@@ -20,6 +20,7 @@ export declare namespace Chat {
 		| Request<Unqueue>
 		| Request<Delete>
 		| Request<Retry>
+		| Request<Wake>
 		| Request<SetParticipation>
 		| Request<Typing>;
 
@@ -33,6 +34,7 @@ export declare namespace Chat {
 		| Sent
 		| Deleted
 		| Retried
+		| Woke
 		| Removed
 		| ParticipationState;
 
@@ -149,6 +151,27 @@ export declare namespace Chat {
 		deliveryState?: DeliveryState;
 		/** Why a `failed` message could not be delivered. */
 		deliveryFailure?: DeliveryFailure;
+		/**
+		 * On a system notice that says a Planner turn ended without finishing its reply: why, so a
+		 * client can offer the way back. Absent on any other entry and on one saved before this
+		 * existed, which is only its `text`.
+		 */
+		turnFailure?: TurnFailure;
+	};
+
+	/**
+	 * Why a Planner turn ended. `error` is the model's or harness's own failure, `detail` its words
+	 * as reported; `refused` a tool the turn was not allowed to run, `tool` one it needed that is
+	 * not offered, `timed-out` a turn that took too long, `unreachable` an agent that could not be
+	 * reached, and `dropped` the machine's connection going while it replied (the connection's to
+	 * tell, not a failure to retry). `request` is the member message that began the turn, and
+	 * `focus` the child document that was open when it was sent, so a retry is the same turn.
+	 */
+	export type TurnFailure = {
+		kind: "error" | "refused" | "tool" | "timed-out" | "unreachable" | "dropped";
+		detail?: string;
+		request?: string;
+		focus?: string;
 	};
 
 	export type DeliveryState = "sent" | "delivered" | "failed";
@@ -327,4 +350,26 @@ export declare namespace Chat {
 
 	/** The message is waiting again. */
 	export type Retried = KIND<"chat:retry"> & { id: string };
+
+	/**
+	 * Ask a machine to start the document's Planner now, as sending it a message does, without
+	 * sending one. Authorized like `chat:send`: repository write access, and a document that is
+	 * not archived or deleted. It changes nothing about a Planner that is attached, or whose
+	 * connection dropped and whose work is kept for its return: the answer says so and the
+	 * machine's own client is what resumes. It never replays a turn. It is the root document's;
+	 * a child's Chat is its root's.
+	 */
+	export type Wake = KIND<"chat:wake">;
+
+	/**
+	 * `asked` is true when a machine that can run the Planner was asked to start it; its progress
+	 * arrives as `session:planner`. When false, `why` says so: `attached` (nothing to start),
+	 * `disconnected` (its machine's connection dropped; only that machine can resume it) or
+	 * `held` (another account holds it) leave it as it is; `no-machine` means no machine that can
+	 * run it is connected; `unavailable` means this server does not run Planners on machines.
+	 */
+	export type Woke = KIND<"chat:wake"> & {
+		asked: boolean;
+		why?: "attached" | "disconnected" | "held" | "no-machine" | "unavailable";
+	};
 }

@@ -61,6 +61,7 @@ import { broadcast, fail, PASSING, reply, tell } from "../wire";
 import { MAX_MESSAGE_BYTES } from "./limits";
 import { contributed } from "./initiative";
 import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./reply-policy";
+import { turnFailureOf } from "./turn-failure";
 import { runDuration } from "./run-duration";
 import type { InitiativeSchedule } from "./initiative-schedule";
 
@@ -2834,6 +2835,8 @@ async function run(
 	let firstEntry = chat.entries.length;
 	let failed = false;
 	let replyOnly = false;
+	// The turn a failure notice names, kept past `finally`, which clears the live fields.
+	let began: { request?: string; focus?: string } = {};
 
 	if (!reserved) {
 		chat.busy = true;
@@ -2860,6 +2863,10 @@ async function run(
 
 	chat.readiness = about?.readiness;
 	chat.focus = about?.focus ?? member?.focus;
+	began = {
+		request: member && chat.turn ? member.entryId : undefined,
+		focus: chat.focus?.channelId,
+	};
 	chat.activeRequest = member && chat.turn
 		? {
 			entryId: member.entryId,
@@ -2996,15 +3003,25 @@ async function run(
 					reason: jobReason(err),
 				};
 		} else if (!chat.closed && failed && !opened?.session.shuttingDown?.()) {
+			let suspended = !!opened?.session.suspended?.();
+			// Read before `chat.interruption` is cleared below.
+			let failure = turnFailureOf({
+				error: err,
+				interruption: chat.interruption,
+				suspended,
+				request: chat.activeRequest?.entryId,
+				focus: chat.focus?.channelId,
+			});
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
-				text: opened?.session.suspended?.()
+				text: suspended
 					? "The machine's connection dropped during this reply. Its workflows and open "
 						+ "questions are kept; ask again once it has reconnected."
 					: err instanceof Error
 					? err.message
 					: "The agent could not be reached.",
+				turnFailure: failure,
 				ts: now(),
 			});
 		}
@@ -3044,6 +3061,7 @@ async function run(
 							id: ulid(),
 							author: { kind: "system" },
 							text: "Chopin's session could not close cleanly. Try again.",
+							turnFailure: turnFailureOf({ error: err, suspended: false, ...began }),
 							ts: now(),
 						});
 					} catch (noticeError) {
@@ -4047,15 +4065,23 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 			chat.interruption = "Chopin's tool approval was denied.";
 			chat.turnController?.abort();
 			return;
-		case "error":
+		case "error": {
 			chat.tooling = undefined;
+			let reported = part.error instanceof Error ? part.error : new Error(String(part.error));
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
-				text: part.error instanceof Error ? part.error.message : String(part.error),
+				text: reported.message,
+				turnFailure: turnFailureOf({
+					error: reported,
+					suspended: false,
+					request: chat.activeRequest?.entryId,
+					focus: chat.focus?.channelId,
+				}),
 				ts: now(),
 			});
 			return;
+		}
 	}
 }
 

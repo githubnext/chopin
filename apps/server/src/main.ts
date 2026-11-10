@@ -40,6 +40,7 @@ import type { ExperimentRuntime } from "./experiments/routes";
 import type { Instruction, ServerInstructionDeps } from "./chat/server-instruction";
 import { fingerprint } from "./experiments/service";
 import * as Chat from "./chat/service";
+import { wakePlanner } from "./chat/wake";
 import * as Initiative from "./chat/initiative";
 import { deferralWiring, keepsRequests } from "./chat/deferred";
 import { createChildDocuments } from "./chat/children";
@@ -1383,6 +1384,28 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 					ws,
 					frame.rid,
 					error instanceof Error ? error.message : "cannot send message",
+					PASSING,
+				);
+			}
+			return;
+
+		case "chat:wake":
+			try {
+				if (!await plannerWritable(room, ws, frame.rid)) return;
+				if (room.plan!.parentChannelId) {
+					fail(ws, frame.rid, "this document's Chat is on its root document");
+					return;
+				}
+				reply(ws, frame.rid, {
+					kind: "chat:wake",
+					ts: 0,
+					...await wakePlanner(room.id, { attachments: plannerAttachments, experiments }),
+				});
+			} catch (error) {
+				fail(
+					ws,
+					frame.rid,
+					error instanceof Error ? error.message : "cannot ask for the Planner",
 					PASSING,
 				);
 			}
