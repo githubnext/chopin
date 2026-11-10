@@ -418,7 +418,11 @@ test("a machine whose link dropped under a reply with no work to keep is held fo
 		await expect(failureBanner(page)).toHaveCount(0);
 		await expect(page.getByRole("alert")).toHaveCount(0);
 		await expect(allBanners(page)).toHaveCount(1);
-		await expect(chat(page).getByText(/disconnected|connection dropped/)).toHaveCount(0);
+		let failedLine = chat(page).locator("[data-chat-system]").getByText(
+			"The machine disconnected during the turn.",
+			{ exact: true },
+		);
+		await expect(failedLine).toHaveCount(1);
 
 		// The machine's client is back: the connection's banner goes, and the failure is told, as it was.
 		let back = await machine(room);
@@ -429,6 +433,7 @@ test("a machine whose link dropped under a reply with no work to keep is held fo
 		await expect(failure.locator(".composer-notice-line")).toHaveText(
 			"The machine disconnected during the turn.",
 		);
+		await expect(failedLine).toHaveCount(0);
 		await expect(allBanners(page)).toHaveCount(1);
 
 		// Retry asks the same turn again, once, with its references, and the machine answers it.
