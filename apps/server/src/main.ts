@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { displayTitle, parse, ulid } from "@chopin/dialect";
 
 import { harnessFor, plannerCatalog, shutdownHarnesses } from "./harness/harnesses";
-import { chooseModel, modelState, turnModel } from "./chat/model-choice";
+import { chooseModel, publishModelState, turnModel } from "./chat/model-choice";
 import type { ModelChoiceDeps } from "./chat/model-choice";
 import {
 	admitAgent,
@@ -1200,23 +1200,16 @@ const modelChoices: ModelChoiceDeps = {
 	},
 };
 
-/** Each document's latest model announcement, so an earlier one that resolves later is dropped. */
-let modelAnnouncements = new Map<string, number>();
-
-/** Tell everyone in the document what its Planner can be set to run and what it is set to. */
+/**
+ * Tell everyone in the document what its Planner can be set to run and what it is set to. It goes
+ * through the same order as a choice, so it never tells the room an older choice after a newer one.
+ */
 function announceModel(channelId: string): void {
 	let room = Rooms.get(channelId);
 	if (!room || room.parentChannelId || cutting) return;
-	let turn = (modelAnnouncements.get(channelId) ?? 0) + 1;
-	modelAnnouncements.set(channelId, turn);
-	void modelState(modelChoices, channelId).then(state => {
-		if (modelAnnouncements.get(channelId) !== turn) return;
-		modelAnnouncements.delete(channelId);
+	void publishModelState(modelChoices, channelId, state => {
 		if (server && !cutting) broadcast(server, channelId, state);
-	}, err => {
-		if (modelAnnouncements.get(channelId) === turn) modelAnnouncements.delete(channelId);
-		console.error("chopin: could not announce a document's model choice -", err);
-	});
+	}).catch(err => console.error("chopin: could not announce a document's model choice -", err));
 }
 
 /** Each document's latest status announcement, so an earlier one that resolves later is dropped. */
@@ -1361,7 +1354,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				);
 				// What the Planner can be set to run, and what it is set to, for the composer.
 				if (!parent) {
-					void modelState(modelChoices, room.id).then(state => {
+					void publishModelState(modelChoices, room.id, state => {
 						if (!ws.data.closed && room.members.get(ws.data.client) === ws) tell(ws, state);
 					}).catch(err => console.error("chopin: could not send a model choice -", err));
 				}

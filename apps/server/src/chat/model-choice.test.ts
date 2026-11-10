@@ -5,8 +5,9 @@ import { openPlannerSession } from "../harness/session";
 import * as Plan from "../plan/service";
 import { openPlan } from "../testing/plan";
 import { expectPlain } from "../testing/plain-words";
+import { broadcast, tell } from "../wire";
 import { authenticatedMemory } from "./job-authenticated-memory.test-fixtures";
-import { chooseModel, modelState, turnModel } from "./model-choice";
+import { chooseModel, modelState, publishModelState, turnModel } from "./model-choice";
 import * as Chat from "./service";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
@@ -172,6 +173,125 @@ describe("choosing a document's model and thinking level", () => {
 			{ model: "acme/small" },
 		]);
 		expect((await modelState(deps, opened.channel.id)).choice).toEqual({ model: "acme/small" });
+	});
+});
+
+/** What a member of the room hears, in the order it arrives: broadcasts and what it is told alone. */
+type Heard = Array<Record<string, unknown>>;
+
+/**
+ * Holds the first read a document's model state makes of `read` (its stored choice, or the catalog
+ * its harness reports) open until `release`, with the value the read had when it began, as a slow
+ * query that started before a choice was stored and answers after it.
+ */
+function slowFirstRead<T extends object, K extends keyof T>(owner: T, read: K) {
+	let method = owner[read] as unknown as (...args: unknown[]) => Promise<unknown>;
+	let { promise: gate, resolve: release } = Promise.withResolvers<void>();
+	let held = false;
+	(owner as Record<K, unknown>)[read] = async (...args: unknown[]) => {
+		let value = await method.apply(owner, args);
+		if (!held) {
+			held = true;
+			await gate;
+		}
+		return value;
+	};
+	return release;
+}
+
+describe("a room hears its model state in the order it was stored", () => {
+	/** A person's choice goes out of `choose`; what the held announcement or join delivers is `heard`. */
+	async function racing(held?: "choice" | "catalog") {
+		let offered: Wire.ModelCatalog | undefined = catalog;
+		let { opened, deps, choose } = await sets(() => offered);
+		let heard: Heard = [];
+		let publish = opened.server.publish.bind(opened.server);
+		opened.server.publish = ((topic: string, data: string) => {
+			heard.push(JSON.parse(data));
+			return publish(topic, data);
+		}) as never;
+		let release = held === "choice"
+			? slowFirstRead(opened.storage.plannerModelChoices, "get")
+			: held === "catalog"
+			? slowFirstRead(deps, "catalog")
+			: () => {};
+		let channelId = opened.channel.id;
+		// What main.ts does: an announcement goes to the room, a join's state to the joiner alone.
+		let announce = (state: Wire.ModelState) => broadcast(opened.server, channelId, state);
+		let joiner = { send: (text: string) => heard.push(JSON.parse(text)) };
+		let greet = (state: Wire.ModelState) => tell(joiner, state);
+		let settle = async (reads: Promise<void>, choosing: Promise<void>) => {
+			// Long enough for an unordered choice to store and broadcast ahead of the slow read.
+			await Bun.sleep(20);
+			release();
+			await Promise.all([reads, choosing]);
+		};
+		return {
+			opened,
+			deps,
+			choose,
+			heard,
+			announce,
+			greet,
+			settle,
+			offer: (next: typeof offered) => (offered = next),
+		};
+	}
+
+	for (let held of ["choice", "catalog"] as const) {
+		test(`a catalog change announced while a choice is being stored does not bring the old choice back (slow ${held} read)`, async () => {
+			let { opened, deps, choose, heard, announce, settle } = await racing(held);
+			let announced = publishModelState(deps, opened.channel.id, announce);
+			let choosing = choose({ model: "acme/large", thinkingLevel: "high" });
+			await settle(announced, choosing);
+			expect(heard.at(-1)).toMatchObject({
+				kind: "chat:model",
+				catalog,
+				choice: { model: "acme/large", thinkingLevel: "high" },
+			});
+			expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toMatchObject({
+				model: "acme/large",
+				thinkingLevel: "high",
+			});
+		});
+
+		test(`a person who joins while a choice is being stored ends up with that choice (slow ${held} read)`, async () => {
+			let { opened, deps, choose, heard, greet, settle } = await racing(held);
+			// The joiner is already subscribed to the room, so it hears the broadcast as well.
+			let joining = publishModelState(deps, opened.channel.id, greet);
+			let choosing = choose({ model: "acme/small" });
+			await settle(joining, choosing);
+			expect(heard.at(-1)).toMatchObject({ kind: "chat:model", choice: { model: "acme/small" } });
+		});
+	}
+
+	test("an announcement made after a choice was stored says the new choice and the current catalog", async () => {
+		let { opened, deps, choose, heard, announce, offer } = await racing();
+		await choose({ model: "acme/large" });
+		offer({ models: [catalog.models[0]!] });
+		await publishModelState(deps, opened.channel.id, announce);
+		expect(heard.at(-1)).toMatchObject({
+			kind: "chat:model",
+			catalog: { models: [catalog.models[0]] },
+			choice: { model: "acme/large" },
+		});
+	});
+
+	test("a read that fails refuses nothing and does not hold up the announcements and choices behind it", async () => {
+		let { opened, deps, choose, heard, announce } = await racing();
+		let get = opened.storage.plannerModelChoices.get;
+		opened.storage.plannerModelChoices.get = async () => {
+			throw new Error("storage is busy");
+		};
+		await expect(publishModelState(deps, opened.channel.id, announce)).rejects.toThrow(
+			"storage is busy",
+		);
+		opened.storage.plannerModelChoices.get = get;
+		await choose({ model: "acme/small" });
+		await publishModelState(deps, opened.channel.id, announce);
+		expect(heard.map(frame => frame.choice)).toEqual([{ model: "acme/small" }, {
+			model: "acme/small",
+		}]);
 	});
 });
 
