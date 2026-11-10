@@ -3360,13 +3360,13 @@ async function startNext(
 			if (next instanceof Promise) next = await next;
 			continue;
 		}
-		(next.job ? jobQueued : queued)(chat, server, room);
 		let nextId = next.id;
 		let entry = next.message ? chat.entries.find(item => item.id === nextId) : undefined;
 		if (entry && !next.posted) {
 			announce(server, room, entry);
 			context.memberMessagePersisted?.(entry, next.sessionId);
 		}
+		(next.job ? jobQueued : queued)(chat, server, room);
 		let turn = [
 			turnContext,
 			next.handle,

@@ -110,6 +110,32 @@ async function until(check: () => boolean, what: string): Promise<void> {
 	if (!check()) throw new Error(`timed out waiting for ${what}`);
 }
 
+test("a waiting memory message is announced before it leaves the queue", async () => {
+	let { opened, send, turns, finish } = await room();
+	try {
+		await send("first");
+		await until(() => turns.length === 1, "the first turn to start");
+		await send("second");
+		let id = opened.plan.chat.waiting[0]!.id;
+		let start = opened.broadcasts.length;
+		turns[0]!.release();
+		await until(() => turns.length === 2, "the queued turn to start");
+		let frames = opened.broadcasts.slice(start);
+		let message = frames.findIndex(frame =>
+			frame.kind === "chat:message" && (frame.entry as { id?: string }).id === id
+		);
+		let queue = frames.findIndex(frame =>
+			frame.kind === "chat:queue"
+			&& !(frame.waiting as Array<{ id: string }>).some(item => item.id === id)
+		);
+		expect(message).toBeGreaterThanOrEqual(0);
+		expect(queue).toBeGreaterThan(message);
+	} finally {
+		turns.at(-1)?.release();
+		await finish();
+	}
+});
+
 test("a turn that ends while the process is stopping leaves the next queued request waiting, unstarted", async () => {
 	let { opened, send, turns, finish } = await room();
 	try {
