@@ -45,6 +45,20 @@ const STEP_MS = 2_500;
 const INVESTIGATE_PROMPT = "INVESTIGATE-ANCHOR";
 const INVESTIGATE_TARGET = "Cold start";
 const CAPTURE_PROMPT = "ANCHORED-DECISIONS";
+const IMAGES_PROMPT = "GENERATE-IMAGES";
+const GENERATED = [
+	{ file: "the-cap.webp", mimeType: "image/webp", alt: "The cap is a balance of 100." },
+	{
+		file: "option-write-back.png",
+		mimeType: "image/png",
+		alt: "Write-back: write, cache, then database later",
+	},
+	{
+		file: "option-write-through.png",
+		mimeType: "image/png",
+		alt: "Write-through: write, cache, database",
+	},
+];
 const PROVISIONAL = "The first version remains provisional.";
 /**
  * A member message naming one way a reply ends without finishing: the model's own error, a
@@ -667,6 +681,43 @@ export function createFakeHarness(
 									finishReason: { unified: "stop", raw: undefined },
 									totalUsage: reportedUsage,
 								});
+								settled.resolve();
+							} catch (err) {
+								turn.emit({ type: "error", error: err });
+								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (requested.includes(IMAGES_PROMPT)) {
+						void (async () => {
+							try {
+								if (!available.has("upload_plan_image")) {
+									throw new Error("e2e-fake harness expected host tool upload_plan_image");
+								}
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								turn.emit({
+									type: "text-delta",
+									id,
+									delta: "I drew the cap and both write paths.",
+								});
+								turn.emit({ type: "text-end", id });
+								for (let picture of GENERATED) {
+									let bytes = await Bun.file(
+										new URL(`../fixtures/${picture.file}`, import.meta.url),
+									)
+										.bytes();
+									checked(
+										"upload_plan_image",
+										await callTool("upload_plan_image", undefined, {
+											data: Buffer.from(bytes).toString("base64"),
+											mimeType: picture.mimeType,
+											alt: picture.alt,
+										}),
+									);
+								}
+								finish();
 								settled.resolve();
 							} catch (err) {
 								turn.emit({ type: "error", error: err });
