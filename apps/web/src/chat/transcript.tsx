@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import {
-	CloseIcon,
 	MessageForwardIcon,
 	MessageIcon,
 	SignInIcon,
@@ -210,13 +209,12 @@ function DecisionSystemEntry(
 let LEADING_MENTION = /^\s*@chopin\b[^\S\n]*/i;
 
 function MessageBody(
-	{ enter, handle, message, onDelete, onRetry, onWithdraw, quietFailures, ...markers }: {
+	{ enter, handle, message, onDelete, onRetry, quietFailures, ...markers }: {
 		enter: boolean;
 		handle: string;
 		message: Message;
 		onDelete: (id: string) => void;
 		onRetry: (id: string) => void;
-		onWithdraw: (id: string) => void;
 		quietFailures: boolean;
 	} & PlanMarkers,
 ) {
@@ -277,19 +275,6 @@ function MessageBody(
 					{delivery && delivery !== "failed" && <DeliveryMark mark={delivery} />}
 					{delivery && deletable(message) && delivery !== "failed"
 						&& <MessageMenu onDelete={() => onDelete(message.id)} />}
-					{message.queued && message.author.kind === "member" && message.author.handle === handle
-						&& (
-							<button
-								aria-label="Withdraw queued message"
-								data-tooltip="Withdraw message"
-								className="btn btn-icon btn-ghost -my-1 shrink-0"
-								onClick={() => onWithdraw(message.id)}
-								title="Withdraw"
-								type="button"
-							>
-								<CloseIcon aria-hidden="true" size={16} />
-							</button>
-						)}
 				</div>
 			)}
 			{delivery === "failed" && !quietFailures && (
@@ -299,7 +284,7 @@ function MessageBody(
 					reason={failureOf(message)}
 				/>
 			)}
-			{ANALYSIS && !message.queued && markers.onCardLink && markers.onRetryAnalysis && (
+			{ANALYSIS && markers.onCardLink && markers.onRetryAnalysis && (
 				<MessageMarkers
 					canEdit={!!markers.canEdit}
 					messageId={message.id}
@@ -324,7 +309,6 @@ function MessageGroup(
 		handle,
 		onDelete,
 		onRetry,
-		onWithdraw,
 		quietFailures,
 		...markers
 	}: {
@@ -335,7 +319,6 @@ function MessageGroup(
 		handle: string;
 		onDelete: (id: string) => void;
 		onRetry: (id: string) => void;
-		onWithdraw: (id: string) => void;
 		quietFailures: boolean;
 	} & PlanMarkers,
 ) {
@@ -344,37 +327,20 @@ function MessageGroup(
 	let name = item.author.kind === "agent" ? "Chopin" : capitalize(item.author.handle);
 
 	return (
-		<div
-			className={`flex gap-3 ${item.queued ? "text-text-quaternary" : ""}`}
-			data-chat-enter={enter || undefined}
-			data-chat-entry
-			data-chat-state={item.queued ? "queued" : undefined}
-		>
-			<div className={`w-6 shrink-0 ${item.queued ? "opacity-45" : ""}`}>
+		<div className="flex gap-3" data-chat-enter={enter || undefined} data-chat-entry>
+			<div className="w-6 shrink-0">
 				{item.continued
 					? null
 					: item.author.kind === "agent"
 					? <ChopinMark circle />
 					: <Face decorative handle={item.author.handle} size={24} titled={false} />}
 			</div>
-			<div
-				className={`flex min-w-0 flex-1 flex-col gap-1 ${item.continued ? "" : "-mt-0.5"} ${
-					item.queued ? "opacity-60" : ""
-				}`}
-			>
+			<div className={`flex min-w-0 flex-1 flex-col gap-1 ${item.continued ? "" : "-mt-0.5"}`}>
 				{!item.continued && (
 					<div className="flex items-baseline gap-1.5 text-sm">
 						<span className="min-w-0 break-all font-semibold">{name}</span>
-						<span
-							className={item.queued
-								? "text-sm text-text-quaternary tabular-nums"
-								: "text-2xs text-text-tertiary tabular-nums"}
-						>
-							{item.queued
-								? "queued"
-								: active
-								? `Started at ${when(active.ts!)}`
-								: when(first.ts!)}
+						<span className="text-2xs text-text-tertiary tabular-nums">
+							{active ? `Started at ${when(active.ts!)}` : when(first.ts!)}
 						</span>
 					</div>
 				)}
@@ -396,7 +362,6 @@ function MessageGroup(
 						message={message}
 						onDelete={onDelete}
 						onRetry={onRetry}
-						onWithdraw={onWithdraw}
 						quietFailures={quietFailures}
 					/>
 				))}
@@ -430,8 +395,6 @@ export function Transcript(
 		quietFailures = false,
 		onRetryAnalysis,
 		onRetryJob,
-		onWithdraw,
-		queued,
 		sourceDestination,
 		suspendedWork,
 		working,
@@ -465,8 +428,6 @@ export function Transcript(
 		onRetry?: (id: string) => void;
 		/** The page's connection banner shows: a message's "Couldn't send" gives way to it, and is back with the connection. */
 		quietFailures?: boolean;
-		onWithdraw: (id: string) => void;
-		queued: Chat.Waiting[];
 		suspendedWork?: CompletedWork;
 		working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">;
 		sourceDestination?: ChatDestination;
@@ -491,7 +452,7 @@ export function Transcript(
 	let offered = useRef(false);
 	let sourceOwner = useRef({});
 	let groups = researchTranscript(
-		group(entries, queued, working, completedWork, suspendedWork),
+		group(entries, working, completedWork, suspendedWork),
 		researchOffers ? conversationPlan?.researchOffers ?? [] : [],
 	);
 	let messages = groups.flatMap(item => item.kind === "messages" ? item.messages : []);
@@ -507,7 +468,7 @@ export function Transcript(
 		if (item.kind === "system") return { item, key: item.id };
 		let first = item.messages[0]!;
 		let turn = first.working ? working?.id : turns.get(first.id);
-		return { item, key: turn ? `turn:${turn}` : `${item.queued ? "queued" : "sent"}-${first.id}` };
+		return { item, key: turn ? `turn:${turn}` : `sent-${first.id}` };
 	});
 	let atoms = new Set(
 		groups.flatMap(item =>
@@ -839,7 +800,6 @@ export function Transcript(
 								onDelete={onDelete}
 								onRetry={onRetry}
 								quietFailures={quietFailures}
-								onWithdraw={onWithdraw}
 								sourceDestination={sourceDestination}
 							/>
 						)

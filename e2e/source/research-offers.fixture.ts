@@ -64,7 +64,7 @@ function View({ handle }: { handle: string }) {
 		},
 		onRetryLink() {},
 	};
-	return <section aria-label={handle}><Transcript active entries={entries} queued={[]} handle={handle} onWithdraw={() => {}} conversationPlan={value.state} researchOffers={controls} /></section>;
+	return <section aria-label={handle}><Transcript active entries={entries} handle={handle} conversationPlan={value.state} researchOffers={controls} /></section>;
 }
 function wire(): Wire {
 	return {

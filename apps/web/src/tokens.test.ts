@@ -519,7 +519,7 @@ type StandardAction = {
 	count?: number;
 	action: string;
 	marker: string;
-	size: "btn-sm" | "btn-md" | "btn-icon";
+	size: "btn-xs" | "btn-sm" | "btn-md" | "btn-icon";
 	tiers:
 		readonly ("btn-primary" | "btn-secondary" | "btn-outline" | "btn-ghost" | "btn-destructive")[];
 };
@@ -563,7 +563,7 @@ function standardButtonOffenders(source: string, file: string, action: StandardA
 
 		let tiers: string[] = [];
 		for (let list of classes) {
-			let sizes = list.filter(name => /^(btn-sm|btn-md|btn-icon)$/.test(name));
+			let sizes = list.filter(name => /^(btn-xs|btn-sm|btn-md|btn-icon)$/.test(name));
 			let currentTiers = list.filter(name =>
 				/^(btn-primary|btn-secondary|btn-outline|btn-ghost|btn-destructive)$/.test(name)
 			);
@@ -760,11 +760,23 @@ describe("migration", () => {
 				size: "btn-sm",
 				tiers: ["btn-ghost"],
 			}],
-			["apps/web/src/chat/transcript.tsx", {
-				action: "Withdraw",
-				marker: 'title="Withdraw"',
-				size: "btn-icon",
+			["apps/web/src/chat/message-queue.tsx", {
+				action: "edit a queued message",
+				marker: "aria-label={`Edit message from ${row.name}`}",
+				size: "btn-xs",
 				tiers: ["btn-ghost"],
+			}],
+			["apps/web/src/chat/message-queue.tsx", {
+				action: "cancel a queued message",
+				marker: "aria-label={`Cancel message from ${row.name}`}",
+				size: "btn-xs",
+				tiers: ["btn-ghost"],
+			}],
+			["apps/web/src/chat/message-queue.tsx", {
+				action: "save an edited queued message",
+				marker: 'type="submit"',
+				size: "btn-xs",
+				tiers: ["btn-primary"],
 			}],
 			["apps/web/src/chat/composer.tsx", {
 				action: "Stop Chopin",

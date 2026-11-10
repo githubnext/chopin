@@ -90,7 +90,7 @@ function Fixture({ editable }: { editable: boolean }) {
 			<div style={{ height: 900 }} />
 		</div></section>
 		<section className="native-chat"><Transcript active entries={entries.map(entry => entry.id === source.messageId ? { ...entry, text: sourceText } : entry)}
-			handle="mina" onWithdraw={() => {}} queued={[]} sourceDestination={destination} /></section>
+			handle="mina" sourceDestination={destination} /></section>
 		<button id="outside">Outside fixture</button>
 	</main>;
 }

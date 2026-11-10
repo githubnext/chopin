@@ -28,8 +28,6 @@ function render(entries: Chat.Entry[], quietFailures = false): string {
 		active: true,
 		entries,
 		handle: "ana",
-		onWithdraw: () => {},
-		queued: [],
 		quietFailures,
 	}));
 }

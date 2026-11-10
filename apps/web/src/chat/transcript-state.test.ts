@@ -50,7 +50,7 @@ describe("transcript work retention", () => {
 			endOffset: 3,
 			anchorId: "prose",
 		}]);
-		let messages = group(state.entries, [], state.turn, state.completedWork).flatMap(item =>
+		let messages = group(state.entries, state.turn, state.completedWork).flatMap(item =>
 			item.kind === "messages" ? item.messages : []
 		);
 		expect(messages.find(message => message.id === "prose")?.tools).toMatchObject([{
@@ -78,7 +78,7 @@ describe("transcript work retention", () => {
 		});
 
 		expect(state.completedWork).toMatchObject([{ anchorId: "prose", endOffset: 3 }]);
-		let messages = group(state.entries, [], state.turn, state.completedWork).flatMap(item =>
+		let messages = group(state.entries, state.turn, state.completedWork).flatMap(item =>
 			item.kind === "messages" ? item.messages : []
 		);
 		expect(messages.find(message => message.id === "prose")?.tools).toMatchObject([{
@@ -113,7 +113,7 @@ describe("transcript work retention", () => {
 		state = transcriptReducer(state, { kind: "history", entries: history });
 
 		expect(state.completedWork).toMatchObject([{ anchorId: "prose-a", endOffset: 3 }]);
-		let messages = group(state.entries, [], state.turn, state.completedWork).flatMap(item =>
+		let messages = group(state.entries, state.turn, state.completedWork).flatMap(item =>
 			item.kind === "messages" ? item.messages : []
 		);
 		expect(messages.find(message => message.id === "prose-a")?.tools).toMatchObject([{

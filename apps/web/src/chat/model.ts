@@ -22,7 +22,6 @@ export type Message = {
 	echo?: true;
 	failure?: string;
 	deletable?: boolean;
-	queued: boolean;
 	working?: boolean;
 	workDisconnected?: boolean;
 	workStreaming?: boolean;
@@ -30,7 +29,7 @@ export type Message = {
 };
 
 export type Group =
-	| { kind: "messages"; author: Speaker; messages: Message[]; queued: boolean }
+	| { kind: "messages"; author: Speaker; messages: Message[] }
 	| {
 		kind: "system";
 		id: string;
@@ -104,7 +103,6 @@ export function displayText(value: string): string {
 
 export function group(
 	entries: Chat.Entry[],
-	queued: Chat.Waiting[],
 	working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">,
 	completed: CompletedWork[] = [],
 	suspended?: CompletedWork,
@@ -156,7 +154,6 @@ export function group(
 			...anchor.entry,
 			author: { kind: "agent" },
 			tools,
-			queued: false,
 			...(span.disconnected ? { workDisconnected: true } : {}),
 			...(span.active
 				? {
@@ -183,27 +180,14 @@ export function group(
 				author: { kind: "agent" as const },
 				text: "",
 				ts: working.started,
-				queued: false,
 				working: true,
 			}]
 			: []),
-		...queued.map(item => ({
-			id: item.id,
-			author: { kind: "member" as const, handle: item.handle },
-			text: item.text,
-			references: item.references,
-			to: "planner" as const,
-			queued: true,
-		})),
 	];
 	let result: Group[] = [];
 
 	for (let row of rows) {
-		if ("queued" in row) {
-			append(result, row);
-			continue;
-		}
-		if (row.author.kind === "system") {
+		if (isSystem(row)) {
 			// Filter at presentation time so saved turn offsets and comment references stay intact.
 			if (
 				row.decision?.kind === "activity"
@@ -224,18 +208,18 @@ export function group(
 			});
 			continue;
 		}
-		append(result, { ...row, author: row.author, queued: false });
+		append(result, { ...row, author: row.author });
 	}
 	return result;
 }
 
+function isSystem(row: Chat.Entry | Message): row is Chat.Entry {
+	return row.author.kind === "system";
+}
+
 function append(result: Group[], message: Message): void {
 	let previous = result.at(-1);
-	if (
-		previous?.kind === "messages"
-		&& previous.queued === message.queued
-		&& speaker(previous.author) === speaker(message.author)
-	) {
+	if (previous?.kind === "messages" && speaker(previous.author) === speaker(message.author)) {
 		previous.messages.push(message);
 		return;
 	}
@@ -243,7 +227,6 @@ function append(result: Group[], message: Message): void {
 		kind: "messages",
 		author: message.author,
 		messages: [message],
-		queued: message.queued,
 	});
 }
 

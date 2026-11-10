@@ -61,8 +61,6 @@ function SourceFixture() {
 		active: state.active,
 		entries: state.entries,
 		handle: "ana",
-		onWithdraw: () => {},
-		queued: [],
 		sourceDestination: state.destination,
 	});
 }

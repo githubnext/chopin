@@ -28,7 +28,8 @@ import {
 } from "@chopin/editor";
 import { chatDraftKey } from "../demo-actor";
 import { WireLost, WireRefusal } from "../wire";
-import { canWithdraw } from "./withdraw";
+import { MessageQueue } from "./message-queue";
+import { queueRows, refusalWords, withoutQueued } from "./queue-model";
 import {
 	echoes,
 	keepOutbox,
@@ -964,6 +965,16 @@ export function Chat(
 		: undefined;
 	let bannerIds = [leadNode ? bannerId : undefined, connectionNode ? connectionId : undefined]
 		.filter(Boolean).join(" ");
+	// What waits for the Planner shows above the composer; a message in it is not in the transcript.
+	let waiting = queueRows(queue, entries, handle);
+	let changeQueue = async (change: "cancel" | "edit", request: Promise<unknown>) => {
+		try {
+			await request;
+			return undefined;
+		} catch (error) {
+			return refusalWords(change, error);
+		}
+	};
 
 	let transcriptView = (
 		<Transcript
@@ -985,7 +996,7 @@ export function Chat(
 			onRetryJob={onRetryJob}
 			conversationPlan={conversationPlan}
 			decisions={decisions}
-			empty={transcriptReady && entries.length === 0 && queue.length === 0 && outbox.length === 0
+			empty={transcriptReady && entries.length === 0 && waiting.length === 0 && outbox.length === 0
 					&& !turn
 				? emptyNotice
 				: undefined}
@@ -994,7 +1005,7 @@ export function Chat(
 			entries={[
 				...withNoticesAfter(
 					withoutFailure(
-						withoutRetracted(entries, retractions),
+						withoutRetracted(withoutQueued(entries, queue), retractions),
 						slot.lead === "failure" ? failed?.entry : undefined,
 					),
 					unanswered,
@@ -1008,10 +1019,6 @@ export function Chat(
 			suspendedWork={suspendedWork}
 			handle={handle}
 			live={transcriptReady}
-			onWithdraw={id => {
-				if (canWithdraw(queue, id, handle)) wire?.send("chat:unqueue", { id });
-			}}
-			queued={queue}
 			working={workingTurn}
 		/>
 	);
@@ -1044,6 +1051,17 @@ export function Chat(
 					/>
 				</div>
 			)}
+
+			<MessageQueue
+				onCancel={composerShown && wire
+					? id => changeQueue("cancel", wire.ask<Wire.Unqueued>("chat:unqueue", { id }))
+					: undefined}
+				onEdit={composerShown && wire
+					? (id, text) => changeQueue("edit", wire.ask<Wire.Edited>("chat:edit", { id, text }))
+					: undefined}
+				queued={waiting}
+				restoreFocus={() => textarea.current?.focus()}
+			/>
 
 			<ChatComposer
 				rootRef={composerRoot}

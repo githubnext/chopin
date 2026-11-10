@@ -6,6 +6,7 @@ import { ConnectionBannerView } from "../../chat/connection-banner";
 import { connectionStep, INITIAL_MEMORY } from "../../chat/connection-phase";
 import { ErrorState } from "../../chat/error-state";
 import { failureView } from "../../chat/failure";
+import { MessageQueue } from "../../chat/message-queue";
 import { plannerGlyph, plannerStatus } from "../../chat/planner-status";
 import { MachineGlyph, PlannerNote } from "../../machine-button";
 import { boundedChatError } from "../../chat/references";
@@ -15,6 +16,7 @@ import { AuditPlate, StateLabel } from "../frame";
 
 import type { Chat, Session } from "@chopin/protocol";
 import type { ChatComposerProps } from "../../chat/composer";
+import type { QueueRow } from "../../chat/queue-model";
 
 const HANDLE = "maggieappleton";
 
@@ -34,6 +36,42 @@ let CHAT_ENTRIES: Chat.Entry[] = [
 			{ id: "audit-tool-2", name: "update_plan", status: "done", took: 180 },
 		],
 		ts: 1_787_913_660,
+	},
+];
+
+/** Waiting for the Planner: the person's own message, a colleague's, a long one and work nobody typed. */
+const QUEUED: QueueRow[] = [
+	{
+		id: "audit-queued-own",
+		name: "Maggieappleton",
+		handle: HANDLE,
+		text: "Also check the compact layout.",
+		message: true,
+		mine: true,
+	},
+	{
+		id: "audit-queued-other",
+		name: "Mona",
+		handle: "mona",
+		text:
+			"When the sidebar is narrow, can the state labels fold into glyphs before the title truncates, and does the same hold on a phone?",
+		message: true,
+		mine: false,
+	},
+	{
+		id: "audit-queued-comment",
+		name: "Mona",
+		handle: "mona",
+		text: "Reply to a comment",
+		message: false,
+		mine: false,
+	},
+	{
+		id: "audit-queued-followup",
+		name: "Chopin",
+		text: "Re-checking decisions against the document",
+		message: false,
+		mine: false,
 	},
 ];
 
@@ -271,12 +309,11 @@ export function ConversationPlate() {
 								active
 								entries={CHAT_ENTRIES}
 								handle={HANDLE}
-								onWithdraw={() => {}}
-								queued={[{
-									id: "audit-queued",
-									handle: HANDLE,
-									text: "Also check the compact layout.",
-								}]}
+							/>
+							<MessageQueue
+								onCancel={async () => undefined}
+								onEdit={async () => undefined}
+								queued={QUEUED}
 							/>
 							<ComposerSpecimen />
 						</div>

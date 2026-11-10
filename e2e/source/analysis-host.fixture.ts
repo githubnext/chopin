@@ -137,7 +137,7 @@ function AnalysisHost({ mode }: { mode: "editable" | "readonly" }) {
  };
  return <main>
   <section className="analysis-host-chat">
-   <Transcript active entries={entries} queued={[]} handle="ana" onWithdraw={() => {}}
+   <Transcript active entries={entries} handle="ana"
     canEdit={canEdit} conversationPlan={state} conversationPlanJobs={diagnostics ? analysisHostJobs : []}
     onCardLink={link => window.analysisHostFixture.cards.push(link.threadId)}
     onAddExcerpt={addExcerpt} onRetryAnalysis={retryAnalysis} onRetryJob={retryJob} />
