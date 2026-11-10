@@ -1,5 +1,6 @@
 /**
- * What a dropped connection looks like from the page.
+ * What a dropped connection looks like from the page: one connection banner, by the Chat
+ * composer where Chat is on screen and at the document where it is not.
  *
  * Routed rather than `context.setOffline`, which leaves an established socket
  * alone. Proxying the socket is the only way to be the thing that drops it.
@@ -13,8 +14,17 @@ import * as PlanRoom from "../apps/server/src/plan/room";
 import * as Y from "../apps/server/node_modules/yjs";
 import { REGISTRY } from "../apps/server/src/testing/peer";
 import { chatInput, expectChatValue, fillChat } from "./chat-input";
+import {
+	allBanners as banners,
+	bannerEntrances as entrances,
+	connectionBanner as notice,
+	heardWords as heard,
+	phaseVoice as spoken,
+	RESUMED_WAIT as RESUMED,
+	watchBanners as watch,
+	wordsOutsideBanner,
+} from "./banner";
 import { readSource } from "./database";
-import { inBetween, top, trace } from "./motion";
 import { authenticate, content, expect, ready, roomPath, status, test } from "./room";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 
@@ -22,6 +32,24 @@ import type { Plan } from "../packages/protocol/index";
 import type { Browser, BrowserContext, Locator, Page, WebSocketRoute } from "@playwright/test";
 
 const OFFLINE = "You're offline. Your changes are kept and will sync when you reconnect.";
+const RECONNECTING = "Reconnecting. Your changes are kept.";
+const CATCHING_UP = "Catching up";
+const BACK = "Back online. Your changes are synced";
+
+/**
+ * What the live region said, in order. The moment of catching up, between the socket opening and
+ * the document syncing, is said only if the sync takes that long, so it may be there or not; it
+ * is checked to come at most once and right before the return, and taken out of what is compared.
+ */
+async function heardPhases(page: Page): Promise<string[]> {
+	let said = await heard(page);
+	let catching = said.filter(words => words === CATCHING_UP);
+	expect(catching.length).toBeLessThanOrEqual(1);
+	if (catching.length) {
+		expect(said[said.indexOf(CATCHING_UP) + 1]).toMatch(/^Back online\./);
+	}
+	return said.filter(words => words !== CATCHING_UP);
+}
 
 /** Set to a directory to keep the screenshots a pull request shows. */
 const SHOTS = process.env.CHOPIN_SHOTS;
@@ -32,13 +60,8 @@ async function snap(target: Page | Locator, name: string): Promise<void> {
 	await target.screenshot({ path: `${SHOTS}/${name}.png`, animations: "disabled" });
 }
 
-/** The one notice a lost connection brings, at the top of the document's content. */
-function notice(page: Page) {
-	return page.locator("[data-offline-notice]");
-}
-
-function retry(page: Page) {
-	return notice(page).getByRole("button", { name: "Retry", exact: true });
+function reconnect(page: Page) {
+	return notice(page).getByRole("button", { name: "Reconnect", exact: true });
 }
 
 function chatPane(page: Page) {
@@ -48,7 +71,7 @@ function chatPane(page: Page) {
 /**
  * The server these specs run against has its agent off, which the composer would tell in a strip
  * above it. A test that measures the composer across an outage turns the agent on instead, so the
- * strip cannot hide a connection strip's size.
+ * strip cannot hide a connection banner's size.
  */
 async function agentOn(page: Page): Promise<void> {
 	await page.route("**/api/session", async route => {
@@ -57,7 +80,7 @@ async function agentOn(page: Page): Promise<void> {
 	});
 }
 
-/** What the composer says above its field: its strip, and nothing else. */
+/** What the composer says above its field: its own strip, and nothing else. */
 function composerStrip(chat: Locator) {
 	return chat.locator(".chat-composer").getByRole("status").filter({ hasText: /\S/ });
 }
@@ -100,11 +123,12 @@ function route(page: Page | BrowserContext, { sends = false } = {}) {
 }
 
 test("a blip that recovers inside the grace period shows nothing", async ({ join, page }) => {
+	await watch(page);
 	let wire = route(page);
 	await wire.ready;
 	await join("ana");
 	let chat = chatPane(page);
-	await expect(notice(page)).toHaveCount(0);
+	await expect(banners(page)).toHaveCount(0);
 
 	await wire.sockets.at(-1)!.close();
 	await expect.poll(() => wire.sockets.length).toBeGreaterThan(1);
@@ -114,17 +138,19 @@ test("a blip that recovers inside the grace period shows nothing", async ({ join
 	while (Date.now() < until) {
 		await expect(content(page)).toHaveAttribute("contenteditable", "true");
 		await expect(status(page)).toHaveAttribute("data-level", "hidden");
-		await expect(notice(page)).toHaveCount(0);
+		await expect(banners(page)).toHaveCount(0);
 		await expect(page.getByRole("alert")).toHaveCount(0);
 		await expect(chat.getByText(/Connection lost|Synchronizing|Reconnecting|Offline/))
 			.toHaveCount(0);
 		await page.waitForTimeout(150);
 	}
-	await expect(page.locator("[data-offline-status]")).toHaveText("");
+	await expect(spoken(page)).toHaveText("");
+	expect(await heard(page)).toEqual([]);
 });
 
-test("a long outage says so once, at the top of the document, keeps the draft, and goes when it returns", async ({ join, page }) => {
+test("a long outage says so once, by the Chat composer, in its phases, keeps the draft, and goes when it returns", async ({ join, page }) => {
 	await agentOn(page);
+	await watch(page);
 	// The widest jitter, so a scheduled retry cannot pass for the online event.
 	await page.addInitScript(() => {
 		Math.random = () => 0.999;
@@ -134,55 +160,91 @@ test("a long outage says so once, at the top of the document, keeps the draft, a
 	await join("ana");
 	let chat = chatPane(page);
 	let input = chatInput(chat);
-	let composer = await chat.locator(".chat-composer").boundingBox();
 	let surface = await chat.locator(".composer-surface").boundingBox();
 
 	wire.state.offline = true;
-	// The notice eases open a frame at a time, pushing the document down by its own height.
-	let opening = await trace(page.locator("[data-workspace-document-swap]"), top, async () => {
-		await wire.sockets.at(-1)!.close();
-		await expect(notice(page)).toBeVisible();
-	});
-	expect(inBetween(opening).length).toBeGreaterThan(0);
+	await wire.sockets.at(-1)!.close();
+	await expect(notice(page)).toBeVisible();
+	// By the composer, above the field, and nowhere else.
+	await expect(chat.locator(".chat-composer [data-connection-banner]")).toHaveCount(1);
+	await expect(banners(page)).toHaveCount(1);
+	await expect(page.locator("[data-document-banner]")).toHaveCount(0);
+
+	// The attempts are counted from the first, as the room's socket tries again.
+	await expect(notice(page)).toHaveAttribute("data-phase", "reconnecting");
+	await expect(notice(page)).toHaveAttribute("data-layer", "socket");
+	await expect(notice(page)).toContainText(RECONNECTING);
+	await expect(notice(page).locator("[data-connection-attempt]")).toHaveText(/^attempt \d+$/);
+	await expect(reconnect(page)).toHaveCount(0);
 
 	// Still draftable: the composer only holds back the send.
 	await input.click();
 	await page.keyboard.type("Written while offline");
-	await expect(notice(page).getByRole("alert")).toHaveText(OFFLINE);
 	await expect(content(page)).toHaveAttribute("contenteditable", "false");
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
 	await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
 	await expect(input).toHaveAttribute("contenteditable", "true");
-	// Said once, and nowhere else: not in the header status, not in Chat, and the composer is
-	// exactly the size it was.
+	// Said once, and nowhere else: not in the header status, and nothing of it in Chat outside the
+	// banner; the field under it is exactly the size it was.
 	await expect(status(page)).toHaveAttribute("data-level", "hidden");
-	await expect(chat.getByText(/Offline|Reconnecting|Connecting|Connection lost/)).toHaveCount(0);
-	await expect(chat.getByRole("button", { name: /Reconnect|Reload|Retry/ })).toHaveCount(0);
-	expect(await chat.locator(".chat-composer").boundingBox()).toEqual(composer);
+	expect(await wordsOutsideBanner(chat, /Offline|Reconnecting|Connecting|Connection lost/))
+		.toEqual([]);
 	expect(await chat.locator(".composer-surface").boundingBox()).toEqual(surface);
-	await snap(page, "offline-desktop");
+	let field = await chat.locator(".composer-surface").boundingBox();
+	// Above it, tucked behind its top edge by no more than the half rem the composer gives it.
+	await settled(page);
+	let bar = await notice(page).boundingBox();
+	expect(bar!.y).toBeLessThan(field!.y);
+	expect(bar!.y + bar!.height).toBeLessThanOrEqual(field!.y + 9);
+	await snap(page, "banner-reconnecting-desktop");
 
-	// Automatic reconnects keep trying, and Retry waits until enough of them have failed.
-	await expect(retry(page)).toHaveCount(0);
-	await expect(retry(page)).toBeVisible({ timeout: 25_000 });
-	await expect(notice(page).getByRole("alert")).toHaveText(`${OFFLINE}Retry`);
-	await snap(page, "offline-retry-desktop");
+	// Automatic reconnects keep trying, and the attempt count follows them. Reconnect waits until
+	// enough of them have failed.
+	let attempts: number[] = [];
+	await expect(async () => {
+		let text = await notice(page).locator("[data-connection-attempt]").textContent({ timeout: 500 })
+			.catch(() => null);
+		if (text) attempts.push(Number(/\d+/.exec(text)![0]));
+		expect(await notice(page).getAttribute("data-phase")).toBe("dropped");
+	}).toPass({ timeout: 30_000, intervals: [250] });
+	expect(attempts.length).toBeGreaterThan(0);
+	expect(attempts).toEqual([...attempts].sort((x, y) => x - y));
+	expect(Math.max(...attempts)).toBeGreaterThan(1);
+	await expect(notice(page)).toHaveAttribute("data-layer", "socket");
+	await expect(notice(page)).toContainText(OFFLINE);
+	await expect(reconnect(page)).toBeVisible();
+	await expect(notice(page).locator("[data-connection-attempt]")).toHaveCount(0);
+	await expect(banners(page)).toHaveCount(1);
+	await snap(page, "banner-dropped-desktop");
 	await page.keyboard.type(" and kept");
 
 	wire.state.offline = false;
-	let attempts = wire.sockets.length;
+	let sockets = wire.sockets.length;
 	let back = Date.now();
-	// The notice goes the way it came, and a screen reader hears once that it is over.
-	let closing = await trace(page.locator("[data-workspace-document-swap]"), top, async () => {
-		await page.evaluate(() => dispatchEvent(new Event("online")));
-		await ready(page);
-		await expect(notice(page)).toHaveCount(0);
-	});
-	expect(inBetween(closing).length).toBeGreaterThan(0);
-	expect(wire.sockets.length).toBe(attempts + 1);
+	await page.evaluate(() => dispatchEvent(new Event("online")));
+	await ready(page);
+	expect(wire.sockets.length).toBe(sockets + 1);
 	expect(Date.now() - back).toBeLessThan(6000);
-	await expect(page.locator("[data-offline-status]")).toHaveText("Reconnected");
+	// It says it is back, and what was caught up, for a moment, and then it goes.
+	await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
+	await expect(notice(page)).toContainText("Back online.");
+	await expect(notice(page).locator("[data-connection-caught]")).toHaveText(
+		"Your changes are synced",
+	);
+	await expect(reconnect(page)).toHaveCount(0);
+	await expect(banners(page)).toHaveCount(1);
+	await snap(page, "banner-resumed-desktop");
+	await expect(banners(page)).toHaveCount(0, { timeout: 8_000 });
 	await expect(page.getByRole("alert")).toHaveCount(0);
+
+	// A screen reader heard each phase once, as it began, and that it was over.
+	expect(await heardPhases(page)).toEqual([RECONNECTING, OFFLINE, BACK]);
+	await expect(spoken(page)).toHaveText("");
+	// The banner came in once and went; it never came in twice.
+	let entered = await entrances(page);
+	expect(entered).toHaveLength(1);
+	expect(entered[0]!.animation).toBe("chat-banner-enter");
+	expect(Math.min(...entered[0]!.opacity)).toBeLessThan(1);
 
 	await expectChatValue(input, "Written while offline and kept");
 	await input.press("Enter");
@@ -190,31 +252,32 @@ test("a long outage says so once, at the top of the document, keeps the draft, a
 	await expect(chat.getByText("Written while offline and kept", { exact: true })).toBeVisible();
 });
 
-test("with reduced motion the notice comes and goes at once, with nothing between", async ({ join, page }) => {
+test("with reduced motion the banner comes and goes at once, with no entrance", async ({ join, page }) => {
 	await page.emulateMedia({ reducedMotion: "reduce" });
+	await watch(page);
 	let wire = route(page);
 	await wire.ready;
 	await join("ana");
 
 	wire.state.offline = true;
-	let opening = await trace(page.locator("[data-workspace-document-swap]"), top, async () => {
-		await wire.sockets.at(-1)!.close();
-		await expect(notice(page)).toBeVisible();
-	});
-	expect(inBetween(opening)).toEqual([]);
-	await expect(notice(page).getByRole("alert")).toHaveText(OFFLINE);
+	await wire.sockets.at(-1)!.close();
+	await expect(notice(page)).toBeVisible();
+	await expect(notice(page)).toContainText(RECONNECTING);
 
 	wire.state.offline = false;
-	let closing = await trace(page.locator("[data-workspace-document-swap]"), top, async () => {
-		await page.evaluate(() => dispatchEvent(new Event("online")));
-		await ready(page);
-		await expect(notice(page)).toHaveCount(0);
-	});
-	expect(inBetween(closing)).toEqual([]);
-	await expect(page.locator("[data-offline-status]")).toHaveText("Reconnected");
+	await page.evaluate(() => dispatchEvent(new Event("online")));
+	await ready(page);
+	await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
+	await expect(banners(page)).toHaveCount(0, { timeout: 8_000 });
+	let entered = await entrances(page);
+	expect(entered).toHaveLength(1);
+	// Nothing between: no animation, and never a frame that was not fully there.
+	expect(entered[0]!.animation).toBe("none");
+	expect(entered[0]!.opacity.every(opacity => opacity === 1)).toBe(true);
+	expect(await heardPhases(page)).toEqual([RECONNECTING, BACK]);
 });
 
-test("Retry asks again at once, and the notice goes when the connection returns", async ({ join, page }) => {
+test("Reconnect asks again at once, and the banner says it is back when the connection returns", async ({ join, page }) => {
 	await page.addInitScript(() => {
 		Math.random = () => 0.999;
 	});
@@ -224,14 +287,15 @@ test("Retry asks again at once, and the notice goes when the connection returns"
 
 	wire.state.offline = true;
 	await wire.sockets.at(-1)!.close();
-	await expect(retry(page)).toBeVisible({ timeout: 25_000 });
+	await expect(reconnect(page)).toBeVisible({ timeout: 30_000 });
 	// Pressing it is another attempt now, not after the rest of a long wait.
 	let before = wire.sockets.length;
 	wire.state.offline = false;
-	await retry(page).click();
+	await reconnect(page).click();
 	await expect.poll(() => wire.sockets.length).toBeGreaterThan(before);
 	await ready(page);
-	await expect(notice(page)).toHaveCount(0);
+	await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
+	await expect(banners(page)).toHaveCount(0, { timeout: 8_000 });
 });
 
 test("a send pressed during a blip goes once the connection is back", async ({ join, page }) => {
@@ -247,7 +311,7 @@ test("a send pressed during a blip goes once the connection is back", async ({ j
 
 	await expectChatValue(input, "");
 	await expect(chat.getByText("Pressed during a blip", { exact: true })).toBeVisible();
-	await expect(notice(page)).toHaveCount(0);
+	await expect(banners(page)).toHaveCount(0);
 });
 
 /*
@@ -317,13 +381,19 @@ test("edits made during a blip are dropped, and said to be, when the document wa
 		update: Buffer.from(update).toString("base64"),
 	}));
 	await reset.promise;
+	// The loss is shown once it has outlasted the grace, as a blip is not; only a shown loss is
+	// said to be over, so Ana stays away until the banner has told it.
+	await expect(notice(page)).toBeVisible();
 
 	ana.state.offline = false;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
 	await ready(page);
-	// The notice that said changes were kept is gone once reconnected, and what is left is the one
-	// alert that says the last edits were not: shown, in view, and not hidden behind the notice.
-	await expect(notice(page)).toHaveCount(0);
+	// What said the changes were kept is gone or no longer says they were synced, and what is left
+	// is the one alert that says the last edits were not: shown, in view, and not hidden behind the
+	// banner. The banner never says "synced" over edits that were not saved.
+	await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
+	await expect(notice(page)).not.toContainText(/synced/);
+	await expect(banners(page)).toHaveCount(0, { timeout: 8_000 });
 	await expect(page.getByRole("alert")).toHaveCount(1);
 	await expect(page.getByRole("alert")).toContainText(
 		"Your last edits couldn't be saved because the document changed while you were offline.",
@@ -352,7 +422,7 @@ test("a reload keeps an unsent Chat message", async ({ join, page }) => {
 	await expectChatValue(chatInput(chatPane(page)), "Not sent before the reload");
 });
 
-test("on a phone, Chat shows the same notice at its top, and Retry after repeated failures", async ({ baseURL, browser, room }) => {
+test("on a phone, Chat shows the banner by its composer, and Reconnect after repeated failures", async ({ baseURL, browser, room }) => {
 	test.setTimeout(90_000);
 	let wire: ReturnType<typeof route> | undefined;
 	let context = await browser.newContext({
@@ -365,6 +435,7 @@ test("on a phone, Chat shows the same notice at its top, and Retry after repeate
 	try {
 		let page = await context.newPage();
 		await agentOn(page);
+		await watch(page);
 		await page.addInitScript(() => {
 			Math.random = () => 0.999;
 		});
@@ -380,29 +451,39 @@ test("on a phone, Chat shows the same notice at its top, and Retry after repeate
 		await page.waitForFunction(() =>
 			document.getAnimations().every(a => a.playState !== "running")
 		);
-		let composer = await chat.locator(".chat-composer").boundingBox();
+		let surface = await chat.locator(".composer-surface").boundingBox();
 
 		wire.state.offline = true;
 		await wire.sockets.at(-1)!.close();
-		// Chat is all that shows, so the one notice stands above it, and is the only one.
+		// Chat is all that shows, so the one banner stands by its composer, and is the only one.
 		await expect(notice(page)).toBeVisible();
-		await expect(page.locator("[data-offline-notice]")).toHaveCount(1);
-		await expect(page.getByRole("alert")).toHaveText(OFFLINE);
-		// The composer keeps its size and its place: the notice takes the transcript's room.
-		expect(await chat.locator(".chat-composer").boundingBox()).toEqual(composer);
+		await expect(banners(page)).toHaveCount(1);
+		await expect(chat.locator(".chat-composer [data-connection-banner]")).toHaveCount(1);
+		await expect(page.locator("[data-document-banner]")).toHaveCount(0);
+		await expect(notice(page)).toContainText(RECONNECTING);
+		// The field keeps its size and its place: the banner takes the transcript's room.
+		expect(await chat.locator(".composer-surface").boundingBox()).toEqual(surface);
 		await expect(chat.getByRole("button", { name: /Reconnect|Reload|Retry/ })).toHaveCount(0);
 		await expectNoHorizontalOverflow(page);
 		await expectInsideViewport(notice(page));
-		await snap(page, "offline-phone");
+		await snap(page, "banner-reconnecting-phone");
 
-		await expect(retry(page)).toBeVisible({ timeout: 25_000 });
-		await expect(retry(page)).toBeInViewport();
+		await expect(reconnect(page)).toBeVisible({ timeout: 30_000 });
+		await expect(notice(page)).toHaveAttribute("data-phase", "dropped");
+		await expect(reconnect(page)).toBeInViewport();
+		await expect(notice(page)).toContainText(OFFLINE);
 		await expectNoHorizontalOverflow(page);
-		await snap(page, "offline-retry-phone");
+		await expectInsideViewport(notice(page));
+		await snap(page, "banner-dropped-phone");
 
 		wire.state.offline = false;
-		await retry(page).tap({ timeout: 8_000 });
-		await expect(notice(page)).toHaveCount(0);
+		await reconnect(page).tap({ timeout: 8_000 });
+		await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
+		await expectInsideViewport(notice(page));
+		await expectNoHorizontalOverflow(page);
+		await snap(page, "banner-resumed-phone");
+		await expect(banners(page)).toHaveCount(0, { timeout: 8_000 });
+		expect(await heardPhases(page)).toEqual([RECONNECTING, OFFLINE, RECONNECTING, BACK]);
 	} finally {
 		// A routed socket that is still open holds its context open.
 		await Promise.all(wire?.sockets.map(socket => socket.close()) ?? []);
@@ -431,7 +512,8 @@ test("a lost connection says so even while the request that asks why it was lost
 	await expect.poll(() => probes).toBeGreaterThan(0);
 	// The probe is still unanswered, and the page says it is offline all the same.
 	await expect(notice(page)).toBeVisible();
-	await expect(notice(page).getByRole("alert")).toHaveText(OFFLINE);
+	await expect(notice(page)).toHaveAttribute("data-layer", "socket");
+	await expect(notice(page)).toContainText(RECONNECTING);
 	await expect(content(page)).toHaveAttribute("contenteditable", "false");
 
 	// The network comes back while the probe is still out: the page does not wait on it.
@@ -440,7 +522,8 @@ test("a lost connection says so even while the request that asks why it was lost
 	let attempts = wire.sockets.length;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
 	await ready(page);
-	await expect(notice(page)).toHaveCount(0);
+	await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
+	await expect(banners(page)).toHaveCount(0, { timeout: 8_000 });
 	expect(wire.sockets.length).toBeGreaterThan(attempts);
 });
 
@@ -466,18 +549,27 @@ function tab(page: Page, name: RegExp) {
 	return page.getByRole("navigation", { name: "Workspace view" }).getByRole("button", { name });
 }
 
+/**
+ * Every entrance and slide has finished. The reconnecting banner's spinner turns for as long as the
+ * phase lasts, by design, so an animation that repeats forever is not one to wait for: waiting for
+ * it would outlast the phase itself.
+ */
 async function settled(page: Page): Promise<void> {
-	await page.waitForFunction(() => document.getAnimations().every(a => a.playState !== "running"));
+	await page.waitForFunction(() =>
+		document.getAnimations().every(a =>
+			a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity
+		)
+	);
 }
 
 /** What the composer says online, on a server whose agent is off. */
 const REPLIES_OFF = "Replies are off on this server.";
 
 /**
- * A lost connection is one notice, the page's. The composer's own strip tells a state that is not
- * the connection (here, that the server's agent is off), so it says nothing while the notice is
- * up, comes back by itself when the connection does, and nothing else about the connection or
- * about availability is drawn anywhere in Chat.
+ * A lost connection is one banner, by the composer. The composer's own strip tells a state that is
+ * not the connection (here, that the server's agent is off), so it says nothing while the banner is
+ * up, comes back by itself when the connection and the banner's goodbye are over, and nothing else
+ * about the connection or about availability is drawn anywhere in Chat.
  */
 async function expectOneNotice(
 	page: Page,
@@ -491,26 +583,30 @@ async function expectOneNotice(
 	wire.state.offline = true;
 	await wire.sockets.at(-1)!.close();
 	await expect(notice(page)).toBeVisible();
-	await expect(notice(page).getByRole("alert")).toHaveText(OFFLINE);
+	await expect(notice(page)).toContainText(RECONNECTING);
+	await expect(chat.locator(".chat-composer [data-connection-banner]")).toHaveCount(1);
 	await expect(composerStrip(chat)).toHaveCount(0);
-	await expect(page.getByRole("alert")).toHaveCount(1);
+	await expect(banners(page)).toHaveCount(1);
+	await expect(page.getByRole("alert")).toHaveCount(0);
 	await expect(chat.getByRole("alert")).toHaveCount(0);
-	await expect(
-		chat.getByText(
+	expect(
+		await wordsOutsideBanner(
+			chat,
 			/unavailable|Chopin is off|off on this server|offline|Reconnecting|Connecting|Connection lost/i,
 		),
-	)
-		.toHaveCount(0);
+	).toEqual([]);
 	await expect(chat.getByRole("button", { name: /Reconnect|Reload|Retry/ })).toHaveCount(0);
 	await snap(page, `${shot}-offline`);
 
 	wire.state.offline = false;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
-	await expect(notice(page)).toHaveCount(0);
+	await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
+	await expect(composerStrip(chat)).toHaveCount(0);
+	await expect(banners(page)).toHaveCount(0, RESUMED);
 	await expect(composerStrip(chat)).toHaveText(REPLIES_OFF);
 }
 
-test("a lost connection is the page's one notice: the composer's own strip is gone while it shows, and back when it clears", async ({ join, page }) => {
+test("a lost connection is one banner: the composer's own strip is gone while it shows, and back when it clears", async ({ join, page }) => {
 	await page.addInitScript(() => {
 		Math.random = () => 0.999;
 	});
@@ -521,9 +617,9 @@ test("a lost connection is the page's one notice: the composer's own strip is go
 });
 
 /**
- * A /research the connection could not take is told by the page's one notice and nothing else:
- * the composer's own "Reconnecting" line would be a second strip about the same connection, and
- * is gone, not waiting, when the connection returns. The agent is on, so no other strip is there.
+ * A /research the connection could not take is told by the one banner and nothing else: the
+ * composer's own "Reconnecting" line would be a second strip about the same connection, and is
+ * gone, not waiting, when the connection returns. The agent is on, so no other strip is there.
  */
 async function expectResearchOffline(
 	page: Page,
@@ -539,23 +635,24 @@ async function expectResearchOffline(
 	await expect(notice(page)).toBeVisible();
 	await fillChat(draft, "/research what changed upstream?");
 	await draft.press("Enter");
-	// The command stays in the draft for when the connection is back, and the page's notice is the
-	// only word about the connection, with no Retry of its own beside the composer.
+	// The command stays in the draft for when the connection is back, and the banner is the only
+	// word about the connection, with no Retry of its own beside the composer.
 	await expectChatValue(draft, "/research what changed upstream?");
 	await expect(composerStrip(chat)).toHaveCount(0);
-	await expect(chat.getByText(/Reconnecting|try again in a moment/)).toHaveCount(0);
+	expect(await wordsOutsideBanner(chat, /Reconnecting|try again in a moment/)).toEqual([]);
 	await expect(chat.getByRole("button", { name: "Retry" })).toHaveCount(0);
-	await expect(page.getByRole("alert")).toHaveCount(1);
+	await expect(banners(page)).toHaveCount(1);
+	await expect(page.getByRole("alert")).toHaveCount(0);
 	await snap(page, `${shot}-offline`);
 
 	wire.state.offline = false;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
-	await expect(notice(page)).toHaveCount(0);
+	await expect(banners(page)).toHaveCount(0, RESUMED);
 	await expect(composerStrip(chat)).toHaveCount(0);
 	await expect(chat.getByRole("button", { name: "Retry" })).toHaveCount(0);
 }
 
-test("a /research pressed while offline adds no second connection strip, and nothing of it is left when the connection returns", async ({ join, page }) => {
+test("a /research pressed while offline adds no second connection banner, and nothing of it is left when the connection returns", async ({ join, page }) => {
 	await page.addInitScript(() => {
 		Math.random = () => 0.999;
 	});
@@ -566,7 +663,7 @@ test("a /research pressed while offline adds no second connection strip, and not
 	await expectResearchOffline(page, wire, chatPane(page), "research-offline-desktop");
 });
 
-test("on a phone, a /research pressed while offline adds no second connection strip either", async ({ baseURL, browser, room }) => {
+test("on a phone, a /research pressed while offline adds no second connection banner either", async ({ baseURL, browser, room }) => {
 	test.setTimeout(90_000);
 	let wire: ReturnType<typeof route> | undefined;
 	let context = await browser.newContext({
@@ -598,9 +695,9 @@ test("on a phone, a /research pressed while offline adds no second connection st
 });
 
 /**
- * A Chat send the connection cut off is told by the page's one notice and nothing else. The
- * composer draws no strip for it, neither for the moments before the notice shows nor once it
- * does, and none is left when the connection returns; the draft stays for the person to send again.
+ * A Chat send the connection cut off is told by the one banner and nothing else. The composer
+ * draws no failure for it, neither for the moments before the banner shows nor once it does, and
+ * none is left when the connection returns; the draft stays for the person to send again.
  */
 async function expectCutSend(
 	page: Page,
@@ -614,14 +711,16 @@ async function expectCutSend(
 	wire.state.send = "cut";
 	await draft.press("Enter");
 
-	// Sampled from the cut until the notice has been up a while, so nothing can come and go unseen.
+	// Sampled from the cut until the banner has been up a while, so nothing can come and go unseen.
 	let until = Date.now() + 2500;
 	while (Date.now() < until) {
 		await expect(failure).toHaveCount(0);
+		await expect(page.locator("[data-error-banner]")).toHaveCount(0);
 		await page.waitForTimeout(100);
 	}
 	await expect(notice(page)).toBeVisible();
-	await expect(page.getByRole("alert")).toHaveCount(1);
+	await expect(banners(page)).toHaveCount(1);
+	await expect(page.getByRole("alert")).toHaveCount(0);
 	await expect(chat.getByRole("button", { name: "Retry" })).toHaveCount(0);
 	await expectChatValue(draft, "Cut off on its way");
 	await snap(page, `${shot}-offline`);
@@ -629,7 +728,8 @@ async function expectCutSend(
 	wire.state.send = "pass";
 	wire.state.offline = false;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
-	await expect(notice(page)).toHaveCount(0);
+	await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
+	await expect(banners(page)).toHaveCount(0, RESUMED);
 	await expect(page.getByRole("alert")).toHaveCount(0);
 	await expect(failure).toHaveCount(0);
 	await expect(chat.getByRole("button", { name: "Retry" })).toHaveCount(0);
@@ -642,9 +742,10 @@ async function expectCutSend(
 }
 
 /**
- * A server's refusal of a send is told by its strip while the connection is up. While the page's
- * offline notice shows it gives way, so that notice is the only alert, and the same strip, with the
- * same words, is back when the connection returns; it goes only when the person sends again.
+ * A server's refusal of a send is told by its failure banner while the connection is up. While the
+ * connection banner shows it gives way, so that banner is the only one, and the same banner, with
+ * the same words, is back once the connection has returned and said so; it goes only when the
+ * person sends again.
  */
 async function expectRefusalGivesWay(
 	page: Page,
@@ -658,6 +759,9 @@ async function expectRefusalGivesWay(
 	wire.state.send = "refuse";
 	await draft.press("Enter");
 	await expect(refusal).toBeVisible();
+	await expect(refusal).toHaveAttribute("data-error-banner", "");
+	await expect(refusal).toHaveAttribute("data-kind", "send");
+	await expect(banners(page)).toHaveCount(1);
 	await expect(page.getByRole("alert")).toHaveCount(1);
 	await expectChatValue(draft, "Refused by the server");
 	await snap(page, `${shot}-online`);
@@ -665,7 +769,8 @@ async function expectRefusalGivesWay(
 	wire.state.offline = true;
 	await wire.sockets.at(-1)!.close();
 	await expect(notice(page)).toBeVisible();
-	await expect(page.getByRole("alert")).toHaveCount(1);
+	await expect(banners(page)).toHaveCount(1);
+	await expect(page.getByRole("alert")).toHaveCount(0);
 	await expect(refusal).toHaveCount(0);
 	await expect(chat.getByRole("button", { name: "Retry" })).toHaveCount(0);
 	await expectChatValue(draft, "Refused by the server");
@@ -673,9 +778,13 @@ async function expectRefusalGivesWay(
 
 	wire.state.offline = false;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
-	await expect(notice(page)).toHaveCount(0);
-	await expect(refusal).toBeVisible();
+	// The connection says it is back first, and is the one banner while it does.
+	await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
+	await expect(banners(page)).toHaveCount(1);
+	await expect(refusal).toHaveCount(0);
+	await expect(refusal).toBeVisible(RESUMED);
 	await expect(refusal).toHaveText(/^Message not sent: Unavailable\s*Retry$/);
+	await expect(banners(page)).toHaveCount(1);
 	await expect(page.getByRole("alert")).toHaveCount(1);
 	await expectChatValue(draft, "Refused by the server");
 
@@ -720,7 +829,7 @@ async function onPhoneChat(
 	}
 }
 
-test("a send the connection cut off leaves no strip beside the page's offline notice, and none when the connection returns", async ({ join, page }) => {
+test("a send the connection cut off leaves no failure beside the connection banner, and none when the connection returns", async ({ join, page }) => {
 	await page.addInitScript(() => {
 		Math.random = () => 0.999;
 	});
@@ -731,7 +840,7 @@ test("a send the connection cut off leaves no strip beside the page's offline no
 	await expectCutSend(page, wire, chatPane(page), "cut-send-desktop");
 });
 
-test("on a phone, a send the connection cut off leaves no strip beside the page's offline notice either", async ({ baseURL, browser, room }) => {
+test("on a phone, a send the connection cut off leaves no failure beside the connection banner either", async ({ baseURL, browser, room }) => {
 	test.setTimeout(90_000);
 	await onPhoneChat(
 		{ baseURL, browser, room },
@@ -739,7 +848,7 @@ test("on a phone, a send the connection cut off leaves no strip beside the page'
 	);
 });
 
-test("a server's refusal of a send gives way to the page's offline notice and is back, unchanged, when the connection returns", async ({ join, page }) => {
+test("a server's refusal of a send gives way to the connection banner and is back, unchanged, when the connection returns", async ({ join, page }) => {
 	await page.addInitScript(() => {
 		Math.random = () => 0.999;
 	});
@@ -750,7 +859,7 @@ test("a server's refusal of a send gives way to the page's offline notice and is
 	await expectRefusalGivesWay(page, wire, chatPane(page), "refused-send-desktop");
 });
 
-test("on a phone, a server's refusal of a send gives way to the page's offline notice and is back, unchanged, when the connection returns", async ({ baseURL, browser, room }) => {
+test("on a phone, a server's refusal of a send gives way to the connection banner and is back, unchanged, when the connection returns", async ({ baseURL, browser, room }) => {
 	test.setTimeout(90_000);
 	await onPhoneChat(
 		{ baseURL, browser, room },
@@ -758,7 +867,7 @@ test("on a phone, a server's refusal of a send gives way to the page's offline n
 	);
 });
 
-test("on a phone, a lost connection is still the page's one notice, with nothing above the composer", async ({ baseURL, browser, room }) => {
+test("on a phone, a lost connection is still one banner, with nothing else above the composer", async ({ baseURL, browser, room }) => {
 	test.setTimeout(90_000);
 	let wire: ReturnType<typeof route> | undefined;
 	let context = await browser.newContext({
@@ -788,7 +897,7 @@ test("on a phone, a lost connection is still the page's one notice, with nothing
 	}
 });
 
-test("on a phone, the notice takes its own room at the top of Document and of Chat, never over their first content, and stays one notice as the tabs switch", async ({ baseURL, browser, room, seed }) => {
+test("on a phone, the banner takes its own room at the top of Document and by the composer in Chat, never over their content, and is one banner, said once, as the tabs switch", async ({ baseURL, browser, room, seed }) => {
 	test.setTimeout(120_000);
 	await seed(
 		"# A document with real content\n\nThe first paragraph is the first thing a reader meets.\n\n"
@@ -804,6 +913,7 @@ test("on a phone, the notice takes its own room at the top of Document and of Ch
 	});
 	try {
 		let page = await context.newPage();
+		await watch(page);
 		await page.addInitScript(() => {
 			Math.random = () => 0.999;
 		});
@@ -829,13 +939,37 @@ test("on a phone, the notice takes its own room at the top of Document and of Ch
 		await tab(page, /^Document/).tap();
 		await settled(page);
 
+		// However many banners the page holds at once, at any moment, and any alert added to it, are
+		// recorded from here on.
+		await page.evaluate(() => {
+			let most = 0;
+			let alerts = 0;
+			new MutationObserver(records => {
+				most = Math.max(most, document.querySelectorAll("[data-banner]").length);
+				for (let record of records) {
+					for (let node of record.addedNodes) {
+						if (node instanceof Element && node.matches("[role=alert], [role=alert] *")) alerts++;
+					}
+				}
+			}).observe(document.body, { childList: true, subtree: true });
+			(window as unknown as { seen: () => { most: number; alerts: number } }).seen = () => ({
+				most,
+				alerts,
+			});
+		});
+
 		wire.state.offline = true;
 		await wire.sockets.at(-1)!.close();
 		await expect(notice(page)).toBeVisible();
 		await settled(page);
-		await expect(page.locator("[data-offline-notice]")).toHaveCount(1);
+		await expect(banners(page)).toHaveCount(1);
 
-		// Document: the notice floats under the top bar and the first heading starts below it.
+		// Document: Chat is not on screen, so the banner is the document's, under the top bar, and the
+		// first heading starts below it.
+		await expect(page.locator("[data-document-banner] [data-connection-banner]")).toHaveCount(1);
+		// The Chat pane is still mounted but off screen: it holds no banner of its own.
+		await expect(chatPane(page).locator("[data-banner]")).toHaveCount(0);
+		await expect(notice(page)).toContainText(RECONNECTING);
 		let bar = await page.locator(".phone-top-bar").boundingBox();
 		let alert = await notice(page).boundingBox();
 		expect(alert!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height - 1);
@@ -843,62 +977,56 @@ test("on a phone, the notice takes its own room at the top of Document and of Ch
 		await expectNotOver(notice(page), content(page).getByText("The first paragraph"));
 		await expectInsideViewport(notice(page));
 		await expectNotCovered(notice(page));
-		await snap(page, "offline-phone-document");
-
-		// The one notice: marked, and watched for any alert that is added to the page from here on.
-		await notice(page).evaluate(element => {
-			element.setAttribute("data-same-notice", "");
-			let added = 0;
-			new MutationObserver(records => {
-				for (let record of records) {
-					for (let node of record.addedNodes) {
-						if (node instanceof Element && node.matches("[role=alert], [role=alert] *")) added++;
-					}
-				}
-			}).observe(document.body, { childList: true, subtree: true });
-			(window as unknown as { alertsAdded: () => number }).alertsAdded = () => added;
-		});
+		await snap(page, "banner-phone-document");
 
 		await tab(page, /^Chat/).tap();
 		await settled(page);
-		// The same element, not a fresh one that would wait out the grace period and be heard again.
-		await expect(page.locator("[data-offline-notice][data-same-notice]")).toHaveCount(1);
-		await expect(page.locator("[data-offline-notice]")).toHaveCount(1);
-		await chat.locator("[data-chat-scroll]").evaluate(element => {
-			element.scrollTop = 0;
-		});
-		await expectNotOver(notice(page), chat.getByText(/^Message 1:/));
+		// Chat is on screen now, so the banner is by its composer, and the document has none. It is
+		// a new element, but the page holds its phase above both, so it neither waits out the grace
+		// period again nor is heard a second time.
+		await expect(banners(page)).toHaveCount(1);
+		await expect(chat.locator(".chat-composer [data-connection-banner]")).toHaveCount(1);
+		await expect(page.locator("[data-document-banner]")).toHaveCount(0);
+		await expectNotOver(chat.locator("[data-chat-scroll]"), notice(page));
+		await expectNotOver(notice(page), chat.locator(".composer-surface"));
 		await expectInsideViewport(notice(page));
 		await expectNotCovered(notice(page));
-		await snap(page, "offline-phone-chat");
-		await expect(page.locator("[data-offline-status]")).toHaveText("");
+		await snap(page, "banner-phone-chat");
 
 		await tab(page, /^Document/).tap();
 		await settled(page);
-		await expect(page.locator("[data-offline-notice][data-same-notice]")).toHaveCount(1);
+		await expect(banners(page)).toHaveCount(1);
+		await expect(page.locator("[data-document-banner] [data-connection-banner]")).toHaveCount(1);
+		// The Chat pane is still mounted but off screen: it holds no banner of its own.
+		await expect(chatPane(page).locator("[data-banner]")).toHaveCount(0);
 		await expectNotOver(notice(page), content(page).locator("h1").first());
+		// One banner at every moment, no alert of any kind, and the live region said it once.
 		expect(
-			await page.evaluate(() => (window as unknown as { alertsAdded: () => number }).alertsAdded()),
-		).toBe(0);
-		await expect(page.locator("[data-offline-status]")).toHaveText("");
+			await page.evaluate(() =>
+				(window as unknown as { seen: () => { most: number; alerts: number } }).seen()
+			),
+		).toEqual({ most: 1, alerts: 0 });
+		expect(await heard(page)).toEqual([RECONNECTING]);
 
 		wire.state.offline = false;
 		await page.evaluate(() => dispatchEvent(new Event("online")));
-		await expect(notice(page)).toHaveCount(0);
+		await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
+		await expect(banners(page)).toHaveCount(0, RESUMED);
 		// Nothing is left reserved at the top of the document once it has gone.
 		await settled(page);
-		await expect(page.locator("[data-offline-status]")).toHaveText("Reconnected");
 		let after = await content(page).locator("h1").first().boundingBox();
 		expect(after!.y).toBeGreaterThan(bar!.y + bar!.height);
 		expect(after!.y).toBeLessThan(alert!.y + alert!.height);
+		expect(await heardPhases(page)).toEqual([RECONNECTING, BACK]);
 	} finally {
 		await Promise.all(wire?.sockets.map(socket => socket.close()) ?? []);
 		await context.close();
 	}
 });
 
-test("in a compact window, one notice sits above Chat and the document and is not mounted again as they take turns", async ({ join, page }) => {
+test("in a compact window, the banner is by the composer in Chat and at the top of the document, one at a time as they take turns, and said once", async ({ join, page }) => {
 	await page.setViewportSize({ width: 723, height: 900 });
+	await watch(page);
 	let wire = route(page);
 	await wire.ready;
 	await join("ana");
@@ -908,20 +1036,30 @@ test("in a compact window, one notice sits above Chat and the document and is no
 	await expect(notice(page)).toBeVisible();
 	await settled(page);
 	let frame = page.locator(".workspace-frame");
-	// In flow: above the panel that holds both panes, taking its own room.
+	// The document is on screen: in flow, above the panel that holds both panes, taking its own room.
+	await expect(banners(page)).toHaveCount(1);
+	await expect(page.locator("[data-document-banner] [data-connection-banner]")).toHaveCount(1);
+	// The Chat pane is still mounted but off screen: it holds no banner of its own.
+	await expect(chatPane(page).locator("[data-banner]")).toHaveCount(0);
 	await expectNotOver(notice(page), frame);
-	await notice(page).evaluate(element => element.setAttribute("data-same-notice", ""));
 
 	await tab(page, /^Chat/).click();
 	await settled(page);
-	await expect(page.locator("[data-offline-notice][data-same-notice]")).toHaveCount(1);
-	await expectNotOver(notice(page), chatPane(page));
+	await expect(banners(page)).toHaveCount(1);
+	await expect(chatPane(page).locator(".chat-composer [data-connection-banner]")).toHaveCount(1);
+	await expect(page.locator("[data-document-banner]")).toHaveCount(0);
+	await expectNotOver(chatPane(page).locator("[data-chat-scroll]"), notice(page));
 	await tab(page, /^Document/).click();
 	await settled(page);
-	await expect(page.locator("[data-offline-notice][data-same-notice]")).toHaveCount(1);
-	await expect(page.locator("[data-offline-status]")).toHaveText("");
+	await expect(banners(page)).toHaveCount(1);
+	await expect(page.locator("[data-document-banner] [data-connection-banner]")).toHaveCount(1);
+	// The Chat pane is still mounted but off screen: it holds no banner of its own.
+	await expect(chatPane(page).locator("[data-banner]")).toHaveCount(0);
+	// Said once, whichever pane carried it.
+	expect(await heard(page)).toEqual([RECONNECTING]);
 
 	wire.state.offline = false;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
-	await expect(notice(page)).toHaveCount(0);
+	await expect(banners(page)).toHaveCount(0, RESUMED);
+	expect(await heardPhases(page)).toEqual([RECONNECTING, BACK]);
 });
