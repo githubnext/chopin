@@ -188,6 +188,73 @@ test("a raster type that white space Markdown percent-encoded comes before, or t
 	}
 });
 
+test("an address with no type is a raster image whatever amount of white space its base64 payload starts with or holds, and loads as it was written", () => {
+	let forms = [" ", "%20", "\t", "%09", "%0a", "%0D", "%0c", "\n", "\r\n", " %20\t%0A"];
+	let svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>');
+
+	for (let form of forms) {
+		for (let run of [1, 85, 86, 255, 256, 257, 1_000, 100_000]) {
+			let white = form.repeat(run);
+			for (
+				let src of [
+					`data:;base64,${white}${PNG_HEAD}`,
+					`DATA:;BASE64,${white}${PNG_HEAD}`,
+					`data:%20;base64,${white}${PNG_HEAD}`,
+					`data:;charset=utf-8;base64,${white}${PNG_HEAD}`,
+					`data:;base64,iVBO${white}Rw0K${white}Ggo=`,
+					`data:;base64,${white}${written(RASTER_HEADS[1]![1])}`,
+				]
+			) {
+				expect(isDataImage(src), `${JSON.stringify(form)} x ${run}: ${src.slice(0, 40)}`).toBe(
+					true,
+				);
+				expect(imageSource(src, "doc", ORIGIN).kind).toBe("data");
+			}
+			let refused = [
+				`data:;base64,${white}${svg.toString("base64")}`,
+				`data:;base64,${white}`,
+				`data:;base64,${white}AAAA`,
+				`data:;base64,${white}iVBORw0K`,
+				`data:image/svg+xml;base64,${white}${PNG_HEAD}`,
+			];
+			for (let src of run > 1_000 ? refused.slice(0, 2) : refused) {
+				expect(isDataImage(src), `${JSON.stringify(form)} x ${run}: ${src.slice(0, 40)}`).toBe(
+					false,
+				);
+				expect(imageSource(src, "doc", ORIGIN)).toEqual({ kind: "unavailable" });
+			}
+		}
+	}
+	for (let [, bytes] of RASTER_HEADS) {
+		let src = `data:;base64,${"%20".repeat(100_000)}${written(bytes)}`;
+		expect(isDataImage(src), src.slice(-30)).toBe(true);
+	}
+});
+
+test("white space that is not ASCII white space is no part of a base64 payload, as a browser reads it, so an address starting with it is not a raster image", () => {
+	for (
+		let lead of [
+			"%0B",
+			"%0b%0B",
+			"%C2%A0",
+			"%E2%80%83",
+			"\u000b",
+			"\u00a0",
+			"\u2003",
+		]
+	) {
+		for (
+			let src of [
+				`data:;base64,${lead}${PNG_HEAD}`,
+				`data:;base64,${PNG_HEAD.slice(0, 4)}${lead}${PNG_HEAD.slice(4)}`,
+			]
+		) {
+			expect(isDataImage(src), JSON.stringify(src)).toBe(false);
+			expect(imageSource(src, "doc", ORIGIN), JSON.stringify(src)).toEqual({ kind: "unavailable" });
+		}
+	}
+});
+
 test("white space before a type never makes SVG, markup or another type a raster image, and an address with no type is one only when its bytes are", () => {
 	let svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>');
 	let html = Buffer.from("<html><body onload=alert(1)><script>alert(1)</script>");
@@ -305,6 +372,12 @@ test(
 			["data:" + "%20".repeat(many) + ";base64,iVBORw0KGgo=", true],
 			["data:;base64,iVBORw0KGgo=" + "A".repeat(many * 20), true],
 			["data:," + "%00".repeat(many * 20) + "%89PNG%0D%0A%1A%0A", false],
+			["data:;base64," + " ".repeat(many * 20) + "iVBORw0KGgo=", true],
+			["data:;base64," + "%20".repeat(many * 10) + "iVBORw0KGgo=", true],
+			["data:;base64," + " %09\\n".repeat(many * 5) + "iVBORw0KGgo=", true],
+			["data:;base64," + "\\r\\n".repeat(many * 10), false],
+			["data:;base64," + " ".repeat(many * 20) + "PHN2Zy8+", false],
+			["data:;base64,iVBORw0KGgo=" + " ".repeat(many * 20) + "!", true],
 		];
 		let outcomes = cases.map(([src, expected]) => [
 			isDataImage(src) === expected,
@@ -322,7 +395,7 @@ test(
 		expect(run.signalCode, run.stderr.toString()).toBeUndefined();
 		expect(run.exitCode, run.stderr.toString()).toBe(0);
 		expect(JSON.parse(run.stdout.toString())).toEqual(
-			Array.from({ length: 25 }, () => [true, true]),
+			Array.from({ length: 31 }, () => [true, true]),
 		);
 	},
 	20_000,
