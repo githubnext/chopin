@@ -557,6 +557,10 @@ test("a build's agent opens draft pull requests with the machine's own GitHub to
 		// The machine's own GitHub authorization, which its owner approved when it paired.
 		expect(token).toMatch(new RegExp(`^ghu_e2e_${handle}_\\d+$`));
 		expect(args).toEqual(["pr", "create", "--draft", "--title", "Task one", ""]);
+		await expect.poll(
+			() => readFile(join(scratch, "github.json"), "utf8").catch(() => ""),
+			{ timeout: 30_000 },
+		).not.toBe("");
 		let seen = JSON.parse(await readFile(join(scratch, "github.json"), "utf8"));
 		expect(seen).toMatchObject({ GH_TOKEN: token, GITHUB_TOKEN: token });
 		expect(seen.credential).toContain(`password=${token}\n`);
