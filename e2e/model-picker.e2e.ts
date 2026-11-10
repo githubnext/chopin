@@ -73,6 +73,23 @@ function databaseUrls() {
 	return { cluster: cluster.href, own: own.href };
 }
 
+/**
+ * Makes the server's read of the documents' stored model choices fail, or work again, by renaming
+ * their table in this file's own database.
+ */
+async function choicesReadable(readable: boolean) {
+	let db = new SQL(databaseUrls().own);
+	try {
+		await db.unsafe(
+			readable
+				? "ALTER TABLE planner_model_choices_hidden RENAME TO planner_model_choices"
+				: "ALTER TABLE planner_model_choices RENAME TO planner_model_choices_hidden",
+		);
+	} finally {
+		await db.close();
+	}
+}
+
 const ENV = {
 	SERVER_HOST: HOST,
 	PORT: String(PORT),
@@ -799,6 +816,50 @@ test("falls back to the default with a notice when the chosen model has gone, an
 	await ask(page, "level gone", 4);
 	expect(turnFor(asked, "level gone")).toMatchObject({ model: "acme/large" });
 	expect(turnFor(asked, "level gone").thinkingLevel).toBeUndefined();
+	await client.detach();
+});
+
+test("says the default ran when a turn cannot read the document's model choice, to everyone, until one can", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await newRoom();
+	let page = await open(browser, HANDLE, room, DESKTOP);
+	let teammate = await open(browser, "ana", room, DESKTOP);
+	let { client, asked } = await attachClient(room, CATALOG);
+	await expect(trigger(page)).toBeVisible();
+	await openPicker(page);
+	await option(page, "Large").click();
+	await openPicker(page);
+	await level(page, "High").click();
+	await page.keyboard.press("Escape");
+	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
+	await expect(trigger(teammate)).toHaveAccessibleName("Model: Large, reasoning high");
+
+	// The server cannot read the stored choice: the turn runs the client's default, never silently.
+	let unread = "This document's model choice couldn't be read, so Chopin used its default model.";
+	await choicesReadable(false);
+	try {
+		await ask(page, "while it cannot be read", 1);
+		expect(turnFor(asked, "while it cannot be read").model).toBeUndefined();
+		expect(turnFor(asked, "while it cannot be read").thinkingLevel).toBeUndefined();
+		// Every composer says so in its strip, and Chat says it once on the turn.
+		await expect(strip(page).filter({ hasText: unread })).toBeVisible();
+		await expect(strip(teammate).filter({ hasText: unread })).toBeVisible();
+		await expect(chat(page).getByText(unread, { exact: true })).toHaveCount(2);
+		await shoot(chat(page), "model-picker-unreadable-desktop");
+	} finally {
+		await choicesReadable(true);
+	}
+
+	// A turn that can read it runs the stored choice again, and the strip goes with the cause.
+	await ask(page, "once it can", 2);
+	expect(turnFor(asked, "once it can")).toMatchObject({
+		model: "acme/large",
+		thinkingLevel: "high",
+	});
+	await expect(strip(page).filter({ hasText: unread })).toHaveCount(0);
+	await expect(strip(teammate).filter({ hasText: unread })).toHaveCount(0);
+	await expect(chat(page).getByText(unread, { exact: true })).toHaveCount(1);
+	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
 	await client.detach();
 });
 

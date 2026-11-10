@@ -105,6 +105,14 @@ export function levelLabel(level: string): string {
 	return LEVELS.get(level) ?? level.charAt(0).toUpperCase() + level.slice(1);
 }
 
+/**
+ * The words for a turn that could not read the document's model choice, or the catalog to check it
+ * against, and so ran the harness's default. The server says them in Chat and tells the room, and
+ * the composer shows them, so a choice is never dropped without a word.
+ */
+export const UNREADABLE_NOTICE =
+	"This document's model choice couldn't be read, so Chopin used its default model.";
+
 /** The words a person reads for what could not be honoured, without Chopin's own terms. */
 export function unavailableNotice(
 	catalog: Catalog | undefined,

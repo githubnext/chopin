@@ -10,6 +10,7 @@ import {
 	modelLevels,
 	resolveChoice,
 	unavailableNotice,
+	UNREADABLE_NOTICE,
 } from "@chopin/protocol/model-choice";
 
 import type { Chat } from "@chopin/protocol";
@@ -141,6 +142,24 @@ export function triggerTitle(catalog: Catalog, choice: Choice | undefined): stri
 export function fallbackNotice(catalog: Catalog, choice: Choice | undefined): string | undefined {
 	let lost = resolveChoice(catalog, choice).unavailable;
 	return lost ? unavailableNotice(catalog, lost) : undefined;
+}
+
+/**
+ * What the composer's strip says about the document's model, if anything. A choice the server just
+ * refused comes first, then the server's word that a turn could not read the choice and ran the
+ * harness's default (which holds even where this browser has no catalog), then a stored choice
+ * the catalog no longer offers.
+ */
+export function composerModelNotice(
+	control:
+		| { catalog: Catalog; choice: Choice | undefined; refusal: string | undefined }
+		| undefined,
+	unreadable: boolean,
+): { tone: "warning" | "info"; text: string } | undefined {
+	if (control?.refusal) return { tone: "warning", text: control.refusal };
+	if (unreadable) return { tone: "info", text: UNREADABLE_NOTICE };
+	let lost = control && fallbackNotice(control.catalog, control.choice);
+	return lost ? { tone: "info", text: lost } : undefined;
 }
 
 /**

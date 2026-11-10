@@ -38,7 +38,8 @@ export declare namespace Chat {
 		| Woke
 		| Removed
 		| ParticipationState
-		| ModelState;
+		| ModelState
+		| ModelUnreadable;
 
 	/** Who said something. The agent is not a member, so it is named apart. */
 	export type Author =
@@ -284,6 +285,15 @@ export declare namespace Chat {
 	 * offers; the agent then runs its default and says so in Chat.
 	 */
 	export type ModelState = KIND<"chat:model"> & { catalog?: ModelCatalog; choice?: ModelChoice };
+
+	/**
+	 * Sent to everyone in the room when a turn could not read the document's model choice, or the
+	 * catalog to check it against, and so ran the agent's default (`unreadable: true`), and again
+	 * when a later turn could read it (`false`). Only a change is sent; a person who joins while it
+	 * holds is sent it after `History`, which ends what an earlier connection was told. The composer
+	 * says so, in the words of `UNREADABLE_NOTICE`, until it ends.
+	 */
+	export type ModelUnreadable = KIND<"chat:model-unreadable"> & { unreadable: boolean };
 
 	/**
 	 * Choose the document's model and thinking level, from the next turn. Anyone who can write may.
