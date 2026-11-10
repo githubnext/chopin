@@ -98,18 +98,63 @@ describe("choosing a document's model and thinking level", () => {
 		expect(broadcasts()).toEqual([]);
 	});
 
-	test("refuses anything that is not a non-empty string, and any choice for a child document", async () => {
+	test("chooses any model and level the catalog lists, spelled and as long as the client wrote them", async () => {
+		// The picker offers every entry of the catalog, so each can be chosen and is kept as it was.
+		let long = `acme/${"m".repeat(5_000)}`;
+		let odd: Wire.ModelCatalog = {
+			models: [
+				{
+					id: long,
+					name: "Long",
+					thinkingLevels: ["extra high", "deep thought", "\u4f4e", "x".repeat(300)],
+				},
+				{ id: 'with space \n and "quotes"', name: "Spaced" },
+				{ id: "", name: "Empty", thinkingLevels: [""] },
+			],
+		};
+		let { opened, replies, choose, broadcasts } = await sets(() => odd);
+		await choose({ model: long, thinkingLevel: "deep thought" });
+		expect(replies.at(-1)).toMatchObject({ kind: "chat:model" });
+		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toMatchObject({
+			model: long,
+			thinkingLevel: "deep thought",
+		});
+		await choose({ model: long, thinkingLevel: "\u4f4e" });
+		await choose({ model: long, thinkingLevel: "x".repeat(300) });
+		await choose({ model: 'with space \n and "quotes"' });
+		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toMatchObject({
+			model: 'with space \n and "quotes"',
+		});
+		await choose({ model: "", thinkingLevel: "" });
+		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toMatchObject({
+			model: "",
+			thinkingLevel: "",
+		});
+		expect(replies.every(reply => reply.kind === "chat:model")).toBe(true);
+		expect(broadcasts()).toHaveLength(5);
+	});
+
+	test("refuses a string only because the catalog does not list it, however long", async () => {
 		let { opened, replies, choose, broadcasts } = await sets();
-		for (
-			let fields of [{ model: 3 }, { model: "" }, { thinkingLevel: ["low"] }, {
-				model: "x".repeat(257),
-			}]
-		) {
+		await choose({ model: "x".repeat(257) });
+		await choose({ model: "acme/large", thinkingLevel: "x".repeat(1_000_000) });
+		await choose({ model: "" });
+		expect(replies.map(reply => reply.message)).toEqual([
+			"That model isn't available.",
+			"That model doesn't offer that level of reasoning.",
+			"That model isn't available.",
+		]);
+		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toBeUndefined();
+		expect(broadcasts()).toEqual([]);
+	});
+
+	test("refuses anything that is not a string, and any choice for a child document", async () => {
+		let { opened, replies, choose, broadcasts } = await sets();
+		for (let fields of [{ model: 3 }, { model: null }, { thinkingLevel: ["low"] }]) {
 			await choose(fields);
 		}
 		await choose({ model: "acme/large" }, { child: true });
 		expect(replies.map(reply => reply.message)).toEqual([
-			"That is not a model choice.",
 			"That is not a model choice.",
 			"That is not a model choice.",
 			"That is not a model choice.",

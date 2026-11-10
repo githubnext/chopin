@@ -819,7 +819,8 @@ test("refuses a choice the catalog does not offer, whatever the browser sends, a
 		"That model isn't available.",
 		"That model doesn't offer that level of reasoning.",
 		"That is not a model choice.",
-		"That is not a model choice.",
+		// Any string is a choice; only the catalog refuses one it does not list, however long.
+		"That model isn't available.",
 	]);
 	// Nobody in the room sees any of it, and the next turn still runs the chosen model.
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large");

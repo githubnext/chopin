@@ -65,13 +65,15 @@ export async function turnModel(deps: ModelChoiceDeps, channelId: string): Promi
 	};
 }
 
-/** The fields of a request that are a choice: a field that is not a non-empty string is no choice. */
+/**
+ * The fields of a request that are a choice: a string is one, whatever it holds, and a field of
+ * any other type is no choice. Only the catalog says what is offered (`refusedChoice`), so a model
+ * or level it lists is chosen as it was written, however it is spelled or how long it is.
+ */
 function requested(frame: Wire.SetModel): Wire.ModelChoice | undefined {
 	let { model, thinkingLevel } = frame;
 	for (let value of [model, thinkingLevel]) {
-		if (value !== undefined && (typeof value !== "string" || value === "" || value.length > 256)) {
-			return undefined;
-		}
+		if (value !== undefined && typeof value !== "string") return undefined;
 	}
 	return {
 		...(model !== undefined ? { model } : {}),

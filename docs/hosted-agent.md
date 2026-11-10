@@ -51,7 +51,8 @@ wrapper puts it on that turn; no turn can see another's, and a background job's 
 
 `chat:model` checks a choice against the catalog reported now, stores it under the writer lease
 and only then answers the sender and tells the room. It refuses a model or a level the catalog
-does not list, anything that is not a short non-empty string, a choice for a child document
+does not list (whatever its spelling or length: only the catalog decides, and what it lists is
+stored as written), a field that is not a string, a choice for a child document
 (which uses its root's), and every choice where no catalog is offered; choosing nothing goes back
 to the default. Every Planner turn a person started resolves the stored choice again. A model that
 has gone, or a level its model no longer lists, is not sent: the default runs, Chat says so once
