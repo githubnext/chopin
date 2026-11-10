@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { apng, bigPng, fixture } from "../images/raster.test-fixtures";
-import { savedImages, toolImages, toolRowOutput } from "./images";
+import { inspectImages, savedImages, savedRefusals, toolImages, toolRowOutput } from "./images";
 
 const PNG = new Uint8Array([
 	0x89,
@@ -193,6 +193,112 @@ describe("tool images", () => {
 	});
 });
 
+const SHOWN = "PNG, JPEG, WebP, GIF, AVIF, BMP or ICO";
+
+function reasons(...blocks: unknown[]): string[] {
+	return inspectImages({ content: blocks }).refusals.map(refusal => refusal.reason);
+}
+
+describe("refused tool images", () => {
+	test("says an image type Chat does not show is not one, SVG and HTML among them", () => {
+		expect(reasons(
+			image({ data: base64(SVG), mimeType: "image/svg+xml" }),
+			image({ data: base64(HTML), mimeType: "TEXT/HTML; charset=utf-8" }),
+			image({ data: base64(fixture("raster-18x6.avif")), mimeType: "image/heic" }),
+			image({ mimeType: "not a type <script>" }),
+		)).toEqual([
+			`Image couldn't be shown: its type image/svg+xml isn't one Chat shows (${SHOWN}).`,
+			`Image couldn't be shown: its type text/html isn't one Chat shows (${SHOWN}).`,
+			`Image couldn't be shown: its type image/heic isn't one Chat shows (${SHOWN}).`,
+			`Image couldn't be shown: its type isn't one Chat shows (${SHOWN}).`,
+		]);
+	});
+
+	test("says data that is not base64 is not", () => {
+		expect(reasons(
+			image({ data: "not base64!" }),
+			image({ data: base64(PNG).slice(0, -1) }),
+			image({ data: `${base64(PNG)}=====` }),
+		)).toEqual(Array(3).fill("Image couldn't be shown: its data isn't valid base64."));
+	});
+
+	test("says bytes that are not the image their type names are not, and which raster they are", () => {
+		expect(reasons(
+			image({ data: base64(SVG) }),
+			image({ data: base64(new Uint8Array(1_048_577).fill(1)) }),
+			image({ data: base64(HTML), mimeType: "image/x-icon" }),
+			image({ data: base64(fixture("raster-18x6.avif")), mimeType: "image/png" }),
+			image({ data: base64(PNG), mimeType: "image/vnd.microsoft.icon" }),
+		)).toEqual([
+			"Image couldn't be shown: its bytes aren't PNG data, as its type says.",
+			"Image couldn't be shown: its bytes aren't PNG data, as its type says.",
+			"Image couldn't be shown: its bytes aren't ICO data, as its type says.",
+			"Image couldn't be shown: its bytes are AVIF data, not PNG as its type says.",
+			"Image couldn't be shown: its bytes are PNG data, not ICO as its type says.",
+		]);
+	});
+
+	test("says an image whose header cannot be read is cut short or damaged", () => {
+		expect(reasons(
+			image({ data: base64(PNG.slice(0, 20)) }),
+			image({ data: base64(fixture("raster-18x6.avif").slice(0, 120)), mimeType: "image/avif" }),
+			image({ data: "", mimeType: "image/gif" }),
+		)).toEqual([
+			"Image couldn't be shown: its PNG header can't be read, so the image is cut short or damaged.",
+			"Image couldn't be shown: its AVIF header can't be read, so the image is cut short or damaged.",
+			"Image couldn't be shown: its bytes aren't GIF data, as its type says.",
+		]);
+	});
+
+	test("says a block with no data or no type has none", () => {
+		expect(reasons(
+			{ type: "image", mimeType: "image/png" },
+			{ type: "image", data: base64(PNG) },
+			{ type: "image", data: 7, mimeType: "image/png" },
+			{ type: "image" },
+		)).toEqual(Array(4).fill("Image couldn't be shown: its block has no base64 data or no type."));
+	});
+
+	test("keeps the order of the blocks and each duplicate, and where among the shown images each was", () => {
+		let found = inspectImages({
+			content: [
+				{ type: "text", text: "Drew three" },
+				image({ alt: "first" }),
+				image({ data: base64(SVG), mimeType: "image/svg+xml" }),
+				image({ alt: "second" }),
+				image({ data: "not base64!" }),
+				image({ data: "not base64!" }),
+				image({ alt: "third" }),
+				image({ data: base64(SVG) }),
+			],
+		});
+		expect(found.images.map(item => item.alt)).toEqual(["first", "second", "third"]);
+		expect(found.refusals).toEqual([
+			{
+				before: 1,
+				reason: `Image couldn't be shown: its type image/svg+xml isn't one Chat shows (${SHOWN}).`,
+			},
+			{ before: 2, reason: "Image couldn't be shown: its data isn't valid base64." },
+			{ before: 2, reason: "Image couldn't be shown: its data isn't valid base64." },
+			{
+				before: 3,
+				reason: "Image couldn't be shown: its bytes aren't PNG data, as its type says.",
+			},
+		]);
+		expect(toolImages({ content: [image(), image({ data: base64(SVG) })] }).refused).toBe(1);
+	});
+
+	test("has nothing to say about a result with no image block or a block it shows", () => {
+		for (
+			let output of ["plain text", null, 42, { content: [{ type: "text", text: "x" }] }, {
+				content: [image()],
+			}]
+		) {
+			expect(inspectImages(output).refusals).toEqual([]);
+		}
+	});
+});
+
 describe("saved images", () => {
 	test("admits the images a turn saved", () => {
 		expect(savedImages([])).toBe(true);
@@ -219,5 +325,32 @@ describe("saved images", () => {
 				[{ src: SRC, width: 1, height: 1, bytes: "AAAA" }],
 			]
 		) expect(savedImages(value)).toBe(false);
+	});
+});
+
+describe("saved refused images", () => {
+	const reason = "Image couldn't be shown: its data isn't valid base64.";
+
+	test("admits what a turn saved, and nothing", () => {
+		expect(savedRefusals([])).toBe(true);
+		expect(savedRefusals([{ before: 0, reason }, { before: 2, reason }])).toBe(true);
+	});
+
+	test("refuses anything else", () => {
+		for (
+			let value of [
+				undefined,
+				{},
+				[null],
+				[{ before: 0 }],
+				[{ reason }],
+				[{ before: -1, reason }],
+				[{ before: 1.5, reason }],
+				[{ before: 0, reason: 3 }],
+				[{ before: 0, reason: "" }],
+				[{ before: 0, reason: "It was not shown." }],
+				[{ before: 0, reason, extra: true }],
+			]
+		) expect(savedRefusals(value)).toBe(false);
 	});
 });

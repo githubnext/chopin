@@ -864,9 +864,19 @@ made, and several show as one gallery. Browsers load it from
 `/images/<sha256>.<ext>`, which serves it only to people who can read the
 document, with its own `Content-Type`, `X-Content-Type-Options: nosniff` and a
 `sandbox` content security policy, so no SVG or HTML is ever served from it.
-Any other block, SVG and HTML among them, is left out of Chat, and the tool's row
+A block Chopin will not host, SVG and HTML among them, is not shown, and the
+message does not leave it unsaid: the turn's message lists `refusedImages`, one
+entry per such block in the order of the result's blocks, duplicates kept, each
+with a plain sentence that starts `Image couldn't be shown:` and says why, and
+`before`, how many of the message's images come before it. The reasons are that
+its type is not one Chat shows, that its data is not base64, that its bytes are
+not the type it names (or are another type, or are cut short), that its block
+has no data or type, and that Chopin could not store it, which gives no detail
+of the failure. `refusedImages` is an optional field that old browsers ignore,
+saved with the message; a message may have it without `images`. The tool's row
 in Work details shows the `text` blocks and how many images the result carried,
-never their bytes. A `preliminary` or failed result shows no images.
+never their bytes. A `preliminary` or failed result shows no images and no
+reasons.
 `@chopin/agent-link` exports the block as `toolImageSchema`. Like the
 [structured tool error](#structured-tool-errors), it is a convention, not a new
 wire shape: `result` is still any JSON, so a client sends it to any server, and a

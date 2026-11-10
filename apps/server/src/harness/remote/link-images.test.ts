@@ -242,4 +242,38 @@ describe("images over the agent connection", () => {
 			});
 		}
 	});
+
+	it("say why each image a client sent could not be shown, where it would have been among the others", async () => {
+		let avif = fixture("raster-18x6.avif");
+		let { chat } = await drawn([
+			{ type: "text", text: "Drew five" },
+			{ type: "image", data: encoded(PNG), mimeType: "image/png", alt: "Ground floor" },
+			{ type: "image", data: encoded(SVG), mimeType: "image/svg+xml" },
+			{ type: "image", data: encoded(avif), mimeType: "image/png" },
+			{ type: "image", data: encoded(PNG.slice(0, 20)), mimeType: "image/png" },
+			{ type: "image", data: "not base64!", mimeType: "image/png" },
+			{ type: "image", data: encoded(avif), mimeType: "image/avif", alt: "First floor" },
+		]);
+
+		let entry = chat.entries.find(item => item.images);
+		expect(entry?.images?.map(image => image.alt)).toEqual(["Ground floor", "First floor"]);
+		expect(entry?.refusedImages).toEqual([
+			{
+				before: 1,
+				reason:
+					"Image couldn't be shown: its type image/svg+xml isn't one Chat shows (PNG, JPEG, WebP, GIF, AVIF, BMP or ICO).",
+			},
+			{
+				before: 1,
+				reason: "Image couldn't be shown: its bytes are AVIF data, not PNG as its type says.",
+			},
+			{
+				before: 1,
+				reason:
+					"Image couldn't be shown: its PNG header can't be read, so the image is cut short or damaged.",
+			},
+			{ before: 1, reason: "Image couldn't be shown: its data isn't valid base64." },
+		]);
+		expect(entry?.tools?.[0]?.result).toBe("Drew five\n6 images");
+	});
 });

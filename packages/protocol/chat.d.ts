@@ -204,6 +204,18 @@ export declare namespace Chat {
 		generated?: true;
 	};
 
+	/**
+	 * An image of the agent's turn that Chat could not show, in the place it would have had among
+	 * the message's images. Additive: a client that does not know `Entry.refusedImages` shows the
+	 * images alone.
+	 */
+	export type ImageRefusal = {
+		/** How many of the entry's `images` come before it, from 0 to `images.length`. */
+		before: number;
+		/** A plain sentence that starts `Image couldn't be shown: ` and says why. */
+		reason: string;
+	};
+
 	export type Entry = {
 		id: string;
 		author: Author;
@@ -214,6 +226,12 @@ export declare namespace Chat {
 		 * Absent on any other entry.
 		 */
 		images?: Image[];
+		/**
+		 * Images of the turn that Chat could not show, each with its reason and where it would have
+		 * been, in the order of the tool result's blocks with duplicates kept. Present on the same
+		 * entry as `images`, or alone on an entry that has none. Absent on any other entry.
+		 */
+		refusedImages?: ImageRefusal[];
 		/** A system notice about a decision card; text remains its fallback. */
 		decision?:
 			| {

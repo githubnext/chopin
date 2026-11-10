@@ -20,7 +20,7 @@
 
 import { createHash } from "node:crypto";
 import { imagePath, imageSize } from "../images/format";
-import { toolImages, toolRowOutput } from "./images";
+import { inspectImages, STORE_REFUSAL, toolRowOutput } from "./images";
 import type { ToolImage } from "./images";
 
 import { ulid } from "@chopin/dialect";
@@ -3522,9 +3522,10 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 				? part.error
 				: "Refused.";
 			let staged: ToolImage[] = [];
+			let refused: Wire.ImageRefusal[] = [];
 			if (success && !preliminary && !chat.turnImages?.calls.has(part.toolCallId)) {
-				staged = toolImages(output).images;
-				if (staged.length) turnImages(chat).calls.add(part.toolCallId);
+				({ images: staged, refusals: refused } = inspectImages(output));
+				if (staged.length || refused.length) turnImages(chat).calls.add(part.toolCallId);
 			}
 			conclude(
 				context,
@@ -3534,7 +3535,7 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 				success,
 				part.type === "tool-output-denied",
 			);
-			if (staged.length) stageImages(context, staged, part.toolCallId);
+			if (staged.length || refused.length) stageImages(context, staged, refused, part.toolCallId);
 			return;
 		}
 		case "tool-approval-request":
@@ -3766,9 +3767,10 @@ function showImages(
 	turn: TurnImages,
 	images: Wire.Image[],
 	held?: string,
+	refusals: Wire.ImageRefusal[] = [],
 ): void {
 	let { chat, room, server } = context;
-	if (chat.closed || !images.length || chat.turnImages !== turn) return;
+	if (chat.closed || !(images.length || refusals.length) || chat.turnImages !== turn) return;
 	let entry = chat.entries.find(item => item.id === turn.entry)
 		?? chat.entries.find(item => item.id === held)
 		?? chat.entries.find(item => item.id === chat.tooling)
@@ -3778,38 +3780,62 @@ function showImages(
 		chat.entries.push(entry);
 	}
 	turn.entry = entry.id;
-	entry.images = [...entry.images ?? [], ...images];
+	let before = entry.images?.length ?? 0;
+	if (images.length) entry.images = [...entry.images ?? [], ...images];
+	if (refusals.length) {
+		entry.refusedImages = [
+			...entry.refusedImages ?? [],
+			...refusals.map(refusal => ({ ...refusal, before: before + refusal.before })),
+		];
+	}
 	announce(server, room, entry);
 }
 
-function stageImages(context: Room, images: ToolImage[], call: string): void {
+function stageImages(
+	context: Room,
+	images: ToolImage[],
+	refusals: Wire.ImageRefusal[],
+	call: string,
+): void {
 	let { auth, room } = context;
 	let member = currentMemberRequest(context.chat)?.userId;
 	let turn = turnImages(context.chat);
 	let held = holder(context.chat, call)?.id;
 	later(turn, async () => {
-		let uploadedBy = await imageOwner(context, member);
 		let shown: Wire.Image[] = [];
-		for (let image of images) {
-			let sha256 = createHash("sha256").update(image.bytes).digest("hex");
-			await auth.storage.images.put({
-				channelId: room,
-				sha256,
-				mimeType: image.mimeType,
-				bytes: image.bytes,
-				uploadedBy,
-				now: auth.clock(),
-			});
-			shown.push({
-				src: imagePath(sha256, image.mimeType),
-				...(image.alt === undefined ? {} : { alt: image.alt }),
-				...(image.caption === undefined ? {} : { caption: image.caption }),
-				width: image.width,
-				height: image.height,
-				generated: true,
-			});
+		let notes: Wire.ImageRefusal[] = [];
+		let waiting = [...refusals];
+		let uploadedBy: string | undefined;
+		for (let [index, image] of images.entries()) {
+			while (waiting[0] && waiting[0].before <= index) {
+				notes.push({ ...waiting.shift()!, before: shown.length });
+			}
+			try {
+				uploadedBy ??= await imageOwner(context, member);
+				let sha256 = createHash("sha256").update(image.bytes).digest("hex");
+				await auth.storage.images.put({
+					channelId: room,
+					sha256,
+					mimeType: image.mimeType,
+					bytes: image.bytes,
+					uploadedBy,
+					now: auth.clock(),
+				});
+				shown.push({
+					src: imagePath(sha256, image.mimeType),
+					...(image.alt === undefined ? {} : { alt: image.alt }),
+					...(image.caption === undefined ? {} : { caption: image.caption }),
+					width: image.width,
+					height: image.height,
+					generated: true,
+				});
+			} catch (err) {
+				console.error("[chat] could not store an image to show in Chat:", err);
+				notes.push({ before: shown.length, reason: STORE_REFUSAL });
+			}
 		}
-		showImages(context, turn, shown, held);
+		for (let refusal of waiting) notes.push({ ...refusal, before: shown.length });
+		showImages(context, turn, shown, held, notes);
 	});
 }
 

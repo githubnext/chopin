@@ -48,7 +48,7 @@ import * as edit from "./edit";
 import * as room from "./room";
 import * as Chat from "../chat/service";
 import { restoreReferences } from "../chat/references";
-import { savedImages } from "../chat/images";
+import { savedImages, savedRefusals } from "../chat/images";
 import { entriesForStorage, mergePointers } from "../chat/stored-pointers";
 import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
@@ -702,9 +702,10 @@ function restoredState(
 		validateNotice(entry, savedMessages);
 		mergePointers(entry);
 		if (
-			Object.hasOwn(entry, "images")
-			&& ((entry.author as Record<string, JsonValue>).kind !== "agent"
-				|| !savedImages(entry.images))
+			(Object.hasOwn(entry, "images") || Object.hasOwn(entry, "refusedImages"))
+				&& (entry.author as Record<string, JsonValue>).kind !== "agent"
+			|| Object.hasOwn(entry, "images") && !savedImages(entry.images)
+			|| Object.hasOwn(entry, "refusedImages") && !savedRefusals(entry.refusedImages)
 		) throw new Error("hosted channel has an invalid transcript image");
 		if (Object.hasOwn(entry, "references")) {
 			let author = entry.author as Record<string, JsonValue>;
