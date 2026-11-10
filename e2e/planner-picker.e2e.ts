@@ -33,6 +33,7 @@ import {
 } from "./planner-status";
 import { createChannel, registerTestDatabase, seedChannel } from "./database";
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
+import { e2eDatabaseName, e2ePort } from "./ports";
 import { RELEASE } from "./release";
 import { HOST, ROOT } from "./servers";
 
@@ -40,9 +41,9 @@ import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 
 import type { Browser, Page } from "@playwright/test";
 
-const PORT = 8794;
+const PORT = e2ePort(8794);
 const ORIGIN = `http://${HOST}:${PORT}`;
-const DATABASE = "chopin_planner_picker";
+const DATABASE = e2eDatabaseName("chopin_planner_picker");
 const DESKTOP = { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 };
 const PHONE = {
 	hasTouch: true,

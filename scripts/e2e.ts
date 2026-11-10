@@ -1,5 +1,7 @@
 import { fileURLToPath } from "node:url";
 
+import { e2ePort } from "../e2e/ports";
+
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const KEY = "33".repeat(32);
 const COMPOSE = ["docker", "compose", "-f", "compose.yaml", "-f", "compose.local.yaml"];
@@ -11,7 +13,7 @@ const databases = [
 	"postgresql://chopin:chopin@127.0.0.1:5436/chopin?sslmode=disable",
 ];
 // Not `8788 + index`: the harness server is 8792, clear of local-auth's 8791.
-const appOrigins = [8788, 8789, 8792, 8791];
+const appOrigins = [8788, 8789, 8792, 8791].map(e2ePort);
 
 async function run(command: string[], env: Record<string, string> = {}): Promise<void> {
 	let child = Bun.spawn(command, {

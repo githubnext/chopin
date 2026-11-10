@@ -46,6 +46,7 @@ import { startHoldingProxy } from "./holding-proxy";
 import { expectPlannerAttached, machineButton } from "./planner-status";
 import { RELEASE } from "./release";
 import { authenticate, content, expect, ready, roomPath, status, test } from "./room";
+import { e2eDatabaseName, e2ePort } from "./ports";
 import { HOST, ROOT } from "./servers";
 
 import type { Locator, Page } from "@playwright/test";
@@ -53,10 +54,10 @@ import type { AgentHandlers, TurnContext } from "../packages/agent-link/src/clie
 import type { Slot } from "./holding-proxy";
 import type { SocketEvent } from "./reconnect-gaps";
 
-const PROXY_PORT = 8801;
-const SLOT_PORTS: Record<Slot, number> = { a: 8802, b: 8803 };
+const PROXY_PORT = e2ePort(8801);
+const SLOT_PORTS: Record<Slot, number> = { a: e2ePort(8802), b: e2ePort(8803) };
 const ORIGIN = `http://${HOST}:${PROXY_PORT}`;
-const DATABASE = "chopin_handover";
+const DATABASE = e2eDatabaseName("chopin_handover");
 const HANDLE = "mona";
 const MACHINE = "studio";
 /** What the server is told a window for a Planner coming back is; the design proposes 10 s. */

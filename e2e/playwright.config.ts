@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
 
+import { e2ePort } from "./ports";
 import { FIXTURES, HARNESS, HOST, PLAIN, ROOT, SETUP_AGENTS } from "./servers";
 
 /*
@@ -230,7 +231,7 @@ export default defineConfig({
 			testMatch: ["**/auth-lifecycle.e2e.ts", "**/demo-collaborators.e2e.ts"],
 			// These files own the same local-mode port and disposable database.
 			workers: 1,
-			use: { ...devices["Desktop Chrome"], baseURL: "http://127.0.0.1:8791" },
+			use: { ...devices["Desktop Chrome"], baseURL: `http://127.0.0.1:${e2ePort(8791)}` },
 		},
 	],
 

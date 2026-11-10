@@ -5,16 +5,17 @@ import { join } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
+import { e2ePort } from "./ports";
 import { ROOT } from "./servers";
 
-const ORIGIN = "http://127.0.0.1:8791";
+const ORIGIN = `http://127.0.0.1:${e2ePort(8791)}`;
 const BASE_ENV = {
 	...process.env,
 	AUTH_MODE: "local",
 	DEMO_PERSONAS: "off",
 	APP_ORIGIN: ORIGIN,
 	SERVER_HOST: "127.0.0.1",
-	PORT: "8791",
+	PORT: String(e2ePort(8791)),
 	DATABASE_URL: process.env.E2E_DATABASE_URL_3!,
 	GITHUB_APP_SLUG: "chopin-e2e",
 	GITHUB_APP_CLIENT_ID: "e2e",

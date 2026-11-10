@@ -1,4 +1,5 @@
 import { resetPlannerJobs } from "./planner-jobs";
+import { e2ePort } from "./ports";
 import { createChannel } from "./database";
 import { releaseJev, resetJevControl } from "./jev-control";
 import { RESTART_URL, startJevProcess, stopJevProcess } from "./jev-process";
@@ -371,7 +372,7 @@ test("restoring ordinary and Planner history does not enqueue inference", async 
 test("pending inference resumes after an actual server process restart", async ({ browser }) => {
 	await resetJevControl();
 	let room = crypto.randomUUID();
-	await createChannel(8789, room);
+	await createChannel(e2ePort(8789), room);
 	let first = await startJevProcess();
 	let second: typeof first | undefined;
 	let context = await browser.newContext({ baseURL: RESTART_URL });

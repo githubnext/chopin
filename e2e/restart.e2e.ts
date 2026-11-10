@@ -18,13 +18,14 @@ import {
 	testChannelPath,
 } from "./database";
 import { authenticate, content, expect, ready, status, test } from "./room";
+import { e2eDatabaseName, e2ePort } from "./ports";
 import { HOST, ROOT } from "./servers";
 
 import type { Page } from "@playwright/test";
 
-const PORT = 8796;
+const PORT = e2ePort(8796);
 const ORIGIN = `http://${HOST}:${PORT}`;
-const DATABASE = "chopin_restart_quiet";
+const DATABASE = e2eDatabaseName("chopin_restart_quiet");
 
 function databaseUrls() {
 	let cluster = new URL(
