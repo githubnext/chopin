@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { bigPng } from "../images/raster.test-fixtures";
 import { savedImages, toolImages, toolRowOutput } from "./images";
 
 const PNG = new Uint8Array([
@@ -115,6 +116,19 @@ describe("tool images", () => {
 		});
 		expect(found.refused).toBe(6);
 		expect(found.images.map(item => item.alt)).toEqual(["kept"]);
+	});
+
+	test("hosts a picture of any size, a transport's own limit aside", () => {
+		for (let size of [1_048_577, 1_080_993, 9 * 1024 * 1024]) {
+			let big = bigPng(size);
+			let found = toolImages({ content: [image({ data: base64(big), alt: "Big" })] });
+			expect(found.refused, `${size}`).toBe(0);
+			expect(found.images, `${size}`).toHaveLength(1);
+			let [hosted] = found.images;
+			expect(hosted, `${size}`).toMatchObject({ mimeType: "image/png", width: 40, height: 30 });
+			expect(hosted!.bytes.byteLength, `${size}`).toBe(size);
+			expect(Bun.hash(hosted!.bytes), `${size}`).toBe(Bun.hash(big));
+		}
 	});
 
 	test("finds nothing in a result without image blocks", () => {

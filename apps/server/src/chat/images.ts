@@ -1,7 +1,7 @@
 import { toolContentSchema, toolImageSchema } from "@chopin/agent-link";
 import { HOSTED_IMAGE_PATH } from "@chopin/dialect";
 
-import { imageSize, isImageType, MAX_IMAGE_BYTES } from "../images/format";
+import { imageSize, isImageType } from "../images/format";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { ImageType } from "../images/format";
@@ -15,7 +15,7 @@ export type ToolImage = {
 	caption?: string;
 };
 
-const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
 function contentBlocks(output: unknown): unknown[] | undefined {
 	if (typeof output === "string") {
@@ -36,9 +36,8 @@ function hosted(block: unknown): ToolImage | undefined {
 	let image = toolImageSchema.safeParse(block).data;
 	if (!image || !isImageType(image.mimeType)) return undefined;
 	let data = image.data.replace(/\s+/g, "");
-	if (data.length > Math.ceil(MAX_IMAGE_BYTES / 3) * 4 || !BASE64.test(data)) return undefined;
+	if (data.length % 4 !== 0 || !BASE64.test(data)) return undefined;
 	let bytes = new Uint8Array(Buffer.from(data, "base64"));
-	if (bytes.byteLength > MAX_IMAGE_BYTES) return undefined;
 	let size = imageSize(image.mimeType, bytes);
 	if (!size) return undefined;
 	return {
