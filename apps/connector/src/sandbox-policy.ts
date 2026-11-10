@@ -16,52 +16,182 @@ export type SandboxSettings = {
 	writable?: string[];
 };
 
-/** Hosts every run may reach: GitHub, for git and the API, as Chopin's work needs them. */
-export const GITHUB_HOSTS = [
-	"github.com",
-	"api.github.com",
-	"codeload.github.com",
-	"objects.githubusercontent.com",
-	"raw.githubusercontent.com",
-];
+/**
+ * The hosts every sandboxed run may reach, grouped by what needs them. Every entry is a fixed
+ * public service: a package registry, a toolchain download, documentation or a model provider.
+ * None is general-purpose storage a stranger can write to and read back (`storage.googleapis.com`,
+ * `*.blob.core.windows.net`, `s3.amazonaws.com`, `gist.githubusercontent.com`, a paste site), and
+ * no `*.` entry covers such a service, since those are where an injected instruction would send
+ * what an agent read. The registries and GitHub still accept writes from whoever holds a token,
+ * which is why a run's own tokens stay limited to what Chopin's work needs. Sources: GitHub
+ * Agentic Workflows' ecosystem lists (github/gh-aw, pkg/workflow/data/ecosystem_domains.json),
+ * Claude Code on the web's Trusted list and Codex's "common dependencies" preset.
+ */
+export const HOST_GROUPS = {
+	github: [
+		"github.com",
+		"api.github.com",
+		"codeload.github.com",
+		"objects.githubusercontent.com",
+		"raw.githubusercontent.com",
+		"release-assets.githubusercontent.com",
+		"github-releases.githubusercontent.com",
+		"lfs.github.com",
+	],
+	models: [
+		"api.anthropic.com",
+		"api.openai.com",
+		"chatgpt.com",
+		"auth.openai.com",
+		"generativelanguage.googleapis.com",
+		"oauth2.googleapis.com",
+		"*.githubcopilot.com",
+		"copilot-proxy.githubusercontent.com",
+		"openrouter.ai",
+		"*.openai.azure.com",
+	],
+	/** Certificate revocation checks, which the JVM, .NET and package managers make while downloading. */
+	certificates: [
+		"ocsp.digicert.com",
+		"crl3.digicert.com",
+		"crl4.digicert.com",
+		"ocsp.sectigo.com",
+		"crl.sectigo.com",
+		"ocsp.usertrust.com",
+		"crl.usertrust.com",
+		"ocsp.globalsign.com",
+		"crl.globalsign.com",
+		"ocsp.ssl.com",
+		"crls.ssl.com",
+		"ocsp.identrust.com",
+		"crl.identrust.com",
+		"oneocsp.microsoft.com",
+		"r10.o.lencr.org",
+		"r11.o.lencr.org",
+		"x1.c.lencr.org",
+	],
+	javascript: [
+		"registry.npmjs.org",
+		"registry.npmjs.com",
+		"registry.yarnpkg.com",
+		"repo.yarnpkg.com",
+		"get.pnpm.io",
+		"jsr.io",
+		"nodejs.org",
+		"bun.sh",
+		"deno.land",
+		"dl.deno.land",
+	],
+	python: [
+		"pypi.org",
+		"pypi.python.org",
+		"files.pythonhosted.org",
+		"bootstrap.pypa.io",
+		"astral.sh",
+		"conda.anaconda.org",
+		"repo.anaconda.com",
+	],
+	rust: [
+		"crates.io",
+		"index.crates.io",
+		"static.crates.io",
+		"static.rust-lang.org",
+		"sh.rustup.rs",
+		"docs.rs",
+	],
+	go: ["proxy.golang.org", "sum.golang.org", "go.dev", "golang.org", "pkg.go.dev", "dl.google.com"],
+	jvm: [
+		"repo.maven.apache.org",
+		"repo1.maven.org",
+		"central.sonatype.com",
+		"maven.google.com",
+		"plugins.gradle.org",
+		"plugins-artifacts.gradle.org",
+		"services.gradle.org",
+		"downloads.gradle.org",
+		"downloads.gradle-dn.com",
+		"repo.gradle.org",
+		"dlcdn.apache.org",
+		"archive.apache.org",
+		"api.adoptium.net",
+		"api.foojay.io",
+		"cdn.azul.com",
+		"download.java.net",
+		"jdk.java.net",
+		"download.jetbrains.com",
+		"repo.scala-sbt.org",
+		"repo.clojars.org",
+	],
+	dotnet: [
+		"dot.net",
+		"dotnet.microsoft.com",
+		"builds.dotnet.microsoft.com",
+		"ci.dot.net",
+		"nuget.org",
+		"api.nuget.org",
+		"globalcdn.nuget.org",
+		"dist.nuget.org",
+	],
+	ruby: ["rubygems.org", "index.rubygems.org", "api.rubygems.org", "cache.ruby-lang.org"],
+	php: ["packagist.org", "repo.packagist.org", "getcomposer.org"],
+	perl: ["cpan.org", "www.cpan.org", "metacpan.org", "cpan.metacpan.org", "fastapi.metacpan.org"],
+	lua: ["luarocks.org"],
+	haskell: ["hackage.haskell.org", "downloads.haskell.org", "get-ghcup.haskell.org"],
+	ocaml: ["opam.ocaml.org", "ocaml.org"],
+	elixir: ["hex.pm", "repo.hex.pm", "builds.hex.pm", "cdn.hex.pm"],
+	swift: ["download.swift.org", "swift.org", "cdn.cocoapods.org"],
+	dart: ["pub.dev", "pub.dartlang.org"],
+	julia: ["pkg.julialang.org", "*.pkg.julialang.org", "julialang-s3.julialang.org"],
+	r: ["cloud.r-project.org", "cran.r-project.org"],
+	zig: ["ziglang.org"],
+	"c-cpp": ["center2.conan.io"],
+	bazel: ["releases.bazel.build", "bcr.bazel.build", "mirror.bazel.build"],
+	nix: ["cache.nixos.org", "channels.nixos.org"],
+	/**
+	 * What formal verification needs beyond the registries: Lean's elan, toolchain releases,
+	 * Reservoir and Mathlib's build cache; the docs and installers of Verus, F*, Pulse, KaRaMeL,
+	 * LemmaScript, Rocq and Isabelle. Their binaries (Verus, Z3, cvc5, F*, elan, Velvet) are
+	 * GitHub releases, and opam, rustup, npm and NuGet are above.
+	 */
+	"formal-methods": [
+		"lean-lang.org",
+		"*.lean-lang.org",
+		"leanprover.github.io",
+		"leanprover-community.github.io",
+		"mathlib4.lean-cache.cloud",
+		"lakecache.blob.core.windows.net",
+		"verus-lang.github.io",
+		"aka.ms",
+		"fstar-lang.org",
+		"docs.lemmascript.org",
+		"rocq-prover.org",
+		"coq.inria.fr",
+		"isabelle.in.tum.de",
+	],
+	/** Research the agents do: pdd-kit's pldb MCP server, for programming-languages papers, and arXiv. */
+	research: ["pldb.kirancodes.me", "arxiv.org", "export.arxiv.org"],
+} as const satisfies Record<string, readonly string[]>;
 
-/** Package registries for npm, PyPI and crates. */
-export const REGISTRY_HOSTS = [
-	"registry.npmjs.org",
-	"pypi.org",
-	"files.pythonhosted.org",
-	"crates.io",
-	"index.crates.io",
-	"static.crates.io",
-];
+export type HostGroup = keyof typeof HOST_GROUPS;
 
-/** The model providers the built-in agents and the common ACP agents talk to. */
-export const MODEL_HOSTS = [
-	"api.anthropic.com",
-	"api.openai.com",
-	"chatgpt.com",
-	"auth.openai.com",
-	"generativelanguage.googleapis.com",
-	"oauth2.googleapis.com",
-	"*.githubcopilot.com",
-	"copilot-proxy.githubusercontent.com",
-	"openrouter.ai",
-	"*.openai.azure.com",
+/** The built-in hosts, every group's together. */
+export const BUILT_IN_HOST_LIST: readonly string[] = [
+	...new Set(Object.values(HOST_GROUPS).flat()),
 ];
 
 /** The ports an entry without its own port allows: HTTPS, and HTTP for the registries that use it. */
 const WEB_PORTS = new Set([80, 443]);
 
 /**
- * Every host a sandboxed run may reach: Chopin's own origin (with its port), GitHub, the model
- * providers, the package registries, and `extra` from the owner's configuration.
+ * Every host a sandboxed run may reach: Chopin's own origin (with its port), the built-in groups
+ * above, and `extra` from the owner's configuration.
  */
 export function allowedHosts(server: string, extra: readonly string[] = []): string[] {
 	let url = new URL(server);
 	let port = url.port || (url.protocol === "https:" ? "443" : "80");
 	let host = url.hostname.startsWith("[") ? url.hostname.slice(1, -1) : url.hostname;
 	let origin = host.includes(":") ? `[${host}]:${port}` : `${host}:${port}`;
-	return [...new Set([origin, ...GITHUB_HOSTS, ...MODEL_HOSTS, ...REGISTRY_HOSTS, ...extra])];
+	return [...new Set([origin, ...BUILT_IN_HOST_LIST, ...extra])];
 }
 
 /** An entry as the proxy matches it: a host or `*.` suffix and the one port it is limited to. */
@@ -72,7 +202,7 @@ function parseEntry(entry: string) {
 	return { host, port: match[2] === undefined ? undefined : Number(match[2]) };
 }
 
-const BUILT_IN_HOSTS = new Set([...GITHUB_HOSTS, ...MODEL_HOSTS, ...REGISTRY_HOSTS]);
+const BUILT_IN_HOSTS = new Set(BUILT_IN_HOST_LIST);
 
 /**
  * Whether an entry is one the owner chose: Chopin's own origin or a host added with

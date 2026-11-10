@@ -2,8 +2,10 @@ import { expect, test } from "bun:test";
 import {
 	agentStateDirectories,
 	allowedHosts,
+	BUILT_IN_HOST_LIST,
 	commandLine,
 	type Disk,
+	HOST_GROUPS,
 	matchingEntry,
 	mxcRequest,
 	ownerEntry,
@@ -40,7 +42,7 @@ function policy(platform: NodeJS.Platform, engine: Policy["engine"]): Policy {
 	};
 }
 
-test("the proxy lets a run reach Chopin, GitHub, the model providers and the registries", () => {
+test("the proxy lets a run reach Chopin, GitHub, the model providers, every common language's registries, the formal-methods toolchains and research", () => {
 	let hosts = allowedHosts("https://chopin.example.com");
 	for (
 		let [host, port] of [
@@ -58,9 +60,78 @@ test("the proxy lets a run reach Chopin, GitHub, the model providers and the reg
 			["crates.io", 443],
 			["static.crates.io", 443],
 			["api.individual.githubcopilot.com", 443],
+			["release-assets.githubusercontent.com", 443],
+			["elan.lean-lang.org", 443],
+			["releases.lean-lang.org", 443],
+			["reservoir.lean-lang.org", 443],
+			["lean-lang.org", 443],
+			["mathlib4.lean-cache.cloud", 443],
+			["lakecache.blob.core.windows.net", 443],
+			["static.rust-lang.org", 443],
+			["sh.rustup.rs", 443],
+			["aka.ms", 443],
+			["opam.ocaml.org", 443],
+			["fstar-lang.org", 443],
+			["builds.dotnet.microsoft.com", 443],
+			["api.nuget.org", 443],
+			["docs.lemmascript.org", 443],
+			["pldb.kirancodes.me", 443],
+			["arxiv.org", 443],
+			["proxy.golang.org", 443],
+			["repo.maven.apache.org", 443],
+			["plugins.gradle.org", 443],
+			["rubygems.org", 443],
+			["repo.packagist.org", 443],
+			["hackage.haskell.org", 443],
+			["repo.hex.pm", 443],
+			["download.swift.org", 443],
+			["pub.dev", 443],
+			["pkg.julialang.org", 443],
+			["center2.conan.io", 443],
+			["globalcdn.nuget.org", 443],
+			["jsr.io", 443],
+			["conda.anaconda.org", 443],
 		] as const
 	) {
 		expect(matchingEntry(hosts, host, port)).toBeDefined();
+	}
+});
+
+test("every built-in host is a valid entry, and no group is empty", () => {
+	for (let [group, hosts] of Object.entries(HOST_GROUPS)) {
+		expect(hosts.length).toBeGreaterThan(0);
+		for (let host of hosts) {
+			expect({ group, host, valid: validHostEntry(host) }).toEqual({ group, host, valid: true });
+		}
+	}
+});
+
+test("no built-in host is storage a stranger can write to and read back", () => {
+	let hosts = allowedHosts("https://chopin.example.com");
+	for (
+		let [host, port] of [
+			["storage.googleapis.com", 443],
+			["attacker.blob.core.windows.net", 443],
+			["s3.amazonaws.com", 443],
+			["attacker.s3.amazonaws.com", 443],
+			["gist.githubusercontent.com", 443],
+			["gist.github.com", 443],
+			["user-images.githubusercontent.com", 443],
+			["pastebin.com", 443],
+			["attacker.github.io", 443],
+			["httpbin.org", 443],
+			["webhook.site", 443],
+			["attacker.cloudfront.net", 443],
+			["attacker.workers.dev", 443],
+			["attacker.ngrok.io", 443],
+		] as const
+	) {
+		expect({ host, entry: matchingEntry(hosts, host, port) }).toEqual({ host, entry: undefined });
+	}
+	for (let entry of BUILT_IN_HOST_LIST) {
+		expect(entry).not.toMatch(
+			/^\*\.(githubusercontent\.com|github\.io|blob\.core\.windows\.net|googleapis\.com|amazonaws\.com|cloudfront\.net|azureedge\.net|workers\.dev|vercel\.app|netlify\.app)$/,
+		);
 	}
 });
 
