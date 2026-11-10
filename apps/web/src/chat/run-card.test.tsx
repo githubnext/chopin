@@ -388,7 +388,7 @@ test("a disconnected run still offers Pause, said as pending, and never a Resume
 	expect(markup).toContain('aria-label="Resume elsewhere"');
 });
 
-test("while the page's offline notice shows, a disconnected run's card says nothing of its machine and keeps its identity and controls", () => {
+test("while the page's connection banner shows, a disconnected run's card says nothing of its machine and keeps its identity and controls", () => {
 	let tell = (item: Wire.Run, offline: boolean) =>
 		renderToStaticMarkup(createElement(RunStack, {
 			offline,

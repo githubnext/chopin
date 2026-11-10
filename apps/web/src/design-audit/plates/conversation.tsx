@@ -1,7 +1,12 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 
 import { ChatComposer } from "../../chat/composer";
-import { plannerGlyph, plannerPlacement, plannerStatus } from "../../chat/planner-status";
+import { ConnectionBannerView } from "../../chat/connection-banner";
+import { connectionStep, INITIAL_MEMORY } from "../../chat/connection-phase";
+import { ErrorState } from "../../chat/error-state";
+import { failureView } from "../../chat/failure";
+import { plannerGlyph, plannerStatus } from "../../chat/planner-status";
 import { MachineGlyph, PlannerNote } from "../../machine-button";
 import { boundedChatError } from "../../chat/references";
 import { mentionCandidates } from "../../chat/mentions";
@@ -54,13 +59,14 @@ let MENTIONS = [
 ];
 
 type Specimen =
-	& Pick<ChatComposerProps, "notice" | "run" | "unavailable">
+	& Pick<ChatComposerProps, "banner" | "notice" | "run" | "unavailable">
 	& { sending?: boolean; text?: string; chopin?: boolean };
 
 /** The live composer, holding its own draft so the specimen can be typed into. */
 export function ComposerSpecimen(
 	{
 		chopin = false,
+		banner,
 		notice,
 		run,
 		sending = false,
@@ -75,6 +81,7 @@ export function ComposerSpecimen(
 		<ChatComposer
 			agent
 			mode={{ chopin: mode, disabled: !draftable || sending, onToggle: () => setMode(on => !on) }}
+			banner={banner}
 			draftable={draftable}
 			notice={notice}
 			onSubmit={() => {}}
@@ -96,23 +103,141 @@ export function ComposerSpecimen(
 	);
 }
 
+const WELL = {
+	socket: "up",
+	failures: 0,
+	retrying: undefined,
+	synced: true,
+	current: true,
+	turn: undefined,
+	messages: 12,
+	planner: undefined,
+} as const;
+
+function connection(facts: Partial<Parameters<typeof connectionStep>[1]>, resumed = false) {
+	let lost = connectionStep(INITIAL_MEMORY, { ...WELL, turn: "audit-turn", ...facts });
+	if (!resumed) return lost.view;
+	return connectionStep(
+		connectionStep(INITIAL_MEMORY, { ...WELL, turn: "audit-turn", socket: "lost" }).memory,
+		{
+			...WELL,
+			turn: "audit-turn",
+			messages: 15,
+		},
+	).view;
+}
+
 /**
- * With no machine button to carry them, the composer's top edge tells each state, and draws the
- * reason for a machine that cannot be connected to.
+ * The one banner above the composer, in each phase: the room's connection, the document catching
+ * up, the machine's own connection, and a failed reply. Each shows nothing while all is well.
  */
-let WITHOUT_BUTTON = [
-	{ label: "No machine button: connecting", planner: STARTING },
-	{ label: "No machine button: can't connect, reason drawn", planner: FAILING },
+let BANNERS: { label: string; node: ReactNode }[] = [
 	{
-		label: "No machine button: offline",
-		planner: { state: "disconnected", login: "mona" },
+		label: "Reconnecting, with its attempt",
+		node: (
+			<ConnectionBannerView
+				onRetry={undefined}
+				view={connection({ socket: "lost", failures: 2 })}
+			/>
+		),
 	},
 	{
-		label: "No machine button: stepped away",
-		planner: { state: "held", login: "mona", until: "2026-11-04T18:31:00.000Z" },
+		label: "Dropped, Reconnect",
+		node: (
+			<ConnectionBannerView
+				onRetry={() => {}}
+				view={connection({ socket: "lost", failures: 4 })}
+			/>
+		),
 	},
-	{ label: "No machine button: no machine connected", planner: { state: "none" } },
-] as const satisfies readonly { label: string; planner: Session.PlannerAttachment }[];
+	{
+		label: "Back, the reply kept going",
+		node: <ConnectionBannerView onRetry={undefined} view={connection({}, true)} />,
+	},
+	// Nobody here has the machine's name, so its owner's login is all that names it.
+	{
+		label: "Connecting to the machine",
+		node: (
+			<ConnectionBannerView
+				onRetry={undefined}
+				view={connection({ planner: plannerStatus(STARTING) })}
+			/>
+		),
+	},
+	{
+		label: "Can't connect to the machine, reason and Try again",
+		node: (
+			<ConnectionBannerView
+				onRetry={() => {}}
+				view={connection({ planner: plannerStatus(FAILING) })}
+			/>
+		),
+	},
+	{
+		label: "Machine offline",
+		node: (
+			<ConnectionBannerView
+				onRetry={undefined}
+				view={connection({ planner: plannerStatus({ state: "disconnected", login: "mona" }) })}
+			/>
+		),
+	},
+	{
+		label: "Machine stepped away",
+		node: (
+			<ConnectionBannerView
+				onRetry={undefined}
+				view={connection({
+					planner: plannerStatus({
+						state: "held",
+						login: "mona",
+						until: "2026-11-04T18:31:00.000Z",
+					}),
+				})}
+			/>
+		),
+	},
+	{
+		label: "No machine connected",
+		node: (
+			<ConnectionBannerView
+				onRetry={undefined}
+				view={connection({ planner: plannerStatus({ state: "none" }) })}
+			/>
+		),
+	},
+	{
+		label: "Reply failed, Retry",
+		node: <FailureSpecimen failure={{ kind: "error", detail: "429 Too Many Requests" }} retry />,
+	},
+	{
+		label: "Retrying",
+		node: <FailureSpecimen failure={{ kind: "timed-out" }} retry retrying />,
+	},
+	{
+		label: "Reply refused, nothing to retry",
+		node: <FailureSpecimen failure={{ kind: "refused" }} />,
+	},
+];
+
+function FailureSpecimen(
+	{ failure, retry = false, retrying = false }: {
+		failure: Chat.TurnFailure;
+		retry?: boolean;
+		retrying?: boolean;
+	},
+) {
+	let view = failureView(failure)!;
+	return (
+		<ErrorState
+			detail={view.detail}
+			kind={view.kind}
+			onRetry={retry ? () => {} : undefined}
+			retrying={retrying}
+			title={view.title}
+		/>
+	);
+}
 
 /**
  * The machine button's dot and the top of its menu, as the state of the document's machine changes
@@ -178,11 +303,10 @@ export function ConversationPlate() {
 						text="Can we tighten the header?"
 					/>
 				</div>
-				{WITHOUT_BUTTON.map(({ label, planner }) => (
+				{BANNERS.map(({ label, node }) => (
 					<div key={label}>
 						<StateLabel>{label}</StateLabel>
-						{/* Nobody here has the machine, so its owner's login is all that names it. */}
-						<ComposerSpecimen notice={plannerPlacement(plannerStatus(planner), false).strip} />
+						<ComposerSpecimen banner={{ id: label, node }} />
 					</div>
 				))}
 				<div>

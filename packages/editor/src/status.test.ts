@@ -21,7 +21,7 @@ describe("describeStatus", () => {
 		expect(describeStatus({ connection: "connecting", synced: false }).level).toBe("quiet");
 	});
 
-	test("a lost connection is the offline notice's to say, so the header stays quiet", () => {
+	test("a lost connection is the connection banner's to say, so the header stays quiet", () => {
 		for (let connection of ["reconnecting", "connecting"] as const) {
 			expect(describeStatus({ connection, synced: true }).level).toBe("hidden");
 		}

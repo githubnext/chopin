@@ -279,11 +279,22 @@ describe("design audit specimens", () => {
 		expect(chat).toContain('class="workspace-root');
 		expect(chat).toContain('class="composer-surface field"');
 		expect(chat).toContain('class="composer-notice motion-feedback"');
-		// The Planner's states: the machine button's dot and note, and a warning on the composer's edge
-		// for a person with no button.
-		// The strips announce nothing themselves: the page's one live region does.
-		expect(chat).toMatch(/class="composer-notice" data-warning="true"/);
-		expect(chat).not.toMatch(/class="composer-notice" role="(alert|status)" data-warning/);
+		// The connection and the Planner's states: the one banner on the composer's edge in each phase,
+		// and the machine button's dot and note.
+		// The banner announces nothing itself: the page's one live region does.
+		expect(chat).toMatch(
+			/class="composer-notice" data-banner="" data-connection-banner=""[^>]*data-warning="true"/,
+		);
+		expect(chat).not.toMatch(/data-connection-banner=""[^>]*role="(alert|status)"/);
+		expect(chat).toContain('data-phase="reconnecting"');
+		expect(chat).toContain('data-phase="dropped"');
+		expect(chat).toContain('data-phase="resumed"');
+		expect(chat).toContain(">attempt 3</span>");
+		expect(chat).toContain("Back. The reply kept going.");
+		expect(chat).toContain("Couldn't finish the reply.");
+		expect(chat).toContain("429 Too Many Requests");
+		expect(chat).toContain("Retrying");
+		expect(chat).toContain('data-error-banner=""');
 		expect(chat).toContain("Can't connect to @mona's machine.");
 		expect(chat).toContain("Can't connect to Build box");
 		expect(chat).toContain("How to fix");
@@ -301,7 +312,8 @@ describe("design audit specimens", () => {
 		expect(chat).toContain('data-planner="starting"');
 		expect(chat).toContain('data-planner="failing"');
 		expect(chat).toContain('data-planner="away"');
-		expect(chat).not.toContain("Reconnect");
+		expect(chat).toContain(">Reconnect</button>");
+		expect(chat).toContain(">Try again</button>");
 		// The machine button's dots beside each state: only a healthy one keeps the machine's green,
 		// and no machine connected has no dot at all.
 		let cells = chat.split('class="design-audit-planner-presence"')[1]!.split(

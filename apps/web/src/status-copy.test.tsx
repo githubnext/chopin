@@ -14,6 +14,7 @@ import { BuildPlanButton } from "./build-plan-button";
 import { SETUP } from "./build-connection-popover";
 import { SHARE_DETAIL, YourMachines } from "./experiments/machine-list";
 import { ChatComposer } from "./chat/composer";
+import { plannerForBanner } from "./chat/connection-phase";
 import {
 	destinationCue,
 	PLANNER_UNAVAILABLE_NOTICE,
@@ -30,16 +31,24 @@ import {
 	PlannerJobDiagnostics,
 } from "./conversation-plan/planner-job-diagnostics";
 import {
-	plannerAnnouncement,
 	plannerButtonLabel,
 	plannerGlyph,
-	plannerPlacement,
 	plannerSentence,
 	plannerStatus,
 } from "./chat/planner-status";
 import { MachineButton, MachineGlyph, PlannerNote } from "./machine-button";
-import { OFFLINE_MESSAGE, OfflineAnnouncement, OfflineNoticeBody } from "./offline-notice";
-import { AgentFace, offlineAnnouncement, PlanStatus } from "@chopin/editor";
+import { ConnectionAnnouncement, ConnectionBannerView } from "./chat/connection-banner";
+import {
+	connectionSpeech,
+	connectionStep,
+	INITIAL_MEMORY,
+	NOTHING_SPOKEN,
+	OFFLINE_MESSAGE,
+} from "./chat/connection-phase";
+import type { ConnectionFacts } from "./chat/connection-phase";
+import { failureView, sendFailureView } from "./chat/failure";
+import { ErrorState } from "./chat/error-state";
+import { AgentFace, PlanStatus } from "@chopin/editor";
 import { INTERNAL, INTERNAL_IN_STATUS } from "@chopin/protocol/plain-words";
 
 import type { Chat, ConversationPlan, Session } from "@chopin/protocol";
@@ -201,7 +210,7 @@ test("every state's sentence, button name, menu note and live-region word is pla
 		let texts = [
 			sentence,
 			plannerButtonLabel("Runs on Build box", status),
-			plannerAnnouncement(undefined, status),
+			told(status),
 			...(status.kind === "cant-start" ? [status.title, status.detail] : [status.text]),
 			...words(render(createElement(PlannerNote, { status }))),
 			...words(render(createElement(MachineButton, { choice: choice(), planner: status }))),
@@ -210,13 +219,8 @@ test("every state's sentence, button name, menu note and live-region word is pla
 			),
 		];
 		expectPlain(`${status.kind} ${sentence}`, texts);
-		// Said once as entered: nothing for a state it was already in, and every first telling is plain.
-		expect(plannerAnnouncement(undefined, status)).toBe(sentence);
-		expect(plannerAnnouncement(status.kind, status)).toBe("");
-	}
-	// A state replacing another is told in the same plain words, whichever it replaces.
-	for (let from of all) {
-		for (let to of all) expectPlain("a change", [plannerAnnouncement(from.kind, to)]);
+		// Said once as entered, and every first telling is plain.
+		expect(told(status)).toBe(sentence);
 	}
 });
 
@@ -228,38 +232,90 @@ test("every glyph the button's dot takes says nothing, and none of it is an inte
 	}
 });
 
-test("the composer's strip says every state in plain words, with the button or without", () => {
+test("the banner at the composer says every state in plain words, with the button or without", () => {
 	for (let status of statuses()) {
 		for (let hasButton of [true, false]) {
-			let strip = plannerPlacement(status, hasButton).strip;
-			if (!strip) continue;
-			expectPlain(`strip ${status.kind} ${hasButton}`, [
-				strip.text,
-				...(strip.detail ?? []),
-				strip.link?.label ?? "",
-			]);
+			let view = connectionStep(INITIAL_MEMORY, {
+				...WELL,
+				planner: plannerForBanner(status, hasButton),
+			}).view;
+			if (view.phase === "online") continue;
+			let markup = render(createElement(ConnectionBannerView, { onRetry: () => {}, view }));
+			expect(markup.length).toBeGreaterThan(0);
+			expectPlain(`banner ${status.kind} ${hasButton}`, words(markup));
 			// And as the composer draws it, above the field.
-			let markup = render(createElement(ChatComposer, { ...COMPOSER, notice: strip }));
-			let drawn = markup.slice(
-				markup.indexOf("composer-notice-slot"),
-				markup.indexOf("composer-surface"),
+			let drawn = render(
+				createElement(ChatComposer, {
+					...COMPOSER,
+					banner: {
+						id: "b",
+						node: createElement(ConnectionBannerView, { onRetry: () => {}, view }),
+					},
+				}),
 			);
-			expect(drawn.length).toBeGreaterThan(0);
-			expectPlain(`drawn ${status.kind} ${hasButton}`, words(drawn));
+			expectPlain(
+				`drawn ${status.kind} ${hasButton}`,
+				words(
+					drawn.slice(
+						drawn.indexOf('<div class="composer-notice"'),
+						drawn.indexOf("composer-surface"),
+					),
+				),
+			);
 		}
 	}
 });
 
-test("a lost connection, its action and its one polite word are plain", () => {
+test("a lost connection, its action, its return and its one polite word are plain", () => {
 	expect(OFFLINE_MESSAGE).toBe(
 		"You're offline. Your changes are kept and will sync when you reconnect.",
 	);
-	expectPlain("the notice", words(render(createElement(OfflineNoticeBody, { onRetry: () => {} }))));
-	expectPlain("the word as it goes", [
-		offlineAnnouncement(true, false),
-		...words(
-			render(createElement(OfflineAnnouncement, { spoken: offlineAnnouncement(true, false) })),
-		),
+	let phases = [
+		connectionStep(INITIAL_MEMORY, { ...WELL, socket: "lost", failures: 1 }),
+		connectionStep(INITIAL_MEMORY, { ...WELL, socket: "lost", failures: 4 }),
+		connectionStep(INITIAL_MEMORY, { ...WELL, synced: false }),
+	];
+	let lost = connectionStep(INITIAL_MEMORY, { ...WELL, socket: "lost", turn: "t", messages: 1 });
+	phases.push(connectionStep(lost.memory, { ...WELL, turn: "t", messages: 3 }));
+	phases.push(connectionStep(lost.memory, { ...WELL, turn: undefined, messages: 3 }));
+	for (let { view } of phases) {
+		if (view.phase === "online") continue;
+		expectPlain(
+			`the ${view.phase} banner`,
+			words(render(createElement(ConnectionBannerView, { onRetry: () => {}, view }))),
+		);
+		let speech = connectionSpeech(NOTHING_SPOKEN, view);
+		expectPlain(`the ${view.phase} word`, [
+			speech?.said ?? "",
+			...words(render(createElement(ConnectionAnnouncement, { spoken: speech?.said ?? "" }))),
+		]);
+	}
+});
+
+test("a failed reply says what happened in plain words, in the banner and as it is offered again", () => {
+	for (let kind of ["error", "refused", "tool", "timed-out", "unreachable"] as const) {
+		let view = failureView({ kind })!;
+		expectPlain(
+			`the ${kind} failure`,
+			words(
+				render(
+					createElement(ErrorState, {
+						kind: view.kind,
+						onRetry: () => {},
+						title: view.title,
+					}),
+				),
+			),
+		);
+		expectPlain(
+			`the retrying ${kind} failure`,
+			words(
+				render(createElement(ErrorState, { retrying: true, title: view.title })),
+			),
+		);
+	}
+	expectPlain("the machine link", [
+		sendFailureView({ text: "Message not sent." }, "planner-not-attached").link!.label,
 	]);
 });
 
@@ -294,7 +350,7 @@ test("a server whose agent is off says so in plain words, and says nothing of it
 	);
 	expect(drawn.length).toBeGreaterThan(0);
 	expectPlain("drawn", words(drawn));
-	// The page's offline notice is the one thing said about the connection.
+	// The page's connection banner is the one thing said about the connection.
 	expect(repliesOffNotice(true)).toBeUndefined();
 });
 
@@ -373,7 +429,7 @@ test("a workflow run's status, notes and controls are plain, connected or away",
 					runs: [item],
 				}));
 				expectPlainWords(`a ${status} run card`, words(markup));
-				// While the page's offline notice shows, nothing on a card is about the machine.
+				// While the page's connection banner shows, nothing on a card is about the machine.
 				if (offline) {
 					expect(decode(markup), `a ${status} run card offline`).not.toMatch(
 						/disconnected|machine|reconnect|Last reported/i,
@@ -526,3 +582,20 @@ test("Build plan says it plainly and still opens how to connect a machine for th
 	expect(decode(reconnect)).toContain('data-tooltip="Reconnect the machine to build"');
 	expectPlain("Build plan's tooltip", words(reconnect));
 });
+
+const WELL: ConnectionFacts = {
+	socket: "up",
+	failures: 0,
+	retrying: undefined,
+	synced: true,
+	current: true,
+	turn: undefined,
+	messages: 0,
+	planner: undefined,
+};
+
+/** What the live region says as a Planner state is entered from healthy. */
+function told(status: ReturnType<typeof statuses>[number]): string {
+	let { view } = connectionStep(INITIAL_MEMORY, { ...WELL, planner: status });
+	return connectionSpeech(NOTHING_SPOKEN, view)?.said ?? "";
+}

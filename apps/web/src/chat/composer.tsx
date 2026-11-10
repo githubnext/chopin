@@ -47,6 +47,11 @@ export type ChatComposerProps = {
 	mode?: { chopin: boolean; disabled: boolean; onToggle: () => void };
 	/** Why the draft can't be sent, above the field. */
 	notice?: ComposerNotice;
+	/**
+	 * The page's one banner (connection or failure), above the field in place of a notice. `invalid`
+	 * marks the field and draft invalid, as a refused send does.
+	 */
+	banner?: { id: string; node: ReactNode; invalid?: boolean };
 	/** Archived and read-only documents show why in place of the draft. */
 	unavailable?: "archived" | "readonly";
 	/** Present when `#` references are on: the instructions and the Mention docs button. */
@@ -81,6 +86,7 @@ export function ChatComposer(
 		agent,
 		mode,
 		notice,
+		banner,
 		unavailable,
 		references,
 		draftable,
@@ -94,7 +100,7 @@ export function ChatComposer(
 ) {
 	let instructionsId = useId();
 	let cueId = useId();
-	let error = notice?.tone === "error";
+	let error = notice?.tone === "error" || !!banner?.invalid;
 	let phone = usePhone();
 	let chopin = !!mode?.chopin;
 	// A failed send is shown at once; any other strip eases open and shut, so it does not jump
@@ -104,7 +110,7 @@ export function ChatComposer(
 		MOTION.closeDuration,
 		false,
 	);
-	let shown = error ? notice : strip.value;
+	let shown = notice?.tone === "error" ? notice : strip.value;
 	let warning = shown?.tone === "warning";
 	let alerting = shown?.tone === "error" || warning;
 	let closing = strip.phase === "closing";
@@ -175,7 +181,8 @@ export function ChatComposer(
 					Type # to reference a document.
 				</p>
 			)}
-			{!unavailable && stripBody && (error
+			{!unavailable && banner?.node}
+			{!unavailable && !banner && stripBody && (notice?.tone === "error"
 				? stripBody
 				: (
 					<div
@@ -243,7 +250,7 @@ export function ChatComposer(
 								aria-autocomplete="list"
 								aria-describedby={[
 									references ? instructionsId : undefined,
-									notice ? cueId : undefined,
+									banner ? banner.id : notice ? cueId : undefined,
 								].filter(Boolean).join(" ") || undefined}
 								aria-disabled={!draftable || sending}
 								aria-invalid={error || undefined}

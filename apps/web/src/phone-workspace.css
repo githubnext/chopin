@@ -13,7 +13,7 @@
 		var(--phone-tab-bar-height) + var(--phone-tab-bar-offset) + var(--spacing) * 3
 	);
 	/*
-	 * Every pane scroller starts below the top bar, and below the offline notice that floats under
+	 * Every pane scroller starts below the top bar, and below the connection banner that floats under
 	 * it while a connection is lost (`--phone-notice-height`, 0 otherwise), and can end above the
 	 * bottom bar.
 	 */

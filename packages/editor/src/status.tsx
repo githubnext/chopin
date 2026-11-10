@@ -54,7 +54,7 @@ export function describeStatus(input: StatusInput): StatusDescription {
 	}
 	if (connection === "connecting" || connection === "reconnecting") {
 		// The first connection of a fresh page is ordinary loading. Any other is a loss, which
-		// the offline notice says once, so this status stays out of its way.
+		// the connection banner says once, so this status stays out of its way.
 		return connection === "connecting" && !input.synced
 			? { level: "quiet", label: "Connecting" }
 			: { level: "hidden", label: "Offline" };

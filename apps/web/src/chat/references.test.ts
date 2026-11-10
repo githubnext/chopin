@@ -204,7 +204,7 @@ describe("textarea replacement reconciliation", () => {
 });
 
 describe("the strip for a server whose agent is off", () => {
-	test("says so plainly while the page is online, and nothing while the page's offline notice is up", () => {
+	test("says so plainly while the page is online, and nothing while the page's connection banner is up", () => {
 		expect(repliesOffNotice(false)).toEqual({ tone: "info", text: REPLIES_OFF });
 		expect(REPLIES_OFF).toBe("Replies are off on this server.");
 		expect(repliesOffNotice(true)).toBeUndefined();
@@ -497,7 +497,7 @@ describe("acknowledged composer drafts", () => {
 		}
 	});
 
-	test("tells a send the connection cut off only while the connection is up, and no failure at all while the page's offline notice shows", () => {
+	test("tells a send the connection cut off only while the connection is up, and no failure at all while the page's connection banner shows", () => {
 		let cut = sendFailure(new WireLost("connection lost"));
 		let refused = sendFailure(new WireRefusal("Unavailable"));
 		let machine = sendFailure(
@@ -506,7 +506,7 @@ describe("acknowledged composer drafts", () => {
 				"planner-not-attached",
 			),
 		);
-		// The page's offline notice speaks for a lost connection, so a blip and an outage alike
+		// The page's connection banner speaks for a lost connection, so a blip and an outage alike
 		// leave nothing about the connection beside the composer.
 		expect(shownSendFailure(cut, false, false)).toBeUndefined();
 		expect(shownSendFailure(cut, false, true)).toBeUndefined();

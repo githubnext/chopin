@@ -462,7 +462,7 @@ export function Transcript(
 		onDelete?: (id: string) => void;
 		/** Send a message that could not be sent again. */
 		onRetry?: (id: string) => void;
-		/** The page's offline notice shows: a message's "Couldn't send" gives way to it, and is back with the connection. */
+		/** The page's connection banner shows: a message's "Couldn't send" gives way to it, and is back with the connection. */
 		quietFailures?: boolean;
 		onWithdraw: (id: string) => void;
 		queued: Chat.Waiting[];
