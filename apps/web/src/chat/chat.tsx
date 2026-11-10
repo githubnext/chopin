@@ -382,6 +382,7 @@ export function Chat(
 		() => restoreOutbox(room, handle),
 	);
 	let [intents, dispatchIntents] = useReducer(intentsReducer, []);
+	let [tab] = useState(() => crypto.randomUUID());
 	let sendingId = useRef<string | undefined>(undefined);
 	let [flushed, setFlushed] = useState(0);
 	let [unanswered, setUnanswered] = useState<Record<string, Wire.Entry>>({});
@@ -749,8 +750,9 @@ export function Chat(
 					id: frame.id,
 					reactions: frame.reactions,
 					handle,
+					tab,
 					...(frame.by !== undefined && frame.emoji !== undefined
-						? { applied: { by: frame.by, emoji: frame.emoji, seq: frame.seq } }
+						? { applied: { by: frame.by, emoji: frame.emoji, seq: frame.seq, tab: frame.tab } }
 						: {}),
 				});
 			}),
@@ -1086,21 +1088,24 @@ export function Chat(
 		if (!wire || !transcriptReady) return;
 		for (let { id, emoji, on, seq } of dueNow(intents, savedIds)) {
 			dispatchIntents({ kind: "sent", id, emoji, on, seq });
-			void wire.ask<Wire.Reacted>("chat:react", { id, emoji, on, seq }).then(
-				() =>
+			void wire.ask<Wire.Reacted>("chat:react", { id, emoji, on, seq, tab }).then(
+				() => {
 					dispatchIntents({
 						kind: "settle",
 						id,
 						answers: { emoji, on, seq },
 						reactions: latestEntries.current.find(entry => entry.id === id)?.reactions,
 						handle,
-					}),
+						tab,
+					});
+					dispatchIntents({ kind: "answered", id, emoji, on, seq });
+				},
 				error => {
 					if (error instanceof WireRefusal) dispatchIntents({ kind: "drop", id, emoji, on, seq });
 				},
 			);
 		}
-	}, [wire, transcriptReady, intents, savedIds, handle]);
+	}, [wire, transcriptReady, intents, savedIds, handle, tab]);
 	let outboxIds = outbox.map(item => item.entryId ?? item.payload.requestId).join("\n");
 	useEffect(() => {
 		if (!transcriptReady || intents.length === 0) return;

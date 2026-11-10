@@ -1,19 +1,28 @@
 import type { Chat } from "@chopin/protocol";
 
-export type Intent = { id: string; emoji: string; on: boolean; seq?: number; sent?: true };
+export type Intent = {
+	id: string;
+	emoji: string;
+	on: boolean;
+	seq?: number;
+	sent?: true;
+	answered?: true;
+};
 
 export type IntentAction =
 	| { kind: "ask"; id: string; emoji: string; on: boolean; seq?: number }
 	| { kind: "sent"; id: string; emoji: string; on: boolean; seq?: number }
 	| { kind: "unsent"; id: string; emoji: string; on: boolean; seq?: number }
 	| { kind: "drop"; id: string; emoji: string; on: boolean; seq?: number }
+	| { kind: "answered"; id: string; emoji: string; on: boolean; seq?: number }
 	| {
 		kind: "settle";
 		id: string;
 		reactions: readonly Chat.Reaction[] | undefined;
 		handle: string;
+		tab?: string;
 		answers?: { emoji: string; on: boolean; seq?: number };
-		applied?: { by: string; emoji: string; seq?: number };
+		applied?: { by: string; emoji: string; seq?: number; tab?: string };
 	}
 	| { kind: "history"; entries: readonly Chat.Entry[]; handle: string }
 	| { kind: "prune"; present: ReadonlySet<string> };
@@ -43,11 +52,21 @@ function current(intent: Intent, seq: number | undefined): boolean {
 	return seq === undefined || intent.seq === undefined || intent.seq <= seq;
 }
 
-function settles(intent: Intent, action: Extract<IntentAction, { kind: "settle" }>): boolean {
+type Settle = Extract<IntentAction, { kind: "settle" }>;
+
+function broadcastMaySettle(intent: Intent, action: Settle): boolean {
+	let { applied } = action;
+	if (applied?.tab !== undefined) return applied.tab === action.tab;
+	if (applied && action.tab === undefined) return true;
+	return intent.seq === undefined || !!intent.answered;
+}
+
+function settles(intent: Intent, action: Settle): boolean {
 	if (intent.id !== action.id) return false;
 	let { answers, applied } = action;
 	if (applied && (applied.by !== action.handle || applied.emoji !== intent.emoji)) return false;
 	if (answers && (answers.emoji !== intent.emoji || answers.on !== intent.on)) return false;
+	if (!answers && !broadcastMaySettle(intent, action)) return false;
 	return current(intent, (answers ?? applied)?.seq)
 		&& satisfied(intent, action.reactions, action.handle);
 }
@@ -89,6 +108,12 @@ export function intentsReducer(
 		case "drop":
 			return intents.filter(intent =>
 				!(same(intent, action.id, action.emoji) && request(intent, action))
+			);
+		case "answered":
+			return intents.map(intent =>
+				same(intent, action.id, action.emoji) && request(intent, action)
+					? { ...intent, answered: true }
+					: intent
 			);
 		case "settle":
 			return kept(intents, intents.filter(intent => !settles(intent, action)));

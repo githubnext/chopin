@@ -6,9 +6,9 @@
  */
 import AxeBuilder from "@axe-core/playwright";
 
-import { expect, test } from "./room";
+import { expect, openIsolatedRoom, test } from "./room";
 
-import type { Locator, Page, WebSocketRoute } from "@playwright/test";
+import type { BrowserContext, Locator, Page, WebSocketRoute } from "@playwright/test";
 
 const PHONE = { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } };
 const CLIPBOARD = ["clipboard-read", "clipboard-write"] as const;
@@ -631,6 +631,203 @@ test("a message only this browser has can be reacted to, and the reaction is kep
 	);
 	expect(wire.state.reactions).toHaveLength(1);
 	expect(wire.state.reactions[0]).toMatchObject({ emoji: "✅", on: true });
+});
+
+function holdingRoute(page: Page) {
+	let state = { holding: true, connections: 0, heard: 0, answered: 0, held: [] as string[] };
+	let live: { browser: WebSocketRoute; server: WebSocketRoute } | undefined;
+	let ready = page.routeWebSocket("**/ws?**", browser => {
+		state.connections++;
+		let server = browser.connectToServer();
+		live = { browser, server };
+		browser.onMessage(message => {
+			if (
+				state.holding && typeof message === "string"
+				&& (JSON.parse(message) as { kind: string }).kind === "chat:react"
+			) {
+				state.held.push(message);
+			} else server.send(message);
+		});
+		server.onMessage(message => {
+			let kind = typeof message === "string" ? (JSON.parse(message) as { kind: string }).kind : "";
+			if (kind === "chat:reactions") state.heard++;
+			if (kind === "chat:react") state.answered++;
+			browser.send(message);
+		});
+	});
+	return {
+		ready,
+		state,
+		asked: () => state.held.map(message => (JSON.parse(message) as { on: boolean }).on),
+		release() {
+			state.holding = false;
+			live!.server.send(state.held[0]!);
+		},
+		async cut() {
+			await live!.browser.close();
+			await live!.server.close();
+		},
+	};
+}
+
+function olderBuild(omitted: readonly string[]) {
+	return async (context: BrowserContext) => {
+		await context.routeWebSocket("**/ws?**", socket => {
+			let server = socket.connectToServer();
+			socket.onMessage(message => {
+				if (typeof message !== "string") return server.send(message);
+				let frame = JSON.parse(message) as Record<string, unknown>;
+				if (frame.kind !== "chat:react") return server.send(message);
+				for (let field of omitted) delete frame[field];
+				server.send(JSON.stringify(frame));
+			});
+			server.onMessage(message => socket.send(message));
+		});
+	};
+}
+
+function reacted() {
+	return transcript().map(entry =>
+		entry.id === PLANNER.id ? { ...entry, reactions: [{ emoji: "✅", handles: ["ana"] }] } : entry
+	);
+}
+
+async function lookRight(page: Page): Promise<void> {
+	let target = message(page, PLANNER.id);
+	await target.hover();
+	await toolbar(target).getByRole("button", { name: "Looks right", exact: true }).click();
+}
+
+async function settled(page: Page): Promise<void> {
+	await page.evaluate(() =>
+		new Promise<void>(resolve =>
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+		)
+	);
+}
+
+const SECOND_TABS: ReadonlyArray<[string, readonly string[]]> = [
+	["that names its tab", []],
+	["of an earlier build that numbers its asks and names no tab", ["tab"]],
+];
+
+for (const [kind, omitted] of SECOND_TABS) {
+	test(`a reaction added again is kept when another tab of the same person ${kind} is heard and the connection is cut after the older removal got through`, async ({ baseURL, browser, join, page, room, seed }) => {
+		test.setTimeout(120_000);
+		await seed("# Actions\n", { transcript: reacted() });
+		let net = holdingRoute(page);
+		await net.ready;
+		let first = await join("ana");
+		let other = await openIsolatedRoom(browser, baseURL!, room, "ana", {}, olderBuild(omitted));
+		try {
+			let second = other.page;
+			let mine = (tab: Page) =>
+				message(tab, PLANNER.id).getByRole("button", { name: "You reacted with ✅" });
+			let none = (tab: Page) => message(tab, PLANNER.id).getByRole("group", { name: "Reactions" });
+			await expect(mine(first)).toHaveText("✅1");
+			await expect(mine(second)).toHaveText("✅1");
+
+			await lookRight(first);
+			await expect(none(first)).toHaveCount(0);
+			await lookRight(first);
+			await expect.poll(() => net.asked()).toEqual([false, true]);
+
+			await lookRight(second);
+			await expect(none(second)).toHaveCount(0);
+			await lookRight(second);
+			await expect(mine(second)).toHaveText("✅1");
+			await expect.poll(() => net.state.heard).toBeGreaterThanOrEqual(2);
+			await settled(first);
+
+			net.release();
+			await expect(none(second)).toHaveCount(0);
+			await net.cut();
+			await first.evaluate(() => dispatchEvent(new Event("online")));
+
+			await expect(mine(second)).toHaveText("✅1", { timeout: 20_000 });
+			await expect(mine(first)).toHaveText("✅1", { timeout: 20_000 });
+			expect(net.state.connections).toBeGreaterThan(1);
+			let reopened = await join("ana", {});
+			await expect(mine(reopened)).toHaveText("✅1");
+		} finally {
+			await other.close();
+		}
+	});
+}
+
+test("a reaction added again is kept when a client that numbers nothing is heard and the connection is cut after the older removal got through", async ({ baseURL, browser, join, page, room, seed }) => {
+	test.setTimeout(120_000);
+	await seed("# Actions\n", { transcript: reacted() });
+	let net = holdingRoute(page);
+	await net.ready;
+	let ana = await join("ana");
+	let mina = await openIsolatedRoom(
+		browser,
+		baseURL!,
+		room,
+		"mina",
+		{},
+		olderBuild(["seq", "tab"]),
+	);
+	try {
+		let anaThenMina = (tab: Page) =>
+			message(tab, PLANNER.id).getByRole("button", { name: "You and Mina reacted with ✅" });
+		let minaThenAna = (tab: Page) =>
+			message(tab, PLANNER.id).getByRole("button", { name: "Mina and You reacted with ✅" });
+		await expect(message(ana, PLANNER.id).getByRole("button", { name: "You reacted with ✅" }))
+			.toHaveText("✅1");
+
+		await lookRight(ana);
+		await expect(message(ana, PLANNER.id).getByRole("group", { name: "Reactions" })).toHaveCount(0);
+		await lookRight(ana);
+		await expect.poll(() => net.asked()).toEqual([false, true]);
+
+		await lookRight(mina.page);
+		await expect(anaThenMina(ana)).toHaveText("✅2");
+		await settled(ana);
+
+		net.release();
+		await expect(
+			message(mina.page, PLANNER.id).getByRole("button", { name: "You reacted with ✅" }),
+		)
+			.toHaveText("✅1");
+		await net.cut();
+		await ana.evaluate(() => dispatchEvent(new Event("online")));
+
+		await expect(minaThenAna(ana)).toHaveText("✅2", { timeout: 20_000 });
+		let reopened = await join("ana", {});
+		await expect(minaThenAna(reopened)).toHaveText("✅2");
+	} finally {
+		await mina.close();
+	}
+});
+
+test("an ask that changes nothing is settled by its answer alone, so the pill follows the server after it", async ({ join, page, seed }) => {
+	test.setTimeout(120_000);
+	await seed("# Actions\n", { transcript: transcript() });
+	let net = holdingRoute(page);
+	await net.ready;
+	let first = await join("ana");
+	let second = await join("ana", {});
+	let pill = (tab: Page) =>
+		message(tab, PLANNER.id).getByRole("button", { name: "You reacted with ✅" });
+
+	await lookRight(first);
+	await expect(pill(first)).toHaveAttribute("data-pending", "true");
+	await expect.poll(() => net.asked()).toEqual([true]);
+	await lookRight(second);
+	await expect(pill(second)).toHaveText("✅1");
+	await expect(pill(first)).not.toHaveAttribute("data-pending");
+
+	net.release();
+	await expect.poll(() => net.state.answered).toBeGreaterThanOrEqual(1);
+	await settled(first);
+
+	await lookRight(second);
+	await expect(message(second, PLANNER.id).getByRole("group", { name: "Reactions" })).toHaveCount(
+		0,
+	);
+	await expect(message(first, PLANNER.id).getByRole("group", { name: "Reactions" })).toHaveCount(0);
 });
 
 test("a clipboard that refuses a write after one it accepted takes Copied back: the item says Couldn't copy, politely", async ({ join, seed }) => {
