@@ -962,13 +962,20 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	}
 	/**
 	 * Whose machine is about to run a document's Planner, when nothing holds it yet: one chosen for
-	 * it, or Default machine's, that can run Planners now, and why its backend keeps failing to
-	 * start once it has more than once in a row. Undefined when no machine will.
+	 * it, or Default machine's, that can run Planners now, which launch it waits on once one has
+	 * exited before attaching (`attempt`, one more than the launches in a row that did), and why its
+	 * backend keeps failing to start once it has more than once in a row. Undefined when no machine
+	 * will.
 	 */
 	async function plannerStarting(
 		documentId: string,
 	): Promise<
-		{ login: string; machineId: string; failure?: Session.PlannerStartFailure } | undefined
+		{
+			login: string;
+			machineId: string;
+			attempt?: number;
+			failure?: Session.PlannerStartFailure;
+		} | undefined
 	> {
 		if (!options.planners || !auth.machines.durable) return undefined;
 		if (options.attachments?.()?.holding(documentId)) return undefined;
@@ -986,6 +993,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			return {
 				login: live.login,
 				machineId,
+				...(failure ? { attempt: failure.attempts + 1 } : {}),
 				...(failure && failure.attempts >= PLANNER_FAILURE_SHOWN_AT
 					? {
 						failure: {

@@ -680,6 +680,24 @@ test("a machine being connected to shows no attempt count it does not know", () 
 	expect("attempt" in view).toBe(false);
 });
 
+test("a machine being connected to shows the launch it waits on once an earlier one exited", () => {
+	let starting = plannerStatus({ state: "starting", login: "mona", attempt: 2 }, "Build box");
+	let { view } = step(INITIAL_MEMORY, { planner: starting });
+	expect(view).toEqual({
+		phase: "reconnecting",
+		layer: "planner",
+		text: "Connecting to Build box",
+		plannerKind: "starting",
+		attempt: 2,
+	});
+	// Said once, as a state: one launch more is not a new thing to hear.
+	let again = plannerStatus({ state: "starting", login: "mona", attempt: 3 }, "Build box");
+	let first = connectionSpeech(NOTHING_SPOKEN, view)!;
+	expect(first.said).toBe("Connecting to Build box");
+	expect(connectionSpeech(first.spoken, step(INITIAL_MEMORY, { planner: again }).view))
+		.toBeUndefined();
+});
+
 test("a return after edits were dropped never says the changes are synced", () => {
 	let { view } = run(
 		{ socket: "lost", messages: 12, lostEdits: 0 },

@@ -41,6 +41,7 @@ import type { Instruction, ServerInstructionDeps } from "./chat/server-instructi
 import { fingerprint } from "./experiments/service";
 import * as Chat from "./chat/service";
 import { answerWake } from "./chat/wake";
+import { plannerAttachment } from "./chat/planner-attachment";
 import * as Initiative from "./chat/initiative";
 import { deferralWiring, keepsRequests } from "./chat/deferred";
 import { createChildDocuments } from "./chat/children";
@@ -1179,14 +1180,7 @@ async function plannerStarting(channelId: string): Promise<void> {
 async function plannerStatus(channelId: string): Promise<PlannerAttachment> {
 	let status = plannerAttachments!.status(channelId);
 	if (status.state !== "none") return status;
-	let starting = await experiments?.plannerStarting(channelId);
-	return starting
-		? {
-			state: "starting",
-			login: starting.login,
-			...(starting.failure ? { failure: starting.failure } : {}),
-		}
-		: status;
+	return plannerAttachment(status, await experiments?.plannerStarting(channelId));
 }
 
 /** Each document's latest status announcement, so an earlier one that resolves later is dropped. */

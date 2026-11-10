@@ -202,7 +202,13 @@ function plannerView(status: PlannerStatus): ConnectionView {
 	let text = plannerSentence(status);
 	switch (status.kind) {
 		case "starting":
-			return { phase: "reconnecting", layer: "planner", text, plannerKind: status.kind };
+			return {
+				phase: "reconnecting",
+				layer: "planner",
+				text,
+				plannerKind: status.kind,
+				...(status.attempt === undefined ? {} : { attempt: status.attempt }),
+			};
 		case "cant-start":
 			return {
 				phase: "dropped",
