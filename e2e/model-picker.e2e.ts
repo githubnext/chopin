@@ -863,7 +863,7 @@ test("says the default ran when a turn cannot read the document's model choice, 
 	await client.detach();
 });
 
-test("is one icon on a phone, opens a list as wide as the composer and chooses by touch", async ({ browser }) => {
+test("names the model on a phone trigger, opens a list as wide as the composer and chooses by touch", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await newRoom();
 	let page = await open(browser, HANDLE, room, PHONE);
@@ -880,8 +880,10 @@ test("is one icon on a phone, opens a list as wide as the composer and chooses b
 	let model = trigger(page);
 	await expect(model).toBeVisible();
 	await expect(model).toHaveAccessibleName("Model: Small");
-	// The words give way to the icon; the target stays a full touch target.
-	await expect(model.locator(".composer-model-name")).toBeHidden();
+	// The trigger keeps the model's short name beside its icon, and stays a full touch target.
+	await expect(model.locator(".composer-model-symbol")).toBeVisible();
+	await expect(model.locator(".composer-model-name")).toBeVisible();
+	await expect(model.locator(".composer-model-name")).toHaveText("Small");
 	let box = (await model.boundingBox())!;
 	expect(box.width).toBeGreaterThanOrEqual(36);
 	expect(box.height).toBeGreaterThanOrEqual(36);
@@ -897,6 +899,8 @@ test("is one icon on a phone, opens a list as wide as the composer and chooses b
 	await option(page, "Large").tap();
 	await expect(popover(page)).toHaveCount(0);
 	await expect(model).toHaveAccessibleName("Model: Large");
+	await expect(model.locator(".composer-model-name")).toHaveText("Large");
+	await expect(model.locator(".composer-model-name")).toBeVisible();
 
 	await model.tap();
 	await expect(levels(page).getByRole("radio")).toHaveCount(5);
@@ -911,10 +915,102 @@ test("is one icon on a phone, opens a list as wide as the composer and chooses b
 	await level(page, "Extra high").tap();
 	await expect(model).toHaveAccessibleName("Model: Large, reasoning extra high");
 	await expect(popover(page)).toBeVisible();
+	// The level is in the accessible name and the open list; the pill has no room for it beside the name.
+	await expect(model.locator(".composer-model-name")).toBeVisible();
+	await expect(model.locator(".composer-model-level")).toBeHidden();
 	await shoot(page, "model-picker-open-phone");
 	await expectAccessible(page);
 	await expectNoHorizontalOverflow(page);
 	await client.detach();
+});
+
+test("keeps the model's name on a touch phone's trigger at every phone width, cutting a long one short", async ({ browser }) => {
+	test.setTimeout(180_000);
+	let room = await newRoom();
+	let longName = "Acme Reasoning Ultra with an Extremely Long Name 2.5 Preview";
+	let attached: Awaited<ReturnType<typeof attachClient>> | undefined;
+	for (let width of [320, 360, 390, 430]) {
+		let page = await open(browser, HANDLE, room, {
+			...PHONE,
+			viewport: { width, height: 844 },
+		});
+		// The Planner's owner is somebody signed in, so the client attaches once the first page is.
+		attached ??= await attachClient(room, {
+			models: {
+				available: [
+					{ id: "acme/small", name: "Small", description: "Fast for short questions." },
+					{ id: "acme/long", name: longName, thinkingLevels: ["low", "high"] },
+				],
+				default: { id: "acme/small" },
+			},
+		});
+		await page.getByRole("navigation", { name: "Workspace view" })
+			.getByRole("button", { name: /^Chat/ }).tap();
+		await expect.poll(async () => (await chat(page).boundingBox())?.x).toBe(0);
+		let model = trigger(page);
+		let name = model.locator(".composer-model-name");
+		let words = async () =>
+			name.evaluate(element => ({
+				clipped: element.scrollWidth > element.clientWidth,
+				ellipsis: getComputedStyle(element).textOverflow,
+			}));
+		// The pill rests as one row and every control in it stays inside the phone, apart from the others.
+		let row = async () => {
+			let mention = chat(page).getByRole("button", { name: "Mention docs" });
+			let mode = chat(page).getByRole("button", { name: "Talk to Chopin" });
+			let send = chat(page).getByRole("button", { name: "Send message" });
+			let controls = [model, mention, chatInput(chat(page)), mode, send];
+			let boxes = await Promise.all(controls.map(async control => (await control.boundingBox())!));
+			for (let control of controls) await expectInsideViewport(control);
+			for (let index = 1; index < boxes.length; index++) {
+				let before = boxes[index - 1]!;
+				expect(before.x + before.width, `control ${index} at ${width}px`)
+					.toBeLessThanOrEqual(boxes[index]!.x + 1);
+				expect(Math.abs(before.y + before.height / 2 - boxes[index]!.y - boxes[index]!.height / 2))
+					.toBeLessThanOrEqual(2);
+			}
+			// The draft keeps room to type in beside the longest name.
+			expect(boxes[2]!.width, `draft at ${width}px`).toBeGreaterThanOrEqual(80);
+			expect(boxes[0]!.height).toBeGreaterThanOrEqual(36);
+			await expectNoHorizontalOverflow(page);
+		};
+
+		await expect(model).toHaveAccessibleName("Model: Small");
+		await expect(name).toBeVisible();
+		await expect(name).toHaveText("Small");
+		// A short name shows whole.
+		expect(await words()).toMatchObject({ clipped: false });
+		await row();
+
+		// A long one is cut short with an ellipsis, in the same row, and keeps its words in the name.
+		await model.tap();
+		await expect(popover(page)).toBeVisible();
+		await option(page, "Acme Reasoning").tap();
+		await expect(popover(page)).toHaveCount(0);
+		await expect(model).toHaveAccessibleName(`Model: ${longName}`);
+		await expect(name).toBeVisible();
+		await expect(name).toHaveText(longName);
+		expect(await words()).toEqual({ clipped: true, ellipsis: "ellipsis" });
+		await row();
+		await shoot(page, `model-picker-long-name-phone-${width}`);
+
+		// Choosing a level keeps the name and the layout, and Small comes back as it was.
+		await model.tap();
+		await level(page, "High").tap();
+		// Touch has no Escape: the trigger that opened the list closes it.
+		await model.tap();
+		await expect(popover(page)).toHaveCount(0);
+		await expect(model).toHaveAccessibleName(`Model: ${longName}, reasoning high`);
+		await row();
+		await model.tap();
+		await option(page, "Small").tap();
+		await expect(model).toHaveAccessibleName("Model: Small");
+		await expect(name).toHaveText("Small");
+		expect(await words()).toMatchObject({ clipped: false });
+		await row();
+		await page.context().close();
+	}
+	await attached?.client.detach();
 });
 
 test("refuses a choice the catalog does not offer, whatever the browser sends, and keeps the shared one", async ({ browser }) => {

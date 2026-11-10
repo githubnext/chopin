@@ -14,7 +14,7 @@
 .composer-model-trigger[aria-expanded="true"] {
 	background-color: var(--color-gray-200);
 }
-/* The icon stands in for the words on a phone, where the pill has no room for them. */
+/* The icon is drawn on a phone only, where it leads the name in a pill. */
 .composer-model-symbol {
 	display: none;
 }

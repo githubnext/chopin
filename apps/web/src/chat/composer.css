@@ -430,7 +430,7 @@
 		min-width: var(--composer-pill-control);
 		min-height: var(--composer-pill-control);
 	}
-	.chat-composer .composer-surface :is(.btn-icon, .composer-mode, .composer-model-trigger) {
+	.chat-composer .composer-surface :is(.btn-icon, .composer-mode) {
 		width: var(--composer-pill-control);
 		height: var(--composer-pill-control);
 		border-radius: var(--radius-full);
@@ -442,16 +442,25 @@
 		width: var(--composer-pill-icon);
 		height: var(--composer-pill-icon);
 	}
-	/* The model control is its icon here; the words are in its accessible name. */
-	.chat-composer .composer-model-trigger {
-		justify-content: center;
-		max-width: none;
-		padding-inline: 0;
+	/*
+	 * The model control keeps its short name beside its icon, as a pill as tall as the others. The
+	 * name gives way to an ellipsis at a share of the pill, so the draft keeps room to type in on
+	 * the narrowest phone beside the longest name. The level and the chevron are left to the
+	 * accessible name and the open list.
+	 */
+	.chat-composer .composer-surface .composer-model-trigger {
+		justify-content: flex-start;
+		height: var(--composer-pill-control);
+		max-width: 30%;
+		padding-inline: calc((var(--composer-pill-control) - var(--composer-pill-icon)) / 2)
+			calc(var(--spacing) * 3);
+		border-radius: var(--radius-full);
 	}
 	.chat-composer .composer-model-symbol {
 		display: inline-flex;
+		flex: none;
 	}
-	.chat-composer :is(.composer-model-name, .composer-model-level, .composer-model-chevron) {
+	.chat-composer :is(.composer-model-level, .composer-model-chevron) {
 		display: none;
 	}
 	/* The switch keeps its accessible name and drops the visible word. */
