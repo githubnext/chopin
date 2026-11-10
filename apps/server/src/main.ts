@@ -57,6 +57,7 @@ import * as Chat from "./chat/service";
 import { answerWake } from "./chat/wake";
 import { plannerAttachment } from "./chat/planner-attachment";
 import * as Initiative from "./chat/initiative";
+import * as Reactions from "./chat/reactions";
 import { createChildDocuments } from "./chat/children";
 import { createRootChat } from "./chat/root";
 import { serverInstruction as runServerInstruction } from "./chat/server-instruction";
@@ -1195,6 +1196,7 @@ async function plannerWritable(
 	room: Rooms.Room,
 	ws: Socket,
 	rid: string,
+	write = true,
 ): Promise<boolean> {
 	let opened = await readyPlan(room);
 	if (!opened) {
@@ -1211,7 +1213,7 @@ async function plannerWritable(
 		ws.close(4403, "authorization expired");
 		return false;
 	}
-	if (!ws.data.canEdit) {
+	if (write && !ws.data.canEdit) {
 		fail(ws, rid, "repository write access is required");
 		return false;
 	}
@@ -1493,6 +1495,18 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			await Threads.controlMessage(chat(room, ws), ws, frame);
 			return;
 
+		case "chat:react":
+			if (!room.plan) return;
+			if (room.plan.parentChannelId) {
+				fail(ws, frame.rid, "this document's Chat is on its root document");
+				return;
+			}
+			// A reader may react; the access check that other requests get on arrival is made here,
+			// since a viewer-allowed frame skips it.
+			if (!await plannerWritable(room, ws, frame.rid, false)) return;
+			await Reactions.react(chat(room, ws), ws, frame);
+			return;
+
 		case "conversation-plan:correct":
 		case "conversation-plan:scoped-choice-save":
 		case "conversation-plan:retry":
@@ -1685,6 +1699,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 
 const VIEWER_ALLOWED = new Set([
 	"session:ping",
+	"chat:react",
 	"plan:open",
 	"plan:close",
 	"chat:thread",

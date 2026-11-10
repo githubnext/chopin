@@ -47,6 +47,7 @@ import * as presence from "./presence";
 import * as edit from "./edit";
 import * as room from "./room";
 import * as Chat from "../chat/service";
+import { validateReactions } from "../chat/reactions";
 import { restoreReferences } from "../chat/references";
 import { savedImages, savedRefusals } from "../chat/images";
 import { entriesForStorage, mergePointers } from "../chat/stored-pointers";
@@ -728,6 +729,7 @@ function restoredState(
 		} catch (err) {
 			throw new Error("hosted channel has invalid chat delivery metadata", { cause: err });
 		}
+		validateReactions(entry as unknown as Chat.Chat["entries"][number]);
 	}
 	let mcpUpdates = restoreMcpUpdates(item.mcpUpdates);
 	let conversationPlan = restoreConversationPlan(
