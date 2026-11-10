@@ -7,7 +7,6 @@
 import {
 	catalogModel,
 	levelLabel,
-	levelPhrase,
 	modelLevels,
 	resolveChoice,
 	unavailableNotice,
@@ -119,18 +118,13 @@ export function triggerText(
 	return { name, ...(resolved.thinkingLevel ? { level: levelLabel(resolved.thinkingLevel) } : {}) };
 }
 
-/** What the trigger's name and tooltip say of the level somebody chose, in the level's own spelling. */
-function reasoningPhrase(catalog: Catalog, choice: Choice | undefined): string | undefined {
-	let { thinkingLevel } = resolveChoice(catalog, choice);
-	return thinkingLevel ? `reasoning ${levelPhrase(thinkingLevel)}` : undefined;
-}
-
 /** The words a person who cannot see the trigger hears: the model, its level, and what went missing. */
 export function triggerLabel(catalog: Catalog, choice: Choice | undefined): string {
+	let { name, level } = triggerText(catalog, choice);
 	let lost = resolveChoice(catalog, choice).unavailable;
 	return [
-		`Model: ${triggerText(catalog, choice).name}`,
-		reasoningPhrase(catalog, choice),
+		`Model: ${name}`,
+		level ? `reasoning ${level}` : undefined,
 		lost ? unavailableNotice(catalog, lost) : undefined,
 	].filter(Boolean).join(", ");
 }
@@ -140,8 +134,8 @@ export function triggerLabel(catalog: Catalog, choice: Choice | undefined): stri
  * which the strip above the composer already says and a screen reader hears in the name.
  */
 export function triggerTitle(catalog: Catalog, choice: Choice | undefined): string {
-	return [`Model: ${triggerText(catalog, choice).name}`, reasoningPhrase(catalog, choice)]
-		.filter(Boolean).join(", ");
+	let { name, level } = triggerText(catalog, choice);
+	return level ? `Model: ${name}, reasoning ${level}` : `Model: ${name}`;
 }
 
 /**

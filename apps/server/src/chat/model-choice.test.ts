@@ -466,7 +466,7 @@ describe("what the next turn runs", () => {
 		};
 		expect(await turnModel(deps, opened.channel.id)).toEqual({
 			model: "acme/large",
-			notice: "High reasoning is no longer available for this model, so Chopin used its default.",
+			notice: "high reasoning is no longer available for this model, so Chopin used its default.",
 		});
 	});
 

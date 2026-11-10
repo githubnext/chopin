@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 
 import {
 	levelLabel,
-	levelPhrase,
 	modelLevels,
 	refusedChoice,
 	resolveChoice,
@@ -113,45 +112,8 @@ describe("refusing a choice the catalog does not offer", () => {
 });
 
 describe("the words for a level and for a choice that could not be honoured", () => {
-	it("spells Atomic's levels in sentence case and keeps any other as its client wrote it", () => {
-		expect(["off", "minimal", "low", "medium", "high", "xhigh", "max"].map(levelLabel)).toEqual([
-			"Off",
-			"Minimal",
-			"Low",
-			"Medium",
-			"High",
-			"Extra high",
-			"Max",
-		]);
-		// A level the client invented is its own spelling, not a capitalised one.
-		expect(levelLabel("balanced")).toBe("balanced");
-		expect(levelLabel("Deep-think")).toBe("Deep-think");
-	});
-
-	it("never gives two levels one label, and keeps each level's own spelling in it", () => {
-		// Pairs a client can report side by side, and the label they used to share.
-		let pairs = [["xhigh", "extra high"], ["\u00df-fast", "SS-fast"], ["high", "High"]] as const;
-		for (let [first, second] of pairs) {
-			expect(levelLabel(first), `${first} and ${second}`).not.toBe(levelLabel(second));
-			// Not even by case: a screen reader says both alike when only the case differs.
-			expect(levelLabel(first).toLowerCase(), `${first} and ${second}`)
-				.not.toBe(levelLabel(second).toLowerCase());
-			expect(levelPhrase(first).toLowerCase(), `${first} and ${second}`)
-				.not.toBe(levelPhrase(second).toLowerCase());
-		}
-		// Atomic's own keep their words; one that reads like a word, or like the Default choice
-		// beside them, is shown in quotation marks so that it is not taken for it.
-		expect(levelLabel("xhigh")).toBe("Extra high");
-		expect(levelLabel("extra high")).toBe("“extra high”");
-		expect(levelLabel("High")).toBe("“High”");
-		expect(levelLabel("default")).toBe("“default”");
-		expect(levelLabel("Default")).toBe("“Default”");
-		// A level that opens with a quotation mark is quoted too, so no quoted label is another's own.
-		expect(levelLabel("“High”")).toBe("““High””");
-		// Any other level is what the client wrote.
-		expect(levelLabel("ss-fast")).toBe("ss-fast");
-		expect(levelLabel("\u00df-fast")).toBe("\u00df-fast");
-		let levels = [
+	it("shows every level exactly as its client reported it, Atomic's own and an object's own property names included", () => {
+		let reported = [
 			"off",
 			"minimal",
 			"low",
@@ -159,56 +121,39 @@ describe("the words for a level and for a choice that could not be honoured", ()
 			"high",
 			"xhigh",
 			"max",
-			"Off",
-			"LOW",
-			"Medium",
-			"HIGH",
-			"High",
-			"extra high",
-			"Extra high",
-			"EXTRA HIGH",
-			"default",
-			"Default",
 			"balanced",
-			"Balanced",
-			"\u00df-fast",
-			"SS-fast",
-			"ss-fast",
-			"\u4f4e",
-			"",
-			" ",
-			"“High”",
-			"“",
-			"“extra high”",
-		];
-		let labels = levels.map(levelLabel);
-		expect(new Set(labels).size).toBe(levels.length);
-	});
-
-	it("reads any string a client names a level as that string, even one an object already has", () => {
-		expect(
-			["constructor", "toString", "__proto__", "hasOwnProperty", "extra high", "\u4f4e", ""]
-				.map(levelLabel),
-		).toEqual([
+			"Deep-think",
 			"constructor",
 			"toString",
 			"__proto__",
 			"hasOwnProperty",
-			"“extra high”",
+			"extra high",
 			"\u4f4e",
 			"",
-		]);
+		];
+		expect(reported.map(levelLabel)).toEqual(reported);
+		// Not the words Atomic's own are given elsewhere, nor a capitalised copy.
+		expect(levelLabel("xhigh")).toBe("xhigh");
+		expect(levelLabel("high")).toBe("high");
+		expect(levelLabel("balanced")).not.toBe("Balanced");
 	});
 
-	it("says a level inside a sentence in lower case only for Atomic's own, and as labelled otherwise", () => {
-		expect(["off", "high", "xhigh", "max"].map(levelPhrase)).toEqual([
-			"off",
-			"high",
-			"extra high",
-			"max",
-		]);
-		expect(["High", "extra high", "Deep-think", "\u00df-fast", "SS-fast"].map(levelPhrase))
-			.toEqual(["“High”", "“extra high”", "Deep-think", "\u00df-fast", "SS-fast"]);
+	it("never gives two distinct levels one label, though one is the other's capitalised or spelled-out copy", () => {
+		let pairs = [["xhigh", "extra high"], ["\u00df-fast", "SS-fast"], ["high", "High"]] as const;
+		for (let [first, second] of pairs) {
+			expect(levelLabel(first), `${first} and ${second}`).toBe(first);
+			expect(levelLabel(second), `${first} and ${second}`).toBe(second);
+			expect(levelLabel(first)).not.toBe(levelLabel(second));
+		}
+		// So the notice for each reads its own level too.
+		let notices = pairs.flat().map(level => unavailableNotice(catalog, { thinkingLevel: level }));
+		expect(new Set(notices).size).toBe(notices.length);
+		expect(notices).toContain(
+			"SS-fast reasoning is no longer available for this model, so Chopin used its default.",
+		);
+		expect(notices).toContain(
+			"\u00df-fast reasoning is no longer available for this model, so Chopin used its default.",
+		);
 	});
 
 	it("names a model whose catalog name is empty by its id", () => {
@@ -226,7 +171,7 @@ describe("the words for a level and for a choice that could not be honoured", ()
 			"acme/old is no longer available, so Chopin used its default model.",
 		);
 		expect(unavailableNotice(catalog, { thinkingLevel: "xhigh" })).toBe(
-			"Extra high reasoning is no longer available for this model, so Chopin used its default.",
+			"xhigh reasoning is no longer available for this model, so Chopin used its default.",
 		);
 	});
 });

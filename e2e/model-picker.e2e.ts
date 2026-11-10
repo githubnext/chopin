@@ -395,20 +395,20 @@ test("lists models by provider, filters them, and chooses with the mouse, reason
 	await openPicker(page);
 	await expect(levels(page).getByRole("radio")).toHaveText([
 		"Default",
-		"Off",
-		"Low",
-		"High",
-		"Extra high",
+		"off",
+		"low",
+		"high",
+		"xhigh",
 	]);
 	await expect(level(page, "Default")).toHaveAttribute("aria-checked", "true");
-	await level(page, "High").click();
-	await expect(level(page, "High")).toHaveAttribute("aria-checked", "true");
+	await level(page, "high").click();
+	await expect(level(page, "high")).toHaveAttribute("aria-checked", "true");
 	await expect(popover(page)).toBeVisible();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
-	await expect(trigger(page)).toContainText("High");
+	await expect(trigger(page)).toContainText("high");
 	await shoot(page, "model-picker-reasoning-desktop");
 	// Escape closes it from the level just chosen, and the trigger has the focus again.
-	await expect(level(page, "High")).toBeFocused();
+	await expect(level(page, "high")).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(popover(page)).toHaveCount(0);
 	await expect(trigger(page)).toBeFocused();
@@ -418,7 +418,7 @@ test("lists models by provider, filters them, and chooses with the mouse, reason
 	await option(page, "Deep").click();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Deep, reasoning high");
 	await openPicker(page);
-	await expect(levels(page).getByRole("radio")).toHaveText(["Default", "Low", "Medium", "High"]);
+	await expect(levels(page).getByRole("radio")).toHaveText(["Default", "low", "medium", "high"]);
 	await option(page, "Small").click();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Small");
 	await openPicker(page);
@@ -433,7 +433,7 @@ test("lists models by provider, filters them, and chooses with the mouse, reason
 	await openPicker(page);
 	await option(page, "Large").click();
 	await openPicker(page);
-	await level(page, "Low").click();
+	await level(page, "low").click();
 	await page.keyboard.press("Escape");
 	await ask(page, "second", 2);
 	expect(turnFor(asked, "second")).toMatchObject({ model: "acme/large", thinkingLevel: "low" });
@@ -493,10 +493,10 @@ test("opens, searches, moves and chooses from the keyboard", async ({ browser })
 	await search(page).press("Tab");
 	await expect(level(page, "Default")).toBeFocused();
 	await page.keyboard.press("ArrowRight");
-	await expect(level(page, "Low")).toHaveAttribute("aria-checked", "true");
-	await expect(level(page, "Low")).toBeFocused();
+	await expect(level(page, "low")).toHaveAttribute("aria-checked", "true");
+	await expect(level(page, "low")).toBeFocused();
 	await page.keyboard.press("ArrowRight");
-	await expect(level(page, "Medium")).toHaveAttribute("aria-checked", "true");
+	await expect(level(page, "medium")).toHaveAttribute("aria-checked", "true");
 	await page.keyboard.press("ArrowLeft");
 	await page.keyboard.press("ArrowLeft");
 	await expect(level(page, "Default")).toHaveAttribute("aria-checked", "true");
@@ -587,16 +587,15 @@ test("lists a catalog that repeats a model or a level as the client reported it"
 
 	// Default, then every level as listed; only the first of a repeated level is the one chosen.
 	let radios = levels(page).getByRole("radio");
-	await expect(radios).toHaveText(["Default", "High", "Off", "High", "“default”"]);
+	await expect(radios).toHaveText(["Default", "high", "off", "high", "default"]);
 	await expect(levels(page).locator('[aria-checked="true"]')).toHaveText(["Default"]);
 	await radios.nth(3).click();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Echo one, reasoning high");
 	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
 	await expect(radios.nth(1)).toHaveAttribute("aria-checked", "true");
-	// A level named `default` is a level the client asked for, not the model's own, and is quoted so
-	// that it is not taken for the Default choice beside it.
+	// A level named `default` is a level the client asked for, not the model's own.
 	await radios.nth(4).click();
-	await expect(trigger(page)).toHaveAccessibleName("Model: Echo one, reasoning “default”");
+	await expect(trigger(page)).toHaveAccessibleName("Model: Echo one, reasoning default");
 	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
 	await expect(radios.nth(4)).toHaveAttribute("aria-checked", "true");
 	await expectAccessible(page);
@@ -606,22 +605,13 @@ test("lists a catalog that repeats a model or a level as the client reported it"
 	await client.detach();
 });
 
-test("tells apart levels that read alike, by sight and by name, and sends exactly the one chosen", async ({ browser }) => {
+test("shows each level exactly as reported, so levels that read alike stay two, and sends exactly the one chosen", async ({ browser }) => {
 	test.setTimeout(180_000);
 	let room = await newRoom();
 	let page = await open(browser, HANDLE, room, DESKTOP);
 	// Distinct strings a client may list side by side: Atomic's `xhigh` and a spelling in words, a
 	// word and its capitalised copy, and a letter whose capital is two letters.
 	let reported = ["xhigh", "extra high", "high", "High", "\u00df-fast", "SS-fast"];
-	let shown = ["Extra high", "“extra high”", "High", "“High”", "\u00df-fast", "SS-fast"];
-	let named = [
-		"extra high",
-		"“extra high”",
-		"high",
-		"“High”",
-		"\u00df-fast",
-		"SS-fast",
-	];
 	let { client, asked } = await attachClient(room, {
 		models: {
 			available: [{ id: "acme/odd", name: "Odd", thinkingLevels: reported }],
@@ -631,13 +621,13 @@ test("tells apart levels that read alike, by sight and by name, and sends exactl
 	await expect(trigger(page)).toHaveAccessibleName("Model: Odd");
 	await openPicker(page);
 
-	// Every level is offered, in the order given, and no two read, or are named, alike.
+	// Every level is offered as written, in the order given, and no two are read or named alike.
 	let radios = levels(page).getByRole("radio");
-	await expect(radios).toHaveText(["Default", ...shown]);
-	for (let [position, label] of shown.entries()) {
-		await expect(radios.nth(position + 1)).toHaveAccessibleName(label, { ignoreCase: false });
+	await expect(radios).toHaveText(["Default", ...reported]);
+	for (let [position, label] of reported.entries()) {
+		await expect(radios.nth(position + 1)).toHaveAccessibleName(label);
 	}
-	expect(new Set(shown.map(label => label.toLowerCase())).size).toBe(reported.length);
+	expect(new Set(reported).size).toBe(reported.length);
 	await expectAccessible(page);
 	await shoot(page, "model-picker-levels-alike-desktop");
 	await page.keyboard.press("Escape");
@@ -647,7 +637,7 @@ test("tells apart levels that read alike, by sight and by name, and sends exactl
 	for (let [position, level] of reported.entries()) {
 		await openPicker(page);
 		await radios.nth(position + 1).click();
-		await expect(trigger(page)).toHaveAccessibleName(`Model: Odd, reasoning ${named[position]}`);
+		await expect(trigger(page)).toHaveAccessibleName(`Model: Odd, reasoning ${level}`);
 		await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
 		await expect(radios.nth(position + 1)).toHaveAttribute("aria-checked", "true");
 		await page.keyboard.press("Escape");
@@ -703,17 +693,17 @@ test("lists and runs a catalog of any spelling as the client wrote it, skipping 
 	await option(page, "Long").click();
 	await openPicker(page);
 	// An empty level is not one: it is not listed between Default and the others.
-	// Each level is as the client wrote it, `extra high` quoted since it reads as Atomic's `xhigh`.
+	// Each level is as the client wrote it.
 	await expect(levels(page).getByRole("radio")).toHaveText([
 		"Default",
-		"“extra high”",
+		"extra high",
 		"\u4f4e",
 		"constructor",
 	]);
 	await level(page, "constructor").click();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Long, reasoning constructor");
-	await level(page, "“extra high”").click();
-	await expect(trigger(page)).toHaveAccessibleName("Model: Long, reasoning “extra high”");
+	await level(page, "extra high").click();
+	await expect(trigger(page)).toHaveAccessibleName("Model: Long, reasoning extra high");
 	await page.keyboard.press("Escape");
 	await ask(page, "as spelled", 1);
 	expect(turnFor(asked, "as spelled")).toMatchObject({ model: long, thinkingLevel: "extra high" });
@@ -759,7 +749,7 @@ test("keeps the choice across a reload and shows it live to a second person", as
 	await openPicker(page);
 	await option(page, "Large").click();
 	await openPicker(page);
-	await level(page, "High").click();
+	await level(page, "high").click();
 	await page.keyboard.press("Escape");
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
 
@@ -772,7 +762,7 @@ test("keeps the choice across a reload and shows it live to a second person", as
 	await expect(trigger(teammate)).toHaveAccessibleName("Model: Large, reasoning high");
 	await openPicker(teammate);
 	await expect(option(teammate, "Large")).toHaveAttribute("aria-selected", "true");
-	await expect(level(teammate, "High")).toHaveAttribute("aria-checked", "true");
+	await expect(level(teammate, "high")).toHaveAttribute("aria-checked", "true");
 	await teammate.keyboard.press("Escape");
 
 	// Their change reaches the first person without a reload, and the next turn runs it.
@@ -831,7 +821,7 @@ test("falls back to the default with a notice when the chosen model has gone, an
 	await openPicker(page);
 	await option(page, "Large").click();
 	await openPicker(page);
-	await level(page, "High").click();
+	await level(page, "high").click();
 	await page.keyboard.press("Escape");
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
 	await expect(chat(page).getByText("no longer available")).toHaveCount(0);
@@ -875,7 +865,7 @@ test("falls back to the default with a notice when the chosen model has gone, an
 		},
 	});
 	let reasoning =
-		"High reasoning is no longer available for this model, so Chopin used its default.";
+		"high reasoning is no longer available for this model, so Chopin used its default.";
 	await expect(trigger(page)).toHaveAccessibleName(`Model: Large, ${reasoning}`);
 	await ask(page, "level gone", 4);
 	expect(turnFor(asked, "level gone")).toMatchObject({ model: "acme/large" });
@@ -898,7 +888,7 @@ test("keeps a saved choice's notice when the client withdraws every model or an 
 	await openPicker(page);
 	await option(page, "Large").click();
 	await openPicker(page);
-	await level(page, "High").click();
+	await level(page, "high").click();
 	await page.keyboard.press("Escape");
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
 	await expect(trigger(teammate)).toHaveAccessibleName("Model: Large, reasoning high");
@@ -994,7 +984,7 @@ test("says the default ran when a turn cannot read the document's model choice, 
 	await openPicker(page);
 	await option(page, "Large").click();
 	await openPicker(page);
-	await level(page, "High").click();
+	await level(page, "high").click();
 	await page.keyboard.press("Escape");
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
 	await expect(trigger(teammate)).toHaveAccessibleName("Model: Large, reasoning high");
@@ -1077,8 +1067,8 @@ test("names the model on a phone trigger, opens a list as wide as the composer a
 		// (the pill control is in rem, so the two differ by under a pixel).
 		expect((await radio.boundingBox())!.height).toBeGreaterThanOrEqual(box.height - 1);
 	}
-	await level(page, "Extra high").tap();
-	await expect(model).toHaveAccessibleName("Model: Large, reasoning extra high");
+	await level(page, "xhigh").tap();
+	await expect(model).toHaveAccessibleName("Model: Large, reasoning xhigh");
 	await expect(popover(page)).toBeVisible();
 	// The level is in the accessible name and the open list; the pill has no room for it beside the name.
 	await expect(model.locator(".composer-model-name")).toBeVisible();
@@ -1161,7 +1151,7 @@ test("keeps the model's name on a touch phone's trigger at every phone width, cu
 
 		// Choosing a level keeps the name and the layout, and Small comes back as it was.
 		await model.tap();
-		await level(page, "High").tap();
+		await level(page, "high").tap();
 		// Touch has no Escape: the trigger that opened the list closes it.
 		await model.tap();
 		await expect(popover(page)).toHaveCount(0);
