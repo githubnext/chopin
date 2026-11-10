@@ -106,6 +106,7 @@ export function group(
 	working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">,
 	completed: CompletedWork[] = [],
 	suspended?: CompletedWork,
+	hiddenQueued?: ReadonlySet<string>,
 ): Group[] {
 	let replacements = new Map<number, Message>();
 	let hiddenTools = new Set<number>();
@@ -187,6 +188,11 @@ export function group(
 	let result: Group[] = [];
 
 	for (let row of rows) {
+		// Waiting entries stay in the array until after turn spans have used its original offsets.
+		if (
+			row.author.kind === "member" && row.deliveryState !== "delivered"
+			&& row.deliveryState !== "failed" && hiddenQueued?.has(row.id)
+		) continue;
 		if (isSystem(row)) {
 			// Filter at presentation time so saved turn offsets and comment references stay intact.
 			if (

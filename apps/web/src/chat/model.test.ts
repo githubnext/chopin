@@ -174,6 +174,34 @@ describe("transcript groups", () => {
 		expect(JSON.stringify(result).match(/"working":true/g)).toHaveLength(1);
 	});
 
+	it("keeps turn offsets when another waiting message is hidden in the queue", () => {
+		let entries: Chat.Entry[] = [
+			entry("first", { kind: "member", handle: "ana" }),
+			{ ...entry("second", { kind: "member", handle: "ana" }), deliveryState: "delivered" },
+			{ ...entry("third", { kind: "member", handle: "ana" }), deliveryState: "sent" },
+			{ ...entry("previous-reply", { kind: "agent" }, "Previous"), tools: running("read_plan") },
+			{ ...entry("current-work", { kind: "agent" }, ""), tools: running("edit_plan") },
+		];
+		let completed = [{
+			turnId: "previous",
+			entryOffset: 1,
+			endOffset: 4,
+			anchorId: "previous-reply",
+		}];
+		let result = group(entries, working(4), completed, undefined, new Set(["third"]));
+		let messages = result.flatMap(item => item.kind === "messages" ? item.messages : []);
+		expect(messages.map(message => message.id)).toEqual([
+			"first",
+			"second",
+			"previous-reply",
+			"current-work",
+		]);
+		expect(messages.find(message => message.id === "previous-reply")?.tools?.map(tool => tool.name))
+			.toEqual(["read_plan"]);
+		expect(messages.find(message => message.id === "current-work"))
+			.toMatchObject({ working: true, tools: [{ name: "edit_plan" }] });
+	});
+
 	it("does not promote historical activity from the same second as a new turn", () => {
 		let result = group(
 			[

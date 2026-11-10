@@ -385,6 +385,7 @@ export function Transcript(
 		emptyHint,
 		entries,
 		handle,
+		hiddenQueued,
 		live,
 		onCardLink,
 		onAddExcerpt,
@@ -420,6 +421,8 @@ export function Transcript(
 		researchOffers?: ResearchOfferControls;
 		entries: Chat.Entry[];
 		handle: string;
+		/** Saved waiting messages stay in the entry array for turn offsets but render in the queue. */
+		hiddenQueued?: ReadonlySet<string>;
 		/** False until the current connection's history has arrived. */
 		live?: boolean;
 		/** Take back a message that was not delivered. */
@@ -452,7 +455,7 @@ export function Transcript(
 	let offered = useRef(false);
 	let sourceOwner = useRef({});
 	let groups = researchTranscript(
-		group(entries, working, completedWork, suspendedWork),
+		group(entries, working, completedWork, suspendedWork, hiddenQueued),
 		researchOffers ? conversationPlan?.researchOffers ?? [] : [],
 	);
 	let messages = groups.flatMap(item => item.kind === "messages" ? item.messages : []);

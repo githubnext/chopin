@@ -60,6 +60,20 @@ test("the author alone is offered Edit and Cancel, each named for the message it
 	expect(markup.match(/class="btn btn-xs btn-ghost"/g)).toHaveLength(2);
 });
 
+test("a saved waiting message keeps its sender's Sent mark and Delete menu in the queue", () => {
+	let markup = renderToStaticMarkup(createElement(MessageQueue, {
+		queued: [
+			row("a", "My message", { mine: true, sent: true }),
+			row("b", "Someone else's message", { name: "Felix", handle: "felix", sent: true }),
+		],
+		onDelete: () => {},
+	}));
+	expect(markup).toContain('data-chat-message-id="a"');
+	expect(markup).toContain('data-chat-message-id="b"');
+	expect(markup.match(/aria-label="Sent"/g)).toHaveLength(1);
+	expect(markup.match(/aria-label="Message actions"/g)).toHaveLength(1);
+});
+
 test("the no-cancel state: a queue nobody may change has no controls, whoever wrote what", () => {
 	let markup = render([row("a", "Compare the options.", { mine: true })], false);
 	expect(markup).toContain("Compare the options.");
@@ -94,14 +108,17 @@ test("work nobody typed is told in plain words, in Chopin's name, and cannot be 
 	expect(markup).not.toContain("<button");
 });
 
-test("folds all but the first three behind a control that says how many", () => {
+test("keeps every waiting row in order in the queue", () => {
 	let rows = Array.from({ length: 5 }, (_, index) => row(`m${index}`, `Message ${index}`));
 	let markup = render(rows);
 	expect(markup).toContain("5 waiting for Chopin");
-	expect(markup).toContain("Message 2");
-	expect(markup).not.toContain("Message 3");
-	expect(markup).toMatch(/aria-expanded="false"[^>]*data-chat-queue-more[^>]*>2 more</);
-	expect(render(rows.slice(0, 3))).not.toContain("data-chat-queue-more");
+	expect([...markup.matchAll(/data-queue-id="(m\d)"/g)].map(match => match[1])).toEqual([
+		"m0",
+		"m1",
+		"m2",
+		"m3",
+		"m4",
+	]);
 });
 
 test("is an ordinary collapsing region, open from its first frame", () => {

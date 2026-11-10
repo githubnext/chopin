@@ -9,9 +9,6 @@ import { displayName } from "@chopin/editor";
 
 import type { Chat } from "@chopin/protocol";
 
-/** How many waiting turns the queue shows before it folds the rest. */
-export const SHOWN = 3;
-
 export type QueueRow = {
 	id: string;
 	/** Who asked: a person's name, or Chopin for work nobody typed. */
@@ -24,13 +21,15 @@ export type QueueRow = {
 	message: boolean;
 	/** The person's own message, which only they can cancel or edit. */
 	mine: boolean;
+	/** The server has durably saved this message and has not delivered it yet. */
+	sent?: true;
 };
 
 /**
- * The waiting turns that have not started, in order. A message that is already in the transcript
- * as anything but sent has started, and leaves the queue before the server says so. Work nobody
- * typed is not told by such an entry: a comment's turn waits under the id of the notice that says
- * it was sent, which is in the transcript the whole time.
+ * The waiting turns that have not started, in order. A message marked delivered or failed has
+ * left the queue even if its queue frame has not arrived yet. An MCP message kept in memory has
+ * no delivery mark, so the queue itself remains authoritative for it. Work nobody typed is not
+ * told by such an entry: a comment's notice stays in the transcript the whole time.
  */
 export function queueRows(
 	queue: readonly Chat.Waiting[],
@@ -38,7 +37,11 @@ export function queueRows(
 	handle: string,
 ): QueueRow[] {
 	let started = new Set(
-		entries.filter(entry => entry.deliveryState !== "sent").map(entry => entry.id),
+		entries.filter(entry => entry.deliveryState === "delivered" || entry.deliveryState === "failed")
+			.map(entry => entry.id),
+	);
+	let sent = new Set(
+		entries.filter(entry => entry.deliveryState === "sent").map(entry => entry.id),
 	);
 	return queue.filter(item => item.kind !== undefined || !started.has(item.id)).map(item => {
 		let message = item.kind === undefined;
@@ -50,31 +53,9 @@ export function queueRows(
 			text: item.text,
 			message,
 			mine: message && item.handle === handle,
+			...(message && sent.has(item.id) ? { sent: true as const } : {}),
 		};
 	});
-}
-
-/**
- * The transcript without the messages that are waiting in the queue. A hosted message is saved
- * as a transcript entry, marked sent, the moment it is accepted; the queue is where it shows until
- * its turn starts.
- */
-export function withoutQueued<T extends Pick<Chat.Entry, "id" | "deliveryState">>(
-	entries: T[],
-	queue: readonly Pick<Chat.Waiting, "id">[],
-): T[] {
-	if (queue.length === 0) return entries;
-	let waiting = new Set(queue.map(item => item.id));
-	return entries.filter(entry => entry.deliveryState !== "sent" || !waiting.has(entry.id));
-}
-
-/** The rows shown, and how many are folded behind "more". */
-export function visibleRows(
-	rows: readonly QueueRow[],
-	expanded: boolean,
-): { shown: QueueRow[]; folded: number } {
-	let shown = expanded ? [...rows] : rows.slice(0, SHOWN);
-	return { shown, folded: rows.length - shown.length };
 }
 
 /** The line above the rows. */
@@ -82,14 +63,12 @@ export function queueCaption(count: number): string {
 	return `${count} waiting for Chopin`;
 }
 
-/**
- * The row to put focus on once `id` has left the queue: the one that took its place, else the one
- * before it, else none, and focus goes back to the composer.
- */
+/** The next actionable row, then the previous one, or the composer when none remain. */
 export function focusAfterRemoval(rows: readonly QueueRow[], id: string): string | undefined {
 	let index = rows.findIndex(row => row.id === id);
 	if (index < 0) return undefined;
-	return (rows[index + 1] ?? rows[index - 1])?.id;
+	return rows.slice(index + 1).find(row => row.mine)?.id
+		?? rows.slice(0, index).findLast(row => row.mine)?.id;
 }
 
 export type Change = "cancel" | "edit";

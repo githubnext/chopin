@@ -29,7 +29,7 @@ import {
 import { chatDraftKey } from "../demo-actor";
 import { WireLost, WireRefusal } from "../wire";
 import { MessageQueue } from "./message-queue";
-import { queueRows, refusalWords, withoutQueued } from "./queue-model";
+import { queueRows, refusalWords } from "./queue-model";
 import {
 	echoes,
 	keepOutbox,
@@ -966,7 +966,7 @@ export function Chat(
 	let bannerIds = [leadNode ? bannerId : undefined, connectionNode ? connectionId : undefined]
 		.filter(Boolean).join(" ");
 	// What waits for the Planner shows above the composer; a message in it is not in the transcript.
-	let waiting = queueRows(queue, entries, handle);
+	let waiting = queueRows(queue, entries, handle).filter(row => !retractions.includes(row.id));
 	let changeQueue = async (change: "cancel" | "edit", request: Promise<unknown>) => {
 		try {
 			await request;
@@ -1005,13 +1005,14 @@ export function Chat(
 			entries={[
 				...withNoticesAfter(
 					withoutFailure(
-						withoutRetracted(withoutQueued(entries, queue), retractions),
+						withoutRetracted(entries, retractions),
 						slot.lead === "failure" ? failed?.entry : undefined,
 					),
 					unanswered,
 				),
 				...echoes(outbox),
 			]}
+			hiddenQueued={new Set(queue.filter(item => item.kind === undefined).map(item => item.id))}
 			onDelete={deleteMessage}
 			onRetry={retryMessage}
 			quietFailures={quietFailures}
@@ -1024,6 +1025,7 @@ export function Chat(
 	);
 	let queueView = (
 		<MessageQueue
+			onDelete={!readonly && !archived ? deleteMessage : undefined}
 			onCancel={composerShown && wire
 				? id => changeQueue("cancel", wire.ask<Wire.Unqueued>("chat:unqueue", { id }))
 				: undefined}

@@ -165,7 +165,10 @@ test("a second person sees the same queue live, and can change none of it", asyn
 	await expect(rowsOf(bob).nth(0)).toContainText("second: list the failure modes");
 	await expect(rowsOf(bob).nth(1)).toContainText("third: add a rollout paragraph");
 	await expect(queueOf(bob).getByRole("button")).toHaveCount(0);
-	await expect(rowsOf(ana).getByRole("button")).toHaveCount(4);
+	await expect(rowsOf(ana).getByRole("button")).toHaveCount(6);
+	await expect(rowsOf(ana).getByRole("button", { name: "Edit message from Ana" })).toHaveCount(2);
+	await expect(rowsOf(ana).getByRole("button", { name: "Cancel message from Ana" })).toHaveCount(2);
+	await expect(rowsOf(ana).getByRole("button", { name: "Message actions" })).toHaveCount(2);
 
 	await say(bob, "@chopin bob's question about the saddle");
 	await expect(rowsOf(ana)).toHaveCount(3);
@@ -184,6 +187,25 @@ test("a second person sees the same queue live, and can change none of it", asyn
 		.fill("third: add a short rollout paragraph");
 	await rowsOf(ana).nth(0).getByRole("button", { name: "Save", exact: true }).click();
 	await expect(rowsOf(bob).nth(0)).toContainText("third: add a short rollout paragraph");
+});
+
+test("cancelling hands focus past read-only rows and then back to the composer", async ({ join, seed }) => {
+	await seed(SOURCE);
+	let ana = await join("ana");
+	let bob = await join("bob");
+	await startBusyTurn(ana);
+	await say(ana, "@chopin first from Ana");
+	await say(bob, "@chopin from Bob");
+	await say(ana, "@chopin last from Ana");
+	let rows = rowsOf(ana);
+	await expect(rows).toHaveCount(3);
+	await rows.nth(0).getByRole("button", { name: "Cancel message from Ana" }).press("Enter");
+	await expect(rows).toHaveCount(2);
+	await expect(rows.nth(1).getByRole("button", { name: "Edit message from Ana" })).toBeFocused();
+	await rows.nth(1).getByRole("button", { name: "Cancel message from Ana" }).press("Enter");
+	await expect(rows).toHaveCount(1);
+	await expect(rows.first()).toContainText("Bob");
+	await expect(chatInput(chatPane(ana))).toBeFocused();
 });
 
 test("a message leaves the queue and joins the transcript as one move, and the composer never shifts", async ({ join, seed }) => {
@@ -258,7 +280,7 @@ test("an edit that loses the race with its turn starting says so plainly, and th
 	await expect(notice).toHaveCount(0, { timeout: 15_000 });
 });
 
-test("a long message keeps to one line, and more than three fold behind a control that says how many", async ({ join, seed }) => {
+test("a long message keeps to one line, and all waiting messages stay in an ordered, bounded list", async ({ join, seed }) => {
 	await seed(SOURCE);
 	let page = await join("ana");
 	await startBusyTurn(page);
@@ -278,17 +300,28 @@ test("a long message keeps to one line, and more than three fold behind a contro
 
 	for (let number of [2, 3, 4, 5]) await say(page, `@chopin message ${number}`);
 	await expect(queueOf(page)).toContainText("5 waiting for Chopin");
-	await expect(rowsOf(page)).toHaveCount(3);
-	let more = queueOf(page).getByRole("button", { name: "2 more" });
-	await expect(more).toHaveAttribute("aria-expanded", "false");
-	await more.click();
 	await expect(rowsOf(page)).toHaveCount(5);
-	await expect(queueOf(page).getByRole("button", { name: "Show fewer" })).toHaveAttribute(
-		"aria-expanded",
-		"true",
-	);
-	await queueOf(page).getByRole("button", { name: "Show fewer" }).click();
-	await expect(rowsOf(page)).toHaveCount(3);
+	await expect(rowsOf(page).locator("[data-chat-queue-text]")).toHaveText([
+		long,
+		"message 2",
+		"message 3",
+		"message 4",
+		"message 5",
+	]);
+	let list = queueOf(page).getByRole("list");
+	let dimensions = await list.evaluate(element => ({
+		height: element.clientHeight,
+		scrollHeight: element.scrollHeight,
+		overflow: getComputedStyle(element).overflowY,
+	}));
+	expect(dimensions.overflow).toBe("auto");
+	expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.height);
+	await rowsOf(page).last().scrollIntoViewIfNeeded();
+	let [lastBox, listBox] = await Promise.all([
+		rowsOf(page).last().boundingBox(),
+		list.boundingBox(),
+	]);
+	expect(lastBox!.y + lastBox!.height).toBeLessThanOrEqual(listBox!.y + listBox!.height + 1);
 });
 
 test("a comment sent to Chopin waits as a reply to a comment, which nobody can change", async ({ join, seed }) => {
@@ -308,7 +341,7 @@ test("a comment sent to Chopin waits as a reply to a comment, which nobody can c
 		await expect(row).not.toContainText("saddle");
 	}
 	await expect(rowsOf(ana).filter({ hasText: "and then that one" }).getByRole("button"))
-		.toHaveCount(2);
+		.toHaveCount(3);
 	await expect(rowsOf(bob).getByRole("button")).toHaveCount(0);
 });
 

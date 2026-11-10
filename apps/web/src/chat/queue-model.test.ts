@@ -6,10 +6,8 @@ import {
 	queueCaption,
 	queueRows,
 	refusalWords,
-	SHOWN,
-	visibleRows,
-	withoutQueued,
 } from "./queue-model";
+import { group } from "./model";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -65,7 +63,13 @@ describe("the rows of the queue", () => {
 		expect(rows.filter(row => row.mine).map(row => row.id)).toEqual(["a"]);
 	});
 
-	it("drops a turn whose message is already in the transcript as anything but sent: it has started", () => {
+	it("keeps an MCP message with no delivery mark in the queue while it waits", () => {
+		let queue = [waiting("mcp", "ana", "Compare the options")];
+		let entries: Pick<Chat.Entry, "id" | "deliveryState">[] = [{ id: "mcp" }];
+		expect(queueRows(queue, entries, "ana").map(row => row.id)).toEqual(["mcp"]);
+	});
+
+	it("drops a turn whose message is already delivered or failed: it has started or ended", () => {
 		let queue = [
 			waiting("a", "ana", "one"),
 			waiting("b", "ana", "two"),
@@ -74,10 +78,9 @@ describe("the rows of the queue", () => {
 		let entries: Pick<Chat.Entry, "id" | "deliveryState">[] = [
 			{ id: "a", deliveryState: "delivered" },
 			{ id: "b", deliveryState: "sent" },
-			// Kept in memory, then put into the transcript when its turn began: no state at all.
-			{ id: "c" },
+			{ id: "c", deliveryState: "failed" },
 		];
-		expect(queueRows(queue, entries, "ana").map(row => row.id)).toEqual(["b"]);
+		expect(queueRows(queue, entries, "ana").map(row => [row.id, row.sent])).toEqual([["b", true]]);
 		expect(queueRows(queue, [], "ana").map(row => row.id)).toEqual(["a", "b", "c"]);
 	});
 });
@@ -90,42 +93,32 @@ it("keeps work nobody typed while the entry it waits under, such as a comment's 
 
 describe("the transcript beside the queue", () => {
 	it("leaves a message out while it waits, and puts it back once it has started", () => {
-		let entries: Pick<Chat.Entry, "id" | "deliveryState">[] = [
-			{ id: "earlier", deliveryState: "delivered" },
-			{ id: "plain" },
-			{ id: "waits", deliveryState: "sent" },
-			{ id: "failed", deliveryState: "failed" },
+		let author = { kind: "member" as const, handle: "ana" };
+		let entries: Chat.Entry[] = [
+			{ id: "earlier", author, text: "earlier", ts: 1, deliveryState: "delivered" },
+			{ id: "plain", author, text: "plain", ts: 1 },
+			{ id: "waits", author, text: "waits", ts: 1, deliveryState: "sent" },
+			{ id: "failed", author, text: "failed", ts: 1, deliveryState: "failed" },
 		];
-		let queue = [{ id: "waits" }, { id: "earlier" }];
+		let ids = (queue: string[]) =>
+			group(entries, undefined, [], undefined, new Set(queue))
+				.flatMap(item => item.kind === "messages" ? item.messages.map(message => message.id) : []);
 		// Only a message that is sent and waiting leaves; the rest are the transcript's own.
-		expect(withoutQueued(entries, queue).map(entry => entry.id)).toEqual([
-			"earlier",
-			"plain",
-			"failed",
-		]);
-		expect(withoutQueued(entries, [])).toBe(entries);
-		expect(withoutQueued(entries, [{ id: "elsewhere" }])).toHaveLength(4);
+		expect(ids(["waits", "earlier"])).toEqual(["earlier", "plain", "failed"]);
+		expect(ids([])).toEqual(["earlier", "plain", "waits", "failed"]);
+		expect(ids(["elsewhere"])).toEqual(["earlier", "plain", "waits", "failed"]);
+		expect(ids(["plain"])).toEqual(["earlier", "waits", "failed"]);
 	});
 });
 
-describe("how much of the queue shows", () => {
+describe("the queue's count and focus", () => {
 	let rows = Array.from({ length: 5 }, (_, index) => ({
 		id: String(index),
 		name: "Ana",
 		text: String(index),
 		message: true,
-		mine: false,
+		mine: true,
 	}));
-
-	it("shows the first few and says how many are folded", () => {
-		expect(SHOWN).toBe(3);
-		expect(visibleRows(rows, false)).toMatchObject({ folded: 2 });
-		expect(visibleRows(rows, false).shown.map(row => row.id)).toEqual(["0", "1", "2"]);
-		expect(visibleRows(rows, true)).toMatchObject({ folded: 0 });
-		expect(visibleRows(rows, true).shown).toHaveLength(5);
-		expect(visibleRows(rows.slice(0, 2), false)).toMatchObject({ folded: 0 });
-		expect(visibleRows([], false)).toEqual({ shown: [], folded: 0 });
-	});
 
 	it("says how many are waiting, in plain words", () => {
 		expect(queueCaption(1)).toBe("1 waiting for Chopin");
@@ -137,6 +130,10 @@ describe("how much of the queue shows", () => {
 		expect(focusAfterRemoval(rows, "4")).toBe("3");
 		expect(focusAfterRemoval(rows.slice(0, 1), "0")).toBeUndefined();
 		expect(focusAfterRemoval(rows, "gone")).toBeUndefined();
+		let mixed = [rows[0]!, { ...rows[1]!, mine: false }, rows[2]!];
+		expect(focusAfterRemoval(mixed, "0")).toBe("2");
+		expect(focusAfterRemoval(mixed.slice(0, 2), "0")).toBeUndefined();
+		expect(focusAfterRemoval(mixed, "2")).toBe("0");
 	});
 });
 

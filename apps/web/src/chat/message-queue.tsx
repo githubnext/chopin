@@ -14,19 +14,13 @@
  * and the plain words a refused change is told in. The element's own "running" row is left out:
  * the turn that is running already shows in the transcript.
  */
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChopinMark, Face } from "@chopin/editor";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 
 import { motionContract } from "../motion-contract";
-import {
-	editedText,
-	focusAfterRemoval,
-	queueCaption,
-	refusalWords,
-	SHOWN,
-	visibleRows,
-} from "./queue-model";
+import { DeliveryMark, MessageMenu } from "./message-delivery";
+import { editedText, focusAfterRemoval, queueCaption, refusalWords } from "./queue-model";
 import "./message-queue.css";
 
 import type { FormEvent, KeyboardEvent } from "react";
@@ -46,11 +40,13 @@ type Props = {
 	onCancel?: (id: string) => Answer;
 	/** Rewrite a message of the person's own before it starts. */
 	onEdit?: (id: string, text: string) => Answer;
+	/** Take a saved message back, including while offline. */
+	onDelete?: (id: string) => void;
 	/** Where focus goes when the last row leaves, and nothing is left to take it. */
 	restoreFocus?: () => void;
 };
 
-export function MessageQueue({ queued, onCancel, onEdit, restoreFocus }: Props) {
+export function MessageQueue({ queued, onCancel, onEdit, onDelete, restoreFocus }: Props) {
 	// A word about a change that could not be made outlives the row it was about, which leaves the
 	// queue when its turn starts: it stays a few seconds, in the queue's own card.
 	let [notice, setNotice] = useState<string>();
@@ -89,6 +85,7 @@ export function MessageQueue({ queued, onCancel, onEdit, restoreFocus }: Props) 
 							<Queue
 								notice={notice}
 								onCancel={onCancel}
+								onDelete={onDelete}
 								onEdit={onEdit}
 								onNotice={setNotice}
 								onSize={size => height.current = size}
@@ -104,7 +101,7 @@ export function MessageQueue({ queued, onCancel, onEdit, restoreFocus }: Props) 
 }
 
 function Queue(
-	{ queued, notice, onNotice, onSize, waiting, onCancel, onEdit, restoreFocus }: Props & {
+	{ queued, notice, onNotice, onSize, waiting, onCancel, onEdit, onDelete, restoreFocus }: Props & {
 		notice?: string;
 		onNotice: (words: string | undefined) => void;
 		/** Told the card's height after each draw. */
@@ -115,24 +112,15 @@ function Queue(
 ) {
 	let list = useRef<HTMLOListElement>(null);
 	let card = useRef<HTMLDivElement>(null);
+	let atEnd = useRef(true);
 	useLayoutEffect(() => {
 		if (card.current) onSize(card.current.offsetHeight);
 	});
-	let [expanded, setExpanded] = useState(false);
+	useLayoutEffect(() => {
+		if (list.current && atEnd.current) list.current.scrollTop = list.current.scrollHeight;
+	}, [queued.length]);
 	let [said, setSaid] = useState("");
 	let [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
-	let { shown, folded } = visibleRows(queued, expanded);
-	let focusAfter = useRef<string | undefined>(undefined);
-	let listId = useId();
-
-	// A row that was cancelled by this person hands focus to its neighbour once it has gone.
-	useEffect(() => {
-		let id = focusAfter.current;
-		if (id === undefined) return;
-		focusAfter.current = undefined;
-		list.current?.querySelector<HTMLElement>(`[data-queue-id="${CSS.escape(id)}"] button`)
-			?.focus();
-	}, [queued]);
 
 	let note = (id: string, words: string | undefined) =>
 		setNotes(current => {
@@ -148,7 +136,12 @@ function Queue(
 		let refused = await onCancel(row.id);
 		if (refused) return refuse(row, refused);
 		setSaid(`Cancelled the message from ${row.name}.`);
-		if (neighbour) focusAfter.current = neighbour;
+		let next = neighbour
+			? list.current?.querySelector<HTMLElement>(
+				`[data-queue-id="${CSS.escape(neighbour)}"] button`,
+			)
+			: undefined;
+		if (next) next.focus();
 		else restoreFocus?.();
 	});
 
@@ -184,11 +177,19 @@ function Queue(
 			role="region"
 		>
 			{queued.length > 0 && <p className="chat-queue-caption">{queueCaption(queued.length)}</p>}
-			<ol className="chat-queue-list" id={listId} ref={list}>
-				{shown.map((row, index) => (
+			<ol
+				className="chat-queue-list"
+				onScroll={event => {
+					let element = event.currentTarget;
+					atEnd.current = element.scrollHeight - element.clientHeight - element.scrollTop <= 1;
+				}}
+				ref={list}
+			>
+				{queued.map((row, index) => (
 					<Item
 						cancel={cancel}
 						edit={edit}
+						onDelete={onDelete}
 						index={index + 1}
 						key={row.id}
 						note={notes.get(row.id)}
@@ -197,18 +198,6 @@ function Queue(
 					/>
 				))}
 			</ol>
-			{queued.length > SHOWN && (
-				<button
-					aria-controls={listId}
-					aria-expanded={expanded}
-					className="btn btn-sm btn-ghost chat-queue-more"
-					data-chat-queue-more=""
-					onClick={() => setExpanded(open => !open)}
-					type="button"
-				>
-					{expanded ? "Show fewer" : `${folded} more`}
-				</button>
-			)}
 			{notice && <p className="chat-queue-notice" data-chat-queue-notice="">{notice}</p>}
 			<span aria-atomic="true" aria-live="polite" className="sr-only" role="status">{said}</span>
 		</div>
@@ -216,12 +205,13 @@ function Queue(
 }
 
 function Item(
-	{ row, index, note, cancel, edit, onLeave }: {
+	{ row, index, note, cancel, edit, onDelete, onLeave }: {
 		row: QueueRow;
 		index: number;
 		note?: string;
 		cancel?: (row: QueueRow) => Promise<void>;
 		edit?: (row: QueueRow, text: string) => Promise<string | undefined>;
+		onDelete?: (id: string) => void;
 		/** Called when the row goes while its message is open for editing. */
 		onLeave: (row: QueueRow) => void;
 	},
@@ -241,6 +231,7 @@ function Item(
 			aria-busy={busy || undefined}
 			className="chat-queue-item"
 			data-chat-queue-item=""
+			data-chat-message-id={row.message ? row.id : undefined}
 			data-queue-id={row.id}
 			data-queue-kind={row.message ? "message" : "work"}
 		>
@@ -275,20 +266,23 @@ function Item(
 					)
 					: (
 						<>
-							<p
-								className="chat-queue-text"
-								data-chat-queue-text=""
-								title={row.text}
-							>
-								{row.text}
-							</p>
+							<div className="chat-queue-preview">
+								<p
+									className="chat-queue-text"
+									data-chat-queue-text=""
+									title={row.text}
+								>
+									{row.text}
+								</p>
+								{row.mine && row.sent && <DeliveryMark mark="sent" />}
+							</div>
 							{note && <p className="chat-queue-note" role="alert">{note}</p>}
 						</>
 					)}
 			</div>
-			{controls && !editing && (
+			{(controls || (row.mine && row.sent && onDelete)) && !editing && (
 				<div className="chat-queue-actions">
-					{edit && (
+					{controls && edit && (
 						<button
 							aria-label={`Edit message from ${row.name}`}
 							className="btn btn-xs btn-ghost"
@@ -300,7 +294,7 @@ function Item(
 							Edit
 						</button>
 					)}
-					{cancel && (
+					{controls && cancel && (
 						<button
 							aria-label={`Cancel message from ${row.name}`}
 							className="btn btn-xs btn-ghost"
@@ -315,6 +309,7 @@ function Item(
 							Cancel
 						</button>
 					)}
+					{row.mine && row.sent && onDelete && <MessageMenu onDelete={() => onDelete(row.id)} />}
 				</div>
 			)}
 		</li>
