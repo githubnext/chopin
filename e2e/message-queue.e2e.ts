@@ -392,8 +392,18 @@ test("on a phone the queue fits, its controls are reachable, and it passes an ac
 			let button = rowsOf(page).first().getByRole("button", { name });
 			await expectInsideViewport(button);
 			let box = (await button.boundingBox())!;
-			expect(box.height).toBeGreaterThanOrEqual(24);
-			expect(box.width).toBeGreaterThanOrEqual(24);
+			expect(box.width).toBeGreaterThanOrEqual(44);
+			for (let offset of [-21, 21]) {
+				let reached = await button.evaluate((element, y) => {
+					let rectangle = element.getBoundingClientRect();
+					let hit = document.elementFromPoint(
+						rectangle.left + rectangle.width / 2,
+						rectangle.top + rectangle.height / 2 + y,
+					);
+					return element.contains(hit);
+				}, offset);
+				expect(reached).toBe(true);
+			}
 		}
 		let found = await new AxeBuilder({ page }).include("[data-chat-queue]").analyze();
 		expect(found.violations).toEqual([]);
