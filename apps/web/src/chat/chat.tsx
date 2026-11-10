@@ -46,6 +46,7 @@ import {
 import type { DraftInputHandle } from "./draft-input";
 import { ConnectionBannerView } from "./connection-banner";
 import type { ConnectionBanner, TranscriptFacts } from "./connection-banner";
+import { silencesFailedSends } from "./connection-phase";
 import { ErrorState } from "./error-state";
 import { failureBanner, retryPayload, sendFailureView, withoutFailure } from "./failure";
 import { TypingReporter } from "./typing";
@@ -383,6 +384,9 @@ export function Chat(
 		if (retried && !retrying) setRetried(undefined);
 	}, [retried, retrying]);
 	let tellsConnection = !!banner && banner.view.phase !== "online";
+	// Only a banner that says why a send could not go gives a refused message's line its quiet;
+	// a Planner's absence is another fact, and the message still says it was not sent.
+	let quietFailures = !!banner && silencesFailedSends(banner.view);
 	let composerReady = transcriptReady && !readonly && !archived;
 	// What the composer and the empty transcript show. A restart is waited out in silence, and
 	// nothing is to change on the page for it: until the fresh transcript is here they read as
@@ -950,7 +954,7 @@ export function Chat(
 			]}
 			onDelete={deleteMessage}
 			onRetry={retryMessage}
-			quietFailures={tellsConnection}
+			quietFailures={quietFailures}
 			completedWork={transcript.completedWork}
 			suspendedWork={suspendedWork}
 			handle={handle}

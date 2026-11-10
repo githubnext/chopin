@@ -9,6 +9,7 @@ import {
 	plannerForBanner,
 	RESUMED_MS,
 	retryLayer,
+	silencesFailedSends,
 } from "./connection-phase";
 import { RETRY_AFTER_FAILURES } from "@chopin/editor";
 
@@ -238,6 +239,29 @@ test("the Planner's dropped link offers no Reconnect from here and says so truth
 	let away = plannerStatus({ state: "disconnected", login: "mona" }, "Build box");
 	let { view } = step(INITIAL_MEMORY, { planner: away });
 	expect(retryLayer(view)).toBeUndefined();
+});
+
+test("only a banner that says the same cause as a refused send gives that send's line its quiet", () => {
+	let none = plannerStatus({ state: "none" });
+	let away = plannerStatus({ state: "disconnected", login: "mona" }, "Build box");
+	// The room's socket being down is the cause a send could not go, so the banner speaks for it,
+	// and while it says it is back; the send's own line returns after.
+	let lost = step(INITIAL_MEMORY, { socket: "lost" });
+	expect(silencesFailedSends(lost.view)).toBe(true);
+	expect(silencesFailedSends(run({ socket: "lost" }, { socket: "up" }).view)).toBe(true);
+	expect(silencesFailedSends(run({ socket: "lost" }, { synced: false }).view)).toBe(true);
+	// A Planner that is absent says nothing of why the server turned a message down for good.
+	expect(silencesFailedSends(step(INITIAL_MEMORY, { planner: none }).view)).toBe(false);
+	expect(silencesFailedSends(step(INITIAL_MEMORY, { planner: away }).view)).toBe(false);
+	let back = run({ planner: away }, { planner: undefined, plannerAttached: true });
+	expect(back.view).toMatchObject({ phase: "resumed", layer: "planner" });
+	expect(silencesFailedSends(back.view)).toBe(false);
+	expect(silencesFailedSends({ phase: "online" })).toBe(false);
+	// The socket's banner stands in front of the Planner's, so a Planner absence behind a lost
+	// socket is one banner, and it is the socket's.
+	expect(silencesFailedSends(step(INITIAL_MEMORY, { socket: "lost", planner: none }).view)).toBe(
+		true,
+	);
 });
 
 test("a screen reader hears each phase once, and nothing as the banner goes", () => {
