@@ -126,6 +126,21 @@ describe("the words for a level and for a choice that could not be honoured", ()
 		expect(levelLabel("Deep-think")).toBe("Deep-think");
 	});
 
+	it("reads any string a client names a level as that string, even one an object already has", () => {
+		expect(
+			["constructor", "toString", "__proto__", "hasOwnProperty", "extra high", "\u4f4e", ""]
+				.map(levelLabel),
+		).toEqual([
+			"Constructor",
+			"ToString",
+			"__proto__",
+			"HasOwnProperty",
+			"Extra high",
+			"\u4f4e",
+			"",
+		]);
+	});
+
 	it("names a model whose catalog name is empty by its id", () => {
 		let blank = { models: [{ id: "acme/blank", name: "" }] };
 		expect(unavailableNotice(blank, { model: "acme/blank" })).toBe(

@@ -171,6 +171,22 @@ describe("a catalog that leaves fields empty", () => {
 		default: { model: "p/one" },
 	};
 
+	test("keeps a provider whose id is empty apart from the models that name no provider", () => {
+		let mixed: Chat.ModelCatalog = {
+			models: [
+				{ id: "a", name: "A" },
+				{ id: "b", name: "B", provider: { id: "", name: "Blank" } },
+				{ id: "c", name: "C", provider: { id: "" } },
+			],
+		};
+		let groups = pickerGroups(mixed, undefined, "");
+		expect(groups.map(group => [group.name, group.models.map(model => model.id)])).toEqual([
+			["Other", ["a"]],
+			["Blank", ["b", "c"]],
+		]);
+		expect(new Set(groups.map(group => group.id)).size).toBe(2);
+	});
+
 	test("reads an empty list of levels as no reasoning control", () => {
 		expect(reasoningLevels(blank, undefined)).toEqual({ levels: [], current: undefined });
 		expect(reasoningLevels(blank, { model: "p/two" }).levels).toEqual(["low"]);

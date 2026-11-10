@@ -26,7 +26,12 @@ export type PickerModel = Chat.ModelOption & {
 	selected: boolean;
 };
 
-export type PickerGroup = { id: string; name: string | undefined; models: PickerModel[] };
+export type PickerGroup = {
+	/** Tells the group from the others: a provider's id, or none for the models that name none. */
+	id: string;
+	name: string | undefined;
+	models: PickerModel[];
+};
 
 /** The model that will run: the chosen one if the catalog offers it, else the harness's default. */
 export function shownModel(
@@ -70,7 +75,8 @@ export function pickerGroups(
 		let occurrence = seen.get(model.id) ?? 0;
 		seen.set(model.id, occurrence + 1);
 		if (!matchesQuery(model, query)) continue;
-		let id = model.provider?.id ?? "";
+		// Apart from any provider's id, an empty one included, so the two never share a group.
+		let id = model.provider ? `provider:${model.provider.id}` : "none";
 		let group = groups.get(id);
 		if (!group) {
 			group = {
