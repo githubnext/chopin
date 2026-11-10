@@ -144,8 +144,15 @@ export function triggerTitle(catalog: Catalog, choice: Choice | undefined): stri
 		.filter(Boolean).join(", ");
 }
 
-/** What to say about a stored choice the harness no longer offers, if anything. */
-export function fallbackNotice(catalog: Catalog, choice: Choice | undefined): string | undefined {
+/**
+ * What to say about a stored choice the harness no longer offers, if anything. With no catalog at
+ * all, such as after a client withdrew its models, every model or level somebody chose is gone,
+ * and a default nobody chose is not a choice.
+ */
+export function fallbackNotice(
+	catalog: Catalog | undefined,
+	choice: Choice | undefined,
+): string | undefined {
 	let lost = resolveChoice(catalog, choice).unavailable;
 	return lost ? unavailableNotice(catalog, lost) : undefined;
 }
@@ -154,17 +161,22 @@ export function fallbackNotice(catalog: Catalog, choice: Choice | undefined): st
  * What the composer's strip says about the document's model, if anything. A choice the server just
  * refused comes first, then the server's word that a turn could not read the choice and ran the
  * harness's default (which holds even where this browser has no catalog), then a stored choice
- * the catalog no longer offers.
+ * the catalog no longer offers. Where there is no catalog and so no control, `saved` (the choice
+ * the room holds) is checked against it in the control's place: the picker is gone, but a model
+ * somebody chose has not become the default, and the strip still says so.
  */
 export function composerModelNotice(
 	control:
 		| { catalog: Catalog; choice: Choice | undefined; refusal: string | undefined }
 		| undefined,
 	unreadable: boolean,
+	saved?: Choice,
 ): { tone: "warning" | "info"; text: string } | undefined {
 	if (control?.refusal) return { tone: "warning", text: control.refusal };
 	if (unreadable) return { tone: "info", text: UNREADABLE_NOTICE };
-	let lost = control && fallbackNotice(control.catalog, control.choice);
+	let lost = control
+		? fallbackNotice(control.catalog, control.choice)
+		: fallbackNotice(undefined, saved);
 	return lost ? { tone: "info", text: lost } : undefined;
 }
 

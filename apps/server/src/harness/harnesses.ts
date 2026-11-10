@@ -147,6 +147,18 @@ export async function plannerCatalog(
 	return undefined;
 }
 
+/**
+ * Whether what the document's Planner offers is known now, though it may be nothing. A remote
+ * Planner's is known only while a client is attached and has told it, or offered no catalog to tell
+ * it with: with nobody attached (a machine that is away, a server that has just restarted) there is
+ * nobody to honor or to refuse a saved choice, and nothing is said of it. Every other harness knows.
+ */
+export function plannerOfferKnown(harness: string, channelId: string): boolean {
+	if (harness !== "remote") return true;
+	let link = attachedLink(channelId);
+	return link !== undefined && !link.catalogPending;
+}
+
 export function registerCredential(
 	id: string,
 	currentToken: () => string | undefined,

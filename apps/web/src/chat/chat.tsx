@@ -304,7 +304,7 @@ export function Chat(
 	let typing = useRef<TypingReporter | undefined>(undefined);
 	let counts = runCounts(runs);
 	// What the document's agent can be set to run, and what everyone in the room has set it to.
-	let { control: modelControl, unreadable: modelUnreadable } = useModelChoice({
+	let { control: modelControl, saved: modelSaved, unreadable: modelUnreadable } = useModelChoice({
 		wire,
 		room,
 		connected,
@@ -313,7 +313,7 @@ export function Chat(
 	// A refused choice, a choice the server could not read, or one the agent can no longer honour is
 	// said until it is made again. One object while its words stand: the composer's strip eases in
 	// and out as that value changes.
-	let modelShown = composerModelNotice(modelControl, modelUnreadable);
+	let modelShown = composerModelNotice(modelControl, modelUnreadable, modelSaved);
 	let modelWords = modelShown?.text;
 	let modelTone = modelShown?.tone ?? "info";
 	let modelNotice = useMemo<ComposerNotice | undefined>(

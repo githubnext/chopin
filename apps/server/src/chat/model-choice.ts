@@ -17,6 +17,12 @@ import type { SocketData } from "../wire";
 export type ModelChoiceDeps = {
 	/** What the document's harness can be set to run now; none where it offers no choice. */
 	catalog: (channelId: string) => Promise<Wire.ModelCatalog | undefined>;
+	/**
+	 * Whether what the harness offers is known now, which may be nothing: false while a remote
+	 * Planner has no client to ask, or one that has yet to report. The stored choice is then not
+	 * told to the room with no catalog, since it is neither gone nor honored. Absent means known.
+	 */
+	known?: (channelId: string) => boolean;
 	storage: Pick<StorageAdapter, "plannerModelChoices">;
 	lease: () => Lease;
 	now?: () => Date;
@@ -37,17 +43,22 @@ async function stored(
 	};
 }
 
-/** The room's model state: the catalog and the stored choice, whether or not the catalog honours it. */
+/**
+ * The room's model state: the catalog and the stored choice, whether or not the catalog honours it.
+ * Where the harness offers nothing, the choice is still told, so the composer can say it fell back
+ * to the default, but not while what the harness offers is unknown (`known`).
+ */
 export async function modelState(
 	deps: ModelChoiceDeps,
 	channelId: string,
 ): Promise<Wire.ModelState> {
 	let [catalog, choice] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
+	let told = choice && (catalog || (deps.known?.(channelId) ?? true));
 	return {
 		kind: "chat:model",
 		ts: 0,
 		...(catalog ? { catalog } : {}),
-		...(choice ? { choice } : {}),
+		...(told ? { choice } : {}),
 	};
 }
 

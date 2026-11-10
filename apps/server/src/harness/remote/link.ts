@@ -1132,6 +1132,16 @@ export class AgentLink {
 		return this.#catalog;
 	}
 
+	/**
+	 * Whether what the client offers is yet to be told: it offered `capability-catalog` and has not
+	 * sent `capabilities`. A client from before the catalog never will, so nothing is pending for it,
+	 * and a report that withdraws everything is still a report.
+	 */
+	get catalogPending(): boolean {
+		return this.#catalog === undefined
+			&& this.#options.features?.includes(AGENT_FEATURES.capabilityCatalog) === true;
+	}
+
 	/** Whether this link offered `resumable-sessions`. */
 	get resumable(): boolean {
 		return this.#options.features?.includes(AGENT_FEATURES.resumableSessions) === true;

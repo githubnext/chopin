@@ -1564,6 +1564,30 @@ describe("Agent connection capability catalog", () => {
 		await raw.closed;
 	});
 
+	it("has nothing to wait for from a client that never offered the catalog, and waits for one that did until it reports, withdrawing included", async () => {
+		let { auth, channel } = await linkAuth();
+		let server = linkServer(auth, 300);
+		cleanups.push(server.stop);
+		let older = await rawLink(server.url);
+		older.send({ type: "attach", version: 1, document: channel.id });
+		await older.next("attached");
+		expect(server.links.at(-1)!.catalogPending).toBe(false);
+		older.send({ type: "detach" });
+		await older.closed;
+
+		let raw = await rawLink(server.url, undefined, "capability-catalog");
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		let link = server.links.at(-1)!;
+		expect(link.catalogPending).toBe(true);
+		raw.send({ type: "capabilities", catalog: {} });
+		await until(() => link.catalog !== undefined, 1_000);
+		// Withdrawing everything is a report: what the client offers is known, and it is nothing.
+		expect(link.catalogPending).toBe(false);
+		raw.send({ type: "detach" });
+		await raw.closed;
+	});
+
 	it("keeps a report of more models than a person picks from, and a field it has no use for, and stays attached", async () => {
 		let { auth, channel } = await linkAuth();
 		let server = linkServer(auth, 300);

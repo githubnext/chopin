@@ -203,6 +203,36 @@ describe("what the composer's strip says about the document's model", () => {
 		expect(composerModelNotice(undefined, true)).toEqual({ tone: "info", text: unread });
 	});
 
+	test("keeps what a saved choice fell back from where the harness offers no models at all", () => {
+		// The picker is gone (no control, no catalog), and the choice the document holds is still said.
+		let gone = "acme/large is no longer available, so Chopin used its default model.";
+		expect(composerModelNotice(undefined, false, { model: "acme/large" })).toEqual({
+			tone: "info",
+			text: gone,
+		});
+		expect(composerModelNotice(undefined, false, { model: "acme/large", thinkingLevel: "high" }))
+			.toEqual({ tone: "info", text: gone });
+		expect(composerModelNotice(undefined, false, { thinkingLevel: "xhigh" })).toEqual({
+			tone: "info",
+			text:
+				"Extra high reasoning is no longer available for this model, so Chopin used its default.",
+		});
+		// What could not be read still comes before it, as it does with a catalog.
+		expect(composerModelNotice(undefined, true, { model: "acme/large" })).toEqual({
+			tone: "info",
+			text: unread,
+		});
+	});
+
+	test("says nothing of a default nobody chose, or of a choice the catalog offers", () => {
+		expect(composerModelNotice(undefined, false, undefined)).toBeUndefined();
+		expect(composerModelNotice(undefined, false, {})).toBeUndefined();
+		// With a control, its own choice is the one that counts, not the stored one beside it.
+		expect(composerModelNotice(held, false, { model: "acme/gone" })).toBeUndefined();
+		expect(composerModelNotice({ ...held, choice: undefined }, false, { model: "acme/large" }))
+			.toBeUndefined();
+	});
+
 	test("puts a refused choice first, then what could not be read, then a model that has gone", () => {
 		let refused = { ...held, refusal: "That model isn't available." };
 		expect(composerModelNotice(refused, true)).toEqual({
