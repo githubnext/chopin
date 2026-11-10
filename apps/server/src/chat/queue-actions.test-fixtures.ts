@@ -9,6 +9,7 @@ import { ulid } from "@chopin/dialect";
 
 import * as Chat from "./service";
 import { memberEntry, tick, waitFor } from "./deferred.test-fixtures";
+import { JOB } from "./job.test-fixtures";
 
 import type { world } from "./deferred.test-fixtures";
 
@@ -81,6 +82,73 @@ const queueOf = (w: World) =>
 
 const texts = async (w: World, states?: Parameters<World["rows"]>[0]) =>
 	(await w.rows(states)).map(row => row.text);
+
+const said = (w: World) =>
+	w.context.chat.entries.filter(entry => entry.author.kind !== "system").map(entry => entry.text);
+
+/** What a browser that connects now is told: the transcript in order, and what waits. */
+function greeted(w: World, who: "ana" | "bob" = "bob") {
+	let person = w.socket(who);
+	Chat.greet(w.context.chat, person.ws);
+	let history = person.frames[0] as unknown as {
+		entries: Array<{ text: string; author: { kind: string } }>;
+		queued: Array<{ text: string }>;
+	};
+	return {
+		said: history.entries.filter(entry => entry.author.kind !== "system").map(entry => entry.text),
+		waiting: history.queued.map(item => item.text),
+	};
+}
+
+/** What the transcript saved for the document says, in order. */
+const saved = async (w: World) =>
+	((await w.storage.collaboration.load(w.channel.id, new Date()))!.sidecar as unknown as {
+		transcript: Array<{ text: string; author: { kind: string } }>;
+	}).transcript.filter(entry => entry.author.kind !== "system").map(entry => entry.text);
+
+/**
+ * What a browser that has been connected throughout draws, from the frames it was sent: an entry
+ * joins at the end, is replaced where it is, moves to the end when told it has, and leaves when
+ * removed. A person's message that still waits is not drawn until its turn has begun.
+ */
+function drawn(events: World["events"], upTo = events.length): string[] {
+	let entries: Array<{ id: string; text: string; delivered: boolean; author: string }> = [];
+	let waiting = new Set<string>();
+	for (let event of events.slice(0, upTo)) {
+		if (event.kind === "chat:message") {
+			let entry = event.entry as {
+				id: string;
+				text: string;
+				deliveryState?: string;
+				author: { kind: string };
+			};
+			let next = {
+				id: entry.id,
+				text: entry.text,
+				delivered: entry.deliveryState === "delivered" || entry.deliveryState === "failed",
+				author: entry.author.kind,
+			};
+			let at = entries.findIndex(value => value.id === entry.id);
+			if (at < 0) entries.push(next);
+			else if (event.moved) {
+				entries.splice(at, 1);
+				entries.push(next);
+			} else entries[at] = next;
+		} else if (event.kind === "chat:removed") {
+			entries = entries.filter(value => value.id !== event.id);
+		} else if (event.kind === "chat:queue") {
+			waiting = new Set(
+				(event.waiting as Array<{ id: string; kind?: string }>)
+					.filter(item => item.kind === undefined).map(item => item.id),
+			);
+		}
+	}
+	return entries.filter(entry =>
+		entry.author === "system"
+			? false
+			: !(entry.author === "member" && !entry.delivered && waiting.has(entry.id))
+	).map(entry => entry.text);
+}
 
 export function queueActions(open: Open, options: { interleavings?: number } = {}) {
 	let interleavings = options.interleavings ?? 8;
@@ -919,5 +987,167 @@ export function queueActions(open: Open, options: { interleavings?: number } = {
 		await w.turns(1);
 		expect(w.prompts[0]).toContain("after the edit");
 		expect(w.prompts[0]).not.toContain("before the restart");
+	});
+	test("a message whose turn starts follows what was said while it waited, so the reply on screen keeps its place: for the room, after a reload, and for every turn behind it", async () => {
+		let w = await open({ away: false });
+		w.planner.hold();
+		await w.send("first");
+		await waitFor(() => w.planner.running === 1);
+		let second = await w.send("second");
+		await w.send("third");
+		// A browser that connects while they wait is told the transcript as saved, and what waits.
+		expect(greeted(w)).toEqual({
+			said: ["first", "second", "third"],
+			waiting: ["second", "third"],
+		});
+		// The reply to the first is said after both messages that waited behind it.
+		w.planner.release();
+		await waitFor(() => w.planner.running === 1 && w.prompts.length === 2);
+		let chat = w.context.chat;
+
+		// The second has begun, and the reply that was on screen is where it was, above it.
+		expect(said(w)).toEqual(["first", "third", "answer 1", "second"]);
+		expect(drawn(w.events)).toEqual(["first", "answer 1", "second"]);
+		let start = w.events.findIndex(event =>
+			event.kind === "chat:message"
+			&& (event.entry as { id: string; deliveryState?: string }).id === second.id
+			&& (event.entry as { deliveryState?: string }).deliveryState === "delivered"
+		);
+		expect(w.events[start]).toMatchObject({ moved: true });
+		// Everything that was drawn before the start is drawn, in its place, after it.
+		expect(drawn(w.events, start + 1).slice(0, drawn(w.events, start).length)).toEqual(
+			drawn(w.events, start),
+		);
+		expect(chat.entries[chat.turn!.entryOffset - 1]!.text).toBe("second");
+		expect(await saved(w)).toEqual(["first", "third", "answer 1", "second"]);
+		// A browser that reconnects now is told the same order the connected ones have drawn.
+		expect(greeted(w)).toEqual({
+			said: ["first", "third", "answer 1", "second"],
+			waiting: ["third"],
+		});
+
+		// The third begins behind the second, and its reply and the second's stay put.
+		w.planner.release();
+		await waitFor(() => w.planner.running === 1 && w.prompts.length === 3);
+		expect(said(w)).toEqual(["first", "answer 1", "second", "answer 2", "third"]);
+		expect(drawn(w.events)).toEqual(["first", "answer 1", "second", "answer 2", "third"]);
+		expect(chat.entries[chat.turn!.entryOffset - 1]!.text).toBe("third");
+
+		w.planner.hold(false);
+		w.planner.release();
+		await w.turns(3);
+		let order = ["first", "answer 1", "second", "answer 2", "third", "answer 3"];
+		expect(said(w)).toEqual(order);
+		expect(drawn(w.events)).toEqual(order);
+		expect(await saved(w)).toEqual(order);
+		expect(greeted(w)).toEqual({ said: order, waiting: [] });
+		// Nothing but their place changed: the second keeps its words, author and mark.
+		expect(memberEntry(w.context, "second")).toMatchObject({
+			id: second.id,
+			deliveryState: "delivered",
+		});
+
+		let restarted = await w.restart();
+		await Chat.recover(restarted);
+		expect(
+			restarted.chat.entries.filter(entry => entry.author.kind !== "system").map(entry =>
+				entry.text
+			),
+		).toEqual(order);
+	});
+
+	test("the move of a started message is saved with its start, and not shown to the room until then", async () => {
+		let w = await open({ away: false });
+		w.planner.hold();
+		await w.send("running");
+		await waitFor(() => w.planner.running === 1);
+		let second = await w.send("second");
+
+		let collaboration = w.storage.collaboration;
+		let commit = collaboration.commit.bind(collaboration);
+		let starting = Promise.withResolvers<void>();
+		let entered = Promise.withResolvers<void>();
+		collaboration.commit = async input => {
+			if (
+				input.deferredTurns?.some(change =>
+					change.action === "transition" && change.to === "started"
+				)
+			) {
+				entered.resolve();
+				await starting.promise;
+			}
+			return commit(input);
+		};
+		w.planner.hold(false);
+		w.planner.release();
+		await entered.promise;
+		let seen = w.events.length;
+		// Held: what was saved, what is in memory and what the room was told are all as they were.
+		expect(await saved(w)).toEqual(["running", "second", "answer 1"]);
+		expect(said(w)).toEqual(["running", "second", "answer 1"]);
+		expect(w.events.slice(seen).some(event => event.kind === "chat:message")).toBe(false);
+		expect(w.events.some(event => event.moved === true)).toBe(false);
+		// Whatever else tells the room of the queue meanwhile still lists it, so that no browser
+		// draws it at the place it was sent, above the reply it is about to follow.
+		let abort = new AbortController();
+		let background = Chat.job(
+			w.context,
+			{ ...JOB, id: "heading:held", kind: "heading" },
+			"prompt",
+			undefined,
+			abort.signal,
+		);
+		expect(queueOf(w).map(item => item.text)).toEqual(["second"]);
+		abort.abort();
+		await background;
+		expect(queueOf(w).map(item => item.text)).toEqual(["second"]);
+		expect(greeted(w).waiting).toEqual(["second"]);
+		expect(drawn(w.events)).toEqual(["running", "answer 1"]);
+
+		starting.resolve();
+		await w.turns(2);
+		collaboration.commit = commit;
+		let order = ["running", "answer 1", "second", "answer 2"];
+		expect(await saved(w)).toEqual(order);
+		expect(said(w)).toEqual(order);
+		expect(drawn(w.events)).toEqual(order);
+		expect(queueOf(w)).toEqual([]);
+		expect(w.events.filter(event => event.moved === true)).toMatchObject([{
+			entry: { id: second.id, deliveryState: "delivered" },
+		}]);
+	});
+
+	test("a start whose commit fails moves nothing, tells nobody, and leaves the message waiting in its row", async () => {
+		let w = await open({ away: false });
+		// Every turn is started with the context its send was given, so the failure is set up first.
+		let failing = false;
+		let persist = w.context.persist;
+		w.context.persist = async (view, changes) => {
+			if (
+				failing
+				&& changes?.some(change => change.action === "transition" && change.to === "started")
+			) throw new Error("commit failed");
+			return persist(view, changes);
+		};
+		w.planner.hold();
+		await w.send("running");
+		await waitFor(() => w.planner.running === 1);
+		let second = await w.send("second");
+		let rowsBefore = await w.rows(["waiting"]);
+		let seen = w.events.length;
+
+		failing = true;
+		w.planner.hold(false);
+		w.planner.release();
+		await waitFor(() => w.context.chat.closed);
+
+		expect(said(w)).toEqual(["running", "second", "answer 1"]);
+		expect(memberEntry(w.context, "second")).toMatchObject({
+			id: second.id,
+			deliveryState: "sent",
+		});
+		expect(w.events.slice(seen).some(event => event.moved === true)).toBe(false);
+		expect(await saved(w)).toEqual(["running", "second", "answer 1"]);
+		expect((await w.rows(["waiting"])).map(row => row.id)).toEqual(rowsBefore.map(row => row.id));
 	});
 }

@@ -1027,6 +1027,14 @@ the document". A document's title being refreshed is not listed, since it ends i
 the list in one card above the composer, and a message that is waiting there is not drawn in the
 transcript; it joins the transcript, from its own entry, when its turn starts.
 
+A message that waits is saved as a transcript entry where it was sent, which is before the reply to the
+turn that was running meanwhile. So that nothing the reader has already seen moves, its entry goes to
+the end of the transcript when its turn starts: in the same commit that moves its row to `started`,
+and, once that commit is saved, in memory and in the `chat:message` that shows it delivered, which then
+carries `moved: true`. Browsers move the entry to the end on seeing it; a browser that connects later is
+told the transcript in its new order. A start that cannot be saved moves nothing, tells nobody, and
+leaves the message waiting.
+
 Only a message's author may change it, as only its author may delete or retry it. Owners and editors of
 the repository may not: it is the author's own words, run as the author, and anyone who may write can
 still stop the turn that is running. `chat:unqueue` cancels a waiting message: its row and its

@@ -8,6 +8,7 @@ import {
 	transcriptReducer,
 } from "./transcript-state";
 
+import type { TranscriptState } from "./transcript-state";
 import type { Chat } from "@chopin/protocol";
 
 let turn: Chat.Turn = {
@@ -216,5 +217,102 @@ describe("a message removed before it was delivered", () => {
 		later = transcriptReducer(later, { kind: "removed", id: "three" });
 		expect(later.turn?.entryOffset).toBe(1);
 		expect(transcriptReducer(later, { kind: "removed", id: "nothing" })).toBe(later);
+	});
+});
+
+describe("a message that waited for its turn, once the turn starts", () => {
+	let ana: Chat.Author = { kind: "member", handle: "ana" };
+	let waiting = (id: string, delivered = false): Chat.Entry => ({
+		...entry(id, ana, id),
+		deliveryState: delivered ? "delivered" : "sent",
+	});
+	// What is said, in order; the new turn's own working row has no words yet.
+	let texts = (state: typeof initialTranscript, hidden: string[]) =>
+		group(state.entries, state.turn, state.completedWork, undefined, new Set(hidden))
+			.flatMap(item => item.kind === "messages" ? item.messages.map(message => message.text) : [])
+			.filter(Boolean);
+
+	it("joins the end after the reply the reader was watching, and nothing already drawn moves", () => {
+		// Two messages were sent behind the first turn, which is still running.
+		let state = transcriptReducer(initialTranscript, {
+			kind: "history",
+			entries: [entry("first", ana, "first"), waiting("second"), waiting("third")],
+			turn: { ...turn, entryOffset: 1 },
+		});
+		state = transcriptReducer(state, {
+			kind: "message",
+			entry: entry("answer", { kind: "agent" }, "answer 1"),
+		});
+		let hidden = ["second", "third"];
+		let before = texts(state, hidden);
+		expect(before).toEqual(["first", "answer 1"]);
+
+		// The second one's turn starts: its entry is announced as moved, and then the new turn.
+		state = transcriptReducer(state, {
+			kind: "message",
+			entry: waiting("second", true),
+			moved: true,
+		});
+		expect(state.entries.map(item => item.id)).toEqual(["first", "third", "answer", "second"]);
+		expect(texts(state, hidden)).toEqual([...before, "second"]);
+		state = transcriptReducer(state, {
+			kind: "turn",
+			turn: { ...turn, id: "turn-2", entryOffset: 4 },
+		});
+		expect(state.completedWork).toMatchObject([{ turnId: "turn-1", entryOffset: 1, endOffset: 4 }]);
+		expect(texts(state, ["third"])).toEqual(["first", "answer 1", "second"]);
+
+		// The third follows behind the second and its answer, the same way.
+		state = transcriptReducer(state, {
+			kind: "message",
+			entry: entry("answer-2", { kind: "agent" }, "answer 2"),
+		});
+		state = transcriptReducer(state, {
+			kind: "message",
+			entry: waiting("third", true),
+			moved: true,
+		});
+		expect(texts(state, [])).toEqual(["first", "answer 1", "second", "answer 2", "third"]);
+	});
+
+	it("moves the turn and the finished work that count entries from the start, as a removal does", () => {
+		let state: TranscriptState = {
+			...initialTranscript,
+			entries: [
+				entry("one", ana, "one"),
+				waiting("two"),
+				entry("reply", { kind: "agent" }, "reply"),
+				entry("three", ana, "three"),
+			],
+			turn: { ...turn, entryOffset: 3 },
+			completedWork: [{ turnId: "turn-0", entryOffset: 2, endOffset: 3, anchorId: "reply" }],
+		};
+		state = transcriptReducer(state, { kind: "message", entry: waiting("two", true), moved: true });
+		expect(state.entries.map(item => item.id)).toEqual(["one", "reply", "three", "two"]);
+		expect(state.turn?.entryOffset).toBe(2);
+		expect(state.completedWork).toEqual([
+			{ turnId: "turn-0", entryOffset: 1, endOffset: 2, anchorId: "reply" },
+		]);
+	});
+
+	it("is replaced where it is unless it was told to move, and added when it is not there", () => {
+		let state = transcriptReducer(initialTranscript, {
+			kind: "history",
+			entries: [waiting("two"), entry("reply", { kind: "agent" }, "reply")],
+		});
+		let replaced = transcriptReducer(state, { kind: "message", entry: waiting("two", true) });
+		expect(replaced.entries.map(item => item.id)).toEqual(["two", "reply"]);
+		let last = transcriptReducer(replaced, {
+			kind: "message",
+			entry: waiting("reply", true),
+			moved: true,
+		});
+		expect(last.entries.map(item => item.id)).toEqual(["two", "reply"]);
+		let added = transcriptReducer(state, {
+			kind: "message",
+			entry: waiting("new", true),
+			moved: true,
+		});
+		expect(added.entries.map(item => item.id)).toEqual(["two", "reply", "new"]);
 	});
 });

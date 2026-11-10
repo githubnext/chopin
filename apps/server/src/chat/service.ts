@@ -445,6 +445,11 @@ export type Chat = {
 	 * accepted, the machine back, a login restored.
 	 */
 	unopened?: boolean;
+	/**
+	 * The message whose start is being saved. It has left `waiting`, but its entry is not yet
+	 * shown as delivered where it will be drawn, so the queue the room is told still lists it.
+	 */
+	beginning?: Waiting;
 	/** Says once what a queue that cannot start waits for. */
 	/**
 	 * Requests whose sender took them back before the server had them, most recent last. A send
@@ -740,7 +745,9 @@ function responded(chat: Chat, server: Server<SocketData>, room: string, text: s
  * it is in plain words instead.
  */
 function visible(chat: Chat): Wire.Waiting[] {
-	return chat.waiting.flatMap(item => project(item) ?? []);
+	return [...(chat.beginning ? [chat.beginning] : []), ...chat.waiting].flatMap(item =>
+		project(item) ?? []
+	);
 }
 
 function queued(chat: Chat, server: Server<SocketData>, room: string): void {
@@ -758,8 +765,18 @@ function say(
 	return entry;
 }
 
-function announce(server: Server<SocketData>, room: string, entry: Wire.Entry): void {
-	broadcast(server, room, { kind: "chat:message", ts: 0, entry: publicEntry(entry) });
+function announce(
+	server: Server<SocketData>,
+	room: string,
+	entry: Wire.Entry,
+	moved = false,
+): void {
+	broadcast(server, room, {
+		kind: "chat:message",
+		ts: 0,
+		entry: publicEntry(entry),
+		...(moved ? { moved: true as const } : {}),
+	});
 }
 
 /** Everything said so far, for somebody who has just arrived. */
@@ -3356,6 +3373,8 @@ async function startNext(
 			break;
 		}
 		if (begun === "gone" || next.job?.settled) {
+			// What was told of the queue while it was starting still lists it.
+			queued(chat, server, room);
 			next = take();
 			if (next instanceof Promise) next = await next;
 			continue;
@@ -3598,12 +3617,26 @@ async function discard(context: Room, opened: NonNullable<Waiting["opened"]>): P
  * and the turn must not run.
  */
 async function beginTurn(context: Room, next: Waiting): Promise<Begun> {
-	let { chat, room, server } = context;
+	let { chat } = context;
 	let held = next.deferred;
 	if (!held || !context.deferred) {
 		await context.persist();
 		return "started";
 	}
+	chat.beginning = next;
+	try {
+		return await beginRow(context, next, held);
+	} finally {
+		if (chat.beginning === next) chat.beginning = undefined;
+	}
+}
+
+async function beginRow(
+	context: Room,
+	next: Waiting,
+	held: NonNullable<Waiting["deferred"]>,
+): Promise<Begun> {
+	let { chat, room, server } = context;
 	let opened: NonNullable<Waiting["opened"]>;
 	try {
 		opened = await repositorySession(
@@ -3623,7 +3656,19 @@ async function beginTurn(context: Room, next: Waiting): Promise<Begun> {
 	if (entry) entry.deliveryState = "delivered";
 	let outcomes: DeferredTurnOutcome[] | void;
 	try {
-		outcomes = await context.persist(undefined, [move(held.row, "waiting", "started")]);
+		outcomes = await context.persist(
+			// A message that waited was saved where it was sent, and is not drawn there while it waits.
+			// Its turn starts after whatever was said meanwhile, which the reader has already seen, so
+			// it is saved after it, with its start.
+			entry
+				? () => ({
+					entries: [...chat.entries.filter(value => value !== entry), entry],
+					runs: chat.runs,
+					initiativePaused: chat.initiativePaused,
+				})
+				: undefined,
+			[move(held.row, "waiting", "started")],
+		);
 	} catch (err) {
 		if (entry) entry.deliveryState = before;
 		await discard(context, opened);
@@ -3636,7 +3681,15 @@ async function beginTurn(context: Room, next: Waiting): Promise<Begun> {
 		await discard(context, opened);
 		return "gone";
 	}
-	if (entry) announce(server, room, entry);
+	let at = entry ? chat.entries.indexOf(entry) : -1;
+	let moved = at >= 0 && at < chat.entries.length - 1;
+	if (entry && moved) {
+		chat.entries.splice(at, 1);
+		chat.entries.push(entry);
+		// The ended turn still counts its entries from the start: what left ahead of it moves it up.
+		if (chat.turn && at < chat.turn.entryOffset) chat.turn.entryOffset--;
+	}
+	if (entry) announce(server, room, entry, moved);
 	next.opened = opened;
 	return "started";
 }

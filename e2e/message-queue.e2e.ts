@@ -48,6 +48,77 @@ async function commentToChopin(page: Page, passage: string, text: string) {
 	await expect(card).toHaveCount(0);
 }
 
+type Words = { first: string; reply: string; second: string };
+type Order = { gaps: number[]; below: boolean[] };
+
+/**
+ * Samples, in the page, after every change to it and every frame, where the first request's group
+ * and the reply to it are, and whether the second request is drawn below the reply: what a reader
+ * looking at the reply would see move. A reply is on screen for moments before the next turn begins,
+ * so a sample per frame alone could miss the change.
+ */
+async function watchOrder(page: Page, words: Words) {
+	await page.evaluate(words => {
+		let order: Order = { gaps: [], below: [] };
+		(window as unknown as { order: Order }).order = order;
+		let sample = () => {
+			let scroll = document.querySelector("[data-chat-scroll]");
+			if (!scroll) return;
+			let find = (text: string) => {
+				let walker = document.createTreeWalker(scroll, NodeFilter.SHOW_TEXT);
+				for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+					if (node.textContent?.includes(text)) return node.parentElement!;
+				}
+			};
+			let [first, reply, second] = [words.first, words.reply, words.second].map(find);
+			if (first && reply) {
+				let [above, below] = [first, reply].map(element =>
+					element.closest("[data-chat-entry]")!.getBoundingClientRect().top
+				);
+				order.gaps.push(below! - above!);
+			}
+			if (reply && second) {
+				order.below.push(second.getBoundingClientRect().top > reply.getBoundingClientRect().top);
+			}
+		};
+		new MutationObserver(sample).observe(document.body, {
+			attributes: true,
+			characterData: true,
+			childList: true,
+			subtree: true,
+		});
+		let frame = () => {
+			sample();
+			requestAnimationFrame(frame);
+		};
+		frame();
+	}, words);
+}
+
+async function orderSeen(page: Page): Promise<Order> {
+	return page.evaluate(() => (window as unknown as { order: Order }).order);
+}
+
+/** The first request, the reply to it, the second request and the reply to that, top to bottom. */
+async function wordsInOrder(page: Page, words: string[]): Promise<number[]> {
+	return page.evaluate(words => {
+		let walker = document.createTreeWalker(
+			document.querySelector("[data-chat-scroll]")!,
+			NodeFilter.SHOW_TEXT,
+		);
+		let tops = words.map(() => -1);
+		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+			let at = words.findIndex(word => node!.textContent?.includes(word));
+			if (at >= 0 && tops[at] < 0) {
+				let range = document.createRange();
+				range.selectNodeContents(node);
+				tops[at] = range.getBoundingClientRect().top;
+			}
+		}
+		return tops;
+	}, words);
+}
+
 async function startBusyTurn(page: Page, text = "@chopin SLOW-LIVE write up the approach") {
 	await say(page, text);
 	await expect(chatPane(page).getByRole("button", { name: "Stop Chopin" })).toBeVisible();
@@ -274,6 +345,96 @@ test("a message leaves the queue and joins the transcript as one move, and the c
 	);
 	expect(probe.places).toBe("qt");
 	expect(Math.max(...probe.composers) - Math.min(...probe.composers)).toBeLessThanOrEqual(1);
+});
+
+const FIRST = "SLOW-LIVE write up the approach";
+const SECOND = "second: list the failure modes";
+const WORDS = { first: FIRST, reply: "Streaming", second: SECOND };
+const REPLIES = [FIRST, "Streaming", SECOND, "Latest pull request:"];
+
+function expectInOrder(tops: number[]) {
+	expect(tops.every(top => top >= 0)).toBe(true);
+	expect(tops).toEqual([...tops].sort((a, b) => a - b));
+}
+
+/**
+ * The second request was never drawn above the reply, and all is in order. With `still`, the reply
+ * also stayed exactly where it was against the first request.
+ */
+async function expectUnmoved(page: Page, still = true) {
+	let order = await orderSeen(page);
+	if (still) {
+		expect(order.gaps.length).toBeGreaterThan(0);
+		expect(Math.max(...order.gaps) - Math.min(...order.gaps)).toBeLessThanOrEqual(1);
+	}
+	expect(order.below.length).toBeGreaterThan(0);
+	expect(order.below.every(Boolean)).toBe(true);
+	expectInOrder(await wordsInOrder(page, REPLIES));
+}
+
+test("a message that waited joins the transcript after the reply that was on screen, for everyone, and that reply never moves", async ({ join, seed }) => {
+	await seed(SOURCE);
+	let ana = await join("ana");
+	let bob = await join("bob");
+	await startBusyTurn(ana, `@chopin ${FIRST}`);
+	await say(ana, `@chopin ${SECOND}`);
+	await expect(rowsOf(bob)).toHaveCount(1);
+
+	// Both watch from before the reply appears, which is when the first turn ends.
+	let pages = [ana, bob];
+	await Promise.all(pages.map(page => watchOrder(page, WORDS)));
+	for (let page of pages) {
+		await expect(transcriptHas(page, SECOND)).toHaveCount(1, { timeout: TURN });
+		await expect(queueOf(page)).toHaveCount(0);
+		await expect(chatPane(page).getByText("Latest pull request:").last()).toBeVisible({
+			timeout: TURN,
+		});
+	}
+
+	for (let page of pages) await expectUnmoved(page);
+
+	// Saved in that order: a reload draws it again.
+	await ana.reload();
+	await expect(transcriptHas(ana, "Latest pull request:").last()).toBeVisible();
+	expectInOrder(await wordsInOrder(ana, REPLIES));
+});
+
+test("a browser that reconnects while a message waits draws the same order when its turn starts", async ({ baseURL, page, room, seed }) => {
+	await seed(SOURCE);
+	let sockets: Array<{ close: () => Promise<void> }> = [];
+	await authenticate(page, "ana", baseURL!);
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => route.send(message));
+		sockets.push({
+			close: async () => {
+				await route.close();
+				await server.close();
+			},
+		});
+	});
+	await page.goto(roomPath(room));
+	await expect(chatInput(chatPane(page))).toBeVisible();
+	await startBusyTurn(page, `@chopin ${FIRST}`);
+	await say(page, `@chopin ${SECOND}`);
+	await expect(rowsOf(page)).toHaveCount(1);
+
+	let connections = sockets.length;
+	await sockets.at(-1)!.close();
+	await expect.poll(() => sockets.length, { timeout: 10_000 }).toBeGreaterThan(connections);
+	// The transcript the new connection is told still keeps the message out until its turn starts.
+	await expect(rowsOf(page)).toHaveCount(1);
+	await expect(transcriptHas(page, SECOND)).toHaveCount(0);
+	await watchOrder(page, WORDS);
+
+	await expect(transcriptHas(page, SECOND)).toHaveCount(1, { timeout: TURN });
+	await expect(chatPane(page).getByText("Latest pull request:").last()).toBeVisible({
+		timeout: TURN,
+	});
+	// A connection made again redraws the first request's group when the first turn ends, whatever
+	// is queued behind it, so what is held to here is only that the second is drawn after the reply.
+	await expectUnmoved(page, false);
 });
 
 test("an edit that loses the race with its turn starting says so plainly, and the message goes as it was written", async ({ join, page, seed }) => {

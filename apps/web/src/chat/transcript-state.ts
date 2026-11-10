@@ -10,7 +10,7 @@ export type TranscriptState = {
 
 export type TranscriptAction =
 	| { kind: "history"; entries: Chat.Entry[]; turn?: Chat.Turn }
-	| { kind: "message"; entry: Chat.Entry }
+	| { kind: "message"; entry: Chat.Entry; moved?: boolean }
 	| { kind: "delta"; id: string; text: string }
 	| { kind: "tool"; entryId: string; activity: Chat.Activity }
 	| { kind: "turn"; turn?: Chat.Turn }
@@ -92,6 +92,24 @@ function finish(
 	}].slice(-50);
 }
 
+/**
+ * The transcript without the entry at `index`. Everything after it moves up one place, and the
+ * turn and the finished work that count entries from the start move with it.
+ */
+function without(state: TranscriptState, index: number): TranscriptState {
+	let earlier = (offset: number) => index < offset ? offset - 1 : offset;
+	return {
+		...state,
+		entries: state.entries.filter((_, at) => at !== index),
+		turn: state.turn ? { ...state.turn, entryOffset: earlier(state.turn.entryOffset) } : undefined,
+		completedWork: state.completedWork.map(item => ({
+			...item,
+			entryOffset: earlier(item.entryOffset),
+			endOffset: index < item.endOffset ? item.endOffset - 1 : item.endOffset,
+		})),
+	};
+}
+
 export function transcriptReducer(
 	state: TranscriptState,
 	action: TranscriptAction,
@@ -115,6 +133,13 @@ export function transcriptReducer(
 		}
 		case "message": {
 			let index = state.entries.findIndex(entry => entry.id === action.entry.id);
+			// A message that waited for its turn was saved where it was sent and not drawn there. Its
+			// turn begins after what was said meanwhile, so it joins the end, where the reader has
+			// not been looking, and nothing already on the page moves.
+			if (index >= 0 && action.moved && index < state.entries.length - 1) {
+				let rest = without(state, index);
+				return withAnchor({ ...rest, entries: [...rest.entries, action.entry] });
+			}
 			let entries = index < 0 ? [...state.entries, action.entry] : [...state.entries];
 			if (index >= 0) entries[index] = action.entry;
 			return withAnchor({ ...state, entries });
@@ -155,22 +180,7 @@ export function transcriptReducer(
 		}
 		case "removed": {
 			let index = state.entries.findIndex(entry => entry.id === action.id);
-			if (index < 0) return state;
-			// Everything after it moves up one place, and the turn and the finished work that
-			// count entries from the start move with it.
-			let earlier = (offset: number) => index < offset ? offset - 1 : offset;
-			return withAnchor({
-				...state,
-				entries: state.entries.filter((_, at) => at !== index),
-				turn: state.turn
-					? { ...state.turn, entryOffset: earlier(state.turn.entryOffset) }
-					: undefined,
-				completedWork: state.completedWork.map(item => ({
-					...item,
-					entryOffset: earlier(item.entryOffset),
-					endOffset: index < item.endOffset ? item.endOffset - 1 : item.endOffset,
-				})),
-			});
+			return index < 0 ? state : withAnchor(without(state, index));
 		}
 		case "responded":
 			return state.turn && !state.turn.responded

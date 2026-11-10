@@ -323,8 +323,12 @@ export declare namespace Chat {
 		participation?: Participation;
 	};
 
-	/** A new entry, or a finished one replacing its streaming self. */
-	export type Message = KIND<"chat:message"> & { entry: Entry };
+	/**
+	 * A new entry, or a finished one replacing its streaming self. With `moved`, the entry also
+	 * goes to the end of the transcript: a message that waited for its turn is saved where it was
+	 * sent, and is shown, once its turn starts, after whatever was said while it waited.
+	 */
+	export type Message = KIND<"chat:message"> & { entry: Entry; moved?: true };
 
 	/** Text appended to an entry still being written. */
 	export type Delta = KIND<"chat:delta"> & { id: string; text: string };

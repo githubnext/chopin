@@ -534,7 +534,7 @@ export function Chat(
 					activity.current?.({ type: "message", busy: reportedBusy.current });
 				}
 				seen.add(frame.entry.id);
-				dispatchTranscript({ kind: "message", entry: frame.entry });
+				dispatchTranscript({ kind: "message", entry: frame.entry, moved: frame.moved });
 				dispatchOutbox({ kind: "seen", ids: [frame.entry.id] });
 				response(frame.entry.author.kind === "agent", frame.entry.text);
 			}),
