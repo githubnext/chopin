@@ -342,16 +342,22 @@ test("a Planner state that carried on through a loss is not said again, and a di
 	expect(connectionSpeech(back.spoken, starting)?.said).toBe("Connecting to Build box");
 });
 
-test("a gap while the Planner's status is only withheld is not the banner going: the same state is not said again", () => {
+test("a withheld Planner status clears the live region without saying the same state twice", () => {
 	let view = step(INITIAL_MEMORY, {
 		planner: plannerStatus({ state: "disconnected", login: "mona" }, "Build box"),
 	}).view;
 	let said = connectionSpeech(NOTHING_SPOKEN, view)!;
-	// Withheld: the banner is empty for a moment, and what was said is kept.
-	expect(connectionSpeech(said.spoken, { phase: "online" }, true)).toBeUndefined();
-	expect(connectionSpeech(said.spoken, view)).toBeUndefined();
+	// Withheld: clear the words, but remember what was said.
+	let gap = connectionSpeech(said.spoken, { phase: "online" }, true)!;
+	expect(gap.said).toBe("");
+	expect(gap.spoken).toEqual(said.spoken);
+	expect(connectionSpeech(gap.spoken, view)).toBeUndefined();
+	let starting = step(INITIAL_MEMORY, {
+		planner: plannerStatus({ state: "starting", login: "mona" }, "Build box"),
+	}).view;
+	expect(connectionSpeech(gap.spoken, starting)?.said).toBe("Connecting to Build box");
 	// Gone for good, it is said again when it comes back.
-	let gone = connectionSpeech(said.spoken, { phase: "online" })!;
+	let gone = connectionSpeech(gap.spoken, { phase: "online" })!;
 	expect(gone.spoken).toBe(NOTHING_SPOKEN);
 	expect(connectionSpeech(gone.spoken, view)?.said).toBe(said.said);
 });

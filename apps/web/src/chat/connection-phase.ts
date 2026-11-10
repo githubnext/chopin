@@ -351,8 +351,8 @@ export const NOTHING_SPOKEN: Spoken = { key: undefined, planner: undefined };
  * said again when the connection returns, and a different one is said once. Its kind, rather than its
  * words, distinguishes it: a machine's name or retry details can change without a new state.
  *
- * `held` is the Planner's status being only withheld for a moment, not over: the banner falling
- * silent is then a gap, and the same state coming back after it is not said twice.
+ * `held` is the Planner's status being only withheld for a moment, not over: clear the live region
+ * for the gap, but remember what was said so the same state coming back is not said twice.
  */
 export function connectionSpeech(
 	previous: Spoken,
@@ -360,7 +360,8 @@ export function connectionSpeech(
 	held = false,
 ): { spoken: Spoken; said: string } | undefined {
 	if (view.phase === "online") {
-		if (held || (previous.key === undefined && previous.planner === undefined)) return undefined;
+		if (held) return { spoken: previous, said: "" };
+		if (previous.key === undefined && previous.planner === undefined) return undefined;
 		return { spoken: NOTHING_SPOKEN, said: "" };
 	}
 	if (view.phase === "resumed") {
