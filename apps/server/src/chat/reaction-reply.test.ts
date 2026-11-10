@@ -675,3 +675,23 @@ test("a person who gives a reading after its turn is queued is answered if the f
 	await finishTurn(h);
 	expect(h.prompts).toHaveLength(2);
 });
+
+test("a reader's answer whose save fails gives back only its own reading, not one recorded while it saved", async () => {
+	let h = await room();
+	let errors = spyOn(console, "error").mockImplementation(() => {});
+	let persist = h.context.persist;
+	h.context.persist = async () => {
+		// Another request's reading is recorded and kept while this answer is being saved.
+		entryA1(h).answeredIntents = [...(entryA1(h).answeredIntents ?? []), "disagree"];
+		throw new Error("storage busy");
+	};
+	let result = await Chat.postAgentReply(h.context, "Let me say that differently.", {
+		entry: entryA1(h),
+		intent: "confused",
+	});
+	expect(result).toBe("failed");
+	expect(h.chat.entries.some(entry => entry.text === "Let me say that differently.")).toBe(false);
+	expect(entryA1(h).answeredIntents).toEqual(["disagree"]);
+	h.context.persist = persist;
+	errors.mockRestore();
+});
