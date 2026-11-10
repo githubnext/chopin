@@ -11,12 +11,26 @@ import { spawn } from "node:child_process";
 import { SQL } from "bun";
 
 import { connectAgent } from "../packages/agent-link/src/client";
+import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { instruction } from "../packages/protocol/address";
+import {
+	CONNECTOR_PLANNER_COMMAND_HEADER,
+	CONNECTOR_PLATFORM_HEADER,
+	CONNECTOR_PROTOCOL_HEADER,
+	CONNECTOR_VERSION_HEADER,
+} from "../packages/protocol/connector";
 import { finishTurn } from "../apps/server/src/testing/agent-link";
 import { allBanners, connectionBanner, failureBanner, RESUMED_WAIT, watchBanners } from "./banner";
 import { chatInput, fillChat } from "./chat-input";
-import { createChannel, registerTestDatabase, seedChannel, seedChildChannel } from "./database";
+import {
+	createChannel,
+	registerTestDatabase,
+	seedChannel,
+	seedChildChannel,
+	seedLinkedChildChannel,
+} from "./database";
 import { e2eDatabaseName, e2ePort } from "./ports";
+import { RELEASE } from "./release";
 import { authenticate, expect, ready, roomPath, test } from "./room";
 import { HOST, ROOT } from "./servers";
 
@@ -68,12 +82,15 @@ const ENV = {
 };
 
 let processes: ReturnType<typeof spawn>[] = [];
+/** The database of the server `remoteServer` started last. */
+let serverDatabase = "";
 
 // One disposable database and application port, so the tests take turns.
 test.describe.configure({ mode: "default" });
 
 async function remoteServer(): Promise<string> {
 	let database = await freshDatabase();
+	serverDatabase = database;
 	let migrated = Bun.spawn(["bun", "apps/server/src/storage/migrate.ts"], {
 		cwd: ROOT,
 		env: { ...process.env, ...ENV, DATABASE_URL: database },
@@ -598,6 +615,201 @@ test("asking a machine to start the Planner whose link dropped with a workflow r
 		await expect(connectionBanner(writer)).toHaveText(PLANNER_OFFLINE);
 		await expect(connectionBanner(writer).getByRole("button")).toHaveCount(0);
 	} finally {
+		link.restore();
+	}
+});
+
+/** `handle` created the document, as if they had made it in Chopin. */
+async function createdBy(room: string, handle: string) {
+	let database = new SQL(serverDatabase);
+	try {
+		await database`
+			UPDATE channels SET created_by = (SELECT id FROM users WHERE login = ${handle})
+			WHERE id = ${room}
+		`;
+	} finally {
+		await database.close();
+	}
+}
+
+/**
+ * Pair a machine for the person signed in on `page` and connect a checkout of octo-org/score as
+ * `chopin connect --planner-command` does. Its poll is the connector's own: the Planners it runs,
+ * answered with the ones it should run once they differ, or `{ waiting: true }` once Chopin has
+ * waited as long as it does for a change.
+ */
+async function pairedMachine(page: Page, label: string) {
+	let back = page.url();
+	await page.goto(`${ORIGIN}/auth/github/connector?key`);
+	await expect(page).toHaveURL(/\/machines\?server$/);
+	let minted = await (await page.request.post(`${ORIGIN}/api/connector/pairing-keys`, {
+		data: {},
+		headers: { origin: ORIGIN },
+	})).json() as { key: string };
+	let checkout = { repository: "octo-org/score", commit: "a".repeat(40), label };
+	let post = (path: string, body: unknown, extra: Record<string, string> = {}) =>
+		fetch(new URL(path, ORIGIN), {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL),
+				[CONNECTOR_VERSION_HEADER]: RELEASE,
+				...extra,
+			},
+			body: JSON.stringify(body),
+		});
+	let paired = await (await post("/api/connector/pairings", { ...checkout, key: minted.key }))
+		.json() as { token: string };
+	let opened = await post("/api/connector/connections", checkout, {
+		[CONNECTOR_PLATFORM_HEADER]: "linux x64",
+		[CONNECTOR_PLANNER_COMMAND_HEADER]: "1",
+		authorization: `Bearer ${paired.token}`,
+	});
+	expect(opened.status, await opened.clone().text()).toBe(200);
+	let { token } = await opened.json() as { token: string };
+	await page.goto(back);
+	return {
+		poll: async (planners: string[]) => {
+			let answer = await (await post("/connector/mcp", {
+				jsonrpc: "2.0",
+				id: 1,
+				method: "tools/call",
+				params: { name: "wait_for_work", arguments: { planners } },
+			}, { authorization: `Bearer ${token}` })).json() as {
+				result: { content: Array<{ text: string }> };
+			};
+			return JSON.parse(answer.result.content[0]!.text) as unknown;
+		},
+		disconnect: () =>
+			post("/connector/mcp", {
+				jsonrpc: "2.0",
+				id: 1,
+				method: "tools/call",
+				params: { name: "disconnect_workspace", arguments: {} },
+			}, { authorization: `Bearer ${token}` }),
+	};
+}
+
+test("asking a machine to start the Planner reaches the paired machine that serves the document, which is waiting on its Planner poll, and is answered asked", async ({ page }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	await authenticate(page, HANDLE, ORIGIN);
+	await createdBy(room, HANDLE);
+	await page.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(page);
+	let studio = await pairedMachine(page, "studio");
+
+	// The machine is asked to run the document's Planner, and so runs it as far as it is told.
+	expect(await studio.poll([])).toEqual({
+		kind: "planners",
+		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
+	});
+	// It does, and nothing has attached yet: its poll has nothing to be told and waits, for as
+	// long as Chopin waits for a change, which is far longer than this test does.
+	let waited = Date.now();
+	let poll = studio.poll([room]).then(answer => ({ answer, at: Date.now() }));
+	let settled = false;
+	void poll.then(() => void (settled = true));
+	await page.waitForTimeout(3_000);
+	expect(settled).toBe(false);
+
+	// A writer asks for the Planner: the answer says a machine was asked, and the machine's own
+	// waiting poll is woken by it, at once, with nothing new to run.
+	let asked = Date.now();
+	let answer = await ask(page, room, "chat:wake");
+	expect(answer).toMatchObject({ kind: "chat:wake", asked: true });
+	expect(answer).not.toHaveProperty("why");
+	let woken = await poll;
+	expect(woken.answer).toEqual({ waiting: true });
+	expect(woken.at - asked).toBeLessThan(5_000);
+	expect(woken.at - waited).toBeLessThan(15_000);
+	await studio.disconnect();
+});
+
+test("Retry sends the same turn again from the child document it was asked in, with its focus and its references, once the machine is back", async ({ page }) => {
+	test.setTimeout(150_000);
+	let room = await remoteServer();
+	let hold = Promise.withResolvers<void>();
+	let referred = crypto.randomUUID();
+	let referredTitle = `Source review ${referred.slice(0, 8)}`;
+	await seedChildChannel(PORT, room, referred, referredTitle, "# Referenced child\n");
+	let child = crypto.randomUUID();
+	let childTitle = `Open child ${child.slice(0, 8)}`;
+	await seedLinkedChildChannel(PORT, room, child, childTitle, `# ${childTitle}\n\nA finding.\n`);
+	await authenticate(page, HANDLE, ORIGIN);
+	await watchBanners(page);
+	let sent: Chat.Send[] = [];
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => {
+			if (typeof message === "string") {
+				let frame = JSON.parse(message) as Chat.Send;
+				if (frame.kind === "chat:send") sent.push(frame);
+			}
+			server.send(message);
+		});
+		server.onMessage(message => route.send(message));
+	});
+	await page.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(page);
+	let link = watchSockets();
+	try {
+		let planner = await machine(room, [hold.promise]);
+		// The child is open beside the root's Chat, which has no Chat of its own for it.
+		await page.getByRole("link", { name: `#${childTitle}`, exact: true }).click();
+		let surface = page.getByRole("region", { name: `Child document: ${childTitle}` });
+		await expect(surface.locator(`[data-workspace-room="${child}"]`)).toBeVisible();
+		let input = chatInput(page);
+		await fillChat(input, `@chopin Compare #${referred.slice(0, 8)}`);
+		let documents = chat(page).getByRole("listbox", { name: "Document references" });
+		await documents.getByRole("option", { name: referredTitle, exact: true }).click();
+		await input.press("Enter");
+		await expect(running(page)).toBeVisible();
+		expect(planner.prompts).toHaveLength(1);
+		expect(sent).toHaveLength(1);
+		expect(sent[0]!.focus).toBe(child);
+		expect(sent[0]!.references).toHaveLength(1);
+		link.sockets[0]!.close(3000, "network failed");
+		await planner.client.resumption;
+		let back = await machine(room);
+		await expect(connectionBanner(page)).toHaveCount(0, { timeout: 30_000 });
+		let failure = failureBanner(page);
+		await expect(failure).toHaveAttribute("data-kind", "error");
+
+		// The child is closed before Retry is pressed: the turn is asked again from where it was
+		// asked, not from where the page is now.
+		await page.goto(`${ORIGIN}${roomPath(room)}`);
+		await ready(page);
+		await expect(surface).toHaveCount(0);
+		await expect(failure).toHaveAttribute("data-kind", "error");
+		await failure.getByRole("button", { name: "Retry", exact: true }).click();
+		await expect.poll(() => sent.length).toBe(2);
+		expect(sent[1]).toMatchObject({ text: instruction(sent[0]!.text), to: sent[0]!.to });
+		expect(sent[1]!.requestId).not.toBe(sent[0]!.requestId);
+		expect(sent[1]!.focus).toBe(child);
+		let summons = sent[0]!.text.length - sent[1]!.text.length;
+		let first = sent[0]!.references![0]!;
+		expect(first).toEqual({
+			kind: "document",
+			channelId: referred,
+			start: sent[0]!.text.indexOf(`#${referredTitle}`),
+			end: sent[0]!.text.indexOf(`#${referredTitle}`) + referredTitle.length + 1,
+		});
+		expect(sent[1]!.references).toEqual([{
+			kind: "document",
+			channelId: referred,
+			start: first.start - summons,
+			end: first.end - summons,
+		}]);
+		expect(sent[1]!.text.slice(first.start - summons, first.end - summons))
+			.toBe(`#${referredTitle}`);
+		await expect(chat(page).getByText("Answer 1", { exact: true })).toBeVisible();
+		expect(back.prompts).toHaveLength(1);
+		expect(sent).toHaveLength(2);
+		await expect(allBanners(page)).toHaveCount(0);
+		await back.client.detach();
+	} finally {
+		hold.resolve();
 		link.restore();
 	}
 });
