@@ -191,3 +191,65 @@ describe("when a restart is waited out in silence", () => {
 		expect(silentRestart(false, false, false, false)).toBe(false);
 	});
 });
+
+describe("a tool call id a remote client reuses in a later turn", () => {
+	it("keeps each turn's tool and images on its own message", () => {
+		let image = (src: string): Chat.Image => ({
+			src,
+			alt: src,
+			width: 4,
+			height: 3,
+			generated: true,
+		});
+		let state = transcriptReducer(initialTranscript, {
+			kind: "history",
+			entries: [{
+				...entry("first", { kind: "agent" }),
+				tools: [{ id: "call-1", name: "make_image", status: "done" }],
+				images: [image("/images/first.png")],
+			}],
+		});
+		state = transcriptReducer(state, {
+			kind: "message",
+			entry: entry("second", { kind: "agent" }),
+		});
+		state = transcriptReducer(state, {
+			kind: "tool",
+			entryId: "second",
+			activity: { id: "call-1", name: "make_image", status: "running" },
+		});
+		state = transcriptReducer(state, {
+			kind: "message",
+			entry: {
+				...entry("second", { kind: "agent" }),
+				tools: [{ id: "call-1", name: "make_image", status: "done" }],
+				images: [image("/images/second.png")],
+			},
+		});
+
+		let [first, second] = state.entries;
+		expect(first?.tools).toEqual([{ id: "call-1", name: "make_image", status: "done" }]);
+		expect(first?.images?.map(item => item.src)).toEqual(["/images/first.png"]);
+		expect(second?.tools).toEqual([{ id: "call-1", name: "make_image", status: "done" }]);
+		expect(second?.images?.map(item => item.src)).toEqual(["/images/second.png"]);
+	});
+
+	it("draws the images of each message on that message", () => {
+		let groups = group([
+			{
+				...entry("first", { kind: "agent" }, "One."),
+				images: [{ src: "/images/first.png", alt: "first", width: 4, height: 3 }],
+			},
+			{
+				...entry("second", { kind: "agent" }, "Two."),
+				images: [{ src: "/images/second.png", alt: "second", width: 4, height: 3 }],
+			},
+		]);
+		let messages = groups.flatMap(item => item.kind === "messages" ? item.messages : []);
+
+		expect(messages.map(message => message.images?.map(item => item.alt))).toEqual([
+			["first"],
+			["second"],
+		]);
+	});
+});

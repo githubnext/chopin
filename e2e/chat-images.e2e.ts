@@ -34,7 +34,6 @@ function chunk(type: string, data: Uint8Array): Uint8Array {
 	return out;
 }
 
-/** A gradient PNG of this size, so a test can hold an image of any shape without a fixture file. */
 function png(width: number, height: number, seed = 0): Uint8Array {
 	let rows = new Uint8Array(height * (1 + width * 3));
 	for (let y = 0; y < height; y++) {
@@ -91,7 +90,6 @@ function figures(page: Page): Locator {
 	return chat(page).locator("[data-chat-image]");
 }
 
-/** Where the figure sits in its message and how tall the whole Chat is: both exact, whatever the scroll. */
 function layout(figure: Locator) {
 	return figure.evaluate(element => {
 		let body = element.closest(".chat-message-body")!.getBoundingClientRect();
@@ -103,6 +101,20 @@ function layout(figure: Locator) {
 			width: box.width,
 			stack: stack.height,
 		};
+	});
+}
+
+function settled(figure: Locator): Promise<void> {
+	return figure.evaluate(async element => {
+		await document.fonts.ready;
+		let last = Number.NaN;
+		let still = 0;
+		while (still < 5) {
+			await new Promise(requestAnimationFrame);
+			let top = element.getBoundingClientRect().top;
+			still = top === last ? still + 1 : 0;
+			last = top;
+		}
 	});
 }
 
@@ -174,7 +186,9 @@ test("an image holds its shape while it loads, so nothing moves when it arrives"
 	await expect(figure).toHaveAttribute("data-load", "loading");
 	await expect(figure.locator(".chat-image-placeholder")).toBeVisible();
 	await expect(figure.getByText("The cap is a balance of 100.")).toBeVisible();
-	let before = await layout(figure);
+	await settled(figure);
+	let before = (await figure.boundingBox())!;
+	let inside = await layout(figure);
 	let frameBefore = (await frame.boundingBox())!;
 	expect(frameBefore.width / frameBefore.height).toBeCloseTo(1.5, 1);
 	expect(frameBefore.width).toBeLessThanOrEqual(384.5);
@@ -185,7 +199,11 @@ test("an image holds its shape while it loads, so nothing moves when it arrives"
 	await expect.poll(() =>
 		figure.locator("img").evaluate(image => (image as HTMLImageElement).naturalWidth)
 	).toBe(1536);
-	expect(await layout(figure)).toEqual(before);
+	let after = (await figure.boundingBox())!;
+	expect(after.y).toBe(before.y);
+	expect(after.height).toBe(before.height);
+	expect(after.width).toBe(before.width);
+	expect(await layout(figure)).toEqual(inside);
 	await expect(figure.locator(".chat-image-placeholder")).toHaveCount(0);
 	await expect(figure.locator("img")).toHaveCSS("opacity", "1");
 });
