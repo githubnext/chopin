@@ -307,10 +307,10 @@ function fastest(source: string): number {
 	return best;
 }
 
-// A Chat message may be 64 KiB and its parts are chosen on the render path. Each of these took
-// from a few hundred milliseconds to seconds when the scans backtracked; linear, they take well
-// under one.
-const LONG = 60000;
+// A Chat message may be 64 KiB and its parts are chosen on the render path; these are 100 KB, past
+// that. Each of these took from a few hundred milliseconds to seconds when the scans backtracked;
+// linear, they take well under one.
+const LONG = 100_000;
 const BOUND = 50;
 const ADVERSARIAL: Record<string, string> = {
 	"a bracket and a long run of spaces": "Read [" + " ".repeat(LONG) + "!",
