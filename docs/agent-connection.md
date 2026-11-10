@@ -598,8 +598,11 @@ level can therefore never be chosen, and a turn never carries one.
   the first entry's.
 - **`thinkingLevels`** are the levels of reasoning this model supports, as strings in the order to
   show them. Atomic's are `off`, `minimal`, `low`, `medium`, `high`, `xhigh` and `max`; other clients
-  may define their own, spelled as they like, and Chopin shows a level it does not know with its first
-  letter capitalized. A model with none or an empty list has no reasoning control, and the composer
+  may define their own, spelled as they like, and Chopin shows a level it does not know exactly as
+  written, its case unchanged (`ß-fast` and `SS-fast` are two levels). So that two levels never share
+  a label, one that would read as one of Atomic's words, or as the composer's own Default choice, is
+  shown in quotation marks: `extra high` beside `xhigh` (shown as Extra high) reads “extra high”,
+  and `High` beside `high` reads “High”. A model with none or an empty list has no reasoning control, and the composer
   hides it. An empty string is not a level: it is dropped. Chopin sends back only a level the model
   listed.
 - **`models.default`** is what the client runs when a turn names no model or no level. Its `id`

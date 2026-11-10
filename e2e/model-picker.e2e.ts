@@ -587,21 +587,84 @@ test("lists a catalog that repeats a model or a level as the client reported it"
 
 	// Default, then every level as listed; only the first of a repeated level is the one chosen.
 	let radios = levels(page).getByRole("radio");
-	await expect(radios).toHaveText(["Default", "High", "Off", "High", "Default"]);
+	await expect(radios).toHaveText(["Default", "High", "Off", "High", "“default”"]);
 	await expect(levels(page).locator('[aria-checked="true"]')).toHaveText(["Default"]);
 	await radios.nth(3).click();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Echo one, reasoning high");
 	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
 	await expect(radios.nth(1)).toHaveAttribute("aria-checked", "true");
-	// A level named `default` is a level the client asked for, not the model's own.
+	// A level named `default` is a level the client asked for, not the model's own, and is quoted so
+	// that it is not taken for the Default choice beside it.
 	await radios.nth(4).click();
-	await expect(trigger(page)).toHaveAccessibleName("Model: Echo one, reasoning default");
+	await expect(trigger(page)).toHaveAccessibleName("Model: Echo one, reasoning “default”");
 	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
 	await expect(radios.nth(4)).toHaveAttribute("aria-checked", "true");
 	await expectAccessible(page);
 	await page.keyboard.press("Escape");
 	await ask(page, "default level", 1);
 	expect(turnFor(asked, "default level")).toMatchObject({ thinkingLevel: "default" });
+	await client.detach();
+});
+
+test("tells apart levels that read alike, by sight and by name, and sends exactly the one chosen", async ({ browser }) => {
+	test.setTimeout(180_000);
+	let room = await newRoom();
+	let page = await open(browser, HANDLE, room, DESKTOP);
+	// Distinct strings a client may list side by side: Atomic's `xhigh` and a spelling in words, a
+	// word and its capitalised copy, and a letter whose capital is two letters.
+	let reported = ["xhigh", "extra high", "high", "High", "\u00df-fast", "SS-fast"];
+	let shown = ["Extra high", "“extra high”", "High", "“High”", "\u00df-fast", "SS-fast"];
+	let named = [
+		"extra high",
+		"“extra high”",
+		"high",
+		"“High”",
+		"\u00df-fast",
+		"SS-fast",
+	];
+	let { client, asked } = await attachClient(room, {
+		models: {
+			available: [{ id: "acme/odd", name: "Odd", thinkingLevels: reported }],
+			default: { id: "acme/odd" },
+		},
+	});
+	await expect(trigger(page)).toHaveAccessibleName("Model: Odd");
+	await openPicker(page);
+
+	// Every level is offered, in the order given, and no two read, or are named, alike.
+	let radios = levels(page).getByRole("radio");
+	await expect(radios).toHaveText(["Default", ...shown]);
+	for (let [position, label] of shown.entries()) {
+		await expect(radios.nth(position + 1)).toHaveAccessibleName(label, { ignoreCase: false });
+	}
+	expect(new Set(shown.map(label => label.toLowerCase())).size).toBe(reported.length);
+	await expectAccessible(page);
+	await shoot(page, "model-picker-levels-alike-desktop");
+	await page.keyboard.press("Escape");
+
+	// Each pick is the string that was listed: the trigger says it, one radio is checked, and the
+	// next turn carries it.
+	for (let [position, level] of reported.entries()) {
+		await openPicker(page);
+		await radios.nth(position + 1).click();
+		await expect(trigger(page)).toHaveAccessibleName(`Model: Odd, reasoning ${named[position]}`);
+		await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
+		await expect(radios.nth(position + 1)).toHaveAttribute("aria-checked", "true");
+		await page.keyboard.press("Escape");
+		let word = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"][position]!;
+		await ask(page, `level ${word}`, position + 1);
+		// No model was chosen, so the client's own runs, at exactly the level that was.
+		expect(turnFor(asked, `level ${word}`).thinkingLevel).toBe(level);
+		expect(turnFor(asked, `level ${word}`).model).toBeUndefined();
+	}
+
+	// The last of them, `SS-fast`, is the one still chosen after a reload; `ß-fast` is not.
+	await page.reload();
+	await ready(page);
+	await expect(trigger(page)).toHaveAccessibleName("Model: Odd, reasoning SS-fast");
+	await openPicker(page);
+	await expect(radios.nth(6)).toHaveAttribute("aria-checked", "true");
+	await expect(radios.nth(5)).toHaveAttribute("aria-checked", "false");
 	await client.detach();
 });
 
@@ -640,16 +703,17 @@ test("lists and runs a catalog of any spelling as the client wrote it, skipping 
 	await option(page, "Long").click();
 	await openPicker(page);
 	// An empty level is not one: it is not listed between Default and the others.
+	// Each level is as the client wrote it, `extra high` quoted since it reads as Atomic's `xhigh`.
 	await expect(levels(page).getByRole("radio")).toHaveText([
 		"Default",
-		"Extra high",
+		"“extra high”",
 		"\u4f4e",
-		"Constructor",
+		"constructor",
 	]);
-	await level(page, "Constructor").click();
+	await level(page, "constructor").click();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Long, reasoning constructor");
-	await level(page, "Extra high").click();
-	await expect(trigger(page)).toHaveAccessibleName("Model: Long, reasoning extra high");
+	await level(page, "“extra high”").click();
+	await expect(trigger(page)).toHaveAccessibleName("Model: Long, reasoning “extra high”");
 	await page.keyboard.press("Escape");
 	await ask(page, "as spelled", 1);
 	expect(turnFor(asked, "as spelled")).toMatchObject({ model: long, thinkingLevel: "extra high" });
