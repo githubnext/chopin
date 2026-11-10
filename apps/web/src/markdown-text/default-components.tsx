@@ -55,16 +55,32 @@ export let CopyCodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
 };
 
 export let defaultComponents = memoizeMarkdownComponents({
-	h1: (props: ComponentProps<"h1">) => <h1 className="aui-md-h1" {...props} />,
-	h2: (props: ComponentProps<"h2">) => <h2 className="aui-md-h2" {...props} />,
-	h3: (props: ComponentProps<"h3">) => <h3 className="aui-md-h3" {...props} />,
-	h4: (props: ComponentProps<"h4">) => <h4 className="aui-md-h4" {...props} />,
-	h5: (props: ComponentProps<"h5">) => <h5 className="aui-md-h5" {...props} />,
-	h6: (props: ComponentProps<"h6">) => <h6 className="aui-md-h6" {...props} />,
-	p: (props: ComponentProps<"p">) => <p className="aui-md-p" {...props} />,
-	a: (props: ComponentProps<"a">) => <a className="aui-md-a" {...props} />,
-	blockquote: (props: ComponentProps<"blockquote">) => (
-		<blockquote className="aui-md-blockquote" {...props} />
+	h1: ({ className, ...props }: ComponentProps<"h1">) => (
+		<h1 className={cn("aui-md-h1", className)} {...props} />
+	),
+	h2: ({ className, ...props }: ComponentProps<"h2">) => (
+		<h2 className={cn("aui-md-h2", className)} {...props} />
+	),
+	h3: ({ className, ...props }: ComponentProps<"h3">) => (
+		<h3 className={cn("aui-md-h3", className)} {...props} />
+	),
+	h4: ({ className, ...props }: ComponentProps<"h4">) => (
+		<h4 className={cn("aui-md-h4", className)} {...props} />
+	),
+	h5: ({ className, ...props }: ComponentProps<"h5">) => (
+		<h5 className={cn("aui-md-h5", className)} {...props} />
+	),
+	h6: ({ className, ...props }: ComponentProps<"h6">) => (
+		<h6 className={cn("aui-md-h6", className)} {...props} />
+	),
+	p: ({ className, ...props }: ComponentProps<"p">) => (
+		<p className={cn("aui-md-p", className)} {...props} />
+	),
+	a: ({ className, ...props }: ComponentProps<"a">) => (
+		<a className={cn("aui-md-a", className)} {...props} />
+	),
+	blockquote: ({ className, ...props }: ComponentProps<"blockquote">) => (
+		<blockquote className={cn("aui-md-blockquote", className)} {...props} />
 	),
 	ul: ({ className, ...props }: ComponentProps<"ul">) => (
 		<ul className={cn("aui-md-ul", className)} {...props} />
@@ -72,20 +88,32 @@ export let defaultComponents = memoizeMarkdownComponents({
 	ol: ({ className, ...props }: ComponentProps<"ol">) => (
 		<ol className={cn("aui-md-ol", className)} {...props} />
 	),
-	hr: (props: ComponentProps<"hr">) => <hr className="aui-md-hr" {...props} />,
-	table: (props: ComponentProps<"table">) => (
+	hr: ({ className, ...props }: ComponentProps<"hr">) => (
+		<hr className={cn("aui-md-hr", className)} {...props} />
+	),
+	table: ({ className, ...props }: ComponentProps<"table">) => (
 		<div className="aui-md-table-wrapper">
-			<table className="aui-md-table" {...props} />
+			<table className={cn("aui-md-table", className)} {...props} />
 		</div>
 	),
-	th: (props: ComponentProps<"th">) => <th className="aui-md-th" {...props} />,
-	td: (props: ComponentProps<"td">) => <td className="aui-md-td" {...props} />,
-	tr: (props: ComponentProps<"tr">) => <tr className="aui-md-tr" {...props} />,
+	th: ({ className, ...props }: ComponentProps<"th">) => (
+		<th className={cn("aui-md-th", className)} {...props} />
+	),
+	td: ({ className, ...props }: ComponentProps<"td">) => (
+		<td className={cn("aui-md-td", className)} {...props} />
+	),
+	tr: ({ className, ...props }: ComponentProps<"tr">) => (
+		<tr className={cn("aui-md-tr", className)} {...props} />
+	),
 	li: ({ className, ...props }: ComponentProps<"li">) => (
 		<li className={cn("aui-md-li", className)} {...props} />
 	),
-	strong: (props: ComponentProps<"strong">) => <strong className="aui-md-strong" {...props} />,
-	sup: (props: ComponentProps<"sup">) => <sup className="aui-md-sup" {...props} />,
+	strong: ({ className, ...props }: ComponentProps<"strong">) => (
+		<strong className={cn("aui-md-strong", className)} {...props} />
+	),
+	sup: ({ className, ...props }: ComponentProps<"sup">) => (
+		<sup className={cn("aui-md-sup", className)} {...props} />
+	),
 	pre: ({ className, ...props }: ComponentProps<"pre">) => (
 		<pre className={cn("aui-md-pre", className)} {...props} />
 	),

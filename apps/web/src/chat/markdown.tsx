@@ -1,7 +1,6 @@
-import { createContext, memo, useContext, useMemo, useRef } from "react";
+import { createContext, memo, useContext, useDeferredValue, useMemo, useRef } from "react";
 import { useLinkHref } from "@chopin/editor";
-import remarkGfm from "remark-gfm";
-
+import { messageGfmRemarkPlugin } from "../markdown-text/gfm";
 import { MarkdownText } from "../markdown-text/markdown-text";
 import { sameJson } from "../same-json";
 import { orderedRunsRemarkPlugin } from "./ordered-runs";
@@ -106,7 +105,7 @@ export function MarkdownPhrase(
 			allowedElements={links ? CHAT_INLINE : INLINE_WITHOUT_LINKS}
 			className="aui-md-line"
 			components={components}
-			container="span"
+			containerComponent="span"
 			defer={false}
 			remarkPlugins={NO_PLUGINS}
 			skipHtml={skipHtml}
@@ -171,15 +170,12 @@ function MessageLink(props: ComponentProps<"a">) {
 		);
 }
 
-/** A task list's box shows its state and is never a control. */
+/** A task list's box shows its state and is never a control; its name is what a reader hears first. */
 function TaskBox({ checked }: ComponentProps<"input">) {
-	return <input checked={!!checked} disabled readOnly type="checkbox" />;
+	return <input aria-label="Task" checked={!!checked} disabled readOnly type="checkbox" />;
 }
 
 let MESSAGE_COMPONENTS: MarkdownComponents = { ...CHAT_COMPONENTS, a: MessageLink, input: TaskBox };
-
-/** Strikethrough needs two tildes, so "about ~5 minutes, ~10 at most" stays as it was written. */
-let GITHUB_FLAVOURED = [[remarkGfm, { singleTilde: false }]] as const;
 
 /** Keeps the identity of the references while what they say is unchanged. */
 function useSame<T>(value: T): T {
@@ -192,10 +188,14 @@ function useSame<T>(value: T): T {
 export const MessageMarkdown = memo(function MessageMarkdown(
 	{ className, mention, references, source, streaming }: MessageMarkdownProps,
 ) {
+	// The text a parse reads and the plugins that know its references come from the same source, so
+	// the deferral is made here: MarkdownText's own would parse the previous text with the next
+	// plugins first, and then the next text again, on every streamed delta.
+	let deferred = useDeferredValue(source);
 	let held = useSame(references);
-	let model = useMemo(() => referenceRenderModel(source, held), [source, held]);
+	let model = useMemo(() => referenceRenderModel(deferred, held), [deferred, held]);
 	let remarkPlugins = useMemo(
-		() => [...GITHUB_FLAVOURED, [referenceRemarkPlugin, model], orderedRunsRemarkPlugin],
+		() => [messageGfmRemarkPlugin, [referenceRemarkPlugin, model], orderedRunsRemarkPlugin],
 		[model],
 	);
 	return (
@@ -216,6 +216,7 @@ export const MessageMarkdown = memo(function MessageMarkdown(
 						</>
 					)
 					: undefined}
+				defer={false}
 				remarkPlugins={remarkPlugins as MarkdownTextProps["remarkPlugins"]}
 				skipHtml
 				status={streaming ? "running" : "complete"}

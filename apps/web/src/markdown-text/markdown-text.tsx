@@ -8,13 +8,14 @@
  * Yjs-backed and has no such runtime, so this is the element's source with that one seam replaced:
  * `text` and `status` are props. See THIRD_PARTY_NOTICES.md for the exact source files and commit.
  *
- * Taken from upstream unchanged in behaviour: the `aui-md-*` element set with `components` merged
- * onto it, `componentsByLanguage` and the `CodeHeader`/`SyntaxHighlighter` slots for fenced code,
- * GitHub-flavoured Markdown by default, `data-status` on the root, the deferred and memoized
- * renderer that parses a text once, and the stable-props hooks that keep that memo from missing.
- * Added: `container` (a phrase is drawn in a `span`), `containerProps`, and `lead` (an inline lead
- * drawn before the first block). Not taken: `smooth`, the typewriter reveal, which is
- * `INTERNAL.useSmooth` of the runtime; Chat already draws each streamed delta as it arrives.
+ * Upstream's, unchanged in behaviour: the `aui-md-*` element set with `components` merged onto it,
+ * `componentsByLanguage` and the `CodeHeader`/`SyntaxHighlighter` slots for fenced code,
+ * GitHub-flavoured Markdown by default, `data-status` on the root, `className`, `containerProps`
+ * (merged with the class) and `containerComponent` of the primitive, `defer`, the deferred and
+ * memoized renderer that parses a text once, and the stable-props hooks that keep that memo from
+ * missing. Added: `lead`, an inline lead drawn before the first block. Not taken: `smooth`, the
+ * typewriter reveal, which is `INTERNAL.useSmooth` of the runtime (Chat draws each streamed delta
+ * as it arrives), and `preprocess`, which nothing here uses.
  */
 
 import { createContext, memo, useContext, useDeferredValue, useMemo, useRef } from "react";
@@ -33,7 +34,7 @@ import { memoizeMarkdownComponents } from "./memoization";
 import { defaultComponents } from "./default-components";
 import "./markdown-text.css";
 
-import type { ComponentProps, ComponentType, FC, ReactNode } from "react";
+import type { ComponentProps, ComponentType, ElementType, FC, ReactNode } from "react";
 import type { Options } from "react-markdown";
 import type {
 	CodeComponent,
@@ -70,10 +71,10 @@ export type MarkdownTextProps =
 		/** Per fence language, for example `{ mermaid: { SyntaxHighlighter: Diagram } }`. */
 		componentsByLanguage?: ComponentsByLanguage | undefined;
 		className?: string | undefined;
-		/** Attributes for the root, such as a surface's `data-*` hooks. */
-		containerProps?: Record<string, string | undefined> | undefined;
+		/** Attributes for the root, such as a surface's `data-*` hooks; its `className` is merged. */
+		containerProps?: (Record<string, string | undefined> & { className?: string }) | undefined;
 		/** The root's element. A phrase inside a button or heading is drawn in a `span`. */
-		container?: "div" | "span" | undefined;
+		containerComponent?: ElementType | undefined;
 		/** Drawn inside the root before the Markdown, such as a message's leading @mention. */
 		lead?: ReactNode;
 		/**
@@ -232,7 +233,7 @@ let MarkdownTextImpl: FC<MarkdownTextProps> = (
 		className,
 		components,
 		componentsByLanguage,
-		container: Container = "div",
+		containerComponent: Container = "div",
 		containerProps,
 		defer = true,
 		lead,
@@ -249,11 +250,12 @@ let MarkdownTextImpl: FC<MarkdownTextProps> = (
 		return { ...defaultComponents, ...memoizeMarkdownComponents(stableComponents) };
 	}, [stableComponents]);
 
+	let { className: containerClassName, ...attributes } = containerProps ?? {};
 	return (
 		<Container
 			data-status={status}
-			{...containerProps}
-			className={[className, "aui-md"].filter(Boolean).join(" ")}
+			{...attributes}
+			className={[className, "aui-md", containerClassName].filter(Boolean).join(" ")}
 		>
 			{lead}
 			<MarkdownTextInner

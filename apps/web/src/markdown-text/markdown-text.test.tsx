@@ -3,9 +3,10 @@ import { readdirSync, readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { defaultComponents } from "./default-components";
 import { MarkdownText } from "./markdown-text";
 
-import type { ComponentProps } from "react";
+import type { ComponentProps, ComponentType } from "react";
 import type { SyntaxHighlighterProps } from "./markdown-text";
 
 function draw(props: Partial<ComponentProps<typeof MarkdownText>> & { text: string }): string {
@@ -106,7 +107,7 @@ test("a link is as written: no script, data or javascript target survives", () =
 
 test("the phrase container, its attributes and a lead before the first block", () => {
 	let markup = draw({
-		container: "span",
+		containerComponent: "span",
 		containerProps: { "data-mine": "yes" },
 		lead: <b data-lead="">@x</b>,
 		text: "plain",
@@ -180,4 +181,61 @@ test("the element is the standalone one: nothing in it imports assistant-ui's ru
 	let manifest = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
 	let dependencies = Object.keys({ ...manifest.dependencies, ...manifest.devDependencies });
 	expect(dependencies.filter(name => name.startsWith("@assistant-ui/"))).toEqual([]);
+});
+
+/** What one of the default elements draws with the props react-markdown would give it. */
+function element(component: unknown, props: object): string {
+	return renderToStaticMarkup(createElement(component as ComponentType<object>, props));
+}
+
+test("a class a component is given joins its aui-md class, as upstream's elements do", () => {
+	let tags = [
+		"h1",
+		"h2",
+		"h3",
+		"h4",
+		"h5",
+		"h6",
+		"p",
+		"a",
+		"blockquote",
+		"ul",
+		"ol",
+		"hr",
+		"th",
+		"td",
+		"tr",
+		"li",
+		"strong",
+		"sup",
+		"pre",
+	] as const;
+	for (let tag of tags) {
+		let markup = element(defaultComponents[tag], { className: "given" });
+		expect(markup, tag).toContain(`class="aui-md-${tag} given"`);
+	}
+	expect(element(defaultComponents.table, { className: "given" })).toContain(
+		'<table class="aui-md-table given">',
+	);
+	// A task list's classes from the parser keep the list's own.
+	expect(element(defaultComponents.ul, { className: "contains-task-list" })).toBe(
+		'<ul class="aui-md-ul contains-task-list"></ul>',
+	);
+	expect(draw({ text: "- [x] done" })).toContain('<ul class="aui-md-ul contains-task-list">');
+	expect(draw({ text: "- [x] done" })).toContain('<li class="aui-md-li task-list-item">');
+});
+
+test("the root's class, its aui-md class and the container's own class all stay", () => {
+	expect(
+		draw({
+			className: "mine",
+			containerProps: { className: "theirs", "data-x": "1" },
+			text: "t",
+		}),
+	).toBe(
+		'<div data-status="complete" data-x="1" class="mine aui-md theirs"><p class="aui-md-p">t</p></div>',
+	);
+	expect(draw({ containerProps: { className: "theirs" }, text: "t" })).toContain(
+		'class="aui-md theirs"',
+	);
 });

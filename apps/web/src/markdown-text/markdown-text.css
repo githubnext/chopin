@@ -107,6 +107,8 @@
 :where(.aui-md-table) {
 	border-collapse: collapse;
 	font-size: var(--text-xs);
+	/* A cell keeps its words whole; a table too wide for the message scrolls in its lane instead. */
+	overflow-wrap: normal;
 }
 
 :where(.aui-md-th, .aui-md-td) {
