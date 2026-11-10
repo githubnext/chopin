@@ -373,6 +373,37 @@ describe("what the next turn runs", () => {
 		});
 	});
 
+	test("is exactly the level that was chosen, among levels that read alike", async () => {
+		let levels = ["xhigh", "extra high", "high", "High", "\u00df-fast", "SS-fast"];
+		let odd: Wire.ModelCatalog = {
+			models: [{ id: "acme/odd", name: "Odd", thinkingLevels: levels }],
+			default: { model: "acme/odd" },
+		};
+		let { deps, opened, choose, replies } = await sets(() => odd);
+		for (let level of levels) {
+			await choose({ model: "acme/odd", thinkingLevel: level });
+			expect(await turnModel(deps, opened.channel.id)).toEqual({
+				model: "acme/odd",
+				thinkingLevel: level,
+			});
+			expect((await modelState(deps, opened.channel.id)).choice).toEqual({
+				model: "acme/odd",
+				thinkingLevel: level,
+			});
+		}
+		expect(replies.every(reply => reply.kind === "chat:model")).toBe(true);
+		// A spelling the model does not list is not one of them, whatever it reads like.
+		await choose({ model: "acme/odd", thinkingLevel: "HIGH" });
+		expect(replies.at(-1)).toMatchObject({
+			kind: "session:error",
+			message: "That model doesn't offer that level of reasoning.",
+		});
+		expect(await turnModel(deps, opened.channel.id)).toEqual({
+			model: "acme/odd",
+			thinkingLevel: "SS-fast",
+		});
+	});
+
 	test("keeps the model and falls back only on a level it no longer lists", async () => {
 		let offered: Wire.ModelCatalog | undefined = catalog;
 		let { deps, opened, choose } = await sets(() => offered);

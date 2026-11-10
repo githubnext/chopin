@@ -96,13 +96,31 @@ const LEVELS = new Map([
 	["max", "Max"],
 ]);
 
+/** What a quoted level would otherwise read as: Atomic's words, and the Default choice beside them. */
+const READS_AS = new Set([...LEVELS.values(), "Default"].map(words => words.toLowerCase()));
+
 /**
- * A thinking level in words, in sentence case; one a harness invented keeps its own spelling. A
- * level is any string a client chose, so it is looked up in a map, where `constructor` is a level
- * like any other and not the property every object has.
+ * A thinking level in words. Atomic's own levels read in sentence case ("Extra high" for `xhigh`).
+ * Any other level is the string its client reported, its case left as written: a level is any
+ * string, and a capitalised `ß-fast` is `SS-fast`, which a client may list as a level of its own.
+ * So that every level a client lists has a label of its own, one that would read as another's
+ * words (`High` beside `high`, `extra high` beside `xhigh`, `default` beside the Default choice) is
+ * shown in quotation marks, and so is one that opens with a quotation mark, so no label is any
+ * other level's own spelling. A level is looked up in a map, where `constructor` is a level like
+ * any other and not the property every object has.
  */
 export function levelLabel(level: string): string {
-	return LEVELS.get(level) ?? level.charAt(0).toUpperCase() + level.slice(1);
+	let words = LEVELS.get(level);
+	if (words !== undefined) return words;
+	return READS_AS.has(level.toLowerCase()) || level.startsWith("“") ? `“${level}”` : level;
+}
+
+/**
+ * A level inside a sentence, as a screen reader hears it: Atomic's own in lower case ("reasoning
+ * extra high"), any other as `levelLabel` shows it, so the sentence names the level the radio does.
+ */
+export function levelPhrase(level: string): string {
+	return LEVELS.has(level) ? levelLabel(level).toLowerCase() : levelLabel(level);
 }
 
 /**

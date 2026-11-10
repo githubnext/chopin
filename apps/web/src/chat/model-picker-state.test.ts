@@ -41,6 +41,14 @@ let catalog: Chat.ModelCatalog = {
 	default: { model: "acme/small" },
 };
 
+// Levels a client can report side by side that used to read alike once their case was changed.
+let alikeLevels = ["xhigh", "extra high", "high", "High", "\u00df-fast", "SS-fast"];
+let alike: Chat.ModelCatalog = {
+	models: [{ id: "acme/odd", name: "Odd", thinkingLevels: alikeLevels }],
+	default: { model: "acme/odd" },
+};
+let asking = (thinkingLevel: string) => ({ model: "acme/odd", thinkingLevel });
+
 describe("what the picker lists", () => {
 	test("groups by provider in the order each first appears, keeping the catalog's order inside one", () => {
 		let groups = pickerGroups(catalog, undefined, "");
@@ -128,6 +136,44 @@ describe("what the trigger says", () => {
 			"Model: Small",
 		);
 		expect(triggerLabel(catalog, { model: "acme/gone" })).toContain("no longer available");
+	});
+
+	test("tells levels that read alike apart, each in its own spelling, in the trigger and its name", () => {
+		let shown = alikeLevels.map(level => triggerText(alike, asking(level)).level);
+		expect(shown).toEqual([
+			"Extra high",
+			"“extra high”",
+			"High",
+			"“High”",
+			"\u00df-fast",
+			"SS-fast",
+		]);
+		let named = alikeLevels.map(level => triggerLabel(alike, asking(level)));
+		expect(named).toEqual([
+			"Model: Odd, reasoning extra high",
+			"Model: Odd, reasoning “extra high”",
+			"Model: Odd, reasoning high",
+			"Model: Odd, reasoning “High”",
+			"Model: Odd, reasoning \u00df-fast",
+			"Model: Odd, reasoning SS-fast",
+		]);
+		let titles = alikeLevels.map(level => triggerTitle(alike, asking(level)));
+		expect(titles).toEqual(named);
+		for (let list of [shown, named, titles]) {
+			expect(new Set(list).size).toBe(alikeLevels.length);
+			expect(new Set(list.map(text => text!.toLowerCase())).size).toBe(alikeLevels.length);
+		}
+	});
+
+	test("asks for exactly the level that was picked, however it is spelled, in the order listed", () => {
+		expect(reasoningLevels(alike, undefined).levels).toEqual(alikeLevels);
+		for (let level of alikeLevels) {
+			let asked = chooseLevel(alike, undefined, level);
+			expect(asked).toEqual({ thinkingLevel: level });
+			expect(reasoningLevels(alike, asked).current).toBe(level);
+		}
+		expect(levelSteps(alikeLevels, "High").filter(step => step.checked).map(step => step.level))
+			.toEqual(["High"]);
 	});
 
 	test("says what a gone model fell back to, and nothing when the choice stands", () => {
