@@ -106,7 +106,8 @@ export function unavailableNotice(
 	catalog: Catalog | undefined,
 	unavailable: Choice,
 ): string {
-	let name = (id: string) => catalogModel(catalog, id)?.name ?? id;
+	// A catalog may give a model an empty name: it is then called by its id.
+	let name = (id: string) => catalogModel(catalog, id)?.name || id;
 	if (unavailable.model !== undefined) {
 		return `${name(unavailable.model)} is no longer available, so Chopin used its default model.`;
 	}
