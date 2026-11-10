@@ -278,7 +278,7 @@ test("a disconnect rejects a pending send without losing its draft, and leaves n
 	await draft.fill(value);
 	let before = connections.opened;
 	await chat.getByRole("button", { name: "Send message" }).click();
-	// The connection comes back, and the page's own notice, not the composer, spoke for it.
+	// The connection comes back, and the connection banner, not the composer, spoke for it.
 	await expect.poll(() => connections.opened).toBeGreaterThan(before);
 	await expect(chat.getByRole("alert")).toHaveCount(0);
 	await expect(chat.getByText(/Message not sent|Check the connection/)).toHaveCount(0);
@@ -301,7 +301,7 @@ test("a refused send keeps its draft, and its strip does not animate when motion
 		document.addEventListener("transitionstart", event => {
 			if (
 				event.target instanceof Element
-				&& event.target.matches('[data-motion-feedback="alert"]')
+				&& event.target.matches('[data-motion-feedback="alert"], [data-error-banner]')
 			) record.starts++;
 		}, true);
 	});
@@ -309,6 +309,8 @@ test("a refused send keeps its draft, and its strip does not animate when motion
 	let error = chat.getByRole("alert");
 	await expect(error).toContainText("Message not sent: Unavailable");
 	await expect(error).toHaveCSS("transition-duration", "0s");
+	// Nor does it enter: with reduced motion the banner has no animation either.
+	await expect(error).toHaveCSS("animation-name", "none");
 	await error.evaluate(() =>
 		new Promise<void>(resolve =>
 			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))

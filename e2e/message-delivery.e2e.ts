@@ -521,7 +521,7 @@ test("a message the server turns down for good says Couldn't send on itself, nev
 	await expect(chat(page).locator("[data-chat-message-id]")).toHaveCount(0);
 });
 
-test("a message's Couldn't send gives way to the page's one offline notice while it shows, and is back with the connection", async ({ page }) => {
+test("a message's Couldn't send gives way to the connection banner while it shows, and is back with the connection", async ({ page }) => {
 	test.setTimeout(120_000);
 	let wire = route(page);
 	await wire.ready;
@@ -532,11 +532,11 @@ test("a message's Couldn't send gives way to the page's one offline notice while
 	let failed = chat(page).locator("[data-chat-message-id]").filter({ hasText: "xxxxxxxx" });
 	await expect(failed.getByText("Couldn't send.")).toBeVisible();
 
-	// Nothing but the notice speaks of a send while the connection is down: the message stays,
+	// Nothing but the banner speaks of a send while the connection is down: the message stays,
 	// without its line, and the person's work is not touched.
 	wire.state.offline = true;
 	await wire.sockets.at(-1)!.close();
-	await expect(page.locator("[data-offline-notice]")).toBeVisible();
+	await expect(page.locator('[data-connection-banner][data-layer="socket"]')).toBeVisible();
 	await expect(failed).toHaveCount(1);
 	await expect(failed.getByText("Couldn't send.")).toHaveCount(0);
 	await expect(failed.getByRole("button", { name: "Try again" })).toHaveCount(0);
@@ -545,7 +545,13 @@ test("a message's Couldn't send gives way to the page's one offline notice while
 	// Back with the connection, the same line, as it was.
 	wire.state.offline = false;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
-	await expect(page.locator("[data-offline-notice]")).toHaveCount(0);
+	// The room's own connection is told no more. This server has no machine attached, so the
+	// Planner's own banner ("No machine is connected.") correctly stays, and does not hide the
+	// message's line: a missing machine is not why a send was turned down.
+	await expect(page.locator('[data-connection-banner]:not([data-layer="planner"])')).toHaveCount(
+		0,
+		{ timeout: 15_000 },
+	);
 	await expect(failed.getByText("Couldn't send.")).toBeVisible();
 	await expect(failed).toContainText("exceeds the 64 KiB limit");
 	await expect(failed.getByRole("button", { name: "Try again" })).toBeVisible();
