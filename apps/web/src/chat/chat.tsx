@@ -1022,10 +1022,23 @@ export function Chat(
 			working={workingTurn}
 		/>
 	);
+	let queueView = (
+		<MessageQueue
+			onCancel={composerShown && wire
+				? id => changeQueue("cancel", wire.ask<Wire.Unqueued>("chat:unqueue", { id }))
+				: undefined}
+			onEdit={composerShown && wire
+				? (id, text) => changeQueue("edit", wire.ask<Wire.Edited>("chat:edit", { id, text }))
+				: undefined}
+			queued={waiting}
+			restoreFocus={() => textarea.current?.focus()}
+		/>
+	);
 	if (notice) {
 		return (
 			<div className="flex h-full min-h-0 flex-col">
 				{transcriptView}
+				{queueView}
 				<div className="chat-composer shrink-0 px-2.5 pb-2.5">
 					<p className="px-4 py-3 text-sm text-text-tertiary">{notice}</p>
 				</div>
@@ -1052,16 +1065,7 @@ export function Chat(
 				</div>
 			)}
 
-			<MessageQueue
-				onCancel={composerShown && wire
-					? id => changeQueue("cancel", wire.ask<Wire.Unqueued>("chat:unqueue", { id }))
-					: undefined}
-				onEdit={composerShown && wire
-					? (id, text) => changeQueue("edit", wire.ask<Wire.Edited>("chat:edit", { id, text }))
-					: undefined}
-				queued={waiting}
-				restoreFocus={() => textarea.current?.focus()}
-			/>
+			{queueView}
 
 			<ChatComposer
 				rootRef={composerRoot}
