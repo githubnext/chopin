@@ -18,7 +18,7 @@ What was kept: the controlled-props shape (`copied`, `onCopy`, `onMore`, toggles
 the `data-slot="message-actions"` row, the copy and check icons crossfading in one grid cell, and the
 copy hook that turns `isCopied` on only after the clipboard accepts the text and off after a delay.
 
-What Chopin changed: the copy hook also writes an empty message instead of ignoring it; icons come from `@chopin/icons`, styles use Chopin's tokens in
+What Chopin changed: the copy hook also writes an empty message instead of ignoring it and reports a write the clipboard refused; icons come from `@chopin/icons`, styles use Chopin's tokens in
 `message-actions.css`, the toggles are quick reactions, Copy moved into the overflow menu, and the
 thumbs and regenerate buttons are left out because Chopin cannot honour them.
 
