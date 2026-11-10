@@ -130,8 +130,8 @@
 
 	.chat-message-body[data-chat-engaged] > .chat-message-toolbar,
 	.chat-message-body:has(:focus-visible) > .chat-message-toolbar {
-		position: sticky;
-		top: 0.5rem;
+		position: relative;
+		top: auto;
 		inset-inline-end: auto;
 		order: -1;
 		display: inline-flex;

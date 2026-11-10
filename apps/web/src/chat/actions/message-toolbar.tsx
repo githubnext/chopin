@@ -14,6 +14,8 @@ import type { CSSProperties, KeyboardEvent, RefObject } from "react";
 
 export let COPIED_MS = 1500;
 
+const TOOLBAR_MARGIN = 8;
+
 type Which = "markdown" | "plain";
 
 export type ToolbarActions = {
@@ -159,6 +161,18 @@ export let MessageToolbar = memo(function MessageToolbar(
 		element?.toggleAttribute("data-chat-engaged", engaged || persistent);
 		return () => element?.removeAttribute("data-chat-engaged");
 	}, [host, engaged, persistent]);
+
+	useEffect(() => {
+		if (!pinned) return;
+		let bar = host.current?.querySelector<HTMLElement>('[data-slot="message-actions"]');
+		let view = bar?.closest<HTMLElement>("[data-chat-scroll]");
+		if (!bar || !view) return;
+		let box = bar.getBoundingClientRect();
+		let frame = view.getBoundingClientRect();
+		if (box.top < frame.top || box.bottom > frame.bottom) {
+			view.scrollTop += box.top - frame.top - TOOLBAR_MARGIN;
+		}
+	}, [host, pinned]);
 
 	useEffect(() => {
 		if (menuPlaced) {
