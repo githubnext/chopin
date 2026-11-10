@@ -172,7 +172,7 @@ test("a message takes the parts of GitHub's Markdown its text can use, and nothi
 	expect(messageGfmRemarkPlugin("| a |\n| - |")).toBeDefined();
 	expect(messageGfmRemarkPlugin("| a |")).toBeUndefined();
 	expect(messageGfmRemarkPlugin("~~a~~")).toBeDefined();
-	expect(messageGfmRemarkPlugin("~a~")).toBeUndefined();
+	expect(messageGfmRemarkPlugin("~a~")).toBeDefined();
 	expect(messageGfmRemarkPlugin("- [x] a")).toBeDefined();
 	// The same marks give the same plugin, so a message's options keep their identity.
 	expect(messageGfmRemarkPlugin("| a |\n| - |")).toBe(messageGfmRemarkPlugin("x | y\n- | -"));
@@ -193,6 +193,14 @@ test("nor does it for any prefix of a streamed message", () => {
 	for (let text of STREAMED) {
 		for (let end = 0; end <= text.length; end++) expectSame(text.slice(0, end));
 	}
+});
+
+test("a single tilde takes the strikethrough syntax, so a link in emphasis around it never changes as the message grows", () => {
+	let first = "X*~[link](https://example.com)*";
+	expectSame(first);
+	expect(draw(first, messageGfmRemarkPlugin(first))).toBe(
+		draw(first, messageGfmRemarkPlugin(`${first}\n\n~~yes~~`)),
+	);
 });
 
 test("nor does it for six thousand generated sources of the marks that matter", () => {
@@ -233,7 +241,7 @@ const STRIKETHROUGH_ONLY = "~~a~~";
 function referenceChoice(source: string) {
 	let marks: string[] = [];
 	if (REFERENCE_DELIMITER_ROW.test(source)) marks.push(TABLE_ONLY);
-	if (source.includes("~~")) marks.push(STRIKETHROUGH_ONLY);
+	if (source.includes("~")) marks.push(STRIKETHROUGH_ONLY);
 	if (REFERENCE_TASK_BOX.test(source)) marks.push(TASKS_ONLY);
 	return messageGfmRemarkPlugin(marks.join("\n\n"));
 }
