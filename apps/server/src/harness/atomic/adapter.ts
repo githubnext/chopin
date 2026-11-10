@@ -172,6 +172,21 @@ const ZERO_USAGE = {
 	outputTokens: { total: undefined, text: undefined, reasoning: undefined },
 };
 
+type Level = ReturnType<AgentSession["getAvailableThinkingLevels"]>[number];
+
+/**
+ * The level the session's current model runs when nobody has chosen one, as Atomic starts a
+ * session on a model: the level saved for that model in the operator's settings, else their
+ * default, else `medium` (Atomic's own default, which it does not export). A level the model does
+ * not support is clamped when it is set. It is the model's, not the level the session happened to
+ * hold when a person chose one, which belonged to whichever model the session started on.
+ */
+function ownLevel(session: AgentSession): Level {
+	let { model, settingsManager } = session;
+	return (model && settingsManager.getModelThinkingLevel(model.provider, model.id))
+		?? settingsManager.getDefaultThinkingLevel() ?? "medium";
+}
+
 type ProviderConfig = Parameters<ModelRuntime["registerProvider"]>[1];
 type Model = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
 type ToolOutcome = { output: unknown; isError?: boolean };
@@ -588,8 +603,6 @@ export function createAtomicAdapter(
 				systemPrompt: ATOMIC_DEFAULT_SYSTEM_PROMPT,
 			};
 			let live: { session: AgentSession; signature: string; release: () => void } | undefined;
-			/** The thinking level the session had before a person chose one, to go back to. */
-			let initialLevel: ReturnType<AgentSession["getAvailableThinkingLevels"]>[number] | undefined;
 			/** Whether a person's level is applied to the session now. */
 			let levelChosen = false;
 			let current: Run | undefined;
@@ -772,7 +785,6 @@ export function createAtomicAdapter(
 					// Never `startPendingRecovery()`: it replays undelivered work as turns Chopin did not
 					// start, and an interrupted turn is never replayed.
 					let session = created.session;
-					initialLevel = session.thinkingLevel;
 					if (full) {
 						full.workflows = session.workflows;
 					}
@@ -810,17 +822,16 @@ export function createAtomicAdapter(
 			}
 
 			/**
-			 * A person's thinking level for this turn, or the session's own again once nobody's is
+			 * A person's thinking level for this turn, or the model's own again once nobody's is
 			 * chosen. Atomic clamps a level to what the model supports; the server only ever sends
 			 * one the catalog listed for it.
 			 */
 			async function applyLevel(session: AgentSession, level: string | undefined): Promise<void> {
-				let wanted = level as typeof initialLevel;
-				if (wanted !== undefined) {
-					await session.setThinkingLevel(wanted);
+				if (level !== undefined) {
+					await session.setThinkingLevel(level as Level);
 					levelChosen = true;
-				} else if (levelChosen && initialLevel !== undefined) {
-					await session.setThinkingLevel(initialLevel);
+				} else if (levelChosen) {
+					await session.setThinkingLevel(ownLevel(session));
 					levelChosen = false;
 				}
 			}
