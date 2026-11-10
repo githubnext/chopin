@@ -18,6 +18,7 @@ import { applyDeferredTurnChanges, PostgresDeferredTurnStore } from "./deferred-
 import { PostgresMcpSessionStore } from "./mcp-sessions";
 import { PostgresPlannerCredentialStore } from "./planner-credentials";
 import { PostgresPlannerLinkHoldStore } from "./planner-holds";
+import { PostgresPlannerModelChoiceStore } from "./planner-model-choices";
 import { PostgresResearchWorkspaceStore } from "./research";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../model";
 
@@ -563,6 +564,11 @@ export class PostgresStorage implements StorageAdapter {
 			(action, execute) => this.#run(action, execute),
 			(transaction, lease) => this.#assertLease(transaction, lease),
 		);
+		this.plannerModelChoices = new PostgresPlannerModelChoiceStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+			(transaction, lease) => this.#assertLease(transaction, lease),
+		);
 		this.plannerCredentials = new PostgresPlannerCredentialStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
@@ -735,6 +741,7 @@ export class PostgresStorage implements StorageAdapter {
 	readonly versions: PostgresDocumentVersionStore;
 	readonly machines: PostgresMachineStore;
 	readonly plannerHolds: PostgresPlannerLinkHoldStore;
+	readonly plannerModelChoices: PostgresPlannerModelChoiceStore;
 	readonly plannerCredentials: PostgresPlannerCredentialStore;
 	readonly mcpSessions: PostgresMcpSessionStore;
 	readonly deferredTurns: PostgresDeferredTurnStore;

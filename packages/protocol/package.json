@@ -21,6 +21,10 @@
 			"types": "./address.ts",
 			"default": "./address.ts"
 		},
+		"./model-choice": {
+			"types": "./model-choice.ts",
+			"default": "./model-choice.ts"
+		},
 		"./connector": {
 			"types": "./connector.ts",
 			"default": "./connector.ts"
