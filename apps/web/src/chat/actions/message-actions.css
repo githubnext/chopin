@@ -35,6 +35,21 @@
 	--chat-highlight-top: calc(var(--text-sm) * var(--text-sm--line-height) + 0.375rem);
 }
 
+/*
+ * The name line and the gap under it belong to the message below, so the pointer crosses from the
+ * text to a toolbar that straddles the line without leaving the message. The heading takes no
+ * pointer events of its own, so this is what the pointer meets between its name and its time; the
+ * name and the time themselves are the heading's, and `:hover` on it stands for the message.
+ */
+.chat-message-body[data-chat-headed]::after {
+	content: "";
+	position: absolute;
+	z-index: 1;
+	inset-block-start: calc(-1 * (var(--text-sm) * var(--text-sm--line-height) + 0.25rem));
+	inset-block-end: 100%;
+	inset-inline: 0;
+}
+
 /* The whole message as one full-width row, in the hover surface. */
 .chat-message-body::before {
 	content: "";
@@ -50,7 +65,8 @@
 }
 
 @media (hover: hover) {
-	.chat-message-body:hover::before {
+	.chat-message-body:hover::before,
+	[data-chat-head]:hover + .chat-message-body::before {
 		opacity: 1;
 	}
 }
@@ -93,7 +109,8 @@
 }
 
 @media (hover: hover) {
-	.chat-message-body:hover > .chat-message-toolbar {
+	.chat-message-body:hover > .chat-message-toolbar,
+	[data-chat-head]:hover + .chat-message-body > .chat-message-toolbar {
 		opacity: 1;
 		pointer-events: auto;
 	}
