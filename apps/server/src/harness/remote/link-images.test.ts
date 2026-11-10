@@ -276,4 +276,23 @@ describe("images over the agent connection", () => {
 		]);
 		expect(entry?.tools?.[0]?.result).toBe("Drew five\n6 images");
 	});
+
+	it("say how big an image was that the client left out because its result did not fit one message", async () => {
+		let large = bigPng(2_400_000);
+		let { chat, storage } = await drawn([
+			{ type: "text", text: "Drew two" },
+			{ type: "image", data: encoded(large), mimeType: "image/png", alt: "Too large" },
+			{ type: "image", data: encoded(PNG), mimeType: "image/png", alt: "Fits" },
+		]);
+
+		let entry = chat.entries.find(item => item.images);
+		expect(entry?.images?.map(image => image.alt)).toEqual(["Fits"]);
+		expect(entry?.refusedImages).toEqual([{
+			before: 0,
+			reason:
+				"Image couldn't be shown: it is 2.3 MiB, which did not fit in one agent connection message (2 MiB at most).",
+		}]);
+		expect(entry?.tools?.[0]?.result).toBe("Drew two\n2 images");
+		expect(await storage.images.channels(hashOf(large))).toEqual([]);
+	});
 });

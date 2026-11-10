@@ -1,4 +1,4 @@
-import { toolContentSchema, toolImageSchema } from "@chopin/agent-link";
+import { MAX_LINK_MESSAGE_BYTES, toolContentSchema, toolImageSchema } from "@chopin/agent-link";
 import { HOSTED_IMAGE_PATH } from "@chopin/dialect";
 
 import { IMAGE_LABELS, imageSize, namedImageType, sniffImageType } from "../images/format";
@@ -43,6 +43,11 @@ function refusal(reason: string): { reason: string } {
 	return { reason: `${REFUSAL_START}${reason}` };
 }
 
+function megabytes(bytes: number): string {
+	let size = bytes / 1_048_576;
+	return `${Number.isInteger(size) ? size : size.toFixed(1)} MiB`;
+}
+
 function typeNamed(declared: string): string {
 	let name = declared.split(";")[0]!.trim().toLowerCase();
 	return TYPE_TOKEN.test(name) ? ` ${name}` : "";
@@ -51,6 +56,13 @@ function typeNamed(declared: string): string {
 function hosted(block: unknown): ToolImage | { reason: string } {
 	let image = toolImageSchema.safeParse(block).data;
 	if (!image) return refusal("its block has no base64 data or no type.");
+	if (image.tooLarge !== undefined) {
+		return refusal(
+			`it is ${megabytes(image.tooLarge)}, which did not fit in one agent connection message (${
+				megabytes(MAX_LINK_MESSAGE_BYTES)
+			} at most).`,
+		);
+	}
 	let named = namedImageType(image.mimeType);
 	if (!named) {
 		return refusal(`its type${typeNamed(image.mimeType)} isn't one Chat shows (${SHOWN}).`);

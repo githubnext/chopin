@@ -273,6 +273,43 @@ type RunsReport = { active: string[]; paused: string[]; cards: LinkRun[] };
 
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
 
+function decodedBytes(data: string): number {
+	let clean = data.replace(/\s+/g, "");
+	let padding = clean.endsWith("==") ? 2 : clean.endsWith("=") ? 1 : 0;
+	return Math.max(1, Math.floor(clean.length / 4) * 3 - padding);
+}
+
+function fitImages(message: ClientMessageOf<"part">): ClientMessageOf<"part"> {
+	let { part } = message;
+	if (part.type !== "tool-result" || bytes(message) <= WIRE.maxMessageBytes) return message;
+	let asText = typeof part.result === "string";
+	let result: unknown = part.result;
+	if (typeof result === "string") {
+		try {
+			result = JSON.parse(result);
+		} catch {
+			return message;
+		}
+	}
+	let content = (result as { content?: unknown } | null)?.content;
+	if (!result || typeof result !== "object" || !Array.isArray(content)) return message;
+	let blocks: unknown[] = [...content];
+	let images = blocks.flatMap((block, index) => {
+		let { type, data } = (block ?? {}) as { type?: unknown; data?: unknown };
+		return type === "image" && typeof data === "string" ? [{ index, data }] : [];
+	}).sort((a, b) => b.data.length - a.data.length || b.index - a.index);
+	for (let { index, data } of images) {
+		blocks[index] = { ...blocks[index] as object, data: "", tooLarge: decodedBytes(data) };
+		let sent = { ...result, content: blocks };
+		let fitted: ClientMessageOf<"part"> = {
+			...message,
+			part: { ...part, result: asText ? JSON.stringify(sent) : sent } as typeof part,
+		};
+		if (bytes(fitted) <= WIRE.maxMessageBytes) return fitted;
+	}
+	return message;
+}
+
 /**
  * `runs` messages that each fit a frame: every one a complete report, with the delta cards'
  * stages spread across them in order. Later parts carry every card as a delta, so a full card
@@ -395,12 +432,12 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 			signal: state.controller.signal,
 			emit: part => {
 				if (state.ended) return;
-				send({
+				send(fitImages({
 					type: "part",
 					session: message.session,
 					turn: message.turn,
 					part: part.type === "error" ? { ...part, error: note(part.error) } : part,
-				});
+				}));
 			},
 			offerTools: names =>
 				send({

@@ -288,6 +288,21 @@ describe("refused tool images", () => {
 		expect(toolImages({ content: [image(), image({ data: base64(SVG) })] }).refused).toBe(1);
 	});
 
+	test("says how big an image was that its client left out of one message", () => {
+		expect(reasons(
+			image({ data: "", tooLarge: 3_650_000, alt: "Plan" }),
+			image({ data: "", tooLarge: 1_700_000 }),
+			image({ data: base64(PNG), tooLarge: 2_097_152, mimeType: "image/svg+xml" }),
+		)).toEqual([
+			"Image couldn't be shown: it is 3.5 MiB, which did not fit in one agent connection message (2 MiB at most).",
+			"Image couldn't be shown: it is 1.6 MiB, which did not fit in one agent connection message (2 MiB at most).",
+			"Image couldn't be shown: it is 2 MiB, which did not fit in one agent connection message (2 MiB at most).",
+		]);
+		expect(reasons(image({ data: "", tooLarge: "big" }))).toEqual([
+			"Image couldn't be shown: its bytes aren't PNG data, as its type says.",
+		]);
+	});
+
 	test("has nothing to say about a result with no image block or a block it shows", () => {
 		for (
 			let output of ["plain text", null, 42, { content: [{ type: "text", text: "x" }] }, {
