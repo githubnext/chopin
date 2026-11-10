@@ -410,3 +410,22 @@ test("a person who gives a reading after its turn is queued is answered if the f
 	await finishTurn(h);
 	expect(h.prompts).toHaveLength(2);
 });
+
+test("a writer who loses write access while the turn waits behind a running turn gets none, and claims no owner", async () => {
+	let h = await room();
+	await planner(h);
+	await reactAs(h, "ben", "\u2753");
+	await h.clock.advance(DEBOUNCE_MS + 100);
+	await until(() => h.chat.waiting.length === 1);
+	expect(entryA1(h).answeredIntents).toEqual(["confused"]);
+	let claims = h.claims.mock.calls.length;
+	h.context.initiativeAuthorize = async () => false;
+	await finishTurn(h, "First turn done.");
+	await flush();
+	await until(() => !h.chat.busy && h.chat.waiting.length === 0);
+	expect(h.prompts).toHaveLength(1);
+	expect(h.claims.mock.calls.length).toBe(claims);
+	expect(entryA1(h).answeredIntents).toBeUndefined();
+	expect(JSON.parse(h.saved.at(-1)!).find((entry: Wire.Entry) => entry.id === "a1").answeredIntents)
+		.toBeUndefined();
+});

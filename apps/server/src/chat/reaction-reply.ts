@@ -1,8 +1,4 @@
-/**
- * A reaction to the Planner's message starts a Planner turn. A reactor who may write starts the
- * ordinary one. A reader's turn is the same turn in the Chat, queued, streamed and stopped like
- * any other, but with no tools, under the owner the document already has, and never claiming one.
- */
+/** A reader's turn is an ordinary turn in the Chat with no tools, under the existing owner. */
 import type { Chat as Wire } from "@chopin/protocol";
 
 import { actor as actorOf } from "./initiative";
@@ -324,7 +320,8 @@ export function createResponder(
 							: reactionInstruction(current, emoji, handle, intent),
 						"",
 						{
-							...(reader ? { reader: true as const, authorize } : {}),
+							authorize,
+							...(reader ? { reader: true as const } : {}),
 							spent: () =>
 								closed || chat.closed || !present(context, candidate.entryId, handle, emoji),
 							started: () => {
