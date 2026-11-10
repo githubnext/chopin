@@ -159,6 +159,20 @@ export function plannerOfferKnown(harness: string, channelId: string): boolean {
 	return link !== undefined && !link.catalogPending;
 }
 
+/**
+ * A turn has fallen back on a saved choice for want of a catalog its remote Planner's client
+ * offered and never reported. The wait is over for that client (`plannerOfferKnown` is then true
+ * until it leaves), so what the turn did can be told. False where no client is attached, and for
+ * every other harness, which knows what it offers.
+ */
+export function plannerRanWithoutOffer(harness: string, channelId: string): boolean {
+	if (harness !== "remote") return false;
+	let link = attachedLink(channelId);
+	if (!link) return false;
+	link.settleWithoutCatalog();
+	return true;
+}
+
 export function registerCredential(
 	id: string,
 	currentToken: () => string | undefined,

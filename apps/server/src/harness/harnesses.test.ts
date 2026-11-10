@@ -8,6 +8,7 @@ import {
 	harnessFor,
 	plannerCatalog,
 	plannerOfferKnown,
+	plannerRanWithoutOffer,
 	registerCredential,
 	shutdownHarnesses,
 } from "./harnesses";
@@ -180,6 +181,33 @@ it("knows what a remote Planner offers only from an attached client that has rep
 	// Every other harness knows what it offers, which may be nothing.
 	for (let harness of ["copilot-sdk", "atomic", "not-installed"]) {
 		expect(plannerOfferKnown(harness, "doc-a")).toBe(true);
+	}
+});
+
+it("settles a remote Planner's wait for a catalog when a turn ran without it, for that document's client alone", () => {
+	let pending = true;
+	let link = {
+		get catalogPending() {
+			return pending;
+		},
+		settleWithoutCatalog() {
+			pending = false;
+		},
+	} as unknown as AgentLink;
+	// Nothing is attached: nothing to settle, and nothing becomes known.
+	expect(plannerRanWithoutOffer("remote", "doc-a")).toBe(false);
+	expect(plannerOfferKnown("remote", "doc-a")).toBe(false);
+	let detach = attachLink("doc-a", link);
+	expect(plannerRanWithoutOffer("remote", "doc-b")).toBe(false);
+	expect(plannerOfferKnown("remote", "doc-a")).toBe(false);
+	expect(plannerRanWithoutOffer("remote", "doc-a")).toBe(true);
+	expect(plannerOfferKnown("remote", "doc-a")).toBe(true);
+	// The client leaves: what it fell back on goes with it.
+	detach();
+	expect(plannerOfferKnown("remote", "doc-a")).toBe(false);
+	// Every other harness knew what it offers all along, so there is nothing to settle.
+	for (let harness of ["copilot-sdk", "atomic", "not-installed"]) {
+		expect(plannerRanWithoutOffer(harness, "doc-a")).toBe(false);
 	}
 });
 

@@ -280,6 +280,64 @@ describe("the stored choice a room is told where nothing can be chosen", () => {
 		});
 	});
 
+	test("a turn that falls back where what the harness offers is unknown says so once, so the room is told the choice", async () => {
+		let known = false;
+		let fellBack: string[] = [];
+		let { deps, opened, choose } = await sets();
+		await choose({ model: "acme/large", thinkingLevel: "high" });
+		let silent: ModelChoiceDeps = {
+			...deps,
+			catalog: async () => undefined,
+			known: () => known,
+			fellBack: id => {
+				fellBack.push(id);
+				known = true;
+			},
+		};
+		// Before any turn nothing is said of the choice, and nothing has fallen back.
+		expect(await modelState(silent, opened.channel.id)).toEqual({ kind: "chat:model", ts: 0 });
+		// The turn found no catalog to check it against: the default runs, with the notice, and the
+		// harness is told that it did.
+		expect(await turnModel(silent, opened.channel.id)).toEqual({
+			notice: "acme/large is no longer available, so Chopin used its default model.",
+		});
+		expect(fellBack).toEqual([opened.channel.id]);
+		// So the choice is now told, and the composer can say what the turn did.
+		expect(await modelState(silent, opened.channel.id)).toEqual({
+			kind: "chat:model",
+			ts: 0,
+			choice: { model: "acme/large", thinkingLevel: "high" },
+		});
+	});
+
+	test("says nothing of a fallback where it knows what the harness offers, or when nothing was chosen, or when a catalog was there to check", async () => {
+		let fellBack: string[] = [];
+		let offered: Wire.ModelCatalog | undefined = catalog;
+		let known = true;
+		let { deps, opened, choose } = await sets(() => offered);
+		let watched: ModelChoiceDeps = {
+			...deps,
+			known: () => known,
+			fellBack: id => void fellBack.push(id),
+		};
+		// Nobody chose: the default is no choice, known or not.
+		known = false;
+		offered = undefined;
+		expect(await turnModel(watched, opened.channel.id)).toEqual({});
+		offered = catalog;
+		await choose({ model: "acme/large" });
+		// A catalog was there, and it lists the model: it runs, and nothing fell back.
+		expect(await turnModel(watched, opened.channel.id)).toEqual({ model: "acme/large" });
+		// A catalog was there and the model has gone: that is told in the catalog's own way.
+		offered = { models: [catalog.models[1]!], default: catalog.default };
+		expect((await turnModel(watched, opened.channel.id)).notice).toContain("no longer available");
+		// The harness knows it offers nothing (a client that reported nothing): known already.
+		offered = undefined;
+		known = true;
+		expect((await turnModel(watched, opened.channel.id)).notice).toContain("no longer available");
+		expect(fellBack).toEqual([]);
+	});
+
 	test("is told to everyone when the client that went comes back, and the turn runs the default meanwhile", async () => {
 		let offered: Wire.ModelCatalog | undefined = catalog;
 		let { deps, opened, choose } = await sets(() => offered);

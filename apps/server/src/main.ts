@@ -20,6 +20,7 @@ import {
 	harnessFor,
 	plannerCatalog,
 	plannerOfferKnown,
+	plannerRanWithoutOffer,
 	shutdownHarnesses,
 } from "./harness/harnesses";
 import { chooseModel, publishModelState, turnModel } from "./chat/model-choice";
@@ -1199,6 +1200,9 @@ const modelChoices: ModelChoiceDeps = {
 	catalog: async channelId =>
 		config.agent ? plannerCatalog(config.harness, channelId, config.model || undefined) : undefined,
 	known: channelId => plannerOfferKnown(config.harness, channelId),
+	fellBack: channelId => {
+		if (plannerRanWithoutOffer(config.harness, channelId)) announceModel(channelId);
+	},
 	storage,
 	lease: () => {
 		if (!writerLease.held) throw new Error("storage writer lease is unavailable");

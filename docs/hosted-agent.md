@@ -69,7 +69,11 @@ available and the default runs, before and after a turn, until somebody's client
 A document nobody chose for says nothing. The choice is held back while what a remote Planner
 offers is unknown: with no client attached (a machine that is away, a server that has just restarted)
 or one that offered the catalog and has yet to report it. The choice is then neither gone nor
-honored, and the machine's own status speaks. A person who can only read the document sees
+honored, and the machine's own status speaks. It stops being unknown for a client that offered the
+catalog and never reports it once a turn has run for want of it and fallen back on the saved
+choice: that has happened, Chat says it, and the room is told the choice so every composer says it
+too, for as long as that client stays attached and reports nothing. A report that comes later, or
+another client, starts again from what it reports. A person who can only read the document sees
 none of it.
 
 A turn that cannot read the choice at all (the catalog or the stored choice fails to load) never

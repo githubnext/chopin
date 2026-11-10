@@ -286,6 +286,8 @@ export declare namespace Chat {
 	 * its place); the agent then runs its default and says so in Chat, and the composer says so
 	 * too. `choice` is left out, though one is stored, while what the harness offers is unknown (a
 	 * remote Planner with no client attached, or one yet to report): it is neither gone nor honored.
+	 * A turn that falls back for want of a catalog its client offered and never reported ends that
+	 * for the client, and `choice` is then sent.
 	 */
 	export type ModelState = KIND<"chat:model"> & { catalog?: ModelCatalog; choice?: ModelChoice };
 
