@@ -587,6 +587,36 @@ test("lists a catalog that repeats a model or a level as the client reported it"
 	await client.detach();
 });
 
+test("lists every model of a catalog as large as two gateways' together, and searches it", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await newRoom();
+	let page = await open(browser, HANDLE, room, DESKTOP);
+	// 403 and 307 models: what Atomic offers a person with keys for OpenRouter and the Vercel gateway.
+	let { client, asked } = await attachClient(room, {
+		models: {
+			available: Array.from({ length: 710 }, (_, index) => ({
+				id: `${index < 403 ? "openrouter" : "gateway"}/model-${index}`,
+				name: `Model ${index}`,
+				provider: index < 403
+					? { id: "openrouter", name: "OpenRouter" }
+					: { id: "gateway", name: "AI Gateway" },
+			})),
+			default: { id: "openrouter/model-0" },
+		},
+	});
+	await expect(trigger(page)).toHaveAccessibleName("Model: Model 0");
+	await openPicker(page);
+	await expect(popover(page).getByRole("option")).toHaveCount(710);
+	await expect(popover(page).getByRole("group")).toHaveCount(2);
+	await search(page).fill("model 709");
+	await expect(popover(page).getByRole("option")).toHaveCount(1);
+	await search(page).press("Enter");
+	await expect(trigger(page)).toHaveAccessibleName("Model: Model 709");
+	await ask(page, "last of them", 1);
+	expect(turnFor(asked, "last of them").model).toBe("gateway/model-709");
+	await client.detach();
+});
+
 test("keeps the choice across a reload and shows it live to a second person", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await newRoom();
