@@ -27,9 +27,6 @@ export function atomicThinkingLevels(
 	});
 }
 
-/** The most models one catalog lists, as the agent connection's own limit. */
-export const MAX_MODELS = 512;
-
 /**
  * The catalog an attached client reported, for the browser. `MODEL`, when the operator set it,
  * is the default in the client's place; otherwise the client's own default stands. No models
@@ -47,7 +44,14 @@ export function remoteCatalog(
 		models: models.map(model => ({
 			id: model.id,
 			name: model.name,
-			...(model.provider ? { provider: model.provider } : {}),
+			...(model.provider
+				? {
+					provider: {
+						id: model.provider.id,
+						...(model.provider.name !== undefined ? { name: model.provider.name } : {}),
+					},
+				}
+				: {}),
 			...(model.description ? { description: model.description } : {}),
 			...(model.thinkingLevels?.length ? { thinkingLevels: model.thinkingLevels } : {}),
 		})),

@@ -453,23 +453,71 @@ describe("The capability catalog", () => {
 			parseClientMessage(JSON.stringify({ type: "capabilities", catalog: value })).ok;
 		expect(refused({ models: { available: [{ id: "", name: "x" }] } })).toBe(false);
 		expect(refused({ models: { available: [{ id: "a", name: "" }] } })).toBe(false);
+		expect(refused({ models: { available: [{ id: 3, name: "x" }] } })).toBe(false);
+		expect(refused({ models: { available: "none" } })).toBe(false);
 		expect(
 			refused({ models: { available: [{ id: "a", name: "x", thinkingLevels: ["not a level"] }] } }),
 		)
 			.toBe(false);
-		expect(
-			refused({ models: { available: [{ id: "a", name: "x", description: "d".repeat(401) }] } }),
-		)
-			.toBe(false);
-		expect(refused({ models: { available: [{ id: "a", name: "x", price: 1 }] } })).toBe(false);
-		expect(
-			refused({
-				models: { available: Array.from({ length: 513 }, (_, i) => ({ id: `m${i}`, name: "m" })) },
-			}),
-		)
-			.toBe(false);
 		expect(refused({ commands: [{ name: "x", kind: "not a kind" }] })).toBe(false);
-		expect(refused({ widgets: [] })).toBe(false);
+		expect(refused({ commands: [{ name: "", kind: "skill" }] })).toBe(false);
+		// A description is text like the protocol's other text, at most 4,000 characters.
+		expect(
+			refused({ models: { available: [{ id: "a", name: "x", description: "d".repeat(4_001) }] } }),
+		)
+			.toBe(false);
+	});
+
+	it("takes as many models and commands as the frame holds, and a description as long as a skill's", () => {
+		// Atomic's own models number 1,774 and its skills describe themselves in up to 925 characters.
+		let large = {
+			models: {
+				available: Array.from({ length: 1_774 }, (_, index) => ({
+					id: `provider/model-${index}`,
+					name: `Model ${index}`,
+					provider: { id: `provider-${index % 40}` },
+					thinkingLevels: ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+				})),
+			},
+			commands: Array.from({ length: 600 }, (_, index) => ({
+				name: `skill-${index}`,
+				kind: "skill",
+				description: "d".repeat(925),
+			})),
+		};
+		let parsed = parseClientMessage(JSON.stringify({ type: "capabilities", catalog: large }));
+		expect(parsed).toEqual({ ok: true, message: { type: "capabilities", catalog: large } });
+		let described = {
+			models: { available: [{ id: "a", name: "x", description: "d".repeat(4_000) }] },
+		};
+		expect(parseClientMessage(JSON.stringify({ type: "capabilities", catalog: described })).ok)
+			.toBe(true);
+	});
+
+	it("ignores a field it has no use for and keeps it as written, so a report can grow", () => {
+		let grown = {
+			models: {
+				available: [{
+					id: "a",
+					name: "A",
+					provider: { id: "p", homepage: "https://example.test" },
+					price: { input: 1, output: 3 },
+					thinkingLevels: ["low"],
+				}],
+				default: { id: "a", why: "cheapest" },
+				recommended: ["a"],
+			},
+			commands: [{ name: "x", kind: "skill", aliases: ["y"] }],
+			attachments: { images: true },
+			mentions: [{ kind: "file" }],
+		};
+		let parsed = parseClientMessage(JSON.stringify({ type: "capabilities", catalog: grown }));
+		expect(parsed).toEqual({ ok: true, message: { type: "capabilities", catalog: grown } });
+		// Only the catalog is read this way: a message is still strict.
+		expect(
+			parseClientMessage(JSON.stringify({ type: "capabilities", catalog: {}, extra: 1 })).ok,
+		)
+			.toBe(false);
 	});
 
 	it("rides a turn as an optional thinking level beside the model, and old turns still parse", () => {
