@@ -43,10 +43,11 @@
 	--queue-fade-above: 0px;
 	--queue-fade-below: 0px;
 	max-height: min(12rem, 35vh);
-	margin: 0;
+	/* The list clips what leaves it, so it is wider than its rows by room for a focus ring. */
+	margin: 0 calc(var(--spacing) * -1);
 	overflow-y: auto;
 	overscroll-behavior: contain;
-	padding: calc(var(--spacing) * 2) 0;
+	padding: calc(var(--spacing) * 2) var(--spacing);
 	list-style: none;
 	/* A row cut by an edge fades out there, which says the list goes on that way. */
 	mask-image: linear-gradient(

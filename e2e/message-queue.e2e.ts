@@ -736,6 +736,15 @@ test("beside Cancel the Delete menu is not drawn a second time, and shows once t
 	await page.keyboard.press("Tab");
 	await expect(row.getByRole("button", { name: "Message actions" })).toBeFocused();
 	await expect(anchor).toHaveCSS("opacity", "1");
+	let [ring, edge] = await row.getByRole("button", { name: "Message actions" }).evaluate(button => {
+		let styles = getComputedStyle(button);
+		return [
+			button.getBoundingClientRect().right + parseFloat(styles.outlineOffset)
+			+ parseFloat(styles.outlineWidth),
+			button.closest("ol")!.getBoundingClientRect().right,
+		];
+	});
+	expect(ring).toBeLessThanOrEqual(edge!);
 	await page.keyboard.press("Enter");
 	await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();
 	await page.keyboard.press("Escape");
