@@ -121,11 +121,34 @@ function Queue(
 	let list = useRef<HTMLOListElement>(null);
 	let card = useRef<HTMLDivElement>(null);
 	let atEnd = useRef(true);
+	// Which edges of the list have rows beyond them, so that a row cut by an edge fades out there
+	// and the list says it scrolls.
+	let [beyond, setBeyond] = useState({ above: false, below: false });
+	let measure = () => {
+		let element = list.current;
+		if (!element) return;
+		let above = element.scrollTop > 1;
+		let below = element.scrollHeight - element.clientHeight - element.scrollTop > 1;
+		setBeyond(current =>
+			current.above === above && current.below === below ? current : { above, below }
+		);
+	};
 	useLayoutEffect(() => {
 		if (card.current) onSize(card.current.offsetHeight);
 	});
 	useLayoutEffect(() => {
 		if (list.current && atEnd.current) list.current.scrollTop = list.current.scrollHeight;
+	}, [queued.length]);
+	// After each draw, and as the list or any row in it changes size: the window, a row opened for
+	// editing, a word wrapped differently once a font has loaded.
+	useLayoutEffect(measure);
+	useEffect(() => {
+		let element = list.current;
+		if (!element) return;
+		let watching = new ResizeObserver(measure);
+		watching.observe(element);
+		for (let row of element.children) watching.observe(row);
+		return () => watching.disconnect();
 	}, [queued.length]);
 	let [said, setSaid] = useState("");
 	let [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
@@ -189,9 +212,12 @@ function Queue(
 			{queued.length > 0 && <p className="chat-queue-caption">{queueCaption(queued.length)}</p>}
 			<ol
 				className="chat-queue-list"
+				data-beyond-above={beyond.above || undefined}
+				data-beyond-below={beyond.below || undefined}
 				onScroll={event => {
 					let element = event.currentTarget;
 					atEnd.current = element.scrollHeight - element.clientHeight - element.scrollTop <= 1;
+					measure();
 				}}
 				ref={list}
 			>
@@ -326,7 +352,9 @@ function Item(
 							Cancel
 						</button>
 					)}
-					{row.mine && row.sent && onDelete && <MessageMenu onDelete={() => onDelete(row.id)} />}
+					{row.mine && row.sent && onDelete && (
+						<MessageMenu onDelete={() => onDelete(row.id)} quiet={controls && !!cancel} />
+					)}
 				</div>
 			)}
 		</li>

@@ -119,6 +119,32 @@ async function wordsInOrder(page: Page, words: string[]): Promise<number[]> {
 	}, words);
 }
 
+/**
+ * Which edges of the queue's list say there are rows beyond them, how far the page fades each (read
+ * from the mask it draws), and whether a row is cut by an edge.
+ */
+async function edgesOf(list: Locator) {
+	return list.evaluate(element => {
+		let mask = getComputedStyle(element).maskImage;
+		let box = element.getBoundingClientRect();
+		return {
+			above: element.hasAttribute("data-beyond-above"),
+			below: element.hasAttribute("data-beyond-below"),
+			// A fade of none is drawn as no stop at all: from the top it is 0px, and from the bottom 100%.
+			fadeAbove: Number(/rgb\(0, 0, 0\) ([\d.]+)px/.exec(mask)?.[1] ?? 0),
+			fadeBelow: Number(/calc\(100% - ([\d.]+)px\)/.exec(mask)?.[1] ?? 0),
+			cutAbove: [...element.children].some(row => {
+				let rect = row.getBoundingClientRect();
+				return rect.top < box.top && rect.bottom > box.top;
+			}),
+			cutBelow: [...element.children].some(row => {
+				let rect = row.getBoundingClientRect();
+				return rect.top < box.bottom && rect.bottom > box.bottom;
+			}),
+		};
+	});
+}
+
 async function startBusyTurn(page: Page, text = "@chopin SLOW-LIVE write up the approach") {
 	await say(page, text);
 	await expect(chatPane(page).getByRole("button", { name: "Stop Chopin" })).toBeVisible();
@@ -533,8 +559,21 @@ test("a long message keeps to one line, and all waiting messages stay in an orde
 		list.boundingBox(),
 	]);
 	expect(lastBox!.y + lastBox!.height).toBeLessThanOrEqual(listBox!.y + listBox!.height + 1);
+	// At the end, the rows above fade out at the top edge, and nothing fades at the bottom.
+	await expect.poll(() => edgesOf(list)).toMatchObject({
+		above: true,
+		below: false,
+		fadeAbove: 24,
+		fadeBelow: 0,
+	});
 
 	await list.evaluate(element => element.scrollTop = 0);
+	await expect.poll(() => edgesOf(list)).toMatchObject({
+		above: false,
+		below: true,
+		fadeAbove: 0,
+		fadeBelow: 24,
+	});
 	await page.evaluate(() => new Promise(requestAnimationFrame));
 	await say(page, "@chopin message 6");
 	await expect(rowsOf(page)).toHaveCount(6);
@@ -675,6 +714,73 @@ test("a queue is visible and reachable throughout its entrance on a phone", asyn
 			}).queueEntrance
 		);
 		expect(frames.filter(frame => !frame.above || !frame.visible || !frame.reachable)).toEqual([]);
+	} finally {
+		await close();
+	}
+});
+
+test("beside Cancel the Delete menu is not drawn a second time, and shows once the keyboard reaches it", async ({ join, seed }) => {
+	await seed(SOURCE);
+	let page = await join("ana");
+	await startBusyTurn(page);
+	await say(page, "@chopin second: list the failure modes");
+	let row = rowsOf(page).first();
+	await expect(row.getByRole("button", { name: "Cancel message from Ana" })).toBeVisible();
+	let anchor = row.locator(".chat-message-menu-anchor");
+	await expect(anchor).toHaveCount(1);
+	// Not on hover either: Cancel is the one way drawn to take the message back.
+	await row.hover();
+	await expect(anchor).toHaveCSS("opacity", "0");
+	// It is still there: a keyboard reaches it, and it is drawn while it has focus.
+	await row.getByRole("button", { name: "Cancel message from Ana" }).focus();
+	await page.keyboard.press("Tab");
+	await expect(row.getByRole("button", { name: "Message actions" })).toBeFocused();
+	await expect(anchor).toHaveCSS("opacity", "1");
+	await page.keyboard.press("Enter");
+	await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(row.getByRole("button", { name: "Message actions" })).toBeFocused();
+	await expect(anchor).toHaveCSS("opacity", "1");
+	// Focus leaves, and it is not drawn again.
+	await row.getByRole("button", { name: "Cancel message from Ana" }).focus();
+	await expect(anchor).toHaveCSS("opacity", "0");
+});
+
+test("on a phone a long queue fades where a row is cut by an edge, and says which way it goes on", async ({ baseURL, browser, room, seed }) => {
+	await seed(SOURCE);
+	let { close, page } = await openIsolatedRoom(browser, baseURL!, room, "ana", PHONE);
+	try {
+		await page.getByRole("navigation", { name: "Workspace view" })
+			.getByRole("button", { name: /^Chat/ }).click();
+		await startBusyTurn(page);
+		for (let number of [1, 2, 3, 4, 5]) await say(page, `@chopin message ${number} for the queue`);
+		await expect(rowsOf(page)).toHaveCount(5);
+		let list = queueOf(page).getByRole("list");
+		// At the end the row above is cut by the top edge, and fades out there.
+		await expect.poll(() => edgesOf(list)).toMatchObject({
+			above: true,
+			below: false,
+			fadeAbove: 24,
+			fadeBelow: 0,
+			cutAbove: true,
+		});
+		// Delete is not drawn beside Cancel on a touch screen either.
+		await expect(rowsOf(page).last().locator(".chat-message-menu-anchor")).toHaveCSS(
+			"opacity",
+			"0",
+		);
+		let found = await new AxeBuilder({ page }).include("[data-chat-queue]").analyze();
+		expect(found.violations).toEqual([]);
+
+		await list.evaluate(element => element.scrollTop = 0);
+		await expect.poll(() => edgesOf(list)).toMatchObject({
+			above: false,
+			below: true,
+			fadeAbove: 0,
+			fadeBelow: 24,
+			cutBelow: true,
+		});
+		await expectNoHorizontalOverflow(page);
 	} finally {
 		await close();
 	}

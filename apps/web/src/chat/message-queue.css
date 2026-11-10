@@ -40,12 +40,30 @@
 }
 
 .chat-queue-list {
+	--queue-fade-above: 0px;
+	--queue-fade-below: 0px;
 	max-height: min(12rem, 35vh);
 	margin: 0;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	padding: calc(var(--spacing) * 2) 0;
 	list-style: none;
+	/* A row cut by an edge fades out there, which says the list goes on that way. */
+	mask-image: linear-gradient(
+		to bottom,
+		transparent,
+		black var(--queue-fade-above),
+		black calc(100% - var(--queue-fade-below)),
+		transparent
+	);
+}
+
+.chat-queue-list[data-beyond-above] {
+	--queue-fade-above: calc(var(--spacing) * 6);
+}
+
+.chat-queue-list[data-beyond-below] {
+	--queue-fade-below: calc(var(--spacing) * 6);
 }
 
 .chat-queue-item {
@@ -130,6 +148,14 @@
 
 .chat-queue-item:is(:hover, :focus-within) .chat-message-menu-anchor {
 	opacity: 1;
+}
+
+/*
+ * Beside Cancel the Delete menu does the same, so it is not drawn twice: it keeps its place and is
+ * shown to the keyboard that reaches it, on a touch screen as everywhere else.
+ */
+.chat-queue-item .chat-message-menu-anchor[data-quiet]:not(:focus-within, [data-open]) {
+	opacity: 0;
 }
 
 .chat-queue-note {

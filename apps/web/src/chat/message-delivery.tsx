@@ -34,8 +34,11 @@ export function DeliveryMark({ mark }: { mark: Mark }) {
 	);
 }
 
-/** Taking a message back, from its own menu. It opens above or below the button, as there is room. */
-export function MessageMenu({ onDelete }: { onDelete: () => void }) {
+/**
+ * Taking a message back, from its own menu. It opens above or below the button, as there is room.
+ * `quiet` says another control beside it does the same, so it is drawn only for the keyboard.
+ */
+export function MessageMenu({ onDelete, quiet }: { onDelete: () => void; quiet?: boolean }) {
 	let id = useId();
 	let button = useRef<HTMLButtonElement>(null);
 	let panel = useRef<HTMLDivElement>(null);
@@ -78,7 +81,11 @@ export function MessageMenu({ onDelete }: { onDelete: () => void }) {
 	};
 
 	return (
-		<span className="chat-message-menu-anchor" data-open={open || undefined}>
+		<span
+			className="chat-message-menu-anchor"
+			data-open={open || undefined}
+			data-quiet={quiet || undefined}
+		>
 			<button
 				aria-controls={open ? id : undefined}
 				aria-expanded={open}
