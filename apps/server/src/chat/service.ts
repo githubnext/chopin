@@ -1527,9 +1527,8 @@ export function postAgentReply(
 			& Wire.Entry
 			& { viaReaction: true };
 		let marked = answered?.entry as MemberEntry | undefined;
-		let before = marked?.answeredIntents;
 		chat.entries.push(entry);
-		if (marked) marked.answeredIntents = [...(before ?? []), answered!.intent];
+		if (marked) marked.answeredIntents = [...(marked.answeredIntents ?? []), answered!.intent];
 		try {
 			await context.persist();
 		} catch (err) {
@@ -1539,7 +1538,11 @@ export function postAgentReply(
 			);
 			chat.entries.splice(chat.entries.indexOf(entry), 1);
 			if (marked) {
-				if (before) marked.answeredIntents = before;
+				// Only this answer's reading is given back: another recorded while it saved stays.
+				let rest = [...(marked.answeredIntents ?? [])];
+				let at = rest.indexOf(answered!.intent);
+				if (at >= 0) rest.splice(at, 1);
+				if (rest.length > 0) marked.answeredIntents = rest;
 				else delete marked.answeredIntents;
 			}
 			return "failed";
