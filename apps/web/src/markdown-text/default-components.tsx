@@ -8,14 +8,15 @@
  * with Chopin's tokens. The copy button is Chopin's icon button and its icons.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { CheckIcon, CopyIcon } from "@chopin/icons";
 
 import { useIsMarkdownCodeBlock } from "./code-blocks";
-import { memoizeMarkdownComponents } from "./memoization";
+import { memoCompareNodes } from "./memoization";
 
-import type { ComponentProps, FC } from "react";
+import type { ElementType, FC } from "react";
 import type { CodeHeaderProps } from "./code-blocks";
+import type { HastElement } from "./memoization";
 
 let cn = (...names: (string | undefined)[]) => names.filter(Boolean).join(" ");
 
@@ -54,74 +55,55 @@ export let CopyCodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
 	);
 };
 
-export let defaultComponents = memoizeMarkdownComponents({
-	h1: ({ className, ...props }: ComponentProps<"h1">) => (
-		<h1 className={cn("aui-md-h1", className)} {...props} />
+type HastProps = { node?: HastElement; className?: string };
+
+/**
+ * One default element: its tag, its `aui-md-*` class joined to the class it is given, and the
+ * properties react-markdown computed. It is memoized on its hast node itself, as
+ * `memoizeMarkdownComponents` would, but without a second component under the memo: a transcript
+ * draws thousands of these, and a layer per element is a fibre per element.
+ */
+let element = (Tag: ElementType, own: string) =>
+	memo(
+		({ node: _node, className, ...props }: HastProps) => (
+			<Tag className={cn(own, className)} {...props} />
+		),
+		memoCompareNodes,
+	);
+
+export let defaultComponents = {
+	h1: element("h1", "aui-md-h1"),
+	h2: element("h2", "aui-md-h2"),
+	h3: element("h3", "aui-md-h3"),
+	h4: element("h4", "aui-md-h4"),
+	h5: element("h5", "aui-md-h5"),
+	h6: element("h6", "aui-md-h6"),
+	p: element("p", "aui-md-p"),
+	a: element("a", "aui-md-a"),
+	blockquote: element("blockquote", "aui-md-blockquote"),
+	ul: element("ul", "aui-md-ul"),
+	ol: element("ol", "aui-md-ol"),
+	hr: element("hr", "aui-md-hr"),
+	table: memo(
+		({ node: _node, className, ...props }: HastProps) => (
+			<div className="aui-md-table-wrapper">
+				<table className={cn("aui-md-table", className)} {...props} />
+			</div>
+		),
+		memoCompareNodes,
 	),
-	h2: ({ className, ...props }: ComponentProps<"h2">) => (
-		<h2 className={cn("aui-md-h2", className)} {...props} />
-	),
-	h3: ({ className, ...props }: ComponentProps<"h3">) => (
-		<h3 className={cn("aui-md-h3", className)} {...props} />
-	),
-	h4: ({ className, ...props }: ComponentProps<"h4">) => (
-		<h4 className={cn("aui-md-h4", className)} {...props} />
-	),
-	h5: ({ className, ...props }: ComponentProps<"h5">) => (
-		<h5 className={cn("aui-md-h5", className)} {...props} />
-	),
-	h6: ({ className, ...props }: ComponentProps<"h6">) => (
-		<h6 className={cn("aui-md-h6", className)} {...props} />
-	),
-	p: ({ className, ...props }: ComponentProps<"p">) => (
-		<p className={cn("aui-md-p", className)} {...props} />
-	),
-	a: ({ className, ...props }: ComponentProps<"a">) => (
-		<a className={cn("aui-md-a", className)} {...props} />
-	),
-	blockquote: ({ className, ...props }: ComponentProps<"blockquote">) => (
-		<blockquote className={cn("aui-md-blockquote", className)} {...props} />
-	),
-	ul: ({ className, ...props }: ComponentProps<"ul">) => (
-		<ul className={cn("aui-md-ul", className)} {...props} />
-	),
-	ol: ({ className, ...props }: ComponentProps<"ol">) => (
-		<ol className={cn("aui-md-ol", className)} {...props} />
-	),
-	hr: ({ className, ...props }: ComponentProps<"hr">) => (
-		<hr className={cn("aui-md-hr", className)} {...props} />
-	),
-	table: ({ className, ...props }: ComponentProps<"table">) => (
-		<div className="aui-md-table-wrapper">
-			<table className={cn("aui-md-table", className)} {...props} />
-		</div>
-	),
-	th: ({ className, ...props }: ComponentProps<"th">) => (
-		<th className={cn("aui-md-th", className)} {...props} />
-	),
-	td: ({ className, ...props }: ComponentProps<"td">) => (
-		<td className={cn("aui-md-td", className)} {...props} />
-	),
-	tr: ({ className, ...props }: ComponentProps<"tr">) => (
-		<tr className={cn("aui-md-tr", className)} {...props} />
-	),
-	li: ({ className, ...props }: ComponentProps<"li">) => (
-		<li className={cn("aui-md-li", className)} {...props} />
-	),
-	strong: ({ className, ...props }: ComponentProps<"strong">) => (
-		<strong className={cn("aui-md-strong", className)} {...props} />
-	),
-	sup: ({ className, ...props }: ComponentProps<"sup">) => (
-		<sup className={cn("aui-md-sup", className)} {...props} />
-	),
-	pre: ({ className, ...props }: ComponentProps<"pre">) => (
-		<pre className={cn("aui-md-pre", className)} {...props} />
-	),
-	code: function Code({ className, ...props }: ComponentProps<"code">) {
+	th: element("th", "aui-md-th"),
+	td: element("td", "aui-md-td"),
+	tr: element("tr", "aui-md-tr"),
+	li: element("li", "aui-md-li"),
+	strong: element("strong", "aui-md-strong"),
+	sup: element("sup", "aui-md-sup"),
+	pre: element("pre", "aui-md-pre"),
+	code: memo(function Code({ node: _node, className, ...props }: HastProps) {
 		let isCodeBlock = useIsMarkdownCodeBlock();
 		return (
 			<code className={cn(isCodeBlock ? undefined : "aui-md-inline-code", className)} {...props} />
 		);
-	},
-	CodeHeader: CopyCodeHeader,
-});
+	}, memoCompareNodes),
+	CodeHeader: memo(CopyCodeHeader, memoCompareNodes),
+};

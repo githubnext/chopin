@@ -194,10 +194,10 @@ export const MessageMarkdown = memo(function MessageMarkdown(
 	let deferred = useDeferredValue(source);
 	let held = useSame(references);
 	let model = useMemo(() => referenceRenderModel(deferred, held), [deferred, held]);
-	let remarkPlugins = useMemo(
-		() => [messageGfmRemarkPlugin, [referenceRemarkPlugin, model], orderedRunsRemarkPlugin],
-		[model],
-	);
+	let remarkPlugins = useMemo(() => {
+		let gfm = messageGfmRemarkPlugin(model.source);
+		return [...(gfm ? [gfm] : []), [referenceRemarkPlugin, model], orderedRunsRemarkPlugin];
+	}, [model]);
 	return (
 		<References.Provider value={model.references}>
 			<MarkdownText
