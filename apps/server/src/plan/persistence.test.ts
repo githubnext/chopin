@@ -196,6 +196,39 @@ describe("hosted plan persistence", () => {
 		await Service.close(restored);
 	});
 
+	it("restores a turn's images with their message, and refuses images on a person's message", async () => {
+		let context = await hosted();
+		let plan = await Service.open(context.channel.id, context.backend, context.server);
+		let images: ChatWire.Image[] = [
+			{
+				src: `/images/${"a".repeat(64)}.png`,
+				alt: "Ground floor",
+				caption: "",
+				width: 800,
+				height: 600,
+				generated: true,
+			},
+			{ src: `/images/${"b".repeat(64)}.webp`, width: 3, height: 4 },
+		];
+		plan.chat.entries.push({ id: ulid(), author: { kind: "agent" }, text: "", ts: 1, images });
+		await Service.persist(plan);
+		await Service.close(plan);
+
+		let restored = await Service.open(context.channel.id, context.backend, context.server);
+		expect(restored.chat.entries[0]?.images).toEqual(images);
+		restored.chat.entries.push({
+			id: ulid(),
+			author: { kind: "member", handle: "octocat" },
+			text: "Mine",
+			ts: 2,
+			images,
+		});
+		await Service.persist(restored);
+		await Service.close(restored);
+		await expect(Service.open(context.channel.id, context.backend, context.server)).rejects
+			.toThrow("hosted channel has an invalid transcript image");
+	});
+
 	it("restores workflow run cards, with runs still live then stopped", async () => {
 		let context = await hosted();
 		let plan = await Service.open(context.channel.id, context.backend, context.server);
