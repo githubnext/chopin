@@ -5,6 +5,8 @@ export type ImageSize = { width: number; height: number };
 
 const ADDRESS_CHARS_READ = 96 * 1024;
 
+const BASE64_MARKER = /^ *base64 *$/i;
+
 const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const ASCII_WHITE_SPACE = new Set([0x09, 0x0a, 0x0c, 0x0d, 0x20]);
 const PERCENT_SIGN = 0x25;
@@ -79,7 +81,7 @@ function dataPayloadStart(src: string): Uint8Array | undefined {
 		} else if (code < 0x80) unescaped.push(code);
 		else return undefined;
 	}
-	if (!/^base64$/i.test(address.parameters.at(-1)?.trim() ?? "")) return Uint8Array.from(unescaped);
+	if (!BASE64_MARKER.test(address.parameters.at(-1) ?? "")) return Uint8Array.from(unescaped);
 	let bytes: number[] = [];
 	let pending = 0;
 	let pendingBits = 0;

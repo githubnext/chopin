@@ -216,6 +216,34 @@ test("a raster image written into a message is drawn as written, whatever raster
 	}
 });
 
+test("a raster image whose type is followed by a space or a tab in an angle-bracketed address is drawn as Markdown encoded it, and SVG or HTML written the same way is not", () => {
+	for (
+		let [written, src] of [
+			["data:image/png ;base64,iVBORw0KGgo=", "data:image/png%20;base64,iVBORw0KGgo="],
+			["data:image/png\t;base64,iVBORw0KGgo=", "data:image/png%09;base64,iVBORw0KGgo="],
+			["DATA:IMAGE/PNG  ;BASE64,iVBORw0KGgo=", "DATA:IMAGE/PNG%20%20;BASE64,iVBORw0KGgo="],
+		]
+	) {
+		let markup = markdown(`![a dot](<${written}>)`);
+		expect(markup, written).toContain(
+			`<img alt="a dot" class="chat-image-preview" decoding="async" loading="lazy" referrerPolicy="no-referrer" src="${src}"/>`,
+		);
+	}
+	for (
+		let written of [
+			"data:image/svg+xml ;base64,PHN2Zy8+",
+			"data:image/svg+xml\t;base64,PHN2Zy8+",
+			"data:text/html ;base64,PGI+",
+			"data:image/png x;base64,iVBORw0KGgo=",
+		]
+	) {
+		let markup = markdown(`![where it was](<${written}>)`);
+		expect(markup, written).not.toContain("<img");
+		expect(markup, written).toContain('data-chat-image-broken="unavailable"');
+		expect(markup, written).toContain(">where it was</span>");
+	}
+});
+
 test("an address on another site is drawn exactly as it was written", () => {
 	for (let src of ["https://example.invalid", "//example.invalid/a.png"]) {
 		expect(markdown(`![far](${src})`), src).toContain(`src="${src}"/>`);

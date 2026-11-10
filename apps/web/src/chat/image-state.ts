@@ -26,6 +26,17 @@ const RASTER_TYPE = new RegExp(
 	"i",
 );
 
+const ESCAPED_WHITE_SPACE = /^%(?:09|0[a-d]|20)$/i;
+
+function withoutTrailingWhiteSpace(type: string): string {
+	let end = type.length;
+	for (;;) {
+		if (end > 0 && /\s/.test(type[end - 1]!)) end -= 1;
+		else if (end >= 3 && ESCAPED_WHITE_SPACE.test(type.slice(end - 3, end))) end -= 3;
+		else return type.slice(0, end);
+	}
+}
+
 export type DataAddress = { type: string; parameters: string[]; payloadStart: number };
 
 export function readDataAddress(src: string): DataAddress | undefined {
@@ -37,7 +48,7 @@ export function readDataAddress(src: string): DataAddress | undefined {
 
 export function isDataImage(src: string): boolean {
 	let address = readDataAddress(src);
-	return address !== undefined && RASTER_TYPE.test(address.type.trimEnd());
+	return address !== undefined && RASTER_TYPE.test(withoutTrailingWhiteSpace(address.type));
 }
 
 function hosted(path: string, document: string | undefined): ImageSource {

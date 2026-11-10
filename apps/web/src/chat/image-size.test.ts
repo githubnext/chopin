@@ -79,6 +79,46 @@ test("the size is read from the payload however the address writes it", () => {
 	) expect(dataImageSize(src), src).toEqual(expected);
 });
 
+test("white space Markdown percent-encoded after the type leaves the payload and its base64 marker read as written", () => {
+	let base64 = Buffer.from(png(90, 30)).toString("base64");
+
+	for (
+		let src of [
+			`data:image/png%20;base64,${base64}`,
+			`data:image/png%09%20;BASE64,${base64}`,
+			`data:image/png%20;charset=utf-8;base64,${base64}`,
+		]
+	) expect(dataImageSize(src), src).toEqual({ width: 90, height: 30 });
+});
+
+test("the base64 marker is the last parameter with only spaces around it, as Chromium reads it, so a payload it does not decode has no size", () => {
+	let base64 = Buffer.from(png(90, 30)).toString("base64");
+
+	for (
+		let src of [
+			`data:image/png; base64 ,${base64}`,
+			`data:image/png;  base64  ,${base64}`,
+			`data:image/png;foo;base64,${base64}`,
+			`data:image/png;base64;x;base64,${base64}`,
+		]
+	) expect(dataImageSize(src), src).toEqual({ width: 90, height: 30 });
+	for (
+		let src of [
+			`data:image/png;base64\u00a0,${base64}`,
+			`data:image/png;\u00a0base64,${base64}`,
+			`data:image/png;\u2003base64,${base64}`,
+			`data:image/png;\tbase64,${base64}`,
+			`data:image/png;base64\n,${base64}`,
+			`data:image/png;\u000bbase64,${base64}`,
+			`data:image/png;\u000cbase64,${base64}`,
+			`data:image/png;base64%20,${base64}`,
+			`data:image/png;%20base64,${base64}`,
+			`data:image/png;base64;charset=utf-8,${base64}`,
+			`data:image/png;x=base64,${base64}`,
+		]
+	) expect(dataImageSize(src), JSON.stringify(src)).toBeUndefined();
+});
+
 test("the bytes decide the format, not the type the address names", () => {
 	expect(dataImageSize(dataUrl(png(90, 30), "image/jpeg"))).toEqual({ width: 90, height: 30 });
 	expect(dataImageSize(dataUrl(png(90, 30), "image/x-icon"))).toEqual({ width: 90, height: 30 });
