@@ -34,11 +34,13 @@ import {
 	ExternalLinkIcon,
 	ImageIcon,
 	ImageOffIcon,
+	LinkIcon,
 	SparkleIcon,
 } from "@chopin/icons";
 
 import {
 	copyLabel,
+	copyLinkLabel,
 	downloadLabel,
 	downloadName,
 	frameRatio,
@@ -47,6 +49,7 @@ import {
 	loadState,
 	settledOnMount,
 } from "./image-state";
+import { useExternalRead } from "./image-read";
 import { dataImageSize } from "./image-size";
 import { loadLocalImage } from "./local-image";
 import "./image.css";
@@ -114,6 +117,7 @@ export function MessageImages({ children }: { children: ReactNode }) {
 								<ImageButtons
 									compact={false}
 									data={data}
+									engaged
 									key={index}
 									inLightbox
 									shown={{ source, type, url }}
@@ -304,6 +308,13 @@ async function copyImage(url: string): Promise<void> {
 	await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
 }
 
+async function copyLink(url: string): Promise<void> {
+	if (!navigator.clipboard) {
+		throw new Error("Clipboard API is not available in this environment.");
+	}
+	await navigator.clipboard.writeText(url);
+}
+
 function save(href: string, name: string): void {
 	let link = document.createElement("a");
 	link.href = href;
@@ -322,15 +333,18 @@ async function downloadImage({ source, url }: Shown, name: string): Promise<void
 }
 
 function ImageButtons(
-	{ compact, data, inLightbox = false, shown }: {
+	{ compact, data, engaged, inLightbox = false, shown }: {
 		compact: boolean;
 		data: ChatImageData;
+		engaged: boolean;
 		inLightbox?: boolean;
 		shown: Shown;
 	},
 ) {
 	let [copied, setCopied] = useState<Copied>("idle");
 	let [saved, setSaved] = useState<Copied>("idle");
+	let read = useExternalRead(shown.source.kind === "external" && engaged ? shown.url : undefined);
+	let linked = shown.source.kind === "external" && read !== "readable";
 	useEffect(() => {
 		if (copied === "idle" && saved === "idle") return;
 		let timer = setTimeout(() => {
@@ -342,31 +356,55 @@ function ImageButtons(
 	return (
 		<>
 			<button
-				aria-label={copyLabel(copied)}
+				aria-label={linked ? copyLinkLabel(copied) : copyLabel(copied)}
 				className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} ${
 					inLightbox ? "btn-secondary" : "btn-outline"
 				}`}
 				data-chat-image-action="copy"
 				onClick={() =>
-					copyImage(shown.url).then(() => setCopied("copied"), () => setCopied("failed"))}
-				type="button"
-			>
-				{copied === "copied" ? <CheckIcon aria-hidden="true" /> : <CopyIcon />}
-			</button>
-			<button
-				aria-label={downloadLabel(saved)}
-				className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} ${
-					inLightbox ? "btn-secondary" : "btn-outline"
-				}`}
-				data-chat-image-action="download"
-				onClick={() =>
-					downloadImage(shown, downloadName(data.alt, data.src, shown.type)).catch(() =>
-						setSaved("failed")
+					(linked ? copyLink(shown.url) : copyImage(shown.url)).then(
+						() => setCopied("copied"),
+						() => setCopied("failed"),
 					)}
 				type="button"
 			>
-				<DownloadIcon aria-hidden="true" />
+				{copied === "copied"
+					? <CheckIcon aria-hidden="true" />
+					: linked
+					? <LinkIcon aria-hidden="true" />
+					: <CopyIcon />}
 			</button>
+			{linked
+				? (
+					<a
+						aria-label="Open image"
+						className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} ${
+							inLightbox ? "btn-secondary" : "btn-outline"
+						}`}
+						data-chat-image-action="open-original"
+						href={shown.url}
+						rel="noopener noreferrer"
+						target="_blank"
+					>
+						<ExternalLinkIcon aria-hidden="true" />
+					</a>
+				)
+				: (
+					<button
+						aria-label={downloadLabel(saved)}
+						className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} ${
+							inLightbox ? "btn-secondary" : "btn-outline"
+						}`}
+						data-chat-image-action="download"
+						onClick={() =>
+							downloadImage(shown, downloadName(data.alt, data.src, shown.type)).catch(() =>
+								setSaved("failed")
+							)}
+						type="button"
+					>
+						<DownloadIcon aria-hidden="true" />
+					</button>
+				)}
 			{shown.source.kind === "external" && (
 				<a
 					aria-label="Open image in a new tab"
@@ -382,16 +420,21 @@ function ImageButtons(
 				</a>
 			)}
 			<span aria-live="polite" className="sr-only">
-				{saved === "failed" ? downloadLabel(saved) : copied === "idle" ? "" : copyLabel(copied)}
+				{saved === "failed"
+					? downloadLabel(saved)
+					: copied === "idle"
+					? ""
+					: (linked ? copyLinkLabel : copyLabel)(copied)}
 			</span>
 		</>
 	);
 }
 
 function ImageActions(
-	{ compact, data, label, onOpen, shown }: {
+	{ compact, data, engaged, label, onOpen, shown }: {
 		compact: boolean;
 		data: ChatImageData;
+		engaged: boolean;
 		label: string;
 		onOpen: () => void;
 		shown: Shown;
@@ -414,7 +457,7 @@ function ImageActions(
 			>
 				<ExpandIcon aria-hidden="true" />
 			</button>
-			<ImageButtons compact={compact} data={data} shown={shown} />
+			<ImageButtons compact={compact} data={data} engaged={engaged} shown={shown} />
 		</div>
 	);
 }
@@ -470,6 +513,7 @@ export function ImageFigure(
 	let { id, label, pending, source, type, url } = useImageEntry(host, image, anchor);
 	let { image: preview, load, onError, onLoad } = useLoad(url, pending);
 	let framed = useFrameImage(image, source);
+	let [engaged, setEngaged] = useState(false);
 	let open = () => {
 		host.open(id);
 		onOpen?.();
@@ -480,6 +524,8 @@ export function ImageFigure(
 			<div
 				className="chat-image-frame"
 				data-chat-image-frame
+				onFocus={() => setEngaged(true)}
+				onPointerEnter={() => setEngaged(true)}
 				onClick={url && load === "shown"
 					? event => {
 						// Focus the Open action so the lightbox gives focus back to it.
@@ -503,6 +549,7 @@ export function ImageFigure(
 					<ImageActions
 						compact={variant === "tile"}
 						data={image}
+						engaged={engaged}
 						label={label}
 						onOpen={open}
 						shown={{ source, type, url }}

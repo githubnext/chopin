@@ -575,6 +575,20 @@ test("an image from another site can be opened, copied and saved where its host 
 				? route.abort()
 				: route.fulfill({ contentType: "image/png", body: Buffer.from(png(40, 30)) }),
 	);
+	let reads = 0;
+	await page.route(
+		"https://example.invalid/flaky/**",
+		route =>
+			route.request().resourceType() === "fetch"
+				? reads++ === 0
+					? route.fulfill({
+						contentType: "image/png",
+						headers: { "access-control-allow-origin": "*" },
+						body: Buffer.from(png(40, 30)),
+					})
+					: route.abort()
+				: route.fulfill({ contentType: "image/png", body: Buffer.from(png(40, 30)) }),
+	);
 	await seed("# Out\n", {
 		transcript: [
 			{
@@ -584,13 +598,20 @@ test("an image from another site can be opened, copied and saved where its host 
 					"![far away](https://example.invalid/open/far.png)\n\n![shut away](https://example.invalid/closed/near.png)",
 				ts: 1_700_000_900_000,
 			},
+			{
+				id: "flaky",
+				author: { kind: "member", handle: "bo" },
+				text: "![out of reach](https://example.invalid/flaky/reach.png)",
+				ts: 1_700_000_950_000,
+			},
 		],
 	});
 	await join("ana");
 
-	let [open, closed] = [figures(page).nth(0), figures(page).nth(1)];
+	let [open, closed, flaky] = [figures(page).nth(0), figures(page).nth(1), figures(page).nth(2)];
 	await expect(open).toHaveAttribute("data-load", "shown");
 	await expect(closed).toHaveAttribute("data-load", "shown");
+	await expect(flaky).toHaveAttribute("data-load", "shown");
 
 	await open.hover();
 	for (let name of ["Open image", "Copy image", "Download image"]) {
@@ -609,26 +630,147 @@ test("an image from another site can be opened, copied and saved where its host 
 	await expect(open.getByRole("button", { name: "Copied image" })).toBeVisible();
 
 	// Its host does not allow a page to read it, so a copy and a save say they could not.
+	await flaky.hover();
+	await flaky.getByRole("button", { name: "Copy image" }).click();
+	await expect(flaky.getByRole("button", { name: "Couldn’t copy image" })).toBeVisible();
+	await flaky.getByRole("button", { name: "Download image" }).click();
+	await expect(flaky.getByRole("button", { name: "Couldn’t download image" })).toBeVisible();
+	await expect(flaky.getByRole("link", { name: "Open image in a new tab" })).toHaveAttribute(
+		"href",
+		"https://example.invalid/flaky/reach.png",
+	);
+
+	let near = "https://example.invalid/closed/near.png";
 	await closed.hover();
-	await closed.getByRole("button", { name: "Copy image" }).click();
-	await expect(closed.getByRole("button", { name: "Couldn’t copy image" })).toBeVisible();
-	await closed.getByRole("button", { name: "Download image" }).click();
-	await expect(closed.getByRole("button", { name: "Couldn’t download image" })).toBeVisible();
+	await expect(closed.getByRole("button", { name: "Copy link" })).toBeVisible();
+	for (let name of ["Copy image", "Download image"]) {
+		await expect(closed.getByRole("button", { name })).toHaveCount(0);
+	}
+	await closed.getByRole("button", { name: "Copy link" }).click();
+	await expect(closed.getByRole("button", { name: "Copied link" })).toBeVisible();
+	expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(near);
 	await expect(closed.getByRole("link", { name: "Open image in a new tab" })).toHaveAttribute(
 		"href",
-		"https://example.invalid/closed/near.png",
+		near,
 	);
+	let original = closed.getByRole("link", { name: "Open image", exact: true });
+	await expect(original).toHaveAttribute("href", near);
+	await expect(original).toHaveAttribute("target", "_blank");
+	await expect(original).toHaveAttribute("rel", "noopener noreferrer");
+	await page.context().route(
+		near,
+		route => route.fulfill({ contentType: "image/png", body: Buffer.from(png(40, 30)) }),
+	);
+	let [popup] = await Promise.all([page.waitForEvent("popup"), original.click()]);
+	await popup.waitForLoadState();
+	expect(popup.url()).toBe(near);
+	expect(await popup.evaluate(() => window.opener)).toBeNull();
+	await popup.close();
 
 	await closed.getByRole("button", { name: "Open image", exact: true }).click();
 	let box = lightbox(page);
 	await expect(box.getByRole("status")).toHaveText("Image 2 of 2");
+	await expect(box.getByRole("button", { name: "Copy link" })).toBeVisible();
+	await expect(box.getByRole("link", { name: "Open image", exact: true })).toHaveAttribute(
+		"href",
+		near,
+	);
+	await expect(box.getByRole("link", { name: "Open image in a new tab" })).toHaveAttribute(
+		"href",
+		near,
+	);
+	await page.keyboard.press("Escape");
+	await expect(box).toHaveCount(0);
+
+	await flaky.getByRole("button", { name: "Open image", exact: true }).click();
 	for (let name of ["Copy image", "Download image"]) {
 		await expect(box.getByRole("button", { name })).toBeVisible();
 	}
 	await expect(box.getByRole("link", { name: "Open image in a new tab" })).toHaveAttribute(
 		"href",
-		"https://example.invalid/closed/near.png",
+		"https://example.invalid/flaky/reach.png",
 	);
+});
+
+test("an image from another site offers its link while the page learns whether it can read it, and copy and download once it can", async ({ baseURL, join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
+		origin: new URL(baseURL!).origin,
+	});
+	let release!: () => void;
+	let gate = new Promise<void>(resolve => release = resolve);
+	let probes: Array<Record<string, string>> = [];
+	await page.route("https://example.invalid/slow/**", async route => {
+		if (route.request().resourceType() !== "fetch") {
+			return route.fulfill({ contentType: "image/png", body: Buffer.from(png(40, 30)) });
+		}
+		probes.push(await route.request().allHeaders());
+		await gate;
+		await route.fulfill({
+			contentType: "image/png",
+			headers: { "access-control-allow-origin": "*" },
+			body: Buffer.from(png(40, 30)),
+		});
+	});
+	await page.route("https://example.invalid/silent/**", async route => {
+		if (route.request().resourceType() !== "fetch") {
+			return route.fulfill({ contentType: "image/png", body: Buffer.from(png(40, 30)) });
+		}
+		await gate;
+		await route.abort();
+	});
+	await seed("# Probe\n", {
+		transcript: [
+			{
+				id: "slow",
+				author: { kind: "member", handle: "bo" },
+				text: "![slow to answer](https://example.invalid/slow/a.png)",
+				ts: 1_700_000_900_000,
+			},
+			{
+				id: "silent",
+				author: { kind: "member", handle: "bo" },
+				text: "![never readable](https://example.invalid/silent/b.png)",
+				ts: 1_700_000_950_000,
+			},
+		],
+	});
+	await join("ana");
+
+	let [slow, silent] = [figures(page).nth(0), figures(page).nth(1)];
+	await expect(slow).toHaveAttribute("data-load", "shown");
+	await expect(silent).toHaveAttribute("data-load", "shown");
+	await slow.hover();
+	let address = "https://example.invalid/slow/a.png";
+	await expect(slow.getByRole("button", { name: "Copy link" })).toBeVisible();
+	await expect(slow.getByRole("link", { name: "Open image", exact: true })).toHaveAttribute(
+		"href",
+		address,
+	);
+	for (let name of ["Copy image", "Download image"]) {
+		await expect(slow.getByRole("button", { name })).toHaveCount(0);
+	}
+	await slow.getByRole("button", { name: "Copy link" }).click();
+	await expect(slow.getByRole("button", { name: "Copied link" })).toBeVisible();
+	expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(address);
+	expect(probes).toHaveLength(1);
+	expect(probes[0]!["referer"]).toBeUndefined();
+	expect(probes[0]!["cookie"]).toBeUndefined();
+
+	release();
+	for (let name of ["Copy image", "Download image"]) {
+		await expect(slow.getByRole("button", { name })).toHaveCount(1);
+	}
+	await expect(slow.getByRole("button", { name: "Copy link" })).toHaveCount(0);
+	await expect(slow.getByRole("link", { name: "Open image", exact: true })).toHaveCount(0);
+	expect(probes).toHaveLength(1);
+	await slow.getByRole("button", { name: "Copy image" }).click();
+	await expect(slow.getByRole("button", { name: "Copied image" })).toBeVisible();
+
+	await silent.hover();
+	await expect(silent.getByRole("button", { name: "Copy link" })).toBeVisible();
+	await expect(silent.getByRole("link", { name: "Open image", exact: true })).toHaveCount(1);
+	await expect(silent.getByRole("button", { name: "Copy image" })).toHaveCount(0);
 });
 
 test("a person without access to the document is refused its images", async ({ baseURL, browser, join, page, room, seed }) => {

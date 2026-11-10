@@ -173,6 +173,14 @@ export function downloadLabel(state: Copied): string {
 	return state === "failed" ? "Couldn’t download image" : "Download image";
 }
 
+export function copyLinkLabel(state: Copied): string {
+	return state === "copied"
+		? "Copied link"
+		: state === "failed"
+		? "Couldn’t copy link"
+		: "Copy link";
+}
+
 export function copyLabel(state: Copied): string {
 	return state === "copied"
 		? "Copied image"
