@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
 
 import {
+	adoptedSize,
 	copyLabel,
 	copyLinkLabel,
 	downloadLabel,
 	downloadName,
+	framedImage,
 	frameRatio,
 	galleryItems,
 	galleryTiles,
@@ -527,6 +529,41 @@ test("an image the browser already has settles on mount, a pending one waits", (
 		src: "a",
 		outcome: "broken",
 	});
+});
+
+test("an image the browser already has settles on mount with the shape it has", () => {
+	expect(settledOnMount({ complete: true, naturalWidth: 18, naturalHeight: 6 }, "a")).toEqual({
+		src: "a",
+		outcome: "shown",
+		size: { width: 18, height: 6 },
+	});
+	expect(settledOnMount({ complete: true, naturalWidth: 0, naturalHeight: 0 }, "a")).toEqual({
+		src: "a",
+		outcome: "broken",
+	});
+	expect(settledOnMount({ complete: false, naturalWidth: 18, naturalHeight: 6 }, "a"))
+		.toBeUndefined();
+});
+
+test("a shown image offers its own shape to its frame, and only for the address it was shown from", () => {
+	let size = { width: 18, height: 6 };
+
+	expect(adoptedSize({ src: "a", outcome: "shown", size }, "a")).toEqual(size);
+	expect(adoptedSize({ src: "a", outcome: "shown", size }, "b")).toBeUndefined();
+	expect(adoptedSize({ src: "a", outcome: "broken", size }, "a")).toBeUndefined();
+	expect(adoptedSize({ src: "a", outcome: "shown" }, "a")).toBeUndefined();
+	expect(adoptedSize(undefined, "a")).toBeUndefined();
+});
+
+test("a frame keeps a shape that is stated, and takes the shape the image turns out to have where none is", () => {
+	let size = { width: 18, height: 6 };
+	let stated = { src: "a", width: 30, height: 90 };
+	let unknown = { src: "a" };
+
+	expect(framedImage(stated, size)).toBe(stated);
+	expect(framedImage(unknown, size)).toEqual({ src: "a", ...size });
+	expect(framedImage({ src: "a", width: 30 }, size)).toEqual({ src: "a", ...size });
+	expect(framedImage(unknown, undefined)).toBe(unknown);
 });
 
 test("an image with no alt text is named, and one with alt text keeps it as written", () => {

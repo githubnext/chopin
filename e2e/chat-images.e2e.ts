@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 
 import { createChannel, seedChannelImage, testChannelPath } from "./database";
-import { authenticate, expect, test } from "./room";
+import { authenticate, expect, openIsolatedRoom, test } from "./room";
 
-import type { Locator, Page } from "@playwright/test";
+import type { BrowserContext, Locator, Page } from "@playwright/test";
 import type { Chat } from "../packages/protocol/index";
 
 const CAP = readFileSync(new URL("./fixtures/the-cap.webp", import.meta.url));
@@ -1051,7 +1051,10 @@ async function holdDecodingOfWrittenImages(page: Page) {
 			event.stopImmediatePropagation();
 			held.push(image);
 		}, true);
-		let firstSeen = new Map<string, { load: string | null; ratio: number }>();
+		let firstSeen = new Map<
+			string,
+			{ height: number; load: string | null; ratio: number; width: number }
+		>();
 		new MutationObserver(() => {
 			for (let figure of document.querySelectorAll("[data-chat-image]")) {
 				let key = figure.querySelector("figcaption")?.textContent ?? "";
@@ -1059,8 +1062,10 @@ async function holdDecodingOfWrittenImages(page: Page) {
 				if (!frame || firstSeen.has(key)) continue;
 				let box = frame.getBoundingClientRect();
 				firstSeen.set(key, {
+					height: box.height,
 					load: figure.getAttribute("data-load"),
 					ratio: box.width / box.height,
+					width: box.width,
 				});
 			}
 		}).observe(document, { childList: true, subtree: true });
@@ -1075,7 +1080,10 @@ async function holdDecodingOfWrittenImages(page: Page) {
 	return {
 		firstSeen: () =>
 			page.evaluate(() =>
-				(window as any).__firstSeen() as Record<string, { load: string | null; ratio: number }>
+				(window as any).__firstSeen() as Record<
+					string,
+					{ height: number; load: string | null; ratio: number; width: number }
+				>
 			),
 		release: () => page.evaluate(() => (window as any).__release()),
 	};
@@ -1091,6 +1099,37 @@ async function naturalSize(figure: Locator) {
 async function figureBox(figure: Locator) {
 	let frame = (await figure.locator("[data-chat-image-frame]").boundingBox())!;
 	return { ...(await layout(figure)), frame: { height: frame.height, width: frame.width } };
+}
+
+const NEUTRAL_BOX = 96;
+
+async function ownShape(figure: Locator, name: string) {
+	let natural = await naturalSize(figure);
+	let { frame } = await figureBox(figure);
+	expect(
+		Math.abs(frame.height - frame.width * natural.height / natural.width),
+		`${name}: the box is within a pixel of the image's own shape`,
+	).toBeLessThanOrEqual(1);
+	expect(frame.width, name).toBeLessThanOrEqual(384.5);
+	expect(frame.height, name).toBeLessThanOrEqual(448.5);
+	expect(await figure.locator("img").boundingBox(), `${name}: the image fills the box`).toEqual(
+		await figure.locator("[data-chat-image-frame]").boundingBox(),
+	);
+	let gap = await figure.locator("img").evaluate(node => {
+		let image = node as HTMLImageElement;
+		let scale = Math.min(
+			image.clientWidth / image.naturalWidth,
+			image.clientHeight / image.naturalHeight,
+		);
+		return {
+			fit: getComputedStyle(image).objectFit,
+			x: image.clientWidth - image.naturalWidth * scale,
+			y: image.clientHeight - image.naturalHeight * scale,
+		};
+	});
+	expect(gap.fit, name).toBe("contain");
+	expect(Math.max(gap.x, gap.y), `${name}: nothing is left empty beside the image`)
+		.toBeLessThanOrEqual(1);
 }
 
 function oneMessageEachLine(text: string): Chat.Entry[] {
@@ -1198,23 +1237,23 @@ test("an image written into a message holds the shape its own bytes give from th
 	}
 });
 
-test("an image written into a message whose shape is not read from its bytes keeps the fixed frame, and is drawn or reported as before", async ({ join, page, seed }) => {
+test("an image written into a message whose shape is not read from its bytes is a neutral loading box until it has loaded, then has its own shape, and is drawn or reported as before", async ({ join, page, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	let decoding = await holdDecodingOfWrittenImages(page);
 	let cases = [
-		{ name: "not a PNG", src: "data:image/png;base64,AAAA", fixed: true, broken: true },
-		{ name: "no payload", src: "data:image/png;base64,", fixed: true, broken: true },
-		{ name: "cut short", src: "data:image/webp,RIFF", fixed: true, broken: true },
+		{ name: "not a PNG", src: "data:image/png;base64,AAAA", unsized: true, broken: true },
+		{ name: "no payload", src: "data:image/png;base64,", unsized: true, broken: true },
+		{ name: "cut short", src: "data:image/webp,RIFF", unsized: true, broken: true },
 		{
 			name: "icon of two shapes",
 			src: written("raster-18x6-and-6x18.ico"),
-			fixed: true,
+			unsized: true,
 			broken: false,
 		},
 		{
 			name: "avif cropped by its clean aperture",
 			src: written("raster-18x6-cropped.avif"),
-			fixed: true,
+			unsized: true,
 			broken: false,
 		},
 		{
@@ -1222,13 +1261,13 @@ test("an image written into a message whose shape is not read from its bytes kee
 			src: `data:image/png;base64,${
 				Buffer.from(fixture("raster-18x6.png")).fill(0, 29, 33).toString("base64")
 			}`,
-			fixed: false,
+			unsized: false,
 			broken: true,
 		},
 		{
 			name: "jpg whose EXIF density Chromium applies",
 			src: written("raster-18x6-density.jpg"),
-			fixed: true,
+			unsized: true,
 			broken: false,
 		},
 	];
@@ -1241,13 +1280,16 @@ test("an image written into a message whose shape is not read from its bytes kee
 	await expect(all).toHaveCount(cases.length);
 	await settled(all.last());
 	let firstSeen = await decoding.firstSeen();
-	for (let [index, { broken, fixed, name, src }] of cases.entries()) {
+	for (let [index, { broken, name, src, unsized }] of cases.entries()) {
 		let figure = all.nth(index);
 		let ratio = firstSeen[name]!.ratio;
 		expect(firstSeen[name]!.load, name).toBe("loading");
-		expect(Math.abs(ratio / (fixed ? 4 / 3 : 3) - 1), `${name} at the first paint`).toBeLessThan(
-			0.01,
-		);
+		if (unsized) {
+			expect(firstSeen[name]!.height, `${name} at the first paint`).toBe(NEUTRAL_BOX);
+			await expect(figure).not.toHaveAttribute("data-sized");
+		} else {
+			expect(Math.abs(ratio / 3 - 1), `${name} at the first paint`).toBeLessThan(0.01);
+		}
 		if (broken) {
 			await expect(figure).toHaveAttribute("data-load", "broken");
 			await expect(figure.getByText("Couldn’t load image")).toBeVisible();
@@ -1266,17 +1308,129 @@ test("an image written into a message whose shape is not read from its bytes kee
 		await expect.poll(async () => (await naturalSize(figure)).width).toBeGreaterThan(0);
 		await expect(figure).toHaveAttribute("data-load", "loading");
 		let held = await figureBox(figure);
-		expect(Math.abs(held.frame.width / held.frame.height / (4 / 3) - 1)).toBeLessThan(0.01);
+		expect(held.frame.height, "a neutral loading box while the browser has not told the page").toBe(
+			NEUTRAL_BOX,
+		);
+		await expect(figure.locator(".chat-image-placeholder")).toBeVisible();
 		before.push(held);
 	}
 	await decoding.release();
 	for (let [index, figure] of valid.entries()) {
 		await expect(figure).toHaveAttribute("data-load", "shown");
+		await expect(figure).toHaveAttribute("data-sized", "");
 		await settled(figure);
-		expect(await figureBox(figure)).toEqual(before[index]);
-		expect(await figure.locator("img").boundingBox()).toEqual(
-			await figure.locator("[data-chat-image-frame]").boundingBox(),
-		);
+		await ownShape(figure, cases.filter(({ broken }) => !broken)[index]!.name);
+	}
+});
+
+const UNSIZED = [
+	{ name: "far and wide", src: "https://example.invalid/unsized/raster-18x6.png" },
+	{ name: "far and tall", src: "https://example.invalid/unsized/raster-6x18.png" },
+	{ name: "here and wide", src: "/inline/unsized/raster-18x6.png" },
+	{ name: "here and tall", src: "/inline/unsized/raster-6x18.png" },
+];
+
+async function holdUnsized(target: BrowserContext | Page, gate: Promise<void>): Promise<void> {
+	for (let pattern of ["https://example.invalid/unsized/**", "**/inline/unsized/**"]) {
+		await target.route(pattern, async route => {
+			await gate;
+			await route.fulfill({
+				body: fixture(new URL(route.request().url()).pathname.split("/").pop()!),
+				contentType: "image/png",
+			});
+		});
+	}
+}
+
+test("an image whose shape is not known before it arrives, from another site or this one, is a neutral loading box at the first paint, and has its own shape, whole, once it has loaded", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let decoding = await holdDecodingOfWrittenImages(page);
+	let release!: () => void;
+	let gate = new Promise<void>(resolve => release = resolve);
+	await holdUnsized(page, gate);
+	await seed("# Unsized\n", {
+		transcript: oneMessageEachLine(UNSIZED.map(({ name, src }) => `![${name}](${src})`).join("\n")),
+	});
+	await join("ana");
+
+	let all = figures(page);
+	await expect(all).toHaveCount(UNSIZED.length);
+	await settled(all.last());
+	let firstSeen = await decoding.firstSeen();
+	for (let [index, { name }] of UNSIZED.entries()) {
+		let figure = all.nth(index);
+		expect(firstSeen[name]?.load, name).toBe("loading");
+		expect(firstSeen[name]!.height, `${name} at the first paint`).toBe(NEUTRAL_BOX);
+		expect(firstSeen[name]!.width, `${name} at the first paint`).toBeLessThanOrEqual(384.5);
+		expect(Math.abs(firstSeen[name]!.ratio / (4 / 3) - 1), `${name} is not a framed 4:3 image`)
+			.toBeGreaterThan(0.5);
+		await expect(figure).toHaveAttribute("data-load", "loading");
+		await expect(figure).not.toHaveAttribute("data-sized");
+		await expect(figure.locator(".chat-image-placeholder")).toBeVisible();
+		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
+		let held = await figureBox(figure);
+		expect(held.frame.height, name).toBe(NEUTRAL_BOX);
+		expect(held.frame.width, name).toBe((await figure.boundingBox())!.width);
+		await expect(figure.getByRole("button", { name: "Open image" })).toHaveCount(0);
+	}
+
+	release();
+	for (let [index, { name }] of UNSIZED.entries()) {
+		let figure = all.nth(index);
+		await expect(figure).toHaveAttribute("data-load", "shown");
+		await expect(figure).toHaveAttribute("data-sized", "");
+		await expect(figure.locator(".chat-image-placeholder")).toHaveCount(0);
+		await expect(figure.locator("img")).toHaveCSS("opacity", "1");
+		await settled(figure);
+		await ownShape(figure, name);
+		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
+	}
+	let wide = await naturalSize(all.nth(0));
+	expect(wide.width / wide.height).toBe(3);
+});
+
+test("an image whose shape is not known before it arrives is a neutral loading box, then its own shape, on a phone, with nothing overflowing", async ({ baseURL, browser, room, seed }) => {
+	let release!: () => void;
+	let gate = new Promise<void>(resolve => release = resolve);
+	await seed("# Unsized\n", {
+		transcript: oneMessageEachLine(UNSIZED.map(({ name, src }) => `![${name}](${src})`).join("\n")),
+	});
+	let phone = await openIsolatedRoom(
+		browser,
+		baseURL!,
+		room,
+		"ana",
+		PHONE,
+		context => holdUnsized(context, gate),
+	);
+	try {
+		await openChat(phone.page);
+		let all = figures(phone.page);
+		await expect(all).toHaveCount(UNSIZED.length);
+		await settled(all.last());
+		for (let [index, { name }] of UNSIZED.entries()) {
+			let figure = all.nth(index);
+			await expect(figure).toHaveAttribute("data-load", "loading");
+			let held = await figureBox(figure);
+			expect(held.frame.height, name).toBe(NEUTRAL_BOX);
+			expect(held.frame.width, name).toBeLessThanOrEqual(390);
+			await expect(figure.locator(".chat-image-alt")).toHaveText(name);
+		}
+		release();
+		for (let [index, { name }] of UNSIZED.entries()) {
+			let figure = all.nth(index);
+			await expect(figure).toHaveAttribute("data-load", "shown");
+			await settled(figure);
+			await ownShape(figure, name);
+			let box = (await figure.boundingBox())!;
+			expect(box.x).toBeGreaterThanOrEqual(0);
+			expect(box.x + box.width).toBeLessThanOrEqual(390);
+		}
+		expect(await phone.page.evaluate(() => document.documentElement.scrollWidth))
+			.toBeLessThanOrEqual(390);
+	} finally {
+		release();
+		await phone.close();
 	}
 });
 
@@ -1402,8 +1556,7 @@ test("a raster data address whose type Markdown has followed with a space or tab
 	}
 	for (let { name } of undecodable) {
 		expect(firstSeen[name]?.load, name).toBe("loading");
-		expect(Math.abs(firstSeen[name]!.ratio / (4 / 3) - 1), `${name} at the first paint`)
-			.toBeLessThan(0.01);
+		expect(firstSeen[name]!.height, `${name} at the first paint`).toBe(NEUTRAL_BOX);
 	}
 	let before = await Promise.all(drawn.map((_, index) => figureBox(all.nth(index))));
 	for (let [index, { frame }] of before.entries()) {

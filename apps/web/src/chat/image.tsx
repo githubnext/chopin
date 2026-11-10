@@ -39,14 +39,17 @@ import {
 } from "@chopin/icons";
 
 import {
+	adoptedSize,
 	copyLabel,
 	copyLinkLabel,
 	downloadLabel,
 	downloadName,
+	framedImage,
 	frameRatio,
 	imageLabel,
 	imageSource,
 	loadState,
+	naturalSize,
 	settledOnMount,
 } from "./image-state";
 import { useExternalRead } from "./image-read";
@@ -54,7 +57,7 @@ import { dataImageSize } from "./image-size";
 import { loadLocalImage } from "./local-image";
 import "./image.css";
 
-import type { ReactNode } from "react";
+import type { ReactNode, SyntheticEvent } from "react";
 import type { LightboxImage } from "@chopin/editor/image-lightbox";
 import type { Copied, ImageSource, Load, Settled } from "./image-state";
 
@@ -179,8 +182,12 @@ function useLoad(url: string | undefined, pending: boolean) {
 	return {
 		image,
 		load,
+		natural: url ? adoptedSize(settled, url) : undefined,
 		onError: () => url && setSettled({ src: url, outcome: "broken" }),
-		onLoad: () => url && setSettled({ src: url, outcome: "shown" }),
+		onLoad: ({ currentTarget }: SyntheticEvent<HTMLImageElement>) => {
+			let size = naturalSize(currentTarget);
+			if (url) setSettled({ src: url, outcome: "shown", ...size && { size } });
+		},
 	};
 }
 
@@ -221,7 +228,7 @@ function ImagePreview(
 		label: string;
 		load: Load;
 		onError: () => void;
-		onLoad: () => void;
+		onLoad: (event: SyntheticEvent<HTMLImageElement>) => void;
 		preview: React.RefObject<HTMLImageElement | null>;
 		source: ImageSource;
 		url: string | undefined;
@@ -511,8 +518,8 @@ export function ImageFigure(
 ) {
 	let anchor = useRef<HTMLSpanElement>(null);
 	let { id, label, pending, source, type, url } = useImageEntry(host, image, anchor);
-	let { image: preview, load, onError, onLoad } = useLoad(url, pending);
-	let framed = useFrameImage(image, source);
+	let { image: preview, load, natural, onError, onLoad } = useLoad(url, pending);
+	let framed = framedImage(useFrameImage(image, source), natural);
 	let [engaged, setEngaged] = useState(false);
 	let open = () => {
 		host.open(id);
