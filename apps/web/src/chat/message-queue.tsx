@@ -28,6 +28,12 @@ import type { QueueRow } from "./queue-model";
 
 const MOTION = motionContract("collapse");
 
+/**
+ * Narrower than "the same as Cancel": while the page is offline Delete is kept and sent later,
+ * which Cancel, asking the live server, is not.
+ */
+const ALSO_CANCELS = "Also cancels this waiting message.";
+
 /** How long a word about a change that could not be made stays once the row it was about is gone. */
 const NOTICE_MS = 8_000;
 
@@ -353,7 +359,10 @@ function Item(
 						</button>
 					)}
 					{row.mine && row.sent && onDelete && (
-						<MessageMenu onDelete={() => onDelete(row.id)} quiet={controls && !!cancel} />
+						<MessageMenu
+							note={controls && cancel ? ALSO_CANCELS : undefined}
+							onDelete={() => onDelete(row.id)}
+						/>
 					)}
 				</div>
 			)}

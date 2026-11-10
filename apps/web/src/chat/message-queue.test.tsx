@@ -74,7 +74,7 @@ test("a saved waiting message keeps its sender's Sent mark and Delete menu in th
 	expect(markup.match(/aria-label="Message actions"/g)).toHaveLength(1);
 });
 
-test("beside Cancel the Delete menu is kept but quiet, and it is the only way to take back a message when Cancel is not offered", () => {
+test("a saved message offers its Delete menu beside Cancel, and the menu is the only way to take it back where Cancel is not offered", () => {
 	let sent = [row("a", "My message", { mine: true, sent: true })];
 	let withCancel = renderToStaticMarkup(createElement(MessageQueue, {
 		queued: sent,
@@ -84,15 +84,12 @@ test("beside Cancel the Delete menu is kept but quiet, and it is the only way to
 	}));
 	expect(withCancel).toContain('aria-label="Cancel message from Ana"');
 	expect(withCancel).toContain('aria-label="Message actions"');
-	expect(withCancel).toMatch(/class="chat-message-menu-anchor"[^>]*data-quiet="true"/);
-	// Offline there is no Cancel, so the menu is the way, and is drawn as it always is.
 	let offline = renderToStaticMarkup(createElement(MessageQueue, {
 		queued: sent,
 		onDelete: () => {},
 	}));
 	expect(offline).not.toContain("Cancel message");
 	expect(offline).toContain('aria-label="Message actions"');
-	expect(offline).not.toContain("data-quiet");
 });
 
 test("the list says nothing about rows beyond its edges until it has been measured in a browser", () => {

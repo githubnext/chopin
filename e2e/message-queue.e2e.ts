@@ -145,6 +145,23 @@ async function edgesOf(list: Locator) {
 	});
 }
 
+/**
+ * What a pointer finds where the Delete menu's button is: whether the button itself is the hit
+ * target there ("live"), and how drawn its anchor is. Nothing invisible may be live.
+ */
+async function reachOf(row: Locator) {
+	return row.getByRole("button", { name: "Message actions" }).evaluate(button => {
+		let box = button.getBoundingClientRect();
+		let hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+		return {
+			live: !!hit && button.contains(hit),
+			opacity: getComputedStyle(button.closest(".chat-message-menu-anchor")!).opacity,
+		};
+	});
+}
+
+const ALSO_CANCELS = "Also cancels this waiting message.";
+
 async function startBusyTurn(page: Page, text = "@chopin SLOW-LIVE write up the approach") {
 	await say(page, text);
 	await expect(chatPane(page).getByRole("button", { name: "Stop Chopin" })).toBeVisible();
@@ -719,24 +736,33 @@ test("a queue is visible and reachable throughout its entrance on a phone", asyn
 	}
 });
 
-test("beside Cancel the Delete menu is not drawn a second time, and shows once the keyboard reaches it", async ({ join, seed }) => {
+test("beside Cancel the Delete menu is always drawn, so nothing invisible can be pressed, and says it also cancels the waiting message", async ({ join, seed }) => {
 	await seed(SOURCE);
 	let page = await join("ana");
 	await startBusyTurn(page);
 	await say(page, "@chopin second: list the failure modes");
 	let row = rowsOf(page).first();
-	await expect(row.getByRole("button", { name: "Cancel message from Ana" })).toBeVisible();
-	let anchor = row.locator(".chat-message-menu-anchor");
-	await expect(anchor).toHaveCount(1);
-	// Not on hover either: Cancel is the one way drawn to take the message back.
+	let cancel = row.getByRole("button", { name: "Cancel message from Ana" });
+	let actions = row.getByRole("button", { name: "Message actions" });
+	await expect(cancel).toBeVisible();
+	await expect(actions).toHaveCount(1);
+
+	await page.mouse.move(0, 0);
+	expect(await reachOf(row)).toEqual({ live: true, opacity: "1" });
+
 	await row.hover();
-	await expect(anchor).toHaveCSS("opacity", "0");
-	// It is still there: a keyboard reaches it, and it is drawn while it has focus.
-	await row.getByRole("button", { name: "Cancel message from Ana" }).focus();
+	expect(await reachOf(row)).toEqual({ live: true, opacity: "1" });
+	let box = (await actions.boundingBox())!;
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	expect(await reachOf(row)).toEqual({ live: true, opacity: "1" });
+
+	await page.mouse.move(0, 0);
+	await cancel.focus();
+	expect(await reachOf(row)).toEqual({ live: true, opacity: "1" });
 	await page.keyboard.press("Tab");
-	await expect(row.getByRole("button", { name: "Message actions" })).toBeFocused();
-	await expect(anchor).toHaveCSS("opacity", "1");
-	let [ring, edge] = await row.getByRole("button", { name: "Message actions" }).evaluate(button => {
+	await expect(actions).toBeFocused();
+	expect(await reachOf(row)).toEqual({ live: true, opacity: "1" });
+	let [ring, edge] = await actions.evaluate(button => {
 		let styles = getComputedStyle(button);
 		return [
 			button.getBoundingClientRect().right + parseFloat(styles.outlineOffset)
@@ -745,14 +771,118 @@ test("beside Cancel the Delete menu is not drawn a second time, and shows once t
 		];
 	});
 	expect(ring).toBeLessThanOrEqual(edge!);
+
 	await page.keyboard.press("Enter");
-	await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+	let item = page.getByRole("menuitem", { name: "Delete", exact: true });
+	await expect(item).toBeVisible();
+	await expect(item).toHaveAccessibleName("Delete");
+	await expect(item).toHaveAccessibleDescription(ALSO_CANCELS);
+	await expect(page.getByRole("menu", { name: "Message actions" })).toContainText(ALSO_CANCELS);
+	let menuFound = await new AxeBuilder({ page }).include('[role="menu"]').analyze();
+	expect(menuFound.violations).toEqual([]);
+	// The description's text is aria-hidden and only referenced, so read it from Chromium's own tree.
+	let tree = await page.context().newCDPSession(page);
+	let { nodes } = await tree.send("Accessibility.getFullAXTree");
+	let delete_ = nodes.find(node =>
+		node.role?.value === "menuitem" && node.name?.value === "Delete"
+	);
+	expect(delete_?.description?.value).toBe(ALSO_CANCELS);
+	expect(nodes.some(node => node.name?.value === ALSO_CANCELS && !node.ignored)).toBe(false);
 	await page.keyboard.press("Escape");
-	await expect(row.getByRole("button", { name: "Message actions" })).toBeFocused();
-	await expect(anchor).toHaveCSS("opacity", "1");
-	// Focus leaves, and it is not drawn again.
-	await row.getByRole("button", { name: "Cancel message from Ana" }).focus();
-	await expect(anchor).toHaveCSS("opacity", "0");
+	await expect(actions).toBeFocused();
+
+	await actions.evaluate(button => button.blur());
+	await page.mouse.move(0, 0);
+	expect(await reachOf(row)).toEqual({ live: true, opacity: "1" });
+});
+
+test("on a phone the Delete menu is drawn where a finger can press it, says it also cancels the waiting message, and takes the message back", async ({ baseURL, browser, room, seed }) => {
+	await seed(SOURCE);
+	let { close, page } = await openIsolatedRoom(browser, baseURL!, room, "ana", PHONE);
+	try {
+		await page.getByRole("navigation", { name: "Workspace view" })
+			.getByRole("button", { name: /^Chat/ }).click();
+		await startBusyTurn(page);
+		await say(page, "@chopin second: list the failure modes");
+		await say(page, "@chopin third: add a rollout paragraph");
+		await expect(rowsOf(page)).toHaveCount(2);
+
+		let row = rowsOf(page).first();
+		expect(await reachOf(row)).toEqual({ live: true, opacity: "1" });
+		await expectInsideViewport(row.getByRole("button", { name: "Message actions" }));
+		await row.getByRole("button", { name: "Message actions" }).tap();
+		let item = page.getByRole("menuitem", { name: "Delete", exact: true });
+		await expect(item).toHaveAccessibleDescription(ALSO_CANCELS);
+		await expect(page.getByRole("menu", { name: "Message actions" })).toContainText(ALSO_CANCELS);
+		let menu = (await page.getByRole("menu", { name: "Message actions" }).boundingBox())!;
+		let viewport = page.viewportSize()!;
+		expect(menu.x).toBeGreaterThanOrEqual(0);
+		expect(menu.x + menu.width).toBeLessThanOrEqual(viewport.width);
+		expect(menu.y + menu.height).toBeLessThanOrEqual(viewport.height);
+		let found = await new AxeBuilder({ page }).include("[data-chat-queue]").include('[role="menu"]')
+			.analyze();
+		expect(found.violations).toEqual([]);
+
+		await item.tap();
+		await expect(rowsOf(page)).toHaveCount(1);
+		await expect(rowsOf(page).first()).toContainText("third: add a rollout paragraph");
+		await expect(transcriptHas(page, "second: list the failure modes")).toHaveCount(0);
+	} finally {
+		await close();
+	}
+});
+
+test("while the page is offline Cancel is not offered, the Delete menu is the one way and says nothing of it, and the message is dropped when the connection is back", async ({ baseURL, page, room, seed }) => {
+	test.setTimeout(90_000);
+	await seed(SOURCE);
+	let offline = false;
+	let sockets: Array<{ close: () => Promise<void> }> = [];
+	await authenticate(page, "ana", baseURL!);
+	await page.routeWebSocket("**/ws?**", route => {
+		if (offline) return route.close();
+		let server = route.connectToServer();
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => route.send(message));
+		sockets.push({
+			close: async () => {
+				await route.close();
+				await server.close();
+			},
+		});
+	});
+	await page.goto(roomPath(room));
+	await expect(chatInput(chatPane(page))).toBeVisible();
+	await startBusyTurn(page);
+	await say(page, "@chopin second: list the failure modes");
+	let row = rowsOf(page).first();
+	await expect(row.getByRole("button", { name: "Cancel message from Ana" })).toBeVisible();
+
+	offline = true;
+	await sockets.at(-1)!.close();
+	await expect(row.getByRole("button", { name: "Cancel message from Ana" })).toHaveCount(0);
+	await expect(row.getByRole("button", { name: "Edit message from Ana" })).toHaveCount(0);
+	let actions = row.getByRole("button", { name: "Message actions" });
+	await expect(actions).toHaveCount(1);
+
+	await page.mouse.move(0, 0);
+	expect(await reachOf(row)).toEqual({ live: true, opacity: "1" });
+	await row.hover();
+	expect(await reachOf(row)).toEqual({ live: true, opacity: "1" });
+	await actions.click();
+	let item = page.getByRole("menuitem", { name: "Delete", exact: true });
+	await expect(item).toBeVisible();
+	await expect(item).toHaveAccessibleDescription("");
+	await expect(page.getByRole("menu", { name: "Message actions" })).not.toContainText("Cancel");
+	await item.click();
+	await expect(rowsOf(page)).toHaveCount(0);
+
+	offline = false;
+	await expect.poll(() => sockets.length, { timeout: 20_000 }).toBeGreaterThan(1);
+	await expect(chatPane(page).getByText("Streaming slowly now.")).toBeVisible({ timeout: TURN });
+	await expect(queueOf(page)).toHaveCount(0);
+	await expect(transcriptHas(page, "second: list the failure modes")).toHaveCount(0);
+	await page.reload();
+	await expect(transcriptHas(page, "second: list the failure modes")).toHaveCount(0);
 });
 
 test("on a phone a long queue fades where a row is cut by an edge, and says which way it goes on", async ({ baseURL, browser, room, seed }) => {
@@ -773,11 +903,6 @@ test("on a phone a long queue fades where a row is cut by an edge, and says whic
 			fadeBelow: 0,
 			cutAbove: true,
 		});
-		// Delete is not drawn beside Cancel on a touch screen either.
-		await expect(rowsOf(page).last().locator(".chat-message-menu-anchor")).toHaveCSS(
-			"opacity",
-			"0",
-		);
 		let found = await new AxeBuilder({ page }).include("[data-chat-queue]").analyze();
 		expect(found.violations).toEqual([]);
 

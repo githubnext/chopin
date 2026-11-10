@@ -36,10 +36,11 @@ export function DeliveryMark({ mark }: { mark: Mark }) {
 
 /**
  * Taking a message back, from its own menu. It opens above or below the button, as there is room.
- * `quiet` says another control beside it does the same, so it is drawn only for the keyboard.
+ * `note` is the line under its one item where another control beside the menu does the same.
  */
-export function MessageMenu({ onDelete, quiet }: { onDelete: () => void; quiet?: boolean }) {
+export function MessageMenu({ onDelete, note }: { onDelete: () => void; note?: string }) {
 	let id = useId();
+	let noteId = useId();
 	let button = useRef<HTMLButtonElement>(null);
 	let panel = useRef<HTMLDivElement>(null);
 	let [open, setOpen] = useState(false);
@@ -81,11 +82,7 @@ export function MessageMenu({ onDelete, quiet }: { onDelete: () => void; quiet?:
 	};
 
 	return (
-		<span
-			className="chat-message-menu-anchor"
-			data-open={open || undefined}
-			data-quiet={quiet || undefined}
-		>
+		<span className="chat-message-menu-anchor" data-open={open || undefined}>
 			<button
 				aria-controls={open ? id : undefined}
 				aria-expanded={open}
@@ -110,6 +107,8 @@ export function MessageMenu({ onDelete, quiet }: { onDelete: () => void; quiet?:
 					style={position ?? { visibility: "hidden" }}
 				>
 					<MenuItem
+						density={note ? "detailed" : undefined}
+						describedBy={note ? noteId : undefined}
 						onClick={() => {
 							close();
 							onDelete();
@@ -117,7 +116,16 @@ export function MessageMenu({ onDelete, quiet }: { onDelete: () => void; quiet?:
 						tone="destructive"
 					>
 						<CloseIcon aria-hidden="true" size={16} />
-						Delete
+						{note
+							? (
+								<span className="chat-message-menu-option">
+									Delete
+									<span aria-hidden="true" className="chat-message-menu-note" id={noteId}>
+										{note}
+									</span>
+								</span>
+							)
+							: "Delete"}
 					</MenuItem>
 				</div>,
 				document.body,

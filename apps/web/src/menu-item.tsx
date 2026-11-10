@@ -3,6 +3,7 @@ import type { KeyboardEventHandler, MouseEventHandler, ReactNode, Ref } from "re
 type MenuItemProps =
 	& {
 		children: ReactNode;
+		describedBy?: string;
 		/** `detailed`: a title with a line of description under it, beside its icon. */
 		density?: "compact" | "normal" | "detailed";
 		onClick?: MouseEventHandler<HTMLElement>;
@@ -30,6 +31,7 @@ export function MenuItem(props: MenuItemProps) {
 	if (props.href !== undefined) {
 		return (
 			<a
+				aria-describedby={props.describedBy}
 				className="app-menu-item"
 				data-density={props.density ?? "normal"}
 				data-tone={props.tone ?? "normal"}
@@ -47,6 +49,7 @@ export function MenuItem(props: MenuItemProps) {
 	}
 	return (
 		<button
+			aria-describedby={props.describedBy}
 			className="app-menu-item"
 			data-density={props.density ?? "normal"}
 			data-tone={props.tone ?? "normal"}

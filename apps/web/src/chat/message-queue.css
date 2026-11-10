@@ -147,16 +147,13 @@
 	margin-block: calc(var(--spacing) * -0.5);
 }
 
-.chat-queue-item:is(:hover, :focus-within) .chat-message-menu-anchor {
-	opacity: 1;
-}
-
 /*
- * Beside Cancel the Delete menu does the same, so it is not drawn twice: it keeps its place and is
- * shown to the keyboard that reaches it, on a touch screen as everywhere else.
+ * Always drawn in a queue row: the menu is live wherever a pointer or a finger can reach it, so it
+ * must never be invisible. Hiding it until hover left it pressable by a pointer that Chromium had
+ * not yet told it was over the row.
  */
-.chat-queue-item .chat-message-menu-anchor[data-quiet]:not(:focus-within, [data-open]) {
-	opacity: 0;
+.chat-queue-item .chat-message-menu-anchor {
+	opacity: 1;
 }
 
 .chat-queue-note {

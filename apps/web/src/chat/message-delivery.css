@@ -44,6 +44,18 @@
 	outline-offset: calc(-1 * var(--edge-width));
 }
 
+.chat-message-menu-option {
+	display: flex;
+	flex-direction: column;
+}
+
+.chat-message-menu-note {
+	max-width: 12rem;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	color: var(--color-text-tertiary);
+}
+
 .chat-message-failed {
 	display: flex;
 	flex-wrap: wrap;
