@@ -190,6 +190,105 @@ test("the row highlight shades a message and leaves its avatar, name and time dr
 	expect(focused.avatar).toBeLessThan(150);
 });
 
+async function walk(
+	page: Page,
+	from: { x: number; y: number },
+	to: { x: number; y: number },
+	speed: number,
+) {
+	let step = 8;
+	await page.mouse.move(from.x, from.y);
+	await page.waitForTimeout(400);
+	let steps = Math.max(
+		1,
+		Math.round(Math.hypot(to.x - from.x, to.y - from.y) / (speed * step / 1000)),
+	);
+	for (let at = 1; at <= steps; at++) {
+		await page.mouse.move(
+			from.x + (to.x - from.x) * at / steps,
+			from.y + (to.y - from.y) * at / steps,
+		);
+		await page.waitForTimeout(step);
+	}
+	await page.waitForTimeout(300);
+}
+
+async function reveal(page: Page, id: string): Promise<void> {
+	await scroller(page).evaluate((element, wanted) => {
+		let top =
+			element.querySelector(`[data-chat-message-id="${wanted}"]`)!.getBoundingClientRect().top
+			- element.getBoundingClientRect().top;
+		element.scrollTop += top - 120;
+	}, id);
+	await expect.poll(async () => (await message(page, id).boundingBox())!.y).toBeGreaterThan(0);
+}
+
+async function centre(target: Locator) {
+	let box = (await target.boundingBox())!;
+	return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+for (let id of ["m2", "m1"]) {
+	for (let speed of [150, 400, 900, 2000]) {
+		test(`a pointer walked from ${id}'s text to its toolbar, at ${speed} px a second, finds the toolbar and its buttons`, async ({ join, seed }) => {
+			await seed("# Layout\n", { transcript: transcript() });
+			let page = await join("ana");
+			await reveal(page, id);
+			let target = message(page, id);
+			let bar = toolbar(target);
+			let button = bar.getByRole("button").first();
+			let text = await centre(target.locator("[data-chat-message-text] p").first());
+			let aim = await centre(button);
+			await walk(page, { x: text.x, y: text.y }, aim, speed);
+			await expect(bar).toHaveCSS("opacity", "1");
+			expect(await button.evaluate(element => element.matches(":hover"))).toBe(true);
+			expect(await target.evaluate(element => getComputedStyle(element, "::before").opacity)).toBe(
+				"1",
+			);
+		});
+	}
+}
+
+test("a heading shows the toolbar and the row highlight over its whole width, and the pointer reaches the toolbar from it", async ({ join, seed }) => {
+	await seed("# Layout\n", { transcript: transcript() });
+	let page = await join("ana");
+	await reveal(page, "m2");
+	let entry = entryOf(page, "m2");
+	let head = entry.locator("[data-chat-head]");
+	let target = message(page, "m2");
+	let bar = toolbar(target);
+	let shade = () => target.evaluate(element => getComputedStyle(element, "::before").opacity);
+	let headBox = (await head.boundingBox())!;
+	let nameBox = (await entry.getByText("Chopin", { exact: true }).boundingBox())!;
+	let bodyBox = (await target.boundingBox())!;
+	expect(headBox.y + headBox.height).toBeLessThan(bodyBox.y);
+
+	for (
+		let where of [
+			{ x: nameBox.x + nameBox.width / 2, y: headBox.y + headBox.height / 2 },
+			{ x: headBox.x + 4, y: headBox.y + headBox.height / 2 },
+			{ x: bodyBox.x + bodyBox.width * 0.45, y: headBox.y + headBox.height / 2 },
+			{ x: bodyBox.x + bodyBox.width * 0.45, y: (headBox.y + headBox.height + bodyBox.y) / 2 },
+		]
+	) {
+		await page.mouse.move(0, 0);
+		await expect(bar).toHaveCSS("opacity", "0");
+		await page.mouse.move(where.x, where.y);
+		await expect(bar).toHaveCSS("opacity", "1");
+		await expect.poll(shade).toBe("1");
+	}
+
+	let from = { x: nameBox.x + nameBox.width / 2, y: headBox.y + headBox.height / 2 };
+	await page.mouse.move(0, 0);
+	let first = (await bar.getByRole("button").first().boundingBox())!;
+	// The lower part of the first button, which is level with the heading.
+	await walk(page, from, { x: first.x + first.width / 2, y: first.y + first.height * 0.85 }, 400);
+	await expect(bar).toHaveCSS("opacity", "1");
+	expect(
+		await bar.getByRole("button").first().evaluate(element => element.matches(":hover")),
+	).toBe(true);
+});
+
 test("on a phone a long press brings up a toolbar that covers no text, on a message that heads its group, one that continues it and the first", async ({ join, seed }) => {
 	await seed("# Layout\n", { transcript: transcript() });
 	let page = await join("ana", PHONE);
