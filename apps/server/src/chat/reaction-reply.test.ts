@@ -573,3 +573,105 @@ test("a reader's answer that asks for input is withheld like any Planner text, a
 	expect(entryA1(h).answeredIntents).toBeUndefined();
 	errors.mockRestore();
 });
+
+async function planner(h: Room) {
+	await Chat.send(h.context, person("ana"), {
+		kind: "chat:send",
+		rid: crypto.randomUUID(),
+		ts: 0,
+		requestId: crypto.randomUUID(),
+		to: "planner",
+		text: "Keep going.",
+	});
+	await until(() => h.prompts.length === 1);
+}
+
+function fillers(count: number, from = 0) {
+	return Array.from({ length: count }, (_, index) => ({
+		id: `filler-${from + index}`,
+		handle: "ana",
+		text: "queued",
+	})) as unknown as Chat.Chat["waiting"];
+}
+
+test("a place that fills while the reaction's answer is authorized is waited for again, not taken as the answer", async () => {
+	let h = await room();
+	await planner(h);
+	h.chat.waiting.push(...fillers(19));
+	let authorize = h.context.initiativeAuthorize!;
+	let calls = 0;
+	h.context.initiativeAuthorize = async (...args) => {
+		// The second ask comes after the wait for room, as the place is about to be taken.
+		if (++calls === 2) h.chat.waiting.push(...fillers(1, 19));
+		return authorize(...args);
+	};
+	let before = h.chat.entries.length;
+	await reactAs(h, "ben", "\u2753");
+	await h.clock.advance(DEBOUNCE_MS + 100);
+	await flush();
+	await flush();
+	expect(calls).toBeGreaterThanOrEqual(2);
+	expect(h.chat.waiting).toHaveLength(20);
+	expect(h.chat.entries).toHaveLength(before);
+	expect(entryA1(h).answeredIntents).toBeUndefined();
+	h.chat.waiting.splice(0, 5);
+	await h.clock.advance(2_000);
+	await until(() => h.chat.waiting.length === 16);
+	expect(entryA1(h).answeredIntents).toEqual(["confused"]);
+	h.chat.waiting.length = 0;
+	await finishTurn(h, "First turn done.");
+});
+
+test("giving one reading back keeps the other readings that are waiting recorded", async () => {
+	let h = await room();
+	await planner(h);
+	await reactAs(h, "ben", "\u2753");
+	await reactAs(h, "cy", "👎");
+	await h.clock.advance(DEBOUNCE_MS + 100);
+	await until(() => h.chat.waiting.length === 2);
+	expect(entryA1(h).answeredIntents).toEqual(["confused", "disagree"]);
+	await reactAs(h, "ben", "\u2753", false);
+	await finishTurn(h, "First turn done.");
+	await until(() => h.prompts.length === 2);
+	expect(h.prompts[1]).toContain(JSON.stringify("disagree"));
+	expect(entryA1(h).answeredIntents).toEqual(["disagree"]);
+	await finishTurn(h);
+	await reactAs(h, "dee", "👎");
+	await h.clock.advance(DEBOUNCE_MS + 100);
+	await flush();
+	expect(h.prompts).toHaveLength(2);
+});
+
+test("a reading its first reactor took back is still answered for the person who gave it too", async () => {
+	let h = await room();
+	await planner(h);
+	await reactAs(h, "ben", "\u2753");
+	await reactAs(h, "cy", "🤔");
+	await h.clock.advance(DEBOUNCE_MS + 100);
+	await until(() => h.chat.waiting.length === 1);
+	await reactAs(h, "ben", "\u2753", false);
+	await finishTurn(h, "First turn done.");
+	await until(() => h.prompts.length === 2);
+	expect(h.prompts[1]).toContain(JSON.stringify("cy"));
+	expect(entryA1(h).answeredIntents).toEqual(["confused"]);
+	await finishTurn(h);
+	expect(h.prompts).toHaveLength(2);
+});
+
+test("a person who gives a reading after its turn is queued is answered if the first reactor takes it back", async () => {
+	let h = await room();
+	await planner(h);
+	await reactAs(h, "ben", "\u2753");
+	await h.clock.advance(DEBOUNCE_MS + 100);
+	await until(() => h.chat.waiting.length === 1);
+	await reactAs(h, "cy", "🤔");
+	await h.clock.advance(DEBOUNCE_MS + 100);
+	await flush();
+	expect(h.chat.waiting).toHaveLength(1);
+	await reactAs(h, "ben", "\u2753", false);
+	await finishTurn(h, "First turn done.");
+	await until(() => h.prompts.length === 2);
+	expect(h.prompts[1]).toContain(JSON.stringify("cy"));
+	await finishTurn(h);
+	expect(h.prompts).toHaveLength(2);
+});

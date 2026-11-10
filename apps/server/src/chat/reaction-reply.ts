@@ -117,6 +117,9 @@ export function createResponder(
 	let delay = options.delayMs ?? DEBOUNCE_MS;
 	let pending = new Map<string, Candidate>();
 	let asked = new Set<string>();
+	// Reactions that gave a reading another person's turn is already answering. They are answered
+	// if that turn ends without answering it, because the first reactor took theirs back.
+	let backlog = new Map<string, Array<{ candidate: Candidate; reading: Reading }>>();
 	let controller = new AbortController();
 	let timer: unknown;
 	let closed = false;
@@ -196,9 +199,25 @@ export function createResponder(
 		let entry = present(context, candidate.entryId, handle, emoji);
 		if (!entry || !candidate.sessionId) return;
 		let guard = `${entry.id}\u0000${intent}`;
-		if (asked.has(guard) || (entry as MemberEntry).answeredIntents?.includes(intent)) return;
+		// Asked first: the reading is recorded as answered from the moment its turn is queued, and
+		// until that turn ends it is not known whether it will answer this person too.
+		if (asked.has(guard)) {
+			let waiting = backlog.get(guard) ?? [];
+			waiting.push({ candidate, reading });
+			backlog.set(guard, waiting);
+			return;
+		}
+		if ((entry as MemberEntry).answeredIntents?.includes(intent)) return;
 		asked.add(guard);
-		let release = () => void asked.delete(guard);
+		let released = false;
+		let release = () => {
+			if (released) return;
+			released = true;
+			asked.delete(guard);
+			let next = backlog.get(guard)?.shift();
+			if (backlog.get(guard)?.length === 0) backlog.delete(guard);
+			if (next && !closed) void dispatch(next.candidate, next.reading);
+		};
 		try {
 			if (closed || chat.closed) return release();
 			let sessionId = candidate.sessionId;
@@ -248,57 +267,72 @@ export function createResponder(
 	) {
 		let { context, handle, emoji } = candidate;
 		let { chat } = context;
-		if (!await until(candidate, () => !full(chat)) || !await authorize()) return release();
-		let accept = async () => {
-			let current = present(context, candidate.entryId, handle, emoji);
-			if (closed || chat.closed || !current) return release();
-			// Saved before the turn is queued, so a restart can never answer the same reading twice.
-			// A turn that never runs gives the reading back, and a crash leaves it unanswered.
-			let kept = current as MemberEntry;
-			let before = kept.answeredIntents;
-			let mark = () => kept.answeredIntents = [...(before ?? []), intent];
-			let unmark = () => {
-				if (before) kept.answeredIntents = before;
-				else delete kept.answeredIntents;
+		// Room is looked for again whenever it is gone by the time the place is taken: what is
+		// asked and saved in between lets other requests in, and a refused turn would be lost.
+		for (let again = true; again;) {
+			again = false;
+			if (!await until(candidate, () => !full(chat)) || !await authorize()) return release();
+			let accept = async () => {
+				let current = present(context, candidate.entryId, handle, emoji);
+				if (closed || chat.closed || !current) return release();
+				if (full(chat)) return void (again = true);
+				// Saved before the turn is queued, so a restart can never answer the same reading twice.
+				// A turn that never runs gives the reading back, and a crash leaves it unanswered.
+				let kept = current as MemberEntry;
+				let mark = () => kept.answeredIntents = [...(kept.answeredIntents ?? []), intent];
+				// Only this reading is given back: others recorded meanwhile are still waiting to run.
+				let unmark = () => {
+					let rest = [...(kept.answeredIntents ?? [])];
+					let at = rest.indexOf(intent);
+					if (at >= 0) rest.splice(at, 1);
+					if (rest.length > 0) kept.answeredIntents = rest;
+					else delete kept.answeredIntents;
+				};
+				mark();
+				try {
+					await context.persist();
+				} catch (err) {
+					unmark();
+					console.error("[chat] could not save which reaction was answered:", kind(err));
+					return release();
+				}
+				// Checked in the same step that asks for the turn, so nothing can fill the place first.
+				if (full(chat)) {
+					unmark();
+					await Promise.resolve(context.persist()).catch(() => {});
+					return void (again = true);
+				}
+				try {
+					await instruct(
+						context,
+						"Chopin",
+						reactionInstruction(current, emoji, handle, intent),
+						"",
+						{
+							spent: () =>
+								closed || chat.closed || !present(context, candidate.entryId, handle, emoji),
+							started: () => {
+								chat.reactionTurn = chat.turn?.id;
+							},
+							ended: async outcome => {
+								if (outcome.status === "skipped") {
+									unmark();
+									await Promise.resolve(context.persist()).catch(() => {});
+								}
+								release();
+							},
+						},
+					);
+				} catch (err) {
+					unmark();
+					release();
+					throw err;
+				}
 			};
-			mark();
-			try {
-				await context.persist();
-			} catch (err) {
-				unmark();
-				console.error("[chat] could not save which reaction was answered:", kind(err));
-				return release();
-			}
-			try {
-				await instruct(
-					context,
-					"Chopin",
-					reactionInstruction(current, emoji, handle, intent),
-					"",
-					{
-						spent: () =>
-							closed || chat.closed || !present(context, candidate.entryId, handle, emoji),
-						started: () => {
-							chat.reactionTurn = chat.turn?.id;
-						},
-						ended: async outcome => {
-							if (outcome.status === "skipped") {
-								unmark();
-								await Promise.resolve(context.persist()).catch(() => {});
-							}
-							release();
-						},
-					},
-				);
-			} catch (err) {
-				unmark();
-				release();
-				throw err;
-			}
-		};
-		let accepted = chat.sending.then(accept, accept);
-		chat.sending = accepted.then(() => {}, () => {});
-		await accepted;
+			let accepted = chat.sending.then(accept, accept);
+			chat.sending = accepted.then(() => {}, () => {});
+			await accepted;
+		}
 	}
 
 	async function answer(candidate: Candidate, intent: ReactionIntent) {
@@ -365,6 +399,7 @@ export function createResponder(
 			if (timer !== undefined) clock.clear(timer);
 			timer = undefined;
 			pending.clear();
+			backlog.clear();
 			for (let sleeper of sleeping) sleeper.wake();
 		},
 	};
