@@ -119,6 +119,29 @@ test("the base64 marker is the last parameter with only spaces around it, as Chr
 	) expect(dataImageSize(src), JSON.stringify(src)).toBeUndefined();
 });
 
+test("white space in a base64 payload, written or percent-encoded by Markdown, is skipped however much of it there is, and takes nothing from the part of the payload that is read", () => {
+	let bytes = png(90, 30);
+	let base64 = Buffer.from(bytes).toString("base64");
+	let expected = { width: 90, height: 30 };
+	let between = base64.replace(/(.{4})/g, "$1%20");
+
+	for (
+		let src of [
+			`data:image/png;base64,${" ".repeat(200_000)}${base64}`,
+			`data:image/png;base64,${"%20".repeat(40_000)}${base64}`,
+			`data:image/png;base64,${"%0D%0A".repeat(30_000)}${base64}`,
+			`data:;base64,${"%20".repeat(40_000)}${base64}`,
+			`data:;base64,${" \t\n".repeat(50_000)}${base64}`,
+			`data:image/png;base64,${between}`,
+			`data:image/png;base64,${"%20".repeat(40_000)}${between}`,
+			`data:image/png;base64,${base64.slice(0, 20)}${" ".repeat(200_000)}${base64.slice(20)}`,
+		]
+	) expect(dataImageSize(src), src.slice(0, 50)).toEqual(expected);
+	expect(dataImageSize(`data:image/png;base64,${"%20".repeat(40_000)}!!!!`)).toBeUndefined();
+	expect(dataImageSize(`data:image/png;base64,${"%20".repeat(40_000)}`)).toBeUndefined();
+	expect(dataImageSize(`data:image/png;base64,${"%0B".repeat(2)}${base64}`)).toBeUndefined();
+});
+
 test("the bytes decide the format, not the type the address names", () => {
 	expect(dataImageSize(dataUrl(png(90, 30), "image/jpeg"))).toEqual({ width: 90, height: 30 });
 	expect(dataImageSize(dataUrl(png(90, 30), "image/x-icon"))).toEqual({ width: 90, height: 30 });

@@ -280,6 +280,28 @@ test("a raster image written with white space before its type, or with no type, 
 	}
 });
 
+test("a raster image with no type and much white space before its base64 is drawn as Markdown made the address, and SVG or HTML written the same way is not", () => {
+	let png = "iVBORw0KGgo=";
+	for (let spaces of [90, 300, 5_000]) {
+		let markup = markdown(`![a dot](<data:;base64,${" ".repeat(spaces)}${png}>)`);
+		expect(markup, `${spaces}`).toContain(
+			`<img alt="a dot" class="chat-image-preview" decoding="async" loading="lazy" referrerPolicy="no-referrer" src="data:;base64,${
+				"%20".repeat(spaces)
+			}${png}"/>`,
+		);
+	}
+	let svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>').toString(
+		"base64",
+	);
+	let html = Buffer.from("<html><body onload=alert(1)>").toString("base64");
+	for (let written of [`${svg}`, `${html}`, "", "AAAA"]) {
+		let markup = markdown(`![where it was](<data:;base64,${" ".repeat(300)}${written}>)`);
+		expect(markup, written).not.toContain("<img");
+		expect(markup, written).toContain('data-chat-image-broken="unavailable"');
+		expect(markup, written).toContain(">where it was</span>");
+	}
+});
+
 test("an address on another site is drawn exactly as it was written", () => {
 	for (let src of ["https://example.invalid", "//example.invalid/a.png"]) {
 		expect(markdown(`![far](${src})`), src).toContain(`src="${src}"/>`);

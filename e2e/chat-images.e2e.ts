@@ -1442,6 +1442,160 @@ test("a raster data address with white space before its type, or with no type, i
 	expect(await page.evaluate(() => (window as { __svgRan?: number }).__svgRan)).toBeUndefined();
 });
 
+test("a raster data address with no type is drawn as Markdown made it however much white space starts its base64, and SVG or HTML after the same white space is not", async ({ baseURL, join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
+		origin: new URL(baseURL!).origin,
+	});
+	let decoding = await holdDecodingOfWrittenImages(page);
+	let png = fixture("raster-18x6.png");
+	let base64 = png.toString("base64");
+	let spaced = (white: string, run: number, encoded: string) => ({
+		written: `data:;base64,${white.repeat(run)}${base64}`,
+		src: `data:;base64,${encoded.repeat(run)}${base64}`,
+	});
+	let drawn = [
+		{ name: "no type, 90 spaces", ...spaced(" ", 90, "%20") },
+		{ name: "no type, 300 spaces", ...spaced(" ", 300, "%20") },
+		{ name: "no type, 300 tabs", ...spaced("\t", 300, "%09") },
+		{ name: "no type, 5,000 spaces", ...spaced(" ", 5_000, "%20") },
+		{
+			name: "no type, a space between every four",
+			written: `data:;base64,${" ".repeat(300)}${base64.replace(/(.{4})/g, "$1 ")}`,
+			src: `data:;base64,${"%20".repeat(300)}${base64.replace(/(.{4})/g, "$1%20")}`,
+		},
+		{ name: "no type, 40,000 spaces", ...spaced(" ", 40_000, "%20") },
+	];
+	let scripted =
+		'<svg xmlns="http://www.w3.org/2000/svg" onload="window.__svgRan = 1"><script>window.__svgRan = 1</script></svg>';
+	let script = "<script>window.__svgRan = 1</script>";
+	let refused = [
+		{
+			name: "svg after 300 spaces",
+			written: `data:;base64,${" ".repeat(300)}${base64Of(scripted)}`,
+		},
+		{
+			name: "html after 300 spaces",
+			written: `data:;base64,${" ".repeat(300)}${base64Of(script)}`,
+		},
+		{ name: "only 300 spaces", written: `data:;base64,${" ".repeat(300)}` },
+		{ name: "300 spaces, bytes of no image", written: `data:;base64,${" ".repeat(300)}AAAA` },
+		{ name: "300 spaces, a cut signature", written: `data:;base64,${" ".repeat(300)}iVBORw0K` },
+	];
+	for (let { written } of [...drawn, ...refused]) {
+		expect(Buffer.byteLength(written)).toBeLessThan(64 * 1024);
+	}
+	await seed("# Spaces\n", {
+		transcript: oneMessageEachLine(
+			[...drawn, ...refused].map(({ name, written }) => `![${name}](<${written}>)`).join("\n"),
+		),
+	});
+	await join("ana");
+
+	let all = figures(page);
+	await expect(all).toHaveCount(drawn.length + refused.length);
+	for (let [index, { name }] of refused.entries()) {
+		let figure = all.nth(drawn.length + index);
+		await expect(figure.getByText("Image can’t be shown")).toBeVisible();
+		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
+		await expect(figure.locator("img")).toHaveCount(0);
+	}
+	for (let figure of await all.all()) await figure.scrollIntoViewIfNeeded();
+	for (let [index, { name, src }] of drawn.entries()) {
+		let figure = all.nth(index);
+		await expect(figure.locator("img"), name).toHaveAttribute("src", src);
+		await expect(figure.locator("img")).toHaveAttribute("alt", name);
+		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
+		await expect(figure).toHaveAttribute("data-load", "loading");
+		await expect.poll(async () => (await naturalSize(figure)).width, name).toBe(18);
+	}
+	await settled(all.last());
+	let firstSeen = await decoding.firstSeen();
+	let before = await Promise.all(drawn.map((_, index) => figureBox(all.nth(index))));
+	for (let [index, { name }] of drawn.entries()) {
+		expect(firstSeen[name]?.load, name).toBe("loading");
+		expect(Math.abs(firstSeen[name]!.ratio / 3 - 1), `${name} at the first paint`).toBeLessThan(
+			0.01,
+		);
+		expect(
+			Math.abs(before[index]!.frame.width / before[index]!.frame.height / 3 - 1),
+			`${name} while it loads`,
+		).toBeLessThan(0.01);
+	}
+
+	await decoding.release();
+	for (let index of drawn.keys()) {
+		await expect(all.nth(index)).toHaveAttribute("data-load", "shown");
+	}
+	await settled(all.last());
+	expect(await Promise.all(drawn.map((_, index) => figureBox(all.nth(index))))).toEqual(before);
+
+	for (let index of [0, drawn.length - 1]) {
+		let figure = all.nth(index);
+		await figure.hover();
+		let [download] = await Promise.all([
+			page.waitForEvent("download"),
+			figure.getByRole("button", { name: "Download image" }).click(),
+		]);
+		expect(download.suggestedFilename(), drawn[index]!.name).toBe(
+			`${drawn[index]!.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "")}.png`,
+		);
+		expect(readFileSync((await download.path())!).equals(png), drawn[index]!.name).toBe(true);
+	}
+	expect(await page.evaluate(() => (window as { __svgRan?: number }).__svgRan)).toBeUndefined();
+});
+
+test("a raster data address whose base64 starts with white space that Markdown made longer than 96 KiB is drawn at its own shape from the first paint", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let decoding = await holdDecodingOfWrittenImages(page);
+	let base64 = fixture("raster-18x6.png").toString("base64");
+	let cases = [
+		{ name: "image/png, 40,000 spaces", head: "data:image/png;base64," },
+	].map(({ head, name }) => ({
+		name,
+		written: `${head}${" ".repeat(40_000)}${base64}`,
+		src: `${head}${"%20".repeat(40_000)}${base64}`,
+	}));
+	for (let { src, written } of cases) {
+		expect(Buffer.byteLength(written)).toBeLessThan(64 * 1024);
+		expect(src.length).toBeGreaterThan(96 * 1024);
+	}
+	await seed("# Long\n", {
+		transcript: oneMessageEachLine(
+			cases.map(({ name, written }) => `![${name}](<${written}>)`).join("\n"),
+		),
+	});
+	await join("ana");
+
+	let all = figures(page);
+	await expect(all).toHaveCount(cases.length);
+	for (let [index, { name, src }] of cases.entries()) {
+		let figure = all.nth(index);
+		await expect(figure.locator("img"), name).toHaveAttribute("src", src);
+		await expect(figure).toHaveAttribute("data-load", "loading");
+		await expect.poll(async () => (await naturalSize(figure)).width, name).toBe(18);
+	}
+	await settled(all.last());
+	let firstSeen = await decoding.firstSeen();
+	let before = await Promise.all(cases.map((_, index) => figureBox(all.nth(index))));
+	for (let [index, { name }] of cases.entries()) {
+		expect(firstSeen[name]?.load, name).toBe("loading");
+		expect(Math.abs(firstSeen[name]!.ratio / 3 - 1), `${name} at the first paint`).toBeLessThan(
+			0.01,
+		);
+		expect(
+			Math.abs(before[index]!.frame.width / before[index]!.frame.height / 3 - 1),
+			`${name} while it loads`,
+		).toBeLessThan(0.01);
+	}
+	await decoding.release();
+	for (let index of cases.keys()) {
+		await expect(all.nth(index)).toHaveAttribute("data-load", "shown");
+	}
+	await settled(all.last());
+	expect(await Promise.all(cases.map((_, index) => figureBox(all.nth(index))))).toEqual(before);
+});
+
 test("an address on this site that is not a raster image is never drawn or run, and is read without the reader's session", async ({ baseURL, join, page, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	let script =

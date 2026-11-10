@@ -83,23 +83,24 @@ export function dataPayloadStart(
 ): Uint8Array | undefined {
 	let address = readDataAddress(src);
 	if (!address) return undefined;
-	let payload = src.slice(address.payloadStart, address.payloadStart + chars);
-	let unescaped: number[] = [];
-	for (let at = 0; at < payload.length; at++) {
-		let code = payload.charCodeAt(at);
-		let escapedByte = code === PERCENT_SIGN ? payload.slice(at + 1, at + 3) : "";
-		if (/^[0-9a-f]{2}$/i.test(escapedByte)) {
-			unescaped.push(parseInt(escapedByte, 16));
-			at += 2;
-		} else if (code < 0x80) unescaped.push(code);
-		else return undefined;
-	}
-	if (!BASE64_MARKER.test(address.parameters.at(-1) ?? "")) return Uint8Array.from(unescaped);
+	let base64 = BASE64_MARKER.test(address.parameters.at(-1) ?? "");
 	let bytes: number[] = [];
 	let pending = 0;
 	let pendingBits = 0;
-	for (let code of unescaped) {
+	for (let at = address.payloadStart, read = 0; at < src.length && read < chars;) {
+		let code = src.charCodeAt(at);
+		let escaped = code === PERCENT_SIGN && /^[0-9a-f]{2}$/i.test(src.slice(at + 1, at + 3));
+		if (escaped) code = parseInt(src.slice(at + 1, at + 3), 16);
+		else if (code >= 0x80) return undefined;
+		let width = escaped ? 3 : 1;
+		at += width;
+		if (!base64) {
+			bytes.push(code);
+			read += width;
+			continue;
+		}
 		if (ASCII_WHITE_SPACE.has(code)) continue;
+		read += width;
 		if (code === BASE64_PADDING) break;
 		let sextet = BASE64_ALPHABET.indexOf(String.fromCharCode(code));
 		if (sextet < 0) return undefined;

@@ -119,6 +119,27 @@ test("a data address with white space before its type, or with no type, is drawn
 	);
 });
 
+test("a data address that starts its payload with much white space is drawn as written, and has its own shape at the first render", () => {
+	let plain = png(90, 30);
+
+	for (
+		let src of [
+			plain.replace("base64,", `base64,${"%20".repeat(40_000)}`),
+			plain.replace("data:image/png;", "data:;").replace("base64,", `base64,${" ".repeat(1_000)}`),
+			plain.replace("data:image/png;", "data:;").replace(
+				"base64,",
+				`base64,${"%20".repeat(40_000)}`,
+			),
+		]
+	) {
+		let markup = firstRender({ src, alt: "Spaced" });
+
+		expect(frame(markup), src.slice(0, 30)).toEqual({ width: "90", height: "30", sized: true });
+		expect(markup, src.slice(0, 30)).toContain(`src="${src}"`);
+		expect(markup, src.slice(0, 30)).not.toContain("Image can’t be shown");
+	}
+});
+
 test("a size the image part states wins over what the bytes of a data address say", () => {
 	let markup = firstRender({ src: png(90, 30), alt: "Stated", width: 30, height: 90 });
 
