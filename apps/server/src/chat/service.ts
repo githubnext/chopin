@@ -62,6 +62,7 @@ import { watchJobAbort } from "./job-fence";
 import { JOB_TOOLS } from "../agent/job-scope";
 import type { Job, JobOutcome } from "../conversation-plan/jobs";
 export type { Announcer, NoticeInput } from "./notices";
+export type { MemberEntry };
 import { isChannelId } from "../channels/id";
 import { holdsQuestion } from "../questions/records";
 import { broadcast, fail, PASSING, reply, tell } from "../wire";
@@ -102,7 +103,16 @@ type Delivery = {
 	canonicalFingerprint: string;
 };
 
-type MemberEntry = Wire.Entry & { delivery?: Delivery };
+/**
+ * What the server keeps on an entry and clients never see: how a member's message was delivered,
+ * whether the Planner wrote an agent entry in answer to a reaction, and which reading of a
+ * reaction already got its answer.
+ */
+type MemberEntry = Wire.Entry & {
+	delivery?: Delivery;
+	viaReaction?: true;
+	answeredIntents?: string[];
+};
 
 /** How long the agent's cursor stays where it finished, after a turn ends. */
 const LINGER_MS = 5_000;
@@ -261,7 +271,14 @@ function refuseClosed(ws: Socket, rid: string): void {
  * Whether Chopin's own turns waiting behind a running one are a backlog. Background jobs wait
  * beside them and do not count, so one of them never makes another fail.
  */
-function full(chat: Chat): boolean {
+/** What marks an agent entry written while the turn answering a reaction runs. */
+function answeringReaction(chat: Chat): { viaReaction?: true } {
+	return chat.reactionTurn !== undefined && chat.reactionTurn === chat.turn?.id
+		? { viaReaction: true }
+		: {};
+}
+
+export function full(chat: Chat): boolean {
 	return chat.waiting.filter(item => !item.job).length >= MAX_QUEUE;
 }
 
@@ -322,6 +339,10 @@ export type Chat = {
 	jobToolNames?: ReadonlySet<string>;
 	/** The job taken from the waiting turns while its handoff save is pending. */
 	handoffJob?: JobTurn;
+	/** Reads reactions to the Planner's messages and starts the turns that answer them. */
+	reactions?: import("./reaction-reply").ReactionResponder;
+	/** The id of the running turn when it is answering a reaction. */
+	reactionTurn?: string;
 	entries: Wire.Entry[];
 	/** Chopin's own turns waiting for the running one to end; never a person's message. */
 	waiting: Waiting[];
@@ -587,7 +608,7 @@ function delivery(
 }
 
 export function publicEntry(value: Wire.Entry): Wire.Entry {
-	let { delivery, ...entry } = value as MemberEntry;
+	let { delivery, viaReaction: _via, answeredIntents: _answered, ...entry } = value as MemberEntry;
 	return delivery?.destination === "planner" ? { ...entry, to: "planner" } : entry;
 }
 
@@ -726,6 +747,18 @@ export type Room = {
 	persist: (chat?: () => Pick<Chat, "entries" | "runs" | "initiativePaused">) => Promise<void>;
 	initiativePresent?: (sessionId: string, actor: string) => boolean;
 	initiativeAuthorize?: (sessionId: string, actor: string) => Promise<boolean>;
+	/**
+	 * Whether this person is still in the room and may still read the document, as of now. Unlike
+	 * `initiativeAuthorize` it does not ask for write access, and it grants nothing: it only keeps a
+	 * reader's reaction from being answered after the reader has gone or lost access.
+	 */
+	reactionAuthorize?: (sessionId: string, actor: string) => Promise<boolean>;
+	/**
+	 * The Planner's short written answer to a reader's reaction, made by a worker that has no tools
+	 * and runs under the document's existing owner without claiming it. Undefined when there is none
+	 * to give: the agent is off, nobody owns the document, or no Planner is attached.
+	 */
+	reactionReply?: (input: ReactionReplyInput) => Promise<string | undefined>;
 	commitRoomMessage?: (entry: Wire.Entry) => Promise<void>;
 	roomMessagePublished?: () => void;
 	/** Runs only after a new member entry is durably saved and its human turn reserved, or given to the one running. */
@@ -786,6 +819,15 @@ export type Room = {
 	};
 	/** Called when harness-reported context usage or compactions change. */
 	onSessionMetaChanged?: () => Promise<void> | void;
+};
+
+export type ReactionReplyInput = {
+	entry: Wire.Entry;
+	emoji: string;
+	handle: string;
+	intent: string;
+	preceding: Array<{ author: "member" | "agent"; handle?: string; text: string }>;
+	signal: AbortSignal;
 };
 
 type Retained = {
@@ -1464,6 +1506,50 @@ function postNotice(
 	return context.persist().then(() => {
 		announce(server, room, entry);
 	});
+}
+
+/**
+ * Say something as the Planner without running a turn: the answer to a reader's reaction, which
+ * is written by a worker with no tools. It is posted only while nothing runs or waits, so it never
+ * lands inside a turn's own writing, and `busy` says to ask again later. A saved entry is shown;
+ * one whose save fails is taken back out.
+ */
+export function postAgentReply(
+	context: Room,
+	text: string,
+	answered?: { entry: Wire.Entry; intent: string },
+): Promise<"posted" | "busy" | "failed"> {
+	let { chat, room, server } = context;
+	let process = async (): Promise<"posted" | "busy" | "failed"> => {
+		if (chat.closed) return "failed";
+		if (chat.busy || chat.starting || startsHeld || chat.waiting.length > 0) return "busy";
+		let entry = { id: ulid(), author: { kind: "agent" }, text, ts: now(), viaReaction: true } as
+			& Wire.Entry
+			& { viaReaction: true };
+		let marked = answered?.entry as MemberEntry | undefined;
+		let before = marked?.answeredIntents;
+		chat.entries.push(entry);
+		if (marked) marked.answeredIntents = [...(before ?? []), answered!.intent];
+		try {
+			await context.persist();
+		} catch (err) {
+			console.error(
+				"[chat] could not save an answer to a reaction:",
+				err instanceof Error ? err.name : "unknown",
+			);
+			chat.entries.splice(chat.entries.indexOf(entry), 1);
+			if (marked) {
+				if (before) marked.answeredIntents = before;
+				else delete marked.answeredIntents;
+			}
+			return "failed";
+		}
+		announce(server, room, entry);
+		return "posted";
+	};
+	let accepted = chat.sending.then(process, process);
+	chat.sending = accepted.then(() => {}, () => {});
+	return accepted;
 }
 
 /**
@@ -3431,7 +3517,8 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 					text: part.text,
 					ts: now(),
 					streaming: true,
-				});
+					...answeringReaction(chat),
+				} as Wire.Entry);
 			} else {
 				entry.text += part.text;
 				broadcast(server, room, { kind: "chat:delta", ts: 0, id, text: part.text });
@@ -3717,7 +3804,14 @@ function attach(context: Room, activity: Wire.Activity): string {
 	if (entry && !entry.tools?.some(tool => tool.id === activity.id)) chat.tooling = entry.id;
 
 	if (!entry) {
-		entry = { id: ulid(), author: { kind: "agent" }, text: "", ts: now(), tools: [] };
+		entry = {
+			id: ulid(),
+			author: { kind: "agent" },
+			text: "",
+			ts: now(),
+			tools: [],
+			...answeringReaction(chat),
+		} as Wire.Entry;
 		chat.tooling = entry.id;
 		say(chat, server, room, entry);
 	}
@@ -3891,6 +3985,7 @@ export async function close(chat: Chat): Promise<void> {
 	}
 	chat.closed = true;
 	chat.initiative?.close();
+	chat.reactions?.close();
 	chat.job = undefined;
 	chat.jobOutput = undefined;
 	chat.lifecycle++;
