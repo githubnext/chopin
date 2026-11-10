@@ -86,6 +86,8 @@ export type ConnectionFacts = {
 	retrying: number | undefined;
 	/** The shared document has synced on the open socket. */
 	synced: boolean;
+	/** Document edits still awaiting the server's acknowledgement. */
+	unsaved?: boolean;
 	/** The transcript on screen is this socket's own, sent since it opened. */
 	current: boolean;
 	/** The reply the transcript shows running. */
@@ -121,6 +123,8 @@ export type ConnectionMemory = {
 	away?: { turn: string | undefined; messages: number };
 	/** A resume waiting to be said, until `expireResumed`. */
 	resumed?: Extract<ConnectionView, { phase: "resumed" }>;
+	/** Lost-edit count at a socket return whose caught line can say the edits are synced. */
+	resumeEdits?: number;
 };
 
 export const INITIAL_MEMORY: ConnectionMemory = {};
@@ -159,6 +163,8 @@ function resumeOf(
 			? ""
 			: caught > 0
 			? plural(caught, "new message", "new messages")
+			: facts.unsaved
+			? ""
 			: IN_SYNC,
 	};
 }
@@ -274,12 +280,29 @@ export function connectionStep(
 			};
 		}
 		let resumed = resumeOf(memory.lost, facts);
+		// Only a return without lost edits or new messages can later claim the edits are synced.
+		let resumeEdits = (facts.lostEdits ?? 0) <= memory.lost.edits
+				&& facts.messages <= memory.lost.messages
+			? memory.lost.edits
+			: undefined;
 		// A machine that is attached again by now is part of this one return, not a second.
 		let still = attached ? undefined : away;
-		return { memory: still ? { resumed, away: still } : { resumed }, view: resumed };
+		let next = {
+			resumed,
+			...(still ? { away: still } : {}),
+			...(resumeEdits === undefined ? {} : { resumeEdits }),
+		};
+		return { memory: next, view: resumed };
 	}
 	if (memory.resumed) {
-		return { memory: withAway(memory, attached ? undefined : away), view: memory.resumed };
+		let next = withAway(memory, attached ? undefined : away);
+		if (memory.resumeEdits !== undefined) {
+			let caught = (facts.lostEdits ?? 0) > memory.resumeEdits || facts.unsaved ? "" : IN_SYNC;
+			if (caught !== memory.resumed.caught) {
+				next = { ...next, resumed: { ...memory.resumed, caught } };
+			}
+		}
+		return { memory: next, view: next.resumed! };
 	}
 	if (away && attached) {
 		// Without this socket's own transcript there is nothing to compare, so nothing is claimed

@@ -43,6 +43,7 @@ export function useConnectionBanner(
 		lost,
 		failures,
 		synced,
+		unsaved,
 		transcript,
 		planner,
 		plannerAttached,
@@ -55,6 +56,7 @@ export function useConnectionBanner(
 		lost: boolean;
 		failures: number;
 		synced: boolean;
+		unsaved: boolean;
 		transcript: TranscriptFacts;
 		/** The Planner's status where the banner tells it (`plannerForBanner`). */
 		planner: PlannerStatus | undefined;
@@ -87,6 +89,7 @@ export function useConnectionBanner(
 		failures,
 		retrying: pressed,
 		synced,
+		unsaved,
 		current: transcript.current,
 		turn: transcript.turn,
 		messages: transcript.messages,

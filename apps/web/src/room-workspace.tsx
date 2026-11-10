@@ -1323,6 +1323,7 @@ export function RoomWorkspace(
 		lost: isOffline(status, !!outage),
 		failures: outage?.failures ?? 0,
 		synced: planState.synced,
+		unsaved: planState.unsaved ?? false,
 		transcript: profile.chat ? transcriptFacts : NO_TRANSCRIPT,
 		planner: profile.chat
 			? plannerForBanner(plannerNote, hasMachineButton && !chatShowsBanner)
@@ -1665,6 +1666,7 @@ export function RoomWorkspace(
 				motionImmediately={settleMotionImmediately}
 				onScrollTop={setPlanScrollTop}
 				onState={setPlanState}
+				watchUnsaved={banner.view.phase === "resumed" && banner.view.layer !== "planner"}
 				// The skeleton's lines continue in the column until the document first arrives; a
 				// later reconnection keeps the document it already shows.
 				preface={presentation.type === "child" && presentation.parent || loading
