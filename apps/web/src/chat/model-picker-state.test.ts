@@ -207,14 +207,30 @@ describe("a catalog that leaves fields empty", () => {
 });
 
 describe("what a pick asks for", () => {
-	test("choosing the harness's own model clears the model instead of pinning it", () => {
-		expect(chooseModel(catalog, { model: "acme/large" }, "acme/small")).toEqual({});
+	test("records the model chosen, the harness's own included, so the document keeps it", () => {
+		expect(chooseModel(catalog, { model: "acme/large" }, "acme/small")).toEqual({
+			model: "acme/small",
+		});
+		expect(chooseModel(catalog, undefined, "acme/small")).toEqual({ model: "acme/small" });
 		expect(chooseModel(catalog, undefined, "acme/large")).toEqual({ model: "acme/large" });
+	});
+
+	test("a model chosen while it was the default stays chosen when the client's default moves", () => {
+		let chosen = chooseModel(catalog, undefined, "acme/small");
+		let moved = { ...catalog, default: { model: "acme/large" } };
+		expect(shownModel(moved, chosen)?.id).toBe("acme/small");
+		expect(triggerText(moved, chosen)).toEqual({ name: "Small" });
+		expect(fallbackNotice(moved, chosen)).toBeUndefined();
+		// Nobody chose: the document still follows the client's default.
+		expect(shownModel(moved, undefined)?.id).toBe("acme/large");
 	});
 
 	test("keeps the level across a model that offers it and drops it across one that does not", () => {
 		let high = { model: "acme/large", thinkingLevel: "high" };
-		expect(chooseModel(catalog, high, "acme/small")).toEqual({ thinkingLevel: "high" });
+		expect(chooseModel(catalog, high, "acme/small")).toEqual({
+			model: "acme/small",
+			thinkingLevel: "high",
+		});
 		expect(chooseModel(catalog, { model: "acme/small", thinkingLevel: "max" }, "acme/large"))
 			.toEqual({ model: "acme/large" });
 		expect(chooseModel(catalog, high, "beta/mini")).toEqual({ model: "beta/mini" });

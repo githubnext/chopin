@@ -176,13 +176,14 @@ export function levelSteps(levels: readonly string[], current: string | undefine
 }
 
 /**
- * The choice a pick of `id` asks for. The harness's own model is chosen by clearing the model, so
- * nothing stays pinned to it; the level carries over only when the new model offers it.
+ * The choice a pick of `id` asks for. The model is recorded as picked, the harness's own default
+ * included: the document keeps the model somebody chose even when the client's default later
+ * changes. The level carries over only when the new model offers it.
  */
 export function chooseModel(catalog: Catalog, choice: Choice | undefined, id: string): Choice {
 	let level = resolveChoice(catalog, choice).thinkingLevel;
 	return {
-		...(id === catalog.default?.model ? {} : { model: id }),
+		model: id,
 		...(level !== undefined && modelLevels(catalog, id).includes(level)
 			? { thinkingLevel: level }
 			: {}),

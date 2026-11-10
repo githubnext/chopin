@@ -408,9 +408,10 @@ test("lists models by provider, filters them, and chooses with the mouse, reason
 	await expect(levels(page)).toHaveCount(0);
 	await page.keyboard.press("Escape");
 
-	// The next turn, and only it, carries the choice the room holds.
+	// The next turn, and only it, carries the choice the room holds: Small, chosen by name though it
+	// is the client's default, so the document keeps it if the client's default changes.
 	await ask(page, "first", 1);
-	expect(turnFor(asked, "first").model).toBeUndefined();
+	expect(turnFor(asked, "first").model).toBe("acme/small");
 	expect(turnFor(asked, "first").thinkingLevel).toBeUndefined();
 	await openPicker(page);
 	await option(page, "Large").click();
@@ -700,13 +701,39 @@ test("keeps the choice across a reload and shows it live to a second person", as
 		thinkingLevel: "high",
 	});
 
-	// Back to the default for everyone.
+	// Small, the client's default, chosen for everyone.
 	await openPicker(page);
 	await option(page, "Small").click();
 	await openPicker(page);
 	await expect(levels(page)).toHaveCount(0);
 	await page.keyboard.press("Escape");
 	await expect(trigger(teammate)).toHaveAccessibleName("Model: Small");
+	await client.detach();
+});
+
+test("keeps a model chosen while it was the default when the client's default moves", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await newRoom();
+	let page = await open(browser, HANDLE, room, DESKTOP);
+	let { client, asked } = await attachClient(room, CATALOG);
+	await expect(trigger(page)).toHaveAccessibleName("Model: Small");
+	await openPicker(page);
+	await option(page, "Small").click();
+	await expect(trigger(page)).toHaveAccessibleName("Model: Small");
+
+	// The client now runs Large when a turn names none, and still offers Small.
+	client.report({ models: { available: [LARGE, SMALL, DEEP], default: { id: "acme/large" } } });
+	await openPicker(page);
+	await expect(option(page, "Large")).toContainText("Default");
+	await expect(option(page, "Small")).toHaveAttribute("aria-selected", "true");
+	await page.keyboard.press("Escape");
+	// The document's choice stands, for a person who opens it now too, with nothing said as lost.
+	await expect(trigger(page)).toHaveAccessibleName("Model: Small");
+	let teammate = await open(browser, "ana", room, DESKTOP);
+	await expect(trigger(teammate)).toHaveAccessibleName("Model: Small");
+	await expect(chat(page).getByText("no longer available")).toHaveCount(0);
+	await ask(page, "after the default moved", 1);
+	expect(turnFor(asked, "after the default moved").model).toBe("acme/small");
 	await client.detach();
 });
 
