@@ -326,7 +326,7 @@ describe("hosted image routes", () => {
 				}],
 			},
 		});
-		await chat.imageWork;
+		await chat.turnImages?.work;
 		let [image] = chat.entries.flatMap(entry => entry.images ?? []);
 		expect(image).toMatchObject({ width: 1536, height: 1024, generated: true });
 		let path = `${image!.src}?document=${channel.id}`;

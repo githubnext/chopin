@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
 import { ulid } from "@chopin/dialect";
 
-import { create, documentRoom, translate } from "./service";
+import { create, documentRoom, endTurnImages, translate } from "./service";
 
 import type { Server } from "bun";
 import type { TextStreamPart, ToolSet } from "ai";
@@ -143,7 +143,7 @@ describe("images a turn makes", () => {
 		expect(shown()).toEqual([]);
 
 		release();
-		await chat.imageWork;
+		await chat.turnImages?.work;
 		expect(stored).toEqual([expect.objectContaining({
 			channelId: "doc",
 			sha256: path(plan).slice(8, 72),
@@ -182,7 +182,7 @@ describe("images a turn makes", () => {
 			{ type: "image", data: base64(second), mimeType: "image/png", alt: "Tall" },
 			{ type: "image", data: base64(third), mimeType: "image/png", alt: "Small" },
 		]));
-		await chat.imageWork;
+		await chat.turnImages?.work;
 		let holders = chat.entries.filter(entry => entry.images);
 		expect(holders).toHaveLength(1);
 		expect(holders[0]!.images!.map(image => [image.src, image.alt])).toEqual([
@@ -210,7 +210,7 @@ describe("images a turn makes", () => {
 		});
 		send({ type: "tool-call", toolCallId: "c3", toolName: "codemode", input: {} });
 		send(toolResult("c3", [{ type: "image", data: base64(svg), mimeType: "image/svg+xml" }]));
-		await chat.imageWork;
+		await chat.turnImages?.work;
 		expect(stored).toEqual([]);
 		expect(chat.entries.some(entry => entry.images)).toBe(false);
 	});
@@ -223,7 +223,7 @@ describe("images a turn makes", () => {
 			mimeType: "image/png",
 			alt: "Write-through: [write], cache, database",
 		});
-		await chat.imageWork;
+		await chat.turnImages?.work;
 		expect(stored).toHaveLength(1);
 		expect(src).toBe(path(drawing));
 		expect(shown().at(-1)).toMatchObject({
@@ -237,5 +237,43 @@ describe("images a turn makes", () => {
 				generated: true,
 			}],
 		});
+	});
+
+	it("never show an upload that settles after its turn ended, nor let it take the next turn's", async () => {
+		let release!: () => void;
+		let gate = new Promise<void>(resolve => (release = resolve));
+		let { chat, context, send, shown } = turn({ gate });
+		let late = documentRoom(context).uploadImage!({
+			bytes: png(4, 3, 5),
+			mimeType: "image/png",
+			alt: "Late",
+		});
+		await Bun.sleep(0);
+		chat.turnController!.abort();
+		await endTurnImages(chat);
+		chat.busy = false;
+		chat.turnController = undefined;
+		release();
+		await late;
+		await chat.turnImages?.work;
+		expect(shown()).toEqual([]);
+		expect(chat.entries.some(entry => entry.images)).toBe(false);
+
+		chat.busy = true;
+		chat.turnController = new AbortController();
+		send({ type: "text-start", id: "t2" });
+		send({ type: "text-delta", id: "t2", text: "Turn two" });
+		send({ type: "tool-call", toolCallId: "c2", toolName: "codemode", input: {} });
+		send(toolResult("c2", [{
+			type: "image",
+			data: base64(png(8, 8, 6)),
+			mimeType: "image/png",
+			alt: "Turn two's",
+		}]));
+		await endTurnImages(chat);
+		let holders = chat.entries.filter(entry => entry.images);
+		expect(holders.map(entry => [entry.text, entry.images!.map(image => image.alt)])).toEqual([
+			["Turn two", ["Turn two's"]],
+		]);
 	});
 });

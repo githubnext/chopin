@@ -142,7 +142,7 @@ describe("images over the agent connection", () => {
 		} as unknown as Room;
 		let stream = await agent.stream({ session, prompt: "Draw it" });
 		for await (let part of stream.fullStream) translate(context, part as TextStreamPart<ToolSet>);
-		await chat.imageWork;
+		await chat.turnImages?.work;
 
 		let entry = chat.entries.find(item => item.images);
 		let sha256 = new Bun.CryptoHasher("sha256").update(PNG).digest("hex");

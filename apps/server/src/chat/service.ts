@@ -303,6 +303,14 @@ export function workingFor(chat: Chat | undefined, thread: string, channel?: str
 	return chat.acting === thread && chat.actingChannel === channel;
 }
 
+export type TurnImages = {
+	work: Promise<void>;
+	/** The entry holding the turn's images. */
+	entry?: string;
+	/** Tool calls whose images were taken already. */
+	calls: Set<string>;
+};
+
 export type Chat = {
 	initiative?: InitiativeSchedule<import("./initiative").Source>;
 	initiativePaused?: boolean;
@@ -371,12 +379,8 @@ export type Chat = {
 	writing?: string;
 	/** The dedicated entry collecting tool calls for this turn. */
 	tooling?: string;
-	/** The entry holding this turn's images. */
-	imaging?: string;
-	/** Images still being stored; a turn's transcript is saved only once they settle. */
-	imageWork?: Promise<void>;
-	/** Tool calls whose images were taken already. */
-	imagedCalls?: Set<string>;
+	/** The running turn's images; a turn's transcript is saved only once their work settles. */
+	turnImages?: TurnImages;
 	/** Pending removal of the agent's cursor, cancelled if it edits again. */
 	lingering?: ReturnType<typeof setTimeout>;
 	/** When each running tool call started, for its duration. */
@@ -2298,6 +2302,7 @@ export function documentRoom(context: Room): DocumentRoom {
 				) {
 					throw new Error("images can be stored only during a Planner turn");
 				}
+				let images = turnImages(chat);
 				let channel = await context.auth.storage.channels.get(room);
 				if (!channel) throw new Error("this document is unavailable");
 				if (channel.archivedAt) throw new Error("this document is archived");
@@ -2313,9 +2318,9 @@ export function documentRoom(context: Room): DocumentRoom {
 				});
 				let path = imagePath(sha256, mimeType);
 				let size = imageSize(mimeType, bytes);
-				if (size) {
-					later(context, () =>
-						showImages(context, [{
+				if (size && chat.turnImages === images) {
+					later(images, () =>
+						showImages(context, images, [{
 							src: path,
 							...(alt === undefined ? {} : { alt }),
 							...size,
@@ -3083,10 +3088,7 @@ async function run(
 				}
 			}
 		}
-		await chat.imageWork;
-		chat.imageWork = undefined;
-		chat.imaging = undefined;
-		chat.imagedCalls = undefined;
+		await endTurnImages(chat);
 		chat.messageIds = undefined;
 		chat.writing = undefined;
 		chat.tooling = undefined;
@@ -3515,10 +3517,10 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 				: part.type === "tool-error"
 				? part.error
 				: "Refused.";
-			if (success && !preliminary && !chat.imagedCalls?.has(part.toolCallId)) {
+			if (success && !preliminary && !chat.turnImages?.calls.has(part.toolCallId)) {
 				let { images } = toolImages(output);
 				if (images.length) {
-					(chat.imagedCalls ??= new Set()).add(part.toolCallId);
+					turnImages(chat).calls.add(part.toolCallId);
 					stageImages(context, images, part.toolCallId);
 				}
 			}
@@ -3733,17 +3735,37 @@ async function imageOwner(
 	return uploadedBy;
 }
 
-function later(context: Room, work: () => void | Promise<void>): void {
-	let { chat } = context;
-	chat.imageWork = (chat.imageWork ?? Promise.resolve()).then(work).catch(err => {
+function turnImages(chat: Chat): TurnImages {
+	return chat.turnImages ??= { work: Promise.resolve(), calls: new Set() };
+}
+
+/** Waits for the ending turn's images; any that settle later belong to no turn and are not shown. */
+export async function endTurnImages(chat: Chat): Promise<void> {
+	let images = chat.turnImages;
+	if (!images) return;
+	let work: Promise<void>;
+	do {
+		work = images.work;
+		await work;
+	} while (images.work !== work);
+	if (chat.turnImages === images) chat.turnImages = undefined;
+}
+
+function later(images: TurnImages, work: () => void | Promise<void>): void {
+	images.work = images.work.then(work).catch(err => {
 		console.error("[chat] could not show an image in Chat:", err);
 	});
 }
 
-function showImages(context: Room, images: Wire.Image[], call?: string): void {
+function showImages(
+	context: Room,
+	turn: TurnImages,
+	images: Wire.Image[],
+	call?: string,
+): void {
 	let { chat, room, server } = context;
-	if (chat.closed || !images.length) return;
-	let entry = chat.entries.find(item => item.id === chat.imaging)
+	if (chat.closed || !images.length || chat.turnImages !== turn) return;
+	let entry = chat.entries.find(item => item.id === turn.entry)
 		?? (call ? chat.entries.find(item => item.tools?.some(tool => tool.id === call)) : undefined)
 		?? chat.entries.find(item => item.id === chat.tooling)
 		?? chat.entries.find(item => item.id === chat.writing);
@@ -3751,7 +3773,7 @@ function showImages(context: Room, images: Wire.Image[], call?: string): void {
 		entry = { id: ulid(), author: { kind: "agent" }, text: "", ts: now() };
 		chat.entries.push(entry);
 	}
-	chat.imaging = entry.id;
+	turn.entry = entry.id;
 	entry.images = [...entry.images ?? [], ...images];
 	announce(server, room, entry);
 }
@@ -3759,7 +3781,8 @@ function showImages(context: Room, images: Wire.Image[], call?: string): void {
 function stageImages(context: Room, images: ToolImage[], call: string): void {
 	let { auth, room } = context;
 	let member = currentMemberRequest(context.chat)?.userId;
-	later(context, async () => {
+	let turn = turnImages(context.chat);
+	later(turn, async () => {
 		let uploadedBy = await imageOwner(context, member);
 		let shown: Wire.Image[] = [];
 		for (let image of images) {
@@ -3781,7 +3804,7 @@ function stageImages(context: Room, images: ToolImage[], call: string): void {
 				generated: true,
 			});
 		}
-		showImages(context, shown, call);
+		showImages(context, turn, shown, call);
 	});
 }
 
