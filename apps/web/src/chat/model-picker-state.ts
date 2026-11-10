@@ -192,6 +192,21 @@ export function reasoningLevels(
 export type LevelStep = { key: string; level: string | undefined; checked: boolean };
 
 /**
+ * What the reasoning control calls its first step, the model's own level. It is Default, unless a
+ * level the model lists would be taken for it (`Default`, `default`, any case or padding): a client
+ * may list a level of that name, and its label is the string the client reported, so the step
+ * that resets is the one that is called something else (Model default, and further if the model
+ * lists that too). No level of the model has the same label as the step.
+ */
+export function defaultStepLabel(levels: readonly string[]): string {
+	let taken = new Set(levels.map(level => level.trim().toLowerCase()));
+	let label = "Default";
+	if (taken.has(label.toLowerCase())) label = "Model default";
+	while (taken.has(label.toLowerCase())) label += " (reset)";
+	return label;
+}
+
+/**
  * What the reasoning control draws: Default (the model's own, `level` absent) and then each level
  * as the catalog lists it. A catalog may list a level twice, or one named `default`, so a step is
  * told apart by its place, and the first step that is the choice is the one checked.

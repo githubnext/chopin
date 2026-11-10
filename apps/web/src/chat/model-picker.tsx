@@ -16,6 +16,7 @@ import {
 import {
 	chooseLevel,
 	chooseModel,
+	defaultStepLabel,
 	fallbackNotice,
 	levelSteps,
 	movedIndex,
@@ -239,8 +240,9 @@ export function ModelPicker(
 }
 
 /**
- * The levels of reasoning the model offers, after Default (the model's own). One radio group: the
- * arrow keys move to the next level and choose it, Tab leaves the group. A level is a setting, so
+ * The levels of reasoning the model offers, after Default (the model's own, called Model default
+ * where the model lists a level that would be taken for it). One radio group: the arrow keys move
+ * to the next level and choose it, Tab leaves the group. A level is a setting, so
  * choosing one leaves the popover open and the trigger shows it.
  */
 function ReasoningLevels(
@@ -253,6 +255,7 @@ function ReasoningLevels(
 ) {
 	let group = useRef<HTMLDivElement>(null);
 	let steps = levelSteps(levels, current);
+	let own = defaultStepLabel(levels);
 	function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
 		let moves: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
 		let move = moves[event.key];
@@ -286,7 +289,7 @@ function ReasoningLevels(
 						tabIndex={checked ? 0 : -1}
 						type="button"
 					>
-						{level === undefined ? "Default" : levelLabel(level)}
+						{level === undefined ? own : levelLabel(level)}
 					</button>
 				))}
 			</div>
