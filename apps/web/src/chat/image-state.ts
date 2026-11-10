@@ -1,19 +1,30 @@
 import { HOSTED_IMAGE_PATH } from "@chopin/dialect";
 
+import { RASTER_TYPE_NAMES } from "./local-image";
+
 /**
  * Where an image loads from. Hosted is one of this document's own uploads, loaded with the
- * document named, which the server serves only to people who can read it. Data is a PNG, JPEG, GIF
- * or WebP written into the message. External is any other address on another site.
- * Unavailable is never loaded: a path or address on this site that is not an upload would be a
- * request made with the reader's own session by whoever wrote the message.
+ * document named, which the server serves only to people who can read it. Data is a raster image
+ * written into the message. External is any other address on another site. Local is a path or
+ * address on this site that is not an upload: it is read without the reader's credentials, and
+ * drawn only if a raster image answers (see `local-image.ts`). Unavailable is never loaded, and
+ * includes this site's own sign-in and sign-out addresses.
  */
 export type ImageSource =
 	| { kind: "hosted"; url: string }
 	| { kind: "data"; url: string }
 	| { kind: "external"; url: string }
+	| { kind: "local"; url: string }
 	| { kind: "unavailable" };
 
-const DATA_IMAGE = /^data:image\/(?:png|jpeg|gif|webp)(?:;base64)?,/i;
+const AUTH_PATH = /^\/auth(?:\/|$)/;
+
+const DATA_IMAGE = new RegExp(
+	`^data:(?:${
+		RASTER_TYPE_NAMES.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
+	})(?:;base64)?,`,
+	"i",
+);
 
 export function isDataImage(src: string): boolean {
 	return DATA_IMAGE.test(src);
@@ -39,6 +50,8 @@ export function imageSource(
 		if (url.protocol !== "https:" && url.protocol !== "http:") return { kind: "unavailable" };
 		if (url.origin !== new URL(base).origin) return { kind: "external", url: src };
 		if (HOSTED_IMAGE_PATH.test(url.pathname)) return hosted(url.pathname, document);
+		if (AUTH_PATH.test(url.pathname)) return { kind: "unavailable" };
+		return { kind: "local", url: src };
 	} catch {}
 	return { kind: "unavailable" };
 }
@@ -75,10 +88,21 @@ export function galleryTiles(count: number, maxVisible = 6): { shown: number; mo
 	return { shown: count === 0 ? 0 : shown, more: Math.max(0, count - shown) };
 }
 
-export function downloadName(alt: string | undefined, src: string): string {
-	let type = /^data:image\/([a-z]+)/i.exec(src)?.[1]?.toLowerCase();
-	let extension = type
-		? type === "jpeg" ? "jpg" : type
+const EXTENSIONS: Record<string, string> = {
+	apng: "png",
+	"x-png": "png",
+	jpeg: "jpg",
+	pjpeg: "jpg",
+	"x-bmp": "bmp",
+	"x-ms-bmp": "bmp",
+	"x-icon": "ico",
+	"vnd.microsoft.icon": "ico",
+};
+
+export function downloadName(alt: string | undefined, src: string, type?: string): string {
+	let named = type?.split("/")[1] ?? /^data:image\/([a-z0-9.+-]+)/i.exec(src)?.[1]?.toLowerCase();
+	let extension = named
+		? EXTENSIONS[named] ?? named
 		: /\.([a-z]+)(?:\?|$)/i.exec(src)?.[1]?.toLowerCase() ?? "png";
 	let name = (alt ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
 		.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60).replace(/-+$/, "");

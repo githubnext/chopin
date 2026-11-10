@@ -2,13 +2,19 @@ import AxeBuilder from "@axe-core/playwright";
 import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 
-import { seedChannelImage, testChannelPath } from "./database";
+import { createChannel, seedChannelImage, testChannelPath } from "./database";
 import { authenticate, expect, test } from "./room";
 
 import type { Locator, Page } from "@playwright/test";
 import type { Chat } from "../packages/protocol/index";
 
 const CAP = readFileSync(new URL("./fixtures/the-cap.webp", import.meta.url));
+const APP_ICON = readFileSync(new URL("../apps/web/public/icons/icon-192.png", import.meta.url));
+const RASTERS = (["avif", "bmp", "ico"] as const).map(extension => ({
+	bytes: readFileSync(new URL(`./fixtures/raster-18x6.${extension}`, import.meta.url)),
+	extension,
+	type: { avif: "image/avif", bmp: "image/bmp", ico: "image/x-icon" }[extension],
+}));
 const WRITE_BACK = readFileSync(new URL("./fixtures/option-write-back.png", import.meta.url));
 const WRITE_THROUGH = readFileSync(new URL("./fixtures/option-write-through.png", import.meta.url));
 const PHONE = { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } };
@@ -622,7 +628,8 @@ test("every image a person writes in Markdown is drawn where they wrote it", asy
 	await expect(all.nth(1)).toHaveAttribute("data-load", "shown");
 	await expect(all.nth(3).getByText("Image can’t be shown")).toBeVisible();
 	await expect(all.nth(3).getByText("a request")).toBeVisible();
-	await expect(all.nth(4).getByText("Image can’t be shown")).toBeVisible();
+	await expect(all.nth(4)).toHaveAttribute("data-load", "broken");
+	await expect(all.nth(4).getByText("Couldn’t load image")).toBeVisible();
 	await expect(all.nth(4).getByText("Image", { exact: true })).toBeVisible();
 	expect(requested.filter(item => item.includes("/auth/logout"))).toEqual([]);
 	await expect(all.nth(5)).toHaveAttribute("data-load", "shown");
@@ -643,6 +650,295 @@ test("every image a person writes in Markdown is drawn where they wrote it", asy
 		await expect(all.nth(1).getByRole("button", { name })).toHaveCount(1);
 	}
 	await expect(all.nth(1).getByRole("link", { name: "Open image in a new tab" })).toHaveCount(1);
+});
+
+type Sent = { cookie: string | undefined; path: string; search: string; type: string };
+
+function watch(page: Page, prefixes: string[]): { sent: Sent[]; settle: () => Promise<void> } {
+	let sent: Sent[] = [];
+	let pending: Promise<void>[] = [];
+	page.on("request", request => {
+		let { pathname, search } = new URL(request.url());
+		if (!prefixes.some(prefix => pathname.startsWith(prefix))) return;
+		pending.push(
+			request.allHeaders().then(headers => {
+				sent.push({
+					cookie: headers["cookie"],
+					path: pathname,
+					search,
+					type: request.resourceType(),
+				});
+			}),
+		);
+	});
+	return { sent, settle: () => Promise.all(pending).then(() => undefined) };
+}
+
+test("an image on this site that is not an upload is drawn, read without the reader's session", async ({ baseURL, join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
+		origin: new URL(baseURL!).origin,
+	});
+	let { sent, settle } = watch(page, ["/icons/"]);
+	await seed("# Local\n", {
+		transcript: [{
+			id: "local",
+			author: { kind: "member", handle: "bo" },
+			text: [
+				"![the app icon](/icons/icon-192.png)",
+				"",
+				`![from the root](icons/icon-192.png) then ![a dot path](./icons/icon-192.png?size=big) and ![absolute](${baseURL}/icons/icon-192.png)`,
+			].join("\n"),
+			ts: 1_700_000_000_000,
+		}],
+	});
+	await join("ana");
+	expect((await page.context().cookies()).some(cookie => cookie.name === "chopin_session")).toBe(
+		true,
+	);
+
+	let all = figures(page);
+	await expect(all).toHaveCount(4);
+	for (let [index, alt] of ["the app icon", "from the root", "a dot path", "absolute"].entries()) {
+		await expect(all.nth(index)).toHaveAttribute("data-load", "shown");
+		await expect(all.nth(index).locator("img")).toHaveAttribute("alt", alt);
+		await expect(all.nth(index).getByText(alt, { exact: true })).toBeVisible();
+		expect(
+			await all.nth(index).locator("img").evaluate(async node => {
+				let image = node as HTMLImageElement;
+				let drawn = new Uint8Array(await (await fetch(image.src)).arrayBuffer());
+				return { drawn: [...drawn], src: image.src.split(":")[0], width: image.naturalWidth };
+			}).then(({ drawn, src, width }) => ({
+				same: Buffer.from(drawn).equals(APP_ICON),
+				src,
+				width,
+			})),
+			alt,
+		).toEqual({ same: true, src: "blob", width: 192 });
+	}
+
+	await settle();
+	expect(sent.map(item => item.path)).toEqual(Array(4).fill("/icons/icon-192.png"));
+	for (let item of sent) {
+		expect(item.type).toBe("fetch");
+		expect(item.cookie).toBeUndefined();
+	}
+
+	await all.nth(0).hover();
+	for (let name of ["Open image", "Copy image", "Download image"]) {
+		await expect(all.nth(0).getByRole("button", { name, exact: true })).toHaveCount(1);
+	}
+	await expect(all.nth(0).getByRole("link", { name: "Open image in a new tab" })).toHaveCount(0);
+	let [download] = await Promise.all([
+		page.waitForEvent("download"),
+		all.nth(0).getByRole("button", { name: "Download image" }).click(),
+	]);
+	expect(download.suggestedFilename()).toBe("the-app-icon.png");
+	await all.nth(0).getByRole("button", { name: "Copy image" }).click();
+	await expect(all.nth(0).getByRole("button", { name: "Copied image" })).toBeVisible();
+
+	await all.nth(2).getByRole("button", { name: "Open image", exact: true }).click();
+	let box = lightbox(page);
+	await expect(box.getByRole("status")).toHaveText("Image 3 of 4");
+	await expect(box.getByRole("img", { name: "a dot path" })).toBeVisible();
+	for (let name of ["Copy image", "Download image"]) {
+		await expect(box.getByRole("button", { name })).toBeVisible();
+	}
+	await page.keyboard.press("ArrowRight");
+	await expect(box.getByRole("img", { name: "absolute" })).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(box).toHaveCount(0);
+});
+
+test("a raster image of any format is drawn, from this site or written into the message, and SVG written into it is not", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	for (let { bytes, extension, type } of RASTERS) {
+		await page.route(
+			`**/inline/raster.${extension}`,
+			route => route.fulfill({ body: bytes, contentType: type }),
+		);
+	}
+	let svg = "data:image/svg+xml;base64,"
+		+ Buffer.from(
+			'<svg xmlns="http://www.w3.org/2000/svg" onload="window.__svgRan = 1"><script>window.__svgRan = 1</script></svg>',
+		).toString("base64");
+	let { sent, settle } = watch(page, ["/inline/"]);
+	await seed("# Rasters\n", {
+		transcript: [{
+			id: "rasters",
+			author: { kind: "member", handle: "bo" },
+			text: [
+				...RASTERS.map(({ extension }) =>
+					`![on this site, ${extension}](/inline/raster.${extension})`
+				),
+				...RASTERS.map(({ bytes, extension, type }) =>
+					`![written, ${extension}](data:${type};base64,${bytes.toString("base64")})`
+				),
+				`![written, svg](${svg})`,
+			].join("\n\n"),
+			ts: 1_700_000_000_000,
+		}],
+	});
+	await join("ana");
+
+	let all = figures(page);
+	await expect(all).toHaveCount(7);
+	for (let [index, { extension }] of RASTERS.entries()) {
+		for (
+			let [offset, scheme, label] of [[0, "blob", "on this site"], [3, "data", "written"]] as const
+		) {
+			let figure = all.nth(offset + index);
+			await expect(figure).toHaveAttribute("data-load", "shown");
+			await expect(figure.locator("img")).toHaveAttribute("alt", `${label}, ${extension}`);
+			expect(
+				await figure.locator("img").evaluate(node => ({
+					scheme: (node as HTMLImageElement).src.split(":")[0],
+					width: (node as HTMLImageElement).naturalWidth,
+				})),
+				`${label}, ${extension}`,
+			).toEqual({ scheme, width: 18 });
+		}
+	}
+	await expect(all.nth(6).getByText("Image can’t be shown")).toBeVisible();
+	await expect(all.nth(6).getByText("written, svg", { exact: true })).toBeVisible();
+	await expect(all.nth(6).locator("img")).toHaveCount(0);
+	await settle();
+	expect(sent.map(item => item.path).sort()).toEqual(
+		RASTERS.map(({ extension }) => `/inline/raster.${extension}`).sort(),
+	);
+	for (let item of sent) expect(item.cookie, item.path).toBeUndefined();
+	expect(await page.evaluate(() => (window as { __svgRan?: number }).__svgRan)).toBeUndefined();
+});
+
+test("an address on this site that is not a raster image is never drawn or run, and is read without the reader's session", async ({ baseURL, join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let script =
+		'<svg xmlns="http://www.w3.org/2000/svg" onload="window.__svgRan = 1"><script>window.__svgRan = 1</script></svg>';
+	for (
+		let [path, contentType] of [["/inline/active.svg", "image/svg+xml"], [
+			"/inline/disguised.png",
+			"image/png",
+		]]
+	) {
+		await page.route(`**${path}`, route => route.fulfill({ body: script, contentType }));
+	}
+	await page.context().addCookies([{
+		name: "chopin_oauth_state",
+		url: baseURL!,
+		value: "in-flight-sign-in",
+	}]);
+	let { sent, settle } = watch(page, ["/inline/", "/icons/favicon.svg", "/docs/", "/auth/"]);
+	await seed("# Not images\n", {
+		transcript: [{
+			id: "not-images",
+			author: { kind: "member", handle: "bo" },
+			text: [
+				"![an active svg](/inline/active.svg)",
+				"![a disguised one](/inline/disguised.png)",
+				"![the favicon](/icons/favicon.svg)",
+				"![a page](docs/diagram.png)",
+				"![sign in](/auth/github)",
+				"![sign out](auth/logout)",
+			].join("\n\n"),
+			ts: 1_700_000_000_000,
+		}],
+	});
+	await join("ana");
+	let opened = page.url();
+
+	let all = figures(page);
+	await expect(all).toHaveCount(6);
+	for (
+		let [index, alt] of ["an active svg", "a disguised one", "the favicon", "a page"].entries()
+	) {
+		await expect(all.nth(index)).toHaveAttribute("data-load", "broken");
+		await expect(all.nth(index).getByText("Couldn’t load image")).toBeVisible();
+		await expect(all.nth(index).getByText(alt, { exact: true })).toBeVisible();
+		await expect(all.nth(index).locator("img")).toHaveCount(0);
+	}
+	for (let [index, alt] of ["sign in", "sign out"].entries()) {
+		await expect(all.nth(4 + index).getByText("Image can’t be shown")).toBeVisible();
+		await expect(all.nth(4 + index).getByText(alt, { exact: true })).toBeVisible();
+		await expect(all.nth(4 + index).locator("img")).toHaveCount(0);
+	}
+	await settle();
+	expect(new Set(sent.map(item => item.path))).toEqual(
+		new Set([
+			"/inline/active.svg",
+			"/inline/disguised.png",
+			"/icons/favicon.svg",
+			"/docs/diagram.png",
+		]),
+	);
+	for (let item of sent) {
+		expect(item.type, item.path).toBe("fetch");
+		expect(item.cookie, item.path).toBeUndefined();
+	}
+	expect(await page.evaluate(() => (window as { __svgRan?: number }).__svgRan)).toBeUndefined();
+	expect(
+		(await page.context().cookies()).find(cookie => cookie.name === "chopin_oauth_state")?.value,
+	).toBe("in-flight-sign-in");
+	expect(page.url()).toBe(opened);
+});
+
+test("raw HTML in a message is never drawn or run, an image tag with a handler included", async ({ baseURL, join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let { sent, settle } = watch(page, ["/icons/"]);
+	await seed("# Raw\n", {
+		transcript: [{
+			id: "raw",
+			author: { kind: "member", handle: "bo" },
+			text: [
+				'<img src="/icons/icon-192.png" alt="raw" onerror="window.__raw = 1" onload="window.__raw = 1">',
+				'<svg onload="window.__raw = 1"><script>window.__raw = 1</script></svg>',
+				"<script>window.__raw = 1</script>",
+				`<iframe src="${baseURL}/icons/favicon.svg"></iframe>`,
+				"",
+				"After the markup.",
+			].join("\n"),
+			ts: 1_700_000_000_000,
+		}],
+	});
+	await join("ana");
+
+	await expect(page.getByText("After the markup.")).toBeVisible();
+	await expect(figures(page)).toHaveCount(0);
+	await expect(page.locator("[data-chat-markdown]").locator("img, script, iframe, svg[onload]"))
+		.toHaveCount(0);
+	await settle();
+	expect(sent).toEqual([]);
+	expect(await page.evaluate(() => (window as { __raw?: number }).__raw)).toBeUndefined();
+});
+
+test("an upload of another document is not drawn in this one, whatever its address says", async ({ baseURL, join, page, room, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let other = crypto.randomUUID();
+	await createChannel(port(baseURL), other);
+	let theirs = await seedChannelImage(port(baseURL), other, WRITE_BACK, "image/png");
+	let ours = await seedChannelImage(port(baseURL), room, CAP, "image/webp");
+	let { sent, settle } = watch(page, ["/images/"]);
+	await seed("# Mine\n", {
+		transcript: [{
+			id: "reach",
+			author: { kind: "member", handle: "bo" },
+			text:
+				`![theirs](${theirs}?document=${other}) and ![theirs, unscoped](${theirs}) and ![ours](${ours})`,
+			ts: 1_700_000_000_000,
+		}],
+	});
+	await join("ana");
+
+	let all = figures(page);
+	await expect(all).toHaveCount(3);
+	await expect(all.nth(0)).toHaveAttribute("data-load", "broken");
+	await expect(all.nth(1)).toHaveAttribute("data-load", "broken");
+	await expect(all.nth(2)).toHaveAttribute("data-load", "shown");
+	await settle();
+	expect(new Set(sent.map(item => item.path))).toEqual(new Set([theirs, ours]));
+	for (let item of sent) {
+		expect(new URLSearchParams(item.search).get("document"), item.path).toBe(room);
+		expect(item.cookie, item.path).toContain("chopin_session=");
+	}
 });
 
 test("on a phone the actions are always there, nothing overflows, and the lightbox fits", async ({ baseURL, join, room, seed }) => {

@@ -47,6 +47,7 @@ import {
 	loadState,
 	settledOnMount,
 } from "./image-state";
+import { loadLocalImage } from "./local-image";
 import "./image.css";
 
 import type { ReactNode } from "react";
@@ -71,7 +72,9 @@ export const ChatImageDocument = DocumentContext.Provider;
 
 type Loadable = Exclude<ImageSource, { kind: "unavailable" }>;
 
-type Entry = { data: ChatImageData; element: HTMLElement; image: LightboxImage; source: Loadable };
+type Shown = { source: Loadable; url: string; type?: string };
+
+type Entry = Shown & { data: ChatImageData; element: HTMLElement; image: LightboxImage };
 
 type Host = {
 	register(id: string, entry: Entry): () => void;
@@ -105,14 +108,14 @@ export function MessageImages({ children }: { children: ReactNode }) {
 				<Suspense fallback={null}>
 					<Lightbox
 						actions={(_, index) => {
-							let { data, source } = view.entries[index]!;
+							let { data, source, type, url } = view.entries[index]!;
 							return (
 								<ImageButtons
 									compact={false}
 									data={data}
 									key={index}
-									source={source}
 									inLightbox
+									shown={{ source, type, url }}
 								/>
 							);
 						}}
@@ -134,10 +137,36 @@ function pageOrigin(): string {
 	return typeof location === "undefined" ? "" : location.origin;
 }
 
-function useLoad(url: string | undefined) {
+function useLocalImage(source: ImageSource): { pending: boolean; type?: string; url?: string } {
+	let address = source.kind === "local" ? source.url : undefined;
+	let [read, setRead] = useState<{ address: string; type?: string; url?: string }>();
+	useEffect(() => {
+		if (address === undefined) return;
+		let controller = new AbortController();
+		let object: string | undefined;
+		loadLocalImage(address, { base: pageOrigin(), signal: controller.signal }).then(
+			blob => {
+				if (controller.signal.aborted) return;
+				object = URL.createObjectURL(blob);
+				setRead({ address, type: blob.type, url: object });
+			},
+			() => {
+				if (!controller.signal.aborted) setRead({ address });
+			},
+		);
+		return () => {
+			controller.abort();
+			if (object) URL.revokeObjectURL(object);
+		};
+	}, [address]);
+	let current = read?.address === address ? read : undefined;
+	return { pending: address !== undefined && !current, type: current?.type, url: current?.url };
+}
+
+function useLoad(url: string | undefined, pending: boolean) {
 	let image = useRef<HTMLImageElement>(null);
 	let [settled, setSettled] = useState<Settled>();
-	let load: Load = url ? loadState(settled, url) : "broken";
+	let load: Load = pending ? "loading" : url ? loadState(settled, url) : "broken";
 	useLayoutEffect(() => {
 		let ready = url && image.current ? settledOnMount(image.current, url) : undefined;
 		if (ready) setSettled(ready);
@@ -176,13 +205,14 @@ function ImageRoot(
 }
 
 function ImagePreview(
-	{ label, load, onError, onLoad, preview, source }: {
+	{ label, load, onError, onLoad, preview, source, url }: {
 		label: string;
 		load: Load;
 		onError: () => void;
 		onLoad: () => void;
 		preview: React.RefObject<HTMLImageElement | null>;
 		source: ImageSource;
+		url: string | undefined;
 	},
 ) {
 	if (source.kind === "unavailable" || load === "broken") {
@@ -202,17 +232,19 @@ function ImagePreview(
 					<ImageIcon size={24} />
 				</span>
 			)}
-			<img
-				alt={label}
-				className="chat-image-preview"
-				decoding="async"
-				loading="lazy"
-				onError={onError}
-				onLoad={onLoad}
-				ref={preview}
-				referrerPolicy="no-referrer"
-				src={source.url}
-			/>
+			{url && (
+				<img
+					alt={label}
+					className="chat-image-preview"
+					decoding="async"
+					loading="lazy"
+					onError={onError}
+					onLoad={onLoad}
+					ref={preview}
+					referrerPolicy="no-referrer"
+					src={url}
+				/>
+			)}
 		</>
 	);
 }
@@ -274,19 +306,19 @@ function save(href: string, name: string): void {
 	document.body.removeChild(link);
 }
 
-async function downloadImage(source: Loadable, name: string): Promise<void> {
-	if (source.kind !== "external") return save(source.url, name);
-	let object = URL.createObjectURL(await fetchImage(source.url));
+async function downloadImage({ source, url }: Shown, name: string): Promise<void> {
+	if (source.kind !== "external") return save(url, name);
+	let object = URL.createObjectURL(await fetchImage(url));
 	save(object, name);
 	setTimeout(() => URL.revokeObjectURL(object), 40_000);
 }
 
 function ImageButtons(
-	{ compact, data, inLightbox = false, source }: {
+	{ compact, data, inLightbox = false, shown }: {
 		compact: boolean;
 		data: ChatImageData;
 		inLightbox?: boolean;
-		source: Loadable;
+		shown: Shown;
 	},
 ) {
 	let [copied, setCopied] = useState<Copied>("idle");
@@ -308,7 +340,7 @@ function ImageButtons(
 				}`}
 				data-chat-image-action="copy"
 				onClick={() =>
-					copyImage(source.url).then(() => setCopied("copied"), () => setCopied("failed"))}
+					copyImage(shown.url).then(() => setCopied("copied"), () => setCopied("failed"))}
 				type="button"
 			>
 				{copied === "copied" ? <CheckIcon aria-hidden="true" /> : <CopyIcon />}
@@ -320,19 +352,21 @@ function ImageButtons(
 				}`}
 				data-chat-image-action="download"
 				onClick={() =>
-					downloadImage(source, downloadName(data.alt, data.src)).catch(() => setSaved("failed"))}
+					downloadImage(shown, downloadName(data.alt, data.src, shown.type)).catch(() =>
+						setSaved("failed")
+					)}
 				type="button"
 			>
 				<DownloadIcon aria-hidden="true" />
 			</button>
-			{source.kind === "external" && (
+			{shown.source.kind === "external" && (
 				<a
 					aria-label="Open image in a new tab"
 					className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} ${
 						inLightbox ? "btn-secondary" : "btn-outline"
 					}`}
 					data-chat-image-action="new-tab"
-					href={source.url}
+					href={shown.url}
 					rel="noopener noreferrer"
 					target="_blank"
 				>
@@ -347,12 +381,12 @@ function ImageButtons(
 }
 
 function ImageActions(
-	{ compact, data, label, onOpen, source }: {
+	{ compact, data, label, onOpen, shown }: {
 		compact: boolean;
 		data: ChatImageData;
 		label: string;
 		onOpen: () => void;
-		source: Loadable;
+		shown: Shown;
 	},
 ) {
 	return (
@@ -372,7 +406,7 @@ function ImageActions(
 			>
 				<ExpandIcon aria-hidden="true" />
 			</button>
-			<ImageButtons compact={compact} data={data} source={source} />
+			<ImageButtons compact={compact} data={data} shown={shown} />
 		</div>
 	);
 }
@@ -386,20 +420,27 @@ function useImageEntry(
 	let document = useContext(DocumentContext);
 	let source = imageSource(image.src, document, pageOrigin());
 	let label = imageLabel(image.alt, image.generated);
-	let url = source.kind === "unavailable" ? undefined : source.url;
+	let local = useLocalImage(source);
+	let url = source.kind === "local"
+		? local.url
+		: source.kind === "unavailable"
+		? undefined
+		: source.url;
 
 	useLayoutEffect(() => {
 		let element = anchor.current;
-		if (source.kind === "unavailable" || !element) return;
+		if (source.kind === "unavailable" || !url || !element) return;
 		return host.register(id, {
 			data: image,
 			element,
-			image: { src: source.url, alt: label, caption: image.caption, generated: image.generated },
+			image: { src: url, alt: label, caption: image.caption, generated: image.generated },
 			source,
+			type: local.type,
+			url,
 		});
 	}, [host, anchor, id, url, label, image.src, image.alt, image.caption, image.generated]);
 
-	return { id, label, source, url };
+	return { id, label, pending: local.pending, source, type: local.type, url };
 }
 
 export function HiddenImage({ host, image }: { host: Host; image: ChatImageData }) {
@@ -417,8 +458,8 @@ export function ImageFigure(
 	},
 ) {
 	let anchor = useRef<HTMLSpanElement>(null);
-	let { id, label, source, url } = useImageEntry(host, image, anchor);
-	let { image: preview, load, onError, onLoad } = useLoad(url);
+	let { id, label, pending, source, type, url } = useImageEntry(host, image, anchor);
+	let { image: preview, load, onError, onLoad } = useLoad(url, pending);
 	let open = () => host.open(id);
 	return (
 		<ImageRoot image={image} load={load} variant={variant}>
@@ -442,15 +483,16 @@ export function ImageFigure(
 					onLoad={onLoad}
 					preview={preview}
 					source={source}
+					url={url}
 				/>
 				{more ? <span aria-hidden="true" className="chat-image-more">+{more}</span> : null}
-				{source.kind !== "unavailable" && load === "shown" && (
+				{source.kind !== "unavailable" && url && load === "shown" && (
 					<ImageActions
 						compact={variant === "tile"}
 						data={image}
 						label={label}
 						onOpen={open}
-						source={source}
+						shown={{ source, type, url }}
 					/>
 				)}
 			</div>
