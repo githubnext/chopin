@@ -701,20 +701,54 @@ instead.
 | Network     | Only through a proxy on your machine that allows the hosts below and refuses the rest. A direct connection fails, IPv6 is blocked, and the proxy resolves names.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Environment | Everything it has today, including `GH_TOKEN` and `--env` values. `TMPDIR` points at the private directory, `PATH` names each directory by its real path, and `NODE_USE_ENV_PROXY=1` makes Node's own `fetch` use the proxy; the proxy variables come from MXC.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
-Hosts an agent may reach:
+Hosts an agent may reach (the full list is `HOST_GROUPS` in
+[`apps/connector/src/sandbox-policy.ts`](../apps/connector/src/sandbox-policy.ts)):
 
 - your Chopin server's origin, with its port;
-- GitHub: `github.com`, `api.github.com`, `codeload.github.com`,
-  `objects.githubusercontent.com` and `raw.githubusercontent.com`;
+- GitHub: `github.com`, `api.github.com`, `codeload.github.com`, Git LFS, and
+  the hosts GitHub serves raw files and release downloads from
+  (`objects.githubusercontent.com`, `raw.githubusercontent.com`,
+  `release-assets.githubusercontent.com`,
+  `github-releases.githubusercontent.com`), where provers such as Verus, Z3,
+  cvc5, F\* and elan ship their releases;
 - the model providers: `api.anthropic.com`, `api.openai.com`, `chatgpt.com`,
   `auth.openai.com`, `generativelanguage.googleapis.com`,
   `oauth2.googleapis.com`, `*.githubcopilot.com`,
   `copilot-proxy.githubusercontent.com`, `openrouter.ai` and
   `*.openai.azure.com`;
-- the package registries: `registry.npmjs.org`, `pypi.org`,
-  `files.pythonhosted.org`, `crates.io`, `index.crates.io` and
-  `static.crates.io`;
+- certificate revocation checks (DigiCert, Sectigo, GlobalSign, SSL.com,
+  IdenTrust, Microsoft and Let's Encrypt OCSP and CRL hosts), which Java, .NET
+  and package managers make while they download;
+- the package registries and toolchain downloads of every common language,
+  since a run builds and tests whatever language it verifies: JavaScript and
+  TypeScript (npm, Yarn, pnpm, JSR, Node, Bun, Deno), Python (PyPI, uv,
+  conda), Rust (crates.io, rustup, docs.rs), Go (the module proxy and checksum
+  database, Go downloads), the JVM (Maven Central, Google's Maven, Gradle,
+  Apache downloads, Adoptium, Azul, JetBrains, sbt, Clojars), .NET (the SDK
+  and NuGet), Ruby, PHP (Packagist, Composer), Perl (CPAN), Lua (LuaRocks),
+  Haskell (Hackage, GHCup), OCaml (opam), Elixir and Erlang (Hex), Swift
+  (swift.org, CocoaPods), Dart (pub.dev), Julia, R (CRAN), Zig, C and C++
+  (Conan), Bazel and Nix;
+- the formal-methods toolchains beyond those registries: Lean
+  (`lean-lang.org` and `*.lean-lang.org` for elan, releases and Reservoir;
+  Mathlib's build cache at `mathlib4.lean-cache.cloud` and
+  `lakecache.blob.core.windows.net`; the Lean docs), and the docs and
+  installers of Verus, F\*, Pulse and KaRaMeL (`aka.ms`, `fstar-lang.org`),
+  LemmaScript, Rocq and Isabelle;
+- research: `pldb.kirancodes.me`, a read-only search of programming-languages
+  papers that pdd-kit's agents use, and arXiv;
 - the hosts you add.
+
+Every built-in host is a fixed public service. None is general-purpose storage
+that a stranger could write to and read back, such as
+`storage.googleapis.com`, a `*.blob.core.windows.net` account other than
+Mathlib's cache, Amazon S3, gists or a paste site, since those are where an
+injected instruction would send what an agent read. A test keeps it that way.
+The registries and GitHub still accept a publish or a push from whoever holds
+a token, so the list narrows where data can go but doesn't close every path.
+If a project needs one of those storage hosts, as Flutter's SDK does
+(`storage.googleapis.com`), add it yourself. The groups follow the lists that
+GitHub's agentic workflows, Claude Code on the web and Codex maintain.
 
 The first time the proxy refuses a host, the terminal says so and which flag
 allows it. Add hosts and writable directories as you connect; they are saved
