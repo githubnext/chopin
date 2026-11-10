@@ -131,7 +131,7 @@ export function triggerLabel(catalog: Catalog, choice: Choice | undefined): stri
 
 /**
  * The trigger's tooltip: the model and level, without the sentence about a choice that has gone,
- * which the strip above the composer already says and a screen reader hears in the name.
+ * which the composer's notice already says and a screen reader hears in the name.
  */
 export function triggerTitle(catalog: Catalog, choice: Choice | undefined): string {
 	let { name, level } = triggerText(catalog, choice);
@@ -152,12 +152,12 @@ export function fallbackNotice(
 }
 
 /**
- * What the composer's strip says about the document's model, if anything. A choice the server just
+ * What the composer's notice says about the document's model, if anything. A choice the server just
  * refused comes first, then the server's word that a turn could not read the choice and ran the
  * harness's default (which holds even where this browser has no catalog), then a stored choice
  * the catalog no longer offers. Where there is no catalog and so no control, `saved` (the choice
  * the room holds) is checked against it in the control's place: the picker is gone, but a model
- * somebody chose has not become the default, and the strip still says so.
+ * somebody chose has not become the default, and the notice still says so.
  */
 export function composerModelNotice(
 	control:

@@ -64,7 +64,7 @@ kept, so it returns to force if the model does. Background jobs never carry a ch
 
 The composer says so even where nothing can be chosen any longer. When a client withdraws all its
 models, or an older client takes its place, there is no catalog and the picker is gone, but the
-stored choice is still sent in `chat:model` and the strip still says that the model is no longer
+stored choice is still sent in `chat:model` and the composer's notice still says that the model is no longer
 available and the default runs, before and after a turn, until somebody's client offers it again.
 A document nobody chose for says nothing. The choice is held back while what a remote Planner
 offers is unknown: with no client attached (a machine that is away, a server that has just restarted)
@@ -80,8 +80,12 @@ A turn that cannot read the choice at all (the catalog or the stored choice fail
 runs the default silently. It runs the default, Chat says once, while that holds, that the
 document's model choice couldn't be read, and the server tells the room with `chat:model-unreadable`
 (`true`, and `false` when a later turn can read it again; a person who joins meanwhile is sent
-`true` after the Chat history), so every open composer shows the same words in its strip until a
-turn can read the choice again. Nothing stored is changed.
+`true` after the Chat history), so every open composer shows the same words in its notice until a
+turn can read the choice again. Nothing stored is changed. These words are the composer's own
+notice, a cause of their own beside the page's connection banner: drawn beneath the machine's
+banner when that is drawn, and giving way, as the composer's other notices do, to the room's
+own connection banner, a refused send and a failed reply, then returning with the connection
+([design guide](../apps/web/DESIGN.md)).
 
 ## Coaching in an invoked turn
 
