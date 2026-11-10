@@ -1112,17 +1112,34 @@ describe("cancelling and editing a message that waits in memory", () => {
 		expect(shown(sent)).toEqual(["one", "three"]);
 		await Promise.resolve();
 		expect(skipped).toEqual([{ status: "skipped" }]);
-		// Cancelling it again is the plain answer: its turn did not start, nothing waits for it.
+		// Cancelling it again leaves it cancelled, as asking twice would: its turn never started.
 		await Chat.unqueue(context, sender("ana", "U_ana", replies), {
 			kind: "chat:unqueue",
 			rid: "again",
 			id: target.id,
 			ts: 0,
 		});
-		expect(frame(replies, "again")).toMatchObject({
+		expect(frame(replies, "again")).toMatchObject({ kind: "chat:unqueue", id: target.id });
+		// A message nothing has ever held is, whatever else it may be, not waiting.
+		await Chat.unqueue(context, sender("ana", "U_ana", replies), {
+			kind: "chat:unqueue",
+			rid: "unknown",
+			id: crypto.randomUUID(),
+			ts: 0,
+		});
+		expect(frame(replies, "unknown")).toMatchObject({
 			kind: "session:error",
 			code: "already-started",
 		});
+		// And an id that is not one is refused as what it is.
+		await Chat.unqueue(context, sender("ana", "U_ana", replies), {
+			kind: "chat:unqueue",
+			rid: "malformed",
+			id: 7 as never,
+			ts: 0,
+		});
+		expect(frame(replies, "malformed")).toMatchObject({ kind: "session:error" });
+		expect(frame(replies, "malformed")?.code).toBeUndefined();
 		// What starts next is what was left, in order.
 		expect(Chat.pending(chat)?.text).toBe("one");
 		expect(Chat.pending(chat)?.text).toBe("three");
@@ -1275,5 +1292,115 @@ describe("cancelling and editing a message that waits in memory", () => {
 				code: "already-started",
 			});
 		}
+	});
+});
+
+describe("a message in the transcript that waits without a row", () => {
+	/** What `Chat.invoke` queues for an MCP caller where nothing keeps rows: saved, and waiting. */
+	function posted(text = "original") {
+		let state = room({ busy: true });
+		let saved: unknown[] = [];
+		state.context.persist = async chat => {
+			saved.push(structuredClone(chat?.().entries ?? state.chat.entries));
+		};
+		let entry = {
+			id: crypto.randomUUID(),
+			author: { kind: "member" as const, handle: "ana" },
+			text,
+			ts: 1,
+		};
+		state.chat.entries.push(entry);
+		state.chat.waiting.push({
+			id: entry.id,
+			handle: "ana",
+			text,
+			message: true,
+			posted: true,
+			sessionId: "session",
+			userId: "U_ana",
+			invokedBy: "U_ana",
+		});
+		return { ...state, entry, saved };
+	}
+	const ana = (frames: Sent[]) => sender("ana", "U_ana", frames);
+
+	it("is edited in the transcript and in the saved state with it, so the turn and the Chat agree", async () => {
+		let { chat, context, entry, saved } = posted();
+		let replies: Sent[] = [];
+
+		await Chat.edit(context, ana(replies), {
+			kind: "chat:edit",
+			rid: "edit",
+			id: entry.id,
+			text: "edited",
+			ts: 0,
+		});
+
+		expect(frame(replies, "edit")).toMatchObject({ kind: "chat:edit", text: "edited" });
+		expect(chat.entries[0]!.text).toBe("edited");
+		expect(chat.waiting[0]!.text).toBe("edited");
+		// The commit was made from the transcript with the edit, before the message itself changed.
+		expect(saved).toMatchObject([[{ id: entry.id, text: "edited" }]]);
+		expect(Chat.pending(chat)?.text).toBe("edited");
+	});
+
+	it("leaves the Chat as well as the queue when cancelled, and a second cancel finds it gone", async () => {
+		let { chat, context, entry, sent, saved } = posted();
+		let replies: Sent[] = [];
+
+		await Chat.unqueue(context, ana(replies), {
+			kind: "chat:unqueue",
+			rid: "cancel",
+			id: entry.id,
+			ts: 0,
+		});
+
+		expect(frame(replies, "cancel")).toMatchObject({ kind: "chat:unqueue", id: entry.id });
+		expect(chat.entries).toEqual([]);
+		expect(chat.waiting).toEqual([]);
+		expect(sent.filter(item => item.kind === "chat:removed")).toMatchObject([{ id: entry.id }]);
+		expect(saved).toEqual([[]]);
+		expect(shown(sent)).toEqual([]);
+
+		await Chat.unqueue(context, ana(replies), {
+			kind: "chat:unqueue",
+			rid: "again",
+			id: entry.id,
+			ts: 0,
+		});
+		expect(frame(replies, "again")).toMatchObject({ kind: "chat:unqueue", id: entry.id });
+	});
+
+	it("is neither edited nor cancelled by what the commit refused to save: the room is told nothing and it waits as it was", async () => {
+		let { chat, context, entry, sent } = posted();
+		context.persist = async () => {
+			throw new Error("storage unavailable");
+		};
+		let replies: Sent[] = [];
+		let before = sent.length;
+
+		await Chat.edit(context, ana(replies), {
+			kind: "chat:edit",
+			rid: "edit",
+			id: entry.id,
+			text: "never saved",
+			ts: 0,
+		});
+		await Chat.unqueue(context, ana(replies), {
+			kind: "chat:unqueue",
+			rid: "cancel",
+			id: entry.id,
+			ts: 0,
+		});
+
+		for (let rid of ["edit", "cancel"]) {
+			expect(frame(replies, rid)).toMatchObject({
+				kind: "session:error",
+				code: "temporarily-unavailable",
+			});
+		}
+		expect(chat.entries.map(item => item.text)).toEqual(["original"]);
+		expect(chat.waiting.map(item => item.text)).toEqual(["original"]);
+		expect(sent.length).toBe(before);
 	});
 });

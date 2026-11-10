@@ -331,6 +331,170 @@ export function queueActions(open: Open, options: { interleavings?: number } = {
 		}
 	});
 
+	test("an edit is not shown to the room before it is saved, and a commit that fails leaves everything as it was", async () => {
+		let w = await open({ away: false });
+		w.planner.hold();
+		await w.send("running");
+		await waitFor(() => w.planner.running === 1);
+		let second = await w.send("second");
+		let rowsBefore = await w.rows();
+
+		// The edit's commit is held, then fails, as a database that goes away does.
+		let saving = Promise.withResolvers<void>();
+		let context = w.context;
+		let persist = context.persist;
+		context.persist = async () => {
+			await saving.promise;
+			throw new Error("commit failed");
+		};
+		let edited = editing(w, "ana", second.id as string, "UNSAVED EDIT");
+		await tick();
+		context.persist = persist;
+
+		// Other work reaches the queue while the commit is pending; the room is shown what is saved.
+		void Chat.job(
+			context,
+			{
+				id: "j",
+				kind: "heading",
+				target: "t",
+				trigger: "x",
+				status: "pending",
+				attempts: 0,
+				at: "",
+			} as never,
+			"prompt",
+			undefined,
+		);
+		expect(JSON.stringify(w.events)).not.toContain("UNSAVED EDIT");
+		saving.resolve();
+		expect(await edited).toMatchObject({
+			kind: "session:error",
+			code: "temporarily-unavailable",
+		});
+		expect(JSON.stringify(w.events)).not.toContain("UNSAVED EDIT");
+		expect(queueOf(w).map(item => item.text)).toContain("second");
+		expect(context.chat.waiting.find(item => item.id === second.id)!.text).toBe("second");
+		expect(memberEntry(context, "second")?.deliveryState).toBe("sent");
+		expect(await w.rows()).toEqual(rowsBefore);
+		w.planner.hold(false);
+		w.planner.release();
+	});
+
+	test("a cancel whose commit fails changes nothing and tells nobody; the same cancel then goes through", async () => {
+		let w = await open({ away: true });
+		let first = await w.send("first");
+		let second = await w.send("second");
+		let context = w.context;
+		let persist = context.persist;
+		context.persist = async () => {
+			throw new Error("commit failed");
+		};
+		let seen = w.events.length;
+
+		let refused = await cancelling(w, "ana", second.id as string);
+		context.persist = persist;
+
+		expect(refused).toMatchObject({ kind: "session:error", code: "temporarily-unavailable" });
+		expect(w.events.length).toBe(seen);
+		expect(queueOf(w).map(item => item.text)).toEqual(["first", "second"]);
+		expect(memberEntry(context, "second")?.deliveryState).toBe("sent");
+		expect((await w.rows()).map(row => row.state)).toEqual(["waiting", "waiting"]);
+
+		expect(await cancelling(w, "ana", second.id as string)).toMatchObject({
+			kind: "chat:unqueue",
+		});
+		expect(queueOf(w).map(item => item.text)).toEqual(["first"]);
+		expect(first.queued).toBe(true);
+	});
+
+	test("every cancel ends in cancelQueuedJobs: whoever waits on the turn is told it was skipped", async () => {
+		let w = await open({ away: true });
+		let sent = await w.send("to cancel");
+		let skipped: unknown[] = [];
+		w.context.chat.waiting.find(item => item.id === sent.id)!.ended = outcome =>
+			void skipped.push(outcome);
+
+		expect(await cancelling(w, "ana", sent.id as string)).toMatchObject({
+			kind: "chat:unqueue",
+		});
+		await tick();
+		expect(skipped).toEqual([{ status: "skipped" }]);
+		expect(w.context.chat.waiting).toEqual([]);
+		expect(queueOf(w)).toEqual([]);
+	});
+
+	test("a message whose turn is being started is not yet started: it is told to try again, and once the turn has started it is refused as started", async () => {
+		let w = await open({ away: false });
+		w.planner.hold();
+		await w.send("running");
+		await waitFor(() => w.planner.running === 1);
+		let second = await w.send("second");
+
+		// The commit that starts the next turn is slow, as a busy database makes it.
+		let collaboration = w.storage.collaboration;
+		let commit = collaboration.commit.bind(collaboration);
+		let starting = Promise.withResolvers<void>();
+		let entered = Promise.withResolvers<void>();
+		collaboration.commit = async input => {
+			if (
+				input.deferredTurns?.some(change =>
+					change.action === "transition" && change.to === "started"
+				)
+			) {
+				entered.resolve();
+				await starting.promise;
+			}
+			return commit(input);
+		};
+		w.planner.hold(false);
+		w.planner.release();
+		await entered.promise;
+		// Taken from the queue, and its row still waiting: nothing has been decided yet.
+		expect(w.context.chat.waiting.some(item => item.id === second.id)).toBe(false);
+		expect((await w.rows(["waiting"])).map(row => row.text)).toEqual(["second"]);
+
+		let edit = await editing(w, "ana", second.id as string, "second, edited");
+		let cancel = await cancelling(w, "ana", second.id as string);
+		for (let attempt of [edit, cancel]) {
+			expect(attempt).toMatchObject({ kind: "session:error", code: "temporarily-unavailable" });
+		}
+		expect((await w.rows(["waiting"])).map(row => row.text)).toEqual(["second"]);
+
+		starting.resolve();
+		await w.turns(2);
+		collaboration.commit = commit;
+		// Now it has started: the answer is final, and the turn read what was sent.
+		for (
+			let attempt of [
+				await editing(w, "ana", second.id as string, "second, edited"),
+				await cancelling(w, "ana", second.id as string),
+			]
+		) {
+			expect(attempt).toMatchObject({ kind: "session:error", code: "already-started" });
+		}
+		expect(w.prompts[1]).toContain("second");
+		expect(w.prompts[1]).not.toContain("edited");
+	});
+
+	test("a message the system cancelled is cancelled: cancelling it again is done and editing it says so, and nobody else is told anything of it", async () => {
+		let w = await open({ away: true });
+		let sent = await w.send("reset away");
+		await Chat.cancelQueued(w.context, "agent");
+		expect((await w.rows())[0]!.state).toBe("cancelled");
+
+		expect(await cancelling(w, "ana", sent.id as string)).toMatchObject({
+			kind: "chat:unqueue",
+		});
+		let edit = await editing(w, "ana", sent.id as string, "too late");
+		expect(edit).toMatchObject({ kind: "session:error", message: "this message was cancelled" });
+		expect(edit.code).toBeUndefined();
+		// Somebody else's message is theirs, whatever became of it.
+		let other = await cancelling(w, "bob", sent.id as string);
+		expect(other).toMatchObject({ kind: "session:error" });
+		expect(other.code).toBeUndefined();
+	});
+
 	test("what waits for the Planner in plain words is shown to everyone and changed by no one: a comment, a task draft and an automatic follow-up", async () => {
 		let w = await open();
 		w.planner.hold();

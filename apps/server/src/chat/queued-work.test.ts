@@ -107,6 +107,24 @@ describe("references that stand after an edit", () => {
 		expect(carryReferences(text, "Compare today", [plan, spec])).toEqual([]);
 	});
 
+	it("keeps a reference the edit did not touch when it changed both ends of the message", () => {
+		let before = "see #Doc and fix";
+		let after = "please see #Doc and fix it";
+		let doc = reference("#Doc", 4);
+		let carried = carryReferences(before, after, [doc]);
+		expect(carried).toEqual([{ ...doc, start: 11, end: 15 }]);
+		expect(after.slice(carried[0]!.start, carried[0]!.end)).toBe("#Doc");
+		// Where the label stands more than once, which place is the reference's cannot be told.
+		expect(carryReferences(before, "please see #Doc and #Doc, fix it", [doc])).toEqual([]);
+		// One the edit changed is still dropped.
+		expect(carryReferences(before, "please see #Do and fix it", [doc])).toEqual([]);
+		// Several keep their order, and none overlaps another.
+		let two = [reference("#Plan", 8), reference("#Spec", 19)];
+		let swapped = carryReferences(text, "Hey: compare #Plan with #Spec now!", two);
+		expect(swapped.map(item => item.label)).toEqual(["#Plan", "#Spec"]);
+		expect(swapped[0]!.end).toBeLessThanOrEqual(swapped[1]!.start);
+	});
+
 	it("keeps none when there were none, and never invents one", () => {
 		expect(carryReferences("one", "two")).toEqual([]);
 		expect(carryReferences("", "new", [])).toEqual([]);

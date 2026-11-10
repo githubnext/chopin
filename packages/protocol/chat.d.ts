@@ -401,7 +401,8 @@ export declare namespace Chat {
 	/**
 	 * Cancel a message waiting in the queue. Only its author may. It leaves the queue and the Chat
 	 * for everyone and is never delivered. Answered with `Unqueued`, or refused with the code
-	 * `already-started` when it is no longer waiting, because its turn started first.
+	 * `already-started` when it is no longer waiting, because its turn started first, or as a
+	 * passing refusal while its turn is being started and may yet not start.
 	 */
 	export type Unqueue = KIND<"chat:unqueue"> & { id: string };
 
@@ -422,7 +423,7 @@ export declare namespace Chat {
 		references?: ReferenceRequest[];
 	};
 
-	/** The message now reads as `entry.text`, where it waits. */
+	/** The message now reads as `text`, where it waits, with the references that stand in it. */
 	export type Edited = KIND<"chat:edit"> & { id: string; text: string; references?: Reference[] };
 
 	/**

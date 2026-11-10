@@ -38,7 +38,7 @@ export function safeProjection<Args extends unknown[]>(project: (...args: Args) 
  * Takes one waiting turn out of the queue without telling anyone, so the rest keep their order
  * and a turn that ends now cannot start it. False when it is no longer waiting.
  */
-export function dequeue(chat: Chat, item: Waiting): boolean {
+function dequeue(chat: Chat, item: Waiting): boolean {
 	if (!chat.waiting.includes(item)) return false;
 	chat.waiting = chat.waiting.filter(value => value !== item);
 	return true;
@@ -71,7 +71,7 @@ export function createJobQueue({ queued, report, state, startRun, MAX_QUEUE }: {
 	function cancelQueuedJobs(context: Announcer, reason: string, only?: Waiting): number {
 		let { chat, server, room } = context;
 		if (only) {
-			if (!dequeue(chat, only)) return 0;
+			dequeue(chat, only);
 			if (only.job) finishJob(only.job, { status: "failed", reason: jobReason(reason) });
 			else void report(only, { status: "skipped" });
 			queued(chat, server, room);

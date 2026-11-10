@@ -50,8 +50,10 @@ export function project(item: Queued): Wire.Waiting {
  * The references of a message that still stand once its text changes from `before` to `after`.
  *
  * A reference stays where the text around the edit is unchanged, moved by what the edit added or
- * removed before it, and is dropped when the edit touched it, so what remains still reads as the
- * label it was resolved with.
+ * removed before it. One the edit did not touch but could not be placed that way, because the
+ * edit changed both ends of the message, follows its label to where it now reads, when that label
+ * stands exactly once before and once after. A reference the edit touched is dropped, so what
+ * remains still reads as the label it was resolved with.
  */
 export function carryReferences(
 	before: string,
@@ -67,14 +69,36 @@ export function carryReferences(
 		&& before.charCodeAt(before.length - 1 - tail) === after.charCodeAt(after.length - 1 - tail)
 	) tail++;
 	let shift = after.length - before.length;
-	let kept: Wire.Reference[] = [];
+	let carried: Wire.Reference[] = [];
+	let others: Wire.Reference[] = [];
 	for (let reference of references) {
 		let moved = reference.end <= head
 			? reference
 			: reference.start >= before.length - tail
 			? { ...reference, start: reference.start + shift, end: reference.end + shift }
 			: undefined;
-		if (moved && after.slice(moved.start, moved.end) === moved.label) kept.push(moved);
+		if (moved && after.slice(moved.start, moved.end) === moved.label) carried.push(moved);
+		else others.push(reference);
 	}
-	return kept;
+	for (let reference of others) {
+		if (
+			before.slice(reference.start, reference.end) === reference.label
+			&& occurrences(before, reference.label) === 1 && occurrences(after, reference.label) === 1
+		) {
+			let start = after.indexOf(reference.label);
+			carried.push({ ...reference, start, end: start + reference.label.length });
+		}
+	}
+	// In order and apart, as a message's references are.
+	let ordered: Wire.Reference[] = [];
+	for (let reference of carried.sort((a, b) => a.start - b.start)) {
+		if (reference.start >= (ordered.at(-1)?.end ?? 0)) ordered.push(reference);
+	}
+	return ordered;
+}
+
+function occurrences(text: string, part: string): number {
+	let count = 0;
+	for (let at = text.indexOf(part); at >= 0; at = text.indexOf(part, at + part.length)) count++;
+	return count;
 }
