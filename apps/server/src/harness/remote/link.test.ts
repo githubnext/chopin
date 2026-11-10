@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { HarnessAgent } from "@ai-sdk/harness/agent";
 import { tool } from "ai";
 import { z } from "zod";
@@ -46,6 +46,9 @@ import {
 	upgradeRequest,
 	VIEWER_TOKEN,
 } from "../../testing/agent-link";
+import { refusedChoice } from "@chopin/protocol/model-choice";
+
+import { remoteCatalog } from "../catalog";
 import { createRemoteAdapter } from "./adapter";
 import { admitAgent } from "./endpoint";
 import { remotePlanner } from "./registry";
@@ -1712,7 +1715,6 @@ describe("Agent connection capability catalog", () => {
 						description: "d".repeat(4_001),
 						thinkingLevels: ["extra high", "deep thought", "\u4f4e"],
 					},
-					{ id: "", name: "" },
 				],
 			},
 			commands: [{ name: "x", kind: "slash command" }],
@@ -1723,6 +1725,63 @@ describe("Agent connection capability catalog", () => {
 		// Still attached: the next report is read, and a detach ends it as the client chose.
 		raw.send({ type: "capabilities", catalog: catalog });
 		await until(() => link.catalog?.models?.available.length === 2, 1_000);
+		raw.send({ type: "detach" });
+		expect((await raw.closed).code).toBe(LINK_CLOSE.detached);
+	});
+
+	it("skips a model reported with no id and an empty level, keeps the rest and the link, and says so in the log", async () => {
+		let { server, channel } = await setup();
+		let raw = await rawLink(server.url, undefined, "capability-catalog");
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		let link = server.links.at(-1)!;
+		let warned: string[] = [];
+		let warn = spyOn(console, "warn").mockImplementation((...line) => {
+			warned.push(line.join(" "));
+		});
+		cleanups.push(() => warn.mockRestore());
+		raw.send({
+			type: "capabilities",
+			catalog: {
+				models: {
+					available: [
+						{ id: "", name: "Blank", thinkingLevels: [""] },
+						{ id: "valid", name: "Valid", thinkingLevels: ["", "low", "high"] },
+						{ id: "other", name: "Other", description: "Plain." },
+					],
+					default: { id: "valid", thinkingLevel: "" },
+				},
+				commands: [{ name: "notes", kind: "skill" }],
+			},
+		});
+		await until(() => link.catalog !== undefined, 1_000);
+		// Only the malformed entry and the empty level are left out: the siblings stay, in order.
+		expect(link.catalog).toEqual({
+			models: {
+				available: [
+					{ id: "valid", name: "Valid", thinkingLevels: ["low", "high"] },
+					{ id: "other", name: "Other", description: "Plain." },
+				],
+				default: { id: "valid" },
+			},
+			commands: [{ name: "notes", kind: "skill" }],
+		});
+		expect(warned.join("\n")).toContain('the model named "Blank" has no id');
+		expect(warned.join("\n")).toContain("valid lists an empty thinking level");
+		// So the room is offered neither, and a choice of either is refused as one nobody can make.
+		let offered = remoteCatalog(link.catalog, undefined);
+		expect(offered?.models.map(model => model.id)).toEqual(["valid", "other"]);
+		expect(refusedChoice(offered, { model: "" })).toBe("That model isn't available.");
+		expect(refusedChoice(offered, { model: "valid", thinkingLevel: "" })).toBe(
+			"That model doesn't offer that level of reasoning.",
+		);
+		// The link is still attached: a report of nothing but a malformed model offers no choice at all.
+		raw.send({
+			type: "capabilities",
+			catalog: { models: { available: [{ id: "", name: "Only" }] } },
+		});
+		await until(() => link.catalog?.models?.available.length === 0, 1_000);
+		expect(remoteCatalog(link.catalog, undefined)).toBeUndefined();
 		raw.send({ type: "detach" });
 		expect((await raw.closed).code).toBe(LINK_CLOSE.detached);
 	});

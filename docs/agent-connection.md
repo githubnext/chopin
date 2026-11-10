@@ -558,6 +558,13 @@ never refused, and no count bounds the models or commands a client lists. Only t
 bounds a catalog, and only a value of the wrong type (a number where a string is listed, a
 string where an array is) breaks a rule here. An odd entry never closes the link.
 
+The one thing Chopin leaves out is what nobody could be asked for. A model whose `id` is empty is
+malformed, because a turn names a model by its `id`: Chopin skips that entry, keeps every other
+model and the link, and logs it. An empty string among a model's `thinkingLevels` is dropped from
+that model's levels in the same way (a model left with none has no reasoning control), and so is a
+`models.default` with an empty `id`, or an empty `thinkingLevel` of the default. An empty model or
+level can therefore never be chosen, and a turn never carries one.
+
 ```text
 { "type": "capabilities", "catalog": {
     "models?": {
@@ -584,7 +591,7 @@ string where an array is) breaks a rule here. An odd entry never closes the link
 - **`models.available`** lists the models in the order to show them within a provider, as many as the
   frame holds (Atomic's own list runs past 1,700).
   `id` is the exact string the client wants back as a turn's `model`; Chopin never parses, bounds
-  or normalizes it. `name` is what a person reads. `provider` groups models in the picker: `id`
+  or normalizes it, and skips an entry whose `id` is empty. `name` is what a person reads. `provider` groups models in the picker: `id`
   groups, `name` (default: `id`) labels the group, and a model with no `provider` is listed without a
   group. `description` is one line of text. Chopin shows names and descriptions as text, never as
   Markdown. A model listed twice stays listed twice, in the order given; a choice of its `id` is
@@ -593,10 +600,12 @@ string where an array is) breaks a rule here. An odd entry never closes the link
   show them. Atomic's are `off`, `minimal`, `low`, `medium`, `high`, `xhigh` and `max`; other clients
   may define their own, spelled as they like, and Chopin shows a level it does not know with its first
   letter capitalized. A model with none or an empty list has no reasoning control, and the composer
-  hides it. Chopin sends back only a level the model listed.
+  hides it. An empty string is not a level: it is dropped. Chopin sends back only a level the model
+  listed.
 - **`models.default`** is what the client runs when a turn names no model or no level. Its `id`
   should be one of `available`; the composer shows that model as the document's current one until
-  somebody chooses another. An operator's `MODEL` takes its place when it is set.
+  somebody chooses another. An operator's `MODEL` takes its place when it is set. A default with an
+  empty `id` is ignored, and an empty `thinkingLevel` is dropped from it.
 - **`commands`** is reserved for the commands a client offers, such as skills,
   prompt templates and workflows: `name`, `description` and `kind`, a string the client defines
   (`skill`, `prompt`, `workflow`). Chopin keeps them with the catalog, as written, and does not show
@@ -605,9 +614,9 @@ string where an array is) breaks a rule here. An odd entry never closes the link
 
 A person's choice reaches the client in the next turn: `model` is the chosen model's `id`, and
 `thinkingLevel` one of that model's levels (or the default model's, when no model was chosen),
-each exactly as the client spelled it. A turn leaves out an empty `model`, which is also how a
-deployment without `MODEL` reads, so a client should not list a model whose `id` is empty: it would
-be listed and chosen but run as the client's default.
+each exactly as the client spelled it. Neither is ever empty: an empty model `id` or level is
+skipped when the catalog is read (above), so no one can choose it, and a `model` that is absent
+means no model was chosen (an operator's empty `MODEL` reads the same way).
 Chopin checks both against the last catalog the client reported when it accepts the choice and
 again when the turn starts. A model the catalog no longer lists, or a level its model no longer
 lists, is not sent: the turn runs with the client's default, and the document's Chat says so. A
