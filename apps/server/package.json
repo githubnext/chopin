@@ -27,6 +27,8 @@
 		"@lexical/yjs": "catalog:mdx",
 		"ai": "catalog:harness",
 		"lexical": "catalog:mdx",
+		"mdast-util-from-markdown": "2.0.2",
+		"micromark-util-sanitize-uri": "2.0.1",
 		"y-protocols": "catalog:mdx",
 		"typebox": "catalog:harness",
 		"yjs": "catalog:mdx",

@@ -47,6 +47,7 @@ import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
 import { attachmentLimits } from "./attachments/limits";
 import { registerAttachmentRoutes } from "./attachments/routes";
+import { registerRemoteImageRoutes } from "./images/remote";
 import { registerImageRoutes } from "./images/routes";
 import { openaiTranscriber } from "./transcription/openai";
 import { registerTranscriptionRoutes } from "./transcription/routes";
@@ -3300,6 +3301,7 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 });
 registerNavigationRoutes(router, hostedAuth, { storage });
 registerImageRoutes(router, hostedAuth);
+registerRemoteImageRoutes(router, hostedAuth);
 registerAttachmentRoutes(router, hostedAuth, { limits: chatAttachmentLimits });
 registerTranscriptionRoutes(
 	router,

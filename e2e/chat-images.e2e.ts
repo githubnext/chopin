@@ -545,7 +545,7 @@ test("the lightbox carries open, copy and download for what it shows", async ({ 
 	await expect(box).toHaveCount(0);
 });
 
-test("an image from another site can be opened, copied and saved where its host allows it, and says so where it does not", async ({ baseURL, join, page, seed }) => {
+test("an image from another site can be opened, copied and saved where its host allows it, is asked of Chopin where it does not, and says so where neither can read it", async ({ baseURL, join, page, room, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
 		origin: new URL(baseURL!).origin,
@@ -575,6 +575,7 @@ test("an image from another site can be opened, copied and saved where its host 
 			},
 		],
 	});
+	let { sent, settle } = watch(page, ["/images/remote"]);
 	await join("ana");
 
 	let [open, closed] = [figures(page).nth(0), figures(page).nth(1)];
@@ -603,6 +604,15 @@ test("an image from another site can be opened, copied and saved where its host 
 	await expect(closed.getByRole("button", { name: "Couldn’t copy image" })).toBeVisible();
 	await closed.getByRole("button", { name: "Download image" }).click();
 	await expect(closed.getByRole("button", { name: "Couldn’t download image" })).toBeVisible();
+	await settle();
+	let asked = `?${new URLSearchParams({
+		document: room,
+		url: "https://example.invalid/closed/near.png",
+	})}`;
+	expect(sent.map(({ path, search, type }) => ({ path, search, type }))).toEqual(
+		Array(2).fill({ path: "/images/remote", search: asked, type: "fetch" }),
+	);
+	for (let item of sent) expect(item.cookie).toContain("chopin_session=");
 	await expect(closed.getByRole("link", { name: "Open image in a new tab" })).toHaveAttribute(
 		"href",
 		"https://example.invalid/closed/near.png",

@@ -321,6 +321,24 @@ asks, that document must be the one: an image only another document holds is
 `404`. Every other request receives the same `404` as an unknown image, so an
 image URL reveals nothing to someone who cannot read the document.
 
+`/images/remote?document=<id>&url=<address>` reads an image on another site for
+Chat's Copy and Download when its host does not let the page read it (no CORS).
+It needs the same browser rule for the named document, and reads only an `http`
+or `https` address that document's stored Chat transcript draws as an image,
+parsed and normalised as Chat's Markdown does. The server resolves the name
+itself and refuses loopback, private, link-local, multicast and reserved
+addresses, IPv4 and IPv6, and Azure's platform address 168.63.129.16, on the
+first request and on each of at most three redirects, and connects to the very
+address it checked, so a name that resolves elsewhere a second time is never
+reached. It sends no cookie, credential or referrer, gives up after 8 seconds,
+reads at most `MAX_IMAGE_BYTES` (1 MiB), and answers only when the bytes are
+PNG, JPEG, GIF, WebP, AVIF, BMP or icon, served as the type the bytes are with
+`X-Content-Type-Options: nosniff` and
+`Content-Security-Policy: default-src 'none'; sandbox`. Anything else, SVG and
+HTML among it, is the same `404 image not found`, so Copy and Download of an
+image over 1 MiB whose host does not let the page read it still fail. The image
+is still drawn from its own address; only Copy and Download use this route.
+
 `invoke_planner` is the one MCP tool that starts a hosted agent turn. It never
 lends the caller's bearer to the Planner: the turn runs under the channel's
 existing Planner owner, and a channel without one is claimed only for the

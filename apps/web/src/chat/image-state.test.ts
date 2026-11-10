@@ -10,11 +10,24 @@ import {
 	imageSource,
 	isDataImage,
 	loadState,
+	remoteImagePath,
 	settledOnMount,
 } from "./image-state";
 
 const SHA = "a".repeat(64);
 const ORIGIN = "https://chopin.example";
+
+test("an image on another site is read through this site for this document, with its address whole", () => {
+	let path = remoteImagePath("https://a.example/x.png?a=1&b=2#top", "doc/1")!;
+	let query = new URL(path, ORIGIN);
+
+	expect(query.pathname).toBe("/images/remote");
+	expect(Object.fromEntries(query.searchParams)).toEqual({
+		document: "doc/1",
+		url: "https://a.example/x.png?a=1&b=2#top",
+	});
+	expect(remoteImagePath("https://a.example/x.png", undefined)).toBeUndefined();
+});
 
 test("an upload of this document loads with the document named, however it is written", () => {
 	let scoped = { kind: "hosted" as const, url: `/images/${SHA}.png?document=doc%2F1` };
