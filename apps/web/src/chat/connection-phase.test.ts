@@ -376,6 +376,29 @@ function told(
 	return { heard, text };
 }
 
+test("distinct dropped Planner states are each spoken once, including a return to no machine", () => {
+	let none = { state: "none" } as const;
+	let held = { state: "held", login: "mona", until: AT } as const;
+	let result = told([
+		[none, null],
+		[none, null],
+		[held, null],
+		[held, null],
+		[none, null],
+		[none, null],
+		[AWAY, "Build box"],
+		[FAILING(1), "Build box"],
+		[FAILING(2), "Build box"],
+	]);
+	expect(result.heard).toEqual([
+		"No machine is connected.",
+		expect.stringMatching(/^@mona's machine stepped away\. Your work is kept until /),
+		"No machine is connected.",
+		"Build box is offline. Your work is kept.",
+		"Can't connect to Build box.",
+	]);
+});
+
 test("a state is not said again when it is entered again after only a gap in which its status was withheld", () => {
 	expect(
 		told([
