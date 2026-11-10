@@ -87,6 +87,18 @@ const SOURCES = [
 	"-   [ ]   spaced",
 	"- text [x] later",
 	"- [xx] two",
+	// A box whose bracket is split by a line ending, with the container's prefix on the next line.
+	"- [\r\n] a",
+	"- [\n  ] a",
+	"1. [\r\n   ] a",
+	"> - [\n>   ] a",
+	"> - [\n> ] a",
+	"- [\n] a",
+	"- [\r] a",
+	"> [\n> ] not in a list",
+	"- [\n\t] a",
+	"- [\n  x] a",
+	"- [x\n  ] a",
 	"* [x] star\n+ [x] plus",
 	"[x] outside a list",
 	// A table inside code, a quote, a list and a task list at once.
@@ -97,6 +109,7 @@ const SOURCES = [
 const STREAMED = [
 	"Intro\n\n| Queue | Owner |\n| :-- | --: |\n| shared | platform |\n\n- [x] done\n- [ ] open\n\n~~gone~~ text\n",
 	"a\n:-:\nb\n\n> | q |\n> | - |\n",
+	"- [\r\n  ] a\n\n> - [\n>   ] b\r\n1. [\n   x] c\n",
 ];
 
 /** A small deterministic generator, so a failure names the same source every run. */
@@ -130,6 +143,12 @@ function sources(count: number): string[] {
 		"\n",
 		"\r\n",
 		"---",
+		"- [",
+		"1. [",
+		"> - [",
+		"\n  ",
+		"\n> ",
+		"\n>   ",
 		"-|-",
 		"|-|",
 		":-:",
@@ -176,8 +195,8 @@ test("nor does it for any prefix of a streamed message", () => {
 	}
 });
 
-test("nor does it for four thousand generated sources of the marks that matter", () => {
-	for (let source of sources(4000)) expectSame(source);
+test("nor does it for six thousand generated sources of the marks that matter", () => {
+	for (let source of sources(6000)) expectSame(source);
 });
 
 test("a column with no pipe is a table the choice keeps, and a row of hyphens alone is not", () => {
