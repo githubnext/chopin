@@ -102,6 +102,57 @@ describe("the server's word settles an intent", () => {
 	});
 });
 
+describe("an acknowledgement settles only the request it answers", () => {
+	let added = (): readonly Intent[] =>
+		intentsReducer(intentsReducer([], { kind: "ask", id: "a", emoji: "✅", on: true }), {
+			kind: "sent",
+			id: "a",
+			emoji: "✅",
+			on: true,
+		});
+	let acknowledgedAdd = {
+		kind: "settle" as const,
+		id: "a",
+		answers: { emoji: "✅", on: true },
+		reactions: undefined,
+		handle: "ana",
+	};
+
+	it("keeps an unsent removal when the add's acknowledgement is read against the older transcript", () => {
+		let removed = intentsReducer(added(), { kind: "ask", id: "a", emoji: "✅", on: false });
+		let settled = intentsReducer(removed, acknowledgedAdd);
+		expect(settled).toEqual([{ id: "a", emoji: "✅", on: false }]);
+		expect(dueNow(settled, new Set(["a"]))).toEqual([{ id: "a", emoji: "✅", on: false }]);
+	});
+
+	it("keeps a removal already on its way, and asks again for it after a fresh history shows the add", () => {
+		let removed = intentsReducer(added(), { kind: "ask", id: "a", emoji: "✅", on: false });
+		let going = intentsReducer(removed, { kind: "sent", id: "a", emoji: "✅", on: false });
+		let settled = intentsReducer(going, acknowledgedAdd);
+		expect(settled).toEqual([{ id: "a", emoji: "✅", on: false, sent: true }]);
+		let reconnected = intentsReducer(settled, {
+			kind: "history",
+			entries: [entry("a", [reaction("✅", "ana")])],
+			handle: "ana",
+		});
+		expect(reconnected).toEqual([{ id: "a", emoji: "✅", on: false }]);
+		expect(dueNow(reconnected, new Set(["a"]))).toHaveLength(1);
+	});
+
+	it("still retires the intent the acknowledgement answers once the transcript shows it", () => {
+		expect(
+			intentsReducer(added(), { ...acknowledgedAdd, reactions: [reaction("✅", "ana")] }),
+		).toEqual([]);
+		expect(intentsReducer(added(), acknowledgedAdd)).toEqual(added());
+	});
+
+	it("leaves the other emoji of the message alone", () => {
+		let two = intentsReducer(added(), { kind: "ask", id: "a", emoji: "👎", on: false });
+		let settled = intentsReducer(two, { ...acknowledgedAdd, reactions: [reaction("✅", "ana")] });
+		expect(settled).toEqual([{ id: "a", emoji: "👎", on: false }]);
+	});
+});
+
 describe("a message with unconfirmed reactions", () => {
 	it("shows your ask on top of what the server says, and which emoji are still waiting", () => {
 		let shown = withIntents(
