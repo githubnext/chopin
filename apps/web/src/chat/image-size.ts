@@ -1,3 +1,4 @@
+import { readDataAddress } from "./image-state";
 import { rasterType, text } from "./local-image";
 
 export type ImageSize = { width: number; height: number };
@@ -65,9 +66,9 @@ type ExifFacts = {
 };
 
 function dataPayloadStart(src: string): Uint8Array | undefined {
-	let comma = src.slice(0, 128).indexOf(",");
-	if (comma < 0 || !/^data:/i.test(src)) return undefined;
-	let payload = src.slice(comma + 1, comma + 1 + ADDRESS_CHARS_READ);
+	let address = readDataAddress(src);
+	if (!address) return undefined;
+	let payload = src.slice(address.payloadStart, address.payloadStart + ADDRESS_CHARS_READ);
 	let unescaped: number[] = [];
 	for (let at = 0; at < payload.length; at++) {
 		let code = payload.charCodeAt(at);
@@ -78,7 +79,7 @@ function dataPayloadStart(src: string): Uint8Array | undefined {
 		} else if (code < 0x80) unescaped.push(code);
 		else return undefined;
 	}
-	if (!/;\s*base64\s*$/i.test(src.slice(0, comma))) return Uint8Array.from(unescaped);
+	if (!/^base64$/i.test(address.parameters.at(-1)?.trim() ?? "")) return Uint8Array.from(unescaped);
 	let bytes: number[] = [];
 	let pending = 0;
 	let pendingBits = 0;

@@ -850,3 +850,18 @@ test("a header cut inside a field never gives the size its beginning would, only
 		}
 	}
 });
+
+test("a data address whose parameters run long still has its shape read, in time that grows with its length alone", () => {
+	let base64 = Buffer.from(png(90, 30)).toString("base64");
+	let expected = { width: 90, height: 30 };
+
+	expect(dataImageSize(`data:image/png${";name=a.png".repeat(40)};base64,${base64}`)).toEqual(
+		expected,
+	);
+	expect(dataImageSize(`data:image/png${" ;".repeat(100_000)};base64,${base64}`)).toEqual(expected);
+	expect(dataImageSize(`data:image/png${" ;".repeat(100_000)} ; BASE64 ,${base64}`)).toEqual(
+		expected,
+	);
+	expect(dataImageSize(`data:image/png${"; base64".repeat(100_000)};x,${base64}`)).toBeUndefined();
+	expect(dataImageSize(`data:image/png${" ;".repeat(100_000)}`)).toBeUndefined();
+});

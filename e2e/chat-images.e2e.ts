@@ -1127,6 +1127,39 @@ test("an image written into a message whose shape is not read from its bytes kee
 	}
 });
 
+test("a data address whose parameters run long is drawn at its own shape from the first paint, and one that never reaches a comma is not drawn", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let decoding = await holdDecodingOfWrittenImages(page);
+	let long = `data:image/png${";name=a.png".repeat(40)};base64,${
+		fixture("raster-18x6.png").toString("base64")
+	}`;
+	let malformed = `data:image/png${" ;".repeat(20_000)}`;
+	await seed("# Parameters\n", {
+		transcript: oneMessageEachLine(
+			[`![many parameters](${long})`, `![never a comma](<${malformed}>)`].join("\n"),
+		),
+	});
+	await join("ana");
+
+	let all = figures(page);
+	await expect(all).toHaveCount(2);
+	await expect(all.nth(1).getByText("Image can’t be shown")).toBeVisible();
+	await expect(all.nth(1).locator(".chat-image-alt")).toHaveText("never a comma");
+	let figure = all.nth(0);
+	await expect(figure.locator("img")).toHaveAttribute("src", long);
+	await expect.poll(async () => (await naturalSize(figure)).width).toBe(18);
+	await expect(figure).toHaveAttribute("data-load", "loading");
+	await settled(figure);
+	let firstSeen = await decoding.firstSeen();
+	expect(Math.abs(firstSeen["many parameters"]!.ratio / 3 - 1)).toBeLessThan(0.01);
+	let before = await figureBox(figure);
+	expect(Math.abs(before.frame.width / before.frame.height / 3 - 1)).toBeLessThan(0.01);
+	await decoding.release();
+	await expect(figure).toHaveAttribute("data-load", "shown");
+	await settled(figure);
+	expect(await figureBox(figure)).toEqual(before);
+});
+
 test("an address on this site that is not a raster image is never drawn or run, and is read without the reader's session", async ({ baseURL, join, page, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	let script =

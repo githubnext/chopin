@@ -19,15 +19,25 @@ export type ImageSource =
 
 const AUTH_PATH = /^\/auth(?:\/|$)/;
 
-const DATA_IMAGE = new RegExp(
-	`^data:(?:${
-		RASTER_TYPE_NAMES.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
-	})(?:\\s*;[^;,]*)*\\s*,`,
+const DATA_SCHEME = /^data:/i;
+
+const RASTER_TYPE = new RegExp(
+	`^(?:${RASTER_TYPE_NAMES.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})$`,
 	"i",
 );
 
+export type DataAddress = { type: string; parameters: string[]; payloadStart: number };
+
+export function readDataAddress(src: string): DataAddress | undefined {
+	let comma = src.indexOf(",");
+	if (comma < 0 || !DATA_SCHEME.test(src)) return undefined;
+	let [type = "", ...parameters] = src.slice("data:".length, comma).split(";");
+	return { type, parameters, payloadStart: comma + 1 };
+}
+
 export function isDataImage(src: string): boolean {
-	return DATA_IMAGE.test(src);
+	let address = readDataAddress(src);
+	return address !== undefined && RASTER_TYPE.test(address.type.trimEnd());
 }
 
 function hosted(path: string, document: string | undefined): ImageSource {
@@ -42,7 +52,7 @@ export function imageSource(
 	origin: string,
 ): ImageSource {
 	if (!src) return { kind: "unavailable" };
-	if (DATA_IMAGE.test(src)) return { kind: "data", url: src };
+	if (isDataImage(src)) return { kind: "data", url: src };
 	if (HOSTED_IMAGE_PATH.test(src)) return hosted(src, document);
 	let base = origin || "https://chat.invalid";
 	try {

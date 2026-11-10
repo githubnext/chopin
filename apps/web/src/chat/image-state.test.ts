@@ -141,6 +141,49 @@ test("parameters never make SVG, markup or another type a raster image", () => {
 	}
 });
 
+test(
+	"a data address is classified in time that grows with its length alone, whatever its parameters hold",
+	() => {
+		let module = new URL("./image-state.ts", import.meta.url).pathname;
+		let script = `
+		import { imageSource, isDataImage } from ${JSON.stringify(module)};
+		let many = 100_000;
+		let cases = [
+			["data:image/png" + " ;".repeat(many), false],
+			["data:image/png" + " ;".repeat(many) + ",AAAA", true],
+			["data:image/png" + "\\t;\\u00a0".repeat(many), false],
+			["data:image/png" + "\\t;\\u00a0".repeat(many) + ",", true],
+			["data:image/png;" + " ".repeat(many * 2), false],
+			["data:image/png;" + " ".repeat(many * 2) + ",AAAA", true],
+			["data:image/png" + " ".repeat(many * 2), false],
+			["data:image/png" + " ".repeat(many * 2) + ",AAAA", true],
+			["DATA:IMAGE/PNG" + " ;charset=utf-8".repeat(many) + ";base64,AAAA", true],
+			["data:image/png" + " ;".repeat(many) + "x", false],
+			["data:image/svg+xml" + " ;".repeat(many) + ",", false],
+			["data:" + "image/png".repeat(many) + ",", false],
+		];
+		let outcomes = cases.map(([src, expected]) => [
+			isDataImage(src) === expected,
+			(imageSource(src, "doc", "https://chopin.example").kind === "data") === expected,
+		]);
+		console.log(JSON.stringify(outcomes));
+	`;
+		let run = Bun.spawnSync([process.execPath, "-e", script], {
+			cwd: new URL(".", import.meta.url).pathname,
+			stderr: "pipe",
+			stdout: "pipe",
+			timeout: 5_000,
+		});
+
+		expect(run.signalCode, run.stderr.toString()).toBeUndefined();
+		expect(run.exitCode, run.stderr.toString()).toBe(0);
+		expect(JSON.parse(run.stdout.toString())).toEqual(
+			Array.from({ length: 12 }, () => [true, true]),
+		);
+	},
+	20_000,
+);
+
 test("script, markup, SVG and any other scheme are never loaded", () => {
 	for (
 		let src of [
