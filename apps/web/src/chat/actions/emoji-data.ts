@@ -10,7 +10,6 @@ export type EmojiEntry = {
 	emoji: string;
 	name: string;
 	words: string;
-	/** The five single skin tones of an emoji that has them, lightest first. */
 	tones?: string[];
 	variants?: { emoji: string; name: string; words: string }[];
 };
@@ -31,7 +30,6 @@ let GROUP_LABELS = [
 
 let REDUNDANT_SELECTOR = /^(\p{Emoji_Presentation})\uFE0F$/u;
 
-/** Unicode's fully-qualified spelling: emojibase adds a selector to every emoji, which only ❤️ and its kind need. */
 export function fullyQualified(emoji: string): string {
 	return emoji.replace(REDUNDANT_SELECTOR, "$1");
 }
@@ -66,7 +64,6 @@ export function buildGroups(data: readonly CompactEmoji[]): EmojiGroup[] {
 
 let loaded: Promise<EmojiGroup[]> | undefined;
 
-/** Every emoji Unicode lists, with its CLDR name and keywords, fetched the first time a picker opens. */
 export function loadEmoji(): Promise<EmojiGroup[]> {
 	loaded ??= (import("emojibase-data/en/compact.json") as Promise<{ default: CompactEmoji[] }>)
 		.then(module => buildGroups(module.default));
@@ -75,16 +72,11 @@ export function loadEmoji(): Promise<EmojiGroup[]> {
 
 export type EmojiChoice = { emoji: string; name: string };
 
-/** What an entry shows at a skin tone: 0 is the emoji as listed, 1 to 5 the tones from lightest. */
 export function shownAt(entry: EmojiEntry, tone: number): EmojiChoice {
 	let emoji = tone > 0 ? entry.tones?.[tone - 1] : undefined;
 	return { emoji: emoji ?? entry.emoji, name: entry.name };
 }
 
-/**
- * The listed emoji whose name or keywords have every word of the query. Searching also reaches every
- * skin tone variant, so each one can be found even where the tone setting does not apply to it.
- */
 export function searchEmoji(query: string, groups: EmojiGroup[], tone = 0): EmojiChoice[] {
 	let wanted = query.toLowerCase().split(/\s+/).filter(Boolean);
 	if (wanted.length === 0) {
