@@ -638,3 +638,54 @@ test("is one icon on a phone, opens a list as wide as the composer and chooses b
 	await expectNoHorizontalOverflow(page);
 	await client.detach();
 });
+
+test("refuses a choice the catalog does not offer, whatever the browser sends, and keeps the shared one", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await newRoom();
+	let page = await open(browser, HANDLE, room, DESKTOP);
+	let { client, asked } = await attachClient(room, CATALOG);
+	await expect(trigger(page)).toBeVisible();
+	await openPicker(page);
+	await option(page, "Large").click();
+	await expect(trigger(page)).toHaveAccessibleName("Model: Large");
+
+	// A custom client of the same session speaks the wire directly, as the page does.
+	let answers = await page.evaluate(async channel => {
+		let socket = new WebSocket(`${location.origin.replace("http", "ws")}/ws?channel=${channel}`);
+		await new Promise(resolve => socket.addEventListener("open", resolve, { once: true }));
+		let replies: Array<{ kind: string; message?: string; choice?: unknown }> = [];
+		socket.addEventListener("message", event => {
+			let frame = JSON.parse(event.data);
+			if (frame.rid?.startsWith("probe-")) replies.push(frame);
+		});
+		let ask = (rid: string, fields: object) =>
+			socket.send(JSON.stringify({ kind: "chat:model", ts: 0, rid, ...fields }));
+		ask("probe-1", { model: "evil/not-offered" });
+		ask("probe-2", { model: "acme/large", thinkingLevel: "xhigh-plus" });
+		ask("probe-3", { model: 7 });
+		ask("probe-4", { model: "x".repeat(300) });
+		for (let waited = 0; replies.length < 4 && waited < 8_000; waited += 50) {
+			await new Promise(resolve => setTimeout(resolve, 50));
+		}
+		socket.close();
+		return replies;
+	}, room);
+	expect(answers.map(answer => answer.kind)).toEqual([
+		"session:error",
+		"session:error",
+		"session:error",
+		"session:error",
+	]);
+	expect(answers.map(answer => answer.message)).toEqual([
+		"That model isn't available.",
+		"That model doesn't offer that level of reasoning.",
+		"That is not a model choice.",
+		"That is not a model choice.",
+	]);
+	// Nobody in the room sees any of it, and the next turn still runs the chosen model.
+	await expect(trigger(page)).toHaveAccessibleName("Model: Large");
+	await ask(page, "after the probes", 1);
+	expect(turnFor(asked, "after the probes")).toMatchObject({ model: "acme/large" });
+	expect(turnFor(asked, "after the probes").thinkingLevel).toBeUndefined();
+	await client.detach();
+});
