@@ -584,6 +584,40 @@ describe("Agent connection client", () => {
 		expect(typeof (object.part as { result: unknown }).result).toBe("object");
 	});
 
+	it("says how big an image was exactly, whether its base64 was padded or not", async () => {
+		let server = fakeServer();
+		let filler = "A".repeat(1_299_996);
+		let sizes = [
+			["B".repeat(1_299_998), 974_998],
+			["B".repeat(1_299_999), 974_999],
+			[`${"B".repeat(1_299_999)}=`, 974_999],
+			[`${"B".repeat(1_299_998)}==`, 974_998],
+			["B".repeat(1_300_000), 975_000],
+		] as const;
+		await connect(server, {
+			turn(context) {
+				for (let [data] of sizes) {
+					context.emit({
+						type: "tool-result",
+						toolCallId: "c",
+						toolName: "draw",
+						result: {
+							content: [data, filler, filler].map(block => imageBlock(block, "x")),
+						},
+					});
+				}
+			},
+		});
+		server.send(turn("sizes"));
+		for (let [data, size] of sizes) {
+			let sent = resultOf((await server.next("part")) as ClientMessageOf<"part">);
+			let [first, ...rest] = sent.content as Array<Record<string, unknown>>;
+			expect(first, `${data.length}`).toMatchObject({ data: "", tooLarge: size });
+			expect(Buffer.from(data, "base64").length, `${data.length}`).toBe(size);
+			expect(rest.filter(block => block.data === ""), `${data.length}`).toHaveLength(1);
+		}
+	});
+
 	it("leaves out as many images as it takes, and sends a result that fits as it was", async () => {
 		let server = fakeServer();
 		let data = `${"B".repeat(1_299_998)}==`;

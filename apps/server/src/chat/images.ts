@@ -68,7 +68,10 @@ function hosted(block: unknown): ToolImage | { reason: string } {
 		return refusal(`its type${typeNamed(image.mimeType)} isn't one Chat shows (${SHOWN}).`);
 	}
 	let data = image.data.replace(/\s+/g, "");
-	if (data.length % 4 !== 0 || !BASE64.test(data)) return refusal("its data isn't valid base64.");
+	let leftover = data.length % 4;
+	if (!BASE64.test(data) || (data.endsWith("=") ? leftover !== 0 : leftover === 1)) {
+		return refusal("its data isn't valid base64.");
+	}
 	let bytes = new Uint8Array(Buffer.from(data, "base64"));
 	let actual = sniffImageType(bytes);
 	if (actual !== named) {

@@ -118,6 +118,52 @@ describe("tool images", () => {
 		expect(found.images.map(item => item.alt)).toEqual(["kept"]);
 	});
 
+	test("hosts the same image whether its base64 is padded, unpadded, or broken across lines", () => {
+		let sources = [
+			["raster-18x6.png", "image/png"],
+			["raster-6x18.png", "image/png"],
+			["raster-6x18.gif", "image/gif"],
+			["raster-18x6.jpg", "image/jpeg"],
+		] as const;
+		let padding = new Set<number>();
+		for (let [name, mimeType] of sources) {
+			let bytes = fixture(name);
+			let padded = base64(bytes);
+			let unpadded = padded.replace(/=+$/, "");
+			padding.add(padded.length - unpadded.length);
+			let forms = [padded, unpadded, unpadded.replace(/(.{20})/g, "$1\n"), ` ${padded}\r\n`];
+			for (let data of forms) {
+				let found = toolImages({
+					content: [image({ data, mimeType, alt: name, caption: "As sent" })],
+				});
+				expect(found.refused, `${name} ${data.slice(-6)}`).toBe(0);
+				expect(found.images, `${name} ${data.slice(-6)}`).toHaveLength(1);
+				expect(found.images[0], name).toMatchObject({ mimeType, alt: name, caption: "As sent" });
+				expect(found.images[0]!.bytes, name).toEqual(bytes);
+			}
+		}
+		expect([...padding].sort()).toEqual([0, 1, 2]);
+	});
+
+	test("keeps an unpadded image's place among its duplicates, order and the images refused around it", () => {
+		let png = fixture("raster-18x6.png");
+		let unpadded = base64(png).replace(/=+$/, "");
+		let found = inspectImages({
+			content: [
+				image({ data: unpadded, alt: "first" }),
+				image({ data: base64(SVG), mimeType: "image/svg+xml" }),
+				image({ data: unpadded, alt: "first" }),
+				image({ data: base64(png), alt: "", caption: "" }),
+			],
+		});
+		expect(found.images.map(item => [item.alt, item.caption, item.width, item.height])).toEqual([
+			["first", undefined, 18, 6],
+			["first", undefined, 18, 6],
+			["", "", 18, 6],
+		]);
+		expect(found.refusals.map(item => item.before)).toEqual([1]);
+	});
+
 	test("hosts every raster a browser draws, as the type its bytes are, under any of its names", () => {
 		let found = toolImages({
 			content: [
@@ -217,9 +263,13 @@ describe("refused tool images", () => {
 	test("says data that is not base64 is not", () => {
 		expect(reasons(
 			image({ data: "not base64!" }),
-			image({ data: base64(PNG).slice(0, -1) }),
+			image({ data: base64(PNG).slice(0, -3) }),
+			image({ data: base64(fixture("raster-18x6.png")).slice(0, -1) }),
 			image({ data: `${base64(PNG)}=====` }),
-		)).toEqual(Array(3).fill("Image couldn't be shown: its data isn't valid base64."));
+			image({ data: `${base64(PNG).slice(0, 8)}=${base64(PNG).slice(8)}` }),
+			image({ data: `${base64(PNG).replace(/=+$/, "")}==` }),
+			image({ data: base64(PNG).replace(/^./, "*") }),
+		)).toEqual(Array(7).fill("Image couldn't be shown: its data isn't valid base64."));
 	});
 
 	test("says bytes that are not the image their type names are not, and which raster they are", () => {
