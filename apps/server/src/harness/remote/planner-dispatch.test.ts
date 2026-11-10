@@ -2939,4 +2939,39 @@ describe("a person asking for a Planner that is not there", () => {
 		expect(await waited(() => runtime.plannerUsed(channel.id))).toBeGreaterThan(1_200);
 		expect(await waited(() => runtime.plannerUsed(channel.id, true))).toBeLessThan(900);
 	});
+
+	it("tells the machine that will start it, once, in its next Planner poll, and tells a machine nobody asked nothing", async () => {
+		let { machine, choose, runtime, channel, visit, url } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		let desk = await machine("member", "U_member", "desk");
+		await choose("member", laptop.id);
+		expect((await laptop.poll([])).kind).toBe("planners");
+		await visit();
+		// Opening it again is not asking: the poll hears nothing.
+		let polling = laptop.poll([channel.id], 600);
+		await Bun.sleep(100);
+		await runtime.plannerUsed(channel.id);
+		expect(await polling).toEqual({ waiting: true });
+		// Asking for it lists it, with the same list it already runs, in the poll that is waiting.
+		polling = laptop.poll([channel.id], 3_000);
+		await Bun.sleep(100);
+		await runtime.plannerUsed(channel.id, true);
+		expect(await polling).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+			retry: [channel.id],
+		});
+		// Said once: the next poll hears nothing more of it.
+		expect(await laptop.poll([channel.id], 400)).toEqual({ waiting: true });
+		// Asked while no poll waits: the first poll after hears it at once.
+		await runtime.plannerUsed(channel.id, true);
+		expect(await laptop.poll([channel.id], 3_000)).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+			retry: [channel.id],
+		});
+		// A machine that was not the one asked is told nothing.
+		await runtime.plannerUsed(channel.id, true);
+		expect(await desk.poll([], 400)).not.toHaveProperty("retry");
+	});
 });
