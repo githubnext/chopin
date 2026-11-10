@@ -89,6 +89,10 @@ export function downloadName(alt: string | undefined, src: string): string {
 
 export type Copied = "idle" | "copied" | "failed";
 
+export function downloadLabel(state: Copied): string {
+	return state === "failed" ? "Couldn’t download image" : "Download image";
+}
+
 export function copyLabel(state: Copied): string {
 	return state === "copied"
 		? "Copied image"

@@ -91,6 +91,21 @@ function figures(page: Page): Locator {
 	return chat(page).locator("[data-chat-image]");
 }
 
+/** Where the figure sits in its message and how tall the whole Chat is: both exact, whatever the scroll. */
+function layout(figure: Locator) {
+	return figure.evaluate(element => {
+		let body = element.closest(".chat-message-body")!.getBoundingClientRect();
+		let box = element.getBoundingClientRect();
+		let stack = element.closest("[data-chat-stack]")!.getBoundingClientRect();
+		return {
+			offset: box.top - body.top,
+			height: box.height,
+			width: box.width,
+			stack: stack.height,
+		};
+	});
+}
+
 function lightbox(page: Page): Locator {
 	return page.getByRole("dialog", { name: "Image preview", exact: true });
 }
@@ -159,7 +174,7 @@ test("an image holds its shape while it loads, so nothing moves when it arrives"
 	await expect(figure).toHaveAttribute("data-load", "loading");
 	await expect(figure.locator(".chat-image-placeholder")).toBeVisible();
 	await expect(figure.getByText("The cap is a balance of 100.")).toBeVisible();
-	let before = (await figure.boundingBox())!;
+	let before = await layout(figure);
 	let frameBefore = (await frame.boundingBox())!;
 	expect(frameBefore.width / frameBefore.height).toBeCloseTo(1.5, 1);
 	expect(frameBefore.width).toBeLessThanOrEqual(384.5);
@@ -170,10 +185,7 @@ test("an image holds its shape while it loads, so nothing moves when it arrives"
 	await expect.poll(() =>
 		figure.locator("img").evaluate(image => (image as HTMLImageElement).naturalWidth)
 	).toBe(1536);
-	let after = (await figure.boundingBox())!;
-	expect(after.y).toBe(before.y);
-	expect(after.height).toBe(before.height);
-	expect(after.width).toBe(before.width);
+	expect(await layout(figure)).toEqual(before);
 	await expect(figure.locator(".chat-image-placeholder")).toHaveCount(0);
 	await expect(figure.locator("img")).toHaveCSS("opacity", "1");
 });
@@ -431,6 +443,102 @@ test("an image can be downloaded under the name of what it shows, and copied", a
 	await expect(lightbox(page)).toHaveCount(0);
 });
 
+test("the lightbox carries open, copy and download for what it shows", async ({ baseURL, join, page, room, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let stored = await store(baseURL, room);
+	await seed("# Out\n", { transcript: turn(three(stored)) });
+	await join("ana");
+
+	let tiles = chat(page).locator('[data-chat-image="tile"]');
+	await expect(tiles.nth(0)).toHaveAttribute("data-load", "shown");
+	await tiles.nth(0).locator("[data-chat-image-frame]").click({ position: { x: 20, y: 40 } });
+	let box = lightbox(page);
+	let [download] = await Promise.all([
+		page.waitForEvent("download"),
+		box.getByRole("button", { name: "Download image" }).click(),
+	]);
+	expect(download.suggestedFilename()).toBe("the-cap-is-a-balance-of-100.webp");
+	await box.getByRole("button", { name: "Next image" }).click();
+	await expect(box.getByRole("button", { name: "Copy image" })).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(box).toHaveCount(0);
+});
+
+test("an image from another site can be opened, copied and saved where its host allows it, and says so where it does not", async ({ baseURL, join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
+		origin: new URL(baseURL!).origin,
+	});
+	await page.route("https://example.invalid/open/**", route =>
+		route.fulfill({
+			contentType: "image/png",
+			headers: { "access-control-allow-origin": "*" },
+			body: Buffer.from(png(40, 30)),
+		}));
+	// Playwright adds CORS headers to a fulfilled response, so a host's refusal is a failed fetch.
+	await page.route(
+		"https://example.invalid/closed/**",
+		route =>
+			route.request().resourceType() === "fetch"
+				? route.abort()
+				: route.fulfill({ contentType: "image/png", body: Buffer.from(png(40, 30)) }),
+	);
+	await seed("# Out\n", {
+		transcript: [
+			{
+				id: "far",
+				author: { kind: "member", handle: "bo" },
+				text:
+					"![far away](https://example.invalid/open/far.png)\n\n![shut away](https://example.invalid/closed/near.png)",
+				ts: 1_700_000_900_000,
+			},
+		],
+	});
+	await join("ana");
+
+	let [open, closed] = [figures(page).nth(0), figures(page).nth(1)];
+	await expect(open).toHaveAttribute("data-load", "shown");
+	await expect(closed).toHaveAttribute("data-load", "shown");
+
+	await open.hover();
+	for (let name of ["Open image", "Copy image", "Download image"]) {
+		await expect(open.getByRole("button", { name, exact: true })).toHaveCount(1);
+	}
+	await expect(open.getByRole("link", { name: "Open image in a new tab" })).toHaveAttribute(
+		"href",
+		"https://example.invalid/open/far.png",
+	);
+	let [download] = await Promise.all([
+		page.waitForEvent("download"),
+		open.getByRole("button", { name: "Download image" }).click(),
+	]);
+	expect(download.suggestedFilename()).toBe("far-away.png");
+	await open.getByRole("button", { name: "Copy image" }).click();
+	await expect(open.getByRole("button", { name: "Copied image" })).toBeVisible();
+
+	// Its host does not allow a page to read it, so a copy and a save say they could not.
+	await closed.hover();
+	await closed.getByRole("button", { name: "Copy image" }).click();
+	await expect(closed.getByRole("button", { name: "Couldn’t copy image" })).toBeVisible();
+	await closed.getByRole("button", { name: "Download image" }).click();
+	await expect(closed.getByRole("button", { name: "Couldn’t download image" })).toBeVisible();
+	await expect(closed.getByRole("link", { name: "Open image in a new tab" })).toHaveAttribute(
+		"href",
+		"https://example.invalid/closed/near.png",
+	);
+
+	await closed.getByRole("button", { name: "Open image", exact: true }).click();
+	let box = lightbox(page);
+	await expect(box.getByRole("status")).toHaveText("Image 2 of 2");
+	for (let name of ["Copy image", "Download image"]) {
+		await expect(box.getByRole("button", { name })).toBeVisible();
+	}
+	await expect(box.getByRole("link", { name: "Open image in a new tab" })).toHaveAttribute(
+		"href",
+		"https://example.invalid/closed/near.png",
+	);
+});
+
 test("a person without access to the document is refused its images", async ({ baseURL, browser, join, page, room, seed }) => {
 	let stored = await store(baseURL, room);
 	await seed("# Private\n", { transcript: turn(three(stored)) });
@@ -513,8 +621,10 @@ test("every image a person writes in Markdown is drawn where they wrote it", asy
 	let box = lightbox(page);
 	await expect(box.getByRole("status")).toHaveText("Image 2 of 4");
 	await expect(box.getByRole("img", { name: "a remote one" })).toBeVisible();
+	for (let name of ["Copy image", "Download image"]) {
+		await expect(all.nth(1).getByRole("button", { name })).toHaveCount(1);
+	}
 	await expect(all.nth(1).getByRole("link", { name: "Open image in a new tab" })).toHaveCount(1);
-	await expect(all.nth(1).getByRole("button", { name: "Copy image" })).toHaveCount(0);
 });
 
 test("on a phone the actions are always there, nothing overflows, and the lightbox fits", async ({ baseURL, join, room, seed }) => {
@@ -537,7 +647,11 @@ test("on a phone the actions are always there, nothing overflows, and the lightb
 	let tiles = chat(phone).locator('[data-chat-image="tile"]');
 	await expect(tiles).toHaveCount(3);
 	await expect(tiles.nth(0)).toHaveAttribute("data-load", "shown");
-	await expect(tiles.nth(0).locator(".chat-image-actions")).toHaveCSS("opacity", "1");
+	await expect(tiles.nth(0).locator(".chat-image-actions")).toHaveCSS("opacity", "0");
+	await expect(chat(phone).locator('[data-chat-image="single"] .chat-image-actions')).toHaveCSS(
+		"opacity",
+		"1",
+	);
 	for (let tile of await tiles.all()) {
 		let box = (await tile.boundingBox())!;
 		expect(box.x).toBeGreaterThanOrEqual(0);
@@ -545,9 +659,11 @@ test("on a phone the actions are always there, nothing overflows, and the lightb
 	}
 	expect(await phone.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
-	await tiles.nth(0).getByRole("button", { name: "Open image", exact: true }).tap();
+	await tiles.nth(0).locator("[data-chat-image-frame]").tap({ position: { x: 20, y: 40 } });
 	let box = lightbox(phone);
 	await expect(box).toBeVisible();
+	await expect(box.getByRole("button", { name: "Copy image" })).toBeVisible();
+	await expect(box.getByRole("button", { name: "Download image" })).toBeVisible();
 	let footer = (await box.locator(".plan-image-lightbox-footer").boundingBox())!;
 	expect(footer.x).toBeGreaterThanOrEqual(0);
 	expect(footer.x + footer.width).toBeLessThanOrEqual(390);

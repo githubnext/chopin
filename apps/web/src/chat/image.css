@@ -58,10 +58,6 @@
 	opacity: 0;
 }
 
-.chat-image[data-chat-image="tile"] .chat-image-preview {
-	object-fit: cover;
-}
-
 .chat-image[data-load="shown"] .chat-image-preview {
 	opacity: 1;
 }
@@ -140,6 +136,16 @@
 @media (hover: none) {
 	.chat-image-actions {
 		opacity: 1;
+	}
+
+	.chat-image[data-chat-image="tile"] .chat-image-actions {
+		opacity: 0;
+		pointer-events: none;
+	}
+
+	.chat-image[data-chat-image="tile"] .chat-image-frame:focus-within .chat-image-actions {
+		opacity: 1;
+		pointer-events: auto;
 	}
 }
 

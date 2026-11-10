@@ -39,6 +39,7 @@ import {
 
 import {
 	copyLabel,
+	downloadLabel,
 	downloadName,
 	frameRatio,
 	imageLabel,
@@ -68,7 +69,9 @@ export type ChatImageData = {
 const DocumentContext = createContext<string | undefined>(undefined);
 export const ChatImageDocument = DocumentContext.Provider;
 
-type Entry = { element: HTMLElement; image: LightboxImage };
+type Loadable = Exclude<ImageSource, { kind: "unavailable" }>;
+
+type Entry = { data: ChatImageData; element: HTMLElement; image: LightboxImage; source: Loadable };
 
 type Host = {
 	register(id: string, entry: Entry): () => void;
@@ -79,7 +82,7 @@ const HostContext = createContext<Host | undefined>(undefined);
 
 export function MessageImages({ children }: { children: ReactNode }) {
 	let entries = useRef(new Map<string, Entry>());
-	let [view, setView] = useState<{ images: LightboxImage[]; start: number }>();
+	let [view, setView] = useState<{ entries: Entry[]; start: number }>();
 	let host = useMemo<Host>(() => ({
 		register(id, entry) {
 			entries.current.set(id, entry);
@@ -90,7 +93,7 @@ export function MessageImages({ children }: { children: ReactNode }) {
 				a.element.compareDocumentPosition(b.element) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
 			);
 			setView({
-				images: ordered.map(([, entry]) => entry.image),
+				entries: ordered.map(([, entry]) => entry),
 				start: Math.max(0, ordered.findIndex(([key]) => key === id)),
 			});
 		},
@@ -100,7 +103,15 @@ export function MessageImages({ children }: { children: ReactNode }) {
 			{children}
 			{view && (
 				<Suspense fallback={null}>
-					<Lightbox images={view.images} onClose={() => setView(undefined)} start={view.start} />
+					<Lightbox
+						actions={(_, index) => {
+							let { data, source } = view.entries[index]!;
+							return <ImageButtons compact={false} data={data} key={index} source={source} />;
+						}}
+						images={view.entries.map(entry => entry.image)}
+						onClose={() => setView(undefined)}
+						start={view.start}
+					/>
 				</Suspense>
 			)}
 		</HostContext.Provider>
@@ -230,21 +241,24 @@ async function toPng(blob: Blob): Promise<Blob> {
 }
 
 /** Browsers let a page copy PNG and little else, so any other type is redrawn as one. */
+async function fetchImage(url: string): Promise<Blob> {
+	let response = await fetch(url, { referrerPolicy: "no-referrer" });
+	if (!response.ok) throw new Error(`The image answered ${response.status}.`);
+	return response.blob();
+}
+
 async function copyImage(url: string): Promise<void> {
 	if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
 		throw new Error("Clipboard API is not available in this environment.");
 	}
-	let png = fetch(url).then(response => {
-		if (!response.ok) throw new Error(`The image answered ${response.status}.`);
-		return response.blob();
-	}).then(blob => blob.type === "image/png" ? blob : toPng(blob));
+	let png = fetchImage(url).then(blob => blob.type === "image/png" ? blob : toPng(blob));
 	// The item holds the promise, so the write starts inside the click that asked for it.
 	await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
 }
 
-function downloadImage(url: string, name: string): void {
+function save(href: string, name: string): void {
 	let link = document.createElement("a");
-	link.href = url;
+	link.href = href;
 	link.download = name;
 	link.rel = "noopener";
 	document.body.appendChild(link);
@@ -252,21 +266,76 @@ function downloadImage(url: string, name: string): void {
 	document.body.removeChild(link);
 }
 
-function ImageActions(
-	{ compact, image, label, onOpen, source }: {
-		compact: boolean;
-		image: ChatImageData;
-		label: string;
-		onOpen: () => void;
-		source: Exclude<ImageSource, { kind: "unavailable" }>;
-	},
+async function downloadImage(source: Loadable, name: string): Promise<void> {
+	if (source.kind !== "external") return save(source.url, name);
+	let object = URL.createObjectURL(await fetchImage(source.url));
+	save(object, name);
+	setTimeout(() => URL.revokeObjectURL(object), 40_000);
+}
+
+function ImageButtons(
+	{ compact, data, source }: { compact: boolean; data: ChatImageData; source: Loadable },
 ) {
 	let [copied, setCopied] = useState<Copied>("idle");
+	let [saved, setSaved] = useState<Copied>("idle");
 	useEffect(() => {
-		if (copied === "idle") return;
-		let timer = setTimeout(() => setCopied("idle"), 1600);
+		if (copied === "idle" && saved === "idle") return;
+		let timer = setTimeout(() => {
+			setCopied("idle");
+			setSaved("idle");
+		}, 1600);
 		return () => clearTimeout(timer);
-	}, [copied]);
+	}, [copied, saved]);
+	return (
+		<>
+			<button
+				aria-label={copyLabel(copied)}
+				className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} btn-outline`}
+				data-chat-image-action="copy"
+				onClick={() =>
+					copyImage(source.url).then(() => setCopied("copied"), () => setCopied("failed"))}
+				type="button"
+			>
+				{copied === "copied" ? <CheckIcon aria-hidden="true" /> : <CopyIcon />}
+			</button>
+			<button
+				aria-label={downloadLabel(saved)}
+				className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} btn-outline`}
+				data-chat-image-action="download"
+				onClick={() =>
+					downloadImage(source, downloadName(data.alt, data.src)).catch(() => setSaved("failed"))}
+				type="button"
+			>
+				<DownloadIcon aria-hidden="true" />
+			</button>
+			{source.kind === "external" && (
+				<a
+					aria-label="Open image in a new tab"
+					className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} btn-outline`}
+					data-chat-image-action="new-tab"
+					href={source.url}
+					rel="noopener noreferrer"
+					target="_blank"
+				>
+					<ExternalLinkIcon aria-hidden="true" />
+				</a>
+			)}
+			<span aria-live="polite" className="sr-only">
+				{saved === "failed" ? downloadLabel(saved) : copied === "idle" ? "" : copyLabel(copied)}
+			</span>
+		</>
+	);
+}
+
+function ImageActions(
+	{ compact, data, label, onOpen, source }: {
+		compact: boolean;
+		data: ChatImageData;
+		label: string;
+		onOpen: () => void;
+		source: Loadable;
+	},
+) {
 	return (
 		<div
 			aria-label={`Actions for ${label}`}
@@ -284,43 +353,7 @@ function ImageActions(
 			>
 				<ExpandIcon aria-hidden="true" />
 			</button>
-			{source.kind !== "external"
-				? (
-					<>
-						<button
-							aria-label={copyLabel(copied)}
-							className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} btn-outline`}
-							data-chat-image-action="copy"
-							onClick={() =>
-								copyImage(source.url).then(() => setCopied("copied"), () => setCopied("failed"))}
-							type="button"
-						>
-							{copied === "copied" ? <CheckIcon aria-hidden="true" /> : <CopyIcon />}
-						</button>
-						<button
-							aria-label="Download image"
-							className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} btn-outline`}
-							data-chat-image-action="download"
-							onClick={() => downloadImage(source.url, downloadName(image.alt, image.src))}
-							type="button"
-						>
-							<DownloadIcon aria-hidden="true" />
-						</button>
-					</>
-				)
-				: (
-					<a
-						aria-label="Open image in a new tab"
-						className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} btn-outline`}
-						data-chat-image-action="new-tab"
-						href={source.url}
-						rel="noopener noreferrer"
-						target="_blank"
-					>
-						<ExternalLinkIcon aria-hidden="true" />
-					</a>
-				)}
-			<span className="sr-only" role="status">{copied === "idle" ? "" : copyLabel(copied)}</span>
+			<ImageButtons compact={compact} data={data} source={source} />
 		</div>
 	);
 }
@@ -338,12 +371,14 @@ function useImageEntry(
 
 	useLayoutEffect(() => {
 		let element = anchor.current;
-		if (!url || !element) return;
+		if (source.kind === "unavailable" || !element) return;
 		return host.register(id, {
+			data: image,
 			element,
-			image: { src: url, alt: label, caption: image.caption, generated: image.generated },
+			image: { src: source.url, alt: label, caption: image.caption, generated: image.generated },
+			source,
 		});
-	}, [host, anchor, id, url, label, image.caption, image.generated]);
+	}, [host, anchor, id, url, label, image.src, image.alt, image.caption, image.generated]);
 
 	return { id, label, source, url };
 }
@@ -393,7 +428,7 @@ export function ImageFigure(
 				{source.kind !== "unavailable" && load === "shown" && (
 					<ImageActions
 						compact={variant === "tile"}
-						image={image}
+						data={image}
 						label={label}
 						onOpen={open}
 						source={source}
