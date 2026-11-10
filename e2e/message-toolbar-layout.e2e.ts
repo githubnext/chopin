@@ -315,6 +315,49 @@ test("on a phone a long press brings up a toolbar that covers no text, on a mess
 	expect(barBox!.y).toBeGreaterThanOrEqual(view!.y);
 });
 
+async function unmet(bar: Locator): Promise<string[]> {
+	return bar.evaluate(element => {
+		let top = document.querySelector(".phone-top-bar")!.getBoundingClientRect();
+		let missed: string[] = [];
+		for (let button of element.querySelectorAll("button")) {
+			let box = button.getBoundingClientRect();
+			let hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+			if (!hit || !button.contains(hit)) {
+				missed.push(`${button.getAttribute("aria-label")} meets ${hit?.className || hit?.tagName}`);
+			}
+			if (box.top < top.bottom) {
+				missed.push(`${button.getAttribute("aria-label")} is under the top bar`);
+			}
+		}
+		return missed;
+	});
+}
+
+test("on a phone every button of the toolbar a long press brings up is what the finger meets, below the top bar", async ({ join, seed }) => {
+	await seed("# Layout\n", { transcript: transcript() });
+	let page = await join("ana", PHONE);
+	await openChatOnPhone(page);
+	for (let id of ["m2", "m3", "m4", "m5", "m7", "m1"]) {
+		let target = message(page, id);
+		await holdOn(page, target);
+		let bar = toolbar(target);
+		await expect(bar, id).toBeVisible();
+		await expect.poll(() => unmet(bar), { message: id }).toEqual([]);
+		await page.mouse.click(1, 1);
+	}
+	let tall = message(page, "m6");
+	let view = (await scroller(page).boundingBox())!;
+	await tall.scrollIntoViewIfNeeded();
+	await scroller(page).evaluate((element, wanted) => {
+		let top = element.querySelector('[data-chat-message-id="m6"]')!.getBoundingClientRect().top
+			- element.getBoundingClientRect().top;
+		element.scrollTop += top + wanted;
+	}, 80);
+	await hold(page, view.x + view.width / 2, view.y + view.height / 2);
+	await expect(toolbar(tall)).toBeVisible();
+	await expect.poll(() => unmet(toolbar(tall)), { message: "m6" }).toEqual([]);
+});
+
 test("on a phone a long press in the middle of a message taller than the screen keeps the toolbar on screen, with every button a touch target", async ({ join, seed }) => {
 	await seed("# Layout\n", { transcript: transcript() });
 	let page = await join("ana", PHONE);
