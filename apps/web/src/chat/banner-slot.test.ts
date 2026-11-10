@@ -85,3 +85,19 @@ test("where the composer is not drawn there is no slot, and a failed reply's lin
 	});
 	expect(drawn(bannerSlot(online, false, true, false))).toBe(false);
 });
+
+test("a failed reply already shown stays, with its Retry, beside a machine that drops after it: another cause, its own banner", () => {
+	for (let kind of ["held", "disconnected"] as const) {
+		expect(bannerSlot(planner(kind), false, true, true, true)).toEqual({
+			lead: "failure",
+			connection: true,
+			quietsNotices: true,
+		});
+		expect(drawn(bannerSlot(planner(kind), false, true, true, true))).toBe(true);
+	}
+	// The room's own connection is still the whole slot, whatever was shown before it.
+	expect(bannerSlot(lost, false, true, true, true)).toEqual({
+		connection: true,
+		quietsNotices: true,
+	});
+});

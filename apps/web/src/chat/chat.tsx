@@ -384,6 +384,8 @@ export function Chat(
 	useEffect(() => {
 		if (retried && !retrying) setRetried(undefined);
 	}, [retried, retrying]);
+	// The failed reply whose banner has been drawn: a machine that drops after it did not cause it.
+	let [shownFailure, setShownFailure] = useState<string>();
 	// Only a banner that says why a send could not go gives a refused message's line its quiet;
 	// a Planner's absence is another fact, and the message still says it was not sent.
 	let quietFailures = !!banner && silencesFailedSends(banner.view);
@@ -892,7 +894,13 @@ export function Chat(
 	};
 
 	let bannerId = useId();
-	let slot = bannerSlot(banner?.view, !!sendBanner, !!failed, !readonly && !archived);
+	let slot = bannerSlot(
+		banner?.view,
+		!!sendBanner,
+		!!failed,
+		!readonly && !archived,
+		!!failed && shownFailure === failed.entry,
+	);
 	let leadNode = slot.lead === "send" && sendBanner
 		? (
 			<ErrorState
@@ -917,6 +925,10 @@ export function Chat(
 			/>
 		)
 		: undefined;
+	let drawnFailure = slot.lead === "failure" ? failed?.entry : undefined;
+	useEffect(() => {
+		if (drawnFailure) setShownFailure(drawnFailure);
+	}, [drawnFailure]);
 	let connectionId = `${bannerId}-connection`;
 	let connectionNode = slot.connection && banner
 		? <ConnectionBannerView id={connectionId} onRetry={banner.onRetry} view={banner.view} />
