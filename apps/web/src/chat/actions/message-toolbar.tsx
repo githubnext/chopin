@@ -262,12 +262,12 @@ export let MessageToolbar = memo(function MessageToolbar(
 
 	let was = useRef(false);
 	useEffect(() => {
-		if (was.current && !isCopied) {
+		if (was.current && !isCopied && !isFailed) {
 			if (menu.current?.contains(document.activeElement)) closeMenu(true);
 			else setMenuOpen(false);
 		}
 		was.current = isCopied;
-	}, [isCopied]);
+	}, [isCopied, isFailed]);
 
 	useEffect(() => {
 		let element = host.current;

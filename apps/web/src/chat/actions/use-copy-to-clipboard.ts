@@ -9,54 +9,101 @@ export type UseCopyToClipboardOptions = {
 	copiedDuration?: number;
 };
 
+export type Confirmation = { copied: boolean; failed: boolean };
+
+type Timers = {
+	set: (callback: () => void, ms: number) => unknown;
+	clear: (handle: unknown) => void;
+};
+
+const BROWSER: Timers = {
+	set: (callback, ms) => setTimeout(callback, ms),
+	clear: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
+
+export class CopyConfirmation {
+	state: Confirmation = { copied: false, failed: false };
+	private copiedTimer: unknown;
+	private failedTimer: unknown;
+
+	constructor(
+		private publish: (state: Confirmation) => void,
+		private timers: Timers = BROWSER,
+	) {}
+
+	begin(): void {
+		this.timers.clear(this.failedTimer);
+		this.failedTimer = undefined;
+		this.change({ failed: false });
+	}
+
+	copied(duration: number): void {
+		this.timers.clear(this.copiedTimer);
+		this.change({ copied: true });
+		this.copiedTimer = this.timers.set(() => {
+			this.copiedTimer = undefined;
+			this.change({ copied: false });
+		}, duration);
+	}
+
+	refused(duration: number): void {
+		this.timers.clear(this.copiedTimer);
+		this.copiedTimer = undefined;
+		this.timers.clear(this.failedTimer);
+		this.change({ copied: false, failed: true });
+		this.failedTimer = this.timers.set(() => {
+			this.failedTimer = undefined;
+			this.change({ failed: false });
+		}, duration);
+	}
+
+	stop(): void {
+		this.timers.clear(this.copiedTimer);
+		this.timers.clear(this.failedTimer);
+		this.copiedTimer = undefined;
+		this.failedTimer = undefined;
+		this.change({ copied: false, failed: false });
+	}
+
+	private change(next: Partial<Confirmation>): void {
+		let state = { ...this.state, ...next };
+		if (state.copied === this.state.copied && state.failed === this.state.failed) return;
+		this.state = state;
+		this.publish(state);
+	}
+}
+
 export let useCopyToClipboard = ({ copiedDuration = 3000 }: UseCopyToClipboardOptions = {}) => {
-	let [isCopied, setIsCopied] = useState<boolean>(false);
-	let [isFailed, setIsFailed] = useState<boolean>(false);
-	let failedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-	let copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	let [state, setState] = useState<Confirmation>({ copied: false, failed: false });
+	let confirmation = useRef<CopyConfirmation>(undefined);
+	confirmation.current ??= new CopyConfirmation(setState);
 	let scopeGenerationRef = useRef(0);
 
 	useEffect(
 		() => () => {
 			scopeGenerationRef.current += 1;
-			clearTimeout(failedTimerRef.current);
-			if (copiedTimerRef.current === undefined) return;
-
-			clearTimeout(copiedTimerRef.current);
-			copiedTimerRef.current = undefined;
-			setIsCopied(false);
+			confirmation.current?.stop();
 		},
 		[],
 	);
 
-	let fail = () => {
-		clearTimeout(failedTimerRef.current);
-		setIsFailed(true);
-		failedTimerRef.current = setTimeout(() => setIsFailed(false), copiedDuration);
-	};
-
 	let copyToClipboard = (value: string) => {
-		clearTimeout(failedTimerRef.current);
-		setIsFailed(false);
-		if (typeof navigator === "undefined" || !navigator.clipboard) return fail();
+		let current = confirmation.current!;
+		current.begin();
+		if (typeof navigator === "undefined" || !navigator.clipboard) {
+			return current.refused(copiedDuration);
+		}
 
 		let scopeGeneration = scopeGenerationRef.current;
 		navigator.clipboard.writeText(value).then(
 			() => {
-				if (scopeGeneration !== scopeGenerationRef.current) return;
-
-				if (copiedTimerRef.current !== undefined) clearTimeout(copiedTimerRef.current);
-				setIsCopied(true);
-				copiedTimerRef.current = setTimeout(() => {
-					copiedTimerRef.current = undefined;
-					setIsCopied(false);
-				}, copiedDuration);
+				if (scopeGeneration === scopeGenerationRef.current) current.copied(copiedDuration);
 			},
 			() => {
-				if (scopeGeneration === scopeGenerationRef.current) fail();
+				if (scopeGeneration === scopeGenerationRef.current) current.refused(copiedDuration);
 			},
 		);
 	};
 
-	return { isCopied, isFailed, copyToClipboard };
+	return { isCopied: state.copied, isFailed: state.failed, copyToClipboard };
 };

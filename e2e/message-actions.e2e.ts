@@ -606,6 +606,40 @@ test("a message only this browser has can be reacted to, and the reaction is kep
 	expect(wire.state.reactions[0]).toMatchObject({ emoji: "✅", on: true });
 });
 
+test("a clipboard that refuses a write after one it accepted takes Copied back: the item says Couldn't copy, politely", async ({ join, seed }) => {
+	await seed("# Actions\n", { transcript: transcript() });
+	let page = await join("ana");
+	await page.context().grantPermissions([...CLIPBOARD]);
+	await page.clock.install();
+	await page.evaluate(() => {
+		let write = navigator.clipboard.writeText.bind(navigator.clipboard);
+		(window as unknown as { refuse: boolean }).refuse = false;
+		navigator.clipboard.writeText = text =>
+			(window as unknown as { refuse: boolean }).refuse
+				? Promise.reject(new DOMException("denied", "NotAllowedError"))
+				: write(text);
+	});
+	let target = message(page, PERSON.id);
+	let menu = await openMenu(page, target);
+	await menu.getByRole("menuitem", { name: "Copy", exact: true }).click();
+	await expect(menu.getByRole("menuitem", { name: "Copied", exact: true })).toBeVisible();
+	await expect(target.getByRole("status")).toHaveText("Copied");
+
+	await page.evaluate(() => {
+		(window as unknown as { refuse: boolean }).refuse = true;
+	});
+	await menu.getByRole("menuitem", { name: "Copy as plain text", exact: true }).click();
+	await expect(menu.getByRole("menuitem", { name: "Couldn't copy", exact: true })).toBeVisible();
+	await expect(menu.getByRole("menuitem", { name: "Copied" })).toHaveCount(0);
+	await expect(target.getByRole("status")).toHaveText("Couldn't copy");
+
+	await page.clock.fastForward(1_600);
+	await expect(menu.getByRole("menuitem", { name: "Couldn't copy" })).toHaveCount(0);
+	await expect(target.getByRole("status")).toHaveText("");
+	await expect(menu.getByRole("menuitem", { name: "Copy as plain text", exact: true }))
+		.toBeVisible();
+});
+
 test("a clipboard that refuses the write never says Copied: the item says Couldn't copy, politely, and Copy works again afterwards", async ({ join, seed }) => {
 	await seed("# Actions\n", { transcript: transcript() });
 	let page = await join("ana");
