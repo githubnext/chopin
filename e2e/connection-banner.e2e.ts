@@ -205,10 +205,20 @@ async function machine(
 	working = false,
 ) {
 	let prompts: string[] = [];
+	// The sessions Chopin has open on this link, and how many upkeep turns it has run on them.
+	let open = new Set<string>();
+	let upkeep = 0;
 	let handlers: AgentHandlers = {
+		start(message) {
+			open.add(message.session);
+		},
+		destroy(message) {
+			open.delete(message.session);
+		},
 		async turn(context) {
 			// Chopin's own upkeep of the document runs through the same Planner; it is not a message.
 			if (context.message.prompt.startsWith("[Background job")) {
+				upkeep++;
 				context.emit({ type: "stream-start", modelId: "scripted" });
 				return finishTurn(context);
 			}
@@ -250,7 +260,14 @@ async function machine(
 		document: room,
 		handlers,
 	});
-	return { client, prompts };
+	return {
+		client,
+		prompts,
+		open,
+		get upkeep() {
+			return upkeep;
+		},
+	};
 }
 
 function chat(page: Page) {
@@ -604,6 +621,10 @@ test("asking a machine to start the Planner whose link dropped with a workflow r
 		let planner = await machine(room, [], true);
 		await say(writer, "start a workflow run");
 		await expect(chat(writer).getByText("Answer 1", { exact: true })).toBeVisible();
+		// Chopin opens a session of its own for the document's upkeep after a reply, and ends it
+		// when that is done. The link held both while it ran, so cut it once only the chat's is left.
+		await expect.poll(() => planner.upkeep).toBeGreaterThan(0);
+		await expect.poll(() => planner.open.size).toBe(1);
 		link.sockets[0]!.close(3000, "network failed");
 		expect((await planner.client.resumption)?.sessions.size).toBe(1);
 		expect(await ask(writer, room, "chat:wake")).toMatchObject({
