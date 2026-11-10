@@ -25,31 +25,44 @@ const COPIED_MS = 3000;
 
 /**
  * A fenced block's header: its language and a button that copies its code. The write starts in the
- * click itself, so the clipboard keeps the user's gesture.
+ * click itself, so the clipboard keeps the user's gesture. A page with no clipboard (an insecure
+ * origin) and a write the browser refuses both say so in the button's name, for as long as a copy
+ * says it worked, and the button then offers the copy again.
  */
 export let CopyCodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
-	let [copied, setCopied] = useState(false);
+	let [outcome, setOutcome] = useState<"copied" | "failed">();
 	let timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 	useEffect(() => () => clearTimeout(timer.current), []);
 	let copy = () => {
-		if (!code || copied) return;
-		navigator.clipboard.writeText(code).then(() => {
-			setCopied(true);
+		if (!code || outcome === "copied") return;
+		let done = (next: "copied" | "failed") => {
+			setOutcome(next);
 			clearTimeout(timer.current);
-			timer.current = setTimeout(() => setCopied(false), COPIED_MS);
-		}, () => {});
+			timer.current = setTimeout(() => setOutcome(undefined), COPIED_MS);
+		};
+		try {
+			let written = navigator.clipboard.writeText(code);
+			written.then(() => done("copied"), () => done("failed"));
+		} catch {
+			done("failed");
+		}
 	};
 	return (
 		<div className="aui-code-header-root">
 			<span className="aui-code-header-language">{language}</span>
 			<button
-				aria-label={copied ? "Copied" : "Copy code"}
+				aria-label={outcome === "copied"
+					? "Copied"
+					: outcome === "failed"
+					? "Couldn't copy"
+					: "Copy code"}
 				className="btn btn-icon-xs btn-ghost"
-				data-copied={copied ? "" : undefined}
+				data-copied={outcome === "copied" ? "" : undefined}
+				data-failed={outcome === "failed" ? "" : undefined}
 				onClick={copy}
 				type="button"
 			>
-				{copied ? <CheckIcon aria-hidden="true" size={12} /> : <CopyIcon />}
+				{outcome === "copied" ? <CheckIcon aria-hidden="true" size={12} /> : <CopyIcon />}
 			</button>
 		</div>
 	);
