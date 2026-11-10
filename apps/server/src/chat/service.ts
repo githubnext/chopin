@@ -3521,12 +3521,10 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 				: part.type === "tool-error"
 				? part.error
 				: "Refused.";
+			let staged: ToolImage[] = [];
 			if (success && !preliminary && !chat.turnImages?.calls.has(part.toolCallId)) {
-				let { images } = toolImages(output);
-				if (images.length) {
-					turnImages(chat).calls.add(part.toolCallId);
-					stageImages(context, images, part.toolCallId);
-				}
+				staged = toolImages(output).images;
+				if (staged.length) turnImages(chat).calls.add(part.toolCallId);
 			}
 			conclude(
 				context,
@@ -3536,6 +3534,8 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 				success,
 				part.type === "tool-output-denied",
 			);
+			// After the row exists, so a result that came with no earlier call is noted at its own message.
+			if (staged.length) stageImages(context, staged, part.toolCallId);
 			return;
 		}
 		case "tool-approval-request":
