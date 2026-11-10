@@ -1,4 +1,8 @@
+import type { ServerWebSocket } from "bun";
+
 import type { Chat as Wire, Session } from "@chopin/protocol";
+
+import { fail, PASSING, reply } from "../wire";
 
 type Deps = {
 	/** Present only under `HARNESS=remote`. */
@@ -29,4 +33,28 @@ export async function wakePlanner(
 	return await experiments.plannerStarting(channelId)
 		? { asked: true }
 		: { asked: false, why: "no-machine" };
+}
+
+/**
+ * Answer a `chat:wake` frame. `writable` is the check `chat:send` to the Planner makes (write
+ * access, the document not archived or deleted, the socket still in its room); a refusal has
+ * already been answered, so nothing is asked of any machine. A child has no Chat: its root's does.
+ */
+export async function answerWake(
+	ws: Pick<ServerWebSocket<unknown>, "send">,
+	rid: string,
+	room: { id: string; parentChannelId?: string | null },
+	writable: () => Promise<boolean>,
+	deps: Deps,
+): Promise<void> {
+	try {
+		if (!await writable()) return;
+		if (room.parentChannelId) {
+			fail(ws, rid, "this document's Chat is on its root document");
+			return;
+		}
+		reply(ws, rid, { kind: "chat:wake", ts: 0, ...await wakePlanner(room.id, deps) });
+	} catch (error) {
+		fail(ws, rid, error instanceof Error ? error.message : "cannot ask for the Planner", PASSING);
+	}
 }
