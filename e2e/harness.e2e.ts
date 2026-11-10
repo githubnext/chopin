@@ -1,4 +1,16 @@
+import AxeBuilder from "@axe-core/playwright";
+
+import { instruction } from "../packages/protocol/address";
+import {
+	allBanners,
+	connectionBanner,
+	failureBanner,
+	phaseVoice,
+	RESUMED_WAIT,
+	watchBanners,
+} from "./banner";
 import { chatInput } from "./chat-input";
+import { expectFocusIndicator } from "./focus";
 /**
  * Slice 5: a scripted Planner turn through the real host tools, chat
  * projection, and sockets, against the isolated `AGENT=on` harness project.
@@ -7,7 +19,7 @@ import { FAKE_MCP_PORT, PULL_REQUESTS } from "./harness/fixtures";
 import { expect, ready, test } from "./room";
 
 import type { Chat } from "../packages/protocol/index";
-import type { Page } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 import type { Implementation } from "../packages/protocol/implementation";
 
 function chatPane(page: Page) {
@@ -343,4 +355,304 @@ test("only Build plan asks the Planner for tasks, once, without a Chat message, 
 	expect(drafts[1]!.build).toBe(true);
 	expect(drafts[1]!.planRevision).toBe(drafts[0]!.planRevision);
 	expect(sends).toHaveLength(0);
+});
+
+/**
+ * A reply that ends without finishing is one quiet banner by the composer, never a modal, in a
+ * machine's plain words, with Retry only where sending the same turn again can help. Each way
+ * the fake Planner can end a reply is named by the message that asks for it.
+ */
+const ENDINGS = [
+	{
+		kind: "error",
+		prompt: "FAIL-MODEL",
+		title: "Couldn't finish the reply.",
+		detail: "429 Too Many Requests",
+		retry: true,
+	},
+	{ kind: "timed-out", prompt: "FAIL-TIMEOUT", title: "The reply took too long.", retry: true },
+	{
+		kind: "tool",
+		prompt: "FAIL-TOOL",
+		title: "The reply stopped: a tool it needed isn't available.",
+		retry: true,
+	},
+	{
+		kind: "refused",
+		prompt: "FAIL-REFUSED",
+		title: "The reply stopped: it needed something it isn't allowed to use.",
+		retry: false,
+	},
+] as const;
+// `unreachable` (a turn that throws something that is not an Error) cannot be driven through the
+// harness: it wraps whatever a turn throws into a stream error, which is told as `error`. That kind
+// is pinned by `turn-failure.test.ts` and `failure.test.ts`.
+
+/** Words that are Chopin's own, which a failure never says to a person. */
+const JARGON = /boundary|approval|Planner|attach|bash|harness|Error:/i;
+
+async function ask(page: Page, text: string): Promise<void> {
+	let chat = chatPane(page);
+	await chatInput(chat).fill(`@chopin ${text}`);
+	await chat.getByRole("button", { name: "Send message" }).click();
+}
+
+/** How many times the Chat's words say it: the banner is the one place, the transcript's own line gives way. */
+function said(text: string, words: string): number {
+	return text.split(words).length - 1;
+}
+
+/** Chat is a tab of its own on a phone. */
+async function openChat(page: Page): Promise<void> {
+	let input = chatInput(chatPane(page));
+	if (await input.isVisible()) return;
+	await page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: /^Chat/ }).click();
+	await expect(input).toBeVisible();
+}
+
+function chatBanner(page: Page, kind?: string) {
+	return chatPane(page).locator(
+		`.chat-composer [data-error-banner]${kind ? `[data-kind="${kind}"]` : ""}`,
+	);
+}
+
+for (let ending of ENDINGS) {
+	test(
+		`a reply that ends as ${ending.kind} is one quiet banner by the composer, ${
+			ending.retry ? "with Retry" : "with no button, since asking again would be refused again"
+		}, and nothing else says it`,
+		async ({ join, seed }) => {
+			await seed("# Failing turn\nThe harp needs new strings.\n");
+			let page = await join("ana");
+			let chat = chatPane(page);
+			await ask(page, `${ending.prompt} ${ending.kind} outline the plan`);
+
+			let banner = chatBanner(page, ending.kind);
+			await expect(banner).toHaveCount(1, { timeout: 20_000 });
+			await expect(banner).toBeVisible();
+			// A notice, not a modal: an alert in the composer's own place, over nothing, taking no focus.
+			await expect(chat.getByRole("alert")).toHaveCount(1);
+			await expect(page.getByRole("dialog")).toHaveCount(0);
+			await expect(chatInput(chat)).toBeEditable();
+			await expect(banner).toContainText(ending.title);
+			let detail = banner.locator(".composer-notice-line");
+			if ("detail" in ending) await expect(detail).toHaveText(ending.detail);
+			else await expect(detail).toHaveCount(0);
+			await expect(banner).not.toContainText(JARGON);
+			// One cause, one banner: the connection is fine, and the failed reply's own line in the
+			// transcript is what the banner stands in for, so the words are said once.
+			await expect(allBanners(page)).toHaveCount(1);
+			await expect(connectionBanner(page)).toHaveCount(0);
+			await expect.poll(async () => said(await chat.innerText(), ending.title)).toBe(1);
+			if ("detail" in ending) {
+				expect(said(await chat.innerText(), ending.detail)).toBe(1);
+			}
+			await expect(chat).not.toContainText(JARGON);
+
+			let retry = banner.getByRole("button", { name: "Retry", exact: true });
+			if (ending.retry) await expect(retry).toBeVisible();
+			else {
+				await expect(banner.getByRole("button")).toHaveCount(0);
+				await expect(banner.getByRole("link")).toHaveCount(0);
+			}
+
+			// It is the room's record, so it is there after a reload, said the same way.
+			await page.reload();
+			await ready(page);
+			await expect(chatBanner(page, ending.kind)).toHaveCount(1);
+			await expect(chatBanner(page, ending.kind)).toContainText(ending.title);
+			await expect(allBanners(page)).toHaveCount(1);
+		},
+	);
+}
+
+test("Retry sends the same turn again, once, as a new request, and the banner goes with the answer", async ({ join, page, seed }) => {
+	await seed("# Retried turn\nThe harp needs new strings.\n");
+	let sent: Chat.Send[] = [];
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => {
+			if (typeof message === "string") {
+				let frame = JSON.parse(message) as Chat.Send;
+				if (frame.kind === "chat:send") sent.push(frame);
+			}
+			server.send(message);
+		});
+		server.onMessage(message => route.send(message));
+	});
+	let opened = await join("ana");
+	let chat = chatPane(opened);
+	let words = `FAIL-ONCE ${crypto.randomUUID()} compare the export options`;
+	await ask(opened, words);
+	let banner = chatBanner(opened, "error");
+	await expect(banner).toContainText("Couldn't finish the reply.", { timeout: 20_000 });
+	expect(sent).toHaveLength(1);
+	expect(sent[0]).toMatchObject({ text: `@chopin ${words}`, to: "planner" });
+
+	await banner.getByRole("button", { name: "Retry", exact: true }).click();
+	// The same words to the same place, as a request of its own, and nothing more than one.
+	await expect.poll(() => sent.length).toBe(2);
+	// The room keeps the instruction without its summons, and the destination is what addresses it.
+	expect(sent[1]).toMatchObject({ text: instruction(sent[0]!.text), to: sent[0]!.to });
+	expect(sent[1]!.requestId).not.toBe(sent[0]!.requestId);
+	expect(sent[1]!.focus).toBe(sent[0]!.focus);
+	expect(sent[1]!.references).toEqual(sent[0]!.references);
+	// It worked this time: the reply is in the Chat and no banner is left.
+	await expect(chat.getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible({
+		timeout: 20_000,
+	});
+	await expect(failureBanner(opened)).toHaveCount(0);
+	await expect(allBanners(opened)).toHaveCount(0);
+	expect(sent).toHaveLength(2);
+});
+
+test("only the person who asked is offered Retry; another member reads the same failure with no button, and it goes for both with the answer", async ({ join, seed }) => {
+	await seed("# Shared failure\nThe harp needs new strings.\n");
+	let ana = await join("ana");
+	let ben = await join("ben");
+	await ask(ana, `FAIL-ONCE ${crypto.randomUUID()} shorten the summary`);
+	let hers = chatBanner(ana, "error");
+	let his = chatBanner(ben, "error");
+	await expect(hers).toContainText("Couldn't finish the reply.", { timeout: 20_000 });
+	await expect(his).toContainText("Couldn't finish the reply.");
+	await expect(hers.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+	await expect(his.getByRole("button")).toHaveCount(0);
+	await expect(allBanners(ben)).toHaveCount(1);
+	await hers.getByRole("button", { name: "Retry", exact: true }).click();
+	await expect(chatPane(ben).getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible({
+		timeout: 20_000,
+	});
+	await expect(allBanners(ana)).toHaveCount(0);
+	await expect(allBanners(ben)).toHaveCount(0);
+});
+
+for (
+	let [shape, options] of [
+		["desktop", undefined],
+		["phone", { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } }],
+	] as const
+) {
+	test(`the failure banner is reached and used from the keyboard, enters once and not at all under reduced motion, and has nothing axe objects to, on a ${shape}`, async ({ join, seed }) => {
+		await seed("# Keyed failure\nThe harp needs new strings.\n");
+		let page = await join("ana", options);
+		await page.emulateMedia({ reducedMotion: "reduce" });
+		let chat = chatPane(page);
+		let sent = 0;
+		await page.routeWebSocket("**/ws?**", route => {
+			let server = route.connectToServer();
+			route.onMessage(message => {
+				if (typeof message === "string" && message.includes('"chat:send"')) sent++;
+				server.send(message);
+			});
+			server.onMessage(message => route.send(message));
+		});
+		await page.reload();
+		await ready(page);
+		await openChat(page);
+		await ask(page, `FAIL-ONCE ${crypto.randomUUID()} keyboard`);
+		let banner = chatBanner(page, "error");
+		await expect(banner).toBeVisible({ timeout: 20_000 });
+		// Reduced motion: it simply appears.
+		expect(await banner.evaluate(element => getComputedStyle(element).animationName)).toBe("none");
+
+		let result = await new AxeBuilder({ page }).include("[data-error-banner]").analyze();
+		expect(result.violations).toEqual([]);
+
+		// From the keyboard: Shift+Tab in the composer's field switches whom a message is for, so
+		// Retry is reached forward, from the Chat's own first control, and shows its ring; Enter
+		// asks again.
+		let retry = banner.getByRole("button", { name: "Retry", exact: true });
+		await chat.getByRole("button").first().focus();
+		let visited: string[] = [];
+		for (let step = 0; step < 40; step++) {
+			if (await retry.evaluate(element => element === document.activeElement)) break;
+			await page.keyboard.press("Tab");
+			visited.push(
+				await page.evaluate(() => {
+					let active = document.activeElement;
+					return active
+						? `${active.tagName}:${
+							active.getAttribute("aria-label") ?? active.textContent?.trim().slice(0, 20)
+						}`
+						: "nothing";
+				}),
+			);
+		}
+		expect(visited.at(-1) ?? "", `Tab visited ${visited.join(" > ")}`).toContain("Retry");
+		await expectFocusIndicator(retry);
+		await expect(banner).toBeInViewport();
+		let before = sent;
+		await page.keyboard.press("Enter");
+		await expect.poll(() => sent).toBe(before + 1);
+		await expect(chat.getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible({
+			timeout: 20_000,
+		});
+		await expect(allBanners(page)).toHaveCount(0);
+	});
+}
+
+test("a failed reply waits behind the connection banner when the connection drops, and is back, unchanged, when it returns: one cause, one banner, always", async ({ join, page, seed }) => {
+	test.setTimeout(90_000);
+	await seed("# Cut failure\nThe harp needs new strings.\n");
+	let sockets: WebSocketRoute[] = [];
+	let offline = false;
+	await page.routeWebSocket("**/ws?**", route => {
+		if (offline) return route.close();
+		let server = route.connectToServer();
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => route.send(message));
+		sockets.push(route);
+	});
+	await page.addInitScript(() => {
+		Math.random = () => 0.999;
+		let seen = { most: 0 };
+		(window as unknown as { mostBanners: typeof seen }).mostBanners = seen;
+		let count = () => {
+			seen.most = Math.max(seen.most, document.querySelectorAll("[data-banner]").length);
+		};
+		addEventListener("DOMContentLoaded", () => {
+			new MutationObserver(count).observe(document.body, {
+				childList: true,
+				subtree: true,
+				attributes: true,
+			});
+		});
+	});
+	await watchBanners(page);
+	let opened = await join("ana");
+	await ask(opened, `FAIL-MODEL ${crypto.randomUUID()} cut`);
+	let failure = chatBanner(opened, "error");
+	await expect(failure).toContainText("Couldn't finish the reply.", { timeout: 20_000 });
+
+	offline = true;
+	for (let route of sockets) await route.close();
+	// The connection is the cause now, and it is the one thing said: the failure waits.
+	await expect(connectionBanner(opened)).toHaveAttribute("data-layer", "socket", {
+		timeout: 30_000,
+	});
+	await expect(failureBanner(opened)).toHaveCount(0);
+	await expect(allBanners(opened)).toHaveCount(1);
+	await expect(opened.getByRole("alert")).toHaveCount(0);
+
+	offline = false;
+	await opened.evaluate(() => dispatchEvent(new Event("online")));
+	await expect(connectionBanner(opened)).toHaveAttribute("data-phase", "resumed", {
+		timeout: 30_000,
+	});
+	await expect(allBanners(opened)).toHaveCount(1);
+	await expect(failureBanner(opened)).toHaveCount(0);
+	// The room's connection has told its own end, and then the failure is told again, as it was.
+	await expect(connectionBanner(opened)).toHaveCount(0, RESUMED_WAIT);
+	await expect(failure).toContainText("Couldn't finish the reply.");
+	await expect(failure.locator(".composer-notice-line")).toHaveText("429 Too Many Requests");
+	await expect(allBanners(opened)).toHaveCount(1);
+	// At no moment, from any frame the page drew, were there two.
+	expect(
+		await opened.evaluate(() =>
+			(window as unknown as { mostBanners: { most: number } }).mostBanners.most
+		),
+	).toBe(1);
+	// The failure is not one of the live region's words: only the connection is spoken.
+	await expect(phaseVoice(opened)).not.toContainText(/429|reply/);
 });
