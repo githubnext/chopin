@@ -305,8 +305,11 @@ export async function serveWork(options: {
 export type Planners = {
 	/** The documents whose Planners it runs because Chopin asked, by id. */
 	running(): string[];
-	/** Run exactly these, starting the new ones and stopping the others. */
-	assign(planners: PlannerAssignment[], stopped?: Record<string, string>): void;
+	/**
+	 * Run exactly these, starting the new ones and stopping the others; those in `retry` a person
+	 * asked to have started again now, if they are not running.
+	 */
+	assign(planners: PlannerAssignment[], stopped?: Record<string, string>, retry?: string[]): void;
 	/** Chopin answered a poll that named `asked` without a change, so it wants exactly those. */
 	unchanged?(asked: string[]): void;
 };
@@ -378,7 +381,10 @@ async function pollPlanners(
 			let stopped = answer.stopped && typeof answer.stopped === "object"
 				? answer.stopped
 				: undefined;
-			planners.assign(answer.planners, stopped);
+			let retry = Array.isArray(answer.retry)
+				? answer.retry.filter((id): id is string => typeof id === "string")
+				: undefined;
+			planners.assign(answer.planners, stopped, retry);
 		} else planners.unchanged?.(asked);
 	}
 }

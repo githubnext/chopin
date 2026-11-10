@@ -117,6 +117,8 @@ export async function servePlanners(options: {
  * the link of a Planner it stops asking for, so the exit can come before the poll's answer. Until
  * an answer, `running` leaves the document out, which Chopin answers at once if it still wants it;
  * `unchanged` hears an answer that changed nothing, so one that leaves it out withdraws it.
+ * `retry` names the documents a person asked to have started again now: one that exited starts
+ * without waiting out its backoff, and one that is running is left as it is.
  */
 export function dispatchedPlanners(options: {
 	url: string;
@@ -145,6 +147,10 @@ export function dispatchedPlanners(options: {
 		served: Promise<void>;
 		/** Set while it exited by itself and waits on Chopin's answer: whether to start it again. */
 		exited?: (again: boolean) => void;
+		/** Set while it waits out its backoff before starting again: cuts that wait short. */
+		hurry?: () => void;
+		/** A person asked for it again while it waited on Chopin's answer: skip the next backoff. */
+		hurried?: boolean;
 	};
 	let running = new Map<string, Backend>();
 	let own = new Set(options.documents);
@@ -167,8 +173,9 @@ export function dispatchedPlanners(options: {
 		);
 	return {
 		running: () => [...running].filter(([, backend]) => !backend.exited).map(([id]) => id),
-		assign(planners: PlannerAssignment[], stopped?: Record<string, string>) {
+		assign(planners: PlannerAssignment[], stopped?: Record<string, string>, retry?: string[]) {
 			let wanted = new Map(planners.map(value => [value.id, value]));
+			let now = new Set(retry);
 			for (let [id, backend] of running) {
 				let planner = wanted.get(id);
 				if (!planner) {
@@ -177,6 +184,11 @@ export function dispatchedPlanners(options: {
 				}
 				// A renamed document keeps its id; Chopin names its new address.
 				if (!backend.own) backend.url = planner.url;
+				// Only a backend that is not running is hurried: a running one may hold work.
+				if (now.has(id)) {
+					if (backend.hurry) backend.hurry();
+					else if (backend.exited) backend.hurried = true;
+				}
 				backend.exited?.(true);
 			}
 			for (let [id, planner] of wanted) {
@@ -192,6 +204,26 @@ export function dispatchedPlanners(options: {
 						address: () => backend.url,
 						id: planner.id,
 						signal,
+						pause: async (ms: number) => {
+							let now = () =>
+								options.output.say(
+									options.output.style.dim(
+										`… Starting the Planner for ${backend.url} again now, as someone asked.`,
+									),
+								);
+							if (backend.hurried) {
+								backend.hurried = false;
+								now();
+								return;
+							}
+							let cut = new AbortController();
+							backend.hurry = () => {
+								now();
+								cut.abort();
+							};
+							await delay(ms, AbortSignal.any([signal, cut.signal]));
+							backend.hurry = undefined;
+						},
 						again: () =>
 							new Promise<boolean>(resolve => {
 								let answer = (again: boolean) => {
@@ -259,11 +291,14 @@ async function servePlanner(options: {
 	 * so it starts again. Without it, a backend that exits is always started again.
 	 */
 	again?: () => Promise<boolean>;
+	/** Waits out a backoff before starting again, which a person's asking may cut short. */
+	pause?: (ms: number) => Promise<void>;
 }) {
 	let { output, signal } = options;
 	let healthyMs = options.healthyMs ?? HEALTHY_MS;
 	let values = Object.values(options.env ?? {});
 	let current = () => options.address?.() ?? options.document;
+	let pause = options.pause ?? ((ms: number) => delay(ms, signal));
 	// Launches in a row that exited before staying up, and whether Chopin was told of them.
 	let streak = 0;
 	let reported = false;
@@ -311,7 +346,7 @@ async function servePlanner(options: {
 				output.style.dim(`… Can't get a Planner credential for ${document}; retrying in `)
 					+ output.style.dim(`${Math.ceil(wait / 1000)}s.`),
 			);
-			await delay(wait, signal);
+			await pause(wait);
 			continue;
 		}
 		// Chopin names the document's repository, whose checkout the backend runs in.
@@ -444,7 +479,7 @@ async function servePlanner(options: {
 				}s.`,
 			),
 		);
-		await delay(wait, signal);
+		await pause(wait);
 	}
 }
 
