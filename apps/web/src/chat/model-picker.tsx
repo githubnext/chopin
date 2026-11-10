@@ -153,7 +153,7 @@ export function ModelPicker(
 			variant="models"
 		>
 			<div className="composer-model-search">
-				<SearchIcon aria-hidden="true" size={16} />
+				<SearchIcon aria-hidden="true" className="composer-model-search-icon" size={16} />
 				<input
 					ref={search}
 					aria-activedescendant={options.length > 0
