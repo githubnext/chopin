@@ -95,6 +95,29 @@ export function EllipsisIcon(props: IconProps) {
 	);
 }
 
+export function EllipsisVerticalIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<circle cx="9" cy="3.75" fill="currentColor" r="1.25" stroke="none" />
+			<circle cx="9" cy="9" fill="currentColor" r="1.25" stroke="none" />
+			<circle cx="9" cy="14.25" fill="currentColor" r="1.25" stroke="none" />
+		</LineIcon>
+	);
+}
+
+export function ReactionAddIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<path d="M9.75 16.25C5.19 16.25 1.75 13.31 1.75 9C1.75 4.93 4.93 1.75 9 1.75C9.4 1.75 9.79 1.78 10.17 1.84" />
+			<path d="M16.25 8.1C16.25 12.69 13.19 16.25 9 16.25" />
+			<path d="M5.9 10.5C6.45 11.75 7.6 12.5 9 12.5C10.4 12.5 11.55 11.75 12.1 10.5" />
+			<circle cx="6.5" cy="7" fill="currentColor" r=".85" stroke="none" />
+			<circle cx="11.5" cy="7" fill="currentColor" r=".85" stroke="none" />
+			<path d="M14.25 1.25V5.25M12.25 3.25H16.25" />
+		</LineIcon>
+	);
+}
+
 export function InfoIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>
