@@ -458,10 +458,11 @@ export function HiddenImage({ host, image }: { host: Host; image: ChatImageData 
 }
 
 export function ImageFigure(
-	{ host, image, more, variant }: {
+	{ host, image, more, onOpen, variant }: {
 		host: Host;
 		image: ChatImageData;
 		more?: number;
+		onOpen?: () => void;
 		variant: "single" | "tile";
 	},
 ) {
@@ -469,7 +470,10 @@ export function ImageFigure(
 	let { id, label, pending, source, type, url } = useImageEntry(host, image, anchor);
 	let { image: preview, load, onError, onLoad } = useLoad(url, pending);
 	let framed = useFrameImage(image, source);
-	let open = () => host.open(id);
+	let open = () => {
+		host.open(id);
+		onOpen?.();
+	};
 	return (
 		<ImageRoot image={framed} load={load} variant={variant}>
 			<span className="chat-image-anchor" ref={anchor} />
