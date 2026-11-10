@@ -103,12 +103,12 @@ async function darkest(page: Page, target: Locator): Promise<number> {
 	}, png);
 }
 
-async function coveredText(bar: Locator): Promise<string[]> {
-	return bar.evaluate(element => {
+async function coveredText(bar: Locator, within?: string): Promise<string[]> {
+	return bar.evaluate((element, scope) => {
 		let box = element.getBoundingClientRect();
 		let found: string[] = [];
 		let walker = document.createTreeWalker(
-			element.closest("[data-chat-scroll]")!,
+			(scope ? element.closest(scope) : null) ?? element.closest("[data-chat-scroll]")!,
 			NodeFilter.SHOW_TEXT,
 		);
 		while (walker.nextNode()) {
@@ -130,7 +130,7 @@ async function coveredText(bar: Locator): Promise<string[]> {
 			}
 		}
 		return found;
-	});
+	}, within);
 }
 
 async function hold(page: Page, x: number, y: number): Promise<void> {
@@ -436,6 +436,29 @@ test("on a desktop the toolbar of a message taller than the viewport stays in th
 	let first = (await bar.getByRole("button").first().boundingBox())!;
 	await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2, { steps: 12 });
 	await expect(bar).toHaveCSS("opacity", "1");
+});
+
+test("on a desktop the toolbar kept in view on a message taller than the viewport covers none of that message's text, at the middle, near the top and near the end", async ({ join, seed }) => {
+	await seed("# Layout\n", { transcript: transcript() });
+	let page = await join("ana");
+	let target = message(page, "m6");
+	let bar = toolbar(target);
+	let view = (await scroller(page).boundingBox())!;
+	expect((await target.boundingBox())!.height).toBeGreaterThan(view.height);
+	for (let hidden of [80, 300, 520]) {
+		await scroller(page).evaluate((element, wanted) => {
+			let top = element.querySelector('[data-chat-message-id="m6"]')!.getBoundingClientRect().top
+				- element.getBoundingClientRect().top;
+			element.scrollTop += top + wanted;
+		}, hidden);
+		await page.mouse.move(0, 0);
+		await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
+		await expect(bar, String(hidden)).toHaveCSS("opacity", "1");
+		await expect.poll(async () => (await bar.boundingBox())!.y, { message: String(hidden) })
+			.toBeGreaterThanOrEqual(view.y);
+		await expect.poll(() => coveredText(bar, "[data-chat-message-id]"), { message: String(hidden) })
+			.toEqual([]);
+	}
 });
 
 test("on a phone a long press in the middle of a message taller than the screen keeps the toolbar on screen, with every button a touch target", async ({ join, seed }) => {

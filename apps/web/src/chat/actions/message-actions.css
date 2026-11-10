@@ -76,6 +76,11 @@
 	opacity: 1;
 }
 
+/* A message taller than the pane leaves the bar's width beside its text, as the bar is kept in view over it. */
+.chat-message-body[data-chat-tall] [data-chat-message-text] {
+	padding-inline-end: calc(var(--chat-toolbar-reserve, 0px) - var(--chat-bleed-end) + 0.5rem);
+}
+
 .message-actions {
 	display: inline-flex;
 	align-items: center;
