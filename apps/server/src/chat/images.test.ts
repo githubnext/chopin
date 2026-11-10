@@ -77,6 +77,30 @@ describe("tool images", () => {
 		expect(found.images).toEqual([{ bytes: PNG, mimeType: "image/png", width: 512, height: 256 }]);
 	});
 
+	test("reads JSON text with white space around it or a key written with an escape", () => {
+		let text = JSON.stringify({ content: [image({ alt: "A plan" })] });
+		for (
+			let output of [
+				` \n${text}`,
+				`\t\r\n${text}\n `,
+				text.replace('"content"', '"\\u0063ontent"'),
+				` ${text.replace('"content"', '"\\u0063ontent"')} `,
+			]
+		) {
+			expect(toolImages(output).images.map(item => item.alt), output.slice(0, 24)).toEqual([
+				"A plan",
+			]);
+			expect(toolRowOutput(output), output.slice(0, 24)).toBe("1 image");
+		}
+	});
+
+	test("leaves text that is JSON without image blocks as it was", () => {
+		for (let output of [' "content" ', " [1, 2] ", ' {"content": []} ', '{"content": [']) {
+			expect(toolImages(output)).toEqual({ images: [], refused: 0 });
+			expect(toolRowOutput(output)).toBe(output);
+		}
+	});
+
 	test("refuses any image Chopin will not host, and keeps the rest", () => {
 		let found = toolImages({
 			content: [
