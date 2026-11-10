@@ -891,10 +891,12 @@ image blocks that do not fit, largest first and the later of equals first, with
 `data` empty and `tooLarge` set to the bytes the image would have taken, and
 Chat then says so beside the images. A block with `tooLarge` is never stored,
 whatever else it holds. A client that does not do this, as before it did, has its
-message refused and its link closed, and nothing is shown, since the server never
-sees it; a server that does not know `tooLarge` leaves such a block out without
-saying why. A result that still does not fit with its images left out is not sent,
-and its `emit` throws, as it always did.
+message refused with the generic `error` whose `code` is `message-too-large`,
+which names no image, and its link closed with 1009 (see [Closing](#closing)),
+and Chat shows no reason for the missing images, since the server never reads
+the result; a server that does not know `tooLarge` leaves such a block out
+without saying why. A result that still does not fit with its images left out
+is not sent, and its `emit` throws, as it always did.
 
 ### Reading a large document
 
