@@ -1003,6 +1003,21 @@ export type StoredPlannerLinkHold = PlannerLinkHold & {
 	fencing: number;
 };
 
+/**
+ * The model and thinking level somebody chose for a document's Planner, one row per document and
+ * shared by everyone who opens it. A field left out means the Planner's own default. Nothing
+ * checks the strings here: the server resolves them against the catalog the harness reports at
+ * the turn that uses them, and a model that has gone stays stored until somebody chooses again.
+ */
+export type PlannerModelChoice = {
+	channelId: string;
+	model?: string;
+	thinkingLevel?: string;
+	/** Who chose it last. */
+	userId: string;
+	updatedAt: Date;
+};
+
 /** A paired machine's Planner credential, known by the digest of its token and never the token. */
 export type PlannerCredential = {
 	/** SHA-256 of the credential. */

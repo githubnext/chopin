@@ -52,6 +52,7 @@ import type {
 	PauseBackgroundJob,
 	PlannerCredential,
 	PlannerLinkHold,
+	PlannerModelChoice,
 	PublishChannelDescription,
 	PublishChannelDescriptionResult,
 	PublishInitialResearchReport,
@@ -420,6 +421,16 @@ export interface PlannerLinkHoldStore {
 }
 
 /**
+ * The model and thinking level chosen for each document's Planner. Writes are fenced by the writer
+ * lease; a row goes with its document.
+ */
+export interface PlannerModelChoiceStore {
+	/** Replaces the document's choice whole. A choice with neither field removes the row. */
+	put(lease: Lease, choice: PlannerModelChoice): Promise<void>;
+	get(channelId: string): Promise<PlannerModelChoice | undefined>;
+}
+
+/**
  * Credentials a paired machine hands to a Planner backend, by digest. A row is written before
  * its credential is handed out, so a process that starts later accepts it while it lasts.
  */
@@ -493,6 +504,7 @@ export interface StorageAdapter {
 	readonly versions: DocumentVersionStore;
 	readonly machines: MachineStore;
 	readonly plannerHolds: PlannerLinkHoldStore;
+	readonly plannerModelChoices: PlannerModelChoiceStore;
 	readonly plannerCredentials: PlannerCredentialStore;
 	readonly mcpSessions: McpSessionStore;
 	readonly deferredTurns: DeferredTurnStore;

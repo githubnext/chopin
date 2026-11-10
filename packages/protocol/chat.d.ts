@@ -22,6 +22,7 @@ export declare namespace Chat {
 		| Request<Retry>
 		| Request<Wake>
 		| Request<SetParticipation>
+		| Request<SetModel>
 		| Request<Typing>;
 
 	export type Outgoing =
@@ -36,7 +37,8 @@ export declare namespace Chat {
 		| Retried
 		| Woke
 		| Removed
-		| ParticipationState;
+		| ParticipationState
+		| ModelState;
 
 	/** Who said something. The agent is not a member, so it is named apart. */
 	export type Author =
@@ -247,6 +249,48 @@ export declare namespace Chat {
 	export type Participation = { enabled: boolean; paused: boolean };
 	export type ParticipationState = KIND<"chat:participation"> & Participation;
 	export type SetParticipation = KIND<"chat:participation"> & { paused: boolean };
+
+	/**
+	 * A model the document's agent can run, as its harness (or the client attached to the document)
+	 * reports it. `id` is the exact string a turn names; `thinkingLevels` are the levels the model
+	 * supports in the order to show them, absent or empty for a model with no reasoning control.
+	 */
+	export type ModelOption = {
+		id: string;
+		name: string;
+		provider?: { id: string; name?: string };
+		description?: string;
+		thinkingLevels?: string[];
+	};
+
+	/** What a document's agent offers: absent entirely where its harness offers no choice. */
+	export type ModelCatalog = {
+		models: ModelOption[];
+		/** The model, and thinking level, the agent uses until somebody chooses. */
+		default?: { model: string; thinkingLevel?: string };
+	};
+
+	/**
+	 * The model and thinking level somebody chose for the document's agent. A field left out means
+	 * the agent's own default; an empty choice is the default of both.
+	 */
+	export type ModelChoice = { model?: string; thinkingLevel?: string };
+
+	/**
+	 * The document's model choice and what it can be chosen from, shared by everyone in the room:
+	 * sent on join, to everyone when the choice or the catalog changes, and to the sender as the
+	 * answer to `SetModel`. `catalog` is absent when nothing can be chosen, and the composer then
+	 * offers no control. `choice` is the stored choice, which can name a model the catalog no longer
+	 * offers; the agent then runs its default and says so in Chat.
+	 */
+	export type ModelState = KIND<"chat:model"> & { catalog?: ModelCatalog; choice?: ModelChoice };
+
+	/**
+	 * Choose the document's model and thinking level, from the next turn. Anyone who can write may.
+	 * The server checks the choice against the catalog it reports now, and refuses one the catalog
+	 * does not offer. Without a field the agent's own default applies.
+	 */
+	export type SetModel = KIND<"chat:model"> & ModelChoice;
 
 	/** Ephemeral composer activity, with no draft content. */
 	export type Typing = KIND<"chat:typing"> & { active: boolean };
