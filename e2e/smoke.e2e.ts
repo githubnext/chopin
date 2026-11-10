@@ -476,7 +476,11 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 		{ text: "Keep the release notes brief.", to: "room" },
 		{ text: "@chopin Queue the rollback checks.", to: "planner" },
 	]);
-	await expect(chat.locator('[data-chat-state="queued"]')).toBeVisible();
+	let queue = chat.getByRole("region", { name: "Waiting for Chopin" });
+	await expect(queue).toContainText("1 waiting for Chopin");
+	await expect(queue).toContainText("Queue the rollback checks.");
+	await expect(chat.locator("[data-chat-entry]").filter({ hasText: "Queue the rollback checks." }))
+		.toHaveCount(0);
 
 	await fillChat(draft, "@chopin Keep\nthe new line.");
 	await draft.press("Shift+Enter");
@@ -492,9 +496,10 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 	let next = chat.locator("[data-chat-entry]").filter({ hasText: "Queue the rollback checks." });
 	let later = chat.locator("[data-chat-entry]").filter({ hasText: /Keep\s+the new line/ });
 	await expect(next).toHaveCount(1);
-	await expect(next).not.toHaveAttribute("data-chat-state", "queued");
-	await expect(later).toHaveCount(1);
-	await expect(later).toHaveAttribute("data-chat-state", "queued");
+	await expect(queue).toContainText("1 waiting for Chopin");
+	await expect(queue).toContainText(/Keep\s+the new line/);
+	await expect(queue).not.toContainText("Queue the rollback checks.");
+	await expect(later).toHaveCount(0);
 });
 
 test("chat replaces the Planner working row with its response", async ({ join, page }) => {
@@ -896,15 +901,15 @@ test(
 		await expect(chat.getByText("Edit plan", { exact: true })).toHaveCount(0);
 		await expect(chat.getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
 
-		let mine = chat.locator("[data-chat-entry]").filter({
-			has: page.getByText("Ana", { exact: true }),
-		});
-		let theirs = chat.locator("[data-chat-entry]").filter({
+		let queue = chat.getByRole("region", { name: "Waiting for Chopin" });
+		let mine = queue.locator("[data-chat-queue-item]").filter({ hasText: "Ana" });
+		let theirs = queue.locator("[data-chat-queue-item]").filter({
 			hasText: "Check the rollback path too.",
 		});
-		await expect(mine).toHaveAttribute("data-chat-state", "queued");
-		await expect(mine.getByRole("button", { name: "Withdraw queued message" })).toBeVisible();
-		await expect(theirs.getByRole("button", { name: "Withdraw queued message" })).toHaveCount(0);
+		await expect(queue).toContainText("2 waiting for Chopin");
+		await expect(mine.getByRole("button", { name: "Cancel message from Ana" })).toBeVisible();
+		await expect(mine.getByRole("button", { name: "Edit message from Ana" })).toBeVisible();
+		await expect(theirs.getByRole("button")).toHaveCount(0);
 
 		await testInfo.attach("running-turn-with-queue", {
 			body: await chat.screenshot(),
