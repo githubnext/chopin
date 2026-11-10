@@ -29,8 +29,8 @@
 	background: var(--color-inset);
 }
 
-.chat-image[data-chat-image="tile"] .chat-image-frame {
-	aspect-ratio: 4 / 3;
+.chat-image[data-chat-image="tile"] {
+	inline-size: clamp(5rem, calc(12rem * var(--image-width, 4) / var(--image-height, 3)), 100%);
 }
 
 /* The frame's hairline edge is drawn over the image, so a pale image never loses its edge. */
