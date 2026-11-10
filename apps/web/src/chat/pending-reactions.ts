@@ -7,7 +7,13 @@ export type IntentAction =
 	| { kind: "sent"; id: string; emoji: string; on: boolean }
 	| { kind: "unsent"; id: string; emoji: string; on: boolean }
 	| { kind: "drop"; id: string; emoji: string; on: boolean }
-	| { kind: "settle"; id: string; reactions: readonly Chat.Reaction[] | undefined; handle: string }
+	| {
+		kind: "settle";
+		id: string;
+		reactions: readonly Chat.Reaction[] | undefined;
+		handle: string;
+		answers?: { emoji: string; on: boolean };
+	}
 	| { kind: "history"; entries: readonly Chat.Entry[]; handle: string }
 	| { kind: "prune"; present: ReadonlySet<string> };
 
@@ -58,7 +64,10 @@ export function intentsReducer(
 			return kept(
 				intents,
 				intents.filter(intent =>
-					intent.id !== action.id || !satisfied(intent, action.reactions, action.handle)
+					intent.id !== action.id
+					|| (action.answers
+						&& (intent.emoji !== action.answers.emoji || intent.on !== action.answers.on))
+					|| !satisfied(intent, action.reactions, action.handle)
 				),
 			);
 		case "history": {

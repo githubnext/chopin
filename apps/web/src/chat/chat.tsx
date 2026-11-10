@@ -1083,6 +1083,7 @@ export function Chat(
 					dispatchIntents({
 						kind: "settle",
 						id,
+						answers: { emoji, on },
 						reactions: latestEntries.current.find(entry => entry.id === id)?.reactions,
 						handle,
 					}),
