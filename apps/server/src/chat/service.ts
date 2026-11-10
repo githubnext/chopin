@@ -72,6 +72,7 @@ import { contributed } from "./initiative";
 import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./reply-policy";
 import { TOOL_UNAVAILABLE, turnFailureOf } from "./turn-failure";
 import { runDuration } from "./run-duration";
+import { READER_INSTRUCTIONS } from "./reaction-instructions";
 import type { InitiativeSchedule } from "./initiative-schedule";
 
 import type { Server } from "bun";
@@ -150,6 +151,8 @@ export type Waiting = {
 	threadChannel?: string;
 	/** See `Instruction`. */
 	quiet?: boolean;
+	reader?: Instruction["reader"];
+	authorize?: Instruction["authorize"];
 };
 
 /** A request for implementation tasks, live while its turn runs. */
@@ -218,6 +221,14 @@ export type Instruction = {
 	 * never can.
 	 */
 	asked?: true;
+	/**
+	 * Answers a reader's reaction. The turn is an ordinary one in the Chat, queued, streamed and
+	 * stopped like any other, but it has no tools, runs under the document's existing owner without
+	 * claiming it for anyone, and never uses or changes the Planner session kept for the writers.
+	 */
+	reader?: true;
+	/** Asked as the turn is about to start, which can be long after it was queued; `false` ends it unrun. */
+	authorize?: () => Promise<boolean>;
 };
 
 /**
@@ -343,6 +354,8 @@ export type Chat = {
 	reactions?: import("./reaction-reply").ReactionResponder;
 	/** The id of the running turn when it is answering a reaction. */
 	reactionTurn?: string;
+	/** The running turn answers a reader's reaction; see `Instruction.reader`. */
+	reader?: true;
 	entries: Wire.Entry[];
 	/** Chopin's own turns waiting for the running one to end; never a person's message. */
 	waiting: Waiting[];
@@ -753,12 +766,6 @@ export type Room = {
 	 * reader's reaction from being answered after the reader has gone or lost access.
 	 */
 	reactionAuthorize?: (sessionId: string, actor: string) => Promise<boolean>;
-	/**
-	 * The Planner's short written answer to a reader's reaction, made by a worker that has no tools
-	 * and runs under the document's existing owner without claiming it. Undefined when there is none
-	 * to give: the agent is off, nobody owns the document, or no Planner is attached.
-	 */
-	reactionReply?: (input: ReactionReplyInput) => Promise<string | undefined>;
 	commitRoomMessage?: (entry: Wire.Entry) => Promise<void>;
 	roomMessagePublished?: () => void;
 	/** Runs only after a new member entry is durably saved and its human turn reserved, or given to the one running. */
@@ -819,15 +826,6 @@ export type Room = {
 	};
 	/** Called when harness-reported context usage or compactions change. */
 	onSessionMetaChanged?: () => Promise<void> | void;
-};
-
-export type ReactionReplyInput = {
-	entry: Wire.Entry;
-	emoji: string;
-	handle: string;
-	intent: string;
-	preceding: Array<{ author: "member" | "agent"; handle?: string; text: string }>;
-	signal: AbortSignal;
 };
 
 type Retained = {
@@ -1509,53 +1507,6 @@ function postNotice(
 }
 
 /**
- * Say something as the Planner without running a turn: the answer to a reader's reaction, which
- * is written by a worker with no tools. It is posted only while nothing runs or waits, so it never
- * lands inside a turn's own writing, and `busy` says to ask again later. A saved entry is shown;
- * one whose save fails is taken back out.
- */
-export function postAgentReply(
-	context: Room,
-	text: string,
-	answered?: { entry: Wire.Entry; intent: string },
-): Promise<"posted" | "busy" | "failed"> {
-	let { chat, room, server } = context;
-	let process = async (): Promise<"posted" | "busy" | "failed"> => {
-		if (chat.closed) return "failed";
-		if (chat.busy || chat.starting || startsHeld || chat.waiting.length > 0) return "busy";
-		let entry = { id: ulid(), author: { kind: "agent" }, text, ts: now(), viaReaction: true } as
-			& Wire.Entry
-			& { viaReaction: true };
-		let marked = answered?.entry as MemberEntry | undefined;
-		chat.entries.push(entry);
-		if (marked) marked.answeredIntents = [...(marked.answeredIntents ?? []), answered!.intent];
-		try {
-			await context.persist();
-		} catch (err) {
-			console.error(
-				"[chat] could not save an answer to a reaction:",
-				err instanceof Error ? err.name : "unknown",
-			);
-			chat.entries.splice(chat.entries.indexOf(entry), 1);
-			if (marked) {
-				// Only this answer's reading is given back: another recorded while it saved stays.
-				let rest = [...(marked.answeredIntents ?? [])];
-				let at = rest.indexOf(answered!.intent);
-				if (at >= 0) rest.splice(at, 1);
-				if (rest.length > 0) marked.answeredIntents = rest;
-				else delete marked.answeredIntents;
-			}
-			return "failed";
-		}
-		announce(server, room, entry);
-		return "posted";
-	};
-	let accepted = chat.sending.then(process, process);
-	chat.sending = accepted.then(() => {}, () => {});
-	return accepted;
-}
-
-/**
  * Start a Planner turn from something other than a message.
  *
  * Accepting a comment is an instruction in a way prose is not — the `@chopin` rule
@@ -1611,12 +1562,12 @@ export function instruct(
 				handle,
 				text,
 				...rest,
-				sessionId: context.claimantSessionId,
+				sessionId: about.reader ? undefined : context.claimantSessionId,
 			});
 			return;
 		}
 
-		startRun(context, handle, text, about, context.claimantSessionId);
+		startRun(context, handle, text, about, about.reader ? undefined : context.claimantSessionId);
 	};
 	if (about.spent?.() || about.signal?.aborted) return report(about, { status: "skipped" });
 	// A turn a person asked for cannot wait for the one running: it is refused before it is noticed.
@@ -2654,8 +2605,11 @@ async function repositorySession(
 	currentReferences: Wire.Reference[] = [],
 ): Promise<{ session: PlannerSession; binding: ActiveOwnerBinding }> {
 	let retained = context.chat.retained;
+	let reader = !!context.chat.reader;
+	let isolated = reader || !!context.chat.job;
 	// A background job keeps its isolated session: it never borrows or ends the retained Planner.
-	if (retained && !context.chat.job) {
+	// Nor does a reader's answer, whose session has no tools at all.
+	if (retained && !isolated) {
 		if (!retained.binding.signal.aborted && await retained.binding.revalidate()) {
 			context.chat.agent = retained.session;
 			return { session: retained.session, binding: retained.binding };
@@ -2705,7 +2659,9 @@ async function repositorySession(
 			now: new Date(),
 		});
 		chat.referenceCache.clear();
-		let forkSetup = !chat.job ? context.sessionForks?.prepareTurn(currentEntryId) : undefined;
+		// A reader's session has no tools and no history of its own, so it neither forks nor moves the
+		// Planner's session tree: its reply stays untracked, for the next Planner turn to be told.
+		let forkSetup = !isolated ? context.sessionForks?.prepareTurn(currentEntryId) : undefined;
 		let fullBootstrap = sessionBootstrap(
 			chat,
 			ownership.transcriptCursor,
@@ -2730,7 +2686,7 @@ async function repositorySession(
 			repository,
 			chat,
 			...(forkSetup?.fork ? { fork: forkSetup.fork } : {}),
-			instructions: workspace => {
+			instructions: reader ? READER_INSTRUCTIONS : workspace => {
 				let usedNative = !!forkSetup?.skipBootstrap
 					&& !(workspace && "remote" in workspace && workspace.forkedNatively === false);
 				return plannerInstructions(
@@ -2742,6 +2698,7 @@ async function repositorySession(
 			},
 			model: context.config.model || undefined,
 			harness: context.config.harness,
+			...(reader ? { reader: true as const } : {}),
 		});
 		if (!result.ok) {
 			if (binding.signal.aborted) {
@@ -2760,7 +2717,7 @@ async function repositorySession(
 		}
 		chat.agent = opened;
 		chat.owner = openingOwner;
-		if (!chat.job) consumeBootstrapBackscroll(chat);
+		if (!isolated) consumeBootstrapBackscroll(chat);
 		else chat.bootstrapEntries = undefined;
 		return { session: opened, binding };
 	} catch (err) {
@@ -2883,6 +2840,9 @@ async function run(
 	let replyOnly = false;
 	// The turn a failure notice names, kept past `finally`, which clears the live fields.
 	let began: { request?: string; focus?: string } = {};
+	let skipped = false;
+	let reader = !!about?.reader;
+	let isolated = reader || !!jobTurn;
 
 	if (!reserved) {
 		chat.busy = true;
@@ -2938,6 +2898,7 @@ async function run(
 		chat.jobFailureCode = undefined;
 		chat.jobCalls = new Map();
 	}
+	if (reader) chat.reader = true;
 	let sendStarted = false;
 	let outcome: JobOutcome | undefined;
 	let persistenceError: unknown;
@@ -2949,10 +2910,15 @@ async function run(
 	if (about?.signal?.aborted) invalidate();
 	else about?.signal?.addEventListener("abort", invalidate, { once: true });
 	chat.turnController = turnController;
-	let held = jobTurn ? chat.retained : undefined;
+	let held = isolated ? chat.retained : undefined;
 	let heldOwner = chat.owner;
 	let heldReferences = held ? new Map(chat.referenceCache) : undefined;
 	try {
+		if (about?.authorize && !await about.authorize()) {
+			skipped = true;
+			turnController.abort();
+			throw new Error("The turn is no longer authorized.");
+		}
 		opened = await repositorySession(context, claimantSessionId, member?.entryId, references);
 		if (about?.signal && about.spent?.()) turnController.abort();
 		if (chat.agent !== opened.session || turnController.signal.aborted) {
@@ -2966,6 +2932,9 @@ async function run(
 		let files: PlannerFiles | undefined;
 		if (jobTurn) {
 			prompt = jobTurn.prompt;
+		} else if (reader) {
+			// What the Planner has not been told yet, and the references it can read, are the writers'.
+			prompt = text;
 		} else {
 			// A skill or a prompt template is Atomic's own `/name args`, which has to open the prompt:
 			// what the room said and the focus line wait for the next turn instead of standing before it.
@@ -3050,6 +3019,7 @@ async function run(
 				...(files ? { files } : {}),
 				signal,
 				decide: context.decide,
+				repair: !reader,
 				// Only a card still holding its question counts: one a person discarded, or that
 				// was cancelled, leaves nothing for the people in the room to decide.
 				capturedDecisions: () =>
@@ -3143,11 +3113,11 @@ async function run(
 			// A turn the Planner's link dropped under fails, but its client may come back for the
 			// runs and questions the session still holds.
 			if (
-				opened && !chat.closed && !jobTurn
+				opened && !chat.closed && !isolated
 				&& (!failed || replyOnly || opened.session.suspended?.())
 			) kept = retain(context, opened);
 			if (!kept) {
-				if (!jobTurn && chat.retained?.session === opened?.session) await chat.retained?.release();
+				if (!isolated && chat.retained?.session === opened?.session) await chat.retained?.release();
 				else await opened?.session.destroy();
 			}
 		} catch (err) {
@@ -3199,7 +3169,8 @@ async function run(
 			chat.jobCalls = undefined;
 		}
 		chat.jobToolNames = undefined;
-		if (!jobTurn && context.sessionForks) {
+		chat.reader = undefined;
+		if (!isolated && context.sessionForks) {
 			try {
 				await context.sessionForks.finishTurn(began.request, chat.entries.slice(firstEntry));
 			} catch (err) {
@@ -3263,7 +3234,13 @@ async function run(
 		let said = chat.entries.slice(firstEntry).findLast(entry => entry.author.kind === "agent");
 		let stopped = turnController.signal.aborted && !failed;
 		await report(about, {
-			status: failed || persistenceError ? "failed" : stopped ? "stopped" : "done",
+			status: failed || persistenceError
+				? "failed"
+				: skipped
+				? "skipped"
+				: stopped
+				? "stopped"
+				: "done",
 			...(said?.text.trim() ? { text: said.text } : {}),
 		});
 	}
@@ -3403,7 +3380,7 @@ export function pending(chat: Chat): Waiting | undefined {
 
 /** The login whose Copilot entitlement runs a waiting turn. */
 function claimantOf(context: Room, next: Waiting): string | undefined {
-	if (next.job?.job.kind === "decision-followup") return undefined;
+	if (next.job?.job.kind === "decision-followup" || next.reader) return undefined;
 	return next.sessionId ?? context.claimantSessionId;
 }
 
@@ -3743,7 +3720,7 @@ function plain(value: unknown): value is Record<string, unknown> {
 /** Whether the session offers this tool; one it does not offer ends the turn. */
 function permitted(context: Room, name: string): boolean {
 	let { chat } = context;
-	if ((chat.agent?.activeTools ?? PLANNER_TOOL_NAMES).includes(name)) return true;
+	if (!chat.reader && (chat.agent?.activeTools ?? PLANNER_TOOL_NAMES).includes(name)) return true;
 	console.error(`[chat] boundary failure: inactive tool ${name}`);
 	chat.interruption = `Chopin's tool boundary failure: ${name}`;
 	chat.turnController?.abort();
