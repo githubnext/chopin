@@ -235,6 +235,7 @@ test("on a phone a long press in the middle of a message taller than the screen 
 	await hold(page, view.x + view.width / 2, view.y + view.height / 2);
 	let bar = toolbar(target);
 	await expect(bar).toBeVisible();
+	await expect.poll(() => coveredText(bar)).toEqual([]);
 	let barBox = (await bar.boundingBox())!;
 	expect(barBox.y).toBeGreaterThanOrEqual(view.y);
 	expect(barBox.y + barBox.height).toBeLessThanOrEqual(view.y + view.height);
