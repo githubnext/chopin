@@ -477,6 +477,124 @@ export function queueActions(open: Open, options: { interleavings?: number } = {
 		expect(w.prompts[1]).not.toContain("edited");
 	});
 
+	test("a cancel being saved while the sender is found to have lost write access is the only word said of the message", async () => {
+		let w = await open({ away: false });
+		w.planner.hold();
+		await w.send("running");
+		await waitFor(() => w.planner.running === 1);
+		let second = await w.send("second");
+		let ended: unknown[] = [];
+		w.context.chat.waiting.find(item => item.id === second.id)!.ended = outcome =>
+			void ended.push(outcome);
+
+		// The check of the sender's access is slow, and says no.
+		let github = w.context.auth.github as unknown as {
+			repositoryAccess: (...args: unknown[]) => Promise<unknown>;
+		};
+		let access = github.repositoryAccess;
+		let checking = Promise.withResolvers<void>();
+		github.repositoryAccess = async (...args) => {
+			await checking.promise;
+			return {
+				...await access(...args) as object,
+				permissions: { push: false, pull: true, admin: false },
+			};
+		};
+		w.planner.hold(false);
+		w.planner.release();
+		await tick();
+		await tick();
+
+		// Meanwhile the author's cancel is being saved.
+		let collaboration = w.storage.collaboration;
+		let commit = collaboration.commit.bind(collaboration);
+		let saving = Promise.withResolvers<void>();
+		collaboration.commit = async input => {
+			if (
+				input.deferredTurns?.some(change =>
+					change.action === "transition" && change.to === "cancelled"
+				)
+			) {
+				await saving.promise;
+			}
+			return commit(input);
+		};
+		let cancelled = cancelling(w, "ana", second.id as string);
+		await tick();
+		checking.resolve();
+		await tick();
+		await tick();
+		saving.resolve();
+		expect(await cancelled).toMatchObject({ kind: "chat:unqueue" });
+		await tick();
+		collaboration.commit = commit;
+		github.repositoryAccess = access;
+
+		let said = w.events.filter(event =>
+			(event.kind === "chat:message" && (event.entry as { id: string }).id === second.id)
+			|| (event.kind === "chat:removed" && event.id === second.id)
+		).map(event =>
+			event.kind === "chat:removed"
+				? "removed"
+				: (event.entry as { deliveryState: string }).deliveryState
+		);
+		expect(said).toEqual(["sent", "removed"]);
+		expect(memberEntry(w.context, "second")).toBeUndefined();
+		expect(ended).toEqual([{ status: "skipped" }]);
+		let [row] = await w.rows(["cancelled"]);
+		expect(row!.cancelReason).toBeUndefined();
+	});
+
+	test("a request another cancel took first is not announced as failed by the system's cancel", async () => {
+		let w = await open({ away: true });
+		let sent = await w.send("reset away");
+		let ended: unknown[] = [];
+		w.context.chat.waiting[0]!.ended = outcome => void ended.push(outcome);
+		let [row] = await w.rows(["waiting"]);
+		await w.storage.deferredTurns.transition(w.lease, {
+			id: row!.id,
+			from: "waiting",
+			to: "cancelled",
+			at: new Date(),
+		});
+		let seen = w.events.length;
+
+		await Chat.cancelQueued(w.context, "agent");
+
+		expect(memberEntry(w.context, "reset away")?.deliveryState).toBe("sent");
+		expect(w.events.slice(seen).some(event => event.kind === "chat:message")).toBe(false);
+		expect(ended).toEqual([]);
+		expect(sent.queued).toBe(true);
+	});
+
+	test("a row something else moved already is not asked to move again: a cancel finishes what the row says, an edit says it was cancelled and saves nothing", async () => {
+		let w = await open({ away: true });
+		let cancelledOutside = await w.send("cancelled outside");
+		let editedOutside = await w.send("edited outside");
+		for (let sent of [cancelledOutside, editedOutside]) {
+			let row = (await w.rows(["waiting"])).find(value => value.requestId === sent.id)!;
+			await w.storage.deferredTurns.transition(w.lease, {
+				id: row.id,
+				from: "waiting",
+				to: "cancelled",
+				at: new Date(),
+			});
+		}
+
+		expect(await cancelling(w, "ana", cancelledOutside.id as string)).toMatchObject({
+			kind: "chat:unqueue",
+		});
+		expect(memberEntry(w.context, "cancelled outside")).toBeUndefined();
+		expect(await w.rows(["waiting"])).toEqual([]);
+
+		let edit = await editing(w, "ana", editedOutside.id as string, "edited too late");
+		expect(edit).toMatchObject({ kind: "session:error", message: "this message was cancelled" });
+		expect(edit.code).toBeUndefined();
+		let stored = await w.storage.collaboration.load(w.channel.id, new Date());
+		expect(JSON.stringify(stored!.sidecar)).not.toContain("edited too late");
+		expect(memberEntry(w.context, "edited outside")).toBeDefined();
+	});
+
 	test("a message the system cancelled is cancelled: cancelling it again is done and editing it says so, and nobody else is told anything of it", async () => {
 		let w = await open({ away: true });
 		let sent = await w.send("reset away");

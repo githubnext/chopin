@@ -52,8 +52,8 @@ export function project(item: Queued): Wire.Waiting {
  * A reference stays where the text around the edit is unchanged, moved by what the edit added or
  * removed before it. One the edit did not touch but could not be placed that way, because the
  * edit changed both ends of the message, follows its label to where it now reads, when that label
- * stands exactly once before and once after. A reference the edit touched is dropped, so what
- * remains still reads as the label it was resolved with.
+ * stands exactly once before and once after. A reference the edit touched, or ran into the word
+ * beside it, is dropped, so what remains still reads as the label it was resolved with.
  */
 export function carryReferences(
 	before: string,
@@ -77,17 +77,21 @@ export function carryReferences(
 			: reference.start >= before.length - tail
 			? { ...reference, start: reference.start + shift, end: reference.end + shift }
 			: undefined;
-		if (moved && after.slice(moved.start, moved.end) === moved.label) carried.push(moved);
+		if (
+			moved && after.slice(moved.start, moved.end) === moved.label
+			&& !joined(before, reference, after, moved)
+		) carried.push(moved);
 		else others.push(reference);
 	}
 	for (let reference of others) {
 		if (
-			before.slice(reference.start, reference.end) === reference.label
-			&& occurrences(before, reference.label) === 1 && occurrences(after, reference.label) === 1
-		) {
-			let start = after.indexOf(reference.label);
-			carried.push({ ...reference, start, end: start + reference.label.length });
-		}
+			before.slice(reference.start, reference.end) !== reference.label
+			|| occurrences(before, reference.label) !== 1
+			|| occurrences(after, reference.label) !== 1
+		) continue;
+		let start = after.indexOf(reference.label);
+		let moved = { ...reference, start, end: start + reference.label.length };
+		if (!joined(before, reference, after, moved)) carried.push(moved);
 	}
 	// In order and apart, as a message's references are.
 	let ordered: Wire.Reference[] = [];
@@ -95,6 +99,25 @@ export function carryReferences(
 		if (reference.start >= (ordered.at(-1)?.end ?? 0)) ordered.push(reference);
 	}
 	return ordered;
+}
+
+/**
+ * Whether the edit joined the label to the word beside it, as "#Doc" and "s" make "#Docs": a label
+ * that ran into its neighbour when it was resolved is not blamed on the edit.
+ */
+function joined(
+	before: string,
+	was: Pick<Wire.Reference, "start" | "end">,
+	after: string,
+	now: Pick<Wire.Reference, "start" | "end">,
+): boolean {
+	return touching(after, now) && !touching(before, was);
+}
+
+function touching(text: string, at: Pick<Wire.Reference, "start" | "end">): boolean {
+	let word = /[\p{L}\p{N}_]/u;
+	return word.test(text.slice(Math.max(0, at.start - 1), at.start))
+		|| word.test(text.slice(at.end, at.end + 1));
 }
 
 function occurrences(text: string, part: string): number {

@@ -125,6 +125,20 @@ describe("references that stand after an edit", () => {
 		expect(swapped[0]!.end).toBeLessThanOrEqual(swapped[1]!.start);
 	});
 
+	it("drops a reference the edit ran into the word beside it, and keeps one that already did", () => {
+		let doc = reference("#Doc", 2);
+		expect(carryReferences("a #Doc b", "x #Docs y", [doc])).toEqual([]);
+		expect(carryReferences("see #Doc now", "see #Doc, now", [reference("#Doc", 4)])).toEqual([
+			reference("#Doc", 4),
+		]);
+		expect(carryReferences("see #Doc now", "see #Docs now", [reference("#Doc", 4)])).toEqual([]);
+		// Joined before the edit as well, so nothing the edit did.
+		let joinedBefore = reference("#Doc", 3);
+		expect(carryReferences("see#Docs now", "see#Docs now!", [joinedBefore])).toEqual([
+			joinedBefore,
+		]);
+	});
+
 	it("keeps none when there were none, and never invents one", () => {
 		expect(carryReferences("one", "two")).toEqual([]);
 		expect(carryReferences("", "new", [])).toEqual([]);

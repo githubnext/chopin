@@ -1824,9 +1824,7 @@ async function notWaiting(
 	if (row?.state === "waiting") {
 		return fail(ws, rid, "it is about to start; try again in a moment", PASSING);
 	}
-	if (
-		row?.state === "cancelled" || (!row && change === "cancel" && context.chat.retracted?.has(id))
-	) {
+	if (row?.state === "cancelled" || (!row && context.chat.retracted?.has(id))) {
 		// Cancelling twice leaves it cancelled, as asking twice would.
 		if (change === "cancel") return reply(ws, rid, { kind: "chat:unqueue", ts: 0, id });
 		return fail(ws, rid, "this message was cancelled");
@@ -3538,13 +3536,15 @@ async function nextStartable(context: Room): Promise<Waiting | undefined> {
 		// A child that was deleted or archived while the request waited would answer in the
 		// wrong document, so the request ends instead.
 		if (first.focus && context.children && !await context.children.resolve(first.focus.channelId)) {
-			if (chat.waiting[0] === first) chat.waiting.shift();
+			if (chat.waiting[0] !== first || first.editing) continue;
+			chat.waiting.shift();
 			await cancelRow(context, first, "unavailable");
 			continue;
 		}
-		if (chat.waiting[0] !== first) continue;
+		if (chat.waiting[0] !== first || first.editing) continue;
 		if (!await stillWrites(context, first)) {
-			if (chat.waiting[0] === first) chat.waiting.shift();
+			if (chat.waiting[0] !== first || first.editing) continue;
+			chat.waiting.shift();
 			await cancelRow(context, first, "access");
 			continue;
 		}
@@ -3689,11 +3689,9 @@ async function cancelRow(context: Room, item: Waiting, why: CancelWhy): Promise<
 	let entry = item.message
 		? chat.entries.find(value => value.id === (held.entry ?? item.id))
 		: undefined;
-	if (entry && why !== "spent") {
-		entry.deliveryState = "failed";
-		entry.deliveryFailure = FAILURE[why];
-	}
+	let failed = entry && why !== "spent" ? FAILURE[why] : undefined;
 	let changes = [move(held.row, "waiting", "cancelled", why === "spent" ? undefined : why)];
+	let refused = false;
 	try {
 		if (!entry && why !== "spent") {
 			logRefused(
@@ -3706,10 +3704,33 @@ async function cancelRow(context: Room, item: Waiting, why: CancelWhy): Promise<
 				),
 			);
 		} else {
-			logRefused(await context.persist(undefined, changes));
+			// Saved from a view of the transcript with the message marked, which the message itself
+			// is only once that is saved.
+			let outcomes = await context.persist(
+				entry && failed
+					? () => ({
+						entries: chat.entries.map(value =>
+							value === entry
+								? { ...entry, deliveryState: "failed" as const, deliveryFailure: failed }
+								: value
+						),
+						runs: chat.runs,
+						initiativePaused: chat.initiativePaused,
+					})
+					: undefined,
+				changes,
+			);
+			refused = outcomes?.[0]?.action === "transition" && !outcomes[0].changed;
+			logRefused(outcomes);
 		}
 	} catch (err) {
 		console.error("[chat] could not cancel a queued request:", err);
+	}
+	// Moved on already, by whoever cancelled it first: nothing here says anything of it.
+	if (refused) return void queued(chat, server, room);
+	if (entry && failed) {
+		entry.deliveryState = "failed";
+		entry.deliveryFailure = failed;
 	}
 	if (entry) announce(server, room, entry);
 	if (held.kind === "draft" && chat.draft?.id === held.request) {
@@ -3729,7 +3750,10 @@ export async function cancelQueued(context: Room, why: "agent" | "unavailable"):
 	if (!context.deferred) return;
 	await load(context);
 	for (let item of chat.waiting.slice()) {
-		if (item.deferred) await cancelRow(context, item, why);
+		if (!item.deferred) continue;
+		// A change to it being saved is finished first; if it took the message out, there is nothing left.
+		if (item.editing) await item.editing;
+		if (chat.waiting.includes(item)) await cancelRow(context, item, why);
 	}
 }
 
@@ -3824,6 +3848,16 @@ async function takeBack(
 		: [];
 	let release = hold(item);
 	try {
+		// A row that something else has moved already is not asked to move again: the transcript's
+		// change is saved alone, or nothing is, so what is saved never says more than the row does.
+		if (changes.length > 0 && item?.deferred) {
+			let row = await context.plan.persistence.storage.deferredTurns.get(
+				room,
+				item.deferred.request,
+			);
+			if (row?.state === "cancelled") changes = [];
+			else if (row?.state !== "waiting") return "started";
+		}
 		let outcomes = await context.persist(
 			() => ({
 				entries: chat.entries.filter(value => value !== entry),
@@ -3974,6 +4008,13 @@ async function editNow(context: Room, ws: Socket, msg: Request<Wire.Edit>): Prom
 	}
 	let release = hold(item);
 	try {
+		if (item.deferred && context.deferred) {
+			let row = await context.plan.persistence.storage.deferredTurns.get(
+				room,
+				item.deferred.request,
+			);
+			if (row?.state !== "waiting") return notWaiting(context, ws, msg.rid, msg.id, "edit");
+		}
 		// Saved from a view of the transcript with the edit in it; the message itself changes, and the
 		// room hears of it, only once that has been saved.
 		let { references: _before, ...unedited } = entry;

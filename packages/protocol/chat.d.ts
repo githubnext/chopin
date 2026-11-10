@@ -406,7 +406,7 @@ export declare namespace Chat {
 	 */
 	export type Unqueue = KIND<"chat:unqueue"> & { id: string };
 
-	/** The message was cancelled, or had been cancelled by its author already. */
+	/** The message was cancelled, or had been cancelled already, by whoever did. */
 	export type Unqueued = KIND<"chat:unqueue"> & { id: string };
 
 	/**

@@ -1120,6 +1120,19 @@ describe("cancelling and editing a message that waits in memory", () => {
 			ts: 0,
 		});
 		expect(frame(replies, "again")).toMatchObject({ kind: "chat:unqueue", id: target.id });
+		// Editing a message that was cancelled says so, as it does where rows keep them.
+		await Chat.edit(context, sender("ana", "U_ana", replies), {
+			kind: "chat:edit",
+			rid: "after",
+			id: target.id,
+			text: "too late",
+			ts: 0,
+		});
+		expect(frame(replies, "after")).toMatchObject({
+			kind: "session:error",
+			message: "this message was cancelled",
+		});
+		expect(frame(replies, "after")?.code).toBeUndefined();
 		// A message nothing has ever held is, whatever else it may be, not waiting.
 		await Chat.unqueue(context, sender("ana", "U_ana", replies), {
 			kind: "chat:unqueue",
