@@ -4,7 +4,8 @@
  * A Planner session that Chopin registers by session ID runs as a full Atomic
  * session: Atomic builtins, the operator's Atomic resources, a channel working
  * directory, and Chopin as HostInput. Its own turns only offer the tools in
- * `FULL_PLANNER_TOOLS` beside Chopin's; the workflows it starts keep their
+ * `FULL_PLANNER_TOOLS`, the read-only tools the operator's `chopin.plannerTools`
+ * setting adds, and Chopin's; the workflows it starts keep their
  * stages' tools. Every other session (the summary and research workers) stays
  * isolated: only Chopin host tools, no host resources, and a checked per-turn
  * tool boundary.
@@ -72,7 +73,6 @@ export const FULL_PLANNER_TOOLS: ReadonlySet<string> = new Set([
 	"read",
 	"find",
 	"search",
-	"ast_grep",
 	"web_search",
 	"code_search",
 	"fetch_content",
@@ -82,6 +82,40 @@ export const FULL_PLANNER_TOOLS: ReadonlySet<string> = new Set([
 	"intercom",
 	"codemode",
 ]);
+
+/** Atomic tools that change files, run commands or start agents, which no setting gives a Planner's own turns. */
+const WRITING_TOOLS: ReadonlySet<string> = new Set([
+	"bash",
+	"edit",
+	"write",
+	"kill",
+	"subagent",
+	"todo",
+]);
+
+/**
+ * The tools an operator adds to a full Planner's own turns beside `FULL_PLANNER_TOOLS`, named in
+ * `chopin.plannerTools` of the agent directory's `settings.json`: read-only tools a package or
+ * extension registers, such as a structural code search. Only the operator's file is read; a
+ * checkout's project settings can't widen what a Planner may call.
+ */
+export function operatorPlannerTools(operatorSettings: unknown): ReadonlySet<string> {
+	let chopin = (operatorSettings as { chopin?: { plannerTools?: unknown } } | null)?.chopin;
+	let names = chopin?.plannerTools;
+	if (names === undefined) return new Set();
+	if (!Array.isArray(names) || !names.every(name => typeof name === "string" && name !== "")) {
+		throw new Error("chopin.plannerTools in the Atomic settings must be a list of tool names.");
+	}
+	let writing = names.filter(name => WRITING_TOOLS.has(name));
+	if (writing.length > 0) {
+		throw new Error(
+			`chopin.plannerTools names ${
+				writing.join(", ")
+			}, which can change files, run commands or start agents; a Planner's own turns stay read-only.`,
+		);
+	}
+	return new Set(names);
+}
 
 const GATEWAY_PROVIDER = "vercel-ai-gateway";
 const OPERATION_TIMEOUT_MS = 10_000;
@@ -111,12 +145,9 @@ async function optionalFile(path: string): Promise<string | undefined> {
  * `.atomic/settings.json` can add project packages the way it does for a local
  * Atomic session; the empty per-channel directory has none.
  */
-async function fullSettings(agentDir: string, cwd: string): Promise<SettingsManager> {
+async function fullSettings(operator: object, cwd: string): Promise<SettingsManager> {
 	let scopes: Record<"global" | "project", string | undefined> = {
-		global: JSON.stringify({
-			...JSON.parse(await optionalFile(join(agentDir, "settings.json")) ?? "{}"),
-			...SETTINGS,
-		}),
+		global: JSON.stringify({ ...operator, ...SETTINGS }),
 		project: await optionalFile(join(cwd, ".atomic", "settings.json")),
 	};
 	let manager = SettingsManager.fromStorage({
@@ -601,6 +632,8 @@ export function createAtomicAdapter(
 				}
 			}
 
+			let plannerTools: ReadonlySet<string> = new Set();
+
 			async function prepare(turn: HarnessV1PromptTurnOptions): Promise<AgentSession> {
 				if (turn.skills.length > 0) throw unsupported("skills");
 				let hostNames = turn.tools.map(spec => spec.name);
@@ -627,7 +660,11 @@ export function createAtomicAdapter(
 					}
 					let cwd = full?.cwd ?? directory!;
 					let agentDir = full ? getAgentDir() : directory!;
-					if (full) settingsManager = await fullSettings(agentDir, cwd);
+					if (full) {
+						let operator = JSON.parse(await optionalFile(join(agentDir, "settings.json")) ?? "{}");
+						plannerTools = operatorPlannerTools(operator);
+						settingsManager = await fullSettings(operator, cwd);
+					}
 					// The journal holds workflow inputs and outputs; Atomic would create its directory world-readable.
 					if (full && settings.journal) {
 						await mkdir(dirname(settings.journal), { recursive: true, mode: 0o700 });
@@ -751,7 +788,8 @@ export function createAtomicAdapter(
 					let structured = turn.responseFormat?.type === "json";
 					let names = full
 						? agent.getAllTools().map(tool => tool.name).filter(name =>
-							FULL_PLANNER_TOOLS.has(name) || policy.hostNames.includes(name)
+							FULL_PLANNER_TOOLS.has(name) || plannerTools.has(name)
+							|| policy.hostNames.includes(name)
 						)
 						: policy.hostNames;
 					let expected = structured ? [...names, ATOMIC_RESULT_TOOL_NAME] : names;

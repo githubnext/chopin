@@ -10,6 +10,7 @@ import {
 	ATOMIC_RESULT_TOOL_NAME,
 	createAtomicAdapter,
 	FULL_PLANNER_TOOLS,
+	operatorPlannerTools,
 } from "./adapter";
 import {
 	classifyRuns,
@@ -214,7 +215,11 @@ async function run(
 				"---\nname: project-marker\ndescription: PROJECT-SKILL-MARKER\n---\nProject skill.\n",
 			);
 			await mkdir(join(cwd, ".atomic"), { recursive: true });
-			await writeFile(join(cwd, ".atomic", "settings.json"), JSON.stringify({ packages: [pkg] }));
+			// A checkout naming its own tool for the Planner's turns, which only the operator's settings may do.
+			await writeFile(
+				join(cwd, ".atomic", "settings.json"),
+				JSON.stringify({ packages: [pkg], chopin: { plannerTools: ["project_tool"] } }),
+			);
 		}
 		if (askingWorkflow) {
 			await mkdir(operatorPackageDir, { recursive: true });
@@ -460,6 +465,35 @@ test("a Planner session without a checkout is just as full in its empty working 
 	expectPlannerTools(result.requests[0]!.toolNames);
 	expect(result.requests[0]!.system).toContain(result.cwd);
 	expect(result.requests.at(-1)!.toolResults.join("\n")).toContain(result.cwd);
+});
+
+test("the operator's chopin.plannerTools adds a read-only tool an extension registers to the Planner's own turns", async () => {
+	let result = await run(true, "plain", {
+		operatorSettings: { chopin: { plannerTools: ["operator_tool"] } },
+	});
+	let names = result.requests[0]!.toolNames;
+	expect(names).toContain("operator_tool");
+	for (let name of WITHHELD_TOOLS.filter(name => name !== "operator_tool")) {
+		expect(names).not.toContain(name);
+	}
+	for (let name of names) {
+		expect([...FULL_PLANNER_TOOLS, "operator_tool", "host_tool"]).toContain(name);
+	}
+});
+
+test("chopin.plannerTools takes only a list of names, and never a tool that writes, runs commands or starts agents", () => {
+	expect([...operatorPlannerTools({})]).toEqual([]);
+	expect([...operatorPlannerTools({ chopin: { plannerTools: ["code_search_extra"] } })]).toEqual([
+		"code_search_extra",
+	]);
+	for (let bad of ["bash", "edit", "write", "kill", "subagent", "todo"]) {
+		expect(() => operatorPlannerTools({ chopin: { plannerTools: ["read", bad] } })).toThrow(bad);
+	}
+	for (let malformed of ["bash", [""], [1], { name: "x" }]) {
+		expect(() => operatorPlannerTools({ chopin: { plannerTools: malformed } })).toThrow(
+			"list of tool names",
+		);
+	}
 });
 
 test("a checkout's project settings add its packages without writing either settings file", async () => {
