@@ -20,6 +20,14 @@ const TASKS = 4;
 const DELIMITER_ROW = /^(?=[^\n\r]*[|:])[ \t>|:-]*-[ \t>|:-]*$/m;
 
 /**
+ * A task box is a bracket around a space, a line ending, `x` or `X`. A line ending inside it
+ * carries the container's prefix on the next line (the indentation of a list item, the `>` of a
+ * quote), and micromark reads the box across it (`- [` over `  ] a`), so the test allows
+ * whitespace, `>` and at most one `x` between the brackets, which is more than the syntax needs.
+ */
+const TASK_BOX = /\[[\s>]*[xX]?[\s>]*\]/;
+
+/**
  * Which parts of GitHub's Markdown a source can use, from marks without which the syntax cannot
  * match: a delimiter row for a table, two tildes for strikethrough, and a bracket around a space,
  * a line ending, `x` or `X` for a task box. Each test only has to be necessary, never sufficient,
@@ -27,7 +35,7 @@ const DELIMITER_ROW = /^(?=[^\n\r]*[|:])[ \t>|:-]*-[ \t>|:-]*$/m;
  */
 function partsOf(source: string): number {
 	return (DELIMITER_ROW.test(source) ? TABLE : 0) | (source.includes("~~") ? STRIKETHROUGH : 0)
-		| (/\[[\sxX]\]/.test(source) ? TASKS : 0);
+		| (TASK_BOX.test(source) ? TASKS : 0);
 }
 
 function plugin(parts: number): Plugin {
