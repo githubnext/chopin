@@ -16,7 +16,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { displayTitle, parse, ulid } from "@chopin/dialect";
 
-import { harnessFor, shutdownHarnesses } from "./harness/harnesses";
+import { harnessFor, plannerCatalog, shutdownHarnesses } from "./harness/harnesses";
+import { chooseModel, modelState, turnModel } from "./chat/model-choice";
+import type { ModelChoiceDeps } from "./chat/model-choice";
 import {
 	admitAgent,
 	AGENT_UPGRADE_HEADERS,
@@ -725,6 +727,7 @@ function conversation(
 					withChildPlan,
 				}),
 			}),
+		modelChoice: () => turnModel(modelChoices, room.id),
 		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => ownerAvailable(room.id),
 		jobs: config.backgroundJobs ? jobService : undefined,
@@ -1183,6 +1186,39 @@ async function plannerStatus(channelId: string): Promise<PlannerAttachment> {
 	return plannerAttachment(status, await experiments?.plannerStarting(channelId));
 }
 
+/**
+ * A document's Planner model choice: the catalog its harness reports (an attached client's own
+ * under `HARNESS=remote`) and the choice stored for it. Nothing is offered with `AGENT=off`.
+ */
+const modelChoices: ModelChoiceDeps = {
+	catalog: async channelId =>
+		config.agent ? plannerCatalog(config.harness, channelId, config.model || undefined) : undefined,
+	storage,
+	lease: () => {
+		if (!writerLease.held) throw new Error("storage writer lease is unavailable");
+		return writerLease.held;
+	},
+};
+
+/** Each document's latest model announcement, so an earlier one that resolves later is dropped. */
+let modelAnnouncements = new Map<string, number>();
+
+/** Tell everyone in the document what its Planner can be set to run and what it is set to. */
+function announceModel(channelId: string): void {
+	let room = Rooms.get(channelId);
+	if (!room || room.parentChannelId || cutting) return;
+	let turn = (modelAnnouncements.get(channelId) ?? 0) + 1;
+	modelAnnouncements.set(channelId, turn);
+	void modelState(modelChoices, channelId).then(state => {
+		if (modelAnnouncements.get(channelId) !== turn) return;
+		modelAnnouncements.delete(channelId);
+		if (server && !cutting) broadcast(server, channelId, state);
+	}, err => {
+		if (modelAnnouncements.get(channelId) === turn) modelAnnouncements.delete(channelId);
+		console.error("chopin: could not announce a document's model choice -", err);
+	});
+}
+
 /** Each document's latest status announcement, so an earlier one that resolves later is dropped. */
 let plannerAnnouncements = new Map<string, number>();
 
@@ -1323,6 +1359,12 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 						? { working: thread => Chat.workingFor(Rooms.get(parent)?.plan?.chat, thread, room.id) }
 						: undefined,
 				);
+				// What the Planner can be set to run, and what it is set to, for the composer.
+				if (!parent) {
+					void modelState(modelChoices, room.id).then(state => {
+						if (!ws.data.closed && room.members.get(ws.data.client) === ws) tell(ws, state);
+					}).catch(err => console.error("chopin: could not send a model choice -", err));
+				}
 				// A reload while the room stays open settles a finding whose event was missed.
 				if (!parent) {
 					void Explore.sweep(opened, server, room.id, exploreDeps)
@@ -1366,6 +1408,17 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		case "chat:participation":
 			if (!await plannerWritable(room, ws, frame.rid)) return;
 			await Initiative.setParticipation(chat(room, ws), ws, frame);
+			return;
+
+		case "chat:model":
+			if (!await plannerWritable(room, ws, frame.rid)) return;
+			await chooseModel(modelChoices, {
+				server,
+				ws,
+				channelId: room.id,
+				userId: ws.data.principalId,
+				child: !!room.plan?.parentChannelId,
+			}, frame);
 			return;
 
 		case "chat:send":
@@ -2073,6 +2126,7 @@ function listen(): Server<SocketData> {
 						pingEveryMs: config.agentConnectionPingMs,
 						pongTimeoutMs: config.agentConnectionTimeoutMs,
 						maxSilenceMs: config.agentConnectionMaxSilenceMs,
+						catalogChanged: announceModel,
 					});
 					return;
 				}
@@ -3011,6 +3065,8 @@ if (config.agent && config.harness === "remote") {
 		// A machine chosen for the document may start its Planner, or stop waiting to.
 		experiments?.plannerChanged(channelId);
 		announcePlanner(channelId);
+		// A client that attaches or leaves brings or takes its models.
+		announceModel(channelId);
 		// Settlements that waited for a Planner can run now.
 		if (planner.state === "attached") {
 			void startDeferred(channelId).catch(err =>

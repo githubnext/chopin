@@ -1586,6 +1586,77 @@ describe("Agent connection capability catalog", () => {
 		await quiet.detach();
 	});
 
+	it("reaches the client in the turns of a real Planner session, one turn at a time, and only if it offered the feature", async () => {
+		for (let offered of [true, false]) {
+			let f = await hostInputRoom();
+			cleanups.push(f.close);
+			let linked = await linkAuth(f.room.id);
+			let server = linkServer(linked.auth, 300);
+			cleanups.push(server.stop);
+			let seen: Array<{ model?: string; thinkingLevel?: string }> = [];
+			let client = await connectAgent({
+				url: server.url,
+				token: MEMBER_TOKEN,
+				document: f.room.id,
+				resumable: false,
+				...(offered ? { capabilities: catalog } : {}),
+				handlers: {
+					async turn(context) {
+						seen.push({
+							...(context.message.model ? { model: context.message.model } : {}),
+							...(context.message.thinkingLevel
+								? { thinkingLevel: context.message.thinkingLevel }
+								: {}),
+						});
+						finishTurn(context);
+					},
+				},
+			});
+			cleanups.push(() => client.detach());
+			let agent = createPlannerAgent(
+				createRemoteAdapter(sessionId => ({
+					link: server.links.at(-1)!,
+					planner: remotePlanner(sessionId)!,
+				})),
+			);
+			let owner = {
+				channelId: f.room.id,
+				token: "test-token",
+				repository: { id: "R_test", owner: "org", name: "repo", defaultBranch: "main" },
+				signal: new AbortController().signal,
+				currentToken: () => "test-token",
+				revalidate: async () => true,
+				release() {},
+			} as unknown as ActiveOwnerBinding;
+			let opened = await openPlannerSession(owner, {
+				room: f.room,
+				repository: owner.repository,
+				instructions: "Plan.",
+				harness: "remote",
+			}, {
+				githubTools: async () => ({ ok: true, value: {} }),
+				createSandbox: async () => sandboxSession,
+				registerCredential: () => () => {},
+				agent,
+			});
+			if (!opened.ok) throw new Error("Planner unavailable");
+			let session = opened.value;
+			cleanups.push(() => session.destroy());
+			let run = async (choice?: { model?: string; thinkingLevel?: string }) => {
+				let result = await session.stream("go", new AbortController().signal, choice);
+				for await (let _part of result.fullStream);
+			};
+			await run({ model: "acme/large", thinkingLevel: "high" });
+			await run();
+			await run({ thinkingLevel: "low" });
+			expect(seen).toEqual(
+				offered
+					? [{ model: "acme/large", thinkingLevel: "high" }, {}, { thinkingLevel: "low" }]
+					: [{ model: "acme/large" }, {}, {}],
+			);
+		}
+	});
+
 	it("is a protocol violation from a client that did not offer the feature", async () => {
 		let { server, channel } = await setup();
 		for (let header of [undefined, "run-stage-deltas"]) {

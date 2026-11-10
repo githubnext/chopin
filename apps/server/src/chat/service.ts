@@ -361,6 +361,8 @@ export type Chat = {
 	 * third in.
 	 */
 	starting?: boolean;
+	/** The fallback notice the transcript last said, so a choice that stays gone is said once. */
+	modelNotice?: string;
 	/** Per-turn owner for revocation and credential rotation fencing. */
 	openingOwner?: { sessionId: string; generation: number; revision: number };
 	/** Current session. Disposable per turn, except a full Planner session kept while it owns workflow runs. */
@@ -822,6 +824,11 @@ export type Room = {
 	/** Runs only after a new member entry is durably saved and its human turn reserved. */
 	memberMessagePersisted?: (entry: Wire.Entry, claimantSessionId: string | undefined) => void;
 	openPlannerSession?: typeof import("../harness/session")["openPlannerSession"];
+	/**
+	 * What the document's chosen model and thinking level come to for the next turn, checked against
+	 * what its harness offers now. Absent where nothing can be chosen.
+	 */
+	modelChoice?: () => Promise<import("./model-choice").TurnModel>;
 	invokedBy?: string;
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
@@ -2951,8 +2958,24 @@ async function run(
 			}
 		} else {
 			let existingDecisions = new Set(plan.records.keys());
+			let picked = await context.modelChoice?.().catch(error => {
+				console.error("[chat] could not read the model choice:", error);
+				return undefined;
+			});
+			// A choice the harness no longer offers falls back to its default: say so, once.
+			if (picked?.notice && picked.notice !== chat.modelNotice) {
+				say(chat, server, room, {
+					id: ulid(),
+					author: { kind: "system" },
+					text: picked.notice,
+					ts: now(),
+				});
+			}
+			chat.modelNotice = picked?.notice;
+			let { notice: _, ...choice } = picked ?? {};
+			let session = opened.session;
 			await publishPlannerReplies({
-				session: opened.session,
+				session: { stream: (text, abort) => session.stream(text, abort, choice) },
 				prompt,
 				signal,
 				decide: context.decide,

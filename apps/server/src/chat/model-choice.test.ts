@@ -1,0 +1,388 @@
+import { afterEach, describe, expect, test } from "bun:test";
+
+import { createPlannerAgent } from "../harness/agents";
+import { openPlannerSession } from "../harness/session";
+import * as Plan from "../plan/service";
+import { openPlan } from "../testing/plan";
+import { expectPlain } from "../testing/plain-words";
+import { authenticatedMemory } from "./job-authenticated-memory.test-fixtures";
+import { chooseModel, modelState, turnModel } from "./model-choice";
+import * as Chat from "./service";
+
+import type { HarnessV1 } from "@ai-sdk/harness";
+import type { Chat as Wire } from "@chopin/protocol";
+import type { ModelChoiceDeps } from "./model-choice";
+import type { Socket } from "../wire";
+
+afterEach(() => Chat.holdStarts(false));
+
+let catalog: Wire.ModelCatalog = {
+	models: [
+		{
+			id: "acme/large",
+			name: "Large",
+			provider: { id: "acme", name: "Acme" },
+			thinkingLevels: ["off", "low", "high"],
+		},
+		{ id: "acme/small", name: "Small", provider: { id: "acme", name: "Acme" } },
+	],
+	default: { model: "acme/small" },
+};
+
+async function sets(offered: () => Wire.ModelCatalog | undefined = () => catalog) {
+	let opened = await openPlan("Related prose.\n");
+	let deps: ModelChoiceDeps = {
+		catalog: async () => offered(),
+		storage: opened.storage,
+		lease: () => opened.lease,
+		now: () => new Date("2026-08-13T12:30:00.000Z"),
+	};
+	let replies: Array<Record<string, unknown>> = [];
+	let ws = {
+		send(text: string) {
+			replies.push(JSON.parse(text));
+			return text.length;
+		},
+	};
+	let choose = (
+		fields: Record<string, unknown>,
+		options: { child?: boolean } = {},
+	) =>
+		chooseModel(deps, {
+			server: opened.server,
+			ws,
+			channelId: opened.channel.id,
+			userId: "U_test",
+			child: options.child ?? false,
+		}, { kind: "chat:model", rid: crypto.randomUUID(), ts: 0, ...fields } as never);
+	let broadcasts = () => opened.broadcasts.filter(frame => frame.kind === "chat:model");
+	return { opened, deps, replies, choose, broadcasts };
+}
+
+describe("choosing a document's model and thinking level", () => {
+	test("stores a choice the catalog offers, then answers the sender and tells the room", async () => {
+		let { opened, deps, replies, choose, broadcasts } = await sets();
+		await choose({ model: "acme/large", thinkingLevel: "high" });
+		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toMatchObject({
+			model: "acme/large",
+			thinkingLevel: "high",
+			userId: "U_test",
+		});
+		let expected = {
+			kind: "chat:model",
+			catalog,
+			choice: { model: "acme/large", thinkingLevel: "high" },
+		};
+		expect(replies).toMatchObject([expected]);
+		expect(broadcasts()).toMatchObject([expected]);
+		// Another person's join reads the same state.
+		expect(await modelState(deps, opened.channel.id)).toMatchObject(expected);
+	});
+
+	test("refuses a model, or a level of its model, the catalog does not offer, and stores nothing", async () => {
+		let { opened, replies, choose, broadcasts } = await sets();
+		await choose({ model: "acme/gone" });
+		await choose({ model: "acme/small", thinkingLevel: "high" });
+		await choose({ model: "acme/large", thinkingLevel: "max" });
+		await choose({ thinkingLevel: "low" });
+		expect(replies.map(reply => reply.message)).toEqual([
+			"That model isn't available.",
+			"That model doesn't offer that level of reasoning.",
+			"That model doesn't offer that level of reasoning.",
+			"That model doesn't offer that level of reasoning.",
+		]);
+		expect(replies.every(reply => reply.kind === "session:error")).toBe(true);
+		for (let reply of replies) expectPlain(String(reply.message), "a refused model choice");
+		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toBeUndefined();
+		expect(broadcasts()).toEqual([]);
+	});
+
+	test("refuses anything that is not a non-empty string, and any choice for a child document", async () => {
+		let { opened, replies, choose, broadcasts } = await sets();
+		for (
+			let fields of [{ model: 3 }, { model: "" }, { thinkingLevel: ["low"] }, {
+				model: "x".repeat(257),
+			}]
+		) {
+			await choose(fields);
+		}
+		await choose({ model: "acme/large" }, { child: true });
+		expect(replies.map(reply => reply.message)).toEqual([
+			"That is not a model choice.",
+			"That is not a model choice.",
+			"That is not a model choice.",
+			"That is not a model choice.",
+			"A child document uses its parent's model.",
+		]);
+		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toBeUndefined();
+		expect(broadcasts()).toEqual([]);
+	});
+
+	test("refuses every choice where nothing can be chosen, but always accepts going back to the default", async () => {
+		let { opened, replies, choose, broadcasts } = await sets(() => undefined);
+		await choose({ model: "acme/large" });
+		expect(replies[0]!.message).toBe("This document's model can't be chosen.");
+		await choose({});
+		expect(replies[1]).toMatchObject({ kind: "chat:model" });
+		expect(broadcasts()).toHaveLength(1);
+		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toBeUndefined();
+	});
+
+	test("going back to the default removes the stored choice for everyone", async () => {
+		let { opened, deps, choose, broadcasts } = await sets();
+		await choose({ model: "acme/large", thinkingLevel: "low" });
+		await choose({});
+		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toBeUndefined();
+		let last = broadcasts().at(-1)!;
+		expect("choice" in last).toBe(false);
+		expect("choice" in await modelState(deps, opened.channel.id)).toBe(false);
+	});
+
+	test("answers nobody until the choice is stored: a failed write is refused as passing, and nothing is broadcast", async () => {
+		let { opened, replies, choose, broadcasts } = await sets();
+		let put = opened.storage.plannerModelChoices.put;
+		opened.storage.plannerModelChoices.put = async () => {
+			throw new Error("storage is busy");
+		};
+		let silenced = console.error;
+		console.error = () => {};
+		try {
+			await choose({ model: "acme/large" });
+		} finally {
+			console.error = silenced;
+			opened.storage.plannerModelChoices.put = put;
+		}
+		expect(replies).toMatchObject([{
+			kind: "session:error",
+			code: "temporarily-unavailable",
+			message: "Couldn't save the model choice. Try again.",
+		}]);
+		expect(broadcasts()).toEqual([]);
+		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toBeUndefined();
+	});
+
+	test("hears two people's choices in the order they were stored", async () => {
+		let { opened, deps, choose, broadcasts } = await sets();
+		await Promise.all([
+			choose({ model: "acme/large", thinkingLevel: "low" }),
+			choose({ model: "acme/small" }),
+		]);
+		expect(broadcasts().map(frame => frame.choice)).toEqual([
+			{ model: "acme/large", thinkingLevel: "low" },
+			{ model: "acme/small" },
+		]);
+		expect((await modelState(deps, opened.channel.id)).choice).toEqual({ model: "acme/small" });
+	});
+});
+
+describe("what the next turn runs", () => {
+	test("is the harness's own until somebody chooses", async () => {
+		let { deps, opened } = await sets();
+		expect(await turnModel(deps, opened.channel.id)).toEqual({});
+	});
+
+	test("is the stored choice while the catalog offers it", async () => {
+		let { deps, opened, choose } = await sets();
+		await choose({ model: "acme/large", thinkingLevel: "high" });
+		expect(await turnModel(deps, opened.channel.id)).toEqual({
+			model: "acme/large",
+			thinkingLevel: "high",
+		});
+	});
+
+	test("falls back to the default with a notice when the model has gone, and returns when it does", async () => {
+		let offered: Wire.ModelCatalog | undefined = catalog;
+		let { deps, opened, choose } = await sets(() => offered);
+		await choose({ model: "acme/large", thinkingLevel: "high" });
+		offered = { models: [catalog.models[1]!], default: catalog.default };
+		expect(await turnModel(deps, opened.channel.id)).toEqual({
+			notice: "acme/large is no longer available, so Chopin used its default model.",
+		});
+		// Still stored, so the model coming back restores the choice.
+		expect((await modelState(deps, opened.channel.id)).choice).toEqual({
+			model: "acme/large",
+			thinkingLevel: "high",
+		});
+		offered = catalog;
+		expect(await turnModel(deps, opened.channel.id)).toEqual({
+			model: "acme/large",
+			thinkingLevel: "high",
+		});
+	});
+
+	test("keeps the model and falls back only on a level it no longer lists", async () => {
+		let offered: Wire.ModelCatalog | undefined = catalog;
+		let { deps, opened, choose } = await sets(() => offered);
+		await choose({ model: "acme/large", thinkingLevel: "high" });
+		offered = {
+			models: [{ ...catalog.models[0]!, thinkingLevels: ["off", "low"] }, catalog.models[1]!],
+			default: catalog.default,
+		};
+		expect(await turnModel(deps, opened.channel.id)).toEqual({
+			model: "acme/large",
+			notice: "High reasoning is no longer available for this model, so Chopin used its default.",
+		});
+	});
+
+	test("falls back when the harness offers no catalog at all", async () => {
+		let offered: Wire.ModelCatalog | undefined = catalog;
+		let { deps, opened, choose } = await sets(() => offered);
+		await choose({ model: "acme/large" });
+		offered = undefined;
+		expect(await turnModel(deps, opened.channel.id)).toMatchObject({
+			notice: "acme/large is no longer available, so Chopin used its default model.",
+		});
+	});
+});
+
+/** A Planner that records which model each turn asked for. */
+function recordingPlanner() {
+	let models: Array<string | undefined> = [];
+	let fake: HarnessV1 = {
+		specificationVersion: "harness-v1",
+		harnessId: "model-choice",
+		builtinTools: {},
+		async doStart(start) {
+			return {
+				sessionId: start.sessionId,
+				isResume: false,
+				async doPromptTurn(options) {
+					models.push(options.model);
+					options.emit({ type: "text-start", id: "reply" });
+					options.emit({ type: "text-delta", id: "reply", delta: "Done." });
+					options.emit({ type: "text-end", id: "reply" });
+					options.emit({
+						type: "finish-step",
+						finishReason: { unified: "stop", raw: undefined },
+						usage: {
+							inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+							outputTokens: { total: 0, text: 0, reasoning: 0 },
+						},
+					});
+					return { done: Promise.resolve(), async submitToolResult() {} };
+				},
+				async doDestroy() {},
+				async doCompact() {},
+				async doContinueTurn() {
+					throw new Error("unused");
+				},
+				async doSuspendTurn() {
+					throw new Error("unused");
+				},
+				async doDetach() {
+					throw new Error("unused");
+				},
+				async doStop() {
+					throw new Error("unused");
+				},
+			};
+		},
+	};
+	return { fake, models };
+}
+
+describe("a Planner turn", () => {
+	async function room(
+		picked: () => Promise<{ model?: string; thinkingLevel?: string; notice?: string }>,
+	) {
+		let opened = await openPlan("Related prose.\n");
+		let identity = await authenticatedMemory(opened);
+		let { fake, models } = recordingPlanner();
+		identity.context.modelChoice = picked;
+		identity.context.openPlannerSession = (owner, channel) =>
+			openPlannerSession(owner, channel, {
+				agent: createPlannerAgent(fake),
+				githubTools: async () => ({ ok: true, value: {} }),
+				createSandbox: async () =>
+					({
+						defaultWorkingDirectory: "/tmp",
+						async run() {
+							return { exitCode: 0, stdout: "", stderr: "" };
+						},
+						async destroy() {},
+					}) as never,
+				registerCredential: () => () => {},
+			});
+		let socket = {
+			data: { handle: "ana", principalId: "U_test" },
+			send() {},
+		} as unknown as Socket;
+		let send = async (text: string) => {
+			await Chat.send(identity.context, socket, {
+				kind: "chat:send",
+				rid: crypto.randomUUID(),
+				requestId: crypto.randomUUID(),
+				text,
+				to: "planner",
+				ts: 0,
+			});
+			for (let attempt = 0; attempt < 300 && opened.plan.chat.busy; attempt++) await Bun.sleep(10);
+			await opened.plan.chat.running;
+		};
+		let said = () =>
+			opened.plan.chat.entries.filter(entry => entry.author.kind === "system").map(entry =>
+				entry.text
+			);
+		let finish = async () => {
+			identity.revokeAll();
+			await Plan.close(opened.plan);
+		};
+		return { opened, send, models, said, finish };
+	}
+
+	test("runs the chosen model, and the harness's default when nobody chose", async () => {
+		let choice: { model?: string } = {};
+		let { send, models, finish } = await room(async () => choice);
+		try {
+			await send("first");
+			choice = { model: "acme/large" };
+			await send("second");
+			choice = {};
+			await send("third");
+			expect(models).toEqual([undefined, "acme/large", undefined]);
+		} finally {
+			await finish();
+		}
+	});
+
+	test("says once, in Chat, that a choice that is gone ran the default, and again only when it changes", async () => {
+		let notice: string | undefined =
+			"Large is no longer available, so Chopin used its default model.";
+		let { send, models, said, finish } = await room(async () => (notice ? { notice } : {}));
+		try {
+			await send("first");
+			await send("second");
+			expect(models).toEqual([undefined, undefined]);
+			expect(said().filter(text => text.includes("no longer available"))).toEqual([notice]);
+			for (let text of said()) expectPlain(text, "the fallback notice");
+			notice = "Small is no longer available, so Chopin used its default model.";
+			await send("third");
+			notice = undefined;
+			await send("fourth");
+			notice = "Small is no longer available, so Chopin used its default model.";
+			await send("fifth");
+			expect(said().filter(text => text.includes("no longer available"))).toEqual([
+				"Large is no longer available, so Chopin used its default model.",
+				"Small is no longer available, so Chopin used its default model.",
+				"Small is no longer available, so Chopin used its default model.",
+			]);
+		} finally {
+			await finish();
+		}
+	});
+
+	test("still runs when the choice cannot be read, with the harness's default", async () => {
+		let { send, models, finish } = await room(async () => {
+			throw new Error("storage is busy");
+		});
+		let silenced = console.error;
+		console.error = () => {};
+		try {
+			await send("hello");
+		} finally {
+			console.error = silenced;
+			await finish();
+		}
+		expect(models).toEqual([undefined]);
+	});
+});

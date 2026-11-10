@@ -7,8 +7,11 @@ import { createCopilotSdk } from "./copilot-sdk/adapter";
 import { withModelOutput } from "./model-output";
 import { createRemoteAdapter } from "./remote/adapter";
 import { readingOutput } from "../agent/reading-output";
+import { remoteCatalog } from "./catalog";
+import { attachedLink } from "./remote/registry";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
+import type { Chat as Wire } from "@chopin/protocol";
 import type { AtomicAuthMode } from "./atomic/adapter";
 
 const credentials = new Map<string, {
@@ -126,6 +129,22 @@ export function harnessFor(config: {
 		auth,
 		extensions,
 	});
+}
+
+/**
+ * The models a document's Planner can be set to run, or none where its harness cannot honor a
+ * choice: Atomic's runtime offers its models, a remote Planner offers what its attached client
+ * reported (an older client reported nothing), and every other harness offers nothing.
+ */
+export async function plannerCatalog(
+	harness: string,
+	channelId: string,
+	operatorModel: string | undefined,
+): Promise<Wire.ModelCatalog | undefined> {
+	if (harness === "remote") return remoteCatalog(attachedLink(channelId)?.catalog, operatorModel);
+	let atomic = selected as { catalog?: (model: string | undefined) => Promise<Wire.ModelCatalog> };
+	if (harness === "atomic" && atomic?.catalog) return atomic.catalog(operatorModel);
+	return undefined;
 }
 
 export function registerCredential(
