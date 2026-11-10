@@ -2916,3 +2916,24 @@ describe("a machine's GitHub token", () => {
 		expect((await ask("chopin_m_unknown", "octo-org/score")).status).toBe(401);
 	});
 });
+
+describe("a person asking for a Planner that is not there", () => {
+	it("asks the machines again even though the document was already in use, which opening it again does not", async () => {
+		let { machine, choose, runtime, channel, visit } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		await choose("member", laptop.id);
+		expect((await laptop.poll([])).kind).toBe("planners");
+		await visit();
+		// How long a poll that has nothing new to hear waits, once `act` has happened to it.
+		let waited = async (act: () => Promise<unknown>) => {
+			let began = Date.now();
+			let polling = laptop.poll([channel.id], 1_500);
+			await Bun.sleep(150);
+			await act();
+			await polling;
+			return Date.now() - began;
+		};
+		expect(await waited(() => runtime.plannerUsed(channel.id))).toBeGreaterThan(1_200);
+		expect(await waited(() => runtime.plannerUsed(channel.id, true))).toBeLessThan(900);
+	});
+});

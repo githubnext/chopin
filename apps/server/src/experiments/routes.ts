@@ -941,9 +941,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	/**
 	 * Someone uses a document: they opened it, or asked its Planner for something. On Default
 	 * machine its creator's machine is asked to run its Planner, if none is yet. A child's Planner
-	 * is its root's.
+	 * is its root's. `ask` asks the machines again even if this document is already in use, which
+	 * is what a person pressing for a Planner that is not there is owed.
 	 */
-	async function plannerUsed(documentId: string) {
+	async function plannerUsed(documentId: string, ask = false) {
 		if (!options.planners || !auth.machines.durable) return;
 		let channel = await auth.storage.channels.get(documentId);
 		if (channel?.parentChannelId) {
@@ -955,7 +956,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		await readChoices().catch(() => {});
 		// A creator with no machine of their own may get a teammate's shared one, checked anew here.
 		let reached = await reachShared(channel);
-		if (!fresh && !reached) return;
+		if (!fresh && !reached && !ask) return;
 		connections.wake(channel.repositoryId);
 		options.plannerStatus?.(channel.id);
 	}

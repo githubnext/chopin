@@ -2100,3 +2100,97 @@ test("a focused message queued behind a busy turn still names the child when it 
 	expect(drained.indexOf(`child id ${child}`)).toBeGreaterThanOrEqual(0);
 	expect(drained.indexOf(`child id ${child}`)).toBeLessThan(drained.indexOf("shorten the summary"));
 });
+
+function failingMemberTurn(
+	context: Chat.Room,
+	stream: (prompt: string) => Promise<never> | AsyncGenerator<unknown>,
+) {
+	let planner = runningSession();
+	planner.session.stream = (async (prompt: string) => {
+		let made = stream(prompt);
+		return made instanceof Promise ? made : { fullStream: made };
+	}) as never;
+	context.openPlannerSession = async () => ({ ok: true, value: planner.session });
+	return planner;
+}
+
+test("a failed turn's notice says why it ended, for the member message and child that began it, and keeps saying so after a restore", async () => {
+	let { context, backend } = await setup(configured(ATOMIC));
+	let child = "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b";
+	context.children = {
+		list: async () => [],
+		resolve: async id => id === child ? { id, title: "Source review", createdAt: "" } : undefined,
+		open: async () => {
+			throw new Error("not used");
+		},
+	};
+	failingMemberTurn(context, async () => {
+		throw new Error("429 Too Many Requests");
+	});
+	let ws = { data: { handle: "ana", principalId: "U_ana" }, send() {} } as unknown as Socket;
+	let requestId = crypto.randomUUID();
+	await Chat.send(context, ws, {
+		kind: "chat:send",
+		rid: "send",
+		requestId,
+		to: "planner",
+		text: "@chopin shorten the summary",
+		focus: child,
+		ts: 0,
+	} as never);
+	await context.chat.running;
+	let notice = context.chat.entries.at(-1)!;
+	expect(notice.text).toBe("429 Too Many Requests");
+	expect(notice.turnFailure).toEqual({
+		kind: "error",
+		detail: "429 Too Many Requests",
+		request: requestId,
+		focus: child,
+	});
+
+	await context.persist();
+	let reopened = await Plan.open(context.room, backend, context.server);
+	try {
+		expect(reopened.chat.entries.at(-1)?.turnFailure).toEqual(notice.turnFailure);
+	} finally {
+		await Plan.close(reopened);
+	}
+});
+
+test("a turn the Planner's link dropped under says dropped, which a client leaves to the connection to tell", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	let planner = failingMemberTurn(context, async () => {
+		throw new Error("The machine disconnected during the turn.");
+	});
+	Object.assign(planner.session, { suspended: () => true });
+	await Chat.invoke(context, user, "Run the workflow");
+	await context.chat.running;
+	let notice = context.chat.entries.at(-1)!;
+	expect(notice.text).toContain("connection dropped during this reply");
+	expect(notice.turnFailure?.kind).toBe("dropped");
+});
+
+test("a tool that failed inside a turn that went on is no failure of the turn", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	failingMemberTurn(context, async function*() {
+		yield { type: "tool-call", toolCallId: "t1", toolName: "read_plan", input: {} };
+		yield { type: "tool-error", toolCallId: "t1", toolName: "read_plan", error: new Error("no") };
+		yield { type: "finish" };
+	} as never);
+	await Chat.invoke(context, user, "Read it");
+	await context.chat.running;
+	expect(context.chat.entries.filter(entry => entry.turnFailure)).toEqual([]);
+});
+
+test("a tool the turn was refused ends it as refused, once, whatever else ends with it", async () => {
+	let { context, user } = await setup(configured(ATOMIC));
+	failingMemberTurn(context, async function*() {
+		yield { type: "tool-approval-request", approvalId: "a1", toolCall: { toolName: "bash" } };
+		await new Promise(resolve => setTimeout(resolve, 20));
+	} as never);
+	await Chat.invoke(context, user, "Run a command");
+	await context.chat.running;
+	let refused = context.chat.entries.filter(entry => entry.turnFailure);
+	expect(refused.map(entry => entry.turnFailure?.kind)).toEqual(["refused"]);
+	expect(refused[0]!.text).toBe("Chopin's tool approval was denied.");
+});
