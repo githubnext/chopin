@@ -13,7 +13,22 @@
 	--chat-highlight-top: 0.125rem;
 	--chat-bleed-start: 3rem;
 	--chat-bleed-end: 0.75rem;
+	--chat-toolbar-lane: calc(var(--control-target-coarse) + 0.25rem);
 	isolation: isolate;
+}
+
+[data-chat-head],
+[data-chat-avatar] {
+	position: relative;
+	z-index: 1;
+}
+
+[data-chat-head] {
+	pointer-events: none;
+}
+
+[data-chat-head] > * {
+	pointer-events: auto;
 }
 
 .chat-message-body[data-chat-headed] {
@@ -90,19 +105,46 @@
 	pointer-events: auto;
 }
 
-/*
- * A touch screen has no hover, so the toolbar is out of reach until a long press, sits above the
- * message rather than across it, and a long press must not also select the text under the finger.
- */
 @media (hover: none) {
+	.chat-message-body {
+		display: flex;
+		flex-direction: column;
+	}
+
 	.chat-message-toolbar {
-		visibility: hidden;
-		translate: 0 calc(-100% - 0.25rem);
+		display: none;
+	}
+
+	.chat-message-body[data-chat-engaged],
+	.chat-message-body:has(:focus-visible) {
+		margin-block-start: var(--chat-toolbar-lane);
+		--chat-highlight-top: calc(var(--chat-toolbar-lane) + 0.125rem);
+	}
+
+	.chat-message-body[data-chat-headed][data-chat-engaged],
+	.chat-message-body[data-chat-headed]:has(:focus-visible) {
+		--chat-highlight-top: calc(
+			var(--chat-toolbar-lane) + var(--text-sm) * var(--text-sm--line-height) + 0.375rem
+		);
 	}
 
 	.chat-message-body[data-chat-engaged] > .chat-message-toolbar,
 	.chat-message-body:has(:focus-visible) > .chat-message-toolbar {
-		visibility: visible;
+		position: sticky;
+		top: 0.5rem;
+		inset-inline-end: auto;
+		order: -1;
+		display: inline-flex;
+		align-self: flex-end;
+		margin-block: calc(-1 * var(--chat-toolbar-lane)) 0;
+		translate: none;
+		opacity: 1;
+		pointer-events: auto;
+	}
+
+	.chat-message-toolbar .message-actions-button {
+		width: var(--control-target-coarse);
+		height: var(--control-target-coarse);
 	}
 
 	.chat-message-body [data-chat-message-text] {

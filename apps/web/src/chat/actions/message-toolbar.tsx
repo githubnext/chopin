@@ -51,24 +51,41 @@ function useAnchored(
 ) {
 	let [position, setPosition] = useState<CSSProperties>();
 	useLayoutEffect(() => {
-		if (!open) {
+		let element = panel.current;
+		if (!open || !element) {
 			setPosition(undefined);
 			return;
 		}
-		let box = anchor.current?.getBoundingClientRect();
-		let element = panel.current;
-		if (!box || !element) return;
 		let margin = 8;
 		let gap = 4;
-		let width = element.offsetWidth;
-		let height = element.offsetHeight;
-		let below = box.bottom + gap;
-		let top = below + height + margin <= window.innerHeight
-			? below
-			: Math.max(margin, box.top - gap - height);
-		let wanted = align === "end" ? box.right - width : box.left;
-		let left = Math.max(margin, Math.min(wanted, window.innerWidth - width - margin));
-		setPosition({ left, top, visibility: "visible" });
+		let place = () => {
+			let box = anchor.current?.getBoundingClientRect();
+			if (!box) return;
+			let width = element.offsetWidth;
+			let height = element.offsetHeight;
+			let below = box.bottom + gap;
+			let above = box.top - gap - height;
+			let top = below + height + margin <= window.innerHeight
+				? below
+				: above >= margin
+				? above
+				: Math.max(margin, Math.min(below, window.innerHeight - margin - height));
+			let wanted = align === "end" ? box.right - width : box.left;
+			let left = Math.max(margin, Math.min(wanted, window.innerWidth - width - margin));
+			setPosition(current =>
+				current?.left === left && current.top === top
+					? current
+					: { left, top, visibility: "visible" }
+			);
+		};
+		place();
+		let observer = new ResizeObserver(place);
+		observer.observe(element);
+		window.addEventListener("resize", place);
+		return () => {
+			observer.disconnect();
+			window.removeEventListener("resize", place);
+		};
 	}, [open, anchor, panel, align]);
 	return position;
 }
@@ -119,6 +136,8 @@ export let MessageToolbar = memo(function MessageToolbar(
 
 	let menuPosition = useAnchored(menuOpen, moreButton, menu, "end");
 	let pickerPosition = useAnchored(pickerOpen, addButton, picker, "end");
+	let menuPlaced = !!menuPosition;
+	let pickerPlaced = !!pickerPosition;
 	let closeMenu = (restoreFocus = false) => {
 		setMenuOpen(false);
 		if (restoreFocus) moreButton.current?.focus();
@@ -142,14 +161,14 @@ export let MessageToolbar = memo(function MessageToolbar(
 	}, [host, engaged, persistent]);
 
 	useEffect(() => {
-		if (menuPosition) {
+		if (menuPlaced) {
 			menu.current?.querySelector<HTMLElement>("[role=menuitem]:not(:disabled)")?.focus();
 		}
-	}, [menuPosition]);
+	}, [menuPlaced]);
 
 	useEffect(() => {
-		if (pickerPosition) picker.current?.querySelector("input")?.focus();
-	}, [pickerPosition]);
+		if (pickerPlaced) picker.current?.querySelector("input")?.focus();
+	}, [pickerPlaced]);
 
 	let was = useRef(false);
 	useEffect(() => {
