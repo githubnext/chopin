@@ -1,6 +1,7 @@
 import { ChopinMark, Face } from "@chopin/editor";
 import { useEffect } from "react";
 
+import { ComposerMenu, ComposerMenuItem } from "./assistant-ui/composer-model";
 import { referenceOptionId } from "./reference-picker";
 
 import type { MentionCandidate } from "./mentions";
@@ -28,27 +29,18 @@ export function MentionPicker(
 	}, [active, id]);
 
 	return (
-		<div
-			className="absolute bottom-full left-2.5 z-30 mb-1 w-max min-w-48 max-w-[calc(100%-1.25rem)] overflow-y-auto menu-surface"
-			data-chat-mention-picker=""
-			data-menu-enter=""
-			data-focus-boundary=""
-		>
+		<ComposerMenu variant="mentions">
 			<div aria-label="Mentions" id={id} role="listbox">
 				{options.map((option, index) => (
-					<button
+					<ComposerMenuItem
+						active={index === active}
 						aria-label={option.login}
-						aria-selected={index === active}
-						className="menu-item"
-						data-active={index === active || undefined}
 						id={referenceOptionId(id, index)}
 						key={option.login.toLowerCase()}
 						onClick={() => onSelect(option)}
 						onMouseDown={event => event.preventDefault()}
 						onMouseEnter={() => onActive(index)}
-						role="option"
-						tabIndex={-1}
-						type="button"
+						selected={index === active}
 					>
 						{option.kind === "planner"
 							? (
@@ -58,9 +50,9 @@ export function MentionPicker(
 							)
 							: <Face decorative handle={option.login} size={20} titled={false} />}
 						<span className="min-w-0 flex-1 truncate">{option.login}</span>
-					</button>
+					</ComposerMenuItem>
 				))}
 			</div>
-		</div>
+		</ComposerMenu>
 	);
 }

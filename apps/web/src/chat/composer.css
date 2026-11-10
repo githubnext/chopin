@@ -215,7 +215,8 @@
 	margin-top: 0.125rem;
 	color: var(--color-text-tertiary);
 }
-.chat-composer :is([data-chat-reference-picker], [data-chat-mention-picker]) {
+.chat-composer
+	:is([data-chat-reference-picker], [data-chat-mention-picker], [data-chat-model-picker]) {
 	left: calc(-1 * var(--edge-width));
 	margin-bottom: calc(0.625rem + var(--edge-width));
 	box-shadow: var(--shadow-resting-strong);
@@ -399,7 +400,7 @@
 	.chat-composer .composer-left > button {
 		order: 1;
 	}
-	.chat-composer .composer-mode-trigger {
+	.chat-composer :is(.composer-mode-trigger, .composer-model-trigger) {
 		order: 3;
 	}
 	.chat-composer .composer-run-control {
@@ -421,14 +422,29 @@
 		min-width: var(--composer-pill-control);
 		min-height: var(--composer-pill-control);
 	}
-	.chat-composer .composer-surface :is(.btn-icon, .composer-mode) {
+	.chat-composer .composer-surface :is(.btn-icon, .composer-mode, .composer-model-trigger) {
 		width: var(--composer-pill-control);
 		height: var(--composer-pill-control);
 		border-radius: var(--radius-full);
 	}
-	.chat-composer .composer-surface :is(.btn-icon, .composer-mode-symbol) svg {
+	.chat-composer
+		.composer-surface
+		:is(.btn-icon, .composer-mode-symbol, .composer-model-symbol)
+		svg {
 		width: var(--composer-pill-icon);
 		height: var(--composer-pill-icon);
+	}
+	/* The model control is its icon here; the words are in its accessible name. */
+	.chat-composer .composer-model-trigger {
+		justify-content: center;
+		max-width: none;
+		padding-inline: 0;
+	}
+	.chat-composer .composer-model-symbol {
+		display: inline-flex;
+	}
+	.chat-composer :is(.composer-model-name, .composer-model-level, .composer-model-chevron) {
+		display: none;
 	}
 	/* The switch keeps its accessible name and drops the visible word. */
 	.chat-composer .composer-mode {
@@ -520,7 +536,7 @@
 	}
 	/* Pickers become a list resting on the composer, as wide as it is. */
 	.chat-composer
-		:is([data-chat-reference-picker], [data-chat-mention-picker], [data-chat-command-picker]) {
+		:is([data-chat-reference-picker], [data-chat-mention-picker], [data-chat-command-picker], [data-chat-model-picker]) {
 		/* Out to the pill's border, as the desktop dropdowns align. */
 		left: calc(-1 * var(--edge-width));
 		right: calc(-1 * var(--edge-width));
@@ -534,7 +550,7 @@
 		border-radius: var(--radius-lg);
 	}
 	.chat-composer
-		:is([data-chat-reference-picker], [data-chat-mention-picker], [data-chat-command-picker])
+		:is([data-chat-reference-picker], [data-chat-mention-picker], [data-chat-command-picker], [data-chat-model-picker])
 		[role="option"] {
 		height: auto;
 		min-height: var(--control-target-coarse);
