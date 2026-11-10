@@ -22,6 +22,7 @@ import type {
 	HarnessV1StreamPart,
 } from "@ai-sdk/harness";
 import type {
+	CapabilityCatalog,
 	ClientMessage,
 	ClientMessageOf,
 	ProtocolErrorCode,
@@ -93,6 +94,8 @@ export type LinkOptions = {
 	revalidateEveryMs?: number;
 	/** The features `attached` names; absent when the client asked for none. */
 	features?: string[];
+	/** The client reported what it offers, which may be nothing now; read it from `catalog`. */
+	catalogChanged?(): void;
 };
 
 const REFUSAL_CLOSE: Record<RefusalCode, number> = {
@@ -790,6 +793,11 @@ class RemoteSession {
 		let hostNames = offered.map(tool => tool.name);
 		let hostTools = this.planner.hostTools;
 		this.planner.hostTools = undefined;
+		// The level is only ever one the client's own catalog listed for the model.
+		let thinkingLevel = this.#port.features?.includes(AGENT_FEATURES.capabilityCatalog)
+			? this.planner.thinkingLevel
+			: undefined;
+		this.planner.thinkingLevel = undefined;
 		let turn: Turn = {
 			id: crypto.randomUUID(),
 			emit: options.emit,
@@ -811,6 +819,7 @@ class RemoteSession {
 			prompt,
 			...(options.instructions === undefined ? {} : { instructions: options.instructions }),
 			...(options.model ? { model: options.model } : {}),
+			...(thinkingLevel ? { thinkingLevel } : {}),
 			tools: offered.map(tool => ({
 				name: tool.name,
 				...(tool.description === undefined ? {} : { description: tool.description }),
@@ -941,6 +950,7 @@ export class AgentLink {
 	#resumed = false;
 	/** Whether the server or the client chose to end this link, rather than the network failing. */
 	#planned = false;
+	#catalog: CapabilityCatalog | undefined;
 	/** Set on a link rebuilt after a restart: told when its sessions are given back or end. */
 	#rebuilt: { ended(): void; resumed(): void } | undefined;
 
@@ -1111,6 +1121,14 @@ export class AgentLink {
 
 	get attached(): boolean {
 		return this.#state === "attached";
+	}
+
+	/**
+	 * What the client last reported with `capabilities`; absent until it does, and for a link whose
+	 * client offered no `capability-catalog`.
+	 */
+	get catalog(): CapabilityCatalog | undefined {
+		return this.#catalog;
 	}
 
 	/** Whether this link offered `resumable-sessions`. */
@@ -1581,6 +1599,13 @@ export class AgentLink {
 				if (this.#resumed) return this.#violate("protocol", "resume must come first, once.");
 				this.#resumed = true;
 				return this.#resume(message);
+			case "capabilities":
+				if (!this.#options.features?.includes(AGENT_FEATURES.capabilityCatalog)) {
+					return this.#violate("protocol", "capabilities needs the capability-catalog feature.");
+				}
+				this.#catalog = message.catalog;
+				this.#options.catalogChanged?.();
+				return;
 			case "attach":
 				return this.#violate("protocol", "This link is already attached.");
 			case "detach":
