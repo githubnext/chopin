@@ -8,6 +8,7 @@ import { atomicCatalog, createAtomicAdapter } from "./adapter";
 import { registerFullPlanner } from "./full";
 import { startStubModelServer } from "./model-stub";
 
+import type { PlannerTurn } from "../turn-level";
 import type { FullPlanner } from "./full";
 
 let stub = startStubModelServer(() => ({ kind: "text", text: "Done." }));
@@ -133,14 +134,14 @@ describe("a chosen model and thinking level reach the Atomic session", () => {
 		stub.requests.length = 0;
 		try {
 			for (let step of steps) {
-				planner.thinkingLevel = step.thinkingLevel;
 				let control = await session.doPromptTurn({
 					prompt: step.prompt,
 					skills: [],
 					tools: [],
 					...(step.model ? { model: step.model } : {}),
+					...(step.thinkingLevel ? { thinkingLevel: step.thinkingLevel } : {}),
 					emit: () => {},
-				});
+				} as PlannerTurn);
 				await control.done;
 			}
 			return stub.requests.map(request => [request.prompt, request.model, request.reasoningEffort]);

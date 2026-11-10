@@ -41,6 +41,7 @@ import type {
 	HarnessV1ToolSpec,
 } from "@ai-sdk/harness";
 import type { Chat as Wire } from "@chopin/protocol";
+import type { PlannerTurn } from "../turn-level";
 import type {
 	AgentSession,
 	AgentSessionEvent,
@@ -703,7 +704,7 @@ export function createAtomicAdapter(
 
 			let plannerTools: ReadonlySet<string> = new Set();
 
-			async function prepare(turn: HarnessV1PromptTurnOptions): Promise<AgentSession> {
+			async function prepare(turn: PlannerTurn): Promise<AgentSession> {
 				if (turn.skills.length > 0) throw unsupported("skills");
 				let hostNames = turn.tools.map(spec => spec.name);
 				if (hostNames.includes(ATOMIC_RESULT_TOOL_NAME)) {
@@ -809,7 +810,7 @@ export function createAtomicAdapter(
 				) {
 					await live.session.setModel(model);
 				}
-				await applyLevel(live.session);
+				await applyLevel(live.session, turn.thinkingLevel);
 				return live.session;
 			}
 
@@ -818,8 +819,8 @@ export function createAtomicAdapter(
 			 * chosen. Atomic clamps a level to what the model supports; the server only ever sends
 			 * one the catalog listed for it.
 			 */
-			async function applyLevel(session: AgentSession): Promise<void> {
-				let wanted = full?.thinkingLevel as typeof initialLevel;
+			async function applyLevel(session: AgentSession, level: string | undefined): Promise<void> {
+				let wanted = level as typeof initialLevel;
 				if (wanted !== undefined) {
 					await session.setThinkingLevel(wanted);
 					levelChosen = true;
@@ -867,7 +868,7 @@ export function createAtomicAdapter(
 				sessionId: startOptions.sessionId,
 				isResume: false,
 
-				async doPromptTurn(turn: HarnessV1PromptTurnOptions): Promise<HarnessV1PromptControl> {
+				async doPromptTurn(turn: PlannerTurn): Promise<HarnessV1PromptControl> {
 					if (closed) throw new Error("Atomic session is closed.");
 					if (current) throw new Error("Atomic session already has an active turn.");
 					let text = promptText(turn.prompt);

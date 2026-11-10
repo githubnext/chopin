@@ -52,6 +52,7 @@ import { remotePlanner } from "./registry";
 
 import type { AgentClient, AgentHandlers, TurnContext } from "@chopin/agent-link/client";
 import type { ActiveOwnerBinding } from "../../agent/active-owner";
+import type { PlannerTurn } from "../turn-level";
 import type { RemotePlanner } from "./registry";
 
 let cleanups: Array<() => unknown> = [];
@@ -1708,21 +1709,19 @@ describe("Agent connection capability catalog", () => {
 			raw.send({ type: "started", session: start.session });
 			let opened = await opening;
 			cleanups.push(() => opened.doDestroy());
-			planner.thinkingLevel = "high";
 			let turns: unknown[] = [];
 			let running = opened.doPromptTurn({
 				prompt: "go",
 				skills: [],
 				tools: [],
 				model: "acme/large",
+				thinkingLevel: "high",
 				emit: part => turns.push(part),
-			});
+			} as PlannerTurn);
 			let turn = await raw.next("turn");
 			expect(turn.model).toBe("acme/large");
 			expect("thinkingLevel" in turn).toBe(sent);
 			if (sent) expect(turn.thinkingLevel).toBe("high");
-			// The level was for that turn alone: nothing is left to leak into the next.
-			expect(planner.thinkingLevel).toBeUndefined();
 			raw.send({ type: "turn-end", session: turn.session, turn: turn.turn, status: "finished" });
 			await (await running).done.then(() => {}, () => {});
 			raw.send({ type: "detach" });

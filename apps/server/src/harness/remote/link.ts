@@ -33,6 +33,7 @@ import type {
 import type { Chat as Wire } from "@chopin/protocol";
 import type { JsonValue, PlannerHeldSession } from "../../storage/model";
 import type { AskedInput, HumanInputStatus, InputMethod } from "../atomic/human-input";
+import type { PlannerTurn } from "../turn-level";
 import type { RemotePlanner } from "./registry";
 
 const OPERATION_TIMEOUT_MS = 10_000;
@@ -781,7 +782,7 @@ class RemoteSession {
 		};
 	}
 
-	async #prompt(options: HarnessV1PromptTurnOptions): Promise<HarnessV1PromptControl> {
+	async #prompt(options: PlannerTurn): Promise<HarnessV1PromptControl> {
 		this.#ready();
 		if (options.skills.length > 0) throw unsupported("skills");
 		let prompt = promptText(options.prompt);
@@ -795,9 +796,8 @@ class RemoteSession {
 		this.planner.hostTools = undefined;
 		// The level is only ever one the client's own catalog listed for the model.
 		let thinkingLevel = this.#port.features?.includes(AGENT_FEATURES.capabilityCatalog)
-			? this.planner.thinkingLevel
+			? options.thinkingLevel
 			: undefined;
-		this.planner.thinkingLevel = undefined;
 		let turn: Turn = {
 			id: crypto.randomUUID(),
 			emit: options.emit,
