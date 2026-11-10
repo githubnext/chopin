@@ -1643,3 +1643,63 @@ test("a turn that ends while its tool's image is still being stored waits for it
 	]);
 	expect(saved()).toEqual(holders.map(entry => [entry.id, entry.images!.map(item => item.alt)]));
 });
+
+test("a remote client that reuses a tool call id in a later turn keeps each turn's image and tool result on that turn's message", async () => {
+	let room = await remoteRoom();
+	let { context } = room;
+	let image = (seed: number, alt: string) => ({
+		type: "image",
+		data: pixels(640, 480, seed),
+		mimeType: "image/png",
+		alt,
+	});
+	let client = await attach(
+		room.server.url,
+		room.channel.id,
+		scriptedPlanner({
+			async turn(turn) {
+				let next = turn.message.prompt.includes("next");
+				turn.offerTools(["draw"]);
+				turn.emit({
+					type: "tool-call",
+					toolCallId: "draw-1",
+					toolName: "draw",
+					input: "{}",
+					providerExecuted: true,
+				});
+				turn.emit({
+					type: "tool-result",
+					toolCallId: "draw-1",
+					toolName: "draw",
+					result: { content: [next ? image(4, "Next floor") : image(3, "Slow floor")] },
+				});
+				finishTurn(turn);
+			},
+		}).handlers,
+	);
+	cleanups.push(() => client.detach());
+
+	expect(await room.send("@chopin draw it")).toMatchObject({ kind: "chat:send" });
+	await context.chat.running;
+	expect(await room.send("@chopin the next one")).toMatchObject({ kind: "chat:send" });
+	await context.chat.running;
+
+	let holders = context.chat.entries.filter(entry => entry.images);
+	expect(holders.map(entry => entry.images!.map(item => item.alt))).toEqual([
+		["Slow floor"],
+		["Next floor"],
+	]);
+	expect(holders.map(entry => entry.tools!.map(tool => [tool.id, tool.status, tool.result])))
+		.toEqual([
+			[["draw-1", "done", "1 image"]],
+			[["draw-1", "done", "1 image"]],
+		]);
+	let kinds = context.chat.entries.map(entry => entry.author.kind);
+	expect(kinds.indexOf("member")).toBeLessThan(context.chat.entries.indexOf(holders[0]!));
+	expect(context.chat.entries.indexOf(holders[0]!)).toBeLessThan(
+		context.chat.entries.findLastIndex(entry => entry.author.kind === "member"),
+	);
+	expect(context.chat.entries.findLastIndex(entry => entry.author.kind === "member")).toBeLessThan(
+		context.chat.entries.indexOf(holders[1]!),
+	);
+});

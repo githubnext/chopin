@@ -388,6 +388,7 @@ export type Chat = {
 	toolProgress?: (id: string, output: unknown) => void;
 	/** Text part ids are adapter-local; transcript ids are unique across turns. */
 	messageIds?: Map<string, string>;
+	toolEntries?: Map<string, string>;
 	/** Owner identity for the running turn only. */
 	owner?: { sessionId: string; generation: number; revision: number };
 	/** User-facing reason an in-flight turn was interrupted. */
@@ -2834,6 +2835,7 @@ async function run(
 		}
 		: undefined;
 	chat.messageIds = new Map();
+	chat.toolEntries = new Map();
 	if (!jobTurn) chat.captured = new Set();
 	if (jobTurn) {
 		chat.job = jobTurn.job;
@@ -3087,6 +3089,7 @@ async function run(
 		}
 		await endTurnImages(chat);
 		chat.messageIds = undefined;
+		chat.toolEntries = undefined;
 		chat.writing = undefined;
 		chat.tooling = undefined;
 		settle(chat, server, room, turnController.signal.aborted && !failed);
@@ -3671,17 +3674,18 @@ export function progressed(context: Room, id: string, output: unknown): void {
 	conclude(context, id, output, "running", true);
 }
 
+function holder(chat: Chat, id: string): Wire.Entry | undefined {
+	let entry = chat.entries.find(item => item.id === chat.toolEntries?.get(id));
+	return entry?.tools?.some(activity => activity.id === id) ? entry : undefined;
+}
+
 function tool(chat: Chat, id: string): Wire.Activity | undefined {
-	return chat.entries.flatMap(entry => entry.tools ?? []).find(item => item.id === id);
+	return holder(chat, id)?.tools?.find(item => item.id === id);
 }
 
 /** What a running tool call was called, from where it was filed. */
 function named(chat: Chat, id: string): string {
-	for (let entry of chat.entries) {
-		let found = entry.tools?.find(activity => activity.id === id);
-		if (found) return found.name;
-	}
-	return "tool";
+	return tool(chat, id)?.name ?? "tool";
 }
 
 /**
@@ -3695,7 +3699,7 @@ function named(chat: Chat, id: string): string {
 function attach(context: Room, activity: Wire.Activity): string {
 	let { chat, room, server } = context;
 	// Completion can arrive after idle; find its original activity by call id.
-	let entry = chat.entries.find(item => item.tools?.some(tool => tool.id === activity.id))
+	let entry = holder(chat, activity.id)
 		?? chat.entries.find(item => item.id === chat.tooling)
 		?? chat.entries.find(item => item.id === chat.writing);
 	if (entry && !entry.tools?.some(tool => tool.id === activity.id)) chat.tooling = entry.id;
@@ -3710,6 +3714,7 @@ function attach(context: Room, activity: Wire.Activity): string {
 	let existing = entry.tools.findIndex(item => item.id === activity.id);
 	if (existing >= 0) entry.tools[existing] = { ...entry.tools[existing], ...activity };
 	else entry.tools.push(activity);
+	(chat.toolEntries ??= new Map()).set(activity.id, entry.id);
 	return entry.id;
 }
 
@@ -3762,7 +3767,7 @@ function showImages(
 	let { chat, room, server } = context;
 	if (chat.closed || !images.length || chat.turnImages !== turn) return;
 	let entry = chat.entries.find(item => item.id === turn.entry)
-		?? (call ? chat.entries.find(item => item.tools?.some(tool => tool.id === call)) : undefined)
+		?? (call ? holder(chat, call) : undefined)
 		?? chat.entries.find(item => item.id === chat.tooling)
 		?? chat.entries.find(item => item.id === chat.writing);
 	if (!entry) {
