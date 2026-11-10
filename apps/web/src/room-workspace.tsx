@@ -1962,7 +1962,9 @@ export function RoomWorkspace(
 								active={chatActive}
 								agent={agent}
 								offline={banner.offline}
-								banner={banner}
+								// Only while Chat is on screen: off screen it is still mounted, and the document draws
+								// the banner at its top, so a second one in the hidden composer would be a second banner.
+								banner={chatShowsBanner ? banner : undefined}
 								onTranscript={setTranscriptFacts}
 								focus={presentation.type === "parent-with-child" ? presentation.childId : undefined}
 								onOpenChild={presentation.onChildOpen}
