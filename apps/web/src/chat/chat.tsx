@@ -892,7 +892,7 @@ export function Chat(
 	};
 
 	let bannerId = useId();
-	let slot = bannerSlot(banner?.view, !!sendBanner, !!failed);
+	let slot = bannerSlot(banner?.view, !!sendBanner, !!failed, !readonly && !archived);
 	let leadNode = slot.lead === "send" && sendBanner
 		? (
 			<ErrorState

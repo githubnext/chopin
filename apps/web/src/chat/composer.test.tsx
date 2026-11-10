@@ -183,3 +183,23 @@ test("a read-only document replaces the strip, whatever it was saying", () => {
 	expect(markup).not.toContain("Can't connect");
 	expect(markup).not.toContain("composer-notice");
 });
+
+test("a banner and the composer's own notice are both drawn, and both describe the draft", () => {
+	let markup = render({
+		banner: {
+			id: "lead connection",
+			node: createElement("div", { id: "lead", "data-banner": "" }, "No machine is connected."),
+		},
+		notice: { tone: "info", text: "Research isn't available in this document" },
+	});
+	expect(markup).toContain("No machine is connected.");
+	expect(markup).toContain("Research isn't available in this document");
+	let cue = markup.match(/role="status" id="([^"]+)"/)![1]!;
+	expect(markup).toMatch(new RegExp(`aria-describedby="lead connection ${cue}"`));
+});
+
+test("a banner alone describes the draft by its ids, with no notice strip of its own", () => {
+	let alone = render({ banner: { id: "a b", node: createElement("div", { id: "a" }) } });
+	expect(alone).toContain('aria-describedby="a b"');
+	expect(alone).not.toContain("composer-notice");
+});

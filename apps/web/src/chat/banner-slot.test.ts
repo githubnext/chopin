@@ -77,3 +77,11 @@ test("a failed reply's line leaves the transcript only when its banner is drawn"
 	expect(drawn(bannerSlot(online, true, true))).toBe(false);
 	expect(drawn(bannerSlot(planner("none"), false, true))).toBe(true);
 });
+
+test("where the composer is not drawn there is no slot, and a failed reply's line stays in the transcript", () => {
+	expect(bannerSlot(planner("none"), true, true, false)).toEqual({
+		connection: false,
+		quietsNotices: false,
+	});
+	expect(drawn(bannerSlot(online, false, true, false))).toBe(false);
+});

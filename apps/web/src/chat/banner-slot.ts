@@ -7,7 +7,9 @@ import type { ConnectionView } from "./connection-phase";
  * their banner is the whole slot and a refused send or a failed reply waits behind it. A Planner
  * that is away or absent is another fact: it shows beside a message the server refused or a reply
  * that failed, which it did not cause. The one exception is a machine that dropped (held or
- * disconnected), whose banner already tells why a reply failed.
+ * disconnected), whose banner already tells why a reply failed, and a retry cannot reach it: that
+ * reply's own line stays in the transcript until its banner is drawn. Where the composer is not
+ * drawn (an archived or read-only document) there is no slot, and nothing leaves the transcript.
  */
 export type BannerSlot = {
 	/** The refused send or the failed reply, shown above the connection banner. */
@@ -22,7 +24,9 @@ export function bannerSlot(
 	view: ConnectionView | undefined,
 	send: boolean,
 	failure: boolean,
+	composer = true,
 ): BannerSlot {
+	if (!composer) return { connection: false, quietsNotices: false };
 	let shown = view && view.phase !== "online" ? view : undefined;
 	if (shown && shown.layer !== "planner") return { connection: true, quietsNotices: true };
 	let kind = shown && "plannerKind" in shown ? shown.plannerKind : undefined;
