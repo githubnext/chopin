@@ -290,7 +290,7 @@
 				1
 			]
 		],
-		"sourceHash": "b30281887337389ac90a1a0648ef8e827d2ff6b6a01111c7495989330fa3a34f"
+		"sourceHash": "262e2b1e5c5dc9aaf0c14bd5c853051fda90e6b7c340dbe8186f124a7e50ec55"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
@@ -395,34 +395,6 @@
 				1
 			]
 		],
-		"sourceHash": "15f197fd510d2907f0cc3a5262f33db257028c470474fbfb23cf76a519dadd43"
-	},
-	{
-		"file": "apps/web/src/offline-notice.tsx",
-		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
-		"cases": [
-			[
-				"dynamic",
-				"class",
-				"MOTION.className",
-				"class > OfflineNotice > <div>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"presence.className",
-				"class > OfflineNotice > <div>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"MOTION.contentClassName",
-				"class > OfflineNotice > <div>",
-				1
-			]
-		],
-		"sourceHash": "3004db266aef1f1130ad40829ecb044b26997499b29498276eb3f31156810c44"
+		"sourceHash": "cadb7e8e282c8828a63b6a73133fa7701d7cb3e7345b7ed84a2a1a52925f186e"
 	}
 ]

@@ -38,7 +38,7 @@ const STAGE: Record<Wire.RunStage["status"], string> = {
 /**
  * What a run card's status reads. A disconnected Planner's live runs keep the status they last
  * reported, but say the Planner is away: nothing is running now, and nothing has ended. While the
- * page's offline notice shows, the card says nothing of the machine and reads as last reported.
+ * page's connection banner shows, the card says nothing of the machine and reads as last reported.
  */
 export function runStatusLabel(run: Wire.Run, offline = false): string {
 	return run.disconnected && !offline ? "disconnected" : STATUS[run.status];
@@ -278,7 +278,7 @@ type RunControls = {
 	onShowDecisions?: () => void;
 	onPause?: (runId: string) => void;
 	onResume?: (runId: string) => void;
-	/** The page's offline notice is showing, the one thing said about the connection. */
+	/** The page's connection banner is showing, the one thing said about the connection. */
 	offline?: boolean;
 };
 
@@ -295,7 +295,7 @@ function RunRow(
 ) {
 	let away = !!run.disconnected;
 	// The machine's state is told only while the page can hear it: through a lost connection the
-	// last frame is all there is, and the offline notice is the one thing said about the connection.
+	// last frame is all there is, and the connection banner is the one thing said about the connection.
 	let told = away && !offline;
 	// A disconnected run's clock stays at its last report, as a paused run's does.
 	let live = (run.status === "running" || run.status === "waiting") && !away;

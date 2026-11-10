@@ -176,7 +176,7 @@ export type WorkspaceProps = {
 	 * A notice for the whole page, such as a lost connection, in flow at the top of the document's
 	 * content. Where Chat and the document take turns it stands above both panes, as one element
 	 * that neither switching nor a phone's tabs remount, so it reads as top of Chat where Chat is
-	 * all that shows; a phone's floats just under its top bar (see `offline-notice.css`).
+	 * all that shows; a phone's floats just under its top bar (see `document-banner.css`).
 	 */
 	notice?: ReactNode;
 	/** People present in the room, at the end of the document title bar. */

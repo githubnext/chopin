@@ -96,7 +96,7 @@ test("a message that can never be delivered says Couldn't send on itself, why, a
 	expect(markup).not.toContain('role="alert"');
 });
 
-test("while the page's offline notice shows, a message's Couldn't send gives way to it and comes back with the connection", () => {
+test("while the page's connection banner shows, a message's Couldn't send gives way to it and comes back with the connection", () => {
 	let failed = mine("a", "@chopin outline it", {
 		deliveryState: "failed",
 		deliveryFailure: "machine-removed",

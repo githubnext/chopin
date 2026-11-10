@@ -9,10 +9,7 @@ import {
 	connectionNotice,
 	countGrace,
 	isOffline,
-	offersRetry,
-	offlineAnnouncement,
 	RESTART_GRACE,
-	RETRY_AFTER_FAILURES,
 } from "./connection-notice";
 
 describe("connectionNotice", () => {
@@ -73,33 +70,6 @@ describe("isOffline", () => {
 		expect(isOffline("denied", true)).toBe(false);
 		expect(isOffline("deleted", true)).toBe(false);
 		expect(isOffline("closed", true)).toBe(false);
-	});
-});
-
-describe("offersRetry", () => {
-	test("offers nothing while automatic reconnects are still working through their backoff", () => {
-		expect(offersRetry(0)).toBe(false);
-		expect(offersRetry(RETRY_AFTER_FAILURES - 1)).toBe(false);
-	});
-
-	test("offers Retry once enough attempts have failed, and keeps offering it", () => {
-		expect(offersRetry(RETRY_AFTER_FAILURES)).toBe(true);
-		expect(offersRetry(RETRY_AFTER_FAILURES + 20)).toBe(true);
-	});
-});
-
-describe("offlineAnnouncement", () => {
-	test("says nothing as the notice appears, because the notice speaks for itself", () => {
-		expect(offlineAnnouncement(false, true)).toBe("");
-	});
-
-	test("says once that the connection is back when the notice has gone", () => {
-		expect(offlineAnnouncement(true, false)).toBe("Reconnected");
-	});
-
-	test("says nothing for a blip that never showed the notice, or while it stays", () => {
-		expect(offlineAnnouncement(false, false)).toBe("");
-		expect(offlineAnnouncement(true, true)).toBe("");
 	});
 });
 

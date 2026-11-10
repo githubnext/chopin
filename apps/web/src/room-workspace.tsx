@@ -54,7 +54,7 @@ import {
 } from "@chopin/editor";
 
 import { BuildGlyph, BuildPlanButton, useBuildPlan } from "./build-plan-button";
-import { OfflineAnnouncement, OfflineNotice, useOfflineNotice } from "./offline-notice";
+import { DocumentBanner } from "./document-banner";
 import { buildBlockers } from "./build-blockers";
 import type { BuildBlocker } from "./build-blockers";
 import {
@@ -66,7 +66,13 @@ import {
 	useMachineChoice,
 } from "./machine-choice";
 import { plannerPlacement, plannerStatus, plannerWithheld } from "./chat/planner-status";
-import { PlannerAnnouncement } from "./chat/planner-announcement";
+import {
+	ConnectionAnnouncement,
+	NO_TRANSCRIPT,
+	useConnectionBanner,
+} from "./chat/connection-banner";
+import { plannerForBanner } from "./chat/connection-phase";
+import type { TranscriptFacts } from "./chat/connection-banner";
 import {
 	plannerConnectionLost,
 	plannerWordHeard,
@@ -576,10 +582,9 @@ export function RoomWorkspace(
 	let treatAsConnected = useConnectionNotice(status !== "connected", wire?.restarting) === "none";
 	// What the page draws holds through a restart it is waiting out in silence.
 	let shownConnected = readsConnected(status, !!wire?.restarting, treatAsConnected);
-	// A lost connection is said once, at the top of the page: decided here, above wherever the
-	// notice is drawn, so a person switching between Chat and the document neither waits out the
-	// grace period again nor hears of it twice.
-	let offline = useOfflineNotice(isOffline(status, !!outage), outage?.failures ?? 0);
+	// What Chat's transcript tells the connection banner: a reply running, how many messages it
+	// holds, and whether it is this socket's own.
+	let [transcriptFacts, setTranscriptFacts] = useState<TranscriptFacts>(NO_TRANSCRIPT);
 	// The last loss of unsent edits this person has dismissed.
 	let [lostSeen, setLostSeen] = useState(0);
 	let [members, setMembers] = useState<Session.Member[]>([]);
@@ -1300,7 +1305,7 @@ export function RoomWorkspace(
 	// The machine button is drawn in the title bar beside Build plan, and in a phone's top bar
 	// unless an open child has taken that bar over; only a person with a machine choice has one.
 	// A lost connection hides the button without changing where the Planner's state is told:
-	// the offline notice speaks for the connection meanwhile.
+	// the connection banner speaks for the connection meanwhile.
 	let machineSlot = ownsMachine && machineChoice.state && workspaceCanEdit
 		? machineChoice
 		: undefined;
@@ -1311,9 +1316,25 @@ export function RoomWorkspace(
 			? !(presentation.type === "parent-with-child" && planVisible)
 			: titleBuildShown);
 	let plannerWhere = useMemo(
-		() => plannerPlacement(plannerNote, hasMachineButton, offline.open),
-		[plannerNote, hasMachineButton, offline.open],
+		() => plannerPlacement(plannerNote, hasMachineButton),
+		[plannerNote, hasMachineButton],
 	);
+	// A lost connection and the Planner's own are told once, by one banner: at the Chat composer
+	// while Chat is on screen, else at the top of the document. Decided here, above both, so a
+	// person switching between them neither waits out the grace period again nor hears of it twice.
+	let banner = useConnectionBanner({
+		lost: isOffline(status, !!outage),
+		failures: outage?.failures ?? 0,
+		synced: planState.synced,
+		transcript: profile.chat ? transcriptFacts : NO_TRANSCRIPT,
+		planner: profile.chat ? plannerForBanner(plannerNote, hasMachineButton) : undefined,
+		plannerHeld: plannerWithheldNow,
+		reconnect: () => wire?.reconnect(),
+		wake: () => {
+			void wire?.ask("chat:wake", {}).catch(() => {});
+		},
+	});
+	let chatShowsBanner = profile.chat && workspacePresentation.chatVisible;
 	useTitlingReport({
 		wire: workspaceCanEdit ? wire : undefined,
 		room,
@@ -1596,10 +1617,11 @@ export function RoomWorkspace(
 			item.thread.status === "open" && !item.orphaned && !item.drifted
 		).length;
 
-	// A connection that outlasts a blip is said once, at the top of the document's content.
-	let offlineNotice = (
-		<OfflineNotice onRetry={() => wire?.reconnect()} open={offline.open} retry={offline.retry} />
-	);
+	// A connection that outlasts a blip is said once, at the top of the document's content, where
+	// Chat is not on screen to say it at its composer.
+	let documentBanner = chatShowsBanner
+		? null
+		: <DocumentBanner onRetry={banner.onRetry} view={banner.view} />;
 	let statusNotices = (
 		<>
 			{!!planState.lost && planState.lost !== lostSeen && (
@@ -1772,7 +1794,7 @@ export function RoomWorkspace(
 				<p aria-live="polite" className="sr-only" role="status">
 					<span key={announcement.sequence}>{announcement.text}</span>
 				</p>
-				<OfflineAnnouncement spoken={offline.spoken} />
+				<ConnectionAnnouncement spoken={banner.spoken} />
 				{childTitle?.slot && (childTitle.phone
 					? createPortal(
 						<PhoneHeaderContent
@@ -1835,7 +1857,7 @@ export function RoomWorkspace(
 					</div>
 				)}
 				<div className="child-document-status">{statusNotices}</div>
-				{offlineNotice}
+				{documentBanner}
 				<section
 					aria-label="Document"
 					className="child-document-scroll min-h-0 flex-1"
@@ -1921,14 +1943,7 @@ export function RoomWorkspace(
 					<p aria-live="polite" className="sr-only" role="status">
 						<span key={announcement.sequence}>{announcement.text}</span>
 					</p>
-					<OfflineAnnouncement spoken={offline.spoken} />
-					{profile.chat && (
-						<PlannerAnnouncement
-							offline={offline.open}
-							status={plannerNote}
-							withheld={plannerWithheldNow}
-						/>
-					)}
+					<ConnectionAnnouncement spoken={banner.spoken} />
 					<Workspace
 						space={space}
 						buildEnabled={build.tabReady}
@@ -1943,7 +1958,9 @@ export function RoomWorkspace(
 							<Chat
 								active={chatActive}
 								agent={agent}
-								offline={offline.open}
+								offline={banner.offline}
+								banner={banner}
+								onTranscript={setTranscriptFacts}
 								focus={presentation.type === "parent-with-child" ? presentation.childId : undefined}
 								onOpenChild={presentation.onChildOpen}
 								connected={status === "connected"}
@@ -2002,7 +2019,6 @@ export function RoomWorkspace(
 								repository={repository}
 								room={room}
 								sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}
-								plannerStrip={plannerWhere.strip}
 								wire={wire}
 							/>
 						}
@@ -2115,7 +2131,7 @@ export function RoomWorkspace(
 							</>
 						}
 						ids={workspaceIds}
-						notice={offlineNotice}
+						notice={documentBanner}
 						phoneAction={barEdit && (
 							<button
 								aria-label={barEdit.editing ? "Done editing" : "Edit document"}

@@ -445,17 +445,17 @@ export function boundedChatError(error: unknown): string {
 }
 
 /**
- * What the composer tells of a failed send. While the page's offline notice shows it tells none: a
+ * What the composer tells of a failed send. While the page's connection banner shows it tells none: a
  * lost connection is that notice's to tell, and a strip beside it would be a second alert for a
  * problem the person cannot act on. A failure the server refused is kept meanwhile, and told as it
  * was once the connection is back. A send the connection cut off has no strip of its own while the
  * connection is down, so a blip, which shows no notice, says nothing either.
  */
-export function shownSendFailure(
-	failure: SendFailure | undefined,
+export function shownSendFailure<T extends SendFailure>(
+	failure: T | undefined,
 	connected: boolean,
 	offline: boolean,
-): SendFailure | undefined {
+): T | undefined {
 	return offline || (failure?.lost && !connected) ? undefined : failure;
 }
 

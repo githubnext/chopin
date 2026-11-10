@@ -54,24 +54,6 @@ export function isOffline(
 	return outage && connection !== "denied" && connection !== "deleted" && connection !== "closed";
 }
 
-/**
- * Whether an offline notice offers Retry: not while automatic reconnects are still working
- * through their backoff, which usually ends the outage unseen, but once enough have failed
- * that waiting is no longer the whole answer.
- */
-export function offersRetry(failures: number): boolean {
-	return failures >= RETRY_AFTER_FAILURES;
-}
-
-/**
- * What a screen reader is told as an offline notice changes. The notice speaks for itself as it
- * appears; leaving it is said once, politely, because the document was read-only and is not now.
- * A blip that never showed the notice never says it was over.
- */
-export function offlineAnnouncement(wasShown: boolean, shown: boolean): string {
-	return wasShown && !shown ? "Reconnected" : "";
-}
-
 /** What `countGrace` needs of the page, so the rule it keeps can be tested without one. */
 export type GraceClock = {
 	/** Whether the page can be looked at: not hidden. */

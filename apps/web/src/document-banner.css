@@ -1,0 +1,93 @@
+/* Room for the banner's own focus ring, which its entrance would otherwise clip. */
+.document-banner-inset {
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+}
+
+.document-banner {
+	flex-shrink: 0;
+}
+
+/*
+ * The banner is the Chat composer's strip with a phase, drawn here as a notice in flow: the same
+ * roles, the same words and the same entrance, with no exit.
+ */
+.document-banner [data-banner] {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+	border-radius: var(--radius-lg);
+	background: var(--color-neutral-surface);
+	color: var(--color-text-secondary);
+	font-size: var(--text-sm);
+}
+.document-banner [data-banner] > span {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.document-banner [data-banner][data-warning] {
+	background: var(--color-warning-surface);
+	color: var(--color-warning-text);
+}
+.document-banner [data-banner][data-success] {
+	background: var(--color-success-surface);
+	color: var(--color-success-text);
+}
+.document-banner [data-banner] .composer-notice-icon {
+	--color-icon: var(--color-neutral-icon);
+}
+.document-banner [data-banner][data-warning] .composer-notice-icon {
+	--color-icon: var(--color-warning-icon);
+}
+.document-banner [data-banner][data-success] .composer-notice-icon {
+	--color-icon: var(--color-success-icon);
+}
+.document-banner [data-banner] > .composer-notice-count {
+	flex: none;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.document-banner [data-banner] > .btn {
+	flex: none;
+}
+.document-banner [data-banner] .composer-notice-line {
+	display: block;
+}
+.document-banner [data-banner] .composer-notice-link {
+	color: var(--color-brand-ink);
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+	white-space: nowrap;
+}
+@keyframes document-banner-enter {
+	from {
+		opacity: 0;
+		transform: translateY(-0.25rem);
+	}
+}
+@media (prefers-reduced-motion: no-preference) {
+	.document-banner [data-banner] {
+		animation: document-banner-enter var(--duration-base) var(--motion-smooth-out) both;
+	}
+	.document-banner .composer-notice-spin {
+		animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
+	}
+}
+
+/*
+ * On a phone the top bar floats over every pane, and each pane's scroller is padded to start below
+ * it. The banner floats just under the bar in the same way, and its height is added to that padding
+ * (`--phone-pane-top` takes `--phone-notice-height`), so the first of a pane's content always
+ * starts below it and nothing is ever covered at rest.
+ */
+.workspace-root[data-workspace-phone] > .document-banner {
+	position: absolute;
+	/* Over the panes (Chat's is 10) and under the top bar (30), so Reconnect can always be pressed. */
+	z-index: 20;
+	inset-inline: 0;
+	inset-block-start: var(--phone-top-chrome);
+}

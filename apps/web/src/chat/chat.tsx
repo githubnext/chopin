@@ -44,7 +44,10 @@ import {
 	withoutRetracted,
 } from "./delivery";
 import type { DraftInputHandle } from "./draft-input";
-import type { PlannerNotice } from "./planner-status";
+import { ConnectionBannerView } from "./connection-banner";
+import type { ConnectionBanner, TranscriptFacts } from "./connection-banner";
+import { ErrorState } from "./error-state";
+import { failureBanner, retryPayload, sendFailureView, withoutFailure } from "./failure";
 import { TypingReporter } from "./typing";
 import { ChatComposer } from "./composer";
 
@@ -134,7 +137,7 @@ export type ChatProps = {
 	people?: readonly string[];
 	/** Hosted mode keeps the shared chat while repository-scoped agent work is disabled. */
 	agent?: boolean;
-	/** The page is showing its offline notice, which is the one thing said about the connection. */
+	/** The page is showing its connection banner, which is the one thing said about the connection. */
 	offline?: boolean;
 	active?: boolean;
 	/** `history` marks the transcript arriving, after which `busy` is known rather than assumed. */
@@ -166,12 +169,12 @@ export type ChatProps = {
 	/** One calm line shown while the transcript has loaded and is still empty. */
 	emptyNotice?: string;
 	/**
-	 * The strip for the composer's top edge about the document's remote Planner, when its state
-	 * needs one: a machine that cannot be connected to, or, for a viewer with no machine button to
-	 * say it, any state that is not healthy (`plannerPlacement` decides). Absent while it is
-	 * attached, and under every other harness.
+	 * The page's one connection banner: its phase, and what Reconnect asks for. Chat draws it above
+	 * the composer when it is on screen; the page draws it at the document otherwise.
 	 */
-	plannerStrip?: PlannerNotice;
+	banner?: ConnectionBanner;
+	/** What the transcript tells the banner: a reply running, its size, and whether it is current. */
+	onTranscript?: (facts: TranscriptFacts) => void;
 };
 
 /** How long a message the server had no room for waits before it is sent again. */
@@ -247,7 +250,8 @@ export function Chat(
 		people = [],
 		notice,
 		emptyNotice,
-		plannerStrip,
+		banner,
+		onTranscript,
 		onShowDecisions,
 		onResearch,
 		onShowResearch,
@@ -298,7 +302,7 @@ export function Chat(
 	// A send pressed during a blip, made once the connection is back.
 	let [held, setHeld] = useState(false);
 	let sending = submitting || held;
-	let [sendError, setSendError] = useState<SendFailure>();
+	let [sendError, setSendError] = useState<SendFailure & { code?: string }>();
 	let [researchBlock, setResearchBlock] = useState<ResearchLaunchBlock>();
 	let researching = useRef(false);
 	// Neither a research request the connection could not take nor a send it cut off outlives it.
@@ -341,6 +345,15 @@ export function Chat(
 	// the same Wire. Only that transcript makes this composer current.
 	if (!connected) synchronized.current = undefined;
 	let transcriptReady = connected && synchronized.current === wire;
+	let reportTranscript = useRef(onTranscript);
+	reportTranscript.current = onTranscript;
+	useEffect(() => {
+		reportTranscript.current?.({
+			turn: turn?.id,
+			messages: entries.length,
+			current: transcriptReady,
+		});
+	}, [turn?.id, entries.length, transcriptReady]);
 	// The document says when the connection is lost; Chat only holds back what it cannot send.
 	let connectionNotice = useConnectionNotice(!connected, wire?.restarting);
 	let quietRestart = useRef(false);
@@ -350,6 +363,26 @@ export function Chat(
 		transcriptReady,
 		connectionNotice !== "none",
 	);
+	let [retried, setRetried] = useState<string>();
+	let failed = failureBanner(entries, turn, handle);
+	let sendBanner = shownSend ? sendFailureView(shownSend, shownSend.code) : undefined;
+	let retryTurn = failed?.retry
+		? () => {
+			let payload = retryPayload(entries, failed.entry, () => crypto.randomUUID());
+			if (!payload) return;
+			setRetried(payload.requestId);
+			dispatchOutbox({
+				kind: "add",
+				item: { payload, handle, ts: Math.floor(Date.now() / 1000) },
+			});
+		}
+		: undefined;
+	let retrying = !!retried
+		&& outbox.some(item => item.payload.requestId === retried && !item.failure);
+	useEffect(() => {
+		if (retried && !retrying) setRetried(undefined);
+	}, [retried, retrying]);
+	let tellsConnection = !!banner && banner.view.phase !== "online";
 	let composerReady = transcriptReady && !readonly && !archived;
 	// What the composer and the empty transcript show. A restart is waited out in silence, and
 	// nothing is to change on the page for it: until the fresh transcript is here they read as
@@ -650,7 +683,12 @@ export function Chat(
 			// A restart cut the send off. The draft keeps its request id, so it is made again once
 			// the server is back, and the server answers one it already holds with that message.
 			if (error instanceof WireLost && error.restarting) setHeld(true);
-			else setSendError(sendFailure(error));
+			else {
+				setSendError({
+					...sendFailure(error),
+					...(error instanceof WireRefusal && error.code ? { code: error.code } : {}),
+				});
+			}
 		}).finally(() => {
 			if (submission.current !== token) return;
 			submission.current = undefined;
@@ -849,6 +887,34 @@ export function Chat(
 		unavailable: "Research couldn’t open in the document",
 	};
 
+	let bannerId = useId();
+	let bannerNode = banner && tellsConnection
+		? <ConnectionBannerView id={bannerId} onRetry={banner.onRetry} view={banner.view} />
+		: sendBanner
+		? (
+			<ErrorState
+				id={bannerId}
+				kind={sendBanner.kind}
+				link={sendBanner.link}
+				onRetry={sendBanner.retry ? submit : undefined}
+				retryDisabled={!composerReady || submitting}
+				title={sendBanner.title}
+			/>
+		)
+		: failed
+		? (
+			<ErrorState
+				detail={failed.detail}
+				id={bannerId}
+				kind={failed.kind}
+				link={failed.link}
+				onRetry={retryTurn}
+				retrying={retrying}
+				title={failed.title}
+			/>
+		)
+		: undefined;
+
 	let transcriptView = (
 		<Transcript
 			active={active}
@@ -876,12 +942,15 @@ export function Chat(
 			researchOffers={researchOffers}
 			sourceDestination={sourceDestination}
 			entries={[
-				...withNoticesAfter(withoutRetracted(entries, retractions), unanswered),
+				...withNoticesAfter(
+					withoutFailure(withoutRetracted(entries, retractions), failed?.entry),
+					unanswered,
+				),
 				...echoes(outbox),
 			]}
 			onDelete={deleteMessage}
 			onRetry={retryMessage}
-			quietFailures={offline}
+			quietFailures={tellsConnection}
 			completedWork={transcript.completedWork}
 			suspendedWork={suspendedWork}
 			handle={handle}
@@ -932,12 +1001,9 @@ export function Chat(
 					disabled: !draftable || sending || !agent,
 					onToggle: toggleMode,
 				}}
-				notice={shownSend
-					? {
-						tone: "error",
-						text: shownSend.text,
-						action: { label: "Retry", onClick: submit, disabled: !composerReady || submitting },
-					}
+				banner={bannerNode ? { id: bannerId, node: bannerNode, invalid: !!sendBanner } : undefined}
+				notice={bannerNode
+					? undefined
 					: researchBlock && !(offline && researchBlock === "disconnected")
 					? {
 						tone: "info",
@@ -952,7 +1018,7 @@ export function Chat(
 					? { tone: "info", text: "Research isn’t available in this document" }
 					: !agent
 					? repliesOffNotice(offline)
-					: plannerStrip}
+					: undefined}
 				unavailable={archived ? "archived" : readonly ? "readonly" : undefined}
 				references={referencesEnabled
 					? {

@@ -8,7 +8,7 @@ export const PLANNER_HOW_TO_FIX =
  * What the document says about its remote Planner when it is not simply attached and healthy,
  * which says nothing at all. It is one status told in several places: the machine button's name
  * and its menu, a live region for a screen reader, and, where the person has no machine button,
- * the strip on the composer's top edge (see `plannerPlacement`).
+ * the banner at the composer's top edge (see `connection-phase.ts`).
  *
  * Plain words, with none of Chopin's own terms (no Planner, attach, hold or Decisions, and no
  * mention of Chopin) and a machine, not a Planner, as the subject: `starting` is connecting to it,
@@ -19,7 +19,7 @@ export const PLANNER_HOW_TO_FIX =
  */
 export type PlannerStatus =
 	| { kind: "starting"; text: string }
-	| { kind: "cant-start"; title: string; reason: string; detail: string }
+	| { kind: "cant-start"; title: string; reason: string; detail: string; attempts: number }
 	| { kind: "disconnected"; text: string }
 	| { kind: "held"; text: string }
 	| { kind: "none"; text: string };
@@ -82,6 +82,7 @@ export function plannerStatus(
 	if (!failure) return { kind: "starting", text: `Connecting to ${where}` };
 	return {
 		kind: "cant-start",
+		attempts: failure.attempts,
 		title: `Can't connect to ${where}`,
 		// Exactly as the machine reported it: a path, a command or a code is not ours to tidy.
 		reason: failure.reason,
@@ -121,104 +122,15 @@ export function plannerButtonLabel(label: string, status: PlannerStatus | undefi
 }
 
 /**
- * What a screen reader is told as the Planner's state changes: the sentence of a problem state it
- * has just entered, once. Nothing for a healthy Planner, nothing while the same state carries on
- * (its attempt count, or its machine's name catching up), and nothing as a state clears, since a
- * live region that falls silent says all a healthy state needs.
+ * Where the Planner's state is told on the machine button: the button carries every state, so a
+ * person who has it reads the machine's own state there. Everyone's banner at the Chat composer
+ * tells it as well (see `connection-phase.ts`), once, as it changes.
  */
-export function plannerAnnouncement(
-	previous: PlannerStatus["kind"] | undefined,
-	next: PlannerStatus | undefined,
-): string {
-	return next && next.kind !== previous ? plannerSentence(next) : "";
-}
+export type PlannerPlacement = { button: PlannerStatus | undefined };
 
-/**
- * What a live region does as the status changes, or nothing (undefined): the sentence of a problem
- * state it has just entered, or silence as a state clears (`said` is empty), and the state it has
- * now said, which is what the next change is compared with.
- *
- * A status that is only withheld (`withheld`: the Planner's word is of a state whose machine is
- * not known yet) is a gap, not a clearing: the region falls silent, holding nothing stale, but
- * remembers the state last said, so the same state entered again once the machine is named is
- * not said twice, as a word that repeats it with one more attempt is while the list of machines
- * is read again.
- *
- * While the page's offline notice shows (`offline`) the region is empty and says nothing new,
- * whatever the status does meanwhile: the notice is the one thing said about the connection. It
- * remembers the state last said, as in a gap, so a state that carried on through the loss is not
- * said again when the connection returns, and a different one is said once.
- */
-export function plannerSpeech(
-	previous: PlannerStatus["kind"] | undefined,
-	status: PlannerStatus | undefined,
-	withheld: boolean,
-	offline = false,
-): { kind: PlannerStatus["kind"] | undefined; said: string } | undefined {
-	if (offline || (withheld && !status)) return previous ? { kind: previous, said: "" } : undefined;
-	let kind = status?.kind;
-	return kind === previous ? undefined : { kind, said: plannerAnnouncement(previous, status) };
-}
-
-/** What the strip on the composer's top edge says. */
-export type PlannerNotice = {
-	tone: "warning" | "info";
-	text: string;
-	/** The reason as the machine reported it, then what has been tried, one line each. */
-	detail?: readonly string[];
-	link?: { label: string; href: string };
-	/** The room's one live region announces the state, so the strip says nothing of its own. */
-	silent: true;
-};
-
-/** Where the Planner's state is told, for a viewer who has the machine button or has not. */
-export type PlannerPlacement = {
-	/** For the machine button, its name and the top of its menu. */
-	button: PlannerStatus | undefined;
-	/** For the composer's top edge. */
-	strip: PlannerNotice | undefined;
-};
-
-/**
- * The one decision about where a state is told, so the button, its menu and the strip cannot
- * disagree.
- *
- * Machine state lives in one place, as a contact's does in a chat: the machine button. With it, the
- * button carries every state, a machine that cannot be connected to included (its reason and where
- * to fix it are on the button's menu), and the composer is left alone. Without the button (no
- * machine paired or shared, a title bar that does not show one, a phone whose top bar an open child
- * has taken) the strip is the only place left to see the state, so for that person alone it
- * carries all of them, and the reason for a machine that cannot be connected to is drawn, in full,
- * beneath its sentence.
- *
- * While the page's offline notice shows, that notice is the one thing said about the connection and
- * the page cannot hear the machine anyway, so the strip says nothing, as the composer's other
- * strip about availability says nothing then. It returns by itself, with whatever state is then
- * known, as the notice goes. The button, which is in the title bar and not beside the notice, is
- * unaffected.
- */
 export function plannerPlacement(
 	status: PlannerStatus | undefined,
 	hasButton: boolean,
-	offline = false,
 ): PlannerPlacement {
-	if (!status) return { button: undefined, strip: undefined };
-	if (hasButton) return { button: status, strip: undefined };
-	if (offline) return { button: undefined, strip: undefined };
-	if (status.kind === "cant-start") {
-		return {
-			button: undefined,
-			strip: {
-				tone: "warning",
-				text: plannerSentence(status),
-				detail: [status.reason, status.detail],
-				link: { label: "How to fix", href: PLANNER_HOW_TO_FIX },
-				silent: true,
-			},
-		};
-	}
-	return {
-		button: undefined,
-		strip: { tone: "info", text: plannerSentence(status), silent: true },
-	};
+	return { button: hasButton ? status : undefined };
 }
