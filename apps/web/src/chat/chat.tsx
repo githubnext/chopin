@@ -44,6 +44,7 @@ import {
 	withoutRetracted,
 } from "./delivery";
 import type { DraftInputHandle } from "./draft-input";
+import { bannerSlot } from "./banner-slot";
 import { ConnectionBannerView } from "./connection-banner";
 import type { ConnectionBanner, TranscriptFacts } from "./connection-banner";
 import { silencesFailedSends } from "./connection-phase";
@@ -383,7 +384,6 @@ export function Chat(
 	useEffect(() => {
 		if (retried && !retrying) setRetried(undefined);
 	}, [retried, retrying]);
-	let tellsConnection = !!banner && banner.view.phase !== "online";
 	// Only a banner that says why a send could not go gives a refused message's line its quiet;
 	// a Planner's absence is another fact, and the message still says it was not sent.
 	let quietFailures = !!banner && silencesFailedSends(banner.view);
@@ -892,9 +892,8 @@ export function Chat(
 	};
 
 	let bannerId = useId();
-	let bannerNode = banner && tellsConnection
-		? <ConnectionBannerView id={bannerId} onRetry={banner.onRetry} view={banner.view} />
-		: sendBanner
+	let slot = bannerSlot(banner?.view, !!sendBanner, !!failed);
+	let leadNode = slot.lead === "send" && sendBanner
 		? (
 			<ErrorState
 				id={bannerId}
@@ -905,7 +904,7 @@ export function Chat(
 				title={sendBanner.title}
 			/>
 		)
-		: failed
+		: slot.lead === "failure" && failed
 		? (
 			<ErrorState
 				detail={failed.detail}
@@ -918,6 +917,20 @@ export function Chat(
 			/>
 		)
 		: undefined;
+	let connectionId = `${bannerId}-connection`;
+	let connectionNode = slot.connection && banner
+		? <ConnectionBannerView id={connectionId} onRetry={banner.onRetry} view={banner.view} />
+		: undefined;
+	let bannerNode = leadNode || connectionNode
+		? (
+			<>
+				{leadNode}
+				{connectionNode}
+			</>
+		)
+		: undefined;
+	let bannerIds = [leadNode ? bannerId : undefined, connectionNode ? connectionId : undefined]
+		.filter(Boolean).join(" ");
 
 	let transcriptView = (
 		<Transcript
@@ -947,7 +960,10 @@ export function Chat(
 			sourceDestination={sourceDestination}
 			entries={[
 				...withNoticesAfter(
-					withoutFailure(withoutRetracted(entries, retractions), failed?.entry),
+					withoutFailure(
+						withoutRetracted(entries, retractions),
+						slot.lead === "failure" ? failed?.entry : undefined,
+					),
 					unanswered,
 				),
 				...echoes(outbox),
@@ -1005,8 +1021,10 @@ export function Chat(
 					disabled: !draftable || sending || !agent,
 					onToggle: toggleMode,
 				}}
-				banner={bannerNode ? { id: bannerId, node: bannerNode, invalid: !!sendBanner } : undefined}
-				notice={bannerNode
+				banner={bannerNode
+					? { id: bannerIds, node: bannerNode, invalid: slot.lead === "send" }
+					: undefined}
+				notice={slot.quietsNotices
 					? undefined
 					: researchBlock && !(offline && researchBlock === "disconnected")
 					? {
