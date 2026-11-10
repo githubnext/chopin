@@ -186,11 +186,34 @@ export declare namespace Chat {
 		took?: number;
 	};
 
+	/**
+	 * One image in a message, stored as one of this document's own images. A browser loads it
+	 * from `src` with `?document=` naming the document, which only people who can read the
+	 * document are served.
+	 */
+	export type Image = {
+		/** `/images/<sha256>.<png|jpg|webp|gif>`. */
+		src: string;
+		/** What the image shows, in words, as its source gave it; absent when it gave none. */
+		alt?: string;
+		caption?: string;
+		/** Pixels, read from the stored image, so its frame keeps the image's shape while it loads. */
+		width: number;
+		height: number;
+		/** The Planner or its harness made it during a turn. */
+		generated?: true;
+	};
+
 	export type Entry = {
 		id: string;
 		author: Author;
 		text: string;
 		ts: number;
+		/**
+		 * Images the agent's turn made or showed, in order, on the turn's first message that has one.
+		 * Absent on any other entry.
+		 */
+		images?: Image[];
 		/** A system notice about a decision card; text remains its fallback. */
 		decision?:
 			| {

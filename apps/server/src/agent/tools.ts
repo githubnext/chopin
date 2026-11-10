@@ -188,7 +188,7 @@ export type DocumentRoom = {
 	 * session may not write the document.
 	 */
 	uploadImage?: (
-		image: { bytes: Uint8Array; mimeType: import("../images/format").ImageType },
+		image: { bytes: Uint8Array; mimeType: import("../images/format").ImageType; alt?: string },
 	) => Promise<{ path: string }>;
 };
 const roomContext = z.object({
@@ -337,7 +337,11 @@ export const documentTools = {
 			answer("upload_plan_image", async () => {
 				if (!context.uploadImage) throw new Error("images cannot be stored in this session");
 				let image = planImage(raw, context.id);
-				let { path } = await context.uploadImage({ bytes: image.bytes, mimeType: image.mimeType });
+				let { path } = await context.uploadImage({
+					bytes: image.bytes,
+					mimeType: image.mimeType,
+					alt: (raw as { alt: string }).alt,
+				});
 				return { path, markdown: `![${image.alt}](${path})` };
 			}),
 	}),

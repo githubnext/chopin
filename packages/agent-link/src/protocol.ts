@@ -337,6 +337,28 @@ export const toolErrorSchema = z.strictObject({
 	}),
 });
 
+/**
+ * An image a tool made, as one block of its result's `content`, the shape MCP and Atomic tools
+ * return: base64 `data` and its `mimeType`, with optional `alt` (what it shows, in words) and
+ * `caption`, kept as given. Chopin stores each block it can host (PNG, JPEG, WebP or GIF of at most
+ * 1 MiB whose bytes are that type) as one of the document's images and shows it in Chat as a
+ * generated image; any other block, and every `text` block, stays only in the tool's own row.
+ * Extra keys, and an `alt` or `caption` that is not text, are ignored. Like `toolErrorSchema` this
+ * is a recognised convention: any JSON is still a result.
+ */
+export const toolImageSchema = z.object({
+	type: z.literal("image"),
+	data: z.string(),
+	mimeType: z.string(),
+	alt: z.string().optional().catch(undefined),
+	caption: z.string().optional().catch(undefined),
+});
+
+/** A tool result that carries `content` blocks, some of them images. */
+export const toolContentSchema = z.object({
+	content: z.array(z.unknown()),
+});
+
 const option = z.strictObject({
 	label: z.string().max(MAX_NOTE),
 	description: z.string().max(MAX_NOTE),
@@ -646,6 +668,7 @@ export type ClientMessage = z.infer<typeof clientMessageSchema>;
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 export type StreamPart = z.infer<typeof streamPartSchema>;
 export type ToolError = z.infer<typeof toolErrorSchema>;
+export type ToolImage = z.infer<typeof toolImageSchema>;
 export type InputCall = z.infer<typeof inputSchema>;
 export type InputMethod = InputCall["method"];
 export type LinkRun = z.infer<typeof runSchema>;

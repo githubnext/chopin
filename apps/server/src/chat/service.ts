@@ -19,7 +19,9 @@
  */
 
 import { createHash } from "node:crypto";
-import { imagePath } from "../images/format";
+import { imagePath, imageSize } from "../images/format";
+import { toolImages, toolRowOutput } from "./images";
+import type { ToolImage } from "./images";
 
 import { ulid } from "@chopin/dialect";
 
@@ -369,6 +371,12 @@ export type Chat = {
 	writing?: string;
 	/** The dedicated entry collecting tool calls for this turn. */
 	tooling?: string;
+	/** The entry holding this turn's images. */
+	imaging?: string;
+	/** Images still being stored; a turn's transcript is saved only once they settle. */
+	imageWork?: Promise<void>;
+	/** Tool calls whose images were taken already. */
+	imagedCalls?: Set<string>;
 	/** Pending removal of the agent's cursor, cancelled if it edits again. */
 	lingering?: ReturnType<typeof setTimeout>;
 	/** When each running tool call started, for its duration. */
@@ -2284,7 +2292,7 @@ export function documentRoom(context: Room): DocumentRoom {
 		}),
 		currentMemberRequest: () => currentMemberRequest(chat),
 		...(!chat.job && {
-			uploadImage: async ({ bytes, mimeType }) => {
+			uploadImage: async ({ alt, bytes, mimeType }) => {
 				if (
 					chat.closed || !chat.busy || !chat.turnController || chat.turnController.signal.aborted
 				) {
@@ -2293,19 +2301,7 @@ export function documentRoom(context: Room): DocumentRoom {
 				let channel = await context.auth.storage.channels.get(room);
 				if (!channel) throw new Error("this document is unavailable");
 				if (channel.archivedAt) throw new Error("this document is archived");
-				// Whoever the turn is for owns the upload; a turn nobody asked for, such as a
-				// follow-up, is the Planner owner's.
-				let uploadedBy = currentMemberRequest(chat)?.userId;
-				if (!uploadedBy) {
-					let binding = await context.activeOwner?.();
-					if (!binding) throw new Error("this Planner has no owner to store the image for");
-					try {
-						uploadedBy = (await context.auth.sessions.resolve(binding.ownerSessionId))?.user.id;
-					} finally {
-						binding.release();
-					}
-				}
-				if (!uploadedBy) throw new Error("this Planner has no owner to store the image for");
+				let uploadedBy = await imageOwner(context);
 				let sha256 = createHash("sha256").update(bytes).digest("hex");
 				await context.auth.storage.images.put({
 					channelId: room,
@@ -2315,7 +2311,18 @@ export function documentRoom(context: Room): DocumentRoom {
 					uploadedBy,
 					now: context.auth.clock(),
 				});
-				return { path: imagePath(sha256, mimeType) };
+				let path = imagePath(sha256, mimeType);
+				let size = imageSize(mimeType, bytes);
+				if (size) {
+					later(context, () =>
+						showImages(context, [{
+							src: path,
+							...(alt === undefined ? {} : { alt }),
+							...size,
+							generated: true,
+						}]));
+				}
+				return { path };
 			},
 		}),
 		focusedChild: () =>
@@ -3076,6 +3083,10 @@ async function run(
 				}
 			}
 		}
+		await chat.imageWork;
+		chat.imageWork = undefined;
+		chat.imaging = undefined;
+		chat.imagedCalls = undefined;
 		chat.messageIds = undefined;
 		chat.writing = undefined;
 		chat.tooling = undefined;
@@ -3504,6 +3515,13 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 				: part.type === "tool-error"
 				? part.error
 				: "Refused.";
+			if (success && !preliminary && !chat.imagedCalls?.has(part.toolCallId)) {
+				let { images } = toolImages(output);
+				if (images.length) {
+					(chat.imagedCalls ??= new Set()).add(part.toolCallId);
+					stageImages(context, images, part.toolCallId);
+				}
+			}
 			conclude(
 				context,
 				part.toolCallId,
@@ -3569,7 +3587,7 @@ function conclude(
 			: "The reference could not be read."
 		: failure
 		? textOutput(failure.message)
-		: outputText(output);
+		: outputText(toolRowOutput(output));
 	publish(context, {
 		id,
 		name,
@@ -3694,6 +3712,77 @@ function attach(context: Room, activity: Wire.Activity): string {
 	if (existing >= 0) entry.tools[existing] = { ...entry.tools[existing], ...activity };
 	else entry.tools.push(activity);
 	return entry.id;
+}
+
+/** Whoever the turn is for owns what it stores; a turn nobody asked for is the Planner owner's. */
+async function imageOwner(
+	context: Room,
+	member = currentMemberRequest(context.chat)?.userId,
+): Promise<string> {
+	let uploadedBy = member;
+	if (!uploadedBy) {
+		let binding = await context.activeOwner?.();
+		if (!binding) throw new Error("this Planner has no owner to store the image for");
+		try {
+			uploadedBy = (await context.auth.sessions.resolve(binding.ownerSessionId))?.user.id;
+		} finally {
+			binding.release();
+		}
+	}
+	if (!uploadedBy) throw new Error("this Planner has no owner to store the image for");
+	return uploadedBy;
+}
+
+function later(context: Room, work: () => void | Promise<void>): void {
+	let { chat } = context;
+	chat.imageWork = (chat.imageWork ?? Promise.resolve()).then(work).catch(err => {
+		console.error("[chat] could not show an image in Chat:", err);
+	});
+}
+
+function showImages(context: Room, images: Wire.Image[], call?: string): void {
+	let { chat, room, server } = context;
+	if (chat.closed || !images.length) return;
+	let entry = chat.entries.find(item => item.id === chat.imaging)
+		?? (call ? chat.entries.find(item => item.tools?.some(tool => tool.id === call)) : undefined)
+		?? chat.entries.find(item => item.id === chat.tooling)
+		?? chat.entries.find(item => item.id === chat.writing);
+	if (!entry) {
+		entry = { id: ulid(), author: { kind: "agent" }, text: "", ts: now() };
+		chat.entries.push(entry);
+	}
+	chat.imaging = entry.id;
+	entry.images = [...entry.images ?? [], ...images];
+	announce(server, room, entry);
+}
+
+function stageImages(context: Room, images: ToolImage[], call: string): void {
+	let { auth, room } = context;
+	let member = currentMemberRequest(context.chat)?.userId;
+	later(context, async () => {
+		let uploadedBy = await imageOwner(context, member);
+		let shown: Wire.Image[] = [];
+		for (let image of images) {
+			let sha256 = createHash("sha256").update(image.bytes).digest("hex");
+			await auth.storage.images.put({
+				channelId: room,
+				sha256,
+				mimeType: image.mimeType,
+				bytes: image.bytes,
+				uploadedBy,
+				now: auth.clock(),
+			});
+			shown.push({
+				src: imagePath(sha256, image.mimeType),
+				...(image.alt === undefined ? {} : { alt: image.alt }),
+				...(image.caption === undefined ? {} : { caption: image.caption }),
+				width: image.width,
+				height: image.height,
+				generated: true,
+			});
+		}
+		showImages(context, shown, call);
+	});
 }
 
 export async function resetAgent(

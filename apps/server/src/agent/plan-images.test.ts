@@ -49,14 +49,18 @@ async function run(room: Partial<DocumentRoom>, input: unknown) {
 }
 
 test("upload_plan_image stores through the room and returns the Markdown to use", async () => {
-	let stored: Array<{ bytes: Uint8Array; mimeType: string }> = [];
+	let stored: Array<{ bytes: Uint8Array; mimeType: string; alt?: string }> = [];
 	let result = await run({
 		uploadImage: async image => {
 			stored.push(image);
 			return { path: `/images/${"a".repeat(64)}.png` };
 		},
 	}, { data: base64(PNG), mimeType: "image/png", alt: "Write-through: write, cache, database" });
-	expect(stored).toEqual([{ bytes: PNG, mimeType: "image/png" }]);
+	expect(stored).toEqual([{
+		bytes: PNG,
+		mimeType: "image/png",
+		alt: "Write-through: write, cache, database",
+	}]);
 	expect(result).toEqual({
 		path: `/images/${"a".repeat(64)}.png`,
 		markdown: `![Write-through: write, cache, database](/images/${"a".repeat(64)}.png)`,

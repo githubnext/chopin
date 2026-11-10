@@ -1,5 +1,9 @@
 import { Machines } from "../auth/machines";
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { ulid } from "@chopin/dialect";
+
+import { create, translate } from "../chat/service";
 
 import { Admission } from "../auth/admission";
 import { Sessions } from "../auth/session";
@@ -8,7 +12,9 @@ import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { registerImageRoutes } from "./routes";
 
+import type { TextStreamPart, ToolSet } from "ai";
 import type { HostedAuth } from "../auth/routes";
+import type { Room } from "../chat/service";
 import type {
 	GitHub,
 	GitHubTokenGrant,
@@ -259,6 +265,85 @@ describe("hosted image routes", () => {
 			let response = await router.handle(get(`/images/${hash}.${extension}`, cookie));
 			expect(response?.headers.get("content-type")).toBe("image/jpeg");
 		}
+	});
+
+	it("serves an image a Planner turn made only to the document's readers, as its own type", async () => {
+		let { router, github, storage, upload, cookie } = await setup();
+		let channel = await upload("score");
+		let picture = new Uint8Array(
+			readFileSync(new URL("../../../../e2e/fixtures/the-cap.webp", import.meta.url)),
+		);
+		let chat = create();
+		chat.agent = { activeTools: ["codemode"] } as never;
+		chat.busy = true;
+		chat.turnController = new AbortController();
+		let entryId = ulid();
+		chat.entries.push({
+			id: entryId,
+			author: { kind: "member", handle: "octocat" },
+			text: "Draw the cap",
+			ts: 1,
+		});
+		chat.turn = {
+			id: "turn-1",
+			handle: "octocat",
+			started: 1,
+			startedAt: 1,
+			entryOffset: 1,
+			responded: false,
+		};
+		chat.activeRequest = {
+			entryId,
+			userId: "U_octocat",
+			handle: "octocat",
+			text: "Draw the cap",
+			claimantSessionId: undefined,
+			turnId: "turn-1",
+			lifecycle: chat.lifecycle,
+		};
+		let context = {
+			chat,
+			server: { publish() {} },
+			room: channel.id,
+			plan: {},
+			config: {},
+			auth: { clock: () => new Date(), storage },
+		} as unknown as Room;
+		let send = (value: Record<string, unknown>) =>
+			translate(context, value as TextStreamPart<ToolSet>);
+		send({ type: "tool-call", toolCallId: "c1", toolName: "codemode", input: {} });
+		send({
+			type: "tool-result",
+			toolCallId: "c1",
+			toolName: "codemode",
+			input: {},
+			output: {
+				content: [{
+					type: "image",
+					data: Buffer.from(picture).toString("base64"),
+					mimeType: "image/webp",
+					alt: "The cap is a balance of 100.",
+				}],
+			},
+		});
+		await chat.imageWork;
+		let [image] = chat.entries.flatMap(entry => entry.images ?? []);
+		expect(image).toMatchObject({ width: 1536, height: 1024, generated: true });
+		let path = `${image!.src}?document=${channel.id}`;
+
+		github.access.set("score", { pull: true, push: false, admin: false });
+		let response = await router.handle(get(path, cookie));
+		expect(response?.status).toBe(200);
+		expect(new Uint8Array(await response!.arrayBuffer())).toEqual(picture);
+		expect(Object.fromEntries(response!.headers)).toMatchObject({
+			"content-type": "image/webp",
+			"x-content-type-options": "nosniff",
+			"content-security-policy": "default-src 'none'; sandbox",
+		});
+		await expectNotFound(await router.handle(get(path)));
+		await expectNotFound(await router.handle(get(image!.src.replace(".webp", ".png"), cookie)));
+		github.access.set("score", { pull: false, push: false, admin: false });
+		await expectNotFound(await router.handle(get(path, cookie)));
 	});
 
 	it("reports an unavailable GitHub rather than a missing image", async () => {
