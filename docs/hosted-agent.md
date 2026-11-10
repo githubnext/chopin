@@ -1013,12 +1013,36 @@ a message that has not been delivered, for everyone, and cancels its row in the 
 already taken, or someone else's, is refused with the code `message-not-deletable`, and deleting twice
 leaves it deleted. That code is the server's last word; a delete refused for any other reason (storage
 busy, the message being taken by the machine at that moment) says nothing final. `chat:retry`
-sends a `failed` message again as it was. A message that is waiting is not listed in `chat:queue`,
-which lists only requests with no entry of their own. Chat says nothing about why a queue waits,
-however long it does: the message's own mark is the only sign, and the machine's state is shown on
-the machine button alone, as everywhere else. (The design asked for one Chat line after a delay,
+sends a `failed` message again as it was. Chat says nothing about why a queue waits,
+however long it does: the machine's state is shown on the machine button alone, as everywhere else. (The design asked for one Chat line after a delay,
 saying what the queue waits for; the rule that machine state is not said anywhere else replaces
 it, so there is no such line and no `DEFERRED_NOTICE_DELAY_MS`.)
+
+**The queue above the composer.** `chat:queue` lists every turn waiting for the Planner, in the order
+they will start, to everyone in the room, and again each time it changes. A message is listed with its
+author, its text and its references. Work nobody typed has a `kind` and a sentence the server wrote
+about it, never the prompt the Planner will read: `comment` ("Reply to a comment"), `draft` ("Draft of
+the build tasks"), `followup` ("Automatic follow-up") and `job`, such as "Re-checking decisions against
+the document". A document's title being refreshed is not listed, since it ends in moments. Chat shows
+the list in one card above the composer, and a message that is waiting there is not drawn in the
+transcript; it joins the transcript, from its own entry, when its turn starts.
+
+Only a message's author may change it, as only its author may delete or retry it. Owners and editors of
+the repository may not: it is the author's own words, run as the author, and anyone who may write can
+still stop the turn that is running. `chat:unqueue` cancels a waiting message: its row and its
+transcript entry go in one commit, and the room hears of it only after that commit. `chat:edit`
+rewrites its text with the rules of a send (the same size limit, the mention stripped, empty refused,
+`references` resolved as a send resolves them, or the references that still stand carried to where the
+new text puts them), after the same write check a send makes. The row's text, references and saved
+delivery change with the transcript entry in one commit, and the queue does not start the message while
+that commit is being saved. Every cancel ends in `cancelQueuedJobs`, which takes the waiting turn out of
+the queue and tells whoever waits on it that it was skipped.
+
+A message that is no longer waiting is refused with the code `already-started`, which is final: its
+turn started, or it is unknown. While a turn is being started, its row still waits and its session may
+yet fail to open, so the refusal is the passing `temporarily-unavailable` instead. Cancelling a message
+twice leaves it cancelled; editing a cancelled one is refused without a code. The browser says it in
+plain words beside the row, or in the card for a few seconds once the row has left.
 
 The sender's own message carries one quiet mark, in plain words and readable by a screen reader:
 **Waiting to send** (a clock) while only the browser has it, in an outbox that sends it by itself, in
