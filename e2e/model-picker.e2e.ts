@@ -255,6 +255,16 @@ function level(page: Page, name: string) {
 	return levels(page).getByRole("radio", { name, exact: true });
 }
 
+/**
+ * Waits for the popover's entrance, which scales it in from `--dropdown-pre-scale`, to end. A read
+ * of its geometry before that sees the drawn box a few percent short (a 36px row as 34.92px).
+ */
+async function settled(menu: Locator) {
+	await menu.evaluate(element =>
+		Promise.all(element.getAnimations().map(animation => animation.finished))
+	);
+}
+
 async function openPicker(page: Page) {
 	await trigger(page).click();
 	await expect(popover(page)).toBeVisible();
@@ -598,6 +608,11 @@ test("is one icon on a phone, opens a list as wide as the composer and chooses b
 	test.setTimeout(120_000);
 	let room = await newRoom();
 	let page = await open(browser, HANDLE, room, PHONE);
+	// Ten times slower, so a read of the popover's geometry taken before its entrance ends is
+	// wrong every time and not only when the machine is busy.
+	let animations = await page.context().newCDPSession(page);
+	await animations.send("Animation.enable");
+	await animations.send("Animation.setPlaybackRate", { playbackRate: 0.1 });
 	let { client } = await attachClient(room, CATALOG);
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /^Chat/ }).tap();
@@ -617,6 +632,7 @@ test("is one icon on a phone, opens a list as wide as the composer and chooses b
 
 	await model.tap();
 	await expect(popover(page)).toBeVisible();
+	await settled(popover(page));
 	await expectInsideViewport(popover(page));
 	await expectNoHorizontalOverflow(page);
 	await option(page, "Large").tap();
@@ -625,6 +641,7 @@ test("is one icon on a phone, opens a list as wide as the composer and chooses b
 
 	await model.tap();
 	await expect(levels(page).getByRole("radio")).toHaveCount(5);
+	await settled(popover(page));
 	await expectInsideViewport(levels(page));
 	for (let radio of await levels(page).getByRole("radio").all()) {
 		await expectInsideViewport(radio);
