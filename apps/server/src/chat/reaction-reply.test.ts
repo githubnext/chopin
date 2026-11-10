@@ -155,6 +155,83 @@ test("a reaction that is taken back inside the debounce starts nothing, and one 
 	await finishTurn(h);
 });
 
+test("a classifier result for a reaction taken back and added again starts nothing, and the new one is read after its own debounce", async () => {
+	let h = await room();
+	let release!: () => void;
+	let gate = new Promise<void>(resolve => release = resolve);
+	let classify = h.context.decide!;
+	let calls = 0;
+	h.context.decide = async request => {
+		calls++;
+		if (calls === 1) await gate;
+		return classify(request);
+	};
+	await reactAs(h, "ben", "🤔");
+	await h.clock.advance(DEBOUNCE_MS + 100);
+	await until(() => calls === 1);
+	await reactAs(h, "ben", "🤔", false);
+	await reactAs(h, "ben", "🤔");
+	release();
+	await flush();
+	await flush();
+	expect(h.prompts).toEqual([]);
+	expect(entryA1(h).answeredIntents).toBeUndefined();
+	await h.clock.advance(DEBOUNCE_MS - 1_000);
+	expect(calls).toBe(1);
+	expect(h.prompts).toEqual([]);
+	await h.clock.advance(1_100);
+	await until(() => h.prompts.length === 1);
+	expect(calls).toBe(2);
+	await finishTurn(h);
+});
+
+test("a classifier result for a reaction taken back and added again, then taken back, starts nothing at all", async () => {
+	let h = await room();
+	let release!: () => void;
+	let gate = new Promise<void>(resolve => release = resolve);
+	let classify = h.context.decide!;
+	let calls = 0;
+	h.context.decide = async request => {
+		calls++;
+		await gate;
+		return classify(request);
+	};
+	await reactAs(h, "ben", "🤔");
+	await h.clock.advance(DEBOUNCE_MS + 100);
+	await until(() => calls === 1);
+	await reactAs(h, "ben", "🤔", false);
+	await reactAs(h, "ben", "🤔");
+	release();
+	await flush();
+	await reactAs(h, "ben", "🤔", false);
+	await h.clock.advance(DEBOUNCE_MS * 2);
+	await flush();
+	expect(h.prompts).toEqual([]);
+	expect(entryA1(h).answeredIntents).toBeUndefined();
+});
+
+test("a reaction waiting for a place in a full queue is given up when it is taken back and added again, and the new one waits its own debounce", async () => {
+	let h = await room();
+	await planner(h);
+	h.chat.waiting.push(...fillers(20));
+	await reactAs(h, "ben", "\u2753");
+	await h.clock.advance(DEBOUNCE_MS + 100);
+	await h.clock.advance(5_000);
+	expect(h.chat.waiting).toHaveLength(20);
+	await reactAs(h, "ben", "\u2753", false);
+	await reactAs(h, "ben", "\u2753");
+	h.chat.waiting.splice(0, 5);
+	await h.clock.advance(2_000);
+	await flush();
+	expect(h.chat.waiting).toHaveLength(15);
+	expect(entryA1(h).answeredIntents).toBeUndefined();
+	await h.clock.advance(DEBOUNCE_MS);
+	await until(() => h.chat.waiting.length === 16);
+	expect(entryA1(h).answeredIntents).toEqual(["confused"]);
+	h.chat.waiting.length = 0;
+	await finishTurn(h, "First turn done.");
+});
+
 test("with no decisions model the reaction is kept and nothing starts, not even for the toolbar's three", async () => {
 	let h = await room({ decide: false });
 	for (let emoji of ["\u2753", "👎", "🤔"]) await reactAs(h, "ben", emoji);
