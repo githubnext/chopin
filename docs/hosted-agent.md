@@ -295,9 +295,20 @@ confined to a repository. Operators who do not want that should use
 their usual [bind rules](self-hosting.md#choose-and-trust-a-harness).
 
 The Planner's own turns offer only read-only tools beside Chopin's document and
-repository tools: `read`, `find`, `search`, and `ast_grep` for the working
-directory, Atomic's web research tools, `ask_user_question`, `workflow`, and
-`intercom`. It cannot edit files, run commands, or start subagents itself, so it
+repository tools: `read`, `find` and `search` for the working directory,
+Atomic's web research tools, `ask_user_question`, `workflow`, and `intercom`,
+plus the read-only tools the operator names in `chopin.plannerTools` of the
+agent directory's `settings.json`, such as a code search tool a package
+registers:
+
+```json
+{ "chopin": { "plannerTools": ["my_code_search"] } }
+```
+
+Only the operator's file counts: a checkout's `.atomic/settings.json` can't add
+tools to a Planner, and a name that edits files, runs commands or starts agents
+(`bash`, `edit`, `write`, `kill`, `subagent`, `todo`) stops the Planner from
+starting. It cannot edit files, run commands, or start subagents itself, so it
 never implements the plan; a workflow it starts keeps the tools its stages
 declare. Atomic's workflows, MCP, web access, and Intercom run alongside
 Chopin's tools. The normal Atomic
