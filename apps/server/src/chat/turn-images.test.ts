@@ -44,7 +44,14 @@ const path = (bytes: Uint8Array) =>
 
 type Stored = { channelId: string; sha256: string; mimeType: string; uploadedBy: string };
 
-function turn(options: { tools?: string[]; gate?: Promise<void> } = {}) {
+function turn(
+	options: {
+		tools?: string[];
+		gate?: Promise<void>;
+		failing?: (image: Stored) => Error | undefined;
+		owner?: false;
+	} = {},
+) {
 	let chat: Chat = create();
 	let frames: Array<Record<string, unknown>> = [];
 	let stored: Stored[] = [];
@@ -66,13 +73,16 @@ function turn(options: { tools?: string[]; gate?: Promise<void> } = {}) {
 				images: {
 					put: async (image: Stored) => {
 						await options.gate;
+						let failure = options.failing?.(image);
+						if (failure) throw failure;
 						stored.push(image);
 					},
 				},
 			},
 			sessions: { resolve: async () => ({ user: { id: "owner-user" } }) },
 		},
-		activeOwner: async () => ({ ownerSessionId: "s", release: () => {} }),
+		activeOwner: async () =>
+			options.owner === false ? undefined : { ownerSessionId: "s", release: () => {} },
 	} as unknown as Room;
 	chat.agent = { activeTools: options.tools ?? ["codemode"] } as never;
 	chat.busy = true;
@@ -301,5 +311,179 @@ describe("images a turn makes", () => {
 			entry.tools?.map(tool => tool.id),
 			entry.images!.map(image => image.alt),
 		])).toEqual([["First message", ["orphan"], ["Orphan"]]]);
+	});
+
+	it("say why an image was left out on the message that holds the turn's others, in its place", async () => {
+		let release!: () => void;
+		let gate = new Promise<void>(resolve => (release = resolve));
+		let { chat, frames, send } = turn({ gate });
+		let svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
+		let first = png(100, 50, 1);
+		let second = png(50, 100, 2);
+		send({ type: "text-start", id: "t" });
+		send({ type: "text-delta", id: "t", text: "Here are two." });
+		send({ type: "tool-call", toolCallId: "c1", toolName: "codemode", input: {} });
+		send(toolResult("c1", [
+			{ type: "image", data: base64(first), mimeType: "image/png", alt: "First" },
+			{ type: "image", data: base64(svg), mimeType: "image/svg+xml" },
+			{ type: "image", data: base64(second), mimeType: "image/png", alt: "Second" },
+			{ type: "image", data: "not base64!", mimeType: "image/png" },
+			{ type: "image", data: "not base64!", mimeType: "image/png" },
+		]));
+		await Bun.sleep(0);
+		expect(frames.some(frame => (frame.entry as Wire.Entry | undefined)?.refusedImages)).toBe(
+			false,
+		);
+
+		release();
+		await chat.turnImages?.work;
+		let holders = chat.entries.filter(entry => entry.images || entry.refusedImages);
+		expect(holders).toHaveLength(1);
+		let [entry] = holders;
+		expect(entry!.author.kind).toBe("agent");
+		expect(entry!.text).toBe("Here are two.");
+		expect(entry!.images!.map(image => image.alt)).toEqual(["First", "Second"]);
+		expect(entry!.refusedImages).toEqual([
+			{
+				before: 1,
+				reason:
+					"Image couldn't be shown: its type image/svg+xml isn't one Chat shows (PNG, JPEG, WebP, GIF, AVIF, BMP or ICO).",
+			},
+			{ before: 2, reason: "Image couldn't be shown: its data isn't valid base64." },
+			{ before: 2, reason: "Image couldn't be shown: its data isn't valid base64." },
+		]);
+		let sent = frames.filter(frame => frame.kind === "chat:message").map(frame =>
+			frame.entry as Wire.Entry
+		).filter(item => item.refusedImages);
+		expect(sent).toHaveLength(1);
+		expect(sent[0]!.images).toHaveLength(2);
+		expect(sent[0]!.refusedImages).toEqual(entry!.refusedImages);
+		expect(entry!.tools?.find(tool => tool.id === "c1")?.result).toBe("5 images");
+	});
+
+	it("say why on a message of their own when none of a turn's images could be shown", async () => {
+		let { chat, send, stored } = turn();
+		let svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
+		let cut = png(9, 9).slice(0, 20);
+		send({ type: "tool-call", toolCallId: "c1", toolName: "codemode", input: {} });
+		send(toolResult("c1", [
+			{ type: "image", data: base64(svg), mimeType: "image/svg+xml" },
+			{ type: "image", data: base64(cut), mimeType: "image/png" },
+			{ type: "image", data: base64(png(9, 9)), mimeType: "image/avif" },
+		]));
+		await chat.turnImages?.work;
+		expect(stored).toEqual([]);
+		let holders = chat.entries.filter(entry => entry.refusedImages);
+		expect(holders).toHaveLength(1);
+		expect(holders[0]).toMatchObject({ author: { kind: "agent" }, text: "" });
+		expect(holders[0]!.images).toBeUndefined();
+		expect(holders[0]!.refusedImages).toEqual([
+			{
+				before: 0,
+				reason:
+					"Image couldn't be shown: its type image/svg+xml isn't one Chat shows (PNG, JPEG, WebP, GIF, AVIF, BMP or ICO).",
+			},
+			{
+				before: 0,
+				reason:
+					"Image couldn't be shown: its PNG header can't be read, so the image is cut short or damaged.",
+			},
+			{
+				before: 0,
+				reason: "Image couldn't be shown: its bytes are PNG data, not AVIF as its type says.",
+			},
+		]);
+	});
+
+	it("keep each call's refusals in their own place among the images of the message, never twice for one call", async () => {
+		let { chat, send } = turn();
+		let svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
+		let first = png(100, 50, 1);
+		let second = png(50, 100, 2);
+		let bad = { type: "image", data: base64(svg), mimeType: "image/svg+xml" };
+		send({ type: "tool-call", toolCallId: "c1", toolName: "codemode", input: {} });
+		send(toolResult("c1", [
+			{ type: "image", data: base64(first), mimeType: "image/png", alt: "First" },
+			bad,
+		]));
+		send(toolResult("c1", [bad]));
+		send({ type: "tool-call", toolCallId: "c2", toolName: "codemode", input: {} });
+		send(toolResult("c2", [bad, bad, {
+			type: "image",
+			data: base64(second),
+			mimeType: "image/png",
+			alt: "Second",
+		}]));
+		await chat.turnImages?.work;
+		let holders = chat.entries.filter(entry => entry.images || entry.refusedImages);
+		expect(holders).toHaveLength(1);
+		expect(holders[0]!.images!.map(image => image.alt)).toEqual(["First", "Second"]);
+		expect(holders[0]!.refusedImages!.map(item => item.before)).toEqual([1, 1, 1]);
+	});
+
+	it("say nothing of an image in a failed or partial result", async () => {
+		let { chat, send } = turn();
+		let svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
+		let bad = [{ type: "image", data: base64(svg), mimeType: "image/svg+xml" }];
+		send({ type: "tool-call", toolCallId: "c1", toolName: "codemode", input: {} });
+		send({ ...toolResult("c1", bad), preliminary: true });
+		send({
+			type: "tool-error",
+			toolCallId: "c2",
+			toolName: "codemode",
+			input: {},
+			error: { content: bad },
+		});
+		await chat.turnImages?.work;
+		expect(chat.entries.some(entry => entry.refusedImages)).toBe(false);
+	});
+
+	it("say an image could not be stored in its place, keep the others, and give no detail of why", async () => {
+		let failing = png(60, 40, 2);
+		let { chat, send, stored } = turn({
+			failing: image =>
+				image.sha256 === path(failing).slice(8, 72)
+					? new Error("connection to postgres://chopin:hunter2@db.internal failed")
+					: undefined,
+		});
+		let svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
+		send({ type: "tool-call", toolCallId: "c1", toolName: "codemode", input: {} });
+		send(toolResult("c1", [
+			{ type: "image", data: base64(png(50, 30, 1)), mimeType: "image/png", alt: "A" },
+			{ type: "image", data: base64(svg), mimeType: "image/svg+xml" },
+			{ type: "image", data: base64(failing), mimeType: "image/png", alt: "B" },
+			{ type: "image", data: base64(png(20, 10, 3)), mimeType: "image/png", alt: "C" },
+		]));
+		await chat.turnImages?.work;
+		expect(stored).toHaveLength(2);
+		let entry = chat.entries.find(item => item.images);
+		expect(entry!.images!.map(image => image.alt)).toEqual(["A", "C"]);
+		expect(entry!.refusedImages).toEqual([
+			{
+				before: 1,
+				reason:
+					"Image couldn't be shown: its type image/svg+xml isn't one Chat shows (PNG, JPEG, WebP, GIF, AVIF, BMP or ICO).",
+			},
+			{ before: 1, reason: "Image couldn't be shown: Chopin couldn't store it." },
+		]);
+		expect(JSON.stringify(chat.entries)).not.toContain("hunter2");
+	});
+
+	it("say none could be stored when nobody can own what the turn makes", async () => {
+		let { chat, send, stored } = turn({ owner: false });
+		chat.activeRequest = undefined;
+		send({ type: "tool-call", toolCallId: "c1", toolName: "codemode", input: {} });
+		send(toolResult("c1", [
+			{ type: "image", data: base64(png(50, 30, 1)), mimeType: "image/png" },
+			{ type: "image", data: base64(png(50, 30, 2)), mimeType: "image/png" },
+		]));
+		await chat.turnImages?.work;
+		expect(stored).toEqual([]);
+		let entry = chat.entries.find(item => item.refusedImages);
+		expect(entry!.images).toBeUndefined();
+		expect(entry!.refusedImages).toEqual([
+			{ before: 0, reason: "Image couldn't be shown: Chopin couldn't store it." },
+			{ before: 0, reason: "Image couldn't be shown: Chopin couldn't store it." },
+		]);
 	});
 });

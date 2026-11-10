@@ -342,8 +342,9 @@ export const toolErrorSchema = z.strictObject({
  * return: base64 `data` and its `mimeType`, with optional `alt` (what it shows, in words) and
  * `caption`, kept as given. Chopin stores each block it can host (a PNG, JPEG, WebP, GIF, AVIF, BMP
  * or ICO whose bytes are that type, of any size a message holds) as one of the document's images
- * and shows it in Chat as a generated image; any other block, and every `text` block, stays only in
- * the tool's own row.
+ * and shows it in Chat as a generated image; a block it cannot host is shown as a plain reason
+ * beside the images (`Chat.Entry.refusedImages`), and every `text` block stays only in the tool's
+ * own row.
  * Extra keys, and an `alt` or `caption` that is not text, are ignored. Like `toolErrorSchema` this
  * is a recognised convention: any JSON is still a result.
  */

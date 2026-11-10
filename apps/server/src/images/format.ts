@@ -57,13 +57,27 @@ export function sniffImageType(bytes: Uint8Array): HostedImageType | undefined {
 	return HOSTED_IMAGE_TYPES.find(type => matchesSignature(type, bytes));
 }
 
+export const IMAGE_LABELS: Record<HostedImageType, string> = {
+	"image/png": "PNG",
+	"image/jpeg": "JPEG",
+	"image/webp": "WebP",
+	"image/gif": "GIF",
+	"image/avif": "AVIF",
+	"image/bmp": "BMP",
+	"image/x-icon": "ICO",
+};
+
+export function namedImageType(declared: string): HostedImageType | undefined {
+	let name = declared.split(";")[0]!.trim().toLowerCase();
+	return HOSTED_IMAGE_TYPES.find(type => NAMES[type].includes(name));
+}
+
 export function declaredImageType(
 	declared: string,
 	bytes: Uint8Array,
 ): HostedImageType | undefined {
 	let type = sniffImageType(bytes);
-	let name = declared.split(";")[0]!.trim().toLowerCase();
-	return type && NAMES[type].includes(name) ? type : undefined;
+	return type && namedImageType(declared) === type ? type : undefined;
 }
 
 function startsWith(bytes: Uint8Array, prefix: number[], offset = 0): boolean {
