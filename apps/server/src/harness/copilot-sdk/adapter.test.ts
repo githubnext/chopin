@@ -475,6 +475,57 @@ describe("copilot-sdk adapter", () => {
 		expect(config.mcpServers).toEqual({});
 	});
 
+	it("opens a session with no tools at all with an empty allowlist, no MCP server and every permission refused", async () => {
+		let source = stubRuntimeSource();
+		let harness = createCopilotSdk({ credentials: () => "ghu_test", connect: () => source });
+		let session = await harness.doStart({
+			sessionId: "s1",
+			sandboxSession: { defaultWorkingDirectory: "/tmp" } as never,
+			sessionWorkDir: "/tmp",
+		});
+		let control = await session.doPromptTurn({
+			prompt: "reaction",
+			instructions: "You have no tools.",
+			tools: [],
+			skills: [],
+			emit: () => {},
+		});
+		await control.done;
+		let config = source.sessions[0]!.config;
+		expect(config.availableTools).toEqual([]);
+		expect(config.tools).toEqual([]);
+		expect(config.mcpServers).toEqual({});
+		expect(config.enableHostGitOperations).toBe(false);
+		expect(config.enableSkills).toBe(false);
+		let refused = await config.onPermissionRequest!(
+			{ kind: "shell" } as never,
+			{ sessionId: "s1" } as never,
+		);
+		expect(refused).toMatchObject({ kind: "reject" });
+	});
+
+	it("fails closed when a session meant to have no tools reports one, built in or its own", async () => {
+		for (
+			let reported of [
+				[{ name: "bash", namespacedName: "builtin:bash" }],
+				[{ name: "read_plan" }],
+			]
+		) {
+			let harness = createCopilotSdk({
+				credentials: () => "ghu_test",
+				connect: () => stubRuntimeSource({ metadata: () => reported as CurrentToolMetadata[] }),
+			});
+			let session = await harness.doStart({
+				sessionId: "s1",
+				sandboxSession: { defaultWorkingDirectory: "/tmp" } as never,
+				sessionWorkDir: "/tmp",
+			});
+			await expect(
+				session.doPromptTurn({ prompt: "reaction", tools: [], skills: [], emit: () => {} }),
+			).rejects.toThrow(ToolMetadataMismatchError);
+		}
+	});
+
 	it("uses each turn's MODEL and releases previous unlimited turns", async () => {
 		let source = stubRuntimeSource();
 		let disconnected = 0;
