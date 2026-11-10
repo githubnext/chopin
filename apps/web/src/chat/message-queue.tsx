@@ -42,11 +42,13 @@ type Props = {
 	onEdit?: (id: string, text: string) => Answer;
 	/** Take a saved message back, including while offline. */
 	onDelete?: (id: string) => void;
+	/** Messages known to have started, so a different removal is not called a start. */
+	started?: ReadonlySet<string>;
 	/** Where focus goes when the last row leaves, and nothing is left to take it. */
 	restoreFocus?: () => void;
 };
 
-export function MessageQueue({ queued, onCancel, onEdit, onDelete, restoreFocus }: Props) {
+export function MessageQueue({ queued, onCancel, onEdit, onDelete, started, restoreFocus }: Props) {
 	// A word about a change that could not be made outlives the row it was about, which leaves the
 	// queue when its turn starts: it stays a few seconds, in the queue's own card.
 	let [notice, setNotice] = useState<string>();
@@ -57,6 +59,8 @@ export function MessageQueue({ queued, onCancel, onEdit, onDelete, restoreFocus 
 	}, [notice]);
 	let live = useRef(queued);
 	live.current = queued;
+	let begun = useRef(started);
+	begun.current = started;
 	// The card's height while it held something, which it keeps as it eases shut empty: what was in
 	// it has gone to the transcript or been cancelled, and is not drawn a second time as it goes.
 	let height = useRef(0);
@@ -91,6 +95,7 @@ export function MessageQueue({ queued, onCancel, onEdit, onDelete, restoreFocus 
 								onSize={size => height.current = size}
 								queued={queued}
 								restoreFocus={restoreFocus}
+								started={id => !!begun.current?.has(id)}
 								waiting={id => live.current.some(row => row.id === id)}
 							/>
 						)}
@@ -101,14 +106,17 @@ export function MessageQueue({ queued, onCancel, onEdit, onDelete, restoreFocus 
 }
 
 function Queue(
-	{ queued, notice, onNotice, onSize, waiting, onCancel, onEdit, onDelete, restoreFocus }: Props & {
-		notice?: string;
-		onNotice: (words: string | undefined) => void;
-		/** Told the card's height after each draw. */
-		onSize: (height: number) => void;
-		/** Whether a message still waits, as the server says now rather than as the card last drew it. */
-		waiting: (id: string) => boolean;
-	},
+	{ queued, notice, onNotice, onSize, waiting, onCancel, onEdit, onDelete, started, restoreFocus }:
+		& Omit<Props, "started">
+		& {
+			notice?: string;
+			onNotice: (words: string | undefined) => void;
+			/** Told the card's height after each draw. */
+			onSize: (height: number) => void;
+			/** Whether a message still waits, as the server says now rather than as the card last drew it. */
+			waiting: (id: string) => boolean;
+			started: (id: string) => boolean;
+		},
 ) {
 	let list = useRef<HTMLOListElement>(null);
 	let card = useRef<HTMLDivElement>(null);
@@ -164,7 +172,9 @@ function Queue(
 	};
 	let left = (row: QueueRow) => {
 		// Typing a change into a message whose turn started: what was typed was not saved.
-		if (!waiting(row.id)) onNotice(refusalWords("edit", { code: "already-started" }));
+		if (!waiting(row.id) && started(row.id)) {
+			onNotice(refusalWords("edit", { code: "already-started" }));
+		}
 	};
 
 	return (
@@ -219,6 +229,13 @@ function Item(
 	let [editing, setEditing] = useState(false);
 	let [busy, setBusy] = useState(false);
 	let editor = useRef<HTMLButtonElement>(null);
+	let restoreEditor = useRef(false);
+	useLayoutEffect(() => {
+		if (!editing && restoreEditor.current) {
+			restoreEditor.current = false;
+			editor.current?.focus();
+		}
+	}, [editing]);
 	let open = useRef(false);
 	open.current = editing;
 	useEffect(() => () => {
@@ -249,16 +266,16 @@ function Item(
 							busy={busy}
 							note={note}
 							onClose={() => {
+								restoreEditor.current = true;
 								setEditing(false);
-								queueMicrotask(() => editor.current?.focus());
 							}}
 							onSave={async text => {
 								setBusy(true);
 								let refused = await edit(row, text);
 								setBusy(false);
 								if (!refused) {
+									restoreEditor.current = true;
 									setEditing(false);
-									queueMicrotask(() => editor.current?.focus());
 								}
 							}}
 							text={row.text}

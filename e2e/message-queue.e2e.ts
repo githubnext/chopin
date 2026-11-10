@@ -143,6 +143,7 @@ test("the author edits a waiting message by keyboard, and its turn reads the edi
 	await field.press("Enter");
 	await expect(row.getByRole("textbox")).toHaveCount(0);
 	await expect(row).toContainText("second: list the failure modes and the rollback plan");
+	await expect(row.getByRole("button", { name: "Edit message from Ana" })).toBeFocused();
 	await expect(queueOf(page)).toContainText("1 waiting for Chopin");
 
 	await expect(transcriptHas(page, "and the rollback plan")).toHaveCount(1, { timeout: TURN });
@@ -150,6 +151,38 @@ test("the author edits a waiting message by keyboard, and its turn reads the edi
 	await page.reload();
 	await expect(transcriptHas(page, "second: list the failure modes and the rollback plan"))
 		.toHaveCount(1);
+});
+
+test("a saved edit shows its acknowledged text before the queue broadcast arrives", async ({ baseURL, page, room, seed }) => {
+	await seed(SOURCE);
+	let holding = false;
+	let held: Array<() => void> = [];
+	await authenticate(page, "ana", baseURL!);
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			if (holding && typeof message === "string" && JSON.parse(message).kind === "chat:queue") {
+				held.push(() => route.send(message));
+				return;
+			}
+			route.send(message);
+		});
+	});
+	await page.goto(roomPath(room));
+	await expect(chatInput(chatPane(page))).toBeVisible();
+	await startBusyTurn(page);
+	await say(page, "@chopin original text");
+	let row = rowsOf(page).first();
+	await expect(row).toContainText("original text");
+	await row.getByRole("button", { name: "Edit message from Ana" }).click();
+	await row.getByRole("textbox", { name: "Edit message" }).fill("revised text");
+	holding = true;
+	await row.getByRole("button", { name: "Save", exact: true }).click();
+	await expect(row.getByRole("textbox")).toHaveCount(0);
+	await expect(row).toContainText("revised text", { timeout: 2_000 });
+	holding = false;
+	for (let send of held) send();
 });
 
 test("a second person sees the same queue live, and can change none of it", async ({ join, seed }) => {
@@ -280,6 +313,21 @@ test("an edit that loses the race with its turn starting says so plainly, and th
 	await expect(notice).toHaveCount(0, { timeout: 15_000 });
 });
 
+test("cancelling an edited message from another tab does not say it started", async ({ join, seed }) => {
+	await seed(SOURCE);
+	let first = await join("ana");
+	let second = await join("ana");
+	await startBusyTurn(first);
+	await say(first, "@chopin a message to take back");
+	await expect(rowsOf(second)).toHaveCount(1);
+	await rowsOf(first).first().getByRole("button", { name: "Edit message from Ana" }).click();
+	await expect(rowsOf(first).first().getByRole("textbox", { name: "Edit message" })).toBeVisible();
+	await rowsOf(second).first().getByRole("button", { name: "Cancel message from Ana" }).click();
+	await expect(queueOf(first)).toHaveCount(0, { timeout: 3_000 });
+	await expect(first.getByText("Chopin already started on it, so it can't be changed."))
+		.toHaveCount(0);
+});
+
 test("a long message keeps to one line, and all waiting messages stay in an ordered, bounded list", async ({ join, seed }) => {
 	await seed(SOURCE);
 	let page = await join("ana");
@@ -316,12 +364,20 @@ test("a long message keeps to one line, and all waiting messages stay in an orde
 	}));
 	expect(dimensions.overflow).toBe("auto");
 	expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.height);
-	await rowsOf(page).last().scrollIntoViewIfNeeded();
+	await expect.poll(() =>
+		list.evaluate(element => element.scrollHeight - element.clientHeight - element.scrollTop)
+	).toBeLessThanOrEqual(1);
 	let [lastBox, listBox] = await Promise.all([
 		rowsOf(page).last().boundingBox(),
 		list.boundingBox(),
 	]);
 	expect(lastBox!.y + lastBox!.height).toBeLessThanOrEqual(listBox!.y + listBox!.height + 1);
+
+	await list.evaluate(element => element.scrollTop = 0);
+	await page.evaluate(() => new Promise(requestAnimationFrame));
+	await say(page, "@chopin message 6");
+	await expect(rowsOf(page)).toHaveCount(6);
+	await expect.poll(() => list.evaluate(element => element.scrollTop)).toBe(0);
 });
 
 test("a comment sent to Chopin waits as a reply to a comment, which nobody can change", async ({ join, seed }) => {

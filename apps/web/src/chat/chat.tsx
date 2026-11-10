@@ -1030,9 +1030,28 @@ export function Chat(
 				? id => changeQueue("cancel", wire.ask<Wire.Unqueued>("chat:unqueue", { id }))
 				: undefined}
 			onEdit={composerShown && wire
-				? (id, text) => changeQueue("edit", wire.ask<Wire.Edited>("chat:edit", { id, text }))
+				? (id, text) =>
+					changeQueue(
+						"edit",
+						wire.ask<Wire.Edited>("chat:edit", { id, text }).then(saved => {
+							setQueue(current =>
+								current.map(item => {
+									if (item.id !== id) return item;
+									let { references: _, ...rest } = item;
+									return {
+										...rest,
+										text: saved.text,
+										...(saved.references ? { references: saved.references } : {}),
+									};
+								})
+							);
+						}),
+					)
 				: undefined}
 			queued={waiting}
+			started={new Set(
+				entries.filter(entry => entry.deliveryState !== "sent").map(entry => entry.id),
+			)}
 			restoreFocus={() => textarea.current?.focus()}
 		/>
 	);
