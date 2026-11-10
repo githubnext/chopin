@@ -340,7 +340,7 @@
 				1
 			]
 		],
-		"sourceHash": "92f1f5734cf3615cd8ebada97ee5c123d5e0e089db7ce0a56eeb8621650abea4"
+		"sourceHash": "0b2b445223037b76aa7d58c2fb907678ef605b2a5f406e4d1bab5fdb983bede2"
 	},
 	{
 		"file": "apps/web/src/chat/markdown.tsx",
@@ -357,11 +357,11 @@
 				"dynamic",
 				"class",
 				"[\"chat-markdown\", className].filter(Boolean)",
-				"class > MessageMarkdown > MessageMarkdown > <MarkdownText>",
+				"class > MessageMarkdown > MessageMarkdown > body > <MarkdownText>",
 				1
 			]
 		],
-		"sourceHash": "d146e0bf2e1e868404c8a397fbaa6922bf5a00f855e65e1b60907544cb43325b"
+		"sourceHash": "bffa01a974e33bc20c59d651a4b8d0e22746dcb700c7ab3064f7e594f3645717"
 	},
 	{
 		"file": "apps/web/src/chat/assistant-ui/markdown-primitive.tsx",

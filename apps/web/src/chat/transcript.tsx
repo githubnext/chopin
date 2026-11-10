@@ -25,6 +25,8 @@ import { EmptyState } from "@chopin/visuals";
 
 import { deliveryOf, failureOf } from "./delivery";
 import { DeliveryMark, FailedLine } from "./message-delivery";
+import { ChatImage, ChatImageDocument, MessageImages } from "./image";
+import { ImageGallery } from "./image-gallery";
 import { MessageMarkdown } from "./markdown";
 import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
@@ -237,10 +239,10 @@ function MessageBody(
 		enter: boolean;
 		handle: string;
 		message: Message;
-		room?: string;
 		onDelete: (id: string) => void;
 		onRetry: (id: string) => void;
 		quietFailures: boolean;
+		room?: string;
 	} & PlanMarkers,
 ) {
 	let toPlanner = message.to === "planner" && message.author.kind === "member";
@@ -267,90 +269,99 @@ function MessageBody(
 		&& !message.streaming && delivery === undefined;
 
 	return (
-		<div
-			className="chat-message-body relative"
-			data-chat-enter={enter || undefined}
-			data-chat-source={markers.sourceDestination?.source.messageId === message.id || undefined}
-			data-chat-message-id={message.id}
-			data-chat-raw={message.text}
-			data-thread-root-open={rootOpen || undefined}
-			data-chat-state={message.working
-				? "working"
-				: message.workDisconnected
-				? "disconnected"
-				: undefined}
-		>
-			{(message.working || message.workDisconnected || !!message.tools?.length) && (
-				<WorkProgress
-					decisions={markers.decisions}
-					active={!!message.working}
-					disconnected={!!message.workDisconnected}
-					responseSeen={!!message.workResponseSeen}
-					streaming={!!message.workStreaming || !!message.streaming}
-					tools={message.tools ?? []}
-				/>
-			)}
-			{markers.sourceDestination?.source.messageId === message.id && (
-				<span
-					aria-hidden="true"
-					className="chat-source-tint"
-					key={markers.sourceDestination.token}
-				/>
-			)}
-			{(text || toPlanner) && (
-				<div className="flex items-start gap-1">
-					<div className="min-w-0 flex-1" data-chat-message-text>
-						<MessageMarkdown
-							className="break-words text-chat-body [overflow-wrap:anywhere]"
-							mention={toPlanner ? "@chopin" : undefined}
-							references={references}
-							source={text}
-							streaming={!!message.streaming}
+		<ChatImageDocument value={room}>
+			<MessageImages>
+				<div
+					className="chat-message-body relative"
+					data-chat-enter={enter || undefined}
+					data-chat-source={markers.sourceDestination?.source.messageId === message.id || undefined}
+					data-chat-message-id={message.id}
+					data-chat-raw={message.text}
+					data-thread-root-open={rootOpen || undefined}
+					data-chat-state={message.working
+						? "working"
+						: message.workDisconnected
+						? "disconnected"
+						: undefined}
+				>
+					{(message.working || message.workDisconnected || !!message.tools?.length) && (
+						<WorkProgress
+							decisions={markers.decisions}
+							active={!!message.working}
+							disconnected={!!message.workDisconnected}
+							responseSeen={!!message.workResponseSeen}
+							streaming={!!message.workStreaming || !!message.streaming}
+							tools={message.tools ?? []}
 						/>
-						{message.streaming && <span className="ml-0.5">▍</span>}
-					</div>
-					{canThread && markers.threads && (
-						<span className={hasAnalysisMarker ? "mr-5 shrink-0" : "shrink-0"}>
-							<ThreadEntryButton onOpen={markers.threads.onOpen} rootId={message.id} />
-						</span>
 					)}
-					{delivery && delivery !== "failed" && <DeliveryMark mark={delivery} />}
+					{markers.sourceDestination?.source.messageId === message.id && (
+						<span
+							aria-hidden="true"
+							className="chat-source-tint"
+							key={markers.sourceDestination.token}
+						/>
+					)}
+					{(text || toPlanner) && (
+						<div className="flex items-start gap-1">
+							<div className="min-w-0 flex-1" data-chat-message-text>
+								<MessageMarkdown
+									className="break-words text-chat-body [overflow-wrap:anywhere]"
+									mention={toPlanner ? "@chopin" : undefined}
+									references={references}
+									source={text}
+									streaming={!!message.streaming}
+								/>
+								{message.streaming && <span className="ml-0.5">▍</span>}
+							</div>
+							{canThread && markers.threads && (
+								<span className={hasAnalysisMarker ? "mr-5 shrink-0" : "shrink-0"}>
+									<ThreadEntryButton onOpen={markers.threads.onOpen} rootId={message.id} />
+								</span>
+							)}
+							{delivery && delivery !== "failed" && <DeliveryMark mark={delivery} />}
+						</div>
+					)}
+					{!!message.images?.length && (
+						message.images.length === 1
+							? <ChatImage image={message.images[0]!} />
+							: <ImageGallery images={message.images} />
+					)}
+					{!(text || toPlanner) && canThread && markers.threads && (
+						<div className="flex justify-end">
+							<ThreadEntryButton onOpen={markers.threads.onOpen} rootId={message.id} />
+						</div>
+					)}
+					{!!message.attachments?.length && room && (
+						<Suspense fallback={null}>
+							<MessageFiles channelId={room} files={message.attachments} />
+						</Suspense>
+					)}
+					{delivery === "failed" && !quietFailures && (
+						<FailedLine
+							onDelete={() => onDelete(message.id)}
+							onRetry={() => onRetry(message.id)}
+							reason={failureOf(message)}
+						/>
+					)}
+					{threadSummary && markers.threads && (
+						<ThreadSummaryRow onOpen={markers.threads.onOpen} summary={threadSummary} />
+					)}
+					{ANALYSIS && markers.onCardLink && markers.onRetryAnalysis && (
+						<MessageMarkers
+							canEdit={!!markers.canEdit}
+							messageId={message.id}
+							messageText={message.text}
+							jobs={markers.conversationPlanJobs}
+							onCard={markers.onCardLink}
+							onAddExcerpt={markers.onAddExcerpt}
+							onRetry={markers.onRetryAnalysis}
+							onRetryJob={markers.onRetryJob}
+							state={markers.conversationPlan}
+						/>
+					)}
 				</div>
-			)}
-			{!(text || toPlanner) && canThread && markers.threads && (
-				<div className="flex justify-end">
-					<ThreadEntryButton onOpen={markers.threads.onOpen} rootId={message.id} />
-				</div>
-			)}
-			{!!message.attachments?.length && room && (
-				<Suspense fallback={null}>
-					<MessageFiles channelId={room} files={message.attachments} />
-				</Suspense>
-			)}
-			{delivery === "failed" && !quietFailures && (
-				<FailedLine
-					onDelete={() => onDelete(message.id)}
-					onRetry={() => onRetry(message.id)}
-					reason={failureOf(message)}
-				/>
-			)}
-			{threadSummary && markers.threads && (
-				<ThreadSummaryRow onOpen={markers.threads.onOpen} summary={threadSummary} />
-			)}
-			{ANALYSIS && markers.onCardLink && markers.onRetryAnalysis && (
-				<MessageMarkers
-					canEdit={!!markers.canEdit}
-					messageId={message.id}
-					messageText={message.text}
-					jobs={markers.conversationPlanJobs}
-					onCard={markers.onCardLink}
-					onAddExcerpt={markers.onAddExcerpt}
-					onRetry={markers.onRetryAnalysis}
-					onRetryJob={markers.onRetryJob}
-					state={markers.conversationPlan}
-				/>
-			)}
-		</div>
+			</MessageImages>
+		</ChatImageDocument>
 	);
 }
 

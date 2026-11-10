@@ -450,9 +450,30 @@
 				"props",
 				"unresolved JSX props > MicIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > DownloadIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ImageOffIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ExternalLinkIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "d3058cfabee370f4e290411018e9dfed08186e740009bf05fa3cea81ae66f722"
+		"sourceHash": "5012ca933c502fbb522ea615abec9f6d9fe78cb1e6f7ab091fc6d095c6390e5f"
 	},
 	{
 		"file": "packages/icons/src/warning.tsx",

@@ -1,0 +1,140 @@
+import { expect, test } from "bun:test";
+
+import {
+	copyLabel,
+	downloadName,
+	frameRatio,
+	galleryTiles,
+	imageLabel,
+	imageSource,
+	isDataImage,
+	loadState,
+	settledOnMount,
+} from "./image-state";
+
+const SHA = "a".repeat(64);
+const ORIGIN = "https://chopin.example";
+
+test("an upload of this document loads with the document named, however it is written", () => {
+	let scoped = { kind: "hosted" as const, url: `/images/${SHA}.png?document=doc%2F1` };
+
+	expect(imageSource(`/images/${SHA}.png`, "doc/1", ORIGIN)).toEqual(scoped);
+	expect(imageSource(`${ORIGIN}/images/${SHA}.png`, "doc/1", ORIGIN)).toEqual(scoped);
+	expect(imageSource(`/images/${SHA}.png`, undefined, ORIGIN)).toEqual({ kind: "unavailable" });
+});
+
+test("a path or address on this site that is not an upload is never loaded", () => {
+	for (
+		let src of [
+			"/auth/logout",
+			"images/a.png",
+			"./a.png",
+			"../a.png",
+			`/images/${SHA}.svg`,
+			`${ORIGIN}/auth/logout`,
+			`${ORIGIN}/images/${SHA}.svg`,
+		]
+	) expect(imageSource(src, "doc", ORIGIN), src).toEqual({ kind: "unavailable" });
+});
+
+test("an address on another site loads exactly as it was written", () => {
+	for (
+		let src of [
+			"https://example.invalid/pixel.png",
+			"http://example.invalid/a.gif",
+			"https://example.invalid",
+			"//example.invalid/a.png",
+			"https://EXAMPLE.invalid/A%20b.png?x=1#top",
+		]
+	) expect(imageSource(src, "doc", ORIGIN), src).toEqual({ kind: "external", url: src });
+});
+
+test("a PNG, JPEG, GIF or WebP written into the message loads as it was written", () => {
+	for (
+		let src of [
+			"data:image/png;base64,iVBORw0KGgo=",
+			"data:image/jpeg;base64,/9j/4AAQ",
+			"data:image/gif;base64,R0lGODlh",
+			"data:image/webp,RIFF",
+			"DATA:IMAGE/PNG;base64,AAAA",
+		]
+	) expect(imageSource(src, "doc", ORIGIN), src).toEqual({ kind: "data", url: src });
+	expect(isDataImage("data:image/png;base64,AAAA")).toBe(true);
+	expect(isDataImage("data:image/svg+xml,<svg/>")).toBe(false);
+});
+
+test("script, markup, SVG and any other scheme are never loaded", () => {
+	for (
+		let src of [
+			"javascript:alert(1)",
+			"data:image/svg+xml;base64,PHN2Zy8+",
+			"data:text/html,<script>alert(1)</script>",
+			"data:application/pdf;base64,AAAA",
+			"blob:https://example.invalid/1",
+			"file:///etc/passwd",
+			"ftp://example.invalid/a.png",
+			"",
+			undefined,
+		]
+	) expect(imageSource(src, "doc", ORIGIN), String(src)).toEqual({ kind: "unavailable" });
+});
+
+test("loading settles per address, so a new address starts over", () => {
+	expect(loadState(undefined, "a")).toBe("loading");
+	expect(loadState({ src: "a", outcome: "shown" }, "a")).toBe("shown");
+	expect(loadState({ src: "a", outcome: "broken" }, "a")).toBe("broken");
+	expect(loadState({ src: "a", outcome: "shown" }, "b")).toBe("loading");
+});
+
+test("an image the browser already has settles on mount, a pending one waits", () => {
+	expect(settledOnMount({ complete: false, naturalWidth: 0 }, "a")).toBeUndefined();
+	expect(settledOnMount({ complete: true, naturalWidth: 40 }, "a")).toEqual({
+		src: "a",
+		outcome: "shown",
+	});
+	expect(settledOnMount({ complete: true, naturalWidth: 0 }, "a")).toEqual({
+		src: "a",
+		outcome: "broken",
+	});
+});
+
+test("an image with no alt text is named, and one with alt text keeps it as written", () => {
+	expect(imageLabel("A sunrise over the bay")).toBe("A sunrise over the bay");
+	expect(imageLabel(undefined)).toBe("Image");
+	expect(imageLabel("")).toBe("Image");
+	expect(imageLabel("   ", true)).toBe("Generated image");
+	expect(imageLabel(undefined, true)).toBe("Generated image");
+	expect(imageLabel("  padded ", true)).toBe("  padded ");
+});
+
+test("a frame keeps the image's own shape, and has none when the size is not known", () => {
+	expect(frameRatio(1024, 768)).toBe("1024 / 768");
+	expect(frameRatio(undefined, 10)).toBeUndefined();
+	expect(frameRatio(0, 10)).toBeUndefined();
+});
+
+test("a gallery draws up to six tiles and the last stands for the rest", () => {
+	expect(galleryTiles(0)).toEqual({ shown: 0, more: 0 });
+	expect(galleryTiles(2)).toEqual({ shown: 2, more: 0 });
+	expect(galleryTiles(6)).toEqual({ shown: 6, more: 0 });
+	expect(galleryTiles(9)).toEqual({ shown: 6, more: 3 });
+	expect(galleryTiles(9, 4)).toEqual({ shown: 4, more: 5 });
+});
+
+test("a download is named for what the image shows, or for the stored image", () => {
+	expect(downloadName("Forest cabin, at dusk!", `/images/${SHA}.jpg`)).toBe(
+		"forest-cabin-at-dusk.jpg",
+	);
+	expect(downloadName("Café ☕", `/images/${SHA}.webp?document=x`)).toBe("cafe.webp");
+	expect(downloadName(undefined, `/images/${SHA}.png`)).toBe("image-aaaaaaaa.png");
+	expect(downloadName("???", `/images/${SHA}.gif`)).toBe("image-aaaaaaaa.gif");
+	expect(downloadName("x".repeat(200), `/images/${SHA}.png`)).toBe(`${"x".repeat(60)}.png`);
+	expect(downloadName("A dot", "data:image/jpeg;base64,/9j/4AAQ")).toBe("a-dot.jpg");
+	expect(downloadName(undefined, "data:image/webp,RIFF")).toBe("image.webp");
+});
+
+test("the copy button says what happened", () => {
+	expect(copyLabel("idle")).toBe("Copy image");
+	expect(copyLabel("copied")).toBe("Copied image");
+	expect(copyLabel("failed")).toBe("Couldn’t copy image");
+});

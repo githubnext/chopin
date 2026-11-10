@@ -12,6 +12,8 @@ export type Message = {
 	ts?: number;
 	streaming?: boolean;
 	tools?: Chat.Activity[];
+	/** What the agent's turn made or showed, in order; see `Chat.Entry.images`. */
+	images?: Chat.Image[];
 	references?: Chat.Reference[];
 	/** The images and files sent with it. */
 	attachments?: Chat.Attachment[];
