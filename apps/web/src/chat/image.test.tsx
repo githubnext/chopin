@@ -34,6 +34,14 @@ function png(width: number, height: number): string {
 		0,
 		0,
 		0,
+		...be(2, 4),
+		...ascii("IDAT"),
+		0x78,
+		0x9c,
+		0,
+		0,
+		0,
+		0,
 	];
 	return `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
 }
@@ -68,6 +76,16 @@ test("an image written into a message has its own shape in its frame at the firs
 		expect(markup).toContain('alt="A picture the author wrote"');
 		expect(markup).toContain(">A picture the author wrote</span>");
 	}
+});
+
+test("a data address with parameters of its type is drawn, and has its own shape at the first render", () => {
+	let plain = png(90, 30);
+	let src = plain.replace("data:image/png;base64,", "data:image/png;charset=utf-8;base64,");
+	let markup = firstRender({ src, alt: "With a parameter" });
+
+	expect(frame(markup)).toEqual({ width: "90", height: "30", sized: true });
+	expect(markup).toContain(`src="${src}"`);
+	expect(markup).not.toContain("Image can’t be shown");
 });
 
 test("a size the image part states wins over what the bytes of a data address say", () => {

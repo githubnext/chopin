@@ -11,12 +11,25 @@ const BASE64_PADDING = 0x3d;
 
 const PNG_FIRST_CHUNK_END = 33;
 const PNG_CHUNK_OVERHEAD = 12;
+const PNG_CHUNK_HEADER_BYTES = 8;
 
 const EXIF_ORIENTATION_TAG = 0x0112;
+const EXIF_X_RESOLUTION_TAG = 0x011a;
+const EXIF_Y_RESOLUTION_TAG = 0x011b;
+const EXIF_RESOLUTION_UNIT_TAG = 0x0128;
+const EXIF_SUB_DIRECTORY_TAG = 0x8769;
+const EXIF_PIXEL_WIDTH_TAG = 0xa002;
+const EXIF_PIXEL_HEIGHT_TAG = 0xa003;
+const EXIF_INCH_UNIT = 2;
+const EXIF_REFERENCE_DOTS_PER_INCH = 72;
 const TIFF_MAGIC_NUMBER = 42;
 const TIFF_ENTRY_BYTES = 12;
+const TIFF_SHORT_TYPE = 3;
+const TIFF_LONG_TYPE = 4;
+const TIFF_RATIONAL_TYPE = 5;
 const FIRST_QUARTER_TURN_ORIENTATION = 5;
 const LAST_QUARTER_TURN_ORIENTATION = 8;
+const FIRST_ORIENTATION = 1;
 
 const JPEG_PADDING_MARKER = 0xff;
 const JPEG_STANDALONE_MARKER = 0x01;
@@ -40,8 +53,16 @@ const ICO_ENTRY_BYTES = 16;
 const ICO_ENTRY_SIDE_WHEN_ZERO = 256;
 
 const BOX_HEADER_BYTES = 8;
+const AVIF_EXTENT_BODY_BYTES = 12;
 
 type Box = { type: string; body: number; end: number };
+
+type ExifFacts = {
+	quarterTurn: boolean;
+	resolution?: { x: number; y: number };
+	unit?: number;
+	pixels?: ImageSize;
+};
 
 function dataPayloadStart(src: string): Uint8Array | undefined {
 	let comma = src.slice(0, 128).indexOf(",");
@@ -57,7 +78,7 @@ function dataPayloadStart(src: string): Uint8Array | undefined {
 		} else if (code < 0x80) unescaped.push(code);
 		else return undefined;
 	}
-	if (!/;base64$/i.test(src.slice(0, comma))) return Uint8Array.from(unescaped);
+	if (!/;\s*base64\s*$/i.test(src.slice(0, comma))) return Uint8Array.from(unescaped);
 	let bytes: number[] = [];
 	let pending = 0;
 	let pendingBits = 0;
@@ -85,7 +106,8 @@ function readUnsigned(
 ): number {
 	let value = 0;
 	for (let index = 0; index < length; index++) {
-		let byte = bytes[offset + (littleEndian ? length - 1 - index : index)] ?? 0;
+		let byte = bytes[offset + (littleEndian ? length - 1 - index : index)];
+		if (byte === undefined) return Number.NaN;
 		value = value * 256 + byte;
 	}
 	return value;
@@ -102,46 +124,121 @@ function withSidesExchangedWhen(
 	return size && exchanged ? { width: size.height, height: size.width } : size;
 }
 
-function exifTurnsPictureAQuarter(bytes: Uint8Array, start: number, end: number): boolean {
+function readExif(bytes: Uint8Array, start: number, end: number): ExifFacts {
+	let facts: ExifFacts = { quarterTurn: false };
 	let littleEndian = text(bytes, start, "II") ? true : text(bytes, start, "MM") ? false : undefined;
 	if (
 		littleEndian === undefined || end > bytes.length
 		|| readUnsigned(bytes, start + 2, 2, littleEndian) !== TIFF_MAGIC_NUMBER
-	) return false;
-	let directory = start + readUnsigned(bytes, start + 4, 4, littleEndian);
-	let entries = readUnsigned(bytes, directory, 2, littleEndian);
-	for (
-		let entry = directory + 2;
-		entries-- > 0 && entry + TIFF_ENTRY_BYTES <= end;
-		entry += TIFF_ENTRY_BYTES
-	) {
-		if (readUnsigned(bytes, entry, 2, littleEndian) !== EXIF_ORIENTATION_TAG) continue;
-		let orientation = readUnsigned(bytes, entry + 8, 2, littleEndian);
-		return orientation >= FIRST_QUARTER_TURN_ORIENTATION
-			&& orientation <= LAST_QUARTER_TURN_ORIENTATION;
+	) return facts;
+	let oriented = false;
+	let pixelWidth: number | undefined;
+	let pixelHeight: number | undefined;
+	let subDirectory: number | undefined;
+	let readNumber = (entry: number): number | undefined => {
+		let type = readUnsigned(bytes, entry + 2, 2, littleEndian);
+		if (readUnsigned(bytes, entry + 4, 4, littleEndian) !== 1) return undefined;
+		let value = type === TIFF_SHORT_TYPE
+			? readUnsigned(bytes, entry + 8, 2, littleEndian)
+			: type === TIFF_LONG_TYPE
+			? readUnsigned(bytes, entry + 8, 4, littleEndian)
+			: Number.NaN;
+		return Number.isNaN(value) ? undefined : value;
+	};
+	let readShort = (entry: number): number | undefined =>
+		readUnsigned(bytes, entry + 2, 2, littleEndian) === TIFF_SHORT_TYPE
+			? readNumber(entry)
+			: undefined;
+	let readRational = (entry: number): number | undefined => {
+		let valid = readUnsigned(bytes, entry + 2, 2, littleEndian) === TIFF_RATIONAL_TYPE
+			&& readUnsigned(bytes, entry + 4, 4, littleEndian) === 1;
+		let at = start + readUnsigned(bytes, entry + 8, 4, littleEndian);
+		let numerator = readUnsigned(bytes, at, 4, littleEndian);
+		let denominator = readUnsigned(bytes, at + 4, 4, littleEndian);
+		return valid && at + 8 <= end && denominator > 0 && numerator > 0
+			? numerator / denominator
+			: undefined;
+	};
+	let readDirectory = (directory: number, first: boolean) => {
+		let entries = readUnsigned(bytes, directory, 2, littleEndian);
+		for (
+			let entry = directory + 2;
+			entries-- > 0 && entry + TIFF_ENTRY_BYTES <= end;
+			entry += TIFF_ENTRY_BYTES
+		) {
+			let tag = readUnsigned(bytes, entry, 2, littleEndian);
+			if (first && tag === EXIF_ORIENTATION_TAG && !oriented) {
+				let orientation = readShort(entry);
+				if (orientation !== undefined && orientation >= FIRST_ORIENTATION && orientation <= 8) {
+					oriented = true;
+					facts.quarterTurn = orientation >= FIRST_QUARTER_TURN_ORIENTATION
+						&& orientation <= LAST_QUARTER_TURN_ORIENTATION;
+				}
+			} else if (first && tag === EXIF_X_RESOLUTION_TAG) {
+				facts.resolution = {
+					x: readRational(entry) ?? facts.resolution?.x ?? 0,
+					y: facts.resolution?.y ?? 0,
+				};
+			} else if (first && tag === EXIF_Y_RESOLUTION_TAG) {
+				facts.resolution = {
+					x: facts.resolution?.x ?? 0,
+					y: readRational(entry) ?? facts.resolution?.y ?? 0,
+				};
+			} else if (first && tag === EXIF_RESOLUTION_UNIT_TAG) {
+				facts.unit ??= readShort(entry);
+			} else if (first && tag === EXIF_SUB_DIRECTORY_TAG) {
+				subDirectory ??= readNumber(entry);
+			} else if (tag === EXIF_PIXEL_WIDTH_TAG) {
+				pixelWidth ??= readNumber(entry);
+			} else if (tag === EXIF_PIXEL_HEIGHT_TAG) {
+				pixelHeight ??= readNumber(entry);
+			}
+		}
+	};
+	readDirectory(start + readUnsigned(bytes, start + 4, 4, littleEndian), true);
+	if (subDirectory !== undefined) readDirectory(start + subDirectory, false);
+	if (pixelWidth !== undefined && pixelHeight !== undefined) {
+		facts.pixels = { width: pixelWidth, height: pixelHeight };
 	}
-	return false;
+	return facts;
+}
+
+function densityMayCorrect(facts: ExifFacts, size: ImageSize): boolean {
+	let { resolution, unit, pixels } = facts;
+	if (!resolution?.x || !resolution.y || unit !== EXIF_INCH_UNIT || !pixels) return false;
+	if (pixels.width === size.width && pixels.height === size.height) return false;
+	return Math.abs(pixels.width - size.width * EXIF_REFERENCE_DOTS_PER_INCH / resolution.x) <= 1
+		&& Math.abs(pixels.height - size.height * EXIF_REFERENCE_DOTS_PER_INCH / resolution.y) <= 1;
 }
 
 function pngSize(bytes: Uint8Array): ImageSize | undefined {
 	if (!text(bytes, 12, "IHDR")) return undefined;
 	let size = sizeWhenPositive(readUnsigned(bytes, 16, 4, false), readUnsigned(bytes, 20, 4, false));
+	let quarterTurn = false;
+	let exifSeen = false;
 	for (
 		let chunk = PNG_FIRST_CHUNK_END;
-		chunk + PNG_CHUNK_OVERHEAD <= bytes.length;
+		chunk + PNG_CHUNK_HEADER_BYTES <= bytes.length;
 		chunk += PNG_CHUNK_OVERHEAD + readUnsigned(bytes, chunk, 4, false)
 	) {
-		if (text(bytes, chunk + 4, "IDAT") || text(bytes, chunk + 4, "IEND")) break;
-		if (text(bytes, chunk + 4, "eXIf")) {
-			let exifEnd = chunk + 8 + readUnsigned(bytes, chunk, 4, false);
-			return withSidesExchangedWhen(size, exifTurnsPictureAQuarter(bytes, chunk + 8, exifEnd));
+		if (text(bytes, chunk + 4, "IDAT") || text(bytes, chunk + 4, "IEND")) {
+			return withSidesExchangedWhen(size, quarterTurn);
+		}
+		if (text(bytes, chunk + 4, "eXIf") && !exifSeen) {
+			exifSeen = true;
+			quarterTurn = readExif(
+				bytes,
+				chunk + PNG_CHUNK_HEADER_BYTES,
+				chunk + PNG_CHUNK_HEADER_BYTES + readUnsigned(bytes, chunk, 4, false),
+			).quarterTurn;
 		}
 	}
-	return size;
+	return undefined;
 }
 
 function jpegSize(bytes: Uint8Array): ImageSize | undefined {
-	let turnedByExif = false;
+	let size: ImageSize | undefined;
+	let exif: ExifFacts | undefined;
 	for (let at = 2; at + 4 <= bytes.length;) {
 		if (bytes[at] !== JPEG_PADDING_MARKER) return undefined;
 		let marker = bytes[at + 1]!;
@@ -150,23 +247,24 @@ function jpegSize(bytes: Uint8Array): ImageSize | undefined {
 			marker === JPEG_STANDALONE_MARKER
 			|| (marker >= JPEG_RESTART_FIRST_MARKER && marker <= JPEG_START_OF_IMAGE_MARKER)
 		) at += 2;
-		else if (marker === JPEG_END_OF_IMAGE_MARKER || marker === JPEG_START_OF_SCAN_MARKER) {
-			return undefined;
+		else if (marker === JPEG_END_OF_IMAGE_MARKER) return undefined;
+		else if (marker === JPEG_START_OF_SCAN_MARKER) {
+			if (!size) return undefined;
+			if (exif && densityMayCorrect(exif, size)) return undefined;
+			return withSidesExchangedWhen(size, exif?.quarterTurn === true);
 		} else {
 			let segmentLength = readUnsigned(bytes, at + 2, 2, false);
-			if (segmentLength < 2) return undefined;
+			if (!(segmentLength >= 2)) return undefined;
 			if (marker >= JPEG_BASELINE_FRAME_MARKER && marker <= JPEG_PROGRESSIVE_FRAME_MARKER) {
 				if (at + 9 > bytes.length) return undefined;
-				return withSidesExchangedWhen(
-					sizeWhenPositive(
-						readUnsigned(bytes, at + 7, 2, false),
-						readUnsigned(bytes, at + 5, 2, false),
-					),
-					turnedByExif,
+				size ??= sizeWhenPositive(
+					readUnsigned(bytes, at + 7, 2, false),
+					readUnsigned(bytes, at + 5, 2, false),
 				);
+				if (!size) return undefined;
 			}
-			if (marker === JPEG_EXIF_SEGMENT_MARKER && text(bytes, at + 4, "Exif\0\0")) {
-				turnedByExif ||= exifTurnsPictureAQuarter(bytes, at + 10, at + 2 + segmentLength);
+			if (marker === JPEG_EXIF_SEGMENT_MARKER && text(bytes, at + 4, "Exif\0\0") && !exif) {
+				exif = readExif(bytes, at + 10, at + 2 + segmentLength);
 			}
 			at += 2 + segmentLength;
 		}
@@ -298,7 +396,9 @@ function avifSize(bytes: Uint8Array): ImageSize | undefined {
 		if (item !== primaryItem) continue;
 		let extent = itemProperties.find(property => property.type === "ispe");
 		if (!extent || itemProperties.some(property => property.type === "clap")) return undefined;
+		if (extent.end - extent.body < AVIF_EXTENT_BODY_BYTES) return undefined;
 		let rotation = itemProperties.find(property => property.type === "irot");
+		if (rotation && rotation.end - rotation.body < 1) return undefined;
 		return withSidesExchangedWhen(
 			sizeWhenPositive(
 				readUnsigned(bytes, extent.body + 4, 4, false),
