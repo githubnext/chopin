@@ -1438,3 +1438,134 @@ test("a heading, a Decision and a file mentioned in a message reach the attached
 	).toMatchObject({ kind: "session:error", message: "That file is not in the repository." });
 	expect(context.chat.entries).toHaveLength(before);
 });
+
+function pixels(width: number, height: number, seed: number): string {
+	let size = [width, height].flatMap(value => [
+		value >>> 24,
+		value >>> 16 & 255,
+		value >>> 8 & 255,
+		value & 255,
+	]);
+	let signature = [
+		0x89,
+		0x50,
+		0x4e,
+		0x47,
+		0x0d,
+		0x0a,
+		0x1a,
+		0x0a,
+		0,
+		0,
+		0,
+		13,
+		0x49,
+		0x48,
+		0x44,
+		0x52,
+	];
+	return Buffer.from([...signature, ...size, 8, 6, 0, 0, 0, seed]).toString("base64");
+}
+
+test("a Stop while an attached Planner's image is uploading waits for it, keeps it with that turn, and the next turn's images go on the next turn", async () => {
+	let room = await remoteRoom();
+	let { context, storage } = room;
+	let started = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let put = storage.images.put.bind(storage.images);
+	storage.images.put = async image => {
+		if (image.bytes[image.bytes.length - 1] === 1) {
+			started.resolve();
+			await release.promise;
+		}
+		await put(image);
+	};
+	let client = await attach(
+		room.server.url,
+		room.channel.id,
+		scriptedPlanner({
+			async turn(turn) {
+				if (turn.message.prompt.includes("draw it")) {
+					turn.offerTools(["draw"]);
+					turn.emit({
+						type: "tool-call",
+						toolCallId: "draw-1",
+						toolName: "draw",
+						input: "{}",
+						providerExecuted: true,
+					});
+					turn.emit({
+						type: "tool-result",
+						toolCallId: "draw-1",
+						toolName: "draw",
+						result: {
+							content: [{ type: "text", text: "Drew it" }, {
+								type: "image",
+								data: pixels(800, 600, 2),
+								mimeType: "image/png",
+								alt: "Ground floor",
+							}],
+						},
+					});
+					finishTurn(turn);
+					return;
+				}
+				void turn.callHostTool("upload_plan_image", {
+					data: pixels(40, 30, 1),
+					mimeType: "image/png",
+					alt: "Stopped mid-upload",
+				});
+				await new Promise(resolve => {
+					turn.signal.addEventListener("abort", resolve, { once: true });
+				});
+			},
+		}).handlers,
+	);
+	cleanups.push(() => client.detach());
+
+	expect(await room.send("@chopin upload one")).toMatchObject({ kind: "chat:send" });
+	await started.promise;
+	await Chat.abort(context, room.ws);
+	release.resolve();
+	await context.chat.running;
+	expect(await room.send("@chopin draw it")).toMatchObject({ kind: "chat:send" });
+	await context.chat.running;
+
+	let holders = context.chat.entries.filter(entry => entry.images);
+	expect(holders.map(entry => ({
+		author: entry.author,
+		tools: entry.tools?.map(tool => [tool.name, tool.result]),
+		images: entry.images?.map(({ alt, width, height, generated }) => ({
+			alt,
+			width,
+			height,
+			generated,
+		})),
+	}))).toEqual([
+		{
+			author: { kind: "agent" },
+			tools: [["upload_plan_image", "Turn stopped."]],
+			images: [{ alt: "Stopped mid-upload", width: 40, height: 30, generated: true }],
+		},
+		{
+			author: { kind: "agent" },
+			tools: [["draw", "Drew it\n1 image"]],
+			images: [{ alt: "Ground floor", width: 800, height: 600, generated: true }],
+		},
+	]);
+	let stopped = context.chat.entries.findIndex(entry => entry.text === "@rival stopped the turn.");
+	let next = context.chat.entries.findIndex(entry => entry.text.includes("draw it"));
+	expect(context.chat.entries.indexOf(holders[0]!)).toBeLessThan(stopped);
+	expect(context.chat.entries.indexOf(holders[1]!)).toBeGreaterThan(next);
+	let saved = (context.plan.persistence.committedSidecar as { transcript: Chat.Chat["entries"] })
+		.transcript.filter(entry => entry.images);
+	expect(saved.map(entry => [entry.id, entry.images])).toEqual(
+		holders.map(entry => [entry.id, entry.images]),
+	);
+	for (let image of holders.flatMap(entry => entry.images!)) {
+		expect(await storage.images.get(room.channel.id, image.src.slice(8, 72))).toMatchObject({
+			mimeType: "image/png",
+			uploadedBy: RIVAL.id,
+		});
+	}
+});
