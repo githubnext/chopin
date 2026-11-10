@@ -3,6 +3,8 @@ import { HOSTED_IMAGE_PATH } from "@chopin/dialect";
 import { dataPayloadStart, readDataAddress } from "./image-size";
 import { RASTER_TYPE_NAMES, rasterType } from "./local-image";
 
+import type { ImageSize } from "./image-size";
+
 /**
  * Where an image loads from. Hosted is one of this document's own uploads, loaded with the
  * document named, which the server serves only to people who can read it. Data is a raster image
@@ -86,18 +88,41 @@ export function imageSource(
 
 export type Load = "loading" | "shown" | "broken";
 
-export type Settled = { src: string; outcome: "shown" | "broken" };
+export type Settled = { src: string; outcome: "shown" | "broken"; size?: ImageSize };
 
 export function loadState(settled: Settled | undefined, src: string): Load {
 	return settled?.src === src ? settled.outcome : "loading";
 }
 
+export function naturalSize(
+	{ naturalWidth: width, naturalHeight: height = 0 }: {
+		naturalWidth: number;
+		naturalHeight?: number;
+	},
+): ImageSize | undefined {
+	return width > 0 && height > 0 ? { width, height } : undefined;
+}
+
 export function settledOnMount(
-	image: { complete: boolean; naturalWidth: number },
+	image: { complete: boolean; naturalWidth: number; naturalHeight?: number },
 	src: string,
 ): Settled | undefined {
 	if (!image.complete) return undefined;
-	return { src, outcome: image.naturalWidth > 0 ? "shown" : "broken" };
+	let size = naturalSize(image);
+	return { src, outcome: image.naturalWidth > 0 ? "shown" : "broken", ...size && { size } };
+}
+
+export function adoptedSize(settled: Settled | undefined, src: string): ImageSize | undefined {
+	return settled?.src === src && settled.outcome === "shown" ? settled.size : undefined;
+}
+
+export function framedImage<Image extends { src: string; width?: number; height?: number }>(
+	image: Image,
+	size: ImageSize | undefined,
+): Image {
+	return size && frameRatio(image.width, image.height) === undefined
+		? { ...image, ...size }
+		: image;
 }
 
 export function imageLabel(alt: string | undefined, generated?: boolean): string {

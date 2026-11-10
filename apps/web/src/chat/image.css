@@ -1,6 +1,7 @@
 /*
- * An image in Chat. A frame holds the image's own shape from the first paint, so nothing moves when
- * it loads; its words sit beneath it, always; open, copy and download appear over it on hover or
+ * An image in Chat. A frame holds the image's own shape from the first paint where it is known, so
+ * nothing moves when it loads, and one whose shape is not known is a neutral bar that takes the
+ * shape the image turns out to have; its words sit beneath it, always; open, copy and download appear over it on hover or
  * focus, and stay on a touch screen. Adapted from assistant-ui's Image element (MIT), see
  * THIRD_PARTY_NOTICES.
  */
@@ -31,6 +32,11 @@
 
 .chat-image[data-chat-image="tile"] {
 	inline-size: clamp(5rem, calc(12rem * var(--image-width, 4) / var(--image-height, 3)), 100%);
+}
+
+.chat-image:not([data-sized])[data-load="loading"] .chat-image-frame {
+	aspect-ratio: auto;
+	block-size: 6rem;
 }
 
 /* The frame's hairline edge is drawn over the image, so a pale image never loses its edge. */
