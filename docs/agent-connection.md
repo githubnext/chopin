@@ -173,7 +173,8 @@ uploads its largest frames; raise `AGENT_CONNECTION_TIMEOUT_MS` for it.
 
 Every message is one JSON object in one text frame, with a string `type`. A
 frame may hold at most **2 MiB** (2,097,152 bytes) of UTF-8. Objects are strict:
-a field this page does not list is refused. Binary frames are refused.
+a field this page does not list is refused, except inside a
+[capability catalog](#capability-catalog), which is read as written. Binary frames are refused.
 
 Shared limits, in characters unless stated:
 
@@ -549,6 +550,9 @@ Messages for a session or turn that has ended are ignored, except a
 With `capability-catalog`, a client tells Chopin what it offers in one message, so that a
 document's composer can let a person choose what the client runs. The catalog is one value that
 grows by adding fields; adding a kind of capability later needs no new message and no new feature.
+Commands already fit it, as listed below. Chopin reads a catalog as it was written: a field it
+has no use for is ignored and kept, never refused, and no count bounds the models or commands a
+client lists, only the frame's size. What the fields below do list is checked as written here.
 
 ```text
 { "type": "capabilities", "catalog": {
@@ -570,16 +574,18 @@ grows by adding fields; adding a kind of capability later needs no new message a
   person signs in to another provider. Each report replaces the earlier one whole: a field left out
   is no longer offered, and `{ "catalog": {} }` withdraws everything. A client that offered the
   feature and does not report offers no choice, the same as a client from before the feature. Sending
-  `capabilities` without having offered the feature, or a catalog that breaks the limits below, is a
+  `capabilities` without having offered the feature, or a catalog whose listed fields break the rules below, is a
   `protocol` or `malformed-message` violation. The catalog is held with the link, not stored: after a
   server restart a resumed client sends it again.
-- **`models.available`** lists at most 512 models in the order to show them within a provider.
+- **`models.available`** lists the models in the order to show them within a provider, as many as the
+  frame holds (Atomic's own list runs past 1,700).
   `id` (at most 256 characters) is the exact string the client wants back as a turn's `model`; Chopin
   never parses or normalizes it. `name` (at most 128) is what a person reads. `provider` groups
   models in the picker: `id` groups, `name` (default: `id`) labels the group, and a model with no
-  `provider` is listed without a group. `description` is one line of at most 400 characters. Chopin
+  `provider` is listed without a group. `description` is one line of text, at most 4,000 characters
+  like the protocol's other text. Chopin
   shows names and descriptions as text, never as Markdown.
-- **`thinkingLevels`** are the levels of reasoning this model supports, at most 16 identifiers
+- **`thinkingLevels`** are the levels of reasoning this model supports, as identifiers
   matching `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`, in the order to show them. Atomic's are `off`,
   `minimal`, `low`, `medium`, `high`, `xhigh` and `max`; other clients may define their own and
   Chopin shows an identifier it does not know with its first letter capitalized. A model with none
@@ -588,8 +594,9 @@ grows by adding fields; adding a kind of capability later needs no new message a
 - **`models.default`** is what the client runs when a turn names no model or no level. Its `id`
   should be one of `available`; the composer shows that model as the document's current one until
   somebody chooses another. An operator's `MODEL` takes its place when it is set.
-- **`commands`** (at most 512) is reserved for the commands a client offers, such as skills,
-  prompt templates and workflows: `name` (at most 128), `description` (at most 400) and `kind`, an
+- **`commands`** is reserved for the commands a client offers, such as skills,
+  prompt templates and workflows: `name` (at most 128), `description` (at most 4,000, so a skill's
+  own fits) and `kind`, an
   identifier the client defines (`skill`, `prompt`, `workflow`). Chopin validates and keeps them
   with the catalog and does not show them yet. Send them only when they are real: a client that
   has none omits the field.

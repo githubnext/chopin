@@ -27,7 +27,7 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fullPlanner, settleEndedRuns, workflowRuns } from "./full";
-import { atomicThinkingLevels, MAX_MODELS } from "../catalog";
+import { atomicThinkingLevels } from "../catalog";
 
 import type {
 	HarnessV1,
@@ -204,13 +204,8 @@ export async function atomicCatalog(
 		(runtime.getProvider(left.provider)?.name ?? left.provider)
 			.localeCompare(runtime.getProvider(right.provider)?.name ?? right.provider)
 	);
-	// The default is never cut by the limit.
-	let kept = listed.filter(([id]) => id === defaultModel).concat(
-		listed.filter(([id]) => id !== defaultModel),
-	).slice(0, MAX_MODELS);
-	let keptIds = new Set(kept.map(([id]) => id));
 	return {
-		models: listed.filter(([id]) => keptIds.has(id)).map(([id, model]) => {
+		models: listed.map(([id, model]) => {
 			let levels = atomicThinkingLevels(model);
 			return {
 				id,

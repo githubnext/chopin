@@ -171,26 +171,23 @@ export const streamPartSchema = z.discriminatedUnion("type", [
 /** A plain identifier: no spaces, quotes, `:` or `=`, so it cannot hold an assignment. */
 const identifier = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
 
-/** The most models, and the most commands, one `capabilities` message may name. */
-export const MAX_CATALOG_ENTRIES = 512;
-/** The most thinking levels one model may name. */
-const MAX_THINKING_LEVELS = 16;
-/** The longest one-line description of a model or command, in UTF-16 code units. */
-export const MAX_DESCRIPTION_LENGTH = 400;
-
 /**
  * One model a client can run. `id` is the exact string the turn's `model` carries when a person
  * chooses it, kept as the client wrote it. `thinkingLevels` lists the levels the model supports in
  * the order to show them, as plain identifiers the client defines (Atomic's are `off`, `minimal`,
  * `low`, `medium`, `high`, `xhigh` and `max`); absent or empty means the model has no reasoning
  * control. `provider` groups the model in the picker.
+ *
+ * A catalog is read as it was written: any number of entries, and a field this version has no use
+ * for is ignored and kept, not refused, so a client can report more than Chopin shows. Only the
+ * frame's own limit bounds it.
  */
-export const catalogModelSchema = z.strictObject({
+export const catalogModelSchema = z.looseObject({
 	id: z.string().min(1).max(256),
 	name,
-	provider: z.strictObject({ id: name, name: name.optional() }).optional(),
-	description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
-	thinkingLevels: z.array(identifier).max(MAX_THINKING_LEVELS).optional(),
+	provider: z.looseObject({ id: name, name: name.optional() }).optional(),
+	description: note.optional(),
+	thinkingLevels: z.array(identifier).optional(),
 });
 
 /**
@@ -198,9 +195,9 @@ export const catalogModelSchema = z.strictObject({
  * which, as a plain identifier the client defines. Chopin keeps the entries it is given and shows
  * none of them yet.
  */
-export const catalogCommandSchema = z.strictObject({
+export const catalogCommandSchema = z.looseObject({
 	name,
-	description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+	description: note.optional(),
 	kind: identifier,
 });
 
@@ -209,16 +206,16 @@ export const catalogCommandSchema = z.strictObject({
  * replaces the earlier one whole; a field it leaves out is offered no longer. `models.default` is
  * the model, and the thinking level, the client uses when a turn names none.
  */
-export const capabilityCatalogSchema = z.strictObject({
-	models: z.strictObject({
-		available: z.array(catalogModelSchema).max(MAX_CATALOG_ENTRIES),
-		default: z.strictObject({
+export const capabilityCatalogSchema = z.looseObject({
+	models: z.looseObject({
+		available: z.array(catalogModelSchema),
+		default: z.looseObject({
 			id: z.string().min(1).max(256),
 			thinkingLevel: identifier.optional(),
 		})
 			.optional(),
 	}).optional(),
-	commands: z.array(catalogCommandSchema).max(MAX_CATALOG_ENTRIES).optional(),
+	commands: z.array(catalogCommandSchema).optional(),
 });
 
 /**

@@ -98,6 +98,32 @@ describe("the catalog Atomic offers for a document's Planner", () => {
 		expect(host.default).toBeUndefined();
 	});
 
+	it("lists every model the runtime offers, however many", async () => {
+		let many = Array.from({ length: 710 }, (_, index) => ({
+			...MODELS[0]!,
+			id: `m${index}`,
+			name: `Model ${index}`,
+		}));
+		let harness = createAtomicAdapter({
+			auth: "ai-gateway",
+			model: "stub/plain",
+			providers: {
+				stub: {
+					baseUrl: stub.baseUrl,
+					apiKey: "stub",
+					api: "openai-completions",
+					models: [...MODELS, ...many],
+				},
+			},
+		});
+		let catalog = await harness.catalog("stub/plain");
+		expect(catalog.models).toHaveLength(MODELS.length + many.length);
+		expect(catalog.models.at(-1)!.id).toStartWith("stub/");
+		expect(catalog.models.some(model => model.id === "stub/m709")).toBe(true);
+		expect(catalog.default).toEqual({ model: "stub/plain" });
+		await harness.shutdown();
+	});
+
 	it("keeps the deployment's default in the catalog when it is not among the available models", async () => {
 		let catalog = await adapter().catalog("stub/deep");
 		expect(catalog.models.some(model => model.id === "stub/deep")).toBe(true);

@@ -1561,6 +1561,32 @@ describe("Agent connection capability catalog", () => {
 		await raw.closed;
 	});
 
+	it("keeps a report of more models than a person picks from, and a field it has no use for, and stays attached", async () => {
+		let { auth, channel } = await linkAuth();
+		let server = linkServer(auth, 300);
+		cleanups.push(server.stop);
+		let raw = await rawLink(server.url, undefined, "capability-catalog");
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		let link = server.links.at(-1)!;
+		let grown = {
+			models: {
+				available: Array.from({ length: 710 }, (_, index) => ({
+					id: `p/m${index}`,
+					name: `M ${index}`,
+					price: { input: 1 },
+				})),
+			},
+			commands: [{ name: "release-notes", kind: "skill", description: "d".repeat(925) }],
+			attachments: { images: true },
+		};
+		raw.send({ type: "capabilities", catalog: grown });
+		await until(() => link.catalog !== undefined, 2_000);
+		expect(link.catalog).toEqual(grown);
+		raw.send({ type: "detach" });
+		expect((await raw.closed).code).toBe(1000);
+	});
+
 	it("is reported by the test client after attached, behind a resumable link's resume", async () => {
 		let { server, channel, script } = await setup();
 		for (let resumable of [false, true]) {

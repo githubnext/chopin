@@ -86,6 +86,24 @@ describe("the catalog of a remote Planner", () => {
 		expect(catalog.default).toEqual({ model: "acme/small", thinkingLevel: "low" });
 	});
 
+	it("lists every model a client reports, and shows the room only what the picker uses", () => {
+		// A report may carry what Chopin has no use for yet, and more models than any one person picks from.
+		let many = {
+			models: {
+				available: Array.from({ length: 710 }, (_, index) => ({
+					id: `p/m${index}`,
+					name: `M ${index}`,
+					provider: { id: "p", homepage: "https://example.test" },
+					price: { input: 1 },
+				})),
+			},
+			attachments: { images: true },
+		};
+		let catalog = remoteCatalog(many, undefined)!;
+		expect(catalog.models).toHaveLength(710);
+		expect(catalog.models[709]).toEqual({ id: "p/m709", name: "M 709", provider: { id: "p" } });
+	});
+
 	it("takes the operator's MODEL as the default in the client's place, with the client's level dropped", () => {
 		expect(remoteCatalog(reported, "acme/large")!.default).toEqual({ model: "acme/large" });
 	});
