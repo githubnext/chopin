@@ -1,10 +1,16 @@
-import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES, VISUAL_PLANNER_TOOL_NAMES } from "./tool-names";
+import {
+	BACKGROUND_TOOL_NAMES,
+	PLANNER_TOOL_NAMES,
+	REACTION_TOOL_NAMES,
+	VISUAL_PLANNER_TOOL_NAMES,
+} from "./tool-names";
 import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
 import {
 	decisionFollowupPlannerAgent,
 	headingPlannerAgent,
 	plannerAgent,
 	prosePlannerAgent,
+	reactionPlannerAgent,
 	refinePlannerAgent,
 	visualPlannerAgent,
 } from "./agents";
@@ -70,6 +76,12 @@ export type PlannerChannel = {
 	>;
 	/** Session-tree and remote fork hooks for Chat threads. */
 	fork?: PlannerForkHooks;
+	/**
+	 * An answer to a reader's reaction: a session with no tools, isolated on every harness, so it
+	 * is never a full Atomic session, never offers what an attached client brings, and reads and
+	 * writes nothing but its reply.
+	 */
+	reader?: true;
 };
 
 /** Atomic answers an action it could not carry out with `noop` or `cancelled`; report it rather than claim success. */
@@ -179,6 +191,7 @@ export type PlannerSessionDependencies = {
 	refineAgent?: PlannerAgent;
 	proseAgent?: PlannerAgent;
 	followupAgent?: PlannerAgent;
+	reactionAgent?: PlannerAgent;
 	visualAgent?: PlannerAgent;
 	githubTools?: typeof githubTools;
 	createSandbox?: () => Promise<Sandbox>;
@@ -193,6 +206,7 @@ export async function openPlannerSession(
 ): Promise<Result<PlannerSession, OpenError>> {
 	let activeChat = channel.chat ?? channel.room.plan.chat;
 	let job = activeChat?.job;
+	let isolated = !!job || !!channel.reader;
 	if (job && !Object.hasOwn(BACKGROUND_TOOL_NAMES, job.kind)) {
 		return {
 			ok: false,
@@ -230,7 +244,7 @@ export async function openPlannerSession(
 		let sessionId = crypto.randomUUID();
 		unregister = (deps.registerCredential ?? registerCredential)(sessionId, owner.currentToken);
 		// Background jobs keep the isolated boundary; only a Planner turn may run as a full session.
-		let workspace = channel.harness === "atomic" && !job
+		let workspace = channel.harness === "atomic" && !isolated
 			? await plannerWorkspace(channel.room.id, channel.repository)
 			: undefined;
 		let planner: FullPlanner | undefined;
@@ -270,11 +284,11 @@ export async function openPlannerSession(
 		if (channel.harness === "remote") {
 			let held: RemotePlanner = {
 				channelId: channel.room.id,
-				isolated: !!job,
+				isolated,
 				...(channel.fork?.remoteFrom ? { forkFrom: { ...channel.fork.remoteFrom } } : {}),
 				...(channel.fork?.onRemoteTurn ? { onRemoteTurn: channel.fork.onRemoteTurn } : {}),
 			};
-			if (!job) {
+			if (!isolated) {
 				held.humanInput = report =>
 					createHumanInput(
 						channel.room,
@@ -306,6 +320,8 @@ export async function openPlannerSession(
 			? deps.proseAgent ?? prosePlannerAgent
 			: job?.kind === "decision-followup"
 			? deps.followupAgent ?? decisionFollowupPlannerAgent
+			: channel.reader
+			? deps.reactionAgent ?? reactionPlannerAgent
 			: channel.room.visual
 			? deps.visualAgent ?? visualPlannerAgent
 			: plannerAgent);
@@ -325,7 +341,7 @@ export async function openPlannerSession(
 		let instructions = typeof channel.instructions === "function"
 			? channel.instructions(
 				workspace
-					?? (remote && !job
+					?? (remote && !isolated
 						? { remote: true, forkedNatively: remote.forkedNatively === true }
 						: undefined),
 			)
@@ -352,12 +368,14 @@ export async function openPlannerSession(
 				pauseRun: async (runId: string) => applied(await workflows().pause(runId)),
 				resumeRun: async (runId: string) => applied(await workflows().resume(runId)),
 			}
-			: remote && !job
+			: remote && !isolated
 			? remoteRunControl(remote, watchRuns)
 			: {};
 		let fixedTools = Object.freeze([
 			...(job
 				? BACKGROUND_TOOL_NAMES[job.kind]
+				: channel.reader
+				? REACTION_TOOL_NAMES
 				: channel.room.visual
 				? VISUAL_PLANNER_TOOL_NAMES
 				: PLANNER_TOOL_NAMES),
@@ -369,8 +387,8 @@ export async function openPlannerSession(
 					return planner?.activeTools ?? remote?.activeTools ?? fixedTools;
 				},
 				...runControl,
-				...(planner || remote && !job ? { inputs } : {}),
-				...(remote && !job
+				...(planner || remote && !isolated ? { inputs } : {}),
+				...(remote && !isolated
 					? {
 						rebind: (renewed: ActiveOwnerBinding) => {
 							unregister?.();

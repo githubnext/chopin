@@ -8,6 +8,7 @@ import {
 	createSummaryAgent,
 	descriptionSchema,
 	PLANNER_TOOL_NAMES,
+	reactionPlannerAgent,
 } from "./agents";
 import { openPlannerSession } from "./session";
 
@@ -358,4 +359,111 @@ it("research returns parsed public evidence using only per-turn host web_search"
 
 it("keeps the description's existing Unicode code-point bound after parsing", () => {
 	expect(descriptionSchema.safeParse({ description: "😀".repeat(4_000) }).success).toBe(true);
+});
+
+it("the reaction agent offers a model no tool of its own and none of the Planner's", () => {
+	let settings = (reactionPlannerAgent as unknown as {
+		settings: { tools?: object; activeTools?: unknown[] };
+	}).settings;
+	expect(Object.keys(settings.tools ?? {})).toEqual([]);
+	expect(settings.activeTools).toEqual([]);
+	let planner = createPlannerAgent({ builtinTools: {} } as unknown as HarnessV1) as unknown as {
+		settings: { tools?: object; activeTools?: unknown[] };
+	};
+	expect(planner.settings.activeTools).toEqual(PLANNER_TOOL_NAMES);
+});
+
+it("a reader's session offers the harness no tool even when the owner's GitHub tools exist", async () => {
+	let offered: string[][] = [];
+	let fake: HarnessV1 = {
+		specificationVersion: "harness-v1",
+		harnessId: "reader-fake",
+		builtinTools: {},
+		async doStart(start) {
+			return {
+				sessionId: start.sessionId,
+				isResume: false,
+				async doPromptTurn(turn) {
+					offered.push(turn.tools.map(spec => spec.name));
+					expect(turn.instructions).toBe("Answer the reaction");
+					let done = Promise.withResolvers<void>();
+					queueMicrotask(() => {
+						turn.emit({ type: "text-start", id: "answer" });
+						turn.emit({ type: "text-delta", id: "answer", delta: "Let me say it again." });
+						turn.emit({ type: "text-end", id: "answer" });
+						turn.emit({
+							type: "finish-step",
+							finishReason: { unified: "stop", raw: undefined },
+							usage: {
+								inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+								outputTokens: { total: 0, text: 0, reasoning: 0 },
+							},
+						});
+						done.resolve();
+					});
+					return { done: done.promise, async submitToolResult() {}, async submitToolApproval() {} };
+				},
+				async doDestroy() {},
+				async doCompact() {},
+				async doContinueTurn() {
+					throw new Error("unused");
+				},
+				async doSuspendTurn() {
+					throw new Error("unused");
+				},
+				async doDetach() {
+					throw new Error("unused");
+				},
+				async doStop() {
+					throw new Error("unused");
+				},
+			};
+		},
+	};
+	let owner = {
+		channelId: "channel",
+		token: "token",
+		repository: { id: "R_channel", owner: "githubnext", name: "chopin", defaultBranch: "main" },
+		ownerSessionId: "owner-session",
+		ownerGeneration: 1,
+		credentialRevision: 1,
+		expiresAt: new Date(Date.now() + 60_000),
+		signal: new AbortController().signal,
+		currentToken: () => "token",
+		revalidate: async () => true,
+		release() {},
+	} satisfies ActiveOwnerBinding;
+	let opened = await openPlannerSession(owner, {
+		room: { id: "channel", plan: { chat: { reader: true } }, server: {} } as never,
+		repository: owner.repository,
+		instructions: "Answer the reaction",
+		reader: true,
+	}, {
+		reactionAgent: createPlannerAgent(fake, "reaction") as never,
+		githubTools: async () => ({
+			ok: true,
+			value: { pull_request_read: tool({ inputSchema: z.object({}), execute: async () => "x" }) },
+		}),
+		createSandbox: async () =>
+			({
+				defaultWorkingDirectory: "/tmp",
+				async run() {
+					return { exitCode: 0, stdout: "", stderr: "" };
+				},
+				async destroy() {},
+			}) as never,
+		registerCredential: () => () => {},
+	});
+	if (!opened.ok) throw new Error(String((opened.error as { cause?: unknown }).cause));
+	try {
+		let result = await opened.value.stream("The reaction", owner.signal);
+		let parts = [];
+		for await (let part of result.fullStream) parts.push(part);
+		expect(parts.some(part => part.type === "text-delta" && part.text === "Let me say it again."))
+			.toBe(true);
+		expect(offered).toEqual([[]]);
+		expect(opened.value.activeTools).toEqual([]);
+	} finally {
+		await opened.value.destroy();
+	}
 });

@@ -60,3 +60,5 @@ export const BACKGROUND_TOOL_NAMES: Readonly<Record<ConversationPlan.JobKind, re
 	});
 
 export const HEADING_TOOL_NAMES = BACKGROUND_TOOL_NAMES.heading;
+
+export const REACTION_TOOL_NAMES: readonly string[] = Object.freeze([]);
