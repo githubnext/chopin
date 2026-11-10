@@ -108,7 +108,8 @@ export const MACHINE_WORDS =
  * tooltip, and no live region. The live region is not silent now, since it speaks that
  * connection's own words; what it says carries none of the machine's.
  */
-export async function expectNoMachineWords(page: Page): Promise<void> {
+export async function expectNoMachineWords(page: Page, said: string | RegExp): Promise<void> {
+	await expect(announced(page)).toHaveText(said);
 	await expect(announced(page)).not.toHaveText(MACHINE_WORDS);
 	await expect(page.locator("body")).not.toContainText(MACHINE_WORDS);
 	let live = await page.locator('[aria-live], [role="status"], [role="alert"]').allTextContents();
