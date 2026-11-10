@@ -475,84 +475,7 @@
 				"dynamic",
 				"*",
 				"props",
-				"unresolved JSX props > defaultComponents > <h1>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <h2>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <h3>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <h4>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <h5>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <h6>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <p>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <a>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <blockquote>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <ul>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <ol>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <hr>",
+				"unresolved JSX props > element > <Tag>",
 				1
 			],
 			[
@@ -566,140 +489,21 @@
 				"dynamic",
 				"*",
 				"props",
-				"unresolved JSX props > defaultComponents > <th>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <td>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <tr>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <li>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <strong>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <sup>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <pre>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
 				"unresolved JSX props > defaultComponents > Code > <code>",
 				1
 			],
 			[
 				"dynamic",
 				"class",
-				"className",
-				"class > defaultComponents > <h1>",
+				"own",
+				"class > element > <Tag>",
 				1
 			],
 			[
 				"dynamic",
 				"class",
 				"className",
-				"class > defaultComponents > <h2>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <h3>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <h4>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <h5>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <h6>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <p>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <a>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <blockquote>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <ul>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <ol>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <hr>",
+				"class > element > <Tag>",
 				1
 			],
 			[
@@ -713,60 +517,11 @@
 				"dynamic",
 				"class",
 				"className",
-				"class > defaultComponents > <th>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <td>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <tr>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <li>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <strong>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <sup>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <pre>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
 				"class > defaultComponents > Code > <code>",
 				1
 			]
 		],
-		"sourceHash": "f2e192832f26ac31572a6fa2ce52b4d8f32bcac079fb1c7a0a1b75a18b81edc0"
+		"sourceHash": "0f1f92864f980116501412a76a0d29709d73f908dcd5e7bd0ca0976e7d44e05c"
 	},
 	{
 		"file": "apps/web/src/markdown-text/code-blocks.tsx",
@@ -857,6 +612,6 @@
 				1
 			]
 		],
-		"sourceHash": "321457f295b20942e2cfa87a523f182e6adb9e71b40c9d5dda6682ce6969ad3c"
+		"sourceHash": "56ed0b8487e04145bf7f4125a275fe909b9c3eb84650d4baf731faff8e4c8626"
 	}
 ]
