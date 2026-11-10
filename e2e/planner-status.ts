@@ -1,11 +1,11 @@
 /**
  * What the page says about the document's remote Planner. A healthy Planner is not mentioned. A
- * person with a machine button reads every state on it and in its menu, and the composer warns
- * only for a machine that cannot be connected to; a person with no machine button reads every
- * state on the composer's top edge instead, always, with the reason for a machine that cannot be
- * connected to drawn beneath. A screen reader hears each problem state once from one live region
- * of the page, and the strip and the button never announce it themselves. These helpers read all
- * of those.
+ * person with a machine button reads every state on it and in its menu; everyone also reads it on
+ * the one connection banner at the composer's top edge, with the reason for a machine that cannot
+ * be connected to drawn beneath (a person with a machine button is not told "no machine" there).
+ * A screen reader hears each state once from the page's one polite live region, which is the
+ * connection banner's: it speaks the room's connection and the Planner's alike, and the banner
+ * and the button never announce anything themselves. These helpers read all of those.
  */
 import { expect } from "@playwright/test";
 
@@ -15,14 +15,17 @@ import type { Locator, Page } from "@playwright/test";
 
 export const NONE = "No machine is connected.";
 
-/** The strip on the composer's top edge. */
+/** The banner on the composer's top edge. */
 export function strip(page: Page): Locator {
-	return page.locator(".chat-composer .composer-notice");
+	return page.locator(".chat-composer [data-connection-banner]");
 }
 
-/** The page's one polite live region for the Planner's state: empty while it is healthy. */
+/**
+ * The page's one polite live region for the connection and the Planner's state: empty while both
+ * are healthy.
+ */
 export function announced(page: Page): Locator {
-	return page.locator("[data-planner-status]");
+	return page.locator("[data-connection-status]");
 }
 
 /** The machine button, named for where the document runs and what its Planner is doing. */
@@ -45,7 +48,7 @@ export async function listenForAnnouncements(page: Page): Promise<void> {
 		(window as unknown as { plannerHeard: string[] }).plannerHeard = heard;
 		let last = "";
 		let read = () => {
-			let text = document.querySelector("[data-planner-status]")?.textContent ?? "";
+			let text = document.querySelector("[data-connection-status]")?.textContent ?? "";
 			if (text === last) return;
 			last = text;
 			if (text) heard.push(text);
@@ -100,11 +103,13 @@ export const MACHINE_WORDS =
 	/is offline|Connecting|Your work is kept|No machine|stepped away|Last seen|disconnected|Last reported|when the machine reconnects|It carries on|Answers reach it/;
 
 /**
- * The page says none of it while its offline notice shows: not in what it draws, nor in what a
- * screen reader reads or has been told: no text, label, title or tooltip, and no live region.
+ * The page says none of it while the connection banner tells the room's own connection: not in
+ * what it draws, nor in what a screen reader reads or has been told: no text, label, title or
+ * tooltip, and no live region. The live region is not silent now, since it speaks that
+ * connection's own words; what it says carries none of the machine's.
  */
 export async function expectNoMachineWords(page: Page): Promise<void> {
-	await expect(announced(page)).toHaveText("");
+	await expect(announced(page)).not.toHaveText(MACHINE_WORDS);
 	await expect(page.locator("body")).not.toContainText(MACHINE_WORDS);
 	let live = await page.locator('[aria-live], [role="status"], [role="alert"]').allTextContents();
 	expect(live.filter(text => MACHINE_WORDS.test(text))).toEqual([]);

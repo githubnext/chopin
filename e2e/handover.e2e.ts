@@ -43,7 +43,7 @@ import {
 	seedLinkedChildChannel,
 } from "./database";
 import { startHoldingProxy } from "./holding-proxy";
-import { expectPlannerAttached, machineButton } from "./planner-status";
+import { expectPlannerAttached, machineButton, strip } from "./planner-status";
 import { RELEASE } from "./release";
 import { authenticate, content, expect, ready, roomPath, status, test } from "./room";
 import { e2eDatabaseName, e2ePort } from "./ports";
@@ -399,18 +399,28 @@ async function watch(page: Page): Promise<void> {
 			}
 			let level = document.querySelector(".plan-status")?.getAttribute("data-level");
 			if (level && level !== "hidden") say(`status ${level}`);
-			let failure = document.querySelector(".composer-notice.motion-feedback")?.textContent?.trim();
+			let failure = document.querySelector(".composer-notice.motion-feedback, [data-error-banner]")
+				?.textContent?.trim();
 			if (failure) say(`composer error ${failure}`);
 			if (document.querySelector(".plan[data-plan-offline]")) say("locked");
 			if (document.querySelector(".plan-content")?.getAttribute("contenteditable") === "false") {
 				say("not editable");
 			}
-			if (document.querySelector("[data-offline-notice]")) say("offline notice");
-			let spoken = document.querySelector("[data-offline-status]")?.textContent?.trim();
-			if (spoken) say(`offline status ${spoken}`);
-			// Nothing about the machine or the connection to it, anywhere on the page.
-			let announced = document.querySelector("[data-planner-status]")?.textContent?.trim();
-			if (announced) say(`machine said ${announced}`);
+			// The room's own connection (socket or sync), not the Planner's layer: the machine's
+			// words are reported below, as they were beside the old offline notice.
+			if (document.querySelector('[data-connection-banner]:not([data-layer="planner"])')) {
+				say("offline notice");
+			}
+			// One polite region speaks the connection's words and the machine's: told apart here, as
+			// they were when two regions spoke them, so each is still held to saying nothing.
+			let spoken = document.querySelector("[data-connection-status]")?.textContent?.trim();
+			if (spoken) {
+				say(
+					/^(You're offline|Reconnecting|Back online|Catching up|Back\.)/.test(spoken)
+						? `offline status ${spoken}`
+						: `machine said ${spoken}`,
+				);
+			}
 			// A message that says it could not be sent, whatever the reason.
 			if (document.querySelector("[data-chat-failed]")) say("a message says it could not be sent");
 			let notice = document.querySelector(".chat-composer .composer-notice")?.textContent?.trim();
@@ -989,7 +999,11 @@ async function arrange(
 	await page.reload();
 	await ready(page);
 	let button = machineButton(page);
-	await expect(button).toHaveAccessibleName(`Runs on ${MACHINE}. Connecting to ${MACHINE}`);
+	// While the machine is connected to, the one banner at the composer says so, in the Planner's
+	// layer; the button is named for the machine alone.
+	await expect(button).toHaveAccessibleName(`Runs on ${MACHINE}`);
+	await expect(strip(page)).toHaveAttribute("data-layer", "planner");
+	await expect(strip(page)).toContainText(`Connecting to ${MACHINE}`);
 	expect((await machine.poll([])).planners).toEqual([
 		{ id: room, url: expect.stringContaining(ORIGIN) },
 	]);
@@ -1814,7 +1828,9 @@ test("a hidden tab that was frozen and gets its connection back later than the g
 	await front.close();
 	await page.bringToFront();
 	await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe("visible");
-	await expect(page.locator("[data-offline-notice]")).toBeVisible({ timeout: 10_000 });
+	await expect(page.locator('[data-connection-banner][data-layer="socket"]')).toBeVisible({
+		timeout: 10_000,
+	});
 	await own.context.setOffline(false);
 });
 
