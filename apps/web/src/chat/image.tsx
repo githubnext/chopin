@@ -106,7 +106,15 @@ export function MessageImages({ children }: { children: ReactNode }) {
 					<Lightbox
 						actions={(_, index) => {
 							let { data, source } = view.entries[index]!;
-							return <ImageButtons compact={false} data={data} key={index} source={source} />;
+							return (
+								<ImageButtons
+									compact={false}
+									data={data}
+									key={index}
+									source={source}
+									inLightbox
+								/>
+							);
 						}}
 						images={view.entries.map(entry => entry.image)}
 						onClose={() => setView(undefined)}
@@ -274,7 +282,12 @@ async function downloadImage(source: Loadable, name: string): Promise<void> {
 }
 
 function ImageButtons(
-	{ compact, data, source }: { compact: boolean; data: ChatImageData; source: Loadable },
+	{ compact, data, inLightbox = false, source }: {
+		compact: boolean;
+		data: ChatImageData;
+		inLightbox?: boolean;
+		source: Loadable;
+	},
 ) {
 	let [copied, setCopied] = useState<Copied>("idle");
 	let [saved, setSaved] = useState<Copied>("idle");
@@ -290,7 +303,9 @@ function ImageButtons(
 		<>
 			<button
 				aria-label={copyLabel(copied)}
-				className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} btn-outline`}
+				className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} ${
+					inLightbox ? "btn-secondary" : "btn-outline"
+				}`}
 				data-chat-image-action="copy"
 				onClick={() =>
 					copyImage(source.url).then(() => setCopied("copied"), () => setCopied("failed"))}
@@ -300,7 +315,9 @@ function ImageButtons(
 			</button>
 			<button
 				aria-label={downloadLabel(saved)}
-				className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} btn-outline`}
+				className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} ${
+					inLightbox ? "btn-secondary" : "btn-outline"
+				}`}
 				data-chat-image-action="download"
 				onClick={() =>
 					downloadImage(source, downloadName(data.alt, data.src)).catch(() => setSaved("failed"))}
@@ -311,7 +328,9 @@ function ImageButtons(
 			{source.kind === "external" && (
 				<a
 					aria-label="Open image in a new tab"
-					className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} btn-outline`}
+					className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} ${
+						inLightbox ? "btn-secondary" : "btn-outline"
+					}`}
 					data-chat-image-action="new-tab"
 					href={source.url}
 					rel="noopener noreferrer"
