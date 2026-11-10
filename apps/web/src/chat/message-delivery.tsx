@@ -12,10 +12,8 @@ export function DeliveryMark({ mark }: { mark: Mark }) {
 	return <span className="chat-delivery" data-chat-delivery={mark}>{MARK_LABEL[mark]}</span>;
 }
 
-/** What a message the server refused says on itself, with what can be done about it. */
-export function FailedLine(
-	{ onDelete, onRetry, reason }: { onDelete: () => void; onRetry: () => void; reason: string },
-) {
+/** What a message the server refused says on itself. Try again and Delete are in its menu. */
+export function FailedLine({ reason }: { reason: string }) {
 	return (
 		<div className="chat-message-failed" data-chat-failed="" role="status">
 			<WarningIcon
@@ -26,10 +24,6 @@ export function FailedLine(
 			<p className="chat-message-failed-text">
 				<span className="chat-message-failed-title">{FAILED_LABEL}.</span> {reason}
 			</p>
-			<div className="chat-message-failed-actions">
-				<button className="btn btn-xs btn-ghost" onClick={onRetry} type="button">Try again</button>
-				<button className="btn btn-xs btn-ghost" onClick={onDelete} type="button">Delete</button>
-			</div>
 		</div>
 	);
 }

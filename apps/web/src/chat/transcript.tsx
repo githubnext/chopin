@@ -24,16 +24,24 @@ import { ChopinMark, Face, openCommentThread, useCardMeta } from "@chopin/editor
 import { EmptyState } from "@chopin/visuals";
 
 import { deliveryOf, failureOf } from "./delivery";
+import { MessageToolbar } from "./actions/message-toolbar";
+import { ReactionPills } from "./actions/reaction-pills";
 import { DeliveryMark, FailedLine } from "./message-delivery";
 import { ChatImageDocument, MessageImages } from "./image";
+import { messageMenuActions } from "./message-menu-actions";
 import { MessageMarkdown } from "./markdown";
+import { plainTextOf } from "./message-copy";
+import { withIntents } from "./pending-reactions";
+import { ownEmoji } from "./reactions";
 import { TurnImages } from "./turn-images";
+import type { Intent } from "./pending-reactions";
 import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { CardLink } from "../conversation-plan/links";
 import { capitalize, displayText, group, workAnnouncement, workPhase } from "./model";
 import { movedOffers, slideOffset } from "./offer-motion";
 import { WorkProgress } from "./work-progress";
+import type { ToolbarActions } from "./actions/message-toolbar";
 import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
 import type { ChatDestination } from "../conversation-plan/source";
 
@@ -235,16 +243,32 @@ function DecisionSystemEntry(
 let LEADING_MENTION = /^\s*@chopin\b[^\S\n]*/i;
 
 function MessageBody(
-	{ enter, handle, message, onDelete, onRetry, quietFailures, room, ...markers }: {
+	{
+		enter,
+		handle,
+		headed,
+		intents,
+		message,
+		onDelete,
+		onReact,
+		onRetry,
+		quietFailures,
+		room,
+		...markers
+	}: {
 		enter: boolean;
 		handle: string;
+		headed: boolean;
+		intents: readonly Intent[];
 		message: Message;
 		onDelete: (id: string) => void;
+		onReact?: (id: string, emoji: string, on: boolean) => void;
 		onRetry: (id: string) => void;
 		quietFailures: boolean;
 		room?: string;
 	} & PlanMarkers,
 ) {
+	let host = useRef<HTMLDivElement>(null);
 	let toPlanner = message.to === "planner" && message.author.kind === "member";
 	let lead = toPlanner ? LEADING_MENTION.exec(message.text)?.[0].length ?? 0 : 0;
 	let text = toPlanner ? message.text.slice(lead) : message.text;
@@ -267,6 +291,15 @@ function MessageBody(
 		&& !rootOpen
 		&& (!!threadSummary || markers.threads.canStart)
 		&& !message.streaming && delivery === undefined;
+	let menu = messageMenuActions(message, handle, quietFailures);
+	let actions = useRef<ToolbarActions>(null!);
+	actions.current = {
+		plain: () => plainTextOf(text, references, toPlanner ? "@chopin" : undefined),
+		react: (emoji, on) => onReact?.(message.id, emoji, on),
+		delete: () => onDelete(message.id),
+		retry: () => onRetry(message.id),
+	};
+	let shown = withIntents(message.reactions, intents, message.id, handle);
 
 	return (
 		<ChatImageDocument value={room}>
@@ -274,10 +307,12 @@ function MessageBody(
 				<div
 					className="chat-message-body relative"
 					data-chat-enter={enter || undefined}
+					data-chat-headed={headed || undefined}
 					data-chat-source={markers.sourceDestination?.source.messageId === message.id || undefined}
 					data-chat-message-id={message.id}
 					data-chat-raw={message.text}
 					data-thread-root-open={rootOpen || undefined}
+					ref={host}
 					data-chat-state={message.working
 						? "working"
 						: message.workDisconnected
@@ -332,16 +367,28 @@ function MessageBody(
 							<MessageFiles channelId={room} files={message.attachments} />
 						</Suspense>
 					)}
-					{delivery === "failed" && !quietFailures && (
-						<FailedLine
-							onDelete={() => onDelete(message.id)}
-							onRetry={() => onRetry(message.id)}
-							reason={failureOf(message)}
+					{menu.retry && <FailedLine reason={failureOf(message)} />}
+					{shown.reactions.length > 0 && (
+						<ReactionPills
+							handle={handle}
+							onToggle={(emoji, on) => onReact?.(message.id, emoji, on)}
+							pending={shown.pending}
+							reactions={shown.reactions}
 						/>
 					)}
 					{threadSummary && markers.threads && (
 						<ThreadSummaryRow onOpen={markers.threads.onOpen} summary={threadSummary} />
 					)}
+					<MessageToolbar
+						actions={actions}
+						canDelete={menu.delete}
+						canRetry={menu.retry}
+						host={host}
+						markdown={message.text}
+						persistent={menu.retry}
+						reactable={!!onReact}
+						reacted={ownEmoji(shown.reactions, handle)}
+					/>
 					{ANALYSIS && markers.onCardLink && markers.onRetryAnalysis && (
 						<MessageMarkers
 							canEdit={!!markers.canEdit}
@@ -367,7 +414,9 @@ function MessageGroup(
 		entering,
 		group: item,
 		handle,
+		intents,
 		onDelete,
+		onReact,
 		onRetry,
 		quietFailures,
 		room,
@@ -379,7 +428,9 @@ function MessageGroup(
 		entering: ReadonlySet<string>;
 		group: Extract<ResearchTranscriptItem, { kind: "messages" }>;
 		handle: string;
+		intents: readonly Intent[];
 		onDelete: (id: string) => void;
+		onReact?: (id: string, emoji: string, on: boolean) => void;
 		onRetry: (id: string) => void;
 		quietFailures: boolean;
 	} & PlanMarkers,
@@ -412,8 +463,11 @@ function MessageGroup(
 						</span>
 					</div>
 				)}
-				{item.messages.map(message => (
+				{item.messages.map((message, index) => (
 					<MessageBody
+						headed={index === 0 && !item.continued}
+						intents={intents}
+						onReact={onReact}
 						enter={entering.has(message.id)}
 						decisions={markers.decisions}
 						canEdit={markers.canEdit}
@@ -441,6 +495,7 @@ function MessageGroup(
 }
 
 let noop = () => {};
+let NO_INTENTS: readonly Intent[] = [];
 
 export function Transcript(
 	{
@@ -464,6 +519,8 @@ export function Transcript(
 		onOpenChild,
 		room,
 		onDelete = noop,
+		onReact,
+		reactionIntents = NO_INTENTS,
 		onRetry = noop,
 		quietFailures = false,
 		onRetryAnalysis,
@@ -502,7 +559,9 @@ export function Transcript(
 		live?: boolean;
 		/** Drop a message the server refused. */
 		onDelete?: (id: string) => void;
-		/** Send a message the server refused again. */
+		onReact?: (id: string, emoji: string, on: boolean) => void;
+		reactionIntents?: readonly Intent[];
+		/** Send a message that could not be sent again. */
 		onRetry?: (id: string) => void;
 		/** The page's connection banner shows: a message's "Couldn't send" gives way to it, and is back with the connection. */
 		quietFailures?: boolean;
@@ -884,6 +943,8 @@ export function Transcript(
 								group={item}
 								handle={handle}
 								onDelete={onDelete}
+								intents={reactionIntents}
+								onReact={onReact}
 								onRetry={onRetry}
 								quietFailures={quietFailures}
 								room={room}

@@ -129,7 +129,9 @@ test("typed references survive Planner send, reload, navigation, and a mobile ch
 	await expect(send).toBeDisabled();
 
 	// Try again sends it as it was: the same request, so the server takes it once.
-	await message.getByRole("button", { name: "Try again" }).click();
+	await message.hover();
+	await message.getByRole("button", { name: "Message actions" }).click();
+	await opened.getByRole("menuitem", { name: "Try again" }).click();
 	await expect.poll(() => sent).toHaveLength(1);
 	expect(attempts).toHaveLength(2);
 	expect(attempts[0]!.requestId).toMatch(

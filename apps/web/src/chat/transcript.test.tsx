@@ -36,6 +36,27 @@ test("routine presence entries stay out of the conversation", () => {
 	expect(markup).not.toContain("data-motion-feedback");
 });
 
+test("a message keeps its actions behind one standard icon button, with nothing to take it back", () => {
+	let markup = renderToStaticMarkup(
+		createElement(Transcript, {
+			active: true,
+			entries: [{
+				id: "mine",
+				author: { kind: "member", handle: "ana" },
+				text: "One more thought",
+				ts: 1_700_000_000,
+			}],
+			handle: "ana",
+		}),
+	);
+
+	expect(markup).toMatch(/aria-label="Message actions"[^>]*>.*?height="16"/s);
+	expect(markup).toMatch(/aria-label="Message actions"[^>]*>.*?width="16"/s);
+	expect(markup).toContain('<circle cx="9" cy="3.75"');
+	expect(markup).not.toContain(">×</button>");
+	expect(markup).not.toContain('aria-label="Withdraw queued message"');
+});
+
 test("a ready research notice links to its child document while other notices stay plain text", () => {
 	let childPath = "/documents/octo-org/score/parent/children/research";
 	let markup = renderToStaticMarkup(createElement(Transcript, {

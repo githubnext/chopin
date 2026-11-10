@@ -250,3 +250,55 @@ describe("a tool call id a remote client reuses in a later turn", () => {
 		]);
 	});
 });
+
+describe("message reactions", () => {
+	let reaction = (emoji: string, ...handles: string[]) => ({ emoji, handles });
+
+	it("replaces one message's reactions and leaves every other message as it was", () => {
+		let state = transcriptReducer(initialTranscript, {
+			kind: "history",
+			entries: [entry("a", { kind: "agent" }, "one"), entry("b", { kind: "agent" }, "two")],
+		});
+		let next = transcriptReducer(state, {
+			kind: "reactions",
+			id: "a",
+			reactions: [reaction("❓", "ana"), reaction("✅", "ana", "mina")],
+		});
+		expect(next.entries[0]!.reactions).toEqual([
+			reaction("❓", "ana"),
+			reaction("✅", "ana", "mina"),
+		]);
+		expect(next.entries[1]).toBe(state.entries[1]!);
+		expect(next.turn).toBe(state.turn);
+	});
+
+	it("clears them when the last one is taken back, and ignores a message it does not have", () => {
+		let state = transcriptReducer(initialTranscript, {
+			kind: "history",
+			entries: [{ ...entry("a", { kind: "agent" }, "one"), reactions: [reaction("✅", "ana")] }],
+		});
+		let cleared = transcriptReducer(state, { kind: "reactions", id: "a", reactions: [] });
+		expect(cleared.entries[0]!.reactions).toBeUndefined();
+		expect(
+			transcriptReducer(state, { kind: "reactions", id: "gone", reactions: [reaction("✅", "x")] }),
+		)
+			.toBe(state);
+	});
+
+	it("keeps a message's reactions when its entry is replaced by a streamed one", () => {
+		let state = transcriptReducer(initialTranscript, {
+			kind: "history",
+			entries: [entry("a", { kind: "agent" }, "one")],
+		});
+		let reacted = transcriptReducer(state, {
+			kind: "reactions",
+			id: "a",
+			reactions: [reaction("👎", "ana")],
+		});
+		let finished = transcriptReducer(reacted, {
+			kind: "message",
+			entry: { ...entry("a", { kind: "agent" }, "one more"), reactions: [reaction("👎", "ana")] },
+		});
+		expect(finished.entries[0]!.reactions).toEqual([reaction("👎", "ana")]);
+	});
+});
