@@ -79,8 +79,37 @@ function requested(frame: Wire.SetModel): Wire.ModelChoice | undefined {
 	};
 }
 
-/** Sets run one at a time per document, so the room hears the choices in the order they were stored. */
+/**
+ * Everything that tells a document's room its model state runs one at a time, in the order it was
+ * asked: a choice (store, then tell), an announcement that the catalog changed, and the state sent
+ * to a person who joins. The state is read inside its turn, so what a turn tells is never older
+ * than a choice stored before it, and a read that began before a choice was stored cannot answer
+ * after the room heard it. A turn that fails does not hold up the ones behind it.
+ */
 let queues = new Map<string, Promise<unknown>>();
+
+function inOrder<T>(channelId: string, run: () => Promise<T>): Promise<T> {
+	let previous = queues.get(channelId) ?? Promise.resolve();
+	let result = previous.then(run);
+	let settled = result.then(() => {}, () => {});
+	queues.set(channelId, settled);
+	void settled.then(() => {
+		if (queues.get(channelId) === settled) queues.delete(channelId);
+	});
+	return result;
+}
+
+/**
+ * Reads the document's model state when it is this call's turn and gives it to `deliver`, which
+ * tells the room, or the one person who joined. Rejects if the state cannot be read.
+ */
+export function publishModelState(
+	deps: ModelChoiceDeps,
+	channelId: string,
+	deliver: (state: Wire.ModelState) => void,
+): Promise<void> {
+	return inOrder(channelId, async () => deliver(await modelState(deps, channelId)));
+}
 
 /**
  * Chooses a document's model and thinking level. The catalog reported now must offer the choice;
@@ -98,37 +127,32 @@ export function chooseModel(
 	},
 	frame: Request<Wire.SetModel>,
 ): Promise<void> {
-	let run = async () => {
-		let { ws, channelId } = context;
-		let choice = requested(frame);
-		if (!choice) return fail(ws, frame.rid, "That is not a model choice.");
-		if (context.child) return fail(ws, frame.rid, "A child document uses its parent's model.");
-		let catalog = await deps.catalog(channelId);
-		let refusal = refusedChoice(catalog, choice);
-		if (refusal) return fail(ws, frame.rid, refusal);
-		await deps.storage.plannerModelChoices.put(deps.lease(), {
-			channelId,
-			...choice,
-			userId: context.userId,
-			updatedAt: (deps.now ?? (() => new Date()))(),
-		});
-		let state = await modelState(deps, channelId);
-		reply(ws, frame.rid, state);
-		broadcast(context.server, channelId, state);
-	};
-	let previous = queues.get(context.channelId) ?? Promise.resolve();
-	let next = previous.then(run, run).catch(error => {
-		console.error("[chat] could not save a model choice:", error);
-		fail(
-			context.ws,
-			frame.rid,
-			"Couldn't save the model choice. Try again.",
-			"temporarily-unavailable",
-		);
+	return inOrder(context.channelId, async () => {
+		try {
+			let { ws, channelId } = context;
+			let choice = requested(frame);
+			if (!choice) return fail(ws, frame.rid, "That is not a model choice.");
+			if (context.child) return fail(ws, frame.rid, "A child document uses its parent's model.");
+			let catalog = await deps.catalog(channelId);
+			let refusal = refusedChoice(catalog, choice);
+			if (refusal) return fail(ws, frame.rid, refusal);
+			await deps.storage.plannerModelChoices.put(deps.lease(), {
+				channelId,
+				...choice,
+				userId: context.userId,
+				updatedAt: (deps.now ?? (() => new Date()))(),
+			});
+			let state = await modelState(deps, channelId);
+			reply(ws, frame.rid, state);
+			broadcast(context.server, channelId, state);
+		} catch (error) {
+			console.error("[chat] could not save a model choice:", error);
+			fail(
+				context.ws,
+				frame.rid,
+				"Couldn't save the model choice. Try again.",
+				"temporarily-unavailable",
+			);
+		}
 	});
-	queues.set(context.channelId, next);
-	void next.finally(() => {
-		if (queues.get(context.channelId) === next) queues.delete(context.channelId);
-	});
-	return next;
 }
