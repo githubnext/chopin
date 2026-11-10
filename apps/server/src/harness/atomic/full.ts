@@ -163,12 +163,13 @@ const TOOL_STEP: Record<WorkflowToolNodeStatus, Wire.RunStage["status"]> = {
 	cancelled: "skipped",
 };
 
-const STAGE_STEP: Record<WorkflowStageStatus, Wire.RunStage["status"]> = {
+const STAGE_STEP: Record<WorkflowStageStatus | "waiting", Wire.RunStage["status"]> = {
 	pending: "pending",
 	running: "running",
 	awaiting_input: "awaiting_input",
 	paused: "paused",
 	blocked: "blocked",
+	suspended: "running",
 	waiting: "running",
 	completed: "completed",
 	failed: "failed",
