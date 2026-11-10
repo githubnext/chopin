@@ -22,6 +22,10 @@ function entry(id: string, author: Chat.Author, text = ""): Chat.Entry {
 	return { id, author, text, ts: 1_700_000_001 };
 }
 
+function image(src: string): Chat.Image {
+	return { src, alt: src, width: 4, height: 3, generated: true };
+}
+
 describe("transcript work retention", () => {
 	it("keeps a prose anchor and its later tool together on the first completed render", () => {
 		let state = transcriptReducer(initialTranscript, {
@@ -194,13 +198,6 @@ describe("when a restart is waited out in silence", () => {
 
 describe("a tool call id a remote client reuses in a later turn", () => {
 	it("keeps each turn's tool and images on its own message", () => {
-		let image = (src: string): Chat.Image => ({
-			src,
-			alt: src,
-			width: 4,
-			height: 3,
-			generated: true,
-		});
 		let state = transcriptReducer(initialTranscript, {
 			kind: "history",
 			entries: [{
