@@ -44,6 +44,9 @@ export type StubRequest = {
 	toolNames: string[];
 	hasPriorToolResult: boolean;
 	toolResults: string[];
+	/** The model id and reasoning effort the request asked the provider for. */
+	model: string;
+	reasoningEffort?: string;
 };
 
 export function startStubModelServer(
@@ -59,6 +62,8 @@ export function startStubModelServer(
 				return new Response("Not found", { status: 404 });
 			}
 			let body = await request.json() as {
+				model?: string;
+				reasoning_effort?: string;
 				messages: { role: string; content: unknown }[];
 				tools?: { function?: { name?: string } }[];
 			};
@@ -70,6 +75,8 @@ export function startStubModelServer(
 				.map(message => extractText(message.content))
 				.join("\n");
 			requests.push({
+				model: body.model ?? "",
+				...(body.reasoning_effort ? { reasoningEffort: body.reasoning_effort } : {}),
 				prompt,
 				system,
 				hasPriorToolResult,

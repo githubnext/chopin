@@ -1,0 +1,178 @@
+import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
+import { afterAll, describe, expect, it } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { atomicCatalog, createAtomicAdapter } from "./adapter";
+import { registerFullPlanner } from "./full";
+import { startStubModelServer } from "./model-stub";
+
+import type { FullPlanner } from "./full";
+
+let stub = startStubModelServer(() => ({ kind: "text", text: "Done." }));
+afterAll(stub.stop);
+
+const COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+const MODELS = [
+	{
+		id: "plain",
+		name: "Plain",
+		reasoning: false,
+		input: ["text" as const],
+		cost: COST,
+		contextWindow: 128_000,
+		maxTokens: 4_096,
+	},
+	{
+		id: "deep",
+		name: "Deep",
+		reasoning: true,
+		input: ["text" as const],
+		cost: COST,
+		contextWindow: 1_000_000,
+		maxTokens: 4_096,
+	},
+];
+
+function adapter(auth: "auto" | "ai-gateway" = "ai-gateway") {
+	return createAtomicAdapter({
+		auth,
+		model: "stub/plain",
+		providers: {
+			stub: { baseUrl: stub.baseUrl, apiKey: "stub", api: "openai-completions", models: MODELS },
+		},
+	});
+}
+
+describe("the catalog Atomic offers for a document's Planner", () => {
+	it("lists the runtime's models by provider with their thinking levels and context size", async () => {
+		let catalog = await adapter().catalog("stub/plain");
+		let deep = catalog.models.find(model => model.id === "stub/deep");
+		expect(deep).toMatchObject({
+			name: "Deep",
+			provider: { id: "stub" },
+			description: "1M token context",
+		});
+		// Atomic's own levels for a reasoning model that maps none of them away.
+		expect(deep!.thinkingLevels).toEqual(["off", "minimal", "low", "medium", "high"]);
+		let plain = catalog.models.find(model => model.id === "stub/plain");
+		expect(plain).toMatchObject({ name: "Plain", description: "128K token context" });
+		expect("thinkingLevels" in plain!).toBe(false);
+		expect(catalog.default).toEqual({ model: "stub/plain" });
+	});
+
+	it("offers nothing the deployment's HARNESS_AUTH would refuse to run", async () => {
+		let runtime = {
+			getAvailable: async () => [
+				{
+					provider: "vercel-ai-gateway",
+					id: "a/b",
+					name: "Gateway",
+					reasoning: false,
+					contextWindow: 8_000,
+				},
+				{
+					provider: "anthropic",
+					id: "c",
+					name: "Host login",
+					reasoning: false,
+					contextWindow: 8_000,
+				},
+				{ provider: "stub", id: "d", name: "Registered", reasoning: false, contextWindow: 8_000 },
+			],
+			getModel: () => undefined,
+			getProvider: () => undefined,
+		};
+		let gateway = await atomicCatalog(runtime as never, {
+			auth: "ai-gateway",
+			providers: { stub: {} as never },
+		}, undefined);
+		expect(gateway.models.map(model => model.id).toSorted()).toEqual([
+			"stub/d",
+			"vercel-ai-gateway/a/b",
+		]);
+		let host = await atomicCatalog(runtime as never, { auth: "auto" }, undefined);
+		expect(host.models).toHaveLength(3);
+		expect(host.default).toBeUndefined();
+	});
+
+	it("keeps the deployment's default in the catalog when it is not among the available models", async () => {
+		let catalog = await adapter().catalog("stub/deep");
+		expect(catalog.models.some(model => model.id === "stub/deep")).toBe(true);
+		expect(catalog.default).toEqual({ model: "stub/deep" });
+		// A default Atomic cannot run is not offered as one.
+		expect((await adapter().catalog("stub/missing")).default).toBeUndefined();
+	});
+});
+
+describe("a chosen model and thinking level reach the Atomic session", () => {
+	async function turns(
+		steps: { prompt: string; model?: string; thinkingLevel?: string }[],
+	) {
+		let root = await mkdtemp(join(tmpdir(), "chopin-atomic-choice-"));
+		let harness = adapter();
+		let sandbox = await createJustBashNetworkSandboxSession();
+		let sessionId = crypto.randomUUID();
+		let planner: FullPlanner = {
+			cwd: root,
+			humanInput: {
+				confirm: async () => false,
+				select: async () => undefined,
+				input: async () => undefined,
+				editor: async () => undefined,
+				questionnaire: async () => ({ answers: [], cancelled: true }),
+			},
+		};
+		let release = registerFullPlanner(sessionId, planner);
+		let session = await harness.doStart({
+			sessionId,
+			sandboxSession: sandbox as never,
+			sessionWorkDir: root,
+		});
+		stub.requests.length = 0;
+		try {
+			for (let step of steps) {
+				planner.thinkingLevel = step.thinkingLevel;
+				let control = await session.doPromptTurn({
+					prompt: step.prompt,
+					skills: [],
+					tools: [],
+					...(step.model ? { model: step.model } : {}),
+					emit: () => {},
+				});
+				await control.done;
+			}
+			return stub.requests.map(request => [request.prompt, request.model, request.reasoningEffort]);
+		} finally {
+			await session.doDestroy();
+			release();
+			await harness.shutdown();
+			await rm(root, { recursive: true, force: true });
+		}
+	}
+
+	it("runs the deployment's model and the session's own level until somebody chooses", async () => {
+		let seen = await turns([{ prompt: "first" }]);
+		expect(seen[0]![1]).toBe("plain");
+		expect(seen[0]![2]).toBeUndefined();
+	});
+
+	it("runs the chosen model and level from the next turn, then goes back to the default", async () => {
+		let seen = await turns([
+			{ prompt: "first" },
+			{ prompt: "second", model: "stub/deep", thinkingLevel: "high" },
+			{ prompt: "third", model: "stub/deep" },
+			{ prompt: "fourth" },
+		]);
+		expect(seen.map(row => [row[0], row[1]])).toEqual([
+			["first", "plain"],
+			["second", "deep"],
+			["third", "deep"],
+			["fourth", "plain"],
+		]);
+		expect(seen[1]![2]).toBe("high");
+		// Without a chosen level the session's own returns: none was configured, so none is sent.
+		expect(seen[2]![2]).toBeUndefined();
+	});
+});
