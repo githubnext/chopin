@@ -62,6 +62,16 @@ while the reason stands (and again if it changes, or comes back after the choice
 the composer shows what will run. The stored choice is
 kept, so it returns to force if the model does. Background jobs never carry a choice.
 
+The composer says so even where nothing can be chosen any longer. When a client withdraws all its
+models, or an older client takes its place, there is no catalog and the picker is gone, but the
+stored choice is still sent in `chat:model` and the strip still says that the model is no longer
+available and the default runs, before and after a turn, until somebody's client offers it again.
+A document nobody chose for says nothing. The choice is held back while what a remote Planner
+offers is unknown: with no client attached (a machine that is away, a server that has just restarted)
+or one that offered the catalog and has yet to report it. The choice is then neither gone nor
+honored, and the machine's own status speaks. A person who can only read the document sees
+none of it.
+
 A turn that cannot read the choice at all (the catalog or the stored choice fails to load) never
 runs the default silently. It runs the default, Chat says once, while that holds, that the
 document's model choice couldn't be read, and the server tells the room with `chat:model-unreadable`

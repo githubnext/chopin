@@ -29,10 +29,13 @@ type Asked = { sequence: number; choice: Wire.ModelChoice };
  * The document's model choice, shared by the room: the catalog the harness offers and the choice
  * everyone sees. A pick shows at once and is sent when the connection allows; the server's answer
  * (or its refusal, which puts the shared choice back) decides. No `control` is returned where the
- * harness offers no choice or the person cannot make one. `unreadable` is the server's word that
- * its last turn could not read the choice and ran the harness's default. Only the server ends it:
- * its word that a turn could read it again, or a new transcript (a join, a reconnect, a restarted
- * server), after which it is said again if it still holds.
+ * harness offers no choice or the person cannot make one, and then `saved` is still the choice the
+ * room holds (the server tells it where it knows the harness offers nothing, such as a client that
+ * withdrew its models, and not while no client is attached), so the composer can say it fell back
+ * to the default. `unreadable` is the server's word that its last turn could not read the choice
+ * and ran the harness's default. Only the server ends it: its word that a turn could read it
+ * again, or a new transcript (a join, a reconnect, a restarted server), after which it is said
+ * again if it still holds.
  */
 export function useModelChoice(
 	{ wire, room, connected, enabled }: {
@@ -41,7 +44,7 @@ export function useModelChoice(
 		connected: boolean;
 		enabled: boolean;
 	},
-): { control: ModelControl | undefined; unreadable: boolean } {
+): { control: ModelControl | undefined; saved: Wire.ModelChoice | undefined; unreadable: boolean } {
 	let [held, setHeld] = useState<Held>();
 	let [asked, setAsked] = useState<Asked>();
 	let [refusal, setRefusal] = useState<string>();
@@ -100,7 +103,8 @@ export function useModelChoice(
 
 	let current = held && held.wire === wire && held.room === room ? held : undefined;
 	let unreadable = enabled && current?.unreadable === true;
-	if (!enabled || !wire || !current?.catalog) return { control: undefined, unreadable };
+	let saved = enabled ? current?.choice : undefined;
+	if (!enabled || !wire || !current?.catalog) return { control: undefined, saved, unreadable };
 	let choice = asked && !sameChoice(asked.choice, current.choice) ? asked.choice : current.choice;
-	return { control: { catalog: current.catalog, choice, refusal, choose }, unreadable };
+	return { control: { catalog: current.catalog, choice, refusal, choose }, saved, unreadable };
 }

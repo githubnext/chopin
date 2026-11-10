@@ -16,7 +16,12 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { displayTitle, parse, ulid } from "@chopin/dialect";
 
-import { harnessFor, plannerCatalog, shutdownHarnesses } from "./harness/harnesses";
+import {
+	harnessFor,
+	plannerCatalog,
+	plannerOfferKnown,
+	shutdownHarnesses,
+} from "./harness/harnesses";
 import { chooseModel, publishModelState, turnModel } from "./chat/model-choice";
 import type { ModelChoiceDeps } from "./chat/model-choice";
 import {
@@ -1193,6 +1198,7 @@ async function plannerStatus(channelId: string): Promise<PlannerAttachment> {
 const modelChoices: ModelChoiceDeps = {
 	catalog: async channelId =>
 		config.agent ? plannerCatalog(config.harness, channelId, config.model || undefined) : undefined,
+	known: channelId => plannerOfferKnown(config.harness, channelId),
 	storage,
 	lease: () => {
 		if (!writerLease.held) throw new Error("storage writer lease is unavailable");

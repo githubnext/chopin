@@ -242,6 +242,58 @@ function slowFirstRead<T extends object, K extends keyof T>(owner: T, read: K) {
 	return release;
 }
 
+describe("the stored choice a room is told where nothing can be chosen", () => {
+	test("is told while the harness knows it offers nothing, and held back while it cannot know yet", async () => {
+		let offered: Wire.ModelCatalog | undefined = catalog;
+		let known = true;
+		let { deps, opened, choose } = await sets(() => offered);
+		deps.known = () => known;
+		let chosen = { model: "acme/large", thinkingLevel: "high" };
+		await choose(chosen);
+		// The client withdrew its models, or an older one took its place: the picker has nothing to
+		// list, and the choice the document holds is still the room's, so the composer can say so.
+		offered = undefined;
+		expect(await modelState(deps, opened.channel.id)).toEqual({
+			kind: "chat:model",
+			ts: 0,
+			choice: chosen,
+		});
+		// No client is attached, or it has yet to report (a restart, a blip): nothing is said of the
+		// choice, which is neither gone nor honoured, and the machine's own status speaks.
+		known = false;
+		expect(await modelState(deps, opened.channel.id)).toEqual({ kind: "chat:model", ts: 0 });
+		// A catalog carries the choice whatever else is known, and nothing stored was changed.
+		offered = catalog;
+		expect(await modelState(deps, opened.channel.id)).toEqual({
+			kind: "chat:model",
+			ts: 0,
+			catalog,
+			choice: chosen,
+		});
+		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toMatchObject(chosen);
+		// Nobody chose: there is no choice to say, known or not.
+		let fresh = await sets(() => undefined);
+		fresh.deps.known = () => true;
+		expect(await modelState(fresh.deps, fresh.opened.channel.id)).toEqual({
+			kind: "chat:model",
+			ts: 0,
+		});
+	});
+
+	test("is told to everyone when the client that went comes back, and the turn runs the default meanwhile", async () => {
+		let offered: Wire.ModelCatalog | undefined = catalog;
+		let { deps, opened, choose } = await sets(() => offered);
+		deps.known = () => true;
+		await choose({ model: "acme/large" });
+		offered = undefined;
+		let gone = "acme/large is no longer available, so Chopin used its default model.";
+		expect(await turnModel(deps, opened.channel.id)).toEqual({ notice: gone });
+		expect((await modelState(deps, opened.channel.id)).choice).toEqual({ model: "acme/large" });
+		offered = catalog;
+		expect(await turnModel(deps, opened.channel.id)).toEqual({ model: "acme/large" });
+	});
+});
+
 describe("a room hears its model state in the order it was stored", () => {
 	/** A person's choice goes out of `choose`; what the held announcement or join delivers is `heard`. */
 	async function racing(held?: "choice" | "catalog") {

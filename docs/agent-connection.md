@@ -625,7 +625,8 @@ again when the turn starts. A model the catalog no longer lists, or a level its 
 lists, is not sent: the turn runs with the client's default, and the document's Chat says so. A
 client must still treat an unknown `model` as an error, because its catalog can have changed
 since the report. Without a catalog (an older client, or one that reported none) the composer
-offers no choice and `thinkingLevel` is never sent.
+offers no choice and `thinkingLevel` is never sent, and a model a person had chosen is said, in the
+composer, to be no longer available, as the document's Chat says on the next turn.
 
 The two fields are independent of the protocol version: nothing here changes an existing message
 for a client that did not offer the feature, so the subprotocol stays `chopin.agent.v1`.

@@ -7,6 +7,7 @@ import {
 	harnesses,
 	harnessFor,
 	plannerCatalog,
+	plannerOfferKnown,
 	registerCredential,
 	shutdownHarnesses,
 } from "./harnesses";
@@ -157,6 +158,29 @@ it("offers a remote Planner only what the client attached to the document report
 	expect(await plannerCatalog("remote", "doc-b", undefined)).toBeUndefined();
 	detach();
 	expect(await plannerCatalog("remote", "doc-a", undefined)).toBeUndefined();
+});
+
+it("knows what a remote Planner offers only from an attached client that has reported, or never will", () => {
+	let pending = true;
+	let link = {
+		get catalogPending() {
+			return pending;
+		},
+	} as unknown as AgentLink;
+	// Nobody is attached, or the client has yet to say: nothing can be said of a saved choice.
+	expect(plannerOfferKnown("remote", "doc-a")).toBe(false);
+	let detach = attachLink("doc-a", link);
+	expect(plannerOfferKnown("remote", "doc-a")).toBe(false);
+	pending = false;
+	expect(plannerOfferKnown("remote", "doc-a")).toBe(true);
+	// Another document's client is not this document's.
+	expect(plannerOfferKnown("remote", "doc-b")).toBe(false);
+	detach();
+	expect(plannerOfferKnown("remote", "doc-a")).toBe(false);
+	// Every other harness knows what it offers, which may be nothing.
+	for (let harness of ["copilot-sdk", "atomic", "not-installed"]) {
+		expect(plannerOfferKnown(harness, "doc-a")).toBe(true);
+	}
 });
 
 it("offers an Atomic Planner the models of its own runtime, once the harness is selected", async () => {
