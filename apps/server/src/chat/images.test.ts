@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { bigPng } from "../images/raster.test-fixtures";
+import { apng, bigPng, fixture } from "../images/raster.test-fixtures";
 import { savedImages, toolImages, toolRowOutput } from "./images";
 
 const PNG = new Uint8Array([
@@ -116,6 +116,47 @@ describe("tool images", () => {
 		});
 		expect(found.refused).toBe(6);
 		expect(found.images.map(item => item.alt)).toEqual(["kept"]);
+	});
+
+	test("hosts every raster a browser draws, as the type its bytes are, under any of its names", () => {
+		let found = toolImages({
+			content: [
+				image({ data: base64(fixture("raster-18x6.avif")), mimeType: "image/avif" }),
+				image({ data: base64(fixture("raster-6x18.bmp")), mimeType: "image/bmp" }),
+				image({ data: base64(fixture("raster-18x6.bmp")), mimeType: "image/x-ms-bmp" }),
+				image({ data: base64(fixture("raster-18x6.ico")), mimeType: "image/x-icon" }),
+				image({ data: base64(fixture("raster-6x18.ico")), mimeType: "image/vnd.microsoft.icon" }),
+				image({ data: base64(apng(8, 4)), mimeType: "image/apng" }),
+				image({ data: base64(fixture("raster-18x6.jpg")), mimeType: "image/jpg" }),
+				image({ data: base64(fixture("raster-18x6.gif")), mimeType: "IMAGE/GIF" }),
+			],
+		});
+		expect(found.refused).toBe(0);
+		expect(found.images.map(({ mimeType, width, height }) => [mimeType, width, height])).toEqual([
+			["image/avif", 18, 6],
+			["image/bmp", 6, 18],
+			["image/bmp", 18, 6],
+			["image/x-icon", 18, 6],
+			["image/x-icon", 6, 18],
+			["image/png", 8, 4],
+			["image/jpeg", 18, 6],
+			["image/gif", 18, 6],
+		]);
+	});
+
+	test("refuses a raster whose type names another, and anything that is not a raster", () => {
+		let found = toolImages({
+			content: [
+				image({ data: base64(fixture("raster-18x6.avif")), mimeType: "image/png" }),
+				image({ data: base64(fixture("raster-18x6.bmp")), mimeType: "image/x-icon" }),
+				image({ data: base64(PNG), mimeType: "image/svg+xml" }),
+				image({ data: base64(PNG), mimeType: "image/heic" }),
+				image({ data: base64(SVG), mimeType: "image/avif" }),
+				image({ data: base64(HTML), mimeType: "image/x-icon" }),
+				image({ data: base64(fixture("raster-18x6.ico").slice(0, 10)), mimeType: "image/x-icon" }),
+			],
+		});
+		expect(found).toEqual({ images: [], refused: 7 });
 	});
 
 	test("hosts a picture of any size, a transport's own limit aside", () => {

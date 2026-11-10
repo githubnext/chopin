@@ -10,6 +10,7 @@ import { Sessions } from "../auth/session";
 import { GitHubError } from "../github/client";
 import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
+import { fixture } from "./raster.test-fixtures";
 import { registerImageRoutes } from "./routes";
 
 import type { TextStreamPart, ToolSet } from "ai";
@@ -344,6 +345,78 @@ describe("hosted image routes", () => {
 		await expectNotFound(await router.handle(get(image!.src.replace(".webp", ".png"), cookie)));
 		github.access.set("score", { pull: false, push: false, admin: false });
 		await expectNotFound(await router.handle(get(path, cookie)));
+	});
+
+	it("serves an AVIF, a bitmap and an icon as their own type, each under its own extension only", async () => {
+		let { router, github, storage, upload, cookie } = await setup();
+		let channel = await upload("score");
+		github.access.set("score", { pull: true, push: false, admin: false });
+		for (
+			let [name, type, extension] of [
+				["raster-18x6.avif", "image/avif", "avif"],
+				["raster-18x6.bmp", "image/bmp", "bmp"],
+				["raster-18x6.ico", "image/x-icon", "ico"],
+			] as const
+		) {
+			let bytes = fixture(name);
+			let hash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+			await storage.images.put({
+				channelId: channel.id,
+				sha256: hash,
+				mimeType: type,
+				bytes,
+				uploadedBy: "U_octocat",
+				now: new Date(),
+			});
+			let response = await router.handle(
+				get(`/images/${hash}.${extension}?document=${channel.id}`, cookie),
+			);
+			expect(response?.status, name).toBe(200);
+			let served: Uint8Array = new Uint8Array(await response!.arrayBuffer());
+			expect(served, name).toEqual(bytes);
+			expect(Object.fromEntries(response!.headers), name).toMatchObject({
+				"content-type": type,
+				"x-content-type-options": "nosniff",
+				"cache-control": "private, max-age=31536000, immutable",
+				"content-security-policy": "default-src 'none'; sandbox",
+				"content-disposition": "inline",
+			});
+			await expectNotFound(await router.handle(get(`/images/${hash}.png`, cookie)));
+			await expectNotFound(await router.handle(get(`/images/${hash}.${extension}`)));
+		}
+	});
+
+	it("never serves stored markup or script, under any extension it knows", async () => {
+		let { router, github, storage, upload, cookie } = await setup();
+		let channel = await upload("score");
+		github.access.set("score", { pull: true, push: false, admin: false });
+		for (
+			let [type, source] of [
+				[
+					"image/svg+xml",
+					'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+				],
+				["text/html", "<script>alert(1)</script>"],
+			] as const
+		) {
+			let bytes = new TextEncoder().encode(source);
+			let hash = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
+			await storage.images.put({
+				channelId: channel.id,
+				sha256: hash,
+				mimeType: type,
+				bytes,
+				uploadedBy: "U_octocat",
+				now: new Date(),
+			});
+			for (
+				let extension of ["svg", "html", "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp", "ico"]
+			) {
+				await expectNotFound(
+					await router.handle(get(`/images/${hash}.${extension}`, cookie)),
+				);
+			}
+		}
 	});
 
 	it("reports an unavailable GitHub rather than a missing image", async () => {

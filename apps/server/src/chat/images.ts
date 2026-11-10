@@ -1,14 +1,14 @@
 import { toolContentSchema, toolImageSchema } from "@chopin/agent-link";
 import { HOSTED_IMAGE_PATH } from "@chopin/dialect";
 
-import { imageSize, isImageType } from "../images/format";
+import { declaredImageType, imageSize } from "../images/format";
 
 import type { Chat as Wire } from "@chopin/protocol";
-import type { ImageType } from "../images/format";
+import type { HostedImageType } from "../images/format";
 
 export type ToolImage = {
 	bytes: Uint8Array;
-	mimeType: ImageType;
+	mimeType: HostedImageType;
 	width: number;
 	height: number;
 	alt?: string;
@@ -34,15 +34,16 @@ function isImageBlock(block: unknown): boolean {
 
 function hosted(block: unknown): ToolImage | undefined {
 	let image = toolImageSchema.safeParse(block).data;
-	if (!image || !isImageType(image.mimeType)) return undefined;
+	if (!image) return undefined;
 	let data = image.data.replace(/\s+/g, "");
 	if (data.length % 4 !== 0 || !BASE64.test(data)) return undefined;
 	let bytes = new Uint8Array(Buffer.from(data, "base64"));
-	let size = imageSize(image.mimeType, bytes);
-	if (!size) return undefined;
+	let mimeType = declaredImageType(image.mimeType, bytes);
+	let size = mimeType && imageSize(mimeType, bytes);
+	if (!mimeType || !size) return undefined;
 	return {
 		bytes,
-		mimeType: image.mimeType,
+		mimeType,
 		...size,
 		...(image.alt === undefined ? {} : { alt: image.alt }),
 		...(image.caption === undefined ? {} : { caption: image.caption }),

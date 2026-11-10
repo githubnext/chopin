@@ -237,7 +237,7 @@ describe("security boundary", () => {
 
 	it("accepts only Chopin's own content-addressed image paths as relative images", () => {
 		let hash = "0123456789abcdef".repeat(4);
-		for (let extension of ["png", "jpg", "jpeg", "webp", "gif"]) {
+		for (let extension of ["png", "jpg", "jpeg", "webp", "gif", "avif", "bmp", "ico"]) {
 			accepts(`![a](/images/${hash}.${extension})`);
 		}
 		for (
@@ -245,6 +245,8 @@ describe("security boundary", () => {
 				`/images/${hash.toUpperCase()}.png`,
 				`/images/${hash.slice(1)}.png`,
 				`/images/${hash}.svg`,
+				`/images/${hash}.heic`,
+				`/images/${hash}.cur`,
 				`/images/${hash}.PNG`,
 				`/images/${hash}.png?x=1`,
 				`images/${hash}.png`,

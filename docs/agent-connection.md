@@ -842,17 +842,22 @@ already have:
 ] }
 ```
 
-- `data` is the image's bytes in standard base64; `mimeType` is `image/png`,
-  `image/jpeg`, `image/webp` or `image/gif`.
+- `data` is the image's bytes in standard base64; `mimeType` is their type:
+  `image/png`, `image/jpeg`, `image/webp`, `image/gif`, `image/avif`, `image/bmp`
+  or `image/x-icon`. The usual other names, such as `image/jpg`, `image/apng`,
+  `image/x-ms-bmp` and `image/vnd.microsoft.icon`, are read as the type their
+  bytes are.
 - `alt` says what the image shows, in words, and `caption` is a line shown with it.
   Both are optional and kept as given, an empty string included. Chat shows its
   own words for an image without `alt`.
 - Extra keys in a block, and an `alt` or `caption` that is not a string, are
   ignored. The JSON text of the same object is read the same way.
 
-Chopin stores each image block it can host, a PNG, JPEG, WebP or GIF whose bytes
-are of its `mimeType` and whose size it can read, as one of the document's own
-images, the same store as `upload_image`. Only after the bytes are
+Chopin stores each image block it can host, a raster image a browser draws (PNG,
+JPEG, WebP, GIF, AVIF, BMP or ICO) whose bytes are of its `mimeType` and whose
+size it can read, as one of the document's own images and as the type its bytes
+are. The store is the one `upload_image` uses, which still takes only a PNG,
+JPEG, WebP or GIF. Only after the bytes are
 stored does Chat show it, labelled as generated, on the turn's message: every
 image a turn makes, from any call, goes on one message, in the order they were
 made, and several show as one gallery. Browsers load it from

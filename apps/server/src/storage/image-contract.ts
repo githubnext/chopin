@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { bigPng } from "../images/raster.test-fixtures";
+import { bigPng, fixture } from "../images/raster.test-fixtures";
 import { contractId as id, openedStorage, userAndChannel } from "./contract-support";
 import { StorageError } from "./errors";
 
@@ -62,12 +62,16 @@ export function imageContract(name: string, factory: StorageFactory) {
 			}
 		});
 
-		test("keeps an image of any size", async () => {
+		test("keeps an image of any hosted raster type and of any size", async () => {
 			let storage = await openedStorage(factory);
 			try {
 				let { channelId, userId } = await userAndChannel(storage);
 				let now = new Date("2026-01-02T03:04:05.000Z");
 				let images: Array<[string, Uint8Array]> = [
+					["image/avif", fixture("raster-18x6.avif")],
+					["image/bmp", fixture("raster-18x6.bmp")],
+					["image/x-icon", fixture("raster-18x6.ico")],
+					["image/webp", fixture("the-cap.webp")],
 					["image/png", bigPng(1_048_577)],
 					["image/png", bigPng(1_080_993, 41)],
 					["image/png", bigPng(5 * 1024 * 1024, 42)],
