@@ -244,6 +244,42 @@ test("a raster image whose type is followed by a space or a tab in an angle-brac
 	}
 });
 
+test("a raster image written with white space before its type, or with no type, is drawn as Markdown made the address, and SVG or HTML written the same way is not", () => {
+	let png = "iVBORw0KGgo=";
+	for (
+		let [written, src] of [
+			[`data: image/png;base64,${png}`, `data:%20image/png;base64,${png}`],
+			[`data:\timage/png ;base64,${png}`, `data:%09image/png%20;base64,${png}`],
+			[`data:;base64,${png}`, `data:;base64,${png}`],
+			[`data:;charset=utf-8;base64,${png}`, `data:;charset=utf-8;base64,${png}`],
+			[`data: ;base64,${png}`, `data:%20;base64,${png}`],
+			["data:,%89PNG%0D%0A%1A%0A", "data:,%89PNG%0D%0A%1A%0A"],
+		]
+	) {
+		let markup = markdown(`![a dot](<${written}>)`);
+		expect(markup, written).toContain(
+			`<img alt="a dot" class="chat-image-preview" decoding="async" loading="lazy" referrerPolicy="no-referrer" src="${src}"/>`,
+		);
+	}
+	let svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>');
+	for (
+		let written of [
+			"data: image/svg+xml;base64,PHN2Zy8+",
+			"data:\timage/svg+xml;base64,PHN2Zy8+",
+			"data: text/html;base64,PGI+",
+			`data:;base64,${svg.toString("base64")}`,
+			`data:,${encodeURIComponent(svg.toString())}`,
+			"data:;base64,AAAA",
+			"data:,",
+		]
+	) {
+		let markup = markdown(`![where it was](<${written}>)`);
+		expect(markup, written).not.toContain("<img");
+		expect(markup, written).toContain('data-chat-image-broken="unavailable"');
+		expect(markup, written).toContain(">where it was</span>");
+	}
+});
+
 test("an address on another site is drawn exactly as it was written", () => {
 	for (let src of ["https://example.invalid", "//example.invalid/a.png"]) {
 		expect(markdown(`![far](${src})`), src).toContain(`src="${src}"/>`);

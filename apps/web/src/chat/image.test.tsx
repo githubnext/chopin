@@ -97,6 +97,28 @@ test("a data address whose type Markdown followed with percent-encoded white spa
 	expect(markup).not.toContain("Image can’t be shown");
 });
 
+test("a data address with white space before its type, or with no type, is drawn as written, and has its own shape at the first render", () => {
+	let plain = png(90, 30);
+
+	for (
+		let src of [
+			plain.replace("data:image/png;", "data:%20image/png;"),
+			plain.replace("data:image/png;", "data:%09image/png%20;"),
+			plain.replace("data:image/png;", "data:;"),
+			plain.replace("data:image/png;", "data:;charset=utf-8;"),
+		]
+	) {
+		let markup = firstRender({ src, alt: "Without a type" });
+
+		expect(frame(markup), src).toEqual({ width: "90", height: "30", sized: true });
+		expect(markup, src).toContain(`src="${src}"`);
+		expect(markup, src).not.toContain("Image can’t be shown");
+	}
+	expect(firstRender({ src: "data:;base64,AAAA", alt: "No bytes of an image" })).toContain(
+		"Image can’t be shown",
+	);
+});
+
 test("a size the image part states wins over what the bytes of a data address say", () => {
 	let markup = firstRender({ src: png(90, 30), alt: "Stated", width: 30, height: 90 });
 

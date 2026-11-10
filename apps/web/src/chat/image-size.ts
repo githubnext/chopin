@@ -1,7 +1,17 @@
-import { readDataAddress } from "./image-state";
 import { rasterType, text } from "./local-image";
 
 export type ImageSize = { width: number; height: number };
+
+export type DataAddress = { type: string; parameters: string[]; payloadStart: number };
+
+const DATA_SCHEME = /^data:/i;
+
+export function readDataAddress(src: string): DataAddress | undefined {
+	let comma = src.indexOf(",");
+	if (comma < 0 || !DATA_SCHEME.test(src)) return undefined;
+	let [type = "", ...parameters] = src.slice("data:".length, comma).split(";");
+	return { type, parameters, payloadStart: comma + 1 };
+}
 
 const ADDRESS_CHARS_READ = 96 * 1024;
 
@@ -67,10 +77,13 @@ type ExifFacts = {
 	pixels?: ImageSize;
 };
 
-function dataPayloadStart(src: string): Uint8Array | undefined {
+export function dataPayloadStart(
+	src: string,
+	chars = ADDRESS_CHARS_READ,
+): Uint8Array | undefined {
 	let address = readDataAddress(src);
 	if (!address) return undefined;
-	let payload = src.slice(address.payloadStart, address.payloadStart + ADDRESS_CHARS_READ);
+	let payload = src.slice(address.payloadStart, address.payloadStart + chars);
 	let unescaped: number[] = [];
 	for (let at = 0; at < payload.length; at++) {
 		let code = payload.charCodeAt(at);

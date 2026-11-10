@@ -1285,6 +1285,163 @@ test("a raster data address whose type Markdown has followed with a space or tab
 	expect(await page.evaluate(() => (window as { __svgRan?: number }).__svgRan)).toBeUndefined();
 });
 
+test("a raster data address with white space before its type, or with no type, is drawn as Markdown made it, at its own shape from the first paint, and SVG or HTML written the same way is not", async ({ baseURL, join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
+		origin: new URL(baseURL!).origin,
+	});
+	let decoding = await holdDecodingOfWrittenImages(page);
+	let png = fixture("raster-18x6.png");
+	let jpg = fixture("raster-18x6.jpg");
+	let pngBase64 = png.toString("base64");
+	let jpgBase64 = jpg.toString("base64");
+	let percent = [...png].map(byte => `%${byte.toString(16).padStart(2, "0")}`).join("");
+	let drawn = [
+		{
+			name: "space before the type",
+			written: `data: image/png;base64,${pngBase64}`,
+			src: `data:%20image/png;base64,${pngBase64}`,
+			file: "space-before-the-type.png",
+			bytes: png,
+		},
+		{
+			name: "tab before the type, space after",
+			written: `data:\timage/png ;base64,${pngBase64}`,
+			src: `data:%09image/png%20;base64,${pngBase64}`,
+			file: "tab-before-the-type-space-after.png",
+			bytes: png,
+		},
+		{
+			name: "no type",
+			written: `data:;base64,${pngBase64}`,
+			src: `data:;base64,${pngBase64}`,
+			file: "no-type.png",
+			bytes: png,
+		},
+		{
+			name: "no type, a charset",
+			written: `data:;charset=utf-8;base64,${pngBase64}`,
+			src: `data:;charset=utf-8;base64,${pngBase64}`,
+			file: "no-type-a-charset.png",
+			bytes: png,
+		},
+		{
+			name: "a space for a type",
+			written: `data: ;base64,${pngBase64}`,
+			src: `data:%20;base64,${pngBase64}`,
+			file: "a-space-for-a-type.png",
+			bytes: png,
+		},
+		{
+			name: "no type, percent-encoded bytes",
+			written: `data:,${percent}`,
+			src: `data:,${percent}`,
+			file: "no-type-percent-encoded-bytes.png",
+			bytes: png,
+		},
+		{
+			name: "jpeg after a space",
+			written: `data: image/jpeg;base64,${jpgBase64}`,
+			src: `data:%20image/jpeg;base64,${jpgBase64}`,
+			file: "jpeg-after-a-space.jpg",
+			bytes: jpg,
+		},
+		{
+			name: "jpeg with no type",
+			written: `data:;base64,${jpgBase64}`,
+			src: `data:;base64,${jpgBase64}`,
+			file: "jpeg-with-no-type.jpg",
+			bytes: jpg,
+		},
+	];
+	let scripted =
+		'<svg xmlns="http://www.w3.org/2000/svg" onload="window.__svgRan = 1"><script>window.__svgRan = 1</script></svg>';
+	let script = "<script>window.__svgRan = 1</script>";
+	let refused = [
+		{ name: "svg after a space", written: `data: image/svg+xml;base64,${base64Of(scripted)}` },
+		{ name: "svg with no type", written: `data:;base64,${base64Of(scripted)}` },
+		{ name: "html with no type", written: `data:;base64,${base64Of(script)}` },
+		{ name: "markup with no type", written: `data:,${encodeURIComponent(script)}` },
+		{ name: "no type, bytes of no image", written: "data:;base64,AAAA" },
+	];
+	await seed("# Types\n", {
+		transcript: oneMessageEachLine(
+			[...drawn, ...refused].map(({ name, written }) => `![${name}](<${written}>)`).join("\n"),
+		),
+	});
+	await join("ana");
+
+	let all = figures(page);
+	await expect(all).toHaveCount(drawn.length + refused.length);
+	for (let [index, { name }] of refused.entries()) {
+		let figure = all.nth(drawn.length + index);
+		await expect(figure.getByText("Image can’t be shown")).toBeVisible();
+		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
+		await expect(figure.locator("img")).toHaveCount(0);
+	}
+	for (let figure of await all.all()) await figure.scrollIntoViewIfNeeded();
+	await expect.poll(() =>
+		all.locator("img").evaluateAll(images =>
+			images.filter(image => !(image as HTMLImageElement).naturalWidth).map(image =>
+				(image as HTMLImageElement).alt
+			)
+		)
+	).toEqual([]);
+	for (let [index, { name, src }] of drawn.entries()) {
+		let figure = all.nth(index);
+		await expect(figure.locator("img")).toHaveAttribute("src", src);
+		await expect(figure.locator("img")).toHaveAttribute("alt", name);
+		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
+		await expect(figure).toHaveAttribute("data-load", "loading");
+		expect(await naturalSize(figure), name).toEqual({ height: 6, width: 18 });
+	}
+	await settled(all.last());
+	let firstSeen = await decoding.firstSeen();
+	let before = await Promise.all(drawn.map((_, index) => figureBox(all.nth(index))));
+	for (let [index, { name }] of drawn.entries()) {
+		expect(firstSeen[name]?.load, name).toBe("loading");
+		expect(Math.abs(firstSeen[name]!.ratio / 3 - 1), `${name} at the first paint`).toBeLessThan(
+			0.01,
+		);
+		expect(
+			Math.abs(before[index]!.frame.width / before[index]!.frame.height / 3 - 1),
+			`${name} while it loads`,
+		).toBeLessThan(0.01);
+	}
+
+	await decoding.release();
+	for (let index of drawn.keys()) {
+		await expect(all.nth(index)).toHaveAttribute("data-load", "shown");
+	}
+	await settled(all.last());
+	expect(await Promise.all(drawn.map((_, index) => figureBox(all.nth(index))))).toEqual(before);
+
+	for (let [index, { bytes, file, name }] of drawn.entries()) {
+		let figure = all.nth(index);
+		await figure.hover();
+		let [download] = await Promise.all([
+			page.waitForEvent("download"),
+			figure.getByRole("button", { name: "Download image" }).click(),
+		]);
+		expect(download.suggestedFilename(), name).toBe(file);
+		expect(readFileSync((await download.path())!).equals(bytes), name).toBe(true);
+	}
+	for (let index of [0, 2]) {
+		let figure = all.nth(index);
+		await figure.hover();
+		await figure.getByRole("button", { name: "Copy image" }).click();
+		await expect(figure.getByRole("button", { name: "Copied image" })).toBeVisible();
+		expect(
+			await page.evaluate(async () => {
+				let [item] = await navigator.clipboard.read();
+				let blob = await item!.getType("image/png");
+				return Array.from(new Uint8Array(await blob.arrayBuffer()).slice(0, 4));
+			}),
+		).toEqual([0x89, 0x50, 0x4e, 0x47]);
+	}
+	expect(await page.evaluate(() => (window as { __svgRan?: number }).__svgRan)).toBeUndefined();
+});
+
 test("an address on this site that is not a raster image is never drawn or run, and is read without the reader's session", async ({ baseURL, join, page, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	let script =

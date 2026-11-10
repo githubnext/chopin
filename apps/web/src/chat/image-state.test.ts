@@ -142,6 +142,93 @@ test("a raster type that Markdown has followed with percent-encoded white space,
 	}
 });
 
+const PNG_HEAD = "iVBORw0KGgo=";
+
+function written(bytes: number[]): string {
+	return Buffer.from(bytes).toString("base64");
+}
+
+const RASTER_HEADS: Array<[string, number[]]> = [
+	["png", [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]],
+	["jpeg", [0xff, 0xd8, 0xff, 0xe0, 0, 0x10]],
+	["gif", [...Buffer.from("GIF89a")]],
+	["webp", [...Buffer.from("RIFF"), 0, 0, 0, 0, ...Buffer.from("WEBP")]],
+	["bmp", [...Buffer.from("BM"), ...Array.from({ length: 12 }, () => 0), 40, 0, 0, 0]],
+	["ico", [0, 0, 1, 0, 1, 0]],
+	["avif", [0, 0, 0, 16, ...Buffer.from("ftypavif"), 0, 0, 0, 0]],
+];
+
+test("a raster type that white space Markdown percent-encoded comes before, or that is no type at all, is a raster image written into the message when its bytes are one, loaded as it was written", () => {
+	for (
+		let src of [
+			`data:%20image/png;base64,${PNG_HEAD}`,
+			`data: image/png;base64,${PNG_HEAD}`,
+			`data:%09image/png;base64,${PNG_HEAD}`,
+			`data:%20%20%0a%0DIMAGE/PNG%20%09;BASE64,${PNG_HEAD}`,
+			`data:\t image/png%20;charset=utf-8;base64,${PNG_HEAD}`,
+			`data:%20image/png,%89PNG%0D%0A%1A%0A`,
+			`data:;base64,${PNG_HEAD}`,
+			`DATA:;BASE64,${PNG_HEAD}`,
+			`data:;charset=utf-8;base64,${PNG_HEAD}`,
+			`data:;name=a.png;base64,${PNG_HEAD}`,
+			`data:%20;base64,${PNG_HEAD}`,
+			`data: ;base64,${PNG_HEAD}`,
+			`data:%20%09 ;base64,${PNG_HEAD}`,
+			`data:;base64,iVBO\nRw0K\n Ggo=`,
+			`data:,%89PNG%0D%0A%1A%0A`,
+			`data:,%89%50%4e%47%0d%0a%1a%0a`,
+			...RASTER_HEADS.flatMap(([, bytes]) => [
+				`data:;base64,${written(bytes)}`,
+				`data:%20;base64,${written(bytes)}`,
+			]),
+		]
+	) {
+		expect(imageSource(src, "doc", ORIGIN), src).toEqual({ kind: "data", url: src });
+		expect(isDataImage(src), src).toBe(true);
+	}
+});
+
+test("white space before a type never makes SVG, markup or another type a raster image, and an address with no type is one only when its bytes are", () => {
+	let svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>');
+	let html = Buffer.from("<html><body onload=alert(1)><script>alert(1)</script>");
+	for (
+		let src of [
+			"data:%20image/svg+xml;base64,PHN2Zy8+",
+			"data: image/svg+xml;base64,PHN2Zy8+",
+			"data:%09%20image/svg+xml;charset=image/png;base64,PHN2Zy8+",
+			"data:%20text/html;base64,PGI+",
+			"data: text/html,<script>alert(1)</script>",
+			"data:%20image/pngx;base64,AAAA",
+			"data:%20image/png+xml;base64,AAAA",
+			"data:%20x%20image/png;base64,AAAA",
+			"data:%2520image/png;base64,AAAA",
+			"data:%2image/png;base64,AAAA",
+			"data:%20;image/png;base64,AAAA",
+			"data:%20image/png",
+			`data:;base64,${svg.toString("base64")}`,
+			`data:%20;base64,${svg.toString("base64")}`,
+			`data:;charset=image/png;base64,${svg.toString("base64")}`,
+			`data:;base64,${html.toString("base64")}`,
+			`data:,${encodeURIComponent(svg.toString())}`,
+			`data:,${encodeURIComponent(html.toString())}`,
+			"data:,<script>alert(1)</script>",
+			"data:,",
+			"data:;base64,",
+			"data:;base64,AAAA",
+			"data:;base64,!!!!",
+			"data:;base64",
+			"data:;image/png;base64,AAAA",
+			`data:;base64,${written([0x89, 0x50, 0x4e, 0x47])}`,
+			"data:;base64,iVBORw0K",
+			`data:,%89PNG`,
+			"data:,é",
+		]
+	) {
+		expect(imageSource(src, "doc", ORIGIN), src).toEqual({ kind: "unavailable" });
+		expect(isDataImage(src), src).toBe(false);
+	}
+});
+
 test("percent-encoded white space never makes SVG, markup, another type or a different name a raster image", () => {
 	for (
 		let src of [
@@ -209,6 +296,15 @@ test(
 			["data:image/png" + "%20".repeat(many) + "x,", false],
 			["data:image/png" + "%2".repeat(many) + ",", false],
 			["data:image/png" + " %20\\t".repeat(many) + ";base64,AAAA", true],
+			["data:" + "%20".repeat(many) + "image/png,", true],
+			["data:" + " %20\\t".repeat(many) + "image/png;base64,AAAA", true],
+			["data:" + "%20".repeat(many) + "x" + "%20".repeat(many) + ",", false],
+			["data:" + "%2".repeat(many) + "image/png,", false],
+			["data:" + " ;".repeat(many) + ",", false],
+			["data:" + " ;".repeat(many) + ",%89PNG%0D%0A%1A%0A", true],
+			["data:" + "%20".repeat(many) + ";base64,iVBORw0KGgo=", true],
+			["data:;base64,iVBORw0KGgo=" + "A".repeat(many * 20), true],
+			["data:," + "%00".repeat(many * 20) + "%89PNG%0D%0A%1A%0A", false],
 		];
 		let outcomes = cases.map(([src, expected]) => [
 			isDataImage(src) === expected,
@@ -226,7 +322,7 @@ test(
 		expect(run.signalCode, run.stderr.toString()).toBeUndefined();
 		expect(run.exitCode, run.stderr.toString()).toBe(0);
 		expect(JSON.parse(run.stdout.toString())).toEqual(
-			Array.from({ length: 16 }, () => [true, true]),
+			Array.from({ length: 25 }, () => [true, true]),
 		);
 	},
 	20_000,
@@ -306,6 +402,17 @@ test("a download is named for what the image shows, or for the stored image", ()
 	expect(downloadName("x".repeat(200), `/images/${SHA}.png`)).toBe(`${"x".repeat(60)}.png`);
 	expect(downloadName("A dot", "data:image/jpeg;base64,/9j/4AAQ")).toBe("a-dot.jpg");
 	expect(downloadName(undefined, "data:image/webp,RIFF")).toBe("image.webp");
+});
+
+test("a download of a raster image written with white space before its type, or with no type, is named for the type it is", () => {
+	let jpeg = written([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]);
+
+	expect(downloadName("A dot", `data:%20image/jpeg;base64,${jpeg}`)).toBe("a-dot.jpg");
+	expect(downloadName("A dot", `data: image/webp%20;base64,${jpeg}`)).toBe("a-dot.webp");
+	expect(downloadName("A dot", `data:;base64,${jpeg}`)).toBe("a-dot.jpg");
+	expect(downloadName("A dot", `data:%20;base64,${PNG_HEAD}`)).toBe("a-dot.png");
+	expect(downloadName("A dot", `data:,%FF%D8%FF%E0%00%10`)).toBe("a-dot.jpg");
+	expect(downloadName(undefined, "data:;base64,AAAA")).toBe("image.png");
 });
 
 test("a download from this site is named for the type the image turned out to be, not its address", () => {

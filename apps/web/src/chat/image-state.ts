@@ -1,6 +1,7 @@
 import { HOSTED_IMAGE_PATH } from "@chopin/dialect";
 
-import { RASTER_TYPE_NAMES } from "./local-image";
+import { dataPayloadStart, readDataAddress } from "./image-size";
+import { RASTER_TYPE_NAMES, rasterType } from "./local-image";
 
 /**
  * Where an image loads from. Hosted is one of this document's own uploads, loaded with the
@@ -19,8 +20,6 @@ export type ImageSource =
 
 const AUTH_PATH = /^\/auth(?:\/|$)/;
 
-const DATA_SCHEME = /^data:/i;
-
 const RASTER_TYPE = new RegExp(
 	`^(?:${RASTER_TYPE_NAMES.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})$`,
 	"i",
@@ -28,27 +27,35 @@ const RASTER_TYPE = new RegExp(
 
 const ESCAPED_WHITE_SPACE = /^%(?:09|0[a-d]|20)$/i;
 
-function withoutTrailingWhiteSpace(type: string): string {
+function withoutSurroundingWhiteSpace(type: string): string {
+	let start = 0;
 	let end = type.length;
 	for (;;) {
-		if (end > 0 && /\s/.test(type[end - 1]!)) end -= 1;
-		else if (end >= 3 && ESCAPED_WHITE_SPACE.test(type.slice(end - 3, end))) end -= 3;
-		else return type.slice(0, end);
+		if (start < end && /\s/.test(type[start]!)) start += 1;
+		else if (start + 3 <= end && ESCAPED_WHITE_SPACE.test(type.slice(start, start + 3))) start += 3;
+		else break;
 	}
+	for (;;) {
+		if (end > start && /\s/.test(type[end - 1]!)) end -= 1;
+		else if (end - 3 >= start && ESCAPED_WHITE_SPACE.test(type.slice(end - 3, end))) end -= 3;
+		else break;
+	}
+	return type.slice(start, end);
 }
 
-export type DataAddress = { type: string; parameters: string[]; payloadStart: number };
+const RASTER_HEAD_CHARS = 256;
 
-export function readDataAddress(src: string): DataAddress | undefined {
-	let comma = src.indexOf(",");
-	if (comma < 0 || !DATA_SCHEME.test(src)) return undefined;
-	let [type = "", ...parameters] = src.slice("data:".length, comma).split(";");
-	return { type, parameters, payloadStart: comma + 1 };
+export function dataImageType(src: string): string | undefined {
+	let address = readDataAddress(src);
+	if (address === undefined) return undefined;
+	let type = withoutSurroundingWhiteSpace(address.type);
+	if (type !== "") return RASTER_TYPE.test(type) ? type.toLowerCase() : undefined;
+	let head = dataPayloadStart(src, RASTER_HEAD_CHARS);
+	return head && rasterType(head);
 }
 
 export function isDataImage(src: string): boolean {
-	let address = readDataAddress(src);
-	return address !== undefined && RASTER_TYPE.test(withoutTrailingWhiteSpace(address.type));
+	return dataImageType(src) !== undefined;
 }
 
 function hosted(path: string, document: string | undefined): ImageSource {
@@ -121,7 +128,7 @@ const EXTENSIONS: Record<string, string> = {
 };
 
 export function downloadName(alt: string | undefined, src: string, type?: string): string {
-	let named = type?.split("/")[1] ?? /^data:image\/([a-z0-9.+-]+)/i.exec(src)?.[1]?.toLowerCase();
+	let named = type?.split("/")[1] ?? dataImageType(src)?.split("/")[1];
 	let extension = named
 		? EXTENSIONS[named] ?? named
 		: /\.([a-z]+)(?:\?|$)/i.exec(src)?.[1]?.toLowerCase() ?? "png";
