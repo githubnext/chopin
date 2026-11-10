@@ -12,6 +12,7 @@ import {
 	useEffect,
 	useId,
 	useLayoutEffect,
+	useMemo,
 	useReducer,
 	useRef,
 	useState,
@@ -52,6 +53,7 @@ import { ErrorState } from "./error-state";
 import { failureBanner, retryPayload, sendFailureView, withoutFailure } from "./failure";
 import { TypingReporter } from "./typing";
 import { ChatComposer } from "./composer";
+import type { ComposerNotice } from "./composer";
 
 import { CommandPicker } from "./command-picker";
 import {
@@ -65,6 +67,8 @@ import {
 	filterCommands,
 } from "./commands";
 import { MentionPicker } from "./mention-picker";
+import { fallbackNotice } from "./model-picker-state";
+import { useModelChoice } from "./use-model-choice";
 import {
 	chatAuthors,
 	filterMentions,
@@ -299,6 +303,22 @@ export function Chat(
 	let [participationKey, setParticipationKey] = useState(0);
 	let typing = useRef<TypingReporter | undefined>(undefined);
 	let counts = runCounts(runs);
+	// What the document's agent can be set to run, and what everyone in the room has set it to.
+	let modelControl = useModelChoice({
+		wire,
+		room,
+		connected,
+		enabled: agent && !readonly && !archived,
+	});
+	// A refused choice, or a choice the agent can no longer honour, is said until it is made again.
+	// One object while its words stand: the composer's strip eases in and out as that value changes.
+	let modelWords = modelControl?.refusal
+		?? (modelControl && fallbackNotice(modelControl.catalog, modelControl.choice));
+	let modelTone = modelControl?.refusal ? "warning" as const : "info" as const;
+	let modelNotice = useMemo<ComposerNotice | undefined>(
+		() => modelWords ? { tone: modelTone, text: modelWords } : undefined,
+		[modelWords, modelTone],
+	);
 	let [draft, setDraft] = useState<ComposerDraft>(() => restoreDraft(room, handle));
 	let [submitting, setSubmitting] = useState(false);
 	// A send pressed during a blip, made once the connection is back.
@@ -1028,6 +1048,7 @@ export function Chat(
 				rootRef={composerRoot}
 				inputRef={textarea}
 				agent={!!agent}
+				model={modelControl}
 				mode={{
 					chopin: effectiveMode,
 					disabled: !draftable || sending || !agent,
@@ -1052,7 +1073,7 @@ export function Chat(
 					? { tone: "info", text: "Research isn’t available in this document" }
 					: !agent
 					? repliesOffNotice(offline)
-					: undefined}
+					: modelNotice}
 				unavailable={archived ? "archived" : readonly ? "readonly" : undefined}
 				references={referencesEnabled
 					? {

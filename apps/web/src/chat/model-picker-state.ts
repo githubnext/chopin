@@ -1,0 +1,186 @@
+/**
+ * What the composer's model picker shows and what a pick asks for, as pure functions of the
+ * catalog the document's harness reports and the choice the document holds. The server decides
+ * what a turn runs with the same resolver, so the browser never shows a model that will not run.
+ */
+
+import {
+	catalogModel,
+	levelLabel,
+	modelLevels,
+	resolveChoice,
+	unavailableNotice,
+} from "@chopin/protocol/model-choice";
+
+import type { Chat } from "@chopin/protocol";
+
+type Catalog = Chat.ModelCatalog;
+type Choice = Chat.ModelChoice;
+
+export type PickerModel = Chat.ModelOption & {
+	/** The harness runs it when nobody has chosen. */
+	isDefault: boolean;
+	/** It is the model that will run. */
+	selected: boolean;
+};
+
+export type PickerGroup = { id: string; name: string | undefined; models: PickerModel[] };
+
+/** The model that will run: the chosen one if the catalog offers it, else the harness's default. */
+export function shownModel(
+	catalog: Catalog,
+	choice: Choice | undefined,
+): Chat.ModelOption | undefined {
+	let resolved = resolveChoice(catalog, choice);
+	return catalogModel(catalog, resolved.model ?? catalog.default?.model);
+}
+
+/** Every term of the query appears in the model's name, id, provider or description. */
+export function matchesQuery(model: Chat.ModelOption, query: string): boolean {
+	let terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+	if (terms.length === 0) return true;
+	let text = [model.name, model.id, model.provider?.name, model.provider?.id, model.description]
+		.filter(Boolean).join("\n").toLowerCase();
+	return terms.every(term => text.includes(term));
+}
+
+/**
+ * The models that match, grouped by provider in the order each provider first appears and in the
+ * catalog's order within it. A model with no provider is listed under no heading when none has
+ * one, and under "Other" beside providers that do.
+ */
+export function pickerGroups(
+	catalog: Catalog,
+	choice: Choice | undefined,
+	query: string,
+): PickerGroup[] {
+	let shown = shownModel(catalog, choice)?.id;
+	let named = catalog.models.some(model => model.provider);
+	let groups = new Map<string, PickerGroup>();
+	for (let model of catalog.models) {
+		if (!matchesQuery(model, query)) continue;
+		let id = model.provider?.id ?? "";
+		let group = groups.get(id);
+		if (!group) {
+			group = {
+				id,
+				name: model.provider
+					? model.provider.name ?? model.provider.id
+					: named
+					? "Other"
+					: undefined,
+				models: [],
+			};
+			groups.set(id, group);
+		}
+		group.models.push({
+			...model,
+			isDefault: model.id === catalog.default?.model,
+			selected: model.id === shown,
+		});
+	}
+	return [...groups.values()];
+}
+
+/** The models in the order the keyboard walks them. */
+export function pickerOptions(groups: readonly PickerGroup[]): PickerModel[] {
+	return groups.flatMap(group => group.models);
+}
+
+/** What the trigger says: the model that will run, and the level somebody chose for it. */
+export function triggerText(
+	catalog: Catalog,
+	choice: Choice | undefined,
+): { name: string; level?: string } {
+	let resolved = resolveChoice(catalog, choice);
+	let name = shownModel(catalog, choice)?.name ?? "Default";
+	return { name, ...(resolved.thinkingLevel ? { level: levelLabel(resolved.thinkingLevel) } : {}) };
+}
+
+/** The words a person who cannot see the trigger hears: the model, its level, and what went missing. */
+export function triggerLabel(catalog: Catalog, choice: Choice | undefined): string {
+	let { name, level } = triggerText(catalog, choice);
+	let lost = resolveChoice(catalog, choice).unavailable;
+	return [
+		`Model: ${name}`,
+		level ? `reasoning ${level.toLowerCase()}` : undefined,
+		lost ? unavailableNotice(catalog, lost) : undefined,
+	].filter(Boolean).join(", ");
+}
+
+/** What to say about a stored choice the harness no longer offers, if anything. */
+export function fallbackNotice(catalog: Catalog, choice: Choice | undefined): string | undefined {
+	let lost = resolveChoice(catalog, choice).unavailable;
+	return lost ? unavailableNotice(catalog, lost) : undefined;
+}
+
+/**
+ * The reasoning levels offered for the model that will run, and the one chosen. None for a model
+ * with no levels, and then the control is not drawn.
+ */
+export function reasoningLevels(
+	catalog: Catalog,
+	choice: Choice | undefined,
+): { levels: string[]; current: string | undefined } {
+	let resolved = resolveChoice(catalog, choice);
+	return {
+		levels: modelLevels(catalog, resolved.model),
+		current: resolved.thinkingLevel,
+	};
+}
+
+/**
+ * The choice a pick of `id` asks for. The harness's own model is chosen by clearing the model, so
+ * nothing stays pinned to it; the level carries over only when the new model offers it.
+ */
+export function chooseModel(catalog: Catalog, choice: Choice | undefined, id: string): Choice {
+	let level = resolveChoice(catalog, choice).thinkingLevel;
+	return {
+		...(id === catalog.default?.model ? {} : { model: id }),
+		...(level !== undefined && modelLevels(catalog, id).includes(level)
+			? { thinkingLevel: level }
+			: {}),
+	};
+}
+
+/** The choice a pick of a level asks for; no level goes back to the model's own. */
+export function chooseLevel(
+	catalog: Catalog,
+	choice: Choice | undefined,
+	level: string | undefined,
+): Choice {
+	let { model } = resolveChoice(catalog, choice);
+	return {
+		...(model !== undefined ? { model } : {}),
+		...(level !== undefined ? { thinkingLevel: level } : {}),
+	};
+}
+
+/** Whether two choices ask for the same thing. */
+export function sameChoice(left: Choice | undefined, right: Choice | undefined): boolean {
+	return left?.model === right?.model && left?.thinkingLevel === right?.thinkingLevel;
+}
+
+export type PickerKey = "close" | "next" | "previous" | "pick";
+
+/** What a key does in the picker's search field, or nothing for a key the field keeps (Home and End move its caret). */
+export function pickerKey(
+	event: { key: string; keyCode?: number; isComposing?: boolean; shiftKey?: boolean },
+	hasOptions: boolean,
+): PickerKey | undefined {
+	if (event.isComposing || event.keyCode === 229) return undefined;
+	if (event.key === "Escape") return "close";
+	if (!hasOptions) return undefined;
+	if (event.key === "ArrowDown") return "next";
+	if (event.key === "ArrowUp") return "previous";
+	if (event.key === "Enter" && !event.shiftKey) return "pick";
+	return undefined;
+}
+
+/** The index a key moves to, wrapping at either end. */
+export function movedIndex(key: PickerKey, active: number, count: number): number {
+	if (count === 0) return 0;
+	if (key === "next") return (active + 1) % count;
+	if (key === "previous") return (active - 1 + count) % count;
+	return active;
+}

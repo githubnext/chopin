@@ -5,7 +5,7 @@
  * passes what to show; the design audit renders the same component in each live state.
  */
 
-import { useId } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import type { ReactNode, Ref } from "react";
 
 import { ChopinMark, SendAction } from "@chopin/editor";
@@ -15,6 +15,8 @@ import { ArchiveIcon, CloseIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } fro
 import { DraftInput } from "./draft-input";
 import { motionContract } from "../motion-contract";
 import { ModeSwitch } from "./mode-switch";
+import { ModelPicker, ModelPickerTrigger } from "./model-picker";
+import type { ModelControl } from "./use-model-choice";
 import type { DraftInputHandle, DraftInputProps } from "./draft-input";
 import plannerStop from "../assets/icons/planner-stop.svg";
 import plannerResume from "../assets/icons/planner-resume.svg";
@@ -56,6 +58,8 @@ export type ChatComposerProps = {
 	banner?: { id: string; node: ReactNode; invalid?: boolean };
 	/** Archived and read-only documents show why in place of the draft. */
 	unavailable?: "archived" | "readonly";
+	/** Present where the document's agent offers a choice of model: the trigger and its popover. */
+	model?: ModelControl;
 	/** Present when `#` references are on: the instructions and the Mention docs button. */
 	references?: { disabled: boolean; onMentionDocs: () => void };
 	/** Whether the draft accepts input at all, before a send is in flight. */
@@ -87,6 +91,7 @@ export function ChatComposer(
 		inputRef,
 		agent,
 		mode,
+		model,
 		notice,
 		banner,
 		unavailable,
@@ -102,6 +107,14 @@ export function ChatComposer(
 ) {
 	let instructionsId = useId();
 	let cueId = useId();
+	let modelId = useId();
+	let modelTrigger = useRef<HTMLButtonElement>(null);
+	let [modelOpen, setModelOpen] = useState(false);
+	let closeModel = useCallback((restore: boolean) => {
+		setModelOpen(false);
+		if (restore) requestAnimationFrame(() => modelTrigger.current?.focus());
+	}, []);
+	let modelTriggerNode = useCallback(() => modelTrigger.current, []);
 	let error = notice?.tone === "error" || !!banner?.invalid;
 	let phone = usePhone();
 	let chopin = !!mode?.chopin;
@@ -202,6 +215,14 @@ export function ChatComposer(
 				data-error={error || undefined}
 			>
 				{pickers}
+				{model && modelOpen && !unavailable && (
+					<ModelPicker
+						control={model}
+						id={modelId}
+						onClose={closeModel}
+						trigger={modelTriggerNode}
+					/>
+				)}
 				{unavailable
 					? (
 						<div className="composer-unavailable" role="status">
@@ -271,6 +292,15 @@ export function ChatComposer(
 											effectiveMode={chopin}
 											disabled={mode.disabled}
 											onToggle={mode.onToggle}
+										/>
+									)}
+									{model && (
+										<ModelPickerTrigger
+											control={model}
+											controls={modelId}
+											onToggle={() => setModelOpen(open => !open)}
+											open={modelOpen}
+											triggerRef={modelTrigger}
 										/>
 									)}
 									{references && (

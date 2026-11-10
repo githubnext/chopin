@@ -1,46 +1,5 @@
 [
 	{
-		"file": "apps/web/src/chat/command-picker.tsx",
-		"reason": "Chat reuses the editor slash-menu class recipes; the imported constants are static token-based utilities in the reviewed editor producer.",
-		"cases": [
-			[
-				"dynamic",
-				"class",
-				"MENU_SURFACE",
-				"class > CommandPicker > <div>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"MENU_ROW",
-				"class > CommandPicker > <button>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"MENU_ROW_ON",
-				"class > CommandPicker > <button>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"MENU_ROW_OFF",
-				"class > CommandPicker > <button>",
-				1
-			]
-		],
-		"sourceHash": "9418b1cafede24f85820d9f2893e0f416412445dad0fcfc321e52bee4b9fea80",
-		"producers": [
-			{
-				"file": "packages/editor/src/toolbar/surface.ts",
-				"sourceHash": "ad3d483335b4dda9238fbcf529b79ad86320987accf3175d581a33d90f1c331b"
-			}
-		]
-	},
-	{
 		"file": "apps/web/src/document-workspace-host.tsx",
 		"reason": "Workspace assembly supplies document/session callbacks and data, not design values; scanner does not execute the workspaceProps function. Its returned keys contain no className or style; the parent presentation carries the child layer node, a finite \"open\" | \"closing\" state, a finite \"lift\" | \"zoom\" motion that Workspace renders only as a data attribute, path labels, a close callback, the open child's channel id that Chat sends as its focus, a child-open callback, and the child request key retained across canonical changes and used only to reveal a newly requested Document view; a document presentation carries only that child-open callback.",
 		"cases": [
@@ -381,7 +340,7 @@
 				1
 			]
 		],
-		"sourceHash": "619132cbf2bc755f03dfcb257af75c6170e7238181e5a49fd6c2e5399a4e049b"
+		"sourceHash": "ad3ae9c4e373c3e50f2e9fc3c0159a1d99847d24d9091540195ee04f1d8d88da"
 	},
 	{
 		"file": "apps/web/src/markdown-text/markdown-text.tsx",
