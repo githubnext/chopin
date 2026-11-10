@@ -115,6 +115,34 @@ export function frameRatio(
 	return width && height && width > 0 && height > 0 ? `${width} / ${height}` : undefined;
 }
 
+export type GalleryItem =
+	| { kind: "image"; index: number }
+	| { kind: "refused"; reason: string };
+
+export function galleryItems(
+	count: number,
+	refusals: ReadonlyArray<{ before: number; reason: string }> | undefined,
+	maxVisible = 6,
+): GalleryItem[] {
+	let { shown } = galleryTiles(count, maxVisible);
+	let placed = (refusals ?? []).map(({ before, reason }) => ({
+		before: Number.isFinite(before) ? Math.min(Math.max(Math.trunc(before), 0), count) : 0,
+		reason,
+	})).sort((a, b) => a.before - b.before);
+	let items: GalleryItem[] = [];
+	let next = 0;
+	for (let index = 0; index < shown; index++) {
+		for (; next < placed.length && placed[next]!.before <= index; next++) {
+			items.push({ kind: "refused", reason: placed[next]!.reason });
+		}
+		items.push({ kind: "image", index });
+	}
+	for (; next < placed.length; next++) {
+		items.push({ kind: "refused", reason: placed[next]!.reason });
+	}
+	return items;
+}
+
 export function galleryTiles(count: number, maxVisible = 6): { shown: number; more: number } {
 	let shown = Math.max(1, Math.min(Math.floor(maxVisible), count));
 	return { shown: count === 0 ? 0 : shown, more: Math.max(0, count - shown) };

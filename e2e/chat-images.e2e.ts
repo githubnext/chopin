@@ -74,7 +74,11 @@ function port(baseURL: string | undefined): number {
 	return Number(new URL(baseURL!).port);
 }
 
-function turn(images: Chat.Image[], text = "Here is what I drew."): Chat.Entry[] {
+function turn(
+	images: Chat.Image[],
+	text = "Here is what I drew.",
+	refusedImages?: Chat.ImageRefusal[],
+): Chat.Entry[] {
 	let ts = 1_700_000_000_000;
 	return [
 		{
@@ -84,7 +88,14 @@ function turn(images: Chat.Image[], text = "Here is what I drew."): Chat.Entry[]
 			to: "planner",
 			ts,
 		},
-		{ id: "drawn", author: { kind: "agent" }, text, ts: ts + 1000, images },
+		{
+			id: "drawn",
+			author: { kind: "agent" },
+			text,
+			ts: ts + 1000,
+			images,
+			...(refusedImages ? { refusedImages } : {}),
+		},
 	];
 }
 
@@ -1855,6 +1866,207 @@ test("the images in Chat, and the open lightbox, pass an accessibility check", a
 	let open = await new AxeBuilder({ page }).include("dialog.plan-image-lightbox").analyze();
 	expect(
 		open.violations.map(item => `${item.id}: ${item.nodes.map(node => node.target).join(" ")}`),
+	)
+		.toEqual([]);
+});
+
+const REASONS = {
+	empty: "Image couldn't be shown: its block has no base64 data or no type.",
+	large:
+		"Image couldn't be shown: it is 2.3 MiB, which did not fit in one agent connection message (2 MiB at most).",
+	type:
+		"Image couldn't be shown: its type image/svg+xml isn't one Chat shows (PNG, JPEG, WebP, GIF, AVIF, BMP or ICO).",
+	base64: "Image couldn't be shown: its data isn't valid base64.",
+	other: "Image couldn't be shown: its bytes are JPEG data, not PNG as its type says.",
+	bytes: "Image couldn't be shown: its bytes aren't PNG data, as its type says.",
+	header:
+		"Image couldn't be shown: its PNG header can't be read, so the image is cut short or damaged.",
+	store: "Image couldn't be shown: Chopin couldn't store it.",
+};
+
+function placed(message: Locator): Promise<string[]> {
+	return message.locator("[data-chat-image-refused], [data-chat-image]").evaluateAll(elements =>
+		elements.map(element =>
+			element.hasAttribute("data-chat-image-refused")
+				? element.textContent ?? ""
+				: `${element.getAttribute("data-chat-image")} ${
+					element.querySelector("img")?.getAttribute("alt") ?? ""
+				}`
+		)
+	);
+}
+
+test("an image of a turn that was not shown is said so in the message, where it would have been, and every one is kept", async ({ baseURL, join, page, room, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let stored = await store(baseURL, room);
+	let [cap, back, through] = three(stored);
+	await seed("# Refused\n", {
+		transcript: turn(three(stored), "Here is what I drew.", [
+			{ before: 0, reason: REASONS.type },
+			{ before: 1, reason: REASONS.bytes },
+			{ before: 1, reason: REASONS.bytes },
+			{ before: 3, reason: REASONS.store },
+		]),
+	});
+	await join("ana");
+
+	let message = chat(page).locator('[data-chat-message-id="drawn"]');
+	await expect(message.locator("[data-chat-image]").first()).toHaveAttribute("data-load", "shown");
+	await expect.poll(() => placed(message)).toEqual([
+		REASONS.type,
+		`tile ${cap.alt}`,
+		REASONS.bytes,
+		REASONS.bytes,
+		`tile ${back.alt}`,
+		`tile ${through.alt}`,
+		REASONS.store,
+	]);
+	await expect(message.locator("[data-chat-image-gallery]")).toHaveCount(1);
+	await expect(message.locator("[data-chat-image-gallery] [data-chat-image-refused]")).toHaveCount(
+		4,
+	);
+	await expect(message.locator('[data-chat-image="single"]')).toHaveCount(0);
+	for (let reason of [REASONS.type, REASONS.bytes, REASONS.store]) {
+		await expect(message.getByText(reason, { exact: true }).first()).toBeVisible();
+	}
+	await expect(message.getByText(REASONS.bytes, { exact: true })).toHaveCount(2);
+	await expect(message).toContainText("Here is what I drew.");
+
+	await message.locator("[data-chat-image]").first().getByRole("button", {
+		name: "Open image",
+		exact: true,
+	}).click();
+	await expect(lightbox(page).getByRole("status")).toHaveText("Image 1 of 3");
+});
+
+test("two images with a refusal between them are still one gallery in the order they came, and one lightbox", async ({ baseURL, join, page, room, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let stored = await store(baseURL, room);
+	let [cap, back] = three(stored);
+	await seed("# Between\n", {
+		transcript: turn([cap!, back!], "Here is what I drew.", [{ before: 1, reason: REASONS.bytes }]),
+	});
+	await join("ana");
+
+	let message = chat(page).locator('[data-chat-message-id="drawn"]');
+	let tiles = message.locator('[data-chat-image="tile"]');
+	await expect(tiles).toHaveCount(2);
+	await expect(tiles.first()).toHaveAttribute("data-load", "shown");
+	await expect(tiles.last()).toHaveAttribute("data-load", "shown");
+	await expect.poll(() => placed(message)).toEqual([
+		`tile ${cap!.alt}`,
+		REASONS.bytes,
+		`tile ${back!.alt}`,
+	]);
+	await expect(message.locator("[data-chat-image-gallery]")).toHaveCount(1);
+	await expect(message.locator('[data-chat-image="single"]')).toHaveCount(0);
+	let grids = await message.locator("[data-chat-image], [data-chat-image-refused]").evaluateAll(
+		items => items.map(item => item.parentElement?.className),
+	);
+	expect(new Set(grids)).toEqual(new Set(["chat-image-gallery-grid"]));
+	let grid = (await message.locator(".chat-image-gallery-grid").boundingBox())!;
+	let line = (await message.locator("[data-chat-image-refused]").boundingBox())!;
+	expect(line.width).toBeCloseTo(grid.width, 0);
+
+	await tiles.first().getByRole("button", { name: "Open image", exact: true }).click();
+	let box = lightbox(page);
+	await expect(box.getByRole("status")).toHaveText("Image 1 of 2");
+	await page.keyboard.press("ArrowRight");
+	await expect(box.getByRole("status")).toHaveText("Image 2 of 2");
+	await page.keyboard.press("Escape");
+	await expect(box).toHaveCount(0);
+});
+
+test("one image with refusals around it is a single image with each reason as a line where it came", async ({ baseURL, join, page, room, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let stored = await store(baseURL, room);
+	let [cap] = three(stored);
+	await seed("# One\n", {
+		transcript: turn([cap!], "Here is what I drew.", [
+			{ before: 0, reason: REASONS.empty },
+			{ before: 1, reason: REASONS.base64 },
+		]),
+	});
+	await join("ana");
+
+	let message = chat(page).locator('[data-chat-message-id="drawn"]');
+	await expect(message.locator('[data-chat-image="single"]')).toHaveAttribute("data-load", "shown");
+	await expect.poll(() => placed(message)).toEqual([
+		REASONS.empty,
+		`single ${cap!.alt}`,
+		REASONS.base64,
+	]);
+	await expect(message.locator("[data-chat-image-refused]")).toHaveCount(2);
+	await expect(message.locator("[data-chat-image-gallery]")).toHaveCount(0);
+});
+
+test("a message with no image to show says why, for every reason a tool's image is refused", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let ts = 1_700_000_000_000;
+	let reasons = Object.values(REASONS);
+	await seed("# None\n", {
+		transcript: reasons.map((reason, index) => ({
+			id: `none-${index}`,
+			author: { kind: "agent" as const },
+			text: index % 2 ? "" : "I tried to draw it.",
+			ts: ts + index * 1000,
+			refusedImages: [{ before: 0, reason }],
+		})),
+	});
+	await join("ana");
+
+	for (let [index, reason] of reasons.entries()) {
+		let message = chat(page).locator(`[data-chat-message-id="none-${index}"]`);
+		await expect(message.getByText(reason, { exact: true })).toBeVisible();
+		await expect(message.locator("[data-chat-image-refused]")).toHaveCount(1);
+		await expect(message.locator("[data-chat-image]")).toHaveCount(0);
+	}
+	await expect(chat(page).locator("[data-chat-image]")).toHaveCount(0);
+});
+
+test("a refusal's reason is on the page whole on a phone, and nothing overflows", async ({ baseURL, join, room, seed }) => {
+	let stored = await store(baseURL, room);
+	await seed("# Phone\n", {
+		transcript: turn(three(stored), "Here is what I drew.", [
+			{ before: 1, reason: REASONS.type },
+			{ before: 3, reason: REASONS.large },
+		]),
+	});
+	let phone = await join("ana", PHONE);
+	await openChat(phone);
+
+	for (let reason of [REASONS.type, REASONS.large]) {
+		let line = chat(phone).locator("[data-chat-image-refused]", { hasText: reason });
+		await expect(line).toBeVisible();
+		await expect(line).toHaveText(reason);
+		let box = (await line.boundingBox())!;
+		expect(box.x).toBeGreaterThanOrEqual(0);
+		expect(box.x + box.width).toBeLessThanOrEqual(390);
+		expect(
+			await line.evaluate(element =>
+				element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight
+			),
+		).toBe(true);
+	}
+	expect(await phone.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test("the reasons images were not shown pass an accessibility check", async ({ baseURL, join, page, room, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let stored = await store(baseURL, room);
+	await seed("# Checked\n", {
+		transcript: turn(three(stored), "Here is what I drew.", [
+			{ before: 0, reason: REASONS.large },
+			{ before: 2, reason: REASONS.header },
+		]),
+	});
+	await join("ana");
+	await expect(figures(page).first()).toHaveAttribute("data-load", "shown");
+	await expect(page.locator("[data-chat-image-refused]")).toHaveCount(2);
+
+	let found = await new AxeBuilder({ page }).include("[data-chat-scroll]").analyze();
+	expect(
+		found.violations.map(item => `${item.id}: ${item.nodes.map(node => node.target).join(" ")}`),
 	)
 		.toEqual([]);
 });

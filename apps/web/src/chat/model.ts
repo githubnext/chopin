@@ -14,6 +14,7 @@ export type Message = {
 	tools?: Chat.Activity[];
 	/** What the agent's turn made or showed, in order; see `Chat.Entry.images`. */
 	images?: Chat.Image[];
+	refusedImages?: Chat.ImageRefusal[];
 	references?: Chat.Reference[];
 	/** The images and files sent with it. */
 	attachments?: Chat.Attachment[];
