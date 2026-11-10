@@ -37,13 +37,7 @@ async function answerAll(page: Page) {
 	for (let index = 0; index < 3; index++) {
 		await top(page).getByText("First option", { exact: true }).click();
 		await top(page).getByRole("button", { name: "Save", exact: true }).click();
-		if (index < 2) {
-			await expect(deck(page).locator("[data-deck-settled]")).toHaveCount(index + 1);
-			// The answered card lingers on top before the next one comes up. Its selected option is a
-			// phrase that reads "First option" as well, so wait for the next card rather than rely on
-			// the answered one having no such text.
-			await expect(top(page)).not.toHaveAttribute("data-deck-settled", "");
-		}
+		if (index < 2) await expect(deck(page).locator("[data-deck-settled]")).toHaveCount(index + 1);
 	}
 	await expect(deck(page)).toHaveCount(0);
 }

@@ -10,16 +10,6 @@
 	overflow-wrap: anywhere;
 }
 
-/*
- * A phrase drawn inside a button, a heading or a label is a run of inline text. It keeps a box of
- * its own rather than being `display: contents`: an element with no box has a rectangle of nothing
- * at the page's corner, so a browser cannot measure it, scroll to it or tell that it is still
- * moving, and a test or a screen magnifier that finds the text by its words cannot either.
- */
-:where(.aui-md-line) {
-	display: inline;
-}
-
 :where(.aui-md :is(h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote, pre, hr, .aui-md-table-wrapper)) {
 	margin-block: 0.5rem;
 }

@@ -37,7 +37,7 @@ function heading(markup: string): string {
 
 test("a plain one-line question reads exactly as before", () => {
 	expect(heading(card("What auth system should we use?"))).toBe(
-		'<h4 class="question-title" id="_R_0_-title-q"><span class="question-title-link"><span data-status="complete" class="aui-md-line aui-md">What auth system should we use?</span></span></h4>',
+		'<h4 class="question-title" id="_R_0_-title-q"><span class="question-title-link">What auth system should we use?</span></h4>',
 	);
 });
 
@@ -59,7 +59,7 @@ test("a question body renders a Markdown list with Chat's renderer under its hea
 	let markup = card(
 		"Confirm the earlier answers\n\n- Storage: **PostgreSQL**\n- Rollout: `pilot`\n\nSee [the notes](https://example.com/notes).",
 	);
-	expect(heading(markup)).toContain(">Confirm the earlier answers</span></span></h4>");
+	expect(heading(markup)).toContain(">Confirm the earlier answers</span></h4>");
 	expect(markup).toContain(
 		'<div data-status="complete" data-question-markdown="" class="question-body aui-md"><ul class="aui-md-ul">\n<li class="aui-md-li">Storage: <strong class="aui-md-strong">PostgreSQL</strong></li>\n<li class="aui-md-li">Rollout: <code class="aui-md-inline-code">pilot</code></li>\n</ul>',
 	);
@@ -137,10 +137,10 @@ test("descriptions and option text render through the same renderer", () => {
 	);
 	expect(markup).toContain('<ol class="aui-md-ol">');
 	expect(markup).toContain(
-		'<span class="question-label"><span data-status="complete" class="aui-md-line aui-md">Use <strong class="aui-md-strong">Postgres</strong></span></span>',
+		'<span class="question-label">Use <strong class="aui-md-strong">Postgres</strong></span>',
 	);
 	expect(markup).toContain(
-		'<span class="question-desc"><span data-status="complete" class="aui-md-line aui-md">Managed, <em>familiar</em></span></span>',
+		'<span class="question-desc">Managed, <em>familiar</em></span>',
 	);
 	expect(markup).toContain(
 		'<div data-status="complete" data-question-markdown="" class="question-desc aui-md"><p class="aui-md-p">Trade-offs:</p>',

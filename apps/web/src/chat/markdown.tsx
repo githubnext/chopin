@@ -8,7 +8,7 @@ import { referenceRemarkPlugin } from "./reference-markdown";
 import { referenceRenderModel } from "./references";
 import "./markdown.css";
 
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import type { Chat } from "@chopin/protocol";
 import type { MarkdownTextProps } from "../markdown-text/markdown-text";
 import type { ReferenceRenderModel } from "./references";
@@ -88,8 +88,14 @@ export function inlineSource(source: string): string {
 
 let NO_PLUGINS: never[] = [];
 
+/** The root of a phrase: its content and nothing around it, so the root adds no element. */
+function PhraseRoot({ children }: { children?: ReactNode }) {
+	return <>{children}</>;
+}
+
 /**
- * One line of text, drawn in an inline `span`. Raw HTML is dropped when
+ * One line of text, drawn as its own nodes with no element around them, which is how a phrase
+ * sat in its heading, label or paragraph before MarkdownText. Raw HTML is dropped when
  * `skipHtml` is set, and shown as the text it was written as when it is not.
  */
 export function MarkdownPhrase(
@@ -103,9 +109,8 @@ export function MarkdownPhrase(
 	return (
 		<MarkdownText
 			allowedElements={links ? CHAT_INLINE : INLINE_WITHOUT_LINKS}
-			className="aui-md-line"
 			components={components}
-			containerComponent="span"
+			containerComponent={PhraseRoot}
 			defer={false}
 			remarkPlugins={NO_PLUGINS}
 			skipHtml={skipHtml}
