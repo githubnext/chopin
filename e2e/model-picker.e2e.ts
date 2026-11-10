@@ -618,10 +618,12 @@ test("lists a catalog that repeats a model or a level as the client reported it"
 	await expect(popover(page).getByRole("group", { name: "None" })).toHaveCount(1);
 	await expect(popover(page).getByRole("group", { name: "Other" })).toHaveCount(1);
 
-	// Default, then every level as listed; only the first of a repeated level is the one chosen.
+	// The model's own level, then every level as listed; only the first of a repeated level is the
+	// one chosen. A level named `default` would be taken for the first step, which is called Model
+	// default instead.
 	let radios = levels(page).getByRole("radio");
-	await expect(radios).toHaveText(["Default", "high", "off", "high", "default"]);
-	await expect(levels(page).locator('[aria-checked="true"]')).toHaveText(["Default"]);
+	await expect(radios).toHaveText(["Model default", "high", "off", "high", "default"]);
+	await expect(levels(page).locator('[aria-checked="true"]')).toHaveText(["Model default"]);
 	await radios.nth(3).click();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Echo one, reasoning high");
 	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
@@ -688,6 +690,67 @@ test("shows each level exactly as reported, so levels that read alike stay two, 
 	await openPicker(page);
 	await expect(radios.nth(6)).toHaveAttribute("aria-checked", "true");
 	await expect(radios.nth(5)).toHaveAttribute("aria-checked", "false");
+	await client.detach();
+});
+
+test("tells a level named Default from the model's own default, by sight and by name, and sends each exactly", async ({ browser }) => {
+	test.setTimeout(180_000);
+	let room = await newRoom();
+	let page = await open(browser, HANDLE, room, DESKTOP);
+	let { client, asked } = await attachClient(room, {
+		models: {
+			available: [
+				{ id: "acme/plain", name: "Plain", thinkingLevels: ["low", "high"] },
+				{
+					id: "acme/odd",
+					name: "Odd",
+					thinkingLevels: ["Default", "default", "high", "High"],
+				},
+			],
+			default: { id: "acme/plain" },
+		},
+	});
+	await expect(trigger(page)).toHaveAccessibleName("Model: Plain");
+	await openPicker(page);
+	// A model with no level that reads like it keeps the name the first step always had.
+	await expect(levels(page).getByRole("radio")).toHaveText(["Default", "low", "high"]);
+	await option(page, "Odd").click();
+	await openPicker(page);
+
+	// Odd lists levels named Default and default, and high beside High. The reset is called Model
+	// default so that no radio shares its name; every level is the string the client reported.
+	let radios = levels(page).getByRole("radio");
+	await expect(radios).toHaveText(["Model default", "Default", "default", "high", "High"]);
+	for (let name of ["Model default", "Default", "default", "high", "High"]) {
+		await expect(level(page, name)).toHaveCount(1);
+	}
+	await expect(level(page, "Model default")).toHaveAttribute("aria-checked", "true");
+	await expectAccessible(page);
+	await shoot(page, "model-picker-level-named-default-desktop");
+	await page.keyboard.press("Escape");
+
+	// Each choice asks for exactly what its radio says: the reset for no level, each other for its string.
+	let picks: Array<[string, string | undefined, string]> = [
+		["Default", "Default", "Model: Odd, reasoning Default"],
+		["Model default", undefined, "Model: Odd"],
+		["default", "default", "Model: Odd, reasoning default"],
+		["High", "High", "Model: Odd, reasoning High"],
+		["high", "high", "Model: Odd, reasoning high"],
+		["Model default", undefined, "Model: Odd"],
+	];
+	for (let [position, [radio, sent, named]] of picks.entries()) {
+		await openPicker(page);
+		await level(page, radio).click();
+		await expect(trigger(page)).toHaveAccessibleName(named);
+		await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
+		await expect(level(page, radio)).toHaveAttribute("aria-checked", "true");
+		await page.keyboard.press("Escape");
+		let word = ["one", "two", "three", "four", "five", "six"][position]!;
+		await ask(page, `pick ${word}`, position + 1);
+		let turn = turnFor(asked, `pick ${word}`);
+		expect(turn.model).toBe("acme/odd");
+		expect(turn.thinkingLevel).toBe(sent);
+	}
 	await client.detach();
 });
 

@@ -601,7 +601,7 @@ level can therefore never be chosen, and a turn never carries one.
   may define their own, spelled as they like. Chopin shows
   every level exactly as written, Atomic's own included (`xhigh`, not Extra high), its case
   unchanged, so that `xhigh` and `extra high`, `ß-fast` and `SS-fast`, and `high` and `High` are
-  each two levels a person can tell apart, and the turn carries the string they saw. A model with none or an empty list has no reasoning control, and the composer
+  each two levels a person can tell apart, and the turn carries the string they saw. The composer's own first step, which returns the level to the model's own, is called Default, or Model default where the model lists a level of that name, so no level shares its label. A model with none or an empty list has no reasoning control, and the composer
   hides it. An empty string is not a level: it is dropped. Chopin sends back only a level the model
   listed.
 - **`models.default`** is what the client runs when a turn names no model or no level. Its `id`

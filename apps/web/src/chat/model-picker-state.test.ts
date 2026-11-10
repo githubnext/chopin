@@ -4,6 +4,7 @@ import {
 	chooseLevel,
 	chooseModel,
 	composerModelNotice,
+	defaultStepLabel,
 	fallbackNotice,
 	levelSteps,
 	matchesQuery,
@@ -18,6 +19,8 @@ import {
 	triggerText,
 	triggerTitle,
 } from "./model-picker-state";
+
+import { levelLabel } from "@chopin/protocol/model-choice";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -236,6 +239,56 @@ describe("what the composer's strip says about the document's model", () => {
 			text: "acme/gone is no longer available, so Chopin used its default model.",
 		});
 		expect(composerModelNotice(gone, true)).toEqual({ tone: "info", text: unread });
+	});
+});
+
+describe("the reasoning control's own default beside the levels a model lists", () => {
+	test("is called Default, as it always was, when no level of the model reads like it", () => {
+		expect(defaultStepLabel([])).toBe("Default");
+		expect(defaultStepLabel(["off", "low", "high", "xhigh"])).toBe("Default");
+		// A level that only contains the word is another level.
+		expect(defaultStepLabel(["default-fast", "Defaults", "undefault"])).toBe("Default");
+	});
+
+	test("says Model default instead when a level of the model would be taken for it, by any case or padding", () => {
+		for (let level of ["Default", "default", "DEFAULT", " default ", "Default\t"]) {
+			expect(defaultStepLabel(["low", level, "high"]), JSON.stringify(level)).toBe("Model default");
+		}
+	});
+
+	test("never shares a label with a level, however the model spells them, and shows no level differently", () => {
+		let crowded = ["Default", "Model default", "model default (reset)", "high"];
+		let label = defaultStepLabel(crowded);
+		expect(label).toBe("Model default (reset) (reset)");
+		for (let levels of [[], ["Default"], ["default", "Model default"], crowded]) {
+			let own = defaultStepLabel(levels);
+			expect(levels.map(level => level.trim().toLowerCase())).not.toContain(own.toLowerCase());
+		}
+		// The levels' own labels are what the client reported, with this unchanged.
+		expect(["Default", "default", "Model default"].map(level => levelLabel(level))).toEqual([
+			"Default",
+			"default",
+			"Model default",
+		]);
+	});
+
+	test("asks for the model's own level when the default is chosen, and for the level of that name when it is", () => {
+		let named: Chat.ModelCatalog = {
+			models: [{ id: "acme/odd", name: "Odd", thinkingLevels: ["Default", "default", "high"] }],
+			default: { model: "acme/odd" },
+		};
+		// The step for the model's own is `undefined`; each level is the string that was listed.
+		expect(levelSteps(["Default", "default", "high"], undefined).map(step => step.level)).toEqual([
+			undefined,
+			"Default",
+			"default",
+			"high",
+		]);
+		expect(chooseLevel(named, { thinkingLevel: "Default" }, undefined)).toEqual({});
+		expect(chooseLevel(named, undefined, "Default")).toEqual({ thinkingLevel: "Default" });
+		expect(chooseLevel(named, undefined, "default")).toEqual({ thinkingLevel: "default" });
+		expect(triggerLabel(named, { thinkingLevel: "Default" })).toBe("Model: Odd, reasoning Default");
+		expect(triggerLabel(named, {})).toBe("Model: Odd");
 	});
 });
 
