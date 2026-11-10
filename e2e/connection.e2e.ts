@@ -37,18 +37,16 @@ const CATCHING_UP = "Catching up";
 const BACK = "Back online. Your changes are synced";
 
 /**
- * What the live region said, in order. The moment of catching up, between the socket opening and
- * the document syncing, is said only if the sync takes that long, so it may be there or not; it
- * is checked to come at most once and right before the return, and taken out of what is compared.
+ * The socket is open again and the server has said nothing on it yet, because the test holds it:
+ * the banner says it is catching up, in its own layer, and the live region says so once, for as
+ * long as the test looks. Without the hold the sync is over in a few milliseconds, and whether the
+ * moment is ever drawn or said is a race, which is not something to assert either way.
  */
-async function heardPhases(page: Page): Promise<string[]> {
-	let said = await heard(page);
-	let catching = said.filter(words => words === CATCHING_UP);
-	expect(catching.length).toBeLessThanOrEqual(1);
-	if (catching.length) {
-		expect(said[said.indexOf(CATCHING_UP) + 1]).toMatch(/^Back online\./);
-	}
-	return said.filter(words => words !== CATCHING_UP);
+async function expectCatchingUp(page: Page): Promise<void> {
+	await expect(notice(page)).toHaveAttribute("data-phase", "reconnecting");
+	await expect(notice(page)).toHaveAttribute("data-layer", "sync");
+	await expect(notice(page)).toContainText(CATCHING_UP);
+	await expect(spoken(page)).toHaveText(CATCHING_UP);
 }
 
 /** Set to a directory to keep the screenshots a pull request shows. */
@@ -91,14 +89,21 @@ type Send = "pass" | "cut" | "refuse";
 /**
  * Proxies the document's socket. With `sends`, each Chat send is also answered as `state.send`
  * says: a cut one closes the socket under it and keeps the connection away (`state.offline`), a
- * refused one is answered as the server would answer it.
+ * refused one is answered as the server would answer it. While `state.hold` is set, what the
+ * server says on a socket is kept from the page until `release`, so the page has the socket open
+ * and nothing on it yet: its catching up lasts as long as the test looks at it.
  */
 function route(page: Page | BrowserContext, { sends = false } = {}) {
 	let sockets: WebSocketRoute[] = [];
-	let state = { offline: false, send: "pass" as Send };
+	let state = { offline: false, send: "pass" as Send, hold: false };
+	let held: Array<() => void> = [];
 	let ready = page.routeWebSocket("**/ws?**", socket => {
 		if (state.offline) return socket.close();
 		let server = socket.connectToServer();
+		server.onMessage(message => {
+			if (state.hold) held.push(() => socket.send(message));
+			else socket.send(message);
+		});
 		if (sends) {
 			socket.onMessage(message => {
 				let frame = typeof message === "string"
@@ -119,7 +124,11 @@ function route(page: Page | BrowserContext, { sends = false } = {}) {
 		}
 		sockets.push(socket);
 	});
-	return { sockets, state, ready };
+	let release = () => {
+		state.hold = false;
+		for (let send of held.splice(0)) send();
+	};
+	return { sockets, state, ready, release };
 }
 
 test("a blip that recovers inside the grace period shows nothing", async ({ join, page }) => {
@@ -219,9 +228,13 @@ test("a long outage says so once, by the Chat composer, in its phases, keeps the
 	await page.keyboard.type(" and kept");
 
 	wire.state.offline = false;
+	wire.state.hold = true;
 	let sockets = wire.sockets.length;
 	let back = Date.now();
 	await page.evaluate(() => dispatchEvent(new Event("online")));
+	await expect.poll(() => wire.sockets.length).toBe(sockets + 1);
+	await expectCatchingUp(page);
+	wire.release();
 	await ready(page);
 	expect(wire.sockets.length).toBe(sockets + 1);
 	expect(Date.now() - back).toBeLessThan(6000);
@@ -238,7 +251,7 @@ test("a long outage says so once, by the Chat composer, in its phases, keeps the
 	await expect(page.getByRole("alert")).toHaveCount(0);
 
 	// A screen reader heard each phase once, as it began, and that it was over.
-	expect(await heardPhases(page)).toEqual([RECONNECTING, OFFLINE, BACK]);
+	expect(await heard(page)).toEqual([RECONNECTING, OFFLINE, CATCHING_UP, BACK]);
 	await expect(spoken(page)).toHaveText("");
 	// The banner came in once and went; it never came in twice.
 	let entered = await entrances(page);
@@ -265,7 +278,10 @@ test("with reduced motion the banner comes and goes at once, with no entrance", 
 	await expect(notice(page)).toContainText(RECONNECTING);
 
 	wire.state.offline = false;
+	wire.state.hold = true;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
+	await expectCatchingUp(page);
+	wire.release();
 	await ready(page);
 	await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
 	await expect(banners(page)).toHaveCount(0, { timeout: 8_000 });
@@ -274,7 +290,7 @@ test("with reduced motion the banner comes and goes at once, with no entrance", 
 	// Nothing between: no animation, and never a frame that was not fully there.
 	expect(entered[0]!.animation).toBe("none");
 	expect(entered[0]!.opacity.every(opacity => opacity === 1)).toBe(true);
-	expect(await heardPhases(page)).toEqual([RECONNECTING, BACK]);
+	expect(await heard(page)).toEqual([RECONNECTING, CATCHING_UP, BACK]);
 });
 
 test("Reconnect asks again at once, and the banner says it is back when the connection returns", async ({ join, page }) => {
@@ -477,13 +493,23 @@ test("on a phone, Chat shows the banner by its composer, and Reconnect after rep
 		await snap(page, "banner-dropped-phone");
 
 		wire.state.offline = false;
+		wire.state.hold = true;
 		await reconnect(page).tap({ timeout: 8_000 });
+		await expectCatchingUp(page);
+		await expectInsideViewport(notice(page));
+		wire.release();
 		await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
 		await expectInsideViewport(notice(page));
 		await expectNoHorizontalOverflow(page);
 		await snap(page, "banner-resumed-phone");
 		await expect(banners(page)).toHaveCount(0, { timeout: 8_000 });
-		expect(await heardPhases(page)).toEqual([RECONNECTING, OFFLINE, RECONNECTING, BACK]);
+		expect(await heard(page)).toEqual([
+			RECONNECTING,
+			OFFLINE,
+			RECONNECTING,
+			CATCHING_UP,
+			BACK,
+		]);
 	} finally {
 		// A routed socket that is still open holds its context open.
 		await Promise.all(wire?.sockets.map(socket => socket.close()) ?? []);
@@ -1009,7 +1035,10 @@ test("on a phone, the banner takes its own room at the top of Document and by th
 		expect(await heard(page)).toEqual([RECONNECTING]);
 
 		wire.state.offline = false;
+		wire.state.hold = true;
 		await page.evaluate(() => dispatchEvent(new Event("online")));
+		await expectCatchingUp(page);
+		wire.release();
 		await expect(notice(page)).toHaveAttribute("data-phase", "resumed");
 		await expect(banners(page)).toHaveCount(0, RESUMED);
 		// Nothing is left reserved at the top of the document once it has gone.
@@ -1017,7 +1046,7 @@ test("on a phone, the banner takes its own room at the top of Document and by th
 		let after = await content(page).locator("h1").first().boundingBox();
 		expect(after!.y).toBeGreaterThan(bar!.y + bar!.height);
 		expect(after!.y).toBeLessThan(alert!.y + alert!.height);
-		expect(await heardPhases(page)).toEqual([RECONNECTING, BACK]);
+		expect(await heard(page)).toEqual([RECONNECTING, CATCHING_UP, BACK]);
 	} finally {
 		await Promise.all(wire?.sockets.map(socket => socket.close()) ?? []);
 		await context.close();
@@ -1059,7 +1088,10 @@ test("in a compact window, the banner is by the composer in Chat and at the top 
 	expect(await heard(page)).toEqual([RECONNECTING]);
 
 	wire.state.offline = false;
+	wire.state.hold = true;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
+	await expectCatchingUp(page);
+	wire.release();
 	await expect(banners(page)).toHaveCount(0, RESUMED);
-	expect(await heardPhases(page)).toEqual([RECONNECTING, BACK]);
+	expect(await heard(page)).toEqual([RECONNECTING, CATCHING_UP, BACK]);
 });
