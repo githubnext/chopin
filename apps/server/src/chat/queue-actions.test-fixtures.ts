@@ -595,6 +595,181 @@ export function queueActions(open: Open, options: { interleavings?: number } = {
 		expect(memberEntry(w.context, "edited outside")).toBeDefined();
 	});
 
+	test("a reset whose commit fails says nothing of the message, and leaves it waiting where it was", async () => {
+		let w = await open({ away: true });
+		let first = await w.send("first");
+		let second = await w.send("second");
+		let context = w.context;
+		let persist = context.persist;
+		context.persist = async () => {
+			throw new Error("commit failed");
+		};
+		let seen = w.events.length;
+		let ended: unknown[] = [];
+		w.context.chat.waiting.find(item => item.id === first.id)!.ended = outcome =>
+			void ended.push(outcome);
+
+		await Chat.cancelQueued(context, "agent");
+		context.persist = persist;
+
+		expect(w.events.slice(seen).filter(event => event.kind === "chat:message")).toEqual([]);
+		expect(w.context.chat.waiting.map(item => item.id)).toEqual([
+			first.id as string,
+			second.id as string,
+		]);
+		expect(queueOf(w).map(item => item.text)).toEqual(["first", "second"]);
+		expect(memberEntry(w.context, "first")?.deliveryState).toBe("sent");
+		expect((await w.rows()).map(row => row.state)).toEqual(["waiting", "waiting"]);
+		expect(ended).toEqual([]);
+	});
+
+	test("a reset that comes while the author's cancel is being saved waits for it, and says nothing more of the message", async () => {
+		let w = await open({ away: true });
+		let sent = await w.send("cancelled by its author");
+		let other = await w.send("left for the reset");
+		let ended: unknown[] = [];
+		w.context.chat.waiting.find(item => item.id === sent.id)!.ended = outcome =>
+			void ended.push(outcome);
+		let collaboration = w.storage.collaboration;
+		let commit = collaboration.commit.bind(collaboration);
+		let saving = Promise.withResolvers<void>();
+		collaboration.commit = async input => {
+			if (input.deferredTurns?.some(change => change.action === "transition" && !change.reason)) {
+				await saving.promise;
+			}
+			return commit(input);
+		};
+
+		let cancelled = cancelling(w, "ana", sent.id as string);
+		await tick();
+		let reset = Chat.cancelQueued(w.context, "agent");
+		await tick();
+		await tick();
+		saving.resolve();
+		expect(await cancelled).toMatchObject({ kind: "chat:unqueue" });
+		await reset;
+		collaboration.commit = commit;
+
+		let said = w.events.filter(event =>
+			(event.kind === "chat:message" && (event.entry as { id: string }).id === sent.id)
+			|| (event.kind === "chat:removed" && event.id === sent.id)
+		).map(event =>
+			event.kind === "chat:removed"
+				? "removed"
+				: (event.entry as { deliveryState: string }).deliveryState
+		);
+		expect(said).toEqual(["sent", "removed"]);
+		expect(ended).toEqual([{ status: "skipped" }]);
+		let rows = await w.rows();
+		expect(rows.find(row => row.requestId === sent.id)).toMatchObject({ state: "cancelled" });
+		expect(rows.find(row => row.requestId === sent.id)!.cancelReason).toBeUndefined();
+		expect(rows.find(row => row.requestId === other.id)).toMatchObject({
+			state: "cancelled",
+			cancelReason: "agent",
+		});
+		expect(memberEntry(w.context, "left for the reset")?.deliveryState).toBe("failed");
+	});
+
+	test("a reset that comes while an edit is being saved waits for it, and the message it fails reads the edit", async () => {
+		let w = await open({ away: true });
+		let sent = await w.send("before the edit");
+		let collaboration = w.storage.collaboration;
+		let commit = collaboration.commit.bind(collaboration);
+		let saving = Promise.withResolvers<void>();
+		collaboration.commit = async input => {
+			if (input.deferredTurns?.some(change => change.action === "edit")) await saving.promise;
+			return commit(input);
+		};
+
+		let edited = editing(w, "ana", sent.id as string, "after the edit");
+		await tick();
+		let reset = Chat.cancelQueued(w.context, "agent");
+		await tick();
+		await tick();
+		saving.resolve();
+		expect(await edited).toMatchObject({ kind: "chat:edit", text: "after the edit" });
+		await reset;
+		collaboration.commit = commit;
+
+		let entry = w.context.chat.entries.find(item => item.id === sent.id)!;
+		expect(entry).toMatchObject({
+			text: "after the edit",
+			deliveryState: "failed",
+			deliveryFailure: "machine-removed",
+		});
+		expect((await w.rows())[0]).toMatchObject({
+			text: "after the edit",
+			state: "cancelled",
+			cancelReason: "agent",
+		});
+	});
+
+	test("a request whose child document is found gone while a cancel is being saved is not cancelled twice", async () => {
+		let w = await open({ away: false });
+		let child = crypto.randomUUID();
+		let children = {
+			list: async () => [],
+			resolve: async (id: string) =>
+				({ id, title: "A child", createdAt: "" }) as {
+					id: string;
+					title: string;
+					createdAt: string;
+				} | undefined,
+			open: async () => {
+				throw new Error("not used");
+			},
+		};
+		w.context.children = children as never;
+		w.planner.hold();
+		await w.send("running");
+		await waitFor(() => w.planner.running === 1);
+		let second = await w.send("about the child", "ana", { focus: child });
+		let ended: unknown[] = [];
+		w.context.chat.waiting.find(item => item.id === second.id)!.ended = outcome =>
+			void ended.push(outcome);
+
+		let checking = Promise.withResolvers<void>();
+		children.resolve = async () => {
+			await checking.promise;
+			return undefined;
+		};
+		w.planner.hold(false);
+		w.planner.release();
+		await tick();
+		await tick();
+
+		let collaboration = w.storage.collaboration;
+		let commit = collaboration.commit.bind(collaboration);
+		let saving = Promise.withResolvers<void>();
+		collaboration.commit = async input => {
+			if (
+				input.deferredTurns?.some(change =>
+					change.action === "transition" && change.to === "cancelled"
+				)
+			) {
+				await saving.promise;
+			}
+			return commit(input);
+		};
+		let cancelled = cancelling(w, "ana", second.id as string);
+		await tick();
+		checking.resolve();
+		await tick();
+		await tick();
+		saving.resolve();
+		expect(await cancelled).toMatchObject({ kind: "chat:unqueue" });
+		await tick();
+		collaboration.commit = commit;
+
+		let said = w.events.filter(event =>
+			(event.kind === "chat:message" && (event.entry as { id: string }).id === second.id)
+			|| (event.kind === "chat:removed" && event.id === second.id)
+		).map(event => event.kind === "chat:removed" ? "removed" : "message");
+		expect(said).toEqual(["message", "removed"]);
+		expect(ended).toEqual([{ status: "skipped" }]);
+		expect(memberEntry(w.context, "about the child")).toBeUndefined();
+	});
+
 	test("a message the system cancelled is cancelled: cancelling it again is done and editing it says so, and nobody else is told anything of it", async () => {
 		let w = await open({ away: true });
 		let sent = await w.send("reset away");

@@ -3527,7 +3527,7 @@ async function nextStartable(context: Room): Promise<Waiting | undefined> {
 		}
 		if (first.spent?.()) {
 			chat.waiting.shift();
-			await cancelRow(context, first, "spent");
+			if (!await cancelRow(context, first, "spent")) return undefined;
 			continue;
 		}
 		let gate = await startGate(context);
@@ -3538,14 +3538,14 @@ async function nextStartable(context: Room): Promise<Waiting | undefined> {
 		if (first.focus && context.children && !await context.children.resolve(first.focus.channelId)) {
 			if (chat.waiting[0] !== first || first.editing) continue;
 			chat.waiting.shift();
-			await cancelRow(context, first, "unavailable");
+			if (!await cancelRow(context, first, "unavailable")) return undefined;
 			continue;
 		}
 		if (chat.waiting[0] !== first || first.editing) continue;
 		if (!await stillWrites(context, first)) {
 			if (chat.waiting[0] !== first || first.editing) continue;
 			chat.waiting.shift();
-			await cancelRow(context, first, "access");
+			if (!await cancelRow(context, first, "access")) return undefined;
 			continue;
 		}
 		if (chat.waiting[0] !== first || first.editing) continue;
@@ -3680,10 +3680,12 @@ const FAILURE: Record<Exclude<CancelWhy, "spent">, Wire.DeliveryFailure> = {
  * could not be delivered, and says why; a comment whose thread was resolved needs no word, because
  * the resolution is what its members see; anything else gets a notice and its own mark cleared.
  */
-async function cancelRow(context: Room, item: Waiting, why: CancelWhy): Promise<void> {
+async function cancelRow(context: Room, item: Waiting, why: CancelWhy): Promise<boolean> {
 	let { chat, room, server } = context;
 	let held = item.deferred;
-	if (!held) return;
+	if (!held) return true;
+	// Where it waits, or the head, where the queue's own check took it from.
+	let at = Math.max(0, chat.waiting.indexOf(item));
 	chat.waiting = chat.waiting.filter(value => value !== item);
 	let row = { kind: held.kind, handle: item.handle };
 	let entry = item.message
@@ -3724,10 +3726,16 @@ async function cancelRow(context: Room, item: Waiting, why: CancelWhy): Promise<
 			logRefused(outcomes);
 		}
 	} catch (err) {
+		// Not saved, so not said: the request waits where it did, and nobody is told otherwise.
 		console.error("[chat] could not cancel a queued request:", err);
+		if (!chat.waiting.includes(item)) chat.waiting.splice(at, 0, item);
+		return false;
 	}
 	// Moved on already, by whoever cancelled it first: nothing here says anything of it.
-	if (refused) return void queued(chat, server, room);
+	if (refused) {
+		queued(chat, server, room);
+		return true;
+	}
 	if (entry && failed) {
 		entry.deliveryState = "failed";
 		entry.deliveryFailure = failed;
@@ -3742,6 +3750,7 @@ async function cancelRow(context: Room, item: Waiting, why: CancelWhy): Promise<
 	}
 	queued(chat, server, room);
 	void report(item, { status: "skipped" });
+	return true;
 }
 
 /** Ends every waiting request, because the agent was reset or the document went away. */
@@ -3753,7 +3762,7 @@ export async function cancelQueued(context: Room, why: "agent" | "unavailable"):
 		if (!item.deferred) continue;
 		// A change to it being saved is finished first; if it took the message out, there is nothing left.
 		if (item.editing) await item.editing;
-		if (chat.waiting.includes(item)) await cancelRow(context, item, why);
+		if (chat.waiting.includes(item) && !await cancelRow(context, item, why)) return;
 	}
 }
 
