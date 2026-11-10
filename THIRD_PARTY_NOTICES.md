@@ -17,6 +17,28 @@ and `elements-error-state.json`), which match `assistant-ui/assistant-ui` at com
 shadcn `cn` utility are not used; the classes are replaced with Chopin's tokens, text roles, button
 sizes and icons.
 
+## assistant-ui: Composer's model picker
+
+The Chat composer's model picker (`apps/web/src/chat/assistant-ui/composer-model.tsx`) is adapted
+from the Composer element of [assistant-ui](https://github.com/assistant-ui/assistant-ui), the
+standalone (props and callbacks) lane only. It uses neither assistant-ui's runtime nor
+`AssistantRuntimeProvider` nor `useAui`: Chopin's own state drives it through props.
+
+- **Element:** Composer, the model picker's parts (`ComposerMenu`, `ComposerMenuItem`,
+  `ComposerModelTrigger`, `ComposerModelItem` and the `ComposerModel` type), from the registry item `elements-composer`
+  (<https://r.assistant-ui.com/elements-composer.json>, file
+  `components/assistant-ui/elements/composer.tsx`) and documented at
+  <https://www.assistant-ui.com/elements/composer-model-picker>.
+- **Version:** the registry item as served on 2026-11-10; the repository's `main` was at commit
+  `f92028b466cba721846de6851e4dddb6c04ecfad` that day.
+- **What changed:** restyled to Chopin's tokens, text roles, menu geometry and motion, with its
+  Tailwind utility classes, `lucide-react` icons and `cn` helper replaced by Chopin's own classes
+  and icons; each element names its props and takes a finite `variant` instead of spreading a
+  caller's props, as Chopin's design contract requires; rows show the chosen model with a tint,
+  with no check mark, and carry a description and a right-aligned detail; the menu is mounted
+  while open and anchored to the composer's edge, so its fit-in-composer measurement was dropped;
+  the same menu and row now also draw Chopin's `/` command and `@` mention pickers.
+
 ## assistant-ui: MarkdownText
 
 Chopin's read-only Markdown (Chat messages, decision cards, the phrases inside them) is drawn by
@@ -66,7 +88,8 @@ because `remark-gfm` also reads footnotes and bare addresses, which Chat has alw
 
 ### License
 
-Both adaptations above are under assistant-ui's MIT licence:
+The adaptations above (the connection and failure banners, the model picker and MarkdownText) are
+under assistant-ui's MIT licence:
 
 ```
 MIT License
