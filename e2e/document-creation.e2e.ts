@@ -1,8 +1,15 @@
-import { authenticate, expect, test } from "./room";
+import { authenticate, expect, test as roomTest } from "./room";
 import { createChannel, testChannelPath } from "./database";
 
 import type { Page } from "@playwright/test";
 import type { ChannelDetail } from "../apps/web/src/api";
+
+const test = roomTest.extend({
+	page: async ({ page }, use) => {
+		await use(page);
+		await page.unrouteAll({ behavior: "wait" });
+	},
+});
 
 function sidebar(page: Page) {
 	return page.getByRole("complementary", { name: "Projects", exact: true });
