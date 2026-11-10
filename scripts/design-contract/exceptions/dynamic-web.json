@@ -432,7 +432,7 @@
 			[
 				"dynamic",
 				"*",
-				"containerProps",
+				"attributes",
 				"unresolved JSX props > MarkdownTextImpl: FC<MarkdownTextProps> > <Container>",
 				1
 			],
@@ -446,12 +446,12 @@
 			[
 				"dynamic",
 				"class",
-				"[className, \"aui-md\"].filter(Boolean)",
+				"[className, \"aui-md\", containerClassName].filter(Boolean)",
 				"class > MarkdownTextImpl: FC<MarkdownTextProps> > <Container>",
 				1
 			]
 		],
-		"sourceHash": "e67d97781c59a45f5975c7c0966c197d1b9ed2093430c6a8033be13cfcbee7cb"
+		"sourceHash": "2cd6a8312b5856503115cda33d51b76879fb400811935e1b38ec0aadf1dc1de2"
 	},
 	{
 		"file": "apps/web/src/markdown-text/memoization.tsx",
@@ -469,7 +469,7 @@
 	},
 	{
 		"file": "apps/web/src/markdown-text/default-components.tsx",
-		"reason": "MarkdownText's elements forward the properties react-markdown computed from the parsed message (a link's href, a table cell's alignment, a list's task-list class, a code block's language class) onto the element and add only their fixed aui-md-* class; the values are parsed message data, never authored styles. Reviewed at this exact component boundary.",
+		"reason": "MarkdownText's elements forward the properties react-markdown computed from the parsed message (a link's href, a table cell's alignment, a list's task-list class, a code block's language class) onto the element and join the class they are given to their fixed aui-md-* class; the values are parsed message data, never authored styles. Reviewed at this exact component boundary.",
 		"cases": [
 			[
 				"dynamic",
@@ -622,6 +622,69 @@
 				"dynamic",
 				"class",
 				"className",
+				"class > defaultComponents > <h1>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <h2>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <h3>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <h4>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <h5>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <h6>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <p>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <a>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <blockquote>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
 				"class > defaultComponents > <ul>",
 				1
 			],
@@ -636,7 +699,56 @@
 				"dynamic",
 				"class",
 				"className",
+				"class > defaultComponents > <hr>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <table>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <th>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <td>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <tr>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
 				"class > defaultComponents > <li>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <strong>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > defaultComponents > <sup>",
 				1
 			],
 			[
@@ -654,7 +766,7 @@
 				1
 			]
 		],
-		"sourceHash": "637735195d7fc8e3af215e4639cd15fd0b40810654b6b2f9206453db9a395223"
+		"sourceHash": "f2e192832f26ac31572a6fa2ce52b4d8f32bcac079fb1c7a0a1b75a18b81edc0"
 	},
 	{
 		"file": "apps/web/src/markdown-text/code-blocks.tsx",
@@ -745,6 +857,6 @@
 				1
 			]
 		],
-		"sourceHash": "820f3b308b4b241516a2ea9fa3b88b181138c923bbdb715893cce532b1e3fb98"
+		"sourceHash": "321457f295b20942e2cfa87a523f182e6adb9e71b40c9d5dda6682ce6969ad3c"
 	}
 ]

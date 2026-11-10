@@ -94,6 +94,38 @@ test("the check that Chat draws no h1 recognises an h1 that carries a class", ()
 	expect(markdown("# Title")).toContain('<p class="aui-md-p">Title</p>');
 });
 
+test("Chat reads GitHub's tables, strikethrough and task lists, and only those", () => {
+	let markup = markdown(
+		"| A | B |\n| - | - |\n| 1 | 2 |\n\n~~gone~~ and ~one~ and about ~5 minutes, ~10 at most\n\n- [x] done\n- [ ] open",
+	);
+	expect(markup).toContain('<table class="aui-md-table">');
+	expect(markup).toContain("<del>gone</del>");
+	// One tilde is not strikethrough: it is the text a person typed.
+	expect(markup).toContain("~one~ and about ~5 minutes, ~10 at most");
+	expect(markup.match(/<input [^>]*type="checkbox"/g)).toHaveLength(2);
+	// A box is named, so a reader of the screen hears what it is before the item's words.
+	expect(markup.match(/<input aria-label="Task"/g)).toHaveLength(2);
+	expect(markup).toContain('<li class="aui-md-li task-list-item">');
+});
+
+test("a footnote, a bare address and a www link stay the plain text they were in Chat", () => {
+	let markup = markdown(
+		"Claim[^1] and see https://example.com/page, www.example.com or ana@example.com.\n\n[^1]: The note.",
+	);
+	expect(markup).not.toContain("<a");
+	expect(markup).not.toContain("<sup");
+	expect(markup).not.toContain("<section");
+	expect(markup).not.toContain("footnote");
+	expect(markup).toContain(
+		"Claim[^1] and see https://example.com/page, www.example.com or ana@example.com.",
+	);
+	expect(markup).toContain("[^1]: The note.");
+	// A link someone wrote is still a link.
+	expect(markdown("[the page](https://example.com/page)")).toContain(
+		'href="https://example.com/page"',
+	);
+});
+
 test("indentation keeps nested lists and code blocks intact", () => {
 	let nested =
 		/<li class="aui-md-li">parent\s*<ul class="aui-md-ul">\s*<li class="aui-md-li">child<\/li>\s*<li class="aui-md-li">sibling<\/li>\s*<\/ul>\s*<\/li>\s*<li class="aui-md-li">next<\/li>/;
@@ -377,4 +409,35 @@ test("a message's Markdown is drawn again only when what it says changes", () =>
 	);
 	expect(sameMessageMarkdown(props, { ...props, references: undefined })).toBe(false);
 	expect(sameMessageMarkdown(props, { ...props, references: [] })).toBe(false);
+});
+
+test("a message is drawn again when it starts or stops streaming, and not when its flag is only absent", () => {
+	let base = { source: "Same" };
+	expect(sameMessageMarkdown({ ...base, streaming: true }, { ...base, streaming: false })).toBe(
+		false,
+	);
+	expect(sameMessageMarkdown({ ...base, streaming: false }, { ...base, streaming: true })).toBe(
+		false,
+	);
+	expect(sameMessageMarkdown({ ...base, streaming: undefined }, { ...base, streaming: true })).toBe(
+		false,
+	);
+	expect(sameMessageMarkdown({ ...base, streaming: true }, { ...base, streaming: undefined })).toBe(
+		false,
+	);
+	// Absent and false both mean the message is settled.
+	expect(sameMessageMarkdown({ ...base, streaming: undefined }, { ...base, streaming: false }))
+		.toBe(true);
+	expect(sameMessageMarkdown({ ...base, streaming: false }, base)).toBe(true);
+	expect(sameMessageMarkdown({ ...base, streaming: true }, { ...base, streaming: true })).toBe(
+		true,
+	);
+	// Streaming shows as the root's status.
+	expect(renderToStaticMarkup(createElement(MessageMarkdown, { ...base, streaming: true })))
+		.toContain(
+			'data-status="running"',
+		);
+	expect(renderToStaticMarkup(createElement(MessageMarkdown, base))).toContain(
+		'data-status="complete"',
+	);
 });

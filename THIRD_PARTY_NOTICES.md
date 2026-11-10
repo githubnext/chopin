@@ -41,19 +41,28 @@ Chopin's read-only Markdown (Chat messages, decision cards, the phrases inside t
     `overrides/CodeOverride.tsx` (`556ff6f8ec4edf4aad94c2ef1a7206f8a50c89c4`),
     `overrides/CodeBlock.tsx` (`23743f4581f5b8b7cc442d0670d588585c94c9b7`),
     `overrides/defaultComponents.tsx` (`299b9b1d4f0b568c317c37dca7ef3fca5961e965`) and
-    `overrides/withDefaults.ts`, in `code-blocks.tsx`.
+    `overrides/withDefaults.ts` (`2c9bcc745cbe40f09c862e4a626da4831b074474`), in `code-blocks.tsx`.
 
 **What changed.** The element's own page says that, standalone, MarkdownText has no controlled form:
 its primitive reads the text from the surrounding message part with `useMessagePartText()` and
 `INTERNAL.useSmooth()` of `@assistant-ui/react`, which need that library's runtime. Chopin does not use
 that runtime (its Chat is collaborative and Yjs-backed), so the one seam that read the message part is
-replaced by two props, `text` and `status`; `status` is drawn as `data-status`, as upstream's
-runtime status was. The `smooth` typewriter reveal is `INTERNAL.useSmooth` and is not taken. Added:
-`container`, `containerProps` and `lead`. Upstream styles each element with Tailwind utility classes and
-shadcn colour names; the elements here keep upstream's `aui-md-*` class names and are styled with
-Chopin's tokens in `markdown-text.css`. `classnames` is a one-line join and `@types/hast` is replaced by
-react-markdown's own type. No `@assistant-ui/*` package is a dependency, and
-`apps/web/src/markdown-text/markdown-text.test.tsx` fails if one is imported.
+replaced by two props, `text` and `status`; `status` is drawn as `data-status`, as upstream's runtime
+status was. The primitive's own `className`, `containerProps` (its class merged with the root's),
+`containerComponent`, `defer` and the react-markdown options are kept under their upstream names. Added:
+`lead`, an inline lead drawn inside the root before the first block (Chat's leading `@chopin`). Not
+taken: `smooth`, the typewriter reveal, which is `INTERNAL.useSmooth`, and `preprocess`, which nothing
+here uses. Upstream styles each element with Tailwind utility classes and shadcn colour names; the
+elements here keep upstream's `aui-md-*` class names, and the way a given class joins the element's own,
+and are styled with Chopin's tokens in `markdown-text.css`. The copy button is Chopin's icon button
+and icons. `classnames` is a one-line join and `@types/hast` is replaced by react-markdown's own type.
+No `@assistant-ui/*` package is a dependency, and `apps/web/src/markdown-text/markdown-text.test.tsx`
+fails if one is imported.
+
+`gfm.ts` is Chopin's, not upstream's: the element passes `remark-gfm` to its renderer, and that is the
+element's default here. Chat's messages pass a plugin built from `micromark-extension-gfm-table`,
+`-strikethrough` and `-task-list-item` and their `mdast-util-*` counterparts (MIT, unified collective),
+because `remark-gfm` also reads footnotes and bare addresses, which Chat has always shown as text.
 
 ### License
 
@@ -80,5 +89,6 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-`remark-gfm` (MIT, unified collective) is the one new dependency, because the upstream element passes it
-to its renderer.
+`remark-gfm` and the strikethrough and task-list packages of `micromark-extension-gfm-*` and
+`mdast-util-gfm-*` are the new dependencies (MIT, unified collective); the table packages were already
+one. `remark-gfm` is there because the upstream element passes it to its renderer.
