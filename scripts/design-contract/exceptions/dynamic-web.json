@@ -521,7 +521,7 @@
 				1
 			]
 		],
-		"sourceHash": "0e11eb2e07c33ca6371ddca2b01f83888c5f915fdbb1a86985114469de68bead"
+		"sourceHash": "2e8add35b4eb5bc4b88422c4b8796757798861dd9141d0d66ee40aa211336002"
 	},
 	{
 		"file": "apps/web/src/markdown-text/code-blocks.tsx",

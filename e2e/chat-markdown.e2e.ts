@@ -258,6 +258,42 @@ test("a clipboard that refuses the write says so, and a later copy can work", as
 	expect(errors).toEqual([]);
 });
 
+test("on a phone a copy that fails shows it on the button itself, since touch has no tooltip to read", async ({ join, seed }) => {
+	await seed("# Refused on a phone\n", { transcript: transcript() });
+	let page = await join("ana", PHONE);
+	await page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: /^Chat/ }).click();
+	let message = messageOf(page);
+	await expect(message).toBeVisible();
+	let copy = message.getByRole("button", { name: "Copy code" });
+	await copy.scrollIntoViewIfNeeded();
+	let idle = await copy.screenshot();
+	await page.evaluate(() => {
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: { writeText: () => Promise.reject(new DOMException("denied", "NotAllowedError")) },
+		});
+	});
+	await copy.tap();
+	let failed = message.getByRole("button", { name: "Couldn't copy" });
+	await expect(failed).toBeVisible();
+	// What a person sees changes, not only the name: the glyph is drawn in the danger icon role.
+	expect((await failed.screenshot()).equals(idle)).toBe(false);
+	let ink = await failed.locator("svg").evaluate(svg => {
+		let danger = document.createElement("span");
+		danger.style.color = "var(--color-danger-icon)";
+		document.body.append(danger);
+		let colors = { glyph: getComputedStyle(svg).color, danger: getComputedStyle(danger).color };
+		danger.remove();
+		return colors;
+	});
+	expect(ink.glyph).toBe(ink.danger);
+	// After a moment it offers the copy again, looking as it did.
+	let again = message.getByRole("button", { name: "Copy code" });
+	await expect(again).toBeVisible({ timeout: 6_000 });
+	expect((await again.screenshot()).equals(idle)).toBe(true);
+});
+
 const WIDE = [
 	"Rollout outline",
 	"",
