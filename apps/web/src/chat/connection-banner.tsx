@@ -38,7 +38,18 @@ export type ConnectionBanner = {
  * nor hears of it twice.
  */
 export function useConnectionBanner(
-	{ lost, failures, synced, transcript, planner, plannerHeld, reconnect, wake }: {
+	{
+		lost,
+		failures,
+		synced,
+		transcript,
+		planner,
+		plannerAttached,
+		plannerHeld,
+		lostEdits,
+		reconnect,
+		wake,
+	}: {
 		/** The room's connection is lost: it reports an outage (`isOffline`). */
 		lost: boolean;
 		failures: number;
@@ -46,6 +57,13 @@ export function useConnectionBanner(
 		transcript: TranscriptFacts;
 		/** The Planner's status where the banner tells it (`plannerForBanner`). */
 		planner: PlannerStatus | undefined;
+		/**
+		 * The room's own word, on the current socket, is that the Planner is attached. Not the same
+		 * as `planner` being undefined, which is also a status withheld or hidden.
+		 */
+		plannerAttached: boolean;
+		/** How many replacements of the document dropped edits the server never acknowledged. */
+		lostEdits: number;
 		/** The Planner's status is only withheld for a moment, not over. */
 		plannerHeld: boolean;
 		reconnect: () => void;
@@ -60,6 +78,9 @@ export function useConnectionBanner(
 		if (pressed !== undefined && (!lost || failures > pressed)) setPressed(undefined);
 	}, [lost, failures, pressed]);
 	let [memory, setMemory] = useState<ConnectionMemory>(INITIAL_MEMORY);
+	// `failures` starts over when the socket opens, so the attempt that opened it is the last one
+	// counted while the loss was shown. Left unknown, never guessed, where none was.
+	let attempt = useRef<number>(undefined);
 	let facts: ConnectionFacts = {
 		socket: shown ? "lost" : "up",
 		failures,
@@ -69,10 +90,15 @@ export function useConnectionBanner(
 		turn: transcript.turn,
 		messages: transcript.messages,
 		planner,
+		lostEdits,
+		plannerAttached,
+		reopened: attempt.current,
 	};
 	let step = connectionStep(memory, facts);
 	useEffect(() => {
 		if (step.memory !== memory) setMemory(step.memory);
+		if (lost && shown) attempt.current = failures + 1;
+		else if (!step.memory.lost) attempt.current = undefined;
 	});
 	let resumed = step.view.phase === "resumed";
 	useEffect(() => {
