@@ -81,7 +81,7 @@ test("an image that is not this document's own shows its alt text, never a reque
 	expect(second).not.toContain("example.test");
 	expect(second).toContain('data-question-image="refused"');
 	expect(second).toContain(">A tracker<");
-	expect(second).toContain("<table>");
+	expect(second).toContain('<table class="aui-md-table">');
 });
 
 test("the Decisions tab, the document and the deck show the same visuals", () => {

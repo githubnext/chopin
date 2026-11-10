@@ -81,6 +81,27 @@
 	font-size: var(--text-sm);
 }
 
+/* A fenced block's header (its language and a copy button) and its code read as one block. */
+.chat-markdown .aui-code-header-root {
+	margin-block: 0.5rem 0;
+}
+
+.chat-markdown .aui-code-header-root + pre {
+	margin-block-start: 0;
+	padding-block-start: 0.25rem;
+	border-start-start-radius: 0;
+	border-start-end-radius: 0;
+}
+
+/* A table scrolls in its own lane rather than widening the message. */
+.chat-markdown .aui-md-table-wrapper {
+	margin-block: 0.5rem;
+}
+
+.chat-markdown .aui-md-table {
+	font-size: var(--text-sm);
+}
+
 .chat-message-body:has([data-analysis-trigger]) {
 	padding-inline-end: 2rem;
 }

@@ -47,7 +47,7 @@ test("only the destination message is marked, without a repeated caption", () =>
 test("source metadata preserves current Markdown rendering instead of flattening text", () => {
 	let result = markup(destination, "**A\u{1F9EA} pilot**");
 	expect(result).toContain('data-chat-raw="**A\u{1F9EA} pilot**"');
-	expect(result).toContain("<strong>A\u{1F9EA} pilot</strong>");
+	expect(result).toContain('<strong class="aui-md-strong">A\u{1F9EA} pilot</strong>');
 });
 
 function planner(entries: { id: string; text: string; to?: "planner" }[], queued = []) {

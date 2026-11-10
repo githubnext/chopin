@@ -22,7 +22,7 @@ export {
 	MarkdownText,
 	QuestionMarkdownContext,
 } from "./question-markdown";
-export type { QuestionMarkdownRenderer } from "./question-markdown";
+export type { MarkdownRoot, QuestionMarkdownRenderer } from "./question-markdown";
 export { QuestionView } from "./question-view";
 export type {
 	AddCriterionResult,

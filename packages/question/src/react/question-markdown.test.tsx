@@ -12,7 +12,11 @@ import type { QuestionViewProps } from "./question-view";
 /** Marks what went through which renderer, so placement is visible in the markup. */
 const MARKED: QuestionMarkdownRenderer = {
 	inline: (source, { links }) => <span data-inline={links ? "links" : "plain"}>{source}</span>,
-	block: source => <span data-block="">{source}</span>,
+	block: (source, _place, root) => (
+		<div {...root}>
+			<span data-block="">{source}</span>
+		</div>
+	),
 };
 
 const BODY = "- Storage: PostgreSQL\n- Rollout: small pilot";

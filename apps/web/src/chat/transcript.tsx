@@ -270,6 +270,7 @@ function MessageBody(
 							mention={toPlanner ? "@chopin" : undefined}
 							references={references}
 							source={text}
+							streaming={!!message.streaming}
 						/>
 						{message.streaming && <span className="ml-0.5">▍</span>}
 					</div>

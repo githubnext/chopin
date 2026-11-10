@@ -42,7 +42,11 @@ const META: Question.CardMeta = {
 
 /** Every Markdown region of a card, in order, as its markup. */
 function regions(markup: string): string[] {
-	return [...markup.matchAll(/<div class="[^"]*" data-question-markdown="">[\s\S]*?<\/div>/g)].map(
+	return [
+		...markup.matchAll(
+			/<div data-status="complete" data-question-markdown="" class="[^"]*">[\s\S]*?<\/div>/g,
+		),
+	].map(
 		match => match[0],
 	);
 }
@@ -72,7 +76,9 @@ test("one card reads the same in the Decisions tab and inline in the document", 
 	expect(list[0]).toContain(
 		"(1) Storage stays in PostgreSQL<br/>\n(2) The pilot starts with one team",
 	);
-	expect(list[0]).toContain("<ul>\n<li><strong>Before:</strong> one shared queue</li>");
+	expect(list[0]).toContain(
+		'<ul class="aui-md-ul">\n<li class="aui-md-li"><strong class="aui-md-strong">Before:</strong> one shared queue</li>',
+	);
 	expect(list[1]).toContain("Keeps:<br/>\n(1) storage<br/>\n(2) pilot");
 });
 
