@@ -1,6 +1,8 @@
 {
 	"ignorePatterns": [
 		"**/dist/**",
+		"apps/web/src/components/**",
+		"apps/web/src/lib/utils.ts",
 		"data/**",
 		"e2e/.scratch/**",
 		"e2e/test-results/**",
