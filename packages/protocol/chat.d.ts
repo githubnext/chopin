@@ -289,7 +289,12 @@ export declare namespace Chat {
 	 * A turn that falls back for want of a catalog its client offered and never reported ends that
 	 * for the client, and `choice` is then sent.
 	 */
-	export type ModelState = KIND<"chat:model"> & { catalog?: ModelCatalog; choice?: ModelChoice };
+	export type ModelState = KIND<"chat:model"> & {
+		catalog?: ModelCatalog;
+		choice?: ModelChoice;
+		/** The chosen model's catalog name, kept when the model is no longer offered. */
+		modelName?: string;
+	};
 
 	/**
 	 * Sent to everyone in the room when a turn could not read the document's model choice, or the

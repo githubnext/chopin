@@ -156,6 +156,18 @@ describe("the words for a level and for a choice that could not be honoured", ()
 		);
 	});
 
+	it("prefers the saved name, then the catalog name, then the id", () => {
+		expect(unavailableNotice(catalog, { model: "acme/large" }, "Earlier name")).toBe(
+			"Earlier name is no longer available, so Chopin used its default model.",
+		);
+		expect(unavailableNotice(catalog, { model: "acme/large" })).toBe(
+			"Large is no longer available, so Chopin used its default model.",
+		);
+		expect(unavailableNotice(undefined, { model: "acme/large" })).toBe(
+			"acme/large is no longer available, so Chopin used its default model.",
+		);
+	});
+
 	it("names a model whose catalog name is empty by its id", () => {
 		let blank = { models: [{ id: "acme/blank", name: "" }] };
 		expect(unavailableNotice(blank, { model: "acme/blank" })).toBe(

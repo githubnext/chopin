@@ -1012,6 +1012,8 @@ export type StoredPlannerLinkHold = PlannerLinkHold & {
 export type PlannerModelChoice = {
 	channelId: string;
 	model?: string;
+	/** The catalog's name for the chosen model, when known. */
+	modelName?: string;
 	thinkingLevel?: string;
 	/** Who chose it last. */
 	userId: string;
