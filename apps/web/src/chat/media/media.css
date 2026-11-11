@@ -163,7 +163,7 @@
 
 .chat-composer [data-slot="composer-attachment"][data-kind="file"] {
 	gap: calc(var(--spacing) * 2.5);
-	min-block-size: calc(var(--spacing) * 14);
+	min-block-size: calc(var(--spacing) * 16);
 	max-inline-size: 240px;
 	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 8) calc(var(--spacing) * 2)
 		calc(var(--spacing) * 2);

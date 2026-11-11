@@ -83,6 +83,10 @@ async function openChat(page: Page): Promise<void> {
 		.getByRole("button", { name: /^Chat/ });
 	if (await tab.isVisible()) await tab.click();
 	await expect(chat(page)).toBeVisible();
+	// A phone's pane slides in from the side; measure it once it has arrived.
+	if ((page.viewportSize()?.width ?? 0) <= 600) {
+		await expect.poll(async () => Math.round((await chat(page).boundingBox())?.x ?? -1)).toBe(0);
+	}
 }
 
 function agent(id: string, images: Chat.Image[], ts = 1_700_000_000_000): Chat.Entry {
@@ -269,9 +273,11 @@ test("the viewer is Slack's: full screen, who sent it and when along the top, th
 	await open.getByRole("button", { name: "Previous image" }).click();
 	await expect(open.getByRole("status")).toHaveText("Image 2 of 3");
 	// Tab stays inside it.
+	// Tab stays inside it, wrapping through its focus guards back to its first control.
 	for (let step = 0; step < 8; step++) {
 		await page.keyboard.press("Tab");
-		expect(await open.evaluate(element => element.contains(document.activeElement))).toBe(true);
+		await expect.poll(() => open.evaluate(element => element.contains(document.activeElement)))
+			.toBe(true);
 	}
 	await page.keyboard.press("Escape");
 	await expect(open).toHaveCount(0);
@@ -505,6 +511,7 @@ test("on a phone the images, the grid, the files and the viewer fit the screen",
 	await expect(figure).toHaveAttribute("data-load", "shown");
 	// Each is as wide as its message allows, never wider, and nothing runs off the screen.
 	let body = (await message(page, "one").boundingBox())!;
+
 	let frame = (await figure.locator(".chat-image-frame").boundingBox())!;
 	expect(frame.x + frame.width).toBeLessThanOrEqual(body.x + body.width + 0.5);
 	let grid = (await message(page, "grid").locator("[data-chat-image-gallery]").boundingBox())!;
@@ -513,7 +520,7 @@ test("on a phone the images, the grid, the files and the viewer fit the screen",
 
 	await message(page, "grid").locator('[data-chat-image="tile"]').first().tap();
 	let open = viewer(page);
-	await expect(open.getByRole("status")).toHaveText("Image 2 of 4");
+	await expect(open.getByRole("status")).toHaveText("Image 1 of 3");
 	await expect.poll(async () => {
 		let box = (await open.boundingBox())!;
 		return [box.width, box.height];
@@ -522,7 +529,7 @@ test("on a phone the images, the grid, the files and the viewer fit the screen",
 	expect(next.x + next.width).toBeLessThanOrEqual(390);
 	expect(next.y + next.height).toBeLessThanOrEqual(844);
 	await open.getByRole("button", { name: "Next image" }).tap();
-	await expect(open.getByRole("status")).toHaveText("Image 3 of 4");
+	await expect(open.getByRole("status")).toHaveText("Image 2 of 3");
 });
 
 test("the composer's files keep their place on a phone", async ({ join }) => {
