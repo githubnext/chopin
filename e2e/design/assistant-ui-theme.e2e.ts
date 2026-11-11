@@ -28,6 +28,8 @@ const TOKENS = [
 const ROOTS = [
 	'[data-slot="model-selector-trigger"]',
 	'[data-slot="model-selector-content"]',
+	'[data-slot="composer-menu"]',
+	'[data-slot="directive-text-chip"]',
 ] as const;
 
 type Colour = { r: number; g: number; b: number; a: number };
@@ -60,6 +62,9 @@ async function drawn(
 		let fonts: string[] = [];
 		let leaks: string[] = [];
 		let body = getComputedStyle(document.body).fontFamily;
+		// Chopin's own stack for technical words, which a copy's `font-mono` tag draws (the layer does
+		// not restore a family, so the copy's is Chopin's, and the two are the same string).
+		let mono = getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim();
 		let describe = (element: Element) =>
 			`${element.tagName.toLowerCase()}${
 				element.getAttribute("data-slot") ? `[${element.getAttribute("data-slot")}]` : ""
@@ -94,7 +99,8 @@ async function drawn(
 				if (style.textDecorationLine !== "none") {
 					add(element, "text-decoration-color", style.textDecorationColor);
 				}
-				if (element instanceof SVGElement) {
+				// Only a shape paints: an icon's `svg` and `g` hold the default fill that its shapes override.
+				if (element instanceof SVGGeometryElement) {
 					add(element, "fill", style.fill);
 					add(element, "stroke", style.stroke);
 				}
@@ -109,7 +115,13 @@ async function drawn(
 					&& [...element.childNodes].some(node => node.nodeType === 3 && node.textContent!.trim())
 				) {
 					fonts.push(
-						`${describe(element)}: ${style.fontFamily === body ? "Chopin" : style.fontFamily}`,
+						`${describe(element)}: ${
+							style.fontFamily === body
+								? "Chopin"
+								: style.fontFamily === mono
+								? "Chopin mono"
+								: style.fontFamily
+						}`,
 					);
 				}
 			}
@@ -177,7 +189,7 @@ for (let mode of ["light", "dark"] as const) {
 			expect(unthemed(result), `${state}, ${mode}: colours that are no Chopin token`).toEqual([]);
 			expect(result.leaks, `${state}, ${mode}: borders drawn in the text colour`).toEqual([]);
 			expect(
-				result.fonts.filter(font => !font.endsWith(": Chopin")),
+				result.fonts.filter(font => !/: Chopin( mono)?$/.test(font)),
 				`${state}, ${mode}: type outside Chopin's typeface`,
 			).toEqual([]);
 			checked += result.drawn.length;

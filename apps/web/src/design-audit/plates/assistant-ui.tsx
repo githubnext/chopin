@@ -1,5 +1,12 @@
+import { GlobeIcon, SparklesIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 
+import {
+	ComposerCommandItem,
+	ComposerMenu,
+	ComposerPersonItem,
+} from "@/components/assistant-ui/elements/composer";
+import { createDirectiveText } from "@/components/assistant-ui/elements/directive-text";
 import {
 	ModelSelectorContent,
 	ModelSelectorRoot,
@@ -28,6 +35,16 @@ const CATALOG: Chat.ModelCatalog = {
 		{ id: "gpt-5-mini", name: "GPT-5 mini", description: "Quick drafts" },
 	],
 };
+
+const MENTION = {
+	parse: () => [{ kind: "mention" as const, type: "agent", label: "Chopin", id: "chopin" }],
+};
+/** The chip as Directive text draws it for a mention, and with the control the patch lets it hold. */
+const MentionChip = createDirectiveText(MENTION, { iconMap: { agent: SparklesIcon } });
+const RemovableChip = createDirectiveText(MENTION, {
+	iconMap: { agent: SparklesIcon },
+	trailing: () => <XIcon />,
+});
 
 const SPECIMENS = [
 	{ label: "Outline, default", variant: "outline", size: "default" },
@@ -67,6 +84,46 @@ export function AssistantUiPlate() {
 						</ModelSelectorRoot>
 					</div>
 				))}
+				<div>
+					<StateLabel>Mentions menu</StateLabel>
+					<div className="design-audit-aui-menu">
+						<ComposerMenu open>
+							<ComposerPersonItem active person={{ name: "Chopin", role: "agent" }} />
+							{/* The avatar slot the patch adds, drawn here as a plain node. */}
+							<ComposerPersonItem
+								active={false}
+								person={{ name: "ana", role: "human", avatar: <span aria-hidden="true">A</span> }}
+							/>
+							<ComposerPersonItem active={false} person={{ name: "Overview", role: "H1" }} />
+						</ComposerMenu>
+					</div>
+				</div>
+				<div>
+					<StateLabel>Slash commands menu</StateLabel>
+					<div className="design-audit-aui-menu">
+						<ComposerMenu open>
+							<ComposerCommandItem
+								active
+								command={{
+									name: "research",
+									description: "Search the web for this document",
+									icon: GlobeIcon,
+								}}
+							/>
+							<ComposerCommandItem
+								active={false}
+								command={{ name: "skill:notes", description: "Draft notes", icon: SparklesIcon }}
+							/>
+						</ComposerMenu>
+					</div>
+				</div>
+				<div>
+					<StateLabel>Mention chip, and with a trailing control</StateLabel>
+					<div className="design-audit-aui-chips">
+						<MentionChip text=":agent[Chopin]" />
+						<RemovableChip text=":agent[Chopin]" />
+					</div>
+				</div>
 			</div>
 		</AuditPlate>
 	);

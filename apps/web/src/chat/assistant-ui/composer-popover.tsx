@@ -38,6 +38,7 @@ export function ComposerPopover(
 			<div
 				aria-label={label}
 				className="composer-menu-list"
+				data-chopin-control=""
 				data-focus-boundary=""
 				id={id}
 				role="listbox"

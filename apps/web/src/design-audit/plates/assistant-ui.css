@@ -10,3 +10,17 @@
 	align-items: flex-start;
 	gap: 0.5rem;
 }
+
+/* The menus open upward from the box they belong to, so each is given the room above its own. */
+.design-audit-aui > div > .design-audit-aui-menu {
+	position: relative;
+	width: 18rem;
+	height: 0;
+	margin-top: 8.5rem;
+}
+
+.design-audit-aui-chips {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+}
