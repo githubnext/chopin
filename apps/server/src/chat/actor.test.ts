@@ -76,15 +76,14 @@ function message(
 }
 
 describe("demo actors sharing one operator", () => {
-	it("keeps retries and withdrawal apart per actor", async () => {
-		let { chat, context } = room({ busy: true });
+	it("keeps retries apart per actor", async () => {
+		let { chat, context } = room({ agent: false });
 		let lily = sender("demo:lily", "U_op");
-		let felix = sender("demo:felix", "U_op");
 		let requestId = crypto.randomUUID();
 
 		await Chat.send(context, lily, message("draft it", "planner", undefined, "a", requestId));
 		await Chat.send(context, lily, message("draft it", "planner", undefined, "b", requestId));
-		expect(chat.waiting).toHaveLength(1);
+		expect(chat.entries.filter(entry => entry.id === requestId)).toHaveLength(1);
 
 		let replies: Sent[] = [];
 		let rival = sender("demo:felix", "U_op", replies);
@@ -93,12 +92,7 @@ describe("demo actors sharing one operator", () => {
 			kind: "session:error",
 			message: "chat request id was reused with different content",
 		});
-		expect(chat.waiting).toHaveLength(1);
-
-		Chat.unqueue(context, felix, { kind: "chat:unqueue", rid: "u", id: requestId, ts: 0 });
-		expect(chat.waiting).toHaveLength(1);
-		Chat.unqueue(context, lily, { kind: "chat:unqueue", rid: "u", id: requestId, ts: 0 });
-		expect(chat.waiting).toHaveLength(0);
+		expect(chat.entries.filter(entry => entry.id === requestId)).toHaveLength(1);
 	});
 
 	it("authors room messages as the admitted actor", async () => {

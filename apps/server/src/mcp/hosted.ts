@@ -9,6 +9,7 @@ import {
 
 import { ownOrigin } from "../auth/config";
 import { documentUrl } from "../channels/document-url";
+import { CANNOT_STEER } from "../chat/steering";
 import { notAttachedMessage } from "../harness/remote/attachments";
 import { deterministicChannelId, isChannelId } from "../channels/id";
 import { documentSlug } from "../channels/slug";
@@ -394,6 +395,7 @@ export function hosted(
 								?? notAttachedMessage(url, fullName),
 						};
 					}
+					if (code === "planner-busy") return { kind: "refused", code, message: CANNOT_STEER };
 					if (code) return { kind: "refused", code };
 					return { kind: "invoked", document: { ...summary(channel), url } };
 				},

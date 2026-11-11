@@ -1,17 +1,14 @@
 /**
- * Turns that something other than a message started.
+ * What a message to the Chat does, and the turns that something other than a message started.
  *
- * Accepting a comment is an instruction, so it starts a turn the same way a
- * message does — through the same queue, with the same ceiling. What differs is
- * that a button press is not a thing anybody said, so the transcript has to be
- * told why the agent began moving, and that the work may already be done by the
- * time the turn comes up.
+ * Accepting a comment is an instruction. A button press is not a thing anybody said, so the
+ * transcript has to be told why the agent began moving. A turn the server wrote for itself waits for
+ * the one running, and may already be done by the time it comes up; one a person asked for never waits.
  */
 
 import { afterEach, describe, expect, it } from "bun:test";
 import { ulid } from "@chopin/dialect";
 
-import { expectPlain } from "../testing/plain-words";
 import { ChatReferenceError } from "./references";
 import * as Chat from "./service";
 
@@ -117,19 +114,6 @@ function referenceResolver(reference: Wire.Reference): ReferenceService {
 }
 
 describe("sending to a named destination", () => {
-	it("keeps a planner message in the queue until its turn begins", async () => {
-		let { chat, context } = room({ busy: true });
-
-		await Chat.send(context, sender(), message("draft the migration", "planner"));
-
-		expect(chat.entries).toHaveLength(0);
-		expect(chat.waiting).toMatchObject([{
-			handle: "ana",
-			text: "draft the migration",
-			userId: "U_ana",
-		}]);
-	});
-
 	it("sends to the room even when the prose contains the typing shortcut", async () => {
 		let { chat, context } = room({ busy: true });
 
@@ -186,29 +170,6 @@ describe("sending to a named destination", () => {
 		});
 	});
 
-	it("carries references on the visible queue and persists them when the turn starts", async () => {
-		let { chat, context, sent } = room({ busy: true });
-		let reference = resolvedReference();
-		context.references = referenceResolver(reference);
-		await Chat.send(
-			context,
-			sender(),
-			message("#release", "planner", [{
-				kind: "document",
-				channelId: reference.channelId,
-				start: 0,
-				end: 8,
-			}]),
-		);
-		expect(chat.entries).toEqual([]);
-		expect(chat.waiting[0]?.references).toEqual([reference]);
-		expect(sent.findLast(frame => frame.kind === "chat:queue")?.waiting).toEqual([
-			expect.objectContaining({ references: [reference] }),
-		]);
-		Chat.pending(chat);
-		expect(chat.entries[0]?.references).toEqual([reference]);
-	});
-
 	it("rejects an unresolvable reference before changing transcript, queue, or backscroll", async () => {
 		let { chat, context } = room({ busy: true });
 		let replies: Sent[] = [];
@@ -241,7 +202,7 @@ describe("sending to a named destination", () => {
 	});
 
 	it("answers a reference lookup that failed for storage's sake as a passing trouble, and takes the same request again", async () => {
-		let { chat, context } = room({ busy: true });
+		let { chat, context } = room({ agent: false });
 		let looking = 0;
 		context.references = {
 			resolve: async (input: { text: string }) => {
@@ -275,48 +236,8 @@ describe("sending to a named destination", () => {
 		expect(chat.entries).toEqual([]);
 		expect(chat.waiting).toEqual([]);
 		await Chat.send(context, sender("ana", "U_ana", frames), ask("second"));
-		expect(frames.at(-1)).toMatchObject({ kind: "chat:send", rid: "second", queued: true });
-		expect(chat.waiting.filter(item => item.id === requestId)).toHaveLength(1);
-	});
-
-	it("removes the typing shortcut from a queued planner message", async () => {
-		let { chat, context } = room({ busy: true });
-
-		await Chat.send(context, sender(), message("@chopin draft the migration", "planner"));
-
-		expect(chat.waiting[0]?.text).toBe("draft the migration");
-	});
-
-	it("keeps queued member identity and session provenance off the wire", async () => {
-		let { context, sent } = room({ busy: true });
-		await Chat.send(context, sender("ana", "U_private"), message("research this", "planner"));
-
-		let queue = sent.findLast(frame => frame.kind === "chat:queue");
-		expect(queue?.waiting).toEqual([{
-			id: expect.any(String),
-			handle: "ana",
-			text: "research this",
-		}]);
-	});
-
-	it("moves a queued message into the transcript when it becomes pending", () => {
-		let { chat } = room();
-		chat.waiting.push({
-			id: "w1",
-			handle: "ana",
-			text: "draft the migration",
-			message: true,
-			userId: "U_ana",
-		});
-
-		let pending = Chat.pending(chat);
-
-		expect(pending?.userId).toBe("U_ana");
-		expect(chat.entries).toMatchObject([{
-			id: "w1",
-			author: { kind: "member", handle: "ana" },
-			text: "draft the migration",
-		}]);
+		expect(frames.at(-1)).toMatchObject({ kind: "chat:send", rid: "second", queued: false });
+		expect(chat.entries.filter(item => item.id === requestId)).toHaveLength(1);
 	});
 
 	it("ignores a destination the protocol does not name", async () => {
@@ -385,20 +306,6 @@ describe("sending to a named destination", () => {
 		);
 	});
 
-	it("acknowledges a queued entry with its durable future entry id", async () => {
-		let { chat, context } = room({ busy: true });
-		let replies: Sent[] = [];
-		await Chat.send(context, sender("ana", "U_ana", replies), message("next", "planner"));
-		expect(replies).toEqual([
-			expect.objectContaining({ kind: "chat:send", rid: "request", queued: true }),
-		]);
-		let id = replies[0]?.id;
-		if (!id) throw new Error("queued send reply has no id");
-		expect(id).toBe(chat.waiting[0]?.id);
-		Chat.pending(chat);
-		expect(chat.entries[0]?.id).toBe(id);
-	});
-
 	it("serializes resolution and acceptance in arrival order", async () => {
 		let { chat, context } = room({ busy: true });
 		let entered = Promise.withResolvers<void>();
@@ -437,7 +344,7 @@ describe("sending to a named destination", () => {
 		expect(secondReplies[0]).toMatchObject({ rid: "second-rid", queued: false });
 	});
 
-	it("fails closed, full, and persistence-rejected sends without success replies", async () => {
+	it("fails closed and persistence-rejected sends without success replies", async () => {
 		let closed = room({ busy: true });
 		closed.chat.closed = true;
 		let closedReplies: Sent[] = [];
@@ -453,18 +360,6 @@ describe("sending to a named destination", () => {
 				code: "temporarily-unavailable",
 			}),
 		]);
-
-		let full = room({ busy: true });
-		for (let index = 0; index < 20; index++) {
-			full.chat.waiting.push({ id: `waiting-${index}`, handle: "ana", text: `${index}` });
-		}
-		let fullReplies: Sent[] = [];
-		await Chat.send(full.context, sender("ana", "U_ana", fullReplies), message("full", "planner"));
-		expect(fullReplies).toEqual([
-			expect.objectContaining({ kind: "session:error", message: "the reply queue is full" }),
-		]);
-		expectPlain(String((fullReplies[0] as { message?: string }).message), "a refused send");
-		expect(full.chat.waiting).toHaveLength(20);
 
 		let failed = room({ busy: true });
 		failed.context.persist = async () => {
@@ -587,35 +482,6 @@ describe("sending to a named destination", () => {
 		expect(chat.entries.filter(entry => entry.id === requestId)).toHaveLength(1);
 		expect(persists).toBe(1);
 		expect(replies[0]).toMatchObject({ id: requestId, queued: false });
-	});
-
-	it("replays a process-local queued request and preserves its id when it becomes an entry", async () => {
-		let { chat, context } = room({ busy: true });
-		let requestId = crypto.randomUUID();
-		await Chat.send(
-			context,
-			sender(),
-			message("queue once", "planner", undefined, "first", requestId),
-		);
-		let replies: Sent[] = [];
-		await Chat.send(
-			context,
-			sender("ana", "U_ana", replies),
-			message("queue once", "planner", undefined, "retry", requestId),
-		);
-		expect(chat.waiting).toHaveLength(1);
-		expect(replies[0]).toMatchObject({ id: requestId, queued: true });
-		Chat.pending(chat);
-		expect(chat.entries).toHaveLength(1);
-		expect(chat.entries[0]?.id).toBe(requestId);
-		let startedReplies: Sent[] = [];
-		await Chat.send(
-			context,
-			sender("ana", "U_ana", startedReplies),
-			message("queue once", "planner", undefined, "started-retry", requestId),
-		);
-		expect(chat.entries).toHaveLength(1);
-		expect(startedReplies[0]).toMatchObject({ id: requestId, queued: false });
 	});
 
 	it("rejects conflicting reuse of a request id before another resolution", async () => {
@@ -749,12 +615,11 @@ describe("instructing the agent without a message", () => {
 	});
 
 	it("queues behind a running turn rather than interrupting it", async () => {
-		let { chat, context, sent } = room({ busy: true });
+		let { chat, context } = room({ busy: true });
 		await Chat.instruct(context, "ana", "do the thing", "@ana accepted a comment.");
 
 		expect(chat.waiting).toHaveLength(1);
 		expect(chat.waiting[0]).toMatchObject({ handle: "ana", text: "do the thing" });
-		expect(sent.some(frame => frame.kind === "chat:queue")).toBe(true);
 	});
 
 	it("refuses to grow a queue nobody is going to read", async () => {
@@ -764,7 +629,9 @@ describe("instructing the agent without a message", () => {
 		}
 
 		expect(chat.waiting.length).toBeLessThanOrEqual(20);
-		expect(said(sent)).toContain("The queue is full. Wait for the current turn to finish.");
+		expect(said(sent)).toContain(
+			"Chopin has too much to do already. Try again when it has caught up.",
+		);
 	});
 
 	/**
@@ -814,18 +681,6 @@ describe("what a turn is acting on", () => {
 		await Chat.instruct(context, "ana", "do the thing", "notice", { thread: "t1" });
 
 		expect(chat.waiting[0]).toMatchObject({ thread: "t1" });
-	});
-
-	it("keeps the thread off the wire", async () => {
-		let { context, sent } = room({ busy: true });
-		await Chat.instruct(context, "ana", "do the thing", "notice", { thread: "t1" });
-
-		let queue = sent.findLast(frame => frame.kind === "chat:queue");
-		expect(queue?.waiting).toEqual([{
-			id: expect.any(String),
-			handle: "ana",
-			text: "do the thing",
-		}]);
 	});
 
 	it("says a room with no turn running is acting on nothing", () => {
@@ -890,18 +745,6 @@ describe("draining the queue", () => {
 		done = true;
 		expect(Chat.pending(chat)).toBeUndefined();
 	});
-
-	it("keeps `spent` off the wire", async () => {
-		let { context, sent } = room({ busy: true });
-		await Chat.instruct(context, "ana", "do the thing", "notice", { spent: () => false });
-
-		let queue = sent.findLast(frame => frame.kind === "chat:queue");
-		expect(queue?.waiting).toEqual([{
-			id: expect.any(String),
-			handle: "ana",
-			text: "do the thing",
-		}]);
-	});
 });
 
 const CHILD = "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b";
@@ -928,15 +771,6 @@ describe("focus on a child document", () => {
 			...message("@chopin tighten this", to, undefined, "request", requestId),
 			focus,
 		}) as Request<Wire.Send>;
-
-	it("queues a planner message with the resolved child as focus", async () => {
-		let { chat, context } = room({ busy: true });
-		let lookup = children();
-		context.children = lookup.value;
-		await Chat.send(context, sender(), focused("planner", CHILD));
-		expect(chat.waiting[0]).toMatchObject({ focus: { channelId: CHILD, title: "Source review" } });
-		expect(lookup.asked).toEqual([CHILD]);
-	});
 
 	it("refuses a focus that is not this root's child and queues nothing", async () => {
 		let { chat, context } = room({ busy: true });
@@ -996,7 +830,7 @@ describe("focus on a child document", () => {
 	});
 
 	it("treats a reused request id with a different focus as different content", async () => {
-		let { context } = room({ busy: true });
+		let { context } = room({ agent: false });
 		context.children = children([CHILD, "1a5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b"]).value;
 		let frames: Sent[] = [];
 		let requestId = crypto.randomUUID();
@@ -1041,7 +875,7 @@ describe("a child document's own Chat", () => {
 describe("a process that is stopping", () => {
 	afterEach(() => Chat.holdStarts(false));
 
-	it("starts no turn: a message to an idle Chat waits in the queue, as behind a running turn", async () => {
+	it("starts no turn and says nothing to a message, so its browser sends it again to the next process", async () => {
 		let { chat, context } = room();
 		let frames: Sent[] = [];
 		Chat.holdStarts();
@@ -1054,9 +888,9 @@ describe("a process that is stopping", () => {
 
 		expect(chat.busy).toBe(false);
 		expect(chat.entries).toHaveLength(0);
-		expect(chat.waiting).toMatchObject([{ text: "draft the migration", userId: "U_ana" }]);
-		expect(frames).toMatchObject([{ kind: "chat:send", queued: true }]);
-		expect(Chat.admission(context)).toBe("queued");
+		expect(chat.waiting).toHaveLength(0);
+		expect(frames).toEqual([]);
+		expect(Chat.admission(context)).toBe("busy");
 	});
 
 	it("cuts off the running turn with a notice only when one is running", () => {

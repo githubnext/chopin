@@ -21,49 +21,49 @@ test("saved member hooks exclude retries and failed room or immediate Planner sa
 	expect(h.chat.entries.map(entry => entry.id)).toEqual([room.requestId]);
 });
 
-test("queued browser messages schedule once after their save with the queued sender", async () => {
+test("browser messages sent while a turn runs schedule once after their save with their sender", async () => {
 	let h = harness();
 	let first = member("First turn");
-	let second = member("Queued topic");
+	let second = member("Topic for the running turn");
 	let saved: Array<{ id: string; claimant?: string }> = [];
 	h.context.memberMessagePersisted = (entry, claimant) => saved.push({ id: entry.id, claimant });
 	await Chat.send(h.context, socket(), first);
 	await until(() => h.prompts.length === 1);
 	await Chat.send({ ...h.context, claimantSessionId: "second-session" }, socket(), second);
 	await Chat.send(h.context, socket(), { ...second, rid: "retry" });
-	expect(saved).toEqual([{ id: first.requestId, claimant: "session" }]);
-	expect(h.chat.entries.some(entry => entry.id === second.requestId)).toBe(false);
-	h.emit("session.idle");
-	await until(() => h.prompts.length === 2);
+	await until(() => h.steered.length === 1);
 	expect(saved).toEqual([
 		{ id: first.requestId, claimant: "session" },
 		{ id: second.requestId, claimant: "second-session" },
 	]);
+	expect(h.steered).toEqual(["@ana: Topic for the running turn"]);
+	expect(h.chat.entries.filter(entry => entry.id === second.requestId)).toHaveLength(1);
 	h.emit("session.idle");
 	await until(() => !h.chat.busy);
+	expect(saved).toHaveLength(2);
+	expect(h.prompts).toHaveLength(1);
 });
 
-test("a failed queued save creates no saved-member trigger", async () => {
+test("a message sent while a turn runs that cannot be saved creates no saved-member trigger", async () => {
 	let h = harness();
 	let saved: string[] = [];
 	h.context.memberMessagePersisted = entry => saved.push(entry.id);
 	let first = member("First turn");
-	let second = member("Queued topic");
+	let second = member("Topic for the running turn");
 	await Chat.send(h.context, socket(), first);
 	await until(() => h.prompts.length === 1);
-	await Chat.send(h.context, socket(), second);
 	h.context.persist = async () => {
-		if (h.chat.entries.some(entry => entry.id === second.requestId)) {
-			throw new Error("drain save failed");
-		}
+		throw new Error("save failed");
 	};
-	h.emit("session.idle");
-	await until(() => h.chat.closed);
+	await Chat.send(h.context, socket(), second);
 	expect(saved).toEqual([first.requestId]);
-	expect(h.prompts).toHaveLength(1);
+	expect(h.chat.entries.map(entry => entry.id)).toEqual([first.requestId]);
+	expect(h.steered).toEqual([]);
+	h.emit("session.idle");
+	await until(() => !h.chat.busy);
 });
 
-test("invoke reserves or queues its human turn before scheduling and never schedules at drain again", async () => {
+test("invoke reserves its human turn before scheduling, and a message given to a running turn schedules once", async () => {
 	let h = harness();
 	let saved: string[] = [];
 	h.context.memberMessagePersisted = entry => {
@@ -73,12 +73,14 @@ test("invoke reserves or queues its human turn before scheduling and never sched
 	expect(await Chat.invoke(h.context, { id: "U_ana", login: "ana" }, "First invocation"))
 		.toBeUndefined();
 	await until(() => h.prompts.length === 1);
-	expect(await Chat.invoke(h.context, { id: "U_bo", login: "bo" }, "Queued invocation"))
+	expect(
+		await Chat.invoke(h.context, { id: "U_bo", login: "bo" }, "Invocation for the running turn"),
+	)
 		.toBeUndefined();
 	expect(saved).toHaveLength(2);
-	h.emit("session.idle");
-	await until(() => h.prompts.length === 2);
-	expect(saved).toHaveLength(2);
+	await until(() => h.steered.length === 1);
 	h.emit("session.idle");
 	await until(() => !h.chat.busy);
+	expect(saved).toHaveLength(2);
+	expect(h.prompts).toHaveLength(1);
 });

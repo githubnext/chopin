@@ -171,7 +171,7 @@ export type InvokePlannerError =
 	| "planner-owner-unavailable"
 	| "checkout-unverified"
 	| "planner-unavailable"
-	| "planner-queue-full"
+	| "planner-busy"
 	| "system-turn-forbidden"
 	| "system-turn-limited";
 
@@ -617,7 +617,7 @@ export const TOOLS: Tool[] = [
 								"planner-owner-unavailable",
 								"checkout-unverified",
 								"planner-unavailable",
-								"planner-queue-full",
+								"planner-busy",
 								"system-turn-forbidden",
 								"system-turn-limited",
 							],

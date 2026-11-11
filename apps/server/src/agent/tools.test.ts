@@ -957,7 +957,7 @@ test("chat-started tools retain only the current member request provenance", asy
 							} else {
 								if (!researchTool?.handler) throw new Error("research tool is missing");
 								let question = "Which public release evidence supports adopting version 3?";
-								let attempts = turn === 2 ? 2 : 1;
+								let attempts = turn === 3 ? 2 : 1;
 								for (let attempt = 0; attempt < attempts; attempt++) {
 									let result = await researchTool.handler({ question }, {
 										toolCallId: `research-${turn}-${attempt}`,
@@ -1002,6 +1002,16 @@ test("chat-started tools retain only the current member request provenance", asy
 	);
 	let running = plan.chat.running;
 	await firstStarted.promise;
+	await Chat.instruct(
+		context,
+		"ana",
+		"Act on the accepted comment.",
+		"@ana accepted a comment.",
+	);
+	let error = spyOn(console, "error").mockImplementation(() => {});
+	continueFirst.resolve();
+	await running;
+	// Nothing a person sends waits for a turn: bob's message starts the turn after these two.
 	let queuedContext = { ...context, claimantSessionId: queuedClaimant.id };
 	await Chat.send(
 		queuedContext,
@@ -1015,17 +1025,12 @@ test("chat-started tools retain only the current member request provenance", asy
 			ts: 0,
 		},
 	);
-	let queuedEntryId = plan.chat.waiting[0]!.id;
-	await Chat.instruct(
-		context,
-		"ana",
-		"Act on the accepted comment.",
-		"@ana accepted a comment.",
-	);
-	let error = spyOn(console, "error").mockImplementation(() => {});
-	continueFirst.resolve();
+	let queuedEntryId =
+		plan.chat.entries.find(entry =>
+			entry.author.kind === "member" && entry.author.handle === "bob"
+		)!.id;
 	await sent.promise;
-	await running;
+	await plan.chat.running;
 	if (!researchTool?.handler) throw new Error("research tool is missing");
 	let stale = await researchTool.handler({ question: "Search again" }, {
 		sessionId: "session",
@@ -1051,7 +1056,7 @@ test("chat-started tools retain only the current member request provenance", asy
 		claimantSessionId: claimant.id,
 		lifecycle: 0,
 	});
-	expect(activeRequests[1]).toMatchObject({
+	expect(activeRequests[2]).toMatchObject({
 		entryId: queuedEntryId,
 		userId: "U_bob",
 		handle: "bob",
@@ -1059,8 +1064,8 @@ test("chat-started tools retain only the current member request provenance", asy
 		claimantSessionId: queuedClaimant.id,
 		lifecycle: 0,
 	});
-	expect(activeRequests[0]?.turnId).not.toBe(activeRequests[1]?.turnId);
-	expect(activeRequests[2]).toBeUndefined();
+	expect(activeRequests[0]?.turnId).not.toBe(activeRequests[2]?.turnId);
+	expect(activeRequests[1]).toBeUndefined();
 	expect(researchRequests).toEqual([
 		{
 			entryId: queuedEntryId,
@@ -1077,11 +1082,11 @@ test("chat-started tools retain only the current member request provenance", asy
 			question: "start research on version 3 adoption",
 		},
 	]);
-	expect(researchResponses.slice(0, 2).map(value => JSON.parse(value))).toEqual([
+	expect(researchResponses.slice(1, 3).map(value => JSON.parse(value))).toEqual([
 		expect.objectContaining({ workspaceId: "workspace-1", state: "pending", stage: "queued" }),
 		expect.objectContaining({ workspaceId: "workspace-1", state: "pending", stage: "queued" }),
 	]);
-	expect(researchResponses[2]).toContain(
+	expect(researchResponses[0]).toContain(
 		"Error: research workspaces require the explicit member message",
 	);
 	expect(researchResponses[3]).toContain(

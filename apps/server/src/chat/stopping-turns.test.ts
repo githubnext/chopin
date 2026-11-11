@@ -85,9 +85,12 @@ async function room() {
 				}) as never,
 			registerCredential: () => () => {},
 		});
+	let replies: Array<Record<string, unknown>> = [];
 	let socket = {
 		data: { handle: "ana", principalId: "U_test" },
-		send() {},
+		send(frame: string) {
+			replies.push(JSON.parse(frame));
+		},
 	} as unknown as Socket;
 	let send = (text: string) =>
 		Chat.send(identity.context, socket, {
@@ -102,7 +105,7 @@ async function room() {
 		identity.revokeAll();
 		await Plan.close(opened.plan);
 	};
-	return { opened, send, turns, finish };
+	return { context: identity.context, opened, replies, send, turns, finish };
 }
 
 async function until(check: () => boolean, what: string): Promise<void> {
@@ -110,12 +113,12 @@ async function until(check: () => boolean, what: string): Promise<void> {
 	if (!check()) throw new Error(`timed out waiting for ${what}`);
 }
 
-test("a turn that ends while the process is stopping leaves the next queued request waiting, unstarted", async () => {
-	let { opened, send, turns, finish } = await room();
+test("a turn that ends while the process is stopping leaves Chopin's own next turn waiting, unstarted", async () => {
+	let { context, opened, send, turns, finish } = await room();
 	try {
 		await send("first");
 		await until(() => turns.length === 1, "the first turn to start");
-		await send("second");
+		await Chat.instruct(context, "ana", "second", "@ana asked.");
 		expect(opened.plan.chat.waiting).toHaveLength(1);
 		Chat.holdStarts();
 		turns[0]!.release();
@@ -128,15 +131,17 @@ test("a turn that ends while the process is stopping leaves the next queued requ
 	}
 });
 
-test("a request that arrives while the process is stopping is acknowledged as queued, and starts no turn", async () => {
-	let { opened, send, turns, finish } = await room();
+test("a message that arrives while the process is stopping starts no turn and is not answered, so its browser sends it again to the next process", async () => {
+	let { opened, replies, send, turns, finish } = await room();
 	try {
 		Chat.holdStarts();
 		await send("hello");
 		await Bun.sleep(50);
 		expect(turns).toHaveLength(0);
 		expect(opened.plan.chat.busy).toBe(false);
-		expect(opened.plan.chat.waiting).toMatchObject([{ text: "hello" }]);
+		expect(opened.plan.chat.waiting).toEqual([]);
+		expect(opened.plan.chat.entries).toEqual([]);
+		expect(replies).toEqual([]);
 	} finally {
 		await finish();
 	}

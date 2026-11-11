@@ -172,27 +172,34 @@ test("a task draft runs a Planner turn with no member message and says who asked
 	expect(retry).toMatchObject({ ok: true, existing: false });
 });
 
-test("a task draft queued behind another turn stays out of the visible queue", async () => {
+test("a task draft asked while another turn runs is refused, not held, and runs when asked again", async () => {
 	let { context, events, prompts, releases, turnOpened } = await setup();
 	let first = turnOpened();
 	await Chat.instruct(context, "ana", "Apply the comment.", "Comment accepted.");
 	await first;
-	let result = await Chat.draftTasks(context, "ana", 4, "Revise the tasks.", "@ana asked.");
-	expect(result).toMatchObject({ ok: true, state: "queued" });
-	expect(drafting(events)).toEqual(["queued"]);
-	let queue = events.findLast(event => event.kind === "chat:queue");
-	expect(queue?.waiting ?? []).toEqual([]);
-	expect(await Chat.draftTasks(context, "ben", 4, "Revise the tasks.", "@ben asked."))
-		.toMatchObject({ ok: true, existing: true });
+	let refused = await Chat.draftTasks(context, "ana", 4, "Revise the tasks.", "@ana asked.");
+	expect(refused).toEqual({
+		ok: false,
+		reason: "Chopin is working on something else. Try again when it has finished.",
+	});
+	expectPlain(refused.ok ? "" : refused.reason, "a task draft's refusal");
+	expect(drafting(events)).toEqual([]);
+	expect(context.chat.draft).toBeUndefined();
+	expect(context.chat.waiting).toEqual([]);
+	// Nothing says who asked: nothing was asked.
+	expect(context.chat.entries.map(entry => entry.text)).toEqual(["Comment accepted."]);
 
-	let second = turnOpened();
 	releases[0]!();
+	await context.chat.running;
+	let second = turnOpened();
+	expect(await Chat.draftTasks(context, "ana", 4, "Revise the tasks.", "@ana asked."))
+		.toMatchObject({ ok: true, existing: false, state: "running" });
 	await second;
 	expect(prompts.at(-1)).toBe("@ana: Revise the tasks.");
-	expect(drafting(events)).toEqual(["queued", "running"]);
+	expect(drafting(events)).toEqual(["running"]);
 	releases[1]!();
 	await context.chat.running;
-	expect(drafting(events)).toEqual(["queued", "running", "ended"]);
+	expect(drafting(events)).toEqual(["running", "ended"]);
 	expect(context.chat.busy).toBe(false);
 });
 
@@ -239,55 +246,15 @@ test("a task draft is refused while no remote Planner is attached, and runs once
 	releases.forEach(release => release());
 });
 
-test("a task draft takes the same limits as a Chat message, even with the Planner idle", async () => {
+test("a task draft takes the same limit on sends being processed as a Chat message, even with the Planner idle", async () => {
 	let { context, prompts } = await setup();
 	context.chat.pendingSends = 20;
 	let full = await Chat.draftTasks(context, "ana", 1, "Prepare.", "@ana asked.");
-	expect(full).toEqual({ ok: false, reason: "the reply queue is full" });
+	expect(full).toEqual({ ok: false, reason: "Chopin is busy. Try again in a moment." });
 	expectPlain(full.ok ? "" : full.reason, "a task draft's refusal");
-	context.chat.pendingSends = 0;
-	context.chat.waiting = Array.from({ length: 20 }, (_, index) => ({
-		id: `held-${index}`,
-		handle: "ana",
-		text: "Held.",
-	}));
-	expect(context.chat.busy).toBe(false);
-	expect(await Chat.draftTasks(context, "ana", 1, "Prepare.", "@ana asked.")).toEqual({
-		ok: false,
-		reason: "the reply queue is full",
-	});
 	expect(context.chat.draft).toBeUndefined();
 	expect(context.chat.entries).toEqual([]);
 	expect(prompts).toEqual([]);
-});
-
-test("a draft whose turn finishes before its answer is answered as ended", async () => {
-	let { context, events, releases, turnOpened } = await setup();
-	let first = turnOpened();
-	await Chat.instruct(context, "ana", "Apply the comment.", "Comment accepted.");
-	await first;
-	// Hold the draft's notice save while the turn ahead of it ends and the draft runs.
-	let persist = context.persist;
-	let held = Promise.withResolvers<void>();
-	let holding = true;
-	context.persist = async () => {
-		if (holding) {
-			holding = false;
-			await held.promise;
-		}
-		await persist();
-	};
-	let asked = Chat.draftTasks(context, "ana", 2, "Prepare.", "@ana asked.");
-	await new Promise(resolve => setTimeout(resolve, 10));
-	let second = turnOpened();
-	releases[0]!();
-	await second;
-	releases[1]!();
-	await context.chat.running;
-	expect(drafting(events)).toEqual(["running", "ended"]);
-	held.resolve();
-	expect(await asked).toMatchObject({ ok: true, existing: false, state: "ended" });
-	expect(context.chat.draft).toBeUndefined();
 });
 
 test("open decisions neither refuse a draft nor make the Planner wait for them", async () => {
