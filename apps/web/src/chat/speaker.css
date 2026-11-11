@@ -1,0 +1,66 @@
+/*
+ * Who speaks in a Chat row, after Slack's app messages, in Chopin's colours.
+ *
+ * `.chat-speaker-tag` is Slack's `c-app_badge` (the `APP` beside an app's name): the kind in small
+ * bold capitals in a subtle rounded box, ink at a tenth over whatever the row is drawn on, so it
+ * reads the same on a shaded row. `.chat-app-avatar` is an app's 36px rounded square, as the
+ * Planner's mark is. `.chat-app-attachment` is Slack's `c-message_attachment`: a 4px rounded bar
+ * down the start edge and the app's content 12px beside it.
+ */
+
+.chat-speaker-tag {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	padding-inline: calc(var(--spacing) * 1);
+	border-radius: var(--radius-sm);
+	background: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+	color: var(--color-text-secondary);
+	font-size: var(--text-2xs);
+	font-weight: 700;
+	line-height: var(--text-2xs--line-height);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+.chat-app-avatar {
+	display: inline-flex;
+	width: calc(var(--spacing) * 9);
+	height: calc(var(--spacing) * 9);
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--radius-md);
+	background: var(--color-brand-wash);
+	color: var(--color-brand-ink);
+}
+
+/* The glyph is the Planner mark's 20px, so the two app avatars read as one family. */
+.chat-app-avatar svg {
+	width: calc(var(--spacing) * 5);
+	height: calc(var(--spacing) * 5);
+}
+
+.chat-app-attachment {
+	position: relative;
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 2);
+	padding-inline-start: calc(var(--spacing) * 3);
+}
+
+.chat-app-attachment::before {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	width: calc(var(--spacing) * 1);
+	border-radius: var(--radius-full);
+	background: var(--color-edge);
+	transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.chat-app-attachment[data-active]::before {
+	background: var(--color-brand);
+}

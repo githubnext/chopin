@@ -11,13 +11,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import type { ReactNode } from "react";
-import {
-	MessageForwardIcon,
-	MessageIcon,
-	SignInIcon,
-	SparkleIcon,
-	WarningIcon,
-} from "@chopin/icons";
+import { MessageForwardIcon, MessageIcon, SignInIcon } from "@chopin/icons";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
 import { ChopinMark, Face, openCommentThread, useCardMeta } from "@chopin/editor";
@@ -38,9 +32,11 @@ import type { Intent } from "./pending-reactions";
 import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { CardLink } from "../conversation-plan/links";
-import { capitalize, displayText, group, workAnnouncement, workPhase } from "./model";
+import { displayText, group, workAnnouncement, workPhase } from "./model";
 import { movedOffers, slideOffset } from "./offer-motion";
 import { WorkProgress } from "./work-progress";
+import { AppRow, ResearchAvatar, SpeakerHead } from "./speaker";
+import { messageSpeaker, researchSpeaker } from "./speakers";
 import type { ToolbarActions } from "./actions/message-toolbar";
 import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
 import type { ChatDestination } from "../conversation-plan/source";
@@ -99,10 +95,6 @@ export type TranscriptDecisions = {
 	onOpenCard: (questionnaireId: string) => void;
 };
 
-function when(ts: number): string {
-	return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 /** The time a grouped message shows in the avatar's gutter: the hour and minute alone, as Slack's. */
 function clock(ts: number): string {
 	return new Date(ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
@@ -121,11 +113,25 @@ function SystemEntry(
 ) {
 	let readyPath = READY.exec(item.text)?.[1];
 	let linked = readyPath !== undefined && parseChildDocumentPath(readyPath) !== undefined;
-	let Icon = readyPath
-		? SparkleIcon
-		: item.text.startsWith("Research could not be completed")
-		? WarningIcon
-		: SignInIcon;
+	// A research child's own word, that it is ready or could not be completed, is the child speaking.
+	if (linked || item.text.startsWith("Research could not be completed")) {
+		return (
+			<AppRow avatar={<ResearchAvatar />} enter={enter} speaker={researchSpeaker(item.ts)}>
+				{linked
+					? (
+						<MessageMarkdown
+							className="break-words text-base [overflow-wrap:anywhere]"
+							source={item.text}
+						/>
+					)
+					: (
+						<p className="m-0 break-words text-base text-text-secondary [overflow-wrap:anywhere]">
+							{displayText(item.text)}
+						</p>
+					)}
+			</AppRow>
+		);
+	}
 	return (
 		<div
 			className="flex items-start justify-start gap-3 text-left text-text-tertiary"
@@ -133,20 +139,11 @@ function SystemEntry(
 			data-chat-system
 		>
 			<div className="mt-0.5 shrink-0">
-				<Icon aria-hidden="true" size={16} />
+				<SignInIcon aria-hidden="true" size={16} />
 			</div>
-			{linked
-				? (
-					<MessageMarkdown
-						className="min-w-0 break-words text-sm [overflow-wrap:anywhere]"
-						source={item.text}
-					/>
-				)
-				: (
-					<p className="m-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
-						{displayText(item.text)}
-					</p>
-				)}
+			<p className="m-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
+				{displayText(item.text)}
+			</p>
 		</div>
 	);
 }
@@ -441,13 +438,18 @@ function MessageGroup(
 ) {
 	let first = item.messages[0]!;
 	let active = item.messages.find(message => message.working);
-	let name = item.author.kind === "agent" ? "Chopin" : capitalize(item.author.handle);
+	let speaker = messageSpeaker({
+		author: item.author,
+		ts: first.ts,
+		activeTs: active?.ts,
+	});
 
 	return (
 		<div
 			className="flex gap-2"
 			data-chat-enter={enter || undefined}
 			data-chat-entry
+			data-speaker-kind={speaker.kind}
 		>
 			<div className="w-9 shrink-0" data-chat-avatar="">
 				{item.continued
@@ -459,14 +461,7 @@ function MessageGroup(
 			<div
 				className={`flex min-w-0 flex-1 flex-col gap-1 ${item.continued ? "" : "-mt-0.5"}`}
 			>
-				{!item.continued && (
-					<div className="flex items-baseline gap-2 text-base" data-chat-head="">
-						<span className="min-w-0 break-all font-bold">{name}</span>
-						<span className="text-xs text-text-tertiary tabular-nums">
-							{active ? `Started at ${when(active.ts!)}` : when(first.ts!)}
-						</span>
-					</div>
-				)}
+				{!item.continued && <SpeakerHead speaker={speaker} />}
 				{item.messages.map((message, index) => (
 					<MessageBody
 						headed={index === 0 && !item.continued}

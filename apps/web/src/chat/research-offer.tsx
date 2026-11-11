@@ -9,6 +9,11 @@ import {
 import { Face, ResearchBrief, ResearchCard } from "@chopin/editor";
 import { CheckIcon, CloseIcon, PlusIcon, SearchIcon, WarningIcon } from "@chopin/icons";
 
+import { AgentHandoff } from "@/components/assistant-ui/elements/agent-handoff";
+import { SubagentList } from "@/components/assistant-ui/elements/subagent-list";
+import { AppAttachment, AppRow, ResearchAvatar } from "./speaker";
+import { researchOfferHandoff, researchOfferSubagents, researchSpeaker } from "./speakers";
+
 import type { ConversationPlan, Research } from "@chopin/protocol";
 import type { ResearchRequestStore } from "../research-requests";
 import type { Wire } from "../wire";
@@ -319,28 +324,66 @@ function AcceptedResearch(
 		: link?.status === "unlinked"
 		? "Accepted but not started."
 		: undefined);
+	let handoff = researchOfferHandoff(offer, view.stage);
+	let subagents = researchOfferSubagents(view.stage);
+	let card = (
+		<ResearchCard
+			actionError={actionError}
+			busy={busy}
+			canEdit={canEdit}
+			request={view}
+			onCancel={id && canEdit
+				? () => action(() => cancel(id), "Research could not be cancelled yet.", true)
+				: undefined}
+			onOpen={id && view.child
+				? opener => store.open(view.child!, store.opener(id, opener))
+				: undefined}
+			openButtonRef={id ? button => store.opener(id, button) : undefined}
+			onRetry={id && canEdit
+				? () =>
+					action(
+						() => store.retry(id),
+						"Research could not be retried. Try again when connected.",
+					)
+				: undefined}
+		/>
+	);
+	let updated = Date.parse(view.updatedAt);
 	return (
 		<div className="flex flex-col gap-2">
-			<ResearchCard
-				actionError={actionError}
-				busy={busy}
-				canEdit={canEdit}
-				request={view}
-				onCancel={id && canEdit
-					? () => action(() => cancel(id), "Research could not be cancelled yet.", true)
-					: undefined}
-				onOpen={id && view.child
-					? opener => store.open(view.child!, store.opener(id, opener))
-					: undefined}
-				openButtonRef={id ? button => store.opener(id, button) : undefined}
-				onRetry={id && canEdit
-					? () =>
-						action(
-							() => store.retry(id),
-							"Research could not be retried. Try again when connected.",
-						)
-					: undefined}
-			/>
+			<AppAttachment active={!!subagents} label="Research handoff">
+				<AgentHandoff
+					carried={handoff.carried}
+					className="max-w-none"
+					from={handoff.from}
+					reason={handoff.reason}
+					settled={handoff.settled}
+					to={handoff.to}
+				/>
+				{subagents && (
+					<SubagentList
+						agents={subagents.agents}
+						className="max-w-none"
+						completedCount={subagents.completedCount}
+						progress={subagents.progress}
+						showSummary={subagents.showSummary}
+						summaryAgent={subagents.summaryAgent}
+					/>
+				)}
+			</AppAttachment>
+			{view.stage === "ready" && view.child
+				? (
+					// The finished report is the research child speaking, from Slack's avatar gutter.
+					<div className="-ml-11 mt-2">
+						<AppRow
+							avatar={<ResearchAvatar />}
+							speaker={researchSpeaker(Number.isNaN(updated) ? undefined : updated / 1000)}
+						>
+							{card}
+						</AppRow>
+					</div>
+				)
+				: card}
 			{(note
 				|| controls.canAct && canExecute && canResume
 				|| unverified && controls.canCheckLink) && (
@@ -438,7 +481,7 @@ export function ResearchOfferCard(
 			<div
 				aria-label="Research suggestion"
 				aria-busy={busy}
-				className="chat-research ml-9 flex min-w-0 flex-col gap-2"
+				className="chat-research ml-11 flex min-w-0 flex-col gap-2"
 				data-entering={entering ? "" : undefined}
 				data-research-offer={offer.id}
 				role="group"
@@ -461,7 +504,7 @@ export function ResearchOfferCard(
 		return (
 			<div
 				aria-label="Research suggestion"
-				className="chat-research ml-9 flex min-w-0 items-center gap-2 text-xs text-text-tertiary"
+				className="chat-research ml-11 flex min-w-0 items-center gap-2 text-xs text-text-tertiary"
 				data-entering={entering ? "" : undefined}
 				data-research-offer={offer.id}
 				role="group"
@@ -513,7 +556,7 @@ export function ResearchOfferCard(
 		<div
 			aria-label="Research suggestion"
 			aria-busy={disabled}
-			className="chat-research ml-9 min-w-0"
+			className="chat-research ml-11 min-w-0"
 			data-entering={entering ? "" : undefined}
 			data-research-offer={offer.id}
 			role="group"

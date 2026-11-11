@@ -1,15 +1,17 @@
 import { useSyncExternalStore } from "react";
 import { DecisionIcon } from "@chopin/icons";
 
+import { AgentHandoff } from "@/components/assistant-ui/elements/agent-handoff";
 import {
 	summarize,
-	toolCopy,
 	toolGlyph,
 	waitingCards,
 	waitingPrompts,
 	waitingText,
 	workPhase,
 } from "./model";
+import { AppAttachment, SpeakerTag } from "./speaker";
+import { plannerResearchHandoff, toolSpeaker, toolState } from "./speakers";
 import { TOOL_ICONS, WorkSummary } from "./work-summary";
 import {
 	Trace,
@@ -46,13 +48,10 @@ function ToolCall(
 	{ active, disconnected, tool }: { active: boolean; disconnected: boolean; tool: Chat.Activity },
 ) {
 	let hasDetails = tool.args !== undefined || tool.result !== undefined || tool.error !== undefined;
-	let status = tool.status === "running"
-		? disconnected ? "Last seen running" : active ? "Running" : "Interrupted"
-		: tool.status === "failed"
-		? "Failed"
-		: "Done";
+	let { detail, status, toolStatus } = toolState(tool, { active, disconnected });
 	let glyph = toolGlyph(tool.name);
 	let Icon = TOOL_ICONS[glyph];
+	// A tool speaks in its line as an app does in its row: its name, then the tag that says it is one.
 	let line = (
 		<TraceLine
 			status={status === "Running"
@@ -66,13 +65,12 @@ function ToolCall(
 			<TraceIcon>
 				{status === "Running" && glyph !== "ask" ? <TraceScribble /> : <Icon size={16} />}
 			</TraceIcon>
-			<TraceTitle wrap>{toolCopy(tool.name)}</TraceTitle>
-			{status === "Running" || status === "Done"
-				? <span className="sr-only">{status}</span>
-				: <TraceDescription>{status}</TraceDescription>}
+			<TraceTitle wrap>{toolSpeaker(tool).name}</TraceTitle>
+			<SpeakerTag kind="tool" />
+			{detail !== undefined && <TraceDescription>{detail}</TraceDescription>}
+			{(status === "Running" || status === "Done") && <span className="sr-only">{status}</span>}
 		</TraceLine>
 	);
-	let toolStatus = active || disconnected ? tool.status : status.toLowerCase();
 
 	if (!hasDetails) {
 		return <div data-tool-status={toolStatus} role="listitem">{line}</div>;
@@ -138,6 +136,7 @@ export function WorkProgress(
 	let first = waiting?.ids[0];
 	let summary = summarize(tools, active || disconnected);
 	let phase = workPhase(tools, streaming, active, responseSeen);
+	let handoff = plannerResearchHandoff(tools);
 	if (!active && !disconnected && !tools.length) return null;
 
 	let headline = active ? waiting ? waitingText(waiting.count) : phase! : "Connection lost";
@@ -187,11 +186,18 @@ export function WorkProgress(
 							{open}
 						</div>
 						<TraceCollapsibleContent surface="chat-tools">
-							<Trace label="Tool calls" list scroll>
-								{tools.map(tool => (
-									<ToolCall active={active} disconnected={disconnected} key={tool.id} tool={tool} />
-								))}
-							</Trace>
+							<AppAttachment active={active}>
+								<Trace label="Tool calls" list scroll>
+									{tools.map(tool => (
+										<ToolCall
+											active={active}
+											disconnected={disconnected}
+											key={tool.id}
+											tool={tool}
+										/>
+									))}
+								</Trace>
+							</AppAttachment>
 						</TraceCollapsibleContent>
 					</TraceCollapsible>
 				)
@@ -201,6 +207,20 @@ export function WorkProgress(
 						{open}
 					</div>
 				)}
+			{handoff && (
+				<div className="mt-2">
+					<AppAttachment active={!handoff.settled} label="Research handoff">
+						<AgentHandoff
+							carried={handoff.carried}
+							className="max-w-none"
+							from={handoff.from}
+							reason={handoff.reason}
+							settled={handoff.settled}
+							to={handoff.to}
+						/>
+					</AppAttachment>
+				</div>
+			)}
 		</div>
 	);
 }
