@@ -34,7 +34,8 @@ export function chip(page: Page, name: string): Locator {
 	return strip(page).getByRole("listitem").filter({ hasText: name });
 }
 
-export function paperclip(page: Page): Locator {
+/** The `+` in the bottom row, which opens the picker. */
+export function plus(page: Page): Locator {
 	return composer(page).getByRole("button", { name: "Add files", exact: true });
 }
 

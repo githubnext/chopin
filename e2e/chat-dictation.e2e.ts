@@ -147,6 +147,16 @@ function dictate(page: Page) {
 	return composer(page).getByRole("button", { name: "Dictate", exact: true });
 }
 
+/** The element's own voice: its dot, its waveform and its clock, above the text while it listens. */
+function voice(page: Page) {
+	return composer(page).locator('[data-slot="composer-voice"]');
+}
+
+/** Why it stopped: the composer's own strip, an alert until it is dismissed (its usual words are a status). */
+function failure(page: Page) {
+	return composer(page).getByRole("alert");
+}
+
 function announcement(page: Page) {
 	return composer(page).locator("[data-chat-dictation-announcement]");
 }
@@ -191,10 +201,24 @@ test("asks nothing of the microphone until the button is pressed, then listens, 
 		processLocally: true,
 		lang: await page.evaluate(() => navigator.language),
 	});
-	await expect(composer(page).locator(".composer-recording")).toHaveAttribute(
-		"data-phase",
-		"listening",
-	);
+	await expect(voice(page)).toHaveAttribute("data-recording", "true");
+	// The clock counts the seconds of the person who is speaking.
+	await expect(voice(page)).toContainText(/0:0\d/);
+});
+
+test("an empty draft's hint gives way to the first words being said, which would be drawn over it", async ({ browser, baseURL, room }) => {
+	let page = await open(browser, baseURL!, room);
+	let input = chatInput(chat(page));
+	await expect(input).toHaveAttribute("data-empty", "true");
+	await dictate(page).click();
+	await page.evaluate(() => window.__speech.say("ship the cap", false));
+	await expect(input.locator(".draft-interim")).toHaveAttribute("data-interim", "ship the cap");
+	// The draft is still empty, and the hint is not drawn under what is being said.
+	await expectChatValue(input, "");
+	await expect(input).not.toHaveAttribute("data-empty", "true");
+	// Stopped with nothing written, the hint is back.
+	await dictate(page).click();
+	await expect(input).toHaveAttribute("data-empty", "true");
 });
 
 test("shows what is being said beside the caret, then writes it there, around the words already typed", async ({ browser, baseURL, room }) => {
@@ -253,7 +277,7 @@ test("stops on a second press, and says so once", async ({ browser, baseURL, roo
 	await dictate(page).click();
 	await expect(dictate(page)).toHaveAttribute("aria-pressed", "false");
 	await expect(announcement(page)).toHaveText("Dictation stopped");
-	await expect(composer(page).locator(".composer-recording")).toHaveCount(0);
+	await expect(voice(page)).toHaveCount(0);
 	expect(await heard(page)).toMatchObject({ started: 1, stopped: 1 });
 	// What it hears after it has stopped is ignored.
 	await page.evaluate(() => window.__speech.say("late words", true));
@@ -332,7 +356,7 @@ test("never listens in the background: it stops when the page is hidden and when
 });
 
 for (
-	let failure of [
+	let failed of [
 		{
 			code: "not-allowed",
 			words: "Microphone access is blocked. Allow it in your browser's settings to dictate.",
@@ -345,17 +369,17 @@ for (
 		{ code: "network", words: "Dictation lost its connection. Try again." },
 	]
 ) {
-	test(`says ${failure.code} in plain words, stops, and can be tried again`, async ({ browser, baseURL, room }) => {
+	test(`says ${failed.code} in plain words, stops, and can be tried again`, async ({ browser, baseURL, room }) => {
 		let page = await open(browser, baseURL!, room);
 		await page.evaluate(code => {
 			window.__speech.failOnStart = code;
-		}, failure.code);
+		}, failed.code);
 		await dictate(page).click();
-		let alert = composer(page).locator("[data-chat-dictation-failure]");
-		await expect(alert).toHaveText(failure.words);
+		let alert = failure(page);
+		await expect(alert).toContainText(failed.words);
 		await expect(alert).toHaveAttribute("role", "alert");
 		await expect(dictate(page)).toHaveAttribute("aria-pressed", "false");
-		await expect(composer(page).locator(".composer-recording")).toHaveCount(0);
+		await expect(voice(page)).toHaveCount(0);
 		// Told once: the live region says nothing of it, since the alert does.
 		await expect(announcement(page)).toHaveText("");
 		// Typing is untouched, and a second press tries again and clears the message.
@@ -375,7 +399,7 @@ test("lets the person dismiss why it stopped", async ({ browser, baseURL, room }
 		window.__speech.failOnStart = "audio-capture";
 	});
 	await dictate(page).click();
-	let alert = composer(page).locator("[data-chat-dictation-failure]");
+	let alert = failure(page);
 	await expect(alert).toBeVisible();
 	await alert.getByRole("button", { name: "Dismiss" }).click();
 	await expect(alert).toHaveCount(0);
@@ -384,14 +408,14 @@ test("lets the person dismiss why it stopped", async ({ browser, baseURL, room }
 test("holds the pulse still where the person prefers reduced motion", async ({ browser, baseURL, room }) => {
 	let page = await open(browser, baseURL!, room, installRecognizer, { reducedMotion: "reduce" });
 	await dictate(page).click();
-	let dot = composer(page).locator(".composer-recording-dot");
+	let dot = voice(page).locator(".animate-pulse");
 	await expect(dot).toBeVisible();
 	expect(await dot.evaluate(element => getComputedStyle(element).animationName)).toBe("none");
 	let moving = await open(browser, baseURL!, room, installRecognizer, {
 		reducedMotion: "no-preference",
 	});
 	await dictate(moving).click();
-	let breathing = composer(moving).locator(".composer-recording-dot");
+	let breathing = voice(moving).locator(".animate-pulse");
 	await expect(breathing).toBeVisible();
 	expect(await breathing.evaluate(element => getComputedStyle(element).animationName)).not.toBe(
 		"none",
@@ -403,8 +427,8 @@ test("is accessible while listening, and while it says why it stopped", async ({
 	await dictate(page).click();
 	await expect(dictate(page)).toHaveAttribute("aria-pressed", "true");
 	let check = async () => {
-		let result = await new AxeBuilder({ page }).include(".composer-footer").include(
-			"[data-chat-dictation-failure]",
+		let result = await new AxeBuilder({ page }).include(".composer-row").include(
+			"[data-chat-dictation], .composer-notice",
 		)
 			.analyze();
 		expect(
@@ -415,15 +439,15 @@ test("is accessible while listening, and while it says why it stopped", async ({
 	};
 	await check();
 	await page.evaluate(() => window.__speech.fail("audio-capture"));
-	await expect(composer(page).locator("[data-chat-dictation-failure]")).toBeVisible();
+	await expect(failure(page)).toBeVisible();
 	await check();
 });
 
 test("fits a phone's width, listening and failing, with nothing outside the screen", async ({ browser, baseURL, room }) => {
 	let page = await open(browser, baseURL!, room, installRecognizer, PHONE);
-	// At rest the pill is one line, so the microphone comes with the focus, above the pill and without moving it.
+	// The microphone is in the row at rest, and the box does not move when the field takes the focus.
 	let surface = composer(page).locator(".composer-surface");
-	await expect(dictate(page)).toBeHidden();
+	await expect(dictate(page)).toBeVisible();
 	// Measured once the pane has slid in and come to rest.
 	await expect.poll(async () => (await chat(page).boundingBox())?.x).toBe(0);
 	let resting = (await surface.boundingBox())!;
@@ -434,14 +458,14 @@ test("fits a phone's width, listening and failing, with nothing outside the scre
 		await expectInsideViewport(dictate(page));
 	}).toPass({ timeout: 10_000 });
 	await dictate(page).click();
-	await expect(composer(page).locator(".composer-recording")).toBeVisible();
+	await expect(voice(page)).toBeVisible();
 	await expect(async () => {
 		await expectInsideViewport(dictate(page));
-		await expectInsideViewport(composer(page).locator(".composer-recording"));
+		await expectInsideViewport(voice(page));
 	}).toPass({ timeout: 10_000 });
 	await expectNoHorizontalOverflow(page);
 	await page.evaluate(() => window.__speech.fail("not-allowed"));
-	let alert = composer(page).locator("[data-chat-dictation-failure]");
+	let alert = failure(page);
 	await expect(alert).toBeVisible();
 	await expectInsideViewport(alert);
 	await expectNoHorizontalOverflow(page);
