@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QuestionnaireCard } from "@chopin/editor";
 
+import { markdownClass } from "./chat/assistant-ui/markdown-classes.test-fixtures";
 import { QuestionMarkdownProvider } from "./question-markdown";
 
 import type { Questionnaire } from "@chopin/dialect";
@@ -77,7 +78,9 @@ test("one card reads the same in the Decisions tab and inline in the document", 
 		"(1) Storage stays in PostgreSQL<br/>\n(2) The pilot starts with one team",
 	);
 	expect(list[0]).toContain(
-		'<ul class="aui-md-ul marker:text-muted-foreground my-3 ms-5 list-disc [&amp;&gt;li]:mt-1">\n<li class="aui-md-li leading-relaxed"><strong class="aui-md-strong font-semibold">Before:</strong> one shared queue</li>',
+		`<ul class="${markdownClass("ul")}">\n<li class="${markdownClass("li")}"><strong class="${
+			markdownClass("strong")
+		}">Before:</strong> one shared queue</li>`,
 	);
 	expect(list[1]).toContain("Keeps:<br/>\n(1) storage<br/>\n(2) pilot");
 });

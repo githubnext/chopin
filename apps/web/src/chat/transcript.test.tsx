@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { markdownClass } from "./assistant-ui/markdown-classes.test-fixtures";
 import { Transcript } from "./transcript";
 import { childDocumentPath } from "@chopin/protocol/document-url";
 import {
@@ -14,7 +15,7 @@ import { terminalNotices } from "../../../server/src/research/inline.test-fixtur
 
 import type { Chat } from "@chopin/protocol";
 
-const A_CLASS = "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2";
+const A_CLASS = markdownClass("a");
 
 test("routine presence entries stay out of the conversation", () => {
 	let markup = renderToStaticMarkup(
