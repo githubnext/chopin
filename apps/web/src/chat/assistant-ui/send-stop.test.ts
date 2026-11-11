@@ -23,7 +23,7 @@ describe("the one button turns from send into stop", () => {
 		});
 	});
 
-	test("queues a message while the Planner runs, and goes back to stop once the draft is gone", () => {
+	test("sends a message while the Planner runs, and goes back to stop once the draft is gone", () => {
 		let typing = { ...READY, running: true };
 		expect(sendStop(typing)).toEqual({ action: "send", disabled: false });
 		// Sent, or cleared: the draft is empty again.

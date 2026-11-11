@@ -1,7 +1,8 @@
 /**
  * The composer's one round button, assistant-ui's own: send while the Planner is idle, stop while it
- * runs and the draft is empty, and send (to queue) while it runs and the draft has words. A scripted
- * Planner stands in for the harness, so each state is held as long as a test needs to look at it.
+ * runs and the draft is empty, and send while it runs and the draft has words: the message is posted
+ * at once, as any other is, and the composer says nothing of waiting. A scripted Planner stands in for
+ * the harness, so each state is held as long as a test needs to look at it.
  */
 
 import { chatInput, expectChatValue, fillChat } from "./chat-input";
@@ -33,7 +34,7 @@ async function scriptPlanner(target: Page | BrowserContext) {
 	let aborts = 0;
 	let offline = false;
 	let busy = false;
-	let queued: Chat.Waiting[] = [];
+	let steers = 0;
 	let turn = 0;
 	let entries = 0;
 	let streaming = false;
@@ -87,23 +88,17 @@ async function scriptPlanner(target: Page | BrowserContext) {
 			if (frame.kind === "chat:send") {
 				sends.push({ text: frame.text ?? "", to: frame.to! });
 				let id = `accepted-${sends.length}`;
-				let waiting = frame.to === "planner" && busy;
-				tell({ kind: "chat:send", ts: 0, rid: frame.rid, id, queued: waiting });
-				if (frame.to !== "planner") return announce(id, frame.text ?? "");
-				if (busy) {
-					queued = [...queued, { id, handle: "ana", text: frame.text ?? "" }];
-					return tell({ kind: "chat:queue", ts: 0, waiting: queued });
-				}
+				// Posted at once; one for the Planner while it runs steers the turn that is running.
+				tell({ kind: "chat:send", ts: 0, rid: frame.rid, id });
 				announce(id, frame.text ?? "");
-				return begin();
+				if (frame.to !== "planner") return;
+				if (busy) steers++;
+				else begin();
+				return;
 			}
 			if (frame.kind === "chat:abort") {
 				aborts++;
-				let next = queued.shift();
-				if (!next) return finish();
-				tell({ kind: "chat:queue", ts: 0, waiting: queued });
-				announce(next.id, next.text);
-				return begin();
+				return finish();
 			}
 			server.send(message);
 		});
@@ -122,6 +117,7 @@ async function scriptPlanner(target: Page | BrowserContext) {
 	return {
 		sends: () => sends,
 		aborts: () => aborts,
+		steers: () => steers,
 		/** One token of the reply: the button must not announce it. */
 		token(text: string) {
 			if (!streaming) {
@@ -209,24 +205,29 @@ test("a running Planner with nothing typed is stopped by the same button, which 
 	await expect.poll(() => icon(chat)).toEqual(["arrow"]);
 });
 
-test("a message typed while the Planner runs is queued by the button as by Enter, and the button is a stop again once the draft is gone", async ({ join, page }) => {
+test("a message typed while the Planner runs is posted by the button as by Enter, and the button is a stop again once the draft is gone", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
 	let chat = chatPane(await join("ana"));
 	let draft = chatInput(chat);
 	await startPlanner(chat);
 
-	// Words in the draft turn it into a send that queues.
-	await fillChat(draft, "@chopin Queue the rollback checks.");
+	// Words in the draft turn it into a send.
+	await fillChat(draft, "@chopin Check the rollback.");
 	let send = chat.getByRole("button", { name: "Send message" });
 	await expect(send).toBeEnabled();
 	await expect(chat.getByRole("button", { name: "Stop generating" })).toHaveCount(0);
 	await expect.poll(() => icon(chat)).toEqual(["arrow"]);
 	await send.click();
 	await expect.poll(planner.sends).toContainEqual({
-		text: "@chopin Queue the rollback checks.",
+		text: "@chopin Check the rollback.",
 		to: "planner",
 	});
-	await expect(chat.getByRole("button", { name: "Withdraw queued message" })).toHaveCount(1);
+	// Posted at once, and nothing about waiting: no queue, no withdrawing it.
+	await expect(chat.locator("[data-chat-message-id]").filter({ hasText: "Check the rollback." }))
+		.toHaveCount(1);
+	await expect(chat.locator('[data-chat-state="queued"]')).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: "Withdraw queued message" })).toHaveCount(0);
+	await expect.poll(planner.steers).toBe(1);
 	// Sent: the draft is empty and the Planner still runs, so it is a stop again.
 	await expect(chat.getByRole("button", { name: "Stop generating" })).toBeVisible();
 	await expect.poll(() => icon(chat)).toEqual(["square"]);
@@ -237,14 +238,16 @@ test("a message typed while the Planner runs is queued by the button as by Enter
 	await draft.fill("");
 	await expect(chat.getByRole("button", { name: "Stop generating" })).toBeVisible();
 
-	// Enter queues exactly as the button does.
+	// Enter posts it exactly as the button does.
 	await fillChat(draft, "@chopin And the release notes.");
 	await draft.press("Enter");
 	await expect.poll(planner.sends).toContainEqual({
 		text: "@chopin And the release notes.",
 		to: "planner",
 	});
-	await expect(chat.getByRole("button", { name: "Withdraw queued message" })).toHaveCount(2);
+	await expect(chat.locator("[data-chat-message-id]").filter({ hasText: "And the release notes." }))
+		.toHaveCount(1);
+	await expect.poll(planner.steers).toBe(2);
 	expect(planner.aborts()).toBe(0);
 });
 

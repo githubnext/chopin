@@ -1,7 +1,8 @@
 /**
  * What the composer's one round button is: send, or stop. assistant-ui's composer turns its send
  * button into a stop button while a reply runs; Chopin's composer stays live while a turn runs, so
- * a message typed meanwhile is queued, and the button follows the draft as well as the Planner.
+ * a message typed meanwhile is sent as any other is, and the button follows the draft as well as the
+ * Planner.
  */
 
 export type SendStopAction = "send" | "stop";
@@ -22,7 +23,7 @@ export type SendStop = { action: SendStopAction; disabled: boolean };
 /**
  * Stop appears only for a Planner that runs, an empty draft and a person who may stop it. Someone
  * who may not sees a disabled send, never a stop they cannot use; a draft with words keeps the send
- * (which queues it) and goes back to stop once it is sent or cleared.
+ * and goes back to stop once it is sent or cleared.
  */
 export function sendStop({ running, hasDraft, canSend, canStop }: SendStopInput): SendStop {
 	if (running && !hasDraft && canStop) return { action: "stop", disabled: false };
