@@ -323,15 +323,15 @@ describe("images over the agent connection", () => {
 		expect(await storage.images.channels(hashOf(large))).toEqual([]);
 	});
 
-	it("say a client's image that fits one message is too large when the stored limit is below it", async () => {
+	it("store a client's image that fits one message as a smaller copy when the stored limit is below it", async () => {
 		let fits = bigPng(1_500_000);
 		let { chat, storage } = await drawn([
 			{ type: "image", data: encoded(fits), mimeType: "image/png", alt: "Fits" },
 		], { imageMaxBytes: 1_048_576 });
-		let entry = chat.entries.find(item => item.refusedImages);
-		expect(entry?.images).toBeUndefined();
-		expect(entry?.refusedImages).toEqual([
-			{ before: 0, reason: "Image too large to show (1.5 MB, limit 1 MB)" },
+		let entry = chat.entries.find(item => item.images);
+		expect(entry?.refusedImages).toBeUndefined();
+		expect(entry?.images?.map(image => [image.alt, image.width, image.height])).toEqual([
+			["Fits", 40, 30],
 		]);
 		expect(await storage.images.channels(hashOf(fits))).toEqual([]);
 	});

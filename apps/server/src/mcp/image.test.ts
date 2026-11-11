@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import { fixture } from "../images/raster.test-fixtures";
 import { handler, TOOLS } from "../mcp";
 
 import type { DocumentReader, UploadImage, UploadImageInput } from "../mcp";
@@ -137,7 +138,7 @@ describe("the MCP upload_image protocol", () => {
 		}
 	});
 
-	it("refuses SVG and other types and images over 1 MiB before storing", async () => {
+	it("refuses SVG and other types before storing", async () => {
 		let { mcp, received } = setup();
 		let svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
 		for (let mimeType of ["image/svg+xml", "text/html", "image/avif"]) {
@@ -154,11 +155,31 @@ describe("the MCP upload_image protocol", () => {
 			await mcp(call({ id: url, data: base64(largest), mimeType: "image/png" })),
 		);
 		expect(accepted.result?.isError).toBeUndefined();
+		expect(received).toHaveLength(1);
+	});
 
-		let over = new Uint8Array(1_048_577);
-		over.set(png);
+	it("stores an image over 1 MiB as a smaller copy, and refuses only one it cannot read", async () => {
+		let { mcp, received } = setup();
+		let photo = await new Bun.Image(fixture("option-write-back.png")).resize(2000, 1500).png({
+			compressionLevel: 0,
+		}).bytes();
+		expect(photo.byteLength).toBeGreaterThan(1_048_576);
+		let stored = await result(
+			await mcp(call({ id: url, data: base64(photo), mimeType: "image/png" })),
+		);
+		expect(stored.error).toBeUndefined();
+		expect(stored.result?.isError).toBeUndefined();
+		expect(received).toHaveLength(1);
+		let kept = received[0]!.input;
+		expect(kept.mimeType).toBe("image/webp");
+		expect(kept.bytes.byteLength).toBeLessThanOrEqual(1_048_576);
+		let { width, height } = await new Bun.Image(kept.bytes).metadata();
+		expect(width / height).toBeCloseTo(4 / 3, 1);
+
+		let unreadable = new Uint8Array(1_048_577);
+		unreadable.set(png);
 		let refused = await result(
-			await mcp(call({ id: url, data: base64(over), mimeType: "image/png" })),
+			await mcp(call({ id: url, data: base64(unreadable), mimeType: "image/png" })),
 		);
 		expect(refused.result).toMatchObject({
 			structuredContent: { code: "too-large" },

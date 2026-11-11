@@ -166,16 +166,21 @@ export default api => {
 
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
-test("a full Atomic Planner's image over the stored limit is never stored and Chat says it was too large", async () => {
+test("a full Atomic Planner's image over the stored limit is stored as a smaller copy", async () => {
 	let over = bigPng(MIB + 1);
 	let { chat, stored, types } = await drawn([{ name: "over.png", bytes: over }], MIB);
 	expect(types).toContain("tool-result");
-	expect(stored).toEqual([]);
-	let entry = chat.entries.find(item => item.refusedImages);
-	expect(entry?.images).toBeUndefined();
-	expect(entry?.refusedImages).toEqual([
-		{ before: 0, reason: "Image too large to show (1.1 MB, limit 1 MB)" },
-	]);
+	expect(stored).toHaveLength(1);
+	expect(stored[0]!.bytes.byteLength).toBeLessThanOrEqual(MIB);
+	let entry = chat.entries.find(item => item.images);
+	expect(entry?.refusedImages).toBeUndefined();
+	expect(entry?.images).toEqual([{
+		src: `/images/${stored[0]!.sha256}.webp`,
+		alt: "over.png",
+		width: 40,
+		height: 30,
+		generated: true,
+	}]);
 });
 
 test("a full Atomic Planner's image of exactly the stored limit is hosted", async () => {
@@ -193,12 +198,10 @@ test("a full Atomic Planner's image of exactly the stored limit is hosted", asyn
 	expect(entry?.refusedImages).toBeUndefined();
 });
 
-test("a full Atomic Planner's 30 MiB image is refused under the 10 MiB default", async () => {
+test("a full Atomic Planner's 30 MiB image is shown under the 10 MiB default, never refused", async () => {
 	let { chat, stored } = await drawn([{ name: "huge.png", bytes: bigPng(30 * MIB) }]);
-	expect(stored).toEqual([]);
-	let entry = chat.entries.find(item => item.refusedImages);
-	expect(entry?.images).toBeUndefined();
-	expect(entry?.refusedImages).toEqual([
-		{ before: 0, reason: "Image too large to show (30 MB, limit 10 MB)" },
-	]);
+	expect(stored).toHaveLength(1);
+	let entry = chat.entries.find(item => item.images);
+	expect(entry?.refusedImages).toBeUndefined();
+	expect(entry?.images).toHaveLength(1);
 });

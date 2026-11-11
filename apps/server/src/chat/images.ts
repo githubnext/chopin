@@ -1,6 +1,7 @@
 import { MAX_LINK_MESSAGE_BYTES, toolContentSchema, toolImageSchema } from "@chopin/agent-link";
 import { HOSTED_IMAGE_PATH } from "@chopin/dialect";
 
+import { shrinkToFit } from "../images/resize";
 import {
 	DEFAULT_STORED_IMAGE_BYTES,
 	IMAGE_LABELS,
@@ -62,17 +63,12 @@ function megabytes(bytes: number, round = Math.round): string {
 	return Number.isInteger(size) ? `${size}` : size.toFixed(1);
 }
 
-function decodedBytes(data: string): number {
-	let padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
-	return Math.floor((data.length - padding) * 3 / 4);
-}
-
 function typeNamed(declared: string): string {
 	let name = declared.split(";")[0]!.trim().toLowerCase();
 	return TYPE_TOKEN.test(name) ? ` ${name}` : "";
 }
 
-function hosted(block: unknown, maxBytes: number): ToolImage | { reason: string } {
+function hosted(block: unknown): ToolImage | { reason: string } {
 	let image = toolImageSchema.safeParse(block).data;
 	if (!image) return refusal("its block has no base64 data or no type.");
 	if (image.tooLarge !== undefined) {
@@ -87,14 +83,6 @@ function hosted(block: unknown, maxBytes: number): ToolImage | { reason: string 
 		return refusal(`its type${typeNamed(image.mimeType)} isn't one Chat shows (${SHOWN}).`);
 	}
 	let data = image.data.replace(/\s+/g, "");
-	let size = decodedBytes(data);
-	if (size > maxBytes) {
-		return {
-			reason: `Image too large to show (${megabytes(size, Math.ceil)} MB, limit ${
-				megabytes(maxBytes, Math.floor)
-			} MB)`,
-		};
-	}
 	let leftover = data.length % 4;
 	if (!BASE64.test(data) || (data.endsWith("=") ? leftover !== 0 : leftover === 1)) {
 		return refusal("its data isn't valid base64.");
@@ -110,6 +98,7 @@ function hosted(block: unknown, maxBytes: number): ToolImage | { reason: string 
 	}
 	let dimensions = imageSize(named, bytes);
 	if (!dimensions) return { reason: headerRefusal(named) };
+	// An image over the stored size is not refused: `fitImage` stores a smaller copy of it.
 	return {
 		bytes,
 		mimeType: named,
@@ -119,25 +108,43 @@ function hosted(block: unknown, maxBytes: number): ToolImage | { reason: string 
 	};
 }
 
+export const SHRINK_REFUSAL = `${REFUSAL_START}it is more pixels than Chopin can make smaller.`;
+
+/**
+ * The image as Chopin stores it: as it is when it fits in `maxBytes`, else a smaller copy that
+ * does (as Slack keeps a large photo, but shown from a copy), or a refusal where none can be made.
+ */
+export async function fitImage(
+	image: ToolImage,
+	maxBytes = DEFAULT_STORED_IMAGE_BYTES,
+): Promise<ToolImage | { reason: string }> {
+	if (image.bytes.byteLength <= maxBytes) return image;
+	let fitted = await shrinkToFit(image.bytes, image.mimeType, maxBytes);
+	if (!fitted) return { reason: SHRINK_REFUSAL };
+	return {
+		...image,
+		bytes: fitted.bytes,
+		mimeType: fitted.mimeType,
+		width: fitted.width,
+		height: fitted.height,
+	};
+}
+
 export function inspectImages(
 	output: unknown,
-	maxBytes = DEFAULT_STORED_IMAGE_BYTES,
 ): { images: ToolImage[]; refusals: Wire.ImageRefusal[] } {
 	let images: ToolImage[] = [];
 	let refusals: Wire.ImageRefusal[] = [];
 	for (let block of (contentBlocks(output) ?? []).filter(isImageBlock)) {
-		let found = hosted(block, maxBytes);
+		let found = hosted(block);
 		if ("reason" in found) refusals.push({ before: images.length, reason: found.reason });
 		else images.push(found);
 	}
 	return { images, refusals };
 }
 
-export function toolImages(
-	output: unknown,
-	maxBytes = DEFAULT_STORED_IMAGE_BYTES,
-): { images: ToolImage[]; refused: number } {
-	let { images, refusals } = inspectImages(output, maxBytes);
+export function toolImages(output: unknown): { images: ToolImage[]; refused: number } {
+	let { images, refusals } = inspectImages(output);
 	return { images, refused: refusals.length };
 }
 

@@ -651,6 +651,40 @@ describe("Agent connection client", () => {
 		expect(unchanged.part).toMatchObject({ result: fits });
 	});
 
+	it("sends a photo too large for a frame as a smaller copy, in order, before the turn ends", async () => {
+		let server = fakeServer();
+		let photo = await new Bun.Image(
+			new Uint8Array(
+				await Bun.file(new URL("../../../e2e/fixtures/option-write-back.png", import.meta.url))
+					.arrayBuffer(),
+			),
+		).resize(3000, 1500).png({ compressionLevel: 0 }).bytes();
+		let data = Buffer.from(photo).toString("base64");
+		expect(data.length).toBeGreaterThan(MAX_LINK_MESSAGE_BYTES);
+		await connect(server, {
+			turn(context) {
+				context.emit({
+					type: "tool-result",
+					toolCallId: "c",
+					toolName: "draw",
+					result: { content: [{ type: "text", text: "Drew it" }, imageBlock(data, "Wide")] },
+				});
+				context.emit({ type: "text-delta", id: "t", delta: "after" });
+			},
+		});
+		server.send(turn("photo"));
+		let sent = await server.next("part");
+		expect(JSON.stringify(sent).length).toBeLessThanOrEqual(MAX_LINK_MESSAGE_BYTES);
+		let [text, image] = resultOf(sent).content as Array<Record<string, unknown>>;
+		expect(text).toEqual({ type: "text", text: "Drew it" });
+		expect(image).toMatchObject({ type: "image", mimeType: "image/webp", alt: "Wide" });
+		expect(image!.tooLarge).toBeUndefined();
+		let copy = await new Bun.Image(Buffer.from(image!.data as string, "base64")).metadata();
+		expect(copy.width / copy.height).toBeCloseTo(2, 1);
+		expect((await server.next("part")).part).toMatchObject({ type: "text-delta", delta: "after" });
+		expect(await server.next("turn-end")).toMatchObject({ turn: "photo", status: "finished" });
+	});
+
 	it("still fails a result it cannot fit by leaving images out, as it always did", async () => {
 		let server = fakeServer();
 		let failures: string[] = [];

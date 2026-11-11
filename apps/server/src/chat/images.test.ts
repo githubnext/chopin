@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
 import { apng, bigPng, fixture } from "../images/raster.test-fixtures";
-import { inspectImages, savedImages, savedRefusals, toolImages, toolRowOutput } from "./images";
+import {
+	fitImage,
+	inspectImages,
+	savedImages,
+	savedRefusals,
+	SHRINK_REFUSAL,
+	toolImages,
+	toolRowOutput,
+} from "./images";
+
+import type { ToolImage } from "./images";
 
 const MIB = 1_048_576;
 
@@ -426,82 +436,70 @@ describe("tool images over the stored limit", () => {
 	const png = (size: number, extra: Record<string, unknown> = {}) =>
 		image({ data: base64(bigPng(size)), ...extra });
 
-	test("hosts an image of exactly 10 MiB by default and refuses one byte more with the size and the limit", () => {
+	test("never refuses an image for its size, whatever the stored limit", () => {
 		let found = inspectImages({
 			content: [png(10 * MIB, { alt: "At" }), png(10 * MIB + 1, { alt: "Over" })],
 		});
 		expect(found.images.map(item => [item.alt, item.bytes.byteLength])).toEqual([
 			["At", 10 * MIB],
+			["Over", 10 * MIB + 1],
 		]);
-		expect(found.refusals).toEqual([
-			{ before: 1, reason: "Image too large to show (10.1 MB, limit 10 MB)" },
-		]);
+		expect(found.refusals).toEqual([]);
 	});
 
-	test("says a 30 MiB image is too large without reading its data", () => {
-		let found = inspectImages({
-			content: [image({ data: "!".repeat(30 * MIB * 4 / 3) })],
+	test("stores an image over the limit as a smaller copy of the same picture", async () => {
+		let [over] = inspectImages({ content: [png(3 * MIB, { alt: "Over", caption: "Kept" })] })
+			.images;
+		let fitted = await fitImage(over!, 2 * MIB);
+		expect("reason" in fitted).toBe(false);
+		let stored = fitted as ToolImage;
+		expect(stored.bytes.byteLength).toBeLessThanOrEqual(2 * MIB);
+		expect(stored).toMatchObject({
+			alt: "Over",
+			caption: "Kept",
+			mimeType: "image/webp",
+			width: 40,
+			height: 30,
 		});
+		let [at] = inspectImages({ content: [png(MIB)] }).images;
+		expect(await fitImage(at!, MIB)).toBe(at!);
+	});
+
+	test("makes a very wide photo small enough to store, keeping its shape", async () => {
+		let photo = await new Bun.Image(fixture("raster-18x6.png")).resize(12000, 4000).jpeg({
+			quality: 95,
+		}).bytes();
+		let [wide] =
+			inspectImages({ content: [image({ data: base64(photo), mimeType: "image/jpeg" })] })
+				.images;
+		expect(wide).toMatchObject({ width: 12000, height: 4000 });
+		let fitted = await fitImage(wide!, 100_000) as ToolImage;
+		expect(fitted.mimeType).toBe("image/jpeg");
+		expect(fitted.bytes.byteLength).toBeLessThanOrEqual(100_000);
+		expect(fitted.width).toBeLessThanOrEqual(4096);
+		expect(fitted.width / fitted.height).toBeCloseTo(3, 1);
+	});
+
+	test("says so in Chat's own words when no copy can be made", async () => {
+		let [icon] = inspectImages({
+			content: [image({ data: base64(fixture("raster-18x6.ico")), mimeType: "image/x-icon" })],
+		}).images;
+		expect(await fitImage(icon!, 10)).toEqual({ reason: SHRINK_REFUSAL });
+		expect(SHRINK_REFUSAL).toStartWith("Image couldn't be shown: ");
+		expect(savedRefusals([{ before: 0, reason: SHRINK_REFUSAL }])).toBe(true);
+	});
+
+	test("reads 30 MiB of data that is not base64 as such, not as an image too large", () => {
+		let found = inspectImages({ content: [image({ data: "!".repeat(30 * MIB * 4 / 3) })] });
 		expect(found.images).toEqual([]);
 		expect(found.refusals).toEqual([
-			{ before: 0, reason: "Image too large to show (30 MB, limit 10 MB)" },
-		]);
-	});
-
-	test("applies the limit it is given, in whole or tenths of a megabyte", () => {
-		let found = inspectImages({
-			content: [png(MIB + 100, { alt: "Over" }), png(MIB, { alt: "At" })],
-		}, MIB);
-		expect(found.images.map(item => item.alt)).toEqual(["At"]);
-		expect(found.refusals).toEqual([
-			{ before: 0, reason: "Image too large to show (1.1 MB, limit 1 MB)" },
-		]);
-		expect(
-			inspectImages({ content: [png(3 * MIB)] }, 1.5 * MIB).refusals.map(item => item.reason),
-		).toEqual(["Image too large to show (3 MB, limit 1.5 MB)"]);
-		expect(inspectImages({ content: [png(3 * MIB)] }, 3 * MIB).refusals).toEqual([]);
-	});
-
-	test("counts the decoded bytes of padded, unpadded and line-broken data alike", () => {
-		let bytes = bigPng(5_000);
-		for (let size of [bytes.byteLength, bytes.byteLength + 1, bytes.byteLength + 2]) {
-			let sized = bigPng(size);
-			let padded = base64(sized);
-			let forms = [padded, padded.replace(/=+$/, ""), padded.replace(/(.{76})/g, "$1\r\n")];
-			for (let data of forms) {
-				let at = inspectImages({ content: [image({ data })] }, size);
-				expect(at.refusals, `${size} ${data.slice(-4)}`).toEqual([]);
-				expect(at.images, `${size} ${data.slice(-4)}`).toHaveLength(1);
-				let over = inspectImages({ content: [image({ data })] }, size - 1);
-				expect(over.images, `${size} ${data.slice(-4)}`).toEqual([]);
-				expect(over.refusals, `${size} ${data.slice(-4)}`).toHaveLength(1);
-				expect(over.refusals[0]!.reason).toStartWith("Image too large to show (");
-			}
-		}
-	});
-
-	test("keeps the place of an image it refuses among the images around it", () => {
-		let found = inspectImages({
-			content: [
-				image({ alt: "first" }),
-				png(3 * MIB, { alt: "big" }),
-				image({ data: base64(SVG), mimeType: "image/svg+xml" }),
-				image({ alt: "last" }),
-			],
-		}, 2 * MIB);
-		expect(found.images.map(item => item.alt)).toEqual(["first", "last"]);
-		expect(found.refusals).toEqual([
-			{ before: 1, reason: "Image too large to show (3 MB, limit 2 MB)" },
-			{
-				before: 1,
-				reason:
-					"Image couldn't be shown: its type image/svg+xml isn't one Chat shows (PNG, JPEG, WebP, GIF, AVIF, BMP or ICO).",
-			},
+			{ before: 0, reason: "Image couldn't be shown: its data isn't valid base64." },
 		]);
 	});
 });
 
 describe("saved too-large refusals", () => {
+	// Turns before images were made smaller saved this sentence, and their transcripts still read.
 	test("admits the sentence a turn saved for an image over the limit, beside the others", () => {
 		let large = "Image too large to show (30 MB, limit 10 MB)";
 		expect(savedRefusals([{ before: 0, reason: large }])).toBe(true);

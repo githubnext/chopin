@@ -20,7 +20,7 @@
 
 import { createHash } from "node:crypto";
 import { imagePath, imageSize } from "../images/format";
-import { headerRefusal, inspectImages, STORE_REFUSAL, toolRowOutput } from "./images";
+import { fitImage, headerRefusal, inspectImages, STORE_REFUSAL, toolRowOutput } from "./images";
 import type { ToolImage } from "./images";
 
 import { ulid } from "@chopin/dialect";
@@ -3590,10 +3590,7 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 			let staged: ToolImage[] = [];
 			let refused: Wire.ImageRefusal[] = [];
 			if (success && !preliminary && !chat.turnImages?.calls.has(part.toolCallId)) {
-				({ images: staged, refusals: refused } = inspectImages(
-					output,
-					context.config.imageMaxBytes,
-				));
+				({ images: staged, refusals: refused } = inspectImages(output));
 				if (staged.length || refused.length) turnImages(chat).calls.add(part.toolCallId);
 			}
 			conclude(
@@ -3882,9 +3879,14 @@ function stageImages(
 		let notes: Wire.ImageRefusal[] = [];
 		let waiting = [...refusals];
 		let uploadedBy: string | undefined;
-		for (let [index, image] of images.entries()) {
+		for (let [index, original] of images.entries()) {
 			while (waiting[0] && waiting[0].before <= index) {
 				notes.push({ ...waiting.shift()!, before: shown.length });
+			}
+			let image = await fitImage(original, context.config.imageMaxBytes);
+			if ("reason" in image) {
+				notes.push({ before: shown.length, reason: image.reason });
+				continue;
 			}
 			try {
 				uploadedBy ??= await imageOwner(context, member);
