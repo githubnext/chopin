@@ -3,8 +3,8 @@
  *
  * Drives the agent, and shows what it is doing. The composer stays live while
  * a turn runs — a turn owns the plan, not the chat — and anything sent
- * to the agent meanwhile is queued in order, with its author's name on it, so
- * nobody is silenced because a colleague prompted first.
+ * meanwhile is posted at once, with its author's name on it, so nobody is
+ * silenced because a colleague prompted first.
  */
 
 import {
@@ -55,6 +55,7 @@ import { silencesFailedSends } from "./connection-phase";
 import { ErrorState } from "./error-state";
 import { failureBanner, retryPayload, sendFailureView, withoutFailure } from "./failure";
 import { TypingReporter } from "./typing";
+import { asksChopin, chipKeyAction, restoredChip, takeChopinMention } from "./chopin-chip";
 import { ChatComposer } from "./composer";
 import type { ComposerNotice } from "./composer";
 
@@ -92,7 +93,6 @@ import {
 } from "./reference-picker";
 import {
 	acknowledgeDraft,
-	addressedOutsideReferences,
 	addressesPlanner,
 	insertCommand,
 	insertPointer,
@@ -362,9 +362,9 @@ export function Chat(
 	let [commandCursor, setCommandCursor] = useState<{ key?: string; index: number }>({ index: 0 });
 	let textarea = useRef<DraftInputHandle>(null);
 	let composerRoot = useRef<HTMLDivElement>(null);
-	let [mode, setMode] = useState(() =>
-		draft.submission?.to === "planner" && !addressedOutsideReferences(draft.text, draft.references)
-	);
+	// The chip at the start of the draft, which is who the message is for. It stays on after Chopin
+	// is asked, until it is removed.
+	let [chipOn, setChipOn] = useState(() => restoredChip(draft, draft.submission?.to));
 	let [historyKey, setHistoryKey] = useState(0);
 	let pendingCaret = useRef<number | { start: number; end: number } | undefined>(undefined);
 	let submission = useRef<object | undefined>(undefined);
@@ -446,10 +446,15 @@ export function Chat(
 	let outboxed = agent && sendAcknowledgements;
 	// A draft never waits on the connection; only sending does.
 	let draftable = !readonly && !archived;
-	let effectiveMode = !!agent && (mode || draft.submission?.to === "planner"
-		|| addressedOutsideReferences(draft.text, draft.references));
+	let chip = !!agent && chipOn;
 	let commandDraft = runsCommand(draft.references);
-	let plannerBound = outboxed && effectiveMode;
+	let plannerBound = outboxed && asksChopin({
+		agent: !!agent,
+		chip: chipOn,
+		text: draft.text,
+		references: draft.references,
+		submitted: draft.submission?.to,
+	});
 	let { working: workingTurn, suspended: suspendedWork } = progressOf(
 		transcript,
 		transcriptReady,
@@ -688,7 +693,7 @@ export function Chat(
 		if (outboxed) {
 			let queued = prepareDraftSubmission(current, undefined, {
 				planner: agent,
-				mode: effectiveMode,
+				asking: chip,
 				referencesEnabled,
 				focus,
 			});
@@ -712,7 +717,7 @@ export function Chat(
 		}
 		let submitted = prepareDraftSubmission(current, undefined, {
 			planner: agent,
-			mode: effectiveMode,
+			asking: chip,
 			referencesEnabled,
 			focus,
 		});
@@ -910,46 +915,15 @@ export function Chat(
 		pendingCaret.current = caret;
 	};
 
-	let toggleMode = () => {
-		if (!draftable || sending || !agent) return;
+	// Puts the chip on or takes it off. A send prepared for the other audience is not the one to make
+	// now, so the draft is made again when it goes.
+	let setChip = (on: boolean) => {
+		if (!draftable || sending || !agent || chipOn === on) return;
 		let current = draftRef.current;
-		let at = selection.start;
-		let end = selection.end;
-		if (effectiveMode) {
-			let removals = [...current.text.matchAll(/(^|[^\w@])@chopin\b/gi)]
-				.map(match => {
-					let start = match.index + match[1]!.length;
-					let end = match.index + match[0].length;
-					// Take one following space too where the mention began the text or followed one,
-					// so removing it leaves no doubled or leading space.
-					let before = current.text[start - 1];
-					if (current.text[end] === " " && (start === 0 || before === " ")) end += 1;
-					return { start, end };
-				})
-				.filter(edit =>
-					!current.references.some(reference =>
-						edit.start < reference.end && edit.end > reference.start
-					)
-				);
-			let next = current.text;
-			let references = current.references;
-			for (let edit of removals.toReversed()) {
-				let revised = next.slice(0, edit.start) + next.slice(edit.end);
-				references = reconcileReferenceDrafts(next, revised, references, edit);
-				if (edit.start < at) at -= Math.min(edit.end - edit.start, at - edit.start);
-				if (edit.start < end) end -= Math.min(edit.end - edit.start, end - edit.start);
-				next = revised;
-			}
-			setDraft({ text: next, references });
-			setSelection({ start: at, end });
-			setMode(false);
-		} else {
-			setMode(true);
-			setDraft({ text: current.text, references: current.references });
-		}
+		setChipOn(on);
+		setDraft({ text: current.text, references: current.references });
 		setSendError(undefined);
-		setDismissedPicker(triggerKey ?? mentionKey);
-		pendingCaret.current = { start: at, end };
+		pendingCaret.current = { start: selection.start, end: selection.end };
 	};
 
 	let chooseReference = (target: ReferenceTarget) => {
@@ -964,8 +938,18 @@ export function Chat(
 
 	let chooseMention = (candidate: MentionCandidate) => {
 		if (!freeMention) return;
+		if (candidate.kind === "planner") {
+			// Chopin is the chip, not words in the draft.
+			let taken = takeChopinMention(draft.text, draft.references, freeMention);
+			setChipOn(true);
+			setDraft({ text: taken.text, references: taken.references });
+			setSelection({ start: taken.caret, end: taken.caret });
+			setSendError(undefined);
+			setDismissedPicker(undefined);
+			pendingCaret.current = taken.caret;
+			return;
+		}
 		let next = insertMention(draft.text, freeMention, candidate);
-		if (candidate.kind === "planner") setMode(true);
 		setDraft(current =>
 			reviseComposerDraft(
 				current,
@@ -1163,11 +1147,14 @@ export function Chat(
 				inputRef={textarea}
 				agent={!!agent}
 				model={modelControl}
-				mode={{
-					chopin: effectiveMode,
-					disabled: !draftable || sending || !agent,
-					onToggle: toggleMode,
-				}}
+				chopin={agent
+					? {
+						chip,
+						disabled: !draftable || sending,
+						onAdd: () => setChip(true),
+						onRemove: () => setChip(false),
+					}
+					: undefined}
 				banner={bannerNode
 					? { id: bannerIds, node: bannerNode, invalid: slot.lead === "send" }
 					: undefined}
@@ -1310,6 +1297,26 @@ export function Chat(
 					onBlur: () => typing.current?.stop(),
 					onKeyDown: event => {
 						let composing = event.nativeEvent.isComposing || event.keyCode === 229;
+						let chipAction = agent && draftable && !sending
+							? chipKeyAction({
+								key: event.key,
+								keyCode: event.keyCode,
+								isComposing: event.nativeEvent.isComposing,
+								shiftKey: event.shiftKey,
+								altKey: event.altKey,
+								ctrlKey: event.ctrlKey,
+								metaKey: event.metaKey,
+							}, {
+								chip: chipOn,
+								selectionStart: textarea.current?.selectionStart ?? 0,
+								selectionEnd: textarea.current?.selectionEnd ?? 0,
+							})
+							: undefined;
+						if (chipAction) {
+							event.preventDefault();
+							if (!event.repeat) setChip(chipAction === "insert");
+							return;
+						}
 						let commandAction = commandOpen
 							? commandKeyAction({
 								key: event.key,
@@ -1338,14 +1345,6 @@ export function Chat(
 						}
 						if (!composing && event.key === "Tab" && !event.shiftKey) {
 							setDismissedPicker(mentionKey ?? triggerKey);
-							return;
-						}
-						if (
-							!composing && event.key === "Tab" && event.shiftKey && !event.metaKey
-							&& !event.ctrlKey && !event.altKey && agent && draftable && !sending
-						) {
-							event.preventDefault();
-							if (!event.repeat) toggleMode();
 							return;
 						}
 						let mentionAction = mentionOpen

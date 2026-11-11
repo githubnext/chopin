@@ -75,12 +75,17 @@ export function ComposerSpecimen(
 	}: Specimen,
 ) {
 	let [draft, setDraft] = useState(text);
-	let [mode, setMode] = useState(chopin);
+	let [chip, setChip] = useState(chopin);
 	let draftable = !unavailable;
 	return (
 		<ChatComposer
 			agent
-			mode={{ chopin: mode, disabled: !draftable || sending, onToggle: () => setMode(on => !on) }}
+			chopin={{
+				chip,
+				disabled: !draftable || sending,
+				onAdd: () => setChip(true),
+				onRemove: () => setChip(false),
+			}}
 			banner={banner}
 			draftable={draftable}
 			notice={notice}
