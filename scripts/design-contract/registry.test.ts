@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 import { designProblems } from "../check-design.mjs";
 import {
+	applyPatch,
+	parsePatch,
 	RECORDED_DIRECTORY,
 	RECORDED_MANIFEST,
 	sha256,
@@ -226,5 +229,203 @@ describe("Impeccable accepts recorded files only", () => {
 				]),
 			).changes,
 		).toEqual([`STALE baseline side-tab in ${FILE}: border-l-4`]);
+	});
+});
+
+/** What the registry wrote, one attribute to a line as prettier does, and what a patch may do to it. */
+let ROW = `import { cn } from "cn";
+
+export function Row({ label, ...props }) {
+	return (
+		<li
+			data-slot="row"
+			className={cn("flex gap-2 px-3", props.className)}
+			{...props}
+		>
+			{label}
+		</li>
+	);
+}
+`;
+let ROW_FILE = `${RECORDED_DIRECTORY}/assistant-ui/elements/row.tsx`;
+
+/** A real unified diff with its reasons, as `record-registry-sources.ts --patch` writes it. */
+function diffOf(pristine: string, patched: string, reasons: string[]): string {
+	let root = mkdtempSync(join(tmpdir(), "chopin-diff-"));
+	try {
+		writeFileSync(join(root, "a"), pristine);
+		writeFileSync(join(root, "b"), patched);
+		let diff = spawnSync("diff", ["-U3", "-L", "a/row.tsx", "-L", "b/row.tsx", "a", "b"], {
+			cwd: root,
+			encoding: "utf8",
+		}).stdout;
+		let index = 0;
+		return diff.replace(/^(@@ .* @@).*$/gm, (_, header) => `${header} ${reasons[index++] ?? ""}`);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+}
+
+function patched(
+	change: (source: string) => string,
+	reasons = ["Reason: a leading slot so a row can show who sent it"],
+	check: (root: string, result: ReturnType<typeof verifyRecordedSources>) => void,
+) {
+	let after = change(ROW);
+	let patch = diffOf(ROW, after, reasons);
+	fixture(
+		{
+			[ROW_FILE]: after,
+			[`${ROW_FILE}.patch`]: patch,
+		},
+		record({
+			...entry(ROW_FILE, ROW, { registry: "@assistant-ui", item: "elements-row" }),
+			patch: `${ROW_FILE}.patch`,
+			patchSha256: sha256(patch),
+		} as ReturnType<typeof entry>),
+		root => check(root, verifyRecordedSources(root)),
+	);
+}
+
+let ADD_SLOT = (source: string) =>
+	source.replace("({ label, ...props })", "({ label, lead, ...props })")
+		.replace("\t\t\t{...props}\n", '\t\t\t{...props}\n\t\t\tdata-lead={lead ? "" : undefined}\n')
+		.replace("\t\t\t{label}\n", "\t\t\t{lead}\n\t\t\t{label}\n");
+
+describe("a recorded patch to a copied file", () => {
+	test("is accepted as the registry's file plus exactly the patch, and the copy is held to nothing else", () => {
+		patched(ADD_SLOT, [
+			"Reason: a leading slot for the sender",
+			"Reason: a data attribute for the slot",
+			"Reason: the slot itself",
+		], (root, result) => {
+			expect(result.errors).toEqual([]);
+			expect([...result.files]).toEqual([ROW_FILE]);
+			expect(scan(root).findings.filter(finding => finding.file === ROW_FILE)).toEqual([]);
+		});
+	});
+
+	test("round-trips: undoing it gives back the registry's bytes, and applying it again the patched file", () => {
+		let after = ADD_SLOT(ROW);
+		let parsed = parsePatch(diffOf(ROW, after, ["Reason: one", "Reason: two", "Reason: three"]));
+		expect(parsed.error).toBeUndefined();
+		expect(applyPatch(after, parsed.hunks, "new").text).toBe(ROW);
+		expect(applyPatch(ROW, parsed.hunks, "old").text).toBe(after);
+		expect(applyPatch(ROW, parsed.hunks, "new").error).toContain("no longer applies");
+	});
+
+	test("fails once the file is not the registry's plus the patch: a changed line, or a new registry copy", () => {
+		let after = ADD_SLOT(ROW);
+		let patch = diffOf(ROW, after, [
+			"Reason: the slot",
+			"Reason: the attribute",
+			"Reason: the child",
+		]);
+		let manifest = record({
+			...entry(ROW_FILE, ROW, { registry: "@assistant-ui", item: "elements-row" }),
+			patch: `${ROW_FILE}.patch`,
+			patchSha256: sha256(patch),
+		} as ReturnType<typeof entry>);
+		// Edited by hand beyond the patch.
+		fixture(
+			{ [ROW_FILE]: after.replace("{label}", "{label} {label}"), [`${ROW_FILE}.patch`]: patch },
+			manifest,
+			root => {
+				let result = verifyRecordedSources(root);
+				expect(result.files.size).toBe(0);
+				expect(result.errors.join("\n")).toContain("no longer applies");
+			},
+		);
+		// The registry's file changed under the patch (a copy with --overwrite, and no re-apply).
+		fixture(
+			{ [ROW_FILE]: ROW, [`${ROW_FILE}.patch`]: patch },
+			manifest,
+			root => expect(verifyRecordedSources(root).errors.join("\n")).toContain("no longer applies"),
+		);
+		// The registry's bytes are not the recorded ones.
+		fixture(
+			{ [ROW_FILE]: after, [`${ROW_FILE}.patch`]: patch },
+			record({
+				...entry(ROW_FILE, "other", { registry: "@assistant-ui", item: "elements-row" }),
+				patch: `${ROW_FILE}.patch`,
+				patchSha256: sha256(patch),
+			} as ReturnType<typeof entry>),
+			root => expect(verifyRecordedSources(root).errors.join("\n")).toContain("recorded hash"),
+		);
+	});
+
+	test("needs its record: the patch's hash, its own file and no stray patch beside it", () => {
+		let after = ADD_SLOT(ROW);
+		let patch = diffOf(ROW, after, [
+			"Reason: the slot",
+			"Reason: the attribute",
+			"Reason: the child",
+		]);
+		let base = entry(ROW_FILE, ROW, { registry: "@assistant-ui", item: "elements-row" });
+		fixture(
+			{ [ROW_FILE]: after, [`${ROW_FILE}.patch`]: patch },
+			record({
+				...base,
+				patch: `${ROW_FILE}.patch`,
+				patchSha256: sha256("another patch"),
+			} as ReturnType<typeof entry>),
+			root =>
+				expect(verifyRecordedSources(root).errors.join("\n")).toContain(
+					"no longer matches its record",
+				),
+		);
+		fixture(
+			{ [ROW_FILE]: after, [`${ROW_FILE}.patch`]: patch },
+			record({
+				...base,
+				patch: `${RECORDED_DIRECTORY}/elsewhere.patch`,
+				patchSha256: sha256(patch),
+			} as ReturnType<typeof entry>),
+			root => expect(verifyRecordedSources(root).errors.join("\n")).toContain("its patch must be"),
+		);
+		fixture(
+			{ [FILE]: copied, [`${FILE}.patch`]: patch },
+			record(entry()),
+			root =>
+				expect(verifyRecordedSources(root).errors.join("\n")).toContain(`${FILE}.patch is in`),
+		);
+	});
+
+	test("may only add extension points: no reasonless hunk, class, style or edited string", () => {
+		let reasons = ["Reason: the slot", "Reason: the attribute", "Reason: the child"];
+		patched(
+			ADD_SLOT,
+			["", "Reason: the attribute", "Reason: the child"],
+			(_, result) => expect(result.errors.join("\n")).toContain("needs a one-line reason"),
+		);
+		patched(
+			source =>
+				ADD_SLOT(source).replace(
+					"\t\t\t{label}\n",
+					"\t\t\t{label}\n\t\t\t<b className={lead} />\n",
+				),
+			reasons,
+			(_, result) => expect(result.errors.join("\n")).toContain("adds styling"),
+		);
+		patched(
+			source =>
+				ADD_SLOT(source).replace("\t\t\t{label}\n", "\t\t\t{label}\n\t\t\t<b style={lead} />\n"),
+			reasons,
+			(_, result) => expect(result.errors.join("\n")).toContain("adds styling"),
+		);
+		patched(
+			source => ADD_SLOT(source).replace('"flex gap-2 px-3"', '"flex gap-4 px-3"'),
+			reasons,
+			(_, result) => expect(result.errors.join("\n")).toContain("removes or changes a string"),
+		);
+		patched(
+			source =>
+				ADD_SLOT(source).replace(
+					"\t\t\t{label}\n",
+					'\t\t\t{label}\n\t\t\t<b data-note="p-4 rounded-xl" />\n',
+				),
+			reasons,
+			(_, result) => expect(result.errors.join("\n")).toContain("could be classes"),
+		);
 	});
 });

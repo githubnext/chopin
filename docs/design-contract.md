@@ -33,8 +33,8 @@ do not add aesthetic exceptions or descendant overrides for individual contexts.
 
 Components copied from a registry with `shadcn add` (assistant-ui's elements and the shadcn parts they
 stand on) keep the registry's own Tailwind classes, so they cannot follow the token rules above. They
-are accepted as recorded third-party source, as a set and never one finding at a time, under four
-conditions that [`scripts/design-contract/registry.mjs`](../scripts/design-contract/registry.mjs)
+are accepted as recorded third-party source, as a set and never one finding at a time, under these
+conditions, which [`scripts/design-contract/registry.mjs`](../scripts/design-contract/registry.mjs)
 checks for both `check-design-contract.ts` and `check-design.mjs`:
 
 - `apps/web/src/components/sources.json` records each copied file: its registry, its item, the
@@ -43,6 +43,10 @@ checks for both `check-design-contract.ts` and `check-design.mjs`:
   hand-written code cannot hide in the directory.
 - A recorded file must still match its hash. Editing one fails the check and puts the file back under
   every rule; copy it again with `shadcn add --overwrite` and record it.
+- A copy may carry a recorded patch (`<file>.patch`, one reason per hunk) that adds an extension point
+  and nothing that changes a class or a size. The record then keeps the registry's hash and adds the
+  patch's, and the file must be exactly the registry's bytes plus that patch. See
+  [Patching a copy](assistant-ui.md#patching-a-copy).
 - Nothing about Chopin's own code changes. A rule is never loosened for it, and the copies get no
   per-finding exceptions.
 - The one generated file in the directory, the assistant-ui geometry layer, is recorded as
