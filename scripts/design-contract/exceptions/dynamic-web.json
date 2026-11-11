@@ -572,5 +572,138 @@
 			]
 		],
 		"sourceHash": "25c7c40d5688c6dc6bbf7782b701bcddcac518dfa043f1278bda32afca2c3798"
+	},
+	{
+		"file": "apps/web/src/chat/assistant-ui/markdown-primitive.tsx",
+		"reason": "Props-driven primitive seam for the copied markdown-text registry item: forwards react-markdown parsed element properties (href, language class, task-list class, cell alignment) and caller surface root classes scanned at their call sites. Reviewed at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > wrapWithoutNode > <Component>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"preProps",
+				"unresolved JSX props > BoundPre > <Pre>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > BoundPre > <Pre>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"codeProps",
+				"unresolved JSX props > BoundCode > <Code>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > BoundCode > <Code>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > PlainPre: PreComponent > <pre>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > PlainCode: CodeComponent > <code>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"rest",
+				"unresolved JSX props > FencePre > FencePre > <FallbackPre>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"codeProps",
+				"unresolved JSX props > FenceCode > FenceCode > <config.slots.Code>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > PreDispatch: FC<ComponentProps<PreComponent>> > <FencePre>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > CodeDispatch: FC<ComponentProps<CodeComponent>> > <FenceCode>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"options",
+				"unresolved JSX props > ParsedMarkdown: FC<ParsedMarkdownProps> > <ReactMarkdown>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"options",
+				"unresolved JSX props > DeferredParsedMarkdown: FC<ParsedMarkdownProps> > <ParsedMarkdown>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"attributes",
+				"unresolved JSX props > MarkdownTextPrimitive: FC<MarkdownTextPrimitiveProps> > <Container>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"stableOptions",
+				"unresolved JSX props > MarkdownTextPrimitive: FC<MarkdownTextPrimitiveProps> > <Renderer>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"joinClasses(preProps.className, className)",
+				"class > BoundPre > <Pre>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"joinClasses(codeProps.className, className)",
+				"class > BoundCode > <Code>",
+				1
+			],
+			[
+				"dynamic",
+				"class",
+				"rootClass",
+				"class > MarkdownTextPrimitive: FC<MarkdownTextPrimitiveProps> > <Container>",
+				1
+			]
+		],
+		"sourceHash": "6eafe406d4bf2ae53bda5313a17c9efa3acdd7bbc4d6a7d13e938e73fe9bd2bb"
 	}
 ]
