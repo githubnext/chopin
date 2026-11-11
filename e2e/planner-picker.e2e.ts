@@ -1630,8 +1630,9 @@ test("a Planner its machine keeps failing to start says why on the banner at the
 	await expect(menu).toBeHidden();
 	await expect(button).toBeFocused();
 
-	// More failures update the count and say nothing more aloud; @chopin sent meanwhile is never
-	// refused for it: it is in the Chat at once, marked Sent, and waits for the machine.
+	// More failures update the count and say nothing more aloud; @chopin sent meanwhile is not
+	// turned away for a machine that is still starting: the server waits, up to 30 seconds, for it
+	// to attach before it checks, and the message says Sending, never Sent, until it has answered.
 	await studio.reportFailure(refused(room, 3));
 	await expect(owned.locator(".composer-notice-line").last()).toContainText("Tried 3 times");
 	await expect(seen.locator(".composer-notice-line").last()).toContainText("Tried 3 times");
@@ -1640,7 +1641,8 @@ test("a Planner its machine keeps failing to start says why on the banner at the
 	await input.press("Enter");
 	let outline = teammate.locator("[data-chat-message-id]").filter({ hasText: "outline the plan" });
 	await expect(outline).toHaveCount(1);
-	await expect(outline.getByRole("img", { name: "Sent" })).toBeVisible();
+	await expect(outline.getByText("Sending", { exact: true })).toBeVisible();
+	await expect(outline.getByRole("img", { name: "Sent" })).toHaveCount(0);
 	await expect(input).toHaveText("");
 	await expect(strip(teammate)).not.toHaveAttribute("data-error", "true");
 
@@ -1649,11 +1651,13 @@ test("a Planner its machine keeps failing to start says why on the banner at the
 	await expectHealthy(button);
 	await expect(strip(page)).toHaveCount(0);
 	await expect(announced(page)).toHaveText("");
-	// The warning goes, and the teammate's message, which waited for the machine, is delivered once
-	// it is there, with nothing about it said on the composer.
+	// The warning goes, and the teammate's message is taken by the Planner that is there: the
+	// server answered it, so it says Sending no more, carries no mark at all, and nothing about it
+	// is said on the composer.
 	await expect(teammate.locator(".chat-composer .composer-notice[data-warning]")).toHaveCount(0);
 	await expect(strip(teammate)).toHaveCount(0);
-	await expect(outline.getByRole("img", { name: "Delivered" })).toBeVisible();
+	await expect(outline.getByText("Sending", { exact: true })).toHaveCount(0);
+	await expect(outline.getByRole("img", { name: "Delivered" })).toHaveCount(0);
 	await expect(outline).toHaveCount(1);
 	await expect(page.getByText("Tried 3 times")).toHaveCount(0);
 	// A screen reader was told each state once, and not again as the count rose or it cleared.

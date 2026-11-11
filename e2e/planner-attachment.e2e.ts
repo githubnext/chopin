@@ -296,16 +296,16 @@ test("a new comment is sent to Chopin by default only while a Planner is attache
 	let box = card.getByRole("checkbox", { name: "Send to Chopin" });
 	await expect(box).not.toBeChecked();
 
-	// Ticked anyway, it is not refused for the machine being away: it is posted at once, the
-	// thread shows Chopin is on it, and it waits for the machine.
+	// Ticked anyway, it is refused for the machine being away, in the connection's own words, and
+	// nothing is saved or kept for when a machine is there.
 	await box.check();
 	let field = card.getByRole("textbox", { name: "Comment" });
 	await field.fill("Can you shorten this?");
 	await card.getByRole("button", { name: "Post comment", exact: true }).click();
-	await expect(card.getByRole("alert")).toHaveCount(0);
+	await expect(card.getByRole("alert")).toContainText("Connect a machine to get a reply.");
+	await page.keyboard.press("Escape");
 	await expect(card).toHaveCount(0);
-	await expect(page.getByText("Can you shorten this?").first()).toBeVisible();
-	await expect(page.getByText("Connect a machine to get a reply.")).toHaveCount(0);
+	await expect(page.getByText("Can you shorten this?")).toHaveCount(0);
 
 	let client = await connectAgent({
 		url: ORIGIN,
