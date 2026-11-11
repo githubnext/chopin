@@ -31,8 +31,9 @@ compaction marker, the expandable compaction divider is Chopin's own `Unfold` di
 `@assistant-ui/react-markdown` imports map in `tsconfig.json` to Chopin's props-driven
 `react-markdown` seam (`src/chat/assistant-ui/markdown-primitive.tsx`). The tile the registry calls
 `attachment` draws a live runtime attachment through `AttachmentPrimitive` and has no props-driven
-form, so it is not copied and the chip carries a file's states from props. Each carries a
-[recorded patch](#patching-a-copy) where Chat needed an extension point.
+form, so it is not copied and the chip carries a file's states from props. `elements-agent-handoff`
+and `elements-subagent-list` draw research delegation, unpatched, inside the attachment of a Chat
+app message. Each carries a [recorded patch](#patching-a-copy) where Chat needed an extension point.
 
 ## Add it
 

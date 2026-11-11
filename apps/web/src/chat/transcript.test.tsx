@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { rememberAvatars } from "@chopin/editor/people";
 import { markdownClass } from "./assistant-ui/markdown-classes.test-fixtures";
 import { Transcript } from "./transcript";
 import { childDocumentPath } from "@chopin/protocol/document-url";
@@ -155,7 +156,7 @@ test("the published ready notice renders its actual child route in Transcript", 
 	expect(markup).toContain(`<a class="${A_CLASS}" href="${path}"`);
 	expect(markup).toContain('rel="noopener noreferrer" target="_blank"');
 	expect(markup).toContain(">Open the research document</a>");
-	expect(markup).toContain('class="chat-markdown min-w-0 break-words text-sm');
+	expect(markup).toContain('class="chat-markdown break-words text-base');
 	expect(markup).not.toContain("[Open the research document]");
 });
 
@@ -220,4 +221,66 @@ test("work announcements promise inspectable details only when the turn has tool
 	expect(render([tool], true)).toContain(
 		"Chopin connection lost. Work details remain available.</span>",
 	);
+});
+
+test("people speak with their own picture and no tag; Chopin, a research child and a tool are tagged", () => {
+	rememberAvatars([
+		{ login: "mona_speaker", avatarUrl: "https://avatars.example.invalid/mona.png" },
+		{ login: "hubot_speaker", avatarUrl: "https://avatars.example.invalid/hubot.png" },
+	]);
+	let childPath = "/documents/octo-org/score/parent/children/vps-costs";
+	let markup = renderToStaticMarkup(createElement(Transcript, {
+		active: true,
+		entries: [
+			{
+				author: { kind: "member", handle: "mona_speaker" },
+				id: "m1",
+				text: "Morning, both.",
+				ts: 1_700_000_000,
+			},
+			{
+				author: { kind: "member", handle: "hubot_speaker" },
+				id: "m2",
+				text: "Morning, Mona.",
+				ts: 1_700_000_005,
+			},
+			{
+				author: { kind: "agent" },
+				id: "a1",
+				text: "I checked the options.",
+				tools: [{
+					id: "call-1",
+					name: "create_research_workspace",
+					status: "done",
+					args: JSON.stringify({ question: "Compare VPS pricing" }),
+					took: 80,
+				}],
+				ts: 1_700_000_010,
+			},
+			{
+				author: { kind: "system" },
+				id: "r1",
+				text: `Research is ready. [Open the research document](${childPath}).`,
+				ts: 1_700_000_020,
+			},
+		],
+		handle: "mona_speaker",
+	}));
+
+	expect(markup.match(/data-speaker-kind="user"/g)).toHaveLength(2);
+	expect(markup.match(/data-speaker-kind="agent"/g)).toHaveLength(1);
+	expect(markup.match(/data-speaker-kind="subagent"/g)).toHaveLength(1);
+	expect(markup).toContain('data-speaker-name="">Mona_speaker</span>');
+	expect(markup).toContain('data-speaker-name="">Hubot_speaker</span>');
+	expect(markup).toContain('src="https://avatars.example.invalid/mona.png"');
+	expect(markup).toContain('src="https://avatars.example.invalid/hubot.png"');
+	expect(markup).toContain(
+		'data-speaker-name="">Chopin</span><span class="chat-speaker-tag" data-speaker-tag="agent">Agent</span>',
+	);
+	expect(markup).toContain(
+		'data-speaker-name="">Research</span><span class="chat-speaker-tag" data-speaker-tag="subagent">Subagent</span>',
+	);
+	expect(markup.match(/data-speaker-tag=/g)).toHaveLength(2);
+	expect(markup).toContain('data-slot="agent-handoff"');
+	expect(markup).toContain("Compare VPS pricing");
 });
