@@ -282,7 +282,7 @@ async function say(page: Page, text: string): Promise<void> {
 
 /** A turn the Chat shows running: its composer offers Stop. */
 function running(page: Page) {
-	return chat(page).getByRole("button", { name: "Stop Chopin" });
+	return chat(page).getByRole("button", { name: "Stop generating" });
 }
 
 test("a reply that kept going while the connection was away is told so, and one that ended while it was away is told so, with what was caught up", async ({ page }) => {

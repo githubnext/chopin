@@ -764,7 +764,7 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		await expect(decision.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 
 		// A Stop pressed meanwhile is said to be pending, and nothing claims to have stopped.
-		await page.getByRole("button", { name: "Stop Chopin", exact: true }).click();
+		await page.getByRole("button", { name: "Stop generating", exact: true }).click();
 		await expect(
 			chatPane(page).getByText(
 				"asked Chopin to stop. Its machine is disconnected, so its workflows will pause when it reconnects.",

@@ -8,17 +8,24 @@
 import { useCallback, useId, useRef, useState } from "react";
 import type { ReactNode, Ref } from "react";
 
-import { ChopinMark, SendAction } from "@chopin/editor";
+import { ChopinMark } from "@chopin/editor";
 import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { ArchiveIcon, CloseIcon, InfoIcon, LockIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import {
+	Composer,
+	ComposerActions,
+	ComposerBar,
+	ComposerToolbar,
+} from "@/components/assistant-ui/elements/composer";
 import { DraftInput } from "./draft-input";
+import { sendStop } from "./assistant-ui/send-stop";
+import { SendStopButton } from "./assistant-ui/send-stop-button";
 import { motionContract } from "../motion-contract";
 import { ModeSwitch } from "./mode-switch";
 import { ModelPicker, ModelPickerTrigger } from "./model-picker";
 import type { ModelControl } from "./use-model-choice";
 import type { DraftInputHandle, DraftInputProps } from "./draft-input";
-import plannerStop from "../assets/icons/planner-stop.svg";
 import plannerResume from "../assets/icons/planner-resume.svg";
 import "./composer.css";
 
@@ -67,6 +74,10 @@ export type ChatComposerProps = {
 	sending: boolean;
 	sendDisabled: boolean;
 	onSubmit: () => void;
+	/**
+	 * What the Planner's run offers. Stop shares the round button with Send, which stops only while
+	 * the draft is empty and `disabled` is false; Resume is a button of its own.
+	 */
 	run?: { action: "stop" | "resume"; disabled: boolean; onClick: () => void };
 	/** Reference, command and mention pickers, open over the field. */
 	pickers?: ReactNode;
@@ -118,6 +129,13 @@ export function ChatComposer(
 	let error = notice?.tone === "error" || !!banner?.invalid;
 	let phone = usePhone();
 	let chopin = !!mode?.chopin;
+	let hasDraft = input.value.trim() !== "";
+	let button = sendStop({
+		running: run?.action === "stop",
+		hasDraft,
+		canSend: !sendDisabled,
+		canStop: !!run && !run.disabled,
+	});
 	// A failed send is shown at once; any other strip eases open and shut, so it does not jump
 	// what is above it, and keeps its words while it fades.
 	let strip = useTransitionPresence(
@@ -208,12 +226,8 @@ export function ChatComposer(
 						<div className={MOTION.contentClassName}>{stripBody}</div>
 					</div>
 				))}
-			<div
-				aria-busy={sending}
-				className="composer-surface field"
-				data-mode={chopin ? "chopin" : "chat"}
-				data-error={error || undefined}
-			>
+			{/* The box is assistant-ui's Composer, as wide as the pane; the menus open over it. */}
+			<Composer className="max-w-none">
 				{pickers}
 				{model && modelOpen && !unavailable && (
 					<ModelPicker
@@ -223,121 +237,113 @@ export function ChatComposer(
 						trigger={modelTriggerNode}
 					/>
 				)}
-				{unavailable
-					? (
-						<div className="composer-unavailable" role="status">
-							{unavailable === "archived" ? <ArchiveIcon size={18} /> : <LockIcon size={18} />}
-							<strong>
-								{unavailable === "archived" ? "Document archived" : "Read-only access"}
-							</strong>
-							<p>
-								{unavailable === "archived"
-									? "Restore this document to send messages."
-									: "You need write access to send messages."}
-							</p>
-						</div>
-					)
-					: (
-						<>
-							{/* A phone's switch shows only an icon; the chip says where the message goes. */}
-							{phone && chopin && mode && (
-								<span className="composer-chopin-row">
-									<button
-										aria-label="Remove Chopin"
-										className="composer-chopin-chip"
-										data-press="none"
-										disabled={mode.disabled}
-										onClick={mode.onToggle}
-										type="button"
-									>
-										<ChopinMark />
-										<span aria-hidden="true">Chopin</span>
-										<CloseIcon aria-hidden="true" size={12} />
-									</button>
-								</span>
-							)}
-							<DraftInput
-								aria-activedescendant={input["aria-activedescendant"]}
-								aria-controls={input["aria-controls"]}
-								aria-expanded={input["aria-expanded"]}
-								historyGroupKey={chopin}
-								mentions={input.mentions}
-								onBlur={input.onBlur}
-								onChange={input.onChange}
-								onKeyDown={input.onKeyDown}
-								onSelect={input.onSelect}
-								references={input.references}
-								resetKey={input.resetKey}
-								value={input.value}
-								aria-label="Message"
-								aria-autocomplete="list"
-								aria-describedby={[
-									references ? instructionsId : undefined,
-									banner?.id,
-									notice ? cueId : undefined,
-								].filter(Boolean).join(" ") || undefined}
-								aria-disabled={!draftable || sending}
-								aria-invalid={error || undefined}
-								readOnly={!draftable || sending}
-								role="combobox"
-								onSubmit={onSubmit}
-								placeholder={chopin ? "Ask Chopin…" : "Message your collaborators…"}
-								ref={inputRef}
-							/>
-
-							<div className="composer-footer">
-								<div className="composer-left">
-									{mode && (
-										<ModeSwitch
-											effectiveMode={chopin}
-											disabled={mode.disabled}
-											onToggle={mode.onToggle}
-										/>
-									)}
-									{model && (
-										<ModelPickerTrigger
-											control={model}
-											controls={modelId}
-											onToggle={() => setModelOpen(open => !open)}
-											open={modelOpen}
-											triggerRef={modelTrigger}
-										/>
-									)}
-									{references && (
+				<ComposerBar
+					aria-busy={sending}
+					className="composer-surface"
+					data-error={error || undefined}
+					data-mode={chopin ? "chopin" : "chat"}
+				>
+					{unavailable
+						? (
+							<div className="composer-unavailable" role="status">
+								{unavailable === "archived" ? <ArchiveIcon size={18} /> : <LockIcon size={18} />}
+								<strong>
+									{unavailable === "archived" ? "Document archived" : "Read-only access"}
+								</strong>
+								<p>
+									{unavailable === "archived"
+										? "Restore this document to send messages."
+										: "You need write access to send messages."}
+								</p>
+							</div>
+						)
+						: (
+							<>
+								{/* A phone's switch shows only an icon; the chip says where the message goes. */}
+								{phone && chopin && mode && (
+									<span className="composer-chopin-row">
 										<button
+											aria-label="Remove Chopin"
+											className="composer-chopin-chip"
+											data-press="none"
+											disabled={mode.disabled}
+											onClick={mode.onToggle}
 											type="button"
-											className="btn btn-icon btn-ghost"
-											aria-label="Mention docs"
-											title="Mention docs"
-											data-tooltip="Mention docs"
-											data-tooltip-verbatim=""
-											disabled={references.disabled}
-											onClick={references.onMentionDocs}
 										>
-											<PlusIcon size={16} />
+											<ChopinMark />
+											<span aria-hidden="true">Chopin</span>
+											<CloseIcon aria-hidden="true" size={12} />
 										</button>
-									)}
-								</div>
-								<div className="composer-actions">
-									<span className="composer-run-control">
-										{/* Two elements, so Stop and Resume never reuse one button. */}
-										{run?.action === "stop" && (
+									</span>
+								)}
+								<DraftInput
+									aria-activedescendant={input["aria-activedescendant"]}
+									aria-controls={input["aria-controls"]}
+									aria-expanded={input["aria-expanded"]}
+									historyGroupKey={chopin}
+									mentions={input.mentions}
+									onBlur={input.onBlur}
+									onChange={input.onChange}
+									onKeyDown={input.onKeyDown}
+									onSelect={input.onSelect}
+									references={input.references}
+									resetKey={input.resetKey}
+									value={input.value}
+									aria-label="Message"
+									aria-autocomplete="list"
+									aria-describedby={[
+										references ? instructionsId : undefined,
+										banner?.id,
+										notice ? cueId : undefined,
+									].filter(Boolean).join(" ") || undefined}
+									aria-disabled={!draftable || sending}
+									aria-invalid={error || undefined}
+									readOnly={!draftable || sending}
+									role="combobox"
+									onSubmit={onSubmit}
+									placeholder={chopin ? "Ask Chopin…" : "Message your collaborators…"}
+									ref={inputRef}
+								/>
+
+								<ComposerToolbar className="composer-footer">
+									<ComposerActions className="composer-left">
+										{mode && (
+											<ModeSwitch
+												effectiveMode={chopin}
+												disabled={mode.disabled}
+												onToggle={mode.onToggle}
+											/>
+										)}
+										{model && (
+											<ModelPickerTrigger
+												control={model}
+												controls={modelId}
+												onToggle={() => setModelOpen(open => !open)}
+												open={modelOpen}
+												triggerRef={modelTrigger}
+											/>
+										)}
+										{references && (
 											<button
-												aria-label="Stop Chopin"
-												disabled={run.disabled}
-												className="btn btn-icon btn-secondary"
-												onClick={run.onClick}
-												title="Stop Chopin"
 												type="button"
+												className="btn btn-icon btn-ghost"
+												aria-label="Mention docs"
+												title="Mention docs"
+												data-tooltip="Mention docs"
+												data-tooltip-verbatim=""
+												disabled={references.disabled}
+												onClick={references.onMentionDocs}
 											>
-												<img alt="" className="size-4" src={plannerStop} />
+												<PlusIcon size={16} />
 											</button>
 										)}
+									</ComposerActions>
+									<ComposerActions className="composer-actions">
 										{run?.action === "resume" && (
 											<button
 												aria-label="Resume Chopin"
 												disabled={run.disabled}
-												className="btn btn-icon btn-secondary"
+												className="btn btn-icon btn-ghost"
 												onClick={run.onClick}
 												title="Resume Chopin"
 												type="button"
@@ -345,18 +351,18 @@ export function ChatComposer(
 												<img alt="" className="size-4" src={plannerResume} />
 											</button>
 										)}
-									</span>
-									<SendAction
-										busy={sending}
-										disabled={sendDisabled}
-										onClick={onSubmit}
-										label="Send message"
-									/>
-								</div>
-							</div>
-						</>
-					)}
-			</div>
+										<SendStopButton
+											busy={sending}
+											hasDraft={hasDraft}
+											onClick={button.action === "stop" ? run!.onClick : onSubmit}
+											state={button}
+										/>
+									</ComposerActions>
+								</ComposerToolbar>
+							</>
+						)}
+				</ComposerBar>
+			</Composer>
 		</div>
 	);
 }

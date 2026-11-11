@@ -153,7 +153,7 @@ for (let frozen of acceptance?.cases ?? []) {
 				await save(join(directory, "question-asked.json"), asked);
 				if (visualRouting) {
 					if (!idle()) {
-						await chat.getByRole("button", { name: "Stop Chopin" }).click();
+						await chat.getByRole("button", { name: "Stop generating" }).click();
 						await expect.poll(idle, { timeout: 30_000 }).toBe(true);
 					}
 					throw new Error("Unexpected ask: Jev-three run does not answer or start another turn");
@@ -163,7 +163,7 @@ for (let frozen of acceptance?.cases ?? []) {
 				let answer = process.env.E2E_VISUAL_QUESTION_ANSWER?.trim();
 				let option = question?.options.find(candidate => candidate.label === answer);
 				if (asked.length !== 1 || decision.definition.questions.length !== 1 || !option) {
-					await chat.getByRole("button", { name: "Stop Chopin" }).click();
+					await chat.getByRole("button", { name: "Stop generating" }).click();
 					await expect.poll(idle, { timeout: 30_000 }).toBe(true);
 					throw new Error("Question needs one matching E2E_VISUAL_QUESTION_ANSWER; turn stopped");
 				}

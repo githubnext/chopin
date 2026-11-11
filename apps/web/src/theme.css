@@ -1161,12 +1161,6 @@ body {
 	--activity-badge-ring: var(--color-gray-300);
 }
 
-/* On the ground a white composer is the brightest thing in the column. */
-.workspace-root .chat-composer .field {
-	background: var(--color-inset);
-	box-shadow: none;
-}
-
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel .chat-composer {
 	padding-inline: var(--spacing);
 	padding-bottom: env(safe-area-inset-bottom);
@@ -1479,28 +1473,17 @@ body {
 	}
 }
 
-.chat-composer .field {
-	border-color: var(--color-edge);
-	border-radius: var(--radius-lg);
-	box-shadow: var(--shadow-resting);
-}
-
 /*
  * The ring answers keyboard arrival. A clicked composer is already found, so it
  * keeps only the quieter brand edge from `.composer-surface:focus-within`.
  */
-:root:not([data-focus-origin="pointer"]) .chat-composer .field:focus-within {
+:root:not([data-focus-origin="pointer"]) .chat-composer .composer-surface:focus-within {
 	outline: 2px solid var(--color-brand);
 	outline-offset: 2px;
 }
 
 .chat-composer textarea:focus {
 	outline: none;
-}
-
-.chat-composer .send-action:disabled {
-	background-color: var(--color-brand);
-	color: var(--color-page);
 }
 
 @media (min-width: 640px) {

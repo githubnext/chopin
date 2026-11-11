@@ -7,6 +7,15 @@ import { composerModelNotice } from "./model-picker-state";
 
 import type { ChatComposerProps } from "./composer";
 
+const INPUT: ChatComposerProps["input"] = {
+	mentions: [],
+	onChange: () => {},
+	onSelect: () => {},
+	references: [],
+	resetKey: 0,
+	value: "",
+};
+
 /** The markup, with the apostrophe React escapes in text written back, so copy reads as typed. */
 function render(props: Partial<ChatComposerProps> = {}): string {
 	return renderToStaticMarkup(createElement(ChatComposer, {
@@ -15,21 +24,15 @@ function render(props: Partial<ChatComposerProps> = {}): string {
 		onSubmit: () => {},
 		sendDisabled: false,
 		sending: false,
-		input: {
-			mentions: [],
-			onChange: () => {},
-			onSelect: () => {},
-			references: [],
-			resetKey: 0,
-			value: "",
-		},
+		input: INPUT,
 		...props,
 	})).replaceAll("&#x27;", "'");
 }
 
 test("renders the draft as a combobox in the field", () => {
 	let markup = render();
-	expect(markup).toContain('class="composer-surface field"');
+	expect(markup).toContain('data-slot="composer-bar"');
+	expect(markup).toMatch(/data-slot="composer-bar" class="[^"]* composer-surface"/);
 	expect(markup).toContain('role="combobox"');
 	expect(markup).toContain('aria-label="Message"');
 	expect(markup).toContain("Message your collaborators…");
@@ -74,12 +77,81 @@ test("read-only and archived documents replace the draft and hide notices", () =
 
 test("shows one run control, and no connection state of its own", () => {
 	let markup = render({ run: { action: "stop", disabled: false, onClick: () => {} } });
-	expect(markup).toContain('aria-label="Stop Chopin"');
+	expect(markup).toContain('aria-label="Stop generating"');
 	expect(markup).not.toContain('aria-label="Resume Chopin"');
 	// The document says when the connection is lost, once, at the top of its content.
 	expect(markup).not.toContain("composer-connection");
 	expect(markup).not.toContain("Reconnect");
 	expect(markup).not.toContain("Retry");
+});
+
+/** The round button's own tag: assistant-ui's `ComposerSend`, the only one in the composer. */
+function roundButton(markup: string): string {
+	let buttons = markup.match(/<button[^>]*data-slot="composer-send"[^>]*>/g) ?? [];
+	expect(buttons).toHaveLength(1);
+	return buttons[0]!;
+}
+
+/** Whether the tag carries the `disabled` attribute, which its `disabled:` classes do not. */
+const disabled = (tag: string) => / disabled=""/.test(tag);
+
+const STOP = { action: "stop", disabled: false, onClick: () => {} } as const;
+
+test("one round button sends while the Planner is idle, and waits for a draft", () => {
+	let waiting = roundButton(render({ sendDisabled: true }));
+	expect(waiting).toContain('aria-label="Send message"');
+	expect(waiting).toContain('title="Send message"');
+	expect(disabled(waiting)).toBe(true);
+	let ready = roundButton(render({ input: { ...INPUT, value: "Outline the export" } }));
+	expect(ready).toContain('aria-label="Send message"');
+	expect(disabled(ready)).toBe(false);
+});
+
+test("the same button stops a running Planner while nothing is typed", () => {
+	let markup = render({ run: STOP, sendDisabled: true });
+	let button = roundButton(markup);
+	expect(button).toContain('aria-label="Stop generating"');
+	expect(button).toContain('title="Stop generating"');
+	expect(disabled(button)).toBe(false);
+	// One button, not a Stop beside a Send.
+	expect(markup).not.toContain('aria-label="Send message"');
+});
+
+test("a message typed while the Planner runs is sent, to be queued, and the button is stop again once it is gone", () => {
+	let typing = render({ run: STOP, input: { ...INPUT, value: "And the rollback checks" } });
+	expect(roundButton(typing)).toContain('aria-label="Send message"');
+	expect(disabled(roundButton(typing))).toBe(false);
+	expect(typing).not.toContain('aria-label="Stop generating"');
+	expect(roundButton(render({ run: STOP, sendDisabled: true }))).toContain(
+		'aria-label="Stop generating"',
+	);
+});
+
+test("someone who may not stop the Planner is shown a disabled send, never a stop", () => {
+	let markup = render({
+		run: { action: "stop", disabled: true, onClick: () => {} },
+		sendDisabled: true,
+	});
+	let button = roundButton(markup);
+	expect(button).toContain('aria-label="Send message"');
+	expect(disabled(button)).toBe(true);
+	expect(markup).not.toContain("Stop generating");
+});
+
+test("Resume is a button of its own beside the round one", () => {
+	let markup = render({
+		run: { action: "resume", disabled: false, onClick: () => {} },
+		sendDisabled: true,
+	});
+	expect(markup).toContain('aria-label="Resume Chopin"');
+	expect(roundButton(markup)).toContain('aria-label="Send message"');
+});
+
+test("a polite live region waits beside the button, empty until it changes", () => {
+	let markup = render({ run: STOP, sendDisabled: true });
+	expect(markup).toMatch(
+		/<span aria-atomic="true" aria-live="polite" class="sr-only" data-send-stop-status="" role="status"><\/span>/,
+	);
 });
 
 test("puts nothing beneath the composer, whatever the Planner is doing", () => {
