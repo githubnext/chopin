@@ -34,7 +34,7 @@ test("/research in Chat opens the document's research composer instead of postin
 	await expect(draft).toHaveAttribute("aria-expanded", "true");
 	await expect(
 		menu.getByRole("option", {
-			name: "/research Search the web and add what it finds to the document",
+			name: "/research Search the web for this document",
 			exact: true,
 		}),
 	).toHaveAttribute("aria-selected", "true");

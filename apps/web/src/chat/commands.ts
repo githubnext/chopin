@@ -41,7 +41,7 @@ export const CHAT_COMMANDS: readonly ChatCommand[] = [
 		id: "research",
 		name: "research",
 		group: BUILT_IN,
-		description: "Search the web and add what it finds to the document",
+		description: "Search the web for this document",
 		keywords: ["research", "web search"],
 	},
 ];

@@ -300,3 +300,49 @@ describe("mention picker markup", () => {
 		expect(text).toBe("chopin octocat");
 	});
 });
+
+describe("the @ menu with the document's parts", () => {
+	let groups = [{
+		label: "Sections",
+		options: [
+			{ id: "heading:a", kind: "heading" as const, anchor: "a", label: "Overview", meta: "H1" },
+		],
+	}];
+	let render = (options: MentionCandidate[]) =>
+		renderToStaticMarkup(
+			createElement(MentionPicker, {
+				active: 0,
+				groups,
+				id: "mentions",
+				onActive: () => {},
+				onSelect: () => {},
+				onSelectPointer: () => {},
+				options,
+			}),
+		);
+
+	test("heads Chopin alone as Chopin, people with Chopin as People, and each kind of part by its own", () => {
+		let alone = render([{ kind: "planner", login: "chopin" }]);
+		expect(alone).toContain(">Chopin</div>");
+		expect(alone).not.toContain(">People</div>");
+		let together = render([{ kind: "planner", login: "chopin" }, {
+			kind: "person",
+			login: "octocat",
+		}]);
+		expect(together).toContain(">People</div>");
+		expect(together).toContain(">Sections</div>");
+	});
+
+	test("numbers the rows after the people, so the keys and the pointer agree on which is active", () => {
+		let html = render([{ kind: "planner", login: "chopin" }, { kind: "person", login: "octocat" }]);
+		expect(html).toContain('id="mentions-option-2"');
+		expect(html.match(/<button[^>]*id="mentions-option-0"[^>]*>/)![0]).toContain(
+			'aria-selected="true"',
+		);
+		expect(html.match(/<button[^>]*id="mentions-option-2"[^>]*>/)![0]).toContain(
+			'aria-selected="false"',
+		);
+		expect(html).toContain("Overview");
+		expect(html).toContain(">H1<");
+	});
+});
