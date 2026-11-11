@@ -267,6 +267,25 @@ describe("assistant-ui's colours", () => {
 		expect(block(".dark")).toEqual(block(":root"));
 	});
 
+	test("every raw palette colour a copy names is a Chopin role: accent blue is petrol, green and red are its own", () => {
+		let theme = variables(css, node => node.type === "atrule" && node.name === "theme");
+		let used = new Set<string>();
+		for (let file of recorded.filter(entry => entry.file.endsWith(".tsx"))) {
+			for (
+				let match of read(file.file).matchAll(
+					/(?:bg|text|border|ring|caret|fill|stroke|from|to|via|outline|decoration|inset-ring)-(blue|emerald|red|green|amber|yellow|orange|purple|pink|rose|sky|indigo|violet|teal|cyan|lime|fuchsia|slate|gray|zinc|neutral|stone)-\d+/g,
+				)
+			) used.add(`--color-${match[1]}-${match[0].match(/\d+$/)![0]}`);
+		}
+		expect([...used].sort()).toEqual([...used].filter(name => theme.has(name)).sort());
+		expect(theme.get("--color-blue-500")).toBe("var(--color-brand)");
+		expect(theme.get("--color-blue-400")).toBe("var(--color-brand)");
+		expect(theme.get("--color-emerald-500")).toBe("var(--color-success)");
+		for (let shade of ["400", "500", "600"]) {
+			expect(theme.get(`--color-red-${shade}`)).toBe("var(--color-destructive)");
+		}
+	});
+
 	test("every role has its Tailwind colour, except the one Chopin already names", () => {
 		let theme = variables(css, node => node.type === "atrule" && node.name === "theme");
 		for (let role of ROLES.filter(role => role !== "destructive")) {
