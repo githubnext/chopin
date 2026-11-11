@@ -243,6 +243,19 @@
 	transition: background-color var(--duration-fast) var(--ease-out);
 }
 
+/* What a message says of a reaction the server turned down, as a failed message says it. */
+.chat-reaction-refusal {
+	margin: 0.25rem 0 0;
+	font-size: var(--text-sm);
+	color: var(--color-text-secondary);
+	overflow-wrap: anywhere;
+}
+
+.chat-reaction-refusal-title {
+	font-weight: 600;
+	color: var(--color-destructive-ink);
+}
+
 .chat-reaction-emoji {
 	font-size: var(--text-sm);
 }

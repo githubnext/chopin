@@ -34,6 +34,21 @@ export function toggle(
 	};
 }
 
+const EMOJI_BYTES = 64;
+const REACTIONS_PER_PERSON = 20;
+let graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/**
+ * Whether `emoji` is one extended grapheme cluster of at most 64 UTF-8 bytes. The longest emoji
+ * Unicode lists, a kiss with two skin tones, is 35, so every emoji the picker offers fits.
+ */
+export function oneEmoji(emoji: string): boolean {
+	if (Buffer.byteLength(emoji) > EMOJI_BYTES) return false;
+	let count = 0;
+	for (let _ of graphemes.segment(emoji)) if (++count > 1) return false;
+	return count === 1;
+}
+
 export function reactable(entry: Wire.Entry | undefined): entry is Wire.Entry {
 	return !!entry && entry.author.kind !== "system";
 }
@@ -115,11 +130,24 @@ async function reactNow(
 		|| !msg.emoji
 		|| msg.seq !== undefined && !(Number.isSafeInteger(msg.seq) && msg.seq >= 0)
 	) return fail(ws, msg.rid, "invalid reaction");
+	if (!oneEmoji(msg.emoji)) return fail(ws, msg.rid, "a reaction is a single emoji");
 	let entry = chat.entries.find(value => value.id === msg.id);
 	if (!reactable(entry)) {
 		return fail(ws, msg.rid, "this message cannot take reactions");
 	}
 	let handle = ws.data.handle;
+	if (msg.on) {
+		let own = (entry.reactions ?? []).filter(reaction => reaction.handles.includes(handle));
+		if (
+			own.length >= REACTIONS_PER_PERSON && !own.some(reaction => reaction.emoji === msg.emoji)
+		) {
+			return fail(
+				ws,
+				msg.rid,
+				`you can react to a message with at most ${REACTIONS_PER_PERSON} different emoji`,
+			);
+		}
+	}
 	let next = toggle(entry.reactions, handle, msg.emoji, msg.on);
 	let numbered = msg.seq === undefined ? {} : { seq: msg.seq };
 	let answer = {

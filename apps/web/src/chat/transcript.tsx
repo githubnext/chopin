@@ -25,7 +25,7 @@ import { EmptyState } from "@chopin/visuals";
 
 import { deliveryOf, failureOf } from "./delivery";
 import { MessageToolbar } from "./actions/message-toolbar";
-import { ReactionPills } from "./actions/reaction-pills";
+import { ReactionPills, ReactionRefusal } from "./actions/reaction-pills";
 import { DeliveryMark, FailedLine } from "./message-delivery";
 import { ChatImageDocument, MessageImages } from "./image";
 import { messageMenuActions } from "./message-menu-actions";
@@ -376,6 +376,7 @@ function MessageBody(
 							reactions={shown.reactions}
 						/>
 					)}
+					{shown.refusal && <ReactionRefusal text={shown.refusal} />}
 					{threadSummary && markers.threads && (
 						<ThreadSummaryRow onOpen={markers.threads.onOpen} summary={threadSummary} />
 					)}

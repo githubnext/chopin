@@ -39,3 +39,12 @@ export function ReactionPills(
 		</div>
 	);
 }
+
+/** What a message says of a reaction the server turned down. */
+export function ReactionRefusal({ text }: { text: string }) {
+	return (
+		<p className="chat-reaction-refusal" data-chat-reaction-refused="" role="status">
+			<span className="chat-reaction-refusal-title">Couldn't react.</span> {text}
+		</p>
+	);
+}

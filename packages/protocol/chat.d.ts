@@ -669,11 +669,14 @@ export declare namespace Chat {
 	/**
 	 * Add (`on`) or take back the sender's own reaction to a member's or the Planner's message.
 	 * Anyone who can read the document may, including a reader who cannot write. Asking for what
-	 * is already so changes nothing. The emoji is any non-empty string, kept exactly as sent, and a
-	 * message takes as many reactions as people give it. `seq` numbers the sender's asks, rising
-	 * with each, so that the answer and the broadcast of an earlier ask are told from those of a
-	 * later one. `tab` names the sender's tab, which numbers its own asks: the broadcast of a
-	 * numbered ask carries it, because the sequences of one person's tabs are not comparable.
+	 * is already so changes nothing. The emoji is kept exactly as sent but must be one extended
+	 * grapheme cluster of at most 64 UTF-8 bytes (the longest emoji Unicode lists is 35), and one
+	 * person may hold at most 20 different reactions to a message; a message takes as many as
+	 * people give it. Anything else is refused with no code, and nothing is saved or told to the
+	 * room. `seq` numbers the sender's asks, rising with each, so that the answer and the broadcast
+	 * of an earlier ask are told from those of a later one. `tab` names the sender's tab, which
+	 * numbers its own asks: the broadcast of a numbered ask carries it, because the sequences of one
+	 * person's tabs are not comparable.
 	 */
 	export type React = KIND<"chat:react"> & {
 		id: string;
