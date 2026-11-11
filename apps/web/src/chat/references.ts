@@ -36,7 +36,10 @@ export type ReferenceInsertion = {
 	caret: number;
 };
 
-export type ChatSendPayload = Pick<Chat.Send, "focus" | "references" | "requestId" | "text" | "to">;
+export type ChatSendPayload = Pick<
+	Chat.Send,
+	"attachments" | "focus" | "references" | "requestId" | "text" | "to"
+>;
 
 export type TextReplacement = {
 	start: number;
@@ -59,8 +62,14 @@ export type ComposerDraft = {
 export function prepareDraftSubmission(
 	draft: ComposerDraft,
 	allocate: () => string = () => crypto.randomUUID(),
-	context: { planner?: boolean; asking?: boolean; referencesEnabled?: boolean; focus?: string } =
-		{},
+	context: {
+		planner?: boolean;
+		asking?: boolean;
+		referencesEnabled?: boolean;
+		focus?: string;
+		/** The message carries files, so it may have no text. */
+		files?: boolean;
+	} = {},
 ): (ComposerDraft & { submission: ChatSendPayload }) | undefined {
 	if (draft.submission) return draft as ComposerDraft & { submission: ChatSendPayload };
 	let prefix = context.planner !== false && context.asking
@@ -78,6 +87,7 @@ export function prepareDraftSubmission(
 		allocate(),
 		context.referencesEnabled !== false,
 		context.focus,
+		context.files === true,
 	);
 	return submission ? { ...draft, submission } : undefined;
 }
@@ -498,9 +508,10 @@ export function chatSendPayload(
 	requestId: string,
 	referencesEnabled = true,
 	focus?: string,
+	files = false,
 ): ChatSendPayload | undefined {
 	let value = text.trim();
-	if (!value) return undefined;
+	if (!value && !files) return undefined;
 	let leading = text.length - text.trimStart().length;
 	let trailing = text.trimEnd().length;
 	let requests: Chat.ReferenceRequest[] = [];

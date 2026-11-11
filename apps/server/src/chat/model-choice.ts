@@ -119,8 +119,8 @@ export async function turnModel(deps: ModelChoiceDeps, channelId: string): Promi
  * catalog as it is now, or the harness's default. False where no catalog says so.
  */
 export async function turnReadsImages(deps: ModelChoiceDeps, channelId: string): Promise<boolean> {
-	let [catalog, choice] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
-	return modelReadsImages(catalog, choice);
+	let [catalog, saved] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
+	return modelReadsImages(catalog, saved.choice);
 }
 
 /**

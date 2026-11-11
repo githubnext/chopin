@@ -606,6 +606,11 @@ export function RoomWorkspace(
 	let [chatSendAcks, setChatSendAcks] = useState<{ wire?: Wire; enabled: boolean }>({
 		enabled: false,
 	});
+	// The caps on what a message may carry, told on joining and scoped to the socket that told them.
+	let [chatAttachments, setChatAttachments] = useState<{
+		wire?: Wire;
+		settings?: Session.AttachmentSettings;
+	}>({});
 	let [metadata, setMetadata] = useState<WorkspaceMetadata>({
 		archivedAt,
 		description,
@@ -1241,6 +1246,7 @@ export function RoomWorkspace(
 				setEffectiveCanManage(frame.canManage);
 				setChatReferences({ wire: socket, enabled: frame.chatReferences === true });
 				setChatSendAcks({ wire: socket, enabled: frame.chatSendAcks === true });
+				setChatAttachments({ wire: socket, settings: frame.attachments });
 				setResearchExecution(frame.webResearch === true);
 				updateMetadata(frame);
 				if (accessChanged) onRepositoryAccessChanged();
@@ -2030,6 +2036,7 @@ export function RoomWorkspace(
 									onOpenCard: showDecisionCard,
 								}}
 								referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
+								attachments={chatAttachments.wire === wire ? chatAttachments.settings : undefined}
 								repository={repository}
 								room={room}
 								sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}

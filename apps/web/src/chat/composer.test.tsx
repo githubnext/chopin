@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { INTERNAL } from "@chopin/protocol/plain-words";
+
 import { ChatComposer } from "./composer";
 import { composerModelNotice } from "./model-picker-state";
 
@@ -330,4 +332,66 @@ test("a saved model's fallback notice is drawn beneath a banner as a status, and
 	expect(refused).toContain('aria-invalid="true"');
 	expect(refused).toMatch(/<div class="composer-notice" role="status"/);
 	expect(refused).not.toContain('role="alert"');
+});
+
+const FILES = {
+	files: [],
+	source: () => undefined,
+	disabled: false,
+	waiting: false,
+	onAdd: () => {},
+	onRemove: () => {},
+	onRetry: () => {},
+};
+
+test("offers a paperclip only where the server takes files, and names it as it is", () => {
+	let without = render();
+	expect(without).not.toContain("Add files");
+	expect(without).not.toContain('type="file"');
+	let markup = render({ files: FILES });
+	expect(markup).toMatch(/<button[^>]*aria-label="Add files"[^>]*title="Add files"/);
+	// The picker is a hidden input the paperclip opens: it is never a second control to tab to.
+	expect(markup).toMatch(/<input[^>]*hidden=""[^>]*multiple=""[^>]*type="file"/);
+	expect(markup).not.toContain("aria-describedby");
+});
+
+test("says in the paperclip's own words why images cannot be added, and offers text to pick", () => {
+	let reason = "This model can't read images, so only text files can be sent to it.";
+	let markup = render({ files: { ...FILES, imagesReason: reason } });
+	expect(markup).toContain(`title="Add files. ${reason}"`);
+	expect(markup).toContain(`data-tooltip="Add files. ${reason}"`);
+	expect(markup).toMatch(/<span class="sr-only" id="([^"]+)">This model can't read images/);
+	let id = markup.match(/<span class="sr-only" id="([^"]+)">This model/)![1]!;
+	expect(markup).toContain(`aria-describedby="${id}"`);
+	expect(markup).toMatch(/<input[^>]*accept="text\/\*,\.md/);
+	// Images are not hidden from the picker where they can be read.
+	expect(render({ files: FILES })).not.toContain("accept=");
+});
+
+test("switches the paperclip off while a message is being sent, and says what a waiting send waits for", () => {
+	let sending = render({ files: { ...FILES, disabled: true }, sending: true });
+	expect(sending).toMatch(/<button[^>]*aria-label="Add files"[^>]*disabled=""/);
+	let waiting = render({ files: { ...FILES, waiting: true }, sending: true });
+	expect(waiting).toContain('role="status">Sending once your files have uploaded');
+	expect(render({ files: FILES })).not.toContain("Sending once your files");
+});
+
+test("an archived or read-only document offers no paperclip", () => {
+	expect(render({ files: FILES, unavailable: "archived" })).not.toContain("Add files");
+});
+
+test("none of the words about files uses a term of Chopin's own", () => {
+	let markup = render({
+		files: {
+			...FILES,
+			waiting: true,
+			imagesReason: "This model can't read images, so only text files can be sent to it.",
+		},
+	});
+	let words = [
+		...markup.matchAll(/\b(?:aria-label|data-tooltip|title)="([^"]*)"/g),
+		...markup.matchAll(/>([^<>]+)</g),
+	].map(match => match[1]!);
+	expect(words.some(text => text.includes("Add files"))).toBe(true);
+	for (let text of words) expect(INTERNAL.test(text), text).toBe(false);
 });

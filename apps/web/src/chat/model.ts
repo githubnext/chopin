@@ -13,6 +13,8 @@ export type Message = {
 	streaming?: boolean;
 	tools?: Chat.Activity[];
 	references?: Chat.Reference[];
+	/** The images and files sent with it. */
+	attachments?: Chat.Attachment[];
 	/** Set only when the sender addressed the Planner. */
 	to?: Chat.Destination;
 	/** How far a message to the machine has got; see `deliveryOf`. */

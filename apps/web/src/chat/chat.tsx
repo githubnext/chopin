@@ -81,6 +81,8 @@ import {
 import { MentionPicker, mentionRows } from "./mention-picker";
 import { pointerGroups, useMentionSources } from "./mention-sources";
 import type { PointerOption } from "./mention-sources";
+import { modelReadsImages } from "@chopin/protocol/model-choice";
+import { useFiles } from "./attachments/use-files";
 import { composerModelNotice } from "./model-picker-state";
 import { useModelChoice } from "./use-model-choice";
 import {
@@ -133,13 +135,13 @@ import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-over
 import type { ChatDestination } from "../conversation-plan/source";
 import type { ResearchOfferControls } from "./research-offer";
 
-import type { Chat as Wire, ConversationPlan } from "@chopin/protocol";
+import type { Chat as Wire, ConversationPlan, Session } from "@chopin/protocol";
 import type { Repository } from "../api";
 import type { ResearchLaunchBlock, ResearchLaunchResult } from "@chopin/editor";
 import type { ChatCommand } from "./commands";
 import type { MentionRow } from "./mention-picker";
 import type { MentionCandidate } from "./mentions";
-import type { ComposerDraft, ReferenceTarget, SendFailure } from "./references";
+import type { ChatSendPayload, ComposerDraft, ReferenceTarget, SendFailure } from "./references";
 import type { Wire as Socket } from "../wire";
 
 export type ChatProps = {
@@ -153,6 +155,8 @@ export type ChatProps = {
 	readonly?: boolean;
 	archived?: boolean;
 	referencesEnabled: boolean;
+	/** The caps on the images and files a message may carry; absent where the server takes none. */
+	attachments?: Session.AttachmentSettings;
 	repository: Pick<Repository, "id" | "name" | "owner">;
 	room: string;
 	sendAcknowledgements: boolean;
@@ -279,6 +283,7 @@ export function Chat(
 		onResearch,
 		onShowResearch,
 		referencesEnabled,
+		attachments,
 		repository,
 		room,
 		sendAcknowledgements,
@@ -352,7 +357,10 @@ export function Chat(
 	let [submitting, setSubmitting] = useState(false);
 	// A send pressed during a blip, made once the connection is back.
 	let [held, setHeld] = useState(false);
-	let sending = submitting || held;
+	// A send pressed while files are still uploading, made once they have.
+	let [awaiting, setAwaiting] = useState(false);
+	let awaitingFiles = useRef(false);
+	let sending = submitting || held || awaiting;
 	let [sendError, setSendError] = useState<SendFailure & { code?: string }>();
 	let [researchBlock, setResearchBlock] = useState<ResearchLaunchBlock>();
 	let researching = useRef(false);
@@ -382,9 +390,6 @@ export function Chat(
 	useEffect(() => keepDraft(room, handle, draft), [room, handle, draft]);
 	useEffect(() => keepOutbox(room, handle, outbox), [room, handle, outbox]);
 	useEffect(() => keepRetractions(room, handle, retractions), [room, handle, retractions]);
-	usePendingWork(
-		!!draft.text.trim() || outbox.some(item => !item.acknowledged) || retractions.length > 0,
-	);
 	let pickerId = useId();
 	let mentionPickerId = useId();
 	let commandPickerId = useId();
@@ -461,13 +466,35 @@ export function Chat(
 		submitted: draft.submission?.to,
 	});
 	let commandDraft = runsCommand(draft.references);
-	let plannerBound = outboxed && asksChopin({
+	let askingChopin = asksChopin({
 		agent: !!agent,
 		chip: chipOn,
 		text: draft.text,
 		references: draft.references,
 		submitted: draft.submission?.to,
 	});
+	let plannerBound = outboxed && askingChopin;
+	// An image goes where people read it, and to the Planner only if its model does.
+	let imagesAllowed = !agent || !askingChopin
+		|| modelReadsImages(modelControl?.catalog, modelControl?.choice);
+	let files = useFiles({ channelId: room, limits: attachments, imagesAllowed });
+	let filesRef = useRef(files);
+	filesRef.current = files;
+	// Another set of files is another message: its request id is made again.
+	let filesKey = files.files.map(file => file.sent?.id ?? "").join();
+	let filesSeen = useRef(filesKey);
+	useEffect(() => {
+		if (filesSeen.current === filesKey) return;
+		filesSeen.current = filesKey;
+		setDraft(current =>
+			current.submission ? { text: current.text, references: current.references } : current
+		);
+	}, [filesKey]);
+	let submitAgain = useRef<() => void>(() => {});
+	usePendingWork(
+		!!draft.text.trim() || files.files.length > 0 || outbox.some(item => !item.acknowledged)
+			|| retractions.length > 0,
+	);
 	let { working: workingTurn, suspended: suspendedWork } = progressOf(
 		transcript,
 		transcriptReady,
@@ -694,7 +721,7 @@ export function Chat(
 	};
 
 	let submit = () => {
-		if (submission.current || !draftable) return;
+		if (submission.current || !draftable || awaitingFiles.current) return;
 		typing.current?.stop();
 		let current = draftRef.current;
 		if (!runsCommand(current.references) && draftCommand(current.text)) {
@@ -702,22 +729,49 @@ export function Chat(
 			launchResearch(commandBrief(current.text));
 			return;
 		}
-		if (!current.text.trim()) return;
+		let hasFiles = files.files.length > 0;
+		if (!current.text.trim() && !hasFiles) return;
+		if (hasFiles) {
+			// A file that did not go is for the person to remove or send again, not to leave behind.
+			if (files.failed > 0) return;
+			if (files.uploading > 0) {
+				// The message waits for its files and goes as it was pressed; if one fails it stays here.
+				awaitingFiles.current = true;
+				setAwaiting(true);
+				void files.settled().then(result => {
+					awaitingFiles.current = false;
+					setAwaiting(false);
+					if (result.ok) submitAgain.current();
+				});
+				return;
+			}
+		}
+		let sentIds = files.ids();
+		let sentFiles = files.sent();
+		let withFiles = (payload: ChatSendPayload): ChatSendPayload =>
+			sentIds.length ? { ...payload, attachments: sentIds } : payload;
 		if (outboxed) {
 			let queued = prepareDraftSubmission(current, undefined, {
 				planner: agent,
 				asking: chip,
 				referencesEnabled,
 				focus,
+				files: hasFiles,
 			});
 			if (queued?.submission.to === "planner") {
 				// Never refused for the machine being away or the connection being down: it is in the
 				// Chat at once and goes out by itself.
 				dispatchOutbox({
 					kind: "add",
-					item: { payload: queued.submission, handle, ts: Math.floor(Date.now() / 1000) },
+					item: {
+						payload: withFiles(queued.submission),
+						handle,
+						ts: Math.floor(Date.now() / 1000),
+						...(sentFiles.length ? { attachments: sentFiles } : {}),
+					},
 				});
 				clearSubmittedDraft(current);
+				files.clear();
 				restoreComposerFocus();
 				return;
 			}
@@ -733,9 +787,10 @@ export function Chat(
 			asking: chip,
 			referencesEnabled,
 			focus,
+			files: hasFiles,
 		});
 		if (!submitted) return;
-		let payload = submitted.submission;
+		let payload = withFiles(submitted.submission);
 		let token = {};
 		submission.current = token;
 		draftRef.current = submitted;
@@ -758,6 +813,7 @@ export function Chat(
 		if (!sendAcknowledgements) {
 			wire.send("chat:send", payload);
 			clearSubmittedDraft(submitted);
+			files.clear();
 			submission.current = undefined;
 			setSubmitting(false);
 			restoreComposerFocus();
@@ -765,6 +821,7 @@ export function Chat(
 		}
 		void wire.ask<Wire.Sent>("chat:send", payload).then(() => {
 			clearSubmittedDraft(submitted);
+			files.clear();
 		}, error => {
 			// A restart cut the send off. The draft keeps its request id, so it is made again once
 			// the server is back, and the server answers one it already holds with that message.
@@ -782,6 +839,8 @@ export function Chat(
 			restoreComposerFocus();
 		});
 	};
+
+	submitAgain.current = submit;
 
 	// The outbox goes out one message at a time, oldest first, once this connection's transcript is
 	// here to say which of them the server already has. The request id makes a resend harmless.
@@ -1216,9 +1275,26 @@ export function Chat(
 					onFormat: formatDraft,
 				}}
 				mention={{ disabled: !composerShown || submitting, onMention: startMention }}
+				files={attachments
+					? {
+						files: files.files,
+						source: files.source,
+						...(!imagesAllowed && agent
+							? {
+								imagesReason: "This model can't read images, so only text files can be sent to it.",
+							}
+							: {}),
+						disabled: !draftable || sending,
+						waiting: awaiting,
+						onAdd: files.add,
+						onRemove: files.remove,
+						onRetry: files.retry,
+					}
+					: undefined}
 				draftable={draftable}
 				sending={sending}
-				sendDisabled={!draftable || sending || !draft.text.trim()
+				sendDisabled={!draftable || sending || (!draft.text.trim() && files.files.length === 0)
+					|| files.failed > 0
 					|| blockedCommand
 					|| (connectionNotice !== "none" && !draftCommand(draft.text) && !plannerBound)}
 				onSubmit={submit}

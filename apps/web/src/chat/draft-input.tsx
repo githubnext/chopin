@@ -45,6 +45,8 @@ export type DraftInputProps =
 		onSubmit: () => void;
 		onChange: (event: DraftEvent) => void;
 		onSelect: (event: DraftEvent) => void;
+		/** Files pasted into the field: the image a screenshot copies, or files copied from a folder. */
+		onFiles?: (files: File[]) => void;
 	};
 
 function selectionOffsets(element: HTMLElement) {
@@ -94,6 +96,7 @@ export let DraftInput = forwardRef<DraftInputHandle, DraftInputProps>(function D
 		onSelect,
 		onKeyDown,
 		onBlur,
+		onFiles,
 		role,
 		"aria-label": label,
 		"aria-disabled": disabled,
@@ -430,7 +433,13 @@ export let DraftInput = forwardRef<DraftInputHandle, DraftInputProps>(function D
 			}}
 			onPaste={paste => {
 				paste.preventDefault();
-				insert(paste.clipboardData.getData("text/plain").replace(/\r\n?/g, "\n"));
+				let files = onFiles ? [...paste.clipboardData.files] : [];
+				if (files.length) onFiles!(files);
+				let text = paste.clipboardData.getData("text/plain").replace(/\r\n?/g, "\n");
+				// A file copied from a folder brings its own name as text, which is not meant for the draft.
+				let names = new Set(files.map(file => file.name));
+				let named = text.split("\n").filter(Boolean).every(line => names.has(line.trim()));
+				if (text && !(files.length && named)) insert(text);
 			}}
 		/>
 	);

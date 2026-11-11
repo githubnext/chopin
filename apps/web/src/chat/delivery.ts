@@ -75,6 +75,8 @@ export type Outgoing = {
 	failure?: string;
 	/** The server turned it down for a passing reason; it is sent again, in its turn, later. */
 	full?: true;
+	/** The files it carries as the server kept them, shown with it until its own entry arrives. */
+	attachments?: Chat.Attachment[];
 };
 
 export type OutboxAction =
@@ -180,6 +182,7 @@ export function echoes(outbox: readonly Outgoing[]): LocalEntry[] {
 		text: item.payload.text,
 		ts: item.ts,
 		...(item.payload.to === "planner" ? { to: "planner" as const } : {}),
+		...(item.attachments?.length ? { attachments: item.attachments } : {}),
 		echo: true,
 		// Even one already put on the wire: the server is told to drop it if it has it.
 		deletable: true,
@@ -299,11 +302,12 @@ export function keepOutbox(room: string, handle: string, outbox: readonly Outgoi
 		sessionStorage.setItem(
 			outboxKey(room, handle),
 			JSON.stringify(
-				pending.map(({ payload, handle, ts, attempted }) => ({
+				pending.map(({ payload, handle, ts, attempted, attachments }) => ({
 					payload,
 					handle,
 					ts,
 					...(attempted ? { attempted } : {}),
+					...(attachments?.length ? { attachments } : {}),
 				})),
 			),
 		);
@@ -326,6 +330,9 @@ export function restoreOutbox(room: string, handle: string): readonly Outgoing[]
 					handle,
 					ts: item.ts,
 					...(item.attempted === true ? { attempted: true as const } : {}),
+					...(Array.isArray(item.attachments) && item.attachments.length
+						? { attachments: item.attachments }
+						: {}),
 				}]
 				: [];
 		});
