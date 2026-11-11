@@ -74,7 +74,12 @@ async function expectClassGeometry(element: Locator, label: string) {
 
 /** Each root a copied element draws, and what a person can aim at in it. */
 const ROOTS = {
-	closed: ["model-selector-trigger"],
+	closed: [
+		"model-selector-trigger",
+		"composer-menu",
+		"composer-menu-item",
+		"directive-text-chip",
+	],
 	open: [
 		"model-selector-content",
 		"command",
@@ -88,7 +93,7 @@ const ROOTS = {
 	],
 } as const;
 const TARGETS =
-	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [role="radio"]';
+	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"]';
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 const effortRadios = (page: Page) => slot(page, "model-selector-effort").getByRole("radio");
 
@@ -130,7 +135,7 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 		await expectClassGeometry(radios.nth(index), "effort radio");
 		checked++;
 	}
-	expect(checked).toBe(19);
+	expect(checked).toBe(28);
 });
 
 test("assistant-ui's own radii, in pixels, where Chopin's scale differs", async ({ page }) => {

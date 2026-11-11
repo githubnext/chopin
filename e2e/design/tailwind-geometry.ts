@@ -103,6 +103,8 @@ export function expected(className: string): Geometry {
 		}
 		let text = /^text-(xs|sm|base|lg|xl|2xl)$/.exec(item)?.[1];
 		if (text) [result.fontSize, result.lineHeight] = TEXT[text]!;
+		let corner = /^rounded-\[(\d+(?:\.\d+)?)px\]$/.exec(item)?.[1];
+		if (corner) result.radius = Number(corner);
 		let literal = /^text-\[(\d+(?:\.\d+)?)px\]$/.exec(item)?.[1];
 		if (literal) result.fontSize = Number(literal);
 		if (classes.some(leading => leading.startsWith("leading-"))) delete result.lineHeight;
