@@ -54,6 +54,10 @@ const PROVISIONAL = "The first version remains provisional.";
  */
 const FAIL_PROMPT = /FAIL-(MODEL|TIMEOUT|TOOL|REFUSED)/;
 const FAIL_ONCE_PROMPT = "FAIL-ONCE";
+const THREAD_ECHO_PROMPT = "THREAD-ECHO";
+const USAGE_REPORT_PROMPT = "USAGE-REPORT";
+const USAGE_WARN_PROMPT = "USAGE-WARN";
+const COMPACT_TURN_PROMPT = "COMPACT-TURN";
 const failedOnce = new Set<string>();
 
 function checked<T>(name: string, result: { output: unknown; isError?: boolean }): T {
@@ -557,6 +561,112 @@ export function createFakeHarness(
 								turn.emit({ type: "text-delta", id, delta: `${placement}.` });
 								turn.emit({ type: "text-end", id });
 								finish();
+								settled.resolve();
+							} catch (err) {
+								turn.emit({ type: "error", error: err });
+								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (prompt.includes(THREAD_ECHO_PROMPT)) {
+						void (async () => {
+							try {
+								await callTool("read_plan");
+								let instructions = turn.instructions ?? "";
+								let marker = "Durable conversation context follows:\n";
+								let start = instructions.indexOf(marker);
+								let contextBlock = start >= 0
+									? instructions.slice(start + marker.length).split("\n\n")[0] ?? ""
+									: "";
+								let contextSummary = contextBlock
+									? contextBlock.split("\n").join(" ; ")
+									: "none";
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								turn.emit({
+									type: "text-delta",
+									id,
+									delta: `Context seen: [${contextSummary}]`,
+								});
+								turn.emit({
+									type: "text-delta",
+									id,
+									delta: ` | Prompt: ${prompt.replace(/\s+/g, " ").trim()}`,
+								});
+								turn.emit({ type: "text-end", id });
+								finish();
+								settled.resolve();
+							} catch (err) {
+								turn.emit({ type: "error", error: err });
+								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (
+						prompt.includes(USAGE_REPORT_PROMPT) || prompt.includes(USAGE_WARN_PROMPT)
+						|| prompt.includes(COMPACT_TURN_PROMPT)
+					) {
+						void (async () => {
+							try {
+								await callTool("read_plan");
+								if (prompt.includes(COMPACT_TURN_PROMPT)) {
+									turn.emit({ type: "raw", rawValue: { type: "compacting" } });
+									await new Promise<void>(resolve => setTimeout(resolve, 600));
+									if (turn.abortSignal?.aborted) return;
+									turn.emit({
+										type: "compaction",
+										trigger: "auto",
+										summary: "Summarized earlier goals and storage trade-offs.",
+										tokensBefore: 44_541,
+										tokensAfter: 12_100,
+									});
+								}
+								let warn = prompt.includes(USAGE_WARN_PROMPT);
+								let reportedUsage = warn
+									? {
+										inputTokens: {
+											total: 104_000,
+											noCache: 84_000,
+											cacheRead: 20_000,
+											cacheWrite: 0,
+										},
+										outputTokens: { total: 8_000, text: 8_000, reasoning: 0 },
+									}
+									: {
+										inputTokens: {
+											total: 36_000,
+											noCache: 24_000,
+											cacheRead: 12_000,
+											cacheWrite: 0,
+										},
+										outputTokens: { total: 6_000, text: 6_000, reasoning: 0 },
+									};
+								turn.emit({
+									type: "raw",
+									rawValue: { type: "context-window", contextWindow: 128_000 },
+								});
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								turn.emit({
+									type: "text-delta",
+									id,
+									delta: prompt.includes(COMPACT_TURN_PROMPT)
+										? "Compacted context and ready to continue."
+										: "Reported context window usage.",
+								});
+								turn.emit({ type: "text-end", id });
+								turn.emit({
+									type: "finish-step",
+									finishReason: { unified: "stop", raw: undefined },
+									usage: reportedUsage,
+								});
+								turn.emit({
+									type: "finish",
+									finishReason: { unified: "stop", raw: undefined },
+									totalUsage: reportedUsage,
+								});
 								settled.resolve();
 							} catch (err) {
 								turn.emit({ type: "error", error: err });

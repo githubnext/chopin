@@ -26,6 +26,7 @@ import {
 } from "./harness/harnesses";
 import { chooseModel, publishModelState, turnModel, turnReadsImages } from "./chat/model-choice";
 import type { ModelChoiceDeps } from "./chat/model-choice";
+import * as Threads from "./chat/threads";
 import {
 	admitAgent,
 	AGENT_UPGRADE_HEADERS,
@@ -974,7 +975,7 @@ function conversation(
 			}
 			: undefined,
 	});
-	return context;
+	return Threads.bindTopLevel(context);
 }
 
 /**
@@ -1417,6 +1418,15 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 						? { working: thread => Chat.workingFor(Rooms.get(parent)?.plan?.chat, thread, room.id) }
 						: undefined,
 				);
+				// Thread summaries and session context/compaction state follow the history.
+				if (
+					!parent && !ws.data.closed && room.members.get(ws.data.client) === ws
+					&& room.plan === opened
+				) {
+					await Threads.greetThreads(chat(room, ws), ws).catch(err =>
+						console.error("chopin: could not send thread summaries -", err)
+					);
+				}
 				// What the Planner can be set to run, and what it is set to, for the composer.
 				if (!parent) {
 					void publishModelState(modelChoices, room.id, state => {
@@ -1479,10 +1489,48 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			}, frame);
 			return;
 
+		case "chat:thread": {
+			let opened = await readyPlan(room);
+			if (!opened) {
+				fail(
+					ws,
+					frame.rid,
+					"document is unavailable",
+					deletingChannels.has(room.id) ? undefined : PASSING,
+				);
+				return;
+			}
+			let access = await refreshAccess(ws);
+			if (access === "unavailable") {
+				fail(ws, frame.rid, "authorization is temporarily unavailable", PASSING);
+				return;
+			}
+			if (access === "denied") {
+				fail(ws, frame.rid, "authorization expired");
+				ws.close(4403, "authorization expired");
+				return;
+			}
+			if (
+				Rooms.get(room.id) !== room || room.plan !== opened || room.closing
+				|| deletingChannels.has(room.id) || ws.data.closed || ws.data.room !== room.id
+				|| room.members.get(ws.data.client) !== ws
+			) {
+				fail(ws, frame.rid, "document is unavailable", PASSING);
+				return;
+			}
+			await Threads.openThread(
+				chat(room, ws),
+				ws,
+				frame,
+				ws.data.canEdit && !ws.data.channelArchivedAt && !archivingChannels.has(room.id),
+			);
+			return;
+		}
+
 		case "chat:send":
 			try {
 				if (!await plannerWritable(room, ws, frame.rid)) return;
-				await Chat.send(chat(room, ws), ws, frame);
+				await Threads.sendMessage(chat(room, ws), ws, frame);
 			} catch (error) {
 				// Nothing it threw says the message is at fault: it is sent again.
 				fail(
@@ -1570,12 +1618,14 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				if (frame.rid) fail(ws, frame.rid, "this document's Chat is on its root document");
 				return;
 			}
-			if (frame.kind === "chat:abort") await Chat.abort(chat(room, ws), ws);
-			else if (frame.kind === "chat:resume") await Chat.resume(chat(room, ws), ws);
-			else if (frame.kind === "chat:unqueue") Chat.unqueue(chat(room, ws), ws, frame);
-			else if (frame.kind === "chat:delete") await Chat.remove(chat(room, ws), ws, frame);
-			else if (frame.kind === "chat:retry") await Chat.retry(chat(room, ws), ws, frame);
-			else await Chat.controlRun(chat(room, ws), ws, frame);
+			if (
+				frame.kind === "chat:abort" || frame.kind === "chat:resume"
+				|| frame.kind === "chat:unqueue" || frame.kind === "chat:delete"
+				|| frame.kind === "chat:retry" || frame.kind === "chat:pause-run"
+				|| frame.kind === "chat:resume-run"
+			) {
+				await Threads.controlMessage(chat(room, ws), ws, frame);
+			}
 			return;
 
 		case "conversation-plan:correct":
@@ -1772,6 +1822,7 @@ const VIEWER_ALLOWED = new Set([
 	"session:ping",
 	"plan:open",
 	"plan:close",
+	"chat:thread",
 	"job:list",
 	"job:get",
 	"conversation-plan:research-link",

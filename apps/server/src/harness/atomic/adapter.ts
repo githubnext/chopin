@@ -570,7 +570,17 @@ type Run = {
 	inputs: Map<number, string>;
 	stopped: boolean;
 	failure?: Error;
-	last?: { stopReason: string; errorMessage?: string };
+	last?: {
+		stopReason: string;
+		errorMessage?: string;
+		usage?: {
+			input?: number;
+			output?: number;
+			cacheRead?: number;
+			cacheWrite?: number;
+			totalTokens?: number;
+		};
+	};
 	stop: () => void;
 	done: Promise<void>;
 };
@@ -772,6 +782,37 @@ export function createAtomicAdapter(
 						}
 						run.emit(part);
 					}
+					if (
+						sessionManager
+						&& (event.type === "entry_appended" || event.type === "message_end"
+							|| event.type === "compaction_end")
+					) {
+						let header = sessionManager.getHeader();
+						if (header) {
+							full.onSessionEntries?.(
+								[header, ...sessionManager.getEntries()],
+								sessionManager.getLeafId(),
+							);
+						}
+					}
+				}
+				if (event.type === "compaction_start") {
+					run.emit({ type: "raw", rawValue: { type: "compacting" } });
+					return;
+				}
+				if (event.type === "compaction_end") {
+					if (!event.aborted && event.result) {
+						run.emit({
+							type: "compaction",
+							trigger: event.reason === "manual" ? "manual" : "auto",
+							summary: event.result.compactedText,
+							tokensBefore: event.result.tokensBefore,
+							tokensAfter: event.result.stats.tokensAfter,
+						});
+					} else {
+						run.emit({ type: "raw", rawValue: { type: "compaction-idle" } });
+					}
+					return;
 				}
 				if (!("message" in event) || event.message.role !== "assistant") return;
 				if (event.type === "message_start") {
@@ -844,7 +885,25 @@ export function createAtomicAdapter(
 					if (full && settings.journal) {
 						await mkdir(dirname(settings.journal), { recursive: true, mode: 0o700 });
 					}
-					sessionManager ??= SessionManager.inMemory(cwd);
+					if (!sessionManager) {
+						if (full?.sessionEntries?.length) {
+							sessionManager = SessionManager.inMemory(
+								cwd,
+								undefined,
+								structuredClone(full.sessionEntries) as Parameters<
+									typeof SessionManager.inMemory
+								>[2],
+							);
+							if (full.branchLeafId !== undefined) {
+								if (full.branchLeafId === null) await sessionManager.resetLeaf();
+								else if (sessionManager.getEntry(full.branchLeafId)) {
+									await sessionManager.branch(full.branchLeafId);
+								}
+							}
+						} else {
+							sessionManager = SessionManager.inMemory(cwd);
+						}
+					}
 					let loader = new DefaultResourceLoader({
 						cwd,
 						agentDir,
@@ -1039,15 +1098,53 @@ export function createAtomicAdapter(
 								run.emit({ type: "text-delta", id, delta: JSON.stringify(policy.result.value) });
 								run.emit({ type: "text-end", id });
 							}
+							let recorded = run.last?.usage;
+							let inputTotal = (recorded?.input ?? 0) + (recorded?.cacheRead ?? 0)
+								+ (recorded?.cacheWrite ?? 0);
+							let outputTotal = recorded?.output ?? 0;
+							let hasUsage = inputTotal + outputTotal > 0;
+							let turnUsage = hasUsage
+								? {
+									inputTokens: {
+										total: inputTotal,
+										noCache: recorded?.input ?? 0,
+										cacheRead: recorded?.cacheRead ?? 0,
+										cacheWrite: recorded?.cacheWrite ?? 0,
+									},
+									outputTokens: {
+										total: outputTotal,
+										text: outputTotal,
+										reasoning: 0,
+									},
+								}
+								: ZERO_USAGE;
+							if (hasUsage && agent.model?.contextWindow && agent.model.contextWindow > 0) {
+								run.emit({
+									type: "raw",
+									rawValue: {
+										type: "context-window",
+										contextWindow: agent.model.contextWindow,
+									},
+								});
+							}
+							if (full && sessionManager) {
+								let header = sessionManager.getHeader();
+								if (header) {
+									full.onSessionEntries?.(
+										[header, ...sessionManager.getEntries()],
+										sessionManager.getLeafId(),
+									);
+								}
+							}
 							run.emit({
 								type: "finish-step",
 								finishReason: { unified: "stop", raw: undefined },
-								usage: ZERO_USAGE,
+								usage: turnUsage,
 							});
 							run.emit({
 								type: "finish",
 								finishReason: { unified: "stop", raw: undefined },
-								totalUsage: ZERO_USAGE,
+								totalUsage: turnUsage,
 							});
 						} finally {
 							if (current === run) current = undefined;

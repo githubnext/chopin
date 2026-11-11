@@ -345,7 +345,13 @@ class RemoteSession {
 
 	async start(): Promise<HarnessV1Session> {
 		let mode = this.planner.isolated ? "isolated" as const : "planner" as const;
-		if (!this.#port.send({ type: "start", session: this.id, mode })) {
+		let forkFrom = this.#port.features?.includes(AGENT_FEATURES.sessionForks)
+			? this.planner.forkFrom
+			: undefined;
+		let message = forkFrom
+			? { type: "fork" as const, session: this.id, mode, from: forkFrom }
+			: { type: "start" as const, session: this.id, mode };
+		if (!this.#port.send(message)) {
 			throw new Error("The agent connection is closed.");
 		}
 		await within(
@@ -353,6 +359,7 @@ class RemoteSession {
 			this.#port.timeoutMs,
 			"The machine did not start the session.",
 		);
+		if (forkFrom) this.planner.forkedNatively = true;
 		this.planner.control = (action, runId) => this.#command(action, runId);
 		this.planner.rootOf = runId => this.#roots.get(runId) ?? runId;
 		return this.#session();
@@ -886,6 +893,7 @@ class RemoteSession {
 				: {}),
 		});
 		if (!sent) throw new Error("The agent connection could not carry this turn.");
+		this.planner.onRemoteTurn?.({ session: this.id, turn: turn.id });
 		this.planner.activeTools = hostNames;
 		this.#current = turn;
 		this.#listen(turn, options.abortSignal);
@@ -1265,8 +1273,25 @@ export class AgentLink {
 		try {
 			return await session.start();
 		} catch (error) {
-			// Withdraws any question the client asked while the session was starting.
 			await session.close();
+			// When a client refuses `fork` (e.g. parent session evicted), fall back to `start`.
+			if (
+				planner.forkFrom
+				&& this.#state === "attached"
+				&& error instanceof Error
+				&& error.message.startsWith("The machine refused the session:")
+			) {
+				planner.forkFrom = undefined;
+				planner.forkedNatively = false;
+				let fallback = new RemoteSession(sessionId, planner, this.#port);
+				this.#sessions.set(sessionId, fallback);
+				try {
+					return await fallback.start();
+				} catch (retryError) {
+					await fallback.close();
+					throw retryError;
+				}
+			}
 			throw error;
 		}
 	}
