@@ -10,15 +10,32 @@
  * `apps/web/src/components/sources.json`, and writes the assistant-ui layer
  * (`scripts/assistant-ui-layer.ts`) again, since it follows the copies' `data-slot` roots.
  * With no item it only writes the layer, which is what a Tailwind upgrade needs.
+ *
+ * A copy may carry a patch that adds extension points (props, slots, data attributes) and nothing
+ * that changes a class or a size: `<file>.patch` beside it, one reason per hunk (see
+ * docs/assistant-ui.md). Edit the copy, then
+ *
+ *   bun scripts/record-registry-sources.ts --patch <file> --reason "why" [--reason "why"...]
+ *
+ * writes the patch from `git diff HEAD` (HEAD must hold the registry's recorded bytes), checks the
+ * rules and records it. After `shadcn add --overwrite`, recording the item applies the patch again
+ * onto the fresh bytes, or fails naming the hunk that no longer applies.
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { dirname, join, posix } from "node:path";
 
 import { LAYER_FILE, layerCss, slotsOf } from "./assistant-ui-layer";
-import { RECORDED_MANIFEST, sha256 } from "./design-contract/registry.mjs";
+import {
+	applyPatch,
+	parsePatch,
+	patchProblems,
+	RECORDED_MANIFEST,
+	sha256,
+} from "./design-contract/registry.mjs";
 
 const ROOT = dirname(import.meta.dir);
 /** What `shadcn` itself resolves a bare name against. */
@@ -139,7 +156,10 @@ type Entry = {
 	registry: string;
 	item: string;
 	version: string;
+	/** The registry's bytes; for a patched file, before its patch. */
 	sha256: string;
+	patch?: string;
+	patchSha256?: string;
 };
 
 function readManifest(): Entry[] {
@@ -175,9 +195,108 @@ export function writeLayer(entries: Entry[]): Entry {
 	};
 }
 
+/** What a patched copy was before its patch, if this entry's patch gives it back at the recorded hash. */
+function pristineOf(patched: string, entry: Entry): string | undefined {
+	if (sha256(patched) === entry.sha256) return patched;
+	if (!entry.patch) return undefined;
+	let parsed = parsePatch(readFileSync(join(ROOT, entry.patch), "utf8"));
+	if (parsed.error) return undefined;
+	let undone = applyPatch(patched, parsed.hunks, "new");
+	return undone.text !== undefined && sha256(undone.text) === entry.sha256
+		? undone.text
+		: undefined;
+}
+
+/** A copy with its recorded patch, after `shadcn add` wrote the registry's bytes again or left them patched. */
+function reapply(path: string, entry: Entry, fresh: string): Entry {
+	let patchBytes = readFileSync(join(ROOT, entry.patch!));
+	let parsed = parsePatch(patchBytes.toString("utf8"));
+	if (parsed.error) throw new Error(`${entry.patch} ${parsed.error}`);
+	let forward = applyPatch(fresh, parsed.hunks, "old");
+	let pristine = fresh;
+	let patched = forward.text;
+	if (patched === undefined) {
+		// Not freshly copied: it is fine if it is already the recorded bytes plus this patch.
+		let undone = pristineOf(fresh, entry);
+		if (undone === undefined || sha256(undone) === sha256(fresh)) {
+			throw new Error(
+				`${entry.patch} no longer applies to ${path} (${forward.error}): edit the patch`,
+			);
+		}
+		pristine = undone;
+		patched = fresh;
+	} else {
+		writeFileSync(join(ROOT, path), patched);
+		console.log(`applied ${entry.patch}`);
+	}
+	let problems = patchProblems(pristine, patched, parsed.hunks);
+	if (problems.length) throw new Error(`${entry.patch}: ${problems.join("; ")}`);
+	return { ...entry, sha256: sha256(pristine), patchSha256: sha256(patchBytes) };
+}
+
+/** Writes `<file>.patch` from the edits made to a recorded copy since HEAD. */
+function writePatch(file: string, reasons: string[], entries: Map<string, Entry>): void {
+	let entry = entries.get(file);
+	if (!entry) {
+		throw new Error(`${file} is not recorded: copy it with shadcn add and record it first`);
+	}
+	let head = spawnSync("git", ["show", `HEAD:${file}`], { cwd: ROOT, encoding: "utf8" });
+	if (head.status !== 0) throw new Error(`HEAD has no ${file}: commit the copy before patching it`);
+	let pristine = pristineOf(head.stdout, entry);
+	if (pristine === undefined) {
+		throw new Error(
+			`HEAD's ${file} is not the recorded registry bytes: commit the copy before patching it`,
+		);
+	}
+	let working = readFileSync(join(ROOT, file), "utf8");
+	if (working === pristine) throw new Error(`${file} has no edits to record`);
+	let scratch = mkdtempSync(join(tmpdir(), "chopin-patch-"));
+	try {
+		writeFileSync(join(scratch, "a"), pristine);
+		writeFileSync(join(scratch, "b"), working);
+		let diff = spawnSync("git", ["diff", "--no-index", "--no-color", "-U3", "a", "b"], {
+			cwd: scratch,
+			encoding: "utf8",
+		}).stdout;
+		let from = diff.indexOf("\n@@");
+		let hunks = diff.slice(from + 1).split(/^(?=@@ )/m);
+		if (reasons.length !== 1 && reasons.length !== hunks.length) {
+			throw new Error(
+				`${hunks.length} hunks need ${hunks.length} --reason (or one for all), got ${reasons.length}`,
+			);
+		}
+		let text = hunks.map((hunk, index) =>
+			hunk.replace(/^(@@ .*? @@).*$/m, `$1 ${reasons[reasons.length === 1 ? 0 : index]}`)
+		).join("");
+		let patch = `--- a/${file}\n+++ b/${file}\n${text}`;
+		let parsed = parsePatch(patch);
+		if (parsed.error) throw new Error(`${file}: ${parsed.error}`);
+		let problems = patchProblems(pristine, working, parsed.hunks);
+		if (problems.length) throw new Error(`${file}: ${problems.join("; ")}`);
+		write(`${file}.patch`, patch);
+		entries.set(file, {
+			...entry,
+			sha256: sha256(pristine),
+			patch: `${file}.patch`,
+			patchSha256: sha256(patch),
+		});
+		console.log(`wrote ${file}.patch (${parsed.hunks.length} hunks)`);
+	} finally {
+		rmSync(scratch, { recursive: true, force: true });
+	}
+}
+
 if (import.meta.main) {
 	let config: Config = JSON.parse(readFileSync(join(ROOT, "apps/web/components.json"), "utf8"));
-	let addresses = process.argv.slice(2).filter(argument => !argument.startsWith("-"));
+	let flags = process.argv.slice(2);
+	let reasons: string[] = [];
+	let patching: string | undefined;
+	let addresses: string[] = [];
+	for (let index = 0; index < flags.length; index++) {
+		if (flags[index] === "--reason") reasons.push(flags[++index] ?? "");
+		else if (flags[index] === "--patch") patching = flags[++index];
+		else if (!flags[index]!.startsWith("-")) addresses.push(flags[index]!);
+	}
 	let kept = new Map(readManifest().map(entry => [entry.file, entry]));
 	let versions = new Map<string, string>();
 	for (let item of await resolve(addresses, config)) {
@@ -191,16 +310,28 @@ if (import.meta.main) {
 					`${item.registry}/${item.name} should have written ${path}: run \`shadcn add\` first`,
 				);
 			}
-			kept.set(path, {
+			let copied: Entry = {
 				file: path,
 				registry: item.registry,
 				item: item.name,
 				version,
 				sha256: sha256(readFileSync(join(ROOT, path))),
-			});
+			};
+			let previous = kept.get(path);
+			if (previous?.patch) {
+				copied = {
+					...copied,
+					...reapply(path, previous, readFileSync(join(ROOT, path), "utf8")),
+					version,
+					registry: item.registry,
+					item: item.name,
+				};
+			}
+			kept.set(path, copied);
 			console.log(`recorded ${path} (${item.registry}/${item.name})`);
 		}
 	}
+	if (patching) writePatch(patching, reasons, kept);
 	kept.delete(LAYER_FILE);
 	let layer = writeLayer([...kept.values()]);
 	let files = [...kept.values(), layer].sort((a, b) => a.file.localeCompare(b.file));

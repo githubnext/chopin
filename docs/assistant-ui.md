@@ -38,6 +38,39 @@ recorded and nothing else: never edit a copied file (it fails its hash), and nev
 code in `apps/web/src/components`. To update an element, copy it again with `--overwrite` and record
 it. After a Tailwind upgrade run `bun scripts/record-registry-sources.ts` with no item.
 
+## Patching a copy
+
+A copy is never edited, with one exception: a **recorded patch** that adds an extension point the
+element needs, such as a prop, a slot (a `ReactNode` prop drawn where the registry put none) or a
+`data-` attribute. The patch is `<file>.patch` beside the copy, a unified diff from the registry's
+bytes to the file in the repository, with a one-line reason after the `@@` of every hunk:
+
+```diff
+@@ -125,6 +125,8 @@ Reason: an owner prop so a row can say whose choice it is
+```
+
+[The design contract](design-contract.md#copied-registry-source) accepts the file as "the registry
+file at its recorded hash, plus exactly this patch": the record in `sources.json` keeps the registry's
+`sha256` and adds `patch` and `patchSha256`, and undoing the patch on the file has to give back
+exactly those registry bytes. A patch may not change a class or a size, so it has every hunk's
+reason, it keeps every string the registry wrote, adds no string with a space in it, and adds no
+`className`, `class`, `style`, `cn(`, `cva(`, `clsx(` or `twMerge(`. The geometry spec keeps proving the
+sizes of the patched file.
+
+```bash
+# 1. the copy is committed as the registry wrote it; edit it, then write and record the patch
+bun scripts/record-registry-sources.ts --patch apps/web/src/components/assistant-ui/elements/<file>.tsx \
+  --reason "why the first hunk" --reason "why the second"
+# 2. later, after `shadcn add ... --overwrite` brings the registry's newer bytes
+bun scripts/record-registry-sources.ts @assistant-ui/elements-<name>
+```
+
+The first builds the patch from `git diff HEAD` (HEAD must hold the registry's recorded bytes; one
+`--reason` for every hunk is allowed) and fails if a rule above is broken. The second applies the
+patch again onto the fresh bytes and records them, or fails naming the hunk that no longer applies:
+edit the patch and run it again. Until then the check fails with the same hunk, which is how
+you find out that a registry update moved under a patch.
+
 ## Sizes: assistant-ui's, not Chopin's
 
 Chopin's theme rewrites Tailwind's scale (`rounded-xl` is 10px, `text-sm` a fluid step, and
@@ -47,10 +80,16 @@ changed or dropped, on the copy's own roots (every `data-slot` the copied source
 where a popup portalled to `<body>` is found). Chopin's elements are never inside one, so its scale
 is untouched, and a copy is never given Chopin's control, pill or menu tokens. It is generated from
 Tailwind's `theme.css` and checked against it; do not edit it. It also keeps Chopin's global button
-rules (a `scale` press, a transition that is only `scale`, a focus outline) out of a copy, and on
-touch gives the copy's controls an invisible `::after` of 44px (`--control-target-coarse`), so the
-visible box never grows. An element that clips its own overflow cannot grow a target past its
-edge; its box still does not move.
+rules (a `scale` press, a transition that is only `scale`, a focus outline) out of a copy, and when
+the primary pointer is coarse (`(pointer: coarse)`, mirrored as `data-plan-coarse-pointer`; a touch
+laptop used with a mouse keeps the desktop's sizes) gives the copy's controls an invisible
+`::after` of 44px (`--control-target-coarse`), so the visible box never grows. An element that
+clips its own overflow cannot grow a target past its edge; its box still does not move. Stacked
+rows cannot each take such a target without covering a neighbour's; see Touch targets in
+[DESIGN.md](../apps/web/DESIGN.md).
+
+The unit tests that police Chopin's own code (`focus.test.ts`, `tokens.test.ts`) skip the recorded
+files through `recorded-sources.test-fixtures.ts`; a new scan of that kind should too.
 
 Chopin draws no continuous-curvature corners today, so a copy's corners are assistant-ui's own rounded
 rectangles at the same radii. A pill appears only where the copy says `rounded-full`.
