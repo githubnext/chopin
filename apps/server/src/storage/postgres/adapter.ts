@@ -9,6 +9,7 @@ import { migrate, verifyMigrations } from "./migrations";
 import { PostgresNavigationStore } from "./navigation";
 import { PostgresBackgroundJobStore } from "./jobs";
 import { PostgresExperimentStore } from "./experiments";
+import { PostgresChatAttachmentStore } from "./chat-attachments";
 import { PostgresImageStore } from "./images";
 import { PostgresRunStageStore } from "./run-stages";
 import { PostgresDecisionAnswerStore } from "./decision-answers";
@@ -543,6 +544,10 @@ export class PostgresStorage implements StorageAdapter {
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
 		);
+		this.chatAttachments = new PostgresChatAttachmentStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+		);
 		this.runStages = new PostgresRunStageStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
@@ -748,6 +753,7 @@ export class PostgresStorage implements StorageAdapter {
 	readonly jobs: BackgroundJobStore;
 	readonly research: ResearchWorkspaceStore;
 	readonly images: PostgresImageStore;
+	readonly chatAttachments: PostgresChatAttachmentStore;
 	readonly runStages: PostgresRunStageStore;
 	readonly decisionAnswers: PostgresDecisionAnswerStore;
 	readonly versions: PostgresDocumentVersionStore;

@@ -34,6 +34,35 @@ export type StoredImage = {
 
 export type PutImage = Omit<StoredImage, "size" | "createdAt"> & { now: Date };
 
+/**
+ * An image or text file uploaded to a document's Chat. It is only the uploader's until a message
+ * is sent with it (`entryId` is then that message's id, and `position` its place among the
+ * message's files); a person who can read the document reads it from then on.
+ */
+export type StoredChatAttachment = {
+	id: string;
+	channelId: string;
+	name: string;
+	kind: "image" | "file";
+	/** What the bytes are, as sniffed on arrival, never what the sender claimed. */
+	mimeType: string;
+	bytes: Uint8Array;
+	size: number;
+	uploadedBy: string;
+	createdAt: Date;
+	entryId?: string;
+	position?: number;
+};
+
+export type PutChatAttachment =
+	& Omit<StoredChatAttachment, "size" | "createdAt" | "entryId" | "position">
+	& {
+		now: Date;
+	};
+
+/** What a person has uploaded to one document and not yet sent. */
+export type StagedChatAttachments = { count: number; bytes: number };
+
 /** One stage of a workflow run whose card Chat shows, as its run last reported it. */
 export type RunStageRecord = {
 	id: string;

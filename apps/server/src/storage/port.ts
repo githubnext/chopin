@@ -57,6 +57,7 @@ import type {
 	PublishChannelDescriptionResult,
 	PublishInitialResearchReport,
 	PublishInitialResearchReportResult,
+	PutChatAttachment,
 	PutImage,
 	PutRunStages,
 	PutUser,
@@ -81,9 +82,11 @@ import type {
 	SaveDecisionAnswer,
 	SessionCredentials,
 	SettleBackgroundJob,
+	StagedChatAttachments,
 	StartResearchWorkspace,
 	StartResearchWorkspaceResult,
 	StoredChannel,
+	StoredChatAttachment,
 	StoredDocumentVersion,
 	StoredImage,
 	StoredMachine,
@@ -177,6 +180,31 @@ export interface ImageStore {
 	get(channelId: string, sha256: string): Promise<StoredImage | undefined>;
 	/** Every document these bytes were uploaded to, oldest upload first. */
 	channels(sha256: string): Promise<string[]>;
+}
+
+/** The images and text files people send with Chat messages, kept with the document. */
+export interface ChatAttachmentStore {
+	/** Keeps an upload as its uploader's own. Refuses a document or user that does not exist. */
+	put(attachment: PutChatAttachment): Promise<void>;
+	get(channelId: string, id: string): Promise<StoredChatAttachment | undefined>;
+	/** What `userId` has uploaded to the document and not sent, to bound what one person can keep. */
+	staged(channelId: string, userId: string): Promise<StagedChatAttachments>;
+	/**
+	 * Sends the uploads with the message `entryId`, in this order, all or none: it holds only when
+	 * every id is an upload of `userId` to this document that is still unsent, or already sent
+	 * with this same message (so a retried send binds again). Anything else binds nothing.
+	 */
+	bind(
+		input: { channelId: string; userId: string; ids: string[]; entryId: string },
+	): Promise<boolean>;
+	/** The files of one message in the order they were sent, bytes included. */
+	forEntry(channelId: string, entryId: string): Promise<StoredChatAttachment[]>;
+	/** Takes back an upload its uploader has not sent. False when it is not theirs or was sent. */
+	discard(channelId: string, id: string, userId: string): Promise<boolean>;
+	/** Forgets what a deleted message carried. */
+	discardEntry(channelId: string, entryId: string): Promise<number>;
+	/** Forgets uploads nobody sent that are older than `before`; how many it forgot. */
+	prune(before: Date): Promise<number>;
 }
 
 /**
@@ -505,6 +533,7 @@ export interface StorageAdapter {
 	readonly jobs: BackgroundJobStore;
 	readonly research: ResearchWorkspaceStore;
 	readonly images: ImageStore;
+	readonly chatAttachments: ChatAttachmentStore;
 	readonly runStages: RunStageStore;
 	readonly decisionAnswers: DecisionAnswerStore;
 	readonly versions: DocumentVersionStore;
