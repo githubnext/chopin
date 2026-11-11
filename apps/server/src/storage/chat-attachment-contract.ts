@@ -77,6 +77,34 @@ export function chatAttachmentContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		test("keeps what an image was before a smaller copy was sent, and nothing for one sent whole", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { channelId, userId } = await userAndChannel(storage);
+				let original = { size: 23_000_000, width: 12000, height: 8000 };
+				let copy = { ...await upload(storage, channelId, userId, { id: id("smaller") }) };
+				let copied = id("copied");
+				let entryId = id("entry");
+				await storage.chatAttachments.put({ ...copy, id: copied, original });
+				expect((await storage.chatAttachments.get(channelId, copied))?.original).toEqual(original);
+				expect(await storage.chatAttachments.get(channelId, copy.id)).not.toHaveProperty(
+					"original",
+				);
+				expect(
+					await storage.chatAttachments.bind({
+						channelId,
+						userId,
+						ids: [copied],
+						entryId,
+					}),
+				).toBe(true);
+				expect((await storage.chatAttachments.forEntry(channelId, entryId))[0]?.original)
+					.toEqual(original);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		test("keeps a text file under its text type and refuses a type the kind does not allow", async () => {
 			let storage = await openedStorage(factory);
 			try {

@@ -3,7 +3,7 @@ import type { StoredChatAttachment } from "../storage/model";
 
 /** What Chat shows of a stored file: its identity and look, never its bytes. */
 export function wireAttachment(
-	value: Pick<StoredChatAttachment, "id" | "name" | "kind" | "mimeType" | "size">,
+	value: Pick<StoredChatAttachment, "id" | "name" | "kind" | "mimeType" | "size" | "original">,
 ): Chat.Attachment {
 	return {
 		id: value.id,
@@ -11,5 +11,6 @@ export function wireAttachment(
 		kind: value.kind,
 		mimeType: value.mimeType,
 		size: value.size,
+		...(value.original ? { original: value.original } : {}),
 	};
 }
