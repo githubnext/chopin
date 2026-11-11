@@ -95,7 +95,7 @@ test("Chat Markdown admits formatting without document features", () => {
 	expect(markup).toContain("Ordinary message text");
 	expect(markup).not.toMatch(H1);
 	expect(markup).toContain(
-		'<img alt="remote" class="chat-image-preview" decoding="async" loading="lazy" referrerPolicy="no-referrer" src="https://example.invalid/pixel.png"/>',
+		'<img src="https://example.invalid/pixel.png" alt="remote" class="block h-auto w-full object-contain invisible" decoding="async" loading="lazy" referrerPolicy="no-referrer"/>',
 	);
 	expect(markup).toContain('<span aria-hidden="true" class="chat-image-alt">remote</span>');
 
@@ -172,8 +172,8 @@ test("every Markdown image draws where it is written, in order, and none is merg
 });
 
 function tiles(markup: string): string[] {
-	return [...markup.matchAll(/ alt="([^"]*)" class="chat-image-preview"[^>]* src="([^"]*)"/g)].map(
-		found => `${found[1]}|${found[2]}`,
+	return [...markup.matchAll(/<img src="([^"]*)" alt="([^"]*)"/g)].map(
+		found => `${found[2]}|${found[1]}`,
 	);
 }
 
@@ -194,9 +194,7 @@ test("images written side by side in one paragraph are one compact gallery, in t
 			"Three|https://example.invalid/3.png",
 		]);
 		for (let alt of ["One", "Two", "Three"]) {
-			expect(markup, name).toContain(
-				`<span aria-hidden="true" class="chat-image-alt">${alt}</span>`,
-			);
+			expect(markup, name).toContain(`aria-label="Open image: ${alt}"`);
 		}
 	}
 });
@@ -218,14 +216,14 @@ test("the words around a gallery stay where they were written, and the images ar
 
 	expect(markup.match(/data-chat-image-gallery/g)).toHaveLength(1);
 	expect(markup).toContain(
-		'<div class="chat-markdown-paragraph">Before <div class="chat-image-gallery"',
+		'<div class="chat-markdown-paragraph">Before <div data-slot="image-gallery"',
 	);
 	expect(markup.indexOf("Before")).toBeLessThan(markup.indexOf("data-chat-image-gallery"));
 	expect(markup.indexOf("data-chat-image-gallery")).toBeLessThan(markup.indexOf(" after."));
 	expect(markup.indexOf(" after.")).toBeLessThan(
 		markup.indexOf('<p class="aui-md-p">Next paragraph.</p>'),
 	);
-	expect(markup).not.toMatch(/<p[\s>][^]*<div class="chat-image-gallery/);
+	expect(markup).not.toMatch(/<p[\s>][^]*<div data-slot="image-gallery"/);
 });
 
 test("images with words or a paragraph of words between them are not made a gallery", () => {
@@ -258,8 +256,8 @@ test("a gallery keeps a repeated image, an image without alt text and the reason
 		"Image|https://example.invalid/b.png",
 	]);
 	expect(markup.match(/data-chat-image-broken="unavailable"/g)).toHaveLength(2);
-	expect(markup).toContain('<span aria-hidden="true" class="chat-image-alt">nope</span>');
-	expect(markup).toContain('<span aria-hidden="true" class="chat-image-alt">svg</span>');
+	expect(markup).toContain('aria-label="Image can’t be shown: nope"');
+	expect(markup).toContain('aria-label="Image can’t be shown: svg"');
 	expect(markup).not.toContain("javascript:");
 	expect(markup).not.toContain("svg+xml");
 });
@@ -380,7 +378,7 @@ test("an image alone in emphasis in a link, or in a link written as a reference,
 		let markup = markdown(source);
 		expect(insideLink(markup), source).toBe(false);
 		expect(markup.match(/<figure/g), source).toHaveLength(1);
-		expect(markup, source).toContain('<img alt="logo"');
+		expect(markup, source).toContain('<img src="https://example.invalid/l.png" alt="logo"');
 		expect(markup, source).toContain(
 			'<a class="aui-md-a" href="https://example.com/t" rel="noopener noreferrer" target="_blank">logo</a>',
 		);
@@ -426,7 +424,7 @@ test("a link containing only an empty-alt image is named by its title or destina
 	}
 });
 
-test("a Markdown image's title is its caption, as a single image and as a tile", () => {
+test("a Markdown image's title is its caption on a single image, and a gallery keeps its tiles in order", () => {
 	let single = markdown('![alt text](https://example.invalid/u.png "The title of it")');
 	expect(single).toContain('<span class="chat-image-text">The title of it</span>');
 
@@ -434,9 +432,10 @@ test("a Markdown image's title is its caption, as a single image and as a tile",
 		'![One](https://example.invalid/1.png "First caption") ![Two](https://example.invalid/2.png) ![Three][c]\n\n[c]: https://example.invalid/3.png "Third caption"',
 	);
 	expect(gallery.match(/data-chat-image="tile"/g)).toHaveLength(3);
-	expect([...gallery.matchAll(/chat-image-text">([^<]*)</g)].map(found => found[1])).toEqual([
-		"First caption",
-		"Third caption",
+	expect(tiles(gallery)).toEqual([
+		"One|https://example.invalid/1.png",
+		"Two|https://example.invalid/2.png",
+		"Three|https://example.invalid/3.png",
 	]);
 	expect(markdown("![alt](https://example.invalid/u.png)")).not.toContain("chat-image-text");
 });
@@ -480,9 +479,8 @@ test("a raster image written into a message is drawn as written, whatever raster
 		]
 	) {
 		let markup = markdown(`![a dot](${src})`);
-		expect(markup, src).toContain(
-			`<img alt="a dot" class="chat-image-preview" decoding="async" loading="lazy" referrerPolicy="no-referrer" src="${src}"/>`,
-		);
+		expect(tiles(markup), src).toEqual([`a dot|${src}`]);
+		expect(markup, src).toContain('decoding="async" loading="lazy" referrerPolicy="no-referrer"');
 	}
 });
 
@@ -495,8 +493,9 @@ test("a raster image whose type is followed by a space or a tab in an angle-brac
 		]
 	) {
 		let markup = markdown(`![a dot](<${written}>)`);
+		expect(tiles(markup), written).toEqual([`a dot|${src}`]);
 		expect(markup, written).toContain(
-			`<img alt="a dot" class="chat-image-preview" decoding="async" loading="lazy" referrerPolicy="no-referrer" src="${src}"/>`,
+			'decoding="async" loading="lazy" referrerPolicy="no-referrer"',
 		);
 	}
 	for (
@@ -527,8 +526,9 @@ test("a raster image written with white space before its type, or with no type, 
 		]
 	) {
 		let markup = markdown(`![a dot](<${written}>)`);
+		expect(tiles(markup), written).toEqual([`a dot|${src}`]);
 		expect(markup, written).toContain(
-			`<img alt="a dot" class="chat-image-preview" decoding="async" loading="lazy" referrerPolicy="no-referrer" src="${src}"/>`,
+			'decoding="async" loading="lazy" referrerPolicy="no-referrer"',
 		);
 	}
 	let svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>');
@@ -554,10 +554,11 @@ test("a raster image with no type and much white space before its base64 is draw
 	let png = "iVBORw0KGgo=";
 	for (let spaces of [90, 300, 5_000]) {
 		let markup = markdown(`![a dot](<data:;base64,${" ".repeat(spaces)}${png}>)`);
+		expect(tiles(markup), `${spaces}`).toEqual([
+			`a dot|data:;base64,${"%20".repeat(spaces)}${png}`,
+		]);
 		expect(markup, `${spaces}`).toContain(
-			`<img alt="a dot" class="chat-image-preview" decoding="async" loading="lazy" referrerPolicy="no-referrer" src="data:;base64,${
-				"%20".repeat(spaces)
-			}${png}"/>`,
+			'decoding="async" loading="lazy" referrerPolicy="no-referrer"',
 		);
 	}
 	let svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>').toString(
@@ -574,14 +575,14 @@ test("a raster image with no type and much white space before its base64 is draw
 
 test("an address on another site is drawn exactly as it was written", () => {
 	for (let src of ["https://example.invalid", "//example.invalid/a.png"]) {
-		expect(markdown(`![far](${src})`), src).toContain(`src="${src}"/>`);
+		expect(tiles(markdown(`![far](${src})`)), src).toEqual([`far|${src}`]);
 	}
 });
 
 test("an image inside a link is drawn as an image, with the link kept beside it", () => {
 	let markup = markdown("[![logo](https://example.invalid/l.png)](https://example.com)");
 
-	expect(markup).toContain('<img alt="logo"');
+	expect(tiles(markup)).toEqual(["logo|https://example.invalid/l.png"]);
 	expect(markup).not.toMatch(/<a [^>]*>[^]*<figure/);
 	expect(markup).toContain(
 		'<a class="aui-md-a" href="https://example.com" rel="noopener noreferrer" target="_blank">logo</a>',

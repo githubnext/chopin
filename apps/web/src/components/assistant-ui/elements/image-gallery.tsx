@@ -29,6 +29,7 @@ export interface GalleryImage {
   source?: { label?: string | undefined; url?: string | undefined } | undefined;
   failed?: boolean | undefined;
   failedLabel?: string | undefined;
+  failedChildren?: ReactNode | undefined;
   pending?: boolean | undefined;
   tileProps?:
     | Omit<
@@ -211,6 +212,7 @@ export function ImageGallery({
               {failed ? (
                 <span className="text-muted-foreground flex size-full items-center justify-center">
                   <ImageOffIcon aria-hidden className="size-6" />
+                  {image.failedChildren}
                 </span>
               ) : image.pending ? null : (
                 <img

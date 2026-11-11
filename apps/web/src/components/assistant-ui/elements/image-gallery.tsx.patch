@@ -14,12 +14,13 @@
  } from "react";
  import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
  import { cn } from "@/lib/utils";
-@@ -25,6 +27,18 @@ Tile extension points: pre-known failure/pending flags, accessible failure label, and tile/img attributes
+@@ -25,6 +27,19 @@ Tile extension points: pre-known failure/pending flags, accessible failure label/content, and tile/img attributes
    alt: string;
    caption?: string | undefined;
    source?: { label?: string | undefined; url?: string | undefined } | undefined;
 +  failed?: boolean | undefined;
 +  failedLabel?: string | undefined;
++  failedChildren?: ReactNode | undefined;
 +  pending?: boolean | undefined;
 +  tileProps?:
 +    | Omit<
@@ -33,7 +34,7 @@
  }
  
  export interface ImageGalleryProps extends Omit<
-@@ -34,6 +48,14 @@ Gallery extension points: controlled lightbox state, message-level open hook, refusal rows and dialog actions
+@@ -34,6 +49,14 @@ Gallery extension points: controlled lightbox state, message-level open hook, refusal rows and dialog actions
    images: readonly GalleryImage[];
    maxVisible?: number | undefined;
    onOpen?: ((id: string) => void) | undefined;
@@ -48,7 +49,7 @@
  }
  
  const keyForImage = (image: GalleryImage) => `${image.id}\u0000${image.src}`;
-@@ -42,10 +64,29 @@ Support both uncontrolled standalone state and message-coordinated controlled activeId
+@@ -42,10 +65,29 @@ Support both uncontrolled standalone state and message-coordinated controlled activeId
    images,
    maxVisible = 6,
    onOpen,
@@ -79,7 +80,7 @@
    const [failedImages, setFailedImages] = useState<ReadonlySet<string>>(
      () => new Set(),
    );
-@@ -53,7 +94,9 @@ Only clear uncontrolled state on a missing id so controlled callers own their activeId
+@@ -53,7 +95,9 @@ Only clear uncontrolled state on a missing id so controlled callers own their activeId
    const previousRef = useRef<HTMLButtonElement | null>(null);
    const nextRef = useRef<HTMLButtonElement | null>(null);
    const index = images.findIndex((image) => image.id === activeId);
@@ -90,7 +91,7 @@
    const activeImage = index === -1 ? undefined : images[index];
    const sourceHref = safeHref(activeImage?.source?.url);
    const visibleCount = Math.floor(clamp(maxVisible, 1, images.length));
-@@ -83,7 +126,7 @@ Include setActiveId in show callback dependencies
+@@ -83,7 +127,7 @@ Include setActiveId in show callback dependencies
        }
        setActiveId(image.id);
      },
@@ -99,7 +100,7 @@
    );
  
    useEffect(() => {
-@@ -107,6 +150,11 @@ Delegate tile clicks to a message-wide lightbox coordinator when provided
+@@ -107,6 +151,11 @@ Delegate tile clicks to a message-wide lightbox coordinator when provided
    const open = (nextIndex: number, trigger: HTMLButtonElement) => {
      const image = images[nextIndex];
      if (!image) return;
@@ -111,7 +112,7 @@
      triggerRef.current = trigger;
      setActiveId(image.id);
      onOpen?.(image.id);
-@@ -119,9 +167,11 @@ Allow refusal-only galleries and dialog-only message lightboxes without duplicating the grid
+@@ -119,9 +168,11 @@ Allow refusal-only galleries and dialog-only message lightboxes without duplicating the grid
      );
    };
  
@@ -124,7 +125,7 @@
      <div
        data-slot="image-gallery"
        className={cn("@container w-full max-w-md", className)}
-@@ -129,16 +179,30 @@ Render inline refusal notices in order and expose failed/unavailable tiles as named img roles
+@@ -129,16 +180,30 @@ Render inline refusal notices in order and expose failed/unavailable tiles as named img roles
      >
        <div className="grid grid-cols-2 gap-2 @sm:grid-cols-3">
          {visibleImages.map((image, imageIndex) => {
@@ -161,9 +162,11 @@
                className={cn(
                  field,
                  "focus-visible:ring-foreground/30 relative aspect-square overflow-hidden rounded-xl transition-[transform,background-color] duration-150 outline-none hover:scale-[1.01] focus-visible:ring-1 active:scale-[0.98] motion-reduce:transition-none",
-@@ -148,13 +212,14 @@ Skip the img tag while a local tile is still fetching and forward safe img attributes
+@@ -147,14 +212,16 @@ Render caller-supplied failure text on broken tiles, skip the img tag while pending, and forward safe img attributes
+               {failed ? (
                  <span className="text-muted-foreground flex size-full items-center justify-center">
                    <ImageOffIcon aria-hidden className="size-6" />
++                  {image.failedChildren}
                  </span>
 -              ) : (
 +              ) : image.pending ? null : (
@@ -177,7 +180,7 @@
                  />
                )}
                {overflow ? (
-@@ -162,10 +227,14 @@ Render trailing refusal notices after the visible tiles and close the optional grid wrapper
+@@ -162,10 +229,14 @@ Render trailing refusal notices after the visible tiles and close the optional grid wrapper
                    +{images.length - visibleCount}
                  </span>
                ) : null}
@@ -193,7 +196,7 @@
        {activeImage ? (
          <Dialog
            open
-@@ -181,7 +250,8 @@ Respect pre-known failure flags inside the lightbox preview
+@@ -181,7 +252,8 @@ Respect pre-known failure flags inside the lightbox preview
                ref={focusDialog}
                className="flex min-h-0 items-center justify-center px-10"
              >
@@ -203,7 +206,7 @@
                  <div className="text-muted-foreground flex h-[min(75vh,32rem)] w-full items-center justify-center">
                    <ImageOffIcon aria-hidden className="size-8" />
                  </div>
-@@ -191,6 +261,7 @@ Forward safe img attributes such as referrerPolicy onto the lightbox image
+@@ -191,6 +263,7 @@ Forward safe img attributes such as referrerPolicy onto the lightbox image
                    alt={activeImage.alt}
                    className="max-h-[75vh] max-w-full object-contain"
                    onError={() => markFailed(activeImage)}
@@ -211,7 +214,7 @@
                  />
                )}
              </div>
-@@ -238,6 +309,7 @@ Render Chat image actions inside the lightbox footer row
+@@ -238,6 +311,7 @@ Render Chat image actions inside the lightbox footer row
                    )
                  ) : null}
                </div>
@@ -219,7 +222,7 @@
                <span className={cn(mono, "text-muted-foreground shrink-0")}>
                  {index + 1} / {images.length}
                </span>
-@@ -258,6 +330,6 @@ Close the top-level fragment around the optional grid and dialog
+@@ -258,6 +332,6 @@ Close the top-level fragment around the optional grid and dialog
            </DialogContent>
          </Dialog>
        ) : null}

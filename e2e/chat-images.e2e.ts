@@ -136,7 +136,7 @@ function settled(figure: Locator): Promise<void> {
 }
 
 function lightbox(page: Page): Locator {
-	return page.getByRole("dialog", { name: "Image preview", exact: true });
+	return page.locator('[data-slot="dialog-content"]');
 }
 
 async function openChat(page: Page): Promise<void> {
@@ -201,7 +201,7 @@ test("an image holds its shape while it loads, so nothing moves when it arrives"
 	let figure = figures(page).first();
 	let frame = figure.locator("[data-chat-image-frame]");
 	await expect(figure).toHaveAttribute("data-load", "loading");
-	await expect(figure.locator(".chat-image-placeholder")).toBeVisible();
+	await expect(figure.locator('[data-slot="image-preview-loading"]')).toBeVisible();
 	await expect(figure.getByText("The cap is a balance of 100.")).toBeVisible();
 	await settled(figure);
 	let before = (await figure.boundingBox())!;
@@ -221,8 +221,8 @@ test("an image holds its shape while it loads, so nothing moves when it arrives"
 	expect(after.height).toBe(before.height);
 	expect(after.width).toBe(before.width);
 	expect(await layout(figure)).toEqual(inside);
-	await expect(figure.locator(".chat-image-placeholder")).toHaveCount(0);
-	await expect(figure.locator("img")).toHaveCSS("opacity", "1");
+	await expect(figure.locator('[data-slot="image-preview-loading"]')).toHaveCount(0);
+	await expect(figure.locator("img")).toHaveCSS("visibility", "visible");
 });
 
 test("a tall image is fitted to the height a message allows, whatever its shape", async ({ baseURL, join, page, room, seed }) => {
@@ -310,7 +310,7 @@ test("an image that cannot be loaded says so in the place it would have been", a
 	await expect(figures(page).nth(1)).toHaveAttribute("data-load", "shown");
 });
 
-test("several images of one turn are a compact gallery with their words under each tile", async ({ baseURL, join, page, room, seed }) => {
+test("several images of one turn are a compact gallery of square tile buttons with accessible names", async ({ baseURL, join, page, room, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	let stored = await store(baseURL, room);
 	await seed("# Gallery\n", { transcript: turn(three(stored)) });
@@ -321,20 +321,16 @@ test("several images of one turn are a compact gallery with their words under ea
 	await expect(chat(page).locator('[data-chat-image="single"]')).toHaveCount(0);
 	for (let [index, tile] of (await tiles.all()).entries()) {
 		await expect(tile).toHaveAttribute("data-load", "shown");
-		let box = (await tile.locator("[data-chat-image-frame]").boundingBox())!;
-		let { height, width } = three(stored)[index]!;
-		expect(box.width / box.height).toBeCloseTo(width / height, 1);
+		let box = (await tile.boundingBox())!;
+		expect(box.width / box.height).toBeCloseTo(1, 2);
+		await expect(tile).toHaveAttribute("aria-label", `Open image: ${three(stored)[index]!.alt}`);
 	}
-	await expect(tiles.nth(0).getByText("The cap is a balance of 100.")).toBeVisible();
-	await expect(tiles.nth(1).getByText("Faster, and a crash can lose the last writes."))
-		.toBeVisible();
-	await expect(tiles.nth(2).getByText("Write-through: write, cache, database")).toBeVisible();
 	let first = (await tiles.nth(0).boundingBox())!;
 	let third = (await tiles.nth(2).boundingBox())!;
 	expect(third.y).toBe(first.y);
 });
 
-test("a gallery tile has its image's own shape before the image arrives, and the shape the image turns out to have", async ({ baseURL, join, page, room, seed }) => {
+test("a gallery tile holds its square shape before the image arrives, and does not shift when it loads", async ({ baseURL, join, page, room, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	let at = port(baseURL);
 	let sizes = [[300, 200], [400, 100], [90, 270]] as const;
@@ -359,22 +355,19 @@ test("a gallery tile has its image's own shape before the image arrives, and the
 
 	let tiles = chat(page).locator('[data-chat-image="tile"]');
 	await expect(tiles).toHaveCount(3);
-	let frames = tiles.locator("[data-chat-image-frame]");
 	for (let tile of await tiles.all()) await expect(tile).toHaveAttribute("data-load", "loading");
 	await settled(tiles.first());
-	let before = await frames.evaluateAll(all =>
-		all.map(frame => frame.getBoundingClientRect().toJSON())
+	let before = await tiles.evaluateAll(all =>
+		all.map(tile => tile.getBoundingClientRect().toJSON())
 	);
-	for (let [index, [width, height]] of sizes.entries()) {
-		let box = before[index]!;
-		expect(Math.abs(box.width / box.height / (width / height) - 1), `${width} by ${height}`)
-			.toBeLessThan(0.01);
+	for (let box of before) {
+		expect(Math.abs(box.width / box.height - 1)).toBeLessThan(0.01);
 	}
 
 	release();
 	for (let tile of await tiles.all()) await expect(tile).toHaveAttribute("data-load", "shown");
-	let after = await frames.evaluateAll(all =>
-		all.map(frame => frame.getBoundingClientRect().toJSON())
+	let after = await tiles.evaluateAll(all =>
+		all.map(tile => tile.getBoundingClientRect().toJSON())
 	);
 	expect(after).toEqual(before);
 	for (let [index, tile] of (await tiles.all()).entries()) {
@@ -382,11 +375,7 @@ test("a gallery tile has its image's own shape before the image arrives, and the
 			height: (image as HTMLImageElement).naturalHeight,
 			width: (image as HTMLImageElement).naturalWidth,
 		}));
-		let box = after[index]!;
-		expect(
-			Math.abs(box.width / box.height / (natural.width / natural.height) - 1),
-			`${natural.width} by ${natural.height}`,
-		).toBeLessThan(0.01);
+		expect([natural.width, natural.height]).toEqual([...sizes[index]!]);
 	}
 });
 
@@ -408,8 +397,8 @@ test("more than six images show six tiles, and the lightbox reaches all of them"
 
 	let tiles = chat(page).locator('[data-chat-image="tile"]');
 	await expect(tiles).toHaveCount(6);
-	await expect(tiles.nth(5).locator(".chat-image-more")).toHaveText("+2");
-	await tiles.nth(5).locator("[data-chat-image-frame]").click({ position: { x: 20, y: 60 } });
+	await expect(tiles.nth(5)).toContainText("+2");
+	await tiles.nth(5).click({ position: { x: 20, y: 60 } });
 	let box = lightbox(page);
 	await expect(box).toBeVisible();
 	await expect(box.getByRole("img", { name: "Variant 6" })).toBeVisible();
@@ -428,7 +417,7 @@ test("the lightbox opens, steps and closes by mouse", async ({ baseURL, join, pa
 
 	let tiles = chat(page).locator('[data-chat-image="tile"]');
 	await expect(tiles.nth(1)).toHaveAttribute("data-load", "shown");
-	await tiles.nth(1).locator("[data-chat-image-frame]").click({ position: { x: 20, y: 20 } });
+	await tiles.nth(1).click({ position: { x: 20, y: 20 } });
 	let box = lightbox(page);
 	await expect(box).toBeVisible();
 	await expect(box.getByRole("img", { name: "Write-back: write, cache, then database later" }))
@@ -445,17 +434,13 @@ test("the lightbox opens, steps and closes by mouse", async ({ baseURL, join, pa
 	await expect(box.getByRole("img", { name: "Write-through: write, cache, database" }))
 		.toBeVisible();
 	await expect(box.getByRole("button", { name: "Next image" })).toBeDisabled();
-	await box.getByRole("button", { name: "Zoom in" }).click();
-	await expect(box.getByRole("button", { name: "Zoom out" })).toBeVisible();
-	await box.getByRole("button", { name: "Previous image" }).click();
-	await expect(box.getByRole("button", { name: "Zoom in" })).toBeVisible();
 
-	await box.getByRole("button", { name: "Close image preview" }).click();
+	await box.getByRole("button", { name: "Close", exact: true }).click();
 	await expect(box).toHaveCount(0);
 
-	await tiles.nth(0).locator("[data-chat-image-frame]").click({ position: { x: 20, y: 20 } });
+	await tiles.nth(0).click({ position: { x: 20, y: 20 } });
 	await expect(box).toBeVisible();
-	await box.click({ position: { x: 6, y: 300 } });
+	await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 6, y: 300 } });
 	await expect(box).toHaveCount(0);
 });
 
@@ -467,12 +452,11 @@ test("the lightbox opens, steps, traps focus and gives it back by keyboard", asy
 
 	let tiles = chat(page).locator('[data-chat-image="tile"]');
 	await expect(tiles.nth(1)).toHaveAttribute("data-load", "shown");
-	let opener = tiles.nth(1).getByRole("button", { name: "Open image", exact: true });
+	let opener = tiles.nth(1);
 	await opener.focus();
 	await page.keyboard.press("Enter");
 	let box = lightbox(page);
 	await expect(box).toBeVisible();
-	await expect(box.getByRole("button", { name: "Close image preview" })).toBeFocused();
 	await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
 
 	await page.keyboard.press("ArrowRight");
@@ -486,14 +470,14 @@ test("the lightbox opens, steps, traps focus and gives it back by keyboard", asy
 	await expect(box.getByRole("status")).toHaveText("Image 1 of 3");
 
 	let inside = () =>
-		page.evaluate(() => !!document.activeElement?.closest("dialog.plan-image-lightbox"));
+		page.evaluate(() => !!document.activeElement?.closest('[data-slot="dialog-content"]'));
 	for (let step = 0; step < 7; step++) {
 		await page.keyboard.press("Tab");
-		expect(await inside()).toBe(true);
+		await expect.poll(inside).toBe(true);
 	}
 	for (let step = 0; step < 7; step++) {
 		await page.keyboard.press("Shift+Tab");
-		expect(await inside()).toBe(true);
+		await expect.poll(inside).toBe(true);
 	}
 
 	await page.keyboard.press("Escape");
@@ -513,7 +497,7 @@ test("an image can be downloaded under the name of what it shows, and copied", a
 	let figure = figures(page).first();
 	await expect(figure).toHaveAttribute("data-load", "shown");
 	await figure.hover();
-	await expect(figure.locator(".chat-image-actions")).toHaveCSS("opacity", "1");
+	await expect(figure.locator('[data-slot="image-actions"]')).toBeVisible();
 	let [download] = await Promise.all([
 		page.waitForEvent("download"),
 		figure.getByRole("button", { name: "Download image" }).click(),
@@ -543,7 +527,7 @@ test("the lightbox carries open, copy and download for what it shows", async ({ 
 
 	let tiles = chat(page).locator('[data-chat-image="tile"]');
 	await expect(tiles.nth(0)).toHaveAttribute("data-load", "shown");
-	await tiles.nth(0).locator("[data-chat-image-frame]").click({ position: { x: 20, y: 40 } });
+	await tiles.nth(0).click({ position: { x: 20, y: 40 } });
 	let box = lightbox(page);
 	let [download] = await Promise.all([
 		page.waitForEvent("download"),
@@ -595,7 +579,7 @@ test("an image from another site can be opened, copied and saved where its host 
 				id: "far",
 				author: { kind: "member", handle: "bo" },
 				text:
-					"![far away](https://example.invalid/open/far.png)\n\n![shut away](https://example.invalid/closed/near.png)",
+					"![far away](https://example.invalid/open/far.png)\n\nAnd:\n\n![shut away](https://example.invalid/closed/near.png)",
 				ts: 1_700_000_900_000,
 			},
 			{
@@ -857,6 +841,12 @@ test("every image a person writes in Markdown is drawn where they wrote it", asy
 	await expect(box.getByRole("status")).toHaveText("Image 2 of 4");
 	await expect(box.getByRole("img", { name: "a remote one" })).toBeVisible();
 	for (let name of ["Copy image", "Download image"]) {
+		await expect(box.getByRole("button", { name })).toHaveCount(1);
+	}
+	await expect(box.getByRole("link", { name: "Open image in a new tab" })).toHaveCount(1);
+	await page.keyboard.press("Escape");
+	await expect(box).toHaveCount(0);
+	for (let name of ["Copy image", "Download image"]) {
 		await expect(all.nth(1).getByRole("button", { name })).toHaveCount(1);
 	}
 	await expect(all.nth(1).getByRole("link", { name: "Open image in a new tab" })).toHaveCount(1);
@@ -897,12 +887,12 @@ test("images written side by side in a message are one compact gallery in the or
 	for (let figure of await chat(page).locator("[data-chat-image]").all()) {
 		await expect(figure).toHaveAttribute("data-load", "shown");
 	}
-	await expect(tiles.locator(".chat-image-alt")).toHaveText(["Wide", "Tall", "Wide", "Square"]);
-	await expect(singles.locator(".chat-image-alt")).toHaveText(["Alone", "Apart"]);
-	for (let [index, ratio] of [3 / 2, 3 / 4, 3 / 2, 1].entries()) {
-		let frame = (await tiles.nth(index).locator("[data-chat-image-frame]").boundingBox())!;
-		expect(frame.width / frame.height, `tile ${index + 1}`).toBeCloseTo(ratio, 1);
+	for (let [index, name] of ["Wide", "Tall", "Wide", "Square"].entries()) {
+		await expect(tiles.nth(index)).toHaveAttribute("aria-label", `Open image: ${name}`);
+		let frame = (await tiles.nth(index).boundingBox())!;
+		expect(frame.width / frame.height, `tile ${index + 1}`).toBeCloseTo(1, 1);
 	}
+	await expect(singles.locator(".chat-image-alt")).toHaveText(["Alone", "Apart"]);
 
 	let box = (await gallery.boundingBox())!;
 	let [first, second] = [(await tiles.nth(0).boundingBox())!, (await tiles.nth(1).boundingBox())!];
@@ -913,8 +903,6 @@ test("images written side by side in a message are one compact gallery in the or
 	let text = await chat(page).locator("[data-chat-markdown]").innerText();
 	let at = [
 		"Here are the options.",
-		"Tall",
-		"Square",
 		"That is all of them.",
 		"Then",
 		"Alone",
@@ -955,7 +943,9 @@ test("images in paragraphs of their own are one gallery, and the message's light
 	let tiles = galleryOf(page, 0).locator('[data-chat-image="tile"]');
 	await expect(chat(page).locator("[data-chat-image-gallery]")).toHaveCount(1);
 	await expect(tiles).toHaveCount(3);
-	await expect(tiles.locator(".chat-image-alt")).toHaveText(["The cap", "Write-back", "A dot"]);
+	for (let [index, name] of ["The cap", "Write-back", "A dot"].entries()) {
+		await expect(tiles.nth(index)).toHaveAttribute("aria-label", `Open image: ${name}`);
+	}
 	await expect(chat(page).locator('[data-chat-image="single"] .chat-image-alt')).toHaveText([
 		"Apart",
 		"In another message",
@@ -964,7 +954,7 @@ test("images in paragraphs of their own are one gallery, and the message's light
 		await expect(figure).toHaveAttribute("data-load", "shown");
 	}
 
-	await tiles.nth(1).locator("[data-chat-image-frame]").click({ position: { x: 20, y: 20 } });
+	await tiles.nth(1).click({ position: { x: 20, y: 20 } });
 	let box = lightbox(page);
 	await expect(box).toBeVisible();
 	await expect(box.getByRole("img", { name: "Write-back" })).toBeVisible();
@@ -980,7 +970,7 @@ test("images in paragraphs of their own are one gallery, and the message's light
 	await box.getByRole("button", { name: "Previous image" }).click();
 	await expect(box.getByRole("img", { name: "The cap" })).toBeVisible();
 	await expect(box.getByRole("button", { name: "Previous image" })).toBeDisabled();
-	await box.getByRole("button", { name: "Close image preview" }).click();
+	await box.getByRole("button", { name: "Close", exact: true }).click();
 	await expect(box).toHaveCount(0);
 
 	let apart = chat(page).locator('[data-chat-image="single"]').nth(0);
@@ -988,7 +978,7 @@ test("images in paragraphs of their own are one gallery, and the message's light
 	await expect(box.getByRole("status")).toHaveText("Image 4 of 4");
 	await box.getByRole("button", { name: "Previous image" }).click();
 	await expect(box.getByRole("img", { name: "A dot" })).toBeVisible();
-	await box.click({ position: { x: 6, y: 300 } });
+	await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 6, y: 300 } });
 	await expect(box).toHaveCount(0);
 
 	let other = chat(page).locator('[data-chat-image="single"]').nth(1);
@@ -1022,14 +1012,15 @@ test("the lightbox of a Markdown gallery opens, steps, traps focus and gives it 
 	for (let [index, names] of [["One", "Two", "One"], ["Uno", "Dos", "Uno"]].entries()) {
 		let tiles = galleryOf(page, index).locator('[data-chat-image="tile"]');
 		await expect(tiles).toHaveCount(3);
-		await expect(tiles.locator(".chat-image-alt")).toHaveText(names);
+		for (let [tileIndex, name] of names.entries()) {
+			await expect(tiles.nth(tileIndex)).toHaveAttribute("aria-label", `Open image: ${name}`);
+		}
 		for (let tile of await tiles.all()) await expect(tile).toHaveAttribute("data-load", "shown");
-		let opener = tiles.nth(1).getByRole("button", { name: "Open image", exact: true });
+		let opener = tiles.nth(1);
 		await opener.focus();
 		await page.keyboard.press("Enter");
 		let box = lightbox(page);
 		await expect(box).toBeVisible();
-		await expect(box.getByRole("button", { name: "Close image preview" })).toBeFocused();
 		await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
 		await expect(box.getByRole("img", { name: names[1]! })).toBeVisible();
 
@@ -1046,14 +1037,14 @@ test("the lightbox of a Markdown gallery opens, steps, traps focus and gives it 
 		await expect(box.getByRole("status")).toHaveText("Image 1 of 3");
 
 		let inside = () =>
-			page.evaluate(() => !!document.activeElement?.closest("dialog.plan-image-lightbox"));
+			page.evaluate(() => !!document.activeElement?.closest('[data-slot="dialog-content"]'));
 		for (let step = 0; step < 7; step++) {
 			await page.keyboard.press("Tab");
-			expect(await inside(), `${names[0]} Tab ${step}`).toBe(true);
+			await expect.poll(inside, { message: `${names[0]} Tab ${step}` }).toBe(true);
 		}
 		for (let step = 0; step < 7; step++) {
 			await page.keyboard.press("Shift+Tab");
-			expect(await inside(), `${names[0]} Shift+Tab ${step}`).toBe(true);
+			await expect.poll(inside, { message: `${names[0]} Shift+Tab ${step}` }).toBe(true);
 		}
 
 		await page.keyboard.press("Escape");
@@ -1088,13 +1079,13 @@ test("on a phone a Markdown gallery stays inside the chat, and a tap opens the m
 	}
 	expect(await phone.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
-	await tiles.nth(1).locator("[data-chat-image-frame]").tap({ position: { x: 20, y: 40 } });
+	await tiles.nth(1).tap({ position: { x: 20, y: 40 } });
 	let box = lightbox(phone);
 	await expect(box).toBeVisible();
 	await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
 	await box.getByRole("button", { name: "Next image" }).tap();
 	await expect(box.getByRole("img", { name: "A dot" })).toBeVisible();
-	await box.getByRole("button", { name: "Close image preview" }).tap();
+	await box.getByRole("button", { name: "Close", exact: true }).tap();
 	await expect(box).toHaveCount(0);
 });
 
@@ -1337,7 +1328,7 @@ async function figureBox(figure: Locator) {
 	return { ...(await layout(figure)), frame: { height: frame.height, width: frame.width } };
 }
 
-const NEUTRAL_BOX = 96;
+const NEUTRAL_BOX = 128;
 
 async function ownShape(figure: Locator, name: string) {
 	let natural = await naturalSize(figure);
@@ -1454,7 +1445,7 @@ test("an image written into a message holds the shape its own bytes give from th
 		expect(Math.abs(firstSeen[name]!.ratio / ratio - 1), `${name} at the first paint`).toBeLessThan(
 			0.01,
 		);
-		await expect(figure.locator(".chat-image-placeholder")).toBeVisible();
+		await expect(figure.locator('[data-slot="image-preview-loading"]')).toBeVisible();
 		await expect(figure.locator("img")).toHaveAttribute("src", src);
 		await expect(figure.locator("img")).toHaveAttribute("alt", name);
 		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
@@ -1547,7 +1538,7 @@ test("an image written into a message whose shape is not read from its bytes is 
 		expect(held.frame.height, "a neutral loading box while the browser has not told the page").toBe(
 			NEUTRAL_BOX,
 		);
-		await expect(figure.locator(".chat-image-placeholder")).toBeVisible();
+		await expect(figure.locator('[data-slot="image-preview-loading"]')).toBeVisible();
 		before.push(held);
 	}
 	await decoding.release();
@@ -1602,11 +1593,11 @@ test("an image whose shape is not known before it arrives, from another site or 
 			.toBeGreaterThan(0.5);
 		await expect(figure).toHaveAttribute("data-load", "loading");
 		await expect(figure).not.toHaveAttribute("data-sized");
-		await expect(figure.locator(".chat-image-placeholder")).toBeVisible();
+		await expect(figure.locator('[data-slot="image-preview-loading"]')).toBeVisible();
 		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
 		let held = await figureBox(figure);
 		expect(held.frame.height, name).toBe(NEUTRAL_BOX);
-		expect(held.frame.width, name).toBe((await figure.boundingBox())!.width);
+		expect(held.frame.width, name).toBe((await figure.boundingBox())!.width - 2);
 		await expect(figure.getByRole("button", { name: "Open image" })).toHaveCount(0);
 	}
 
@@ -1615,8 +1606,8 @@ test("an image whose shape is not known before it arrives, from another site or 
 		let figure = all.nth(index);
 		await expect(figure).toHaveAttribute("data-load", "shown");
 		await expect(figure).toHaveAttribute("data-sized", "");
-		await expect(figure.locator(".chat-image-placeholder")).toHaveCount(0);
-		await expect(figure.locator("img")).toHaveCSS("opacity", "1");
+		await expect(figure.locator('[data-slot="image-preview-loading"]')).toHaveCount(0);
+		await expect(figure.locator("img")).toHaveCSS("visibility", "visible");
 		await settled(figure);
 		await ownShape(figure, name);
 		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
@@ -2289,11 +2280,10 @@ test("on a phone the actions are always there, nothing overflows, and the lightb
 	let tiles = chat(phone).locator('[data-chat-image="tile"]');
 	await expect(tiles).toHaveCount(3);
 	await expect(tiles.nth(0)).toHaveAttribute("data-load", "shown");
-	await expect(tiles.nth(0).locator(".chat-image-actions")).toHaveCSS("opacity", "0");
-	await expect(chat(phone).locator('[data-chat-image="single"] .chat-image-actions')).toHaveCSS(
-		"opacity",
-		"1",
-	);
+	await expect(tiles.nth(0).locator('[data-slot="image-actions"]')).toHaveCount(0);
+	await expect(
+		chat(phone).locator('[data-chat-image="single"] [data-slot="image-actions"]'),
+	).toBeVisible();
 	for (let tile of await tiles.all()) {
 		let box = (await tile.boundingBox())!;
 		expect(box.x).toBeGreaterThanOrEqual(0);
@@ -2301,27 +2291,27 @@ test("on a phone the actions are always there, nothing overflows, and the lightb
 	}
 	expect(await phone.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
-	await tiles.nth(0).locator("[data-chat-image-frame]").tap({ position: { x: 20, y: 40 } });
+	await tiles.nth(0).tap({ position: { x: 20, y: 40 } });
 	let box = lightbox(phone);
 	await expect(box).toBeVisible();
+	await settled(box);
 	await expect(box.getByRole("button", { name: "Copy image" })).toBeVisible();
 	await expect(box.getByRole("button", { name: "Download image" })).toBeVisible();
-	let footer = (await box.locator(".plan-image-lightbox-footer").boundingBox())!;
-	expect(footer.x).toBeGreaterThanOrEqual(0);
-	expect(footer.x + footer.width).toBeLessThanOrEqual(390);
-	expect(footer.y + footer.height).toBeLessThanOrEqual(844);
-	for (let name of ["Previous image", "Next image", "Close image preview"]) {
-		let target = (await box.getByRole("button", { name }).boundingBox())!;
+	let dialogBox = (await box.boundingBox())!;
+	expect(dialogBox.x).toBeGreaterThanOrEqual(0);
+	expect(dialogBox.x + dialogBox.width).toBeLessThanOrEqual(390);
+	expect(dialogBox.y + dialogBox.height).toBeLessThanOrEqual(844);
+	for (let name of ["Previous image", "Next image", "Close"]) {
+		let button = box.getByRole("button", { name, exact: true });
+		let target = (await button.boundingBox())!;
 		expect(target.width).toBeGreaterThanOrEqual(28);
 		expect(
-			await box.getByRole("button", { name }).evaluate(button =>
-				parseFloat(getComputedStyle(button, "::after").width)
-			),
+			await button.evaluate(node => parseFloat(getComputedStyle(node, "::after").width)),
 		).toBeGreaterThanOrEqual(44);
 	}
 	await box.getByRole("button", { name: "Next image" }).tap();
 	await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
-	await box.getByRole("button", { name: "Close image preview" }).tap();
+	await box.getByRole("button", { name: "Close", exact: true }).tap();
 	await expect(box).toHaveCount(0);
 
 	let solo = chat(phone).locator('[data-chat-image="single"]');
@@ -2347,8 +2337,11 @@ test("reduced motion leaves no animation on a loading image or the lightbox", as
 	await join("ana");
 
 	let figure = figures(page).first();
-	await expect(figure.locator(".chat-image-placeholder")).toBeVisible();
-	await expect(figure.locator(".chat-image-placeholder")).toHaveCSS("animation-name", "none");
+	await expect(figure.locator('[data-slot="image-preview-loading"]')).toBeVisible();
+	await expect(figure.locator('[data-slot="image-preview-loading"] svg')).toHaveCSS(
+		"animation-name",
+		"none",
+	);
 	release();
 	await expect(figure).toHaveAttribute("data-load", "shown");
 	await expect(figure.locator("img")).toHaveCSS("transition-duration", "0s");
@@ -2382,9 +2375,9 @@ test("the images in Chat, and the open lightbox, pass an accessibility check", a
 	)
 		.toEqual([]);
 
-	await figures(page).nth(1).getByRole("button", { name: "Open image", exact: true }).click();
+	await figures(page).nth(1).click();
 	await expect(lightbox(page)).toBeVisible();
-	let open = await new AxeBuilder({ page }).include("dialog.plan-image-lightbox").analyze();
+	let open = await new AxeBuilder({ page }).include('[data-slot="dialog-content"]').analyze();
 	expect(
 		open.violations.map(item => `${item.id}: ${item.nodes.map(node => node.target).join(" ")}`),
 	)
@@ -2453,10 +2446,7 @@ test("an image of a turn that was not shown is said so in the message, where it 
 	await expect(message.getByText(REASONS.bytes, { exact: true })).toHaveCount(2);
 	await expect(message).toContainText("Here is what I drew.");
 
-	await message.locator("[data-chat-image]").first().getByRole("button", {
-		name: "Open image",
-		exact: true,
-	}).click();
+	await message.locator('[data-chat-image="tile"]').first().click();
 	await expect(lightbox(page).getByRole("status")).toHaveText("Image 1 of 3");
 });
 
@@ -2484,12 +2474,12 @@ test("two images with a refusal between them are still one gallery in the order 
 	let grids = await message.locator("[data-chat-image], [data-chat-image-refused]").evaluateAll(
 		items => items.map(item => item.parentElement?.className),
 	);
-	expect(new Set(grids)).toEqual(new Set(["chat-image-gallery-grid"]));
-	let grid = (await message.locator(".chat-image-gallery-grid").boundingBox())!;
+	expect(new Set(grids).size).toBe(1);
+	let grid = (await message.locator('[data-slot="image-gallery"] > div').boundingBox())!;
 	let line = (await message.locator("[data-chat-image-refused]").boundingBox())!;
 	expect(line.width).toBeCloseTo(grid.width, 0);
 
-	await tiles.first().getByRole("button", { name: "Open image", exact: true }).click();
+	await tiles.first().click();
 	let box = lightbox(page);
 	await expect(box.getByRole("status")).toHaveText("Image 1 of 2");
 	await page.keyboard.press("ArrowRight");
@@ -2647,11 +2637,13 @@ test("an image that cannot be shown or loaded still gives its alt text to a scre
 			"The cap",
 			"Image can’t be shown: Tile that cannot be shown",
 			"Couldn’t load image: Tile that is gone",
-			"Tile that is fine",
 		]
 	) {
 		await expect(chat(page).getByRole("img", { name, exact: true }), name).toHaveCount(1);
 	}
+	await expect(
+		chat(page).getByRole("button", { name: "Open image: Tile that is fine", exact: true }),
+	).toHaveCount(1);
 	await expect(chat(page).getByRole("img", { name: /Bar chart of weekly signups/ })).toHaveCount(1);
 	await expect(chat(page).getByRole("img", { name: /Tile that is gone/ })).toHaveCount(1);
 
@@ -2716,14 +2708,15 @@ async function readWhole(page: Page, width: number): Promise<void> {
 	await expect(all).toHaveCount(5);
 	await expect(all.nth(0)).toHaveAttribute("data-load", "shown");
 	await expect(all.nth(3)).toHaveAttribute("data-load", "shown");
+	let tiles = chat(page).locator('[data-chat-image="tile"]');
+	for (let [index, alt] of [LONG_ALT, "Short", `${LONG_ALT}, second`].entries()) {
+		await expect(tiles.nth(index)).toHaveAttribute("aria-label", `Open image: ${alt}`);
+	}
 	await expect(chat(page).locator(".chat-image-alt")).toHaveText([
-		LONG_ALT,
-		"Short",
-		`${LONG_ALT}, second`,
 		`${LONG_ALT}, alone`,
 		`${LONG_ALT}, unshown`,
 	]);
-	await expect(chat(page).locator(".chat-image-text")).toHaveText([LONG_CAPTION, LONG_CAPTION]);
+	await expect(chat(page).locator(".chat-image-text")).toHaveText([LONG_CAPTION]);
 
 	let clipped = await chat(page).locator(".chat-image-alt, .chat-image-text").evaluateAll(
 		elements =>
@@ -2743,17 +2736,12 @@ async function readWhole(page: Page, width: number): Promise<void> {
 		parseFloat(getComputedStyle(document.documentElement).fontSize)
 	);
 	let gallery = (await chat(page).locator("[data-chat-image-gallery]").boundingBox())!;
-	for (let tile of await chat(page).locator('[data-chat-image="tile"]').all()) {
+	for (let tile of await tiles.all()) {
 		let box = (await tile.boundingBox())!;
 		expect(box.x).toBeGreaterThanOrEqual(gallery.x - 0.5);
 		expect(box.x + box.width).toBeLessThanOrEqual(gallery.x + gallery.width + 0.5);
-		let frame = (await tile.locator("[data-chat-image-frame]").boundingBox())!;
-		expect(frame.height).toBeLessThanOrEqual(12 * rem + 1);
-	}
-	let [cap, back] = [all.nth(0), all.nth(1)];
-	for (let [tile, size] of [[cap, 1536 / 1024], [back, 960 / 420]] as const) {
-		let frame = (await tile.locator("[data-chat-image-frame]").boundingBox())!;
-		expect(frame.width / frame.height).toBeCloseTo(size, 1);
+		expect(box.height).toBeLessThanOrEqual(12 * rem + 1);
+		expect(box.width / box.height).toBeCloseTo(1, 1);
 	}
 	for (let figure of await all.all()) {
 		let box = (await figure.boundingBox())!;
@@ -2804,10 +2792,11 @@ test("images written as references and in line are one compact gallery in the or
 	await expect(chat(page).locator('[data-chat-image="single"]')).toHaveCount(0);
 	await expect(tiles).toHaveCount(3);
 	for (let tile of await tiles.all()) await expect(tile).toHaveAttribute("data-load", "shown");
-	await expect(tiles.locator(".chat-image-alt")).toHaveText(["One", "Two", "Three"]);
-	await expect(tiles.locator(".chat-image-text")).toHaveText(["Second title", "Third title"]);
+	for (let [index, name] of ["One", "Two", "Three"].entries()) {
+		await expect(tiles.nth(index)).toHaveAttribute("aria-label", `Open image: ${name}`);
+	}
 
-	await tiles.nth(1).getByRole("button", { name: "Open image", exact: true }).click();
+	await tiles.nth(1).click();
 	let box = lightbox(page);
 	await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
 	await expect(box.getByRole("img", { name: "Two", exact: true })).toBeVisible();

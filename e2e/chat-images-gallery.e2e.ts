@@ -44,6 +44,9 @@ async function bundleGallery(): Promise<Map<string, string>> {
 					contents: HARNESS,
 					loader: "js",
 				}));
+				build.onResolve({ filter: /^@\// }, ({ path }) => ({
+					path: Bun.resolveSync(`./src/${path.slice(2)}`, WEB),
+				}));
 				build.onResolve({ filter: /^react(-dom)?(\/.*)?$/ }, ({ path }) => ({
 					path: Bun.resolveSync(path, WEB),
 				}));
@@ -77,7 +80,7 @@ test("opening a gallery tile tells onOpen which tile it was, by its picture, its
 	await expect(tiles).toHaveCount(6);
 	for (let tile of await tiles.all()) await expect(tile).toHaveAttribute("data-load", "shown");
 	let opened = () => page.evaluate(() => (window as unknown as { __opened: number[] }).__opened);
-	let lightbox = page.getByRole("dialog", { name: "Image preview", exact: true });
+	let lightbox = page.locator('[data-slot="dialog-content"]');
 
 	await tiles.nth(2).locator("img").click();
 	await expect(lightbox.getByRole("status")).toHaveText("Image 3 of 8");
@@ -88,13 +91,13 @@ test("opening a gallery tile tells onOpen which tile it was, by its picture, its
 	await page.keyboard.press("Escape");
 	await expect(lightbox).toHaveCount(0);
 
-	await tiles.nth(4).getByRole("button", { name: "Open image", exact: true }).click();
+	await tiles.nth(4).click();
 	await expect(lightbox.getByRole("status")).toHaveText("Image 5 of 8");
 	expect(await opened()).toEqual([2, 4]);
 	await page.keyboard.press("Escape");
 	await expect(lightbox).toHaveCount(0);
 
-	let first = tiles.nth(0).getByRole("button", { name: "Open image", exact: true });
+	let first = tiles.nth(0);
 	await first.focus();
 	await page.keyboard.press("Enter");
 	await expect(lightbox.getByRole("status")).toHaveText("Image 1 of 8");

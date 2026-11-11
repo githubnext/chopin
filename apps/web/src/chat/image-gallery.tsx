@@ -1,26 +1,27 @@
 /**
- * The images of one message as a compact grid.
+ * The images of one message as a compact grid, rendered through assistant-ui's copied
+ * `ImageGallery` element (`components/assistant-ui/elements/image-gallery.tsx`, recorded in
+ * `components/sources.json` with `image-gallery.tsx.patch`; see `docs/assistant-ui.md` and
+ * `THIRD_PARTY_NOTICES.md`).
  *
- * Adapted from assistant-ui's Image gallery element, https://github.com/assistant-ui/assistant-ui
- * (`packages/ui/src/components/react/assistant-ui/elements/image-gallery.tsx` at commit f92028b4;
- * the file last changed in 9121416f), MIT, Copyright (c) 2026 AgentbaseAI Inc. See
- * THIRD_PARTY_NOTICES.
- *
- * Its standalone lane is the whole element: the `images`, `maxVisible` and `onOpen` props, up to
- * six tiles (square in the library, each the shape of its own image here) of which the last reads
- * `+N` for the rest, and a lightbox that steps through all of them. Chopin's changes: each tile is
- * the Chat image element, with its alt text under it and its actions over it; the lightbox is the
- * editor's, shared with the message's other images, and opens whether or not `onOpen` is given,
- * which is called with the index of the tile opened by its picture or its Open button; two
- * columns, or three where the message is wide enough; and no cap beyond the six tiles, since every
- * image is reachable from the lightbox.
+ * Each tile is `ImageGallery`'s own soft-fill square button (`field`, `aspect-square`,
+ * `rounded-xl`), with `+N` on the final visible tile when more images follow, inline refusal
+ * lines where a turn's image could not be shown, and `ImageGallery`'s `<Dialog>` lightbox shared
+ * across all showable images of the message.
  */
 
-import { HiddenImage, ImageFigure, MessageImages, RefusedImage, useImageHost } from "./image";
-import { galleryItems, galleryTiles } from "./image-state";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+
+import { ImageGallery as GalleryElement } from "@/components/assistant-ui/elements/image-gallery";
+
+import { MessageImages, pageOrigin, RefusedImage, useImageDocument, useImageHost } from "./image";
+import { galleryItems, imageLabel, imageSource } from "./image-state";
+import { loadLocalImage } from "./local-image";
 import "./image.css";
 
-import type { ChatImageData } from "./image";
+import type { GalleryImage } from "@/components/assistant-ui/elements/image-gallery";
+import type { ChatImageData, ImageHost } from "./image";
+import type { Load } from "./image-state";
 
 export type ImageGalleryProps = {
 	images: readonly ChatImageData[];
@@ -29,9 +30,188 @@ export type ImageGalleryProps = {
 	onOpen?: (index: number) => void;
 };
 
+type LocalResult = { url?: string; type?: string; failed?: boolean };
+
+function GalleryWithHost(
+	{ host, images, maxVisible = 6, onOpen, refused }: ImageGalleryProps & { host: ImageHost },
+) {
+	let galleryId = useId();
+	let documentId = useImageDocument();
+	let anchor = useRef<HTMLDivElement>(null);
+	let [locals, setLocals] = useState<Record<string, LocalResult>>({});
+	let [settled, setSettled] = useState<Record<string, "shown" | "broken">>({});
+
+	let sources = useMemo(
+		() =>
+			images.map(image => ({
+				image,
+				label: imageLabel(image.alt, image.generated),
+				source: imageSource(image.src, documentId, pageOrigin()),
+			})),
+		[images, documentId],
+	);
+
+	let localKey = sources.map(({ source }, index) =>
+		source.kind === "local" ? `${index}:${source.url}` : ""
+	).join("\n");
+
+	useEffect(() => {
+		let controller = new AbortController();
+		let revokes: string[] = [];
+		for (let [index, { source }] of sources.entries()) {
+			if (source.kind !== "local") continue;
+			let key = `${index}:${source.url}`;
+			loadLocalImage(source.url, { base: pageOrigin(), signal: controller.signal }).then(
+				blob => {
+					if (controller.signal.aborted) return;
+					let object = URL.createObjectURL(blob);
+					revokes.push(object);
+					setLocals(current => ({ ...current, [key]: { type: blob.type, url: object } }));
+				},
+				() => {
+					if (!controller.signal.aborted) {
+						setLocals(current => ({ ...current, [key]: { failed: true } }));
+					}
+				},
+			);
+		}
+		return () => {
+			controller.abort();
+			for (let object of revokes) URL.revokeObjectURL(object);
+		};
+	}, [localKey]);
+
+	let resolved = sources.map(({ image, label, source }, index) => {
+		let key = `${index}:${image.src}`;
+		let local = source.kind === "local" ? locals[`${index}:${source.url}`] : undefined;
+		let pending = source.kind === "local" && !local;
+		let url = source.kind === "local"
+			? local?.url
+			: source.kind === "unavailable"
+			? undefined
+			: source.url;
+		let outcome = settled[key];
+		let failed = source.kind === "unavailable" || Boolean(local?.failed) || outcome === "broken";
+		let load: Load = failed ? "broken" : outcome === "shown" ? "shown" : "loading";
+		return {
+			entryId: `${galleryId}:${index}`,
+			failed,
+			image,
+			index,
+			key,
+			label,
+			load,
+			pending,
+			source,
+			type: local?.type,
+			url,
+		};
+	});
+
+	let registrationKey = resolved.map(item =>
+		`${item.entryId}:${item.failed ? "x" : item.url ?? ""}:${item.label}:${
+			item.image.caption ?? ""
+		}:${item.image.generated ? 1 : 0}`
+	).join("\n");
+
+	useLayoutEffect(() => {
+		let element = anchor.current;
+		if (!element) return;
+		let cleanups = resolved.flatMap(item => {
+			if (item.failed || item.source.kind === "unavailable" || !item.url) return [];
+			return [
+				host.register(item.entryId, {
+					data: item.image,
+					element,
+					label: item.label,
+					order: item.index,
+					shown: { source: item.source, type: item.type, url: item.url },
+				}),
+			];
+		});
+		return () => {
+			for (let cleanup of cleanups) cleanup();
+		};
+	}, [host, registrationKey]);
+
+	let mark = (key: string, next: "shown" | "broken") => {
+		setSettled(current => current[key] === next ? current : { ...current, [key]: next });
+	};
+
+	let galleryImages: GalleryImage[] = resolved.map(item => {
+		let brokenMessage = item.source.kind === "unavailable"
+			? "Image can’t be shown"
+			: "Couldn’t load image";
+		return {
+			id: item.entryId,
+			src: item.failed || !item.url ? "" : item.url,
+			alt: item.label,
+			caption: item.image.caption,
+			source: item.image.generated ? { label: "Generated" } : undefined,
+			failed: item.failed,
+			failedLabel: item.failed ? `${brokenMessage}: ${item.label}` : undefined,
+			failedChildren: item.failed
+				? (
+					<span aria-hidden="true" className="chat-image-tile-error">
+						<span>{brokenMessage}</span>
+						<span className="chat-image-tile-error-alt">{item.label}</span>
+					</span>
+				)
+				: undefined,
+			pending: item.pending,
+			tileProps: {
+				"data-chat-image": "tile",
+				"data-load": item.load,
+				...(item.failed ? { "data-chat-image-broken": item.source.kind } : {}),
+				...(item.pending ? { "aria-label": item.label, role: "img" } : {}),
+			} as GalleryImage["tileProps"],
+			imgProps: {
+				decoding: "async",
+				referrerPolicy: "no-referrer",
+				onLoad: () => mark(item.key, "shown"),
+				onError: () => mark(item.key, "broken"),
+				ref: node => {
+					if (node?.complete) mark(item.key, node.naturalWidth > 0 ? "shown" : "broken");
+				},
+			},
+		};
+	});
+
+	let refusalsByBefore = useMemo(() => {
+		let grouped = new Map<number, string[]>();
+		if (!refused?.length) return grouped;
+		let at = 0;
+		for (let item of galleryItems(images.length, refused, maxVisible)) {
+			if (item.kind === "image") at = item.index + 1;
+			else grouped.set(at, [...(grouped.get(at) ?? []), item.reason]);
+		}
+		return grouped;
+	}, [images.length, refused, maxVisible]);
+
+	return (
+		<GalleryElement
+			between={refused?.length
+				? beforeIndex =>
+					refusalsByBefore.get(beforeIndex)?.map((reason, position) => (
+						<RefusedImage key={`refused:${beforeIndex}:${position}`} reason={reason} />
+					))
+				: undefined}
+			data-chat-image-gallery=""
+			images={galleryImages}
+			maxVisible={maxVisible}
+			onTileOpen={(tileId, trigger) => {
+				let index = Number(tileId.slice(galleryId.length + 1));
+				host.open(tileId, trigger);
+				onOpen?.(index);
+			}}
+			ref={anchor}
+		/>
+	);
+}
+
 export function ImageGallery({ images, maxVisible = 6, onOpen, refused }: ImageGalleryProps) {
 	let host = useImageHost();
-	if (images.length === 0) return null;
+	if (images.length === 0 && !refused?.length) return null;
 	if (!host) {
 		return (
 			<MessageImages>
@@ -39,28 +219,13 @@ export function ImageGallery({ images, maxVisible = 6, onOpen, refused }: ImageG
 			</MessageImages>
 		);
 	}
-	let { shown, more } = galleryTiles(images.length, maxVisible);
 	return (
-		<div className="chat-image-gallery" data-chat-image-gallery>
-			<div className="chat-image-gallery-grid">
-				{galleryItems(images.length, refused, maxVisible).map((item, position) =>
-					item.kind === "refused"
-						? <RefusedImage key={`refused:${position}`} reason={item.reason} />
-						: (
-							<ImageFigure
-								host={host}
-								image={images[item.index]!}
-								key={`${item.index}:${images[item.index]!.src}`}
-								more={item.index === shown - 1 && more ? more : undefined}
-								onOpen={onOpen && (() => onOpen(item.index))}
-								variant="tile"
-							/>
-						)
-				)}
-				{images.slice(shown).map((image, index) => (
-					<HiddenImage host={host} image={image} key={`${shown + index}:${image.src}`} />
-				))}
-			</div>
-		</div>
+		<GalleryWithHost
+			host={host}
+			images={images}
+			maxVisible={maxVisible}
+			onOpen={onOpen}
+			refused={refused}
+		/>
 	);
 }

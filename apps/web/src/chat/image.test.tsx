@@ -174,17 +174,20 @@ test("an image whose shape cannot be known when it is first drawn keeps the fixe
 	);
 });
 
-test("a gallery tile of a data address has its own shape at the first render as well", () => {
+test("a gallery draws assistant-ui's square tile buttons inside image-gallery, with no rings or shadows", () => {
 	let markup = renderToStaticMarkup(
 		<ImageGallery
 			images={[{ src: png(90, 30), alt: "Wide" }, { src: png(30, 90), alt: "Tall" }]}
 		/>,
 	);
-	let figures = markup.match(/<figure[^>]*>/g)!;
+	let tiles = markup.match(/<button[^>]*data-chat-image="tile"[^>]*>/g)!;
 
-	expect(figures).toHaveLength(2);
-	expect(figures[0]).toContain("--image-width:90;--image-height:30");
-	expect(figures[1]).toContain("--image-width:30;--image-height:90");
+	expect(markup).toContain('data-slot="image-gallery"');
+	expect(tiles).toHaveLength(2);
+	expect(tiles[0]).toContain('aria-label="Open image: Wide"');
+	expect(tiles[0]).toContain("aspect-square");
+	expect(tiles[0]).toContain("rounded-xl");
+	expect(tiles[1]).toContain('aria-label="Open image: Tall"');
 });
 
 function names(markup: string): string[] {
