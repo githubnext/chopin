@@ -25,7 +25,8 @@ function useFileUrl(file: File | undefined): string | undefined {
 }
 
 function Leading({ view, file }: { view: FileView; file: File | undefined }) {
-	let url = useFileUrl(view.kind === "image" ? file : undefined);
+	// A file that was refused is never drawn as the picture it claimed to be.
+	let url = useFileUrl(view.kind === "image" && view.state !== "error" ? file : undefined);
 	return (
 		<span aria-hidden="true" className="composer-file-visual" data-kind={view.kind}>
 			{url
