@@ -268,27 +268,3 @@ export function chooseLevel(
 export function sameChoice(left: Choice | undefined, right: Choice | undefined): boolean {
 	return left?.model === right?.model && left?.thinkingLevel === right?.thinkingLevel;
 }
-
-export type PickerKey = "close" | "next" | "previous" | "pick";
-
-/** What a key does in the picker's search field, or nothing for a key the field keeps (Home and End move its caret). */
-export function pickerKey(
-	event: { key: string; keyCode?: number; isComposing?: boolean; shiftKey?: boolean },
-	hasOptions: boolean,
-): PickerKey | undefined {
-	if (event.isComposing || event.keyCode === 229) return undefined;
-	if (event.key === "Escape") return "close";
-	if (!hasOptions) return undefined;
-	if (event.key === "ArrowDown") return "next";
-	if (event.key === "ArrowUp") return "previous";
-	if (event.key === "Enter" && !event.shiftKey) return "pick";
-	return undefined;
-}
-
-/** The index a key moves to, wrapping at either end. */
-export function movedIndex(key: PickerKey, active: number, count: number): number {
-	if (count === 0) return 0;
-	if (key === "next") return (active + 1) % count;
-	if (key === "previous") return (active - 1 + count) % count;
-	return active;
-}

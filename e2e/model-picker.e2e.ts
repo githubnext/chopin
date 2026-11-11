@@ -324,7 +324,7 @@ function notice(page: Page) {
 	return page.locator(".chat-composer .composer-notice:not([data-banner])");
 }
 
-/** The control in the composer's footer: named for the model that will run and its level. */
+/** The pill in the composer's toolbar: named for the model that will run and its level. */
 function trigger(page: Page) {
 	return chat(page).getByRole("button", { name: /^Model: / });
 }
@@ -341,8 +341,13 @@ function option(page: Page, name: string) {
 	return popover(page).getByRole("option", { name: new RegExp(`^${name}\\b`) });
 }
 
+/** The element's check, which only the chosen model's row draws. */
+function checked(page: Page, name: string) {
+	return option(page, name).locator("span.absolute");
+}
+
 function levels(page: Page) {
-	return popover(page).getByRole("radiogroup", { name: "Reasoning", exact: true });
+	return popover(page).getByRole("radiogroup", { name: "Thinking", exact: true });
 }
 
 function level(page: Page, name: string) {
@@ -365,6 +370,11 @@ async function openPicker(page: Page) {
 	await expect(search(page)).toBeFocused();
 }
 
+/** The pill's name: the first thing in it, which gives way to an ellipsis. */
+function name(model: Locator) {
+	return model.locator("span").first();
+}
+
 /** Say `text` to Chopin and wait until it has been answered. */
 async function ask(page: Page, text: string, answers: number) {
 	let input = chatInput(chat(page));
@@ -381,7 +391,8 @@ async function shoot(page: Page | Locator, name: string) {
 }
 
 async function expectAccessible(page: Page) {
-	let result = await new AxeBuilder({ page }).include("[data-chat-model-picker]").analyze();
+	let result = await new AxeBuilder({ page }).include('[data-slot="model-selector-content"]')
+		.analyze();
 	expect(result.violations.map(violation => `${violation.id}: ${violation.help}`)).toEqual([]);
 }
 
@@ -436,17 +447,17 @@ test("lists models by provider, filters them, and chooses with the mouse, reason
 
 	await openPicker(page);
 	await expect(trigger(page)).toHaveAttribute("aria-expanded", "true");
-	let list = popover(page).getByRole("listbox", { name: "Models", exact: true });
+	let list = popover(page).getByRole("listbox");
 	await expect(list.getByRole("group", { name: "Acme" }).getByRole("option")).toHaveCount(2);
 	await expect(list.getByRole("group", { name: "Beta" }).getByRole("option")).toHaveCount(1);
 	await expect(list.getByRole("option")).toHaveText([
 		/^Large\s*Slower and more careful\.$/,
-		/^Small\s*Fast for short questions\.\s*Default$/,
+		/^Small\s*Default\. Fast for short questions\.$/,
 		/^Deep\s*Reads the whole repository first\.$/,
 	]);
-	// The model that will run is tinted; none has a check mark.
-	await expect(option(page, "Small")).toHaveAttribute("aria-selected", "true");
-	await expect(option(page, "Large")).toHaveAttribute("aria-selected", "false");
+	// The model that will run has the element's check; no other does.
+	await expect(checked(page, "Small")).toHaveCount(1);
+	await expect(checked(page, "Large")).toHaveCount(0);
 	// Small has no reasoning levels, so the control is not drawn.
 	await expect(levels(page)).toHaveCount(0);
 	await shoot(page, "model-picker-open-desktop");
@@ -459,7 +470,7 @@ test("lists models by provider, filters them, and chooses with the mouse, reason
 	await expect(list.getByRole("option")).toHaveText([/^Deep/]);
 	await search(page).fill("zzz");
 	await expect(list.getByRole("option")).toHaveCount(0);
-	await expect(popover(page).getByRole("status")).toHaveText("No matching models.");
+	await expect(popover(page).getByText("No matching models.", { exact: true })).toBeVisible();
 	await search(page).fill("");
 
 	// Choosing closes the popover, returns to the trigger and names the model.
@@ -524,27 +535,22 @@ test("opens, searches, moves and chooses from the keyboard", async ({ browser })
 	let { client } = await attachClient(room, CATALOG);
 	await expect(trigger(page)).toBeVisible();
 
-	// Enter opens it with the search field focused and the model that will run active.
+	// Enter opens it with the search field focused and the model that will run highlighted.
 	await trigger(page).focus();
 	await trigger(page).press("Enter");
 	await expect(search(page)).toBeFocused();
-	await expect(search(page)).toHaveAttribute("aria-expanded", "true");
-	let active = async () => {
-		let id = await search(page).getAttribute("aria-activedescendant");
-		if (!id) return "none";
-		let row = page.locator(`[id="${id}"]`);
-		await expect(row).toHaveAttribute("data-active", "true");
-		return (await row.innerText()).split("\n")[0]!;
-	};
-	expect(await active()).toBe("Small");
+	let active = async () =>
+		(await popover(page).locator('[cmdk-item][data-selected="true"]').first().innerText())
+			.split("\n")[0]!;
+	await expect.poll(active).toBe("Small");
 
-	// The arrow keys move the active row and wrap at the ends; the field keeps the focus.
+	// The arrow keys move the highlighted row, and stop at either end; the field keeps the focus.
 	await search(page).press("ArrowDown");
-	expect(await active()).toBe("Deep");
+	await expect.poll(active).toBe("Deep");
 	await search(page).press("ArrowDown");
-	expect(await active()).toBe("Large");
+	await expect.poll(active).toBe("Deep");
 	await search(page).press("ArrowUp");
-	expect(await active()).toBe("Deep");
+	await expect.poll(active).toBe("Small");
 	await expect(search(page)).toBeFocused();
 
 	// Typing filters, Enter chooses the active row, closes, and focus returns to the trigger.
@@ -586,9 +592,12 @@ test("opens, searches, moves and chooses from the keyboard", async ({ browser })
 	// A pointer outside the popover closes it and leaves the draft's focus alone.
 	await trigger(page).click();
 	await expect(popover(page)).toBeVisible();
-	await chatInput(chat(page)).click();
+	// The draft's far corner, which the popover over its start does not cover.
+	let draft = chatInput(chat(page));
+	let corner = (await draft.boundingBox())!;
+	await draft.click({ position: { x: corner.width - 6, y: 6 } });
 	await expect(popover(page)).toHaveCount(0);
-	await expect(chatInput(chat(page))).toBeFocused();
+	await expect(draft).toBeFocused();
 	await client.detach();
 });
 
@@ -649,14 +658,14 @@ test("lists a catalog that repeats a model or a level as the client reported it"
 	// Every entry is listed in the order given, and only the first of an id is the model that runs.
 	let rows = popover(page).getByRole("option");
 	await expect(rows).toHaveCount(4);
-	await expect(rows.locator(".composer-model-row-name")).toHaveText([
-		"Echo one",
-		"Echo again",
-		"Two",
-		"Echo third",
+	await expect(rows).toHaveText([
+		/^Echo one\s*Default\.$/,
+		/^Echo again\s*Default\.$/,
+		/^Two$/,
+		/^Echo third\s*Default\.$/,
 	]);
-	await expect(popover(page).locator('[role="option"][aria-selected="true"]')).toHaveCount(1);
-	await expect(rows.first()).toHaveAttribute("aria-selected", "true");
+	await expect(popover(page).getByRole("option").locator("span.absolute")).toHaveCount(1);
+	await expect(rows.first().locator("span.absolute")).toHaveCount(1);
 	// Each group is named by its own heading, whatever its provider's id is made of.
 	await expect(popover(page).getByRole("group", { name: "Echo Lab" })).toHaveCount(1);
 	await expect(popover(page).getByRole("group", { name: "None" })).toHaveCount(1);
@@ -826,7 +835,7 @@ test("lists and runs a catalog of any spelling as the client wrote it, skipping 
 	await openPicker(page);
 	await expect(popover(page).getByRole("option")).toHaveText([
 		/^Long\s*d+$/,
-		/^lab\/plain\s*Default$/,
+		/^lab\/plain\s*Default\.$/,
 	]);
 	await expect(popover(page).getByRole("option", { name: /Blank/ })).toHaveCount(0);
 	await expect(levels(page)).toHaveCount(0);
@@ -870,7 +879,7 @@ test("lists every model of a catalog as large as two gateways' together, and sea
 	await expect(trigger(page)).toHaveAccessibleName("Model: Model 0");
 	await openPicker(page);
 	await expect(popover(page).getByRole("option")).toHaveCount(710);
-	await expect(popover(page).getByRole("group")).toHaveCount(2);
+	await expect(popover(page).locator("[cmdk-group]")).toHaveCount(2);
 	await search(page).fill("model 709");
 	await expect(popover(page).getByRole("option")).toHaveCount(1);
 	await search(page).press("Enter");
@@ -1327,13 +1336,12 @@ test("names the model on a phone trigger, opens a list as wide as the composer a
 	let model = trigger(page);
 	await expect(model).toBeVisible();
 	await expect(model).toHaveAccessibleName("Model: Small");
-	// The trigger keeps the model's short name beside its icon, and stays a full touch target.
-	await expect(model.locator(".composer-model-symbol")).toBeVisible();
-	await expect(model.locator(".composer-model-name")).toBeVisible();
-	await expect(model.locator(".composer-model-name")).toHaveText("Small");
+	// The pill keeps the model's name, drawn as the element's 32px pill with a 44px touch target.
+	await expect(name(model)).toBeVisible();
+	await expect(name(model)).toHaveText("Small");
 	let box = (await model.boundingBox())!;
-	expect(box.width).toBeGreaterThanOrEqual(36);
-	expect(box.height).toBeGreaterThanOrEqual(36);
+	expect(box.height).toBeCloseTo(32, 0);
+	expect(await model.evaluate(element => getComputedStyle(element, "::after").height)).toBe("44px");
 	await expectInsideViewport(model);
 	await expectNoHorizontalOverflow(page);
 	await shoot(page, "model-picker-closed-phone");
@@ -1346,8 +1354,8 @@ test("names the model on a phone trigger, opens a list as wide as the composer a
 	await option(page, "Large").tap();
 	await expect(popover(page)).toHaveCount(0);
 	await expect(model).toHaveAccessibleName("Model: Large");
-	await expect(model.locator(".composer-model-name")).toHaveText("Large");
-	await expect(model.locator(".composer-model-name")).toBeVisible();
+	await expect(name(model)).toHaveText("Large");
+	await expect(name(model)).toBeVisible();
 
 	await model.tap();
 	await expect(levels(page).getByRole("radio")).toHaveCount(5);
@@ -1355,16 +1363,17 @@ test("names the model on a phone trigger, opens a list as wide as the composer a
 	await expectInsideViewport(levels(page));
 	for (let radio of await levels(page).getByRole("radio").all()) {
 		await expectInsideViewport(radio);
-		// The composer's own controls set the size of a touch target here, the trigger among them
-		// (the pill control is in rem, so the two differ by under a pixel).
-		expect((await radio.boundingBox())!.height).toBeGreaterThanOrEqual(box.height - 1);
+		// A level is drawn as the element draws it and reached through its 44px target.
+		expect(await radio.evaluate(element => getComputedStyle(element, "::after").height)).toBe(
+			"44px",
+		);
 	}
 	await level(page, "xhigh").tap();
 	await expect(model).toHaveAccessibleName("Model: Large, reasoning xhigh");
 	await expect(popover(page)).toBeVisible();
-	// The level is in the accessible name and the open list; the pill has no room for it beside the name.
-	await expect(model.locator(".composer-model-name")).toBeVisible();
-	await expect(model.locator(".composer-model-level")).toBeHidden();
+	// The level is in the accessible name and the open list, and in lighter ink beside the name.
+	await expect(name(model)).toBeVisible();
+	await expect(model.locator("span").nth(1)).toHaveText("xhigh");
 	await shoot(page, "model-picker-open-phone");
 	await expectAccessible(page);
 	await expectNoHorizontalOverflow(page);
@@ -1395,18 +1404,19 @@ test("keeps the model's name on a touch phone's trigger at every phone width, cu
 			.getByRole("button", { name: /^Chat/ }).tap();
 		await expect.poll(async () => (await chat(page).boundingBox())?.x).toBe(0);
 		let model = trigger(page);
-		let name = model.locator(".composer-model-name");
+		let label = name(model);
 		let words = async () =>
-			name.evaluate(element => ({
+			label.evaluate(element => ({
 				clipped: element.scrollWidth > element.clientWidth,
 				ellipsis: getComputedStyle(element).textOverflow,
 			}));
-		// The pill rests as one row and every control in it stays inside the phone, apart from the others.
+		// The toolbar rests as one row under the draft and every control in it stays inside the phone,
+		// apart from the others, with the longest name given way to an ellipsis.
 		let row = async () => {
 			let mention = chat(page).getByRole("button", { name: "Mention docs" });
 			let mode = chat(page).getByRole("button", { name: "Talk to Chopin" });
 			let send = chat(page).getByRole("button", { name: "Send message" });
-			let controls = [model, mention, chatInput(chat(page)), mode, send];
+			let controls = [mode, model, mention, send];
 			let boxes = await Promise.all(controls.map(async control => (await control.boundingBox())!));
 			for (let control of controls) await expectInsideViewport(control);
 			for (let index = 1; index < boxes.length; index++) {
@@ -1416,15 +1426,16 @@ test("keeps the model's name on a touch phone's trigger at every phone width, cu
 				expect(Math.abs(before.y + before.height / 2 - boxes[index]!.y - boxes[index]!.height / 2))
 					.toBeLessThanOrEqual(2);
 			}
-			// The draft keeps room to type in beside the longest name.
-			expect(boxes[2]!.width, `draft at ${width}px`).toBeGreaterThanOrEqual(80);
-			expect(boxes[0]!.height).toBeGreaterThanOrEqual(36);
+			// The draft keeps its own row above them, as wide as the box.
+			expect((await chatInput(chat(page)).boundingBox())!.width, `draft at ${width}px`)
+				.toBeGreaterThanOrEqual(width - 60);
+			expect(boxes[1]!.height).toBeCloseTo(32, 0);
 			await expectNoHorizontalOverflow(page);
 		};
 
 		await expect(model).toHaveAccessibleName("Model: Small");
-		await expect(name).toBeVisible();
-		await expect(name).toHaveText("Small");
+		await expect(label).toBeVisible();
+		await expect(label).toHaveText("Small");
 		// A short name shows whole.
 		expect(await words()).toMatchObject({ clipped: false });
 		await row();
@@ -1435,8 +1446,8 @@ test("keeps the model's name on a touch phone's trigger at every phone width, cu
 		await option(page, "Acme Reasoning").tap();
 		await expect(popover(page)).toHaveCount(0);
 		await expect(model).toHaveAccessibleName(`Model: ${longName}`);
-		await expect(name).toBeVisible();
-		await expect(name).toHaveText(longName);
+		await expect(label).toBeVisible();
+		await expect(label).toHaveText(longName);
 		expect(await words()).toEqual({ clipped: true, ellipsis: "ellipsis" });
 		await row();
 		await shoot(page, `model-picker-long-name-phone-${width}`);
@@ -1452,7 +1463,7 @@ test("keeps the model's name on a touch phone's trigger at every phone width, cu
 		await model.tap();
 		await option(page, "Small").tap();
 		await expect(model).toHaveAccessibleName("Model: Small");
-		await expect(name).toHaveText("Small");
+		await expect(label).toHaveText("Small");
 		expect(await words()).toMatchObject({ clipped: false });
 		await row();
 		await page.context().close();

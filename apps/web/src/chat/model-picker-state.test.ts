@@ -8,9 +8,7 @@ import {
 	fallbackNotice,
 	levelSteps,
 	matchesQuery,
-	movedIndex,
 	pickerGroups,
-	pickerKey,
 	pickerOptions,
 	reasoningLevels,
 	sameChoice,
@@ -443,37 +441,6 @@ describe("what a pick asks for", () => {
 		expect(sameChoice({ model: "a" }, { model: "a" })).toBe(true);
 		expect(sameChoice({ model: "a" }, { model: "a", thinkingLevel: "low" })).toBe(false);
 		expect(sameChoice({ model: "a" }, undefined)).toBe(false);
-	});
-});
-
-describe("the keyboard", () => {
-	let key = (name: string, extra: object = {}) => pickerKey({ key: name, ...extra }, true);
-
-	test("moves, picks and closes, and leaves every other key to the search field", () => {
-		expect(key("ArrowDown")).toBe("next");
-		expect(key("ArrowUp")).toBe("previous");
-		expect(key("Enter")).toBe("pick");
-		expect(key("Escape")).toBe("close");
-		for (let other of ["Home", "End", "a", "Tab", "ArrowLeft", "ArrowRight"]) {
-			expect(key(other)).toBeUndefined();
-		}
-		expect(key("Enter", { shiftKey: true })).toBeUndefined();
-	});
-
-	test("does nothing mid-composition, and only closes when there is nothing to pick", () => {
-		expect(key("Enter", { isComposing: true })).toBeUndefined();
-		expect(key("Escape", { keyCode: 229 })).toBeUndefined();
-		expect(pickerKey({ key: "ArrowDown" }, false)).toBeUndefined();
-		expect(pickerKey({ key: "Enter" }, false)).toBeUndefined();
-		expect(pickerKey({ key: "Escape" }, false)).toBe("close");
-	});
-
-	test("wraps at either end and stays put when empty", () => {
-		expect(movedIndex("next", 2, 3)).toBe(0);
-		expect(movedIndex("previous", 0, 3)).toBe(2);
-		expect(movedIndex("next", 0, 3)).toBe(1);
-		expect(movedIndex("next", 0, 0)).toBe(0);
-		expect(movedIndex("pick", 1, 3)).toBe(1);
 	});
 });
 
