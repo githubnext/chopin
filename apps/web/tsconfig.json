@@ -15,7 +15,8 @@
 			"@/*": ["./src/*"],
 			"@assistant-ui/react": ["./src/chat/assistant-ui/markdown-primitive.tsx"],
 			"@assistant-ui/react-markdown": ["./src/chat/assistant-ui/markdown-primitive.tsx"],
-			"@assistant-ui/react-markdown/styles/dot.css": ["./src/chat/assistant-ui/markdown-dot.css"]
+			"@assistant-ui/react-markdown/styles/dot.css": ["./src/chat/assistant-ui/markdown-dot.css"],
+			"lucide-react": ["./src/chat/assistant-ui/lucide.tsx"]
 		},
 
 		"allowSyntheticDefaultImports": true,

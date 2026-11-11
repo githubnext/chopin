@@ -95,9 +95,11 @@ and holds only its values. `markdown-text.tsx` has no standalone (`elements-mark
 entry, so its `@assistant-ui/react` and `@assistant-ui/react-markdown` imports are pointed by
 `apps/web/tsconfig.json` and `vite.config.ts` at Chopin's props-driven `react-markdown` seam
 (`src/chat/assistant-ui/markdown-primitive.tsx`). The packages these files import, none copied, are
-`cmdk` (MIT), `class-variance-authority` (Apache-2.0), `cn` (MIT), `lucide-react` (ISC), `remark-gfm`
-(MIT), `tw-animate-css` (MIT) and `tw-shimmer` (MIT, assistant-ui's own, for `surfaces.tsx`'s
-shimmer), beside the `@base-ui/react` and `react-markdown` Chopin already used. The adaptations above
+`cmdk` (MIT), `class-variance-authority` (Apache-2.0), `cn` (MIT), `remark-gfm` (MIT),
+`tw-animate-css` (MIT) and `tw-shimmer` (MIT, assistant-ui's own, for `surfaces.tsx`'s shimmer),
+beside the `@base-ui/react` and `react-markdown` Chopin already used. Their `lucide-react` imports are
+pointed by `apps/web/tsconfig.json` at `src/chat/assistant-ui/lucide.tsx`, which draws each named icon
+with Chopin's own (`packages/icons`), so no lucide artwork is installed or shipped. The adaptations above
 that were written by hand from assistant-ui's source (the connection and failure banners) are
 unchanged, and are replaced by copies as their elements are migrated.
 

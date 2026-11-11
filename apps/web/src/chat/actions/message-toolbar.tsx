@@ -1,7 +1,12 @@
 import { cloneElement, memo, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { EllipsisVerticalIcon, RotateCcwIcon, SmilePlusIcon, XIcon } from "lucide-react";
-import { MessageIcon } from "@chopin/icons";
+import {
+	CloseIcon,
+	EllipsisVerticalIcon,
+	MessageIcon,
+	ReactionAddIcon,
+	RestartIcon,
+} from "@chopin/icons";
 
 import { MessageActions } from "@/components/assistant-ui/elements/message-actions";
 import {
@@ -384,7 +389,7 @@ export let MessageToolbar = memo(function MessageToolbar(
 					ref: addButton,
 					tabIndex: tab(QUICK_REACTIONS.length),
 				} as MessageActionItem["buttonProps"],
-				children: <SmilePlusIcon aria-hidden="true" size={14} />,
+				children: <ReactionAddIcon aria-hidden="true" />,
 			},
 		]
 		: [];
@@ -471,7 +476,7 @@ export let MessageToolbar = memo(function MessageToolbar(
 									actions.current.retry();
 								}}
 							>
-								<RotateCcwIcon aria-hidden="true" />
+								<RestartIcon aria-hidden="true" />
 								Try again
 							</DropdownMenuItem>
 						)}
@@ -484,7 +489,7 @@ export let MessageToolbar = memo(function MessageToolbar(
 								}}
 								variant="destructive"
 							>
-								<XIcon aria-hidden="true" />
+								<CloseIcon aria-hidden="true" />
 								Delete
 							</DropdownMenuItem>
 						)}

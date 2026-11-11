@@ -52,8 +52,10 @@ test("a message keeps its actions behind the copied message-actions overflow but
 	);
 
 	expect(markup).toContain('data-slot="message-actions"');
-	// Slack's vertical three dots, in place of the copy's horizontal ellipsis.
-	expect(markup).toMatch(/aria-label="Message actions"[^>]*>\s*<[^>]*lucide-ellipsis-vertical/s);
+	// Slack's vertical three dots, in place of the copy's horizontal ellipsis, in Chopin's icons.
+	expect(markup).toMatch(
+		/aria-label="Message actions"[^>]*>\s*<[^>]*data-nucleo-icon[^>]*>\s*<g[^>]*>\s*<circle cx="9" cy="3.75"/s,
+	);
 	expect(markup).not.toContain(">×</button>");
 	expect(markup).not.toContain('aria-label="Withdraw queued message"');
 });
