@@ -1,18 +1,25 @@
 /*
- * The box, its toolbar and the round button are assistant-ui's Composer, copied unmodified, so they
- * have no rule here: `.composer-surface`, `.composer-footer`, `.composer-left` and
- * `.composer-actions` are only names for the specs and the audit to find them by. What is Chopin's
- * is the field inside it, the strips above it and the colour of a failed send's edge.
+ * The field inside the message box, where the Chopin chip sits in it, the strips above it and the
+ * colour of a failed send's edge.
  */
 .chat-composer .composer-surface[data-error] {
 	border-color: var(--color-danger-edge);
+}
+/*
+ * The field scrolls, not the draft in it, so the chip that floats at the start of the draft scrolls
+ * with the first line it sits on. A floated chip leaves the draft's first line shorter and the rest
+ * their whole width, and needs no measuring of the chip.
+ */
+.chat-composer .composer-field {
+	position: relative;
+	max-height: 12rem;
+	overflow-y: auto;
 }
 .chat-composer .composer-draft-input {
 	position: relative;
 	display: block;
 	width: 100%;
 	min-height: calc(1.5rem + 2lh);
-	max-height: 12rem;
 	padding: 0.75rem;
 	border: 0;
 	background: transparent;
@@ -22,7 +29,6 @@
 	color: var(--color-text-primary);
 	white-space: pre-wrap;
 	overflow-wrap: break-word;
-	overflow-y: auto;
 }
 /*
  * The field is Chopin's, inside the copied box. On touch the copy's layer gives a combobox in its
@@ -61,31 +67,33 @@
 	text-decoration: none;
 	box-decoration-break: clone;
 }
-.chat-composer .composer-mode {
-	gap: 0.25rem;
-	min-width: 0;
-	height: 1.75rem;
-	padding-inline: 0.375rem;
-	transition:
-		width var(--duration-fast) var(--ease-out),
-		scale var(--duration-fast) var(--ease-out),
-		color var(--duration-fast) var(--ease-out),
-		background-color var(--duration-fast) var(--ease-out);
-}
-.chat-composer .composer-mode-symbol {
-	display: inline-flex;
+/*
+ * The Chopin chip, assistant-ui's mention chip, sits where the draft's first line begins: the draft's
+ * own padding on top and at the start, one line tall, so the badge in it is centred on that line.
+ * The remove button is drawn over the cross the badge shows, outside the badge, which clips.
+ */
+.chat-composer .composer-chip {
+	position: relative;
+	float: left;
+	display: flex;
 	align-items: center;
-	justify-content: center;
-	width: 1.125rem;
-	flex-shrink: 0;
+	height: 1lh;
+	margin: 0.75rem 0.375rem 0 0.75rem;
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
 }
-.chat-composer .composer-mode-label {
-	display: inline-block;
-	flex-shrink: 0;
-	text-align: left;
+/* The cross is the last 12px of the badge, past 1px of edge and 6px of padding. */
+.chat-composer .composer-chip-remove {
+	position: absolute;
+	inset-inline-end: 0.3125rem;
+	top: 50%;
+	width: 1rem;
+	height: 1rem;
+	translate: 0 -50%;
+	border-radius: var(--radius-full);
 }
-.chat-composer .composer-mode[aria-pressed="true"] {
-	color: var(--color-brand-ink);
+.chat-composer .composer-chip-remove:hover:not(:disabled) {
+	background: var(--color-selected-strong);
 }
 .chat-composer .composer-notice {
 	display: flex;
@@ -260,18 +268,8 @@
 	.chat-composer [data-chat-reference-picker][data-animate] {
 		animation: chat-document-picker-enter var(--dropdown-open-dur) var(--dropdown-ease);
 	}
-	:root:not([data-motion-input="keyboard"]) .chat-composer .composer-mode:not(:disabled):active {
-		scale: 0.99;
-	}
-}
-:root[data-motion-input="keyboard"] .chat-composer .composer-mode,
-:root[data-motion-input="keyboard"] .chat-composer .composer-surface::before {
-	transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
-	.chat-composer .composer-mode, .chat-composer .composer-surface::before {
-		transition: none;
-	}
 	.chat-composer [data-chat-reference-picker] {
 		animation: none;
 	}
@@ -344,12 +342,19 @@
 		/* The home indicator's inset, but not while the keyboard covers it. */
 		padding-bottom: max(0.5rem, calc(env(safe-area-inset-bottom) - var(--keyboard-inset, 0px)));
 	}
-	.chat-composer .composer-draft-input {
+	.chat-composer .composer-field {
 		/* One line at rest; five before it scrolls, fewer above an open keyboard. */
-		min-height: var(--composer-pill-control);
 		max-height: min(calc(5lh + 0.75rem), calc(var(--app-height, 100dvh) * 0.3));
+	}
+	.chat-composer .composer-draft-input {
+		min-height: var(--composer-pill-control);
 		padding: 0.375rem 0.5rem;
 		/* theme.css keeps touch text at 16px or more, so focus never zooms. */
+		line-height: 1.5;
+	}
+	/* The chip begins on the first line, as the draft's own padding does here. */
+	.chat-composer .composer-chip {
+		margin: 0.375rem 0.375rem 0 0.5rem;
 		line-height: 1.5;
 	}
 	/* A narrow box shortens the hint rather than wrapping it out of view. */
@@ -358,60 +363,6 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-	/* Without the Planner the switch can never be used; the line above says why. */
-	.chat-composer[data-planner="off"] .composer-mode-trigger {
-		display: none;
-	}
-	/* The switch keeps its accessible name and drops the visible word. */
-	.chat-composer .composer-mode {
-		column-gap: 0;
-	}
-	.chat-composer .composer-mode-label {
-		width: 0;
-		overflow: hidden;
-		opacity: 0;
-	}
-	/* Addressing Chopin is a removable chip on a row of its own above the draft. */
-	.chat-composer .composer-chopin-row {
-		/* Above the draft, so the chip's touch target may reach into the draft's top padding. */
-		position: relative;
-		z-index: 1;
-		display: flex;
-		padding: 0.25rem;
-	}
-	/* Coarse pointers would otherwise grow every control in the box to a full target. */
-	&[data-plan-coarse-pointer] .chat-composer .composer-surface button.composer-chopin-chip,
-	.chat-composer .composer-surface .composer-chopin-chip {
-		position: relative;
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-		min-width: 0;
-		min-height: 0;
-		height: var(--control-height-compact);
-		padding-inline: 0.5rem 0.375rem;
-		border-radius: var(--radius-full);
-		background: var(--color-brand-wash);
-		color: var(--color-brand-ink);
-		font-size: var(--text-xs);
-		font-weight: var(--font-weight-medium);
-	}
-	/* The chip is the way back to Chat while it shows, so the switch steps aside. */
-	.chat-composer .composer-surface:has(.composer-chopin-row) .composer-mode-trigger {
-		display: none;
-	}
-	/* A full touch target around a chip drawn smaller than one. */
-	.chat-composer .composer-chopin-chip::after {
-		position: absolute;
-		inset: calc((100% - var(--control-target-coarse)) / 2) -0.25rem;
-		width: auto;
-		height: auto;
-		transform: none;
-		content: "";
-	}
-	.chat-composer .composer-chopin-chip:active:not(:disabled) {
-		color: var(--color-brand-active);
 	}
 	.chat-composer .composer-notice-slot {
 		margin-bottom: 0;

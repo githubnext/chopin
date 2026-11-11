@@ -34,9 +34,42 @@ test("renders the draft as a combobox in the field", () => {
 	expect(markup).toContain('class="composer-surface"');
 	expect(markup).toContain('role="combobox"');
 	expect(markup).toContain('aria-label="Message"');
-	expect(markup).toContain("Message your collaborators…");
+	expect(markup).toContain("Message the team, or @Chopin to ask");
 	expect(markup).not.toContain("composer-notice");
 	expect(markup).not.toContain('data-planner="off"');
+});
+
+const CHOPIN = { chip: false, disabled: false, onAdd: () => {}, onRemove: () => {} };
+
+test("there is no Chat/Chopin switch: Chopin is asked by a button and a chip, never a mode", () => {
+	let off = render({ chopin: CHOPIN });
+	expect(off).not.toContain("Talk to Chopin");
+	expect(off).not.toContain("data-mode");
+	expect(off).not.toContain("composer-chopin-row");
+	expect(off).toContain('aria-label="Ask Chopin"');
+	expect(off).not.toContain('aria-label="Asking Chopin"');
+	expect(off).not.toContain('aria-label="Remove Chopin"');
+});
+
+test("the chip starts the field, named for a screen reader, with a button that removes it", () => {
+	let on = render({ chopin: { ...CHOPIN, chip: true } });
+	expect(on).toMatch(/<span aria-label="Asking Chopin" class="composer-chip" role="group">/);
+	expect(on).toContain('aria-label="Remove Chopin"');
+	// It comes before the draft in the field, which is what lets the first line begin after it.
+	expect(on.indexOf("composer-chip")).toBeLessThan(on.indexOf('role="combobox"'));
+	// It is assistant-ui's mention chip: its icon, its label and the cross it draws.
+	expect(on).toContain('data-slot="directive-text-chip"');
+	expect(on).toContain("Ask Chopin…");
+	// Chopin is already being asked, so the button that asks is spent.
+	expect(on.match(/<button[^>]*aria-label="Ask Chopin"[^>]*>/)![0]).toContain('disabled=""');
+});
+
+test("without an agent there is nobody to ask: no button, no chip, and the team's placeholder", () => {
+	let markup = render({ agent: false });
+	expect(markup).not.toContain('aria-label="Ask Chopin"');
+	expect(markup).not.toContain("composer-chip");
+	expect(markup).toContain("Message the team");
+	expect(markup).not.toContain("@Chopin");
 });
 
 test("a failed send alerts above the field and describes the draft", () => {
@@ -116,7 +149,7 @@ test("the same button stops a running Planner while nothing is typed", () => {
 	expect(markup).not.toContain('aria-label="Send message"');
 });
 
-test("a message typed while the Planner runs is sent, to be queued, and the button is stop again once it is gone", () => {
+test("a message typed while the Planner runs is sent as it is, and the button is stop again once it is gone", () => {
 	let typing = render({ run: STOP, input: { ...INPUT, value: "And the rollback checks" } });
 	expect(roundButton(typing)).toContain('aria-label="Send message"');
 	expect(disabled(roundButton(typing))).toBe(false);

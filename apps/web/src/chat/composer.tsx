@@ -8,16 +8,14 @@
 import { useId } from "react";
 import type { ReactNode, Ref } from "react";
 
-import { ChopinMark } from "@chopin/editor";
-import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import {
 	ArchiveIcon,
 	AtSignIcon,
-	CloseIcon,
 	InfoIcon,
 	LockIcon,
 	PlusIcon,
+	SparkleIcon,
 	TextStyleIcon,
 	WarningIcon,
 } from "@chopin/icons";
@@ -26,7 +24,8 @@ import { FormatBar } from "./format-bar";
 import { sendStop } from "./assistant-ui/send-stop";
 import { SendStopButton } from "./assistant-ui/send-stop-button";
 import { motionContract } from "../motion-contract";
-import { ModeSwitch } from "./mode-switch";
+import { ChopinChip } from "./assistant-ui/chopin-chip";
+import { draftPlaceholder } from "./chopin-chip";
 import { ModelPill } from "./assistant-ui/model-pill";
 import type { Format } from "./format-markdown";
 import type { ModelControl } from "./use-model-choice";
@@ -57,8 +56,11 @@ export type ChatComposerProps = {
 	inputRef?: Ref<DraftInputHandle>;
 	/** Whether this document's Planner is on; without it the composer is marked off. */
 	agent: boolean;
-	/** Whether the draft is addressed to Chopin, and the Chat/Chopin switch. */
-	mode?: { chopin: boolean; disabled: boolean; onToggle: () => void };
+	/**
+	 * Present where Chopin can be asked: whether the chip at the start of the draft is on, and the
+	 * ways to put it on (the sparkle button) and take it off (the chip's own cross).
+	 */
+	chopin?: { chip: boolean; disabled: boolean; onAdd: () => void; onRemove: () => void };
 	/** Why the draft can't be sent, above the field. */
 	notice?: ComposerNotice;
 	/**
@@ -115,7 +117,7 @@ export function ChatComposer(
 		rootRef,
 		inputRef,
 		agent,
-		mode,
+		chopin,
 		model,
 		notice,
 		banner,
@@ -135,8 +137,7 @@ export function ChatComposer(
 	let instructionsId = useId();
 	let cueId = useId();
 	let error = notice?.tone === "error" || !!banner?.invalid;
-	let phone = usePhone();
-	let chopin = !!mode?.chopin;
+	let chip = !!chopin?.chip;
 	let hasDraft = input.value.trim() !== "";
 	let button = sendStop({
 		running: run?.action === "stop",
@@ -239,7 +240,6 @@ export function ChatComposer(
 				aria-busy={sending}
 				className="composer-surface"
 				data-error={error || undefined}
-				data-mode={chopin ? "chopin" : "chat"}
 			>
 				{pickers}
 				{unavailable
@@ -259,51 +259,43 @@ export function ChatComposer(
 					: (
 						<>
 							{format?.shown && <FormatBar disabled={format.disabled} onFormat={format.onFormat} />}
-							{/* A phone's switch shows only an icon; the chip says where the message goes. */}
-							{phone && chopin && mode && (
-								<span className="composer-chopin-row">
-									<button
-										aria-label="Remove Chopin"
-										className="composer-chopin-chip"
-										data-press="none"
-										disabled={mode.disabled}
-										onClick={mode.onToggle}
-										type="button"
-									>
-										<ChopinMark />
-										<span aria-hidden="true">Chopin</span>
-										<CloseIcon aria-hidden="true" size={12} />
-									</button>
-								</span>
-							)}
-							<DraftInput
-								aria-activedescendant={input["aria-activedescendant"]}
-								aria-controls={input["aria-controls"]}
-								aria-expanded={input["aria-expanded"]}
-								historyGroupKey={chopin}
-								mentions={input.mentions}
-								onBlur={input.onBlur}
-								onChange={input.onChange}
-								onKeyDown={input.onKeyDown}
-								onSelect={input.onSelect}
-								references={input.references}
-								resetKey={input.resetKey}
-								value={input.value}
-								aria-label="Message"
-								aria-autocomplete="list"
-								aria-describedby={[
-									references ? instructionsId : undefined,
-									banner?.id,
-									notice ? cueId : undefined,
-								].filter(Boolean).join(" ") || undefined}
-								aria-disabled={!draftable || sending}
-								aria-invalid={error || undefined}
-								readOnly={!draftable || sending}
-								role="combobox"
-								onSubmit={onSubmit}
-								placeholder={chopin ? "Ask Chopin…" : "Message your collaborators…"}
-								ref={inputRef}
-							/>
+							{/* The chip floats at the start of the field, so the first line begins after it and the rest run under it. */}
+							<div className="composer-field">
+								{chip && chopin && (
+									<ChopinChip
+										disabled={chopin.disabled || !draftable || sending}
+										onRemove={chopin.onRemove}
+									/>
+								)}
+								<DraftInput
+									aria-activedescendant={input["aria-activedescendant"]}
+									aria-controls={input["aria-controls"]}
+									aria-expanded={input["aria-expanded"]}
+									historyGroupKey={chip}
+									mentions={input.mentions}
+									onBlur={input.onBlur}
+									onChange={input.onChange}
+									onKeyDown={input.onKeyDown}
+									onSelect={input.onSelect}
+									references={input.references}
+									resetKey={input.resetKey}
+									value={input.value}
+									aria-label="Message"
+									aria-autocomplete="list"
+									aria-describedby={[
+										references ? instructionsId : undefined,
+										banner?.id,
+										notice ? cueId : undefined,
+									].filter(Boolean).join(" ") || undefined}
+									aria-disabled={!draftable || sending}
+									aria-invalid={error || undefined}
+									readOnly={!draftable || sending}
+									role="combobox"
+									onSubmit={onSubmit}
+									placeholder={draftPlaceholder({ agent, chip })}
+									ref={inputRef}
+								/>
+							</div>
 
 							<div className="composer-row">
 								<div className="composer-left">
@@ -349,12 +341,20 @@ export function ChatComposer(
 											<AtSignIcon size={16} />
 										</button>
 									)}
-									{mode && (
-										<ModeSwitch
-											effectiveMode={chopin}
-											disabled={mode.disabled}
-											onToggle={mode.onToggle}
-										/>
+									{chopin && (
+										<button
+											type="button"
+											className="btn btn-icon btn-ghost"
+											aria-keyshortcuts="Control+J Meta+J"
+											aria-label="Ask Chopin"
+											title="Ask Chopin"
+											data-tooltip="Ask Chopin"
+											data-tooltip-verbatim=""
+											disabled={chopin.disabled || chip}
+											onClick={chopin.onAdd}
+										>
+											<SparkleIcon size={16} />
+										</button>
 									)}
 									{model && <ModelPill control={model} />}
 								</div>
