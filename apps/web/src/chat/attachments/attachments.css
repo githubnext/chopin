@@ -22,12 +22,8 @@
 	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 1) calc(var(--spacing) * 1)
 		calc(var(--spacing) * 1);
 	overflow: hidden;
-	border: var(--edge-width) solid var(--color-edge);
-	border-radius: var(--radius-md);
-	background: var(--color-page);
-}
-.composer-file[data-state="error"] {
-	border-color: var(--color-danger-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-inset);
 }
 .composer-file-visual {
 	display: inline-flex;
@@ -37,8 +33,8 @@
 	width: 2rem;
 	height: 2rem;
 	overflow: hidden;
-	border-radius: var(--radius-sm);
-	background: var(--color-inset);
+	border-radius: var(--radius-md);
+	background: var(--color-page);
 	color: var(--color-text-tertiary);
 }
 .composer-file[data-state="error"] .composer-file-visual {
@@ -99,8 +95,7 @@
 .message-file-image {
 	display: block;
 	overflow: hidden;
-	border: var(--edge-width) solid var(--color-edge);
-	border-radius: var(--radius-md);
+	border-radius: var(--radius-lg);
 	background: var(--color-inset);
 }
 .message-file-image img {
@@ -116,12 +111,14 @@
 	max-width: 100%;
 	padding: calc(var(--spacing) * 1);
 	padding-inline-end: calc(var(--spacing) * 2.5);
-	border: var(--edge-width) solid var(--color-edge);
-	border-radius: var(--radius-md);
-	background: var(--color-page);
+	border-radius: var(--radius-lg);
+	background: var(--color-inset);
 	color: inherit;
 	text-decoration: none;
 }
 .message-file-chip:hover {
 	background: var(--color-hover);
+}
+.message-file-chip .composer-file-visual {
+	background: var(--color-page);
 }
