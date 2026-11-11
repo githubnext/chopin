@@ -972,6 +972,22 @@ function conversation(
 }
 
 /**
+ * A message an earlier release held for a machine is left as an ordinary posted message: nothing
+ * is held now, so it is never taken by a Planner, and its row is closed. Only the holder of the
+ * writer lease changes it, so an old process serving beside this one is never changed under it.
+ */
+async function retireHeldMessages(): Promise<void> {
+	let lease = writerLease.held;
+	if (!lease) return;
+	let retired = await storage.deferredTurns.retire(lease, new Date());
+	if (retired > 0) {
+		console.log(
+			`chopin: ${retired} message(s) an earlier release held for a Planner were left as ordinary messages`,
+		);
+	}
+}
+
+/**
  * Open a root's room and its Chat, holding it, and `alsoHold`, until `release`.
  *
  * Refuses a root being archived or deleted rather than reopening it.
@@ -3446,6 +3462,10 @@ try {
 		console.error(`chopin: ${index} does not exist, so this process stays not ready`);
 	} else {
 		readiness.started();
+		// Off the readiness path: a message an earlier release held is left as an ordinary one.
+		void retireHeldMessages().catch(err =>
+			console.error("chopin: could not close the messages an earlier release held -", err)
+		);
 		let held = requests.release();
 		console.log(
 			`chopin: ready ${
