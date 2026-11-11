@@ -17,6 +17,7 @@ type Measured = {
 	padding: Sides;
 	border: Sides;
 	radius: number;
+	radii: Sides;
 	gap: number;
 	fontSize: number;
 	lineHeight: number;
@@ -41,6 +42,12 @@ async function measure(element: Locator): Promise<Measured> {
 				style.borderLeftWidth,
 			].map(px),
 			radius: px(style.borderTopLeftRadius),
+			radii: [
+				style.borderTopLeftRadius,
+				style.borderTopRightRadius,
+				style.borderBottomRightRadius,
+				style.borderBottomLeftRadius,
+			].map(px),
 			gap: px(style.columnGap),
 			fontSize: px(style.fontSize),
 			lineHeight: px(style.lineHeight),
@@ -50,8 +57,11 @@ async function measure(element: Locator): Promise<Measured> {
 
 /** Every measured property that the element's own classes decide equals the class's pixels. */
 async function expectClassGeometry(element: Locator, label: string) {
-	let className = (await element.getAttribute("class")) ?? "";
-	let want = expected(className);
+	let [className, tagName] = await element.evaluate(node => [
+		node.getAttribute("class") ?? "",
+		node.tagName.toLowerCase(),
+	]);
+	let want = expected(className, tagName);
 	let got = await measure(element);
 	let at = `${label} (${className})`;
 	if (want.height !== undefined) expect(got.height, `${at} height`).toBeCloseTo(want.height, 1);
@@ -61,7 +71,13 @@ async function expectClassGeometry(element: Locator, label: string) {
 			.toBeCloseTo(side, 2);
 	}
 	expect(got.border, `${at} border widths`).toEqual(want.border);
-	if (want.radius === Infinity) expect(got.radius, `${at} radius`).toBeGreaterThan(1000);
+	if (want.radii) {
+		for (let corner of [0, 1, 2, 3] as const) {
+			if (want.radii[corner] === Infinity) {
+				expect(got.radii[corner], `${at} corner ${corner}`).toBeGreaterThan(1000);
+			} else expect(got.radii[corner], `${at} corner ${corner}`).toBeCloseTo(want.radii[corner], 2);
+		}
+	} else if (want.radius === Infinity) expect(got.radius, `${at} radius`).toBeGreaterThan(1000);
 	else expect(got.radius, `${at} radius`).toBeCloseTo(want.radius, 2);
 	if (want.gap !== undefined) expect(got.gap, `${at} gap`).toBeCloseTo(want.gap, 2);
 	if (want.fontSize !== undefined) {
@@ -84,6 +100,7 @@ const ROOTS = {
 		"composer-voice",
 		"composer-voice-button",
 		"message-attachments",
+		"markdown-text",
 	],
 	open: [
 		"model-selector-content",
@@ -102,8 +119,35 @@ const BOXES = [
 	'[data-slot="composer-attachment"] > span:first-child',
 	'[data-slot="message-attachments"] > *',
 ] as const;
+const MARKDOWN_PARTS: readonly [label: string, select: (root: Locator) => Locator][] = [
+	["h1", root => root.locator(".aui-md-h1")],
+	["h2", root => root.locator(".aui-md-h2").first()],
+	["h3", root => root.locator(".aui-md-h3")],
+	["h4", root => root.locator(".aui-md-h4")],
+	["h5", root => root.locator(".aui-md-h5")],
+	["h6", root => root.locator(".aui-md-h6")],
+	["p", root => root.locator(".aui-md-p").first()],
+	["a", root => root.locator(".aui-md-a").first()],
+	["blockquote", root => root.locator(".aui-md-blockquote")],
+	["ul", root => root.locator(".aui-md-ul").first()],
+	["ol", root => root.locator(".aui-md-ol").first()],
+	["li", root => root.locator(".aui-md-li").first()],
+	["hr", root => root.locator(".aui-md-hr")],
+	["table-wrapper", root => root.locator(".aui-md-table-wrapper")],
+	["table", root => root.locator(".aui-md-table")],
+	["th", root => root.locator(".aui-md-th").nth(1)],
+	["td", root => root.locator(".aui-md-td").first()],
+	["tr", root => root.locator("tbody .aui-md-tr").nth(1)],
+	["strong", root => root.locator(".aui-md-strong")],
+	["sup", root => root.locator(".aui-md-sup")],
+	["inline-code", root => root.locator(".aui-md-inline-code")],
+	["code-header", root => root.locator(".aui-code-header-root")],
+	["code-language", root => root.locator(".aui-code-header-language")],
+	["copy-button", root => root.locator(".aui-button-icon")],
+	["pre", root => root.locator(".aui-md-pre")],
+];
 const TARGETS =
-	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button';
+	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button, [data-slot="markdown-text"] .aui-button-icon, [data-slot="markdown-text"] .aui-md-a';
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 const effortRadios = (page: Page) => slot(page, "model-selector-effort").getByRole("radio");
 
@@ -124,7 +168,7 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 	let checked = 0;
 	for (let name of ROOTS.closed) {
 		let elements = plate(page, "assistant-ui").locator(`[data-slot="${name}"]`);
-		expect(await elements.count()).toBeGreaterThan(1);
+		expect(await elements.count()).toBeGreaterThan(0);
 		for (let index = 0; index < await elements.count(); index++) {
 			await expectClassGeometry(elements.nth(index), name);
 			checked++;
@@ -139,6 +183,23 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 			checked++;
 		}
 	}
+	let markdown = plate(page, "assistant-ui").locator('[data-slot="markdown-text"]');
+	for (let [label, select] of MARKDOWN_PARTS) {
+		let part = select(markdown);
+		await expect(part, `markdown ${label} is drawn`).toBeVisible();
+		await expectClassGeometry(part, `markdown ${label}`);
+		checked++;
+	}
+	let copy = markdown.locator(".aui-button-icon");
+	await copy.scrollIntoViewIfNeeded();
+	await copy.hover();
+	await expect(slot(page, "tooltip-content")).toBeVisible();
+	await expect.poll(() =>
+		slot(page, "tooltip-content").evaluate(node => getComputedStyle(node).opacity)
+	).toBe("1");
+	await expectClassGeometry(slot(page, "tooltip-content"), "tooltip-content");
+	checked++;
+
 	await openSelector(page);
 	for (let name of ROOTS.open) {
 		let elements = slot(page, name);
@@ -154,11 +215,45 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 		await expectClassGeometry(radios.nth(index), "effort radio");
 		checked++;
 	}
-	expect(checked).toBe(52);
+	expect(checked).toBe(79);
 });
 
 test("assistant-ui's own radii, in pixels, where Chopin's scale differs", async ({ page }) => {
-	// Tailwind's `rounded-xl` is 12px and Chopin's is 10px: the popup and its list are the proof.
+	// Tailwind's `rounded-xl` is 12px and Chopin's is 10px: the popup, its list and the code block
+	// header and body are the proof. The hand-adapted code header was 28px tall (9px shorter), with a
+	// 6px radius and 2px by 12px/4px padding; assistant-ui's is 37px tall (`py-1.5` + `size-6` + 1px
+	// top border), with 12px top corners and 6px by 14px padding.
+	let markdown = plate(page, "assistant-ui").locator('[data-slot="markdown-text"]');
+	let codeHeader = await measure(markdown.locator(".aui-code-header-root"));
+	expect(codeHeader.height).toBeCloseTo(37, 1);
+	expect(codeHeader.padding).toEqual([6, 14, 6, 14]);
+	expect(codeHeader.border).toEqual([1, 1, 0, 1]);
+	expect(codeHeader.radii).toEqual([12, 12, 0, 0]);
+	expect([codeHeader.fontSize, codeHeader.lineHeight]).toEqual([12, 16]);
+
+	let copyButton = await measure(markdown.locator(".aui-button-icon"));
+	expect([copyButton.width, copyButton.height]).toEqual([24, 24]);
+	expect(copyButton.padding).toEqual([4, 4, 4, 4]);
+	expect(copyButton.radius).toBe(8);
+
+	let pre = await measure(markdown.locator(".aui-md-pre"));
+	expect(pre.padding).toEqual([14, 14, 14, 14]);
+	expect(pre.border).toEqual([0, 1, 1, 1]);
+	expect(pre.radii).toEqual([0, 0, 12, 12]);
+	expect(pre.fontSize).toBe(13);
+
+	expect((await measure(markdown.locator(".aui-md-th").first())).radii).toEqual([8, 0, 0, 0]);
+	expect((await measure(markdown.locator(".aui-md-th").last())).radii).toEqual([0, 8, 0, 0]);
+	expect(
+		(await measure(markdown.locator("tbody .aui-md-tr").last().locator(".aui-md-td").first()))
+			.radii,
+	).toEqual([0, 0, 0, 8]);
+	let bottomRightCell = await measure(
+		markdown.locator("tbody .aui-md-tr").last().locator(".aui-md-td").last(),
+	);
+	expect(bottomRightCell.radii).toEqual([0, 0, 8, 0]);
+	expect(bottomRightCell.border).toEqual([0, 1, 1, 1]);
+
 	await openSelector(page);
 	expect((await measure(slot(page, "model-selector-content"))).radius).toBe(12);
 	expect((await measure(slot(page, "command").first())).radius).toBe(12);

@@ -34,6 +34,7 @@ export type Geometry = {
 	padding?: Partial<Record<0 | 1 | 2 | 3, number>>;
 	border: Sides;
 	radius: number;
+	radii?: Sides;
 	gap?: number;
 	fontSize?: number;
 	lineHeight?: number;
@@ -43,8 +44,8 @@ let step = (value: string): number | undefined =>
 	value === "px" ? 1 : /^\d+(\.\d+)?$/.test(value) ? Number(value) * UNIT : undefined;
 
 /** What a class list means, for the properties the audit measures. Variants and arbitrary values are not read. */
-export function expected(className: string): Geometry {
-	let result: Geometry = { border: [0, 0, 0, 0], radius: 0 };
+export function expected(className: string, tagName?: string): Geometry {
+	let result: Geometry = { border: tagName === "hr" ? [1, 0, 0, 0] : [0, 0, 0, 0], radius: 0 };
 	let classes = className.split(/\s+/).map(item => item.replace(/^!|!$/g, "")).filter(item =>
 		item && !item.includes(":") && !item.includes("[&")
 	);
@@ -71,6 +72,7 @@ export function expected(className: string): Geometry {
 			});
 		}
 	}
+	let corners: Sides = [0, 0, 0, 0];
 	for (let item of classes) {
 		let size = /^size-(.+)$/.exec(item)?.[1];
 		let height = /^h-(.+)$/.exec(item)?.[1];
@@ -85,13 +87,33 @@ export function expected(className: string): Geometry {
 		if (width && step(width) !== undefined) result.width = step(width);
 		let gap = /^gap-(.+)$/.exec(item)?.[1];
 		if (gap && step(gap) !== undefined) result.gap = step(gap);
-		let rounded = /^rounded(?:-(.+))?$/.exec(item);
+		let rounded = /^rounded(?:-(t|r|b|l|s|e|tl|tr|br|bl|ss|se|ee|es))?(?:-(.+))?$/.exec(item);
 		if (rounded) {
-			let key = rounded[1] ?? "sm";
-			if (key === "full") result.radius = Infinity;
-			else if (key in RADIUS) result.radius = RADIUS[key]!;
+			let place = rounded[1];
+			let key = rounded[2] ?? "sm";
+			let value = key === "full" ? Infinity : key in RADIUS ? RADIUS[key] : undefined;
+			if (value !== undefined) {
+				let target = !place
+					? [0, 1, 2, 3]
+					: place === "t"
+					? [0, 1]
+					: place === "r" || place === "e"
+					? [1, 2]
+					: place === "b"
+					? [2, 3]
+					: place === "l" || place === "s"
+					? [0, 3]
+					: place === "tl" || place === "ss"
+					? [0]
+					: place === "tr" || place === "se"
+					? [1]
+					: place === "br" || place === "ee"
+					? [2]
+					: [3];
+				for (let index of target) corners[index as 0 | 1 | 2 | 3] = value;
+			}
 		}
-		let border = /^border(?:-([trblxy]))?(?:-(\d+))?$/.exec(item);
+		let border = /^border(?:-([trblxyse]))?(?:-(\d+))?$/.exec(item);
 		if (border) {
 			let width = border[2] === undefined ? 1 : Number(border[2]);
 			let side = border[1];
@@ -100,19 +122,21 @@ export function expected(className: string): Geometry {
 			};
 			if (!side) [0, 1, 2, 3].forEach(on);
 			else if (side === "t") on(0);
-			else if (side === "r") on(1);
+			else if (side === "r" || side === "e") on(1);
 			else if (side === "b") on(2);
-			else if (side === "l") on(3);
+			else if (side === "l" || side === "s") on(3);
 			else if (side === "x") [1, 3].forEach(on);
 			else [0, 2].forEach(on);
 		}
 		let text = /^text-(xs|sm|base|lg|xl|2xl)$/.exec(item)?.[1];
 		if (text) [result.fontSize, result.lineHeight] = TEXT[text]!;
 		let corner = /^rounded-\[(\d+(?:\.\d+)?)px\]$/.exec(item)?.[1];
-		if (corner) result.radius = Number(corner);
+		if (corner) corners = [Number(corner), Number(corner), Number(corner), Number(corner)];
 		let literal = /^text-\[(\d+(?:\.\d+)?)px\]$/.exec(item)?.[1];
 		if (literal) result.fontSize = Number(literal);
 		if (classes.some(leading => leading.startsWith("leading-"))) delete result.lineHeight;
 	}
+	result.radius = corners[0];
+	if (corners.some(corner => corner !== corners[0])) result.radii = corners;
 	return result;
 }
