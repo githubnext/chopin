@@ -234,20 +234,16 @@ test("lists Chat's own command and the commands the attached client reports, gro
 	let commands = menu(page, "Commands");
 	await expect(commands).toBeVisible();
 	await expect(input).toHaveAttribute("aria-expanded", "true");
-	await expect(commands.getByRole("group")).toHaveCount(4, { timeout: 15_000 });
-	await expect(commands.getByRole("group").getByRole("option")).toHaveCount(5);
-	// The active row, the first, also shows its enter hint.
-	await expect(commands.getByRole("group", { name: "Built in" }).getByRole("option")).toHaveText([
+	await expect(commands.getByRole("option")).toHaveCount(5, { timeout: 15_000 });
+	// Chat's own first, then what the client reported, as it reported it. The active row, the
+	// first, also shows its enter hint.
+	await expect(commands.getByRole("option")).toHaveText([
 		"/researchSearch the web for this document↵",
-	]);
-	await expect(commands.getByRole("group", { name: "Prompt templates" }).getByRole("option"))
-		.toHaveText(["/reviewReview the current diff"]);
-	await expect(commands.getByRole("group", { name: "Skills" }).getByRole("option")).toHaveText([
+		"/reviewReview the current diff",
 		"/skill:release-notesDraft release notes from merged pull requests",
 		"/skill:notes",
+		"/shipShip a branch through the release workflow",
 	]);
-	await expect(commands.getByRole("group", { name: "Workflows" }).getByRole("option"))
-		.toHaveText(["/shipShip a branch through the release workflow"]);
 	await expect(commands.getByRole("option").first()).toHaveAttribute("aria-selected", "true");
 	await shoot(page, "commands-desktop");
 	await expectAccessible(page, "[data-chat-command-picker]");
@@ -408,7 +404,6 @@ test("a client that reports no commands offers only Chat's own, and another docu
 	await expect(commands.getByRole("option")).toHaveText([
 		"/researchSearch the web for this document↵",
 	]);
-	await expect(commands.getByRole("group")).toHaveCount(1);
 	await page.keyboard.press("Escape");
 	await older.client.detach();
 
@@ -441,7 +436,7 @@ test("on a phone the list stays inside the screen and Chat does not scroll sidew
 	await input.click();
 	await page.keyboard.type("/");
 	let commands = menu(page, "Commands");
-	await expect(commands.getByRole("group")).toHaveCount(4, { timeout: 15_000 });
+	await expect(commands.getByRole("option")).toHaveCount(5, { timeout: 15_000 });
 	await expectInsideViewport(chat(page).locator("[data-chat-command-picker]"));
 	await expectNoHorizontalOverflow(page);
 	await expectAccessible(page, "[data-chat-command-picker]");
@@ -519,24 +514,18 @@ test("@ also lists the document's sections, Decisions and research cards and the
 	await input.click();
 	await page.keyboard.type("@");
 	await expect(mentions).toBeVisible();
-	await expect(mentions.getByRole("group", { name: "Sections" }).getByRole("option")).toHaveText([
+	// One list, as assistant-ui's Mentions is: Chopin, then each part of the document with its level
+	// or what it is at the end of its row.
+	await expect(mentions.getByRole("option")).toHaveText([
+		"Chopinagent",
 		"OverviewH1",
 		"Site surveyH2",
-	]);
-	await expect(mentions.getByRole("group", { name: "Decisions" }).getByRole("option")).toHaveText([
-		"Rollout",
-	]);
-	await expect(mentions.getByRole("group", { name: "Research" }).getByRole("option")).toHaveText([
-		"Release Research",
-	]);
-	await expect(mentions.getByRole("group", { name: "Files" }).getByRole("option")).toHaveText([
-		"README.md",
-		"docs/design.md",
-		"src/index.ts",
-		"src/chat/composer.tsx",
-	]);
-	await expect(mentions.getByRole("group", { name: "Chopin" }).getByRole("option")).toHaveText([
-		"chopin",
+		"Rolloutdecision",
+		"Release Researchresearch",
+		"README.mdfile",
+		"docs/design.mdfile",
+		"src/index.tsfile",
+		"src/chat/composer.tsxfile",
 	]);
 	await shoot(page, "mentions-desktop");
 	await expectAccessible(page, "[data-chat-mention-picker]");
@@ -552,13 +541,13 @@ test("@ also lists the document's sections, Decisions and research cards and the
 
 	// A Decision.
 	await page.keyboard.type("and @roll");
-	await expect(mentions.getByRole("option")).toHaveText(["Rollout"]);
+	await expect(mentions.getByRole("option")).toHaveText(["Rolloutdecision"]);
 	await page.keyboard.press("Enter");
 	await expect(input.locator('.draft-reference[data-reference="decision"]')).toHaveText("@Rollout");
 
 	// A research card, drawn as the research reference it is.
 	await page.keyboard.type("with @release r");
-	await expect(mentions.getByRole("option")).toHaveText(["Release Research"]);
+	await expect(mentions.getByRole("option")).toHaveText(["Release Researchresearch"]);
 	await page.keyboard.press("Enter");
 	await expect(input.locator('.draft-reference[data-reference="research"]')).toHaveText(
 		"%Release Research",
@@ -566,7 +555,7 @@ test("@ also lists the document's sections, Decisions and research cards and the
 
 	// A file, by the end of its name or any part of its path.
 	await page.keyboard.type("in @comp");
-	await expect(mentions.getByRole("option")).toHaveText(["src/chat/composer.tsx"]);
+	await expect(mentions.getByRole("option")).toHaveText(["src/chat/composer.tsxfile"]);
 	await page.keyboard.press("Enter");
 	await expect(input.locator('.draft-reference[data-reference="file"]')).toHaveText(
 		"@src/chat/composer.tsx",
@@ -613,17 +602,17 @@ test("@ keeps Chopin and the people here, and offers no part of a document that 
 	let mentions = menu(page, "Mentions");
 	await input.click();
 	await page.keyboard.type("@ch");
-	await expect(mentions.getByRole("option", { name: "chopin", exact: true })).toBeVisible();
+	await expect(mentions.getByRole("option", { name: /^Chopin/ })).toBeVisible();
 	await page.keyboard.press("Enter");
-	await expectChatValue(input, "@chopin ");
+	// Chopin is the chip, not words in the draft.
+	await expectChatValue(input, "");
+	await expect(chat(page).getByRole("group", { name: "Asking Chopin", exact: true })).toBeVisible();
 	await fillChat(input, "@");
 	// A document with only its title lists that, its files and the people, and no Decision or card.
-	await expect(mentions.getByRole("group", { name: "Files" })).toBeVisible();
-	await expect(mentions.getByRole("group", { name: "Sections" }).getByRole("option")).toHaveCount(
-		1,
-	);
-	await expect(mentions.getByRole("group", { name: "Decisions" })).toHaveCount(0);
-	await expect(mentions.getByRole("group", { name: "Research" })).toHaveCount(0);
+	await expect(mentions.getByRole("option").filter({ hasText: /file$/ })).toHaveCount(4);
+	await expect(mentions.getByRole("option").filter({ hasText: /H\d$/ })).toHaveCount(1);
+	await expect(mentions.getByRole("option").filter({ hasText: /decision$/ })).toHaveCount(0);
+	await expect(mentions.getByRole("option").filter({ hasText: /research$/ })).toHaveCount(0);
 	// An address in a sentence is not a mention.
 	await fillChat(input, "mail a@b");
 	await expect(mentions).toHaveCount(0);
@@ -642,7 +631,9 @@ test("on a phone the @ list stays inside the screen", async ({ browser }) => {
 	await input.click();
 	await page.keyboard.type("@");
 	let mentions = menu(page, "Mentions");
-	await expect(mentions.getByRole("group", { name: "Sections" })).toBeVisible({ timeout: 15_000 });
+	await expect(mentions.getByRole("option").filter({ hasText: /H\d$/ }).first()).toBeVisible({
+		timeout: 15_000,
+	});
 	await expectInsideViewport(chat(page).locator("[data-chat-mention-picker]"));
 	await expectNoHorizontalOverflow(page);
 	await shoot(page, "mentions-phone");

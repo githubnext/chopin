@@ -459,12 +459,9 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 	);
 
 	await expectChatValue(draft, "");
-	if (
-		await chat.getByRole("button", { name: "Talk to Chopin", exact: true }).getAttribute(
-			"aria-pressed",
-		) === "true"
-	) {
-		await draft.press("Shift+Tab");
+	// The chip is on only if it was asked for: a typed @chopin leaves none behind.
+	if (await chat.getByRole("group", { name: "Asking Chopin", exact: true }).count()) {
+		await draft.press("Backspace");
 	}
 	await draft.fill("Keep the release notes brief.");
 	await expect(send).toBeEnabled();

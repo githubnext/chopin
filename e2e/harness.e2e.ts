@@ -107,6 +107,58 @@ test("a scripted Planner turn reaches read_plan and list_pull_requests through r
 	await expect(reloadedChat.getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible();
 });
 
+test("a message with the Chopin chip reaches the Planner, which takes a turn, and one without it goes to the team alone", async ({ join, page, seed }) => {
+	await seed("# Chip routing\nThe harp needs new strings.\n");
+	let sent: Chat.Send[] = [];
+	let states: Chat.State[] = [];
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => {
+			if (typeof message === "string" && message.includes('"chat:send"')) {
+				sent.push(JSON.parse(message) as Chat.Send);
+			}
+			server.send(message);
+		});
+		server.onMessage(message => {
+			if (typeof message === "string") {
+				let frame = JSON.parse(message) as { kind: string };
+				if (frame.kind === "chat:state") states.push(frame as Chat.State);
+			}
+			route.send(message);
+		});
+	});
+	let opened = await join("ana");
+	let chat = chatPane(opened);
+	let draft = chatInput(chat);
+	let chip = chat.getByRole("group", { name: "Asking Chopin", exact: true });
+
+	// With the chip the message is Chopin's: it goes to the Planner, which takes a turn and answers.
+	await chat.getByRole("button", { name: "Ask Chopin", exact: true }).click();
+	await expect(chip).toBeVisible();
+	await draft.fill("what does the plan say?");
+	await draft.press("Enter");
+	await expect.poll(() => states.some(frame => frame.busy)).toBe(true);
+	await expect(chat.getByText("Chip routing", { exact: false })).toBeVisible();
+	await expect.poll(() => states.at(-1)?.busy).toBe(false);
+	expect(sent.at(-1)).toMatchObject({ to: "planner", text: "@chopin what does the plan say?" });
+	let turns = states.filter(frame => frame.busy).length;
+	expect(turns).toBeGreaterThan(0);
+
+	// The chip stays on, so the next is Chopin's too, until it is removed.
+	await expect(chip).toBeVisible();
+	await chat.getByRole("button", { name: "Remove Chopin", exact: true }).click();
+	await expect(chip).toHaveCount(0);
+
+	// Without it the message is the team's: it is in the Chat, and the Planner is not asked.
+	await draft.fill("thanks, both of you");
+	await draft.press("Enter");
+	await expect(chat.getByText("thanks, both of you", { exact: true })).toBeVisible();
+	expect(sent.at(-1)).toMatchObject({ to: "room", text: "thanks, both of you" });
+	await expect.poll(() => sent.length).toBe(2);
+	await expect(chat.getByRole("button", { name: "Stop generating" })).toHaveCount(0);
+	expect(states.filter(frame => frame.busy).length).toBe(turns);
+});
+
 test("tool activity redacts credential text before broadcast and history replay", async ({ join, page, seed }) => {
 	await seed(
 		'# Credential fixture\n\n```json\n{"password":"synthetic-password","AWS_SECRET_ACCESS_KEY":"synthetic-aws-secret","region":"eu-test-1"}\n```\n',
@@ -559,9 +611,8 @@ for (
 		let result = await new AxeBuilder({ page }).include("[data-error-banner]").analyze();
 		expect(result.violations).toEqual([]);
 
-		// From the keyboard: Shift+Tab in the composer's field switches whom a message is for, so
-		// Retry is reached forward, from the Chat's own first control, and shows its ring; Enter
-		// asks again.
+		// From the keyboard: Retry is reached forward, from the Chat's own first control, and shows
+		// its ring; Enter asks again.
 		let retry = banner.getByRole("button", { name: "Retry", exact: true });
 		await chat.getByRole("button").first().focus();
 		let visited: string[] = [];
