@@ -29,8 +29,8 @@ import {
 	ExternalLinkIcon,
 	ImageOffIcon,
 	LinkIcon,
-	SparklesIcon,
-} from "lucide-react";
+	SparkleIcon,
+} from "@chopin/icons";
 
 import { formatBytes } from "@chopin/protocol/attachment";
 import { ImageActions, ImagePreview, ImageRoot } from "@/components/assistant-ui/elements/image";
@@ -296,7 +296,7 @@ function ImageMeta({ image, label }: { image: ChatImageData; label: string }) {
 			<span aria-hidden="true" className="chat-image-alt">{label}</span>
 			{image.generated && image.alt?.trim() && (
 				<span className="chat-image-generated">
-					<SparklesIcon aria-hidden="true" size={12} />
+					<SparkleIcon aria-hidden="true" size={12} />
 					Generated
 				</span>
 			)}
