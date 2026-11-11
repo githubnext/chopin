@@ -592,10 +592,14 @@ test("opens, searches, moves and chooses from the keyboard", async ({ browser })
 	// A pointer outside the popover closes it and leaves the draft's focus alone.
 	await trigger(page).click();
 	await expect(popover(page)).toBeVisible();
-	// The draft's far corner, which the popover over its start does not cover.
+	// A corner of the draft that the popover does not cover: it opens level with the pill, which the
+	// row's other controls (the + and the microphone among them) push along the box, so it may cover
+	// the far corner and leave the near one.
 	let draft = chatInput(chat(page));
 	let corner = (await draft.boundingBox())!;
-	await draft.click({ position: { x: corner.width - 6, y: 6 } });
+	let covered = (await popover(page).boundingBox())!;
+	let near = covered.x > corner.x + 12;
+	await draft.click({ position: { x: near ? 6 : corner.width - 6, y: 6 } });
 	await expect(popover(page)).toHaveCount(0);
 	await expect(draft).toBeFocused();
 	await client.detach();

@@ -11,17 +11,7 @@ import { SQL } from "bun";
 
 import { connectAgent } from "../packages/agent-link/src/client";
 import { finishTurn } from "../apps/server/src/testing/agent-link";
-import {
-	chat,
-	chip,
-	choose,
-	composer,
-	NOTES,
-	paperclip,
-	PNG,
-	SHOT,
-	strip,
-} from "./chat-attachments";
+import { chat, chip, choose, composer, NOTES, plus, PNG, SHOT, strip } from "./chat-attachments";
 import { chatInput, fillChat } from "./chat-input";
 import { createChannel, registerTestDatabase } from "./database";
 import { e2eDatabaseName, e2ePort } from "./ports";
@@ -208,26 +198,35 @@ async function newRoom() {
 	return room;
 }
 
-function toggle(page: Page) {
-	return chat(page).getByRole("button", { name: "Talk to Chopin", exact: true });
+/** The sparkle button that puts the @Chopin chip on, the chip that says so, and its cross. */
+function ask(page: Page) {
+	return chat(page).getByRole("button", { name: "Ask Chopin", exact: true });
+}
+
+function asking(page: Page) {
+	return chat(page).getByRole("group", { name: "Asking Chopin", exact: true });
+}
+
+function remove(page: Page) {
+	return chat(page).getByRole("button", { name: "Remove Chopin", exact: true });
 }
 
 const REASON = "This model can't read images, so only text files can be sent to it.";
 
-test("a model that cannot read images is not sent one: the paperclip says why, and an image is refused with the reason", async ({ browser }) => {
+test("a model that cannot read images is not sent one: the + says why, and an image is refused with the reason", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await newRoom();
 	let page = await open(browser, room);
 	let { client, asked } = await attachClient(room, TEXT_ONLY, true);
 	await expect(chat(page)).toBeVisible();
-	await expect(toggle(page)).toBeVisible();
+	await expect(ask(page)).toBeVisible();
 
 	// To the room, anyone reads an image: nothing is said.
-	await expect(paperclip(page)).toHaveAttribute("title", "Add files");
-	await toggle(page).click();
-	await expect(toggle(page)).toHaveAttribute("aria-pressed", "true");
-	await expect(paperclip(page)).toHaveAttribute("title", `Add files. ${REASON}`);
-	await expect(paperclip(page)).toHaveAccessibleDescription(REASON);
+	await expect(plus(page)).toHaveAttribute("title", "Add files");
+	await ask(page).click();
+	await expect(asking(page)).toBeVisible();
+	await expect(plus(page)).toHaveAttribute("title", `Add files. ${REASON}`);
+	await expect(plus(page)).toHaveAccessibleDescription(REASON);
 	// The picker offers text, which is what can be sent.
 	await expect(composer(page).locator("[data-chat-file-input]")).toHaveAttribute(
 		"accept",
@@ -237,17 +236,22 @@ test("a model that cannot read images is not sent one: the paperclip says why, a
 	await choose(page, SHOT);
 	let refused = chip(page, "shot.png");
 	await expect(refused).toHaveAttribute("data-state", "error");
-	await expect(refused.getByRole("alert")).toHaveText(
+	await expect(refused).toContainText(
 		"This model can't read images. Send it as text, or to the room.",
 	);
+	await expect(
+		composer(page).getByRole("alert").filter({
+			hasText: "This model can't read images. Send it as text, or to the room.",
+		}),
+	).toHaveCount(1);
 	await expect(refused.getByRole("button", { name: /again/ })).toHaveCount(0);
 	await expect(composer(page).getByRole("button", { name: "Send message" })).toBeDisabled();
 
 	// For the room it is fine again: the file was never touched, only the message's address changed.
-	await toggle(page).click();
+	await remove(page).click();
 	await expect(refused).toHaveAttribute("data-state", "done");
-	await expect(paperclip(page)).toHaveAttribute("title", "Add files");
-	await toggle(page).click();
+	await expect(plus(page)).toHaveAttribute("title", "Add files");
+	await ask(page).click();
 	await expect(refused).toHaveAttribute("data-state", "error");
 	await refused.getByRole("button", { name: "Remove shot.png" }).click();
 
@@ -278,8 +282,8 @@ test("a model that reads images is sent the image as its bytes, with the text fi
 	let room = await newRoom();
 	let page = await open(browser, room);
 	let { client, asked } = await attachClient(room, SEEING, true);
-	await toggle(page).click();
-	await expect(paperclip(page)).toHaveAttribute("title", "Add files");
+	await ask(page).click();
+	await expect(plus(page)).toHaveAttribute("title", "Add files");
 	await expect(composer(page).locator("[data-chat-file-input]")).not.toHaveAttribute(
 		"accept",
 		/.+/,
@@ -294,7 +298,7 @@ test("a model that reads images is sent the image as its bytes, with the text fi
 
 	// It shows at once, as the person's own with its files, and the turn runs.
 	let message = chat(page).locator("[data-chat-message-id]").filter({ hasText: "What is this?" });
-	await expect(message.getByRole("list", { name: "Files sent with this message" })).toBeVisible();
+	await expect(message.getByRole("group", { name: "Files sent with this message" })).toBeVisible();
 	await expect.poll(() => turnFor(asked, "What is this?"), { timeout: 20_000 }).toBeDefined();
 	let seen = turnFor(asked, "What is this?")!;
 	expect(seen.attachments).toHaveLength(2);
@@ -311,9 +315,9 @@ test("a model that reads images is sent the image as its bytes, with the text fi
 
 	// The catalog changing under the composer changes what it offers, live.
 	client.report(TEXT_ONLY);
-	await expect(paperclip(page)).toHaveAttribute("title", `Add files. ${REASON}`);
+	await expect(plus(page)).toHaveAttribute("title", `Add files. ${REASON}`);
 	client.report(SEEING);
-	await expect(paperclip(page)).toHaveAttribute("title", "Add files");
+	await expect(plus(page)).toHaveAttribute("title", "Add files");
 	await client.detach();
 });
 
@@ -322,7 +326,7 @@ test("a client that did not ask for files is told of them in words, never sent a
 	let room = await newRoom();
 	let page = await open(browser, room);
 	let { client, asked } = await attachClient(room, SEEING, false);
-	await toggle(page).click();
+	await ask(page).click();
 	await choose(page, SHOT, NOTES);
 	await expect(chip(page, "shot.png")).toHaveAttribute("data-state", "done");
 	await expect(chip(page, "notes.md")).toHaveAttribute("data-state", "done");
@@ -348,8 +352,8 @@ test("a catalog that names no input types is text only, so a client from before 
 	let { client } = await attachClient(room, {
 		models: { available: [{ id: "acme/old", name: "Old" }], default: { id: "acme/old" } },
 	}, true);
-	await toggle(page).click();
-	await expect(paperclip(page)).toHaveAttribute("title", `Add files. ${REASON}`);
+	await ask(page).click();
+	await expect(plus(page)).toHaveAttribute("title", `Add files. ${REASON}`);
 	await client.detach();
 });
 
@@ -359,14 +363,14 @@ test("a message to the Planner shows its files at once for a second person too",
 	let page = await open(browser, room);
 	let other = await open(browser, room);
 	let { client, asked } = await attachClient(room, SEEING, true);
-	await toggle(page).click();
+	await ask(page).click();
 	await choose(page, SHOT);
 	await expect(chip(page, "shot.png")).toHaveAttribute("data-state", "done");
 	await fillChat(chatInput(chat(page)), "Look");
 	await chatInput(chat(page)).press("Enter");
 	for (let viewer of [page, other]) {
 		let message = chat(viewer).locator("[data-chat-message-id]").filter({ hasText: "Look" });
-		await expect(message.locator("img[alt='shot.png']")).toBeVisible();
+		await expect(message.getByRole("button", { name: /^shot\.png/ })).toBeVisible();
 	}
 	await expect.poll(() => turnFor(asked, "Look"), { timeout: 20_000 }).toBeDefined();
 	await client.detach();

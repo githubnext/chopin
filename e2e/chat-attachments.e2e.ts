@@ -1,6 +1,6 @@
 /**
  * Images and files in Chat, in a real browser against the real server and its storage: adding them
- * by the paperclip, a drop and a paste, their progress, removal and refusals, sending them, and a
+ * by the +, a drop and a paste, their progress, removal and refusals, sending them, and a
  * second person reading them. The fake GitHub decides who can read and who can write.
  */
 import AxeBuilder from "@axe-core/playwright";
@@ -13,8 +13,8 @@ import {
 	drop,
 	leave,
 	NOTES,
-	paperclip,
 	paste,
+	plus,
 	PNG,
 	SHOT,
 	strip,
@@ -23,7 +23,7 @@ import { chatInput, expectChatValue, fillChat } from "./chat-input";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { authenticate, expect, roomPath, test } from "./room";
 
-import type { Browser, Page } from "@playwright/test";
+import type { Browser, Locator, Page } from "@playwright/test";
 
 const PHONE = {
 	hasTouch: true,
@@ -40,8 +40,8 @@ async function openChat(page: Page): Promise<void> {
 }
 
 async function expectAccessible(page: Page): Promise<void> {
-	// The files and the footer that adds them: the field itself is the composer's existing combobox.
-	let result = await new AxeBuilder({ page }).include(".composer-files").include(".composer-footer")
+	// The files above the text and the row that adds them: the field is the composer's existing combobox.
+	let result = await new AxeBuilder({ page }).include(".composer-staging").include(".composer-row")
 		.analyze();
 	expect(
 		result.violations.map(violation =>
@@ -64,18 +64,25 @@ function messages(page: Page) {
 	return chat(page).locator("[data-chat-message-id]");
 }
 
-test("adds a file with the paperclip, shows its name and size, and takes it away again", async ({ join }) => {
+/** The address a sent image's tile is drawn from. */
+async function pictureUrl(tile: Locator): Promise<string> {
+	return tile.locator("span[aria-hidden]").first().evaluate(
+		node => /url\("?([^")]+)"?\)/.exec(getComputedStyle(node).backgroundImage)![1]!,
+	);
+}
+
+test("adds a file with the +, shows its name and size, and takes it away again", async ({ join }) => {
 	let page = await join("ana");
 	await openChat(page);
 	await expect(strip(page)).toHaveCount(0);
-	await expect(paperclip(page)).toBeEnabled();
+	await expect(plus(page)).toBeEnabled();
 
 	await choose(page, NOTES);
 	let notes = chip(page, "notes.md");
 	await expect(notes).toBeVisible();
 	await expect(notes).toContainText("25 B");
 	// Once the server has it the chip is done: no bar, no percent, and a way to take it out.
-	await expect(notes.getByRole("progressbar")).toHaveCount(0);
+	await expect(notes.locator("[aria-hidden][style*='width']")).toHaveCount(0);
 	await expect(notes).toHaveAttribute("data-state", "done");
 
 	let removed = page.waitForRequest(request =>
@@ -127,8 +134,8 @@ test("keeps the drop edge while a drag moves between the composer's own parts, a
 	let surface = composer(page).locator(".composer-surface");
 	await drop(page, [SHOT], { over: true });
 	await expect(surface).toHaveAttribute("data-dropping", "true");
-	// Moving into the footer is not leaving.
-	await leave(page, ".composer-footer");
+	// Moving into the row of controls is not leaving.
+	await leave(page, ".composer-row");
 	await expect(surface).toHaveAttribute("data-dropping", "true");
 	await leave(page);
 	await expect(surface).not.toHaveAttribute("data-dropping", "true");
@@ -167,14 +174,13 @@ test("shows an upload as running while it goes, and as done once the server has 
 	await choose(page, NOTES);
 	let notes = chip(page, "notes.md");
 	await expect(notes).toHaveAttribute("data-state", "uploading");
-	let bar = notes.getByRole("progressbar", { name: "Uploading notes.md" });
-	await expect(bar).toBeVisible();
-	await expect(bar).toHaveAttribute("aria-valuemin", "0");
-	await expect(bar).toHaveAttribute("aria-valuemax", "100");
+	// The chip says how far it is as a percent, and draws a bar along its foot, which is gone when it is done.
+	await expect(notes).toContainText("0%");
+	await expect(notes.locator("[aria-hidden][style*='width']")).toBeAttached();
 	await expect.poll(() => upload.held()).toBe(1);
 	upload.release();
 	await expect(notes).toHaveAttribute("data-state", "done");
-	await expect(notes.getByRole("progressbar")).toHaveCount(0);
+	await expect(notes.locator("[aria-hidden][style*='width']")).toHaveCount(0);
 	await expect(notes).toContainText("25 B");
 });
 
@@ -226,7 +232,11 @@ for (
 		await choose(page, refusal);
 		let refused = chip(page, refusal.name);
 		await expect(refused).toHaveAttribute("data-state", "error");
-		await expect(refused.getByRole("alert")).toHaveText(refusal.reason);
+		await expect(refused).toContainText(refusal.reason);
+		// Said once, to a screen reader, as it appears.
+		await expect(composer(page).getByRole("alert").filter({ hasText: refusal.reason })).toHaveCount(
+			1,
+		);
 		// Nothing a refused file could be tried again for, and none of it left the browser.
 		await expect(refused.getByRole("button", { name: /again/ })).toHaveCount(0);
 		expect(uploads).toBe(0);
@@ -253,9 +263,7 @@ test("refuses the sixth file of a message, and one the document's server says no
 	}
 	await expect(strip(page).getByRole("listitem")).toHaveCount(6);
 	await expect(chip(page, "note-5.txt")).toHaveAttribute("data-state", "error");
-	await expect(chip(page, "note-5.txt").getByRole("alert")).toHaveText(
-		"A message can carry up to 5 files.",
-	);
+	await expect(chip(page, "note-5.txt")).toContainText("A message can carry up to 5 files.");
 	for (let index = 0; index < 5; index++) {
 		await expect(chip(page, `note-${index}.txt`)).toHaveAttribute("data-state", "done");
 	}
@@ -270,7 +278,9 @@ test("shows an upload that did not get through, and sends it again from the chip
 	await choose(page, NOTES);
 	let notes = chip(page, "notes.md");
 	await expect(notes).toHaveAttribute("data-state", "error");
-	await expect(notes.getByRole("alert")).toHaveText("notes.md didn't upload.");
+	await expect(notes).toContainText("notes.md didn't upload.");
+	await expect(composer(page).getByRole("alert").filter({ hasText: "notes.md didn't upload." }))
+		.toHaveCount(1);
 	await expect(composer(page).getByRole("button", { name: "Send message" })).toBeDisabled();
 
 	await page.unroute(route);
@@ -298,29 +308,45 @@ test("sends the message with its files, and a second person reads them", async (
 	for (let page of [ana, reader]) {
 		let message = messages(page).filter({ hasText: "The plan and a picture of the cap" });
 		await expect(message).toHaveCount(1);
-		let files = message.getByRole("list", { name: "Files sent with this message" });
-		await expect(files.getByRole("link", { name: /^Open shot\.png/ })).toBeVisible();
-		await expect(files.locator("img[alt='shot.png']")).toBeVisible();
-		await expect.poll(() =>
-			files.locator("img").evaluate(image => (image as HTMLImageElement).naturalWidth)
+		let files = message.getByRole("group", { name: "Files sent with this message" });
+		await expect(files.getByRole("button", { name: /^shot\.png/ })).toBeVisible();
+		await expect(files.getByRole("button", { name: /^notes\.md/ })).toBeVisible();
+		// The tile of an image is drawn from the stored file itself.
+		let url = await pictureUrl(files.getByRole("button", { name: /^shot\.png/ }));
+		expect(
+			await page.evaluate(async source => {
+				let picture = new Image();
+				picture.src = source;
+				await picture.decode();
+				return picture.naturalWidth;
+			}, url),
 		).toBe(2);
-		await expect(files.getByRole("link", { name: /notes\.md/ })).toHaveAttribute(
-			"download",
-			"notes.md",
-		);
 	}
 	let message = messages(reader).filter({ hasText: "The plan and a picture of the cap" });
-	let image = await message.locator("img").getAttribute("src");
-	let notes = await message.getByRole("link", { name: /notes\.md/ }).getAttribute("href");
+	let files = message.getByRole("group", { name: "Files sent with this message" });
+	let image = await pictureUrl(files.getByRole("button", { name: /^shot\.png/ }));
+	// Pressing an image opens it in a tab of its own; pressing a text file downloads it under its name.
+	let [popup] = await Promise.all([
+		reader.waitForEvent("popup"),
+		files.getByRole("button", { name: /^shot\.png/ }).click(),
+	]);
+	expect(popup.url()).toBe(image);
+	await popup.close();
+	let [saved] = await Promise.all([
+		reader.waitForEvent("download"),
+		files.getByRole("button", { name: /^notes\.md/ }).click(),
+	]);
+	expect(saved.suggestedFilename()).toBe("notes.md");
+	let notes = saved.url();
 
 	// Read by a person who can read the document, as what its bytes are and never as a page.
-	let seen = await reader.request.get(image!);
+	let seen = await reader.request.get(image);
 	expect(seen.status()).toBe(200);
 	expect(seen.headers()["content-type"]).toBe("image/png");
 	expect(seen.headers()["x-content-type-options"]).toBe("nosniff");
 	expect(seen.headers()["content-security-policy"]).toBe("default-src 'none'; sandbox");
 	expect(Buffer.compare(await seen.body(), PNG)).toBe(0);
-	let download = await reader.request.get(notes!);
+	let download = await reader.request.get(notes);
 	expect(download.status()).toBe(200);
 	expect(download.headers()["content-type"]).toBe("text/plain; charset=utf-8");
 	expect(download.headers()["content-disposition"]).toMatch(/^attachment;/);
@@ -330,14 +356,14 @@ test("sends the message with its files, and a second person reads them", async (
 	let outsider = await browser.newContext({ baseURL: baseURL! });
 	let stranger = await outsider.newPage();
 	await authenticate(stranger, `score-outsider-${suffix}`, baseURL!);
-	for (let path of [image!, notes!]) {
+	for (let path of [image, notes]) {
 		let refused = await stranger.request.get(path);
 		expect(refused.status(), path).toBe(404);
 		expect(await refused.text()).toBe("file not found");
 	}
 	let nobody = await browser.newContext({ baseURL: baseURL! });
-	expect((await nobody.request.get(image!)).status()).toBe(404);
-	let missing = await reader.request.get(image!.replace(/[^/]+$/, "missing"));
+	expect((await nobody.request.get(image)).status()).toBe(404);
+	let missing = await reader.request.get(image.replace(/[^/]+$/, "missing"));
 	expect(missing.status()).toBe(404);
 	expect(await missing.text()).toBe("file not found");
 	await outsider.close();
@@ -348,7 +374,7 @@ test("sends the message with its files, and a second person reads them", async (
 test("holds a person who can only read the document to reading it, on the server as in the composer", async ({ room, baseURL, browser }) => {
 	let reader = await readerOf(browser, baseURL!, room, crypto.randomUUID().slice(0, 8));
 	await expect(composer(reader).getByText("Read-only access")).toBeVisible();
-	await expect(paperclip(reader)).toHaveCount(0);
+	await expect(plus(reader)).toHaveCount(0);
 	// Whatever the composer offers, the server decides.
 	let refused = await reader.request.post(
 		`${baseURL}/api/channels/${room}/attachments?name=a.txt`,
@@ -412,7 +438,7 @@ test("a message sent before its files have uploaded waits for them, and goes whe
 	upload.release();
 	let message = messages(page).filter({ hasText: "Sent too soon" });
 	await expect(message).toHaveCount(1);
-	await expect(message.getByRole("link", { name: /notes\.md/ })).toBeVisible();
+	await expect(message.getByRole("button", { name: /^notes\.md/ })).toBeVisible();
 	await expect(strip(page)).toHaveCount(0);
 	await expectChatValue(input, "");
 	await expect(input).toHaveAttribute("aria-readonly", "false");
@@ -449,7 +475,7 @@ test("a message may be only a picture", async ({ join }) => {
 	await choose(page, SHOT);
 	await expect(chip(page, "shot.png")).toHaveAttribute("data-state", "done");
 	await composer(page).getByRole("button", { name: "Send message" }).click();
-	let message = messages(page).filter({ has: page.locator("img[alt='shot.png']") });
+	let message = messages(page).filter({ has: page.locator("[data-slot='message-attachments']") });
 	await expect(message).toHaveCount(1);
 	await expect(message).not.toContainText("Ask Chopin");
 });
@@ -457,19 +483,16 @@ test("a message may be only a picture", async ({ join }) => {
 test("keeps the composer's files usable at a phone's width, and accessible", async ({ join }) => {
 	let page = await join("ana", PHONE);
 	await openChat(page);
-	// At rest the pill is one line: adding files appears with the focus, above the pill and
-	// without moving it, so a tap that began on something above it still lands on it.
+	// The + is in the row at rest, and the box does not move when the field takes the focus.
 	let surface = composer(page).locator(".composer-surface");
-	await expect(paperclip(page)).toBeHidden();
+	await expect(plus(page)).toBeVisible();
 	// Measured once the pane has slid in and come to rest.
 	await expect.poll(async () => (await chat(page).boundingBox())?.x).toBe(0);
 	let resting = (await surface.boundingBox())!;
 	await chatInput(chat(page)).tap();
-	await expect(paperclip(page)).toBeVisible();
+	await expect(plus(page)).toBeVisible();
 	let focused = (await surface.boundingBox())!;
 	expect(focused).toEqual(resting);
-	expect((await paperclip(page).boundingBox())!.y + (await paperclip(page).boundingBox())!.height)
-		.toBeLessThanOrEqual(resting.y);
 	await choose(page, SHOT, NOTES, {
 		name: "logo.svg",
 		mimeType: "image/svg+xml",
@@ -482,14 +505,16 @@ test("keeps the composer's files usable at a phone's width, and accessible", asy
 		for (let name of ["shot.png", "notes.md", "logo.svg"]) {
 			await expectInsideViewport(chip(page, name));
 		}
-		await expectInsideViewport(paperclip(page));
+		await expectInsideViewport(plus(page));
 	}).toPass({ timeout: 10_000 });
 	await expectNoHorizontalOverflow(page);
 	await expectAccessible(page);
 	await chip(page, "logo.svg").getByRole("button", { name: "Remove logo.svg" }).click();
 	await chatInput(chat(page)).fill("From a phone");
 	await composer(page).getByRole("button", { name: "Send message" }).click();
-	await expect(messages(page).filter({ hasText: "From a phone" }).locator("img")).toBeVisible();
+	await expect(
+		messages(page).filter({ hasText: "From a phone" }).locator("[data-slot='message-attachments']"),
+	).toBeVisible();
 	await expectNoHorizontalOverflow(page);
 });
 
@@ -503,4 +528,23 @@ test("is accessible on desktop with files waiting, refused and uploading", async
 	});
 	await expect(chip(page, "logo.svg")).toHaveAttribute("data-state", "error");
 	await expectAccessible(page);
+});
+
+test("two files with one name are two: removing one leaves the other", async ({ join }) => {
+	let page = await join("ana");
+	await openChat(page);
+	let other = Buffer.concat([PNG, Buffer.from([0])]);
+	// A pasted screenshot is always called image.png.
+	await paste(page, [{ name: "image.png", mimeType: "image/png", buffer: PNG }]);
+	await paste(page, [{ name: "image.png", mimeType: "image/png", buffer: other }]);
+	let chips = strip(page).getByRole("listitem");
+	await expect(chips).toHaveCount(2);
+	await expect(chips.nth(0)).toHaveAttribute("data-state", "done");
+	await expect(chips.nth(1)).toHaveAttribute("data-state", "done");
+	let first = await chips.nth(0).getAttribute("data-file-id");
+	let removed = page.waitForRequest(request => request.method() === "DELETE");
+	await chips.nth(1).getByRole("button", { name: "Remove image.png" }).click();
+	await removed;
+	await expect(chips).toHaveCount(1);
+	await expect(chips.nth(0)).toHaveAttribute("data-file-id", first!);
 });
