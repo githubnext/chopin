@@ -222,8 +222,8 @@ test("the words around a gallery stay where they were written, and the images ar
 	);
 	expect(markup.indexOf("Before")).toBeLessThan(markup.indexOf("data-chat-image-gallery"));
 	expect(markup.indexOf("data-chat-image-gallery")).toBeLessThan(markup.indexOf(" after."));
-	expect(markup.indexOf(" after.")).toBeLessThan(markup.indexOf("<p>Next paragraph.</p>"));
-	expect(markup).not.toMatch(/<p>[^]*<div class="chat-image-gallery/);
+	expect(markup.indexOf(" after.")).toBeLessThan(markup.indexOf('<p class="aui-md-p">Next paragraph.</p>'));
+	expect(markup).not.toMatch(/<p[\s>][^]*<div class="chat-image-gallery/);
 });
 
 test("images with words or a paragraph of words between them are not made a gallery", () => {
@@ -298,6 +298,106 @@ test("images lifted out of one link, or written in a list item or a quotation, a
 		expect(markup.match(/data-chat-image-gallery/g), source).toHaveLength(1);
 		expect(markup.match(/data-chat-image="tile"/g), source).toHaveLength(2);
 	}
+});
+
+function insideLink(markup: string): boolean {
+	return /<a [^>]*>(?:(?!<\/a>)[^])*<figure/.test(markup);
+}
+
+test("images written as references are a gallery with the ones written in line, in the order written, wherever their definitions are", () => {
+	for (
+		let source of [
+			"![One][a] ![Two][b] ![Three](https://example.invalid/3.png)\n\n[a]: https://example.invalid/1.png\n[b]: https://example.invalid/2.png",
+			"[a]: https://example.invalid/1.png\n\n![One][a] ![Two][B]\n![Three][]\n\n[b]: https://example.invalid/2.png\n[three]: https://example.invalid/3.png",
+			"![One][a]\n\n[a]: https://example.invalid/1.png\n\n![Two][b]\n\n[b]: https://example.invalid/2.png\n\n![Three](https://example.invalid/3.png)",
+			"![One](https://example.invalid/1.png) ![Two][b] ![Three][three]\n\n[b]: https://example.invalid/2.png\n[three]: https://example.invalid/3.png",
+		]
+	) {
+		let markup = markdown(source);
+		expect(markup.match(/data-chat-image-gallery/g), source).toHaveLength(1);
+		expect(markup.match(/data-chat-image="tile"/g), source).toHaveLength(3);
+		expect(markup, source).not.toContain('data-chat-image="single"');
+		expect(tiles(markup), source).toEqual([
+			"One|https://example.invalid/1.png",
+			"Two|https://example.invalid/2.png",
+			"Three|https://example.invalid/3.png",
+		]);
+	}
+});
+
+test("a reference image is the image its first definition says, as a single or in a gallery, and one with no definition stays the words it was", () => {
+	let alone = markdown(
+		"![One][a]\n\n[a]: https://example.invalid/first.png\n[a]: https://example.invalid/second.png",
+	);
+	expect(tiles(alone)).toEqual(["One|https://example.invalid/first.png"]);
+	expect(alone).toContain('data-chat-image="single"');
+
+	let unsafe = markdown(
+		"![Fine][a] ![Nope][bad]\n\n[a]: https://example.invalid/1.png\n[bad]: javascript:alert(1)",
+	);
+	expect(unsafe.match(/data-chat-image="tile"/g)).toHaveLength(2);
+	expect(unsafe).toContain('data-chat-image-broken="unavailable"');
+	expect(unsafe).not.toContain("javascript:");
+
+	let missing = markdown("![One][a] ![Two][nothing]\n\n[a]: https://example.invalid/1.png");
+	expect(missing).not.toContain("data-chat-image-gallery");
+	expect(tiles(missing)).toEqual(["One|https://example.invalid/1.png"]);
+	expect(missing).toContain("![Two][nothing]");
+});
+
+test("an image inside a link is drawn where it was written among the link's words, and never inside the link", () => {
+	let between = markdown(
+		"[Before ![d](https://example.invalid/u.png) after](https://example.com/t)",
+	);
+	expect(insideLink(between)).toBe(false);
+	expect(between.indexOf(">Before ")).toBeLessThan(between.indexOf("<figure"));
+	expect(between.indexOf("<figure")).toBeLessThan(between.indexOf("> after<"));
+	expect(between.match(/<a class="aui-md-a" href="https:\/\/example.com\/t"/g)).toHaveLength(2);
+	expect(between).toContain('target="_blank">Before </a>');
+	expect(between).toContain('target="_blank"> after</a>');
+
+	let nested = markdown(
+		"[**Before ![d](https://example.invalid/u.png) after**](https://example.com/t)",
+	);
+	expect(insideLink(nested)).toBe(false);
+	expect(nested).toContain('<strong class="aui-md-strong">Before </strong></a>');
+	expect(nested).toContain('<strong class="aui-md-strong"> after</strong></a>');
+	expect(nested.indexOf("Before")).toBeLessThan(nested.indexOf("<figure"));
+	expect(nested.indexOf("<figure")).toBeLessThan(nested.indexOf("after"));
+});
+
+test("an image alone in emphasis in a link, or in a link written as a reference, is drawn outside it, and the link keeps its words", () => {
+	for (
+		let source of [
+			"[**![logo](https://example.invalid/l.png)**](https://example.com/t)",
+			"[*![logo](https://example.invalid/l.png)*](https://example.com/t)",
+			"[![logo](https://example.invalid/l.png)][target]\n\n[target]: https://example.com/t",
+			"[![logo][img]][target]\n\n[img]: https://example.invalid/l.png\n[target]: https://example.com/t",
+		]
+	) {
+		let markup = markdown(source);
+		expect(insideLink(markup), source).toBe(false);
+		expect(markup.match(/<figure/g), source).toHaveLength(1);
+		expect(markup, source).toContain('<img alt="logo"');
+		expect(markup, source).toContain(
+			'<a class="aui-md-a" href="https://example.com/t" rel="noopener noreferrer" target="_blank">logo</a>',
+		);
+	}
+});
+
+test("a Markdown image's title is its caption, as a single image and as a tile", () => {
+	let single = markdown('![alt text](https://example.invalid/u.png "The title of it")');
+	expect(single).toContain('<span class="chat-image-text">The title of it</span>');
+
+	let gallery = markdown(
+		'![One](https://example.invalid/1.png "First caption") ![Two](https://example.invalid/2.png) ![Three][c]\n\n[c]: https://example.invalid/3.png "Third caption"',
+	);
+	expect(gallery.match(/data-chat-image="tile"/g)).toHaveLength(3);
+	expect([...gallery.matchAll(/chat-image-text">([^<]*)</g)].map(found => found[1])).toEqual([
+		"First caption",
+		"Third caption",
+	]);
+	expect(markdown("![alt](https://example.invalid/u.png)")).not.toContain("chat-image-text");
 });
 
 test("an image whose address is not one Chat loads shows its alt text and is never requested", () => {

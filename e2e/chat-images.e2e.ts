@@ -2767,3 +2767,97 @@ test("on a phone the whole of an alt text and a caption is on the page, and noth
 
 	await readWhole(phone, 390);
 });
+
+test("images written as references and in line are one compact gallery in the order written, and a title is the caption under its tile and in the lightbox", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let [wide, tall, square] = [dataPng(36, 24, 1), dataPng(24, 32, 2), dataPng(24, 24, 3)];
+	await seed("# References\n", {
+		transcript: [{
+			id: "references",
+			author: { kind: "member", handle: "bo" },
+			text: [
+				`![One][a] ![Two][b] ![Three](${square} "Third title")`,
+				"",
+				`[a]: ${wide}`,
+				`[b]: ${tall} "Second title"`,
+			].join("\n"),
+			ts: 1_700_000_000_000,
+		}],
+	});
+	await join("ana");
+
+	let tiles = chat(page).locator('[data-chat-image-gallery] [data-chat-image="tile"]');
+	await expect(chat(page).locator("[data-chat-image-gallery]")).toHaveCount(1);
+	await expect(chat(page).locator('[data-chat-image="single"]')).toHaveCount(0);
+	await expect(tiles).toHaveCount(3);
+	for (let tile of await tiles.all()) await expect(tile).toHaveAttribute("data-load", "shown");
+	await expect(tiles.locator(".chat-image-alt")).toHaveText(["One", "Two", "Three"]);
+	await expect(tiles.locator(".chat-image-text")).toHaveText(["Second title", "Third title"]);
+
+	await tiles.nth(1).getByRole("button", { name: "Open image", exact: true }).click();
+	let box = lightbox(page);
+	await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
+	await expect(box.getByRole("img", { name: "Two", exact: true })).toBeVisible();
+	await expect(box.getByText("Second title", { exact: true })).toBeVisible();
+	await page.keyboard.press("ArrowRight");
+	await expect(box.getByRole("status")).toHaveText("Image 3 of 3");
+	await expect(box.getByText("Third title", { exact: true })).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(box).toHaveCount(0);
+});
+
+test("an image written inside a link is drawn where it was written among the link's words and outside every link, and its picture opens the lightbox rather than the link", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let [wide, tall, square] = [dataPng(36, 24, 1), dataPng(24, 32, 2), dataPng(24, 24, 3)];
+	await seed("# Linked\n", {
+		transcript: [{
+			id: "linked",
+			author: { kind: "member", handle: "bo" },
+			text: [
+				`Read [Before ![between](${wide}) after](https://example.com/t) now.`,
+				"",
+				`[**![nested](${tall})**](https://example.com/n)`,
+				"",
+				`[![reference linked](${square})][target]`,
+				"",
+				"[target]: https://example.com/r",
+			].join("\n"),
+			ts: 1_700_000_000_000,
+		}],
+	});
+	await join("ana");
+	let popups: string[] = [];
+	page.context().on("page", opened => popups.push(opened.url()));
+
+	let all = figures(page);
+	await expect(all).toHaveCount(3);
+	for (let figure of await all.all()) await expect(figure).toHaveAttribute("data-load", "shown");
+	await expect(chat(page).locator("a:has([data-chat-image])")).toHaveCount(0);
+	await expect(chat(page).locator("a button, a [data-chat-image-frame]")).toHaveCount(0);
+
+	let before = chat(page).getByRole("link", { name: "Before", exact: true });
+	let after = chat(page).getByRole("link", { name: "after", exact: true });
+	await expect(before).toHaveAttribute("href", "https://example.com/t");
+	await expect(after).toHaveAttribute("href", "https://example.com/t");
+	let [first, between, last] = [
+		(await before.boundingBox())!,
+		(await all.nth(0).boundingBox())!,
+		(await after.boundingBox())!,
+	];
+	expect(first.y + first.height).toBeLessThanOrEqual(between.y + 0.5);
+	expect(between.y + between.height).toBeLessThanOrEqual(last.y + 0.5);
+	await expect(chat(page).getByRole("link", { name: "nested", exact: true })).toHaveAttribute(
+		"href",
+		"https://example.com/n",
+	);
+	await expect(chat(page).getByRole("link", { name: "reference linked", exact: true }))
+		.toHaveAttribute("href", "https://example.com/r");
+
+	for (let [index, name] of ["between", "nested", "reference linked"].entries()) {
+		await all.nth(index).locator("[data-chat-image-frame]").click();
+		await expect(lightbox(page).getByRole("img", { name, exact: true }), name).toBeVisible();
+		await page.keyboard.press("Escape");
+		await expect(lightbox(page)).toHaveCount(0);
+	}
+	expect(popups).toEqual([]);
+});

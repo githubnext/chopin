@@ -1,34 +1,87 @@
 type Node = {
 	type: string;
 	alt?: string | null;
+	identifier?: string;
+	title?: string | null;
 	url?: string;
 	value?: string;
 	data?: { hName?: string; hProperties?: Record<string, string> };
 	children?: Node[];
 };
 
+let isImage = (node: Node) => node.type === "image";
+
+let isLink = (node: Node) => node.type === "link" || node.type === "linkReference";
+
+let hasImage = (node: Node): boolean => isImage(node) || !!node.children?.some(hasImage);
+
+let isVisible = (node: Node): boolean =>
+	node.children ? node.children.some(isVisible) : !!node.value?.trim();
+
+function definitions(node: Node, found = new Map<string, Node>()): Map<string, Node> {
+	let key = node.type === "definition" ? node.identifier?.toUpperCase() : undefined;
+	if (key !== undefined && !found.has(key)) found.set(key, node);
+	node.children?.forEach(child => definitions(child, found));
+	return found;
+}
+
+function resolveImageReferences(tree: Node): void {
+	let found = definitions(tree);
+	let walk = (node: Node) => {
+		if (!node.children) return;
+		node.children = node.children.map(child => {
+			let definition = child.type === "imageReference"
+				? found.get(child.identifier?.toUpperCase() ?? "")
+				: undefined;
+			if (!definition) {
+				walk(child);
+				return child;
+			}
+			return { type: "image", alt: child.alt, title: definition.title, url: definition.url ?? "" };
+		});
+	};
+	walk(tree);
+}
+
+function around(node: Node): Node[] {
+	if (!node.children || !hasImage(node)) return [node];
+	let out: Node[] = [];
+	let run: Node[] = [];
+	let close = () => {
+		if (run.length) out.push({ ...node, children: run });
+		run = [];
+	};
+	for (let piece of node.children.flatMap(around)) {
+		if (isImage(piece)) {
+			close();
+			out.push(piece);
+		} else {
+			run.push(piece);
+		}
+	}
+	close();
+	return out;
+}
+
 function lift(node: Node): void {
 	if (!node.children) return;
 	node.children = node.children.flatMap(child => {
 		lift(child);
-		if (child.type !== "link" || !child.children?.some(item => item.type === "image")) {
-			return [child];
-		}
-		let images = child.children.filter(item => item.type === "image");
-		let rest = child.children.filter(item => item.type !== "image");
-		let label: Node[] = rest.length
-			? rest
-			: [{ type: "text", value: images.find(item => item.alt)?.alt ?? child.url ?? "" }];
-		return [...images, { ...child, children: label }];
+		if (!isLink(child) || !hasImage(child)) return [child];
+		let pieces = around(child).filter(piece => isImage(piece) || isVisible(piece));
+		if (pieces.some(piece => !isImage(piece))) return pieces;
+		let label = pieces.find(piece => piece.alt)?.alt ?? child.url ?? "";
+		return [...pieces, { ...child, children: [{ type: "text", value: label }] }];
 	});
 }
 
 /** Lifts images out of links, which would otherwise wrap the image's own buttons and swallow its click. */
 export function imagesOutOfLinksRemarkPlugin() {
-	return (tree: Node) => lift(tree);
+	return (tree: Node) => {
+		resolveImageReferences(tree);
+		lift(tree);
+	};
 }
-
-let isImage = (node: Node) => node.type === "image";
 
 let isSpace = (node: Node) => node.type === "break" || node.type === "text" && !node.value?.trim();
 
@@ -68,12 +121,15 @@ function galleries(children: Node[]): Node[] {
 function gather(node: Node): void {
 	if (!node.children) return;
 	let blocks: Node[] = [];
+	let last: Node | undefined;
 	for (let child of node.children) {
-		let last = blocks.at(-1);
-		if (last && isImageOnly(last) && isImageOnly(child)) {
+		if (child.type === "definition") {
+			blocks.push(child);
+		} else if (last && isImageOnly(last) && isImageOnly(child)) {
 			last.children = [...last.children!, ...child.children!];
 		} else {
 			blocks.push(child);
+			last = child;
 		}
 	}
 	blocks.forEach(gather);
@@ -81,7 +137,10 @@ function gather(node: Node): void {
 }
 
 export function imageGalleriesRemarkPlugin() {
-	return (tree: Node) => gather(tree);
+	return (tree: Node) => {
+		resolveImageReferences(tree);
+		gather(tree);
+	};
 }
 
 function markImageBlocks(node: Node): void {

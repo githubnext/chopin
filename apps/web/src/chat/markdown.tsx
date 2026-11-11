@@ -283,15 +283,27 @@ let imageParagraph = (props: ComponentProps<"p">) => {
 let imageUrl = (url: string, key: string) =>
 	key === "src" && isDataImage(url) ? url : defaultUrlTransform(url);
 
-let markdownImage = ({ alt, src }: ComponentProps<"img">) => (
-	<ChatImage image={{ src: typeof src === "string" ? src : "", alt: alt ?? undefined }} />
+let caption = (title: unknown) => typeof title === "string" && title.trim() ? title : undefined;
+
+let markdownImage = ({ alt, src, title }: ComponentProps<"img">) => (
+	<ChatImage
+		image={{
+			src: typeof src === "string" ? src : "",
+			alt: alt ?? undefined,
+			caption: caption(title),
+		}}
+	/>
 );
 
 /** The pictures a gallery holds are its `img` children, whose props are what the Markdown wrote. */
 let markdownGallery = ({ children }: ComponentProps<"figure">) => {
 	let images = Children.toArray(children).flatMap(child =>
 		isValidElement<ComponentProps<"img">>(child) && typeof child.props.src === "string"
-			? [{ src: child.props.src, alt: child.props.alt ?? undefined }]
+			? [{
+				src: child.props.src,
+				alt: child.props.alt ?? undefined,
+				caption: caption(child.props.title),
+			}]
 			: []
 	);
 	return <ImageGallery images={images} maxVisible={images.length} />;
