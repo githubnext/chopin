@@ -32,9 +32,19 @@ async function stubAvatars(page: Page): Promise<void> {
 	});
 }
 
-function names(page: Page) {
+/** A row is assistant-ui's: a badge, the name and the tag at the end, which is `agent` or `human`. */
+function rows(page: Page) {
 	return chatPane(page).getByRole("listbox", { name: "Mentions" }).getByRole("option")
-		.evaluateAll(options => options.map(option => option.getAttribute("aria-label")));
+		.evaluateAll(options =>
+			options.map(option => {
+				let [, name, tag] = option.querySelectorAll(":scope > span");
+				return { name: name?.textContent, tag: tag?.textContent };
+			})
+		);
+}
+
+async function names(page: Page) {
+	return (await rows(page)).map(row => row.name);
 }
 
 test("the @ picker lists the Planner, people here and past authors, and sends only @chopin to the Planner", async ({ join, page }) => {
@@ -76,15 +86,20 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 	await draft.fill("Ask @");
 	await expect(list).toBeVisible();
 	await expect(draft).toHaveAttribute("aria-expanded", "true");
-	expect(await names(ana)).toEqual(["chopin", "cy", "bo"]);
+	// Chopin first, tagged `agent`; the people after it, tagged `human`.
+	expect(await rows(ana)).toEqual([
+		{ name: "Chopin", tag: "agent" },
+		{ name: "cy", tag: "human" },
+		{ name: "bo", tag: "human" },
+	]);
 	await expect(list.getByRole("option", { name: "cy" }).locator("img")).toHaveAttribute(
 		"src",
 		"https://github.com/cy.png?size=40",
 	);
 	// The failed photograph falls back to the login's initial.
 	await expect(list.getByRole("option", { name: "bo" }).locator("img")).toHaveCount(0);
-	await expect(list.getByRole("option", { name: "bo" })).toHaveText("bbo");
-	await expect(list.getByRole("option", { name: "chopin" })).toHaveAttribute(
+	await expect(list.getByRole("option", { name: "bo" })).toHaveText("bbohuman");
+	await expect(list.getByRole("option", { name: /^Chopin/ })).toHaveAttribute(
 		"aria-selected",
 		"true",
 	);
@@ -100,21 +115,26 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 	await expect(list.getByRole("option", { name: "bo" })).toHaveAttribute("aria-selected", "true");
 
 	await draft.pressSequentially("C");
-	expect(await names(ana)).toEqual(["chopin", "cy"]);
+	expect(await names(ana)).toEqual(["Chopin", "cy"]);
 	await draft.press("Backspace");
 	await draft.pressSequentially("ch");
-	expect(await names(ana)).toEqual(["chopin"]);
+	expect(await names(ana)).toEqual(["Chopin"]);
 	await draft.press("Enter");
-	await expectChatValue(draft, "Ask @chopin ");
+	// Chopin is the chip at the start of the draft, not an @chopin in its words.
+	await expectChatValue(draft, "Ask ");
+	await expect(chat.getByRole("group", { name: "Asking Chopin", exact: true })).toBeVisible();
 	await expect(list).toHaveCount(0);
 	await expect(draft).toBeFocused();
 	await draft.pressSequentially("what is open?");
 	await chat.getByRole("button", { name: "Send message" }).click();
-	await expect.poll(() => sent.at(-1)?.text).toBe("Ask @chopin what is open?");
+	await expect.poll(() => sent.at(-1)?.text).toBe("@chopin Ask what is open?");
 	expect(sent.at(-1)?.to).toBe("planner");
 
 	await expectChatValue(draft, "");
-	await draft.press("Shift+Tab");
+	// The chip stays on after Chopin is asked; Backspace at the start takes it off.
+	await expect(chat.getByRole("group", { name: "Asking Chopin", exact: true })).toBeVisible();
+	await draft.press("Backspace");
+	await expect(chat.getByRole("group", { name: "Asking Chopin", exact: true })).toHaveCount(0);
 	await draft.fill("Thanks @cy");
 	await draft.press("Enter");
 	await expectChatValue(draft, "Thanks @cy ");
@@ -159,7 +179,7 @@ test("the @ picker stays inside a narrow Chat panel", async ({ join, page }) => 
 	await draft.fill("@");
 	let list = chat.locator("[data-chat-mention-picker]");
 	await expect(list).toBeVisible();
-	expect(await names(opened)).toEqual(["chopin"]);
+	expect(await names(opened)).toEqual(["Chopin"]);
 	await expectInsideViewport(list);
 	await expectNoHorizontalOverflow(opened);
 	let panel = await chat.boundingBox();

@@ -1414,7 +1414,7 @@ test("keeps the model's name on a touch phone's trigger at every phone width, cu
 		// apart from the others, with the longest name given way to an ellipsis.
 		let row = async () => {
 			let mention = chat(page).getByRole("button", { name: "Mention docs" });
-			let mode = chat(page).getByRole("button", { name: "Talk to Chopin" });
+			let mode = chat(page).getByRole("button", { name: "Ask Chopin", exact: true });
 			let send = chat(page).getByRole("button", { name: "Send message" });
 			let controls = [mention, mode, model, send];
 			let boxes = await Promise.all(controls.map(async control => (await control.boundingBox())!));
