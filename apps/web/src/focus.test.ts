@@ -7,13 +7,18 @@ import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { recordedSources } from "./recorded-sources.test-fixtures";
+
 const ROOT = join(import.meta.dir, "../../..");
+/** Copied registry source keeps its own classes; the rules below are for Chopin's own code. */
+const COPIED = recordedSources(ROOT);
 
 /** Every matching source under the repo, excluding dependencies. */
 function sources(dir: string, suffixes: string[], found: string[] = []): string[] {
 	for (let entry of readdirSync(dir)) {
 		if (entry === "node_modules" || entry === "dist" || entry.startsWith(".")) continue;
 		let path = join(dir, entry);
+		if (COPIED.has(path)) continue;
 		if (statSync(path).isDirectory()) sources(path, suffixes, found);
 		else if (suffixes.some(suffix => entry.endsWith(suffix))) found.push(path);
 	}

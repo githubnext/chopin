@@ -10,6 +10,8 @@ import { describe, expect, it } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
+import { recordedSources } from "./recorded-sources.test-fixtures";
+
 type Oklch = { l: number; c: number; h: number };
 
 const ROOT = join(import.meta.dir, "../../..");
@@ -85,10 +87,14 @@ function contrast(foreground: string, background: string): number {
 	return (lighter + 0.05) / (darker + 0.05);
 }
 
+/** Copied registry source keeps its own classes; these scans are for Chopin's own code. */
+const COPIED = recordedSources(ROOT);
+
 function sources(dir: string, found: string[] = []): string[] {
 	for (let entry of readdirSync(dir)) {
 		if (entry === "node_modules" || entry === "dist" || entry.startsWith(".")) continue;
 		let path = join(dir, entry);
+		if (COPIED.has(path)) continue;
 		if (statSync(path).isDirectory()) sources(path, found);
 		else if (entry.endsWith(".tsx") || entry.endsWith(".css")) found.push(path);
 	}
