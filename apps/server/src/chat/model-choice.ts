@@ -4,7 +4,12 @@
  * choice, stored once per document so everyone sees the same one.
  */
 
-import { refusedChoice, resolveChoice, unavailableNotice } from "@chopin/protocol/model-choice";
+import {
+	catalogModel,
+	refusedChoice,
+	resolveChoice,
+	unavailableNotice,
+} from "@chopin/protocol/model-choice";
 
 import { broadcast, fail, reply } from "../wire";
 
@@ -40,12 +45,15 @@ export type TurnModel = { model?: string; thinkingLevel?: string; notice?: strin
 async function stored(
 	deps: ModelChoiceDeps,
 	channelId: string,
-): Promise<Wire.ModelChoice | undefined> {
+): Promise<{ choice?: Wire.ModelChoice; modelName?: string }> {
 	let row = await deps.storage.plannerModelChoices.get(channelId);
-	if (!row) return undefined;
+	if (!row) return {};
 	return {
-		...(row.model !== undefined ? { model: row.model } : {}),
-		...(row.thinkingLevel !== undefined ? { thinkingLevel: row.thinkingLevel } : {}),
+		choice: {
+			...(row.model !== undefined ? { model: row.model } : {}),
+			...(row.thinkingLevel !== undefined ? { thinkingLevel: row.thinkingLevel } : {}),
+		},
+		...(row.modelName ? { modelName: row.modelName } : {}),
 	};
 }
 
@@ -58,13 +66,15 @@ export async function modelState(
 	deps: ModelChoiceDeps,
 	channelId: string,
 ): Promise<Wire.ModelState> {
-	let [catalog, choice] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
-	let told = choice && (catalog || (deps.known?.(channelId) ?? true));
+	let [catalog, saved] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
+	let told = saved.choice && (catalog || (deps.known?.(channelId) ?? true));
 	return {
 		kind: "chat:model",
 		ts: 0,
 		...(catalog ? { catalog } : {}),
-		...(told ? { choice } : {}),
+		...(told
+			? { choice: saved.choice, ...(saved.modelName ? { modelName: saved.modelName } : {}) }
+			: {}),
 	};
 }
 
@@ -73,8 +83,8 @@ export async function modelState(
  * level the catalog no longer offers is left out, the harness's default runs, and `notice` says so.
  */
 export async function turnModel(deps: ModelChoiceDeps, channelId: string): Promise<TurnModel> {
-	let [catalog, choice] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
-	let resolved = resolveChoice(catalog, choice);
+	let [catalog, saved] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
+	let resolved = resolveChoice(catalog, saved.choice);
 	// The turn runs the default for a choice nothing could check, where the harness had not yet said
 	// what it offers: from now on that is known, and the composer is told what the turn did.
 	if (resolved.unavailable && !catalog && deps.known?.(channelId) === false) {
@@ -83,7 +93,9 @@ export async function turnModel(deps: ModelChoiceDeps, channelId: string): Promi
 	return {
 		...(resolved.model !== undefined ? { model: resolved.model } : {}),
 		...(resolved.thinkingLevel !== undefined ? { thinkingLevel: resolved.thinkingLevel } : {}),
-		...(resolved.unavailable ? { notice: unavailableNotice(catalog, resolved.unavailable) } : {}),
+		...(resolved.unavailable
+			? { notice: unavailableNotice(catalog, resolved.unavailable, saved.modelName) }
+			: {}),
 	};
 }
 
@@ -160,9 +172,11 @@ export function chooseModel(
 			let catalog = await deps.catalog(channelId);
 			let refusal = refusedChoice(catalog, choice);
 			if (refusal) return fail(ws, frame.rid, refusal);
+			let modelName = catalogModel(catalog, choice.model)?.name;
 			await deps.storage.plannerModelChoices.put(deps.lease(), {
 				channelId,
 				...choice,
+				...(modelName ? { modelName } : {}),
 				userId: context.userId,
 				updatedAt: (deps.now ?? (() => new Date()))(),
 			});

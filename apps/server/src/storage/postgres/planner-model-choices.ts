@@ -5,6 +5,7 @@ import type { PlannerModelChoiceStore } from "../port";
 type Row = {
 	channelId: string;
 	model: string | null;
+	modelName: string | null;
 	thinkingLevel: string | null;
 	userId: string;
 	updatedAt: Date | string;
@@ -26,13 +27,14 @@ export class PostgresPlannerModelChoiceStore implements PlannerModelChoiceStore 
 				}
 				await sql`
 					INSERT INTO planner_model_choices (
-						channel_id, model, thinking_level, user_id, updated_at, fencing
+						channel_id, model, model_name, thinking_level, user_id, updated_at, fencing
 					) VALUES (
-						${input.channelId}, ${input.model ?? null}, ${input.thinkingLevel ?? null},
-						${input.userId}, ${input.updatedAt}, ${lease.fencing}
+						${input.channelId}, ${input.model ?? null}, ${input.modelName ?? null},
+						${input.thinkingLevel ?? null}, ${input.userId}, ${input.updatedAt}, ${lease.fencing}
 					)
 					ON CONFLICT (channel_id) DO UPDATE SET
 						model = EXCLUDED.model,
+						model_name = EXCLUDED.model_name,
 						thinking_level = EXCLUDED.thinking_level,
 						user_id = EXCLUDED.user_id,
 						updated_at = EXCLUDED.updated_at,
@@ -43,7 +45,7 @@ export class PostgresPlannerModelChoiceStore implements PlannerModelChoiceStore 
 	get(channelId: string) {
 		return this.run("read a Planner model choice", async () => {
 			let [row] = await this.sql<Row[]>`
-				SELECT channel_id AS "channelId", model, thinking_level AS "thinkingLevel",
+				SELECT channel_id AS "channelId", model, model_name AS "modelName", thinking_level AS "thinkingLevel",
 					user_id AS "userId", updated_at AS "updatedAt"
 				FROM planner_model_choices WHERE channel_id = ${channelId}
 			`;
@@ -51,6 +53,7 @@ export class PostgresPlannerModelChoiceStore implements PlannerModelChoiceStore 
 			return {
 				channelId: row.channelId,
 				...(row.model !== null ? { model: row.model } : {}),
+				...(row.modelName !== null ? { modelName: row.modelName } : {}),
 				...(row.thinkingLevel !== null ? { thinkingLevel: row.thinkingLevel } : {}),
 				userId: row.userId,
 				updatedAt: new Date(row.updatedAt),

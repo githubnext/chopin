@@ -621,8 +621,11 @@ skipped when the catalog is read (above), so no one can choose it, and a `model`
 means no model was chosen (an operator's empty `MODEL` reads the same way).
 Chopin checks both against the last catalog the client reported when it accepts the choice and
 again when the turn starts. A model the catalog no longer lists, or a level its model no longer
-lists, is not sent: the turn runs with the client's default, and the document's Chat says so. A
-client must still treat an unknown `model` as an error, because its catalog can have changed
+lists, is not sent: the turn runs with the client's default, and the document's Chat says so. The
+catalog name is saved with the choice so that notice can name it even after it disappears. The
+browser's `chat:model` state includes an optional `modelName` for that saved name; older choices
+without a name use the current catalog's name if known, otherwise the id. Older browsers can ignore
+this optional field. A client must still treat an unknown `model` as an error, because its catalog can have changed
 since the report. Without a catalog (an older client, or one that reported none) the composer
 offers no choice and `thinkingLevel` is never sent, and a model a person had chosen is said, in the
 composer, to be no longer available, as the document's Chat says on the next turn.

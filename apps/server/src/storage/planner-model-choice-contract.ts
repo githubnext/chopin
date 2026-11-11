@@ -18,6 +18,7 @@ export function plannerModelChoiceContract(name: string, factory: StorageFactory
 				let first = {
 					channelId,
 					model: "acme/large:preview",
+					modelName: "Large",
 					thinkingLevel: "high",
 					userId,
 					updatedAt: AT,

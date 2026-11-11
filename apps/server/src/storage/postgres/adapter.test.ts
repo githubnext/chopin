@@ -8,6 +8,8 @@ import { storageContract } from "../contract";
 import { ResearchProjectionConflict } from "../model";
 import { contractId, userAndChannel } from "../contract-support";
 import { PostgresStorage } from "./adapter";
+import { PostgresPlannerModelChoiceStore } from "./planner-model-choices";
+import { turnModel } from "../../chat/model-choice";
 import { migrate, verifyMigrations } from "./migrations";
 import { backfillDocumentSlugs } from "./migrations/002_document_slugs";
 import { backfillUnansweredDecisions } from "./migrations/017_unanswered_decisions";
@@ -987,6 +989,46 @@ if (url) {
 		}
 	});
 
+	it("migrates an old model choice without a name and keeps a new name across reconnects", async () => {
+		let sql = new SQL(url, { max: 1 });
+		let schema = `model_name_${crypto.randomUUID().replaceAll("-", "")}`;
+		try {
+			await sql.unsafe(`CREATE SCHEMA "${schema}"`).simple();
+			await sql.unsafe(`SET search_path TO "${schema}"`).simple();
+			await migrate(sql);
+			// Recreate the state immediately before the additive migration, including an old choice.
+			await sql`ALTER TABLE planner_model_choices DROP COLUMN model_name`;
+			await sql`DELETE FROM chopin_migrations WHERE id = '035_planner_model_name'`;
+			await sql`INSERT INTO users (id, login, avatar_url, created_at, updated_at) VALUES ('u', 'u', '', now(), now())`;
+			await sql`INSERT INTO channels (id, repository_id, repository_owner, repository_name, title, created_by, created_at, updated_at) VALUES ('c', 'r', 'octo-org', 'score', 'Test', 'u', now(), now())`;
+			await sql`INSERT INTO planner_model_choices (channel_id, model, user_id, updated_at, fencing) VALUES ('c', 'acme/large', 'u', now(), 1)`;
+			await migrate(sql);
+			await verifyMigrations(sql);
+			let store = new PostgresPlannerModelChoiceStore(sql, (_action, run) => run(), async () => {});
+			let deps = {
+				storage: { plannerModelChoices: store },
+				catalog: async () => undefined,
+				lease: () => {
+					throw new Error("not used");
+				},
+			};
+			expect(await turnModel(deps, "c")).toEqual({
+				notice: "acme/large is no longer available, so Chopin used its default model.",
+			});
+			await sql`UPDATE planner_model_choices SET model_name = 'Large' WHERE channel_id = 'c'`;
+			await sql.close();
+			sql = new SQL(url, { max: 1 });
+			await sql.unsafe(`SET search_path TO "${schema}"`).simple();
+			store = new PostgresPlannerModelChoiceStore(sql, (_action, run) => run(), async () => {});
+			expect(await turnModel({ ...deps, storage: { plannerModelChoices: store } }, "c")).toEqual({
+				notice: "Large is no longer available, so Chopin used its default model.",
+			});
+		} finally {
+			await sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).simple();
+			await sql.close();
+		}
+	});
+
 	it("upgrades a database that recorded user navigation as migration 002 without rewriting history", async () => {
 		let sql = new SQL(url, { max: 1 });
 		let schema = `legacy_navigation_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -1054,6 +1096,7 @@ if (url) {
 				"032_mcp_sessions",
 				"033_planner_hold_machine_owner",
 				"034_planner_model_choices",
+				"035_planner_model_name",
 			]);
 			expect([
 				...await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`,

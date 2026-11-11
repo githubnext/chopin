@@ -242,6 +242,17 @@ function slowFirstRead<T extends object, K extends keyof T>(owner: T, read: K) {
 	return release;
 }
 
+test("a removed model keeps the name its catalog reported for the room and the turn", async () => {
+	let offered: Wire.ModelCatalog | undefined = catalog;
+	let { deps, opened, choose } = await sets(() => offered);
+	await choose({ model: "acme/large" });
+	offered = { models: [catalog.models[1]!], default: catalog.default };
+	expect((await modelState(deps, opened.channel.id)).modelName).toBe("Large");
+	expect((await turnModel(deps, opened.channel.id)).notice).toBe(
+		"Large is no longer available, so Chopin used its default model.",
+	);
+});
+
 describe("the stored choice a room is told where nothing can be chosen", () => {
 	test("is told while the harness knows it offers nothing, and held back while it cannot know yet", async () => {
 		let offered: Wire.ModelCatalog | undefined = catalog;
@@ -257,6 +268,7 @@ describe("the stored choice a room is told where nothing can be chosen", () => {
 			kind: "chat:model",
 			ts: 0,
 			choice: chosen,
+			modelName: "Large",
 		});
 		// No client is attached, or it has yet to report (a restart, a blip): nothing is said of the
 		// choice, which is neither gone nor honoured, and the machine's own status speaks.
@@ -269,6 +281,7 @@ describe("the stored choice a room is told where nothing can be chosen", () => {
 			ts: 0,
 			catalog,
 			choice: chosen,
+			modelName: "Large",
 		});
 		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toMatchObject(chosen);
 		// Nobody chose: there is no choice to say, known or not.
@@ -299,7 +312,7 @@ describe("the stored choice a room is told where nothing can be chosen", () => {
 		// The turn found no catalog to check it against: the default runs, with the notice, and the
 		// harness is told that it did.
 		expect(await turnModel(silent, opened.channel.id)).toEqual({
-			notice: "acme/large is no longer available, so Chopin used its default model.",
+			notice: "Large is no longer available, so Chopin used its default model.",
 		});
 		expect(fellBack).toEqual([opened.channel.id]);
 		// So the choice is now told, and the composer can say what the turn did.
@@ -307,6 +320,7 @@ describe("the stored choice a room is told where nothing can be chosen", () => {
 			kind: "chat:model",
 			ts: 0,
 			choice: { model: "acme/large", thinkingLevel: "high" },
+			modelName: "Large",
 		});
 	});
 
@@ -344,7 +358,7 @@ describe("the stored choice a room is told where nothing can be chosen", () => {
 		deps.known = () => true;
 		await choose({ model: "acme/large" });
 		offered = undefined;
-		let gone = "acme/large is no longer available, so Chopin used its default model.";
+		let gone = "Large is no longer available, so Chopin used its default model.";
 		expect(await turnModel(deps, opened.channel.id)).toEqual({ notice: gone });
 		expect((await modelState(deps, opened.channel.id)).choice).toEqual({ model: "acme/large" });
 		offered = catalog;
@@ -469,7 +483,7 @@ describe("what the next turn runs", () => {
 		await choose({ model: "acme/large", thinkingLevel: "high" });
 		offered = { models: [catalog.models[1]!], default: catalog.default };
 		expect(await turnModel(deps, opened.channel.id)).toEqual({
-			notice: "acme/large is no longer available, so Chopin used its default model.",
+			notice: "Large is no longer available, so Chopin used its default model.",
 		});
 		// Still stored, so the model coming back restores the choice.
 		expect((await modelState(deps, opened.channel.id)).choice).toEqual({
@@ -534,7 +548,7 @@ describe("what the next turn runs", () => {
 		await choose({ model: "acme/large" });
 		offered = undefined;
 		expect(await turnModel(deps, opened.channel.id)).toMatchObject({
-			notice: "acme/large is no longer available, so Chopin used its default model.",
+			notice: "Large is no longer available, so Chopin used its default model.",
 		});
 	});
 });
