@@ -610,7 +610,7 @@ export function RoomWorkspace(
 	let [chatAttachments, setChatAttachments] = useState<{
 		wire?: Wire;
 		settings?: Session.AttachmentSettings;
-		transcription?: { provider: string };
+		transcription?: { provider: string; maxBytes: number };
 	}>({});
 	let [metadata, setMetadata] = useState<WorkspaceMetadata>({
 		archivedAt,
@@ -2044,7 +2044,7 @@ export function RoomWorkspace(
 								attachments={chatAttachments.wire === wire ? chatAttachments.settings : undefined}
 								transcription={chatAttachments.wire === wire
 									? chatAttachments.transcription
-									: undefined}
+									: null}
 								repository={repository}
 								room={room}
 								sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}

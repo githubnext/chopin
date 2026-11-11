@@ -2106,7 +2106,9 @@ function openRoomSocket(ws: Socket): void {
 		webResearch: config.webResearch,
 		...CHAT_CAPABILITIES,
 		...(chatAttachmentLimits ? { attachments: chatAttachmentLimits } : {}),
-		...(config.transcription ? { transcription: { provider: "OpenAI" } } : {}),
+		...(config.transcription
+			? { transcription: { provider: "OpenAI", maxBytes: config.transcription.maxBytes } }
+			: {}),
 		...(CLIENT_BUILD && !config.devClient ? { build: CLIENT_BUILD } : {}),
 	});
 	if (plannerAttachments) {

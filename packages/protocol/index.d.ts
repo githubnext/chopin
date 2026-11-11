@@ -110,9 +110,10 @@ export declare namespace Session {
 		attachments?: AttachmentSettings;
 		/**
 		 * Set where the deployment configured a transcription model for dictation, naming the
-		 * provider it sends audio to. Absent by default: no audio is ever sent to the server.
+		 * provider it sends audio to and the longest recording it takes, in bytes. Where it is set,
+		 * every browser dictates through it. Absent by default: no audio is ever sent to the server.
 		 */
-		transcription?: { provider: string };
+		transcription?: { provider: string; maxBytes: number };
 		/**
 		 * The build of the client this server serves: the entry script its page names. A tab whose own
 		 * build, sent as the socket's `build` query parameter, differs knows a newer server answered.
