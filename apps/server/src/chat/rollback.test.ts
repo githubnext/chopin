@@ -12,6 +12,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { ulid } from "@chopin/dialect";
+
 import * as Service from "../plan/service";
 import { openPlan } from "../testing/plan";
 import { setup } from "./attachments.test-fixtures";
@@ -88,6 +90,17 @@ async function read(directory: string, sidecar: string): Promise<Read> {
 let worktree: string | undefined;
 let scratch = mkdtempSync(join(tmpdir(), "chopin-rollback-"));
 
+/** A temporary worktree of the server it would be rolled back to, made once. */
+function olderServer(): string {
+	if (worktree) return worktree;
+	let made = join(scratch, "base");
+	let added = git("worktree", "add", "--detach", made, BASE);
+	expect(added.exitCode, new TextDecoder().decode(added.stderr)).toBe(0);
+	linkModules(made);
+	worktree = made;
+	return made;
+}
+
 afterAll(() => {
 	if (worktree) {
 		git("worktree", "remove", "--force", worktree);
@@ -151,10 +164,7 @@ describe("a transcript with files in it, on the server it would be rolled back t
 	it.skipIf(!available)(
 		`is opened by the real ${BASE} reader, with the same messages and no file lost to it`,
 		async () => {
-			worktree = join(scratch, "base");
-			let added = git("worktree", "add", "--detach", worktree, BASE);
-			expect(added.exitCode, new TextDecoder().decode(added.stderr)).toBe(0);
-			linkModules(worktree);
+			let worktree = olderServer();
 			await Bun.write(join(worktree, READER), Bun.file(join(ROOT, READER)));
 
 			let { sidecar, ids } = await written();
@@ -184,6 +194,122 @@ describe("a transcript with files in it, on the server it would be rolled back t
 			let refused = await read(worktree, bad);
 			expect(refused).toMatchObject({ ok: false });
 			expect((refused as { error: string }).error).toContain("invalid transcript entry");
+		},
+		240_000,
+	);
+});
+
+/**
+ * The sidecar for a Chat holding a message that points at things the composer can point at: a
+ * command, a heading of the document, a file of its repository and a Decision, among a reference
+ * to another document and one to a research card. The older server restores references strictly and
+ * knows only the last two.
+ */
+async function writtenWithPointers(): Promise<
+	{ sidecar: Record<string, unknown>; id: string; references: Array<Record<string, unknown>> }
+> {
+	let context = await openPlan();
+	let text = "/research @Overview, @src/index.ts and @Choice";
+	let at = (token: string) => ({
+		start: text.indexOf(token),
+		end: text.indexOf(token) + token.length,
+	});
+	let references = [
+		{
+			id: ulid(),
+			kind: "command",
+			name: "research",
+			commandKind: "skill",
+			label: "/research",
+			...at("/research"),
+		},
+		{
+			id: ulid(),
+			kind: "heading",
+			anchor: "overview",
+			level: 1,
+			line: 1,
+			label: "@Overview",
+			...at("@Overview"),
+		},
+		{
+			id: ulid(),
+			kind: "file",
+			path: "src/index.ts",
+			label: "@src/index.ts",
+			...at("@src/index.ts"),
+		},
+		{ id: ulid(), kind: "decision", decisionId: ulid(), label: "@Choice", ...at("@Choice") },
+	];
+	let id = ulid();
+	context.plan.chat.entries.push(
+		{
+			id,
+			author: { kind: "member", handle: "ana" },
+			text,
+			ts: 1_700_000_000,
+			references,
+		} as unknown as Wire.Entry,
+		{
+			id: ulid(),
+			author: { kind: "member", handle: "ana" },
+			text: "A message that points nowhere.",
+			ts: 1_700_000_001,
+		} as Wire.Entry,
+	);
+	await Service.persist(context.plan);
+	await Service.close(context.plan);
+	let loaded = (await context.storage.collaboration.load(context.channel.id, context.now))!;
+	let sidecar = structuredClone(loaded.sidecar ?? loaded.snapshot!.sidecar) as Record<
+		string,
+		unknown
+	>;
+	return { sidecar, id, references };
+}
+
+describe("a transcript with pointers in it, on the server it would be rolled back to", () => {
+	it(
+		"is opened by this checkout with every reference back, in the order of the text, as the control",
+		async () => {
+			let { sidecar, id, references } = await writtenWithPointers();
+			let file = join(scratch, "pointers-control.json");
+			await Bun.write(file, JSON.stringify(sidecar));
+			let result = await read(ROOT, file);
+			expect(result.ok, JSON.stringify(result)).toBe(true);
+			let entries = (result as Extract<Read, { ok: true }>).entries;
+			expect(entries.find(entry => entry.id === id)?.references).toEqual(references);
+			// The sidecar keeps them where a server without them does not look.
+			let stored = (sidecar.transcript as Array<Record<string, unknown>>).find(entry =>
+				entry.id === id
+			)!;
+			expect(stored.references).toBeUndefined();
+			expect(stored.pointers).toEqual(references);
+		},
+		120_000,
+	);
+
+	it.skipIf(!available)(
+		`is opened by the real ${BASE} reader, with the same messages and the words the pointers were written in`,
+		async () => {
+			let older = olderServer();
+			await Bun.write(join(older, READER), Bun.file(join(ROOT, READER)));
+			let { sidecar, id } = await writtenWithPointers();
+			let file = join(scratch, "pointers-written.json");
+			await Bun.write(file, JSON.stringify(sidecar));
+			let result = await read(older, file);
+			expect(result.ok, JSON.stringify(result)).toBe(true);
+			let entries = (result as Extract<Read, { ok: true }>).entries;
+			let before = sidecar.transcript as Array<Record<string, unknown>>;
+			expect(entries.map(entry => entry.id)).toEqual(before.map(entry => entry.id));
+			for (let entry of before) {
+				expect(entries.find(value => value.id === entry.id)!.text, String(entry.id)).toBe(
+					entry.text,
+				);
+			}
+			// The older server reads the pointers as the plain words of the message.
+			expect(entries.find(entry => entry.id === id)!.text).toBe(
+				"/research @Overview, @src/index.ts and @Choice",
+			);
 		},
 		240_000,
 	);
