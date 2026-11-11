@@ -117,6 +117,7 @@ const ROOTS = {
 		"image-copy",
 		"image-regenerate",
 		"image-gallery",
+		"message-actions",
 	],
 	open: [
 		"model-selector-content",
@@ -128,6 +129,11 @@ const ROOTS = {
 		"command-group",
 		"model-selector-item",
 		"model-selector-effort",
+	],
+	menu: [
+		"dropdown-menu-content",
+		"dropdown-menu-item",
+		"dropdown-menu-separator",
 	],
 } as const;
 /** What a staged chip's picture box, a sent file's tiles and a gallery's grid/tiles are. */
@@ -165,7 +171,7 @@ const MARKDOWN_PARTS: readonly [label: string, select: (root: Locator) => Locato
 	["pre", root => root.locator(".aui-md-pre")],
 ];
 const TARGETS =
-	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button, [data-slot="markdown-text"] .aui-button-icon, [data-slot="markdown-text"] .aui-md-a, [data-slot="composer-context"] > button, [data-slot="image-download"], [data-slot="image-copy"], [data-slot="image-regenerate"], [data-slot="image-source-label"], [data-slot="image-gallery"] button';
+	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button, [data-slot="markdown-text"] .aui-button-icon, [data-slot="markdown-text"] .aui-md-a, [data-slot="composer-context"] > button, [data-slot="message-actions"] button, [data-slot="dropdown-menu-item"], [data-slot="image-download"], [data-slot="image-copy"], [data-slot="image-regenerate"], [data-slot="image-source-label"], [data-slot="image-gallery"] button';
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 const effortRadios = (page: Page) => slot(page, "model-selector-effort").getByRole("radio");
 
@@ -207,6 +213,17 @@ function restChrome(locator: Locator) {
 			outline: style.outlineStyle,
 		};
 	});
+}
+
+async function openMenu(page: Page): Promise<Locator> {
+	let trigger = plate(page, "assistant-ui").getByRole("button", { name: "More actions" });
+	await trigger.scrollIntoViewIfNeeded();
+	await trigger.click();
+	await expect(slot(page, "dropdown-menu-content")).toBeVisible();
+	await expect.poll(() =>
+		slot(page, "dropdown-menu-content").evaluate(node => getComputedStyle(node).opacity)
+	).toBe("1");
+	return trigger;
 }
 
 test("a copied element is as many pixels as its Tailwind classes say, not as Chopin's scale would make it", async ({ page }) => {
@@ -284,7 +301,72 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 	await expectClassGeometry(dialog.getByRole("button", { name: "Previous image" }), "previous");
 	await expectClassGeometry(dialog.getByRole("button", { name: "Next image" }), "next");
 	checked += 3;
-	expect(checked).toBe(121);
+	await page.keyboard.press("Escape");
+	await openMenu(page);
+	for (let name of ROOTS.menu) {
+		let elements = slot(page, name);
+		expect(await elements.count(), `${name} is drawn`).toBeGreaterThan(0);
+		for (let index = 0; index < await elements.count(); index++) {
+			await expectClassGeometry(elements.nth(index), name);
+			checked++;
+		}
+	}
+	expect(checked).toBe(131);
+});
+
+test("message-actions and dropdown-menu keep their registry geometry: no +4px container, no extra ring", async ({ page }) => {
+	let rows = plate(page, "assistant-ui").locator('[data-slot="message-actions"]');
+	expect(await rows.count()).toBe(4);
+	let row = rows.first();
+	await row.scrollIntoViewIfNeeded();
+	let bar = await measure(row);
+	expect([bar.height, bar.padding, bar.border, bar.radius, bar.gap]).toEqual([
+		28,
+		[0, 0, 0, 0],
+		[0, 0, 0, 0],
+		0,
+		4,
+	]);
+	let chrome = await row.evaluate(node => {
+		let style = getComputedStyle(node);
+		return { outline: style.outlineStyle, shadow: style.boxShadow };
+	});
+	expect(chrome).toEqual({ outline: "none", shadow: "none" });
+
+	let buttons = row.getByRole("button");
+	expect(await buttons.count()).toBe(5);
+	for (let index = 0; index < 5; index++) {
+		let button = buttons.nth(index);
+		await expectClassGeometry(button, "message-actions button");
+		let box = await measure(button);
+		expect([box.width, box.height, box.padding, box.border]).toEqual([
+			28,
+			28,
+			[0, 0, 0, 0],
+			[0, 0, 0, 0],
+		]);
+		expect(box.radius).toBeGreaterThan(1000);
+		let icon = await measure(button.locator("svg").first());
+		expect([icon.width, icon.height]).toEqual([14, 14]);
+	}
+
+	await openMenu(page);
+	let popup = await measure(slot(page, "dropdown-menu-content"));
+	expect([popup.radius, popup.padding, popup.border]).toEqual([
+		8,
+		[4, 4, 4, 4],
+		[0, 0, 0, 0],
+	]);
+	let item = await measure(slot(page, "dropdown-menu-item").first());
+	expect([
+		item.height,
+		item.padding,
+		item.radius,
+		item.gap,
+		item.fontSize,
+		item.lineHeight,
+	]).toEqual([28, [4, 6, 4, 6], 6, 6, 14, 20]);
+	expect((await measure(slot(page, "dropdown-menu-separator"))).height).toBe(1);
 });
 
 test("assistant-ui's own radii, in pixels, where Chopin's scale differs", async ({ page }) => {

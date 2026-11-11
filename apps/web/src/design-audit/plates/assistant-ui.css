@@ -4,6 +4,10 @@
 	gap: 1rem 1.5rem;
 }
 
+.design-audit-aui + .design-audit-aui {
+	margin-top: 1.5rem;
+}
+
 .design-audit-aui > div {
 	display: flex;
 	flex-direction: column;

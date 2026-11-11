@@ -43,6 +43,8 @@ const ROOTS = [
 	'[data-slot="image-gallery"]',
 	'[data-slot="dialog-overlay"]',
 	'[data-slot="dialog-content"]',
+	'[data-slot="message-actions"]',
+	'[data-slot="dropdown-menu-content"]',
 ] as const;
 
 // The voice's dot pulses for as long as it listens, and a colour is read once nothing is moving.
@@ -276,6 +278,30 @@ async function states(page: Page, measure: (state: string) => Promise<void>) {
 	await rings.nth(1).scrollIntoViewIfNeeded();
 	await rings.nth(1).focus();
 	await check("context ring warn focus");
+	let messageAction = plate(page, "assistant-ui").locator('[data-slot="message-actions"]').first()
+		.getByRole("button").first();
+	await messageAction.scrollIntoViewIfNeeded();
+	await messageAction.hover();
+	await check("message action hover");
+	await messageAction.focus();
+	await page.keyboard.press("Tab");
+	await page.keyboard.press("Shift+Tab");
+	await check("message action focus");
+
+	let more = plate(page, "assistant-ui").getByRole("button", { name: "More actions" });
+	await more.scrollIntoViewIfNeeded();
+	await more.click();
+	await expect(page.locator('[data-slot="dropdown-menu-content"]')).toBeVisible();
+	await expect.poll(() =>
+		page.locator('[data-slot="dropdown-menu-content"]').evaluate(node =>
+			getComputedStyle(node).opacity
+		)
+	).toBe("1");
+	await check("dropdown open");
+	await page.locator('[data-slot="dropdown-menu-item"]').first().hover();
+	await check("dropdown item hover");
+	await page.locator('[data-slot="dropdown-menu-item"][data-variant="destructive"]').hover();
+	await check("dropdown destructive hover");
 }
 
 for (let mode of ["light", "dark"] as const) {

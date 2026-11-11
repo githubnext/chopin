@@ -62,7 +62,7 @@ export function MessageActions(
 			aria-label="Reactions and actions"
 			aria-orientation="horizontal"
 			className={`message-actions ${className ?? ""}`}
-			data-slot="message-actions"
+			data-slot="chat-message-actions"
 			onKeyDown={move}
 			role="toolbar"
 			{...props}

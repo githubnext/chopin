@@ -172,7 +172,7 @@ export let MessageToolbar = memo(function MessageToolbar(
 		let view = element?.closest<HTMLElement>("[data-chat-scroll]");
 		if (!element || !view || !window.matchMedia("(hover: hover)").matches) return;
 		let place = () => {
-			let bar = element.querySelector<HTMLElement>('[data-slot="message-actions"]');
+			let bar = element.querySelector<HTMLElement>('[data-slot="chat-message-actions"]');
 			if (!bar) return;
 			let shift = Number.parseFloat(element.style.getPropertyValue(SHIFT)) || 0;
 			let natural = bar.getBoundingClientRect().top - shift;
@@ -213,7 +213,7 @@ export let MessageToolbar = memo(function MessageToolbar(
 		let view = element?.closest<HTMLElement>("[data-chat-scroll]");
 		if (!element || !view || !window.matchMedia("(hover: hover)").matches) return;
 		let measure = () => {
-			let bar = element.querySelector<HTMLElement>('[data-slot="message-actions"]');
+			let bar = element.querySelector<HTMLElement>('[data-slot="chat-message-actions"]');
 			// Tall is not only taller than the pane: a message that cannot be shown whole with its bar,
 			// which hangs above its top, can be scrolled until its top is out and its bar with it.
 			let shift = Number.parseFloat(element.style.getPropertyValue(SHIFT)) || 0;
@@ -238,7 +238,7 @@ export let MessageToolbar = memo(function MessageToolbar(
 
 	useEffect(() => {
 		if (!pinned) return;
-		let bar = host.current?.querySelector<HTMLElement>('[data-slot="message-actions"]');
+		let bar = host.current?.querySelector<HTMLElement>('[data-slot="chat-message-actions"]');
 		let view = bar?.closest<HTMLElement>("[data-chat-scroll]");
 		if (!bar || !view) return;
 		let box = bar.getBoundingClientRect();
