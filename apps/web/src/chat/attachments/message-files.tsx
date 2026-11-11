@@ -1,49 +1,45 @@
 /**
  * The images and files a message was sent with, under its text, for everyone who can read the
- * document: an image as its thumbnail, a text file as a chip that downloads it.
+ * document: assistant-ui's received-files design (`MessageAttachments`, copied and recorded). An
+ * image is drawn from the stored file as the picture of its tile, and pressing a file opens an image
+ * in its own tab and downloads a text file.
  */
 
-import { PageIcon } from "@chopin/icons";
-import { attachmentPath, formatBytes } from "@chopin/protocol/attachment";
+import { attachmentPath } from "@chopin/protocol/attachment";
+import { MessageAttachments } from "@/components/assistant-ui/elements/message-attachment";
+import { messageFileProps } from "./files";
 
 import type { Chat } from "@chopin/protocol";
-import "./attachments.css";
+
+function open(file: Chat.Attachment, href: string) {
+	if (file.kind === "image") {
+		window.open(href, "_blank", "noopener,noreferrer");
+		return;
+	}
+	let link = document.createElement("a");
+	link.href = href;
+	link.download = file.name;
+	link.click();
+}
 
 export default function MessageFiles(
 	{ channelId, files }: { channelId: string; files: readonly Chat.Attachment[] },
 ) {
 	return (
-		<ul aria-label="Files sent with this message" className="message-files" data-chat-files="">
-			{files.map(file => {
-				let href = attachmentPath(channelId, file.id);
-				return (
-					<li className="message-file" data-kind={file.kind} key={file.id}>
-						{file.kind === "image"
-							? (
-								<a
-									aria-label={`Open ${file.name}, ${formatBytes(file.size)}`}
-									className="message-file-image"
-									href={href}
-									rel="noreferrer"
-									target="_blank"
-								>
-									<img alt={file.name} loading="lazy" src={href} />
-								</a>
-							)
-							: (
-								<a className="message-file-chip" download={file.name} href={href}>
-									<span aria-hidden="true" className="composer-file-visual" data-kind="file">
-										<PageIcon size={16} />
-									</span>
-									<span className="composer-file-text">
-										<span className="composer-file-name" title={file.name}>{file.name}</span>
-										<span className="composer-file-meta">{formatBytes(file.size)}</span>
-									</span>
-								</a>
-							)}
-					</li>
-				);
-			})}
-		</ul>
+		<MessageAttachments
+			aria-label="Files sent with this message"
+			attachments={files.map(file => ({
+				...messageFileProps(file),
+				...(file.kind === "image"
+					? { swatch: `url("${attachmentPath(channelId, file.id)}")` }
+					: {}),
+			}))}
+			data-chat-files=""
+			onOpen={id => {
+				let file = files.find(candidate => candidate.id === id);
+				if (file) open(file, attachmentPath(channelId, id));
+			}}
+			role="group"
+		/>
 	);
 }

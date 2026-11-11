@@ -12,17 +12,15 @@ import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import {
 	ArchiveIcon,
 	AtSignIcon,
-	CloseIcon,
+	DocumentIcon,
 	InfoIcon,
 	LockIcon,
-	MicIcon,
-	PaperclipIcon,
 	PlusIcon,
 	SparkleIcon,
-	StopIcon,
 	TextStyleIcon,
 	WarningIcon,
 } from "@chopin/icons";
+import { ComposerVoice, ComposerVoiceButton } from "@/components/assistant-ui/elements/composer";
 import { DraftInput } from "./draft-input";
 import { FormatBar } from "./format-bar";
 import { sendStop } from "./assistant-ui/send-stop";
@@ -42,7 +40,7 @@ import "./composer.css";
 const MOTION = motionContract("collapse");
 
 /** The files of the message, drawn by code that loads when the first one is added. */
-let FileStrip = lazy(() => import("./attachments/composer-files"));
+let StagedFiles = lazy(() => import("./attachments/staged-files"));
 
 /** What the composer needs to take, show and send files; absent where the server takes none. */
 export type ComposerFiles = {
@@ -70,9 +68,6 @@ export type ComposerDictation = {
 	tooltip: string;
 	/** Spoken once to a screen reader when it starts and when it stops. */
 	announcement: string;
-	/** Why it stopped without finishing, in words, shown above the field until dismissed. */
-	failure?: string;
-	onDismissFailure: () => void;
 	disabled: boolean;
 	onToggle: () => void;
 };
@@ -196,8 +191,6 @@ export function ChatComposer(
 ) {
 	let instructionsId = useId();
 	let cueId = useId();
-	// A phone's pill shows the controls for adding files and dictating once the draft has the focus.
-	let [expanded, setExpanded] = useState(false);
 	let filePicker = useRef<HTMLInputElement>(null);
 	let filesReasonId = useId();
 	// Files dragged over the surface. Leaving it for a child of it is not leaving: only a leave that
@@ -217,7 +210,7 @@ export function ChatComposer(
 	let droppable = !!files && !files.disabled && !unavailable;
 	let error = notice?.tone === "error" || !!banner?.invalid;
 	let chip = !!chopin?.chip;
-	let hasDraft = input.value.trim() !== "";
+	let hasDraft = input.value.trim() !== "" || !!files?.files.length;
 	let button = sendStop({
 		running: run?.action === "stop",
 		hasDraft,
@@ -296,14 +289,6 @@ export function ChatComposer(
 			ref={rootRef}
 			className="chat-composer relative shrink-0 px-2.5 pb-2.5"
 			data-planner={agent ? undefined : "off"}
-			data-extras={expanded || dictation?.active || undefined}
-			onFocus={event => {
-				if ((event.target as HTMLElement).closest(".composer-draft-input")) setExpanded(true);
-			}}
-			onBlur={event => {
-				// Focus moving to another control of the composer (a tap on one) is not leaving it.
-				if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setExpanded(false);
-			}}
 			onKeyDown={dictation
 				? event => {
 					// Escape stops listening wherever the focus is in the composer; the chord starts and stops it.
@@ -325,19 +310,6 @@ export function ChatComposer(
 				<p aria-live="polite" className="sr-only" data-chat-dictation-announcement="" role="status">
 					{dictation.announcement}
 				</p>
-			)}
-			{dictation?.failure && (
-				<div className="composer-dictation-failure" data-chat-dictation-failure="" role="alert">
-					<span>{dictation.failure}</span>
-					<button
-						aria-label="Dismiss"
-						className="btn btn-icon-xs btn-ghost"
-						onClick={dictation.onDismissFailure}
-						type="button"
-					>
-						<CloseIcon aria-hidden="true" size={12} />
-					</button>
-				</div>
 			)}
 			{references && (
 				<p className="sr-only" id={instructionsId}>
@@ -410,9 +382,10 @@ export function ChatComposer(
 					: (
 						<>
 							{format?.shown && <FormatBar disabled={format.disabled} onFormat={format.onFormat} />}
+							{/* What is staged for the message sits above its text: the files, and the voice while it is listened to. */}
 							{files && files.files.length > 0 && (
 								<Suspense fallback={null}>
-									<FileStrip
+									<StagedFiles
 										files={files.files}
 										onRemove={files.onRemove}
 										onRetry={files.onRetry}
@@ -420,6 +393,16 @@ export function ChatComposer(
 									/>
 								</Suspense>
 							)}
+							{dictation && (dictation.phase === "listening" || dictation.phase === "transcribing")
+								&& (
+									<div className="composer-staging" data-chat-dictation="">
+										<ComposerVoice
+											label={clock(dictation.seconds)}
+											recording={dictation.phase === "listening"}
+											seconds={dictation.seconds}
+										/>
+									</div>
+								)}
 							{files?.waiting && (
 								<p className="composer-files-status" role="status">
 									Sending once your files have uploaded
@@ -487,7 +470,7 @@ export function ChatComposer(
 											/>
 											<button
 												type="button"
-												className="btn btn-icon btn-ghost composer-phone-extra"
+												className="btn btn-icon btn-ghost"
 												aria-label="Add files"
 												aria-describedby={files.imagesReason ? filesReasonId : undefined}
 												title={files.imagesReason
@@ -500,7 +483,7 @@ export function ChatComposer(
 												disabled={files.disabled}
 												onClick={() => filePicker.current?.click()}
 											>
-												<PaperclipIcon size={16} />
+												<PlusIcon size={16} />
 											</button>
 											{files.imagesReason && (
 												<span className="sr-only" id={filesReasonId}>{files.imagesReason}</span>
@@ -518,7 +501,7 @@ export function ChatComposer(
 											disabled={references.disabled}
 											onClick={references.onMentionDocs}
 										>
-											<PlusIcon size={16} />
+											<DocumentIcon size={16} />
 										</button>
 									)}
 									{format && (
@@ -565,43 +548,23 @@ export function ChatComposer(
 											<SparkleIcon size={16} />
 										</button>
 									)}
+									{dictation && (
+										<ComposerVoiceButton
+											active={dictation.active}
+											aria-label="Dictate"
+											aria-pressed={dictation.active}
+											data-tooltip={dictation.tooltip}
+											data-tooltip-verbatim=""
+											disabled={dictation.disabled && !dictation.active}
+											// The field keeps its focus and its caret, which is where the words go.
+											onMouseDown={event => event.preventDefault()}
+											onClick={dictation.onToggle}
+											title={dictation.tooltip}
+										/>
+									)}
 									{model && <ModelPill control={model} />}
 								</div>
 								<div className="composer-actions">
-									{dictation && (
-										<>
-											{dictation.active && (
-												<span
-													className="composer-recording composer-phone-extra"
-													data-phase={dictation.phase}
-												>
-													<span aria-hidden="true" className="composer-recording-dot" />
-													<span className="composer-recording-text">
-														{dictation.phase === "transcribing"
-															? "Transcribing"
-															: dictation.phase === "listening"
-															? clock(dictation.seconds)
-															: ""}
-													</span>
-												</span>
-											)}
-											<button
-												type="button"
-												aria-label="Dictate"
-												aria-pressed={dictation.active}
-												className="btn btn-icon btn-ghost composer-dictate composer-phone-extra"
-												data-tooltip={dictation.tooltip}
-												data-tooltip-verbatim=""
-												disabled={dictation.disabled && !dictation.active}
-												// The field keeps its focus and its caret, which is where the words go.
-												onMouseDown={event => event.preventDefault()}
-												onClick={dictation.onToggle}
-												title={dictation.tooltip}
-											>
-												{dictation.active ? <StopIcon size={16} /> : <MicIcon size={16} />}
-											</button>
-										</>
-									)}
 									{run?.action === "resume" && (
 										<button
 											aria-label="Resume Chopin"
