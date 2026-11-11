@@ -53,9 +53,10 @@ test("split Chat sits on the ground beside a raised sheet that carries the title
 	await expect(page.getByRole("button", { name: "Hide chat" })).toHaveCount(0);
 	await expect(page.getByRole("heading", { name: "Chat" })).toHaveClass(/sr-only/);
 	await expect(pane).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-	let field = pane.locator(".chat-composer .field");
+	// The composer on the ground is a message box: the page's surface with a hairline and no shadow.
+	let field = pane.locator(".chat-composer .composer-surface");
 	await expect(field).toHaveCSS("box-shadow", "none");
-	await expect(field).toHaveCSS("background-color", await resolved(page, "--color-inset"));
+	await expect(field).toHaveCSS("background-color", await resolved(page, "--color-page"));
 
 	let [rootBox, titleBox, barBox, viewsBox, paneBox, sheetBox] = await Promise.all([
 		box(root(page)),
@@ -294,7 +295,7 @@ test("compact keeps its header presence and navigation, and split keeps expansio
 		exact: true,
 		name: "Chat",
 	}).click();
-	let compactField = chatPane(page).locator(".chat-composer .field");
+	let compactField = chatPane(page).locator(".chat-composer .composer-surface");
 	await expect(compactField).toHaveCSS("box-shadow", "none");
-	await expect(compactField).toHaveCSS("background-color", await resolved(page, "--color-inset"));
+	await expect(compactField).toHaveCSS("background-color", await resolved(page, "--color-page"));
 });
