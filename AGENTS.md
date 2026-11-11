@@ -18,6 +18,7 @@ The most useful technical references are:
 - [Agent connection](docs/agent-connection.md)
 - [Background jobs and workers](docs/background-jobs.md)
 - [Experimental implementation lifecycle](docs/implementation-lifecycle.md)
+- [Adding an assistant-ui element](docs/assistant-ui.md)
 - [Self-hosting](docs/self-hosting.md)
 - [Deploys nobody can see](docs/zero-downtime-deploys.md)
 
