@@ -4,6 +4,7 @@ import {
   forwardRef,
   type ComponentProps,
   type ComponentPropsWithoutRef,
+  type ComponentType,
   type ReactNode,
   type RefObject,
   useCallback,
@@ -47,6 +48,12 @@ export interface ComposerAttachment {
   state: "uploading" | "done" | "error";
   progress?: number;
   kind?: "image" | "text" | "archive";
+  /** What `onRemove` is called with, so two files that share a name can be told apart. */
+  id?: string;
+  /** Drawn in the box of the icon in place of the icon of its kind, which is how an image shows its picture. */
+  icon?: ComponentType<{ className?: string }>;
+  /** Drawn after the status, for what a surface offers that the chip does not: trying again, and removing a file that did not go. */
+  actions?: ReactNode;
 }
 
 export interface ComposerCommand {
@@ -320,7 +327,7 @@ export function ComposerAttachmentChip({
   attachment: ComposerAttachment;
   onRemove?: (name: string) => void;
 }) {
-  const Icon = ATTACHMENT_ICONS[attachment.kind ?? "text"];
+  const Icon = attachment.icon ?? ATTACHMENT_ICONS[attachment.kind ?? "text"];
   return (
     <div
       data-slot="composer-attachment"
@@ -357,7 +364,7 @@ export function ComposerAttachmentChip({
           <button
             type="button"
             aria-label={`Remove ${attachment.name}`}
-            onClick={() => onRemove(attachment.name)}
+            onClick={() => onRemove(attachment.id ?? attachment.name)}
             className={cn(ghostButton, "size-5 [&_svg]:size-3")}
           >
             <XIcon />
@@ -366,6 +373,7 @@ export function ComposerAttachmentChip({
           <CheckIcon className="size-3.5 text-emerald-500" />
         ) : null}
       </span>
+      {attachment.actions}
       {attachment.state === "uploading" && (
         <span
           aria-hidden
@@ -409,11 +417,14 @@ export function ComposerInput({
 export function ComposerVoice({
   recording,
   seconds,
+  label,
   className,
   ...props
 }: Omit<ComponentProps<"div">, "children"> & {
   recording: boolean;
   seconds: number;
+  /** The time so far in the words of the surface, where the registry draws 0:SS and cannot say past a minute. */
+  label?: string;
 }) {
   return (
     <div
@@ -442,7 +453,11 @@ export function ComposerVoice({
       </div>
       {recording ? (
         <span className={cn(mono, "text-muted-foreground tabular-nums")}>
-          0:{String(seconds).padStart(2, "0")}
+          {label ?? (
+            <>
+              0:{String(seconds).padStart(2, "0")}
+            </>
+          )}
         </span>
       ) : (
         <ShimmerLabel className="text-muted-foreground relative text-[13px]">

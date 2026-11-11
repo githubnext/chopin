@@ -1,14 +1,28 @@
 --- a/apps/web/src/components/assistant-ui/elements/composer.tsx
 +++ b/apps/web/src/components/assistant-ui/elements/composer.tsx
-@@ -4,6 +4,7 @@ the type of a leading slot, which needs ReactNode
+@@ -4,6 +4,8 @@ the types of a leading slot and of a picture, which need ReactNode and ComponentType
    forwardRef,
    type ComponentProps,
    type ComponentPropsWithoutRef,
++  type ComponentType,
 +  type ReactNode,
    type RefObject,
    useCallback,
    useLayoutEffect,
-@@ -56,7 +57,9 @@ a person's own picture can lead the badge, and the tag can name more than agent or human
+@@ -46,6 +48,12 @@ a chip can carry the id of its file, the picture that takes its icon, and what a surface offers beside the status
+   state: "uploading" | "done" | "error";
+   progress?: number;
+   kind?: "image" | "text" | "archive";
++  /** What `onRemove` is called with, so two files that share a name can be told apart. */
++  id?: string;
++  /** Drawn in the box of the icon in place of the icon of its kind, which is how an image shows its picture. */
++  icon?: ComponentType<{ className?: string }>;
++  /** Drawn after the status, for what a surface offers that the chip does not: trying again, and removing a file that did not go. */
++  actions?: ReactNode;
+ }
+ 
+ export interface ComposerCommand {
+@@ -56,7 +64,9 @@ a person's own picture can lead the badge, and the tag can name more than agent or human
  
  export interface ComposerPerson {
    name: string;
@@ -19,7 +33,7 @@
  }
  
  export interface ComposerModel {
-@@ -287,7 +290,7 @@ the picture is drawn in the badge where the registry draws only an initial
+@@ -287,7 +297,7 @@ the picture is drawn in the badge where the registry draws only an initial
    return (
      <ComposerMenuItem active={active} {...props}>
        <span className="bg-foreground/[0.06] text-muted-foreground flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-medium">
@@ -28,3 +42,57 @@
        </span>
        <span className="flex-1 truncate text-start">{person.name}</span>
        <span className={cn(mono, "text-muted-foreground")}>{person.role}</span>
+@@ -317,7 +327,7 @@ a chip can draw a picture in the box of its icon where the registry draws only the icon of its kind
+   attachment: ComposerAttachment;
+   onRemove?: (name: string) => void;
+ }) {
+-  const Icon = ATTACHMENT_ICONS[attachment.kind ?? "text"];
++  const Icon = attachment.icon ?? ATTACHMENT_ICONS[attachment.kind ?? "text"];
+   return (
+     <div
+       data-slot="composer-attachment"
+@@ -354,7 +364,7 @@ a chip names its file by its id when it has one, so two files with one name are two
+           <button
+             type="button"
+             aria-label={`Remove ${attachment.name}`}
+-            onClick={() => onRemove(attachment.name)}
++            onClick={() => onRemove(attachment.id ?? attachment.name)}
+             className={cn(ghostButton, "size-5 [&_svg]:size-3")}
+           >
+             <XIcon />
+@@ -363,6 +373,7 @@ a chip draws what a surface offers beside its status: trying again, and removing a file that did not go
+           <CheckIcon className="size-3.5 text-emerald-500" />
+         ) : null}
+       </span>
++      {attachment.actions}
+       {attachment.state === "uploading" && (
+         <span
+           aria-hidden
+@@ -406,11 +417,14 @@ the voice takes its time in the words of the surface, to say a minute where the registry draws 0:SS
+ export function ComposerVoice({
+   recording,
+   seconds,
++  label,
+   className,
+   ...props
+ }: Omit<ComponentProps<"div">, "children"> & {
+   recording: boolean;
+   seconds: number;
++  /** The time so far in the words of the surface, where the registry draws 0:SS and cannot say past a minute. */
++  label?: string;
+ }) {
+   return (
+     <div
+@@ -439,7 +453,11 @@ the voice draws that time where it is given
+       </div>
+       {recording ? (
+         <span className={cn(mono, "text-muted-foreground tabular-nums")}>
+-          0:{String(seconds).padStart(2, "0")}
++          {label ?? (
++            <>
++              0:{String(seconds).padStart(2, "0")}
++            </>
++          )}
+         </span>
+       ) : (
+         <ShimmerLabel className="text-muted-foreground relative text-[13px]">
