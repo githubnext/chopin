@@ -1,26 +1,7 @@
-.chat-message-body[data-thread-root-open] {
-	margin-inline: calc(var(--spacing) * -2);
-	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
-	border-radius: var(--radius-md);
+/* A message whose thread is open keeps its row in the selected wash, as Slack marks a thread's root. */
+.chat-message-body[data-thread-root-open]::before {
 	background: var(--color-selected);
-}
-
-.chat-message-body .chat-thread-trigger {
-	opacity: 0;
-	transition: opacity var(--duration-fast) var(--ease-out);
-}
-
-.chat-message-body:hover .chat-thread-trigger,
-.chat-message-body:focus-within .chat-thread-trigger,
-:root[data-plan-coarse-pointer] .chat-message-body .chat-thread-trigger,
-.chat-message-body[data-thread-root-open] .chat-thread-trigger {
 	opacity: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.chat-message-body .chat-thread-trigger {
-		transition: none;
-	}
 }
 
 .chat-thread-summary-row {

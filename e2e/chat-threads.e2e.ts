@@ -26,6 +26,17 @@ async function sendInScope(scope: Locator, text: string): Promise<void> {
 	await scope.getByRole("button", { name: "Send message" }).click();
 }
 
+/** A finger held on a message, which brings up its toolbar on a touch screen. */
+async function longPress(page: Page, target: Locator): Promise<void> {
+	let box = (await target.boundingBox())!;
+	let point = { x: box.x + 24, y: box.y + Math.min(8, box.height / 2) };
+	let session = await page.context().newCDPSession(page);
+	await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+	await page.waitForTimeout(700);
+	await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+	await session.detach();
+}
+
 async function openPhoneChat(page: Page): Promise<void> {
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /^Chat/ }).click();
@@ -295,7 +306,9 @@ test("opens threads as a full-height sheet on phones with Back to Chat and no ho
 	let rootMsg = chat.locator(".chat-message-body", { hasText: "Phone root message" });
 	await expect(rootMsg).toBeVisible();
 
-	await rootMsg.getByRole("button", { name: "Reply in thread" }).click();
+	// On a touch screen Reply in thread is in the toolbar a long press brings up.
+	await longPress(page, rootMsg);
+	await rootMsg.getByRole("button", { name: "Reply in thread" }).tap();
 	let sheet = page.locator("[data-thread-panel][data-thread-sheet]");
 	await expect(sheet).toBeVisible();
 	let sheetBox = (await sheet.boundingBox())!;

@@ -1,3 +1,5 @@
+import { SmilePlusIcon } from "lucide-react";
+
 import { reactedBy, reactionHint } from "../reactions";
 
 import "./message-actions.css";
@@ -5,8 +7,10 @@ import "./message-actions.css";
 import type { Chat } from "@chopin/protocol";
 
 export function ReactionPills(
-	{ handle, onToggle, pending, reactions }: {
+	{ handle, onAdd, onToggle, pending, reactions }: {
 		handle: string;
+		/** Opens the message's emoji picker, from the add pill a pointer finds after the reactions. */
+		onAdd?: () => void;
 		onToggle: (emoji: string, on: boolean) => void;
 		pending: ReadonlySet<string>;
 		reactions: readonly Chat.Reaction[];
@@ -38,6 +42,19 @@ export function ReactionPills(
 					</button>
 				);
 			})}
+			{onAdd && (
+				// The toolbar's Add reaction is the one a keyboard and a screen reader reach; this is its
+				// shortcut for a pointer, as Slack shows after a message's reactions on hover.
+				<button
+					aria-hidden="true"
+					className="chat-reaction chat-reaction-add"
+					onClick={onAdd}
+					tabIndex={-1}
+					type="button"
+				>
+					<SmilePlusIcon aria-hidden="true" />
+				</button>
+			)}
 		</div>
 	);
 }

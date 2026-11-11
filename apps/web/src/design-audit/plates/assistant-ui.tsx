@@ -1,13 +1,15 @@
 import {
 	CopyIcon,
 	EllipsisIcon,
+	EllipsisVerticalIcon,
 	GlobeIcon,
 	RotateCcwIcon,
 	SmilePlusIcon,
 	SparklesIcon,
 	XIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { cloneElement, useState } from "react";
+import { MessageIcon } from "@chopin/icons";
 
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import { MessageActions } from "@/components/assistant-ui/elements/message-actions";
@@ -486,6 +488,7 @@ export function AssistantUiPlate() {
 					<StateLabel>Chopin toolbar</StateLabel>
 					<MessageActions
 						aria-label="Reactions and actions"
+						className="chat-message-toolbar"
 						items={[
 							...QUICK_REACTIONS.map((item, index) => ({
 								key: item.emoji,
@@ -500,8 +503,15 @@ export function AssistantUiPlate() {
 								label: "Add reaction",
 								children: <SmilePlusIcon aria-hidden="true" size={14} />,
 							},
+							{
+								key: "thread",
+								label: "Reply in thread",
+								children: <MessageIcon aria-hidden="true" />,
+							},
 						]}
 						moreProps={{ "aria-label": "Message actions" }}
+						renderMore={button =>
+							cloneElement(button, {}, <EllipsisVerticalIcon aria-hidden="true" />)}
 						role="toolbar"
 					/>
 				</div>

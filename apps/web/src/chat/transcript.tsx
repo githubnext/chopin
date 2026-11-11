@@ -63,7 +63,6 @@ import type { ResearchOfferControls } from "./research-offer";
 import { researchTranscript } from "./research-transcript";
 import type { ResearchTranscriptItem } from "./research-transcript";
 import { CompactingRow, CompactionDivider } from "./compaction/compaction-divider";
-import { ThreadEntryButton } from "./threads/thread-entry-button";
 import { ThreadSummaryRow } from "./threads/thread-summary-row";
 
 export type TranscriptThreads = {
@@ -102,6 +101,12 @@ export type TranscriptDecisions = {
 
 function when(ts: number): string {
 	return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** The time a grouped message shows in the avatar's gutter: the hour and minute alone, as Slack's. */
+function clock(ts: number): string {
+	return new Date(ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+		.replace(/\s*[^\d:.\s]+\.?\s*$/u, "").replace(/^\s*[^\d\s]+\.?\s*/u, "");
 }
 
 const READY = /^Research is ready\. \[Open the research document\]\((\/documents\/\S+)\)\.$/;
@@ -285,11 +290,9 @@ function MessageBody(
 	let delivery = own ? deliveryOf(message) : undefined;
 	let threadSummary = markers.threads?.summaries[message.id];
 	let rootOpen = markers.threads?.openRootId === message.id;
-	let hasAnalysisMarker = ANALYSIS && !!markers.onCardLink
-		&& !!markers.onRetryAnalysis;
-	let canThread = !!markers.threads
-		&& !rootOpen
-		&& (!!threadSummary || markers.threads.canStart)
+	let threads = markers.threads;
+	let canThread = !!threads
+		&& (!!threadSummary || threads.canStart)
 		&& !message.streaming && delivery === undefined;
 	let menu = messageMenuActions(message, handle, quietFailures);
 	let actions = useRef<ToolbarActions>(null!);
@@ -298,8 +301,10 @@ function MessageBody(
 		react: (emoji, on) => onReact?.(message.id, emoji, on),
 		delete: () => onDelete(message.id),
 		retry: () => onRetry(message.id),
+		thread: () => threads?.onOpen(message.id),
 	};
 	let shown = withIntents(message.reactions, intents, message.id, handle);
+	let openPicker = useRef<() => void>(undefined);
 
 	return (
 		<ChatImageDocument value={room}>
@@ -319,6 +324,11 @@ function MessageBody(
 						? "disconnected"
 						: undefined}
 				>
+					{!headed && message.ts !== undefined && (
+						<span aria-hidden="true" className="chat-gutter-time tabular-nums">
+							{clock(message.ts)}
+						</span>
+					)}
 					{(message.working || message.workDisconnected || !!message.tools?.length) && (
 						<WorkProgress
 							decisions={markers.decisions}
@@ -339,6 +349,7 @@ function MessageBody(
 					{(text || toPlanner) && (
 						<div className="flex items-start gap-1">
 							<div className="min-w-0 flex-1" data-chat-message-text>
+								<span aria-hidden="true" className="chat-toolbar-room" />
 								<MessageMarkdown
 									className="break-words text-chat-body [overflow-wrap:anywhere]"
 									mention={toPlanner ? "@chopin" : undefined}
@@ -348,20 +359,10 @@ function MessageBody(
 								/>
 								{message.streaming && <span className="ml-0.5">▍</span>}
 							</div>
-							{canThread && markers.threads && (
-								<span className={hasAnalysisMarker ? "mr-5 shrink-0" : "shrink-0"}>
-									<ThreadEntryButton onOpen={markers.threads.onOpen} rootId={message.id} />
-								</span>
-							)}
 							{delivery && delivery !== "failed" && <DeliveryMark mark={delivery} />}
 						</div>
 					)}
 					<TurnImages images={message.images} refused={message.refusedImages} />
-					{!(text || toPlanner) && canThread && markers.threads && (
-						<div className="flex justify-end">
-							<ThreadEntryButton onOpen={markers.threads.onOpen} rootId={message.id} />
-						</div>
-					)}
 					{!!message.attachments?.length && room && (
 						<Suspense fallback={null}>
 							<MessageFiles channelId={room} files={message.attachments} />
@@ -371,6 +372,7 @@ function MessageBody(
 					{shown.reactions.length > 0 && (
 						<ReactionPills
 							handle={handle}
+							onAdd={onReact ? () => openPicker.current?.() : undefined}
 							onToggle={(emoji, on) => onReact?.(message.id, emoji, on)}
 							pending={shown.pending}
 							reactions={shown.reactions}
@@ -386,9 +388,10 @@ function MessageBody(
 						canRetry={menu.retry}
 						host={host}
 						markdown={message.text}
-						persistent={menu.retry}
+						openPicker={openPicker}
 						reactable={!!onReact}
 						reacted={ownEmoji(shown.reactions, handle)}
+						thread={canThread ? message.id : undefined}
 					/>
 					{ANALYSIS && markers.onCardLink && markers.onRetryAnalysis && (
 						<MessageMarkers
@@ -442,24 +445,24 @@ function MessageGroup(
 
 	return (
 		<div
-			className="flex gap-3"
+			className="flex gap-2"
 			data-chat-enter={enter || undefined}
 			data-chat-entry
 		>
-			<div className="w-6 shrink-0" data-chat-avatar="">
+			<div className="w-9 shrink-0" data-chat-avatar="">
 				{item.continued
 					? null
 					: item.author.kind === "agent"
 					? <ChopinMark circle />
-					: <Face decorative handle={item.author.handle} size={24} titled={false} />}
+					: <Face decorative handle={item.author.handle} size={36} titled={false} />}
 			</div>
 			<div
 				className={`flex min-w-0 flex-1 flex-col gap-1 ${item.continued ? "" : "-mt-0.5"}`}
 			>
 				{!item.continued && (
-					<div className="flex items-baseline gap-1.5 text-sm" data-chat-head="">
-						<span className="min-w-0 break-all font-semibold">{name}</span>
-						<span className="text-2xs text-text-tertiary tabular-nums">
+					<div className="flex items-baseline gap-2 text-base" data-chat-head="">
+						<span className="min-w-0 break-all font-bold">{name}</span>
+						<span className="text-xs text-text-tertiary tabular-nums">
 							{active ? `Started at ${when(active.ts!)}` : when(first.ts!)}
 						</span>
 					</div>

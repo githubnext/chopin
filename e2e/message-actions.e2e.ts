@@ -98,6 +98,7 @@ test("a person's message and the Planner's both show the same toolbar on hover, 
 			"Explain this",
 			"Not quite",
 			"Add reaction",
+			"Reply in thread",
 			"Message actions",
 		]);
 		let glyphs = await toolbar(target).getByRole("button").evaluateAll(buttons =>
@@ -281,11 +282,11 @@ test("the toolbar is a keyboard path: one tab stop, arrows within it, Enter open
 	await page.keyboard.press("ArrowRight");
 	await expect(buttons.nth(1)).toBeFocused();
 	await page.keyboard.press("End");
-	await expect(buttons.nth(4)).toBeFocused();
+	await expect(buttons.nth(5)).toBeFocused();
 	await page.keyboard.press("ArrowRight");
 	await expect(buttons.nth(0)).toBeFocused();
 	await page.keyboard.press("ArrowLeft");
-	await expect(buttons.nth(4)).toBeFocused();
+	await expect(buttons.nth(5)).toBeFocused();
 
 	await page.keyboard.press("Enter");
 	let menu = page.getByRole("menu", { name: "Message actions" });
@@ -298,8 +299,8 @@ test("the toolbar is a keyboard path: one tab stop, arrows within it, Enter open
 	await expect.poll(() => clipboard(page)).toBe(PERSON.text);
 
 	await page.keyboard.press("Escape");
-	await expect(buttons.nth(4)).toBeFocused();
-	await expect(buttons.nth(4)).toHaveAttribute("aria-expanded", "false");
+	await expect(buttons.nth(5)).toBeFocused();
+	await expect(buttons.nth(5)).toHaveAttribute("aria-expanded", "false");
 });
 
 test("reacting puts a pill under the message that is yours to take back, and a second person's reaction counts with it", async ({ join, seed }) => {
