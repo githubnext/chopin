@@ -158,6 +158,15 @@ Files sent with a Chat message (see [Files in Chat](hosted-agent.md#files-in-cha
 carries only their names, kinds, types and sizes. The same rows are the memory adapter's, and the
 storage contract holds both to the same rules.
 
+A transcript entry keeps what the composer's `@` and `/` point at (a command, a heading of the
+document, a Decision, a file of the repository) under `pointers`, and only references to other
+documents and to research cards under `references`. A server from before pointers restores
+`references` strictly and refuses a sidecar with any other kind in it, so a pointer in that list
+would leave a rolled-back server unable to open the document; under a key it does not know, it reads
+the message as the words it was written in. A server that knows pointers merges them back by where
+each begins in the text, which restores the list that was stored, exactly
+(`apps/server/src/chat/stored-pointers.ts`, held by `rollback.test.ts` against the real older reader).
+
 ## Archival and deletion
 
 Channel `list` and `scan` operations exclude archived rows unless

@@ -48,6 +48,7 @@ import * as edit from "./edit";
 import * as room from "./room";
 import * as Chat from "../chat/service";
 import { restoreReferences } from "../chat/references";
+import { entriesForStorage, mergePointers } from "../chat/stored-pointers";
 import * as Comments from "../comments/service";
 import * as Questions from "../questions/service";
 import { sidecarUnansweredDecisions } from "../questions/unanswered";
@@ -396,7 +397,7 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 		questions: [...plan.records.values()],
 		openQuestions: Questions.dump(plan.questions),
 		threads: [...plan.threads.values()],
-		transcript: chat.entries,
+		transcript: entriesForStorage(chat.entries),
 		conversationPlan: plan.conversationPlan,
 		...(plan.conversationPlanRetries.length
 			? { conversationPlanRetries: plan.conversationPlanRetries }
@@ -700,6 +701,7 @@ function restoredState(
 			|| Array.isArray(entry.author)
 		) throw new Error("hosted channel has an invalid transcript entry");
 		validateNotice(entry, savedMessages);
+		mergePointers(entry);
 		if (Object.hasOwn(entry, "references")) {
 			let author = entry.author as Record<string, JsonValue>;
 			if (author.kind !== "member") {
