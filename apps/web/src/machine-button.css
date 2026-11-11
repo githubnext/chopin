@@ -62,7 +62,9 @@
 	background: var(--machine-dot-ring);
 }
 
+/* The banner's dots, a little smaller, so the three keep a margin of the surface in the capsule. */
 .machine-glyph-dot[data-planner="starting"] > .connecting-indicator {
+	--connecting-dot: calc(var(--spacing) * 0.75);
 	width: 100%;
 	height: 100%;
 }

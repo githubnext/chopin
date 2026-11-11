@@ -16,16 +16,14 @@ function indicators(markup: string): number {
 	return markup.match(/data-connecting=""/g)?.length ?? 0;
 }
 
-test("the connecting indicator is three dots in an icon's 16px box, hidden from assistive technology", () => {
+test("the connecting indicator is three dots drawn by CSS, hidden from assistive technology", () => {
 	let markup = renderToStaticMarkup(createElement(ConnectingIndicator));
-	expect(markup).toMatch(/^<svg aria-hidden="true" class="connecting-indicator"/);
-	expect(markup).toContain('width="16"');
-	expect(markup).toContain('height="16"');
-	expect(markup.match(/<circle /g)).toHaveLength(3);
+	expect(markup).toBe(
+		'<span aria-hidden="true" class="connecting-indicator" data-connecting="">'
+			+ '<span class="connecting-dot"></span>'.repeat(3)
+			+ "</span>",
+	);
 	// Decoration only: no words, no role, nothing focusable, so the status is said by text alone.
-	expect(markup).not.toContain("role=");
-	expect(markup).not.toContain("<title");
-	expect(markup).toContain('focusable="false"');
 	expect(renderToStaticMarkup(createElement(ConnectingIndicator, { className: "x" })))
 		.toContain('class="connecting-indicator x"');
 });
@@ -64,7 +62,7 @@ test("the machine button's badge draws the indicator only while its Planner star
 	);
 	expect(indicators(starting)).toBe(1);
 	expect(starting).toMatch(
-		/<span class="status-dot machine-glyph-dot" data-planner="starting"><svg aria-hidden="true" class="connecting-indicator"/,
+		/<span class="status-dot machine-glyph-dot" data-planner="starting"><span aria-hidden="true" class="connecting-indicator"/,
 	);
 	// The glyph as a whole stays decoration; the button's name says what is connecting.
 	expect(starting).toMatch(/^<span aria-hidden="true" class="machine-glyph"/);

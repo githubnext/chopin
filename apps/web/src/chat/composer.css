@@ -197,7 +197,8 @@
 	color: var(--color-text-secondary);
 	font-size: var(--text-sm);
 }
-.chat-composer .composer-notice > span {
+/* The words take the room; the connecting dots beside them keep their icon's box. */
+.chat-composer .composer-notice > span:not(.connecting-indicator) {
 	flex: 1;
 	min-width: 0;
 	overflow-wrap: anywhere;

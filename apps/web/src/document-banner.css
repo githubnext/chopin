@@ -21,7 +21,8 @@
 	color: var(--color-text-secondary);
 	font-size: var(--text-sm);
 }
-.document-banner [data-banner] > span {
+/* The words take the room; the connecting dots beside them keep their icon's box. */
+.document-banner [data-banner] > span:not(.connecting-indicator) {
 	flex: 1;
 	min-width: 0;
 	overflow-wrap: anywhere;
