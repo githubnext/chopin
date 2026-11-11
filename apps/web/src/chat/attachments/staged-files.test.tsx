@@ -91,16 +91,48 @@ const SENT: Chat.Attachment[] = [
 	{ id: "txt", name: "notes.md", kind: "file", mimeType: "text/plain", size: 2048 },
 ];
 
-test("a sent message's files are assistant-ui's received files, each a button that can be opened", () => {
+test("a sent message draws its images through Chat's image elements and keeps non-image files on MessageAttachments", () => {
 	let markup = renderToStaticMarkup(
 		createElement(MessageFiles, { channelId: "room", files: SENT }),
 	);
+	expect(markup).toContain('data-chat-image="single"');
+	expect(markup).toContain('data-slot="image-root"');
+	expect(markup).toContain('src="/api/channels/room/attachments/img"');
+	expect(markup).toContain('alt="shot.png"');
 	expect(markup).toContain('data-slot="message-attachments"');
 	expect(markup).toContain('aria-label="Files sent with this message"');
-	expect(markup.match(/<button/g)).toHaveLength(2);
-	expect(markup).toContain(">shot.png<");
 	expect(markup).toContain(">notes.md<");
-	// The picture is the stored file, which the server serves to those who can read the document.
-	expect(markup).toMatch(/background-image:url\(&quot;\/[^"]*\/room\/[^"]*img/);
-	expect(markup).not.toMatch(/background-image:[^"]*txt/);
+	expect(markup).not.toContain("background-image:");
+});
+
+test("several sent images form an ImageGallery, and an oversized image attachment shows the 10 MB placeholder", () => {
+	let gallery = renderToStaticMarkup(
+		createElement(MessageFiles, {
+			channelId: "room",
+			files: [
+				SENT[0]!,
+				{ id: "img2", name: "second.webp", kind: "image", mimeType: "image/webp", size: 900 },
+			],
+		}),
+	);
+	expect(gallery).toContain('data-slot="image-gallery"');
+	expect(gallery.match(/data-chat-image="tile"/g)).toHaveLength(2);
+	expect(gallery).not.toContain('data-slot="message-attachments"');
+
+	let oversized = renderToStaticMarkup(
+		createElement(MessageFiles, {
+			channelId: "room",
+			files: [
+				{
+					id: "huge",
+					name: "huge.png",
+					kind: "image",
+					mimeType: "image/png",
+					size: 12 * 1_048_576,
+				},
+			],
+		}),
+	);
+	expect(oversized).toContain("Image too large to show (12 MB, limit 10 MB)");
+	expect(oversized).not.toContain("<img");
 });

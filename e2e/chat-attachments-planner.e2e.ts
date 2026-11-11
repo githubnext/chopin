@@ -298,6 +298,7 @@ test("a model that reads images is sent the image as its bytes, with the text fi
 
 	// It shows at once, as the person's own with its files, and the turn runs.
 	let message = chat(page).locator("[data-chat-message-id]").filter({ hasText: "What is this?" });
+	await expect(message.locator('[data-chat-image="single"]')).toBeVisible();
 	await expect(message.getByRole("group", { name: "Files sent with this message" })).toBeVisible();
 	await expect.poll(() => turnFor(asked, "What is this?"), { timeout: 20_000 }).toBeDefined();
 	let seen = turnFor(asked, "What is this?")!;
@@ -370,7 +371,7 @@ test("a message to the Planner shows its files at once for a second person too",
 	await chatInput(chat(page)).press("Enter");
 	for (let viewer of [page, other]) {
 		let message = chat(viewer).locator("[data-chat-message-id]").filter({ hasText: "Look" });
-		await expect(message.getByRole("button", { name: /^shot\.png/ })).toBeVisible();
+		await expect(message.getByRole("img", { name: "shot.png" })).toBeVisible();
 	}
 	await expect.poll(() => turnFor(asked, "Look"), { timeout: 20_000 }).toBeDefined();
 	await client.detach();
