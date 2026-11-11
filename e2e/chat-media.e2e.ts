@@ -318,11 +318,18 @@ test("an image that cannot load is Slack's placeholder in the box the image woul
 	let gone = message(page, "gone").locator("[data-chat-image]");
 	await expect(gone).toHaveAttribute("data-load", "loading");
 	let frame = gone.locator(".chat-image-frame");
-	let loading = (await frame.boundingBox())!;
+	// Measured within its message, so the transcript settling its scroll does not count as a move.
+	let inMessage = () =>
+		frame.evaluate(element => {
+			let box = element.getBoundingClientRect();
+			let body = element.closest(".chat-message-body")!.getBoundingClientRect();
+			return { x: box.x - body.x, y: box.y - body.y, width: box.width, height: box.height };
+		});
+	let loading = await inMessage();
 	expect((loading.width - 2) / (loading.height - 2)).toBeCloseTo(2, 1);
 	release();
 	await expect(gone).toHaveAttribute("data-load", "broken");
-	expect(await frame.boundingBox()).toEqual(loading);
+	expect(await inMessage()).toEqual(loading);
 	let placeholder = gone.getByRole("img", {
 		name: "Couldn’t load image: Floor plan of the ground floor",
 		exact: true,
