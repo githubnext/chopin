@@ -45,6 +45,7 @@ const ROOTS = [
 	'[data-slot="dialog-content"]',
 	'[data-slot="message-actions"]',
 	'[data-slot="dropdown-menu-content"]',
+	"[data-audit-reactions]",
 ] as const;
 
 // The voice's dot pulses for as long as it listens, and a colour is read once nothing is moving.
@@ -287,6 +288,15 @@ async function states(page: Page, measure: (state: string) => Promise<void>) {
 	await page.keyboard.press("Tab");
 	await page.keyboard.press("Shift+Tab");
 	await check("message action focus");
+
+	let pill = plate(page, "assistant-ui").locator("[data-chat-reaction]").nth(1);
+	await pill.scrollIntoViewIfNeeded();
+	await pill.hover();
+	await check("reaction pill hover");
+	await pill.focus();
+	await page.keyboard.press("Tab");
+	await page.keyboard.press("Shift+Tab");
+	await check("reaction pill focus");
 
 	let more = plate(page, "assistant-ui").getByRole("button", { name: "More actions" });
 	await more.scrollIntoViewIfNeeded();

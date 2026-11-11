@@ -140,37 +140,9 @@
 		"sourceHash": "0a11fe298d25f70f899ec376a04f2e128b8de45e763d36c377d15f55aa8e2f8b"
 	},
 	{
-		"file": "apps/web/src/chat/actions/message-actions.tsx",
-		"reason": "The standalone MessageActions row forwards DOM props and a caller class to its root element, as assistant-ui's element does; its call site's static classes are scanned and the root takes no dynamic style.",
-		"cases": [
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > MessageActions > <div>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > MessageActions > <div>",
-				1
-			]
-		],
-		"sourceHash": "fd28b6800fb7efaec5475abf69252a954df2b39be47009478a2fa92ca54168b4"
-	},
-	{
 		"file": "apps/web/src/chat/actions/message-toolbar.tsx",
-		"reason": "The message menu and the emoji picker are placed from their button's measured rectangle, below or above as there is room and inside the screen, as the document actions menu is: measured popup coordinates and visibility, not design token values.",
+		"reason": "The emoji picker is placed from its button's measured rectangle, below or above as there is room and inside the screen, as the document actions menu is: measured popup coordinates and visibility, not design token values.",
 		"cases": [
-			[
-				"dynamic",
-				"*",
-				"menuPosition",
-				"unresolved style > MessageToolbar > MessageToolbar > <div>",
-				1
-			],
 			[
 				"dynamic",
 				"*",
@@ -179,7 +151,7 @@
 				1
 			]
 		],
-		"sourceHash": "2d4dbce1f84c00bd514e05f54ee4bf43926fa4eb7169661a5adbd5ff6f293b41"
+		"sourceHash": "71ad1da964d25265e30bbaaad8e9976cad4926dba28a81d83dc735458bf71493"
 	},
 	{
 		"file": "apps/web/src/terminal-alert.tsx",

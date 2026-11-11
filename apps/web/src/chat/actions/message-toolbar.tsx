@@ -1,15 +1,24 @@
 import { memo, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CloseIcon, RestartIcon } from "@chopin/icons";
+import { RotateCcwIcon, SmilePlusIcon, XIcon } from "lucide-react";
 
+import { MessageActions } from "@/components/assistant-ui/elements/message-actions";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useMenuDismissal } from "../../menu-dismissal";
-import { MenuItem, MenuSeparator } from "../../menu-item";
 import { LongPress } from "../long-press";
 import { QUICK_REACTIONS } from "../reactions";
 import { EmojiPicker } from "./emoji-picker";
-import { CopySwap, MessageActions } from "./message-actions";
 import { useCopyToClipboard } from "./use-copy-to-clipboard";
 
+import "./message-actions.css";
+
+import type { MessageActionItem } from "@/components/assistant-ui/elements/message-actions";
 import type { CSSProperties, KeyboardEvent, RefObject } from "react";
 
 export let COPIED_MS = 1500;
@@ -52,7 +61,6 @@ function useAnchored(
 	open: boolean,
 	anchor: RefObject<HTMLElement | null>,
 	panel: RefObject<HTMLElement | null>,
-	align: "end" | "start",
 ) {
 	let [position, setPosition] = useState<CSSProperties>();
 	useLayoutEffect(() => {
@@ -75,7 +83,7 @@ function useAnchored(
 				: above >= margin
 				? above
 				: Math.max(margin, Math.min(below, window.innerHeight - margin - height));
-			let wanted = align === "end" ? box.right - width : box.left;
+			let wanted = box.right - width;
 			let left = Math.max(margin, Math.min(wanted, window.innerWidth - width - margin));
 			setPosition(current =>
 				current?.left === left && current.top === top
@@ -91,27 +99,25 @@ function useAnchored(
 			observer.disconnect();
 			window.removeEventListener("resize", place);
 		};
-	}, [open, anchor, panel, align]);
+	}, [open, anchor, panel]);
 	return position;
 }
 
-function move(event: KeyboardEvent<HTMLElement>) {
-	let key = event.key;
-	if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(key)) return false;
-	let items = [
-		...event.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]:not(:disabled)"),
-	];
-	if (items.length === 0) return false;
-	event.preventDefault();
-	event.stopPropagation();
-	let at = Math.max(0, items.indexOf(document.activeElement as HTMLElement));
-	let next = key === "Home"
-		? 0
-		: key === "End"
-		? items.length - 1
-		: (at + (key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
-	items[next]?.focus();
-	return true;
+function CopyMenuIcon({ copied }: { copied: boolean }) {
+	return (
+		<MessageActions
+			copied={copied}
+			renderCopy={icons => (
+				<span
+					aria-hidden="true"
+					className="chat-copy-swap inline-grid place-items-center"
+					data-copied={copied || undefined}
+				>
+					{icons}
+				</span>
+			)}
+		/>
+	);
 }
 
 export let MessageToolbar = memo(function MessageToolbar(
@@ -126,12 +132,11 @@ export let MessageToolbar = memo(function MessageToolbar(
 		reacted,
 	}: MessageToolbarProps,
 ) {
-	let menuId = useId();
 	let pickerId = useId();
 	let addButton = useRef<HTMLButtonElement>(null);
 	let moreButton = useRef<HTMLButtonElement>(null);
-	let menu = useRef<HTMLDivElement>(null);
 	let picker = useRef<HTMLDivElement>(null);
+	let [active, setActive] = useState(0);
 	let [menuOpen, setMenuOpen] = useState(false);
 	let [pickerOpen, setPickerOpen] = useState(false);
 	let [pinned, setPinned] = useState(false);
@@ -139,23 +144,16 @@ export let MessageToolbar = memo(function MessageToolbar(
 	let { isCopied, isFailed, copyToClipboard } = useCopyToClipboard({ copiedDuration: COPIED_MS });
 	let engaged = pinned || menuOpen || pickerOpen || isCopied || isFailed;
 
-	let menuPosition = useAnchored(menuOpen, moreButton, menu, "end");
-	let pickerPosition = useAnchored(pickerOpen, addButton, picker, "end");
-	let menuPlaced = !!menuPosition;
+	let pickerPosition = useAnchored(pickerOpen, addButton, picker);
 	let pickerPlaced = !!pickerPosition;
-	let closeMenu = (restoreFocus = false) => {
-		setMenuOpen(false);
-		if (restoreFocus) moreButton.current?.focus();
-	};
 	let closePicker = (restoreFocus = false) => {
 		setPickerOpen(false);
 		if (restoreFocus) addButton.current?.focus();
 	};
-	useMenuDismissal(menuOpen, [moreButton, menu], closeMenu);
 	useMenuDismissal(pickerOpen, [addButton, picker], closePicker);
 	useMenuDismissal(
 		pinned && !menuOpen && !pickerOpen,
-		[host, menu, picker],
+		[host, picker],
 		() => setPinned(false),
 	);
 
@@ -172,7 +170,7 @@ export let MessageToolbar = memo(function MessageToolbar(
 		let view = element?.closest<HTMLElement>("[data-chat-scroll]");
 		if (!element || !view || !window.matchMedia("(hover: hover)").matches) return;
 		let place = () => {
-			let bar = element.querySelector<HTMLElement>('[data-slot="chat-message-actions"]');
+			let bar = element.querySelector<HTMLElement>(".chat-message-toolbar");
 			if (!bar) return;
 			let shift = Number.parseFloat(element.style.getPropertyValue(SHIFT)) || 0;
 			let natural = bar.getBoundingClientRect().top - shift;
@@ -213,7 +211,7 @@ export let MessageToolbar = memo(function MessageToolbar(
 		let view = element?.closest<HTMLElement>("[data-chat-scroll]");
 		if (!element || !view || !window.matchMedia("(hover: hover)").matches) return;
 		let measure = () => {
-			let bar = element.querySelector<HTMLElement>('[data-slot="chat-message-actions"]');
+			let bar = element.querySelector<HTMLElement>(".chat-message-toolbar");
 			// Tall is not only taller than the pane: a message that cannot be shown whole with its bar,
 			// which hangs above its top, can be scrolled until its top is out and its bar with it.
 			let shift = Number.parseFloat(element.style.getPropertyValue(SHIFT)) || 0;
@@ -238,7 +236,7 @@ export let MessageToolbar = memo(function MessageToolbar(
 
 	useEffect(() => {
 		if (!pinned) return;
-		let bar = host.current?.querySelector<HTMLElement>('[data-slot="chat-message-actions"]');
+		let bar = host.current?.querySelector<HTMLElement>(".chat-message-toolbar");
 		let view = bar?.closest<HTMLElement>("[data-chat-scroll]");
 		if (!bar || !view) return;
 		let box = bar.getBoundingClientRect();
@@ -251,20 +249,16 @@ export let MessageToolbar = memo(function MessageToolbar(
 	}, [host, pinned]);
 
 	useEffect(() => {
-		if (menuPlaced) {
-			menu.current?.querySelector<HTMLElement>("[role=menuitem]:not(:disabled)")?.focus();
-		}
-	}, [menuPlaced]);
-
-	useEffect(() => {
 		if (pickerPlaced) picker.current?.querySelector("input")?.focus();
 	}, [pickerPlaced]);
 
 	let was = useRef(false);
 	useEffect(() => {
 		if (was.current && !isCopied && !isFailed) {
-			if (menu.current?.contains(document.activeElement)) closeMenu(true);
-			else setMenuOpen(false);
+			let restore = !!document.activeElement?.closest(".chat-message-menu");
+			setMenuOpen(false);
+			setPinned(false);
+			if (restore) moreButton.current?.focus();
 		}
 		was.current = isCopied;
 	}, [isCopied, isFailed]);
@@ -310,106 +304,151 @@ export let MessageToolbar = memo(function MessageToolbar(
 		};
 	}, [host]);
 
+	let count = reactable ? QUICK_REACTIONS.length + 2 : 1;
+	let tab = (index: number) => Math.min(active, count - 1) === index ? 0 : -1;
+	let toolbarKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+		let step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+		let target = event.key === "Home" ? 0 : event.key === "End" ? count - 1 : undefined;
+		if (!step && target === undefined) return;
+		let buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button")];
+		let current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+		if (current < 0) return;
+		event.preventDefault();
+		let next = target ?? (current + step + buttons.length) % buttons.length;
+		setActive(next);
+		buttons[next]?.focus();
+	};
+
 	let copy = (which: Which) => {
 		setCopying(which);
 		copyToClipboard(which === "markdown" ? markdown : actions.current.plain());
-	};
-	let afterAction = () => {
-		closeMenu();
-		setPinned(false);
-	};
-	let menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-		if (event.key === "Tab") return closeMenu();
-		if (event.key === "Escape") return;
-		move(event);
 	};
 	let pickerKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		if (event.key === "Tab") closePicker();
 	};
 
-	return (
-		<>
-			<MessageActions
-				addControls={pickerOpen ? pickerId : undefined}
-				addExpanded={pickerOpen}
-				addRef={addButton}
-				className="chat-message-toolbar"
-				moreControls={menuOpen ? menuId : undefined}
-				moreExpanded={menuOpen}
-				moreRef={moreButton}
-				onAddReaction={() => {
+	let items: MessageActionItem[] = reactable
+		? [
+			...QUICK_REACTIONS.map((item, index): MessageActionItem => ({
+				key: item.emoji,
+				label: item.label,
+				pressed: reacted.has(item.emoji),
+				onClick: () => {
+					actions.current.react(item.emoji, !reacted.has(item.emoji));
+					setPinned(false);
+				},
+				buttonProps: {
+					"data-tooltip": item.label,
+					"data-tooltip-verbatim": "",
+					onFocus: () => setActive(index),
+					tabIndex: tab(index),
+				} as MessageActionItem["buttonProps"],
+				children: <span aria-hidden="true" className="message-actions-emoji">{item.emoji}</span>,
+			})),
+			{
+				key: "add-reaction",
+				label: "Add reaction",
+				onClick: () => {
 					setMenuOpen(false);
 					setPickerOpen(open => !open);
+				},
+				buttonProps: {
+					"aria-controls": pickerOpen ? pickerId : undefined,
+					"aria-expanded": pickerOpen,
+					"aria-haspopup": "dialog",
+					"data-tooltip": "Add reaction",
+					onFocus: () => setActive(QUICK_REACTIONS.length),
+					ref: addButton,
+					tabIndex: tab(QUICK_REACTIONS.length),
+				} as MessageActionItem["buttonProps"],
+				children: <SmilePlusIcon aria-hidden="true" size={14} />,
+			},
+		]
+		: [];
+
+	return (
+		<>
+			<DropdownMenu
+				modal={false}
+				onOpenChange={(next, details) => {
+					if (next) {
+						setPickerOpen(false);
+						setCopying(undefined);
+					} else if (details.reason === "outside-press") {
+						setPinned(false);
+					}
+					setMenuOpen(next);
 				}}
-				onMore={() => {
-					setPickerOpen(false);
-					setCopying(undefined);
-					setMenuOpen(open => !open);
-				}}
-				onReact={emoji => {
-					actions.current.react(emoji, !reacted.has(emoji));
-					setPinned(false);
-				}}
-				pressed={reacted}
-				quick={QUICK_REACTIONS}
-				reactable={reactable}
-			/>
+				open={menuOpen}
+			>
+				<MessageActions
+					aria-label="Reactions and actions"
+					aria-orientation="horizontal"
+					className="chat-message-toolbar"
+					items={items}
+					moreProps={{
+						"aria-label": "Message actions",
+						"data-tooltip": "Message actions",
+						onFocus: () => setActive(count - 1),
+						ref: moreButton,
+						tabIndex: tab(count - 1),
+					} as Record<string, unknown>}
+					onKeyDown={toolbarKeyDown}
+					renderMore={button => <DropdownMenuTrigger render={button} tabIndex={tab(count - 1)} />}
+					role="toolbar"
+				/>
+				{menuOpen && (
+					<DropdownMenuContent
+						align="end"
+						aria-label="Message actions"
+						className="chat-message-menu w-max"
+					>
+						<DropdownMenuItem closeOnClick={false} onClick={() => copy("markdown")}>
+							<CopyMenuIcon copied={isCopied && copying === "markdown"} />
+							{isCopied && copying === "markdown"
+								? "Copied"
+								: isFailed && copying === "markdown"
+								? "Couldn't copy"
+								: "Copy"}
+						</DropdownMenuItem>
+						<DropdownMenuItem closeOnClick={false} onClick={() => copy("plain")}>
+							<CopyMenuIcon copied={isCopied && copying === "plain"} />
+							{isCopied && copying === "plain"
+								? "Copied"
+								: isFailed && copying === "plain"
+								? "Couldn't copy"
+								: "Copy as plain text"}
+						</DropdownMenuItem>
+						{canRetry && (
+							<DropdownMenuItem
+								onClick={() => {
+									setPinned(false);
+									actions.current.retry();
+								}}
+							>
+								<RotateCcwIcon aria-hidden="true" />
+								Try again
+							</DropdownMenuItem>
+						)}
+						{canDelete && <DropdownMenuSeparator />}
+						{canDelete && (
+							<DropdownMenuItem
+								onClick={() => {
+									setPinned(false);
+									actions.current.delete();
+								}}
+								variant="destructive"
+							>
+								<XIcon aria-hidden="true" />
+								Delete
+							</DropdownMenuItem>
+						)}
+					</DropdownMenuContent>
+				)}
+			</DropdownMenu>
 			<span aria-atomic="true" aria-live="polite" className="sr-only" role="status">
 				{isCopied ? "Copied" : isFailed ? "Couldn't copy" : ""}
 			</span>
-			{menuOpen && createPortal(
-				<div
-					aria-label="Message actions"
-					className="chat-message-menu"
-					id={menuId}
-					onKeyDownCapture={menuKeyDown}
-					ref={menu}
-					role="menu"
-					style={menuPosition ?? { visibility: "hidden" }}
-				>
-					<MenuItem onClick={() => copy("markdown")}>
-						<CopySwap copied={isCopied && copying === "markdown"} />
-						{isCopied && copying === "markdown"
-							? "Copied"
-							: isFailed && copying === "markdown"
-							? "Couldn't copy"
-							: "Copy"}
-					</MenuItem>
-					<MenuItem onClick={() => copy("plain")}>
-						<CopySwap copied={isCopied && copying === "plain"} />
-						{isCopied && copying === "plain"
-							? "Copied"
-							: isFailed && copying === "plain"
-							? "Couldn't copy"
-							: "Copy as plain text"}
-					</MenuItem>
-					{canRetry && (
-						<MenuItem
-							onClick={() => {
-								afterAction();
-								actions.current.retry();
-							}}
-						>
-							<RestartIcon aria-hidden="true" size={16} />
-							Try again
-						</MenuItem>
-					)}
-					{canDelete && <MenuSeparator />}
-					{canDelete && (
-						<MenuItem
-							onClick={() => {
-								afterAction();
-								actions.current.delete();
-							}}
-							tone="destructive"
-						>
-							<CloseIcon aria-hidden="true" size={16} />
-							Delete
-						</MenuItem>
-					)}
-				</div>,
-				document.body,
-			)}
 			{pickerOpen && createPortal(
 				<div
 					className="chat-message-picker"

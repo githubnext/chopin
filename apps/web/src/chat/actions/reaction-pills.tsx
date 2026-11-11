@@ -1,5 +1,7 @@
 import { reactedBy, reactionHint } from "../reactions";
 
+import "./message-actions.css";
+
 import type { Chat } from "@chopin/protocol";
 
 export function ReactionPills(

@@ -1,5 +1,5 @@
 /**
- * Adapted from assistant-ui's `use-copy-to-clipboard` hook (see NOTICE.md): `isCopied` turns on only
+ * Adapted from assistant-ui's `use-copy-to-clipboard` hook (see THIRD_PARTY_NOTICES.md): `isCopied` turns on only
  * once the clipboard has accepted the text, and off again after `copiedDuration`; `isFailed` says the
  * same for a write the clipboard refused, which upstream ignores.
  */
