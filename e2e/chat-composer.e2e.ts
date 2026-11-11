@@ -1,6 +1,6 @@
 import { chatCaret, chatInput, expectChatValue, fillChat } from "./chat-input";
 import { seedChildChannel } from "./database";
-import { expect, test } from "./room";
+import { authenticate, expect, roomPath, test } from "./room";
 
 import type { Chat } from "../packages/protocol/index";
 import type { Page } from "@playwright/test";
@@ -318,4 +318,77 @@ test("context-menu paste undo restores the replaced native selection", async ({ 
 	expect(await chatCaret(input)).toBe(11);
 	await input.press("Meta+Shift+z");
 	await expectChatValue(input, "hello friends");
+});
+
+test("copied assistant-ui stylesheet stays off non-document pages and is applied before the first copied element mounts", async ({ baseURL, page, room }) => {
+	await enablePlanner(page);
+	await authenticate(page, "ana", baseURL!);
+	await page.goto("/machines");
+	await expect(page.getByRole("heading", { name: "Machines" })).toBeVisible();
+
+	let initialStylesheets = await page.evaluate(() =>
+		[...document.styleSheets].map(sheet => sheet.href ?? "")
+	);
+	expect(initialStylesheets.some(href => /\/assets\/index-[\w-]+\.css$/.test(href))).toBe(true);
+	expect(initialStylesheets.some(href => /\/assets\/assistant-ui-[\w-]+\.css$/.test(href))).toBe(
+		false,
+	);
+	expect(
+		await page.evaluate(() =>
+			performance.getEntriesByType("resource").some(entry =>
+				/\/assets\/assistant-ui-[\w-]+\.css$/.test(new URL(entry.name).pathname)
+			)
+		),
+	).toBe(false);
+
+	await page.addInitScript(() => {
+		let recorded = false;
+		new MutationObserver(() => {
+			if (recorded) return;
+			let copy = document.querySelector<HTMLElement>(
+				'[data-slot="composer-voice-button"], [data-slot="directive-text-chip"], [data-slot="model-selector-trigger"]',
+			);
+			if (!copy) return;
+			recorded = true;
+			let style = getComputedStyle(copy);
+			(window as unknown as {
+				__firstCopyPaint?: {
+					assistantUiLoaded: boolean;
+					fontSize: string;
+					height: number;
+					slot: string | null;
+				};
+			}).__firstCopyPaint = {
+				assistantUiLoaded: [...document.styleSheets].some(sheet =>
+					/\/assets\/assistant-ui-[\w-]+\.css$/.test(sheet.href ?? "")
+				),
+				fontSize: style.fontSize,
+				height: copy.getBoundingClientRect().height,
+				slot: copy.getAttribute("data-slot"),
+			};
+		}).observe(document, { childList: true, subtree: true });
+	});
+
+	await page.goto(roomPath(room));
+	let chat = chatPane(page);
+	let input = chatInput(chat);
+	await expect(input).toBeVisible();
+	await input.focus();
+	await input.press("ControlOrMeta+j");
+	await expect(chat.locator('[data-slot="directive-text-chip"]')).toBeVisible();
+
+	let firstCopy = await page.evaluate(() =>
+		(window as unknown as {
+			__firstCopyPaint?: {
+				assistantUiLoaded: boolean;
+				fontSize: string;
+				height: number;
+				slot: string | null;
+			};
+		}).__firstCopyPaint
+	);
+	expect(firstCopy).toBeDefined();
+	expect(firstCopy?.assistantUiLoaded).toBe(true);
+	expect(firstCopy?.height).toBeGreaterThan(0);
+	if (firstCopy?.slot === "directive-text-chip") expect(firstCopy.fontSize).toBe("12px");
 });
