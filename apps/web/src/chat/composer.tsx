@@ -5,7 +5,7 @@
  * passes what to show; the design audit renders the same component in each live state.
  */
 
-import { useCallback, useId, useRef, useState } from "react";
+import { useId } from "react";
 import type { ReactNode, Ref } from "react";
 
 import { ChopinMark } from "@chopin/editor";
@@ -23,7 +23,7 @@ import { sendStop } from "./assistant-ui/send-stop";
 import { SendStopButton } from "./assistant-ui/send-stop-button";
 import { motionContract } from "../motion-contract";
 import { ModeSwitch } from "./mode-switch";
-import { ModelPicker, ModelPickerTrigger } from "./model-picker";
+import { ModelPill } from "./assistant-ui/model-pill";
 import type { ModelControl } from "./use-model-choice";
 import type { DraftInputHandle, DraftInputProps } from "./draft-input";
 import plannerResume from "../assets/icons/planner-resume.svg";
@@ -118,14 +118,6 @@ export function ChatComposer(
 ) {
 	let instructionsId = useId();
 	let cueId = useId();
-	let modelId = useId();
-	let modelTrigger = useRef<HTMLButtonElement>(null);
-	let [modelOpen, setModelOpen] = useState(false);
-	let closeModel = useCallback((restore: boolean) => {
-		setModelOpen(false);
-		if (restore) requestAnimationFrame(() => modelTrigger.current?.focus());
-	}, []);
-	let modelTriggerNode = useCallback(() => modelTrigger.current, []);
 	let error = notice?.tone === "error" || !!banner?.invalid;
 	let phone = usePhone();
 	let chopin = !!mode?.chopin;
@@ -229,14 +221,6 @@ export function ChatComposer(
 			{/* The box is assistant-ui's Composer, as wide as the pane; the menus open over it. */}
 			<Composer className="max-w-none">
 				{pickers}
-				{model && modelOpen && !unavailable && (
-					<ModelPicker
-						control={model}
-						id={modelId}
-						onClose={closeModel}
-						trigger={modelTriggerNode}
-					/>
-				)}
 				<ComposerBar
 					aria-busy={sending}
 					className="composer-surface"
@@ -306,7 +290,7 @@ export function ChatComposer(
 								/>
 
 								<ComposerToolbar className="composer-footer">
-									<ComposerActions className="composer-left">
+									<ComposerActions className="composer-left min-w-0">
 										{mode && (
 											<ModeSwitch
 												effectiveMode={chopin}
@@ -314,15 +298,7 @@ export function ChatComposer(
 												onToggle={mode.onToggle}
 											/>
 										)}
-										{model && (
-											<ModelPickerTrigger
-												control={model}
-												controls={modelId}
-												onToggle={() => setModelOpen(open => !open)}
-												open={modelOpen}
-												triggerRef={modelTrigger}
-											/>
-										)}
+										{model && <ModelPill control={model} />}
 										{references && (
 											<button
 												type="button"

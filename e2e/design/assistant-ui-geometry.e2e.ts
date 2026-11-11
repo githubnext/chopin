@@ -291,7 +291,7 @@ test("the composer's box is the element's own: 24px corners, 10px padding and a 
 	for (
 		let name of ["composer-attach", "composer-voice-button", "composer-send"] as const
 	) {
-		let control = shell.locator(`[data-slot="${name}"]`);
+		let control = shell.locator(`[data-slot="${name}"]`).first();
 		await expectClassGeometry(control, name);
 		let size = await measure(control);
 		expect([size.width, size.height], name).toEqual([32, 32]);
