@@ -94,6 +94,10 @@ files through `recorded-sources.test-fixtures.ts`; a new scan of that kind shoul
 Chopin draws no continuous-curvature corners today, so a copy's corners are assistant-ui's own rounded
 rectangles at the same radii. A pill appears only where the copy says `rounded-full`.
 
+A Chopin control placed inside a copy through a patch slot (a words button, a text field) carries
+`data-chopin-control=""`. It gets Chopin's own scale, focus ring, press and transition and touch
+rules back, and the copy's reverts and hit area skip it.
+
 ## Colours: Chopin's
 
 `apps/web/src/assistant-ui.css` is the one place assistant-ui's and shadcn's colour variables meet
@@ -110,7 +114,8 @@ Chopin's tokens:
 | `ring`                                                  | `--focus-ring-color`                     |
 | `destructive`                                           | `--color-destructive`                    |
 
-It maps roles only. Chopin's `btn-outline` edge, `btn-secondary` fill and depth shadows are not mapped,
+Shadows are Tailwind's, tinted: each `rgb(0 0 0 / x)` of Tailwind's shadow values is Chopin's shadow tint
+(`--shadow-color`) at the same opacity, so no raw black is drawn. It maps roles only. Chopin's `btn-outline` edge, `btn-secondary` fill and depth shadows are not mapped,
 because assistant-ui draws none of them. Chopin is light only, so `.dark` reads the same tokens and
 `dark:` classes follow `.dark`, never the system setting. A copy that names a raw palette colour
 (`blue-500`) needs a line in that file's `@theme`, mapped to the Chopin token that plays the role.
@@ -123,15 +128,38 @@ catalogue into the selector's options and keeps each id and reasoning level exac
 reported it. The audit plate wires a copy to it, and state stays where it was: in Chat, the room's
 socket and the server.
 
-## The test to add
+## The tests to add
 
-Put the element on the `assistant-ui` plate of the design audit
-([`plates/assistant-ui.tsx`](../apps/web/src/design-audit/plates/assistant-ui.tsx)), every variant
-and size once. Then add its roots to `ROOTS` and what a finger aims at to `TARGETS` in
-[`e2e/design/assistant-ui-geometry.e2e.ts`](../e2e/design/assistant-ui-geometry.e2e.ts). It reads
-each element's own classes with [`tailwind-geometry.ts`](../e2e/design/tailwind-geometry.ts), which
-knows Tailwind's pixels and nothing of Chopin's, and asserts with `getComputedStyle` its height,
-padding, border width, radius, gap and font size, at both widths. It then forces
-`html[data-plan-coarse-pointer]` and asserts the visible boxes are identical while only the hit area
-grows, through the `::after`, which it reaches with `elementFromPoint`. It runs in `bun run design:behavior`,
-and fails if a Chopin rule thickens a copy.
+Every copied element has two specs on the `assistant-ui` plate of the design audit
+([`plates/assistant-ui.tsx`](../apps/web/src/design-audit/plates/assistant-ui.tsx)): put the element
+there first, every variant and size once. The theme is Chopin's and the proportions are
+assistant-ui's, and each has its own spec in `bun run design:behavior`, at both widths.
+
+**The geometry spec**,
+[`e2e/design/assistant-ui-geometry.e2e.ts`](../e2e/design/assistant-ui-geometry.e2e.ts): add the
+element's roots to `ROOTS` and what a finger aims at to `TARGETS`. It reads each element's own classes
+with [`tailwind-geometry.ts`](../e2e/design/tailwind-geometry.ts), which knows Tailwind's pixels and
+nothing of Chopin's, and asserts with `getComputedStyle` its height, padding, border width, radius,
+gap and font size. It then forces `html[data-plan-coarse-pointer]` and asserts the visible boxes are
+identical while only the hit area grows, through the `::after`, which it reaches with
+`elementFromPoint`. It fails if a Chopin rule thickens a copy.
+
+**The theme spec**,
+[`e2e/design/assistant-ui-theme.e2e.ts`](../e2e/design/assistant-ui-theme.e2e.ts): add the roots to
+`ROOTS` and any state that draws a colour of its own (hover, focus, open, checked) to `states`. In
+light and in dark, in each state once its transitions have settled, every colour on the roots'
+elements (text, fill, border, outline, text decoration, icon fill and stroke, every colour of every
+shadow) has to resolve to one of Chopin's colour tokens from `packages/visuals/theme.css`, at that
+token's opacity or less, and its text has to be Chopin's typeface. The role variables of
+`assistant-ui.css` are not in that set: a role mapped to a raw colour (`blue-500`, `emerald-500`,
+`black`) would vouch for itself, so it fails naming the element and the colour instead. Checked by
+mapping `--accent` to a green: the spec names the trigger's hover fill.
+
+Add both for every element; a copy without them is not accepted. To keep a spec honest, change a
+mapping or a class on purpose once and see it fail.
+
+If a spec is timing-sensitive on a page that is, make the layer cheaper rather than the spec looser:
+the first draft of the layer put a `*` rule under every copy, which made the browser walk every
+element's ancestors on each style recalculation and tipped a 100ms assertion of an unrelated
+workspace spec (`responsive-workspace.e2e.ts`, content swaps) from nine passes in ten to none. The
+layer now reads no universal selector, and a unit test says so.
