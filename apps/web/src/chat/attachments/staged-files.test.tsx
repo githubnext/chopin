@@ -38,6 +38,26 @@ test("a staged file is a chip of assistant-ui's, in a list a screen reader can c
 	expect(markup.match(/role="listitem"/g)).toHaveLength(2);
 	expect(markup).toContain(">notes.md<");
 	expect(markup).toContain(">2 KB<");
+	// Each with its type's icon, as Slack's composer draws a file.
+	expect(markup).toContain('data-file-kind="text"');
+	expect(markup.match(/data-kind="file"/g)).toHaveLength(2);
+});
+
+test("a staged image is a square of its picture with Slack's ring while it uploads", () => {
+	let markup = staged([{
+		...BASE,
+		id: "shot",
+		name: "shot.png",
+		kind: "image",
+		state: "uploading",
+		progress: 40,
+		sizeLabel: "40%",
+	}]);
+	expect(markup).toContain('data-kind="image"');
+	expect(markup).toContain('class="composer-file-ring" style="--progress:40%"');
+	// Its name and percent stay for a screen reader.
+	expect(markup).toContain(">shot.png<");
+	expect(markup).toContain(">40%<");
 });
 
 test("a finished upload is removed by the chip's own button, by the file's id, not its name", () => {
@@ -91,21 +111,23 @@ const SENT: Chat.Attachment[] = [
 	{ id: "txt", name: "notes.md", kind: "file", mimeType: "text/plain", size: 2048 },
 ];
 
-test("a sent message draws its images through Chat's image elements and keeps non-image files on MessageAttachments", () => {
+test("a sent message draws its images from Slack's thumbnail widths and its other files as file cards", () => {
 	let markup = renderToStaticMarkup(
 		createElement(MessageFiles, { channelId: "room", files: SENT }),
 	);
 	expect(markup).toContain('data-chat-image="single"');
 	expect(markup).toContain('data-slot="image-root"');
-	expect(markup).toContain('src="/api/channels/room/attachments/img"');
+	expect(markup).toContain('src="/api/channels/room/attachments/img?w=480"');
 	expect(markup).toContain('alt="shot.png"');
 	expect(markup).toContain('data-slot="message-attachments"');
 	expect(markup).toContain('aria-label="Files sent with this message"');
 	expect(markup).toContain(">notes.md<");
+	expect(markup).toContain('<span class="chat-file-type">Markdown</span>2 KB');
+	expect(markup).toContain('aria-label="Download notes.md"');
 	expect(markup).not.toContain("background-image:");
 });
 
-test("several sent images form an ImageGallery, and an oversized image attachment shows the 10 MB placeholder", () => {
+test("several sent images form an ImageGallery, and an image of any size is drawn from its copies", () => {
 	let gallery = renderToStaticMarkup(
 		createElement(MessageFiles, {
 			channelId: "room",
@@ -133,6 +155,6 @@ test("several sent images form an ImageGallery, and an oversized image attachmen
 			],
 		}),
 	);
-	expect(oversized).toContain("Image too large to show (12 MB, limit 10 MB)");
-	expect(oversized).not.toContain("<img");
+	expect(oversized).not.toContain("too large");
+	expect(oversized).toContain('src="/api/channels/room/attachments/huge?w=480"');
 });

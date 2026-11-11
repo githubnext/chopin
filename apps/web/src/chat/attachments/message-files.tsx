@@ -3,18 +3,24 @@
  * document.
  *
  * Every image in Chat is drawn one way: sent image attachments go through `TurnImages` (`ChatImage`
- * for one, `ImageGallery` for several, `RefusedImage` when over the 10 MiB display cap, and the
- * message's shared `<Dialog>` lightbox), while non-image text files keep assistant-ui's copied
- * `MessageAttachments` tiles and download under their own names.
+ * for one, `ImageGallery` for several, and the message's shared viewer), read at Slack's thumbnail
+ * widths, so an image of any size shows. Other files are assistant-ui's copied `MessageAttachments`
+ * tiles drawn as Slack's file cards (`media.css`): the type's coloured icon, the name in bold, the
+ * type and size under it, and a toolbar of their own on hover; pressing one downloads it under its
+ * own name.
  */
 
-import { attachmentPath } from "@chopin/protocol/attachment";
+import { useState } from "react";
+import { CheckIcon, DownloadIcon, LinkIcon } from "lucide-react";
+
+import { attachmentPath, formatBytes } from "@chopin/protocol/attachment";
 import { MessageAttachments } from "@/components/assistant-ui/elements/message-attachment";
 
 import { ChatImageDocument, useImageDocument } from "../image";
-import { MAX_SHOWN_IMAGE_BYTES, tooLargeImageReason } from "../image-state";
+import { FileKindIcon } from "../media/file-icon";
+import { fileType } from "../media/layout";
 import { TurnImages } from "../turn-images";
-import { messageFileProps } from "./files";
+import "../media/media.css";
 
 import type { Chat } from "@chopin/protocol";
 import type { ChatImageData } from "../image";
@@ -26,26 +32,54 @@ function downloadFile(file: Chat.Attachment, href: string) {
 	link.click();
 }
 
+/** A file's own toolbar, as Slack's file has: download it, or copy where it can be read. */
+function FileActions({ file, href }: { file: Chat.Attachment; href: string }) {
+	let [copied, setCopied] = useState(false);
+	return (
+		<div aria-label={`Actions for ${file.name}`} className="chat-file-actions" role="group">
+			<button
+				aria-label={`Download ${file.name}`}
+				className="chat-file-action"
+				onClick={() => downloadFile(file, href)}
+				type="button"
+			>
+				<DownloadIcon aria-hidden="true" size={16} />
+			</button>
+			<button
+				aria-label={copied ? "Copied link" : `Copy link to ${file.name}`}
+				className="chat-file-action"
+				onClick={() => {
+					navigator.clipboard?.writeText(new URL(href, location.origin).href).then(
+						() => {
+							setCopied(true);
+							setTimeout(() => setCopied(false), 1600);
+						},
+						() => {},
+					);
+				}}
+				type="button"
+			>
+				{copied
+					? <CheckIcon aria-hidden="true" size={16} />
+					: <LinkIcon aria-hidden="true" size={16} />}
+			</button>
+		</div>
+	);
+}
+
 export default function MessageFiles(
 	{ channelId, files }: { channelId: string; files: readonly Chat.Attachment[] },
 ) {
 	let images: ChatImageData[] = [];
-	let refused: Array<{ before: number; reason: string }> = [];
 	let documents: Chat.Attachment[] = [];
 	for (let file of files) {
 		if (file.kind === "image") {
-			if (file.size > MAX_SHOWN_IMAGE_BYTES) {
-				refused.push({
-					before: images.length,
-					reason: tooLargeImageReason(file.size, MAX_SHOWN_IMAGE_BYTES),
-				});
-			} else {
-				images.push({
-					src: attachmentPath(channelId, file.id),
-					alt: file.name,
-					mimeType: file.mimeType,
-				});
-			}
+			images.push({
+				src: attachmentPath(channelId, file.id),
+				alt: file.name,
+				mimeType: file.mimeType,
+				...(file.original ? { original: file.original } : {}),
+			});
 		} else {
 			documents.push(file);
 		}
@@ -54,16 +88,28 @@ export default function MessageFiles(
 	let documentId = useImageDocument();
 	let content = (
 		<>
-			{(images.length > 0 || refused.length > 0) && (
+			{images.length > 0 && (
 				<TurnImages
 					images={images.map(image => ({ ...image })) as readonly Chat.Image[]}
-					refused={refused.length > 0 ? refused : undefined}
+					refused={undefined}
 				/>
 			)}
 			{documents.length > 0 && (
 				<MessageAttachments
 					aria-label="Files sent with this message"
-					attachments={documents.map(messageFileProps)}
+					attachments={documents.map(file => {
+						let type = fileType(file.name);
+						let href = attachmentPath(channelId, file.id);
+						return {
+							id: file.id,
+							name: file.name,
+							size: formatBytes(file.size),
+							kind: "file" as const,
+							icon: <FileKindIcon kind={type.kind} />,
+							detail: <span className="chat-file-type">{type.label}</span>,
+							actions: <FileActions file={file} href={href} />,
+						};
+					})}
 					data-chat-files=""
 					onOpen={id => {
 						let file = documents.find(candidate => candidate.id === id);

@@ -4,19 +4,27 @@
  * `components/sources.json` with `image-gallery.tsx.patch`; see `docs/assistant-ui.md` and
  * `THIRD_PARTY_NOTICES.md`).
  *
- * Each tile is `ImageGallery`'s own soft-fill square button (`field`, `aspect-square`,
- * `rounded-xl`), with `+N` on the final visible tile when more images follow, inline refusal
- * lines where a turn's image could not be shown, and `ImageGallery`'s `<Dialog>` lightbox shared
- * across all showable images of the message.
+ * The tiles are `ImageGallery`'s own buttons, laid out the way Slack lays out a message's images
+ * (`image.css`, by `data-shape`): two side by side, three as one tall beside two stacked, four as
+ * two rows of two with `+N` on the last when more follow. Inline refusal lines stand where a turn's
+ * image could not be shown, and `ImageGallery`'s `<Dialog>` is the message's viewer.
  */
 
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { ImageGallery as GalleryElement } from "@/components/assistant-ui/elements/image-gallery";
 
-import { MessageImages, pageOrigin, RefusedImage, useImageDocument, useImageHost } from "./image";
+import {
+	MessageImages,
+	pageOrigin,
+	RefusedImage,
+	screenDensity,
+	useImageDocument,
+	useImageHost,
+} from "./image";
 import { galleryItems, imageLabel, imageSource } from "./image-state";
 import { loadLocalImage } from "./local-image";
+import { copyWidth, GALLERY_MAX_VISIBLE, galleryShape, thumbnailUrl } from "./media/layout";
 import "./image.css";
 
 import type { GalleryImage } from "@/components/assistant-ui/elements/image-gallery";
@@ -33,7 +41,9 @@ export type ImageGalleryProps = {
 type LocalResult = { url?: string; type?: string; failed?: boolean };
 
 function GalleryWithHost(
-	{ host, images, maxVisible = 6, onOpen, refused }: ImageGalleryProps & { host: ImageHost },
+	{ host, images, maxVisible = GALLERY_MAX_VISIBLE, onOpen, refused }: ImageGalleryProps & {
+		host: ImageHost;
+	},
 ) {
 	let galleryId = useId();
 	let documentId = useImageDocument();
@@ -142,9 +152,15 @@ function GalleryWithHost(
 		let brokenMessage = item.source.kind === "unavailable"
 			? "Image can’t be shown"
 			: "Couldn’t load image";
+		// An upload is read at Slack's thumbnail widths; any other address is drawn as it is.
+		let copies = item.source.kind === "hosted" && item.url && !item.failed;
 		return {
 			id: item.entryId,
-			src: item.failed || !item.url ? "" : item.url,
+			src: item.failed || !item.url
+				? ""
+				: copies
+				? thumbnailUrl(item.url, copyWidth(240, screenDensity()))
+				: item.url,
 			alt: item.label,
 			caption: item.image.caption,
 			source: item.image.generated ? { label: "Generated" } : undefined,
@@ -197,6 +213,7 @@ function GalleryWithHost(
 					))
 				: undefined}
 			data-chat-image-gallery=""
+			data-shape={galleryShape(images.length).shape}
 			images={galleryImages}
 			maxVisible={maxVisible}
 			onTileOpen={(tileId, trigger) => {
@@ -209,7 +226,9 @@ function GalleryWithHost(
 	);
 }
 
-export function ImageGallery({ images, maxVisible = 6, onOpen, refused }: ImageGalleryProps) {
+export function ImageGallery(
+	{ images, maxVisible = GALLERY_MAX_VISIBLE, onOpen, refused }: ImageGalleryProps,
+) {
 	let host = useImageHost();
 	if (images.length === 0 && !refused?.length) return null;
 	if (!host) {

@@ -77,7 +77,9 @@ test("opening a gallery tile tells onOpen which tile it was, by its picture, its
 	await page.goto(`${ORIGIN}/`);
 
 	let tiles = page.locator('[data-chat-image="tile"]');
-	await expect(tiles).toHaveCount(6);
+	// Slack's grid shows four, the last standing for the other four.
+	await expect(tiles).toHaveCount(4);
+	await expect(tiles.nth(3)).toContainText("+4");
 	for (let tile of await tiles.all()) await expect(tile).toHaveAttribute("data-load", "shown");
 	let opened = () => page.evaluate(() => (window as unknown as { __opened: number[] }).__opened);
 	let lightbox = page.locator('[data-slot="dialog-content"]');
@@ -91,9 +93,9 @@ test("opening a gallery tile tells onOpen which tile it was, by its picture, its
 	await page.keyboard.press("Escape");
 	await expect(lightbox).toHaveCount(0);
 
-	await tiles.nth(4).click();
-	await expect(lightbox.getByRole("status")).toHaveText("Image 5 of 8");
-	expect(await opened()).toEqual([2, 4]);
+	await tiles.nth(3).click();
+	await expect(lightbox.getByRole("status")).toHaveText("Image 4 of 8");
+	expect(await opened()).toEqual([2, 3]);
 	await page.keyboard.press("Escape");
 	await expect(lightbox).toHaveCount(0);
 
@@ -101,11 +103,11 @@ test("opening a gallery tile tells onOpen which tile it was, by its picture, its
 	await first.focus();
 	await page.keyboard.press("Enter");
 	await expect(lightbox.getByRole("status")).toHaveText("Image 1 of 8");
-	expect(await opened()).toEqual([2, 4, 0]);
+	expect(await opened()).toEqual([2, 3, 0]);
 	await page.keyboard.press("Escape");
 	await expect(lightbox).toHaveCount(0);
 	await expect(first).toBeFocused();
 	await page.keyboard.press("Space");
 	await expect(lightbox.getByRole("status")).toHaveText("Image 1 of 8");
-	expect(await opened()).toEqual([2, 4, 0, 0]);
+	expect(await opened()).toEqual([2, 3, 0, 0]);
 });

@@ -1,14 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import {
-	chipProps,
-	filesReducer,
-	messageFileProps,
-	readiness,
-	refusalFor,
-	sentIds,
-	viewFiles,
-} from "./files";
+import { chipProps, filesReducer, readiness, refusalFor, sentIds, viewFiles } from "./files";
 
 import type { DraftFile } from "./files";
 
@@ -191,20 +183,6 @@ describe("how the files are drawn", () => {
 			state: "done",
 			progress: 100,
 			kind: "image",
-		});
-		expect(
-			messageFileProps({
-				id: "x",
-				name: "n.md",
-				kind: "file",
-				mimeType: "text/plain",
-				size: 20_480,
-			}),
-		).toEqual({
-			id: "x",
-			name: "n.md",
-			size: "20 KB",
-			kind: "file",
 		});
 	});
 });

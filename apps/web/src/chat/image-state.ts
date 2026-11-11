@@ -2,6 +2,7 @@ import { HOSTED_IMAGE_PATH } from "@chopin/dialect";
 
 import { dataPayloadStart, readDataAddress } from "./image-size";
 import { RASTER_TYPE_NAMES, rasterType } from "./local-image";
+import { GALLERY_MAX_VISIBLE } from "./media/layout";
 
 import type { ImageSize } from "./image-size";
 
@@ -22,19 +23,6 @@ export type ImageSource =
 
 const AUTH_PATH = /^\/auth(?:\/|$)/;
 const ATTACHMENT_PATH = /^\/api\/channels\/([^/]+)\/attachments\/([^/]+)$/;
-
-export const MAX_SHOWN_IMAGE_BYTES = 10 * 1_048_576;
-
-function megabytes(bytes: number, round = Math.round): string {
-	let size = round(bytes * 10 / 1_048_576) / 10;
-	return Number.isInteger(size) ? String(size) : size.toFixed(1);
-}
-
-export function tooLargeImageReason(size: number, maxBytes = MAX_SHOWN_IMAGE_BYTES): string {
-	return `Image too large to show (${megabytes(size, Math.ceil)} MB, limit ${
-		megabytes(maxBytes, Math.floor)
-	} MB)`;
-}
 
 const RASTER_TYPE = new RegExp(
 	`^(?:${RASTER_TYPE_NAMES.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})$`,
@@ -167,7 +155,7 @@ export type GalleryItem =
 export function galleryItems(
 	count: number,
 	refusals: ReadonlyArray<{ before: number; reason: string }> | undefined,
-	maxVisible = 6,
+	maxVisible = GALLERY_MAX_VISIBLE,
 ): GalleryItem[] {
 	let { shown } = galleryTiles(count, maxVisible);
 	let placed = (refusals ?? []).map(({ before, reason }) => ({
@@ -188,7 +176,10 @@ export function galleryItems(
 	return items;
 }
 
-export function galleryTiles(count: number, maxVisible = 6): { shown: number; more: number } {
+export function galleryTiles(
+	count: number,
+	maxVisible = GALLERY_MAX_VISIBLE,
+): { shown: number; more: number } {
 	let shown = Math.max(1, Math.min(Math.floor(maxVisible), count));
 	return { shown: count === 0 ? 0 : shown, more: Math.max(0, count - shown) };
 }

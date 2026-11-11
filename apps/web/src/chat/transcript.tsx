@@ -305,7 +305,15 @@ function MessageBody(
 
 	return (
 		<ChatImageDocument value={room}>
-			<MessageImages>
+			<MessageImages
+				sender={{
+					name: message.author.kind === "agent" ? "Chopin" : capitalize(message.author.handle),
+					face: message.author.kind === "agent"
+						? <ChopinMark circle />
+						: <Face decorative handle={message.author.handle} size={36} titled={false} />,
+					...(message.ts ? { time: when(message.ts) } : {}),
+				}}
+			>
 				<div
 					className="chat-message-body relative"
 					data-chat-enter={enter || undefined}
