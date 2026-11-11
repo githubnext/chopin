@@ -33,3 +33,11 @@
 	width: 24rem;
 	max-width: 100%;
 }
+
+.design-audit-aui-markdown {
+	margin-block-start: 1.5rem;
+	max-inline-size: 36rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}

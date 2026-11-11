@@ -42,4 +42,29 @@ describe("what Tailwind's classes mean in pixels", () => {
 		expect(expected("text-xs").lineHeight).toBe(16);
 		expect(expected("text-xs leading-none").lineHeight).toBeUndefined();
 	});
+
+	it("reads logical border sides and split corner radii on Markdown's code block", () => {
+		let header = expected("rounded-t-xl border border-b-0 px-3.5 py-1.5 text-xs");
+		expect(header).toEqual({
+			border: [1, 1, 0, 1],
+			radius: 12,
+			radii: [12, 12, 0, 0],
+			padding: { 0: 6, 1: 14, 2: 6, 3: 14 },
+			fontSize: 12,
+			lineHeight: 16,
+		});
+		let pre = expected(
+			"rounded-t-none rounded-b-xl border border-t-0 p-3.5 text-[13px] leading-relaxed",
+		);
+		expect(pre).toEqual({
+			border: [0, 1, 1, 1],
+			radius: 0,
+			radii: [0, 0, 12, 12],
+			padding: { 0: 14, 1: 14, 2: 14, 3: 14 },
+			fontSize: 13,
+		});
+		expect(expected("border-s-2 ps-4").border).toEqual([0, 0, 0, 2]);
+		expect(expected("border-s border-b border-e").border).toEqual([0, 1, 1, 1]);
+		expect(expected("border-muted-foreground/20 my-3", "hr").border).toEqual([1, 0, 0, 0]);
+	});
 });

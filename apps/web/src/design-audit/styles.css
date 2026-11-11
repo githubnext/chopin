@@ -24,7 +24,7 @@
 }
 
 .design-audit-header h1,
-.design-audit-section h2,
+.design-audit-section > h2,
 .design-audit-plate > header > h3,
 .design-audit-header p,
 .design-audit-plate > header > p {
@@ -110,7 +110,7 @@
 	border-block-start: 0;
 }
 
-.design-audit-section h2 {
+.design-audit-section > h2 {
 	font-size: var(--text-xl);
 	font-weight: 600;
 	line-height: var(--text-xl--line-height);

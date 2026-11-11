@@ -1,6 +1,7 @@
 import { GlobeIcon, SparklesIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 
+import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import {
 	ComposerCommandItem,
 	ComposerMenu,
@@ -128,9 +129,44 @@ const SPECIMENS = [
 	{ label: "Muted", variant: "muted", size: "default" },
 ] as const;
 
+const MARKDOWN_SPECIMEN = [
+	"# Rollout outline",
+	"## Queue topology",
+	"### Migration order",
+	"#### Fallback rule",
+	"##### Owner check",
+	"###### Cutover note",
+	"",
+	"Move the **shared** queue to *per-team* lanes[^1], drop ~~manual routing~~, and read the [guide](https://example.com/guide) before `bun test`.",
+	"",
+	"> Keep the shared queue for seven days while traffic drains.",
+	"",
+	"- Provision per-team queues",
+	"- Flip the routing flag",
+	"",
+	"1. Verify delivery metrics",
+	"2. Retire the shared queue",
+	"",
+	"---",
+	"",
+	"| Queue | Owner | State |",
+	"| --- | --- | --- |",
+	"| shared | platform | retiring |",
+	"| per-team | each team | live |",
+	"",
+	"```ts",
+	"export function queueFor(team: string) {",
+	"\treturn `queue:${team}`;",
+	"}",
+	"```",
+	"",
+	"[^1]: Retained for replay.",
+].join("\n");
+
 /**
- * Copied assistant-ui elements, drawn as assistant-ui draws them: the model selector from the
- * registry, unmodified, driven by Chopin's own catalogue through props. `e2e/design` measures it.
+ * Copied assistant-ui elements, drawn as assistant-ui draws them: the model selector and
+ * markdown-text from the registry, driven by Chopin's own state through props. `e2e/design`
+ * measures them.
  */
 export function AssistantUiPlate() {
 	let models = modelOptions(CATALOG);
@@ -231,6 +267,10 @@ export function AssistantUiPlate() {
 						<RemovableChip text=":agent[Chopin]" />
 					</div>
 				</div>
+			</div>
+			<div className="design-audit-aui-markdown">
+				<StateLabel>Markdown text</StateLabel>
+				<MarkdownText defer={false} text={MARKDOWN_SPECIMEN} />
 			</div>
 		</AuditPlate>
 	);

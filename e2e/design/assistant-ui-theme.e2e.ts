@@ -34,6 +34,8 @@ const ROOTS = [
 	'[data-slot="composer-voice"]',
 	'[data-slot="composer-voice-button"]',
 	'[data-slot="message-attachments"]',
+	'[data-slot="markdown-text"]',
+	'[data-slot="tooltip-content"]',
 ] as const;
 
 // The voice's dot pulses for as long as it listens, and a colour is read once nothing is moving.
@@ -71,7 +73,9 @@ async function drawn(
 		let body = getComputedStyle(document.body).fontFamily;
 		// Chopin's own stack for technical words, which a copy's `font-mono` tag draws (the layer does
 		// not restore a family, so the copy's is Chopin's, and the two are the same string).
-		let mono = getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim();
+		probe.style.fontFamily = "var(--font-mono)";
+		let mono = getComputedStyle(probe).fontFamily;
+		probe.style.fontFamily = "";
 		let describe = (element: Element) =>
 			`${element.tagName.toLowerCase()}${
 				element.getAttribute("data-slot") ? `[${element.getAttribute("data-slot")}]` : ""
@@ -201,6 +205,26 @@ async function states(page: Page, measure: (state: string) => Promise<void>) {
 	await check("row hover");
 	await page.locator('[data-slot="model-selector-effort"] [role="radio"]').nth(2).hover();
 	await check("level hover");
+	await page.keyboard.press("Escape");
+
+	let markdown = plate(page, "assistant-ui").locator('[data-slot="markdown-text"]');
+	let link = markdown.locator(".aui-md-a").first();
+	await link.scrollIntoViewIfNeeded();
+	await link.hover();
+	await check("markdown link hover");
+
+	let copy = markdown.locator(".aui-button-icon");
+	await copy.scrollIntoViewIfNeeded();
+	await copy.hover();
+	await expect(page.locator('[data-slot="tooltip-content"]')).toBeVisible();
+	await expect.poll(() =>
+		page.locator('[data-slot="tooltip-content"]').evaluate(node => getComputedStyle(node).opacity)
+	).toBe("1");
+	await check("markdown copy hover and tooltip");
+	await copy.focus();
+	await page.keyboard.press("Tab");
+	await page.keyboard.press("Shift+Tab");
+	await check("markdown copy focus");
 }
 
 for (let mode of ["light", "dark"] as const) {
