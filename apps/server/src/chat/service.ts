@@ -983,6 +983,8 @@ export async function invoke(
 			return "planner-owner-unavailable" as const;
 		}
 		if (chat.closed) return "planner-unavailable" as const;
+		// A process that is stopping starts no turn: its caller asks again, of the next one.
+		if (startsHeld && !chat.busy && !chat.starting) return "planner-unavailable" as const;
 		if (notice !== undefined) {
 			// An automatic follow-up needs a turn of its own, which a running one cannot give it.
 			if (occupied(chat)) return "planner-busy" as const;
@@ -1344,9 +1346,9 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		...withAttachments,
 		delivery: savedDelivery,
 	};
+	// The turn holds the Chat from here; people are told it is running once the machine has its prompt.
 	chat.busy = true;
 	chat.turn = begin(handle, chat.entries.length + 1);
-	state(chat, server, room);
 	chat.entries.push(entry);
 	try {
 		await context.persist();
@@ -2887,8 +2889,10 @@ async function run(
 				session: {
 					stream: async (text, abort, _choice, sent) => {
 						let result = await session.stream(text, abort, choice, sent);
-						// Its first call is made: a message given to the turn now reaches it.
+						// Its first call is made: a message given to the turn now reaches it, and
+						// people are told the turn is running, as the machine has its prompt.
 						steered?.open(session);
+						if (reserved && member) state(chat, server, room);
 						return result;
 					},
 				},
