@@ -49,6 +49,8 @@ checks for both `check-design-contract.ts` and `check-design.mjs`:
   `tailwindcss/theme.css` at the Tailwind version it was generated from, and is checked against the
   installed Tailwind.
 
+[Adding an assistant-ui element](assistant-ui.md) says how to copy and record one.
+
 ## Contrast and visual hierarchy
 
 AA contrast is preferred for primary content and controls, not required for every

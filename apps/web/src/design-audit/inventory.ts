@@ -203,6 +203,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				source: "apps/web/src/terminal-alert.tsx",
 				states: ["inline", "terminal", "recoverable"],
 			},
+			{
+				id: "assistant-ui",
+				label: "assistant-ui elements",
+				source: "apps/web/src/components/assistant-ui/elements/model-selector.tsx",
+				states: ["outline", "ghost", "muted", "small", "large", "open"],
+			},
 		],
 	},
 	{

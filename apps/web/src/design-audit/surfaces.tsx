@@ -1,3 +1,4 @@
+import { AssistantUiPlate } from "./plates/assistant-ui";
 import { ConversationPlate } from "./plates/conversation";
 import { DecisionsPlate } from "./plates/decisions";
 import { DialogsPlate } from "./plates/dialogs";
@@ -25,6 +26,7 @@ export function Surfaces() {
 			<LoadingStatusPlate />
 			<EmptyStatesPlate />
 			<ErrorsPlate />
+			<AssistantUiPlate />
 		</>
 	);
 }
