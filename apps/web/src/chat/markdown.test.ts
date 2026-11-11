@@ -221,7 +221,7 @@ test("the words around a gallery stay where they were written, and the images ar
 	expect(markup.indexOf("Before")).toBeLessThan(markup.indexOf("data-chat-image-gallery"));
 	expect(markup.indexOf("data-chat-image-gallery")).toBeLessThan(markup.indexOf(" after."));
 	expect(markup.indexOf(" after.")).toBeLessThan(
-		markup.indexOf('<p class="aui-md-p">Next paragraph.</p>'),
+		markup.indexOf(`<p class="${P_CLASS}">Next paragraph.</p>`),
 	);
 	expect(markup).not.toMatch(/<p[\s>][^]*<div data-slot="image-gallery"/);
 });
@@ -352,7 +352,7 @@ test("an image inside a link is drawn where it was written among the link's word
 	expect(insideLink(between)).toBe(false);
 	expect(between.indexOf(">Before ")).toBeLessThan(between.indexOf("<figure"));
 	expect(between.indexOf("<figure")).toBeLessThan(between.indexOf("> after<"));
-	expect(between.match(/<a class="aui-md-a" href="https:\/\/example.com\/t"/g)).toHaveLength(2);
+	expect(between.split(`<a class="${A_CLASS}" href="https://example.com/t"`)).toHaveLength(3);
 	expect(between).toContain('target="_blank">Before </a>');
 	expect(between).toContain('target="_blank"> after</a>');
 
@@ -360,8 +360,8 @@ test("an image inside a link is drawn where it was written among the link's word
 		"[**Before ![d](https://example.invalid/u.png) after**](https://example.com/t)",
 	);
 	expect(insideLink(nested)).toBe(false);
-	expect(nested).toContain('<strong class="aui-md-strong">Before </strong></a>');
-	expect(nested).toContain('<strong class="aui-md-strong"> after</strong></a>');
+	expect(nested).toContain(`<strong class="${STRONG_CLASS}">Before </strong></a>`);
+	expect(nested).toContain(`<strong class="${STRONG_CLASS}"> after</strong></a>`);
 	expect(nested.indexOf("Before")).toBeLessThan(nested.indexOf("<figure"));
 	expect(nested.indexOf("<figure")).toBeLessThan(nested.indexOf("after"));
 });
@@ -380,7 +380,7 @@ test("an image alone in emphasis in a link, or in a link written as a reference,
 		expect(markup.match(/<figure/g), source).toHaveLength(1);
 		expect(markup, source).toContain('<img src="https://example.invalid/l.png" alt="logo"');
 		expect(markup, source).toContain(
-			'<a class="aui-md-a" href="https://example.com/t" rel="noopener noreferrer" target="_blank">logo</a>',
+			`<a class="${A_CLASS}" href="https://example.com/t" rel="noopener noreferrer" target="_blank">logo</a>`,
 		);
 	}
 });
@@ -585,7 +585,7 @@ test("an image inside a link is drawn as an image, with the link kept beside it"
 	expect(tiles(markup)).toEqual(["logo|https://example.invalid/l.png"]);
 	expect(markup).not.toMatch(/<a [^>]*>[^]*<figure/);
 	expect(markup).toContain(
-		'<a class="aui-md-a" href="https://example.com" rel="noopener noreferrer" target="_blank">logo</a>',
+		`<a class="${A_CLASS}" href="https://example.com" rel="noopener noreferrer" target="_blank">logo</a>`,
 	);
 });
 

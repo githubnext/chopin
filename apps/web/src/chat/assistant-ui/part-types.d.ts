@@ -1,7 +1,10 @@
 /**
  * The standalone prop types the copied `image.tsx` element imports as types. Chopin uses none of
- * assistant-ui's runtime and installs no `@assistant-ui/*` package (see docs/assistant-ui.md).
+ * assistant-ui's runtime and installs no `@assistant-ui/*` package (see docs/assistant-ui.md):
+ * `tsconfig.json` points `@assistant-ui/react` at the Markdown seam, which this file augments.
  */
+import type { ComponentType } from "react";
+
 declare module "@assistant-ui/react" {
 	export type ImageMessagePartStatus =
 		| { readonly type: "running" }
@@ -16,5 +19,5 @@ declare module "@assistant-ui/react" {
 		readonly status?: ImageMessagePartStatus | undefined;
 	};
 
-	export type ImageMessagePartComponent = import("react").ComponentType<ImageMessagePart>;
+	export type ImageMessagePartComponent = ComponentType<ImageMessagePart>;
 }
