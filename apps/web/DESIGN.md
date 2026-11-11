@@ -34,22 +34,22 @@ typography:
     fontWeight: 400
     lineHeight: 1.4
   document-body:
-    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
+    fontFamily: '"Inter Variable", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-base)"
     fontWeight: 400
     lineHeight: 1.6
   chrome:
-    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
+    fontFamily: '"Inter Variable", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-sm)"
     fontWeight: 400
     lineHeight: 1.5
   compact:
-    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
+    fontFamily: '"Inter Variable", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-xs)"
     fontWeight: 400
     lineHeight: 1.35
   small-metadata:
-    fontFamily: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
+    fontFamily: '"Inter Variable", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif'
     fontSize: "var(--text-2xs)"
     fontWeight: 400
     lineHeight: 1.35

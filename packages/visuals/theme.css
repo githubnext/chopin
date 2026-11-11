@@ -477,8 +477,27 @@
 	--default-transition-duration: var(--duration-fast);
 	--default-transition-timing-function: var(--ease-out);
 
-	/* Inter is loaded in `main.tsx`; the editor reads this token rather than repeating the stack. */
-	--font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	/*
+	 * Inter is loaded in `main.tsx`; the editor reads this token rather than repeating the stack.
+	 * The platform's colour emoji fonts follow Inter, so a letter is always Inter's and an emoji,
+	 * which Inter does not have, is the system's own (Slack's "native" emoji) before a generic
+	 * family can draw it as a black outline (Linux resolves `sans-serif` to DejaVu, which has one).
+	 */
+	--font-sans:
+		"Inter Variable",
+		"Apple Color Emoji",
+		"Segoe UI Emoji",
+		"Noto Color Emoji",
+		ui-sans-serif,
+		system-ui,
+		-apple-system,
+		"Segoe UI",
+		sans-serif;
+	/*
+	 * Where only emoji are drawn (a reaction, the picker): the emoji fonts first, so a character
+	 * with a text form too (❤ ☺ ✔) is drawn as the emoji somebody picked, then the text font.
+	 */
+	--font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", var(--font-sans);
 	--font-document-heading: "Lora", Georgia, serif;
 	--font-weight-normal: 400;
 	--font-weight-medium: 500;
