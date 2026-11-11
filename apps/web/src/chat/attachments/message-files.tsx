@@ -103,10 +103,15 @@ export default function MessageFiles(
 						return {
 							id: file.id,
 							name: file.name,
-							size: formatBytes(file.size),
+							// The type and the size are two elements, apart by the line's gap, as Slack draws them.
+							size: (
+								<>
+									<span className="chat-file-type">{type.label}</span>
+									<span>{formatBytes(file.size)}</span>
+								</>
+							),
 							kind: "file" as const,
 							icon: <FileKindIcon kind={type.kind} />,
-							detail: <span className="chat-file-type">{type.label}</span>,
 							actions: <FileActions file={file} href={href} />,
 						};
 					})}
