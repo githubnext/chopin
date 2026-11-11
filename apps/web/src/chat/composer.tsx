@@ -381,7 +381,6 @@ export function ChatComposer(
 					)
 					: (
 						<>
-							{format?.shown && <FormatBar disabled={format.disabled} onFormat={format.onFormat} />}
 							{/* What is staged for the message sits above its text: the files, and the voice while it is listened to. */}
 							{files && files.files.length > 0 && (
 								<Suspense fallback={null}>
@@ -447,6 +446,9 @@ export function ChatComposer(
 									ref={inputRef}
 								/>
 							</div>
+
+							{/* After the field in the page, so Tab arrives at the field first; the bar is drawn above it (composer.css). */}
+							{format?.shown && <FormatBar disabled={format.disabled} onFormat={format.onFormat} />}
 
 							<div className="composer-row">
 								<div className="composer-left">
