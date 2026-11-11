@@ -46,9 +46,12 @@ const ROOTS = [
 	'[data-slot="message-actions"]',
 	'[data-slot="dropdown-menu-content"]',
 	"[data-audit-reactions]",
+	'[data-slot="agent-handoff"]',
+	'[data-slot="subagent-list"]',
 ] as const;
 
-// The voice's dot pulses for as long as it listens, and a colour is read once nothing is moving.
+// The voice's dot pulses for as long as it listens, and subagent cards spin and shimmer: a colour
+// is read once nothing is moving.
 test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 type Colour = { r: number; g: number; b: number; a: number };

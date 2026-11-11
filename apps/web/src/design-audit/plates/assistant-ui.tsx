@@ -11,6 +11,7 @@ import {
 import { cloneElement, useState } from "react";
 import { MessageIcon } from "@chopin/icons";
 
+import { AgentHandoff } from "@/components/assistant-ui/elements/agent-handoff";
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import { MessageActions } from "@/components/assistant-ui/elements/message-actions";
 import {
@@ -48,6 +49,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SubagentList } from "@/components/assistant-ui/elements/subagent-list";
 import { ReactionPills } from "../../chat/actions/reaction-pills";
 import { modelOptions } from "../../chat/assistant-ui/model-options";
 import StagedFiles from "../../chat/attachments/staged-files";
@@ -55,6 +57,7 @@ import { QUICK_REACTIONS } from "../../chat/reactions";
 import { AuditPlate, StateLabel } from "../frame";
 
 import type { Reaction } from "@/components/assistant-ui/elements/message-actions";
+import type { SubagentItem } from "@/components/assistant-ui/elements/subagent-list";
 import type { Chat } from "@chopin/protocol";
 import type { FileView } from "../../chat/attachments/files";
 
@@ -290,11 +293,18 @@ const AUDIT_REACTIONS: readonly Chat.Reaction[] = [
 	{ emoji: QUICK_REACTIONS[1].emoji, handles: ["ben"] },
 ];
 
+const SUBAGENTS: readonly SubagentItem[] = [
+	{ name: "Public web search", model: "web" },
+	{ name: "Repository context", model: "repo" },
+];
+
+const SUMMARY_AGENT: SubagentItem = { name: "Write research report", model: "report" };
+
 /**
  * Copied assistant-ui and shadcn elements, drawn as their registries draw them: the model
  * selector, markdown-text, image, image gallery, the context ring and breakdown, message actions,
- * Chopin's toolbar extension and overflow dropdown menu, plus the reaction pills. `e2e/design`
- * measures their geometry and colours.
+ * Chopin's toolbar extension and overflow dropdown menu, the reaction pills, and the agent handoff
+ * and subagent list research delegation draws. `e2e/design` measures their geometry and colours.
  */
 export function AssistantUiPlate() {
 	let models = modelOptions(CATALOG);
@@ -573,6 +583,48 @@ export function AssistantUiPlate() {
 			<div className="design-audit-aui-markdown">
 				<StateLabel>Markdown text</StateLabel>
 				<MarkdownText defer={false} text={MARKDOWN_SPECIMEN} />
+			</div>
+			<div className="design-audit-aui design-audit-aui-blocks">
+				<div>
+					<StateLabel>Handoff, in transit</StateLabel>
+					<AgentHandoff
+						carried={["Compare self-hosted options", "Keep single-sign-on support"]}
+						from="Chopin"
+						reason="Handing off the research brief to a child document."
+						settled={false}
+						to="Research"
+					/>
+				</div>
+				<div>
+					<StateLabel>Handoff, settled</StateLabel>
+					<AgentHandoff
+						carried={[]}
+						from="Chopin"
+						reason="Published findings in a child document."
+						settled
+						to="Research"
+					/>
+				</div>
+				<div>
+					<StateLabel>Subagent list, partly done</StateLabel>
+					<SubagentList
+						agents={SUBAGENTS}
+						completedCount={1}
+						progress={[100, 60]}
+						showSummary={false}
+						summaryAgent={SUMMARY_AGENT}
+					/>
+				</div>
+				<div>
+					<StateLabel>Subagent list, summarizing</StateLabel>
+					<SubagentList
+						agents={SUBAGENTS}
+						completedCount={2}
+						progress={[100, 100]}
+						showSummary
+						summaryAgent={SUMMARY_AGENT}
+					/>
+				</div>
 			</div>
 		</AuditPlate>
 	);

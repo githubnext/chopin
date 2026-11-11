@@ -118,6 +118,8 @@ const ROOTS = {
 		"image-regenerate",
 		"image-gallery",
 		"message-actions",
+		"agent-handoff",
+		"subagent-list",
 	],
 	open: [
 		"model-selector-content",
@@ -314,7 +316,40 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 			checked++;
 		}
 	}
-	expect(checked).toBe(131);
+	expect(checked).toBe(135);
+});
+
+test("handoff and subagent list keep assistant-ui's exact proportions", async ({ page }) => {
+	let handoff = plate(page, "assistant-ui").locator('[data-slot="agent-handoff"]').first();
+	await handoff.scrollIntoViewIfNeeded();
+	let pills = handoff.locator("> div").first().locator("> span");
+	expect(await pills.count()).toBe(2);
+	for (let index = 0; index < 2; index++) {
+		await expectClassGeometry(pills.nth(index), `handoff pill ${index}`);
+		let pill = await measure(pills.nth(index));
+		expect([pill.padding, pill.fontSize, pill.lineHeight]).toEqual([[4, 10, 4, 10], 12, 16]);
+		expect(pill.radius).toBeGreaterThan(1000);
+	}
+	let carried = await measure(handoff.locator("> div").nth(1).locator("> span").nth(1));
+	expect([carried.border, carried.padding[3], carried.fontSize]).toEqual([[0, 0, 0, 1], 10, 12]);
+
+	// Tailwind's `rounded-2xl` is 16px, which Chopin's theme drops altogether.
+	let subagents = plate(page, "assistant-ui").locator('[data-slot="subagent-list"]').nth(1);
+	await subagents.scrollIntoViewIfNeeded();
+	let cards = subagents.locator("> div");
+	expect(await cards.count()).toBe(3);
+	for (let index = 0; index < 3; index++) {
+		await expectClassGeometry(cards.nth(index), `subagent card ${index}`);
+		let card = await measure(cards.nth(index));
+		expect([card.radius, card.border, card.padding]).toEqual([
+			16,
+			[1, 1, 1, 1],
+			[10, 14, 10, 14],
+		]);
+		let bar = await measure(cards.nth(index).getByRole("progressbar"));
+		expect(bar.height).toBeCloseTo(3, 1);
+		expect(bar.radius).toBeGreaterThan(1000);
+	}
 });
 
 test("message-actions and dropdown-menu keep their registry geometry; Chopin's toolbar and reaction pills take Slack's", async ({ page }) => {

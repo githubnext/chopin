@@ -60,6 +60,7 @@ extension points and change no class or size. Those on
 
 | File (under `apps/web/src/`)                                 | Registry      | Item                          | Upstream revision                        |
 | ------------------------------------------------------------ | ------------- | ----------------------------- | ---------------------------------------- |
+| `components/assistant-ui/elements/agent-handoff.tsx`         | @assistant-ui | `elements-agent-handoff`      | `assistant-ui/assistant-ui@8f47f532b663` |
 | `components/assistant-ui/elements/composer.tsx`              | @assistant-ui | `elements-composer`           | `assistant-ui/assistant-ui@d25a97a22f00` |
 | `components/assistant-ui/elements/directive-text.tsx`        | @assistant-ui | `elements-directive-text`     | `assistant-ui/assistant-ui@2c298dfa8392` |
 | `components/assistant-ui/elements/image-gallery.tsx`         | @assistant-ui | `elements-image-gallery`      | `assistant-ui/assistant-ui@437b410726e2` |
@@ -68,6 +69,7 @@ extension points and change no class or size. Those on
 | `components/assistant-ui/elements/message-actions.tsx`       | @assistant-ui | `elements-message-actions`    | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/assistant-ui/elements/message-attachment.tsx`    | @assistant-ui | `elements-message-attachment` | `assistant-ui/assistant-ui@ec601b37f6b6` |
 | `components/assistant-ui/elements/model-selector.tsx`        | @assistant-ui | `elements-model-selector`     | `assistant-ui/assistant-ui@d25a97a22f00` |
+| `components/assistant-ui/elements/subagent-list.tsx`         | @assistant-ui | `elements-subagent-list`      | `assistant-ui/assistant-ui@8f47f532b663` |
 | `components/assistant-ui/elements/surfaces.tsx`              | @assistant-ui | `elements-surfaces`           | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/assistant-ui/elements/tooltip-icon-button.tsx`   | @assistant-ui | `tooltip-icon-button`         | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/assistant-ui/utils/href.ts`                      | @assistant-ui | `elements-href`               | `assistant-ui/assistant-ui@437b410726e2` |

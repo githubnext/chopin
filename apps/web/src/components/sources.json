@@ -2,6 +2,13 @@
 	"schemaVersion": 1,
 	"files": [
 		{
+			"file": "apps/web/src/components/assistant-ui/elements/agent-handoff.tsx",
+			"registry": "@assistant-ui",
+			"item": "elements-agent-handoff",
+			"version": "assistant-ui/assistant-ui@8f47f532b663",
+			"sha256": "5e6060d960f7f2c36c248fdc0707f5ff039c450e45fc61d404419b290a66f011"
+		},
+		{
 			"file": "apps/web/src/components/assistant-ui/elements/composer.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-composer",
@@ -77,6 +84,13 @@
 			"sha256": "b8cf3a7ebf2c9ae778c2e65680bbb834aa140dc8acd38811e23b1b1f149f809b"
 		},
 		{
+			"file": "apps/web/src/components/assistant-ui/elements/subagent-list.tsx",
+			"registry": "@assistant-ui",
+			"item": "elements-subagent-list",
+			"version": "assistant-ui/assistant-ui@8f47f532b663",
+			"sha256": "45b41b2621c1ed3e0b1268aaa21987b80bb8f3404e0685014f60091d084d83f8"
+		},
+		{
 			"file": "apps/web/src/components/assistant-ui/elements/surfaces.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-surfaces",
@@ -123,7 +137,7 @@
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "9345c2d77d86ffd959ffd5c29d2dea9928cf1aac5fa590e9c3ea6af6183aa6b3"
+			"sha256": "18a7d632f58741d80fbabf82879c77f0cf74ec172e51d11e2b2010a418649b91"
 		},
 		{
 			"file": "apps/web/src/components/hooks/use-copy-to-clipboard.ts",
