@@ -24,6 +24,7 @@ import { FormatBar } from "./format-bar";
 import { sendStop } from "./assistant-ui/send-stop";
 import { SendStopButton } from "./assistant-ui/send-stop-button";
 import { motionContract } from "../motion-contract";
+import { currentShortcutPlatform, shortcutLabel } from "../shortcuts";
 import { ChopinChip } from "./assistant-ui/chopin-chip";
 import { draftPlaceholder } from "./chopin-chip";
 import { ModelPill } from "./assistant-ui/model-pill";
@@ -349,6 +350,7 @@ export function ChatComposer(
 											aria-label="Ask Chopin"
 											title="Ask Chopin"
 											data-tooltip="Ask Chopin"
+											data-tooltip-shortcut={shortcutLabel("ask-chopin", currentShortcutPlatform())}
 											data-tooltip-verbatim=""
 											disabled={chopin.disabled || chip}
 											onClick={chopin.onAdd}

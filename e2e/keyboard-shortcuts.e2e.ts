@@ -30,6 +30,7 @@ test("? opens the keyboard shortcuts sheet outside text fields", async ({ join }
 	await expect(sheet).toBeVisible();
 	await expect(sheet.getByText("Search documents")).toBeVisible();
 	await expect(sheet.getByText("Show or hide chat")).toBeVisible();
+	await expect(sheet.getByText("Ask Chopin")).toBeVisible();
 	await page.keyboard.press("Escape");
 	await expect(sheet).toHaveCount(0);
 

@@ -86,6 +86,14 @@ function wordsStart(draft: Locator): Promise<{ x: number; y: number }> {
 	});
 }
 
+/** Where the placeholder begins, as the page's x: the pseudo-element is positioned, so it has a used `left`. */
+function placeholderStart(draft: Locator): Promise<number> {
+	return draft.evaluate(element => {
+		let box = element.getBoundingClientRect();
+		return box.x + Number.parseFloat(getComputedStyle(element, "::before").left);
+	});
+}
+
 /** The wire's account of a message: who it went to and the words that went. */
 function lastSent(sent: Chat.Send[]) {
 	return sent.at(-1) && { text: sent.at(-1)!.text, to: sent.at(-1)!.to };
@@ -100,6 +108,8 @@ test("with no chip the draft is for the team, and says how to ask Chopin", async
 	await expect(chip).toHaveCount(0);
 	await expect(remove).toHaveCount(0);
 	await expect(ask).toBeEnabled();
+	// The button names its chord, which the shortcuts sheet lists too.
+	await expect(ask).toHaveAttribute("data-tooltip-shortcut", /^(Ctrl\+J|⌘J)$/);
 	// There is no Chat/Chopin switch to be in a mode of.
 	await expect(chat.getByRole("button", { name: "Talk to Chopin" })).toHaveCount(0);
 	await expect(chat.locator("[data-mode]")).toHaveCount(0);
@@ -134,6 +144,18 @@ test("the sparkle button puts the chip at the start without touching the words o
 	await expect(ask).toBeDisabled();
 	await expect(draft).toHaveAttribute("data-placeholder", "Ask Chopin…");
 	await expect(remove).toBeVisible();
+});
+
+test("the placeholder begins after the chip, not under it", async ({ join, page }) => {
+	await enablePlanner(page);
+	let chat = chatPane(await join("ana"));
+	let draft = chatInput(chat);
+	let { chip, ask } = parts(chat);
+	await ask.click();
+	await expect(chip).toBeVisible();
+	await expect(draft).toHaveAttribute("data-placeholder", "Ask Chopin…");
+	let box = (await chip.boundingBox())!;
+	expect(await placeholderStart(draft)).toBeGreaterThanOrEqual(box.x + box.width - 1);
 });
 
 test("Command+J and Control+J put the chip on from anywhere in the draft, and never take it off", async ({ join, page }) => {
@@ -343,6 +365,10 @@ test("on a phone the chip is the same chip, with a full touch target on its cros
 	await expect(chip).toBeVisible();
 	await expect(remove).toBeVisible();
 	await expect(draft).toHaveAttribute("data-placeholder", "Ask Chopin…");
+	// The placeholder begins after the chip, not under it.
+	expect(await placeholderStart(draft)).toBeGreaterThanOrEqual(
+		(await chip.boundingBox())!.x + (await chip.boundingBox())!.width - 1,
+	);
 	// The chip leads the draft's first line, inside the box, and the box is no wider than the phone.
 	let [chipBox, surface] = await Promise.all([
 		chip.boundingBox(),
