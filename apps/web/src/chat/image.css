@@ -186,15 +186,6 @@
 	line-height: var(--text-xs--line-height);
 }
 
-.chat-image-alt,
-.chat-image-text {
-	display: -webkit-box;
-	overflow: hidden;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
-	line-clamp: 2;
-}
-
 .chat-image-text {
 	color: var(--color-text-tertiary);
 }
