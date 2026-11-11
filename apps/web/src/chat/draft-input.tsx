@@ -45,6 +45,8 @@ export type DraftInputProps =
 		onSubmit: () => void;
 		onChange: (event: DraftEvent) => void;
 		onSelect: (event: DraftEvent) => void;
+		/** What is being dictated and not yet settled, drawn beside the caret and not part of the draft. */
+		interim?: { at: number; text: string };
 		/** Files pasted into the field: the image a screenshot copies, or files copied from a folder. */
 		onFiles?: (files: File[]) => void;
 	};
@@ -97,6 +99,7 @@ export let DraftInput = forwardRef<DraftInputHandle, DraftInputProps>(function D
 		onKeyDown,
 		onBlur,
 		onFiles,
+		interim,
 		role,
 		"aria-label": label,
 		"aria-disabled": disabled,
@@ -354,9 +357,9 @@ export let DraftInput = forwardRef<DraftInputHandle, DraftInputProps>(function D
 			group.current = undefined;
 			remember(value, references, selected);
 		}
-		writeDraft(current, value, references, mentions);
+		writeDraft(current, value, references, mentions, interim);
 		if (focused) setSelection(current, selected.anchor, selected.focus);
-	}, [value, references, resetKey, mentionsKey, historyGroupKey]);
+	}, [value, references, resetKey, mentionsKey, historyGroupKey, interim?.at, interim?.text]);
 	return (
 		<div
 			role={role}

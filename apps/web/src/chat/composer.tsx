@@ -12,11 +12,14 @@ import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import {
 	ArchiveIcon,
 	AtSignIcon,
+	CloseIcon,
 	InfoIcon,
 	LockIcon,
+	MicIcon,
 	PaperclipIcon,
 	PlusIcon,
 	SparkleIcon,
+	StopIcon,
 	TextStyleIcon,
 	WarningIcon,
 } from "@chopin/icons";
@@ -56,6 +59,27 @@ export type ComposerFiles = {
 	onRemove: (id: string) => void;
 	onRetry: (id: string) => void;
 };
+
+/** What the composer needs to dictate; absent where nothing can turn speech into words. */
+export type ComposerDictation = {
+	/** Listening, or working on what was heard. */
+	active: boolean;
+	phase: "idle" | "starting" | "listening" | "transcribing";
+	seconds: number;
+	/** What the button says on hover: where the speech goes, and the key that starts it. */
+	tooltip: string;
+	/** Spoken once to a screen reader when it starts and when it stops. */
+	announcement: string;
+	/** Why it stopped without finishing, in words, shown above the field until dismissed. */
+	failure?: string;
+	onDismissFailure: () => void;
+	disabled: boolean;
+	onToggle: () => void;
+};
+
+function clock(seconds: number): string {
+	return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
 
 /** What a file picker offers when images cannot be read: text, which is what can be sent. */
 const TEXT_ONLY =
@@ -117,6 +141,8 @@ export type ChatComposerProps = {
 	mention?: { disabled: boolean; onMention: () => void };
 	/** Present where the server takes images and files with a message. */
 	files?: ComposerFiles;
+	/** Present where the browser or the server can turn speech into words. */
+	dictation?: ComposerDictation;
 	/** Whether the draft accepts input at all, before a send is in flight. */
 	draftable: boolean;
 	sending: boolean;
@@ -158,6 +184,7 @@ export function ChatComposer(
 		format,
 		mention,
 		files,
+		dictation,
 		draftable,
 		sending,
 		sendDisabled,
@@ -255,7 +282,41 @@ export function ChatComposer(
 			ref={rootRef}
 			className="chat-composer relative shrink-0 px-2.5 pb-2.5"
 			data-planner={agent ? undefined : "off"}
+			onKeyDown={dictation
+				? event => {
+					// Escape stops listening wherever the focus is in the composer; the chord starts and stops it.
+					if (event.key === "Escape" && dictation.active) {
+						event.preventDefault();
+						event.stopPropagation();
+						dictation.onToggle();
+					} else if (
+						event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey
+						&& event.code === "KeyM" && !dictation.disabled
+					) {
+						event.preventDefault();
+						dictation.onToggle();
+					}
+				}
+				: undefined}
 		>
+			{dictation && (
+				<p aria-live="polite" className="sr-only" data-chat-dictation-announcement="" role="status">
+					{dictation.announcement}
+				</p>
+			)}
+			{dictation?.failure && (
+				<div className="composer-dictation-failure" data-chat-dictation-failure="" role="alert">
+					<span>{dictation.failure}</span>
+					<button
+						aria-label="Dismiss"
+						className="btn btn-icon-xs btn-ghost"
+						onClick={dictation.onDismissFailure}
+						type="button"
+					>
+						<CloseIcon aria-hidden="true" size={12} />
+					</button>
+				</div>
+			)}
 			{references && (
 				<p className="sr-only" id={instructionsId}>
 					Type # to reference a document.
@@ -356,6 +417,7 @@ export function ChatComposer(
 									mentions={input.mentions}
 									onBlur={input.onBlur}
 									onChange={input.onChange}
+									interim={input.interim}
 									onFiles={files && !files.disabled ? files.onAdd : undefined}
 									onKeyDown={input.onKeyDown}
 									onSelect={input.onSelect}
@@ -482,6 +544,37 @@ export function ChatComposer(
 									{model && <ModelPill control={model} />}
 								</div>
 								<div className="composer-actions">
+									{dictation && (
+										<>
+											{dictation.active && (
+												<span className="composer-recording" data-phase={dictation.phase}>
+													<span aria-hidden="true" className="composer-recording-dot" />
+													<span className="composer-recording-text">
+														{dictation.phase === "transcribing"
+															? "Transcribing"
+															: dictation.phase === "listening"
+															? clock(dictation.seconds)
+															: ""}
+													</span>
+												</span>
+											)}
+											<button
+												type="button"
+												aria-label="Dictate"
+												aria-pressed={dictation.active}
+												className="btn btn-icon btn-ghost composer-dictate"
+												data-tooltip={dictation.tooltip}
+												data-tooltip-verbatim=""
+												disabled={dictation.disabled && !dictation.active}
+												// The field keeps its focus and its caret, which is where the words go.
+												onMouseDown={event => event.preventDefault()}
+												onClick={dictation.onToggle}
+												title={dictation.tooltip}
+											>
+												{dictation.active ? <StopIcon size={16} /> : <MicIcon size={16} />}
+											</button>
+										</>
+									)}
 									{run?.action === "resume" && (
 										<button
 											aria-label="Resume Chopin"

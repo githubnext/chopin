@@ -876,6 +876,40 @@ served inline under its own type; a text file is a download of `text/plain; char
 answer carries `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none';
 sandbox`, so a stored file is never rendered as HTML or SVG.
 
+## Dictating a message
+
+The composer has a microphone button where speech can be turned into words, and nowhere else. It
+never records until a person presses it (the browser asks for the microphone then and not before),
+and it stops on a second press, on Escape, when the message is sent, when the page is hidden, when
+the person leaves the document and when the document stops taking messages. Nothing runs in the
+background, and what a recognizer reports after a stop is ignored.
+
+**Where speech becomes words.** First the browser's own speech recognition (`SpeechRecognition`,
+prefixed or not), and only if the browser says it runs on the device (`processLocally`): a browser
+that cannot say so is treated as having none, because without it a browser may send the audio to a
+speech service. A device with no model for the person's language is asked to fetch one before the
+microphone opens, and is told plainly if it cannot. Otherwise, where `TRANSCRIPTION_MODEL` is set
+(off by default; see [Self-hosting](self-hosting.md)), the composer records on the device and, when
+the person stops, sends the recording to `POST /api/channels/:channelId/transcriptions` for a person
+who can write to the document, from the app's own origin. The server reads the bytes (a recording
+a browser makes, a WAV or an MP3, up to `TRANSCRIPTION_MAX_BYTES`), sends nothing else to the
+provider, and gives back `{ "text" }`; the route answers 404 where no model is set. The
+`session:hello` frame names the provider (`transcription.provider`) only where it is set, and the
+button's tooltip then says the recording goes to it.
+
+**What it does to the draft.** Words the recognizer is sure of are written into the draft at the
+caret the person had when they pressed the button, spaced as typing would, one result after another;
+words it is still working on are shown beside that place in a quieter ink and replaced by the next
+result, and are never part of the draft's text, selection or history. The draft stays ordinary
+text the person can edit at any time: typing or moving the caret takes dictation with them. A
+message sent while speaking is sent as the person saw it. A blocked microphone, no microphone, a
+language the device cannot recognize and a lost connection each stop it with a plain message.
+
+**Accessibility.** The button is "Dictate", pressed while listening, with the chord (Alt+Shift+M, ⌥⇧M on
+a Mac) in its tooltip and in the keyboard shortcuts sheet; a polite live region says when it starts,
+when it stops and why not; and the dot beside it, with the time so far, holds still where the person
+prefers reduced motion.
+
 ## Chat context
 
 [Automatic participation](conversation-initiative.md) is enabled with the Planner and lets

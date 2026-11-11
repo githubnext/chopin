@@ -5,6 +5,8 @@ export function writeDraft(
 	text: string,
 	references: ReferenceDraft[],
 	mentions: readonly string[] = [],
+	/** What is being said and not yet settled: drawn beside `at`, and never part of `text`. */
+	interim?: { at: number; text: string },
 ) {
 	let fragment = document.createDocumentFragment();
 	let end = 0;
@@ -25,8 +27,28 @@ export function writeDraft(
 		}
 		fragment.append(document.createTextNode(source.slice(end)));
 	};
+	// The interim words are a mark in the text that draws them from `data-interim`, so they are not
+	// in the draft's text: its offsets, selection and history are what they would be without them.
+	// A reference is never split by it: they are drawn after one that holds their place.
+	let ghostAt = interim
+		? references.find(reference => reference.start < interim.at && reference.end > interim.at)?.end
+			?? interim.at
+		: undefined;
+	let placed = ghostAt === undefined;
+	let segment = (from: number, to: number) => {
+		if (!placed && ghostAt! >= from && ghostAt! <= to) {
+			appendText(text.slice(from, ghostAt));
+			let span = document.createElement("span");
+			span.className = "draft-interim";
+			span.dataset.interim = interim!.text;
+			span.contentEditable = "false";
+			fragment.append(span);
+			placed = true;
+			appendText(text.slice(ghostAt, to));
+		} else appendText(text.slice(from, to));
+	};
 	for (let reference of [...references].sort((left, right) => left.start - right.start)) {
-		appendText(text.slice(end, reference.start));
+		segment(end, reference.start);
 		let span = document.createElement("span");
 		span.className = "draft-reference";
 		span.dataset.reference = reference.kind;
@@ -34,8 +56,9 @@ export function writeDraft(
 		span.textContent = text.slice(reference.start, reference.end);
 		fragment.append(span);
 		end = reference.end;
+		if (!placed && ghostAt === end) segment(end, end);
 	}
-	appendText(text.slice(end));
+	segment(end, text.length);
 	if (!text || text.endsWith("\n")) fragment.append(document.createElement("br"));
 	element.replaceChildren(fragment);
 }

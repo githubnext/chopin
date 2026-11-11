@@ -67,6 +67,8 @@ describe("platform", () => {
 		expect(shortcutLabel("search", "mac")).toBe("⌘K");
 		expect(shortcutLabel("search", "other")).toBe("Ctrl+K");
 		expect(shortcutLabel("toggle-sidebar", "mac")).toBe("⌘\\");
+		expect(shortcutLabel("dictate", "mac")).toBe("⌥⇧M");
+		expect(shortcutLabel("dictate", "other")).toBe("Alt+Shift+M");
 		expect(shortcutLabel("new-document", "mac")).toBe("⌥N");
 		expect(shortcutLabel("new-document", "other")).toBe("Alt+N");
 		// The composer's chord for asking Chopin, as the tooltip and the sheet print it.
