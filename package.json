@@ -76,6 +76,7 @@
 			},
 			"mdx": {
 				"@lexical/headless": "0.48.0",
+				"@lexical/history": "0.48.0",
 				"@lexical/link": "0.48.0",
 				"@lexical/list": "0.48.0",
 				"@lexical/react": "0.48.0",
