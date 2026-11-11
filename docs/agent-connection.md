@@ -399,10 +399,12 @@ Connect a machine to get a reply. Connect an agent client to <document URL> over
 ```
 
 A document whose Planner is disconnected is refused with the machine named by its
-owner's login, never by its own name:
+owner's login, never by its own name. It says what happened to the message and what to do,
+and nothing of keeping it, since nothing is kept for a machine that is away (the machine's own
+work, its runs and open questions, is kept, and the document says so where it shows the machine):
 
 ```text
-@<login>'s machine is offline, so it can't reply now. Your work is kept and picks up when it's back.
+@<login>'s machine is offline, so this message wasn't sent. Send it again when it's back.
 ```
 
 [Local agent MCP](local-agent-mcp.md#hand-an-instruction-to-the-planner) shows

@@ -375,7 +375,7 @@ describe("first build", () => {
 		// Chopin says so when the machine was connected but its connection dropped.
 		expect(
 			draftRefusalCopy(
-				"@mona's machine is offline, so it can't reply now. Your work is kept and picks up when it's back.",
+				"@mona's machine is offline, so this message wasn't sent. Send it again when it's back.",
 				"planner-not-attached",
 			),
 		).toBe("Reconnect the machine to build.");

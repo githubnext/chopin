@@ -727,9 +727,16 @@ describe("a Planner backend that keeps failing to start", () => {
 		for (let message of messages) expect(internal.test(message), message).toBe(false);
 		expect(notAttachedMessage("u", "r", true)).toStartWith("Connect a machine to get a reply.");
 		expect(notAttachedMessage("u", "r")).toStartWith("Connect a machine to get a reply.");
+		// A refused message is not kept, so what it is told says it was not sent and what to do.
 		expect(disconnectedMessage("mona")).toBe(
-			"@mona's machine is offline, so it can't reply now. Your work is kept and picks up when it's back.",
+			"@mona's machine is offline, so this message wasn't sent. Send it again when it's back.",
 		);
+		expect(disconnectedMessage(undefined)).toBe(
+			"The machine is offline, so this message wasn't sent. Send it again when it's back.",
+		);
+		for (let message of [disconnectedMessage("mona"), disconnectedMessage(undefined)]) {
+			expect(message, message).not.toMatch(/kept|picks up/);
+		}
 	});
 
 	it("keeps what is told short and plain", async () => {

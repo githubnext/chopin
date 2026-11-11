@@ -750,9 +750,9 @@ is another, so a machine that was waited on is never waited on again from where 
 **Unattached documents.** Members, MCP callers, and research requests never claim
 ownership under `HARNESS=remote`. An `@chopin` message or `invoke_planner` call
 for a document with no attached client, including one within its grace period or
-disconnected with its work kept (the message says its machine is offline), is refused with
-that message and nothing is kept, as [messages while the Planner works](#messages-while-the-planner-works)
-describes.
+disconnected with its work kept (the message says its machine is offline, so the message
+was not sent, and to send it again when it is back), is refused with that message and nothing
+is kept, as [messages while the Planner works](#messages-while-the-planner-works) describes.
 Before accepting either, the server rechecks an attached connection as its periodic
 recheck would: if the owner's browser sign-in has ended or storage no longer
 assigns that owner, it closes the connection, releases the ownership, and refuses the
@@ -1145,7 +1145,11 @@ Nothing a person sends to the Planner is held for later. A message is never "wai
   no input mid-run (the Copilot SDK), or a running turn that is a background job's, the code is
   `planner-busy` and the words are "Chopin can't take messages while it works on this machine. Stop
   it to ask now."; the server log names the harness. With no machine attached, or one that is away,
-  the code is `planner-not-attached` with the connection's own words, mid-turn or not.
+  the code is `planner-not-attached` with the connection's own words, mid-turn or not. For a
+  machine that is away they say what happened and what to do: "@mona's machine is offline, so this
+  message wasn't sent. Send it again when it's back." They never say that anything is kept: the
+  machine's own work is, and the status beside the composer says so (_Your work is kept._), but
+  the message is not.
 
 A message sent while a turn is only beginning or finishing has no session to be given to just
 now. It is answered as a passing trouble (`temporarily-unavailable`), and its browser sends it
@@ -1174,7 +1178,9 @@ at that point, and none counts against what a person may send.
 browser has it, in an outbox that sends it by itself, in order and once, when the page's connection
 is back, it says **Sending**; never waiting, queued or a clock. A message the server refuses says
 **Couldn't send** on itself, with the reason, **Try again** and **Delete**, which act on the outbox alone
-since the server kept nothing, and never in a strip above the composer. While the page's connection
+since the server kept nothing, and never in a strip above the composer. The message's words stay on
+that line, so nothing typed is lost; the reason for a machine that is away is the server's own
+words above, and for no machine at all, _No machine is connected to reply._ While the page's connection
 banner shows, that line gives way to it and returns with the connection. The outbox is used only with a
 server that acknowledges sends (`chatSendAcks`), and only for messages to the machine. A teammate
 sees the steering message as an ordinary one where it was sent in the transcript, between the

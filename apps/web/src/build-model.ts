@@ -382,7 +382,9 @@ const RECONNECT_MACHINE_TO_BUILD = "Reconnect the machine to build";
  * not, which reads as Chopin failing to draft.
  */
 export function draftRefusalCopy(message: string, code?: string): string | undefined {
-	if (/ is offline, so it can't reply now/.test(message)) return `${RECONNECT_MACHINE_TO_BUILD}.`;
+	if (/ is offline, so this message wasn't sent/.test(message)) {
+		return `${RECONNECT_MACHINE_TO_BUILD}.`;
+	}
 	if (code === "planner-not-attached" || /Connect a machine to get a reply/.test(message)) {
 		return `${CONNECT_MACHINE_TO_BUILD}.`;
 	}

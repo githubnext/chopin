@@ -338,7 +338,9 @@ input mid-run (the Copilot SDK), or a running turn that is a background job's, r
 the message with `planner-busy`: "Chopin can't take messages while it works on this
 machine. Stop it to ask now." (the server log names the harness). A machine that is away,
 or none attached, refuses it with the connection's own words (`planner-not-attached`),
-mid-turn too. A message sent while a turn is only beginning or finishing has no session
+mid-turn too; for a machine that is away they say the message was not sent and to send it again
+when the machine is back, and never that it is kept (the machine's own work is; the message is
+not). A message sent while a turn is only beginning or finishing has no session
 to be given to, and is answered as a passing trouble (`temporarily-unavailable`). If the
 turn ends before it can read the message, an idle Chat starts a turn for it and any other
 says plainly that Chopin did not read it. A comment note, an `invoke_planner as system` call

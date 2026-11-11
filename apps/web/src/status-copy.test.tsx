@@ -541,7 +541,10 @@ test("every reason Build plan waits and every refusal Build shows is plain, mach
 	expectPlain("Build plan's reasons", reasons);
 
 	let refusals = [
-		["@mona's machine is offline, so it can't reply now. Your work is kept.", undefined],
+		[
+			"@mona's machine is offline, so this message wasn't sent. Send it again when it's back.",
+			undefined,
+		],
 		["anything", "planner-not-attached"],
 		["Connect a machine to get a reply. Choose one with the machine button.", undefined],
 		["accepted comments awaiting plan changes", undefined],

@@ -216,6 +216,33 @@ test("with no attached Planner, @chopin and invoke_planner are refused with how 
 	expect(context.chat.entries.map(entry => entry.text)).toEqual(["Just talking"]);
 });
 
+test("a message to a machine whose link dropped is refused saying it was not sent and to send it again, never that it is kept, and nothing is posted", async () => {
+	let down = await resumablePlanner({ graceMs: GRACE_MS });
+	let { context } = down;
+	await down.drop();
+	let entries = context.chat.entries.length;
+	let saves = 0;
+	let persist = context.persist;
+	context.persist = async chat => {
+		saves++;
+		await persist(chat);
+	};
+
+	let refused = await down.send("@chopin and then this");
+	expect(refused).toMatchObject({
+		kind: "session:error",
+		code: "planner-not-attached",
+		message: "@member's machine is offline, so this message wasn't sent. "
+			+ "Send it again when it's back.",
+	});
+	expect(String(refused?.message)).not.toMatch(/kept|picks up/);
+	// The machine's own work is another matter: it is kept, and the refusal does not touch it.
+	expect(context.chat.entries).toHaveLength(entries);
+	expect(context.chat.waiting).toEqual([]);
+	expect(saves).toBe(0);
+	expect(context.chat.retained).toBeDefined();
+});
+
 test("other harnesses keep claiming ownership for the sender as before", async () => {
 	let room = await remoteRoom();
 	let { context } = room;
