@@ -110,6 +110,7 @@ test("a scripted Planner turn reaches read_plan and list_pull_requests through r
 test("a message with the Chopin chip reaches the Planner, which takes a turn, and one without it goes to the team alone", async ({ join, page, seed }) => {
 	await seed("# Chip routing\nThe harp needs new strings.\n");
 	let sent: Chat.Send[] = [];
+	let entries = new Map<string, Chat.Entry>();
 	let states: Chat.State[] = [];
 	await page.routeWebSocket("**/ws?**", route => {
 		let server = route.connectToServer();
@@ -123,6 +124,10 @@ test("a message with the Chopin chip reaches the Planner, which takes a turn, an
 			if (typeof message === "string") {
 				let frame = JSON.parse(message) as { kind: string };
 				if (frame.kind === "chat:state") states.push(frame as Chat.State);
+				if (frame.kind === "chat:message") {
+					let { entry } = frame as Chat.Message;
+					entries.set(entry.id, entry);
+				}
 			}
 			route.send(message);
 		});
@@ -141,8 +146,7 @@ test("a message with the Chopin chip reaches the Planner, which takes a turn, an
 	await expect(chat.getByText("Chip routing", { exact: false })).toBeVisible();
 	await expect.poll(() => states.at(-1)?.busy).toBe(false);
 	expect(sent.at(-1)).toMatchObject({ to: "planner", text: "@chopin what does the plan say?" });
-	let turns = states.filter(frame => frame.busy).length;
-	expect(turns).toBeGreaterThan(0);
+	await expect.poll(() => entries.get(sent[0]!.requestId)?.to).toBe("planner");
 
 	// The chip stays on, so the next is Chopin's too, until it is removed.
 	await expect(chip).toBeVisible();
@@ -155,8 +159,13 @@ test("a message with the Chopin chip reaches the Planner, which takes a turn, an
 	await expect(chat.getByText("thanks, both of you", { exact: true })).toBeVisible();
 	expect(sent.at(-1)).toMatchObject({ to: "room", text: "thanks, both of you" });
 	await expect.poll(() => sent.length).toBe(2);
-	await expect(chat.getByRole("button", { name: "Stop generating" })).toHaveCount(0);
-	expect(states.filter(frame => frame.busy).length).toBe(turns);
+	// The server filed it as the team's, with no Planner named. It is no count of busy frames or
+	// of Stop buttons that says so: Chopin's own work shows as both, the title it keeps after any
+	// message a moment later and its joining in after a quiet spell (conversation-initiative.e2e).
+	await expect.poll(() => entries.get(sent[1]!.requestId)).toMatchObject({
+		text: "thanks, both of you",
+	});
+	expect(entries.get(sent[1]!.requestId)).not.toHaveProperty("to");
 });
 
 test("tool activity redacts credential text before broadcast and history replay", async ({ join, page, seed }) => {
