@@ -148,7 +148,8 @@ test("a staged image is a 64px square and a staged file a short card, each with 
 	await expect(remove).toHaveCSS("opacity", "1");
 	let corner = await box(remove);
 	expect([corner.width, corner.height]).toEqual([20, 20]);
-	expect(Math.round(file.x + file.width - (corner.x + corner.width))).toBe(4);
+	// 4px in from the card's inside edge, inside its 1px hairline.
+	expect(Math.round(file.x + file.width - (corner.x + corner.width))).toBe(5);
 });
 
 for (let mode of ["light", "dark"] as const) {
