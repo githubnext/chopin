@@ -49,7 +49,8 @@
 [data-slot|="message"],
 [data-slot|="model"],
 [data-slot|="popover"],
-[data-slot|="textarea"] {
+[data-slot|="textarea"],
+[data-slot|="tooltip"] {
 	--spacing: 0.25rem;
 	--text-xs: 0.75rem;
 	--text-xs--line-height: calc(1 / 0.75);
@@ -127,9 +128,10 @@
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) .border:not([data-chopin-control]),
-	.border:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	.border:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -140,9 +142,10 @@
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) .border-t:not([data-chopin-control]),
-	.border-t:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	.border-t:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -153,9 +156,10 @@
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) .border-r:not([data-chopin-control]),
-	.border-r:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	.border-r:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -166,9 +170,10 @@
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) .border-b:not([data-chopin-control]),
-	.border-b:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	.border-b:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -179,9 +184,10 @@
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) .border-l:not([data-chopin-control]),
-	.border-l:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	.border-l:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -192,9 +198,10 @@
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) .border-x:not([data-chopin-control]),
-	.border-x:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	.border-x:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -205,9 +212,10 @@
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) .border-y:not([data-chopin-control]),
-	.border-y:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	.border-y:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -218,9 +226,10 @@
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) .border-s:not([data-chopin-control]),
-	.border-s:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	.border-s:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -231,9 +240,10 @@
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) .border-e:not([data-chopin-control]),
-	.border-e:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]) {
+	.border-e:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]) {
 		border-color: var(--color-border);
 	}
 }
@@ -284,9 +294,10 @@
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) button:not([data-chopin-control]),
-button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -297,9 +308,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="button"]:not([data-chopin-control]),
-[role="button"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+[role="button"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -310,9 +322,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="checkbox"]:not([data-chopin-control]),
-[role="checkbox"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+[role="checkbox"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -323,9 +336,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="combobox"]:not([data-chopin-control]),
-[role="combobox"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+[role="combobox"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -336,9 +350,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="menuitem"]:not([data-chopin-control]),
-[role="menuitem"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+[role="menuitem"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -349,9 +364,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="option"]:not([data-chopin-control]),
-[role="option"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+[role="option"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -362,9 +378,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="radio"]:not([data-chopin-control]),
-[role="radio"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+[role="radio"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -375,9 +392,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="switch"]:not([data-chopin-control]),
-[role="switch"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+[role="switch"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -388,9 +406,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="tab"]:not([data-chopin-control]),
-[role="tab"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+[role="tab"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -401,9 +420,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) a[href]:not([data-chopin-control]),
-a[href]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]) {
+a[href]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]) {
 	transition: revert-layer;
 }
 
@@ -417,9 +437,10 @@ a[href]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) button:not([data-chopin-control]):active,
-button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]):active,
+button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]):active,
 :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -430,13 +451,14 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="button"]:not([data-chopin-control]):active,
-[role="button"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]):active {
+[role="button"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]):active {
 	scale: revert-layer;
 }
 
-:focus-visible:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+:focus-visible:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 :is(
 	[data-slot|="button"],
 	[data-slot|="command"],
@@ -447,7 +469,8 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 	[data-slot|="message"],
 	[data-slot|="model"],
 	[data-slot|="popover"],
-	[data-slot|="textarea"]
+	[data-slot|="textarea"],
+	[data-slot|="tooltip"]
 ) :focus-visible:not([data-chopin-control]) {
 	outline: revert-layer;
 	outline-offset: revert-layer;
@@ -460,8 +483,8 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
  * above it.
  */
 @media (prefers-reduced-motion: reduce) {
-	.animate-pulse:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]),
-	.shimmer:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]),
+	.animate-pulse:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]),
+	.shimmer:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]),
 	:is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -472,7 +495,8 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) .animate-pulse,
 	:is(
 		[data-slot|="button"],
@@ -484,7 +508,8 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) .shimmer {
 		animation: none;
 	}
@@ -505,9 +530,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) button:not([data-chopin-control]),
-	:root[data-plan-coarse-pointer] button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	:root[data-plan-coarse-pointer] button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -518,9 +544,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="button"]:not([data-chopin-control]),
-	:root[data-plan-coarse-pointer] [role="button"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	:root[data-plan-coarse-pointer] [role="button"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -531,9 +558,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="checkbox"]:not([data-chopin-control]),
-	:root[data-plan-coarse-pointer] [role="checkbox"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	:root[data-plan-coarse-pointer] [role="checkbox"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -544,9 +572,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="combobox"]:not([data-chopin-control]),
-	:root[data-plan-coarse-pointer] [role="combobox"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	:root[data-plan-coarse-pointer] [role="combobox"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -557,9 +586,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="menuitem"]:not([data-chopin-control]),
-	:root[data-plan-coarse-pointer] [role="menuitem"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	:root[data-plan-coarse-pointer] [role="menuitem"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -570,9 +600,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="option"]:not([data-chopin-control]),
-	:root[data-plan-coarse-pointer] [role="option"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	:root[data-plan-coarse-pointer] [role="option"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -583,9 +614,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="radio"]:not([data-chopin-control]),
-	:root[data-plan-coarse-pointer] [role="radio"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	:root[data-plan-coarse-pointer] [role="radio"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -596,9 +628,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="switch"]:not([data-chopin-control]),
-	:root[data-plan-coarse-pointer] [role="switch"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	:root[data-plan-coarse-pointer] [role="switch"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -609,9 +642,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="tab"]:not([data-chopin-control]),
-	:root[data-plan-coarse-pointer] [role="tab"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]),
+	:root[data-plan-coarse-pointer] [role="tab"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]),
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -622,9 +656,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) a[href]:not([data-chopin-control]),
-	:root[data-plan-coarse-pointer] a[href]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control]) {
+	:root[data-plan-coarse-pointer] a[href]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control]) {
 		position: relative;
 	}
 
@@ -638,9 +673,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) button:not([data-chopin-control])::after,
-	:root[data-plan-coarse-pointer] button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control])::after,
+	:root[data-plan-coarse-pointer] button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control])::after,
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -651,9 +687,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="button"]:not([data-chopin-control])::after,
-	:root[data-plan-coarse-pointer] [role="button"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control])::after,
+	:root[data-plan-coarse-pointer] [role="button"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control])::after,
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -664,9 +701,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="checkbox"]:not([data-chopin-control])::after,
-	:root[data-plan-coarse-pointer] [role="checkbox"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control])::after,
+	:root[data-plan-coarse-pointer] [role="checkbox"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control])::after,
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -677,9 +715,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="combobox"]:not([data-chopin-control])::after,
-	:root[data-plan-coarse-pointer] [role="combobox"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control])::after,
+	:root[data-plan-coarse-pointer] [role="combobox"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control])::after,
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -690,9 +729,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="menuitem"]:not([data-chopin-control])::after,
-	:root[data-plan-coarse-pointer] [role="menuitem"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control])::after,
+	:root[data-plan-coarse-pointer] [role="menuitem"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control])::after,
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -703,9 +743,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="option"]:not([data-chopin-control])::after,
-	:root[data-plan-coarse-pointer] [role="option"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control])::after,
+	:root[data-plan-coarse-pointer] [role="option"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control])::after,
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -716,9 +757,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="radio"]:not([data-chopin-control])::after,
-	:root[data-plan-coarse-pointer] [role="radio"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control])::after,
+	:root[data-plan-coarse-pointer] [role="radio"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control])::after,
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -729,9 +771,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="switch"]:not([data-chopin-control])::after,
-	:root[data-plan-coarse-pointer] [role="switch"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control])::after,
+	:root[data-plan-coarse-pointer] [role="switch"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control])::after,
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -742,9 +785,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) [role="tab"]:not([data-chopin-control])::after,
-	:root[data-plan-coarse-pointer] [role="tab"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control])::after,
+	:root[data-plan-coarse-pointer] [role="tab"]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control])::after,
 	:root[data-plan-coarse-pointer] :is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -755,9 +799,10 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="message"],
 		[data-slot|="model"],
 		[data-slot|="popover"],
-		[data-slot|="textarea"]
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
 	) a[href]:not([data-chopin-control])::after,
-	:root[data-plan-coarse-pointer] a[href]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]):not([data-chopin-control])::after {
+	:root[data-plan-coarse-pointer] a[href]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]):not([data-chopin-control])::after {
 		content: "";
 		position: absolute;
 		top: 50%;

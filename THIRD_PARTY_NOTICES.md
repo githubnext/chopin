@@ -87,21 +87,25 @@ extension point and change no class or size. Those on
 | ------------------------------------------------------------ | ------------- | ----------------------------- | ---------------------------------------- |
 | `components/assistant-ui/elements/composer.tsx`              | @assistant-ui | `elements-composer`           | `assistant-ui/assistant-ui@d25a97a22f00` |
 | `components/assistant-ui/elements/directive-text.tsx`        | @assistant-ui | `elements-directive-text`     | `assistant-ui/assistant-ui@2c298dfa8392` |
+| `components/assistant-ui/elements/markdown-text.tsx`         | @assistant-ui | `markdown-text`               | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/assistant-ui/elements/message-attachment.tsx`    | @assistant-ui | `elements-message-attachment` | `assistant-ui/assistant-ui@ec601b37f6b6` |
 | `components/assistant-ui/elements/model-selector.tsx`        | @assistant-ui | `elements-model-selector`     | `assistant-ui/assistant-ui@d25a97a22f00` |
 | `components/assistant-ui/elements/surfaces.tsx`              | @assistant-ui | `elements-surfaces`           | `assistant-ui/assistant-ui@ec601b37f6b6` |
+| `components/assistant-ui/elements/tooltip-icon-button.tsx`   | @assistant-ui | `tooltip-icon-button`         | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/assistant-ui/utils/model-selection.ts`           | @assistant-ui | `elements-model-selection`    | `assistant-ui/assistant-ui@d25a97a22f00` |
 | `components/assistant-ui/utils/range.ts`                     | @assistant-ui | `elements-range`              | `assistant-ui/assistant-ui@d25a97a22f00` |
 | `components/assistant-ui/utils/useIsomorphicLayoutEffect.ts` | @assistant-ui | `elements-surfaces`           | `assistant-ui/assistant-ui@ec601b37f6b6` |
 | `components/geometry.css`                                    | tailwindcss   | `theme.css`                   | `tailwindcss@4.3.0`                      |
+| `components/hooks/use-copy-to-clipboard.ts`                  | @assistant-ui | `use-copy-to-clipboard`       | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/ui/badge.tsx`                                    | @assistant-ui | `badge`                       | `assistant-ui/assistant-ui@2c298dfa8392` |
-| `components/ui/button.tsx`                                   | @shadcn       | `button`                      | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/button.tsx`                                   | @shadcn       | `button`                      | `shadcn-ui/ui@dd41d19e2f80`              |
 | `components/ui/command.tsx`                                  | @shadcn       | `command`                     | `shadcn-ui/ui@8ab27715521c`              |
 | `components/ui/dialog.tsx`                                   | @shadcn       | `dialog`                      | `shadcn-ui/ui@8ab27715521c`              |
 | `components/ui/input-group.tsx`                              | @shadcn       | `input-group`                 | `shadcn-ui/ui@8ab27715521c`              |
 | `components/ui/input.tsx`                                    | @shadcn       | `input`                       | `shadcn-ui/ui@8ab27715521c`              |
 | `components/ui/popover.tsx`                                  | @shadcn       | `popover`                     | `shadcn-ui/ui@8ab27715521c`              |
 | `components/ui/textarea.tsx`                                 | @shadcn       | `textarea`                    | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/tooltip.tsx`                                  | @shadcn       | `tooltip`                     | `shadcn-ui/ui@dd41d19e2f80`              |
 | `lib/utils.ts`                                               | @assistant-ui | `utils`                       | `assistant-ui/assistant-ui@d25a97a22f00` |
 
 `components/geometry.css` is generated from Tailwind CSS's own `theme.css` (MIT, Tailwind Labs, Inc.)

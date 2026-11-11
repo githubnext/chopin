@@ -20,6 +20,13 @@
 			"patchSha256": "ddf4a3b22762db4c6d1bba03b26009f138ee1cea8a253b6151e545ad5a0e61b7"
 		},
 		{
+			"file": "apps/web/src/components/assistant-ui/elements/markdown-text.tsx",
+			"registry": "@assistant-ui",
+			"item": "markdown-text",
+			"version": "assistant-ui/assistant-ui@437b410726e2",
+			"sha256": "3fc4c2191adc0f30711f1936cdbf70f4b77781a3e4cfd56e54a57517e405f460"
+		},
+		{
 			"file": "apps/web/src/components/assistant-ui/elements/message-attachment.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-message-attachment",
@@ -39,6 +46,13 @@
 			"item": "elements-surfaces",
 			"version": "assistant-ui/assistant-ui@ec601b37f6b6",
 			"sha256": "5d81fbb669e67ae20026cd30ed57efc51a5e3ee0f4f5d265e1723de75359b8fa"
+		},
+		{
+			"file": "apps/web/src/components/assistant-ui/elements/tooltip-icon-button.tsx",
+			"registry": "@assistant-ui",
+			"item": "tooltip-icon-button",
+			"version": "assistant-ui/assistant-ui@437b410726e2",
+			"sha256": "98580531a6f5a213cccd6964c0c75fd097d97b77bcca05f904df562512273363"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/utils/model-selection.ts",
@@ -66,7 +80,14 @@
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "b9fbc0e484bc84330463cf8e53c6f9a298f865dd80cf794321810a735cfad13a"
+			"sha256": "352b49f967c728c151bbf19814465dfe27d69fef1a8a1c3c4d16214670580d2e"
+		},
+		{
+			"file": "apps/web/src/components/hooks/use-copy-to-clipboard.ts",
+			"registry": "@assistant-ui",
+			"item": "use-copy-to-clipboard",
+			"version": "assistant-ui/assistant-ui@437b410726e2",
+			"sha256": "1f3b8a1bab79cef961f62eb25d6b58a0d16c957d63ba1faf086ad09c99712c0a"
 		},
 		{
 			"file": "apps/web/src/components/ui/badge.tsx",
@@ -79,7 +100,7 @@
 			"file": "apps/web/src/components/ui/button.tsx",
 			"registry": "@shadcn",
 			"item": "button",
-			"version": "shadcn-ui/ui@8ab27715521c",
+			"version": "shadcn-ui/ui@dd41d19e2f80",
 			"sha256": "313353436d0fcc8e44ab470adb614b9fd013d28626f624328ea0d66d41a6c81b"
 		},
 		{
@@ -123,6 +144,13 @@
 			"item": "textarea",
 			"version": "shadcn-ui/ui@8ab27715521c",
 			"sha256": "82601c91ffc6c727d924162c78d7cb853114bcced4e2eb922a68ca12d4239c0f"
+		},
+		{
+			"file": "apps/web/src/components/ui/tooltip.tsx",
+			"registry": "@shadcn",
+			"item": "tooltip",
+			"version": "shadcn-ui/ui@dd41d19e2f80",
+			"sha256": "100101631756e1bebc1f1831e1642b26cd11a6a6c4affb6c638c42001dc14e83"
 		},
 		{
 			"file": "apps/web/src/lib/utils.ts",

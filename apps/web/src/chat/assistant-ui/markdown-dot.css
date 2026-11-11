@@ -1,0 +1,5 @@
+/*
+ * `@assistant-ui/markdown-text` imports `@assistant-ui/react-markdown/styles/dot.css` for the
+ * connected runtime's pulsing dot on `[data-status="running"]`. Chopin's Chat draws its own
+ * streaming cursor beside a live reply and keeps `data-status` still so nothing pulses on its own.
+ */

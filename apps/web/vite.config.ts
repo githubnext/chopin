@@ -88,6 +88,15 @@ export default defineConfig({
 	},
 
 	resolve: {
+		alias: [
+			{
+				find: "@assistant-ui/react-markdown/styles/dot.css",
+				replacement: resolve(
+					import.meta.dirname,
+					"src/chat/assistant-ui/markdown-dot.css",
+				),
+			},
+		],
 		// Only what this app resolves itself. Lexical and Yjs belong to the
 		// editor package, and listing them here would ask Vite to resolve them
 		// from a root that does not have them. Their single-copy guarantee comes

@@ -11,7 +11,12 @@
 		"lib": ["esnext", "dom", "dom.iterable"],
 		"jsx": "react-jsx",
 		"types": ["vite/client", "bun"],
-		"paths": { "@/*": ["./src/*"] },
+		"paths": {
+			"@/*": ["./src/*"],
+			"@assistant-ui/react": ["./src/chat/assistant-ui/markdown-primitive.tsx"],
+			"@assistant-ui/react-markdown": ["./src/chat/assistant-ui/markdown-primitive.tsx"],
+			"@assistant-ui/react-markdown/styles/dot.css": ["./src/chat/assistant-ui/markdown-dot.css"]
+		},
 
 		"allowSyntheticDefaultImports": true,
 
