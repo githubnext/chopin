@@ -1,6 +1,14 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useSyncExternalStore,
+} from "react";
 import {
 	CloseIcon,
 	MessageForwardIcon,
@@ -25,6 +33,9 @@ import { movedOffers, slideOffset } from "./offer-motion";
 import { WorkProgress } from "./work-progress";
 import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
 import type { ChatDestination } from "../conversation-plan/source";
+
+/** The files of a message are drawn by code that loads when a message first has some. */
+let MessageFiles = lazy(() => import("./attachments/message-files"));
 
 /** Message analysis is a development diagnostic; the browser suite builds it in too. */
 const ANALYSIS = import.meta.env.DEV || import.meta.env.VITE_MESSAGE_ANALYSIS === "on";
@@ -210,10 +221,11 @@ function DecisionSystemEntry(
 let LEADING_MENTION = /^\s*@chopin\b[^\S\n]*/i;
 
 function MessageBody(
-	{ enter, handle, message, onDelete, onRetry, onWithdraw, quietFailures, ...markers }: {
+	{ enter, handle, message, onDelete, onRetry, onWithdraw, quietFailures, room, ...markers }: {
 		enter: boolean;
 		handle: string;
 		message: Message;
+		room?: string;
 		onDelete: (id: string) => void;
 		onRetry: (id: string) => void;
 		onWithdraw: (id: string) => void;
@@ -227,7 +239,10 @@ function MessageBody(
 		? message.references?.filter(item => item.start >= lead)
 			.map(item => ({ ...item, start: item.start - lead, end: item.end - lead }))
 		: message.references;
-	if (!toPlanner && !displayText(text) && message.author.kind === "member") text = "Ask Chopin";
+	if (
+		!toPlanner && !displayText(text) && message.author.kind === "member"
+		&& !message.attachments?.length
+	) text = "Ask Chopin";
 	// Only the sender sees how far a message has got, and may take it back until it is delivered.
 	let own = message.author.kind === "member" && message.author.handle === handle;
 	let delivery = own ? deliveryOf(message) : undefined;
@@ -292,6 +307,11 @@ function MessageBody(
 						)}
 				</div>
 			)}
+			{!!message.attachments?.length && room && (
+				<Suspense fallback={null}>
+					<MessageFiles channelId={room} files={message.attachments} />
+				</Suspense>
+			)}
 			{delivery === "failed" && !quietFailures && (
 				<FailedLine
 					onDelete={() => onDelete(message.id)}
@@ -326,9 +346,11 @@ function MessageGroup(
 		onRetry,
 		onWithdraw,
 		quietFailures,
+		room,
 		...markers
 	}: {
 		/** The whole group entered; `entering` holds messages that joined it later. */
+		room?: string;
 		enter: boolean;
 		entering: ReadonlySet<string>;
 		group: Extract<ResearchTranscriptItem, { kind: "messages" }>;
@@ -398,6 +420,7 @@ function MessageGroup(
 						onRetry={onRetry}
 						onWithdraw={onWithdraw}
 						quietFailures={quietFailures}
+						room={room}
 					/>
 				))}
 			</div>
@@ -840,6 +863,7 @@ export function Transcript(
 								onRetry={onRetry}
 								quietFailures={quietFailures}
 								onWithdraw={onWithdraw}
+								room={room}
 								sourceDestination={sourceDestination}
 							/>
 						)

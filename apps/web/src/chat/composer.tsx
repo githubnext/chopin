@@ -5,7 +5,7 @@
  * passes what to show; the design audit renders the same component in each live state.
  */
 
-import { useId } from "react";
+import { lazy, Suspense, useId, useRef, useState } from "react";
 import type { ReactNode, Ref } from "react";
 
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
@@ -14,6 +14,7 @@ import {
 	AtSignIcon,
 	InfoIcon,
 	LockIcon,
+	PaperclipIcon,
 	PlusIcon,
 	SparkleIcon,
 	TextStyleIcon,
@@ -29,12 +30,40 @@ import { ChopinChip } from "./assistant-ui/chopin-chip";
 import { draftPlaceholder } from "./chopin-chip";
 import { ModelPill } from "./assistant-ui/model-pill";
 import type { Format } from "./format-markdown";
+import type { FileView } from "./attachments/files";
 import type { ModelControl } from "./use-model-choice";
 import type { DraftInputHandle, DraftInputProps } from "./draft-input";
 import plannerResume from "../assets/icons/planner-resume.svg";
 import "./composer.css";
 
 const MOTION = motionContract("collapse");
+
+/** The files of the message, drawn by code that loads when the first one is added. */
+let FileStrip = lazy(() => import("./attachments/composer-files"));
+
+/** What the composer needs to take, show and send files; absent where the server takes none. */
+export type ComposerFiles = {
+	files: readonly FileView[];
+	/** The browser's own copy of a file, for its thumbnail. */
+	source: (id: string) => File | undefined;
+	/** Why images cannot be added, in words, when the model the message is for cannot read them. */
+	imagesReason?: string;
+	/** Adding and removing are off while a message is being sent. */
+	disabled: boolean;
+	/** The message is waiting for its files to finish uploading before it goes. */
+	waiting: boolean;
+	onAdd: (files: File[]) => void;
+	onRemove: (id: string) => void;
+	onRetry: (id: string) => void;
+};
+
+/** What a file picker offers when images cannot be read: text, which is what can be sent. */
+const TEXT_ONLY =
+	"text/*,.md,.markdown,.json,.csv,.log,.yaml,.yml,.toml,.xml,.html,.css,.js,.ts,.tsx,.py";
+
+function dragsFiles(event: DragEvent | React.DragEvent): boolean {
+	return [...(event.dataTransfer?.types ?? [])].includes("Files");
+}
 
 export type ComposerNotice = {
 	/**
@@ -86,6 +115,8 @@ export type ChatComposerProps = {
 	};
 	/** The `@` button, which starts a mention at the caret. */
 	mention?: { disabled: boolean; onMention: () => void };
+	/** Present where the server takes images and files with a message. */
+	files?: ComposerFiles;
 	/** Whether the draft accepts input at all, before a send is in flight. */
 	draftable: boolean;
 	sending: boolean;
@@ -126,6 +157,7 @@ export function ChatComposer(
 		references,
 		format,
 		mention,
+		files,
 		draftable,
 		sending,
 		sendDisabled,
@@ -137,6 +169,11 @@ export function ChatComposer(
 ) {
 	let instructionsId = useId();
 	let cueId = useId();
+	let filePicker = useRef<HTMLInputElement>(null);
+	let filesReasonId = useId();
+	// Files dragged over the surface; entering a child fires before leaving the last, so it is counted.
+	let [dragging, setDragging] = useState(0);
+	let droppable = !!files && !files.disabled && !unavailable;
 	let error = notice?.tone === "error" || !!banner?.invalid;
 	let chip = !!chopin?.chip;
 	let hasDraft = input.value.trim() !== "";
@@ -241,6 +278,34 @@ export function ChatComposer(
 				aria-busy={sending}
 				className="composer-surface"
 				data-error={error || undefined}
+				data-dropping={dragging > 0 || undefined}
+				onDragEnter={droppable
+					? event => {
+						if (!dragsFiles(event)) return;
+						event.preventDefault();
+						setDragging(count => count + 1);
+					}
+					: undefined}
+				onDragOver={droppable
+					? event => {
+						if (!dragsFiles(event)) return;
+						event.preventDefault();
+						event.dataTransfer.dropEffect = "copy";
+					}
+					: undefined}
+				onDragLeave={droppable
+					? event => {
+						if (dragsFiles(event)) setDragging(count => Math.max(0, count - 1));
+					}
+					: undefined}
+				onDrop={droppable
+					? event => {
+						if (!dragsFiles(event)) return;
+						event.preventDefault();
+						setDragging(0);
+						files!.onAdd([...event.dataTransfer.files]);
+					}
+					: undefined}
 			>
 				{pickers}
 				{unavailable
@@ -260,6 +325,21 @@ export function ChatComposer(
 					: (
 						<>
 							{format?.shown && <FormatBar disabled={format.disabled} onFormat={format.onFormat} />}
+							{files && files.files.length > 0 && (
+								<Suspense fallback={null}>
+									<FileStrip
+										files={files.files}
+										onRemove={files.onRemove}
+										onRetry={files.onRetry}
+										source={files.source}
+									/>
+								</Suspense>
+							)}
+							{files?.waiting && (
+								<p className="composer-files-status" role="status">
+									Sending once your files have uploaded
+								</p>
+							)}
 							{/* The chip floats at the start of the field, so the first line begins after it and the rest run under it. */}
 							<div className="composer-field">
 								{chip && chopin && (
@@ -276,6 +356,7 @@ export function ChatComposer(
 									mentions={input.mentions}
 									onBlur={input.onBlur}
 									onChange={input.onChange}
+									onFiles={files && !files.disabled ? files.onAdd : undefined}
 									onKeyDown={input.onKeyDown}
 									onSelect={input.onSelect}
 									references={input.references}
@@ -300,6 +381,46 @@ export function ChatComposer(
 
 							<div className="composer-row">
 								<div className="composer-left">
+									{files && (
+										<>
+											<input
+												accept={files.imagesReason ? TEXT_ONLY : undefined}
+												aria-hidden="true"
+												data-chat-file-input=""
+												hidden
+												multiple
+												onChange={event => {
+													let chosen = [...event.currentTarget.files ?? []];
+													// The same file may be chosen again after it was removed.
+													event.currentTarget.value = "";
+													if (chosen.length) files.onAdd(chosen);
+												}}
+												ref={filePicker}
+												tabIndex={-1}
+												type="file"
+											/>
+											<button
+												type="button"
+												className="btn btn-icon btn-ghost"
+												aria-label="Add files"
+												aria-describedby={files.imagesReason ? filesReasonId : undefined}
+												title={files.imagesReason
+													? `Add files. ${files.imagesReason}`
+													: "Add files"}
+												data-tooltip={files.imagesReason
+													? `Add files. ${files.imagesReason}`
+													: "Add files"}
+												data-tooltip-verbatim=""
+												disabled={files.disabled}
+												onClick={() => filePicker.current?.click()}
+											>
+												<PaperclipIcon size={16} />
+											</button>
+											{files.imagesReason && (
+												<span className="sr-only" id={filesReasonId}>{files.imagesReason}</span>
+											)}
+										</>
+									)}
 									{references && (
 										<button
 											type="button"

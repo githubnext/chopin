@@ -436,9 +436,23 @@
 				"props",
 				"unresolved JSX props > UsersIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > PaperclipIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > MicIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "2c57992b273f5f0ce07a72ccc8b29c3c1e343cd20aefdafe2ed1773e5a749eaa"
+		"sourceHash": "d3058cfabee370f4e290411018e9dfed08186e740009bf05fa3cea81ae66f722"
 	},
 	{
 		"file": "packages/icons/src/warning.tsx",

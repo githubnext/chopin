@@ -445,3 +445,23 @@ export function UsersIcon(props: IconProps) {
 		</LineIcon>
 	);
 }
+
+/** A paperclip, for adding files to a message. */
+export function PaperclipIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<path d="m15.25 8.5-5.9 5.9a3.5 3.5 0 0 1-4.95-4.95l6.2-6.2a2.333 2.333 0 0 1 3.3 3.3L7.7 12.75a1.167 1.167 0 0 1-1.65-1.65l5.6-5.6" />
+		</LineIcon>
+	);
+}
+
+/** A microphone, for dictating a message. */
+export function MicIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect height="9" rx="2.5" width="5" x="6.5" y="1.75" />
+			<path d="M3.75 8.5a5.25 5.25 0 0 0 10.5 0" />
+			<line x1="9" x2="9" y1="13.75" y2="16.25" />
+		</LineIcon>
+	);
+}

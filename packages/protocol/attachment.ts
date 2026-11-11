@@ -250,7 +250,12 @@ export function refusalText(
 	}
 }
 
+/** Where a document's files are uploaded: by a person who can write to it. */
+export function attachmentsPath(channelId: string): string {
+	return `/api/channels/${encodeURIComponent(channelId)}/attachments`;
+}
+
 /** Where a stored file is read: for a person who can read the document it belongs to. */
 export function attachmentPath(channelId: string, id: string): string {
-	return `/api/channels/${encodeURIComponent(channelId)}/attachments/${encodeURIComponent(id)}`;
+	return `${attachmentsPath(channelId)}/${encodeURIComponent(id)}`;
 }

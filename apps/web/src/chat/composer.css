@@ -529,3 +529,29 @@
 :root[data-phone] .chat-composer :is(.composer-format, .composer-format-toggle) {
 	display: none;
 }
+
+/* Files being dragged over the composer: the edge takes the accent, and the surface says what a drop does. */
+.chat-composer .composer-surface[data-dropping] {
+	border-color: var(--color-brand);
+}
+.chat-composer .composer-surface[data-dropping]::after {
+	content: "Drop files to add them";
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: inherit;
+	background: color-mix(in srgb, var(--color-page) 88%, transparent);
+	color: var(--color-brand-ink);
+	font-size: var(--text-sm);
+	font-weight: var(--font-weight-medium);
+	pointer-events: none;
+}
+.chat-composer .composer-files-status {
+	margin: 0;
+	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 3) 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+}
