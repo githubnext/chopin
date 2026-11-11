@@ -589,10 +589,11 @@ export function Workspace(
 			data-workspace-title={topBar.titleHidden ? "hidden" : undefined}
 			data-workspace-travel={travel.back ? "back" : undefined}
 			ref={root}
+			// The thread's width joins Chat's only while a thread is open, so the root is as it was without one.
 			style={mode === "split"
 				? {
 					"--chat-width": `${chatWidth}px`,
-					"--thread-width": `${split.thread}px`,
+					...(splitActive ? { "--thread-width": `${split.thread}px` } : {}),
 				} as CSSProperties
 				: undefined}
 		>
