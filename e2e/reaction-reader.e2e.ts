@@ -103,12 +103,12 @@ test("a read-only person's ❓ makes a real Planner turn with no tools: busy for
 
 	await explainThis(reader);
 	await expect(chatOf(writer)).not.toContainText(READER_REPLY);
-	await expect(writer.getByRole("button", { name: "Stop Chopin" })).toBeVisible({
+	await expect(writer.getByRole("button", { name: "Stop generating" })).toBeVisible({
 		timeout: 30_000,
 	});
 	await expect(chatOf(reader)).toContainText(READER_REPLY, { timeout: 60_000 });
 	await expect(chatOf(writer)).toContainText(READER_REPLY);
-	await expect(writer.getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
+	await expect(writer.getByRole("button", { name: "Stop generating" })).toHaveCount(0);
 
 	let after = frames.all().slice(start);
 	let busy = after.filter(item => item.frame.kind === "chat:state").map(item =>
@@ -136,7 +136,7 @@ test("a stop pressed during a read-only person's turn stops it like any turn, an
 	let writer = await join("ana", {});
 	await plannerAnswers(writer);
 	await explainThis(reader);
-	let stop = writer.getByRole("button", { name: "Stop Chopin" });
+	let stop = writer.getByRole("button", { name: "Stop generating" });
 	await expect(stop).toBeVisible({ timeout: 30_000 });
 	await stop.click();
 	await expect(chatOf(writer)).toContainText("Ana stopped the turn.");
