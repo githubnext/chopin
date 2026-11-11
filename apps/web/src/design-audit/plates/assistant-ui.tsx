@@ -1,15 +1,15 @@
+import { cloneElement, useState } from "react";
 import {
+	CloseIcon,
 	CopyIcon,
 	EllipsisIcon,
 	EllipsisVerticalIcon,
 	GlobeIcon,
-	RotateCcwIcon,
-	SmilePlusIcon,
-	SparklesIcon,
-	XIcon,
-} from "lucide-react";
-import { cloneElement, useState } from "react";
-import { MessageIcon } from "@chopin/icons";
+	MessageIcon,
+	ReactionAddIcon,
+	RestartIcon,
+	SparkleIcon,
+} from "@chopin/icons";
 
 import { AgentHandoff } from "@/components/assistant-ui/elements/agent-handoff";
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
@@ -84,10 +84,10 @@ const MENTION = {
 	parse: () => [{ kind: "mention" as const, type: "agent", label: "Chopin", id: "chopin" }],
 };
 /** The chip as Directive text draws it for a mention, and with the control the patch lets it hold. */
-const MentionChip = createDirectiveText(MENTION, { iconMap: { agent: SparklesIcon } });
+const MentionChip = createDirectiveText(MENTION, { iconMap: { agent: SparkleIcon } });
 const RemovableChip = createDirectiveText(MENTION, {
-	iconMap: { agent: SparklesIcon },
-	trailing: () => <XIcon />,
+	iconMap: { agent: SparkleIcon },
+	trailing: () => <CloseIcon />,
 });
 
 /** The files of a message being written, as Chat draws them in each state `useFiles` gives. */
@@ -367,7 +367,7 @@ export function AssistantUiPlate() {
 							/>
 							<ComposerCommandItem
 								active={false}
-								command={{ name: "skill:notes", description: "Draft notes", icon: SparklesIcon }}
+								command={{ name: "skill:notes", description: "Draft notes", icon: SparkleIcon }}
 							/>
 						</ComposerMenu>
 					</div>
@@ -511,7 +511,7 @@ export function AssistantUiPlate() {
 							{
 								key: "add",
 								label: "Add reaction",
-								children: <SmilePlusIcon aria-hidden="true" size={14} />,
+								children: <ReactionAddIcon aria-hidden="true" />,
 							},
 							{
 								key: "thread",
@@ -568,12 +568,12 @@ export function AssistantUiPlate() {
 								Copy as plain text
 							</DropdownMenuItem>
 							<DropdownMenuItem>
-								<RotateCcwIcon />
+								<RestartIcon />
 								Try again
 							</DropdownMenuItem>
 							<DropdownMenuSeparator />
 							<DropdownMenuItem variant="destructive">
-								<XIcon />
+								<CloseIcon />
 								Delete
 							</DropdownMenuItem>
 						</DropdownMenuContent>

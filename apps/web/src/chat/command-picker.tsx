@@ -1,5 +1,5 @@
 import { COMMAND_KINDS } from "@chopin/protocol/commands";
-import { GlobeIcon, PlayIcon, SparklesIcon, TerminalIcon, WrenchIcon } from "lucide-react";
+import { GlobeIcon, PlayIcon, SparkleIcon, TerminalIcon, WrenchIcon } from "@chopin/icons";
 import { useEffect } from "react";
 import { ComposerCommandItem } from "@/components/assistant-ui/elements/composer";
 import { ComposerPopover } from "./assistant-ui/composer-popover";
@@ -12,7 +12,7 @@ function icon(command: ChatCommand) {
 	if (command.source === "chat") return GlobeIcon;
 	switch (command.commandKind) {
 		case COMMAND_KINDS.skill:
-			return SparklesIcon;
+			return SparkleIcon;
 		case COMMAND_KINDS.prompt:
 			return TerminalIcon;
 		case COMMAND_KINDS.workflow:

@@ -33,7 +33,6 @@
 		"cn": "^0.5.2",
 		"emojibase-data": "17.0.0",
 		"lexical": "catalog:mdx",
-		"lucide-react": "^1.71.0",
 		"mdast-util-from-markdown": "2.0.2",
 		"mdast-util-gfm-strikethrough": "2.0.0",
 		"mdast-util-gfm-table": "2.0.0",

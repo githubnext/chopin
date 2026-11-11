@@ -1,4 +1,4 @@
-import { SmilePlusIcon } from "lucide-react";
+import { ReactionAddIcon } from "@chopin/icons";
 
 import { reactedBy, reactionHint } from "../reactions";
 
@@ -52,7 +52,7 @@ export function ReactionPills(
 					tabIndex={-1}
 					type="button"
 				>
-					<SmilePlusIcon aria-hidden="true" />
+					<ReactionAddIcon aria-hidden="true" />
 				</button>
 			)}
 		</div>

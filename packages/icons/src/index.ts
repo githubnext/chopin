@@ -1,4 +1,30 @@
 export { GitHubIcon } from "./brand";
+export {
+	BallIcon,
+	CarIcon,
+	ChevronDownIcon,
+	ChevronLeftIcon,
+	CupIcon,
+	FileAudioIcon,
+	FileCodeIcon,
+	FileIcon,
+	FileImageIcon,
+	FilePdfIcon,
+	FileSheetIcon,
+	FileTextIcon,
+	FileVideoIcon,
+	FileZipIcon,
+	FlagIcon,
+	GlobeIcon,
+	HeartIcon,
+	LeafIcon,
+	ShieldAlertIcon,
+	SlidesIcon,
+	SmileyIcon,
+	SpinnerIcon,
+	ThumbsDownIcon,
+	ThumbsUpIcon,
+} from "./chat";
 export { CommentIcon } from "./comment";
 export { CopyIcon } from "./copy";
 export { DocumentsIcon } from "./documents";
