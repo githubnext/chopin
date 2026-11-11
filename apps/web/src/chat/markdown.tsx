@@ -1,5 +1,7 @@
 import {
+	Children,
 	createContext,
+	isValidElement,
 	memo,
 	useContext,
 	useDeferredValue,
@@ -22,7 +24,12 @@ import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-ic
 import { sameJson } from "../same-json";
 import { messageGfmRemarkPlugin } from "./gfm";
 import { ChatImage, MessageImages, useImageHost } from "./image";
-import { imageBlocksRemarkPlugin, imagesOutOfLinksRemarkPlugin } from "./image-markdown";
+import { ImageGallery } from "./image-gallery";
+import {
+	imageBlocksRemarkPlugin,
+	imageGalleriesRemarkPlugin,
+	imagesOutOfLinksRemarkPlugin,
+} from "./image-markdown";
 import { isDataImage } from "./image-state";
 import { orderedRunsRemarkPlugin } from "./ordered-runs";
 import { referenceRemarkPlugin } from "./reference-markdown";
@@ -63,6 +70,7 @@ export const CHAT_ELEMENTS = [
 export const MESSAGE_ELEMENTS = [
 	...CHAT_ELEMENTS,
 	"del",
+	"figure",
 	"input",
 	"table",
 	"tbody",
@@ -279,10 +287,21 @@ let markdownImage = ({ alt, src }: ComponentProps<"img">) => (
 	<ChatImage image={{ src: typeof src === "string" ? src : "", alt: alt ?? undefined }} />
 );
 
+/** The pictures a gallery holds are its `img` children, whose props are what the Markdown wrote. */
+let markdownGallery = ({ children }: ComponentProps<"figure">) => {
+	let images = Children.toArray(children).flatMap(child =>
+		isValidElement<ComponentProps<"img">>(child) && typeof child.props.src === "string"
+			? [{ src: child.props.src, alt: child.props.alt ?? undefined }]
+			: []
+	);
+	return <ImageGallery images={images} maxVisible={images.length} />;
+};
+
 let MESSAGE_COMPONENTS: MarkdownComponents = {
 	...CHAT_COMPONENTS,
 	CodeHeader: ChatCodeHeader,
 	a: MessageLink,
+	figure: markdownGallery,
 	h1: imageParagraph,
 	h2: imageParagraph,
 	h3: imageParagraph,
@@ -318,6 +337,7 @@ export const MessageMarkdown = memo(function MessageMarkdown(
 			[referenceRemarkPlugin, model],
 			orderedRunsRemarkPlugin,
 			imagesOutOfLinksRemarkPlugin,
+			imageGalleriesRemarkPlugin,
 			imageBlocksRemarkPlugin,
 		];
 	}, [model]);

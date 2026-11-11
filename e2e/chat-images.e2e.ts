@@ -862,6 +862,242 @@ test("every image a person writes in Markdown is drawn where they wrote it", asy
 	await expect(all.nth(1).getByRole("link", { name: "Open image in a new tab" })).toHaveCount(1);
 });
 
+function dataPng(width: number, height: number, seed = 0): string {
+	return `data:image/png;base64,${Buffer.from(png(width, height, seed)).toString("base64")}`;
+}
+
+function galleryOf(page: Page, index: number): Locator {
+	return chat(page).locator("[data-chat-image-gallery]").nth(index);
+}
+
+test("images written side by side in a message are one compact gallery in the order written, and the words around them stay where they were", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let [wide, tall, square] = [dataPng(36, 24, 1), dataPng(24, 32, 2), dataPng(24, 24, 3)];
+	await seed("# Written\n", {
+		transcript: [{
+			id: "written",
+			author: { kind: "agent" },
+			text: [
+				`Here are the options. ![Wide](${wide}) ![Tall](${tall})`,
+				`![Wide](${wide}) ![Square](${square}) That is all of them.`,
+				"",
+				`Then ![Alone](${square}) and ![Apart](${tall}) stay as they were.`,
+			].join("\n"),
+			ts: 1_700_000_000_000,
+		}],
+	});
+	await join("ana");
+
+	let gallery = chat(page).locator("[data-chat-image-gallery]");
+	let tiles = gallery.locator('[data-chat-image="tile"]');
+	let singles = chat(page).locator('[data-chat-image="single"]');
+	await expect(gallery).toHaveCount(1);
+	await expect(tiles).toHaveCount(4);
+	await expect(singles).toHaveCount(2);
+	for (let figure of await chat(page).locator("[data-chat-image]").all()) {
+		await expect(figure).toHaveAttribute("data-load", "shown");
+	}
+	await expect(tiles.locator(".chat-image-alt")).toHaveText(["Wide", "Tall", "Wide", "Square"]);
+	await expect(singles.locator(".chat-image-alt")).toHaveText(["Alone", "Apart"]);
+	for (let [index, ratio] of [3 / 2, 3 / 4, 3 / 2, 1].entries()) {
+		let frame = (await tiles.nth(index).locator("[data-chat-image-frame]").boundingBox())!;
+		expect(frame.width / frame.height, `tile ${index + 1}`).toBeCloseTo(ratio, 1);
+	}
+
+	let box = (await gallery.boundingBox())!;
+	let [first, second] = [(await tiles.nth(0).boundingBox())!, (await tiles.nth(1).boundingBox())!];
+	expect(box.width).toBeLessThanOrEqual(448.5);
+	expect(second.y).toBe(first.y);
+	expect(first.width).toBeLessThan((await singles.nth(0).boundingBox())!.width);
+
+	let text = await chat(page).locator("[data-chat-markdown]").innerText();
+	let at = [
+		"Here are the options.",
+		"Tall",
+		"Square",
+		"That is all of them.",
+		"Then",
+		"Alone",
+		"Apart",
+		"stay as they were.",
+	].map(words => text.indexOf(words));
+	expect(at.every(position => position >= 0), text).toBe(true);
+	expect(at).toEqual([...at].sort((a, b) => a - b));
+});
+
+test("images in paragraphs of their own are one gallery, and the message's lightbox steps by mouse through them and the image written apart from them", async ({ baseURL, join, page, room, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let stored = await store(baseURL, room);
+	await seed("# Blocks\n", {
+		transcript: [
+			{
+				id: "blocks",
+				author: { kind: "agent" },
+				text: [
+					`![The cap](${stored.cap})`,
+					`![Write-back](${stored.back})`,
+					`![A dot](${dataPng(30, 20, 1)})`,
+					"Between the two.",
+					`![Apart](${dataPng(20, 30, 2)})`,
+				].join("\n\n"),
+				ts: 1_700_000_000_000,
+			},
+			{
+				id: "other",
+				author: { kind: "agent" },
+				text: `![In another message](${dataPng(24, 24, 3)})`,
+				ts: 1_700_000_001_000,
+			},
+		],
+	});
+	await join("ana");
+
+	let tiles = galleryOf(page, 0).locator('[data-chat-image="tile"]');
+	await expect(chat(page).locator("[data-chat-image-gallery]")).toHaveCount(1);
+	await expect(tiles).toHaveCount(3);
+	await expect(tiles.locator(".chat-image-alt")).toHaveText(["The cap", "Write-back", "A dot"]);
+	await expect(chat(page).locator('[data-chat-image="single"] .chat-image-alt')).toHaveText([
+		"Apart",
+		"In another message",
+	]);
+	for (let figure of await chat(page).locator("[data-chat-image]").all()) {
+		await expect(figure).toHaveAttribute("data-load", "shown");
+	}
+
+	await tiles.nth(1).locator("[data-chat-image-frame]").click({ position: { x: 20, y: 20 } });
+	let box = lightbox(page);
+	await expect(box).toBeVisible();
+	await expect(box.getByRole("img", { name: "Write-back" })).toBeVisible();
+	await expect(box.getByRole("status")).toHaveText("Image 2 of 4");
+	await box.getByRole("button", { name: "Next image" }).click();
+	await expect(box.getByRole("img", { name: "A dot" })).toBeVisible();
+	await box.getByRole("button", { name: "Next image" }).click();
+	await expect(box.getByRole("img", { name: "Apart" })).toBeVisible();
+	await expect(box.getByRole("status")).toHaveText("Image 4 of 4");
+	await expect(box.getByRole("button", { name: "Next image" })).toBeDisabled();
+	await box.getByRole("button", { name: "Previous image" }).click();
+	await box.getByRole("button", { name: "Previous image" }).click();
+	await box.getByRole("button", { name: "Previous image" }).click();
+	await expect(box.getByRole("img", { name: "The cap" })).toBeVisible();
+	await expect(box.getByRole("button", { name: "Previous image" })).toBeDisabled();
+	await box.getByRole("button", { name: "Close image preview" }).click();
+	await expect(box).toHaveCount(0);
+
+	let apart = chat(page).locator('[data-chat-image="single"]').nth(0);
+	await apart.locator("[data-chat-image-frame]").click({ position: { x: 20, y: 20 } });
+	await expect(box.getByRole("status")).toHaveText("Image 4 of 4");
+	await box.getByRole("button", { name: "Previous image" }).click();
+	await expect(box.getByRole("img", { name: "A dot" })).toBeVisible();
+	await box.click({ position: { x: 6, y: 300 } });
+	await expect(box).toHaveCount(0);
+
+	let other = chat(page).locator('[data-chat-image="single"]').nth(1);
+	await other.locator("[data-chat-image-frame]").click({ position: { x: 20, y: 20 } });
+	await expect(box.getByRole("img", { name: "In another message" })).toBeVisible();
+	await expect(box.getByRole("status")).toHaveCount(0);
+});
+
+test("the lightbox of a Markdown gallery opens, steps, traps focus and gives it back by keyboard, however the images were written", async ({ join, page, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let [one, two] = [dataPng(30, 20, 1), dataPng(20, 30, 2)];
+	await seed("# Keys\n", {
+		transcript: [
+			{
+				id: "paragraph",
+				author: { kind: "agent" },
+				text: `![One](${one}) ![Two](${two})\n![One](${one})`,
+				ts: 1_700_000_000_000,
+			},
+			{
+				id: "blocks",
+				author: { kind: "agent" },
+				text: [`![Uno](${one})`, `![Dos](${two})`, `![Uno](${one})`].join("\n\n"),
+				ts: 1_700_000_001_000,
+			},
+		],
+	});
+	await join("ana");
+
+	await expect(chat(page).locator("[data-chat-image-gallery]")).toHaveCount(2);
+	for (let [index, names] of [["One", "Two", "One"], ["Uno", "Dos", "Uno"]].entries()) {
+		let tiles = galleryOf(page, index).locator('[data-chat-image="tile"]');
+		await expect(tiles).toHaveCount(3);
+		await expect(tiles.locator(".chat-image-alt")).toHaveText(names);
+		for (let tile of await tiles.all()) await expect(tile).toHaveAttribute("data-load", "shown");
+		let opener = tiles.nth(1).getByRole("button", { name: "Open image", exact: true });
+		await opener.focus();
+		await page.keyboard.press("Enter");
+		let box = lightbox(page);
+		await expect(box).toBeVisible();
+		await expect(box.getByRole("button", { name: "Close image preview" })).toBeFocused();
+		await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
+		await expect(box.getByRole("img", { name: names[1]! })).toBeVisible();
+
+		await page.keyboard.press("ArrowRight");
+		await expect(box.getByRole("status")).toHaveText("Image 3 of 3");
+		await expect(box.getByRole("img", { name: names[2]! })).toBeVisible();
+		await page.keyboard.press("ArrowRight");
+		await expect(box.getByRole("status")).toHaveText("Image 3 of 3");
+		await page.keyboard.press("ArrowLeft");
+		await page.keyboard.press("ArrowLeft");
+		await expect(box.getByRole("status")).toHaveText("Image 1 of 3");
+		await expect(box.getByRole("img", { name: names[0]! })).toBeVisible();
+		await page.keyboard.press("ArrowLeft");
+		await expect(box.getByRole("status")).toHaveText("Image 1 of 3");
+
+		let inside = () =>
+			page.evaluate(() => !!document.activeElement?.closest("dialog.plan-image-lightbox"));
+		for (let step = 0; step < 7; step++) {
+			await page.keyboard.press("Tab");
+			expect(await inside(), `${names[0]} Tab ${step}`).toBe(true);
+		}
+		for (let step = 0; step < 7; step++) {
+			await page.keyboard.press("Shift+Tab");
+			expect(await inside(), `${names[0]} Shift+Tab ${step}`).toBe(true);
+		}
+
+		await page.keyboard.press("Escape");
+		await expect(box).toHaveCount(0);
+		await expect(opener).toBeFocused();
+	}
+});
+
+test("on a phone a Markdown gallery stays inside the chat, and a tap opens the message's lightbox", async ({ baseURL, join, room, seed }) => {
+	let stored = await store(baseURL, room);
+	await seed("# Phone\n", {
+		transcript: [{
+			id: "phone",
+			author: { kind: "agent" },
+			text: `Two options:\n\n![The cap](${stored.cap}) ![Write-back](${stored.back})\n\n![A dot](${
+				dataPng(30, 20, 1)
+			})`,
+			ts: 1_700_000_000_000,
+		}],
+	});
+	let phone = await join("ana", PHONE);
+	await openChat(phone);
+
+	let tiles = galleryOf(phone, 0).locator('[data-chat-image="tile"]');
+	await expect(chat(phone).locator("[data-chat-image-gallery]")).toHaveCount(1);
+	await expect(tiles).toHaveCount(3);
+	await expect(tiles.nth(2)).toHaveAttribute("data-load", "shown");
+	for (let tile of await tiles.all()) {
+		let box = (await tile.boundingBox())!;
+		expect(box.x).toBeGreaterThanOrEqual(0);
+		expect(box.x + box.width).toBeLessThanOrEqual(390);
+	}
+	expect(await phone.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
+	await tiles.nth(1).locator("[data-chat-image-frame]").tap({ position: { x: 20, y: 40 } });
+	let box = lightbox(phone);
+	await expect(box).toBeVisible();
+	await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
+	await box.getByRole("button", { name: "Next image" }).tap();
+	await expect(box.getByRole("img", { name: "A dot" })).toBeVisible();
+	await box.getByRole("button", { name: "Close image preview" }).tap();
+	await expect(box).toHaveCount(0);
+});
+
 type Sent = { cookie: string | undefined; path: string; search: string; type: string };
 
 function watch(page: Page, prefixes: string[]): { sent: Sent[]; settle: () => Promise<void> } {

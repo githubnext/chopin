@@ -3,7 +3,7 @@ type Node = {
 	alt?: string | null;
 	url?: string;
 	value?: string;
-	data?: { hProperties?: Record<string, string> };
+	data?: { hName?: string; hProperties?: Record<string, string> };
 	children?: Node[];
 };
 
@@ -28,11 +28,67 @@ export function imagesOutOfLinksRemarkPlugin() {
 	return (tree: Node) => lift(tree);
 }
 
+let isImage = (node: Node) => node.type === "image";
+
+let isSpace = (node: Node) => node.type === "break" || node.type === "text" && !node.value?.trim();
+
+let isImageOnly = (node: Node) =>
+	node.type === "paragraph" && !!node.children?.some(isImage)
+	&& node.children.every(child => isImage(child) || isSpace(child));
+
+function galleries(children: Node[]): Node[] {
+	let out: Node[] = [];
+	let run: Node[] = [];
+	let gap: Node[] = [];
+	let end = () => {
+		out.push(
+			...run.length > 1
+				? [{ type: "imageGallery", data: { hName: "figure" }, children: run }]
+				: run,
+			...gap,
+		);
+		run = [];
+		gap = [];
+	};
+	for (let child of children) {
+		if (isImage(child)) {
+			gap = run.length ? [] : gap;
+			run.push(child);
+		} else if (isSpace(child) && run.length) {
+			gap.push(child);
+		} else {
+			end();
+			out.push(child);
+		}
+	}
+	end();
+	return out;
+}
+
+function gather(node: Node): void {
+	if (!node.children) return;
+	let blocks: Node[] = [];
+	for (let child of node.children) {
+		let last = blocks.at(-1);
+		if (last && isImageOnly(last) && isImageOnly(child)) {
+			last.children = [...last.children!, ...child.children!];
+		} else {
+			blocks.push(child);
+		}
+	}
+	blocks.forEach(gather);
+	node.children = galleries(blocks);
+}
+
+export function imageGalleriesRemarkPlugin() {
+	return (tree: Node) => gather(tree);
+}
+
 function markImageBlocks(node: Node): void {
 	node.children?.forEach(markImageBlocks);
 	if (
 		(node.type === "paragraph" || node.type === "heading")
-		&& node.children?.some(child => child.type === "image")
+		&& node.children?.some(child => child.type === "image" || child.type === "imageGallery")
 	) {
 		node.data = { ...node.data, hProperties: { ...node.data?.hProperties, dataChatImageBlock: "" } };
 	}
