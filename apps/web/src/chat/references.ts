@@ -186,7 +186,13 @@ function moved(reference: ReferenceDraft, change: number): ReferenceDraft {
 	return { ...reference, start: reference.start + change, end: reference.end + change };
 }
 
-/** Find the unfinished, whitespace-delimited reference token immediately before the caret. */
+/**
+ * The unfinished `#query` before the caret: the start of a reference to another document, or to a
+ * part of this one or a file of its repository. The `#` begins the text or follows whitespace, so a
+ * URL's fragment or `issue#12` is not one. The query may go on past a space, for the words of a
+ * title, a heading or a path, but stays on its line, holds no other `#` or `%`, and is at most 64
+ * characters.
+ */
 export function referenceTrigger(
 	text: string,
 	selectionStart: number,
@@ -196,28 +202,15 @@ export function referenceTrigger(
 		!Number.isSafeInteger(selectionStart)
 		|| !Number.isSafeInteger(selectionEnd)
 		|| selectionStart !== selectionEnd
-		|| selectionStart < 0
+		|| selectionStart <= 0
 		|| selectionStart > text.length
 	) return undefined;
-
-	let start = selectionStart;
-	while (start > 0 && !/\s/.test(text[start - 1]!)) start--;
-	let token = text.slice(start, selectionStart);
-	let marker = token[0];
-	if (marker !== "#") return undefined;
-	let query = token.slice(1);
-	if (
-		query.length > MAX_REFERENCE_QUERY
-		|| query.includes("#")
-		|| query.includes("%")
-	) return undefined;
-	return {
-		kind: "document",
-		marker,
-		query,
-		start,
-		end: selectionStart,
-	};
+	let line = text.lastIndexOf("\n", selectionStart - 1) + 1;
+	let start = text.lastIndexOf("#", selectionStart - 1);
+	if (start < line || (start > 0 && !/\s/.test(text[start - 1]!))) return undefined;
+	let query = text.slice(start + 1, selectionStart);
+	if (query.length > MAX_REFERENCE_QUERY || query.includes("%")) return undefined;
+	return { kind: "document", marker: "#", query, start, end: selectionStart };
 }
 
 export function referenceTriggerKey(trigger: ReferenceTrigger): string {
@@ -343,7 +336,7 @@ export function insertReference(
 	return { text: next, references: [...shifted, reference], caret: end };
 }
 
-/** A part of the document, or a file, `@` can point at, with the words the token shows. */
+/** A part of the document, or a file, `#` can point at, with the words the token shows. */
 export type PointerTarget =
 	| { kind: "heading"; anchor: string; label: string }
 	| { kind: "decision"; decisionId: string; label: string }
@@ -369,8 +362,9 @@ function pointerRequest(
 }
 
 /**
- * Replace the typed `@query` with the part's own words as one chip (`%` for a research card), a
- * space after it, and the caret after that. A part already in the draft moves to its new place
+ * Replace the typed `#query` with the part's own words as one chip (`@` for a section, a Decision
+ * or a file, `%` for a research card, as the server reads them), a space after it, and the caret
+ * after that. A part already in the draft moves to its new place
  * rather than appearing twice, and a draft that holds the most references is left as it was.
  */
 export function insertPointer(
@@ -379,7 +373,7 @@ export function insertPointer(
 	trigger: { query: string; start: number; end: number },
 	target: PointerTarget,
 ): ReferenceInsertion {
-	if (text.slice(trigger.start, trigger.end) !== `@${trigger.query}` || !target.label) {
+	if (text.slice(trigger.start, trigger.end) !== `#${trigger.query}` || !target.label) {
 		return { text, references, caret: trigger.end };
 	}
 	let request = pointerRequest(target);

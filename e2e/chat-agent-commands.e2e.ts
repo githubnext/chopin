@@ -1,5 +1,5 @@
 /**
- * The Chat composer's `/` commands and `@` mentions, under `HARNESS=remote`: the commands come from
+ * The Chat composer's `/` commands, `@` mentions and `#` references, under `HARNESS=remote`: the commands come from
  * the client attached to the document, so this file starts a server of its own against a database
  * of its own and attaches a scripted client over the real agent connection, as the model picker's
  * spec does. A mention of a file reads the repository's tree through the fake GitHub.
@@ -208,7 +208,7 @@ function chat(page: Page) {
 	return page.getByRole("complementary", { name: "Chat", exact: true });
 }
 
-function menu(page: Page, name: "Commands" | "Mentions") {
+function menu(page: Page, name: "Commands" | "Document references" | "Mentions") {
 	return chat(page).getByRole("listbox", { name, exact: true });
 }
 
@@ -504,20 +504,19 @@ async function mentionRoom(withResearch = true) {
 	return { room, research };
 }
 
-test("@ also lists the document's sections, Decisions and research cards and the repository's files, and sends each as a structured reference", async ({ browser }) => {
+test("# lists the document's sections, Decisions and research cards and the repository's files, and sends each as a structured reference", async ({ browser }) => {
 	test.setTimeout(180_000);
 	let { room } = await mentionRoom();
 	let page = await open(browser, HANDLE, room, DESKTOP);
 	let { asked } = await attachClient(room);
 	let input = chatInput(chat(page));
-	let mentions = menu(page, "Mentions");
+	let mentions = menu(page, "Document references");
 	await input.click();
-	await page.keyboard.type("@");
+	await page.keyboard.type("#");
 	await expect(mentions).toBeVisible();
-	// One list, as assistant-ui's Mentions is: Chopin, then each part of the document with its level
-	// or what it is at the end of its row.
-	await expect(mentions.getByRole("option")).toHaveText([
-		"Chopinagent",
+	// Each part of the document, with its level or what it is at the end of its row, before any
+	// other document.
+	await expect(mentions.getByRole("option").filter({ hasNotText: /^#/ })).toHaveText([
 		"OverviewH1",
 		"Site surveyH2",
 		"Rolloutdecision",
@@ -528,7 +527,7 @@ test("@ also lists the document's sections, Decisions and research cards and the
 		"src/chat/composer.tsxfile",
 	]);
 	await shoot(page, "mentions-desktop");
-	await expectAccessible(page, "[data-chat-mention-picker]");
+	await expectAccessible(page, "[data-chat-reference-picker]");
 
 	// A section: filtered by the words typed, which go on past a space.
 	await page.keyboard.type("site s");
@@ -540,13 +539,13 @@ test("@ also lists the document's sections, Decisions and research cards and the
 	);
 
 	// A Decision.
-	await page.keyboard.type("and @roll");
+	await page.keyboard.type("and #roll");
 	await expect(mentions.getByRole("option")).toHaveText(["Rolloutdecision"]);
 	await page.keyboard.press("Enter");
 	await expect(input.locator('.draft-reference[data-reference="decision"]')).toHaveText("@Rollout");
 
 	// A research card, drawn as the research reference it is.
-	await page.keyboard.type("with @release r");
+	await page.keyboard.type("with #release r");
 	await expect(mentions.getByRole("option")).toHaveText(["Release Researchresearch"]);
 	await page.keyboard.press("Enter");
 	await expect(input.locator('.draft-reference[data-reference="research"]')).toHaveText(
@@ -554,7 +553,7 @@ test("@ also lists the document's sections, Decisions and research cards and the
 	);
 
 	// A file, by the end of its name or any part of its path.
-	await page.keyboard.type("in @comp");
+	await page.keyboard.type("in #comp");
 	await expect(mentions.getByRole("option")).toHaveText(["src/chat/composer.tsxfile"]);
 	await page.keyboard.press("Enter");
 	await expect(input.locator('.draft-reference[data-reference="file"]')).toHaveText(
@@ -593,7 +592,7 @@ test("@ also lists the document's sections, Decisions and research cards and the
 	await shoot(page, "chips-sent-desktop");
 });
 
-test("@ keeps Chopin and the people here, and offers no part of a document that has none", async ({ browser }) => {
+test("@ keeps Chopin and the people, and # offers no part of a document that has none", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await newRoom();
 	let page = await open(browser, HANDLE, room, DESKTOP);
@@ -607,18 +606,19 @@ test("@ keeps Chopin and the people here, and offers no part of a document that 
 	// Chopin is the chip, not words in the draft.
 	await expectChatValue(input, "");
 	await expect(chat(page).getByRole("group", { name: "Asking Chopin", exact: true })).toBeVisible();
-	await fillChat(input, "@");
-	// A document with only its title lists that, its files and the people, and no Decision or card.
-	await expect(mentions.getByRole("option").filter({ hasText: /file$/ })).toHaveCount(4);
-	await expect(mentions.getByRole("option").filter({ hasText: /H\d$/ })).toHaveCount(1);
-	await expect(mentions.getByRole("option").filter({ hasText: /decision$/ })).toHaveCount(0);
-	await expect(mentions.getByRole("option").filter({ hasText: /research$/ })).toHaveCount(0);
+	await fillChat(input, "#");
+	// A document with only its title lists that and its files, and no Decision or card.
+	let parts = menu(page, "Document references");
+	await expect(parts.getByRole("option").filter({ hasText: /file$/ })).toHaveCount(4);
+	await expect(parts.getByRole("option").filter({ hasText: /H\d$/ })).toHaveCount(1);
+	await expect(parts.getByRole("option").filter({ hasText: /decision$/ })).toHaveCount(0);
+	await expect(parts.getByRole("option").filter({ hasText: /research$/ })).toHaveCount(0);
 	// An address in a sentence is not a mention.
 	await fillChat(input, "mail a@b");
 	await expect(mentions).toHaveCount(0);
 });
 
-test("on a phone the @ list stays inside the screen", async ({ browser }) => {
+test("on a phone the # list stays inside the screen", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let { room } = await mentionRoom(false);
 	let page = await open(browser, HANDLE, room, PHONE);
@@ -629,12 +629,12 @@ test("on a phone the @ list stays inside the screen", async ({ browser }) => {
 		.click();
 	let input = chatInput(chat(page));
 	await input.click();
-	await page.keyboard.type("@");
-	let mentions = menu(page, "Mentions");
-	await expect(mentions.getByRole("option").filter({ hasText: /H\d$/ }).first()).toBeVisible({
+	await page.keyboard.type("#");
+	let parts = menu(page, "Document references");
+	await expect(parts.getByRole("option").filter({ hasText: /H\d$/ }).first()).toBeVisible({
 		timeout: 15_000,
 	});
-	await expectInsideViewport(chat(page).locator("[data-chat-mention-picker]"));
+	await expectInsideViewport(chat(page).locator("[data-chat-reference-picker]"));
 	await expectNoHorizontalOverflow(page);
 	await shoot(page, "mentions-phone");
 });

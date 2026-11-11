@@ -13,7 +13,6 @@ import {
 	mentionKeyAction,
 	mentionTrigger,
 	mentionTriggerKey,
-	pointerTrigger,
 } from "./mentions";
 
 import type { MentionCandidate } from "./mentions";
@@ -29,6 +28,8 @@ describe("mention trigger", () => {
 		expect(mentionTrigger("(@octo", 6)).toEqual({ query: "octo", start: 1, end: 6 });
 		expect(mentionTrigger("one\n@oct", 8)).toEqual({ query: "oct", start: 4, end: 8 });
 		expect(mentionTrigger("@a-b", 4)).toEqual({ query: "a-b", start: 0, end: 4 });
+		// A caret before a leading `@chopin` (a refused draft put back) has nothing typed before it.
+		expect(mentionTrigger("@chopin outline the plan", 0)).toBeUndefined();
 	});
 
 	test("never opens inside an email address or after a word character", () => {
@@ -70,41 +71,6 @@ describe("mention trigger", () => {
 	});
 });
 
-describe("the trigger for a part of the document or a file", () => {
-	test("finds what mentionTrigger finds, with the same range and query", () => {
-		for (
-			let [text, caret] of [["@", 1], ["Ask @ch", 7], ["(@octo", 6], ["one\n@oct", 8], [
-				"@a-b",
-				4,
-			]] as const
-		) expect(pointerTrigger(text, caret)).toEqual(mentionTrigger(text, caret));
-	});
-
-	test("goes on past a space, a dot or a slash, for the words of a heading or a path", () => {
-		expect(pointerTrigger("Rewrite @Site 1: harbour", 24)).toEqual({
-			query: "Site 1: harbour",
-			start: 8,
-			end: 24,
-		});
-		expect(pointerTrigger("Look at @src/chat/a.ts", 22)?.query).toBe("src/chat/a.ts");
-		expect(pointerTrigger("@ch ", 4)).toEqual({ query: "ch ", start: 0, end: 4 });
-	});
-
-	test("never opens inside an address, over a line break, past the longest query, or inside a word", () => {
-		expect(pointerTrigger("mail a@b.com", 12)).toBeUndefined();
-		expect(pointerTrigger("hi@chopin", 9)).toBeUndefined();
-		expect(pointerTrigger("see a@b and @", 13)).toEqual({ query: "", start: 12, end: 13 });
-		expect(pointerTrigger("@one\ntwo", 8)).toBeUndefined();
-		expect(pointerTrigger(`@${"a ".repeat(32)}`, 65)?.query).toHaveLength(64);
-		expect(pointerTrigger(`@${"a ".repeat(33)}`, 67)).toBeUndefined();
-		expect(pointerTrigger("@chopin", 0)).toBeUndefined();
-		expect(pointerTrigger("@chopin outline the plan", 0)).toBeUndefined();
-		expect(pointerTrigger("@chopin", 3)).toBeUndefined();
-		expect(pointerTrigger("@chopin", 1, 3)).toBeUndefined();
-		expect(pointerTrigger("no at sign", 5)).toBeUndefined();
-	});
-});
-
 describe("mention candidates", () => {
 	let planner: MentionCandidate = { kind: "planner", login: "chopin" };
 
@@ -120,6 +86,22 @@ describe("mention candidates", () => {
 			{ kind: "person", login: "lavaman131" },
 			{ kind: "person", login: "Octocat" },
 			{ kind: "person", login: "ana" },
+			{ kind: "person", login: "mona" },
+			{ kind: "person", login: "hubot" },
+		]);
+	});
+
+	test("puts the people here before the others who can read the document", () => {
+		let candidates = mentionCandidates({
+			authors: ["hubot"],
+			people: ["cy"],
+			readers: ["mona", "CY", "me", "hubot"],
+			planner: true,
+			self: "me",
+		});
+		expect(candidates).toEqual([
+			planner,
+			{ kind: "person", login: "cy" },
 			{ kind: "person", login: "mona" },
 			{ kind: "person", login: "hubot" },
 		]);
@@ -302,51 +284,5 @@ describe("mention picker markup", () => {
 		expect(html).not.toContain("github.com/chopin.png");
 		// The badge is hidden from a screen reader, which reads the row's own words.
 		expect(html).toContain('<span aria-hidden="true"><span aria-hidden="true"');
-	});
-});
-
-describe("the @ menu with the document's parts", () => {
-	let groups = [{
-		label: "Sections",
-		options: [
-			{ id: "heading:a", kind: "heading" as const, anchor: "a", label: "Overview", meta: "H1" },
-			{ id: "decision:d", kind: "decision" as const, decisionId: "d", label: "Pick a store" },
-			{ id: "file:f", kind: "file" as const, path: "src/a.ts", label: "src/a.ts" },
-		],
-	}];
-	let render = (options: MentionCandidate[]) =>
-		renderToStaticMarkup(
-			createElement(MentionPicker, {
-				active: 0,
-				groups,
-				id: "mentions",
-				onActive: () => {},
-				onSelect: () => {},
-				onSelectPointer: () => {},
-				options,
-			}),
-		);
-
-	test("lists each kind of part after the people, tagged with its level or what it is", () => {
-		let html = render([{ kind: "planner", login: "chopin" }, { kind: "person", login: "octocat" }]);
-		expect(html.indexOf(">octocat<")).toBeLessThan(html.indexOf(">Overview<"));
-		expect(html).toMatch(/>Overview<\/span><span class="[^"]*">H1</);
-		expect(html).toMatch(/>Pick a store<\/span><span class="[^"]*">decision</);
-		expect(html).toMatch(/>src\/a.ts<\/span><span class="[^"]*">file</);
-		// No heading divides them: the tag says what a row is.
-		expect(html).not.toContain('role="group"');
-	});
-
-	test("numbers the rows after the people, so the keys and the pointer agree on which is active", () => {
-		let html = render([{ kind: "planner", login: "chopin" }, { kind: "person", login: "octocat" }]);
-		expect(html).toContain('id="mentions-option-2"');
-		expect(html.match(/<button[^>]*id="mentions-option-0"[^>]*>/)![0]).toContain(
-			'aria-selected="true"',
-		);
-		expect(html.match(/<button[^>]*id="mentions-option-2"[^>]*>/)![0]).toContain(
-			'aria-selected="false"',
-		);
-		expect(html).toContain("Overview");
-		expect(html).toContain(">H1<");
 	});
 });

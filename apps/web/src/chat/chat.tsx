@@ -76,7 +76,8 @@ import {
 	draftCommand,
 	filterCommands,
 } from "./commands";
-import { MentionPicker, mentionRows } from "./mention-picker";
+import { MentionPicker } from "./mention-picker";
+import { useDocumentPeople } from "./document-people";
 import { pointerGroups, useMentionSources } from "./mention-sources";
 import type { PointerOption } from "./mention-sources";
 import { modelReadsImages } from "@chopin/protocol/model-choice";
@@ -91,13 +92,15 @@ import {
 	insertMention,
 	mentionCandidates,
 	mentionKeyAction,
+	mentionTrigger,
 	mentionTriggerKey,
-	pointerTrigger,
 } from "./mentions";
 import {
+	referenceMenuShown,
 	referenceOptionId,
 	ReferencePicker,
 	referencePickerKeyAction,
+	referenceRows,
 	useReferencePicker,
 } from "./reference-picker";
 import {
@@ -146,7 +149,7 @@ import type { Chat as Wire, ConversationPlan, Session } from "@chopin/protocol";
 import type { Repository } from "../api";
 import type { ResearchLaunchBlock, ResearchLaunchResult } from "@chopin/editor";
 import type { ChatCommand } from "./commands";
-import type { MentionRow } from "./mention-picker";
+import type { ReferenceRow } from "./reference-picker";
 import type { MentionCandidate } from "./mentions";
 import type { ChatSendPayload, ComposerDraft, ReferenceTarget, SendFailure } from "./references";
 import type { Wire as Socket } from "../wire";
@@ -609,8 +612,15 @@ export function Chat(
 		transcriptReady,
 		quietRestart.current,
 	);
-	let detected = referencesEnabled && composerReady && !submitting
+	// `#` and `@` both open at the caret; the one typed nearer to it is the one being written.
+	let hashed = referencesEnabled && composerReady && !submitting
 		? referenceTrigger(draft.text, selection.start, selection.end)
+		: undefined;
+	let typedMention = composerReady && !submitting
+		? mentionTrigger(draft.text, selection.start, selection.end)
+		: undefined;
+	let detected = hashed && !(typedMention && typedMention.start > hashed.start)
+		? hashed
 		: undefined;
 	let trigger = detected
 			&& !draft.references.some(reference =>
@@ -619,17 +629,33 @@ export function Chat(
 		? detected
 		: undefined;
 	let triggerKey = trigger ? referenceTriggerKey(trigger) : undefined;
-	let pickerOpen = !submitting && trigger !== undefined && triggerKey !== dismissedPicker;
+	let pickerWanted = !submitting && trigger !== undefined && triggerKey !== dismissedPicker;
 	let atReferenceLimit = draft.references.length >= MAX_REFERENCES;
 	let picker = useReferencePicker(
-		pickerOpen && !atReferenceLimit && referencesEnabled ? trigger : undefined,
+		pickerWanted && !atReferenceLimit && referencesEnabled ? trigger : undefined,
 		repository,
 		room,
 	);
+	// This document's parts and files are asked for as the person types, beside the documents.
+	let sources = useMentionSources(
+		room,
+		pickerWanted && !atReferenceLimit ? trigger!.query : undefined,
+	);
+	let pointers = atReferenceLimit
+		? []
+		: pointerGroups(sources).flatMap(group => group.options);
+	let rows = referenceRows(pointers, picker.options);
+	let pickerOpen = pickerWanted
+		&& referenceMenuShown(
+			trigger!.query,
+			rows.length,
+			atReferenceLimit || picker.status === "error",
+		);
+	let activeRow: ReferenceRow | undefined = rows.length === 0
+		? undefined
+		: rows[Math.min(picker.active, rows.length - 1)];
 	let authors = chatAuthors(entries);
-	let mention = composerReady && !submitting && !detected
-		? pointerTrigger(draft.text, selection.start, selection.end)
-		: undefined;
+	let mention = detected ? undefined : typedMention;
 	let mentionKey = mention ? mentionTriggerKey(mention) : undefined;
 	let freeMention = mention
 			&& !draft.references.some(reference =>
@@ -637,29 +663,19 @@ export function Chat(
 			)
 		? mention
 		: undefined;
+	let readers = useDocumentPeople(room, !!freeMention);
 	let mentionOptions = freeMention
 		? filterMentions(
-			mentionCandidates({ authors, people, planner: agent, self: handle }),
+			mentionCandidates({ authors, people, readers, planner: agent, self: handle }),
 			freeMention.query,
 		)
 		: [];
-	// The document's parts and files are asked for as the person types, while the menu can show.
-	let sources = useMentionSources(
-		room,
-		referencesEnabled && freeMention && mentionKey !== dismissedPicker
-			? freeMention.query
-			: undefined,
-	);
-	let mentionRowsShown = mentionRows(
-		mentionOptions,
-		atReferenceLimit ? [] : pointerGroups(sources),
-	);
-	let mentionOpen = mentionRowsShown.length > 0 && mentionKey !== dismissedPicker;
+	let mentionOpen = mentionOptions.length > 0 && mentionKey !== dismissedPicker;
 	let mentionActive = mentionCursor.key === mentionKey
-		? Math.min(mentionCursor.index, mentionRowsShown.length - 1)
+		? Math.min(mentionCursor.index, mentionOptions.length - 1)
 		: 0;
-	let activeMention: MentionRow | undefined = mentionOpen
-		? mentionRowsShown[mentionActive]
+	let activeMention: MentionCandidate | undefined = mentionOpen
+		? mentionOptions[mentionActive]
 		: undefined;
 	let command = composerReady && !submitting
 		? commandTrigger(draft.text, selection.start, selection.end)
@@ -687,9 +703,6 @@ export function Chat(
 			),
 		() => setDismissedPicker(commandOpen ? commandKey : mentionOpen ? mentionKey : triggerKey),
 	);
-	let activeOption = picker.options.length === 0
-		? undefined
-		: picker.options[Math.min(picker.active, picker.options.length - 1)];
 
 	useEffect(() => {
 		if (!wire) return;
@@ -1106,11 +1119,11 @@ export function Chat(
 		setSendError(undefined);
 		pendingCaret.current = { start: result.start, end: result.end };
 	};
-	// An `@` at the caret, which opens the mentions.
-	let startMention = () => {
+	// An `@` at the caret, which opens the mentions, or a `#`, which opens the documents and parts.
+	let startMention = (marker: "#" | "@" = "@") => {
 		let current = draftRef.current;
 		let before = current.text.slice(0, selection.start);
-		let lead = before && !/\s$/.test(before) ? " @" : "@";
+		let lead = before && !/\s$/.test(before) ? ` ${marker}` : marker;
 		let next = before + lead + current.text.slice(selection.end);
 		let caret = before.length + lead.length;
 		setDraft(
@@ -1187,8 +1200,8 @@ export function Chat(
 
 	/** A part of the document or a file becomes a chip, which the Planner receives as what it is. */
 	let choosePointer = (option: PointerOption) => {
-		if (!freeMention) return;
-		let next = insertPointer(draft.text, draft.references, freeMention, option);
+		if (!trigger) return;
+		let next = insertPointer(draft.text, draft.references, trigger, option);
 		setDraft(current => reviseComposerDraft(current, next.text, next.references));
 		setSelection({ start: next.caret, end: next.caret });
 		setSendError(undefined);
@@ -1196,8 +1209,8 @@ export function Chat(
 		pendingCaret.current = next.caret;
 	};
 
-	let chooseRow = (row: MentionRow) =>
-		row.type === "candidate" ? chooseMention(row.candidate) : choosePointer(row.option);
+	let chooseRow = (row: ReferenceRow) =>
+		row.type === "pointer" ? choosePointer(row.option) : chooseReference(row.target);
 
 	let moveMention = (to: (index: number) => number) =>
 		setMentionCursor({ key: mentionKey, index: to(mentionActive) });
@@ -1484,15 +1497,7 @@ export function Chat(
 				references={referencesEnabled
 					? {
 						disabled: !composerShown || submitting,
-						onMentionDocs: () => {
-							let current = draftRef.current;
-							let next = current.text
-								+ (current.text && !current.text.endsWith(" ") ? " #" : "#");
-							setDraft(reviseComposerDraft(current, next, current.references));
-							setSelection({ start: next.length, end: next.length });
-							setDismissedPicker(undefined);
-							pendingCaret.current = next.length;
-						},
+						onMentionDocs: () => startMention("#"),
 					}
 					: undefined}
 				format={{
@@ -1501,7 +1506,7 @@ export function Chat(
 					onToggle: toggleFormatting,
 					onFormat: formatDraft,
 				}}
-				mention={{ disabled: !composerShown || submitting, onMention: startMention }}
+				mention={{ disabled: !composerShown || submitting, onMention: () => startMention("@") }}
 				files={attachments
 					? {
 						files: files.files,
@@ -1561,10 +1566,12 @@ export function Chat(
 					<>
 						{pickerOpen && trigger && (
 							<ReferencePicker
-								active={picker.active}
+								active={Math.min(picker.active, Math.max(rows.length - 1, 0))}
 								id={pickerId}
 								onActive={picker.setActive}
 								onSelect={chooseReference}
+								onSelectPointer={choosePointer}
+								pointers={pointers}
 								state={atReferenceLimit
 									? { status: "limit", options: [] }
 									: picker}
@@ -1582,11 +1589,9 @@ export function Chat(
 						{mentionOpen && (
 							<MentionPicker
 								active={mentionActive}
-								groups={atReferenceLimit ? [] : pointerGroups(sources)}
 								id={mentionPickerId}
 								onActive={index => setMentionCursor({ key: mentionKey, index })}
 								onSelect={chooseMention}
-								onSelectPointer={choosePointer}
 								options={mentionOptions}
 							/>
 						)}
@@ -1597,8 +1602,8 @@ export function Chat(
 						? referenceOptionId(commandPickerId, commandActive)
 						: mentionOpen
 						? referenceOptionId(mentionPickerId, mentionActive)
-						: pickerOpen && activeOption
-						? referenceOptionId(pickerId, picker.options.indexOf(activeOption))
+						: pickerOpen && activeRow
+						? referenceOptionId(pickerId, rows.indexOf(activeRow))
 						: undefined,
 					"aria-controls": commandOpen
 						? commandPickerId
@@ -1702,17 +1707,17 @@ export function Chat(
 							}, true)
 							: undefined;
 						if (mentionAction === "next") {
-							moveMention(index => (index + 1) % mentionRowsShown.length);
+							moveMention(index => (index + 1) % mentionOptions.length);
 							event.preventDefault();
 							return;
 						}
 						if (mentionAction === "previous") {
-							moveMention(index => (index - 1 + mentionRowsShown.length) % mentionRowsShown.length);
+							moveMention(index => (index - 1 + mentionOptions.length) % mentionOptions.length);
 							event.preventDefault();
 							return;
 						}
 						if (mentionAction === "select" && activeMention) {
-							chooseRow(activeMention);
+							chooseMention(activeMention);
 							event.preventDefault();
 							return;
 						}
@@ -1722,26 +1727,22 @@ export function Chat(
 								keyCode: event.keyCode,
 								isComposing: event.nativeEvent.isComposing,
 								shiftKey: event.shiftKey,
-							}, activeOption !== undefined)
+							}, activeRow !== undefined)
 							: undefined;
 						if (action === "next") {
-							picker.setActive(value =>
-								picker.options.length === 0 ? 0 : (value + 1) % picker.options.length
-							);
+							picker.setActive(value => rows.length === 0 ? 0 : (value + 1) % rows.length);
 							event.preventDefault();
 							return;
 						}
 						if (action === "previous") {
 							picker.setActive(value =>
-								picker.options.length === 0
-									? 0
-									: (value - 1 + picker.options.length) % picker.options.length
+								rows.length === 0 ? 0 : (value - 1 + rows.length) % rows.length
 							);
 							event.preventDefault();
 							return;
 						}
-						if (action === "select" && activeOption) {
-							chooseReference(activeOption);
+						if (action === "select" && activeRow) {
+							chooseRow(activeRow);
 							event.preventDefault();
 							return;
 						}
