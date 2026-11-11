@@ -1,16 +1,53 @@
+import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 
-import { initialJavaScriptBudget } from "./bundle-budget";
+import { initialJavaScriptBudget, initialStylesheetBudget } from "./bundle-budget";
 
-import type { ServerOptions } from "vite";
+import type { Plugin, ServerOptions } from "vite";
 
 const PORT = Number(process.env.CHOPIN_DEV_WEB_PORT ?? "5173");
 const EXE_HOST = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.exe\.xyz$/;
+const ASSISTANT_UI_STYLESHEET = resolve(import.meta.dirname, "src/assistant-ui.css")
+	.replaceAll("\\", "/");
+const COPIED_COMPONENTS_DIR = `${
+	resolve(import.meta.dirname, "src/components").replaceAll("\\", "/")
+}/`;
 
 type DevNetwork = Pick<ServerOptions, "host" | "allowedHosts" | "hmr">;
+
+/**
+ * Copied registry files under `src/components` cannot be edited on disk (`sources.json` checks
+ * their hashes), so Vite attaches their shared stylesheet at transform time. A page without a
+ * copied element never downloads it, and Vite's preload helper waits for the `<link>` before
+ * resolving the dynamic import that mounts the first copy.
+ */
+export function copiedElementsStyles(
+	componentsDir = COPIED_COMPONENTS_DIR,
+	stylesheet = ASSISTANT_UI_STYLESHEET,
+): Plugin {
+	let importLine = `\nimport ${JSON.stringify(stylesheet)};\n`;
+	return {
+		name: "copied-elements-styles",
+		enforce: "pre",
+		transform(code, id) {
+			let file = id.split("?")[0]!.replaceAll("\\", "/");
+			if (!file.startsWith(componentsDir) || !file.endsWith(".tsx")) return null;
+			return { code: `${code}${importLine}`, map: null };
+		},
+	};
+}
+
+/** Keeps the copies' CSS in one shared asset across whichever lazy chunks mount them. */
+export function assistantUiChunk(
+	id: string,
+	stylesheet = ASSISTANT_UI_STYLESHEET,
+): string | undefined {
+	let file = id.split("?")[0]!.replaceAll("\\", "/");
+	return file === stylesheet ? "assistant-ui" : undefined;
+}
 
 export function devNetwork(exeHost: string | undefined, port = PORT): DevNetwork {
 	if (!exeHost) {
@@ -31,7 +68,21 @@ export function devNetwork(exeHost: string | undefined, port = PORT): DevNetwork
 }
 
 export default defineConfig({
-	plugins: [react(), tailwindcss(), tsconfigPaths(), initialJavaScriptBudget()],
+	plugins: [
+		copiedElementsStyles(),
+		react(),
+		tailwindcss(),
+		tsconfigPaths(),
+		initialJavaScriptBudget(),
+		initialStylesheetBudget(),
+	],
+	build: {
+		rollupOptions: {
+			output: {
+				manualChunks: id => assistantUiChunk(id),
+			},
+		},
+	},
 	optimizeDeps: {
 		esbuildOptions: { minifyWhitespace: true, minifySyntax: true },
 	},

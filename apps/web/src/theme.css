@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "@chopin/visuals/theme.css";
-@import "./assistant-ui.css";
 @import "./conversation-plan/source.css";
 @import "./build-view.css";
 @import "./criteria.css";
@@ -17,6 +16,7 @@
 @source "../../../packages/editor/src/**/*.{ts,tsx}";
 @source "../../../packages/icons/src/**/*.{ts,tsx}";
 @source "../../../packages/question/src/**/*.{ts,tsx}";
+@source not "./components";
 
 @utility ring-hairline {
 	outline: var(--edge-width) solid var(--color-edge);

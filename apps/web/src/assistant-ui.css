@@ -1,13 +1,24 @@
 /*
- * assistant-ui and shadcn's colours, read from Chopin's. Copied components name their colours by role
- * (`bg-background`, `text-muted-foreground`, `ring-ring/50`) and read these variables; this maps each
- * role onto the Chopin token that plays it, so a copy looks as assistant-ui draws it, in Chopin's
- * colours. Colours only: sizes, radii, type and motion are the copies' own (see the geometry layer
- * below, which `bun scripts/record-registry-sources.ts` writes), and none of Chopin's button fills,
- * rings or shadows is mapped, because assistant-ui draws none of them.
+ * assistant-ui and shadcn's colours, read from Chopin's, and the stylesheet that ships with the
+ * first copied element that imports from `apps/web/src/components`.
  *
- * `shadcn add` appends the `@import` an item needs here. Keep that line; review anything else it adds.
+ * Copied components name their colours by role (`bg-background`, `text-muted-foreground`,
+ * `ring-ring/50`) and read these variables; this maps each role onto the Chopin token that plays
+ * it, so a copy looks as assistant-ui draws it, in Chopin's colours. Colours only: sizes, radii,
+ * type and motion are the copies' own (see the geometry layer below, which
+ * `bun scripts/record-registry-sources.ts` writes), and none of Chopin's button fills, rings or
+ * shadows is mapped, because assistant-ui draws none of them.
+ *
+ * `theme.css` excludes `./components`, so the entry stylesheet carries none of the copies'
+ * utilities, animations or layer rules; `vite.config.ts` imports this file from each copied `.tsx`
+ * module instead. `shadcn add` appends the `@import` an item needs here. Keep that line; review
+ * anything else it adds.
  */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "@chopin/visuals/theme.css" reference;
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./components";
 @import "tw-animate-css";
 @import "./components/geometry.css";
 @import "tw-shimmer";

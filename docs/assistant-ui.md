@@ -170,12 +170,20 @@ mapping `--accent` to a green: the spec names the trigger's hover fill.
 Add both for every element; a copy without them is not accepted. To keep a spec honest, change a
 mapping or a class on purpose once and see it fail.
 
-The layer is on every page, so its selectors have to be cheap: every rule's subject is a tag, a class,
-an attribute or a pseudo-class the browser can find an element by (`button`, `.border-t`,
-`[role="option"]`, `:focus-visible`), the ancestors it asks about are a handful of
-`[data-slot|=word]`, and no subject is `*`, `[class*=]`, `:is(...)` or `:where(...)`; a unit test reads
-the generated file for it. The first draft put a `*` rule under every copy, which made the browser
-test every element's ancestors against some forty selectors on each style recalculation, and a 100ms
-assertion of an unrelated workspace spec (`responsive-workspace.e2e.ts`, content swaps) went from
-nine passes in ten to none. If a spec that races a timer starts failing after a layer change, make the
-layer cheaper rather than the spec looser.
+The copies' utilities, animations, geometry layer and colour roles ship in one separate stylesheet
+(`apps/web/src/assistant-ui.css`), excluded from `theme.css` (`@source not "./components"`) and
+attached by [`apps/web/vite.config.ts`](../apps/web/vite.config.ts) to each copied `.tsx` module at
+transform time so no file on disk changes. A page without a copied element never downloads it,
+[`bundle-budget.ts`](../apps/web/bundle-budget.ts) keeps it out of the entry stylesheet, and Vite's
+preload helper waits for its `<link>` before resolving the dynamic import that mounts the first copy.
+
+Once a copy mounts, the layer is on that page, so its selectors have to be cheap: every rule's
+subject is a tag, a class, an attribute or a pseudo-class the browser can find an element by
+(`button`, `.border-t`, `[role="option"]`, `:focus-visible`), the ancestors it asks about are a
+handful of `[data-slot|=word]`, and no subject is `*`, `[class*=]`, `:is(...)` or `:where(...)`; a
+unit test reads the generated file for it. The first draft put a `*` rule under every copy, which
+made the browser test every element's ancestors against some forty selectors on each style
+recalculation, and a 100ms assertion of an unrelated workspace spec
+(`responsive-workspace.e2e.ts`, content swaps) went from nine passes in ten to none. If a spec that
+races a timer starts failing after a layer change, make the layer cheaper rather than the spec
+looser.

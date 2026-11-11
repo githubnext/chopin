@@ -298,4 +298,18 @@ describe("assistant-ui's colours", () => {
 		expect(theme.has("--color-destructive")).toBe(false);
 		expect(chopinOwn.has("--color-destructive")).toBe(true);
 	});
+
+	test("splits the copies' stylesheet from the entry theme, keeping Tailwind's layer order", () => {
+		let webTheme = read("apps/web/src/theme.css");
+		expect(webTheme).not.toContain("assistant-ui.css");
+		expect(webTheme).toContain('@source not "./components";');
+		let firstLayer = sheet.nodes.find(
+			node => node.type === "atrule" && node.name === "layer",
+		);
+		expect(firstLayer?.type === "atrule" ? firstLayer.params : undefined).toBe(
+			"theme, base, components, utilities",
+		);
+		expect(css).toContain('@source "./components";');
+		expect(css).toContain('@import "@chopin/visuals/theme.css" reference;');
+	});
 });
