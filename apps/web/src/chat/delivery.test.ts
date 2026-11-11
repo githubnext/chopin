@@ -272,6 +272,14 @@ describe("the words", () => {
 		);
 		expect(
 			refusalText(
+				"planner-not-attached",
+				"Still connecting to @mona's machine, so this message wasn't sent. Send it again in a moment.",
+			),
+		).toBe(
+			"Still connecting to @mona's machine, so this message wasn't sent. Send it again in a moment.",
+		);
+		expect(
+			refusalText(
 				"planner-busy",
 				"Chopin can't take messages while it works on this machine. Stop it to ask now.",
 			),

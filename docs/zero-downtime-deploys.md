@@ -248,7 +248,7 @@ it too, provided it follows the rules below.
   See [Agent connection](agent-connection.md#when-the-server-is-restarting).
 - A client without the feature sees a 1012 close and resumes on its own backoff. If that is
   longer than the window, the document shows the machine as away when the window ends, as for any
-  lost connection, and what was sent meanwhile waits.
+  lost connection.
 - A paired machine's backend keeps working: the credential the server issued it is stored by
   digest, so the new process accepts an unexpired one at once and the backend sees no HTTP 401.
   Older connectors need no change. The machine's connection itself is kept in memory, so its

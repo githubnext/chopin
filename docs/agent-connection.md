@@ -407,6 +407,12 @@ work, its runs and open questions, is kept, and the document says so where it sh
 @<login>'s machine is offline, so this message wasn't sent. Send it again when it's back.
 ```
 
+Inside a deploy's hand-over window before the client has resumed, it says:
+
+```text
+Still connecting to @<login>'s machine, so this message wasn't sent. Send it again in a moment.
+```
+
 [Local agent MCP](local-agent-mcp.md#hand-an-instruction-to-the-planner) shows
 how `invoke_planner` returns it. Once a client is attached, both arrive as
 `turn`s on its connection.
@@ -1257,8 +1263,9 @@ Planner had asked stay open and answerable in the document.
 The next process rebuilds each hold as a suspended one. Until its **hand-over window**
 (`HANDOVER_PLANNER_WINDOW_MS`, 10 seconds by default, counted from the release of the lease: the
 next process starts it as it rebuilds the hold, after the release) ends, the
-document's members see the Planner attached, the run cards Chat stored stay as they were, and
-a `@chopin` message, comment note or task draft is saved and started when the client resumes.
+document's members see the Planner attached and the run cards Chat stored stay as they were; a
+`@chopin` message, comment note or task draft sent before the client resumes is refused saying
+it is still connecting, with nothing kept for later.
 A returning client attaches, and sends `resume` as usual:
 
 - **Before the owner's browser sign-in is back,** which a browser's cookie restores, the

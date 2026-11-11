@@ -337,7 +337,9 @@ checked before `Chat.send`, so a reader cannot steer. A harness that cannot take
 input mid-run (the Copilot SDK), or a running turn that is a background job's, refuses
 the message with `planner-busy`: "Chopin can't take messages while it works on this
 machine. Stop it to ask now." (the server log names the harness). A machine that is away,
-or none attached, refuses it with the connection's own words (`planner-not-attached`),
+in its hand-over window before the client resumes ("Still connecting to @mona's machine, so
+this message wasn't sent. Send it again in a moment."), or with none attached, refuses it with
+the connection's own words (`planner-not-attached`),
 mid-turn too; for a machine that is away they say the message was not sent and to send it again
 when the machine is back, and never that it is kept (the machine's own work is; the message is
 not). A message sent while a turn is only beginning or finishing has no session

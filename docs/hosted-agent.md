@@ -1147,7 +1147,9 @@ Nothing a person sends to the Planner is held for later. A message is never "wai
   it to ask now."; the server log names the harness. With no machine attached, or one that is away,
   the code is `planner-not-attached` with the connection's own words, mid-turn or not. For a
   machine that is away they say what happened and what to do: "@mona's machine is offline, so this
-  message wasn't sent. Send it again when it's back." They never say that anything is kept: the
+  message wasn't sent. Send it again when it's back."; inside a deploy's hand-over window before
+  the machine's client has resumed they say "Still connecting to @mona's machine, so this message
+  wasn't sent. Send it again in a moment." They never say that anything is kept: the
   machine's own work is, and the status beside the composer says so (_Your work is kept._), but
   the message is not.
 
