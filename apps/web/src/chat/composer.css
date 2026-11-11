@@ -451,6 +451,8 @@
 	border-color: var(--color-text-tertiary);
 }
 .chat-composer .composer-format {
+	/* Drawn above the draft but after it in the page, so Tab reaches the draft first. */
+	order: -1;
 	display: flex;
 	align-items: center;
 	gap: 0.125rem;
