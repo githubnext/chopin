@@ -794,6 +794,8 @@ export let RichDraftInput = forwardRef<RichDraftHandle, RichDraftInputProps>(
 			},
 		}), [editor]);
 
+		let tellSelection = () => document.dispatchEvent(new Event("selectionchange"));
+
 		let keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 			if (event.nativeEvent.isComposing || event.keyCode === 229) {
 				// An input method's Enter chooses its words; it never sends.
@@ -811,7 +813,7 @@ export let RichDraftInput = forwardRef<RichDraftHandle, RichDraftInputProps>(
 			// move; a key that edits the selection straight after one (as a select-all and Delete
 			// do) is told first.
 			if (["Backspace", "Delete"].includes(event.key) || event.metaKey || event.ctrlKey) {
-				document.dispatchEvent(new Event("selectionchange"));
+				tellSelection();
 			}
 			let shortcut = formatShortcut(event);
 			// As in the document, ⌘K is a link only for chosen words or a link already there, and is
@@ -860,6 +862,12 @@ export let RichDraftInput = forwardRef<RichDraftHandle, RichDraftInputProps>(
 				spellCheck
 				tabIndex={0}
 				onKeyDownCapture={keyDown}
+				// The page says the selection moved a moment after it did; a paste, and what reads the
+				// caret once a key or the pointer is let go (dictation's place, a menu's query), are
+				// told now.
+				onPasteCapture={tellSelection}
+				onKeyUp={tellSelection}
+				onMouseUp={tellSelection}
 				onFocus={() => {
 					let offsets = editor.getEditorState().read(() => $selectionOffsets(index.current));
 					latest.current.onSelect({
