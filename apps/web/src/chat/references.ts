@@ -23,9 +23,12 @@ export type ReferenceTarget = {
 	description?: string;
 };
 
-export type ReferenceDraft = Extract<Chat.ReferenceRequest, { kind: "document" }> & {
-	token: string;
-};
+/**
+ * A reference in the draft: what the server is asked for, over the range of the token the person
+ * sees. A document is a `#` token, a research card a `%` token, a heading, a Decision or a file an
+ * `@` token and a command a `/` token.
+ */
+export type ReferenceDraft = Chat.ReferenceRequest & { token: string };
 
 export type ReferenceInsertion = {
 	text: string;
@@ -111,7 +114,7 @@ function sameReference(left: ReferenceDraft, right: ReferenceDraft): boolean {
 	return left.start === right.start
 		&& left.end === right.end
 		&& left.token === right.token
-		&& left.channelId === right.channelId;
+		&& targetKey(left) === targetKey(right);
 }
 
 export function reviseComposerDraft(
@@ -127,8 +130,26 @@ export function reviseComposerDraft(
 	return { text, references };
 }
 
+/** What a draft reference points at, so one target is never in a draft twice. */
+export function referenceTargetKey(value: ReferenceDraft | ReferenceTarget): string {
+	switch (value.kind) {
+		case "document":
+			return `document:${value.channelId}`;
+		case "research":
+			return `research:${value.workspaceId}`;
+		case "command":
+			return `command:${value.commandKind}:${value.name}`;
+		case "heading":
+			return `heading:${value.anchor}`;
+		case "decision":
+			return `decision:${value.decisionId}`;
+		case "file":
+			return `file:${value.path}`;
+	}
+}
+
 function targetKey(value: ReferenceDraft | ReferenceTarget): string {
-	return `document:${value.channelId}`;
+	return referenceTargetKey(value);
 }
 
 function validDraft(text: string, reference: ReferenceDraft): boolean {
@@ -311,10 +332,156 @@ export function insertReference(
 	return { text: next, references: [...shifted, reference], caret: end };
 }
 
+/** A part of the document, or a file, `@` can point at, with the words the token shows. */
+export type PointerTarget =
+	| { kind: "heading"; anchor: string; label: string }
+	| { kind: "decision"; decisionId: string; label: string }
+	| { kind: "research"; workspaceId: string; label: string }
+	| { kind: "file"; path: string; label: string };
+
+function pointerRequest(
+	target: PointerTarget,
+): Chat.ReferenceRequest extends infer R
+	? R extends { start: number; end: number } ? Omit<R, "start" | "end"> : never
+	: never
+{
+	switch (target.kind) {
+		case "heading":
+			return { kind: "heading", anchor: target.anchor };
+		case "decision":
+			return { kind: "decision", decisionId: target.decisionId };
+		case "research":
+			return { kind: "research", workspaceId: target.workspaceId };
+		case "file":
+			return { kind: "file", path: target.path };
+	}
+}
+
+/**
+ * Replace the typed `@query` with the part's own words as one chip (`%` for a research card), a
+ * space after it, and the caret after that. A part already in the draft moves to its new place
+ * rather than appearing twice, and a draft that holds the most references is left as it was.
+ */
+export function insertPointer(
+	text: string,
+	references: ReferenceDraft[],
+	trigger: { query: string; start: number; end: number },
+	target: PointerTarget,
+): ReferenceInsertion {
+	if (text.slice(trigger.start, trigger.end) !== `@${trigger.query}` || !target.label) {
+		return { text, references, caret: trigger.end };
+	}
+	let request = pointerRequest(target);
+	let key = referenceTargetKey({ ...request, start: 0, end: 0, token: "" } as ReferenceDraft);
+	let deduped = references.filter(reference => referenceTargetKey(reference) !== key);
+	if (deduped.length >= MAX_REFERENCES) return { text, references, caret: trigger.end };
+	let token = `${target.kind === "research" ? "%" : "@"}${target.label}`;
+	let spaced = text[trigger.end] === " ";
+	let next = text.slice(0, trigger.start) + token + (spaced ? "" : " ") + text.slice(trigger.end);
+	let shifted = reconcileReferenceDrafts(
+		text,
+		next,
+		deduped,
+		{ start: trigger.start, end: trigger.end },
+		true,
+	);
+	let end = trigger.start + token.length;
+	return {
+		text: next,
+		references: [...shifted, { ...request, start: trigger.start, end, token } as ReferenceDraft],
+		caret: end + 1,
+	};
+}
+
+/**
+ * Replace the typed `/query`, which is the whole draft so far, with the command as a chip that
+ * opens the draft, and a space after it for the words it is run with.
+ */
+export function insertCommand(
+	text: string,
+	references: ReferenceDraft[],
+	trigger: { end: number },
+	command: { name: string; commandKind: string },
+): ReferenceInsertion {
+	let token = `/${command.name}`;
+	let next = `${token} ${text.slice(trigger.end).replace(/^ /, "")}`;
+	let kept = references.filter(reference =>
+		reference.kind !== "command" && reference.start >= trigger.end
+	)
+		.map(reference => ({
+			...reference,
+			start: reference.start + next.length - text.length,
+			end: reference.end + next.length - text.length,
+		}));
+	return {
+		text: next,
+		references: [{
+			kind: "command",
+			name: command.name,
+			commandKind: command.commandKind,
+			start: 0,
+			end: token.length,
+			token,
+		}, ...kept],
+		caret: token.length + 1,
+	};
+}
+
+/**
+ * What an edit touches once a chip is whole: a chip is one thing, so deleting at its edge, or any
+ * of it, takes all of it, a selection that reaches into one takes the rest, and a caret inside
+ * one (it can be put there with the mouse) goes to its end before anything is typed.
+ */
+export function expandToChips(
+	references: ReadonlyArray<Pick<ReferenceDraft, "start" | "end">>,
+	start: number,
+	end: number,
+	inputType: string,
+): { start: number; end: number } {
+	let chips = [...references].sort((left, right) => left.start - right.start);
+	if (start === end) {
+		let deleting = inputType.startsWith("delete");
+		let backward = inputType.includes("Backward");
+		for (let chip of chips) {
+			if (deleting) {
+				if (
+					backward
+						? chip.start < start && start <= chip.end
+						: chip.start <= start && start < chip.end
+				) {
+					return { start: chip.start, end: chip.end };
+				}
+			} else if (chip.start < start && start < chip.end) {
+				return { start: chip.end, end: chip.end };
+			}
+		}
+		return { start, end };
+	}
+	for (let pass = 0; pass < 2; pass++) {
+		for (let chip of chips) {
+			if (chip.start < end && chip.end > start) {
+				start = Math.min(start, chip.start);
+				end = Math.max(end, chip.end);
+			}
+		}
+	}
+	return { start, end };
+}
+
+/** Whether the draft runs a command, which is only ever for the Planner. */
+export function runsCommand(references: ReadonlyArray<Pick<ReferenceDraft, "kind">>): boolean {
+	return references.some(reference => reference.kind === "command");
+}
+
+/**
+ * Whether the text outside its references addresses the Planner. A command is an address of its
+ * own: it runs in the Planner's turn, so a draft that holds one needs no `@chopin`.
+ */
 export function addressedOutsideReferences(
 	text: string,
-	references: Array<Pick<Chat.ReferenceRequest, "start" | "end">>,
+	references: Array<Pick<Chat.ReferenceRequest, "start" | "end"> & { kind?: string }>,
 ): boolean {
+	if (references.some(reference => reference.kind === "command")) return true;
 	let masked = text.split("");
 	for (let reference of references) {
 		for (let index = reference.start; index < reference.end; index++) masked[index] = " ";
@@ -358,7 +525,8 @@ export function chatSendPayload(
 		if (start < previousEnd || value.slice(start, end) !== reference.token) continue;
 		targets.add(key);
 		previousEnd = end;
-		requests.push({ kind: "document", channelId: reference.channelId, start, end });
+		let { token: _token, ...request } = reference;
+		requests.push({ ...request, start, end });
 	}
 
 	let to: Chat.Destination = plannerEnabled && addressedOutsideReferences(value, requests)

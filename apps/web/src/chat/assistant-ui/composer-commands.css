@@ -1,0 +1,86 @@
+/*
+ * The `/` and `@` rows and their group headings, in Chopin's roles: the shared menu row and its
+ * tinted active state, the small text role for a name, the extra-small role and tertiary ink for
+ * what is secondary. A row is one line; only its description gives way.
+ */
+
+.composer-menu[data-variant="commands"] {
+	width: 26rem;
+	max-height: min(24rem, calc(var(--app-height, 100dvh) * 0.5));
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+.composer-menu[data-variant="mentions"] {
+	width: 22rem;
+	max-height: min(24rem, calc(var(--app-height, 100dvh) * 0.5));
+}
+
+.composer-menu-group-label {
+	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 1.5) var(--spacing);
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	font-weight: var(--font-weight-medium);
+	line-height: var(--text-xs--line-height);
+}
+[data-slot="composer-menu-group"] + [data-slot="composer-menu-group"] {
+	margin-top: var(--spacing);
+}
+
+.composer-menu-item[data-variant="command"],
+.composer-menu-item[data-variant="mention"] {
+	gap: calc(var(--spacing) * 2);
+}
+.composer-row-lead {
+	display: flex;
+	flex: none;
+	align-items: center;
+	color: var(--color-text-tertiary);
+}
+.composer-command-name,
+.composer-mention-name {
+	min-width: 0;
+	flex: none;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.composer-command-name {
+	font-weight: var(--font-weight-medium);
+}
+.composer-mention-name {
+	flex: 1 1 auto;
+}
+.composer-row-description {
+	min-width: 0;
+	flex: 1 1 0;
+	overflow: hidden;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.composer-row-meta {
+	flex: none;
+	margin-inline-start: auto;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+}
+/* The enter hint is for a pointer that can hover; a touch screen has no use for it. */
+.composer-row-hint {
+	display: none;
+	flex: none;
+	margin-inline-start: auto;
+	padding-inline: calc(var(--spacing) * 1);
+	border-radius: var(--radius-sm);
+	background: var(--color-hover);
+	color: var(--color-text-tertiary);
+	font: inherit;
+	font-size: var(--text-2xs);
+}
+@media (hover: hover) {
+	.composer-row-hint {
+		display: inline-block;
+	}
+}

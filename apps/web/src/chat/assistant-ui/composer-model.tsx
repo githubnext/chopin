@@ -50,7 +50,12 @@ export function ComposerMenu(props: MenuProps) {
 			id={props.id}
 			onBlur={props.onBlur}
 			onKeyDown={props.onKeyDown}
+			// The `/` and `@` lists can scroll, and nothing in them is a tab stop (the draft keeps
+			// focus and points at a row), so the region itself is reachable; a press inside never
+			// takes the draft's focus away.
+			onMouseDown={event => event.preventDefault()}
 			role={props.role}
+			tabIndex={0}
 		>
 			{props.children}
 		</div>
@@ -62,6 +67,8 @@ type ItemProps = {
 	active: boolean;
 	/** The chosen value; a list with none marks its active row as chosen. */
 	selected: boolean;
+	/** A command's and a mention's row sit in a line. */
+	variant?: "command" | "mention";
 	children: ReactNode;
 	id: string;
 	"aria-label"?: string;

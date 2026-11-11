@@ -29,7 +29,8 @@ export function writeDraft(
 		appendText(text.slice(end, reference.start));
 		let span = document.createElement("span");
 		span.className = "draft-reference";
-		span.dataset.documentId = reference.channelId;
+		span.dataset.reference = reference.kind;
+		if (reference.kind === "document") span.dataset.documentId = reference.channelId;
 		span.textContent = text.slice(reference.start, reference.end);
 		fragment.append(span);
 		end = reference.end;

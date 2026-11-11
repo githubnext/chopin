@@ -11,13 +11,8 @@
 	z-index: 30;
 	margin-bottom: var(--spacing);
 }
-.composer-menu[data-variant="commands"] {
-	width: 14rem;
-	max-width: calc(100% - var(--spacing) * 5);
-}
+/* The `/` and `@` menus take their widths from the rows they hold, in composer-commands.css. */
+.composer-menu[data-variant="commands"],
 .composer-menu[data-variant="mentions"] {
-	width: max-content;
-	min-width: 12rem;
 	max-width: calc(100% - var(--spacing) * 5);
-	overflow-y: auto;
 }
