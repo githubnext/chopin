@@ -160,9 +160,11 @@ durable.
   client sees what a turn sees and steers its document writes. Attaching makes
   the account's live browser login the document's Planner owner, one client per
   document; nothing else claims ownership. `@chopin` and `invoke_planner` on a
-  document without one are saved as durable rows, shown as sent and delivered
-  when a Planner takes them, also under `AUTH_MODE=local`. Signing out the
-  owner's login, its expiry, or a Planner reset closes the link. A lost
+  document without one, or whose machine is away, are refused with the
+  connection's own words and nothing is kept for later. A client that offers the
+  optional `steer-turn` feature is given a message sent while its turn runs as a
+  `steer` frame (`docs/agent-connection.md`); one that does not is refused such a
+  message. Signing out the owner's login, its expiry, or a Planner reset closes the link. A lost
   connection never ends work by itself: a link that offered
   `resumable-sessions` and then dropped unexpectedly keeps its sessions that hold
   a live run or an open question, however long it stays away, and holds any Stop
@@ -325,29 +327,44 @@ destination is authoritative on the server. Do not describe `@chopin` as a serve
 authorization boundary: a custom write-authorized client can send an explicit
 Planner destination without a mention.
 
+Nothing a person sends is ever held for the Planner. A message to it starts a turn
+when none is running; while one runs it is posted to the transcript and
+acknowledged at once and given to that turn (`PlannerSession.steer`, through the
+harness's own mid-run input: Atomic's `steer`, a `steer` frame to a remote client
+that offered `steer-turn`), which reads it at its next step as `@handle: text`, in the
+same turn. Steering takes the same write access as starting a turn: `chat:send` is
+checked before `Chat.send`, so a reader cannot steer. A harness that cannot take
+input mid-run (the Copilot SDK), or a running turn that is a background job's, refuses
+the message with `planner-busy`: "Chopin can't take messages while it works on this
+machine. Stop it to ask now." (the server log names the harness). A machine that is away,
+or none attached, refuses it with the connection's own words (`planner-not-attached`),
+mid-turn too. A message sent while a turn is only beginning or finishing has no session
+to be given to, and is answered as a passing trouble (`temporarily-unavailable`). If the
+turn ends before it can read the message, an idle Chat starts a turn for it and any other
+says plainly that Chopin did not read it. A comment note, an `invoke_planner as system` call
+and a task draft need a turn of their own, so a running turn refuses them before anything is
+saved. Only Chopin's own scheduling still waits for the running turn, in `chat.waiting`:
+background jobs and server-authored instructions nobody typed (initiative, an ended workflow
+run, readiness, decision follow-ups). `planner_deferred_turns` is no longer written or read;
+at start the writer-lease holder closes any row an earlier release left open
+(`deferredTurns.retire`), so a message it held stays in its Chat as an ordinary one that no
+Planner took. The table and its rows are kept, and no migration was added.
+
 A message to the Planner leaves the composer at once. The browser shows it from
-its outbox (`apps/web/src/chat/delivery.ts`), marked as waiting to send, until
-the server's entry for the same request ID arrives; it then carries
-`Entry.deliveryState` (sent, delivered). Delivered means the prompt is on its way
-to the machine, after a session is open there; a request whose session cannot be
-opened stays sent and waits to be tried again. The outbox sends one message at a
-time, oldest first, once the current connection's transcript has arrived, and only
-to a server that acknowledges sends. A refused send or a `failed` entry says
-"Couldn't send" on the message with Try again and Delete, never in a strip above
-the composer, and not while the page's connection banner shows. A refusal with a passing reason is not a
-refusal of the message: a full queue behind a running turn (`planner-queue-full`, twenty requests; a
-machine that is away has no bound, and keeps every request until it is back, as a chat app keeps
-a message for someone offline) or a storage, room or authorization trouble that will pass
-(`temporarily-unavailable`). The browser keeps the message waiting to send and sends it
-again, in order and with the same request ID, once there may be room. Only a refusal with neither
-code is final.
-A message already put on the wire can still be deleted, whatever the server last answered it
-(an earlier attempt of one it turned down for a passing reason may have been kept): the server is
-told to drop it, and a late send cannot bring it back. One it kept, though the commit's answer
-was lost, is put back in the queue and the transcript, in its place, when the same request is sent
-again, when the queue next starts and when the document opens again, and is delivered once and in
-order; a person's request for a machine that is away is never turned away for how many are being
-saved at once, whether sent from Chat, by an MCP call or as a task draft.
+its outbox (`apps/web/src/chat/delivery.ts`) as the person's own, saying Sending (never
+waiting, queued or a clock), until the server's entry for the same request ID arrives; from
+then it carries no mark. The outbox holds a message only for the browser's own connection:
+it sends one message at a time, oldest first, once the current connection's transcript has
+arrived, and only to a server that acknowledges sends. A refused send says "Couldn't send" on
+the message with Try again and Delete (which act on the outbox alone, since the server kept
+nothing), never in a strip above the composer, and not while the page's connection banner
+shows. A refusal with a passing reason is not a refusal of the message: a storage, room or
+authorization trouble that will pass, or a turn that is only beginning or finishing
+(`temporarily-unavailable`). The browser keeps the message sending and sends it again, in order
+and with the same request ID, in a moment. Only a refusal with neither code is final, and so
+are `planner-busy` and `planner-not-attached`. One the server kept, though the commit's answer
+was lost, is answered with its first answer when the same request is sent again, and is given
+to a turn once.
 
 `instruction()` strips the mention before model input. Recent room messages that
 did not address the Planner still enter a bounded backscroll for the next turn.

@@ -25,8 +25,9 @@ that origin.
   Planner that was connected when the process stopped, which keeps its place for
   a short window (see [Deploys nobody can see](zero-downtime-deploys.md#a-remote-planner-and-its-machine)).
   Documents, transcripts, decisions, background jobs and artifacts, research
-  request staging, child documents, implementation state and Planner requests
-  that had not started remain. A hosted browser's login is restored when its
+  request staging, child documents and implementation state remain. A Planner request
+  that had not started does not: nothing is held for a Planner, and a message sent
+  while the process stops is sent again by its browser to the next one. A hosted browser's login is restored when its
   cookie reaches the new process. In local mode (see below), the returning
   browser can restore the same login without repeating device-flow sign-in; it
   still gets a new session and does not reclaim Planner ownership.

@@ -59,7 +59,7 @@ checks for both `check-design-contract.ts` and `check-design.mjs`:
 
 AA contrast is preferred for primary content and controls, not required for every
 text role. Maggie has approved the original lighter timestamps and secondary chat
-metadata, muted queued/loading and tool-status text, original pierre-light code
+metadata, muted loading and tool-status text, original pierre-light code
 and diff colours, supplementary audit-page labels in their quaternary role, and
 original destructive red. Preserve those choices; do not
 promote them to darker roles just to make a contrast audit pass.
