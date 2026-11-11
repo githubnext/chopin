@@ -10,6 +10,7 @@ export default defineConfig<DesignOptions>({
 		"build-blockers.e2e.ts",
 		"assistant-ui-geometry.e2e.ts",
 		"assistant-ui-theme.e2e.ts",
+		"chat-media.e2e.ts",
 		"touch-targets.e2e.ts",
 		"connecting-indicator.e2e.ts",
 	],

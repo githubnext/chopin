@@ -23,7 +23,13 @@ voice and button (`ComposerVoice`, `ComposerVoiceButton`) fill the box's slots, 
 Planner turn, from Markdown, or attached to a sent message — is drawn by `image` (assistant-ui has no
 separate `elements-image` item; `image.tsx` is already props-driven and imports only two prop types,
 declared locally in `part-types.d.ts` without installing `@assistant-ui/react`) and
-`elements-image-gallery` (with the `href` helper it stands on, and its `<Dialog>` lightbox).
+`elements-image-gallery` (with the `href` helper it stands on, and its `<Dialog>` lightbox). Those, the
+received-files tiles and the staged-file chips are the one place where Slack's look wins over
+assistant-ui's proportions: Chat draws its images, placeholders and files as Slack does, so Chopin's
+own unlayered rules (`src/chat/image.css`, `src/chat/media/media.css`) restyle the copies from outside,
+as the message rows' toolbar is, while the copies keep their structure, behaviour and recorded bytes;
+the plate's pristine specimens keep assistant-ui's geometry, and `e2e/design/chat-media.e2e.ts` holds
+Chat's to Slack's.
 `ComposerContext` (from `elements-composer`) and `elements-context-breakdown` draw the composer's
 context-window ring and token breakdown from harness-reported usage; because assistant-ui ships no
 compaction marker, the expandable compaction divider is Chopin's own `Unfold` disclosure.
