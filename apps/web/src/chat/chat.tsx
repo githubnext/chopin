@@ -1101,7 +1101,20 @@ export function Chat(
 					dispatchIntents({ kind: "answered", id, emoji, on, seq });
 				},
 				error => {
-					if (error instanceof WireRefusal) dispatchIntents({ kind: "drop", id, emoji, on, seq });
+					if (!(error instanceof WireRefusal)) return;
+					// A refusal for a passing reason is not the server's word on the reaction; any other
+					// is, and its message says what the server would take.
+					if (passing(error.code)) dispatchIntents({ kind: "drop", id, emoji, on, seq });
+					else {
+						dispatchIntents({
+							kind: "refuse",
+							id,
+							emoji,
+							on,
+							seq,
+							text: refusalText(error.code, error.message),
+						});
+					}
 				},
 			);
 		}

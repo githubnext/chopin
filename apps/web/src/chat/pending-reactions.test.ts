@@ -372,3 +372,54 @@ describe("a message with unconfirmed reactions", () => {
 		expect(withIntents(undefined, [], "a", "ana")).toEqual({ reactions: [], pending: new Set() });
 	});
 });
+
+describe("a reaction the server refused", () => {
+	let TEXT = "A reaction is a single emoji.";
+	let refused = (): readonly Intent[] => {
+		let asked = intentsReducer([], { kind: "ask", id: "a", emoji: "🦄", on: true, seq: 1 });
+		let sent = intentsReducer(asked, { kind: "sent", id: "a", emoji: "🦄", on: true, seq: 1 });
+		return intentsReducer(sent, {
+			kind: "refuse",
+			id: "a",
+			emoji: "🦄",
+			on: true,
+			seq: 1,
+			text: TEXT,
+		});
+	};
+
+	it("is not drawn as a reaction, and its message says why the server turned it down", () => {
+		let shown = withIntents([reaction("✅", "mina")], refused(), "a", "ana");
+		expect(shown.reactions).toEqual([reaction("✅", "mina")]);
+		expect(shown.pending.size).toBe(0);
+		expect(shown.refusal).toBe(TEXT);
+		expect(withIntents([], refused(), "other", "ana").refusal).toBeUndefined();
+	});
+
+	it("is not sent again, by the queue or by the history of a new connection", () => {
+		expect(dueNow(refused(), new Set(["a"]))).toEqual([]);
+		expect(intentsReducer(refused(), { kind: "history", entries: [entry("a")], handle: "ana" }))
+			.toEqual([]);
+	});
+
+	it("goes when the person asks for any reaction next, on any message", () => {
+		let next = intentsReducer(refused(), { kind: "ask", id: "b", emoji: "✅", on: true, seq: 2 });
+		expect(next).toEqual([{ id: "b", emoji: "✅", on: true, seq: 2 }]);
+		expect(withIntents([], next, "a", "ana").refusal).toBeUndefined();
+	});
+
+	it("is for the ask it names, not for a newer ask of the same emoji that is still to go out", () => {
+		let asked = intentsReducer([], { kind: "ask", id: "a", emoji: "🦄", on: true, seq: 1 });
+		let newer = intentsReducer(asked, { kind: "ask", id: "a", emoji: "🦄", on: true, seq: 2 });
+		let late = intentsReducer(newer, {
+			kind: "refuse",
+			id: "a",
+			emoji: "🦄",
+			on: true,
+			seq: 1,
+			text: TEXT,
+		});
+		expect(late).toEqual(newer);
+		expect(withIntents([], late, "a", "ana").refusal).toBeUndefined();
+	});
+});

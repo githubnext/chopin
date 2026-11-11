@@ -7,6 +7,8 @@ export type Intent = {
 	seq?: number;
 	sent?: true;
 	answered?: true;
+	/** Why the server turned it down: it is not sent again, and its message says so. */
+	refused?: string;
 };
 
 export type IntentAction =
@@ -14,6 +16,7 @@ export type IntentAction =
 	| { kind: "sent"; id: string; emoji: string; on: boolean; seq?: number }
 	| { kind: "unsent"; id: string; emoji: string; on: boolean; seq?: number }
 	| { kind: "drop"; id: string; emoji: string; on: boolean; seq?: number }
+	| { kind: "refuse"; id: string; emoji: string; on: boolean; seq?: number; text: string }
 	| { kind: "answered"; id: string; emoji: string; on: boolean; seq?: number }
 	| {
 		kind: "settle";
@@ -87,7 +90,7 @@ export function intentsReducer(
 	switch (action.kind) {
 		case "ask":
 			return [
-				...intents.filter(intent => !same(intent, action.id, action.emoji)),
+				...intents.filter(intent => !intent.refused && !same(intent, action.id, action.emoji)),
 				{
 					id: action.id,
 					emoji: action.emoji,
@@ -109,6 +112,12 @@ export function intentsReducer(
 			return intents.filter(intent =>
 				!(same(intent, action.id, action.emoji) && request(intent, action))
 			);
+		case "refuse":
+			return intents.map(intent =>
+				same(intent, action.id, action.emoji) && request(intent, action)
+					? { ...intent, refused: action.text }
+					: intent
+			);
 		case "answered":
 			return intents.map(intent =>
 				same(intent, action.id, action.emoji) && request(intent, action)
@@ -120,6 +129,7 @@ export function intentsReducer(
 		case "history": {
 			let reactions = new Map(action.entries.map(entry => [entry.id, entry.reactions]));
 			return intents
+				.filter(intent => !intent.refused)
 				.map(unsent)
 				.filter(intent =>
 					!reactions.has(intent.id) || !satisfied(intent, reactions.get(intent.id), action.handle)
@@ -131,7 +141,7 @@ export function intentsReducer(
 }
 
 export function dueNow(intents: readonly Intent[], saved: ReadonlySet<string>): Intent[] {
-	return intents.filter(intent => !intent.sent && saved.has(intent.id));
+	return intents.filter(intent => !intent.sent && !intent.refused && saved.has(intent.id));
 }
 
 export function withIntents(
@@ -139,11 +149,16 @@ export function withIntents(
 	intents: readonly Intent[],
 	id: string,
 	handle: string,
-): { reactions: Chat.Reaction[]; pending: Set<string> } {
+): { reactions: Chat.Reaction[]; pending: Set<string>; refusal?: string } {
 	let result = (reactions ?? []).map(item => ({ emoji: item.emoji, handles: [...item.handles] }));
 	let pending = new Set<string>();
+	let refusal: string | undefined;
 	for (let intent of intents) {
 		if (intent.id !== id) continue;
+		if (intent.refused) {
+			refusal = intent.refused;
+			continue;
+		}
 		let held = result.find(item => item.emoji === intent.emoji);
 		let has = !!held?.handles.includes(handle);
 		if (has === intent.on) continue;
@@ -152,5 +167,5 @@ export function withIntents(
 		else if (intent.on) result.push({ emoji: intent.emoji, handles: [handle] });
 		else if (held) held.handles = held.handles.filter(item => item !== handle);
 	}
-	return { reactions: result.filter(item => item.handles.length > 0), pending };
+	return { reactions: result.filter(item => item.handles.length > 0), pending, refusal };
 }

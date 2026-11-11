@@ -1,6 +1,7 @@
 import { describe, expect, it, spyOn } from "bun:test";
+import catalogue from "emojibase-data/en/compact.json";
 
-import { react, toggle, validateReactions } from "./reactions";
+import { oneEmoji, react, toggle, validateReactions } from "./reactions";
 import { create } from "./service";
 
 import type { Server } from "bun";
@@ -63,6 +64,10 @@ function ask(
 		...(seq === undefined ? {} : { seq }),
 	} as Request<Wire.React>;
 }
+
+/** Every emoji the picker offers, each skin tone and sequence among them: what its Add reaction sends. */
+let offered = (catalogue as Array<{ unicode: string; skins?: Array<{ unicode: string }> }>)
+	.flatMap(item => [item.unicode, ...(item.skins ?? []).map(skin => skin.unicode)]);
 
 describe("toggling a reaction", () => {
 	it("keeps emoji in the order first used and handles in the order they reacted", () => {
@@ -258,19 +263,20 @@ describe("reacting to a message", () => {
 		expect(published).toEqual([]);
 	});
 
-	it("accepts an emoji of any form or length and any number of emoji on one message", async () => {
+	it("takes as many different emoji on one message as people give it, each of them within their own limit", async () => {
 		let { context, chat, saved, published } = harness();
-		let { ws, sent } = socket("ana");
-		let long = "x".repeat(5_000);
-		await react(context, ws, ask("a1", long, true));
-		expect(chat.entries[1]!.reactions).toEqual([{ emoji: long, handles: ["ana"] }]);
-		for (let index = 0; index < 300; index++) {
-			await react(context, ws, ask("a1", `e${index}`, true));
+		let people = Array.from({ length: 15 }, (_, index) => socket(`person${index}`));
+		for (let [index, person] of people.entries()) {
+			for (let emoji of offered.slice(index * 20, index * 20 + 20)) {
+				await react(context, person.ws, ask("a1", emoji, true));
+			}
 		}
-		expect(chat.entries[1]!.reactions).toHaveLength(301);
-		expect(sent.every(frame => frame.kind === "chat:react")).toBe(true);
-		expect(saved).toHaveLength(301);
-		expect(published).toHaveLength(301);
+		expect(chat.entries[1]!.reactions).toHaveLength(300);
+		expect(saved).toHaveLength(300);
+		expect(published).toHaveLength(300);
+		for (let person of people) {
+			expect(person.sent.every(frame => frame.kind === "chat:react")).toBe(true);
+		}
 		// Saved so, a message like that is read back whole.
 		validateReactions(chat.entries[1]!);
 	});
@@ -319,6 +325,126 @@ describe("reacting to a message", () => {
 			({ entry, handle, on }) => seen.push([entry.id, handle, on]),
 		);
 		expect(seen).toEqual([["a1", "ana", true]]);
+	});
+});
+
+let refusals = (sent: Array<Record<string, unknown>>) =>
+	sent.filter(frame => frame.kind === "session:error");
+
+describe("the bounds of a reaction", () => {
+	/** One combining mark is two bytes, and joins the letter or emoji before it. */
+	let MARK = "\u0301";
+	async function refused(emoji: string) {
+		let { context, chat, saved, published } = harness();
+		let { ws, sent } = socket("ana");
+		let told: unknown[] = [];
+		await react(context, ws, ask("a1", emoji, true), reacted => told.push(reacted));
+		return { sent, saved, published, told, entry: chat.entries[1]! };
+	}
+
+	it("refuses a string of more than one grapheme cluster, whatever each of them is", async () => {
+		for (let emoji of ["🙂🙃", "👍👍", "ab", "👍 ", "🇳🇴🇳🇴", "👨‍👩‍👧‍👦👨‍👩‍👧‍👦", "x".repeat(5_000)]) {
+			let result = await refused(emoji);
+			expect(result.sent, emoji.slice(0, 8)).toMatchObject([{
+				kind: "session:error",
+				message: "a reaction is a single emoji",
+			}]);
+			// A refusal for a reason that will not pass is never marked as passing.
+			expect(result.sent[0]).not.toHaveProperty("code");
+			expect(result.saved, emoji.slice(0, 8)).toEqual([]);
+			expect(result.published, emoji.slice(0, 8)).toEqual([]);
+			expect(result.told, emoji.slice(0, 8)).toEqual([]);
+			expect(result.entry.reactions, emoji.slice(0, 8)).toBeUndefined();
+		}
+	});
+
+	it("takes a single grapheme cluster of up to 64 bytes and refuses one of 65, though both are one cluster", async () => {
+		let { context, chat, published } = harness();
+		let { ws, sent } = socket("ana");
+		let longest = "👍" + MARK.repeat(30);
+		let tooLong = "x" + MARK.repeat(32);
+		expect(new TextEncoder().encode(longest)).toHaveLength(64);
+		expect(new TextEncoder().encode(tooLong)).toHaveLength(65);
+		expect([...new Intl.Segmenter().segment(longest)]).toHaveLength(1);
+		expect([...new Intl.Segmenter().segment(tooLong)]).toHaveLength(1);
+		await react(context, ws, ask("a1", longest, true));
+		await react(context, ws, ask("a1", tooLong, true));
+		expect(sent).toMatchObject([
+			{ kind: "chat:react", emoji: longest },
+			{ kind: "session:error", message: "a reaction is a single emoji" },
+		]);
+		expect(chat.entries[1]!.reactions).toEqual([{ emoji: longest, handles: ["ana"] }]);
+		expect(published).toHaveLength(1);
+	});
+
+	it("takes every emoji the picker offers, so the picker and the server cannot drift apart", () => {
+		expect(offered.length).toBeGreaterThan(3_900);
+		expect(offered).toContain("🧑🏻‍❤️‍💋‍🧑🏼");
+		expect(offered.filter(emoji => !oneEmoji(emoji))).toEqual([]);
+	});
+
+	it("refuses a person's 21st different reaction to a message, and keeps and tells nothing of it", async () => {
+		let { context, chat, saved, published } = harness();
+		let ana = socket("ana");
+		let told: unknown[] = [];
+		for (let emoji of offered.slice(0, 20)) {
+			await react(context, ana.ws, ask("a1", emoji, true));
+		}
+		let savedBefore = saved.length;
+		let publishedBefore = published.length;
+		await react(context, ana.ws, ask("a1", offered[20]!, true), reacted => told.push(reacted));
+		expect(ana.sent.slice(0, 20).every(frame => frame.kind === "chat:react")).toBe(true);
+		expect(ana.sent.at(-1)).toMatchObject({
+			kind: "session:error",
+			message: "you can react to a message with at most 20 different emoji",
+		});
+		expect(ana.sent.at(-1)).not.toHaveProperty("code");
+		expect(saved).toHaveLength(savedBefore);
+		expect(published).toHaveLength(publishedBefore);
+		expect(told).toEqual([]);
+		expect(chat.entries[1]!.reactions!.map(reaction => reaction.emoji)).toEqual(
+			offered.slice(0, 20),
+		);
+	});
+
+	it("counts a person's reactions to one message, not those of other people or to other messages", async () => {
+		let { context, chat } = harness();
+		let ana = socket("ana");
+		let ben = socket("ben");
+		for (let emoji of offered.slice(0, 20)) await react(context, ana.ws, ask("a1", emoji, true));
+		// Ben has none of his own on that message, though the message has twenty emoji; he may
+		// join in on one of theirs and add one of his own, and Ana may react to another message.
+		await react(context, ben.ws, ask("a1", offered[0]!, true));
+		await react(context, ben.ws, ask("a1", offered[20]!, true));
+		await react(context, ana.ws, ask("m1", offered[20]!, true));
+		expect(refusals(ana.sent)).toEqual([]);
+		expect(refusals(ben.sent)).toEqual([]);
+		expect(chat.entries[1]!.reactions).toHaveLength(21);
+		expect(chat.entries[0]!.reactions).toEqual([{ emoji: offered[20]!, handles: ["ana"] }]);
+	});
+
+	it("keeps allowing a reaction taken back and added again at the limit, and gives the place back to another", async () => {
+		let { context, chat, published } = harness();
+		let ana = socket("ana");
+		let first = offered.slice(0, 20);
+		for (let emoji of first) await react(context, ana.ws, ask("a1", emoji, true));
+		// Asking again for one already held at the limit is answered as before, not refused.
+		await react(context, ana.ws, ask("a1", first[3]!, true, "again"));
+		expect(ana.sent.at(-1)).toMatchObject({ kind: "chat:react", rid: "again", on: true });
+		await react(context, ana.ws, ask("a1", first[3]!, false));
+		expect(chat.entries[1]!.reactions).toHaveLength(19);
+		await react(context, ana.ws, ask("a1", first[3]!, true));
+		expect(chat.entries[1]!.reactions!.flatMap(reaction => reaction.handles)).toHaveLength(20);
+		expect(refusals(ana.sent)).toEqual([]);
+		// A place she gave up is one she may fill with another, and then she is at the limit again.
+		await react(context, ana.ws, ask("a1", first[3]!, false));
+		await react(context, ana.ws, ask("a1", offered[20]!, true));
+		expect(refusals(ana.sent)).toEqual([]);
+		await react(context, ana.ws, ask("a1", first[3]!, true));
+		expect(refusals(ana.sent)).toMatchObject([{ message: expect.stringContaining("at most 20") }]);
+		expect(published.at(-1)).toMatchObject({
+			reactions: expect.arrayContaining([{ emoji: offered[20]!, handles: ["ana"] }]),
+		});
 	});
 });
 
