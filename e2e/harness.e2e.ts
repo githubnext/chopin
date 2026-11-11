@@ -776,8 +776,9 @@ test("images the Planner makes reach Chat as stored, generated images only reade
 	for (let picture of pictures) {
 		let image = chat.getByRole("img", { name: picture.alt, exact: true });
 		await expect(image).toBeVisible();
+		// A tile is drawn from the server's 360px copy, or the image itself where it is narrower.
 		await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth))
-			.toBe(picture.width);
+			.toBe(Math.min(picture.width, 360));
 	}
 	// Three images are a gallery, whose tiles carry no attribution: each image is told as generated
 	// in the lightbox, as it is shown.
