@@ -11,8 +11,18 @@ import {
 	ComposerVoiceButton,
 } from "@/components/assistant-ui/elements/composer";
 import { ContextBreakdown } from "@/components/assistant-ui/elements/context-breakdown";
-import { MessageAttachments } from "@/components/assistant-ui/elements/message-attachment";
 import { createDirectiveText } from "@/components/assistant-ui/elements/directive-text";
+import {
+	Image,
+	ImageActions,
+	ImageFilename,
+	ImagePreview,
+	ImageRoot,
+	ImageSource,
+	ImageZoom,
+} from "@/components/assistant-ui/elements/image";
+import { ImageGallery } from "@/components/assistant-ui/elements/image-gallery";
+import { MessageAttachments } from "@/components/assistant-ui/elements/message-attachment";
 import {
 	ModelSelectorContent,
 	ModelSelectorRoot,
@@ -188,10 +198,62 @@ const WARN_USAGE: Chat.ContextUsage = {
 	contextWindow: 128_000,
 };
 
+const SAMPLE_PNG =
+	"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAIAAABxZ0isAAAAEUlEQVR4nGOwyavAihgGUgIA5Fc2Yf0kXjAAAAAASUVORK5CYII=";
+const BROKEN_PNG = "data:image/png;base64,AAAA";
+
+const IMAGE_PART = {
+	type: "image" as const,
+	image: SAMPLE_PNG,
+	filename: "write-back.png",
+};
+
+const GALLERY_IMAGES = [
+	{
+		id: "cap",
+		src: SAMPLE_PNG,
+		alt: "The cap is a balance of 100.",
+		caption: "Faster, and a crash can lose the last writes.",
+		source: { label: "Generated" },
+	},
+	{
+		id: "back",
+		src: SAMPLE_PNG,
+		alt: "Write-back: write, cache, then database later",
+		caption: "Reference diagram",
+		source: { label: "example.com", url: "https://example.com" },
+	},
+	{
+		id: "through",
+		src: SAMPLE_PNG,
+		alt: "Write-through: write, cache, database",
+	},
+	{
+		id: "broken",
+		src: BROKEN_PNG,
+		alt: "A picture that could not load",
+	},
+	{
+		id: "fifth",
+		src: SAMPLE_PNG,
+		alt: "Read-through cache",
+	},
+	{
+		id: "sixth",
+		src: SAMPLE_PNG,
+		alt: "Write-around cache",
+	},
+	{
+		id: "seventh",
+		src: SAMPLE_PNG,
+		alt: "Invalidation flow",
+	},
+] as const;
+
 /**
  * Copied assistant-ui elements, drawn as assistant-ui draws them: the model selector,
- * markdown-text, the context ring and the context breakdown from the registry, driven by
- * Chopin's own state through props. `e2e/design` measures them.
+ * markdown-text, image, image gallery, the context ring and the context breakdown from the
+ * registry, driven by Chopin's own state through props. `e2e/design` measures them.
  */
 export function AssistantUiPlate() {
 	let models = modelOptions(CATALOG);
@@ -317,6 +379,50 @@ export function AssistantUiPlate() {
 						limit={warnBreakdown.limit}
 						segments={warnBreakdown.segments}
 					/>
+				</div>
+				<div className="design-audit-aui-wide">
+					<StateLabel>Image: outline, with actions and source</StateLabel>
+					<ImageRoot size="default" variant="outline">
+						<ImageZoom alt="Write-back diagram" src={SAMPLE_PNG}>
+							<ImagePreview alt="Write-back diagram" fit="contain" ratio="4:3" src={SAMPLE_PNG} />
+						</ImageZoom>
+						<ImageFilename>write-back.png</ImageFilename>
+						<ImageSource label="example.com" url="https://example.com" />
+						<ImageActions onRegenerate={() => {}} part={IMAGE_PART} />
+					</ImageRoot>
+				</div>
+				<div className="design-audit-aui-wide">
+					<StateLabel>Image: outline small, outline large, ghost, muted broken</StateLabel>
+					<ImageRoot size="sm" variant="outline">
+						<ImagePreview alt="Small preview" ratio="4:3" src={SAMPLE_PNG} />
+					</ImageRoot>
+					<ImageRoot size="lg" variant="outline">
+						<ImagePreview alt="Large preview" ratio="16:9" src={SAMPLE_PNG} />
+					</ImageRoot>
+					<ImageRoot size="default" variant="ghost">
+						<ImagePreview alt="Ghost preview" ratio="1:1" src={SAMPLE_PNG} />
+					</ImageRoot>
+					<ImageRoot size="full" variant="muted">
+						<ImagePreview alt="Broken preview" src={BROKEN_PNG} />
+					</ImageRoot>
+				</div>
+				<div className="design-audit-aui-wide">
+					<StateLabel>Image: generating and blocked</StateLabel>
+					<Image
+						filename="generating.png"
+						image={SAMPLE_PNG}
+						status={{ type: "running" }}
+						type="image"
+					/>
+					<Image
+						image={SAMPLE_PNG}
+						status={{ reason: "content-filter", type: "incomplete" }}
+						type="image"
+					/>
+				</div>
+				<div className="design-audit-aui-wide">
+					<StateLabel>Image gallery: tiles, broken tile, overflow and lightbox</StateLabel>
+					<ImageGallery images={GALLERY_IMAGES} maxVisible={6} />
 				</div>
 			</div>
 			<div className="design-audit-aui-markdown">

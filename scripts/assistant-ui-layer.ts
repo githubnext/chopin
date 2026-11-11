@@ -25,7 +25,7 @@ export const LAYER_FILE = "apps/web/src/components/geometry.css";
 
 /** The variables a copied class can read geometry from; colours and fonts are not geometry. */
 const GEOMETRY =
-	/^--(spacing|radius-.+|text-.+|font-weight-.+|tracking-.+|leading-.+|shadow-.+|inset-shadow-.+|drop-shadow-.+|ease-.+|default-transition-(duration|timing-function))$/;
+	/^--(spacing|radius(?:-.+)?|text-.+|font-weight-.+|tracking-.+|leading-.+|shadow(?:-.+)?|inset-shadow-.+|drop-shadow(?:-.+)?|ease-.+|default-transition-(duration|timing-function))$/;
 
 /** What a press scales. */
 const PRESSABLE = ["button", '[role="button"]'];
@@ -109,16 +109,17 @@ export function tinted(value: string): string {
 }
 
 export function layerCss({ tailwind, chopin, slots }: LayerInput): string {
-	let wanted = declarations(tailwind, rule => rule.params === "default")
+	let wanted = declarations(tailwind, rule => rule.params.split(/\s+/).includes("default"))
 		.filter(([name]) => GEOMETRY.test(name))
 		.map(([name, value]): Variable => [name, /shadow/.test(name) ? tinted(value) : value]);
 	let own = declarations(chopin, () => true);
 	let declared = new Set(own.map(([name]) => name));
 	let resets = own.filter(([name, value]) => name.endsWith("-*") && value === "initial")
 		.map(([name]) => name.slice(0, -1));
-	// Everything Chopin's theme changed or dropped. What it left alone is already Tailwind's.
+	// Everything Chopin's theme changed or dropped (`--foo-*: initial` also drops bare `--foo`).
 	let touched = wanted.filter(([name]) =>
-		declared.has(name) || resets.some(prefix => name.startsWith(prefix))
+		declared.has(name)
+		|| resets.some(prefix => name === prefix.slice(0, -1) || name.startsWith(prefix))
 	);
 	let dropped = touched.filter(([name]) => !declared.has(name));
 	let chopinValue = new Map(own);
@@ -174,6 +175,11 @@ ${lines(touched)}
 ${borders} {
 		border-color: var(--color-border);
 	}
+
+	:focus-visible:is(${roots.join(", ")})${OWN},
+	${copies(1)} :focus-visible${OWN} {
+		outline-color: var(--color-ring);
+	}
 }
 
 /*
@@ -204,10 +210,10 @@ ${copies(0)} :focus-visible${OWN} {
 }
 
 /*
- * Where motion is reduced the endless motion of a copy (the pulse of a recording's dot, and the
- * shimmer of a label that says it is working, which assistant-ui's own \`motion-reduce\` utility does
- * not stop) holds still, as Chopin's own motion does. The subject is the class, a handful of roots
- * above it.
+ * Where motion is reduced the endless motion of a copy (the pulse of a recording's dot or an
+ * image's placeholder, and the shimmer of a label that says it is working, which assistant-ui's
+ * own \`motion-reduce\` utility does not stop) holds still, as Chopin's own motion does. The
+ * subject is the class, a handful of roots above it.
  */
 @media (prefers-reduced-motion: reduce) {
 	.animate-pulse:is(${roots.join(", ")}),

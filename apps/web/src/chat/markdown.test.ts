@@ -222,7 +222,9 @@ test("the words around a gallery stay where they were written, and the images ar
 	);
 	expect(markup.indexOf("Before")).toBeLessThan(markup.indexOf("data-chat-image-gallery"));
 	expect(markup.indexOf("data-chat-image-gallery")).toBeLessThan(markup.indexOf(" after."));
-	expect(markup.indexOf(" after.")).toBeLessThan(markup.indexOf('<p class="aui-md-p">Next paragraph.</p>'));
+	expect(markup.indexOf(" after.")).toBeLessThan(
+		markup.indexOf('<p class="aui-md-p">Next paragraph.</p>'),
+	);
 	expect(markup).not.toMatch(/<p[\s>][^]*<div class="chat-image-gallery/);
 });
 
