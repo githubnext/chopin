@@ -1,10 +1,10 @@
 /**
  * The ports the browser suite binds, in one place.
  *
- * Every port is written as the number it has always had (8788 to 8804) and
+ * Every port is written as the number it has always had (8788 to 8805) and
  * passed through `e2ePort`. With `E2E_PORT_BASE` unset it is returned as
  * written. With `E2E_PORT_BASE=9950` the whole suite moves together, 8788 to
- * 9950 and 8804 to 9966, so a machine that shares its ports can give the suite
+ * 9950 and 8805 to 9967, so a machine that shares its ports can give the suite
  * its own range.
  */
 const FIRST = 8788;
