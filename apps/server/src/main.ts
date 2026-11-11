@@ -24,7 +24,7 @@ import {
 	plannerRanWithoutOffer,
 	shutdownHarnesses,
 } from "./harness/harnesses";
-import { chooseModel, publishModelState, turnModel } from "./chat/model-choice";
+import { chooseModel, publishModelState, turnModel, turnReadsImages } from "./chat/model-choice";
 import type { ModelChoiceDeps } from "./chat/model-choice";
 import {
 	admitAgent,
@@ -768,6 +768,7 @@ function conversation(
 		modelChoice: () => turnModel(modelChoices, room.id),
 		commands: () => modelChoices.commands?.(room.id) ?? Promise.resolve(undefined),
 		fileExists: (path, sessionId) => repositoryFiles.has(room.id, repository, sessionId, path),
+		readsImages: () => turnReadsImages(modelChoices, room.id),
 		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => ownerAvailable(room.id),
 		jobs: config.backgroundJobs ? jobService : undefined,

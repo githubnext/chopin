@@ -54,6 +54,14 @@ export const AGENT_FEATURES = {
 	 * only the deployment's own `model`, as before.
 	 */
 	capabilityCatalog: "capability-catalog",
+	/**
+	 * A turn carries the images and text files a person sent with the message that began it, in
+	 * `attachments`, each with its bytes as base64 (at most `MAX_LINK_ATTACHMENT_BYTES` in all). A
+	 * client that does not ask never sees the field: its turn carries the text files written into
+	 * the prompt, and a note in words for an image it cannot be given. Images are only ever sent
+	 * where the model the turn names reports `image` among its `inputTypes`.
+	 */
+	attachments: "attachments",
 } as const;
 
 /** How often a client that offered `restart-notice` retries a `resume` refused with `retry`. */
@@ -99,6 +107,7 @@ const MAX_RUNS = 64;
 const MAX_STAGES = 64;
 const MAX_QUESTIONS = 16;
 const MAX_OPTIONS = 32;
+const MAX_TURN_ATTACHMENTS = 20;
 /** The most questions one link keeps open at a time. */
 const MAX_OPEN_REQUESTS = 16;
 
@@ -175,6 +184,20 @@ export const streamPartSchema = z.discriminatedUnion("type", [
 	z.strictObject({ type: z.literal("error"), error: note }),
 ]);
 
+/**
+ * One image or text file of a turn. `kind` is what its bytes are, `mediaType` the type it was kept
+ * under (a text file is always `text/plain`), `size` its length in bytes and `data` those bytes as
+ * base64, never more than `MAX_LINK_ATTACHMENT_BYTES` across a turn.
+ */
+export const turnAttachment = z.strictObject({
+	id,
+	name: z.string().min(1).max(255),
+	kind: z.enum(["image", "file"]),
+	mediaType: z.string().min(1).max(MAX_NAME),
+	size: count,
+	data: z.string().max(MAX_LINK_MESSAGE_BYTES),
+});
+
 /** A plain identifier: no spaces, quotes, `:` or `=`, so it cannot hold an assignment. */
 const identifier = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
 
@@ -198,6 +221,11 @@ export const catalogModelSchema = z.looseObject({
 	provider: z.looseObject({ id: z.string(), name: z.string().optional() }).optional(),
 	description: z.string().optional(),
 	thinkingLevels: z.array(z.string()).optional(),
+	/**
+	 * What the model reads: `text`, and `image` where it reads images. Absent reads as text only,
+	 * so an image is never sent with a turn to a model that has not said it reads them.
+	 */
+	inputTypes: z.array(z.string()).optional(),
 });
 
 /**
@@ -538,6 +566,11 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 		 * as it spelled it. Absent when nobody chose one: the client uses its own.
 		 */
 		thinkingLevel: z.string().optional(),
+		/**
+		 * With `attachments`: the images and files sent with the message that began the turn, in the
+		 * order they were sent. Absent when it had none, and always for a client that did not ask.
+		 */
+		attachments: z.array(turnAttachment).max(MAX_TURN_ATTACHMENTS).optional(),
 		tools: z.array(toolSpec).max(MAX_TOOLS),
 		responseFormat: responseFormat.optional(),
 	}),
@@ -570,6 +603,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 
 export type CapabilityCatalog = z.infer<typeof capabilityCatalogSchema>;
 export type CatalogModel = z.infer<typeof catalogModelSchema>;
+export type TurnAttachment = z.infer<typeof turnAttachment>;
 export type CatalogCommand = z.infer<typeof catalogCommandSchema>;
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 export type ServerMessage = z.infer<typeof serverMessageSchema>;

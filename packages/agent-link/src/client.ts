@@ -31,6 +31,7 @@ export const WIRE = {
 	resumableSessions: "resumable-sessions",
 	restartNotice: "restart-notice",
 	capabilityCatalog: "capability-catalog",
+	attachments: "attachments",
 	/** How often a client retries a `resume` refused with `retry`, after a `restarting` notice. */
 	restartResumeRetryMs: 250,
 } as const;
@@ -104,6 +105,12 @@ export type AgentOptions = {
 	 * document's composer offers no choice of model. `AgentClient.report` replaces it later.
 	 */
 	capabilities?: CapabilityCatalog;
+	/**
+	 * Asks for `attachments`: a turn then carries the images and text files sent with the message
+	 * that began it (`TurnContext.message.attachments`), which a client that does not ask is never
+	 * sent.
+	 */
+	attachments?: boolean;
 };
 
 /** A question this client asked and still waits on, which a later link may carry on. */
@@ -224,6 +231,7 @@ export function linkSocket(
 	token: string,
 	resumable = false,
 	catalog = false,
+	attachments = false,
 ): WebSocket {
 	return new (WebSocket as unknown as HeaderWebSocket)(url, {
 		headers: {
@@ -233,6 +241,7 @@ export function linkSocket(
 				WIRE.decisionOptionPreviews,
 				...(resumable ? [WIRE.resumableSessions, WIRE.restartNotice] : []),
 				...(catalog ? [WIRE.capabilityCatalog] : []),
+				...(attachments ? [WIRE.attachments] : []),
 			].join(", "),
 		},
 		protocols: [WIRE.subprotocol],
@@ -320,6 +329,7 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 		options.token,
 		resumable,
 		options.capabilities !== undefined,
+		options.attachments === true,
 	);
 	let turns = new Map<string, TurnState>();
 	let asks = new Map<string, PendingAsk>();

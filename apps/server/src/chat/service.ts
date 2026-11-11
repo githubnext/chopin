@@ -22,7 +22,7 @@ import { imagePath } from "../images/format";
 import { ulid } from "@chopin/dialect";
 
 import { PLANNER_TOOL_NAMES } from "../harness/tool-names";
-import type { PlannerSession } from "../harness/session";
+import type { PlannerFiles, PlannerSession } from "../harness/session";
 import { verifiedCheckout } from "../harness/atomic/checkout";
 import { rememberCheckout } from "../harness/atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
@@ -32,10 +32,13 @@ import type { VisualAdmission } from "../agent/visual-admission";
 import type { ChildDocuments } from "./children";
 import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
+import { checkMessageAttachments, refusalText } from "@chopin/protocol/attachment";
 import { COMMAND_KINDS } from "@chopin/protocol/commands";
 import { UNREADABLE_NOTICE } from "@chopin/protocol/model-choice";
 import { settledStages } from "@chopin/protocol/run-stages";
 
+import { attachmentLimits } from "../attachments/limits";
+import { wireAttachment } from "../attachments/wire";
 import {
 	annotatedText,
 	commandReference,
@@ -148,6 +151,8 @@ export type Waiting = Wire.Waiting & {
 	draft?: string;
 	/** The child the member had open, resolved when the message was accepted. */
 	focus?: Focus;
+	/** The images and files sent with this message, which its entry shows once it is in Chat. */
+	attachments?: Wire.Attachment[];
 	/** The child holding `thread`, when the thread is not in this document. */
 	threadChannel?: string;
 	/** See `Instruction`. */
@@ -554,12 +559,14 @@ function requestFingerprint(
 		: msg.references ?? [];
 	// Appended only when present, so replays of entries saved before focus existed still match.
 	let focus = (msg as { focus?: unknown }).focus;
+	let attachments = (msg as { attachments?: unknown }).attachments;
 	return digest(JSON.stringify([
 		principalId,
 		msg.to,
 		msg.text,
 		references,
 		...(focus !== undefined ? [focus] : []),
+		...(attachments !== undefined ? [{ attachments }] : []),
 		...(actor ? [{ actor }] : []),
 	]));
 }
@@ -858,6 +865,11 @@ export type Room = {
 	 * or undefined when the repository's files cannot be listed. Absent where nothing lists them.
 	 */
 	fileExists?: (path: string, sessionId: string) => Promise<boolean | undefined>;
+	/**
+	 * Whether the model the next turn would run reads images, by the catalog its harness reports
+	 * now. Absent where nothing is known, which reads as no.
+	 */
+	readsImages?: () => Promise<boolean>;
 	invokedBy?: string;
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
@@ -1119,6 +1131,58 @@ export async function invoke(
 	return context.plannerStarting().catch(() => {}).then(enqueue);
 }
 
+/**
+ * The files a send names, read from the server's own records and bound to the message in the order
+ * given. A file must be an upload of this sender to this document that no other message carries;
+ * the count and total are the server's; and an image goes only where the model reads images. A
+ * refusal is the words for the person, and `PASSING` where only storage was at fault.
+ */
+async function acceptAttachments(
+	context: Room,
+	ws: Socket,
+	requestId: string,
+	destination: Wire.Destination,
+	supplied: unknown,
+): Promise<{ attachments: Wire.Attachment[] } | { refusal: string; code?: typeof PASSING }> {
+	let limits = attachmentLimits(context.config);
+	if (!limits) return { refusal: "files are not accepted here" };
+	if (
+		!Array.isArray(supplied) || supplied.length === 0
+		|| supplied.some(id => typeof id !== "string" || id.length === 0 || id.length > 128)
+		|| new Set(supplied).size !== supplied.length
+	) return { refusal: "invalid files" };
+	if (supplied.length > limits.maxCount) return { refusal: refusalText("too-many", { limits }) };
+	let { chatAttachments } = context.auth.storage;
+	let ids = supplied as string[];
+	try {
+		let found = await Promise.all(ids.map(id => chatAttachments.get(context.room, id)));
+		let mine = found.filter(value =>
+			value && value.uploadedBy === ws.data.principalId
+			&& (value.entryId === undefined || value.entryId === requestId)
+		);
+		if (mine.length !== ids.length) return { refusal: refusalText("gone") };
+		let files = mine as NonNullable<(typeof mine)[number]>[];
+		let message = checkMessageAttachments(files.map(value => value.size), limits);
+		if (message) return { refusal: refusalText(message, { limits }) };
+		if (
+			destination === "planner" && files.some(value => value.kind === "image")
+			&& !await context.readsImages?.()
+		) return { refusal: refusalText("images-unavailable") };
+		if (
+			!await chatAttachments.bind({
+				channelId: context.room,
+				userId: ws.data.principalId,
+				ids,
+				entryId: requestId,
+			})
+		) return { refusal: refusalText("gone") };
+		return { attachments: files.map(wireAttachment) };
+	} catch (err) {
+		console.error("[chat] could not read a message's files:", err);
+		return { refusal: "files are temporarily unavailable", code: PASSING };
+	}
+}
+
 async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): Promise<void> {
 	let { chat, room, server } = context;
 	let suppliedRequestId = (msg as Request<Wire.Send> & { requestId?: unknown }).requestId;
@@ -1213,9 +1277,23 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	}
 	let text = projected.text;
 	let references = projected.references;
-	if (!text) return fail(ws, msg.rid, "message text is empty");
+	let attached: Wire.Attachment[] = [];
+	let suppliedAttachments = (msg as { attachments?: unknown }).attachments;
+	if (suppliedAttachments !== undefined) {
+		let accepted = await acceptAttachments(
+			context,
+			ws,
+			requestId,
+			destination,
+			suppliedAttachments,
+		);
+		if ("refusal" in accepted) return fail(ws, msg.rid, accepted.refusal, accepted.code);
+		attached = accepted.attachments;
+	}
+	if (!text && attached.length === 0) return fail(ws, msg.rid, "message text is empty");
 	if (chat.closed) return refuseClosed(ws, msg.rid);
 	let savedDelivery = delivery(destination, request, text, references);
+	let withAttachments = attached.length ? { attachments: attached } : {};
 
 	if (destination === "room") {
 		let entry: MemberEntry = {
@@ -1224,6 +1302,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			text,
 			ts: now(),
 			...(references?.length ? { references } : {}),
+			...withAttachments,
 			delivery: savedDelivery,
 		};
 		if (!context.commitRoomMessage) chat.entries.push(entry);
@@ -1256,6 +1335,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			text,
 			ts: now(),
 			...(references?.length ? { references } : {}),
+			...withAttachments,
 			delivery: savedDelivery,
 		}, {
 			id: ulid(),
@@ -1298,6 +1378,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			handle,
 			text,
 			references,
+			attachments: attached,
 			delivery: savedDelivery,
 			focus,
 		});
@@ -1321,6 +1402,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			handle,
 			text,
 			...(references?.length ? { references } : {}),
+			...withAttachments,
 			delivery: savedDelivery,
 			message: true,
 			sessionId: context.claimantSessionId,
@@ -1338,6 +1420,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		text,
 		ts: now(),
 		...(references?.length ? { references } : {}),
+		...withAttachments,
 		delivery: savedDelivery,
 		// Sent until its prompt is on its way to the machine; the turn says when.
 		...(context.deferred ? { deliveryState: "sent" as const } : {}),
@@ -1407,6 +1490,7 @@ async function deferMessage(
 		handle: string;
 		text: string;
 		references?: Wire.Reference[];
+		attachments?: Wire.Attachment[];
 		delivery: Delivery;
 		focus?: Focus;
 	},
@@ -1418,12 +1502,14 @@ async function deferMessage(
 		return fail(ws, msg.rid, "the queue is full", "planner-queue-full");
 	}
 	let { requestId, handle, text, references, focus } = input;
+	let withAttachments = input.attachments?.length ? { attachments: input.attachments } : {};
 	let entry: MemberEntry = {
 		id: requestId,
 		author: { kind: "member", handle },
 		text,
 		ts: now(),
 		...(references?.length ? { references } : {}),
+		...withAttachments,
 		delivery: input.delivery,
 		deliveryState: "sent",
 	};
@@ -1459,6 +1545,7 @@ async function deferMessage(
 		handle,
 		text,
 		...(references?.length ? { references } : {}),
+		...withAttachments,
 		delivery: input.delivery,
 		message: true,
 		posted: true,
@@ -2967,6 +3054,8 @@ async function run(
 			? new Set(opened.session.activeTools ?? PLANNER_TOOL_NAMES)
 			: undefined;
 		let prompt: string;
+		// The files sent with the message that began the turn, given with the first attempt's prompt.
+		let files: PlannerFiles | undefined;
 		if (jobTurn) {
 			prompt = jobTurn.prompt;
 		} else {
@@ -2987,6 +3076,15 @@ async function run(
 			prompt = compose(backscroll, handle, text, references, available, !!context.invokedBy);
 			let focus = chat.focus;
 			if (focus && !opening) prompt = `${focusContext(focus)}\n\n${prompt}`;
+			if (member && chat.entries.find(value => value.id === member.entryId)?.attachments?.length) {
+				let sent = await context.auth.storage.chatAttachments.forEntry(room, member.entryId);
+				if (sent.length) {
+					files = {
+						attachments: sent,
+						readsImages: !!await context.readsImages?.().catch(() => false),
+					};
+				}
+			}
 		}
 		if (member) markDelivered(context, member.entryId);
 		sendStarted = true;
@@ -3031,8 +3129,11 @@ async function run(
 			let { notice: _, ...choice } = picked ?? {};
 			let session = opened.session;
 			await publishPlannerReplies({
-				session: { stream: (text, abort) => session.stream(text, abort, choice) },
+				session: {
+					stream: (text, abort, _choice, sent) => session.stream(text, abort, choice, sent),
+				},
 				prompt,
+				...(files ? { files } : {}),
 				signal,
 				decide: context.decide,
 				// Only a card still holding its question counts: one a person discarded, or that
@@ -3411,6 +3512,7 @@ export function pending(chat: Chat): Waiting | undefined {
 			text: next.text,
 			ts: now(),
 			...(next.references?.length ? { references: next.references } : {}),
+			...(next.attachments?.length ? { attachments: next.attachments } : {}),
 			...(next.delivery ? { delivery: next.delivery } : {}),
 		};
 		chat.entries.push(entry);
@@ -3732,6 +3834,7 @@ async function removeNow(context: Room, ws: Socket, msg: Request<Wire.Delete>): 
 				if (queued) chat.waiting.push(queued);
 				return fail(ws, msg.rid, "could not delete message");
 			}
+			forgetFiles(context, msg.id);
 			return reply(ws, msg.rid, { kind: "chat:delete", ts: 0, id: msg.id });
 		}
 	}
@@ -3763,7 +3866,15 @@ async function removeNow(context: Room, ws: Socket, msg: Request<Wire.Delete>): 
 	}
 	reply(ws, msg.rid, { kind: "chat:delete", ts: 0, id: msg.id });
 	broadcast(server, room, { kind: "chat:removed", ts: 0, id: msg.id });
+	forgetFiles(context, msg.id);
 	if (item) void report(item, { status: "skipped" });
+}
+
+/** A deleted message's files go with it; a failure here only leaves bytes nobody can reach. */
+function forgetFiles(context: Room, entryId: string): void {
+	void context.auth.storage.chatAttachments.discardEntry(context.room, entryId).catch(err =>
+		console.error("[chat] a deleted message's files were not removed:", err)
+	);
 }
 
 /** Send a message that could not be delivered again, as it was. Only its author may. */

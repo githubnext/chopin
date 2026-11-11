@@ -6,6 +6,7 @@
 
 import {
 	catalogModel,
+	modelReadsImages,
 	refusedChoice,
 	resolveChoice,
 	unavailableNotice,
@@ -111,6 +112,15 @@ export async function turnModel(deps: ModelChoiceDeps, channelId: string): Promi
 			? { notice: unavailableNotice(catalog, resolved.unavailable, saved.modelName) }
 			: {}),
 	};
+}
+
+/**
+ * Whether the model the next turn would run reads images: the stored choice, checked against the
+ * catalog as it is now, or the harness's default. False where no catalog says so.
+ */
+export async function turnReadsImages(deps: ModelChoiceDeps, channelId: string): Promise<boolean> {
+	let [catalog, choice] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
+	return modelReadsImages(catalog, choice);
 }
 
 /**

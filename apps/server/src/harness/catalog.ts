@@ -57,6 +57,7 @@ export function remoteCatalog(
 				: {}),
 			...(model.description !== undefined ? { description: model.description } : {}),
 			...(model.thinkingLevels !== undefined ? { thinkingLevels: model.thinkingLevels } : {}),
+			...(model.inputTypes !== undefined ? { inputTypes: model.inputTypes } : {}),
 		})),
 		...(chosen !== undefined
 			? {

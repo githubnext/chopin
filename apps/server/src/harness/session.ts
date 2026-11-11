@@ -21,6 +21,8 @@ import {
 import { createHumanInput, PendingInputs } from "./atomic/human-input";
 import { type PlannerWorkspace, plannerWorkspace } from "./atomic/workspace";
 import { registerRemotePlanner, type RemotePlanner } from "./remote/registry";
+import { promptWithAttachments } from "../chat/attachment-prompt";
+import type { SentAttachment } from "../chat/attachment-prompt";
 import { startingTurn } from "./turn-level";
 
 import type { HarnessAgent } from "@ai-sdk/harness/agent";
@@ -58,6 +60,15 @@ function applied(outcome: { status: string; message: string }): void {
 
 export type PlannerChoice = { model?: string; thinkingLevel?: string };
 
+/**
+ * The images and files sent with the message that began a turn, and whether its model reads
+ * images. The first attempt of a turn is given them with its prompt; a repair is not.
+ */
+export type PlannerFiles = {
+	attachments: readonly SentAttachment[];
+	readsImages: boolean;
+};
+
 export type PlannerSession = {
 	/** The tools this session offers; a full Atomic session reports the set of its running turn. */
 	activeTools?: readonly string[];
@@ -70,6 +81,7 @@ export type PlannerSession = {
 		prompt: string,
 		abortSignal: AbortSignal,
 		choice?: PlannerChoice,
+		files?: PlannerFiles,
 	) => ReturnType<PlannerAgent["stream"]>;
 	destroy: () => Promise<void>;
 	/**
@@ -332,7 +344,7 @@ export async function openPlannerSession(
 						},
 					}
 					: {}),
-				stream: (prompt, abortSignal, choice) => {
+				stream: (prompt, abortSignal, choice, files) => {
 					// The remote turn aborts it when the turn ends or the link drops mid-tool.
 					let hostTools = remote ? new AbortController() : undefined;
 					if (remote) remote.hostTools = hostTools;
@@ -340,7 +352,9 @@ export async function openPlannerSession(
 					return startingTurn(choice?.thinkingLevel, () =>
 						agent.stream({
 							session: active,
-							prompt,
+							prompt: files?.attachments.length
+								? [promptWithAttachments(prompt, files.attachments, files.readsImages)]
+								: prompt,
 							abortSignal,
 							options: {
 								...channel,

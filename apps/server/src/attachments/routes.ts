@@ -10,12 +10,12 @@ import { ownOrigin } from "../auth/config";
 import { isChannelId } from "../channels/id";
 import { GitHubError } from "../github/client";
 import { StorageError } from "../storage/errors";
+import { wireAttachment } from "./wire";
 
-import type { Chat } from "@chopin/protocol";
 import type { HostedAuth } from "../auth/routes";
 import type { AuthenticatedSession } from "../auth/session";
 import type { Router } from "../http/router";
-import type { ChannelRecord, StoredChatAttachment } from "../storage/model";
+import type { ChannelRecord } from "../storage/model";
 
 /** Uploads one person may leave unsent in a document, as a multiple of what a message may carry. */
 const STAGED_FACTOR = 4;
@@ -42,16 +42,6 @@ function plain(status: number, message: string): Response {
 
 function refused(reason: AttachmentRefusal, status: number, limits: AttachmentLimits): Response {
 	return json({ error: refusalText(reason, { limits }), reason }, status);
-}
-
-export function wireAttachment(value: StoredChatAttachment): Chat.Attachment {
-	return {
-		id: value.id,
-		name: value.name,
-		kind: value.kind,
-		mimeType: value.mimeType,
-		size: value.size,
-	};
 }
 
 /**
@@ -175,7 +165,7 @@ export function registerAttachmentRoutes(
 			};
 			await storage.chatAttachments.put(attachment);
 			return json({
-				attachment: wireAttachment({ ...attachment, size: bytes.byteLength, createdAt: now }),
+				attachment: wireAttachment({ ...attachment, size: bytes.byteLength }),
 			}, 201);
 		} catch (err) {
 			return failed(err, auth);

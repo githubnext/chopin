@@ -230,6 +230,7 @@ export async function atomicCatalog(
 				provider: { id: model.provider, name: runtime.getProvider(model.provider)?.name },
 				description: contextLabel(model.contextWindow),
 				...(levels.length ? { thinkingLevels: levels } : {}),
+				...(model.input ? { inputTypes: [...model.input] } : {}),
 			};
 		}),
 		...(fallback ? { default: { model: defaultModel! } } : {}),
@@ -420,13 +421,36 @@ function bounded<T>(operation: Promise<T>, message: string): Promise<T> {
 	]).finally(() => clearTimeout(timer));
 }
 
-function promptText(prompt: HarnessV1PromptTurnOptions["prompt"]): string {
-	if (typeof prompt === "string") return prompt;
-	if (typeof prompt.content === "string") return prompt.content;
-	return prompt.content.map(part => {
-		if (part.type !== "text") throw unsupported(`${part.type} prompt parts`);
-		return part.text;
-	}).join("\n\n");
+/** An image as Atomic's prompt takes it. */
+type ImageContent = { type: "image"; data: string; mimeType: string };
+
+/**
+ * What a turn's prompt comes to for Atomic: its text, with each text file written into it under its
+ * name, and each image as the image Atomic's own prompt takes. Anything else is not offered.
+ */
+export function promptParts(
+	prompt: HarnessV1PromptTurnOptions["prompt"],
+): { text: string; images: ImageContent[] } {
+	if (typeof prompt === "string") return { text: prompt, images: [] };
+	if (typeof prompt.content === "string") return { text: prompt.content, images: [] };
+	let texts: string[] = [];
+	let images: ImageContent[] = [];
+	for (let part of prompt.content) {
+		if (part.type === "text") texts.push(part.text);
+		else if (part.type === "image" || part.type === "file" && part.mediaType.startsWith("image/")) {
+			let data = part.type === "image" ? part.image : part.data;
+			let mimeType = part.mediaType ?? "image/png";
+			if (!(data instanceof Uint8Array)) throw unsupported("image prompt parts that are not bytes");
+			images.push({ type: "image", data: Buffer.from(data).toString("base64"), mimeType });
+		} else if (part.type === "file" && part.data instanceof Uint8Array) {
+			texts.push(
+				`<file name=${JSON.stringify(part.filename ?? "file")}>\n${
+					new TextDecoder().decode(part.data)
+				}\n</file>`,
+			);
+		} else throw unsupported(`${part.type} prompt parts`);
+	}
+	return { text: texts.join("\n\n"), images };
 }
 
 function sameNames(actual: readonly string[], expected: readonly string[]): boolean {
@@ -950,7 +974,7 @@ export function createAtomicAdapter(
 				async doPromptTurn(turn: PlannerTurn): Promise<HarnessV1PromptControl> {
 					if (closed) throw new Error("Atomic session is closed.");
 					if (current) throw new Error("Atomic session already has an active turn.");
-					let text = promptText(turn.prompt);
+					let { text, images } = promptParts(turn.prompt);
 					let agent = await prepare(turn);
 					let structured = turn.responseFormat?.type === "json";
 					let names = full
@@ -996,7 +1020,10 @@ export function createAtomicAdapter(
 							if (!run.stopped) {
 								run.emit({ type: "stream-start", modelId: agent.model?.id });
 								await agent.agent.waitForIdle();
-								await agent.prompt(text, { expandPromptTemplates: !!full });
+								await agent.prompt(text, {
+									expandPromptTemplates: !!full,
+									...(images.length ? { images } : {}),
+								});
 							}
 							if (run.failure) throw run.failure;
 							if (run.stopped) return;

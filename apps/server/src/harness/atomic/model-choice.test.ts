@@ -71,6 +71,8 @@ describe("the catalog Atomic offers for a document's Planner", () => {
 		expect(deep!.thinkingLevels).toEqual(["off", "minimal", "low", "medium", "high"]);
 		let plain = catalog.models.find(model => model.id === "stub/plain");
 		expect(plain).toMatchObject({ name: "Plain", description: "128K token context" });
+		// What the model reads is Atomic's own word for it, so a composer sends only images it can.
+		expect(plain!.inputTypes).toEqual(["text"]);
 		expect("thinkingLevels" in plain!).toBe(false);
 		expect(catalog.default).toEqual({ model: "stub/plain" });
 	});
