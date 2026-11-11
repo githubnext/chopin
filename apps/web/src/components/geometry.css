@@ -580,6 +580,9 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 @media (prefers-reduced-motion: reduce) {
 	.animate-pulse:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="context"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="image"], [data-slot|="input"], [data-slot|="markdown"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]),
 	.shimmer:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="context"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="image"], [data-slot|="input"], [data-slot|="markdown"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]),
+	.animate-in:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="context"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="image"], [data-slot|="input"], [data-slot|="markdown"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]),
+	[data-open]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="context"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="image"], [data-slot|="input"], [data-slot|="markdown"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]),
+	[data-closed]:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="context"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="image"], [data-slot|="input"], [data-slot|="markdown"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"], [data-slot|="tooltip"]),
 	:is(
 		[data-slot|="button"],
 		[data-slot|="command"],
@@ -611,8 +614,57 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 		[data-slot|="popover"],
 		[data-slot|="textarea"],
 		[data-slot|="tooltip"]
-	) .shimmer {
+	) .shimmer,
+	:is(
+		[data-slot|="button"],
+		[data-slot|="command"],
+		[data-slot|="composer"],
+		[data-slot|="context"],
+		[data-slot|="dialog"],
+		[data-slot|="directive"],
+		[data-slot|="image"],
+		[data-slot|="input"],
+		[data-slot|="markdown"],
+		[data-slot|="message"],
+		[data-slot|="model"],
+		[data-slot|="popover"],
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
+	) .animate-in,
+	:is(
+		[data-slot|="button"],
+		[data-slot|="command"],
+		[data-slot|="composer"],
+		[data-slot|="context"],
+		[data-slot|="dialog"],
+		[data-slot|="directive"],
+		[data-slot|="image"],
+		[data-slot|="input"],
+		[data-slot|="markdown"],
+		[data-slot|="message"],
+		[data-slot|="model"],
+		[data-slot|="popover"],
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
+	) [data-open],
+	:is(
+		[data-slot|="button"],
+		[data-slot|="command"],
+		[data-slot|="composer"],
+		[data-slot|="context"],
+		[data-slot|="dialog"],
+		[data-slot|="directive"],
+		[data-slot|="image"],
+		[data-slot|="input"],
+		[data-slot|="markdown"],
+		[data-slot|="message"],
+		[data-slot|="model"],
+		[data-slot|="popover"],
+		[data-slot|="textarea"],
+		[data-slot|="tooltip"]
+	) [data-closed] {
 		animation: none;
+		transition: none;
 	}
 }
 

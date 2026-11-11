@@ -1,0 +1,186 @@
+--- a/apps/web/src/components/assistant-ui/elements/image.tsx
++++ b/apps/web/src/components/assistant-ui/elements/image.tsx
+@@ -1,12 +1,15 @@ Fragment and React prop types for the preview and action extension points
+ "use client";
+ 
+ import {
++  Fragment,
+   memo,
+   useState,
+   useEffect,
+   useCallback,
+   useRef,
++  type ComponentProps,
+   type PropsWithChildren,
++  type ReactNode,
+ } from "react";
+ import { createPortal } from "react-dom";
+ import { cva, type VariantProps } from "class-variance-authority";
+@@ -203,13 +206,29 @@ Preview extension points: measured ratio flag, controlled load status, and attribute/content slots
+ 
+ type ImagePreviewProps = Omit<React.ComponentProps<"img">, "children"> & {
+   containerClassName?: string | undefined;
+-  ratio?: "auto" | "1:1" | "4:3" | "16:9" | "9:16" | undefined;
++  containerProps?:
++    | Omit<ComponentProps<"div">, "children" | "className" | "style">
++    | undefined;
++  loadingProps?:
++    | Omit<ComponentProps<"div">, "children" | "className" | "style">
++    | undefined;
++  errorProps?:
++    | Omit<ComponentProps<"div">, "children" | "className" | "style">
++    | undefined;
++  errorChildren?: ReactNode;
++  status?: "loading" | "loaded" | "error" | undefined;
++  ratio?: "auto" | "1:1" | "4:3" | "16:9" | "9:16" | "custom" | undefined;
+   fit?: "cover" | "contain" | undefined;
+ };
+ 
+ function ImagePreview({
+   className,
+   containerClassName,
++  containerProps,
++  loadingProps,
++  errorProps,
++  errorChildren,
++  status,
+   ratio = "auto",
+   fit = "contain",
+   onLoad,
+@@ -222,8 +241,8 @@ Controlled load and error status so unavailable or pending local sources never request an empty or unsafe URL
+   const [loadedSrc, setLoadedSrc] = useState<string | undefined>(undefined);
+   const [errorSrc, setErrorSrc] = useState<string | undefined>(undefined);
+ 
+-  const loaded = loadedSrc === src;
+-  const error = errorSrc === src;
++  const loaded = status !== undefined ? status === "loaded" : loadedSrc === src;
++  const error = status !== undefined ? status === "error" : errorSrc === src;
+   const fixedRatio = ratio !== "auto";
+   const ratioClassName =
+     ratio === "1:1"
+@@ -251,11 +270,13 @@ Container and loading attribute slots on the preview and its loading placeholder
+         fixedRatio ? ratioClassName : "min-h-32",
+         containerClassName,
+       )}
++      {...containerProps}
+     >
+       {!loaded && !error && (
+         <div
+           data-slot="image-preview-loading"
+           className="bg-muted/50 absolute inset-0 flex items-center justify-center"
++          {...loadingProps}
+         >
+           <ImageIcon className="text-muted-foreground size-8 animate-pulse" />
+         </div>
+@@ -267,10 +288,12 @@ Error attribute and message slots, and skipping the img tag while no safe URL is ready
+             "bg-muted/50 flex min-h-32 items-center justify-center p-4",
+             fixedRatio && "absolute inset-0",
+           )}
++          {...errorProps}
+         >
+           <ImageOffIcon className="text-muted-foreground size-8" />
++          {errorChildren}
+         </div>
+-      ) : (
++      ) : src !== undefined ? (
+         <img
+           ref={imgRef}
+           src={src}
+@@ -295,7 +318,7 @@ Close the conditional img branch when no URL is ready yet
+           }}
+           {...props}
+         />
+-      )}
++      ) : null}
+     </div>
+   );
+ }
+@@ -545,8 +568,27 @@ Action item and group prop types so Chopin can drive copy, save, open and external-link actions
+   );
+ }
+ 
++export type ImageActionItem = {
++  key: string;
++  slot?: string | undefined;
++  label: string;
++  icon: ReactNode;
++  href?: string | undefined;
++  onClick?: (() => void) | undefined;
++  props?:
++    | Omit<
++        ComponentProps<"button"> & ComponentProps<"a">,
++        "children" | "className" | "style"
++      >
++    | undefined;
++};
++
+ export type ImageActionsProps = {
+-  part: ImageMessagePart;
++  part?: ImageMessagePart | undefined;
++  actions?: readonly ImageActionItem[] | undefined;
++  groupProps?:
++    | Omit<ComponentProps<"div">, "children" | "className" | "style">
++    | undefined;
+   /**
+    * Wire to your own generation call to show a regenerate button. The button
+    * renders only when this is set and the part carries a `prompt`.
+@@ -585,21 +627,44 @@ Render caller-supplied action buttons and links through the registry's own button classes
+   );
+ }
+ 
+-function ImageActions({ part, onRegenerate, className }: ImageActionsProps) {
++function ImageActions({
++  part,
++  actions,
++  groupProps,
++  onRegenerate,
++  className,
++}: ImageActionsProps) {
+   return (
+     <div
+       data-slot="image-actions"
+       className={cn("flex items-center gap-1 p-1", className)}
++      {...groupProps}
+     >
+-      <button
+-        type="button"
+-        onClick={() => downloadImagePart(part)}
+-        data-slot="image-download"
+-        aria-label="Download image"
++      {(actions ?? (part ? [undefined] : [])).map((action, index) => {
++        const ActionTag = action?.href ? "a" : "button";
++        return (
++          <Fragment key={action?.key ?? index}>
++      <ActionTag
++        type={action?.href ? undefined : "button"}
++        href={action?.href}
++        onClick={
++          action ? action.onClick : () => part && downloadImagePart(part)
++        }
++        data-slot={action?.slot ?? "image-download"}
++        aria-label={action ? action.label : "Download image"}
++        {...action?.props}
+         className="hover:bg-muted inline-flex size-7 items-center justify-center rounded"
+       >
++        {action ? (
++          action.icon
++        ) : (
+         <DownloadIcon className="size-4" />
+-      </button>
++        )}
++      </ActionTag>
++          </Fragment>
++        );
++      })}
++      {!actions && part && (
+       <button
+         type="button"
+         onClick={() => {
+@@ -611,6 +676,7 @@ Keep the default copy button when no custom action list is given
+       >
+         <CopyIcon className="size-4" />
+       </button>
++      )}
+       {onRegenerate && <RegenerateButton onRegenerate={onRegenerate} />}
+     </div>
+   );

@@ -31,14 +31,18 @@
 			"registry": "@assistant-ui",
 			"item": "elements-image-gallery",
 			"version": "assistant-ui/assistant-ui@437b410726e2",
-			"sha256": "059480306d8ec9461efb1c34929c16db6a980dcb3c9ba7c03baff7fa7dd7c20d"
+			"sha256": "059480306d8ec9461efb1c34929c16db6a980dcb3c9ba7c03baff7fa7dd7c20d",
+			"patch": "apps/web/src/components/assistant-ui/elements/image-gallery.tsx.patch",
+			"patchSha256": "cfc7a3f5c3beccbf8e1908e462543ac618221ea047e81407b3dec6ad1d0b37d7"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/elements/image.tsx",
 			"registry": "@assistant-ui",
 			"item": "image",
 			"version": "assistant-ui/assistant-ui@437b410726e2",
-			"sha256": "916b2ca0f1097a2eb22e6e5c3ffd39a918dec71abff424b6b8795939733d53fb"
+			"sha256": "916b2ca0f1097a2eb22e6e5c3ffd39a918dec71abff424b6b8795939733d53fb",
+			"patch": "apps/web/src/components/assistant-ui/elements/image.tsx.patch",
+			"patchSha256": "de81ee33112ba40ce561d183887352ce74c3b6db1b40696cd007ee8e8e29b5dd"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/elements/markdown-text.tsx",
@@ -67,7 +71,7 @@
 			"file": "apps/web/src/components/assistant-ui/elements/surfaces.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-surfaces",
-			"version": "assistant-ui/assistant-ui@7db1f744a09e",
+			"version": "assistant-ui/assistant-ui@437b410726e2",
 			"sha256": "5d81fbb669e67ae20026cd30ed57efc51a5e3ee0f4f5d265e1723de75359b8fa"
 		},
 		{
@@ -95,14 +99,14 @@
 			"file": "apps/web/src/components/assistant-ui/utils/range.ts",
 			"registry": "@assistant-ui",
 			"item": "elements-range",
-			"version": "assistant-ui/assistant-ui@7db1f744a09e",
+			"version": "assistant-ui/assistant-ui@437b410726e2",
 			"sha256": "555d880ea1ac3a2b8f0cdbe76bece147e72f6748a07a643dbe404957c64d451d"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/utils/useIsomorphicLayoutEffect.ts",
 			"registry": "@assistant-ui",
 			"item": "elements-surfaces",
-			"version": "assistant-ui/assistant-ui@7db1f744a09e",
+			"version": "assistant-ui/assistant-ui@437b410726e2",
 			"sha256": "8db117d730e640655e5099e086af4e00d545c283839d9ef5885ca93419d51893"
 		},
 		{
@@ -110,7 +114,7 @@
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "b90d3bc25f1afb7b49605e5aa46ba42a53b9c4e22ca8caa321d5980244fdd3b4"
+			"sha256": "5bb3b0eb525a40d0d13fae0d007acd575ef61daf6d465577b65b66e42ace4450"
 		},
 		{
 			"file": "apps/web/src/components/hooks/use-copy-to-clipboard.ts",
