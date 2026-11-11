@@ -498,7 +498,7 @@ ownership are unchanged; only authorship changes. The connection's `handle`
 becomes the roster ID (never a GitHub login, because a colon is not valid in
 one) and every handler derives chat, comment, and decision authorship from it,
 ignoring client-supplied authors. Chat retry fingerprints include the actor,
-queued messages are withdrawn only by their author, and questionnaires keep one
+and questionnaires keep one
 shared draft and one winning submission. Stored fictional authors are plain
 strings, so they survive restart and are never resolved as GitHub users.
 

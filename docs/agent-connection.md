@@ -357,13 +357,11 @@ resuming, except `unavailable`: Chopin could not decide, so the refusal carries
 ### Without an attached Planner
 
 On a server running `HARNESS=remote`, an `@chopin` message in the browser and
-an MCP `invoke_planner` call for a document with no attached client are never refused
-for it: they are [saved](hosted-agent.md#saved-requests), appear in
-Chat as sent, and start once a client attaches, in hosted mode and under `AUTH_MODE=local`
-alike. A
-document whose Planner is within its grace period, or disconnected with its work kept
-(the message then says the machine is offline, that the work is kept and that it picks
-up when the machine is back), counts as
+an MCP `invoke_planner` call for a document with no attached client are refused with
+`planner-not-attached`, and nothing is kept for when a client attaches: no message is ever
+held for a Planner (see [messages while the Planner works](hosted-agent.md#messages-while-the-planner-works)).
+A document whose Planner is within its grace period, or disconnected with its work kept
+(the message then says the machine is offline), counts as
 unattached, and so
 does one whose attached connection the request finds stale: its owner's browser
 sign-in has ended or the stored ownership no longer names it. The request closes

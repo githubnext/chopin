@@ -113,11 +113,8 @@ only attaching makes an account the owner. With a client attached the turn goes
 to it and runs under its owner, whoever invoked it. Without one, including
 while a detached Planner's grace period runs, while a disconnected Planner's work is kept for it, and once the attached Planner's
 owner signs out of the browser, that sign-in expires, or its Planner is reset,
-the instruction is [saved](hosted-agent.md#saved-requests) and waits for a Planner, in hosted
-mode and under `AUTH_MODE=local` alike; the call returns as usual and its message shows in Chat
-as sent. A call that finds the queue full behind a running turn is refused with `planner-queue-full`; a machine that is away never has a full queue, and every call is saved and kept for it, in the order the calls came, however many arrive together. The refusal below,
-`planner-not-attached`, is what an older Chopin answered, and what `invoke_planner` still declares
-for a document that has no way to save a request:
+the call is refused with `planner-not-attached`, and nothing is kept for when a Planner attaches
+(see [messages while the Planner works](hosted-agent.md#messages-while-the-planner-works)):
 
 ```json
 {
@@ -203,8 +200,11 @@ Refusals return an object with `code`, and `planner-not-attached` also a
 - `checkout-unverified`: under `atomic`, correct the supplied path or its
   repository origin.
 - `planner-unavailable`: the Planner is disabled or the room is closing.
-- `planner-queue-full`: twenty requests wait behind a running turn; wait for queued work to
-  drain before invoking again. Never answered for a machine that is away.
+- `planner-busy`: a turn is running and cannot be given the instruction. A message-like call is
+  given to the running turn when its harness takes input mid-run, and refused with this code
+  when it does not (the Copilot SDK) or the running turn is a background job's; an `as: "system"`
+  call needs a turn of its own and is always refused while one runs. Nothing is held for later:
+  call again once the turn has ended.
 - `system-turn-forbidden`: `as: "system"` came from someone other than the
   document's creator or the account holding its Planner.
 - `system-turn-limited`: the document has taken 10 automatic follow-ups in the
