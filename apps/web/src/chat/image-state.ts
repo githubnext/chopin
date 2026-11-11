@@ -21,6 +21,20 @@ export type ImageSource =
 	| { kind: "unavailable" };
 
 const AUTH_PATH = /^\/auth(?:\/|$)/;
+const ATTACHMENT_PATH = /^\/api\/channels\/([^/]+)\/attachments\/([^/]+)$/;
+
+export const MAX_SHOWN_IMAGE_BYTES = 10 * 1_048_576;
+
+function megabytes(bytes: number, round = Math.round): string {
+	let size = round(bytes * 10 / 1_048_576) / 10;
+	return Number.isInteger(size) ? String(size) : size.toFixed(1);
+}
+
+export function tooLargeImageReason(size: number, maxBytes = MAX_SHOWN_IMAGE_BYTES): string {
+	return `Image too large to show (${megabytes(size, Math.ceil)} MB, limit ${
+		megabytes(maxBytes, Math.floor)
+	} MB)`;
+}
 
 const RASTER_TYPE = new RegExp(
 	`^(?:${RASTER_TYPE_NAMES.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})$`,
@@ -80,6 +94,16 @@ export function imageSource(
 		if (url.protocol !== "https:" && url.protocol !== "http:") return { kind: "unavailable" };
 		if (url.origin !== new URL(base).origin) return { kind: "external", url: src };
 		if (HOSTED_IMAGE_PATH.test(url.pathname)) return hosted(url.pathname, document);
+		let attachment = ATTACHMENT_PATH.exec(url.pathname);
+		if (attachment) {
+			let channel: string | undefined;
+			try {
+				channel = decodeURIComponent(attachment[1]!);
+			} catch {}
+			return document && channel === document
+				? { kind: "hosted", url: url.pathname }
+				: { kind: "unavailable" };
+		}
 		if (AUTH_PATH.test(url.pathname)) return { kind: "unavailable" };
 		return { kind: "local", url: src };
 	} catch {}
@@ -185,7 +209,8 @@ export function downloadName(alt: string | undefined, src: string, type?: string
 	let extension = named
 		? EXTENSIONS[named] ?? named
 		: /\.([a-z]+)(?:\?|$)/i.exec(src)?.[1]?.toLowerCase() ?? "png";
-	let name = (alt ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+	let stem = (alt ?? "").replace(/\.(?:a?png|jpe?g|jfif|webp|gif|avif|bmp|ico)$/i, "");
+	let name = stem.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
 		.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60).replace(/-+$/, "");
 	if (name) return `${name}.${extension}`;
 	let stored = /\/([0-9a-f]{64})\.[a-z]+(?:\?|$)/.exec(src)?.[1];

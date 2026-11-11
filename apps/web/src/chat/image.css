@@ -102,8 +102,13 @@
 	margin-block: calc(var(--spacing) * 2);
 }
 
-.chat-message-body > :is(.chat-image, [data-chat-image-gallery], .chat-image-refused) {
+.chat-message-body
+	> :is(.chat-image, [data-chat-image-gallery], .chat-image-refused, [data-chat-files]) {
 	margin-block-start: calc(var(--spacing) * 2);
+}
+
+.chat-message-body > :is(.chat-image, [data-chat-image-gallery]):first-child {
+	margin-block-start: 0;
 }
 
 .chat-image-refused {

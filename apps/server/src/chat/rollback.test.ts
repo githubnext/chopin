@@ -417,3 +417,68 @@ describe("a transcript with a message given to the running turn, on the server i
 		240_000,
 	);
 });
+
+async function writtenWithPlannerImages(): Promise<
+	{ sidecar: Record<string, unknown>; id: string }
+> {
+	let context = await openPlan();
+	let id = ulid();
+	let sha = "a".repeat(64);
+	context.plan.chat.entries.push({
+		id,
+		author: { kind: "agent" },
+		text: "Here are the diagrams.",
+		ts: 1_700_000_000,
+		images: [
+			{
+				src: `/images/${sha}.png`,
+				alt: "Cache write-back diagram",
+				caption: "Writes buffer before flushing.",
+				width: 960,
+				height: 420,
+				generated: true,
+			},
+		],
+		refusedImages: [
+			{ before: 1, reason: "Image too large to show (12 MB, limit 10 MB)" },
+		],
+	});
+	await Service.persist(context.plan);
+	await Service.close(context.plan);
+	let loaded = (await context.storage.collaboration.load(context.channel.id, context.now))!;
+	let sidecar = structuredClone(loaded.sidecar ?? loaded.snapshot!.sidecar) as Record<
+		string,
+		unknown
+	>;
+	return { sidecar, id };
+}
+
+describe("a transcript with Planner images and refused images in it, on the server it would be rolled back to", () => {
+	it("is opened by this checkout with its images and refusals intact", async () => {
+		let { sidecar, id } = await writtenWithPlannerImages();
+		let file = join(scratch, "images-control.json");
+		await Bun.write(file, JSON.stringify(sidecar));
+		let result = await read(ROOT, file);
+		expect(result.ok, JSON.stringify(result)).toBe(true);
+		let entry = (result as Extract<Read, { ok: true }>).entries.find(item => item.id === id)!;
+		expect(entry.images).toHaveLength(1);
+		expect(entry.refusedImages).toHaveLength(1);
+	}, 120_000);
+
+	it.skipIf(!available)(
+		`is opened by the real ${BASE} reader without refusing the transcript`,
+		async () => {
+			let older = olderServer();
+			await Bun.write(join(older, READER), Bun.file(join(ROOT, READER)));
+			let { sidecar, id } = await writtenWithPlannerImages();
+			let file = join(scratch, "images-written.json");
+			await Bun.write(file, JSON.stringify(sidecar));
+			let result = await read(older, file);
+			expect(result.ok, JSON.stringify(result)).toBe(true);
+			let entry = (result as Extract<Read, { ok: true }>).entries.find(item => item.id === id)!;
+			expect(entry.text).toBe("Here are the diagrams.");
+			expect(entry.author).toEqual({ kind: "agent" });
+		},
+		240_000,
+	);
+});

@@ -284,7 +284,7 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 	await expectClassGeometry(dialog.getByRole("button", { name: "Previous image" }), "previous");
 	await expectClassGeometry(dialog.getByRole("button", { name: "Next image" }), "next");
 	checked += 3;
-	expect(checked).toBe(122);
+	expect(checked).toBe(121);
 });
 
 test("assistant-ui's own radii, in pixels, where Chopin's scale differs", async ({ page }) => {

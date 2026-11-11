@@ -15,6 +15,7 @@ import {
 	isDataImage,
 	loadState,
 	settledOnMount,
+	tooLargeImageReason,
 } from "./image-state";
 
 const SHA = "a".repeat(64);
@@ -111,6 +112,15 @@ test("an upload of this document loads with the document named, however it is wr
 	expect(imageSource(`/images/${SHA}.png`, "doc/1", ORIGIN)).toEqual(scoped);
 	expect(imageSource(`${ORIGIN}/images/${SHA}.png`, "doc/1", ORIGIN)).toEqual(scoped);
 	expect(imageSource(`/images/${SHA}.png`, undefined, ORIGIN)).toEqual({ kind: "unavailable" });
+});
+
+test("a sent message attachment of this document loads as hosted, and one of another document is refused", () => {
+	let path = "/api/channels/doc%2F1/attachments/att-1";
+	expect(imageSource(path, "doc/1", ORIGIN)).toEqual({ kind: "hosted", url: path });
+	expect(imageSource(`${ORIGIN}${path}`, "doc/1", ORIGIN)).toEqual({ kind: "hosted", url: path });
+	expect(imageSource(path, "other-doc", ORIGIN)).toEqual({ kind: "unavailable" });
+	expect(imageSource(path, undefined, ORIGIN)).toEqual({ kind: "unavailable" });
+	expect(tooLargeImageReason(12 * 1_048_576)).toBe("Image too large to show (12 MB, limit 10 MB)");
 });
 
 test("a path or address on this site that is not an upload is read without the reader's credentials, as written", () => {
@@ -614,6 +624,10 @@ test("a download of a raster image written with white space before its type, or 
 
 test("a download from this site is named for the type the image turned out to be, not its address", () => {
 	expect(downloadName("A face", "/avatar/12", "image/jpeg")).toBe("a-face.jpg");
+	expect(downloadName("shot.png", "/api/channels/doc/attachments/1", "image/png")).toBe("shot.png");
+	expect(downloadName("shot.webp", "/api/channels/doc/attachments/1", "image/webp")).toBe(
+		"shot.webp",
+	);
 	expect(downloadName(undefined, "/avatar/12", "image/png")).toBe("image.png");
 	expect(downloadName("Logo", "/logo.png?v=2", "image/webp")).toBe("logo.webp");
 	expect(downloadName("Tab", "/favicon", "image/x-icon")).toBe("tab.ico");

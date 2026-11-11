@@ -66,6 +66,7 @@ export type ChatImageData = {
 	width?: number;
 	height?: number;
 	generated?: boolean;
+	mimeType?: string;
 };
 
 const DocumentContext = createContext<string | undefined>(undefined);
@@ -386,9 +387,10 @@ export function ChatImageActions(
 			icon: <DownloadIcon aria-hidden="true" size={16} />,
 			onClick: () => {
 				if (!shown) return;
-				downloadImage(shown, downloadName(data.alt, data.src, shown.type)).catch(() =>
-					setSaved("failed")
-				);
+				downloadImage(
+					shown,
+					downloadName(data.alt, data.src, shown.type ?? data.mimeType),
+				).catch(() => setSaved("failed"));
 			},
 			props: { "data-chat-image-action": "download" } as ImageActionItem["props"],
 		});
