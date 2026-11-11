@@ -118,6 +118,7 @@ client must then use none of them.
 | `capability-catalog`       | A [`capabilities`](#capability-catalog) report of the models, thinking levels and commands the client offers, and a person's choice of model and thinking level in the `turn` |
 | `attachments`              | The images and text files a person sent with a message, in the `turn`'s [`attachments`](#images-and-files-in-a-turn)                                                          |
 | `session-forks`            | A [`fork`](#server-to-client) message to branch a thread's Planner session from an earlier session and turn, multiplexed over the same connection                             |
+| `steer-turn`               | A [`steer`](#server-to-client) message: a person's message for the turn the client is running, read at its next step                                                          |
 
 ### Pings
 
@@ -417,6 +418,7 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 { "type": "fork", "session": "", "mode": "planner", "from": { "session": "", "turn?": "" } }
 { "type": "turn", "session": "", "turn": "", "prompt": "", "instructions?": "", "model?": "", "thinkingLevel?": "", "attachments?": [{ "id": "", "name": "", "kind": "image", "mediaType": "", "size": 0, "data": "" }], "tools": [], "responseFormat?": {} }
 { "type": "abort", "session": "", "turn": "" }
+{ "type": "steer", "request": "", "session": "", "turn": "", "prompt": "" }
 { "type": "host-tool-result", "session": "", "turn": "", "toolCallId": "", "output": json, "isError?": true }
 { "type": "input-result", "request": "", "status": "answered", "value?": json, "message?": "" }
 { "type": "stop", "request": "", "session": "", "run?": "" }
@@ -456,6 +458,17 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 - `abort` stops the turn. Answer with `turn-end`; after **10 seconds** the
   server ends the turn anyway. The server sends no `host-tool-result` for the
   turn's calls after `abort`, so settle any call still waiting as failed.
+- `steer`, with `steer-turn`, gives the turn that is running a message a person sent to Chopin
+  while it works. Chopin never holds a message for the next turn, so this is how a person talks to
+  a Planner mid-reply: `prompt` is the message as the model should read it (the sender's handle
+  first, `@bo: ...`), to be read at the turn's next step, after the tool calls of the step it is
+  in and before its next call to the model, as an ordinary user message in the same turn. Answer
+  with `control-result` within **10 seconds**: `ok: true` once the turn has taken it, `ok: false`
+  with a `message` when it has not, because the turn has ended or the client has no way to hand
+  it on. A refusal is final: Chat then says the message was not read, and it is not sent again.
+  A client that did not offer the feature never receives one, and a message sent while it works
+  is refused in Chat ("Chopin can't take messages while it works on this machine. Stop it to ask
+  now.") rather than kept for later.
 - `host-tool-result` answers a `host-tool-call`. `output` is the tool's result
   as JSON. A failed call has `"isError": true` and `output`
   `{ "error": "<message>" }`; that includes a tool that threw, invalid input, a
@@ -551,7 +564,7 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   have the Planner act on a run that ended, call `invoke_planner` with
   `as: "system"` and a GitHub token of the account holding the Planner; see
   [Automatic follow-ups](local-agent-mcp.md#automatic-follow-ups).
-- `control-result` answers `stop` or `resume`.
+- `control-result` answers `stop`, `resume` or, with `steer-turn`, `steer`.
 - `detach` closes the connection with code 1000. The account keeps the document's
   Planner for the grace period in [Ownership](#ownership). It ends everything the
   link held, even with `resumable-sessions`: only a link that drops without it keeps

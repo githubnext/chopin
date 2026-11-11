@@ -1526,6 +1526,89 @@ describe("Agent connection protocol", () => {
 	});
 });
 
+describe("Agent connection steering", () => {
+	/** A turn that hangs until it is aborted, on a session of its own. */
+	async function hanging(handlers: Partial<AgentHandlers>) {
+		let running = Promise.withResolvers<void>();
+		let fixture = await setup({
+			async turn(context) {
+				context.emit({ type: "stream-start", modelId: "scripted" });
+				running.resolve();
+				await new Promise(resolve => context.signal.addEventListener("abort", resolve));
+			},
+			...handlers,
+		});
+		let harness = adapterFor(fixture.server, { channelId: fixture.channel.id, isolated: false });
+		let agent = agentFor(harness);
+		let session = await agent.createSession({ sandboxSession });
+		cleanups.push(() => session.destroy());
+		let abort = new AbortController();
+		let result = await agent.stream({ session, prompt: "turn", abortSignal: abort.signal });
+		let drained = (async () => {
+			for await (let _part of result.fullStream);
+		})();
+		await running.promise;
+		return {
+			...fixture,
+			harness,
+			session,
+			end: async () => {
+				abort.abort();
+				await drained.catch(() => {});
+			},
+		};
+	}
+
+	it("reaches the running turn of a client that offered steer-turn, which answers it", async () => {
+		let heard: Array<{ turn: string; prompt: string }> = [];
+		let { session, server, channel, harness, end } = await hanging({
+			steer(message) {
+				heard.push({ turn: message.turn, prompt: message.prompt });
+			},
+		});
+		expect(server.links.at(-1)!.steers).toBe(true);
+		expect(harness.steers(channel.id)).toBe(true);
+		await session.experimental_steerTurn("@bo: Also say what it costs.");
+		expect(heard).toHaveLength(1);
+		expect(heard[0]!.prompt).toBe("@bo: Also say what it costs.");
+		await end();
+	});
+
+	it("is offered only to a client that asked for steer-turn, and says so for its document", async () => {
+		let { server, channel, harness, session, end } = await hanging({});
+		expect(server.links.at(-1)!.steers).toBe(false);
+		expect(harness.steers(channel.id)).toBe(false);
+		await expect(session.experimental_steerTurn("@bo: hello")).rejects.toThrow(
+			/does not support steering/,
+		);
+		await end();
+	});
+
+	it("tells the sender when the client could not take it", async () => {
+		let { session, end } = await hanging({
+			steer() {
+				throw new Error("The model is between steps.");
+			},
+		});
+		await expect(session.experimental_steerTurn("@bo: hello")).rejects.toThrow(
+			"The model is between steps.",
+		);
+		await end();
+	});
+
+	it("is refused once the turn has ended, without a frame going to the client", async () => {
+		let heard: string[] = [];
+		let { session, end } = await hanging({
+			steer(message) {
+				heard.push(message.prompt);
+			},
+		});
+		await end();
+		await expect(session.experimental_steerTurn("@bo: too late")).rejects.toThrow();
+		expect(heard).toEqual([]);
+	});
+});
+
 describe("Agent connection capability catalog", () => {
 	let catalog = {
 		models: {

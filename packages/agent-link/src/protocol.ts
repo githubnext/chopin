@@ -70,6 +70,12 @@ export const AGENT_FEATURES = {
 	 * `start` session seeded with the transcript up to the root message.
 	 */
 	sessionForks: "session-forks",
+	/**
+	 * A person's message sent while a turn runs reaches that turn as a `steer`, to read at its next
+	 * step, answered with `control-result`. Without the feature the server never sends one, and a
+	 * message sent while this client works is refused rather than held.
+	 */
+	steerTurn: "steer-turn",
 } as const;
 
 /** How often a client that offered `restart-notice` retries a `resume` refused with `retry`. */
@@ -601,6 +607,11 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 		responseFormat: responseFormat.optional(),
 	}),
 	z.strictObject({ type: z.literal("abort"), session: id, turn: id }),
+	/**
+	 * With `steer-turn`: a person's message for the turn that is running, to read at its next
+	 * step. The client answers with `control-result`, `ok: false` when the turn has ended.
+	 */
+	z.strictObject({ type: z.literal("steer"), request: id, session: id, turn: id, prompt: text }),
 	z.strictObject({
 		type: z.literal("host-tool-result"),
 		session: id,

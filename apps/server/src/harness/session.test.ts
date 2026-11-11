@@ -60,6 +60,35 @@ function fixture() {
 }
 
 describe("openPlannerSession", () => {
+	it("gives a Planner turn's session a way to steer its running turn, and a background job's none", async () => {
+		let { owner, channel, deps } = fixture();
+		let steered: string[] = [];
+		deps.agent = {
+			createSession: async () => ({
+				destroy: async () => {},
+				experimental_steerTurn: async (text: string) => {
+					steered.push(text);
+				},
+			}),
+		} as never;
+		let planner = await openPlannerSession(owner, channel, deps);
+		if (!planner.ok) throw new Error("the Planner session did not open");
+		await planner.value.steer!("@bo: Also say what it costs.");
+		expect(steered).toEqual(["@bo: Also say what it costs."]);
+		await planner.value.destroy();
+
+		channel.room = {
+			id: "channel",
+			plan: { chat: { job: { kind: "heading" } } },
+			server: {},
+		} as never;
+		deps.headingAgent = deps.agent;
+		let job = await openPlannerSession(owner, channel, deps);
+		if (!job.ok) throw new Error("the job session did not open");
+		expect(job.value.steer).toBeUndefined();
+		await job.value.destroy();
+	});
+
 	it("uses the visual Planner profile only when the room has Jev routing", async () => {
 		let { owner, channel, deps } = fixture();
 		let visualOpened = false;

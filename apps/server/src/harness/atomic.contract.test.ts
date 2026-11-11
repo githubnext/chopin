@@ -288,6 +288,53 @@ describe("atomic HarnessV1 lifecycle", () => {
 		}
 	});
 
+	it("gives a running turn a person's message, which the model reads as its next input", async () => {
+		stub.requests.length = 0;
+		let session = await start();
+		let first = recorder();
+		try {
+			let control = await session.doPromptTurn({
+				prompt: "tools",
+				skills: [],
+				tools: [HOST_TOOL],
+				emit: first.emit,
+			});
+			let toolCallId = await first.called;
+			// Between the step's tool call and its result: the message waits for the step to end.
+			await control.submitUserMessage!("@bo: Also say what it costs.");
+			await control.submitToolResult({ toolCallId, output: "ok" });
+			await control.done;
+		} finally {
+			await session.doDestroy();
+		}
+		expect(stub.requests.map(request => request.prompt)).toEqual([
+			"tools",
+			"@bo: Also say what it costs.",
+		]);
+		expect(stub.requests[1]!.hasPriorToolResult).toBe(true);
+	});
+
+	it("refuses a message once the turn is over, and starts no turn of its own for it", async () => {
+		stub.requests.length = 0;
+		let session = await start();
+		try {
+			let control = await session.doPromptTurn({
+				prompt: "plain",
+				skills: [],
+				tools: [],
+				emit: () => {},
+			});
+			await control.done;
+			await expect(control.submitUserMessage!("@bo: too late")).rejects.toThrow(
+				"The turn is not running.",
+			);
+			await Bun.sleep(100);
+			expect(stub.requests.map(request => request.prompt)).toEqual(["plain"]);
+		} finally {
+			await session.doDestroy();
+		}
+	});
+
 	it("rebuilds the Atomic session for a new tool set without losing the conversation", async () => {
 		stub.requests.length = 0;
 		let session = await start();

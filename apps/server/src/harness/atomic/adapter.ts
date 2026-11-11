@@ -582,6 +582,8 @@ type Run = {
 		};
 	};
 	stop: () => void;
+	/** Gives the model a person's message at its next step, between a step's tool calls and its next call. */
+	steer: (text: string) => Promise<void>;
 	done: Promise<void>;
 };
 
@@ -593,6 +595,7 @@ function control(run: Run): HarnessV1PromptControl {
 		async submitToolApproval() {
 			// The adapter emits no approval requests; there is nothing to answer.
 		},
+		submitUserMessage: text => run.steer(text),
 		done: run.done,
 	};
 }
@@ -678,6 +681,8 @@ export function createAtomicAdapter(
 	settings: AtomicSettings,
 ): HarnessV1 & {
 	shutdown(): Promise<void>;
+	/** A turn takes a person's message while it runs, through `submitUserMessage`. */
+	steers: true;
 	/** What a document's Planner can be set to run; see `atomicCatalog`. */
 	catalog(defaultModel: string | undefined): Promise<Wire.ModelCatalog>;
 	/** The commands a Planner working in `cwd` offers; see `sessionCommands`. */
@@ -694,6 +699,7 @@ export function createAtomicAdapter(
 		harnessId: "atomic",
 		builtinTools: {},
 		supportsBuiltinToolFiltering: true,
+		steers: true,
 
 		async doStart(startOptions: HarnessV1StartOptions): Promise<HarnessV1Session> {
 			if (startOptions.resumeFrom || startOptions.continueFrom) {
@@ -1070,6 +1076,17 @@ export function createAtomicAdapter(
 							}
 							run.pending.clear();
 							void bounded(agent.abort(), "Atomic abort timed out.").catch(() => {});
+						},
+						steer: async text => {
+							// Atomic would start a turn of its own for a message it is given while idle, and
+							// Chopin never starts one it did not ask for.
+							if (run.stopped || current !== run || !agent.isStreaming) {
+								throw new Error("The turn is not running.");
+							}
+							await bounded(
+								agent.steer(text, undefined, { expandPromptTemplates: false }),
+								"Atomic steering timed out.",
+							);
 						},
 						done: Promise.resolve(),
 					};

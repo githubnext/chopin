@@ -220,6 +220,8 @@ type Port = {
 		runId?: string,
 		sent?: (request: string) => void,
 	): Promise<void>;
+	/** Gives the client's running `turn` a person's message; rejects when it could not take it. */
+	steer(session: string, turn: string, prompt: string): Promise<void>;
 	forget(session: string): void;
 	/** Whether the client's work in `session` goes on past a restart: it is kept, not destroyed. */
 	kept(session: string): boolean;
@@ -837,6 +839,17 @@ class RemoteSession {
 			async submitToolApproval() {
 				// The remote Planner asks no approvals; host tools are already allowed.
 			},
+			// Only a client that offered `steer-turn` is sent a `steer`, so only its turns take a message.
+			...(this.#port.features?.includes(AGENT_FEATURES.steerTurn)
+				? {
+					submitUserMessage: async (text: string) => {
+						if (turn.ended || turn.stopped || this.#current !== turn) {
+							throw new Error("The turn is not running.");
+						}
+						await this.#port.steer(this.id, turn.id, text);
+					},
+				}
+				: {}),
 			done: turn.settle.promise,
 		};
 	}
@@ -1024,6 +1037,7 @@ export class AgentLink {
 		this.#port = {
 			send: message => this.#send(message),
 			control: (session, action, runId, sent) => this.#control(session, action, runId, sent),
+			steer: (session, turn, prompt) => this.#steer(session, turn, prompt),
 			forget: session => {
 				this.#sessions.delete(session);
 				this.#cancelInputs(session);
@@ -1193,6 +1207,11 @@ export class AgentLink {
 	 */
 	get catalog(): CapabilityCatalog | undefined {
 		return this.#catalog;
+	}
+
+	/** Whether the client offered `steer-turn`: a message for a running turn can reach it. */
+	get steers(): boolean {
+		return this.#options.features?.includes(AGENT_FEATURES.steerTurn) === true;
 	}
 
 	/**
@@ -1800,6 +1819,26 @@ export class AgentLink {
 				if (this.#late.size > MAX_LATE_CONTROLS) this.#late.delete(this.#late.keys().next().value!);
 			}
 			throw error;
+		} finally {
+			this.#controls.delete(request);
+		}
+	}
+
+	/** A person's message for a running turn, answered by the client's `control-result`. */
+	async #steer(session: string, turn: string, prompt: string): Promise<void> {
+		let request = crypto.randomUUID();
+		let pending = Promise.withResolvers<void>();
+		this.#controls.set(request, pending);
+		if (!this.#send({ type: "steer", request, session, turn, prompt })) {
+			this.#controls.delete(request);
+			throw new Error("The agent connection is closed.");
+		}
+		try {
+			await within(
+				pending.promise,
+				this.#port.timeoutMs,
+				"The machine did not answer a message sent to its turn.",
+			);
 		} finally {
 			this.#controls.delete(request);
 		}
