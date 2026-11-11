@@ -277,7 +277,8 @@ describe("design audit specimens", () => {
 		// The apostrophe React escapes in text, written back, so copy reads as typed.
 		let chat = plate(markup, "chat").replaceAll("&#x27;", "'");
 		expect(chat).toContain('class="workspace-root');
-		expect(chat).toContain('class="composer-surface field"');
+		expect(chat).toContain('data-slot="composer-bar"');
+		expect(chat).toContain("composer-surface");
 		expect(chat).toContain('class="composer-notice motion-feedback"');
 		// The connection and the Planner's states: the one banner on the composer's edge in each phase,
 		// and the machine button's dot and note.
@@ -325,7 +326,7 @@ describe("design audit specimens", () => {
 		let none = cells.at(-1)!;
 		expect(none).toContain("No machine is connected.");
 		expect(none).not.toContain("status-dot");
-		expect(chat).toContain('aria-label="Stop Chopin"');
+		expect(chat).toContain('aria-label="Stop generating"');
 		expect(chat).toContain("Read-only access");
 		expect(chat).toContain("Document archived");
 		expect(chat).not.toContain("<textarea");

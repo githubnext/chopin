@@ -306,7 +306,7 @@ async function watch(page: Page): Promise<void> {
 						[...composer.querySelectorAll("button")]
 							// Send follows what is typed, and Stop and Resume follow whether a turn is running.
 							.filter(button =>
-								!/^(Send message|Stop Chopin|Resume Chopin)$/.test(
+								!/^(Send message|Stop generating|Resume Chopin)$/.test(
 									button.getAttribute("aria-label") ?? "",
 								)
 							)

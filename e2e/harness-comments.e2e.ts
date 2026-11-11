@@ -88,7 +88,7 @@ test("stopping Chopin's turn says so on the thread", async ({ join, seed }) => {
 	await page.getByRole("button", { name: /^Comment on “.*”\. / }).click();
 	let thread = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(thread.getByText("Chopin is working on it")).toBeVisible();
-	await chatPane(page).getByRole("button", { name: "Stop Chopin" }).click();
+	await chatPane(page).getByRole("button", { name: "Stop generating" }).click();
 
 	// Stopping from Chat dismisses the card; the thread says why when it opens again.
 	await page.getByRole("button", { name: /^Comment on “.*”\. / }).click();

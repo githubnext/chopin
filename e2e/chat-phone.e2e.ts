@@ -19,15 +19,15 @@ async function openPhoneChat(page: Page): Promise<void> {
 	await expect.poll(async () => (await chatPane(page).boundingBox())?.x).toBe(0);
 }
 
-/** From the top of the pill to the bottom of the composer, leaving out the status line above it. */
-function pillHeight(page: Page): Promise<number> {
+/** From the top of the box to the bottom of the composer, leaving out the status line above it. */
+function boxHeight(page: Page): Promise<number> {
 	return chatPane(page).locator(".chat-composer").evaluate(composer => {
 		let surface = composer.querySelector(".composer-surface")!.getBoundingClientRect();
 		return composer.getBoundingClientRect().bottom - surface.top;
 	});
 }
 
-test("a phone composer rests as one pill with a reference button, draft and send", async ({ join }) => {
+test("a phone composer is assistant-ui's box: the draft above a toolbar with the reference button and a round send", async ({ join }) => {
 	let page = await join("ana", PHONE);
 	await openPhoneChat(page);
 	let chat = chatPane(page);
@@ -35,30 +35,35 @@ test("a phone composer rests as one pill with a reference button, draft and send
 	let send = chat.getByRole("button", { name: "Send message" });
 	let reference = chat.getByRole("button", { name: "Mention docs" });
 
-	expect(await pillHeight(page)).toBeLessThanOrEqual(64);
+	// One line of draft over one row of 32px controls, in the element's 10px padding.
+	expect(await boxHeight(page)).toBeLessThanOrEqual(112);
 	let [draftBox, sendBox, referenceBox] = await Promise.all([
 		draft.boundingBox(),
 		send.boundingBox(),
 		reference.boundingBox(),
 	]);
-	// One row: the reference button leads, the send button trails the draft.
-	expect(referenceBox!.x + referenceBox!.width).toBeLessThanOrEqual(draftBox!.x + 1);
-	expect(sendBox!.x).toBeGreaterThanOrEqual(draftBox!.x + draftBox!.width - 1);
-	expect(Math.abs(sendBox!.y + sendBox!.height - (draftBox!.y + draftBox!.height)))
+	// The toolbar sits under the draft: the reference button leads, the send button trails.
+	expect(referenceBox!.y).toBeGreaterThanOrEqual(draftBox!.y + draftBox!.height - 1);
+	expect(sendBox!.y).toBeGreaterThanOrEqual(draftBox!.y + draftBox!.height - 1);
+	expect(referenceBox!.x).toBeLessThan(sendBox!.x);
+	expect(Math.abs(sendBox!.y + sendBox!.height / 2 - (referenceBox!.y + referenceBox!.height / 2)))
 		.toBeLessThanOrEqual(1);
-	expect(sendBox!.width).toBeCloseTo(36, 0);
-	expect(sendBox!.height).toBeCloseTo(36, 0);
-	// The status stays readable as one line above the pill.
+	// The element's own 32px round button, whatever the pointer: only its target grows.
+	expect(sendBox!.width).toBeCloseTo(32, 0);
+	expect(sendBox!.height).toBeCloseTo(32, 0);
+	// The status stays readable as one line above the box.
 	let notice = chat.getByRole("status").filter({ hasText: "Replies are off on this server." });
 	await expect(notice).toBeVisible();
 	expect((await notice.boundingBox())!.height).toBeLessThanOrEqual(28);
-	// Disabled send is drawn solid rather than faded.
+	// Nothing to send: disabled, as assistant-ui draws its disabled controls.
 	await expect(send).toBeDisabled();
-	expect(await send.evaluate(element => getComputedStyle(element).opacity)).toBe("1");
+	expect(await send.evaluate(element => getComputedStyle(element).opacity)).toBe("0.3");
 
 	await draft.click();
 	await page.keyboard.type("One more line to send");
 	await expect(send).toBeEnabled();
+	// Drawn in full once its fade has run.
+	await expect.poll(() => send.evaluate(element => getComputedStyle(element).opacity)).toBe("1");
 	await expectNoHorizontalOverflow(page);
 });
 
@@ -193,17 +198,13 @@ test("a phone transcript at the bottom stays pinned when a message arrives with 
 	}
 });
 
-test("the desktop composer keeps its labelled mode switch, footer and dropdown pickers", async ({ join }) => {
+test("the desktop composer keeps its labelled mode switch, toolbar and dropdown pickers", async ({ join }) => {
 	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
 	await join("cy");
 	let chat = chatPane(page);
 	let draft = chatInput(chat);
 	await expect(draft).toBeVisible();
 	await expect(chat.locator(".composer-mode-label")).toHaveText("Chat");
-	expect(
-		await chat.locator(".composer-surface").evaluate(element => getComputedStyle(element).display),
-	)
-		.not.toBe("flex");
 	let [draftBox, sendBox] = await Promise.all([
 		draft.boundingBox(),
 		chat.getByRole("button", { name: "Send message" }).boundingBox(),
