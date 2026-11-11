@@ -1,7 +1,8 @@
-import { GlobeIcon, SparklesIcon, XIcon } from "lucide-react";
+import { CopyIcon, EllipsisIcon, GlobeIcon, RotateCcwIcon, SparklesIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
+import { MessageActions } from "@/components/assistant-ui/elements/message-actions";
 import {
 	ComposerCommandItem,
 	ComposerContext,
@@ -29,10 +30,19 @@ import {
 	ModelSelectorTrigger,
 } from "@/components/assistant-ui/elements/model-selector";
 import { toBreakdownSegments, toComposerUsage } from "../../chat/context/context-usage";
+import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { modelOptions } from "../../chat/assistant-ui/model-options";
 import StagedFiles from "../../chat/attachments/staged-files";
 import { AuditPlate, StateLabel } from "../frame";
 
+import type { Reaction } from "@/components/assistant-ui/elements/message-actions";
 import type { Chat } from "@chopin/protocol";
 import type { FileView } from "../../chat/attachments/files";
 
@@ -198,6 +208,18 @@ const WARN_USAGE: Chat.ContextUsage = {
 	contextWindow: 128_000,
 };
 
+const ACTION_SPECIMENS: readonly {
+	label: string;
+	copied: boolean;
+	reaction: Reaction;
+	regenerating: boolean;
+}[] = [
+	{ label: "Message actions, default", copied: false, reaction: null, regenerating: false },
+	{ label: "Copied", copied: true, reaction: null, regenerating: false },
+	{ label: "Helpful", copied: false, reaction: "up", regenerating: false },
+	{ label: "Unhelpful", copied: false, reaction: "down", regenerating: false },
+];
+
 const SAMPLE_PNG =
 	"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYAAAAEgCAIAAAAyuTMGAAACzElEQVR42u3UMQ0AAAgEsZeFKGb0IwOGJlVww6V6AE5EAsCAAAMCMCDAgAAMCDAgAAMCDAjAgAADAjAgwIAADAgwIAADAgwIMCAAAwIMCMCAAAMCMCDAgAAMCDAgAAMCDAjAgAADAjAgwIAADAgwIMCAAAwIMCAAAwIMCMCAAAMCMCDAgAAMCDAgAAMCDAjAgAADAgwIwIAAAwIwIMCAAAwIMCAAAwIMCMCAAAMCMCDAgAAMCDAgAAMCDAgwIAADAgwIwIAAAwIwIMCAAAwIMCAAAwIMCMCAAAMCMCDAgAADAjAgwIAADAgwIAADAgwIwIAAAwIwIMCAAAwIMCAAAwIMCMCAAAMCDAjAgAADAjAgwIAADAgwIAADAgwIwIAAAwIwIMCAAAwIMCDAgFQADAgwIAADAgwIwIAAAwIwIMCAAAwIMCAAAwIMCMCAAAMCMCDAgAADAjAgwIAADAgwIAADAgwIwIAAAwIwIMCAAAwIMCAAAwIMCMCAAAMCDAjAgAADAjAgwIAADAgwIAADAgwIwIAAAwIwIMCAAAwIMCDAgAAMCDAgAAMCDAjAgAADAjAgwIAADAgwIAADAgwIwIAAAwIwIMCAAAMCMCDAgAAMCDAgAAMCDAjAgAADAjAgwIAADAgwIAADAgwIMCAAAwIMCMCAAAMCMCDAgAAMCDAgAAMCDAjAgAADAjAgwIAADAgwIMCAAAwIMCAAAwIMCMCAAAMCMCDAgAAMCDAgAAMCDAjAgAADAgxIBcCAAAMCMCDAgAAMCDAgAAMCDAjAgAADAjAgwIAADAgwIAADAgwIMCAAAwIMCMCAAAMCMCDAgAAMCDAgAAMCDAjAgAADAjAgwIAAA5IAMCDAgAAMCDAgAAMCDAjAgAADAjAgwIAADAgwIAADAgwIwIAAAwIMCMCAAAMCMCDAgAAMCDAgAAMCDAjAgAADAjAg4K8Fn0771hKV5o8AAAAASUVORK5CYII=";
 const BROKEN_PNG = "data:image/png;base64,AAAA";
@@ -251,9 +273,10 @@ const GALLERY_IMAGES = [
 ] as const;
 
 /**
- * Copied assistant-ui elements, drawn as assistant-ui draws them: the model selector,
- * markdown-text, image, image gallery, the context ring and the context breakdown from the
- * registry, driven by Chopin's own state through props. `e2e/design` measures them.
+ * Copied assistant-ui and shadcn elements, drawn as their registries draw them: the model
+ * selector, markdown-text, image, image gallery, the context ring and breakdown, message actions
+ * and the overflow dropdown menu, driven by Chopin's own state through props. `e2e/design`
+ * measures their geometry and colours.
  */
 export function AssistantUiPlate() {
 	let models = modelOptions(CATALOG);
@@ -263,6 +286,8 @@ export function AssistantUiPlate() {
 	let warnComposerUsage = toComposerUsage(WARN_USAGE)!;
 	let normalBreakdown = toBreakdownSegments(NORMAL_USAGE)!;
 	let warnBreakdown = toBreakdownSegments(WARN_USAGE)!;
+	let [reaction, setReaction] = useState<Reaction>("up");
+	let [copied, setCopied] = useState(false);
 	return (
 		<AuditPlate
 			description="Copied registry source, unmodified, with assistant-ui's own sizes and Chopin's colours."
@@ -423,6 +448,53 @@ export function AssistantUiPlate() {
 				<div className="design-audit-aui-wide">
 					<StateLabel>Image gallery: tiles, broken tile, overflow and lightbox</StateLabel>
 					<ImageGallery images={GALLERY_IMAGES} maxVisible={6} />
+				</div>
+			</div>
+			<div className="design-audit-aui">
+				{ACTION_SPECIMENS.map(specimen => (
+					<div key={specimen.label}>
+						<StateLabel>{specimen.label}</StateLabel>
+						<MessageActions
+							copied={specimen.copied || (specimen.label === "Message actions, default" && copied)}
+							onCopy={() => setCopied(value => !value)}
+							onMore={() => {}}
+							onReactionChange={setReaction}
+							onRegenerate={() => {}}
+							reaction={specimen.reaction ?? (specimen.label === "Helpful" ? reaction : null)}
+							regenerating={specimen.regenerating}
+						/>
+					</div>
+				))}
+				<div>
+					<StateLabel>Overflow menu</StateLabel>
+					<DropdownMenu modal={false}>
+						<DropdownMenuTrigger
+							render={
+								<Button aria-label="More actions" size="icon-sm" variant="ghost">
+									<EllipsisIcon />
+								</Button>
+							}
+						/>
+						<DropdownMenuContent align="end" aria-label="More actions" className="w-auto">
+							<DropdownMenuItem>
+								<CopyIcon />
+								Copy
+							</DropdownMenuItem>
+							<DropdownMenuItem>
+								<CopyIcon />
+								Copy as plain text
+							</DropdownMenuItem>
+							<DropdownMenuItem>
+								<RotateCcwIcon />
+								Try again
+							</DropdownMenuItem>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem variant="destructive">
+								<XIcon />
+								Delete
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
 				</div>
 			</div>
 			<div className="design-audit-aui-markdown">

@@ -54,6 +54,13 @@
 			"patchSha256": "cb2a65560dd2515ac53c0eaa8d1add5a3c8d4e7f1d692619789fb2a36e78102a"
 		},
 		{
+			"file": "apps/web/src/components/assistant-ui/elements/message-actions.tsx",
+			"registry": "@assistant-ui",
+			"item": "elements-message-actions",
+			"version": "assistant-ui/assistant-ui@437b410726e2",
+			"sha256": "000c9da991dd888234576521192579169a0b6c4913ad2b025ee387b29c6d5277"
+		},
+		{
 			"file": "apps/web/src/components/assistant-ui/elements/message-attachment.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-message-attachment",
@@ -114,7 +121,7 @@
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "5bb3b0eb525a40d0d13fae0d007acd575ef61daf6d465577b65b66e42ace4450"
+			"sha256": "9345c2d77d86ffd959ffd5c29d2dea9928cf1aac5fa590e9c3ea6af6183aa6b3"
 		},
 		{
 			"file": "apps/web/src/components/hooks/use-copy-to-clipboard.ts",
@@ -150,6 +157,13 @@
 			"item": "dialog",
 			"version": "shadcn-ui/ui@dd41d19e2f80",
 			"sha256": "e1a331d1617ef6381511f537c5652b13e1f9a4d627a25d80853d6171b7e8b8a5"
+		},
+		{
+			"file": "apps/web/src/components/ui/dropdown-menu.tsx",
+			"registry": "@shadcn",
+			"item": "dropdown-menu",
+			"version": "shadcn-ui/ui@dd41d19e2f80",
+			"sha256": "38eb2d79c390295e7038ed4c016543afdd5441611e9692f10c85f78434752a3f"
 		},
 		{
 			"file": "apps/web/src/components/ui/input-group.tsx",

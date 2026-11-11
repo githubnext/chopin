@@ -207,7 +207,7 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				id: "assistant-ui",
 				label: "assistant-ui elements",
 				source: "apps/web/src/components/assistant-ui/elements/markdown-text.tsx",
-				states: ["outline", "ghost", "muted", "small", "large", "open", "markdown"],
+				states: ["outline", "ghost", "muted", "small", "large", "open", "markdown", "actions", "menu"],
 			},
 		],
 	},
