@@ -343,202 +343,6 @@
 		"sourceHash": "4a274a795c3cc65ad14b7bc3c60483bfa62243d60f6c40fe5195142a85289123"
 	},
 	{
-		"file": "apps/web/src/markdown-text/markdown-text.tsx",
-		"reason": "MarkdownText draws its root with the class and attributes its surface passes (Chat's message root, a decision card's body); each caller's static classes are scanned at its own call site. Reviewed at this exact component boundary.",
-		"cases": [
-			[
-				"dynamic",
-				"*",
-				"codeOverrides",
-				"unresolved JSX props > MarkdownCodeOverride: FC<ComponentProps<CodeComponent>> > <CodeOverride>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > MarkdownCodeOverride: FC<ComponentProps<CodeComponent>> > <CodeOverride>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > MarkdownPreOverride: FC<ComponentProps<PreComponent>> > <PreOverride>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"options",
-				"unresolved JSX props > MarkdownRenderer: FC<MarkdownRendererProps> > <ReactMarkdown>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"options",
-				"unresolved JSX props > DeferredMarkdownRenderer: FC<MarkdownRendererProps> > <MarkdownRenderer>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"stableRest",
-				"unresolved JSX props > MarkdownTextInner: FC<MarkdownTextInnerProps> > <Renderer>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"attributes",
-				"unresolved JSX props > MarkdownTextImpl: FC<MarkdownTextProps> > <Container>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"rest",
-				"unresolved JSX props > MarkdownTextImpl: FC<MarkdownTextProps> > <MarkdownTextInner>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"[className, \"aui-md\", containerClassName].filter(Boolean)",
-				"class > MarkdownTextImpl: FC<MarkdownTextProps> > <Container>",
-				1
-			]
-		],
-		"sourceHash": "2cd6a8312b5856503115cda33d51b76879fb400811935e1b38ec0aadf1dc1de2"
-	},
-	{
-		"file": "apps/web/src/markdown-text/memoization.tsx",
-		"reason": "The memoizing wrapper forwards the properties react-markdown computed to the component it wraps, unchanged. Reviewed at this exact component boundary.",
-		"cases": [
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > withoutNode > <Component>",
-				1
-			]
-		],
-		"sourceHash": "a9cceda09bc6905e37be11e647def47a8aa0d6e900510f7e912f4b26b44ce0c4"
-	},
-	{
-		"file": "apps/web/src/markdown-text/default-components.tsx",
-		"reason": "MarkdownText's elements forward the properties react-markdown computed from the parsed message (a link's href, a table cell's alignment, a list's task-list class, a code block's language class) onto the element and join the class they are given to their fixed aui-md-* class; the values are parsed message data, never authored styles. Reviewed at this exact component boundary.",
-		"cases": [
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > element > <Tag>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > <table>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > defaultComponents > Code > <code>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"own",
-				"class > element > <Tag>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > element > <Tag>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > <table>",
-				1
-			],
-			[
-				"dynamic",
-				"class",
-				"className",
-				"class > defaultComponents > Code > <code>",
-				1
-			]
-		],
-		"sourceHash": "2e8add35b4eb5bc4b88422c4b8796757798861dd9141d0d66ee40aa211336002"
-	},
-	{
-		"file": "apps/web/src/markdown-text/code-blocks.tsx",
-		"reason": "The fenced-code override re-emits the pre and code properties react-markdown computed from the parsed message (a block's language class) onto the pre and code it draws; nothing is authored here. Reviewed at this exact component boundary.",
-		"cases": [
-			[
-				"dynamic",
-				"*",
-				"rest",
-				"unresolved JSX props > DefaultPre: PreComponent > <pre>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"rest",
-				"unresolved JSX props > DefaultCode: CodeComponent > <code>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"rest",
-				"unresolved JSX props > PreOverrideImpl > <FallbackPre>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"withDefaultProps<any>(preProps)(props)",
-				"unresolved JSX props > WrappedPre > <Pre>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"withDefaultProps<any>(codeProps)(props)",
-				"unresolved JSX props > WrappedCode > <Code>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > CodeOverrideImpl: FC<CodeOverrideProps> > <components.Code>",
-				1
-			],
-			[
-				"dynamic",
-				"*",
-				"props",
-				"unresolved JSX props > CodeOverrideImpl: FC<CodeOverrideProps> > <CodeBlockOverride>",
-				1
-			]
-		],
-		"sourceHash": "536278deba1ca3bd121443588f57e37f7ecb4df845d6d106d5b3f0fd3abf99d9"
-	},
-	{
 		"file": "apps/web/src/question-markdown.tsx",
 		"reason": "The decision card's Markdown root takes the class its place gives it from the question package (one of five fixed roots); static classes there are scanned. Reviewed at this exact component boundary.",
 		"cases": [
@@ -550,7 +354,7 @@
 				1
 			]
 		],
-		"sourceHash": "8f8433e53e188bfb21813716660a6b9c8369dc8b814cc0e7a19fdde9e9f23401"
+		"sourceHash": "92f1f5734cf3615cd8ebada97ee5c123d5e0e089db7ce0a56eeb8621650abea4"
 	},
 	{
 		"file": "apps/web/src/chat/markdown.tsx",
@@ -559,8 +363,8 @@
 			[
 				"dynamic",
 				"class",
-				"[\"aui-md-a\", className].filter(Boolean)",
-				"class > ChatLink > <a>",
+				"className",
+				"class > ChatLink > <UpstreamLink>",
 				1
 			],
 			[
@@ -571,7 +375,7 @@
 				1
 			]
 		],
-		"sourceHash": "25c7c40d5688c6dc6bbf7782b701bcddcac518dfa043f1278bda32afca2c3798"
+		"sourceHash": "d146e0bf2e1e868404c8a397fbaa6922bf5a00f855e65e1b60907544cb43325b"
 	},
 	{
 		"file": "apps/web/src/chat/assistant-ui/markdown-primitive.tsx",
@@ -704,6 +508,6 @@
 				1
 			]
 		],
-		"sourceHash": "6eafe406d4bf2ae53bda5313a17c9efa3acdd7bbc4d6a7d13e938e73fe9bd2bb"
+		"sourceHash": "17854ba1f1e12e412b0b653635d84ac5e995d43a8ea61c01b29f29456da49371"
 	}
 ]

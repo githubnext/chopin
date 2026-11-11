@@ -1733,6 +1733,7 @@ body {
 
 [data-question-markdown] pre {
 	overflow-x: auto;
+	border: 0;
 	border-radius: var(--radius-md);
 	background: var(--color-inset);
 	padding: 0.5rem 0.75rem;

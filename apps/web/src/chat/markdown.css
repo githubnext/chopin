@@ -2,7 +2,6 @@
 	min-width: 0;
 	overflow-wrap: anywhere;
 	font-size: var(--text-sm);
-	line-height: 1.4;
 }
 
 .chat-markdown > :first-child {
@@ -18,41 +17,19 @@
 	text-wrap: pretty;
 }
 
-.chat-markdown p,
-.chat-markdown ul,
-.chat-markdown ol,
-.chat-markdown blockquote,
-.chat-markdown pre {
-	margin-block: 0.5rem;
+/* A task item shows its checkbox in place of a bullet; a table cell scrolls whole in its lane. */
+.chat-markdown li.task-list-item {
+	list-style: none;
 }
 
-.chat-markdown ul,
-.chat-markdown ol {
-	padding-inline-start: 1.25rem;
+.chat-markdown li.task-list-item > input,
+.chat-markdown li.task-list-item > p > input {
+	margin-inline: -1.25rem 0.375rem;
+	vertical-align: middle;
 }
 
-.chat-markdown ul {
-	list-style: disc;
-}
-
-.chat-markdown ol {
-	list-style: decimal;
-}
-
-.chat-markdown li + li {
-	margin-block-start: 0.125rem;
-}
-
-.chat-markdown blockquote {
-	border-inline-start: 2px solid var(--color-edge);
-	padding-inline-start: 0.75rem;
-	color: var(--color-text-secondary);
-}
-
-.chat-markdown a {
-	color: var(--color-brand-ink);
-	text-decoration: underline;
-	text-underline-offset: 0.125rem;
+.chat-markdown .aui-md-table {
+	overflow-wrap: normal;
 }
 
 .chat-markdown .chat-reference {
@@ -60,51 +37,11 @@
 	max-width: 100%;
 	border-radius: var(--radius-sm);
 	background: var(--color-brand-wash);
+	color: var(--color-brand-ink);
 	padding-inline: 0.25rem;
 	font-weight: 500;
 	text-decoration: none;
 	vertical-align: baseline;
-}
-
-.chat-markdown :not(pre) > code {
-	border-radius: var(--radius-sm);
-	background: var(--color-inset);
-	padding: 0.125rem 0.25rem;
-	font-family: var(--font-mono);
-	font-size: var(--text-sm);
-}
-
-.chat-markdown pre {
-	overflow-x: auto;
-	border-radius: var(--radius-md);
-	background: var(--color-inset);
-	padding: 0.75rem;
-}
-
-.chat-markdown pre code {
-	font-family: var(--font-mono);
-	font-size: var(--text-sm);
-}
-
-/* A fenced block's header (its language and a copy button) and its code read as one block. */
-.chat-markdown .aui-code-header-root {
-	margin-block: 0.5rem 0;
-}
-
-.chat-markdown .aui-code-header-root + pre {
-	margin-block-start: 0;
-	padding-block-start: 0.25rem;
-	border-start-start-radius: 0;
-	border-start-end-radius: 0;
-}
-
-/* A table scrolls in its own lane rather than widening the message. */
-.chat-markdown .aui-md-table-wrapper {
-	margin-block: 0.5rem;
-}
-
-.chat-markdown .aui-md-table {
-	font-size: var(--text-sm);
 }
 
 .chat-message-body:has([data-analysis-trigger]) {

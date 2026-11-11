@@ -3,8 +3,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { RepositoryLinksProvider } from "@chopin/editor";
 
+import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import { inlineText } from "./inline-text";
-import { MarkdownText } from "../markdown-text/markdown-text";
 import { InlineMarkdown, MessageMarkdown, sameMessageMarkdown } from "./markdown";
 import { referenceRenderModel } from "./references";
 
@@ -52,6 +52,17 @@ function reference(source: string, token: string, id = "reference-one"): Chat.Re
 	};
 }
 
+const P_CLASS = "aui-md-p my-3 leading-relaxed first:mt-0 last:mb-0";
+const STRONG_CLASS = "aui-md-strong font-semibold";
+const A_CLASS = "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2";
+const CODE_CLASS = "aui-md-inline-code bg-muted rounded-md px-1.5 py-0.5 font-mono text-[0.85em]";
+const UL_CLASS = "aui-md-ul marker:text-muted-foreground my-3 ms-5 list-disc [&amp;&gt;li]:mt-1";
+const OL_CLASS = "aui-md-ol marker:text-muted-foreground my-3 ms-5 list-decimal [&amp;&gt;li]:mt-1";
+const LI_CLASS = "aui-md-li leading-relaxed";
+const QUOTE_CLASS =
+	"aui-md-blockquote border-muted-foreground/30 text-muted-foreground my-3 border-s-2 ps-4";
+const TABLE_CLASS = "aui-md-table w-full border-separate border-spacing-0";
+
 function markdown(source: string, references?: Chat.Reference[]): string {
 	return renderToStaticMarkup(createElement(MessageMarkdown, { source, references }));
 }
@@ -59,18 +70,18 @@ function markdown(source: string, references?: Chat.Reference[]): string {
 test("Chat Markdown admits formatting without document features", () => {
 	let markup = markdown(PARTICIPANT_MESSAGE);
 
-	expect(markup).toContain('<strong class="aui-md-strong">Bold</strong>');
+	expect(markup).toContain(`<strong class="${STRONG_CLASS}">Bold</strong>`);
 	expect(markup).toContain("<em>italic</em>");
-	expect(markup).toContain('<ul class="aui-md-ul">');
-	expect(markup).toContain('<li class="aui-md-li">first</li>');
-	expect(markup).toContain('<ol class="aui-md-ol">');
-	expect(markup).toContain('<li class="aui-md-li">one</li>');
-	expect(markup).toContain('<blockquote class="aui-md-blockquote">');
+	expect(markup).toContain(`<ul class="${UL_CLASS}">`);
+	expect(markup).toContain(`<li class="${LI_CLASS}">first</li>`);
+	expect(markup).toContain(`<ol class="${OL_CLASS}">`);
+	expect(markup).toContain(`<li class="${LI_CLASS}">one</li>`);
+	expect(markup).toContain(`<blockquote class="${QUOTE_CLASS}">`);
 	expect(markup).toContain("quoted");
 	expect(markup).toContain('href="https://example.com"');
 	expect(markup).toContain('target="_blank"');
 	expect(markup).toContain(
-		'<p class="aui-md-p">Use <code class="aui-md-inline-code">bun test</code>.</p>',
+		`<p class="${P_CLASS}">Use <code class="${CODE_CLASS}">bun test</code>.</p>`,
 	);
 	expect(markup).toContain('<code class="language-ts">let answer = 42;');
 	expect(markup).toContain("Ordinary message text");
@@ -78,34 +89,36 @@ test("Chat Markdown admits formatting without document features", () => {
 	expect(markup).not.toContain("<img");
 
 	expect(markdown("Planner wrote **strongly**.")).toContain(
-		'<strong class="aui-md-strong">strongly</strong>',
+		`<strong class="${STRONG_CLASS}">strongly</strong>`,
 	);
 });
 
 test("the check that Chat draws no h1 recognises an h1 that carries a class", () => {
 	let drawn = renderToStaticMarkup(createElement(MarkdownText, { text: "# Title" }));
 	// MarkdownText draws a heading as an h1 with its class, which "<h1>" alone would never match.
-	expect(drawn).toContain('<h1 class="aui-md-h1">Title</h1>');
+	expect(drawn).toContain(
+		'<h1 class="aui-md-h1 mt-5 mb-2 scroll-m-20 text-xl font-semibold first:mt-0 last:mb-0">Title</h1>',
+	);
 	expect(drawn).not.toContain("<h1>");
 	expect(drawn).toMatch(H1);
 	expect(H1.test("<h1>")).toBe(true);
 	// Chat's message draws the same source as a line of text.
 	expect(markdown("# Title")).not.toMatch(H1);
-	expect(markdown("# Title")).toContain('<p class="aui-md-p">Title</p>');
+	expect(markdown("# Title")).toContain(`<p class="${P_CLASS}">Title</p>`);
 });
 
 test("Chat reads GitHub's tables, strikethrough and task lists, and only those", () => {
 	let markup = markdown(
 		"| A | B |\n| - | - |\n| 1 | 2 |\n\n~~gone~~ and ~one~ and about ~5 minutes, ~10 at most\n\n- [x] done\n- [ ] open",
 	);
-	expect(markup).toContain('<table class="aui-md-table">');
+	expect(markup).toContain(`<table class="${TABLE_CLASS}">`);
 	expect(markup).toContain("<del>gone</del>");
 	// One tilde is not strikethrough: it is the text a person typed.
 	expect(markup).toContain("~one~ and about ~5 minutes, ~10 at most");
 	expect(markup.match(/<input [^>]*type="checkbox"/g)).toHaveLength(2);
 	// A box is named, so a reader of the screen hears what it is before the item's words.
 	expect(markup.match(/<input aria-label="Task"/g)).toHaveLength(2);
-	expect(markup).toContain('<li class="aui-md-li task-list-item">');
+	expect(markup).toContain(`<li class="${LI_CLASS} task-list-item">`);
 });
 
 test("a footnote, a bare address and a www link stay the plain text they were in Chat", () => {
@@ -127,8 +140,11 @@ test("a footnote, a bare address and a www link stay the plain text they were in
 });
 
 test("indentation keeps nested lists and code blocks intact", () => {
-	let nested =
-		/<li class="aui-md-li">parent\s*<ul class="aui-md-ul">\s*<li class="aui-md-li">child<\/li>\s*<li class="aui-md-li">sibling<\/li>\s*<\/ul>\s*<\/li>\s*<li class="aui-md-li">next<\/li>/;
+	let nested = new RegExp(
+		`<li class="${LI_CLASS}">parent\\s*<ul class="${
+			RegExp.escape(UL_CLASS)
+		}">\\s*<li class="${LI_CLASS}">child<\\/li>\\s*<li class="${LI_CLASS}">sibling<\\/li>\\s*<\\/ul>\\s*<\\/li>\\s*<li class="${LI_CLASS}">next<\\/li>`,
+	);
 
 	expect(markdown("- parent\n  - child\n  - sibling\n- next")).toMatch(nested);
 	expect(markdown("- parent\n    - child\n    - sibling\n- next")).toMatch(nested);
@@ -153,17 +169,23 @@ test("a numbered list that continues after a lead-in line still renders as a lis
 	].join("\n");
 	let markup = markdown(source);
 
-	expect(markup).toContain('<p class="aui-md-p">Needs task 1 first:</p>');
+	expect(markup).toContain(`<p class="${P_CLASS}">Needs task 1 first:</p>`);
 	expect(markup).toContain(
-		'<ol class="aui-md-ol" start="3">\n<li class="aui-md-li"><code class="aui-md-inline-code">rewire-handler</code>: rewire it.</li>\n</ol>',
+		`<ol class="${OL_CLASS}" start="3">\n<li class="${LI_CLASS}"><code class="${CODE_CLASS}">rewire-handler</code>: rewire it.</li>\n</ol>`,
 	);
-	expect(markup).toContain('<p class="aui-md-p">Need task 3 first:</p>');
+	expect(markup).toContain(`<p class="${P_CLASS}">Need task 3 first:</p>`);
 	expect(markup).toMatch(
-		/<ol class="aui-md-ol" start="4">\s*<li class="aui-md-li"><code class="aui-md-inline-code">table-tests<\/code>: check tables\s+and statuses\.<\/li>\s*<li class="aui-md-li"><code class="aui-md-inline-code">secret-test<\/code>: check the secret\.<\/li>\s*<\/ol>/,
+		new RegExp(
+			`<ol class="${RegExp.escape(OL_CLASS)}" start="4">\\s*<li class="${LI_CLASS}"><code class="${
+				RegExp.escape(CODE_CLASS)
+			}">table-tests<\\/code>: check tables\\s+and statuses\\.<\\/li>\\s*<li class="${LI_CLASS}"><code class="${
+				RegExp.escape(CODE_CLASS)
+			}">secret-test<\\/code>: check the secret\\.<\\/li>\\s*<\\/ol>`,
+		),
 	);
 	// An escaped marker, a number inside a sentence, and code stay as written.
 	expect(markdown("Released in\n2024\\. Then more")).toContain(
-		'<p class="aui-md-p">Released in\n2024. Then more</p>',
+		`<p class="${P_CLASS}">Released in\n2024. Then more</p>`,
 	);
 	expect(markdown("Step\n`3. code`")).not.toContain("<ol");
 });
@@ -174,7 +196,7 @@ test("authoritative ranges render internal chips inside ordinary Markdown", () =
 
 	expect(markup).not.toContain("@chopin");
 	expect(markup).toContain(
-		'<strong class="aui-md-strong"><a class="chat-reference" data-chat-reference="document" href="/documents/octo-org/score/reference-one">#Release: v2 (API)</a></strong>',
+		`<strong class="${STRONG_CLASS}"><a class="chat-reference" data-chat-reference="document" data-chopin-control="" href="/documents/octo-org/score/reference-one">#Release: v2 (API)</a></strong>`,
 	);
 	expect(markup).toContain('href="https://example.com"');
 	expect(markup).toContain('rel="noopener noreferrer"');
@@ -226,7 +248,7 @@ test("a command that opened a message is a chip, not a link, and the words after
 	expect(markup).toContain(
 		'<span class="chat-reference" data-chat-reference="command">/skill:release-notes</span>',
 	);
-	expect(markup).toContain('<strong class="aui-md-strong">v2</strong>');
+	expect(markup).toContain(`<strong class="${STRONG_CLASS}">v2</strong>`);
 	expect(markup).not.toContain("<a");
 });
 
@@ -294,7 +316,7 @@ test("ranges inside code, link labels, and link destinations remain ordinary tex
 	let markup = markdown(source, references);
 
 	expect(markup.match(/class="chat-reference"/g)).toHaveLength(1);
-	expect(markup).toContain('<code class="aui-md-inline-code">#Code</code>');
+	expect(markup).toContain(`<code class="${CODE_CLASS}">#Code</code>`);
 	expect(markup).toContain(">#Label</a>");
 	expect(markup).toContain('href="#Target"');
 	expect(markup).toContain(">#Plan</a>");
@@ -326,7 +348,7 @@ function inline(source: string, links?: boolean): string {
 
 test("inline Markdown formats code, emphasis and links without blocks", () => {
 	expect(inline("Rewire `login` to **call** _three_ [helpers](https://example.com)")).toBe(
-		'Rewire <code class="aui-md-inline-code">login</code> to <strong class="aui-md-strong">call</strong> <em>three</em> <a class="aui-md-a" href="https://example.com" rel="noopener noreferrer" target="_blank">helpers</a>',
+		`Rewire <code class="${CODE_CLASS}">login</code> to <strong class="${STRONG_CLASS}">call</strong> <em>three</em> <a class="${A_CLASS}" href="https://example.com" rel="noopener noreferrer" target="_blank">helpers</a>`,
 	);
 	// A task title sits inside a button, so its links read as text.
 	expect(inline("See [the docs](https://example.com)", false)).toBe("See the docs");
@@ -336,7 +358,7 @@ test("inline Markdown formats code, emphasis and links without blocks", () => {
 	expect(inline("# Heading")).toBe("# Heading");
 	expect(inline("> quote")).toBe("&gt; quote");
 	expect(inline("    indented `code`")).toBe(
-		'indented <code class="aui-md-inline-code">code</code>',
+		`indented <code class="${CODE_CLASS}">code</code>`,
 	);
 	expect(inline("<b>raw</b> ![image](https://example.invalid/i.png)")).toBe("raw ");
 	expect(inline("one\n\ntwo")).toBe("one two");
@@ -374,12 +396,12 @@ test("a repository path in Chat opens the file on GitHub, as it does in the docu
 	let markup = inRepository(createElement(MessageMarkdown, { source }));
 
 	expect(markup).toContain(
-		`<a class="aui-md-a" href="${BLOB}/docs/review.md#L10-L20" rel="noopener noreferrer" target="_blank">the review</a>`,
+		`<a class="${A_CLASS}" href="${BLOB}/docs/review.md#L10-L20" rel="noopener noreferrer" target="_blank">the review</a>`,
 	);
-	expect(markup).toContain(`<a class="aui-md-a" href="${BLOB}/src/app.ts"`);
+	expect(markup).toContain(`<a class="${A_CLASS}" href="${BLOB}/src/app.ts"`);
 	expect(
 		inRepository(createElement(InlineMarkdown, { source: "Edit [the app](src/app.ts)" })),
-	).toContain(`<a class="aui-md-a" href="${BLOB}/src/app.ts"`);
+	).toContain(`<a class="${A_CLASS}" href="${BLOB}/src/app.ts"`);
 });
 
 test("every other link in Chat is as written, with or without a repository", () => {

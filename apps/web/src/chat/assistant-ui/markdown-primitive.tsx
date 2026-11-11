@@ -157,13 +157,21 @@ function wrapWithoutNode(Component: ComponentType) {
 	);
 }
 
-export function memoizeMarkdownComponents(components: MemoizableComponents = {}) {
+type MemoizedComponents<T extends MemoizableComponents> = {
+	[K in keyof T]: T[K] extends ComponentType<infer P> | undefined
+		? ComponentType<P & { node?: HastElement | undefined }>
+		: T[K];
+};
+
+export function memoizeMarkdownComponents<T extends MemoizableComponents = MemoizableComponents>(
+	components: T = {} as T,
+): MemoizedComponents<T> {
 	return Object.fromEntries(
 		Object.entries(components ?? {}).map(([key, value]) => [
 			key,
 			value ? wrapWithoutNode(value as ComponentType) : value,
 		]),
-	);
+	) as MemoizedComponents<T>;
 }
 
 let PrePropsContext = createContext<
@@ -296,7 +304,7 @@ let FenceCode = memo(
 			& { config: CodeBlockConfig },
 	) {
 		let preProps = useContext(PrePropsContext);
-		if (!preProps) return <config.slots.Code {...codeProps} />;
+		if (!preProps) return <config.slots.Code {...codeProps}>{children}</config.slots.Code>;
 
 		let language = fenceLanguage(codeProps.className);
 		let byLanguage = config.componentsByLanguage?.[language];
