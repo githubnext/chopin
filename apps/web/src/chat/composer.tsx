@@ -568,10 +568,6 @@ export function ChatComposer(
 									{model && <ModelPill control={model} />}
 								</div>
 								<div className="composer-actions">
-									{/* On a phone, adding files and dictating have a row of their own below the draft. */}
-									{(files || dictation) && (
-										<span aria-hidden="true" className="composer-row-break" />
-									)}
 									{dictation && (
 										<>
 											{dictation.active && (
