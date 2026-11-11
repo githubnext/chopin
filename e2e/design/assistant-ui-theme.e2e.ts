@@ -36,7 +36,7 @@ type Drawn = { where: string; property: string; value: string; colour: Colour };
 /** Every colour drawn by the copies' elements right now, as sRGB and alpha. */
 async function drawn(
 	page: Page,
-): Promise<{ drawn: Drawn[]; tokens: Record<string, Colour>; fonts: string[] }> {
+): Promise<{ drawn: Drawn[]; tokens: Record<string, Colour>; fonts: string[]; leaks: string[] }> {
 	return page.evaluate(([roots, names]) => {
 		let probe = document.createElement("span");
 		document.body.append(probe);
@@ -58,6 +58,7 @@ async function drawn(
 		let found: Drawn[] = [];
 		let seen = new Set<Element>();
 		let fonts: string[] = [];
+		let leaks: string[] = [];
 		let body = getComputedStyle(document.body).fontFamily;
 		let describe = (element: Element) =>
 			`${element.tagName.toLowerCase()}${
@@ -80,6 +81,11 @@ async function drawn(
 						&& style[`border${side}Style`] !== "none"
 					) {
 						add(element, `border-${side.toLowerCase()}-color`, style[`border${side}Color`]);
+						// A border left to preflight is drawn in the text colour: black rules between a copy's
+						// parts, where assistant-ui draws its soft border role.
+						if (style[`border${side}Color`] === style.color) {
+							leaks.push(`${describe(element)} border-${side.toLowerCase()} is the text colour`);
+						}
 					}
 				}
 				if (style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) > 0) {
@@ -109,7 +115,7 @@ async function drawn(
 			}
 		}
 		probe.remove();
-		return { drawn: found, tokens, fonts };
+		return { drawn: found, tokens, fonts, leaks };
 	}, [ROOTS, TOKENS] as const);
 }
 
@@ -169,6 +175,7 @@ for (let mode of ["light", "dark"] as const) {
 			let result = await drawn(page);
 			expect(result.drawn.length, `${state} draws colours`).toBeGreaterThan(10);
 			expect(unthemed(result), `${state}, ${mode}: colours that are no Chopin token`).toEqual([]);
+			expect(result.leaks, `${state}, ${mode}: borders drawn in the text colour`).toEqual([]);
 			expect(
 				result.fonts.filter(font => !font.endsWith(": Chopin")),
 				`${state}, ${mode}: type outside Chopin's typeface`,
