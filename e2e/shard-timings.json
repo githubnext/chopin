@@ -148,8 +148,8 @@
 		"tests": 3
 	},
 	"handover.e2e.ts": {
-		"ms": 75000,
-		"tests": 6
+		"ms": 249189,
+		"tests": 13
 	},
 	"harness-children.e2e.ts": {
 		"ms": 15351,

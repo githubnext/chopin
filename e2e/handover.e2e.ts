@@ -557,6 +557,17 @@ function replies(page: Page, text: string): Locator {
 	return chat(page).getByText(text, { exact: true });
 }
 
+/** What a person sent to Chopin, as the Chat shows it: not the Planner's own lines, which may repeat it. */
+function message(page: Page, text: string): Locator {
+	return chat(page).locator("[data-chat-message-id]")
+		.filter({ has: page.locator(".chat-mention") })
+		.filter({ hasText: text });
+}
+
+/** What a message says once the server refused it, or the browser still holds it. */
+const failure = (page: Page, text: string) => message(page, text).locator("[data-chat-failed]");
+const sending = (page: Page) => chat(page).locator("[data-chat-delivery]");
+
 /**
  * Two servers over one database and a proxy in front of them, with a person's tab open on a
  * document, as a deploy leaves them: A serving, B waiting beside it, and the proxy sending the
@@ -698,9 +709,11 @@ async function pair(page: Page, label: string): Promise<Machine> {
 async function backend(
 	token: string,
 	document: string,
-	options: { onTurn?: () => void; resumeAfter?: Promise<unknown> } = {},
+	options: { onTurn?: () => void; resumeAfter?: Promise<unknown>; steers?: boolean } = {},
 ) {
 	let prompts: Array<{ tag: string; prompt: string; at: number; child?: string }> = [];
+	/** What its running turns were given by a person, by the tag the message carries. */
+	let steered: Array<{ tag: string; prompt: string; turn: string }> = [];
 	let held = Promise.withResolvers<void>();
 	let resumes: Array<{ attempts: number; at: number }> = [];
 	let closes: Array<{ code: number; reconnectWithinMs?: number; at: number }> = [];
@@ -729,6 +742,13 @@ async function backend(
 				if (context.signal.aborted) return context.end("aborted");
 			}
 			context.emit({ type: "stream-start", modelId: "scripted" });
+			// What the turn was given while it ran, read at its next step.
+			for (let given of steered.filter(given => given.turn === context.message.turn)) {
+				let id = `read-${given.tag}`;
+				context.emit({ type: "text-start", id });
+				context.emit({ type: "text-delta", id, delta: `Read ${given.tag}` });
+				context.emit({ type: "text-end", id });
+			}
 			// A message about an open child names it, and the turn reads the child through its tools.
 			let child = /child id (\S+?)\)/.exec(prompt)?.[1];
 			if (child) {
@@ -764,6 +784,29 @@ async function backend(
 			}
 			finishTurn(context);
 		},
+		// Without it the client offers no way to take a message while a turn runs.
+		...(options.steers
+			? {
+				steer(message) {
+					let tag = [...message.prompt.matchAll(/\[([a-z]\d+)\]/g)].at(-1)?.[1] ?? "?";
+					steered.push({ tag, prompt: message.prompt, turn: message.turn });
+				},
+			}
+			: {}),
+	};
+	/** Turns in flight, and when the machine last did anything: Chopin's own upkeep counts. */
+	let working = 0;
+	let lastActive = performance.now();
+	let turn = handlers.turn;
+	handlers.turn = async context => {
+		working++;
+		lastActive = performance.now();
+		try {
+			await turn(context);
+		} finally {
+			working--;
+			lastActive = performance.now();
+		}
 	};
 	let state = {
 		client: await connectAgent({ url: ORIGIN, token, document, handlers }),
@@ -788,6 +831,7 @@ async function backend(
 				});
 				state.client = resumed.client;
 				resumes.push({ attempts: resumed.attempts, at: performance.now() });
+				lastActive = performance.now();
 			} catch (error) {
 				// A link Chopin ended for good (the machine was disconnected) has nothing to resume.
 				if (!flags.ended) errors.push(String(error));
@@ -797,6 +841,12 @@ async function backend(
 	})();
 	return {
 		prompts,
+		steered,
+		/**
+		 * How long the machine has had nothing to do: no turn in flight, its own upkeep (a title for
+		 * the document, which runs once it is attached) included, since it last had, or resumed.
+		 */
+		idleFor: () => working > 0 ? 0 : performance.now() - lastActive,
 		resumes,
 		closes,
 		errors,
@@ -982,6 +1032,8 @@ async function arrange(
 		source?: string;
 		seed?: (room: string) => Promise<void>;
 		resumeAfter?: Promise<unknown>;
+		/** Whether its machine takes a message while a turn runs (it offers `steer-turn`). */
+		steers?: boolean;
 	} = {},
 ) {
 	let world = await overlap(page, options.source);
@@ -1005,6 +1057,7 @@ async function arrange(
 	]);
 	let planner = await backend(await machine.credential(room), room, {
 		resumeAfter: options.resumeAfter,
+		steers: options.steers,
 	});
 	closers.push(() => planner.detach());
 	await expect(button).toHaveAccessibleName(`Runs on ${MACHINE}`);
@@ -1106,6 +1159,274 @@ test("a deploy under an open tab with a connected machine shows nothing, reloads
 });
 
 /** Waits for the page to have lost its connection to the old process: the 1012 close has arrived. */
+async function lostConnection(page: Page): Promise<void> {
+	await expect.poll(async () => (await probe(page)).closes.includes(1012), { timeout: 15_000 })
+		.toBe(true);
+}
+
+/** The tags of the messages people sent to Chopin, in the order the Chat shows them. */
+async function sentTags(page: Page): Promise<string[]> {
+	let texts = await chat(page).locator("[data-chat-message-id]")
+		.filter({ has: page.locator(".chat-mention") }).allTextContents();
+	return texts.map(text => /\[([a-z]\d+)\]/.exec(text)?.[1] ?? "?");
+}
+
+const tagsOf = (prompts: Array<{ tag: string }>) => prompts.map(prompt => prompt.tag);
+
+/**
+ * Until the machine has had nothing to do for a while. Chopin's own upkeep of the document (a
+ * title for it) runs on the machine once it is attached, and a message sent while that runs is
+ * refused, as one sent to a turn that cannot take it, so a test that means to start a turn waits.
+ */
+async function quiet(planner: { idleFor(): number }): Promise<void> {
+	await until("the machine to have nothing to do", () => planner.idleFor() > 2_000, 30_000);
+}
+
+/** The states of the Planner requests an earlier release saved for the document, in the order it saved them. */
+async function rowStates(database: string, room: string): Promise<string[]> {
+	let sql = new SQL(database);
+	try {
+		let rows = await sql<{ state: string }[]>`
+			SELECT state FROM planner_deferred_turns WHERE document_id = ${room} ORDER BY seq
+		`;
+		return rows.map(row => row.state);
+	} finally {
+		await sql.close();
+	}
+}
+
+/** A request an earlier release was holding for a machine when the deploy began, as it saved one. */
+async function holdRow(database: string, room: string, text: string): Promise<void> {
+	let sql = new SQL(database);
+	try {
+		await sql`
+			INSERT INTO planner_deferred_turns (
+				id, document_id, request_id, kind, handle, user_id, text, references_json, state,
+				created_at, fencing
+			) VALUES (
+				${crypto.randomUUID()}, ${room}, ${crypto.randomUUID()}, 'composer', ${HANDLE},
+				'earlier-release', ${text}, '[]'::jsonb, 'waiting', now(), 1
+			)
+		`;
+	} finally {
+		await sql.close();
+	}
+}
+
+/**
+ * What the page said of a deploy that was meant to be invisible: nothing, but for the one message
+ * it could not send, which says so on itself. The machine was shown attached throughout.
+ */
+async function expectOnlyRefusals(page: Page, loads: { count: number }, refused: boolean) {
+	let seen = await probe(page);
+	expect(seen.violations, seen.timeline.join("\n")).toEqual(
+		refused ? ["a message says it could not be sent"] : [],
+	);
+	expect(seen.planner.filter(state => state !== "attached")).toEqual([]);
+	expect(seen.resets).toEqual([]);
+	expect(loads.count).toBe(0);
+}
+
+test("messages sent before, during and after the machine's hand-over window each end as started, given to the running turn or refused, and none is lost or left at Sending", async ({ browser, page }) => {
+	test.setTimeout(240_000);
+	let back = Promise.withResolvers<void>();
+	let { world, room, planner, loads } = await arrange(page, {
+		resumeAfter: back.promise,
+		steers: true,
+	});
+	let keys = keyboard();
+
+	// Before the deploy: the first message starts a turn, and the second, sent while it runs, is
+	// given to it.
+	await say(page, keys, "[m1] hold me");
+	await until("the first turn to start", () => planner.prompts.length === 1);
+	await say(page, keys, "[m2] sent while the turn runs, before the deploy");
+	await until("the second message to reach the turn", () => planner.steered.length === 1);
+
+	// During the old process's wait for that turn it is still serving, and still gives it a message.
+	let deploy = beginDeploy(world);
+	await deploy.told;
+	await say(page, keys, "[m3] sent while the old process waits for the turn");
+	await until("the third message to reach the turn", () => planner.steered.length === 2);
+
+	// The turn ends, the old process lets go, and the page has lost its connection to it. The
+	// person writes again: only this browser has it, and it says so.
+	planner.release();
+	await deploy.released;
+	await lostConnection(page);
+	await say(page, keys, "[m4] sent while the page is between processes");
+	await expect(message(page, "[m4]")).toHaveCount(1);
+	let done = await deploy.finish();
+	expect(done.exit, world.a.log.text).toBe(0);
+	await expectGap(done, page);
+
+	// The new process has the lease and the machine is shown attached, but its client has not
+	// resumed, inside its window: the browser sent the message again, and it was refused, on the
+	// message, with nothing kept for when the machine is back.
+	await expect(failure(page, "[m4]")).toContainText("Couldn't send.");
+	await expect(failure(page, "[m4]")).toContainText("No machine is connected to reply.");
+	expect(planner.prompts.map(prompt => prompt.tag)).toEqual(["m1"]);
+	expect(planner.resumes).toEqual([]);
+
+	// The machine is back, inside the window, and a message sent now starts a turn.
+	back.resolve();
+	await until("the Planner to resume", () => planner.resumes.length > 0, WINDOW_MS);
+	await quiet(planner);
+	await say(page, keys, "[m5] sent once the machine is back");
+	await expect(replies(page, "Reply m5")).toHaveCount(1);
+
+	// Each one's end, in the Chat and at the machine: started (m1, m5), given to the running turn,
+	// which read it (m2, m3), or refused (m4). None twice, none at Sending, none waiting.
+	await expect(replies(page, "Reply m1")).toHaveCount(1);
+	await expect(replies(page, "Read m2")).toHaveCount(1);
+	await expect(replies(page, "Read m3")).toHaveCount(1);
+	await expect(replies(page, "Reply m4")).toHaveCount(0);
+	for (let tag of ["m1", "m2", "m3", "m4", "m5"]) {
+		await expect(message(page, `[${tag}]`)).toHaveCount(1);
+	}
+	for (let tag of ["m1", "m2", "m3", "m5"]) {
+		await expect(failure(page, `[${tag}]`)).toHaveCount(0);
+	}
+	await expect(sending(page)).toHaveCount(0);
+	await expect(chat(page).locator('[data-chat-state="queued"]')).toHaveCount(0);
+	await Bun.sleep(1_000);
+	expect(tagsOf(planner.prompts)).toEqual(["m1", "m5"]);
+	expect(tagsOf(planner.steered)).toEqual(["m2", "m3"]);
+	expect(planner.errors).toEqual([]);
+	await expectOnlyRefusals(page, loads, true);
+
+	// The refused message was never kept: a tab opened afterwards has the other four, once, and
+	// the server holds no row for any of them.
+	let later = await browser.newContext();
+	closers.push(() => later.close());
+	let fresh = await later.newPage();
+	await authenticate(fresh, "hubot", ORIGIN);
+	await fresh.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(fresh);
+	await expect.poll(() => sentTags(fresh)).toEqual(["m1", "m2", "m3", "m5"]);
+	expect(await rowStates(world.database, room)).toEqual([]);
+});
+
+for (let steers of [true, false]) {
+	test(`a turn running when the deploy begins is not cut off or run twice, and a message sent to it ${steers ? "reaches it" : "is refused with words, kept nowhere, and starts a turn when sent again"}`, async ({ page }) => {
+		test.setTimeout(180_000);
+		let { world, room, planner, loads } = await arrange(page, { steers });
+		let keys = keyboard();
+
+		await say(page, keys, "[m1] hold me");
+		await until("the first turn to start", () => planner.prompts.length === 1);
+		// The old process has heard SIGTERM and waits for the turn, still serving.
+		let deploy = beginDeploy(world);
+		await deploy.told;
+		await say(page, keys, "[m2] sent to the turn the old process waits for");
+		if (steers) {
+			await until("the message to reach the turn", () => planner.steered.length === 1);
+			await expect(message(page, "[m2]")).toHaveCount(1);
+			await expect(failure(page, "[m2]")).toHaveCount(0);
+		} else {
+			await expect(failure(page, "[m2]")).toContainText("Couldn't send.");
+			await expect(failure(page, "[m2]")).toContainText(
+				"Chopin can't take messages while it works on this machine. Stop it to ask now.",
+			);
+			expect(planner.steered).toEqual([]);
+		}
+		// Still running: the old process has not cut it off, and it has not begun again.
+		await Bun.sleep(1_000);
+		expect(planner.closes).toEqual([]);
+		expect(tagsOf(planner.prompts)).toEqual(["m1"]);
+
+		planner.release();
+		let done = await deploy.finish();
+		expect(done.exit, world.a.log.text).toBe(0);
+		await expectGap(done, page);
+		await until("the Planner to resume", () => planner.resumes.length > 0, WINDOW_MS);
+
+		// It ended cleanly: one reply, read what it was given, and no notice of being stopped.
+		await expect(replies(page, "Reply m1")).toHaveCount(1);
+		await expect(replies(page, "Read m2")).toHaveCount(steers ? 1 : 0);
+		await expect(chat(page).getByText(/stopped|cut off|interrupted|did not read/i)).toHaveCount(0);
+		await expect(message(page, "[m2]")).toHaveCount(1);
+		await Bun.sleep(1_000);
+		expect(tagsOf(planner.prompts)).toEqual(["m1"]);
+		expect(tagsOf(planner.steered)).toEqual(steers ? ["m2"] : []);
+		expect(await rowStates(world.database, room)).toEqual([]);
+
+		if (!steers) {
+			// Nothing was kept for it, so the person says it again, and the new process answers it once.
+			await expect(failure(page, "[m2]")).toHaveCount(1);
+			await quiet(planner);
+			await message(page, "[m2]").getByRole("button", { name: "Try again" }).click();
+			await expect(replies(page, "Reply m2")).toHaveCount(1);
+			await expect(failure(page, "[m2]")).toHaveCount(0);
+			expect(tagsOf(planner.prompts)).toEqual(["m1", "m2"]);
+		}
+		await expect(sending(page)).toHaveCount(0);
+		expect(planner.errors).toEqual([]);
+		await expectOnlyRefusals(page, loads, !steers);
+	});
+}
+
+test("once the new release has the lease the transcript holds no waiting or ghost message, a request an earlier release left open is closed unread, and a new @Chopin message starts a turn", async ({ browser, page }) => {
+	test.setTimeout(180_000);
+	let { world, room, planner, loads } = await arrange(page, { steers: true });
+	let keys = keyboard();
+
+	await say(page, keys, "[m1] hold me");
+	await until("the first turn to start", () => planner.prompts.length === 1);
+	await say(page, keys, "[m2] given to the turn before the deploy");
+	await until("the second message to reach the turn", () => planner.steered.length === 1);
+	// What the release before this one was holding for a machine when the deploy began.
+	await holdRow(world.database, room, "@chopin [h1] held by the release before");
+	expect(await rowStates(world.database, room)).toEqual(["waiting"]);
+
+	let deploy = beginDeploy(world);
+	await deploy.told;
+	planner.release();
+	await deploy.released;
+	let done = await deploy.finish();
+	expect(done.exit, world.a.log.text).toBe(0);
+	await expectGap(done, page);
+	await until("the Planner to resume", () => planner.resumes.length > 0, WINDOW_MS);
+	await expectPlannerAttached(page);
+
+	// The release that took the lease closed the row, without a turn: it is not waiting, and it
+	// never reached the machine.
+	await expect.poll(() => rowStates(world.database, room), { timeout: 20_000 }).toEqual([
+		"cancelled",
+	]);
+	expect(world.b.log.text).toContain("1 message(s) an earlier release held for a Planner");
+
+	// The transcript has what was said, once, and nothing waiting, sending or unsent, in the tab
+	// that lived through the deploy and in one opened after it, which are the same.
+	let later = await browser.newContext();
+	closers.push(() => later.close());
+	let fresh = await later.newPage();
+	await authenticate(fresh, "hubot", ORIGIN);
+	await fresh.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(fresh);
+	for (let view of [page, fresh]) {
+		await expect.poll(() => sentTags(view)).toEqual(["m1", "m2"]);
+		await expect(replies(view, "Reply m1")).toHaveCount(1);
+		await expect(replies(view, "Read m2")).toHaveCount(1);
+		await expect(chat(view).getByText("[h1]", { exact: false })).toHaveCount(0);
+		await expect(chat(view).locator("[data-chat-failed]")).toHaveCount(0);
+		await expect(chat(view).locator('[data-chat-state="queued"]')).toHaveCount(0);
+		await expect(sending(view)).toHaveCount(0);
+	}
+
+	// A new message to Chopin starts a turn of its own, once.
+	await quiet(planner);
+	await say(page, keys, "[m3] a new message after the hand-over");
+	await expect(replies(page, "Reply m3")).toHaveCount(1);
+	await expect(replies(fresh, "Reply m3")).toHaveCount(1);
+	await Bun.sleep(1_000);
+	expect(tagsOf(planner.prompts)).toEqual(["m1", "m3"]);
+	expect(tagsOf(planner.steered)).toEqual(["m2"]);
+	expect(planner.prompts.some(prompt => prompt.prompt.includes("[h1]"))).toBe(false);
+	expect(planner.errors).toEqual([]);
+	await expectOnlyRefusals(page, loads, false);
+});
+
 test("a Decision answered while the old process waits for the turn that asked it reaches that turn once, and starts no second one after the deploy", async ({ page }) => {
 	test.setTimeout(180_000);
 	let world = await overlap(page);
