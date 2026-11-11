@@ -261,17 +261,6 @@ export function selectedReplacement(
 	return contiguousReplacement(previous, next);
 }
 
-export function beforeInputSelection(
-	start: number,
-	end: number,
-	inputType: string,
-	length: number,
-): { start: number; end: number } {
-	if (start === end && inputType === "deleteContentBackward") start = Math.max(0, start - 1);
-	if (start === end && inputType === "deleteContentForward") end = Math.min(length, end + 1);
-	return { start, end };
-}
-
 /** Preserve only references whose exact token remained wholly outside the edited range. */
 export function reconcileReferenceDrafts(
 	previous: string,
@@ -430,47 +419,6 @@ export function insertCommand(
 		}, ...kept],
 		caret: token.length + 1,
 	};
-}
-
-/**
- * What an edit touches once a chip is whole: a chip is one thing, so deleting at its edge, or any
- * of it, takes all of it, a selection that reaches into one takes the rest, and a caret inside
- * one (it can be put there with the mouse) goes to its end before anything is typed.
- */
-export function expandToChips(
-	references: ReadonlyArray<Pick<ReferenceDraft, "start" | "end">>,
-	start: number,
-	end: number,
-	inputType: string,
-): { start: number; end: number } {
-	let chips = [...references].sort((left, right) => left.start - right.start);
-	if (start === end) {
-		let deleting = inputType.startsWith("delete");
-		let backward = inputType.includes("Backward");
-		for (let chip of chips) {
-			if (deleting) {
-				if (
-					backward
-						? chip.start < start && start <= chip.end
-						: chip.start <= start && start < chip.end
-				) {
-					return { start: chip.start, end: chip.end };
-				}
-			} else if (chip.start < start && start < chip.end) {
-				return { start: chip.end, end: chip.end };
-			}
-		}
-		return { start, end };
-	}
-	for (let pass = 0; pass < 2; pass++) {
-		for (let chip of chips) {
-			if (chip.start < end && chip.end > start) {
-				start = Math.min(start, chip.start);
-				end = Math.max(end, chip.end);
-			}
-		}
-	}
-	return { start, end };
 }
 
 /** Whether the draft runs a command, which is only ever for the Planner. */

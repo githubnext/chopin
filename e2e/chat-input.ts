@@ -6,8 +6,16 @@ export function chatInput(scope: Locator | Page): Locator {
 	return scope.getByRole("combobox", { name: "Message", exact: true, includeHidden: true });
 }
 
+/**
+ * The draft's value is the Markdown it will be sent as, which the rich draft keeps on its field as
+ * `data-chat-raw` (its text is what the formatting draws, without its marks).
+ */
+export async function chatValue(input: Locator): Promise<string | null> {
+	return input.getAttribute("data-chat-raw");
+}
+
 export async function expectChatValue(input: Locator, value: string): Promise<void> {
-	await expect.poll(() => input.textContent()).toBe(value);
+	await expect.poll(() => chatValue(input)).toBe(value);
 }
 
 export async function fillChat(input: Locator, value: string): Promise<void> {

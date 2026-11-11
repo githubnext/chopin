@@ -1,4 +1,4 @@
-import { chatCaret, chatInput, expectChatValue, fillChat } from "./chat-input";
+import { chatCaret, chatInput, chatValue, expectChatValue, fillChat } from "./chat-input";
 import { seedChildChannel } from "./database";
 import { authenticate, expect, roomPath, test } from "./room";
 
@@ -147,7 +147,7 @@ test("wrapped document mentions keep caret placement, edits and undo aligned", a
 	await expect(reference).toHaveAttribute("data-document-id", target);
 	await expect.poll(() => reference.evaluate(element => element.getClientRects().length))
 		.toBeGreaterThan(1);
-	let before = await input.textContent();
+	let before = await chatValue(input);
 	await expect.poll(() => chatCaret(input)).toBe(before!.length);
 	let caret = await reference.evaluate(element => {
 		let walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
@@ -170,10 +170,10 @@ test("wrapped document mentions keep caret placement, edits and undo aligned", a
 	await input.pressSequentially(" and PDF");
 	await expectChatValue(input, before + " and PDF");
 	await expect(reference).toHaveAttribute("data-document-id", target);
-	await input.press("Meta+z");
+	await input.press("ControlOrMeta+z");
 	await expectChatValue(input, before!);
 	await expect(reference).toHaveAttribute("data-document-id", target);
-	await input.press("Meta+Shift+z");
+	await input.press("ControlOrMeta+Shift+z");
 	await expectChatValue(input, before + " and PDF");
 	await input.press("ControlOrMeta+j");
 	await expectChatValue(input, before + " and PDF");
@@ -288,18 +288,16 @@ test(
 	},
 );
 
-test("context-menu paste undo restores the replaced native selection", async ({ join, page }) => {
+test("a rich paste keeps its formatting, and undo restores the replaced native selection", async ({ join, page }) => {
 	let input = chatInput(chatPane(await join("ana")));
 	await input.fill("hello world");
+	await input.press("Home");
+	for (let index = 0; index < 6; index++) await input.press("ArrowRight");
+	for (let index = 0; index < 5; index++) await input.press("Shift+ArrowRight");
+	await expect.poll(() => input.page().evaluate(() => window.getSelection()!.toString())).toBe(
+		"world",
+	);
 	await input.evaluate(element => {
-		let text = element.firstChild!;
-		let range = document.createRange();
-		range.setStart(text, 6);
-		range.setEnd(text, 11);
-		let selection = window.getSelection()!;
-		selection.removeAllRanges();
-		selection.addRange(range);
-		document.dispatchEvent(new Event("selectionchange"));
 		let clipboardData = new DataTransfer();
 		clipboardData.setData("text/plain", "friends");
 		clipboardData.setData("text/html", "<strong>friends</strong>");
@@ -311,14 +309,15 @@ test("context-menu paste undo restores the replaced native selection", async ({ 
 			}),
 		);
 	});
-	await expectChatValue(input, "hello friends");
-	await expect(input.locator("strong")).toHaveCount(0);
-	await input.press("Meta+z");
+	// The draft draws it bold, and sends it as Markdown.
+	await expectChatValue(input, "hello **friends**");
+	await expect(input.locator("strong")).toHaveText("friends");
+	await input.press("ControlOrMeta+z");
 	await expectChatValue(input, "hello world");
 	expect(await page.evaluate(() => window.getSelection()!.toString())).toBe("world");
 	expect(await chatCaret(input)).toBe(11);
-	await input.press("Meta+Shift+z");
-	await expectChatValue(input, "hello friends");
+	await input.press("ControlOrMeta+Shift+z");
+	await expectChatValue(input, "hello **friends**");
 });
 
 test("copied assistant-ui stylesheet stays off non-document pages and is applied before the first copied element mounts", async ({ baseURL, page, room }) => {

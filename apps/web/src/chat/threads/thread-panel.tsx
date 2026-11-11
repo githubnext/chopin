@@ -13,7 +13,6 @@ import {
 	withoutChopinMentions,
 } from "../chopin-chip";
 import { sendFailureView } from "../failure";
-import { applyFormat } from "../format-markdown";
 import { keepFormatPreference, readFormatPreference } from "../format-preference";
 import { MessageMarkdown } from "../markdown";
 import { useDocumentPeople } from "../document-people";
@@ -60,7 +59,6 @@ import type { Chat as Wire } from "@chopin/protocol";
 import type { Wire as Socket } from "../../wire";
 import type { ComposerNotice } from "../composer";
 import type { DraftInputHandle } from "../draft-input";
-import type { Format } from "../format-markdown";
 import type { ReferenceRow } from "../reference-picker";
 import type { PointerOption } from "../mention-sources";
 import type { MentionCandidate } from "../mentions";
@@ -325,21 +323,6 @@ export function ThreadPanel(
 	let toggleFormatting = () => {
 		keepFormatPreference(handle, !formatting);
 		setFormatting(on => !on);
-	};
-
-	let formatDraft = (kind: Format) => {
-		let current = draftRef.current;
-		let result = applyFormat(kind, current.text, selection);
-		setDraft(
-			reviseComposerDraft(
-				current,
-				result.text,
-				reconcileReferenceDrafts(current.text, result.text, current.references, result.edit),
-			),
-		);
-		setSelection({ start: result.start, end: result.end });
-		setSendError(undefined);
-		pendingCaret.current = { start: result.start, end: result.end };
 	};
 
 	let startMention = (marker: "#" | "@" = "@") => {
@@ -627,7 +610,6 @@ export function ThreadPanel(
 						shown: formatting,
 						disabled: !composerReady || submitting,
 						onToggle: toggleFormatting,
-						onFormat: formatDraft,
 					}}
 				input={{
 					"aria-activedescendant": mentionOpen

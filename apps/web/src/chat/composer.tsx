@@ -5,7 +5,7 @@
  * passes what to show; the design audit renders the same component in each live state.
  */
 
-import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode, Ref } from "react";
 
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
@@ -21,8 +21,8 @@ import {
 	WarningIcon,
 } from "@chopin/icons";
 import { ComposerVoice, ComposerVoiceButton } from "@/components/assistant-ui/elements/composer";
-import { DraftInput } from "./draft-input";
 import { FormatBar } from "./format-bar";
+import { LinkForm } from "./link-form";
 import { sendStop } from "./assistant-ui/send-stop";
 import { SendStopButton } from "./assistant-ui/send-stop-button";
 import { motionContract } from "../motion-contract";
@@ -30,10 +30,11 @@ import { currentShortcutPlatform, shortcutLabel } from "../shortcuts";
 import { ChopinChip } from "./assistant-ui/chopin-chip";
 import { draftPlaceholder } from "./chopin-chip";
 import { ModelPill } from "./assistant-ui/model-pill";
-import type { Format } from "./format-markdown";
+import type { Format } from "./format";
 import type { FileView } from "./attachments/files";
 import type { ModelControl } from "./use-model-choice";
 import type { DraftInputHandle, DraftInputProps } from "./draft-input";
+import type { RichDraftHandle } from "./rich/rich-draft-input";
 import plannerResume from "../assets/icons/planner-resume.svg";
 import "./composer.css";
 
@@ -41,6 +42,16 @@ const MOTION = motionContract("collapse");
 
 /** The files of the message, drawn by code that loads when the first one is added. */
 let StagedFiles = lazy(() => import("./attachments/staged-files"));
+
+/**
+ * The draft's rich text is Lexical, which is fetched beside the page's code rather than in it, as
+ * soon as the composer's own code runs, so it is there by the time the draft is reached.
+ */
+let loadRichDraft = () => import("./rich/rich-draft-input");
+let RichDraftInput = lazy(() =>
+	loadRichDraft().then(module => ({ default: module.RichDraftInput }))
+);
+if (typeof window !== "undefined") void loadRichDraft();
 
 /** What the composer needs to take, show and send files; absent where the server takes none. */
 export type ComposerFiles = {
@@ -126,12 +137,7 @@ export type ChatComposerProps = {
 	/** Present when `#` references are on: the instructions and the Mention docs button. */
 	references?: { disabled: boolean; onMentionDocs: () => void };
 	/** The formatting toolbar above the draft, which `shown` says is on, and the Aa button that turns it off. */
-	format?: {
-		shown: boolean;
-		disabled: boolean;
-		onToggle: () => void;
-		onFormat: (kind: Format) => void;
-	};
+	format?: { shown: boolean; disabled: boolean; onToggle: () => void };
 	/** The `@` button, which starts a mention at the caret. */
 	mention?: { disabled: boolean; onMention: () => void };
 	/** Present where the server takes images and files with a message. */
@@ -168,7 +174,6 @@ export type ChatComposerProps = {
 		| "readOnly"
 		| "placeholder"
 		| "onSubmit"
-		| "historyGroupKey"
 	>;
 };
 
@@ -199,6 +204,25 @@ export function ChatComposer(
 ) {
 	let instructionsId = useId();
 	let cueId = useId();
+	// The draft's own handle, which the toolbar formats through, given to `inputRef` as well.
+	let rich = useRef<RichDraftHandle | null>(null);
+	let setInput = useCallback((handle: RichDraftHandle | null) => {
+		rich.current = handle;
+		if (typeof inputRef === "function") inputRef(handle);
+		else if (inputRef) (inputRef as { current: DraftInputHandle | null }).current = handle;
+	}, [inputRef]);
+	let [active, setActive] = useState<ReadonlySet<Format>>(() => new Set());
+	let [linking, setLinking] = useState<{ address: string }>();
+	let openLink = () => {
+		let handle = rich.current;
+		if (!handle || format?.disabled) return;
+		handle.holdSelection();
+		setLinking({ address: handle.linkAddress() ?? "" });
+	};
+	let formatDraft = (kind: Format) => {
+		if (kind === "link") openLink();
+		else rich.current?.format(kind);
+	};
 	let filePicker = useRef<HTMLInputElement>(null);
 	let filesReasonId = useId();
 	// Files dragged over the surface. Leaving it for a child of it is not leaving: only a leave that
@@ -217,6 +241,11 @@ export function ChatComposer(
 	}, [dragging]);
 	let droppable = !!files && !files.disabled && !unavailable;
 	let error = notice?.tone === "error" || !!banner?.invalid;
+	let describedBy = [
+		references ? instructionsId : undefined,
+		banner?.id,
+		notice ? cueId : undefined,
+	].filter(Boolean).join(" ") || undefined;
 	let chip = !!chopin?.chip;
 	let hasDraft = input.value.trim() !== "" || !!files?.files.length;
 	let button = sendStop({
@@ -374,6 +403,16 @@ export function ChatComposer(
 					: undefined}
 			>
 				{pickers}
+				{linking && !unavailable && (
+					<LinkForm
+						address={linking.address}
+						onDismiss={() => setLinking(undefined)}
+						onDone={url => {
+							setLinking(undefined);
+							rich.current?.setLink(url);
+						}}
+					/>
+				)}
 				{unavailable
 					? (
 						<div className="composer-unavailable" role="status">
@@ -424,40 +463,55 @@ export function ChatComposer(
 										onRemove={chopin.onRemove}
 									/>
 								)}
-								<DraftInput
-									aria-activedescendant={input["aria-activedescendant"]}
-									aria-controls={input["aria-controls"]}
-									aria-expanded={input["aria-expanded"]}
-									historyGroupKey={chip}
-									mentions={input.mentions}
-									onBlur={input.onBlur}
-									onChange={input.onChange}
-									interim={input.interim}
-									onFiles={files && !files.disabled ? files.onAdd : undefined}
-									onKeyDown={input.onKeyDown}
-									onSelect={input.onSelect}
-									references={input.references}
-									resetKey={input.resetKey}
-									value={input.value}
-									aria-label="Message"
-									aria-autocomplete="list"
-									aria-describedby={[
-										references ? instructionsId : undefined,
-										banner?.id,
-										notice ? cueId : undefined,
-									].filter(Boolean).join(" ") || undefined}
-									aria-disabled={!draftable || sending}
-									aria-invalid={error || undefined}
-									readOnly={!draftable || sending}
-									role="combobox"
-									onSubmit={onSubmit}
-									placeholder={draftPlaceholder({ agent, chip })}
-									ref={inputRef}
-								/>
+								<Suspense
+									fallback={
+										<div
+											aria-busy="true"
+											aria-describedby={describedBy}
+											aria-disabled="true"
+											aria-invalid={error || undefined}
+											aria-label="Message"
+											className="composer-draft-input"
+											data-empty=""
+											data-placeholder={draftPlaceholder({ agent, chip })}
+											role="combobox"
+										/>
+									}
+								>
+									<RichDraftInput
+										aria-activedescendant={input["aria-activedescendant"]}
+										aria-controls={input["aria-controls"]}
+										aria-expanded={input["aria-expanded"]}
+										mentions={input.mentions}
+										onBlur={input.onBlur}
+										onChange={input.onChange}
+										interim={input.interim}
+										onFiles={files && !files.disabled ? files.onAdd : undefined}
+										onFormats={setActive}
+										onKeyDown={input.onKeyDown}
+										onLink={openLink}
+										onSelect={input.onSelect}
+										references={input.references}
+										resetKey={input.resetKey}
+										value={input.value}
+										aria-label="Message"
+										aria-autocomplete="list"
+										aria-describedby={describedBy}
+										aria-disabled={!draftable || sending}
+										aria-invalid={error || undefined}
+										readOnly={!draftable || sending}
+										role="combobox"
+										onSubmit={onSubmit}
+										placeholder={draftPlaceholder({ agent, chip })}
+										ref={setInput}
+									/>
+								</Suspense>
 							</div>
 
 							{/* After the field in the page, so Tab arrives at the field first; the bar is drawn above it (composer.css). */}
-							{format?.shown && <FormatBar disabled={format.disabled} onFormat={format.onFormat} />}
+							{format?.shown && (
+								<FormatBar active={active} disabled={format.disabled} onFormat={formatDraft} />
+							)}
 
 							<div className="composer-row">
 								<div className="composer-left">
