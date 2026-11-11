@@ -379,6 +379,12 @@ describe("first build", () => {
 				"planner-not-attached",
 			),
 		).toBe("Reconnect the machine to build.");
+		expect(
+			draftRefusalCopy(
+				"Still connecting to @mona's machine, so this message wasn't sent. Send it again in a moment.",
+				"planner-not-attached",
+			),
+		).toBe("Still connecting to @mona's machine. Try again in a moment.");
 	});
 
 	it("returns to the button when drafting or starting fails", () => {

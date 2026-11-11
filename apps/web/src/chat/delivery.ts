@@ -33,12 +33,17 @@ const NO_MACHINE = "No machine is connected to reply.";
  * machine it is, so it is shown as it is.
  */
 const MACHINE_AWAY = / is offline, so this message wasn't sent\. Send it again when it's back\.$/;
+const MACHINE_RECONNECTING =
+	/^Still connecting to .+, so this message wasn't sent\. Send it again in a moment\.$/;
 const MAX_REASON = 120;
 
 /** What a refusal of the send itself says, in plain words and no longer than a line. */
 export function refusalText(code: string | undefined, message: string): string {
 	if (code === "planner-not-attached") {
-		return MACHINE_AWAY.test(message.trim()) ? message.trim() : NO_MACHINE;
+		let trimmed = message.trim();
+		return MACHINE_AWAY.test(trimmed) || MACHINE_RECONNECTING.test(trimmed)
+			? trimmed
+			: NO_MACHINE;
 	}
 	let detail = message.trim();
 	if (!detail) return "The server turned it down.";
