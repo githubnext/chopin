@@ -187,12 +187,12 @@
 	color: var(--color-text-tertiary);
 }
 .chat-composer :is([data-chat-reference-picker], [data-chat-mention-picker]) {
-	left: 0;
-	margin-bottom: 0.5rem;
+	left: calc(-1 * var(--edge-width));
+	margin-bottom: calc(0.5rem + var(--edge-width));
 	box-shadow: var(--shadow-resting-strong);
 }
 .chat-composer [data-chat-reference-picker] {
-	right: 0;
+	right: calc(-1 * var(--edge-width));
 	max-height: min(16rem, 45dvh, 45vh);
 }
 /* At most eight rows show before the list scrolls: 8 × 2rem plus the 0.25rem padding. */
@@ -431,8 +431,8 @@
 	/* Pickers become a list resting on the composer, as wide as it is. */
 	.chat-composer
 		:is([data-chat-reference-picker], [data-chat-mention-picker], [data-chat-command-picker]) {
-		left: 0;
-		right: 0;
+		left: calc(-1 * var(--edge-width));
+		right: calc(-1 * var(--edge-width));
 		width: auto;
 		min-width: 0;
 		max-width: none;
@@ -449,4 +449,104 @@
 		min-height: var(--control-target-coarse);
 		font-size: var(--text-base);
 	}
+}
+
+/*
+ * The message box. A rounded rectangle with a hairline, white as the page, over a toolbar of
+ * formatting marks that sits on the inset ground and a row of controls under the draft; every size
+ * is a Chopin control size (28px buttons, 16px icons, the large radius) and every colour a token.
+ * The menus (references, mentions, commands, models) open over it.
+ */
+.chat-composer {
+	container: composer / inline-size;
+}
+.chat-composer .composer-surface {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	border: var(--edge-width) solid var(--color-control-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+}
+.chat-composer .composer-surface:focus-within {
+	border-color: var(--color-text-tertiary);
+}
+.chat-composer .composer-format {
+	display: flex;
+	align-items: center;
+	gap: 0.125rem;
+	padding: 0.25rem 0.375rem;
+	border-bottom: var(--edge-width) solid var(--color-edge);
+	border-radius: var(--radius-md) var(--radius-md) 0 0;
+	background: var(--color-inset);
+}
+.chat-composer .composer-format-group {
+	display: flex;
+	align-items: center;
+	gap: 0.125rem;
+}
+.chat-composer .composer-format-divider {
+	width: var(--edge-width);
+	height: 1rem;
+	margin-inline: 0.25rem;
+	background: var(--color-edge);
+}
+.chat-composer .composer-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.25rem;
+	padding: 0.25rem 0.375rem 0.375rem;
+}
+.chat-composer :is(.composer-left, .composer-actions) {
+	display: flex;
+	align-items: center;
+	gap: 0.125rem;
+	min-width: 0;
+}
+.chat-composer .composer-left {
+	flex: 1 1 auto;
+}
+.chat-composer .composer-actions {
+	flex: none;
+	gap: 0.25rem;
+}
+.chat-composer .composer-format-toggle[aria-pressed="true"] {
+	background: var(--color-selected);
+}
+/* The send is a rounded square, the primary action; Stop is the same button. */
+.chat-composer .composer-send {
+	flex: none;
+}
+.chat-composer .composer-model-pill {
+	flex: 0 1 auto;
+	min-width: 0;
+	gap: 0.25rem;
+	padding-inline: 0.5rem 0.375rem;
+	font-size: var(--text-xs);
+}
+.chat-composer .composer-model-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.chat-composer .composer-model-level {
+	flex: none;
+	color: var(--color-text-tertiary);
+}
+.chat-composer .composer-model-chevron {
+	flex: none;
+	color: var(--color-text-tertiary);
+	transform: rotate(90deg);
+}
+/* The toolbar gives way where the pane is narrow, and on a phone, where the draft has the room. */
+@container composer (max-width: 20rem) {
+	.chat-composer .composer-format,
+	.chat-composer .composer-format-toggle {
+		display: none;
+	}
+}
+:root[data-phone] .chat-composer :is(.composer-format, .composer-format-toggle) {
+	display: none;
 }

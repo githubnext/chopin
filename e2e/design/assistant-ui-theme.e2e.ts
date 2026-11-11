@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect } from "@playwright/test";
 import { plate, test } from "./fixture";
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 /**
  * The theme is Chopin's, the proportions are assistant-ui's (assistant-ui-geometry.e2e.ts). Every colour
@@ -183,5 +183,105 @@ for (let mode of ["light", "dark"] as const) {
 			checked += result.drawn.length;
 		});
 		expect(checked).toBeGreaterThan(300);
+	});
+}
+
+/**
+ * The theme comes from Chopin and the proportions from the message box (`assistant-ui-geometry` has
+ * the proportions). Every colour the composer draws, light and dark, is a Chopin token or a mix of
+ * them: its surface is the page, its edge Chopin's control edge, its toolbar the inset ground, its
+ * send Chopin's primary, its font Chopin's. Chopin has no dark theme yet, so `.dark` reads the same
+ * tokens and the two schemes draw the same colours.
+ */
+
+/** What a colour expression computes to, by asking the browser, so a token is exact. */
+async function computed(page: Page, expression: string): Promise<string> {
+	return page.evaluate(value => {
+		let probe = document.createElement("i");
+		probe.style.color = value;
+		document.body.append(probe);
+		let result = getComputedStyle(probe).color;
+		probe.remove();
+		return result;
+	}, expression);
+}
+
+type Property = "backgroundColor" | "color" | "borderTopColor";
+
+async function paint(element: Locator, property: Property): Promise<string> {
+	return element.evaluate((node, name) => getComputedStyle(node)[name], property);
+}
+
+for (let name of ["light", "dark"] as const) {
+	test(`the message box draws only Chopin's colours in ${name}: page, edge, inset, ink and primary from its tokens`, async ({ page }) => {
+		await page.evaluate(
+			dark => document.documentElement.classList.toggle("dark", dark),
+			name === "dark",
+		);
+		let composer = plate(page, "chat").locator(".chat-composer").first();
+		await composer.scrollIntoViewIfNeeded();
+		let token = (value: string) => computed(page, `var(--color-${value})`);
+
+		// The box is the page's surface with Chopin's control edge, and its edge darkens on focus.
+		let box = composer.locator(".composer-surface");
+		expect(await paint(box, "backgroundColor")).toBe(await token("page"));
+		expect(await paint(box, "borderTopColor")).toBe(await token("control-edge"));
+		await composer.getByRole("combobox", { name: "Message" }).focus();
+		expect(await paint(box, "borderTopColor")).toBe(await token("text-tertiary"));
+
+		// The toolbar is the inset ground with Chopin's edge for its divider, and its marks quiet ink.
+		let toolbar = composer.getByRole("toolbar", { name: "Formatting" });
+		expect(await paint(toolbar, "backgroundColor")).toBe(await token("inset"));
+		expect(await paint(composer.locator(".composer-format-divider").first(), "backgroundColor"))
+			.toBe(
+				await token("edge"),
+			);
+
+		// Send is Chopin's primary with the page's colour on it, never black.
+		let send = composer.locator("[data-send-stop]");
+		await composer.getByRole("combobox", { name: "Message" }).fill("A message");
+		expect(await paint(send, "backgroundColor")).toBe(await token("brand"));
+		expect(await paint(send, "backgroundColor")).not.toBe("rgb(0, 0, 0)");
+		expect(await paint(send, "color")).toBe(await token("page"));
+
+		// Chopin's font family, and nothing in the box that is a colour Chopin does not have.
+		let family = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
+		expect(family).toContain("Inter");
+		expect(await box.evaluate(node => getComputedStyle(node).fontFamily)).toBe(family);
+		let strangers = await composer.evaluate(root => {
+			let canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
+			let rgb = (value: string) => {
+				canvas.clearRect(0, 0, 1, 1);
+				canvas.fillStyle = "#000";
+				canvas.fillStyle = value;
+				canvas.fillRect(0, 0, 1, 1);
+				return [...canvas.getImageData(0, 0, 1, 1).data].slice(0, 3).join(",");
+			};
+			// Every `--color-*` the page defines, as the root's own computed style lists them.
+			let names = [...getComputedStyle(document.documentElement)].filter(property =>
+				property.startsWith("--color-")
+			);
+			let known = new Set<string>([rgb("transparent")]);
+			for (let property of names) {
+				let probe = document.createElement("i");
+				probe.style.color = `var(${property})`;
+				document.body.append(probe);
+				known.add(rgb(getComputedStyle(probe).color));
+				probe.remove();
+			}
+			let found: string[] = [];
+			for (let node of [root, ...root.querySelectorAll(".composer-surface, .composer-surface *")]) {
+				let style = getComputedStyle(node);
+				for (let property of ["color", "backgroundColor", "borderTopColor"] as const) {
+					let value = style[property];
+					if (value === "transparent" || /^rgba\(\d+, \d+, \d+, 0\)$/.test(value)) continue;
+					if (!known.has(rgb(value))) {
+						found.push(`${property} ${value} on ${node.tagName.toLowerCase()}`);
+					}
+				}
+			}
+			return found;
+		});
+		expect(strangers).toEqual([]);
 	});
 }

@@ -277,8 +277,8 @@ describe("design audit specimens", () => {
 		// The apostrophe React escapes in text, written back, so copy reads as typed.
 		let chat = plate(markup, "chat").replaceAll("&#x27;", "'");
 		expect(chat).toContain('class="workspace-root');
-		expect(chat).toContain('data-slot="composer-bar"');
-		expect(chat).toContain("composer-surface");
+		expect(chat).toContain('class="composer-surface"');
+		expect(chat).toContain('role="toolbar"');
 		expect(chat).toContain('class="composer-notice motion-feedback"');
 		// The connection and the Planner's states: the one banner on the composer's edge in each phase,
 		// and the machine button's dot and note.

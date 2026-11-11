@@ -14,18 +14,15 @@ function chatPane(page: Page) {
 	return page.getByRole("complementary", { includeHidden: true, name: "Chat" });
 }
 
-/** The round button, under whichever name it has now. */
+/** The one send control, under whichever name it has now. */
 function button(chat: Locator) {
-	return chat.locator('[data-slot="composer-send"]');
+	return chat.locator("[data-send-stop]");
 }
 
-/** Which icon the button is showing: the arrow or the square, whichever is not faded out. */
-function icon(chat: Locator) {
-	return button(chat).evaluate(element =>
-		[...element.querySelectorAll("svg")]
-			.filter(svg => getComputedStyle(svg).opacity === "1")
-			.map(svg => svg.classList.contains("lucide-square") ? "square" : "arrow")
-	);
+/** Which it is drawn as: the paper plane (send) or the square (stop), as it says itself. */
+async function icon(chat: Locator) {
+	let action = await button(chat).getAttribute("data-send-stop");
+	return [action === "stop" ? "square" : "arrow"];
 }
 
 /** The Planner, scripted: busy from the first message to the Planner until `answer` or a Stop. */
@@ -178,13 +175,10 @@ test("an idle composer sends: the round button waits for a draft, and it and Ent
 
 	await expect(send).toBeDisabled();
 	await expect(send).toHaveAttribute("title", "Send message");
-	expect(await send.evaluate(element => getComputedStyle(element).opacity)).toBe("0.3");
 	await expect.poll(() => icon(chat)).toEqual(["arrow"]);
 
 	await draft.fill("A note for the team");
 	await expect(send).toBeEnabled();
-	// Fully drawn once its fade has run.
-	await expect.poll(() => send.evaluate(element => getComputedStyle(element).opacity)).toBe("1");
 	await send.click();
 	await expect.poll(planner.sends).toEqual([{ text: "A note for the team", to: "room" }]);
 	await expect(send).toBeDisabled();
@@ -206,7 +200,6 @@ test("a running Planner with nothing typed is stopped by the same button, which 
 	await expect(stop).toHaveAttribute("title", "Stop generating");
 	await expect(chat.getByRole("button", { name: "Send message" })).toHaveCount(0);
 	await expect.poll(() => icon(chat)).toEqual(["square"]);
-	await expect.poll(() => stop.evaluate(element => getComputedStyle(element).opacity)).toBe("1");
 
 	await stop.click();
 	await expect.poll(planner.aborts).toBe(1);
@@ -335,40 +328,23 @@ test("a polite live region says once that the button became a stop, not for each
 	expect(await heard()).toEqual(["Stop generating", "Send message"]);
 });
 
-test("under reduced motion the icons swap at once, and without it they animate", async ({ join, page }) => {
+test("the button swaps at once under either motion preference, drawing no animation of its own", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
-	await page.emulateMedia({ reducedMotion: "no-preference" });
 	let chat = chatPane(await join("ana"));
-	await button(chat).evaluate(element => {
-		let runs = { count: 0 };
-		(window as unknown as { runs: typeof runs }).runs = runs;
-		// The swap is the icons' motion; the button's own colour fade is not.
-		element.addEventListener("transitionrun", event => {
-			if (event.target instanceof SVGElement) runs.count++;
-		});
-	});
-	let transitions = () =>
-		page.evaluate(() => (window as unknown as { runs: { count: number } }).runs.count);
-	await startPlanner(chat);
-	await expect.poll(transitions).toBeGreaterThan(0);
-	let moving = await button(chat).evaluate(element =>
-		getComputedStyle(element.querySelector("svg")!).transitionProperty
-	);
-	expect(moving).toContain("opacity");
-
-	await page.emulateMedia({ reducedMotion: "reduce" });
-	let before = await transitions();
-	planner.answer();
-	await expect(chat.getByRole("button", { name: "Send message" })).toBeDisabled();
-	await expect.poll(() => icon(chat)).toEqual(["arrow"]);
-	expect(await transitions()).toBe(before);
-	let still = await button(chat).evaluate(element =>
-		[...element.querySelectorAll("svg")].map(svg => getComputedStyle(svg).transitionProperty)
-	);
-	expect(still).toEqual(["none", "none"]);
+	for (let preference of ["no-preference", "reduce"] as const) {
+		await page.emulateMedia({ reducedMotion: preference });
+		await startPlanner(chat, `@chopin Start under ${preference}.`);
+		// Stop is drawn from the first frame it is there: nothing is fading or turning into it.
+		expect(await button(chat).evaluate(element => element.getAnimations({ subtree: true }).length))
+			.toBe(0);
+		planner.answer();
+		await expect(chat.getByRole("button", { name: "Send message" })).toBeDisabled();
+		expect(await button(chat).evaluate(element => element.getAnimations({ subtree: true }).length))
+			.toBe(0);
+	}
 });
 
-test("on a phone the button is the same 32px circle with a 44px target, and is a stop while the Planner runs", async ({ baseURL, browser, room }) => {
+test("on a phone the button is the same 28px square with a 44px target, and is a stop while the Planner runs", async ({ baseURL, browser, room }) => {
 	let planner: Awaited<ReturnType<typeof scriptPlanner>> | undefined;
 	let emulation = await openIsolatedRoom(
 		browser,
@@ -397,13 +373,13 @@ test("on a phone the button is the same 32px circle with a 44px target, and is a
 		let send = chat.getByRole("button", { name: "Send message" });
 		await expect(send).toBeDisabled();
 		let box = (await send.boundingBox())!;
-		expect([box.width, box.height]).toEqual([32, 32]);
+		expect([box.width, box.height]).toEqual([28, 28]);
 		await startPlanner(chat);
 		let stop = chat.getByRole("button", { name: "Stop generating" });
-		expect((await stop.boundingBox())!.width).toBe(32);
-		// The 44px target reaches 6px past the 32px circle: a finger 5px below still lands on it.
-		expect(await aim(5)).toBe(true);
-		expect(await aim(8)).toBe(false);
+		expect((await stop.boundingBox())!.width).toBe(28);
+		// The 44px target reaches 8px past the 28px square: a finger 6px below still lands on it.
+		expect(await aim(6)).toBe(true);
+		expect(await aim(10)).toBe(false);
 		await stop.tap();
 		await expect.poll(() => planner!.aborts()).toBe(1);
 		await expect(chat.getByRole("button", { name: "Send message" })).toBeDisabled();

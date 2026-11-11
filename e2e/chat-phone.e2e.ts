@@ -27,7 +27,7 @@ function boxHeight(page: Page): Promise<number> {
 	});
 }
 
-test("a phone composer is assistant-ui's box: the draft above a toolbar with the reference button and a round send", async ({ join }) => {
+test("a phone composer is the message box: the draft above a row with the reference button, and a rounded-square send", async ({ join }) => {
 	let page = await join("ana", PHONE);
 	await openPhoneChat(page);
 	let chat = chatPane(page);
@@ -35,35 +35,34 @@ test("a phone composer is assistant-ui's box: the draft above a toolbar with the
 	let send = chat.getByRole("button", { name: "Send message" });
 	let reference = chat.getByRole("button", { name: "Mention docs" });
 
-	// One line of draft over one row of 32px controls, in the element's 10px padding.
+	// The formatting toolbar gives way on a phone, and so does the button that turns it on.
+	await expect(chat.getByRole("toolbar", { name: "Formatting" })).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: "Formatting", exact: true })).toBeHidden();
+	// One line of draft over one row of 28px controls.
 	expect(await boxHeight(page)).toBeLessThanOrEqual(112);
 	let [draftBox, sendBox, referenceBox] = await Promise.all([
 		draft.boundingBox(),
 		send.boundingBox(),
 		reference.boundingBox(),
 	]);
-	// The toolbar sits under the draft: the reference button leads, the send button trails.
+	// The row sits under the draft: the reference button leads, the send button trails.
 	expect(referenceBox!.y).toBeGreaterThanOrEqual(draftBox!.y + draftBox!.height - 1);
 	expect(sendBox!.y).toBeGreaterThanOrEqual(draftBox!.y + draftBox!.height - 1);
 	expect(referenceBox!.x).toBeLessThan(sendBox!.x);
 	expect(Math.abs(sendBox!.y + sendBox!.height / 2 - (referenceBox!.y + referenceBox!.height / 2)))
 		.toBeLessThanOrEqual(1);
-	// The element's own 32px round button, whatever the pointer: only its target grows.
-	expect(sendBox!.width).toBeCloseTo(32, 0);
-	expect(sendBox!.height).toBeCloseTo(32, 0);
+	// A 28px square whatever the pointer: only its target grows.
+	expect(sendBox!.width).toBeCloseTo(28, 0);
+	expect(sendBox!.height).toBeCloseTo(28, 0);
 	// The status stays readable as one line above the box.
 	let notice = chat.getByRole("status").filter({ hasText: "Replies are off on this server." });
 	await expect(notice).toBeVisible();
 	expect((await notice.boundingBox())!.height).toBeLessThanOrEqual(28);
-	// Nothing to send: disabled, as assistant-ui draws its disabled controls.
 	await expect(send).toBeDisabled();
-	expect(await send.evaluate(element => getComputedStyle(element).opacity)).toBe("0.3");
 
 	await draft.click();
 	await page.keyboard.type("One more line to send");
 	await expect(send).toBeEnabled();
-	// Drawn in full once its fade has run.
-	await expect.poll(() => send.evaluate(element => getComputedStyle(element).opacity)).toBe("1");
 	await expectNoHorizontalOverflow(page);
 });
 
