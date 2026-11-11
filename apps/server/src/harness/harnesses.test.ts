@@ -10,6 +10,7 @@ import {
 	plannerCommands,
 	plannerOfferKnown,
 	plannerRanWithoutOffer,
+	plannerSteers,
 	registerCredential,
 	shutdownHarnesses,
 } from "./harnesses";
@@ -23,6 +24,30 @@ it("selects the tested Copilot SDK, Atomic, and remote harnesses", () => {
 	expect(Object.keys(harnesses)).toEqual(["copilot-sdk", "atomic", "remote"]);
 	expect(harnessFor({ harness: "copilot-sdk" }).harnessId).toBe("copilot-sdk");
 	expect(() => harnessFor({ harness: "not-installed" })).toThrow("Unknown harness: not-installed");
+});
+
+it("takes a message while a turn runs on Atomic, and on a remote client only if it offered steer-turn", () => {
+	expect(plannerSteers("doc")).toBe(false);
+	harnessFor({ harness: "atomic", harnessAuth: "ai-gateway", host: "127.0.0.1" });
+	expect(plannerSteers("doc")).toBe(true);
+	shutdownHarnesses();
+});
+
+it("refuses a message while a turn runs on the Copilot SDK, which names no way to take one", () => {
+	harnessFor({ harness: "copilot-sdk" });
+	expect(plannerSteers("doc")).toBe(false);
+});
+
+it("takes a message for a remote Planner only while its attached client offered steer-turn", () => {
+	harnessFor({ harness: "remote" });
+	expect(plannerSteers("doc")).toBe(false);
+	let release = attachLink("doc", { steers: false } as unknown as AgentLink);
+	expect(plannerSteers("doc")).toBe(false);
+	release();
+	release = attachLink("doc", { steers: true } as unknown as AgentLink);
+	expect(plannerSteers("doc")).toBe(true);
+	expect(plannerSteers("another")).toBe(false);
+	release();
 });
 
 it("refuses host-login fallback on public binds but accepts it on loopback", () => {

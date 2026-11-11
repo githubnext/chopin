@@ -104,6 +104,12 @@ export type PlannerSession = {
 	) => ReturnType<PlannerAgent["stream"]>;
 	destroy: () => Promise<void>;
 	/**
+	 * Gives the running turn a person's message, which it reads at its next step. Rejects when no
+	 * turn is running or its harness takes no input mid-run; whether one does is `plannerSteers`.
+	 * Absent for a background job's session, which no one talks to.
+	 */
+	steer?: (text: string) => Promise<void>;
+	/**
 	 * The questions this session asked that no member has answered yet, and the requests whose
 	 * result its client has not received. A session with either is kept past a turn that ended
 	 * without it, as one that owns a workflow run is.
@@ -405,6 +411,7 @@ export async function openPlannerSession(
 							},
 						}));
 				},
+				...(job ? {} : { steer: (text: string) => active.experimental_steerTurn(text) }),
 				destroy: () =>
 					stopped ??= (async () => {
 						try {

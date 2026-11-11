@@ -29,13 +29,15 @@ export function attachedTarget(sessionId: string): RemoteTarget {
  */
 export function createRemoteAdapter(
 	resolve: (sessionId: string) => RemoteTarget = attachedTarget,
-): HarnessV1 & { shutdown(): Promise<void> } {
+): HarnessV1 & { shutdown(): Promise<void>; steers: (channelId: string) => boolean } {
 	let open = new Set<HarnessV1Session>();
 	return {
 		specificationVersion: "harness-v1",
 		harnessId: "remote",
 		builtinTools: {},
 		supportsBuiltinToolFiltering: true,
+		// Only a client that offered `steer-turn` is sent a message for the turn it is running.
+		steers: channelId => attachedLink(channelId)?.steers === true,
 
 		async doStart(options: HarnessV1StartOptions): Promise<HarnessV1Session> {
 			if (options.resumeFrom || options.continueFrom) {

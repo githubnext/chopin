@@ -15,6 +15,13 @@ import type { HarnessV1 } from "@ai-sdk/harness";
 import type { Chat as Wire } from "@chopin/protocol";
 import type { AtomicAuthMode } from "./atomic/adapter";
 
+/**
+ * Whether a harness's turn takes a person's message while it runs, through its prompt control's
+ * `submitUserMessage`: always, or for the document whose client the harness asks. One that has
+ * none is refused a message while a turn runs, since nothing is ever held for the next one.
+ */
+export type Steers = boolean | ((channelId: string) => boolean);
+
 const credentials = new Map<string, {
 	currentToken: () => string | undefined;
 	maxAiCredits?: number;
@@ -22,7 +29,7 @@ const credentials = new Map<string, {
 
 function createAtomicHarness(
 	settings: { auth?: string; extensions?: readonly string[] },
-): HarnessV1 & { shutdown(): Promise<void> } {
+): HarnessV1 & { shutdown(): Promise<void>; steers: true } {
 	// Atomic takes neither a GitHub credential nor a credit limit; only `auth` (validated by
 	// `harnessFor` below), the extensions, and the workflow journal reach the real adapter.
 	return createAtomicAdapter({
@@ -33,13 +40,16 @@ function createAtomicHarness(
 }
 
 /** The model runs in a client attached over the agent connection, so the server holds no credential. */
-function createRemoteHarness(): HarnessV1 & { shutdown(): Promise<void> } {
+function createRemoteHarness(): HarnessV1 & {
+	shutdown(): Promise<void>;
+	steers: (channelId: string) => boolean;
+} {
 	return createRemoteAdapter();
 }
 
 /** Each real harness shows the model `read_plan` and `read_child` as text; see `withModelOutput`. */
 function reading<Settings>(
-	create: (settings: Settings) => HarnessV1 & { shutdown(): Promise<void> },
+	create: (settings: Settings) => HarnessV1 & { shutdown(): Promise<void>; steers?: Steers },
 ) {
 	return (settings: Settings) => withModelOutput(create(settings), readingOutput);
 }
@@ -60,7 +70,7 @@ export const harnesses = {
 
 export type HarnessName = keyof typeof harnesses;
 
-let selected: (HarnessV1 & { shutdown(): Promise<void> }) | undefined;
+let selected: (HarnessV1 & { shutdown(): Promise<void>; steers?: Steers }) | undefined;
 
 function loopback(host: string): boolean {
 	return host === "localhost" || host === "::1" || host === "[::1]"
@@ -178,6 +188,17 @@ export async function plannerCommands(
 
 const ATOMIC_COMMANDS_TTL_MS = 30_000;
 let atomicCommands = new Map<string, { at: number; read: Promise<Wire.CommandOption[]> }>();
+
+/**
+ * Whether a message sent while the document's Planner works can reach its turn: the selected
+ * harness takes input mid-run (Atomic always, a remote Planner when its client offered
+ * `steer-turn`). Every other harness, the Copilot SDK among them, cannot, and the message is
+ * refused.
+ */
+export function plannerSteers(channelId: string): boolean {
+	let steers = selected?.steers;
+	return typeof steers === "function" ? steers(channelId) : steers === true;
+}
 
 /**
  * Whether what the document's Planner offers is known now, though it may be nothing. A remote

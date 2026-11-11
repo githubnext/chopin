@@ -33,6 +33,7 @@ export const WIRE = {
 	capabilityCatalog: "capability-catalog",
 	attachments: "attachments",
 	sessionForks: "session-forks",
+	steerTurn: "steer-turn",
 	/** How often a client retries a `resume` refused with `retry`, after a `restarting` notice. */
 	restartResumeRetryMs: 250,
 } as const;
@@ -83,6 +84,12 @@ export type AgentHandlers = {
 	destroy?(message: ServerMessageOf<"destroy">): void;
 	/** Stop or resume the session's workflow runs; throw to report that it could not. */
 	control?(message: ServerMessageOf<"stop"> | ServerMessageOf<"resume">): void | Promise<void>;
+	/**
+	 * Gives a person's message to the turn that is running, to read at its next step. Throw to say
+	 * the turn could not take it. Having it asks for `steer-turn`; a turn that has already ended is
+	 * answered without calling it.
+	 */
+	steer?(message: ServerMessageOf<"steer">): void | Promise<void>;
 };
 
 export type AgentOptions = {
@@ -243,6 +250,7 @@ export function linkSocket(
 	catalog = false,
 	attachments = false,
 	sessionForks = false,
+	steering = false,
 ): WebSocket {
 	return new (WebSocket as unknown as HeaderWebSocket)(url, {
 		headers: {
@@ -254,6 +262,7 @@ export function linkSocket(
 				...(catalog ? [WIRE.capabilityCatalog] : []),
 				...(attachments ? [WIRE.attachments] : []),
 				...(sessionForks ? [WIRE.sessionForks] : []),
+				...(steering ? [WIRE.steerTurn] : []),
 			].join(", "),
 		},
 		protocols: [WIRE.subprotocol],
@@ -344,6 +353,7 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 		options.capabilities !== undefined,
 		options.attachments === true,
 		sessionForks,
+		options.handlers.steer !== undefined,
 	);
 	let turns = new Map<string, TurnState>();
 	let asks = new Map<string, PendingAsk>();
@@ -495,6 +505,27 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 			case "abort":
 				turns.get(`${message.session}/${message.turn}`)?.controller.abort();
 				return;
+			case "steer": {
+				let running = turns.get(`${message.session}/${message.turn}`);
+				try {
+					if (
+						!options.handlers.steer || !running || running.ended
+						|| running.controller.signal.aborted
+					) {
+						throw new Error("The turn has ended.");
+					}
+					await options.handlers.steer(message);
+					send({ type: "control-result", request: message.request, ok: true });
+				} catch (error) {
+					send({
+						type: "control-result",
+						request: message.request,
+						ok: false,
+						message: reason(error),
+					});
+				}
+				return;
+			}
 			case "host-tool-result": {
 				let calls = turns.get(`${message.session}/${message.turn}`)?.calls;
 				calls?.get(message.toolCallId)?.({

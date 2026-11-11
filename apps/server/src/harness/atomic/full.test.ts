@@ -102,6 +102,7 @@ async function run(
 		askingWorkflow = false,
 		operatorSettings,
 		afterTurn,
+		during,
 		events,
 		reports,
 	}: {
@@ -120,6 +121,8 @@ async function run(
 		operatorSettings?: Record<string, unknown>;
 		/** Runs once the Planner's turn has ended, while its session and workflow runs are still live. */
 		afterTurn?: () => Promise<void>;
+		/** Runs while the turn is under way, with the session the turn runs in. */
+		during?: (session: Awaited<ReturnType<HarnessAgent["createSession"]>>) => Promise<void>;
 		/** Collects, in order, the tool reports the adapter makes and the stream parts a tool yields. */
 		events?: string[];
 		/** Collects every runs report the Planner session makes. */
@@ -331,6 +334,7 @@ export default workflow({
 		stub.requests.length = 0;
 		try {
 			let result = await agent.stream({ session, prompt });
+			let meanwhile = during?.(session);
 			let parts: { type: string; toolName?: string; dynamic?: boolean; preliminary?: boolean }[] =
 				[];
 			for await (let part of result.fullStream) {
@@ -340,6 +344,7 @@ export default workflow({
 				}
 			}
 			await result.text;
+			await meanwhile;
 			await afterTurn?.();
 			let requests = [...stub.requests];
 			if (!worker) {
@@ -458,6 +463,42 @@ test("Planner sessions use their checkout cwd and route ask_user_question throug
 	expect(question.requests.at(-1)!.toolResults.join("\n")).toContain("Second");
 	let prompt = await run(true, "/marker");
 	expect(prompt.requests[0]!.prompt).toBe("OPERATOR-PROMPT-MARKER");
+});
+
+test("a Planner turn takes a person's message while it runs, and the model reads it as its next input", async () => {
+	let asked = Promise.withResolvers<void>();
+	let released = Promise.withResolvers<void>();
+	let host: HostInput = {
+		confirm: async () => false,
+		select: async () => undefined,
+		input: async () => undefined,
+		editor: async () => undefined,
+		questionnaire: async value => {
+			asked.resolve();
+			await released.promise;
+			return {
+				answers: [{
+					questionIndex: 0,
+					question: value.questions[0]!.question,
+					kind: "option",
+					answer: "Second",
+				}],
+				cancelled: false,
+			};
+		},
+	};
+	let result = await run(true, "question", {
+		host,
+		during: async session => {
+			// The turn is inside its tool call: the message waits for the step's end, not for the turn's.
+			await asked.promise;
+			await session.experimental_steerTurn("@bo: Also say what the rollout costs.");
+			released.resolve();
+		},
+	});
+	expect(result.requests).toHaveLength(2);
+	expect(result.requests[1]!.hasPriorToolResult).toBe(true);
+	expect(result.requests[1]!.prompt).toBe("@bo: Also say what the rollout costs.");
 });
 
 test("a Planner session without a checkout is just as full in its empty working directory", async () => {

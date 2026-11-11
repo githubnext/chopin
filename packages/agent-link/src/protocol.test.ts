@@ -327,6 +327,7 @@ describe("Agent connection messages", () => {
 			capabilityCatalog: AGENT_FEATURES.capabilityCatalog,
 			attachments: AGENT_FEATURES.attachments,
 			sessionForks: AGENT_FEATURES.sessionForks,
+			steerTurn: AGENT_FEATURES.steerTurn,
 			restartResumeRetryMs: RESTART_RESUME_RETRY_MS,
 		});
 		expect(AGENT_FEATURES.restartNotice).toBe("restart-notice");
@@ -334,6 +335,25 @@ describe("Agent connection messages", () => {
 		let source = await Bun.file(new URL("./client.ts", import.meta.url)).text();
 		let imports = [...source.matchAll(/^import\s+(type\s+)?/gm)];
 		expect(imports.every(match => match[1])).toBe(true);
+	});
+
+	it("carries a person's message for the running turn as a steer, named by its request", () => {
+		expect(AGENT_FEATURES.steerTurn).toBe("steer-turn");
+		let steer = {
+			type: "steer",
+			request: "r",
+			session: "s",
+			turn: "t",
+			prompt: "@bo: also X",
+		} as const;
+		expect(parseServerMessage(encodeMessage(steer))).toEqual({ ok: true, message: steer });
+		for (let missing of ["request", "session", "turn", "prompt"]) {
+			let { [missing]: _, ...rest } = steer as Record<string, unknown>;
+			expect(parseServerMessage(JSON.stringify(rest))).toMatchObject({ ok: false });
+		}
+		expect(parseServerMessage(JSON.stringify({ ...steer, extra: 1 }))).toMatchObject({ ok: false });
+		// Only the server steers: a client that sends one is malformed.
+		expect(parseClientMessage(JSON.stringify(steer))).toMatchObject({ ok: false });
 	});
 
 	it("marks a refusal as worth retrying only when the server says so", () => {

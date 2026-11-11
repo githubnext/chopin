@@ -478,6 +478,66 @@ describe("Agent connection client", () => {
 			.toBe(true);
 	});
 
+	it("offers steer-turn only to a client that can steer, and gives a steer to the running turn", async () => {
+		let plain = fakeServer();
+		await connect(plain, { turn() {} });
+		expect(plain.asked[0]).not.toContain("steer-turn");
+
+		let server = fakeServer({ features: ["steer-turn"] });
+		let steered: string[] = [];
+		let holding = Promise.withResolvers<TurnContext>();
+		let client = await connect(server, {
+			async turn(context) {
+				holding.resolve(context);
+				await new Promise(resolve => context.signal.addEventListener("abort", resolve));
+			},
+			steer(message) {
+				steered.push(message.prompt);
+			},
+		});
+		expect(server.asked[0]).toContain("steer-turn");
+		expect(client.features).toEqual(["steer-turn"]);
+		server.send(turn("running"));
+		await holding.promise;
+		server.send({
+			type: "steer",
+			request: "r1",
+			session: "s",
+			turn: "running",
+			prompt: "@bo: Also X",
+		});
+		expect(await server.next("control-result")).toEqual({
+			type: "control-result",
+			request: "r1",
+			ok: true,
+		});
+		expect(steered).toEqual(["@bo: Also X"]);
+	});
+
+	it("answers a steer for a turn that has ended, or that its handler refuses, with ok false", async () => {
+		let server = fakeServer({ features: ["steer-turn"] });
+		let steered: string[] = [];
+		await connect(server, {
+			turn(context) {
+				context.end("finished");
+			},
+			steer(message) {
+				steered.push(message.prompt);
+				throw new Error("The model is between steps.");
+			},
+		});
+		server.send(turn("over"));
+		await server.next("turn-end");
+		server.send({ type: "steer", request: "late", session: "s", turn: "over", prompt: "too late" });
+		expect(await server.next("control-result")).toEqual({
+			type: "control-result",
+			request: "late",
+			ok: false,
+			message: "The turn has ended.",
+		});
+		expect(steered).toEqual([]);
+	});
+
 	it("settles requests made once the link has closed instead of leaving them pending", async () => {
 		let server = fakeServer();
 		let holding = Promise.withResolvers<TurnContext>();
