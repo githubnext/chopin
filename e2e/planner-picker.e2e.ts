@@ -168,7 +168,12 @@ async function machine(
 	page: Page,
 	label: string,
 	planner: boolean,
-	{ service = false, bare = false }: { service?: boolean; bare?: boolean } = {},
+	{ service = false, bare = false, version = RELEASE }: {
+		service?: boolean;
+		bare?: boolean;
+		/** The chopin release it says it runs. */
+		version?: string;
+	} = {},
 ) {
 	let back = page.url();
 	await page.goto(`${ORIGIN}/auth/github/connector?key`);
@@ -184,7 +189,7 @@ async function machine(
 			headers: {
 				"content-type": "application/json",
 				[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL),
-				[CONNECTOR_VERSION_HEADER]: RELEASE,
+				[CONNECTOR_VERSION_HEADER]: version,
 				...extra,
 			},
 			body: JSON.stringify(body),
@@ -220,6 +225,16 @@ async function machine(
 				document,
 				handlers,
 			});
+		},
+		/**
+		 * One launch of the Planner backend as a connector that cannot say why a backend exited
+		 * makes it: a credential for the document, and then nothing ever attaches.
+		 */
+		launch: async (document: string) => {
+			let issued = await post("/api/connector/planner", { document }, {
+				authorization: `Bearer ${paired.token}`,
+			});
+			expect(issued.status, await issued.clone().text()).toBe(200);
 		},
 		/**
 		 * The connector's Planner poll, naming the Planners it runs; Chopin answers with the ones
@@ -2318,4 +2333,44 @@ test("with no machine of their own, a person still opens the Machines menu to a 
 	runs = await runOn(page);
 	await expect(runs.getByRole("menuitemradio", { name: /^Desk casey/ })).toHaveCount(1);
 	await expect(runs.getByRole("menuitemradio", { name: /^Desk Connected/ })).toHaveCount(1);
+});
+
+test("a machine whose connector cannot say why its backend keeps stopping is said not to connect, with the release to update, and goes when it attaches", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	let page = await open(browser, "mona", room, DESKTOP, { listen: true });
+	await createdBy(room, "mona");
+	// chopin 0.0.22 starts a backend for each launch and has no way to say that it exited.
+	let studio = await machine(page, "studio", true, { version: "0.0.22" });
+	await page.reload();
+	await ready(page);
+	expect((await studio.poll([])).planners).toHaveLength(1);
+	await expect(strip(page)).toContainText("Connecting to studio");
+
+	// Its backend is launched twice and never attaches: Chopin cannot know it exited, so it still
+	// only waits.
+	await studio.launch(room);
+	await studio.launch(room);
+	await page.waitForTimeout(2_000);
+	await expect(strip(page)).toContainText("Connecting to studio");
+
+	// The third launch says the first two ended, and the banner says so and what to update.
+	await studio.launch(room);
+	let owned = strip(page);
+	await expect(owned).toContainText("Can't connect to studio.");
+	await expect(owned.locator(".composer-notice-line")).toHaveText([
+		"It started and stopped again before it connected. It runs chopin 0.0.22, which can't say why: "
+		+ "run `chopin update` on it",
+		/^Tried 2 times, last at .+\. Still trying\.$/,
+	]);
+	await expect(owned.getByRole("link", { name: "How to fix" })).toBeVisible();
+	await expect(announced(page)).toHaveText("Can't connect to studio.");
+	await shoot(page, "planner-silent-connector");
+
+	// Once its backend attaches there is nothing left to say.
+	let link = await studio.backend(room);
+	await expectHealthy(machineButton(page));
+	await expect(strip(page)).toHaveCount(0);
+	await expect(page.getByText("chopin update")).toHaveCount(0);
+	await link.detach();
 });

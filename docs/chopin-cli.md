@@ -441,6 +441,16 @@ while the connector keeps retrying. Once the Planner attaches, or a launch stays
 goes. A Chopin from before this does not know the report; the connector asks it
 once and carries on.
 
+A chopin older than 0.0.23 cannot make the report, and a Planner that never attaches
+without exiting makes none, so Chopin says what it saw itself. Each launch asks Chopin for a
+credential, so from the third launch in a row the machine's **Can't connect** reads
+_It started and stopped again before it connected_, with the release the machine runs and
+`chopin update` where that release is older than 0.0.23. Two minutes after a machine was asked, with
+no Planner attached, it reads _It hasn't answered yet_ or _It started but hasn't connected yet_
+and _Waiting since 7:26 PM_, whatever release it runs. Run `chopin update` on that machine and
+restart the service (`chopin service restart`): its next failure then comes with the reason
+the Planner printed.
+
 A connector started with `--planner-command` says it can run Planners, and
 lists each Planner it runs because Chopin asked this machine for it
 beside the `--planner` ones (`canRunPlanners` and `chosenPlanners` in

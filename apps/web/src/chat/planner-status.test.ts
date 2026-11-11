@@ -77,6 +77,16 @@ test("says why a Planner that keeps failing cannot start, and what has been trie
 	});
 });
 
+test("says a machine that has not answered has not, instead of counting launches it has not made", () => {
+	expect(plannerStatus(failing(0, "It hasn't answered yet"), "Build box")).toEqual({
+		kind: "cant-start",
+		attempts: 0,
+		title: "Can't connect to Build box",
+		reason: "It hasn't answered yet",
+		detail: `Waiting since ${clockTime(AT)}. Still trying.`,
+	});
+});
+
 test("keeps the reason exactly as the machine reported it: no trimming, no stop added or removed", () => {
 	for (
 		let reason of [

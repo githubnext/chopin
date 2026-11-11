@@ -376,12 +376,15 @@ Still connecting to @<login>'s machine. Try again in a moment.
 ```
 
 Once the machine's backend has exited before attaching more than once in a row,
-the refusal says why, from what its connector reported (see
+the refusal says why, from what its connector reported or, for a connector that cannot
+say or a machine that has not answered in two minutes, from what Chopin saw itself (see
 [Hosted agent](hosted-agent.md#remote-planner)), and still only names the login:
 
 ```text
 Can't connect to @<login>'s machine: <reason> (3 attempts in a row). It keeps trying; try again once that is fixed.
 ```
+
+A machine that has not answered yet has no attempts in a row to count, so the parentheses are left out.
 
 If no machine is starting one, the message says how to get one, in plain words:
 a machine is needed. Where Chopin runs Planners on paired machines:
