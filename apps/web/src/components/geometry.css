@@ -23,23 +23,28 @@
 	--radius-2xl: 1rem;
 	--radius-3xl: 1.5rem;
 	--radius-4xl: 2rem;
-	--shadow-2xs: 0 1px rgb(0 0 0 / 0.05);
-	--shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-	--shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-	--shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-	--shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-	--shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-	--shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
-	--text-shadow-2xs: 0px 1px 0px rgb(0 0 0 / 0.15);
-	--text-shadow-xs: 0px 1px 1px rgb(0 0 0 / 0.2);
-	--text-shadow-sm: 0px 1px 0px rgb(0 0 0 / 0.075), 0px 1px 1px rgb(0 0 0 / 0.075), 0px 2px 2px rgb(0 0 0 / 0.075);
-	--text-shadow-md: 0px 1px 1px rgb(0 0 0 / 0.1), 0px 1px 2px rgb(0 0 0 / 0.1), 0px 2px 4px rgb(0 0 0 / 0.1);
-	--text-shadow-lg: 0px 1px 2px rgb(0 0 0 / 0.1), 0px 3px 2px rgb(0 0 0 / 0.1), 0px 4px 8px rgb(0 0 0 / 0.1);
+	--shadow-2xs: 0 1px oklch(var(--shadow-color) / 0.05);
+	--shadow-xs: 0 1px 2px 0 oklch(var(--shadow-color) / 0.05);
+	--shadow-sm: 0 1px 3px 0 oklch(var(--shadow-color) / 0.1), 0 1px 2px -1px oklch(var(--shadow-color) / 0.1);
+	--shadow-md: 0 4px 6px -1px oklch(var(--shadow-color) / 0.1), 0 2px 4px -2px oklch(var(--shadow-color) / 0.1);
+	--shadow-lg: 0 10px 15px -3px oklch(var(--shadow-color) / 0.1), 0 4px 6px -4px oklch(var(--shadow-color) / 0.1);
+	--shadow-xl: 0 20px 25px -5px oklch(var(--shadow-color) / 0.1), 0 8px 10px -6px oklch(var(--shadow-color) / 0.1);
+	--shadow-2xl: 0 25px 50px -12px oklch(var(--shadow-color) / 0.25);
+	--text-shadow-2xs: 0px 1px 0px oklch(var(--shadow-color) / 0.15);
+	--text-shadow-xs: 0px 1px 1px oklch(var(--shadow-color) / 0.2);
+	--text-shadow-sm: 0px 1px 0px oklch(var(--shadow-color) / 0.075), 0px 1px 1px oklch(var(--shadow-color) / 0.075), 0px 2px 2px oklch(var(--shadow-color) / 0.075);
+	--text-shadow-md: 0px 1px 1px oklch(var(--shadow-color) / 0.1), 0px 1px 2px oklch(var(--shadow-color) / 0.1), 0px 2px 4px oklch(var(--shadow-color) / 0.1);
+	--text-shadow-lg: 0px 1px 2px oklch(var(--shadow-color) / 0.1), 0px 3px 2px oklch(var(--shadow-color) / 0.1), 0px 4px 8px oklch(var(--shadow-color) / 0.1);
 	--ease-in: cubic-bezier(0.4, 0, 1, 1);
 	--ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Tailwind's own values, on the copies' roots. Chopin's elements are never inside one. */
+/*
+ * Tailwind's own values, on the copies' roots. Chopin's elements are never inside one. A bare
+ * `border` draws shadcn's border colour there: preflight reads `--color-gray-200` for it, which
+ * is inherited, so one declaration on the root reaches every descendant (a rule on `*` would make
+ * the browser walk every element's ancestors on each style recalculation).
+ */
 :where(
 	[data-slot="button"],
 	[data-slot="command"],
@@ -122,115 +127,56 @@
 	--radius-2xl: 1rem;
 	--radius-3xl: 1.5rem;
 	--radius-4xl: 2rem;
-	--shadow-2xs: 0 1px rgb(0 0 0 / 0.05);
-	--shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-	--shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-	--shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-	--shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-	--shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-	--shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
-	--text-shadow-2xs: 0px 1px 0px rgb(0 0 0 / 0.15);
-	--text-shadow-xs: 0px 1px 1px rgb(0 0 0 / 0.2);
-	--text-shadow-sm: 0px 1px 0px rgb(0 0 0 / 0.075), 0px 1px 1px rgb(0 0 0 / 0.075), 0px 2px 2px rgb(0 0 0 / 0.075);
-	--text-shadow-md: 0px 1px 1px rgb(0 0 0 / 0.1), 0px 1px 2px rgb(0 0 0 / 0.1), 0px 2px 4px rgb(0 0 0 / 0.1);
-	--text-shadow-lg: 0px 1px 2px rgb(0 0 0 / 0.1), 0px 3px 2px rgb(0 0 0 / 0.1), 0px 4px 8px rgb(0 0 0 / 0.1);
+	--shadow-2xs: 0 1px oklch(var(--shadow-color) / 0.05);
+	--shadow-xs: 0 1px 2px 0 oklch(var(--shadow-color) / 0.05);
+	--shadow-sm: 0 1px 3px 0 oklch(var(--shadow-color) / 0.1), 0 1px 2px -1px oklch(var(--shadow-color) / 0.1);
+	--shadow-md: 0 4px 6px -1px oklch(var(--shadow-color) / 0.1), 0 2px 4px -2px oklch(var(--shadow-color) / 0.1);
+	--shadow-lg: 0 10px 15px -3px oklch(var(--shadow-color) / 0.1), 0 4px 6px -4px oklch(var(--shadow-color) / 0.1);
+	--shadow-xl: 0 20px 25px -5px oklch(var(--shadow-color) / 0.1), 0 8px 10px -6px oklch(var(--shadow-color) / 0.1);
+	--shadow-2xl: 0 25px 50px -12px oklch(var(--shadow-color) / 0.25);
+	--text-shadow-2xs: 0px 1px 0px oklch(var(--shadow-color) / 0.15);
+	--text-shadow-xs: 0px 1px 1px oklch(var(--shadow-color) / 0.2);
+	--text-shadow-sm: 0px 1px 0px oklch(var(--shadow-color) / 0.075), 0px 1px 1px oklch(var(--shadow-color) / 0.075), 0px 2px 2px oklch(var(--shadow-color) / 0.075);
+	--text-shadow-md: 0px 1px 1px oklch(var(--shadow-color) / 0.1), 0px 1px 2px oklch(var(--shadow-color) / 0.1), 0px 2px 4px oklch(var(--shadow-color) / 0.1);
+	--text-shadow-lg: 0px 1px 2px oklch(var(--shadow-color) / 0.1), 0px 3px 2px oklch(var(--shadow-color) / 0.1), 0px 4px 8px oklch(var(--shadow-color) / 0.1);
 	--ease-in: cubic-bezier(0.4, 0, 1, 1);
 	--ease-out: cubic-bezier(0, 0, 0.2, 1);
 	--ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 	--default-transition-duration: 150ms;
 	--default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+	--color-gray-200: var(--color-border);
 }
 
-/* A bare `border` draws shadcn's border colour, as its own base layer makes it. */
-@layer base {
-	:is(
-	[data-slot="button"],
-	[data-slot="command"],
-	[data-slot="command-empty"],
-	[data-slot="command-group"],
-	[data-slot="command-input"],
-	[data-slot="command-input-wrapper"],
-	[data-slot="command-item"],
-	[data-slot="command-list"],
-	[data-slot="command-separator"],
-	[data-slot="command-shortcut"],
-	[data-slot="dialog"],
-	[data-slot="dialog-close"],
-	[data-slot="dialog-content"],
-	[data-slot="dialog-description"],
-	[data-slot="dialog-footer"],
-	[data-slot="dialog-header"],
-	[data-slot="dialog-overlay"],
-	[data-slot="dialog-portal"],
-	[data-slot="dialog-title"],
-	[data-slot="dialog-trigger"],
-	[data-slot="input"],
-	[data-slot="input-group"],
-	[data-slot="input-group-addon"],
-	[data-slot="input-group-control"],
-	[data-slot="model-selector-content"],
-	[data-slot="model-selector-effort"],
-	[data-slot="model-selector-empty"],
-	[data-slot="model-selector-group"],
-	[data-slot="model-selector-item"],
-	[data-slot="model-selector-list"],
-	[data-slot="model-selector-search"],
-	[data-slot="model-selector-separator"],
-	[data-slot="model-selector-trigger"],
-	[data-slot="model-selector-value"],
-	[data-slot="popover"],
-	[data-slot="popover-content"],
-	[data-slot="popover-description"],
-	[data-slot="popover-header"],
-	[data-slot="popover-title"],
-	[data-slot="popover-trigger"],
-	[data-slot="textarea"]
-),
-	:is(
-	[data-slot="button"],
-	[data-slot="command"],
-	[data-slot="command-empty"],
-	[data-slot="command-group"],
-	[data-slot="command-input"],
-	[data-slot="command-input-wrapper"],
-	[data-slot="command-item"],
-	[data-slot="command-list"],
-	[data-slot="command-separator"],
-	[data-slot="command-shortcut"],
-	[data-slot="dialog"],
-	[data-slot="dialog-close"],
-	[data-slot="dialog-content"],
-	[data-slot="dialog-description"],
-	[data-slot="dialog-footer"],
-	[data-slot="dialog-header"],
-	[data-slot="dialog-overlay"],
-	[data-slot="dialog-portal"],
-	[data-slot="dialog-title"],
-	[data-slot="dialog-trigger"],
-	[data-slot="input"],
-	[data-slot="input-group"],
-	[data-slot="input-group-addon"],
-	[data-slot="input-group-control"],
-	[data-slot="model-selector-content"],
-	[data-slot="model-selector-effort"],
-	[data-slot="model-selector-empty"],
-	[data-slot="model-selector-group"],
-	[data-slot="model-selector-item"],
-	[data-slot="model-selector-list"],
-	[data-slot="model-selector-search"],
-	[data-slot="model-selector-separator"],
-	[data-slot="model-selector-trigger"],
-	[data-slot="model-selector-value"],
-	[data-slot="popover"],
-	[data-slot="popover-content"],
-	[data-slot="popover-description"],
-	[data-slot="popover-header"],
-	[data-slot="popover-title"],
-	[data-slot="popover-trigger"],
-	[data-slot="textarea"]
-) * {
-		border-color: var(--color-border);
-	}
+/*
+ * A Chopin control in a copy's slot (`data-chopin-control`) is Chopin's again: the variables above
+ * return to Chopin's values for it, and the rules below leave it alone.
+ */
+:where([data-chopin-control]) {
+	--spacing: 0.25rem;
+	--text-xs: clamp(0.747369rem, 0.740003rem + 0.032738vw, 0.769468rem);
+	--text-xs--line-height: 1.35;
+	--text-sm: clamp(0.837054rem, 0.823674rem + 0.059466vw, 0.877193rem);
+	--text-sm--line-height: 1.5;
+	--text-base: clamp(0.9375rem, 0.916667rem + 0.092593vw, 1rem);
+	--text-base--line-height: 1.5;
+	--text-lg: clamp(1.176rem, 1.1348rem + 0.183111vw, 1.2996rem);
+	--text-lg--line-height: 1.4;
+	--text-xl: clamp(1.31712rem, 1.262312rem + 0.243591vw, 1.481544rem);
+	--text-xl--line-height: 1.25;
+	--text-2xl: clamp(1.652195rem, 1.561122rem + 0.404769vw, 1.925415rem);
+	--text-2xl--line-height: 1.15;
+	--font-weight-normal: 400;
+	--font-weight-medium: 500;
+	--font-weight-semibold: 600;
+	--font-weight-bold: 700;
+	--radius-sm: 0.25rem;
+	--radius-md: 0.375rem;
+	--radius-lg: 0.5rem;
+	--radius-xl: 0.625rem;
+	--ease-out: cubic-bezier(0.2, 0, 0, 1);
+	--default-transition-duration: var(--duration-fast);
+	--default-transition-timing-function: var(--ease-out);
+	--color-gray-200: oklch(0.94216 0.00393 95);
 }
 
 /*
@@ -291,7 +237,7 @@
 	[role="switch"],
 	[role="tab"],
 	a[href]
-),
+):not([data-chopin-control]),
 :is(
 	[data-slot="button"],
 	[data-slot="command"],
@@ -345,7 +291,7 @@
 	[role="switch"],
 	[role="tab"],
 	a[href]
-) {
+):not([data-chopin-control]) {
 	transition: revert-layer;
 }
 
@@ -391,7 +337,7 @@
 	[data-slot="popover-title"],
 	[data-slot="popover-trigger"],
 	[data-slot="textarea"]
-):is(button, [role="button"]):active,
+):is(button, [role="button"]):not([data-chopin-control]):active,
 :is(
 	[data-slot="button"],
 	[data-slot="command"],
@@ -434,7 +380,7 @@
 	[data-slot="popover-title"],
 	[data-slot="popover-trigger"],
 	[data-slot="textarea"]
-) :is(button, [role="button"]):active {
+) :is(button, [role="button"]):not([data-chopin-control]):active {
 	scale: revert-layer;
 }
 
@@ -480,7 +426,7 @@
 	[data-slot="popover-title"],
 	[data-slot="popover-trigger"],
 	[data-slot="textarea"]
-):focus-visible,
+):focus-visible:not([data-chopin-control]),
 :is(
 	[data-slot="button"],
 	[data-slot="command"],
@@ -523,7 +469,7 @@
 	[data-slot="popover-title"],
 	[data-slot="popover-trigger"],
 	[data-slot="textarea"]
-) :focus-visible {
+) :focus-visible:not([data-chopin-control]) {
 	outline: revert-layer;
 	outline-offset: revert-layer;
 }
@@ -587,7 +533,7 @@
 			[role="switch"],
 			[role="tab"],
 			a[href]
-		),
+		):not([data-chopin-control]),
 		:is(
 			[data-slot="button"],
 			[data-slot="command"],
@@ -641,7 +587,7 @@
 			[role="switch"],
 			[role="tab"],
 			a[href]
-		)
+		):not([data-chopin-control])
 	) {
 		position: relative;
 	}
@@ -700,7 +646,7 @@
 			[role="switch"],
 			[role="tab"],
 			a[href]
-		),
+		):not([data-chopin-control]),
 		:is(
 			[data-slot="button"],
 			[data-slot="command"],
@@ -754,7 +700,7 @@
 			[role="switch"],
 			[role="tab"],
 			a[href]
-		)
+		):not([data-chopin-control])
 	)::after {
 		content: "";
 		position: absolute;
