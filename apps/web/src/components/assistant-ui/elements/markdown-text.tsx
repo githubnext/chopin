@@ -10,7 +10,7 @@ import {
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
-import { type FC, memo, useMemo, useRef } from "react";
+import { type FC, type ReactNode, memo, useMemo, useRef } from "react";
 import type { TextMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
@@ -18,10 +18,11 @@ import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-ic
 import { useCopyToClipboard } from "@/components/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
 
-type MarkdownTextProps = Partial<TextMessagePartProps> & {
-  components?: Parameters<typeof memoizeMarkdownComponents>[0];
-  componentsByLanguage?: MarkdownTextPrimitiveProps["componentsByLanguage"];
-};
+export type MarkdownTextProps = Partial<TextMessagePartProps> &
+  Omit<MarkdownTextPrimitiveProps, "components" | "componentsByLanguage"> & {
+    components?: Parameters<typeof memoizeMarkdownComponents>[0];
+    componentsByLanguage?: MarkdownTextPrimitiveProps["componentsByLanguage"];
+  };
 
 const useShallowStable = <T extends Record<string, unknown> | undefined>(
   value: T,
@@ -42,6 +43,7 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
 const MarkdownTextImpl: FC<MarkdownTextProps> = ({
   components,
   componentsByLanguage,
+  ...props
 }) => {
   const stableComponents = useShallowStable(components);
   const stableComponentsByLanguage = useShallowStable(componentsByLanguage);
@@ -55,18 +57,24 @@ const MarkdownTextImpl: FC<MarkdownTextProps> = ({
 
   return (
     <MarkdownTextPrimitive
+      data-slot="markdown-text"
       remarkPlugins={[remarkGfm]}
       className="aui-md"
       components={markdownComponents}
       componentsByLanguage={stableComponentsByLanguage}
       defer
+      {...props}
     />
   );
 };
 
 export const MarkdownText = memo(MarkdownTextImpl);
 
-const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
+export const CodeHeader: FC<CodeHeaderProps & { action?: ReactNode }> = ({
+  language,
+  code,
+  action,
+}) => {
   const { isCopied, copyToClipboard } = useCopyToClipboard();
   const onCopy = () => {
     if (!code || isCopied) return;
@@ -78,6 +86,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
       <span className="aui-code-header-language text-muted-foreground font-medium lowercase">
         {language}
       </span>
+      {action ??
       <TooltipIconButton tooltip="Copy" onClick={onCopy}>
         {!isCopied && (
           <CopyIcon className="animate-in zoom-in-75 fade-in duration-150" />
@@ -85,12 +94,12 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
         {isCopied && (
           <CheckIcon className="animate-in zoom-in-50 fade-in duration-200 ease-out" />
         )}
-      </TooltipIconButton>
+      </TooltipIconButton>}
     </div>
   );
 };
 
-const defaultComponents = memoizeMarkdownComponents({
+export const defaultComponents = memoizeMarkdownComponents({
   h1: ({ className, ...props }) => (
     <h1
       className={cn(

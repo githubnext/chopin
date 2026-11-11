@@ -24,7 +24,9 @@
 			"registry": "@assistant-ui",
 			"item": "markdown-text",
 			"version": "assistant-ui/assistant-ui@437b410726e2",
-			"sha256": "3fc4c2191adc0f30711f1936cdbf70f4b77781a3e4cfd56e54a57517e405f460"
+			"sha256": "3fc4c2191adc0f30711f1936cdbf70f4b77781a3e4cfd56e54a57517e405f460",
+			"patch": "apps/web/src/components/assistant-ui/elements/markdown-text.tsx.patch",
+			"patchSha256": "cb2a65560dd2515ac53c0eaa8d1add5a3c8d4e7f1d692619789fb2a36e78102a"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/elements/message-attachment.tsx",
@@ -80,7 +82,7 @@
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "352b49f967c728c151bbf19814465dfe27d69fef1a8a1c3c4d16214670580d2e"
+			"sha256": "860d72c3045ae296ac5878e3915c3df1f71765864783ca78b3c9a8314e33660a"
 		},
 		{
 			"file": "apps/web/src/components/hooks/use-copy-to-clipboard.ts",
