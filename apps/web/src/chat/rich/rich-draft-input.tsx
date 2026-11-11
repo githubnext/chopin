@@ -51,6 +51,7 @@ import {
 	HISTORY_PUSH_TAG,
 	INDENT_CONTENT_COMMAND,
 	INSERT_PARAGRAPH_COMMAND,
+	KEY_ESCAPE_COMMAND,
 	PASTE_COMMAND,
 	SKIP_DOM_SELECTION_TAG,
 	TextNode,
@@ -608,6 +609,9 @@ export let RichDraftInput = forwardRef<RichDraftHandle, RichDraftInputProps>(
 					},
 				),
 				editor.registerCommand(INDENT_CONTENT_COMMAND, () => true, COMMAND_PRIORITY_CRITICAL),
+				// Escape is the page's (a menu, dictation, a pane): the draft keeps its focus, where the
+				// rich-text editor would blur.
+				editor.registerCommand(KEY_ESCAPE_COMMAND, () => true, COMMAND_PRIORITY_CRITICAL),
 				editor.registerCommand(CONTROLLED_TEXT_INSERTION_COMMAND, () => {
 					// A chip is one thing: words typed with the caret inside one go after it.
 					let current = $getSelection();
