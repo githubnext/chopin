@@ -1,6 +1,8 @@
 /*
- * The field inside the message box, where the Chopin chip sits in it, the strips above it and the
- * colour of a failed send's edge.
+ * The field inside the message box, the strips above it and the colour of a failed send's edge. The
+ * menus that open over the box (`@` and `/`) and the Chopin chip are assistant-ui's elements, copied
+ * (and patched only where an extension point was needed), so they have no rule here but where the
+ * chip sits in the draft.
  */
 .chat-composer .composer-surface[data-error] {
 	border-color: var(--color-danger-edge);
@@ -94,6 +96,18 @@
 }
 .chat-composer .composer-chip-remove:hover:not(:disabled) {
 	background: var(--color-selected-strong);
+}
+/*
+ * The rows of assistant-ui's menu are its own; this is only the list that holds them, which keeps
+ * the menu's 2px gap between them and scrolls once there are more than fit above the box.
+ */
+.chat-composer .composer-menu-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.125rem;
+	max-height: min(18rem, calc(var(--app-height, 100dvh) * 0.4));
+	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 .chat-composer .composer-notice {
 	display: flex;
@@ -208,18 +222,12 @@
 	margin-top: 0.125rem;
 	color: var(--color-text-tertiary);
 }
-.chat-composer :is([data-chat-reference-picker], [data-chat-mention-picker]) {
+.chat-composer [data-chat-reference-picker] {
 	left: calc(-1 * var(--edge-width));
 	margin-bottom: calc(0.5rem + var(--edge-width));
 	box-shadow: var(--shadow-resting-strong);
-}
-.chat-composer [data-chat-reference-picker] {
 	right: calc(-1 * var(--edge-width));
 	max-height: min(16rem, 45dvh, 45vh);
-}
-/* At most eight rows show before the list scrolls: 8 × 2rem plus the 0.25rem padding. */
-.chat-composer [data-chat-mention-picker] {
-	max-height: min(16.5rem, 45dvh, 45vh);
 }
 .chat-composer [data-chat-reference-picker] [role="option"] {
 	height: 2rem;
@@ -237,9 +245,6 @@
 	.chat-composer [data-chat-reference-picker] [data-reference-meta="slug"] {
 		display: none;
 	}
-}
-.chat-composer [data-chat-mention-picker] [role="option"] {
-	padding-left: 0.25rem;
 }
 .chat-composer .composer-picker-status {
 	display: flex;
@@ -393,9 +398,8 @@
 	.chat-composer .composer-unavailable {
 		min-height: 0;
 	}
-	/* Pickers become a list resting on the composer, as wide as it is. */
-	.chat-composer
-		:is([data-chat-reference-picker], [data-chat-mention-picker], [data-chat-command-picker]) {
+	/* The document picker becomes a list resting on the composer, as wide as it is. */
+	.chat-composer [data-chat-reference-picker] {
 		left: calc(-1 * var(--edge-width));
 		right: calc(-1 * var(--edge-width));
 		width: auto;
@@ -407,9 +411,7 @@
 		overscroll-behavior: contain;
 		border-radius: var(--radius-lg);
 	}
-	.chat-composer
-		:is([data-chat-reference-picker], [data-chat-mention-picker], [data-chat-command-picker])
-		[role="option"] {
+	.chat-composer [data-chat-reference-picker] [role="option"] {
 		height: auto;
 		min-height: var(--control-target-coarse);
 		font-size: var(--text-base);

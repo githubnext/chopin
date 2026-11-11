@@ -1,13 +1,12 @@
 import { ChopinMark, Face } from "@chopin/editor";
 import { DecisionIcon, DocumentIcon, GlobeSearchIcon, TextStyleIcon } from "@chopin/icons";
-import { useEffect, useId } from "react";
-
-import { ComposerMenuGroup, ComposerPersonItem } from "./assistant-ui/composer-commands";
-import { ComposerMenu } from "./assistant-ui/composer-model";
+import { useEffect } from "react";
+import { ComposerPersonItem } from "@/components/assistant-ui/elements/composer";
+import { ComposerPopover } from "./assistant-ui/composer-popover";
 import { referenceOptionId } from "./reference-picker";
 
-import type { MentionCandidate } from "./mentions";
 import type { PointerGroup, PointerOption } from "./mention-sources";
+import type { MentionCandidate } from "./mentions";
 
 /** Every row `@` offers, in the order the keys move through them: people first, then the parts. */
 export type MentionRow =
@@ -29,20 +28,26 @@ export function mentionRows(
 function pointerIcon(option: PointerOption) {
 	switch (option.kind) {
 		case "heading":
-			return <TextStyleIcon size={16} />;
+			return <TextStyleIcon size={14} />;
 		case "decision":
-			return <DecisionIcon size={16} />;
+			return <DecisionIcon size={14} />;
 		case "research":
-			return <GlobeSearchIcon size={16} />;
+			return <GlobeSearchIcon size={14} />;
 		case "file":
-			return <DocumentIcon size={16} />;
+			return <DocumentIcon size={14} />;
 	}
 }
 
+/** What the tag at the end of a part's row says: a section's level, else what kind of thing it is. */
+function pointerTag(option: PointerOption): string {
+	return option.meta ?? option.kind;
+}
+
 /**
- * The `@` menu over the Chat composer: Chopin and the people here, then, under their own headings,
- * the document's sections, Decisions and research cards and its repository's files. With nothing
- * but people it is the one plain list it always was.
+ * The `@` menu over the Chat composer, assistant-ui's Mentions: a small round badge, a name and a
+ * tiny tag at the end of each row. Chopin comes first, tagged `agent`, with its mark; the people
+ * here follow, tagged `human`, with their GitHub picture; then the document's sections, Decisions
+ * and research cards and its repository's files, each tagged with what it is.
  */
 export function MentionPicker(
 	{
@@ -63,7 +68,6 @@ export function MentionPicker(
 		options: readonly MentionCandidate[];
 	},
 ) {
-	let headingId = useId();
 	useEffect(() => {
 		let frame = requestAnimationFrame(() => {
 			document.getElementById(referenceOptionId(id, active))?.scrollIntoView({ block: "nearest" });
@@ -71,62 +75,55 @@ export function MentionPicker(
 		return () => cancelAnimationFrame(frame);
 	}, [active, id]);
 
-	let people = options.map((option, index) => (
-		<ComposerPersonItem
-			active={index === active}
-			aria-label={option.login}
-			id={referenceOptionId(id, index)}
-			key={option.login.toLowerCase()}
-			lead={option.kind === "planner"
-				? <ChopinMark circle />
-				: <Face decorative handle={option.login} size={20} titled={false} />}
-			name={option.login}
-			onClick={() => onSelect(option)}
-			onMouseDown={event => event.preventDefault()}
-			onMouseEnter={() => onActive(index)}
-		/>
-	));
-	let offset = options.length;
+	let rows = mentionRows(options, groups);
 	return (
-		<ComposerMenu variant="mentions">
-			<div aria-label="Mentions" id={id} role="listbox">
-				{groups.length === 0
-					? people
-					: options.length > 0 && (
-						<ComposerMenuGroup
-							id={`${headingId}-people`}
-							// Chopin alone is not a group of people.
-							label={options.some(option => option.kind === "person") ? "People" : "Chopin"}
-						>
-							{people}
-						</ComposerMenuGroup>
-					)}
-				{groups.map(group => {
-					let start = offset;
-					offset += group.options.length;
+		<ComposerPopover id={id} kind="mentions" label="Mentions">
+			{rows.map((row, index) => {
+				let shared = {
+					active: index === active,
+					"aria-selected": index === active,
+					id: referenceOptionId(id, index),
+					onMouseDown: (event: { preventDefault: () => void }) => event.preventDefault(),
+					onMouseEnter: () => onActive(index),
+					role: "option",
+					tabIndex: -1,
+				};
+				if (row.type === "candidate") {
+					let candidate = row.candidate;
+					let planner = candidate.kind === "planner";
 					return (
-						<ComposerMenuGroup
-							id={`${headingId}-${group.label}`}
-							key={group.label}
-							label={group.label}
-						>
-							{group.options.map((option, index) => (
-								<ComposerPersonItem
-									active={start + index === active}
-									id={referenceOptionId(id, start + index)}
-									key={option.id}
-									lead={pointerIcon(option)}
-									meta={option.meta}
-									name={option.label}
-									onClick={() => onSelectPointer?.(option)}
-									onMouseDown={event => event.preventDefault()}
-									onMouseEnter={() => onActive(start + index)}
-								/>
-							))}
-						</ComposerMenuGroup>
+						<ComposerPersonItem
+							{...shared}
+							key={candidate.login.toLowerCase()}
+							onClick={() => onSelect(candidate)}
+							person={{
+								name: planner ? "Chopin" : candidate.login,
+								role: planner ? "agent" : "human",
+								avatar: (
+									<span aria-hidden="true">
+										{planner
+											? <ChopinMark circle />
+											: <Face decorative handle={candidate.login} size={20} titled={false} />}
+									</span>
+								),
+							}}
+						/>
 					);
-				})}
-			</div>
-		</ComposerMenu>
+				}
+				let option = row.option;
+				return (
+					<ComposerPersonItem
+						{...shared}
+						key={option.id}
+						onClick={() => onSelectPointer?.(option)}
+						person={{
+							name: option.label,
+							role: pointerTag(option),
+							avatar: <span aria-hidden="true">{pointerIcon(option)}</span>,
+						}}
+					/>
+				);
+			})}
+		</ComposerPopover>
 	);
 }
