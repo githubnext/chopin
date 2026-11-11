@@ -6,14 +6,18 @@
 			"registry": "@assistant-ui",
 			"item": "elements-composer",
 			"version": "assistant-ui/assistant-ui@d25a97a22f00",
-			"sha256": "397fb48354d73ae3eb2e51fc4872601eb8cc863e981520a4a7de65865db65308"
+			"sha256": "397fb48354d73ae3eb2e51fc4872601eb8cc863e981520a4a7de65865db65308",
+			"patch": "apps/web/src/components/assistant-ui/elements/composer.tsx.patch",
+			"patchSha256": "2439cb5d476212de4273d801ef552b63baafa7259cc71c7ba0bf0540b1f22606"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/elements/directive-text.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-directive-text",
 			"version": "assistant-ui/assistant-ui@2c298dfa8392",
-			"sha256": "7865b18353476c4963a1f59cd6c0d72a994899ee2acf27eeb849e7942bf0b3d4"
+			"sha256": "7865b18353476c4963a1f59cd6c0d72a994899ee2acf27eeb849e7942bf0b3d4",
+			"patch": "apps/web/src/components/assistant-ui/elements/directive-text.tsx.patch",
+			"patchSha256": "ddf4a3b22762db4c6d1bba03b26009f138ee1cea8a253b6151e545ad5a0e61b7"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/elements/model-selector.tsx",

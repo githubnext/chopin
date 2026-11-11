@@ -1,0 +1,37 @@
+--- a/apps/web/src/components/assistant-ui/elements/directive-text.tsx
++++ b/apps/web/src/components/assistant-ui/elements/directive-text.tsx
+@@ -1,6 +1,6 @@ the type of the trailing control, which needs ReactNode
+ "use client";
+ 
+-import type { FC } from "react";
++import type { FC, ReactNode } from "react";
+ import { Badge } from "@/components/ui/badge";
+ 
+ type IconComponent = FC<{ className?: string }>;
+@@ -24,6 +24,10 @@ a control the chip's owner draws after the label, such as one that removes the mention
+   iconMap?: Record<string, IconComponent>;
+   /** Icon rendered when `iconMap` has no entry for the segment type. */
+   fallbackIcon?: IconComponent;
++  /** Drawn inside the chip, after its label: a control that acts on the mention. */
++  trailing?: (
++    segment: Extract<DirectiveTextSegment, { readonly kind: "mention" }>,
++  ) => ReactNode;
+ };
+ 
+ /** Creates a text component that parses directive syntax and renders inline chips. */
+@@ -33,6 +37,7 @@ the option is read once, beside the others
+ ): FC<{ text: string }> {
+   const iconMap = options?.iconMap;
+   const fallbackIcon = options?.fallbackIcon;
++  const trailing = options?.trailing;
+ 
+   const Component: FC<{ text: string }> = ({ text }) => {
+     const segments = formatter.parse(text);
+@@ -65,6 +70,7 @@ the trailing control is drawn inside the chip after its label
+             >
+               {Icon && <Icon />}
+               {seg.label}
++              {trailing?.(seg)}
+             </Badge>
+           );
+         })}
