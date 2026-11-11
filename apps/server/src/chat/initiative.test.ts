@@ -90,7 +90,6 @@ test.each(["pending", "active"] as const)(
 			expect(h.replies.at(-1)).toMatchObject({
 				kind: "chat:send",
 				id: child.requestId,
-				queued: false,
 			});
 			expect(typing).toHaveBeenCalledWith("ana-tab", "U_ana", false);
 			await h.clock.advance(12_000);

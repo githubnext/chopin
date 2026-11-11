@@ -28,31 +28,12 @@ test("routine presence entries stay out of the conversation", () => {
 				ts: 1_700_000_000,
 			}],
 			handle: "ana",
-			onWithdraw: () => {},
-			queued: [],
 		}),
 	);
 
 	expect(markup).not.toContain("Sam joined");
 	expect(markup).not.toContain("data-chat-system");
 	expect(markup).not.toContain("data-motion-feedback");
-});
-
-test("queued messages use the standard icon-button glyph", () => {
-	let markup = renderToStaticMarkup(
-		createElement(Transcript, {
-			active: true,
-			entries: [],
-			handle: "ana",
-			onWithdraw: () => {},
-			queued: [{ handle: "ana", id: "queued", text: "One more thought" }],
-		}),
-	);
-
-	expect(markup).toMatch(/aria-label="Withdraw queued message"[^>]*>.*?height="16"/s);
-	expect(markup).toMatch(/aria-label="Withdraw queued message"[^>]*>.*?width="16"/s);
-	expect(markup).toContain('<line x1="14" x2="4" y1="4" y2="14"></line>');
-	expect(markup).not.toContain(">×</button>");
 });
 
 test("a ready research notice links to its child document while other notices stay plain text", () => {
@@ -74,8 +55,6 @@ test("a ready research notice links to its child document while other notices st
 			},
 		],
 		handle: "ana",
-		onWithdraw: () => {},
-		queued: [],
 	}));
 
 	expect(markup).toContain(`<a class="${A_CLASS}" href="${childPath}"`);
@@ -96,8 +75,6 @@ test("system notices with arbitrary Markdown remain text", () => {
 			ts: 1_700_000_000,
 		}],
 		handle: "ana",
-		onWithdraw: () => {},
-		queued: [],
 	}));
 
 	expect(markup).not.toContain("<a");
@@ -115,8 +92,6 @@ test("a ready notice cannot turn an external destination into a system link", ()
 			ts: 1_700_000_000,
 		}],
 		handle: "ana",
-		onWithdraw: () => {},
-		queued: [],
 	}));
 
 	expect(markup).not.toContain("<a");
@@ -154,8 +129,6 @@ test("the published ready notice renders its actual child route in Transcript", 
 			ts: 1,
 		})),
 		handle: "ana",
-		onWithdraw() {},
-		queued: [],
 	}));
 
 	expect(markup).toContain(`<a class="${A_CLASS}" href="${path}"`);
@@ -180,8 +153,6 @@ test.each([
 		active: true,
 		entries: [{ author: { kind: "system" }, id: "invalid", text, ts: 1 }],
 		handle: "ana",
-		onWithdraw() {},
-		queued: [],
 	}));
 
 	expect(markup).not.toContain("<a");
@@ -196,8 +167,6 @@ test("a ready link with extra system prose remains plain text", () => {
 		active: true,
 		entries: [{ author: { kind: "system" }, id: "extra", text, ts: 1 }],
 		handle: "ana",
-		onWithdraw() {},
-		queued: [],
 	}));
 
 	expect(markup).not.toContain("<a");
@@ -218,8 +187,6 @@ test("work announcements promise inspectable details only when the turn has tool
 			active: true,
 			entries: [{ ...entry, tools }],
 			handle: "ana",
-			onWithdraw() {},
-			queued: [],
 			...(suspended ? { suspendedWork: span } : { completedWork: [span] }),
 		}));
 	let tool: Chat.Activity = { id: "tool", name: "read_plan", status: "done" };

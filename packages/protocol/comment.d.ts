@@ -63,10 +63,11 @@ export declare namespace Comment {
 	/**
 	 * What became of a note sent to the Planner, as its sender is told.
 	 *
-	 * `running` and `queued` mean a turn will read the thread; `off` means this
-	 * server runs without a Planner, so the note is saved and nothing more.
+	 * `running` means a turn will read the thread; `off` means this server runs without a
+	 * Planner, so the note is saved and nothing more. A note is refused, not held, while a turn
+	 * is running.
 	 */
-	export type Planner = "running" | "queued" | "off";
+	export type Planner = "running" | "off";
 
 	export type Thread = {
 		id: string;
@@ -85,10 +86,10 @@ export declare namespace Comment {
 		/** When they did, Unix seconds. */
 		at?: number;
 		/**
-		 * A Planner turn is running or queued for this thread.
+		 * A Planner turn is running for this thread.
 		 *
-		 * Derived from the live turn and its queue when a client joins, and never
-		 * stored: a turn does not survive a restart, so neither does this.
+		 * Derived from the live turn when a client joins, and never stored: a turn
+		 * does not survive a restart, so neither does this.
 		 */
 		working?: boolean;
 	};
@@ -221,7 +222,7 @@ export declare namespace Comment {
 	/**
 	 * Whether the Planner is working on a thread.
 	 *
-	 * True once a turn for it is running or queued. False when the last one
+	 * True once a turn for it is running. False when the last one
 	 * ends; `reason` says why when it did not finish on its own: it was stopped,
 	 * it failed, or there is no Planner to run it.
 	 */

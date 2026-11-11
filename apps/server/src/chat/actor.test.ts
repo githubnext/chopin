@@ -13,7 +13,6 @@ type Sent = {
 	kind: string;
 	id?: string;
 	message?: string;
-	queued?: boolean;
 	rid?: string;
 	[key: string]: unknown;
 };

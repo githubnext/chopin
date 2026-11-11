@@ -334,7 +334,7 @@ let PRESENCE = [
 export function ConversationPlate() {
 	return (
 		<AuditPlate
-			description="Member, Chopin, tool activity, queued work, composer, and error states."
+			description="Member, Chopin, tool activity, composer, and error states."
 			item="chat"
 			title="Conversation"
 		>
@@ -346,12 +346,6 @@ export function ConversationPlate() {
 								active
 								entries={CHAT_ENTRIES}
 								handle={HANDLE}
-								onWithdraw={() => {}}
-								queued={[{
-									id: "audit-queued",
-									handle: HANDLE,
-									text: "Also check the compact layout.",
-								}]}
 							/>
 							<ComposerSpecimen />
 						</div>

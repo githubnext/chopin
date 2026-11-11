@@ -33,7 +33,7 @@ test("closing resolves queued and active jobs, and the queue has a bound", async
 	expect(full.chat.waiting).toHaveLength(20);
 });
 
-test("ephemeral state and queue broadcast failures cannot strand a job", async () => {
+test("an ephemeral state broadcast failure cannot strand a job, and a job waiting behind a turn fails when the document closes", async () => {
 	let direct = harness();
 	direct.breakFrame("chat:state");
 	let running = Chat.job(direct.context, JOB, "prompt", "session");
@@ -44,7 +44,6 @@ test("ephemeral state and queue broadcast failures cannot strand a job", async (
 
 	let queued = harness();
 	queued.chat.busy = true;
-	queued.breakFrame("chat:queue");
 	let waiting = Chat.job(queued.context, JOB, "prompt", "session");
 	expect(queued.chat.waiting).toHaveLength(1);
 	await Chat.close(queued.chat);

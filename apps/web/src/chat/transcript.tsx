@@ -12,7 +12,6 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import {
-	CloseIcon,
 	MessageForwardIcon,
 	MessageIcon,
 	SignInIcon,
@@ -24,8 +23,8 @@ import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 import { ChopinMark, Face, openCommentThread, useCardMeta } from "@chopin/editor";
 import { EmptyState } from "@chopin/visuals";
 
-import { deletable, deliveryOf, failureOf } from "./delivery";
-import { DeliveryMark, FailedLine, MessageMenu } from "./message-delivery";
+import { deliveryOf, failureOf } from "./delivery";
+import { DeliveryMark, FailedLine } from "./message-delivery";
 import { MessageMarkdown } from "./markdown";
 import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
@@ -234,14 +233,13 @@ function DecisionSystemEntry(
 let LEADING_MENTION = /^\s*@chopin\b[^\S\n]*/i;
 
 function MessageBody(
-	{ enter, handle, message, onDelete, onRetry, onWithdraw, quietFailures, room, ...markers }: {
+	{ enter, handle, message, onDelete, onRetry, quietFailures, room, ...markers }: {
 		enter: boolean;
 		handle: string;
 		message: Message;
 		room?: string;
 		onDelete: (id: string) => void;
 		onRetry: (id: string) => void;
-		onWithdraw: (id: string) => void;
 		quietFailures: boolean;
 	} & PlanMarkers,
 ) {
@@ -256,7 +254,7 @@ function MessageBody(
 		!toPlanner && !displayText(text) && message.author.kind === "member"
 		&& !message.attachments?.length
 	) text = "Ask Chopin";
-	// Only the sender sees how far a message has got, and may take it back until it is delivered.
+	// Only the sender sees that a message is still only in their browser, or that the server refused it.
 	let own = message.author.kind === "member" && message.author.handle === handle;
 	let delivery = own ? deliveryOf(message) : undefined;
 	let threadSummary = markers.threads?.summaries[message.id];
@@ -318,21 +316,6 @@ function MessageBody(
 						</span>
 					)}
 					{delivery && delivery !== "failed" && <DeliveryMark mark={delivery} />}
-					{delivery && deletable(message) && delivery !== "failed"
-						&& <MessageMenu onDelete={() => onDelete(message.id)} />}
-					{message.queued && message.author.kind === "member" && message.author.handle === handle
-						&& (
-							<button
-								aria-label="Withdraw queued message"
-								data-tooltip="Withdraw message"
-								className="btn btn-icon btn-ghost -my-1 shrink-0"
-								onClick={() => onWithdraw(message.id)}
-								title="Withdraw"
-								type="button"
-							>
-								<CloseIcon aria-hidden="true" size={16} />
-							</button>
-						)}
 				</div>
 			)}
 			{!(text || toPlanner) && canThread && markers.threads && (
@@ -355,7 +338,7 @@ function MessageBody(
 			{threadSummary && markers.threads && (
 				<ThreadSummaryRow onOpen={markers.threads.onOpen} summary={threadSummary} />
 			)}
-			{ANALYSIS && !message.queued && markers.onCardLink && markers.onRetryAnalysis && (
+			{ANALYSIS && markers.onCardLink && markers.onRetryAnalysis && (
 				<MessageMarkers
 					canEdit={!!markers.canEdit}
 					messageId={message.id}
@@ -380,7 +363,6 @@ function MessageGroup(
 		handle,
 		onDelete,
 		onRetry,
-		onWithdraw,
 		quietFailures,
 		room,
 		...markers
@@ -393,7 +375,6 @@ function MessageGroup(
 		handle: string;
 		onDelete: (id: string) => void;
 		onRetry: (id: string) => void;
-		onWithdraw: (id: string) => void;
 		quietFailures: boolean;
 	} & PlanMarkers,
 ) {
@@ -403,12 +384,11 @@ function MessageGroup(
 
 	return (
 		<div
-			className={`flex gap-3 ${item.queued ? "text-text-quaternary" : ""}`}
+			className="flex gap-3"
 			data-chat-enter={enter || undefined}
 			data-chat-entry
-			data-chat-state={item.queued ? "queued" : undefined}
 		>
-			<div className={`w-6 shrink-0 ${item.queued ? "opacity-45" : ""}`}>
+			<div className="w-6 shrink-0">
 				{item.continued
 					? null
 					: item.author.kind === "agent"
@@ -416,23 +396,13 @@ function MessageGroup(
 					: <Face decorative handle={item.author.handle} size={24} titled={false} />}
 			</div>
 			<div
-				className={`flex min-w-0 flex-1 flex-col gap-1 ${item.continued ? "" : "-mt-0.5"} ${
-					item.queued ? "opacity-60" : ""
-				}`}
+				className={`flex min-w-0 flex-1 flex-col gap-1 ${item.continued ? "" : "-mt-0.5"}`}
 			>
 				{!item.continued && (
 					<div className="flex items-baseline gap-1.5 text-sm">
 						<span className="min-w-0 break-all font-semibold">{name}</span>
-						<span
-							className={item.queued
-								? "text-sm text-text-quaternary tabular-nums"
-								: "text-2xs text-text-tertiary tabular-nums"}
-						>
-							{item.queued
-								? "queued"
-								: active
-								? `Started at ${when(active.ts!)}`
-								: when(first.ts!)}
+						<span className="text-2xs text-text-tertiary tabular-nums">
+							{active ? `Started at ${when(active.ts!)}` : when(first.ts!)}
 						</span>
 					</div>
 				)}
@@ -455,7 +425,6 @@ function MessageGroup(
 						message={message}
 						onDelete={onDelete}
 						onRetry={onRetry}
-						onWithdraw={onWithdraw}
 						quietFailures={quietFailures}
 						room={room}
 					/>
@@ -493,8 +462,6 @@ export function Transcript(
 		quietFailures = false,
 		onRetryAnalysis,
 		onRetryJob,
-		onWithdraw,
-		queued,
 		sourceDestination,
 		suspendedWork,
 		threads,
@@ -527,14 +494,12 @@ export function Transcript(
 		handle: string;
 		/** False until the current connection's history has arrived. */
 		live?: boolean;
-		/** Take back a message that was not delivered. */
+		/** Drop a message the server refused. */
 		onDelete?: (id: string) => void;
-		/** Send a message that could not be sent again. */
+		/** Send a message the server refused again. */
 		onRetry?: (id: string) => void;
 		/** The page's connection banner shows: a message's "Couldn't send" gives way to it, and is back with the connection. */
 		quietFailures?: boolean;
-		onWithdraw: (id: string) => void;
-		queued: Chat.Waiting[];
 		suspendedWork?: CompletedWork;
 		working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">;
 		sourceDestination?: ChatDestination;
@@ -559,7 +524,7 @@ export function Transcript(
 	let offered = useRef(false);
 	let sourceOwner = useRef({});
 	let groups = researchTranscript(
-		group(entries, queued, working, completedWork, suspendedWork),
+		group(entries, working, completedWork, suspendedWork),
 		researchOffers ? conversationPlan?.researchOffers ?? [] : [],
 	);
 	let messages = groups.flatMap(item => item.kind === "messages" ? item.messages : []);
@@ -575,7 +540,7 @@ export function Transcript(
 		if (item.kind === "system") return { item, key: item.id };
 		let first = item.messages[0]!;
 		let turn = first.working ? working?.id : turns.get(first.id);
-		return { item, key: turn ? `turn:${turn}` : `${item.queued ? "queued" : "sent"}-${first.id}` };
+		return { item, key: turn ? `turn:${turn}` : `sent-${first.id}` };
 	});
 	let atoms = new Set(
 		groups.flatMap(item =>
@@ -915,7 +880,6 @@ export function Transcript(
 								onDelete={onDelete}
 								onRetry={onRetry}
 								quietFailures={quietFailures}
-								onWithdraw={onWithdraw}
 								room={room}
 								sourceDestination={sourceDestination}
 								threads={threads}

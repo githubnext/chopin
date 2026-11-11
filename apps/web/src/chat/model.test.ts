@@ -47,7 +47,7 @@ function reference(): Chat.Reference {
 
 describe("transcript groups", () => {
 	it("adds one temporary Planner message while a turn has no response", () => {
-		expect(group([], [], working())).toEqual([{
+		expect(group([], working())).toEqual([{
 			kind: "messages",
 			author: { kind: "agent" },
 			messages: [{
@@ -55,15 +55,13 @@ describe("transcript groups", () => {
 				author: { kind: "agent" },
 				text: "",
 				ts: 1_700_000_001,
-				queued: false,
 				working: true,
 			}],
-			queued: false,
 		}]);
 	});
 
 	it("replaces the temporary Planner message when a response arrives", () => {
-		let result = group([entry("a1", { kind: "agent" }, "I found it.")], []);
+		let result = group([entry("a1", { kind: "agent" }, "I found it.")]);
 
 		expect(result).toMatchObject([{
 			kind: "messages",
@@ -73,20 +71,7 @@ describe("transcript groups", () => {
 	});
 
 	it("does not keep a temporary Planner message after a turn stops", () => {
-		expect(group([], [])).toEqual([]);
-	});
-
-	it("places the temporary Planner message before queued requests", () => {
-		let result = group(
-			[entry("m1", { kind: "member", handle: "ana" })],
-			[{ id: "q1", handle: "ana", text: "Then compare options." }],
-			working(),
-		);
-
-		expect(result.map(item => {
-			if (item.kind === "system") return item.kind;
-			return item.messages[0]!.id;
-		})).toEqual(["m1", "turn-1", "q1"]);
+		expect(group([])).toEqual([]);
 	});
 
 	it("puts consecutive messages from one author in one group", () => {
@@ -94,7 +79,7 @@ describe("transcript groups", () => {
 			entry("m1", { kind: "member", handle: "ana" }),
 			entry("m2", { kind: "member", handle: "ana" }),
 			entry("m3", { kind: "agent" }),
-		], []);
+		]);
 
 		expect(result).toHaveLength(2);
 		expect(result[0]).toMatchObject({
@@ -108,7 +93,7 @@ describe("transcript groups", () => {
 			entry("m1", { kind: "member", handle: "ana" }),
 			entry("s1", { kind: "system" }),
 			entry("m2", { kind: "member", handle: "ana" }),
-		], []);
+		]);
 
 		expect(result.map(item => item.kind)).toEqual(["messages", "system", "messages"]);
 	});
@@ -122,7 +107,7 @@ describe("transcript groups", () => {
 			entry("m1", { kind: "member", handle: "ana" }),
 			activity,
 			entry("m2", { kind: "member", handle: "ana" }),
-		], []);
+		]);
 
 		expect(result).toMatchObject([{
 			kind: "messages",
@@ -138,7 +123,7 @@ describe("transcript groups", () => {
 				entry("presence", { kind: "system" }, text),
 				entry("member", { kind: "member", handle: "ana" }, text),
 				entry("agent", { kind: "agent" }, text),
-			], []);
+			]);
 			expect(result.map(item => item.kind)).toEqual(["messages", "messages"]);
 		},
 	);
@@ -151,32 +136,14 @@ describe("transcript groups", () => {
 			...entry("activity", { kind: "system" }, text),
 			decision: { kind: "activity", questionnaireId: "Q", label: "Auth" },
 		};
-		expect(group([activity], [])).toMatchObject([{ kind: "system", text }]);
+		expect(group([activity])).toMatchObject([{ kind: "system", text }]);
 	});
 
-	it("groups queued messages separately from sent messages", () => {
-		let result = group(
-			[entry("m1", { kind: "member", handle: "ana" })],
-			[
-				{ id: "q1", handle: "ana", text: "one" },
-				{ id: "q2", handle: "ana", text: "two" },
-			],
-		);
-
-		expect(result).toHaveLength(2);
-		expect(result[1]).toMatchObject({ queued: true, messages: [{ id: "q1" }, { id: "q2" }] });
-	});
-
-	it("carries persisted references through entries and queued messages", () => {
+	it("carries persisted references through entries", () => {
 		let sent = { ...entry("m1", { kind: "member", handle: "ana" }), references: [reference()] };
-		let result = group(
-			[sent],
-			[{ id: "q1", handle: "ana", text: "See #Plan", references: [reference()] }],
-		);
 
-		expect(result).toMatchObject([
+		expect(group([sent])).toMatchObject([
 			{ kind: "messages", messages: [{ id: "m1", references: [{ id: "reference-one" }] }] },
-			{ kind: "messages", messages: [{ id: "q1", references: [{ id: "reference-one" }] }] },
 		]);
 	});
 
@@ -195,7 +162,6 @@ describe("transcript groups", () => {
 					tools: [{ id: "new-tool", name: "edit_plan", status: "running" }],
 				},
 			],
-			[],
 			working(2),
 		);
 
@@ -224,7 +190,6 @@ describe("transcript groups", () => {
 					tools: [{ id: "current-tool", name: "edit_plan", status: "running" }],
 				},
 			],
-			[],
 			working(2),
 		);
 
@@ -245,7 +210,6 @@ describe("transcript groups", () => {
 					streaming: true,
 				},
 			],
-			[],
 			working(),
 		);
 
@@ -272,7 +236,6 @@ describe("transcript groups", () => {
 					tools: [{ id: "edit", name: "edit_plan", status: "running" }],
 				},
 			],
-			[],
 			working(),
 		);
 		let messages = result.flatMap(item => item.kind === "messages" ? item.messages : []);
@@ -298,7 +261,6 @@ describe("transcript groups", () => {
 					tools: [{ id: "edit", name: "edit_plan", status: "running" }],
 				},
 			],
-			[],
 			undefined,
 			[{
 				turnId: "turn-1",
@@ -332,7 +294,7 @@ describe("transcript groups", () => {
 			endOffset: 3,
 			anchorId: "prose",
 		}];
-		let messages = group(entries, [], undefined, retained).flatMap(item =>
+		let messages = group(entries, undefined, retained).flatMap(item =>
 			item.kind === "messages" ? item.messages : []
 		);
 		expect(messages.find(item => item.id === "prose")?.tools).toMatchObject([{ id: "read" }]);
@@ -354,7 +316,7 @@ describe("transcript groups", () => {
 			endOffset: 3,
 			anchorId: "prose",
 		};
-		let messages = group(entries, [], undefined, [], suspended).flatMap(item =>
+		let messages = group(entries, undefined, [], suspended).flatMap(item =>
 			item.kind === "messages" ? item.messages : []
 		);
 		expect(messages.find(item => item.id === "prose")).toMatchObject({
@@ -464,7 +426,7 @@ it("preserves decision metadata and timestamp on system groups", () => {
 		decision: { questionnaireId: "card-1", kind: "prompt" as const, generation: 2 },
 	};
 
-	expect(group([prompt], [])).toEqual([{
+	expect(group([prompt])).toEqual([{
 		kind: "system",
 		id: "decision-prompt",
 		text: "Ready to decide",

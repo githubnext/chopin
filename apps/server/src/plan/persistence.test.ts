@@ -324,8 +324,8 @@ describe("hosted plan persistence", () => {
 		await Chat.send(room(restored), ws, { ...message, rid: "retry" });
 		expect(restored.chat.entries.filter(entry => entry.id === requestId)).toHaveLength(1);
 		expect(replies.filter(frame => frame.kind === "chat:send")).toEqual([
-			expect.objectContaining({ rid: "first", id: requestId, queued: false }),
-			expect.objectContaining({ rid: "retry", id: requestId, queued: false }),
+			expect.objectContaining({ rid: "first", id: requestId }),
+			expect.objectContaining({ rid: "retry", id: requestId }),
 		]);
 		await Service.close(restored);
 	});

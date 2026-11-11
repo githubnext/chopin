@@ -624,7 +624,7 @@ function replay(
 		fail(ws, msg.rid, "chat request id was reused with different content");
 		return true;
 	}
-	reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id, queued: false });
+	reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id });
 	return true;
 }
 
@@ -669,7 +669,6 @@ export function greet(chat: Chat, ws: Socket): void {
 		busy: chat.busy,
 		...(chat.turn ? { turn: chat.turn } : {}),
 		...(chat.runs ? { runs: chat.runs } : {}),
-		queued: [],
 		participation: { enabled: !!chat.initiativeEnabled, paused: false },
 	});
 	// After the history, which ends whatever an earlier connection was told of it.
@@ -1242,7 +1241,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			}
 			return fail(ws, msg.rid, "could not save message", PASSING);
 		}
-		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id, queued: false });
+		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id });
 		announce(server, room, entry);
 		context.roomMessagePublished?.();
 		context.memberMessagePersisted?.(entry, context.claimantSessionId);
@@ -1278,7 +1277,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			chat.entries = chat.entries.filter(entry => !ids.has(entry.id));
 			return fail(ws, msg.rid, "could not save message", PASSING);
 		}
-		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entries[0]!.id, queued: false });
+		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entries[0]!.id });
 		for (let entry of entries) announce(server, room, entry);
 		context.memberMessagePersisted?.(entries[0]!, context.claimantSessionId);
 		return;
@@ -1318,7 +1317,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			chat.entries = chat.entries.filter(value => value.id !== entry.id);
 			return fail(ws, msg.rid, "could not save message", PASSING);
 		}
-		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id, queued: false });
+		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id });
 		if (chat.closed) return;
 		announce(server, room, entry);
 		context.memberMessagePersisted?.(entry, context.claimantSessionId);
@@ -1358,7 +1357,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		state(chat, server, room);
 		return fail(ws, msg.rid, "could not save message", PASSING);
 	}
-	reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id, queued: false });
+	reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id });
 	if (chat.closed) return;
 	announce(server, room, entry);
 	startRun(
