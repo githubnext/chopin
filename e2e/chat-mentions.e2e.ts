@@ -43,8 +43,17 @@ function rows(page: Page) {
 		);
 }
 
+/**
+ * Chopin and the people: the rows that are there as soon as `@` is typed. The document's sections,
+ * Decisions, research cards and files are asked of the server and come in below them a moment
+ * later, so a read of the whole list is of whichever of the two moments it lands in.
+ */
+async function people(page: Page) {
+	return (await rows(page)).filter(row => row.tag === "agent" || row.tag === "human");
+}
+
 async function names(page: Page) {
-	return (await rows(page)).map(row => row.name);
+	return (await people(page)).map(row => row.name);
 }
 
 test("the @ picker lists the Planner, people here and past authors, and sends only @chopin to the Planner", async ({ join, page }) => {
@@ -87,7 +96,7 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 	await expect(list).toBeVisible();
 	await expect(draft).toHaveAttribute("aria-expanded", "true");
 	// Chopin first, tagged `agent`; the people after it, tagged `human`.
-	expect(await rows(ana)).toEqual([
+	expect(await people(ana)).toEqual([
 		{ name: "Chopin", tag: "agent" },
 		{ name: "cy", tag: "human" },
 		{ name: "bo", tag: "human" },
@@ -104,15 +113,27 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 		"true",
 	);
 
+	// The keys run through every row, the document's parts and files too, so they are read once
+	// those are in: the last row is where ArrowUp from the first one lands.
+	let last = list.getByRole("option", { name: "src/chat/composer.tsx" });
+	await expect(last).toBeVisible();
+
 	await draft.press("ArrowDown");
 	await expect(list.getByRole("option", { name: "cy" })).toHaveAttribute("aria-selected", "true");
 	await expect(draft).toHaveAttribute(
 		"aria-activedescendant",
 		(await list.getByRole("option", { name: "cy" }).getAttribute("id"))!,
 	);
-	await draft.press("ArrowUp");
-	await draft.press("ArrowUp");
+	await draft.press("ArrowDown");
 	await expect(list.getByRole("option", { name: "bo" })).toHaveAttribute("aria-selected", "true");
+	await draft.press("ArrowUp");
+	await draft.press("ArrowUp");
+	await expect(list.getByRole("option", { name: /^Chopin/ })).toHaveAttribute(
+		"aria-selected",
+		"true",
+	);
+	await draft.press("ArrowUp");
+	await expect(last).toHaveAttribute("aria-selected", "true");
 
 	await draft.pressSequentially("C");
 	expect(await names(ana)).toEqual(["Chopin", "cy"]);
