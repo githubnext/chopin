@@ -381,6 +381,35 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+	/*
+	 * Adding files and dictating are one tap away once the draft has the focus (or while it is
+	 * listening), on a row of their own below the draft, so at rest the pill is the one line it
+	 * always was and the draft keeps its room beside the longest model name.
+	 */
+	.chat-composer :is(.composer-phone-extra, .composer-row-break) {
+		display: none;
+	}
+	.chat-composer[data-extras] .composer-row-break {
+		display: block;
+		order: 6;
+		flex-basis: 100%;
+		height: 0;
+	}
+	.chat-composer[data-extras] .composer-phone-extra {
+		display: inline-flex;
+		order: 7;
+	}
+	.chat-composer[data-extras] .composer-recording {
+		order: 8;
+		margin-inline-start: auto;
+	}
+	.chat-composer[data-extras] .composer-dictate {
+		order: 9;
+		margin-inline-start: auto;
+	}
+	.chat-composer[data-extras] .composer-recording + .composer-dictate {
+		margin-inline-start: 0;
+	}
 	.chat-composer .composer-notice-slot {
 		margin-bottom: 0;
 	}
@@ -610,4 +639,9 @@
 	background: var(--color-danger-surface);
 	color: var(--color-danger-text);
 	font-size: var(--text-xs);
+}
+
+/* The row break exists only for a phone's pill; elsewhere it takes no place, not even a gap. */
+.chat-composer .composer-row-break {
+	display: none;
 }

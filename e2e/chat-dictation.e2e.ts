@@ -421,6 +421,9 @@ test("is accessible while listening, and while it says why it stopped", async ({
 
 test("fits a phone's width, listening and failing, with nothing outside the screen", async ({ browser, baseURL, room }) => {
 	let page = await open(browser, baseURL!, room, installRecognizer, PHONE);
+	// At rest the pill is one line, so the microphone comes with the focus, on a row below the draft.
+	await expect(dictate(page)).toBeHidden();
+	await chatInput(chat(page)).tap();
 	await expect(async () => {
 		await expectInsideViewport(dictate(page));
 	}).toPass({ timeout: 10_000 });
