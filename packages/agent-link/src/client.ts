@@ -32,6 +32,7 @@ export const WIRE = {
 	restartNotice: "restart-notice",
 	capabilityCatalog: "capability-catalog",
 	attachments: "attachments",
+	sessionForks: "session-forks",
 	/** How often a client retries a `resume` refused with `retry`, after a `restarting` notice. */
 	restartResumeRetryMs: 250,
 } as const;
@@ -72,6 +73,11 @@ export type HostToolResult = { output: unknown; isError: boolean };
 export type AgentHandlers = {
 	/** Throw to refuse the session. */
 	start?(message: ServerMessageOf<"start">): void | Promise<void>;
+	/**
+	 * With `session-forks`: branch `message.session` from `message.from`. Throw to refuse the
+	 * fork (`start-failed`), such as when the source session is no longer held.
+	 */
+	fork?(message: ServerMessageOf<"fork">): void | Promise<void>;
 	/** Ends the turn as finished when it resolves without calling `end`, failed when it rejects. */
 	turn(context: TurnContext): void | Promise<void>;
 	destroy?(message: ServerMessageOf<"destroy">): void;
@@ -111,6 +117,10 @@ export type AgentOptions = {
 	 * sent.
 	 */
 	attachments?: boolean;
+	/**
+	 * Asks for `session-forks` when `handlers.fork` is supplied, unless `false`.
+	 */
+	sessionForks?: boolean;
 };
 
 /** A question this client asked and still waits on, which a later link may carry on. */
@@ -232,6 +242,7 @@ export function linkSocket(
 	resumable = false,
 	catalog = false,
 	attachments = false,
+	sessionForks = false,
 ): WebSocket {
 	return new (WebSocket as unknown as HeaderWebSocket)(url, {
 		headers: {
@@ -242,6 +253,7 @@ export function linkSocket(
 				...(resumable ? [WIRE.resumableSessions, WIRE.restartNotice] : []),
 				...(catalog ? [WIRE.capabilityCatalog] : []),
 				...(attachments ? [WIRE.attachments] : []),
+				...(sessionForks ? [WIRE.sessionForks] : []),
 			].join(", "),
 		},
 		protocols: [WIRE.subprotocol],
@@ -324,12 +336,14 @@ function settleCalls(turn: TurnState, message: string): void {
 /** Attaches to one document as its Planner and serves the server's requests. */
 export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 	let resumable = options.resumable !== false || options.resume !== undefined;
+	let sessionForks = options.sessionForks ?? options.handlers.fork !== undefined;
 	let socket = linkSocket(
 		agentUrl(options.url),
 		options.token,
 		resumable,
 		options.capabilities !== undefined,
 		options.attachments === true,
+		sessionForks,
 	);
 	let turns = new Map<string, TurnState>();
 	let asks = new Map<string, PendingAsk>();
@@ -450,6 +464,22 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 			case "start":
 				try {
 					await options.handlers.start?.(message);
+					sessions.add(message.session);
+					send({ type: "started", session: message.session });
+				} catch (error) {
+					send({
+						type: "start-failed",
+						session: message.session,
+						message: reason(error),
+					});
+				}
+				return;
+			case "fork":
+				try {
+					if (!options.handlers.fork) {
+						throw new Error("This Planner does not support session forks.");
+					}
+					await options.handlers.fork(message);
 					sessions.add(message.session);
 					send({ type: "started", session: message.session });
 				} catch (error) {

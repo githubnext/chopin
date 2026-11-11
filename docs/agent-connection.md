@@ -117,6 +117,7 @@ client must then use none of them.
 | `restart-notice`           | A [`restarting`](#server-to-client) message before the server closes the link with 1012, and the [client rule](#when-the-server-is-restarting) that follows it                |
 | `capability-catalog`       | A [`capabilities`](#capability-catalog) report of the models, thinking levels and commands the client offers, and a person's choice of model and thinking level in the `turn` |
 | `attachments`              | The images and text files a person sent with a message, in the `turn`'s [`attachments`](#images-and-files-in-a-turn)                                                          |
+| `session-forks`            | A [`fork`](#server-to-client) message to branch a thread's Planner session from an earlier session and turn, multiplexed over the same connection                             |
 
 ### Pings
 
@@ -410,6 +411,7 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 
 ```text
 { "type": "start", "session": "", "mode": "planner" }
+{ "type": "fork", "session": "", "mode": "planner", "from": { "session": "", "turn?": "" } }
 { "type": "turn", "session": "", "turn": "", "prompt": "", "instructions?": "", "model?": "", "thinkingLevel?": "", "attachments?": [{ "id": "", "name": "", "kind": "image", "mediaType": "", "size": 0, "data": "" }], "tools": [], "responseFormat?": {} }
 { "type": "abort", "session": "", "turn": "" }
 { "type": "host-tool-result", "session": "", "turn": "", "toolCallId": "", "output": json, "isError?": true }
@@ -427,6 +429,15 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   session refused with `start-failed` or not answered in time gets `destroy`,
   and any question asked for it meanwhile is withdrawn and answered
   `cancelled`.
+- `fork`, with `session-forks`, opens a thread's Planner session branched from
+  `from.session` (and `from.turn` when named), preserving the conversation,
+  tool results, compaction state and session memory up to that point. Answer
+  with `started` or `start-failed` within **10 seconds**, exactly as for
+  `start`. Once started, turns, host tools, questions, runs and `destroy`
+  multiplex over the connection by `session`. A client that did not offer
+  `session-forks` never receives `fork`; when a client answers `fork` with
+  `start-failed` (such as when the source session is no longer held), Chopin
+  falls back to `start` with the transcript up to the thread's root message.
 - `turn` runs one turn. `tools` lists at most 256 of Chopin's host tools as
   `{ "name": "", "description?": "", "inputSchema?": {json schema} }`;
   `description` may be 64,000 characters. `instructions` is the Planner's

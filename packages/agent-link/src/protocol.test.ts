@@ -326,6 +326,7 @@ describe("Agent connection messages", () => {
 			restartNotice: AGENT_FEATURES.restartNotice,
 			capabilityCatalog: AGENT_FEATURES.capabilityCatalog,
 			attachments: AGENT_FEATURES.attachments,
+			sessionForks: AGENT_FEATURES.sessionForks,
 			restartResumeRetryMs: RESTART_RESUME_RETRY_MS,
 		});
 		expect(AGENT_FEATURES.restartNotice).toBe("restart-notice");
@@ -758,5 +759,79 @@ describe("Images and files in a turn", () => {
 				catalog: { models: { available: [{ id: "a", name: "A", inputTypes: "image" }] } },
 			})),
 		).toMatchObject({ ok: false });
+	});
+});
+
+describe("Session forks and compaction parts", () => {
+	it("validates fork server messages and session-forks feature", () => {
+		expect(AGENT_FEATURES.sessionForks).toBe("session-forks");
+		expect(WIRE.sessionForks).toBe(AGENT_FEATURES.sessionForks);
+		let fork = {
+			type: "fork" as const,
+			session: "thread-session-1",
+			mode: "planner" as const,
+			from: { session: "root-session-1", turn: "turn-2" },
+		};
+		expect(parseServerMessage(encodeMessage(fork))).toEqual({ ok: true, message: fork });
+		let forkWithoutTurn = {
+			type: "fork" as const,
+			session: "thread-session-2",
+			mode: "planner" as const,
+			from: { session: "root-session-1" },
+		};
+		expect(parseServerMessage(encodeMessage(forkWithoutTurn))).toEqual({
+			ok: true,
+			message: forkWithoutTurn,
+		});
+		expect(
+			parseServerMessage(JSON.stringify({ ...fork, extra: true })),
+		).toMatchObject({ ok: false, code: "malformed-message" });
+	});
+
+	it("validates compacting, compaction and contextWindow stream parts", () => {
+		let compacting = {
+			type: "part" as const,
+			session: "s",
+			turn: "t",
+			part: { type: "compacting" as const },
+		};
+		expect(parseClientMessage(encodeMessage(compacting))).toEqual({
+			ok: true,
+			message: compacting,
+		});
+		let compacted = {
+			type: "part" as const,
+			session: "s",
+			turn: "t",
+			part: {
+				type: "compaction" as const,
+				trigger: "auto" as const,
+				summary: "Summarized earlier messages.",
+				tokensBefore: 44541,
+				tokensAfter: 12100,
+			},
+		};
+		expect(parseClientMessage(encodeMessage(compacted))).toEqual({
+			ok: true,
+			message: compacted,
+		});
+		let finishWithWindow = {
+			type: "part" as const,
+			session: "s",
+			turn: "t",
+			part: {
+				type: "finish" as const,
+				finishReason: { unified: "stop" as const },
+				totalUsage: {
+					inputTokens: { total: 12000 },
+					outputTokens: { total: 800 },
+					contextWindow: 128000,
+				},
+			},
+		};
+		expect(parseClientMessage(encodeMessage(finishWithWindow))).toEqual({
+			ok: true,
+			message: finishWithWindow,
+		});
 	});
 });

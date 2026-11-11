@@ -62,6 +62,14 @@ export const AGENT_FEATURES = {
 	 * where the model the turn names reports `image` among its `inputTypes`.
 	 */
 	attachments: "attachments",
+	/**
+	 * A thread started from a Chat message asks the client to fork the Planner session at that
+	 * message (`fork`), keeping the messages, tool results, compaction state and session memory
+	 * up to that turn, and multiplexing the forked session over the same connection. Without the
+	 * feature, or when `fork` is answered with `start-failed`, the server opens an ordinary
+	 * `start` session seeded with the transcript up to the root message.
+	 */
+	sessionForks: "session-forks",
 } as const;
 
 /** How often a client that offered `restart-notice` retries a `resume` refused with `retry`. */
@@ -136,6 +144,7 @@ const usage = z.strictObject({
 		text: count.optional(),
 		reasoning: count.optional(),
 	}),
+	contextWindow: count.optional(),
 });
 
 /**
@@ -181,6 +190,14 @@ export const streamPartSchema = z.discriminatedUnion("type", [
 	}),
 	z.strictObject({ type: z.literal("finish-step"), finishReason, usage }),
 	z.strictObject({ type: z.literal("finish"), finishReason, totalUsage: usage }),
+	z.strictObject({ type: z.literal("compacting") }),
+	z.strictObject({
+		type: z.literal("compaction"),
+		trigger: z.enum(["manual", "auto"]),
+		summary: text,
+		tokensBefore: count.optional(),
+		tokensAfter: count.optional(),
+	}),
 	z.strictObject({ type: z.literal("error"), error: note }),
 ]);
 
@@ -548,6 +565,15 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 		type: z.literal("start"),
 		session: id,
 		mode: z.enum(["planner", "isolated"]),
+	}),
+	z.strictObject({
+		type: z.literal("fork"),
+		session: id,
+		mode: z.enum(["planner", "isolated"]),
+		from: z.strictObject({
+			session: id,
+			turn: id.optional(),
+		}),
 	}),
 	z.strictObject({
 		type: z.literal("turn"),
