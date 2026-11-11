@@ -361,7 +361,7 @@
 				1
 			]
 		],
-		"sourceHash": "7ddb3938cebec796f91b633de6c4d641d09feeb563b49e465667676f7cbc75e2"
+		"sourceHash": "c2cd8f65f4e0472511a408e4e3ad5820a056f86ac4750271f782754aef97031f"
 	},
 	{
 		"file": "apps/web/src/chat/assistant-ui/markdown-primitive.tsx",
