@@ -497,13 +497,14 @@ describe("install.ps1", () => {
 		expect(result.exitCode).toBe(0);
 	}, 30_000);
 
+	// PowerShell starts cold here too, so this test gets the same allowance as the parse check.
 	test.skipIf(!pwsh || process.platform === "win32")("refuses to run outside Windows", async () => {
 		using release = fakeRelease({});
 		let result = await install(release.env, "0.2.0");
 		expect(result.code).not.toBe(0);
 		expect(result.output).toContain("install.ps1 installs chopin on Windows");
 		expect(release.requests).toEqual([]);
-	});
+	}, 30_000);
 
 	test.skipIf(!pwsh)(
 		"refuses a plain HTTP URL for releases unless it is on this machine",
