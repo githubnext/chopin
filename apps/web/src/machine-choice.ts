@@ -57,6 +57,11 @@ export type MachineChoiceState = {
 	machines: ChoosableMachine[];
 	/** Who runs the document's Planner; null or absent when Chopin runs no Planners on machines. */
 	planner?: PlannerRunner | null;
+	/**
+	 * The document's creator chose a machine, and that is where its Planner runs whatever this
+	 * person chooses: their choice runs their own builds and runs. Absent for the creator.
+	 */
+	creatorDecides?: boolean;
 };
 
 export type MachineState = "connected" | "offline" | "reauthorize";
@@ -148,11 +153,13 @@ export function plannerLastSeen(state: MachineChoiceState | undefined): string |
  * one; undefined where the status says whose machine it is by login. `null` says nothing is said
  * yet: while the person's machines are loading; while the list is older than the socket's word
  * (`current` is false: it was read before the word came, so it describes the Planner as it was, and
- * may name a machine it has since left, or one the document no longer runs on); while the list
- * names a machine the document does not run on (a teammate's, or another of the person's own) for
- * a Planner the person's own account is the one starting or dropping; and while the list describes
- * another account's Planner than the page's socket does (its login, or the viewer's own where the
- * machine is theirs). In each the two disagree, and the list is what is out of date.
+ * may name a machine it has since left, or one the document no longer runs on; a choice being
+ * saved leaves it false for the same reason); while the list names a machine the document does not
+ * run on (a teammate's, or another of the person's own) for a Planner the person's own account is
+ * the one starting or dropping; and while the list describes another account's Planner than the
+ * page's socket does (its login, or the viewer's own where the machine is theirs). In each the two
+ * disagree, and the list is what is out of date. Where the creator's choice decides, the list is
+ * not about the Planner's machine at all, so it is never read for one.
  */
 export function plannerMachineName(
 	state: MachineChoiceState | undefined,
@@ -163,6 +170,9 @@ export function plannerMachineName(
 ): string | null | undefined {
 	if (!state) return loading ? null : undefined;
 	if (planner?.state !== "starting" && planner?.state !== "disconnected") return undefined;
+	// The creator's choice decides where it runs, and the list tells nothing of that machine: the
+	// word's own login names it, however old the list is, and a choice made here changes nothing.
+	if (state.creatorDecides) return undefined;
 	if (!current) return null;
 	let name = plannerRunsOn(state);
 	if (name !== undefined) {
@@ -283,6 +293,8 @@ export type MachineChoice = {
 	read: number;
 	/** A choice is being saved. */
 	saving: boolean;
+	/** How many choices have been saved since the document opened: each is news to what the status says. */
+	chosen: number;
 	/** Why the last choice was refused. */
 	error?: string;
 	choose: (machine: string | null) => Promise<void>;
@@ -322,6 +334,7 @@ export async function setShared(machine: string, shared: boolean): Promise<boole
 export function useMachineChoice(room: string, enabled: boolean): MachineChoice {
 	let [{ state, read }, setHeld] = useState<Held>({ read: 0 });
 	let [saving, setSaving] = useState(false);
+	let [chosen, setChosen] = useState(0);
 	let [error, setError] = useState<string>();
 	let generation = useRef(0);
 	// Where the read answered last began; the hold follows it only when it says something new.
@@ -343,6 +356,7 @@ export function useMachineChoice(room: string, enabled: boolean): MachineChoice 
 	useEffect(() => {
 		answeredAt.current = 0;
 		setHeld({ read: 0 });
+		setChosen(0);
 		if (!enabled) return;
 		refresh();
 		let timer = window.setInterval(refresh, REFRESH_MS);
@@ -388,6 +402,8 @@ export function useMachineChoice(room: string, enabled: boolean): MachineChoice 
 					body: JSON.stringify({ machine }),
 				}),
 			);
+			// Saved is saved, whether this answer or a read that began after it is the one held.
+			setChosen(count => count + 1);
 			if (mine === generation.current) {
 				answeredAt.current = began;
 				setHeld({ state: value, read: began });
@@ -399,5 +415,5 @@ export function useMachineChoice(room: string, enabled: boolean): MachineChoice 
 			setSaving(false);
 		}
 	};
-	return { state, read, saving, error, choose, refresh };
+	return { state, read, saving, chosen, error, choose, refresh };
 }

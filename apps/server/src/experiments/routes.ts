@@ -2130,6 +2130,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			/** The caller's favorite machine, theirs or a teammate's, which Automatic prefers where it serves the repository. */
 			favorite: favorite ?? null,
 			planner: plannerState(userId, channel, serving),
+			// Where its Planner runs is the creator's choice, once they made one: another person's
+			// choice runs only their own builds and runs.
+			...(userId !== channel.createdBy && connections.chosen(documentId, channel.createdBy)
+				? { creatorDecides: true as const }
+				: {}),
 			automatic: automaticId
 				? { id: automaticId, label: label(automaticId), favorite: automaticId === favorite }
 				: null,

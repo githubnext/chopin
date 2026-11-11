@@ -549,3 +549,33 @@ test("a read that says what the choice held changes nothing the page draws, unle
 	expect(afterRead(held, moved, 6, 5)).toEqual({ state: moved, read: 6 });
 	expect(afterRead({ read: 0 }, same, 1, 0)).toEqual({ state: same, read: 1 });
 });
+
+test("where the creator's choice decides, the list says nothing of the machine, however old it is: the owner's login names it", () => {
+	let box = machine({ id: "M_theirs", label: "their-box", teammate: true });
+	let own = machine({ id: "M_mine", label: "my-box" });
+	let list = state({
+		choice: "M_mine",
+		machines: [own, box],
+		creatorDecides: true,
+		planner: { state: "none", login: null, machine: null },
+	});
+	// The person's own choice is not where it runs, so nothing in the list can name a machine for the
+	// word, current or not: it says whose machine it is, as the word does, and is not withheld.
+	for (let current of [true, false]) {
+		expect(told(list, { state: "starting", login: "drew" }, "quinn", false, current))
+			.toBeUndefined();
+		expect(told(list, { state: "disconnected", login: "drew" }, "quinn", false, current))
+			.toBeUndefined();
+	}
+	// Where the person decides, a list older than the word still names nothing.
+	expect(
+		told(
+			{ ...list, creatorDecides: undefined },
+			{ state: "starting", login: "quinn" },
+			"quinn",
+			false,
+			false,
+		),
+	)
+		.toBeNull();
+});

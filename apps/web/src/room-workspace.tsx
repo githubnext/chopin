@@ -751,8 +751,10 @@ export function RoomWorkspace(
 	// machine it is on is said only once the person's machines are in, and read after the socket's
 	// last word: null says nothing until then.
 	let attachment = plannerAttachment.wire === wire ? plannerAttachment.planner : undefined;
-	let listCurrent = machineChoice.read
-		> (plannerAttachment.wire === wire ? plannerAttachment.heard ?? 0 : 0);
+	// While a choice is being saved the list is the person's own guess at the answer: it still
+	// describes the Planner as it was, and must not be read as the machine of the word that comes.
+	let listCurrent = !machineChoice.saving && machineChoice.read
+			> (plannerAttachment.wire === wire ? plannerAttachment.heard ?? 0 : 0);
 	let machineName = plannerMachineName(
 		machineChoice.state,
 		attachment,
@@ -770,6 +772,7 @@ export function RoomWorkspace(
 		plannerNow,
 		plannerAttachment.placeholder,
 		plannerWithheldNow,
+		machineChoice.chosen,
 	);
 	// The choice shows only while the person has a paired machine, live, or the document lists a
 	// teammate's shared one: it appears with their first and goes with their last.

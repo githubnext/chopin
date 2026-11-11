@@ -154,6 +154,7 @@ function choice(): MachineChoice {
 		},
 		read: 1,
 		saving: false,
+		chosen: 0,
 		choose: async () => {},
 		refresh: () => {},
 	};

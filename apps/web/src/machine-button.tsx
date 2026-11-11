@@ -107,6 +107,24 @@ export function PlannerNote({ status }: { status: PlannerStatus }) {
 	);
 }
 
+/**
+ * Why choosing a machine here does not move where replies come from, for a person who is not the
+ * document's creator: the creator chose one, which decides it; theirs runs their own work.
+ */
+export const CREATOR_DECIDES =
+	"The document's creator chose where its replies come from, so your choice runs your builds and runs.";
+
+export function CreatorNote() {
+	return (
+		<>
+			<div aria-label="Replies" className="machine-planner" data-kind="creator" role="group">
+				<p>{CREATOR_DECIDES}</p>
+			</div>
+			<div className="app-menu-separator" role="separator" />
+		</>
+	);
+}
+
 function go(path: string) {
 	history.pushState(null, "", path);
 	window.dispatchEvent(new PopStateEvent("popstate"));
@@ -283,6 +301,7 @@ export function MachineButton(
 	let body = (sheet: boolean) => (
 		<>
 			{planner && <PlannerNote status={planner} />}
+			{state?.creatorDecides && <CreatorNote />}
 			{group("Local", rows.filter(row => !row.cloud), sheet)}
 			{group("Cloud", rows.filter(row => row.cloud), sheet)}
 			{rows.length > 0 && <div className="app-menu-separator" role="separator" />}
