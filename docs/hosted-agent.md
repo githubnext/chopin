@@ -998,8 +998,9 @@ and persisted references from the removed Research Workspace interface still ret
 bounded compatibility projection. Both forms are untrusted evidence, and neither changes
 the room-fixed target of `read_plan` or editing tools.
 
-`@` also points at the document's own parts and at its repository, as references the
-Planner receives as identities and not as words. A request names the part and never
+The composer's `#` and its Mention docs button also point at the document's own parts and at
+its repository (`@` is for people), as references the Planner receives as identities and not as
+words; their chips are written `@Section` and `%Research card`, as before. A request names the part and never
 its text; the server resolves it against the document as it stands when the message
 is sent, writes the label the person saw from it, and refuses one that has gone, in
 words the composer shows (`That heading is no longer in the document.`,
@@ -1025,6 +1026,14 @@ of the Planner's checkout where the document has one (`HARNESS=atomic`, what `gi
 not ignored, kept 10 seconds) and else what GitHub lists for the default branch, read with the
 asking person's own session and kept a minute per repository, up to 50,000 paths; with neither,
 `files` is left out and a file mention is refused.
+
+For `@`, the composer asks `GET /api/channels/:channelId/people` once per document for the people
+who can read it: the repository's collaborators with pull access and their GitHub pictures (bots
+left out, at most three pages of 100), read with the asking person's own session and kept a
+minute per session and repository, with `authoritative: true`. Where GitHub will not list them
+(a reader without push access, or a deployment whose GitHub has no such call) it answers with the
+document's creator and the authors of its recent edits, with `authoritative: false`. Anybody who
+cannot read the document is told it does not exist, as for `mentions`.
 
 None but a document or a research reference can be read by id: a heading, a Decision and a file
 are places the prompt already says how to find (`read_plan` shows the document with its Decisions,
