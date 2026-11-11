@@ -3,21 +3,21 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RepositoryLinksProvider } from "@chopin/editor";
 import { QuestionView } from "@chopin/question/react";
 
+import { markdownClass } from "./chat/assistant-ui/markdown-classes.test-fixtures";
 import { documentImageUrl, QuestionMarkdownProvider } from "./question-markdown";
 
 import type { QuestionViewProps } from "@chopin/question/react";
 
 const DOCUMENT = "0b5c6f0e-8d0e-4d7e-9a43-5d4c4a8f1b2e";
 const IMAGE = `/images/${"a".repeat(64)}.png`;
-const P_CLASS = "aui-md-p my-3 leading-relaxed first:mt-0 last:mb-0";
-const STRONG_CLASS = "aui-md-strong font-semibold";
-const A_CLASS = "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2";
-const CODE_CLASS = "aui-md-inline-code bg-muted rounded-md px-1.5 py-0.5 font-mono text-[0.85em]";
-const UL_CLASS = "aui-md-ul marker:text-muted-foreground my-3 ms-5 list-disc [&amp;&gt;li]:mt-1";
-const OL_CLASS = "aui-md-ol marker:text-muted-foreground my-3 ms-5 list-decimal [&amp;&gt;li]:mt-1";
-const LI_CLASS = "aui-md-li leading-relaxed";
-const PRE_CLASS =
-	"aui-md-pre border-border/50 bg-muted/30 overflow-x-auto rounded-t-none rounded-b-xl border border-t-0 p-3.5 text-[13px] leading-relaxed";
+const P_CLASS = markdownClass("p");
+const STRONG_CLASS = markdownClass("strong");
+const A_CLASS = markdownClass("a");
+const CODE_CLASS = markdownClass("code");
+const UL_CLASS = markdownClass("ul");
+const OL_CLASS = markdownClass("ol");
+const LI_CLASS = markdownClass("li");
+const PRE_CLASS = markdownClass("pre");
 
 function card(question: string, extra: Partial<QuestionViewProps> = {}, item: object = {}) {
 	let definition = {
