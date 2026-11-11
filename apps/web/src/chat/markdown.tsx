@@ -10,10 +10,9 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { CheckIcon, CopyIcon } from "lucide-react";
 import { defaultUrlTransform } from "react-markdown";
 import { useLinkHref } from "@chopin/editor";
-import { WarningIcon } from "@chopin/icons";
+import { CheckIcon, CopyIcon, WarningIcon } from "@chopin/icons";
 
 import {
 	CodeHeader,
@@ -22,6 +21,7 @@ import {
 } from "@/components/assistant-ui/elements/markdown-text";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { sameJson } from "../same-json";
+import { emojiRemarkPlugin, jumbo } from "./emoji";
 import { messageGfmRemarkPlugin } from "./gfm";
 import { ChatImage, MessageImages, useImageHost } from "./image";
 import { ImageGallery } from "./image-gallery";
@@ -72,6 +72,7 @@ export const MESSAGE_ELEMENTS = [
 	"del",
 	"figure",
 	"input",
+	"span",
 	"table",
 	"tbody",
 	"td",
@@ -381,6 +382,7 @@ export const MessageMarkdown = memo(function MessageMarkdown(
 			imagesOutOfLinksRemarkPlugin,
 			imageGalleriesRemarkPlugin,
 			imageBlocksRemarkPlugin,
+			emojiRemarkPlugin,
 		];
 	}, [model]);
 	let host = useImageHost();
@@ -392,6 +394,7 @@ export const MessageMarkdown = memo(function MessageMarkdown(
 				components={MESSAGE_COMPONENTS}
 				containerProps={{
 					"data-chat-markdown": "",
+					"data-chat-jumbo": !mention && jumbo(model.source) ? "" : undefined,
 					"data-chat-mention-lead": mention ? "" : undefined,
 				}}
 				lead={mention

@@ -67,3 +67,19 @@
 	overflow-x: visible;
 	white-space: pre-wrap;
 }
+
+/*
+ * An emoji in a message is the platform's own, larger than the words as Slack's native emoji are
+ * (22px beside 15px words), on the words' baseline and without making the line taller.
+ */
+.chat-markdown .chat-emoji {
+	font-family: var(--font-emoji);
+	font-size: var(--text-lg);
+	line-height: 1;
+	vertical-align: -0.1em;
+}
+
+/* A message of nothing but emoji draws them large, as Slack's jumbomoji. */
+.chat-markdown[data-chat-jumbo] .chat-emoji {
+	font-size: var(--text-2xl);
+}
