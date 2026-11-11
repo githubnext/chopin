@@ -32,8 +32,13 @@ test("/research in Chat opens the document's research composer instead of postin
 	await page.keyboard.type("/");
 	await expect(menu).toBeVisible();
 	await expect(draft).toHaveAttribute("aria-expanded", "true");
-	await expect(menu.getByRole("option", { name: "Research", exact: true }))
-		.toHaveAttribute("aria-selected", "true");
+	await expect(
+		menu.getByRole("option", {
+			name: "/research Search the web and add what it finds to the document",
+			exact: true,
+		}),
+	).toHaveAttribute("aria-selected", "true");
+	await expect(menu.getByRole("group", { name: "Built in" })).toBeVisible();
 
 	// Escape closes only the menu; the draft and focus stay.
 	await page.keyboard.press("Escape");

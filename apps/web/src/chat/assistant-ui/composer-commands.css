@@ -4,15 +4,25 @@
  * what is secondary. A row is one line; only its description gives way.
  */
 
-.composer-menu[data-variant="commands"] {
-	width: 26rem;
+/*
+ * Each list is as wide as its widest row, between a floor and a ceiling, so a few people are a small
+ * dropdown and a list of described commands or long headings is as wide as they need, no wider than
+ * the composer.
+ */
+.composer-menu[data-variant="commands"],
+.composer-menu[data-variant="mentions"] {
+	width: max-content;
 	max-height: min(24rem, calc(var(--app-height, 100dvh) * 0.5));
 	overflow-y: auto;
 	overscroll-behavior: contain;
 }
+.composer-menu[data-variant="commands"] {
+	min-width: 14rem;
+	max-width: min(26rem, calc(100% - var(--spacing) * 5));
+}
 .composer-menu[data-variant="mentions"] {
-	width: 22rem;
-	max-height: min(24rem, calc(var(--app-height, 100dvh) * 0.5));
+	min-width: 12rem;
+	max-width: min(22rem, calc(100% - var(--spacing) * 5));
 }
 
 .composer-menu-group-label {

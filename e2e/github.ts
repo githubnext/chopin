@@ -301,6 +301,20 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		}
 		// The head a machine with no checkout of octo-org/score clones.
 		if (url.pathname === "/repos/octo-org/score/commits/main") return json({ sha: "b".repeat(40) });
+		// The files of octo-org/score, which a message can mention.
+		if (url.pathname === "/repos/octo-org/score/git/trees/main") {
+			return json({
+				truncated: false,
+				tree: [
+					{ path: "README.md", type: "blob" },
+					{ path: "docs", type: "tree" },
+					{ path: "docs/design.md", type: "blob" },
+					{ path: "src", type: "tree" },
+					{ path: "src/index.ts", type: "blob" },
+					{ path: "src/chat/composer.tsx", type: "blob" },
+				],
+			});
+		}
 		let reference = /^\/repos\/octo-org\/score\/((?:pulls|issues)\/\d+)$/.exec(url.pathname);
 		let summary = reference && references.get(reference[1]!);
 		if (summary) return tagged(summary, `"reference-${reference![1]}"`);

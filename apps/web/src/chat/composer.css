@@ -47,6 +47,20 @@
 	text-underline-offset: 0.2em;
 	text-decoration-thickness: var(--edge-width);
 }
+/*
+ * A command, a section, a Decision, a research card or a file is one chip: the tint the transcript
+ * gives a reference, so a person sees in the draft what the message will show. A document keeps
+ * its underlined link.
+ */
+.chat-composer .draft-reference:not([data-reference="document"]) {
+	border-radius: var(--radius-sm);
+	background: var(--color-brand-wash);
+	padding-inline: 0.125rem;
+	color: var(--color-brand-ink);
+	font-weight: 500;
+	text-decoration: none;
+	box-decoration-break: clone;
+}
 .chat-composer .composer-mode {
 	gap: 0.25rem;
 	min-width: 0;
