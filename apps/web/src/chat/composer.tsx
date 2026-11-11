@@ -196,6 +196,8 @@ export function ChatComposer(
 ) {
 	let instructionsId = useId();
 	let cueId = useId();
+	// A phone's pill shows the controls for adding files and dictating once the draft has the focus.
+	let [expanded, setExpanded] = useState(false);
 	let filePicker = useRef<HTMLInputElement>(null);
 	let filesReasonId = useId();
 	// Files dragged over the surface. Leaving it for a child of it is not leaving: only a leave that
@@ -294,6 +296,14 @@ export function ChatComposer(
 			ref={rootRef}
 			className="chat-composer relative shrink-0 px-2.5 pb-2.5"
 			data-planner={agent ? undefined : "off"}
+			data-extras={expanded || dictation?.active || undefined}
+			onFocus={event => {
+				if ((event.target as HTMLElement).closest(".composer-draft-input")) setExpanded(true);
+			}}
+			onBlur={event => {
+				// Focus moving to another control of the composer (a tap on one) is not leaving it.
+				if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setExpanded(false);
+			}}
 			onKeyDown={dictation
 				? event => {
 					// Escape stops listening wherever the focus is in the composer; the chord starts and stops it.
@@ -477,7 +487,7 @@ export function ChatComposer(
 											/>
 											<button
 												type="button"
-												className="btn btn-icon btn-ghost"
+												className="btn btn-icon btn-ghost composer-phone-extra"
 												aria-label="Add files"
 												aria-describedby={files.imagesReason ? filesReasonId : undefined}
 												title={files.imagesReason
@@ -558,10 +568,17 @@ export function ChatComposer(
 									{model && <ModelPill control={model} />}
 								</div>
 								<div className="composer-actions">
+									{/* On a phone, adding files and dictating have a row of their own below the draft. */}
+									{(files || dictation) && (
+										<span aria-hidden="true" className="composer-row-break" />
+									)}
 									{dictation && (
 										<>
 											{dictation.active && (
-												<span className="composer-recording" data-phase={dictation.phase}>
+												<span
+													className="composer-recording composer-phone-extra"
+													data-phase={dictation.phase}
+												>
 													<span aria-hidden="true" className="composer-recording-dot" />
 													<span className="composer-recording-text">
 														{dictation.phase === "transcribing"
@@ -576,7 +593,7 @@ export function ChatComposer(
 												type="button"
 												aria-label="Dictate"
 												aria-pressed={dictation.active}
-												className="btn btn-icon btn-ghost composer-dictate"
+												className="btn btn-icon btn-ghost composer-dictate composer-phone-extra"
 												data-tooltip={dictation.tooltip}
 												data-tooltip-verbatim=""
 												disabled={dictation.disabled && !dictation.active}

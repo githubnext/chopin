@@ -457,6 +457,12 @@ test("a message may be only a picture", async ({ join }) => {
 test("keeps the composer's files usable at a phone's width, and accessible", async ({ join }) => {
 	let page = await join("ana", PHONE);
 	await openChat(page);
+	// At rest the pill is one line: adding files appears with the focus, on a row below the draft.
+	await expect(paperclip(page)).toBeHidden();
+	await chatInput(chat(page)).tap();
+	await expect(paperclip(page)).toBeVisible();
+	let draft = (await chatInput(chat(page)).boundingBox())!;
+	expect((await paperclip(page).boundingBox())!.y).toBeGreaterThan(draft.y + draft.height - 1);
 	await choose(page, SHOT, NOTES, {
 		name: "logo.svg",
 		mimeType: "image/svg+xml",
