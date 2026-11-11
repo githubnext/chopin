@@ -8,7 +8,10 @@
  */
 
 import {
+	lazy,
+	Suspense,
 	useCallback,
+	useContext,
 	useEffect,
 	useId,
 	useLayoutEffect,
@@ -17,6 +20,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 import {
 	connectionGrace,
@@ -124,7 +128,14 @@ import {
 } from "./references";
 import { runCounts, RunStack } from "./run-card";
 import { runStages } from "../api";
+import { ResizeHandle } from "../resizable-pane";
+import { WorkspaceThreadContext } from "../workspace";
+import { THREAD_MIN } from "./threads/split-layout";
+import { initialThreadsState, threadsReducer } from "./threads/thread-model";
 import { Transcript } from "./transcript";
+
+let LazyContextRing = lazy(() => import("./context/context-ring"));
+let LazyThreadPanel = lazy(() => import("./threads/thread-panel"));
 import {
 	initialTranscript,
 	progressOf,
@@ -297,6 +308,75 @@ export function Chat(
 ) {
 	let [transcript, dispatchTranscript] = useReducer(transcriptReducer, initialTranscript);
 	let { entries, turn } = transcript;
+	let [threadsState, dispatchThreads] = useReducer(threadsReducer, initialThreadsState);
+	let workspaceThread = useContext(WorkspaceThreadContext);
+	let entriesRef = useRef(entries);
+	entriesRef.current = entries;
+	let threadOpenerRef = useRef<HTMLElement | null>(null);
+	let openRootRef = useRef(threadsState.openRootId);
+	openRootRef.current = threadsState.openRootId;
+
+	useEffect(() => {
+		dispatchThreads({ kind: "reset" });
+	}, [room]);
+
+	let closeThread = useCallback(
+		(options?: { restoreFocus?: boolean }) => {
+			let closingRoot = openRootRef.current;
+			dispatchThreads({ kind: "close" });
+			if (options?.restoreFocus && closingRoot) {
+				let savedOpener = threadOpenerRef.current;
+				requestAnimationFrame(() => {
+					if (
+						savedOpener?.isConnected
+						&& !savedOpener.closest("[hidden], [inert]")
+					) {
+						savedOpener.focus({ preventScroll: true });
+						return;
+					}
+					let selector = `[data-thread-summary="${
+						CSS.escape(closingRoot)
+					}"], [data-thread-trigger="${CSS.escape(closingRoot)}"]`;
+					document.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
+				});
+			}
+		},
+		[],
+	);
+
+	let openThread = useCallback(
+		(rootId: string) => {
+			if (document.activeElement instanceof HTMLElement) {
+				threadOpenerRef.current = document.activeElement;
+			}
+			let rootEntry = entriesRef.current.find(entry => entry.id === rootId);
+			dispatchThreads({
+				kind: "open",
+				rootId,
+				root: rootEntry,
+				nowSeconds: Math.floor(Date.now() / 1000),
+			});
+			if (wire?.connected) {
+				void wire.ask<Wire.ThreadOpened>("chat:thread", {
+					rootId,
+					create: !readonly && !archived,
+				}).then(
+					opened => dispatchThreads({ kind: "opened", frame: opened }),
+					() => {},
+				);
+			}
+		},
+		[wire, readonly, archived],
+	);
+
+	useEffect(() => {
+		workspaceThread?.setThreadOpen(threadsState.openRootId !== undefined);
+	}, [workspaceThread, threadsState.openRootId]);
+
+	useEffect(() => {
+		workspaceThread?.registerCloseThread(() => closeThread({ restoreFocus: true }));
+		return () => workspaceThread?.registerCloseThread(undefined);
+	}, [workspaceThread, closeThread]);
 	let [queue, setQueue] = useState<Wire.Waiting[]>([]);
 	// What was sent to the machine and the server has not shown back yet: shown at once as the
 	// person's own, sent when the connection allows, and in order.
@@ -692,6 +772,36 @@ export function Chat(
 			wire.on<Wire.ParticipationState>("chat:participation", frame => {
 				if (!loaded || synchronized.current !== wire) return;
 				setParticipation({ room, wire, state: { enabled: frame.enabled, paused: frame.paused } });
+			}),
+			wire.on<Wire.ThreadSummaries>("chat:threads", frame => {
+				dispatchThreads({ kind: "summaries", frame });
+				if (openRootRef.current && wire.connected) {
+					void wire.ask<Wire.ThreadOpened>("chat:thread", {
+						rootId: openRootRef.current,
+						create: false,
+					}).then(
+						opened => dispatchThreads({ kind: "opened", frame: opened }),
+						() => {},
+					);
+				}
+			}),
+			wire.on<Wire.ThreadSummaryUpdated>("chat:thread-summary", frame => {
+				dispatchThreads({ kind: "summary", summary: frame.summary });
+			}),
+			wire.on<Wire.InThread>("chat:in-thread", frame => {
+				if (
+					loaded && frame.frame.kind === "chat:message"
+					&& frame.frame.entry.author.kind !== "system"
+				) {
+					activity.current?.({ type: "message", busy: reportedBusy.current });
+				}
+				dispatchThreads({ kind: "in-thread", frame });
+			}),
+			wire.on<Wire.ContextState>("chat:context", frame => {
+				dispatchThreads({ kind: "top-context", frame });
+			}),
+			wire.on<Wire.CompactionState>("chat:compaction", frame => {
+				dispatchThreads({ kind: "top-compaction", frame });
 			}),
 		];
 
@@ -1196,10 +1306,55 @@ export function Chat(
 	let bannerIds = [leadNode ? bannerId : undefined, connectionNode ? connectionId : undefined]
 		.filter(Boolean).join(" ");
 
+	let openThreadView = threadsState.openRootId
+		? threadsState.threads[threadsState.openRootId]
+		: undefined;
+	let threadSheet = !!workspaceThread
+		&& (workspaceThread.phone || workspaceThread.mode !== "split");
+	let threadPanelNode = openThreadView
+		? (
+			<Suspense fallback={null}>
+				<LazyThreadPanel
+					agent={!!agent}
+					archived={archived}
+					connected={transcriptReady}
+					decisions={decisions}
+					focus={focus}
+					handle={handle}
+					key={openThreadView.rootId}
+					loadStages={loadStages}
+					modelControl={modelControl}
+					modelNotice={modelNotice}
+					offline={offline}
+					onAlsoToChatChange={value =>
+						dispatchThreads({
+							kind: "set-also-to-chat",
+							rootId: openThreadView.rootId,
+							value,
+						})}
+					onClose={closeThread}
+					onShowDecisions={onShowDecisions}
+					people={people}
+					readonly={readonly}
+					referencesEnabled={referencesEnabled}
+					repository={repository}
+					room={room}
+					sendAcknowledgements={sendAcknowledgements}
+					sheet={threadSheet}
+					summaryCount={threadsState.summaries[openThreadView.rootId]?.replyCount}
+					view={openThreadView}
+					wire={wire}
+				/>
+			</Suspense>
+		)
+		: undefined;
+
 	let transcriptView = (
 		<Transcript
 			active={active}
 			canEdit={composerShown}
+			compacting={threadsState.topCompacting}
+			compactions={threadsState.topCompactions}
 			emptyHint={readonly || archived
 				? undefined
 				: {
@@ -1222,6 +1377,12 @@ export function Chat(
 				: undefined}
 			researchOffers={researchOffers}
 			sourceDestination={sourceDestination}
+			threads={{
+				summaries: threadsState.summaries,
+				openRootId: threadsState.openRootId,
+				canStart: !readonly && !archived && transcriptReady,
+				onOpen: openThread,
+			}}
 			entries={[
 				...withNoticesAfter(
 					withoutFailure(
@@ -1246,18 +1407,48 @@ export function Chat(
 			working={workingTurn}
 		/>
 	);
+	let renderWithThread = (mainColumn: React.ReactNode) => (
+		<div className="chat-split-shell">
+			<div className="chat-split-main">
+				{mainColumn}
+			</div>
+			{threadPanelNode && !threadSheet && (
+				<div
+					className="chat-split-thread"
+					data-thread-pane=""
+				>
+					{workspaceThread && (
+						<ResizeHandle
+							label="Resize thread"
+							max={workspaceThread.maximumThread}
+							min={THREAD_MIN}
+							onCommit={workspaceThread.onCommitThreadWidth}
+							onRelease={() => workspaceThread.onShowThreadWidth(undefined)}
+							onResize={workspaceThread.onResizeThreadWidth}
+							onShow={workspaceThread.onShowThreadWidth}
+							side="left"
+							width={workspaceThread.threadWidth}
+						/>
+					)}
+					{threadPanelNode}
+				</div>
+			)}
+			{threadPanelNode && threadSheet && typeof document !== "undefined"
+				&& createPortal(threadPanelNode, document.body)}
+		</div>
+	);
 	if (notice) {
-		return (
+		return renderWithThread(
 			<div className="flex h-full min-h-0 flex-col">
 				{transcriptView}
 				<div className="chat-composer shrink-0 px-2.5 pb-2.5">
 					<p className="px-4 py-3 text-sm text-text-tertiary">{notice}</p>
 				</div>
-			</div>
+			</div>,
 		);
 	}
 
-	return (
+	return renderWithThread(
 		<div className="flex h-full min-h-0 flex-col">
 			{transcriptView}
 
@@ -1281,6 +1472,13 @@ export function Chat(
 				inputRef={textarea}
 				agent={!!agent}
 				model={modelControl}
+				contextRing={threadsState.topUsage
+					? (
+						<Suspense fallback={null}>
+							<LazyContextRing usage={threadsState.topUsage} />
+						</Suspense>
+					)
+					: undefined}
 				chopin={agent
 					? {
 						chip,
@@ -1594,6 +1792,6 @@ export function Chat(
 					value: draft.text,
 				}}
 			/>
-		</div>
+		</div>,
 	);
 }

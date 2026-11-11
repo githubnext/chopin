@@ -150,6 +150,8 @@ export type ChatComposerProps = {
 	run?: { action: "stop" | "resume"; disabled: boolean; onClick: () => void };
 	/** Reference, command and mention pickers, open over the field. */
 	pickers?: ReactNode;
+	/** Context-window usage ring in the composer rail, when reported by the harness. */
+	contextRing?: ReactNode;
 	input: Omit<
 		DraftInputProps,
 		| "role"
@@ -186,6 +188,7 @@ export function ChatComposer(
 		onSubmit,
 		run,
 		pickers,
+		contextRing,
 		input,
 	}: ChatComposerProps,
 ) {
@@ -567,6 +570,7 @@ export function ChatComposer(
 									{model && <ModelPill control={model} />}
 								</div>
 								<div className="composer-actions">
+									{contextRing}
 									{run?.action === "resume" && (
 										<button
 											aria-label="Resume Chopin"

@@ -1,0 +1,96 @@
+.chat-message-body[data-thread-root-open] {
+	margin-inline: calc(var(--spacing) * -2);
+	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
+	border-radius: var(--radius-md);
+	background: var(--color-selected);
+}
+
+.chat-message-body .chat-thread-trigger {
+	opacity: 0;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.chat-message-body:hover .chat-thread-trigger,
+.chat-message-body:focus-within .chat-thread-trigger,
+:root[data-plan-coarse-pointer] .chat-message-body .chat-thread-trigger,
+.chat-message-body[data-thread-root-open] .chat-thread-trigger {
+	opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chat-message-body .chat-thread-trigger {
+		transition: none;
+	}
+}
+
+.chat-thread-summary-row {
+	display: inline-flex;
+	max-width: 100%;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	margin-top: calc(var(--spacing) * 1.5);
+	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2) calc(var(--spacing) * 1)
+		calc(var(--spacing) * 1.5);
+	border-radius: var(--radius-md);
+	border: var(--edge-width) solid transparent;
+	background: transparent;
+	text-align: left;
+	cursor: pointer;
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		border-color var(--duration-fast) var(--ease-out);
+}
+
+.chat-thread-summary-row:hover,
+.chat-thread-summary-row:focus-visible {
+	background: var(--color-page);
+	border-color: var(--color-edge);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chat-thread-summary-row {
+		transition: none;
+	}
+}
+
+.chat-thread-summary-avatars {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 0.75);
+	flex-shrink: 0;
+}
+
+.chat-thread-summary-count {
+	color: var(--color-brand);
+	font-size: var(--text-xs);
+	font-weight: 600;
+	line-height: 1.35;
+	white-space: nowrap;
+}
+
+.chat-thread-summary-age {
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: 1.35;
+	white-space: nowrap;
+}
+
+.chat-thread-summary-view {
+	display: none;
+	align-items: center;
+	gap: calc(var(--spacing) * 0.5);
+	color: var(--color-text-secondary);
+	font-size: var(--text-xs);
+	line-height: 1.35;
+	white-space: nowrap;
+}
+
+.chat-thread-summary-row:hover .chat-thread-summary-age,
+.chat-thread-summary-row:focus-visible .chat-thread-summary-age {
+	display: none;
+}
+
+.chat-thread-summary-row:hover .chat-thread-summary-view,
+.chat-thread-summary-row:focus-visible .chat-thread-summary-view {
+	display: inline-flex;
+}

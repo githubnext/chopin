@@ -1,6 +1,7 @@
 /** The shared chat, grouped for reading rather than event delivery. */
 
 import {
+	Fragment,
 	lazy,
 	Suspense,
 	useCallback,
@@ -9,6 +10,7 @@ import {
 	useRef,
 	useSyncExternalStore,
 } from "react";
+import type { ReactNode } from "react";
 import {
 	CloseIcon,
 	MessageForwardIcon,
@@ -51,6 +53,16 @@ import { ResearchOfferCard } from "./research-offer";
 import type { ResearchOfferControls } from "./research-offer";
 import { researchTranscript } from "./research-transcript";
 import type { ResearchTranscriptItem } from "./research-transcript";
+import { CompactingRow, CompactionDivider } from "./compaction/compaction-divider";
+import { ThreadEntryButton } from "./threads/thread-entry-button";
+import { ThreadSummaryRow } from "./threads/thread-summary-row";
+
+export type TranscriptThreads = {
+	summaries: Record<string, Chat.ThreadSummary>;
+	openRootId?: string;
+	canStart: boolean;
+	onOpen: (rootId: string) => void;
+};
 
 type PlanMarkers = {
 	decisions?: TranscriptDecisions;
@@ -67,6 +79,7 @@ type PlanMarkers = {
 	sourceDestination?: ChatDestination;
 	conversationPlan?: ConversationPlan.State;
 	researchOffers?: ResearchOfferControls;
+	threads?: TranscriptThreads;
 };
 
 export type TranscriptDecisions = {
@@ -246,6 +259,12 @@ function MessageBody(
 	// Only the sender sees how far a message has got, and may take it back until it is delivered.
 	let own = message.author.kind === "member" && message.author.handle === handle;
 	let delivery = own ? deliveryOf(message) : undefined;
+	let threadSummary = markers.threads?.summaries[message.id];
+	let rootOpen = markers.threads?.openRootId === message.id;
+	let canThread = !!markers.threads
+		&& (!!threadSummary || markers.threads.canStart)
+		&& !message.queued && !message.streaming
+		&& delivery !== "waiting" && delivery !== "failed";
 
 	return (
 		<div
@@ -254,6 +273,7 @@ function MessageBody(
 			data-chat-source={markers.sourceDestination?.source.messageId === message.id || undefined}
 			data-chat-message-id={message.id}
 			data-chat-raw={message.text}
+			data-thread-root-open={rootOpen || undefined}
 			data-chat-state={message.working
 				? "working"
 				: message.workDisconnected
@@ -289,6 +309,9 @@ function MessageBody(
 						/>
 						{message.streaming && <span className="ml-0.5">▍</span>}
 					</div>
+					{canThread && markers.threads && (
+						<ThreadEntryButton onOpen={markers.threads.onOpen} rootId={message.id} />
+					)}
 					{delivery && delivery !== "failed" && <DeliveryMark mark={delivery} />}
 					{delivery && deletable(message) && delivery !== "failed"
 						&& <MessageMenu onDelete={() => onDelete(message.id)} />}
@@ -307,6 +330,11 @@ function MessageBody(
 						)}
 				</div>
 			)}
+			{!(text || toPlanner) && canThread && markers.threads && (
+				<div className="flex justify-end">
+					<ThreadEntryButton onOpen={markers.threads.onOpen} rootId={message.id} />
+				</div>
+			)}
 			{!!message.attachments?.length && room && (
 				<Suspense fallback={null}>
 					<MessageFiles channelId={room} files={message.attachments} />
@@ -318,6 +346,9 @@ function MessageBody(
 					onRetry={() => onRetry(message.id)}
 					reason={failureOf(message)}
 				/>
+			)}
+			{threadSummary && markers.threads && (
+				<ThreadSummaryRow onOpen={markers.threads.onOpen} summary={threadSummary} />
 			)}
 			{ANALYSIS && !message.queued && markers.onCardLink && markers.onRetryAnalysis && (
 				<MessageMarkers
@@ -413,6 +444,7 @@ function MessageGroup(
 						conversationPlan={markers.conversationPlan}
 						researchOffers={markers.researchOffers}
 						sourceDestination={markers.sourceDestination}
+						threads={markers.threads}
 						handle={handle}
 						key={message.id}
 						message={message}
@@ -434,6 +466,8 @@ export function Transcript(
 	{
 		active,
 		canEdit,
+		compacting,
+		compactions,
 		completedWork,
 		conversationPlan,
 		conversationPlanJobs,
@@ -443,6 +477,7 @@ export function Transcript(
 		emptyHint,
 		entries,
 		handle,
+		lead,
 		live,
 		onCardLink,
 		onAddExcerpt,
@@ -457,13 +492,18 @@ export function Transcript(
 		queued,
 		sourceDestination,
 		suspendedWork,
+		threads,
 		working,
 	}: {
 		active: boolean;
 		canEdit?: boolean;
+		compacting?: boolean;
+		compactions?: Chat.CompactionRecord[];
 		completedWork?: CompletedWork[];
 		conversationPlan?: ConversationPlan.State;
 		conversationPlanJobs?: ConversationPlan.Job[];
+		lead?: ReactNode;
+		threads?: TranscriptThreads;
 		onCardLink?: (link: CardLink) => void;
 		onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
 		onOpenChild?: (channelId: string) => Promise<boolean>;
@@ -788,10 +828,16 @@ export function Transcript(
 				{announcement}
 			</span>
 			<div
-				className="relative flex min-h-full shrink-0 flex-col gap-4 [&>*:first-child]:mt-auto"
+				className={`relative flex min-h-full shrink-0 flex-col gap-4 ${
+					lead ? "" : "[&>*:first-child]:mt-auto"
+				}`}
 				data-chat-stack
 				ref={stack}
 			>
+				{lead}
+				{compactions?.filter(item => !item.afterEntryId).map(item => (
+					<CompactionDivider compaction={item} key={`compact:${item.id}`} />
+				))}
 				{empty && (
 					<p
 						className="px-1 text-left text-sm text-text-tertiary"
@@ -800,15 +846,20 @@ export function Transcript(
 						{empty}
 					</p>
 				)}
-				{keyed.map(({ item, key }) =>
-					item.kind === "research"
+				{keyed.map(({ item, key }) => {
+					let groupIds = item.kind === "messages"
+						? new Set(item.messages.map(message => message.id))
+						: new Set([item.kind === "system" ? item.id : ""]);
+					let afterCompactions = compactions?.filter(
+						compaction => compaction.afterEntryId && groupIds.has(compaction.afterEntryId),
+					) ?? [];
+					let node = item.kind === "research"
 						? (
 							<div
 								data-chat-enter={enters(key) || undefined}
 								data-chat-offer={item.offer.id}
 								data-chat-placement={item.offer.workflow?.placementMessageId
 									?? item.offer.source.messageId}
-								key={key}
 							>
 								<ResearchOfferCard controls={researchOffers!} offer={item.offer} />
 							</div>
@@ -822,7 +873,6 @@ export function Transcript(
 									item={item as Extract<Group, { kind: "system" }> & {
 										decision: NonNullable<Chat.Entry["decision"]>;
 									}}
-									key={key}
 									latest={item.decision.kind === "prompt"
 										? latestPrompt.get(item.decision.questionnaireId) === item.id
 										: item.decision.kind === "scoped-choice"
@@ -835,14 +885,13 @@ export function Transcript(
 								<CommentSystemEntry
 									comment={item.comment}
 									enter={enters(key)}
-									key={key}
 									onOpenChild={onOpenChild}
 									room={room}
 								/>
 							)
 							: announced.has(readyChild(item.text) ?? "")
 							? null
-							: <SystemEntry enter={enters(key)} item={item} key={key} />
+							: <SystemEntry enter={enters(key)} item={item} />
 						: (
 							<MessageGroup
 								decisions={decisions}
@@ -858,16 +907,28 @@ export function Transcript(
 								entering={entered.current}
 								group={item}
 								handle={handle}
-								key={key}
 								onDelete={onDelete}
 								onRetry={onRetry}
 								quietFailures={quietFailures}
 								onWithdraw={onWithdraw}
 								room={room}
 								sourceDestination={sourceDestination}
+								threads={threads}
 							/>
-						)
-				)}
+						);
+					return (
+						<Fragment key={key}>
+							{node}
+							{afterCompactions.map(compaction => (
+								<CompactionDivider
+									compaction={compaction}
+									key={`compact:${compaction.id}`}
+								/>
+							))}
+						</Fragment>
+					);
+				})}
+				{compacting && <CompactingRow />}
 				<div className="h-4 shrink-0" />
 				{emptyHint && (
 					<div

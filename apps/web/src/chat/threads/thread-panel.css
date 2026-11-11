@@ -1,0 +1,116 @@
+.thread-panel {
+	display: flex;
+	height: 100%;
+	min-height: 0;
+	min-width: 0;
+	width: 100%;
+	flex-direction: column;
+}
+
+.thread-panel[data-thread-sheet] {
+	position: fixed;
+	inset: 0;
+	z-index: 45;
+	background: var(--color-page);
+	padding-top: env(safe-area-inset-top);
+	padding-bottom: env(safe-area-inset-bottom);
+	padding-left: env(safe-area-inset-left);
+	padding-right: env(safe-area-inset-right);
+}
+
+.thread-panel-header {
+	display: flex;
+	height: var(--document-shell-header-height);
+	flex-shrink: 0;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	padding-inline: calc(var(--spacing) * 3.5);
+	border-bottom: 1px solid var(--color-divider);
+}
+
+.thread-panel[data-thread-sheet] .thread-panel-header {
+	padding-inline: calc(var(--spacing) * 2);
+}
+
+.thread-panel-titles {
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: calc(var(--spacing) * 2);
+	flex: 1 1 auto;
+}
+
+.thread-panel-title {
+	color: var(--color-text-primary);
+	font-size: var(--text-sm);
+	font-weight: 600;
+	line-height: 1.35;
+}
+
+.thread-panel-subtitle {
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: 1.35;
+}
+
+.thread-lead {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 3);
+}
+
+.thread-provenance {
+	margin: 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: 1.4;
+}
+
+.thread-root-entry {
+	display: flex;
+	gap: calc(var(--spacing) * 3);
+}
+
+.thread-replies-rule {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2.5);
+	padding-top: calc(var(--spacing) * 1);
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: 1.35;
+}
+
+.thread-replies-rule::after {
+	content: "";
+	flex: 1 1 0%;
+	height: 1px;
+	background: var(--color-divider);
+}
+
+.thread-also-send {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	padding: 0 calc(var(--spacing) * 3.5) calc(var(--spacing) * 2.5);
+	color: var(--color-text-secondary);
+	font-size: var(--text-xs);
+	line-height: 1.35;
+	cursor: pointer;
+	user-select: none;
+}
+
+.workspace-root[data-workspace-mode="split"]
+	.workspace-chat-panel
+	.thread-composer-boundary
+	.thread-also-send {
+	padding-inline: calc(var(--spacing) * 2);
+}
+
+.thread-also-checkbox {
+	width: 0.875rem;
+	height: 0.875rem;
+	accent-color: var(--color-brand);
+	border-radius: var(--radius-sm);
+	cursor: pointer;
+}
