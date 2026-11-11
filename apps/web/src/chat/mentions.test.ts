@@ -97,6 +97,8 @@ describe("the trigger for a part of the document or a file", () => {
 		expect(pointerTrigger("@one\ntwo", 8)).toBeUndefined();
 		expect(pointerTrigger(`@${"a ".repeat(32)}`, 65)?.query).toHaveLength(64);
 		expect(pointerTrigger(`@${"a ".repeat(33)}`, 67)).toBeUndefined();
+		expect(pointerTrigger("@chopin", 0)).toBeUndefined();
+		expect(pointerTrigger("@chopin outline the plan", 0)).toBeUndefined();
 		expect(pointerTrigger("@chopin", 3)).toBeUndefined();
 		expect(pointerTrigger("@chopin", 1, 3)).toBeUndefined();
 		expect(pointerTrigger("no at sign", 5)).toBeUndefined();

@@ -82,7 +82,8 @@ export function pointerTrigger(
 	) return undefined;
 	if (/[\w-]/.test(text[selectionStart] ?? "")) return undefined;
 	let line = text.lastIndexOf("\n", selectionStart - 1) + 1;
-	let at = text.lastIndexOf("@", selectionStart - 1);
+	// With the caret at the very start, `lastIndexOf` would find an `@` after it, which is no trigger.
+	let at = selectionStart > 0 ? text.lastIndexOf("@", selectionStart - 1) : -1;
 	if (at < line || selectionStart - at - 1 > MAX_POINTER_QUERY) return undefined;
 	if (at > 0 && /[\w@]/.test(text[at - 1]!)) return undefined;
 	return { query: text.slice(at + 1, selectionStart), start: at, end: selectionStart };
