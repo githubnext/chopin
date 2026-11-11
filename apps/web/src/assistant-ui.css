@@ -48,13 +48,17 @@
 	/* The one raw palette colour the copies use (a dialog's scrim) is Chopin's ink. */
 	--color-black: var(--color-gray-900);
 	/*
-	 * The raw palette the composer, surfaces, context breakdown and message actions name: accent
-	 * blue (caret, recording dot, upload bar, a drop target's tint, live surfaces) is Chopin's petrol,
-	 * green (the check a copy turns into) is Chopin's success, amber is Chopin's warning and reds are
-	 * Chopin's destructive. Chopin has no Tailwind palette, so none of these would draw otherwise.
+	 * The raw palette the composer, surfaces, context breakdown, message actions, agent handoff and
+	 * subagent list name: accent blue (caret, recording dot, upload bar, a drop target's tint, live
+	 * surfaces, a handoff in transit) is Chopin's petrol, and the blue a handoff writes its words in
+	 * is petrol's ink; green (the check a copy turns into) is Chopin's success, amber is Chopin's
+	 * warning and reds are Chopin's destructive. Chopin has no Tailwind palette, so none of these
+	 * would draw otherwise.
 	 */
+	--color-blue-300: var(--color-brand-ink);
 	--color-blue-400: var(--color-brand);
 	--color-blue-500: var(--color-brand);
+	--color-blue-700: var(--color-brand-ink);
 	--color-emerald-500: var(--color-success);
 	--color-amber-400: var(--color-warning);
 	--color-amber-500: var(--color-warning);

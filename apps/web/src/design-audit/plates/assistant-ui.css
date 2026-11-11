@@ -49,3 +49,11 @@
 .design-audit-aui-wide {
 	inline-size: min(100%, 24rem);
 }
+
+.design-audit-aui-blocks {
+	margin-top: 1.5rem;
+}
+
+.design-audit-aui-blocks > div {
+	width: min(100%, 24rem);
+}
