@@ -58,7 +58,9 @@
 			"registry": "@assistant-ui",
 			"item": "elements-message-actions",
 			"version": "assistant-ui/assistant-ui@437b410726e2",
-			"sha256": "000c9da991dd888234576521192579169a0b6c4913ad2b025ee387b29c6d5277"
+			"sha256": "000c9da991dd888234576521192579169a0b6c4913ad2b025ee387b29c6d5277",
+			"patch": "apps/web/src/components/assistant-ui/elements/message-actions.tsx.patch",
+			"patchSha256": "bb69bca37d4e3953c79b22fc07e8818809602169d19ce0c33ddc32c4c7e0c71e"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/elements/message-attachment.tsx",
