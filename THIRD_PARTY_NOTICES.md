@@ -125,7 +125,10 @@ its runtime is used and no `@assistant-ui/*` package is a dependency. Each file 
 [`apps/web/src/components/sources.json`](apps/web/src/components/sources.json) with its registry,
 item, upstream revision (the registry's repository at its main commit when it was fetched) and the
 sha256 of its bytes, and the design contract fails if one is edited
-([how](docs/assistant-ui.md)). Those on 2026-11-10:
+([how](docs/assistant-ui.md)). Two carry a recorded patch beside them (`composer.tsx.patch` and
+`directive-text.tsx.patch`): a prop that draws a person's own picture and a tag in a row, and a
+control drawn inside a chip, which add an extension point and change no class or size. Those on
+2026-11-10:
 
 | File (under `apps/web/src/`)                                 | Registry      | Item                       | Upstream revision                        |
 | ------------------------------------------------------------ | ------------- | -------------------------- | ---------------------------------------- |

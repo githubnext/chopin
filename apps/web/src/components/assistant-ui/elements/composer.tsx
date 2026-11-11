@@ -4,6 +4,7 @@ import {
   forwardRef,
   type ComponentProps,
   type ComponentPropsWithoutRef,
+  type ReactNode,
   type RefObject,
   useCallback,
   useLayoutEffect,
@@ -56,7 +57,9 @@ export interface ComposerCommand {
 
 export interface ComposerPerson {
   name: string;
-  role: "agent" | "human";
+  role: "agent" | "human" | (string & {});
+  /** Drawn in the badge in place of the name's first letter. */
+  avatar?: ReactNode;
 }
 
 export interface ComposerModel {
@@ -287,7 +290,7 @@ export function ComposerPersonItem({
   return (
     <ComposerMenuItem active={active} {...props}>
       <span className="bg-foreground/[0.06] text-muted-foreground flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-medium">
-        {person.name[0]}
+        {person.avatar ?? person.name[0]}
       </span>
       <span className="flex-1 truncate text-start">{person.name}</span>
       <span className={cn(mono, "text-muted-foreground")}>{person.role}</span>

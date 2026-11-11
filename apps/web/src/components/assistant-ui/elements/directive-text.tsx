@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC } from "react";
+import type { FC, ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 
 type IconComponent = FC<{ className?: string }>;
@@ -24,6 +24,10 @@ export type CreateDirectiveTextOptions = {
   iconMap?: Record<string, IconComponent>;
   /** Icon rendered when `iconMap` has no entry for the segment type. */
   fallbackIcon?: IconComponent;
+  /** Drawn inside the chip, after its label: a control that acts on the mention. */
+  trailing?: (
+    segment: Extract<DirectiveTextSegment, { readonly kind: "mention" }>,
+  ) => ReactNode;
 };
 
 /** Creates a text component that parses directive syntax and renders inline chips. */
@@ -33,6 +37,7 @@ export function createDirectiveText(
 ): FC<{ text: string }> {
   const iconMap = options?.iconMap;
   const fallbackIcon = options?.fallbackIcon;
+  const trailing = options?.trailing;
 
   const Component: FC<{ text: string }> = ({ text }) => {
     const segments = formatter.parse(text);
@@ -65,6 +70,7 @@ export function createDirectiveText(
             >
               {Icon && <Icon />}
               {seg.label}
+              {trailing?.(seg)}
             </Badge>
           );
         })}
