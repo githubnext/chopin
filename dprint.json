@@ -23,6 +23,8 @@
 		"**/node_modules",
 		"**/*-lock.json",
 		"**/*.lock",
+		"apps/web/src/components/**",
+		"apps/web/src/lib/utils.ts",
 		"data/**",
 		"evals/datasets/registry.json",
 		"evals/datasets/v2/proposals/rust-async-await.md",

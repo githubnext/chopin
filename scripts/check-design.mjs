@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { verifyRecordedSources } from "./design-contract/registry.mjs";
+
 let targets = [
 	"index.html",
 	"src",
@@ -31,7 +33,11 @@ function text(value) {
 	return typeof value === "string" && value.trim().length > 0;
 }
 
-export function designProblems(scan, baseline, root) {
+/**
+ * `accepted` holds the recorded third-party files (`registry.mjs`), whose own classes the scanner
+ * is not asked about: their findings are neither new nor baseline. Anything else is compared as before.
+ */
+export function designProblems(scan, baseline, root, accepted = new Set()) {
 	if (scan.error || ![0, 2].includes(scan.status)) {
 		throw new Error(
 			`Impeccable scan failed (${scan.status}): ${
@@ -48,6 +54,7 @@ export function designProblems(scan, baseline, root) {
 	if (!Array.isArray(findings)) throw new Error("Expected an array of Impeccable findings.");
 
 	let current = new Map();
+	let counted = 0;
 	for (let finding of findings) {
 		if (
 			!finding || !text(finding.antipattern) || !text(finding.file) || !text(finding.snippet)
@@ -57,6 +64,8 @@ export function designProblems(scan, baseline, root) {
 		if (!file || file.startsWith("../") || file === ".." || isAbsolute(file)) {
 			throw new Error(`Impeccable reported a file outside the repository: ${finding.file}`);
 		}
+		if (accepted.has(file)) continue;
+		counted++;
 		let entry = { rule: finding.antipattern, file, snippet: finding.snippet };
 		let fingerprint = key(entry);
 		let previous = current.get(fingerprint);
@@ -97,21 +106,26 @@ export function designProblems(scan, baseline, root) {
 			changes.push(`STALE baseline ${entry.rule} in ${entry.file}: ${entry.snippet}`);
 		}
 	}
-	return { changes, count: findings.length };
+	return { changes, count: counted };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 	try {
 		let root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 		let baseline = JSON.parse(readFileSync(join(root, "scripts/impeccable-baseline.json"), "utf8"));
-		let result = designProblems(scanDesign(root), baseline, root);
+		let recorded = verifyRecordedSources(root);
+		let result = designProblems(scanDesign(root), baseline, root, recorded.files);
+		if (recorded.errors.length) throw new Error(recorded.errors.join("\n"));
 		if (result.changes.length) {
 			throw new Error(
 				result.changes.join("\n")
 					+ "\nFix new findings; reduce the baseline when existing findings are fixed.",
 			);
 		}
-		console.log(`Impeccable: no new findings (${result.count} existing baseline findings).`);
+		console.log(
+			`Impeccable: no new findings (${result.count} existing baseline findings; `
+				+ `${recorded.files.size} recorded third-party files not asked).`,
+		);
 	} catch (error) {
 		console.error(error.message);
 		process.exitCode = 1;

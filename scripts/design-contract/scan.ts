@@ -1,11 +1,12 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, normalize, relative } from "node:path";
+import { dirname, join, normalize, relative, sep } from "node:path";
 
 import postcss from "postcss";
 
 import { classProblems } from "./classes";
 import { DIAGRAM_TYPOGRAPHY_SOURCE, diagramTypographyFoundation } from "./diagram-typography";
 import { declarationProblem, type TokenPolicy } from "./policy";
+import { verifyRecordedSources } from "./registry.mjs";
 import { type Extraction, extractSource } from "./source";
 
 export type Finding = {
@@ -21,13 +22,15 @@ export type Finding = {
 };
 export type Exception = Omit<Finding, "line" | "reason"> & { count: number; reason: string };
 
-export function sourceFiles(root: string): string[] {
+/** `accepted` is recorded third-party source, which the registry check answers for instead. */
+export function sourceFiles(root: string, accepted: ReadonlySet<string> = new Set()): string[] {
 	let visit = (dir: string): string[] =>
 		readdirSync(dir).flatMap(entry => {
 			if (entry.startsWith(".") || ["node_modules", "dist"].includes(entry)) return [];
 			let path = join(dir, entry);
 			if (statSync(path).isDirectory()) return visit(path);
 			if (/\.(test|spec|e2e)\.[jt]sx?$/.test(entry)) return [];
+			if (accepted.has(relative(root, path).split(sep).join("/"))) return [];
 			return /\.(css|html|svg|[jt]sx?)$/.test(entry) ? [path] : [];
 		});
 	return ["apps", "packages"].flatMap(dir => visit(join(root, dir)));
@@ -87,8 +90,14 @@ export function inspect(file: string, extracted: Extraction, policy: TokenPolicy
 export function scan(
 	root: string,
 	read = (path: string) => readFileSync(path, "utf8"),
-): { findings: Finding[]; files: number; policy: TokenPolicy } {
-	let files = sourceFiles(root);
+): {
+	findings: Finding[];
+	files: number;
+	policy: TokenPolicy;
+	recorded: ReturnType<typeof verifyRecordedSources>;
+} {
+	let recorded = verifyRecordedSources(root);
+	let files = sourceFiles(root, recorded.files);
 	let contents = files.map(path => ({ file: relative(root, path), content: read(path) }));
 	let foundationPath = join(root, DIAGRAM_TYPOGRAPHY_SOURCE);
 	if (
@@ -156,7 +165,7 @@ export function scan(
 			reason,
 		});
 	}
-	return { findings, files: files.length, policy };
+	return { findings, files: files.length, policy, recorded };
 }
 
 export function fingerprint(
