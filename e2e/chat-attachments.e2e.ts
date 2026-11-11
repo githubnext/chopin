@@ -121,6 +121,28 @@ test("adds an image by dropping it on the composer and a file by pasting it into
 	await expectChatValue(chatInput(chat(page)), "plain text still pastes");
 });
 
+test("keeps the drop edge while a drag moves between the composer's own parts, and drops it when the drag ends anywhere", async ({ join }) => {
+	let page = await join("ana");
+	await openChat(page);
+	let surface = composer(page).locator(".composer-surface");
+	await drop(page, [SHOT], { over: true });
+	await expect(surface).toHaveAttribute("data-dropping", "true");
+	// Moving into the footer is not leaving.
+	await leave(page, ".composer-footer");
+	await expect(surface).toHaveAttribute("data-dropping", "true");
+	await leave(page);
+	await expect(surface).not.toHaveAttribute("data-dropping", "true");
+	// A drag that ends somewhere else, by a drop or by Escape, does not leave it lit.
+	await drop(page, [SHOT], { over: true });
+	await expect(surface).toHaveAttribute("data-dropping", "true");
+	await page.evaluate(() => window.dispatchEvent(new Event("dragend")));
+	await expect(surface).not.toHaveAttribute("data-dropping", "true");
+	await drop(page, [SHOT], { over: true });
+	await page.evaluate(() => window.dispatchEvent(new Event("drop")));
+	await expect(surface).not.toHaveAttribute("data-dropping", "true");
+	await expect(strip(page)).toHaveCount(0);
+});
+
 /** Holds every upload where it is until `release`, then lets it go on or fails it. */
 async function hold(page: Page) {
 	let open!: (outcome: "go" | "fail") => void;

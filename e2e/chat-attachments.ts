@@ -77,15 +77,29 @@ export async function drop(
 	await target.dispatchEvent("drop", { dataTransfer: transfer });
 }
 
-/** Leave the composer with the files still in the drag. */
-export async function leave(page: Page): Promise<void> {
+/**
+ * Leave where the drag was, with the files still in it: for another element inside the composer when
+ * `into` names one (moving between its own parts), and for none at all, outside it, otherwise.
+ */
+export async function leave(page: Page, into?: string): Promise<void> {
 	let target = composer(page).locator(".composer-surface");
 	let transfer = await target.evaluateHandle(() => {
 		let data = new DataTransfer();
 		data.items.add(new File(["x"], "x.txt", { type: "text/plain" }));
 		return data;
 	});
-	await target.dispatchEvent("dragleave", { dataTransfer: transfer });
+	await target.evaluate(
+		(element, { data, selector }) => {
+			element.dispatchEvent(
+				new DragEvent("dragleave", {
+					dataTransfer: data,
+					relatedTarget: selector ? element.querySelector(selector) : null,
+					bubbles: true,
+				}),
+			);
+		},
+		{ data: transfer, selector: into },
+	);
 }
 
 /** Paste files into the field, as a copied screenshot or a copied file does. */

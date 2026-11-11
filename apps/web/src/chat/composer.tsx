@@ -5,7 +5,7 @@
  * passes what to show; the design audit renders the same component in each live state.
  */
 
-import { lazy, Suspense, useId, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode, Ref } from "react";
 
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
@@ -198,8 +198,20 @@ export function ChatComposer(
 	let cueId = useId();
 	let filePicker = useRef<HTMLInputElement>(null);
 	let filesReasonId = useId();
-	// Files dragged over the surface; entering a child fires before leaving the last, so it is counted.
-	let [dragging, setDragging] = useState(0);
+	// Files dragged over the surface. Leaving it for a child of it is not leaving: only a leave that
+	// ends outside it, or in no element at all (the window), does, and a drag that ends anywhere
+	// else (a drop elsewhere, Escape) is ended by the window, so the surface never stays lit.
+	let [dragging, setDragging] = useState(false);
+	useEffect(() => {
+		if (!dragging) return;
+		let end = () => setDragging(false);
+		window.addEventListener("dragend", end);
+		window.addEventListener("drop", end);
+		return () => {
+			window.removeEventListener("dragend", end);
+			window.removeEventListener("drop", end);
+		};
+	}, [dragging]);
 	let droppable = !!files && !files.disabled && !unavailable;
 	let error = notice?.tone === "error" || !!banner?.invalid;
 	let chip = !!chopin?.chip;
@@ -339,12 +351,12 @@ export function ChatComposer(
 				aria-busy={sending}
 				className="composer-surface"
 				data-error={error || undefined}
-				data-dropping={dragging > 0 || undefined}
+				data-dropping={dragging || undefined}
 				onDragEnter={droppable
 					? event => {
 						if (!dragsFiles(event)) return;
 						event.preventDefault();
-						setDragging(count => count + 1);
+						setDragging(true);
 					}
 					: undefined}
 				onDragOver={droppable
@@ -352,18 +364,20 @@ export function ChatComposer(
 						if (!dragsFiles(event)) return;
 						event.preventDefault();
 						event.dataTransfer.dropEffect = "copy";
+						setDragging(true);
 					}
 					: undefined}
 				onDragLeave={droppable
 					? event => {
-						if (dragsFiles(event)) setDragging(count => Math.max(0, count - 1));
+						let into = event.relatedTarget;
+						if (!(into instanceof Node && event.currentTarget.contains(into))) setDragging(false);
 					}
 					: undefined}
 				onDrop={droppable
 					? event => {
 						if (!dragsFiles(event)) return;
 						event.preventDefault();
-						setDragging(0);
+						setDragging(false);
 						files!.onAdd([...event.dataTransfer.files]);
 					}
 					: undefined}
