@@ -88,11 +88,15 @@
 	background: var(--color-divider);
 }
 
+.thread-composer-boundary .chat-composer {
+	padding-bottom: calc(var(--spacing) * 1.5);
+}
+
 .thread-also-send {
 	display: inline-flex;
 	align-items: center;
 	gap: calc(var(--spacing) * 2);
-	padding: 0 calc(var(--spacing) * 3.5) calc(var(--spacing) * 2.5);
+	padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 3.5) calc(var(--spacing) * 3);
 	color: var(--color-text-secondary);
 	font-size: var(--text-xs);
 	line-height: 1.35;
@@ -104,7 +108,7 @@
 	.workspace-chat-panel
 	.thread-composer-boundary
 	.thread-also-send {
-	padding-inline: calc(var(--spacing) * 2);
+	padding-inline: calc(var(--spacing) * 3);
 }
 
 .thread-also-checkbox {

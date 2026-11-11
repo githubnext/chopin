@@ -617,12 +617,14 @@ export function ThreadPanel(
 					)
 					: undefined}
 				draftable={draftable}
-				format={{
-					shown: formatting,
-					disabled: !composerReady || submitting,
-					onToggle: toggleFormatting,
-					onFormat: formatDraft,
-				}}
+				format={sheet
+					? undefined
+					: {
+						shown: formatting,
+						disabled: !composerReady || submitting,
+						onToggle: toggleFormatting,
+						onFormat: formatDraft,
+					}}
 				input={{
 					"aria-activedescendant": mentionOpen
 						? referenceOptionId(mentionPickerId, mentionActive)
