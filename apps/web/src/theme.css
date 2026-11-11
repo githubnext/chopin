@@ -1540,7 +1540,6 @@ body {
 }
 
 :root[data-plan-coarse-pointer] .room-header :where(button, summary),
-:root[data-plan-coarse-pointer] .chat-composer button,
 :root[data-plan-coarse-pointer] .document-banner button,
 :root[data-plan-coarse-pointer] .hosted-header button,
 :root[data-plan-coarse-pointer] .channel-create-input,
@@ -1579,15 +1578,18 @@ body {
 }
 
 /* Small controls keep their look; an invisible 44px target grows around them. */
+/* The Chopin chip draws its own target (composer.css), so it is left to it. */
 /* In the components layer so utilities such as `absolute` still win. */
 @layer components {
 	:root[data-plan-coarse-pointer]
-		:where(.btn-icon, .btn-sm, .project-sidebar-action, .project-sidebar-document-action) {
+		:where(.btn-icon, .btn-sm, .project-sidebar-action, .project-sidebar-document-action, .chat-composer
+			button:not(.composer-chopin-chip)) {
 		position: relative;
 	}
 
 	:root[data-plan-coarse-pointer]
-		:where(.btn-icon, .btn-sm, .project-sidebar-action, .project-sidebar-document-action)::after {
+		:where(.btn-icon, .btn-sm, .project-sidebar-action, .project-sidebar-document-action, .chat-composer
+			button:not(.composer-chopin-chip))::after {
 		content: "";
 		position: absolute;
 		top: 50%;

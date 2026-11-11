@@ -1527,11 +1527,37 @@
 	min-height: var(--control-target-coarse);
 }
 
-:root[data-plan-coarse-pointer]
-	:where(.document-actions-menu, .navigation-account-menu)
-	:is(button, a),
-:root[data-plan-coarse-pointer] .app-menu-item {
-	min-height: var(--control-target-coarse);
+/*
+ * A menu row keeps its own height on touch. An invisible target of the coarse height grows around
+ * it, and a row that follows another stands a target's pitch from it (the space the rows no longer
+ * take up themselves, as one margin, since neighbouring margins would collapse), so adjacent
+ * targets meet and never overlap, and the menu is as tall as it was.
+ */
+@layer components {
+	:root[data-plan-coarse-pointer]
+		:where(:where(.document-actions-menu, .navigation-account-menu)
+			:is(button, a), .app-menu-item) {
+		position: relative;
+	}
+
+	:root[data-plan-coarse-pointer]
+		:where(:where(.document-actions-menu, .navigation-account-menu)
+			:is(button, a)
+			+ :is(button, a), .app-menu-item + .app-menu-item) {
+		margin-block-start: calc(var(--control-target-coarse) - var(--menu-item-height-normal));
+	}
+
+	:root[data-plan-coarse-pointer]
+		:where(:where(.document-actions-menu, .navigation-account-menu)
+			:is(button, a), .app-menu-item)::after {
+		content: "";
+		position: absolute;
+		top: 50%;
+		left: 0;
+		width: 100%;
+		height: var(--control-target-coarse);
+		transform: translateY(-50%);
+	}
 }
 
 .title-control {

@@ -60,18 +60,17 @@ export function usePointerCapabilities(): void {
 		document.documentElement.toggleAttribute("data-phone", phone);
 	}, [phone]);
 	useEffect(() => {
-		let coarse = matchMedia(COARSE_POINTER_QUERY);
+		// The pointer in use, not any pointer attached: a touch laptop used with a mouse keeps the
+		// desktop's sizes. Touch targets grow only when the primary pointer is coarse.
 		let primary = matchMedia(PRIMARY_COARSE_POINTER_QUERY);
 		let root = document.documentElement;
 		let update = () => {
-			root.toggleAttribute("data-plan-coarse-pointer", coarse.matches);
+			root.toggleAttribute("data-plan-coarse-pointer", primary.matches);
 			root.toggleAttribute("data-plan-primary-coarse-pointer", primary.matches);
 		};
 		update();
-		coarse.addEventListener("change", update);
 		primary.addEventListener("change", update);
 		return () => {
-			coarse.removeEventListener("change", update);
 			primary.removeEventListener("change", update);
 		};
 	}, []);
