@@ -1049,6 +1049,45 @@ export type PlannerModelChoice = {
 	updatedAt: Date;
 };
 
+export type EntryForkPoint = {
+	atomicLeafId?: string | null;
+	remote?: { session: string; turn?: string };
+};
+
+export type ChatThreadForkState = {
+	/** Transcript entries of top-level Chat up to and including the root message at fork time. */
+	bootstrapEntries: import("@chopin/protocol").Chat.Entry[];
+	summary?: string;
+	/** Serialized Atomic `FileEntry[]` for this thread's branched session. */
+	atomicEntries?: JsonValue[];
+	atomicLeafId?: string | null;
+	/** Remote session and turn to branch from on the first turn, or continue from. */
+	remoteFrom?: { session: string; turn?: string };
+};
+
+export type ChatThreadRecord = {
+	channelId: string;
+	rootId: string;
+	root: import("@chopin/protocol").Chat.Entry;
+	forkedAt: number;
+	createdBy: string;
+	entries: import("@chopin/protocol").Chat.Entry[];
+	compactions: import("@chopin/protocol").Chat.CompactionRecord[];
+	usage?: import("@chopin/protocol").Chat.ContextUsage;
+	forkState: ChatThreadForkState;
+	updatedAt: Date;
+};
+
+export type ChatSessionState = {
+	channelId: string;
+	compactions: import("@chopin/protocol").Chat.CompactionRecord[];
+	usage?: import("@chopin/protocol").Chat.ContextUsage;
+	atomicEntries?: JsonValue[];
+	atomicLeafId?: string | null;
+	entryForks: Record<string, EntryForkPoint>;
+	updatedAt: Date;
+};
+
 /** A paired machine's Planner credential, known by the digest of its token and never the token. */
 export type PlannerCredential = {
 	/** SHA-256 of the credential. */
