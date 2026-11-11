@@ -8,24 +8,19 @@ import "./connecting-indicator.css";
  * button's name or the banner's text, and the page's live region say what is connecting.
  *
  * One drawing everywhere a machine or the Planner is connected to: the connection banner's icon,
- * at the 16px of the icon it replaced, and the machine button's corner badge, sized by its CSS.
+ * in the 16px box of the icon it replaced, and the machine button's corner badge, sized by its CSS.
+ * The dots are boxes drawn by CSS, not artwork, so they size and colour from Chopin's tokens.
  */
-export function ConnectingIndicator(
-	{ className, size = 16 }: { className?: string; size?: number },
-) {
+export function ConnectingIndicator({ className }: { className?: string }) {
 	return (
-		<svg
+		<span
 			aria-hidden="true"
 			className={className ? `connecting-indicator ${className}` : "connecting-indicator"}
 			data-connecting=""
-			focusable="false"
-			height={size}
-			viewBox="0 0 16 6"
-			width={size}
 		>
-			<circle cx="3" cy="3" r="1.75" />
-			<circle cx="8" cy="3" r="1.75" />
-			<circle cx="13" cy="3" r="1.75" />
-		</svg>
+			<span className="connecting-dot" />
+			<span className="connecting-dot" />
+			<span className="connecting-dot" />
+		</span>
 	);
 }

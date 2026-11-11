@@ -266,11 +266,11 @@
 				"dynamic",
 				"class",
 				"className",
-				"class > ConnectingIndicator > <svg>",
+				"class > ConnectingIndicator > <span>",
 				1
 			]
 		],
-		"sourceHash": "b0580ccca5e71a0a658b432dff33b14e2dc748a9adfb6a70d9057e5264c079b5"
+		"sourceHash": "96ebdfc813db44fa8c1125147689bfabd0c24e57f26a88b17f2ba5dcbd4088a9"
 	},
 	{
 		"file": "apps/web/src/machine-button.tsx",

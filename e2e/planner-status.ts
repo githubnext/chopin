@@ -124,7 +124,7 @@ export async function expectNoMachineWords(page: Page, said: string | RegExp): P
 
 /** The connecting dots inside `within`: the banner's icon or the machine button's badge. */
 export function connectingDots(within: Locator): Locator {
-	return within.locator("svg[data-connecting]");
+	return within.locator("[data-connecting]");
 }
 
 /**
@@ -133,9 +133,9 @@ export function connectingDots(within: Locator): Locator {
  */
 export async function expectConnectingWave(dots: Locator): Promise<void> {
 	await expect(dots).toBeVisible();
-	let waves = await dots.evaluate(svg =>
-		[...svg.querySelectorAll("circle")].map(circle =>
-			circle.getAnimations().map(animation => {
+	let waves = await dots.evaluate(indicator =>
+		[...indicator.querySelectorAll(".connecting-dot")].map(dot =>
+			dot.getAnimations().map(animation => {
 				let effect = animation.effect as KeyframeEffect;
 				return {
 					name: (animation as CSSAnimation).animationName,
@@ -171,10 +171,10 @@ export async function expectConnectingWave(dots: Locator): Promise<void> {
 export async function expectConnectingStill(dots: Locator): Promise<void> {
 	await expect(dots).toBeVisible();
 	await expect.poll(() =>
-		dots.evaluate(svg =>
-			[...svg.querySelectorAll("circle")].map(circle => ({
-				moving: circle.getAnimations().length,
-				opacity: getComputedStyle(circle).opacity,
+		dots.evaluate(indicator =>
+			[...indicator.querySelectorAll(".connecting-dot")].map(dot => ({
+				moving: dot.getAnimations().length,
+				opacity: getComputedStyle(dot).opacity,
 			}))
 		)
 	).toEqual([
@@ -186,12 +186,18 @@ export async function expectConnectingStill(dots: Locator): Promise<void> {
 
 /**
  * Over one whole wave and a little more, every frame lays out `targets` exactly where the first did:
- * the dots, and what is around them, never shift.
+ * the dots, and what is around them, never shift. It starts once every entrance has finished (the
+ * banner's own slide in moves all of it together); the dots' wave never finishes, by design.
  */
 export async function expectSteadyLayout(targets: Locator[]): Promise<void> {
 	let handles = await Promise.all(targets.map(target => target.elementHandle()));
 	let page = targets[0]!.page();
 	let boxes = await page.evaluate(async elements => {
+		await Promise.all(
+			document.getAnimations()
+				.filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
+				.map(animation => animation.finished.catch(() => undefined)),
+		);
 		let seen = new Set<string>();
 		let end = performance.now() + 1_400;
 		while (performance.now() < end) {

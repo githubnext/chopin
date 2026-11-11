@@ -15,7 +15,7 @@ const banner = (page: Page, layer: "socket" | "planner") =>
 	);
 const badge = (page: Page) =>
 	plate(page, "chat").locator('.machine-glyph-dot[data-planner="starting"]');
-const dots = (within: Locator) => within.locator("svg[data-connecting]");
+const dots = (within: Locator) => within.locator("[data-connecting]");
 
 function indicators(page: Page): [string, Locator][] {
 	return [
@@ -57,8 +57,8 @@ test("the banner's dots take the 16px box and place of the icon they replaced", 
 		expect(drawn.height, layer).toBeCloseTo(16, 2);
 		expect(drawn.x - around.x, `${layer} left`).toBeCloseTo(icon.x - strip.x, 2);
 		expect(drawn.y - around.y, `${layer} top`).toBeCloseTo(icon.y - strip.y, 2);
-		// Three dots of 3.5px across the middle of the box, 1.5px apart.
-		let circles = dots(own).locator("circle");
+		// Three round dots of 3.5px across the middle of the box, 1.5px apart.
+		let circles = dots(own).locator(".connecting-dot");
 		await expect(circles).toHaveCount(3);
 		let lefts: number[] = [];
 		for (let index of [0, 1, 2]) {
@@ -67,6 +67,12 @@ test("the banner's dots take the 16px box and place of the icon they replaced", 
 			expect(circle.height, `${layer} dot ${index}`).toBeCloseTo(3.5, 1);
 			expect(circle.y + circle.height / 2, `${layer} dot ${index} middle`)
 				.toBeCloseTo(drawn.y + drawn.height / 2, 1);
+			expect(
+				await circles.nth(index).evaluate(node =>
+					Number.parseFloat(getComputedStyle(node).borderRadius)
+				),
+				`${layer} dot ${index} round`,
+			).toBeGreaterThan(1000);
 			lefts.push(circle.x);
 		}
 		expect(lefts[1]! - lefts[0]!, `${layer} spacing`).toBeCloseTo(5, 1);
@@ -93,12 +99,22 @@ test("the machine button's badge is a capsule as tall as the machine's dot, at i
 	expect(border).toBe("2px");
 	expect(await capsule.evaluate(node => Number.parseFloat(getComputedStyle(node).borderRadius)))
 		.toBeGreaterThan(1000);
-	// The dots fill its width, scaled from the banner's, and sit on its middle.
-	let svg = await box(dots(capsule));
-	expect(svg.width).toBeCloseTo(14, 2);
-	let circle = await box(dots(capsule).locator("circle").first());
-	expect(circle.width).toBeCloseTo(3.5 * 14 / 16, 1);
-	expect(circle.y + circle.height / 2).toBeCloseTo(drawn.y + drawn.height / 2, 1);
+	// The dots, of 3px, 1.5px apart, sit centred in its 14 by 8 inside the ring.
+	let inside = await box(dots(capsule));
+	expect(inside.width).toBeCloseTo(14, 2);
+	expect(inside.height).toBeCloseTo(8, 2);
+	let lefts: number[] = [];
+	for (let index of [0, 1, 2]) {
+		let circle = await box(dots(capsule).locator(".connecting-dot").nth(index));
+		expect(circle.width, `dot ${index}`).toBeCloseTo(3, 1);
+		expect(circle.height, `dot ${index}`).toBeCloseTo(3, 1);
+		expect(circle.y + circle.height / 2, `dot ${index} middle`)
+			.toBeCloseTo(drawn.y + drawn.height / 2, 1);
+		lefts.push(circle.x);
+	}
+	expect(lefts[1]! - lefts[0]!).toBeCloseTo(4.5, 1);
+	expect(lefts[2]! - lefts[1]!).toBeCloseTo(4.5, 1);
+	expect(lefts[0]! - inside.x).toBeCloseTo(inside.x + inside.width - (lefts[2]! + 3), 1);
 });
 
 for (let mode of ["light", "dark"] as const) {
@@ -109,8 +125,8 @@ for (let mode of ["light", "dark"] as const) {
 		);
 		let brand = await resolve(page, "var(--color-brand)");
 		for (let [label, indicator] of indicators(page)) {
-			let fills = await indicator.locator("circle").evaluateAll(circles =>
-				circles.map(circle => getComputedStyle(circle).fill)
+			let fills = await indicator.locator(".connecting-dot").evaluateAll(circles =>
+				circles.map(circle => getComputedStyle(circle).backgroundColor)
 			);
 			expect(fills, label).toHaveLength(3);
 			for (let fill of fills) expect(await resolve(page, fill), label).toBe(brand);
@@ -126,7 +142,7 @@ test("under reduced motion every indicator holds still, an ellipsis stepped from
 	for (let [label, indicator] of indicators(page)) {
 		await indicator.scrollIntoViewIfNeeded();
 		expect(
-			await indicator.locator("circle").evaluateAll(circles =>
+			await indicator.locator(".connecting-dot").evaluateAll(circles =>
 				circles.map(circle => ({
 					moving: circle.getAnimations().length,
 					opacity: getComputedStyle(circle).opacity,
@@ -147,7 +163,7 @@ test.describe("with motion allowed", () => {
 	test("each indicator's dots brighten in turn by opacity alone, and nothing around them moves", async ({ page }) => {
 		for (let [label, indicator] of indicators(page)) {
 			await indicator.scrollIntoViewIfNeeded();
-			let waves = await indicator.locator("circle").evaluateAll(circles =>
+			let waves = await indicator.locator(".connecting-dot").evaluateAll(circles =>
 				circles.map(circle =>
 					circle.getAnimations().map(animation => {
 						let effect = animation.effect as KeyframeEffect;
