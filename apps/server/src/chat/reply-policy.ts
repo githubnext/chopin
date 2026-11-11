@@ -1,7 +1,7 @@
 import type { TextStreamPart, ToolSet } from "ai";
 import type { Decide } from "../conversation-plan/decisions";
 import type { JevQuestion } from "../conversation-plan/jev";
-import type { PlannerSession } from "../harness/session";
+import type { PlannerFiles, PlannerSession } from "../harness/session";
 
 type Part = TextStreamPart<ToolSet>;
 
@@ -102,6 +102,8 @@ export async function checkPlannerReply(
 export async function publishPlannerReplies(options: {
 	session: Pick<PlannerSession, "stream">;
 	prompt: string;
+	/** The files sent with the message, which only the first attempt is given with its prompt. */
+	files?: PlannerFiles;
 	signal: AbortSignal;
 	decide: Decide | undefined;
 	/** Count new, durably captured Planner decisions from the authoritative document state. */
@@ -149,7 +151,12 @@ export async function publishPlannerReplies(options: {
 		}`;
 		let failure: unknown;
 		try {
-			let result = await session.stream(prompt, signal);
+			let result = await session.stream(
+				prompt,
+				signal,
+				undefined,
+				attempt === 0 ? options.files : undefined,
+			);
 			for await (let part of result.fullStream) {
 				// Keep consuming after a local failure: cancelling a tee does not settle its producer.
 				if (signal.aborted) continue;

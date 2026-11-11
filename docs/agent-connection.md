@@ -116,6 +116,7 @@ client must then use none of them.
 | `resumable-sessions`       | [Resuming](#resuming-after-a-dropped-link) the sessions, runs and questions of a link that dropped unexpectedly                                                               |
 | `restart-notice`           | A [`restarting`](#server-to-client) message before the server closes the link with 1012, and the [client rule](#when-the-server-is-restarting) that follows it                |
 | `capability-catalog`       | A [`capabilities`](#capability-catalog) report of the models, thinking levels and commands the client offers, and a person's choice of model and thinking level in the `turn` |
+| `attachments`              | The images and text files a person sent with a message, in the `turn`'s [`attachments`](#images-and-files-in-a-turn)                                                          |
 
 ### Pings
 
@@ -409,7 +410,7 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 
 ```text
 { "type": "start", "session": "", "mode": "planner" }
-{ "type": "turn", "session": "", "turn": "", "prompt": "", "instructions?": "", "model?": "", "thinkingLevel?": "", "tools": [], "responseFormat?": {} }
+{ "type": "turn", "session": "", "turn": "", "prompt": "", "instructions?": "", "model?": "", "thinkingLevel?": "", "attachments?": [{ "id": "", "name": "", "kind": "image", "mediaType": "", "size": 0, "data": "" }], "tools": [], "responseFormat?": {} }
 { "type": "abort", "session": "", "turn": "" }
 { "type": "host-tool-result", "session": "", "turn": "", "toolCallId": "", "output": json, "isError?": true }
 { "type": "input-result", "request": "", "status": "answered", "value?": json, "message?": "" }
@@ -433,6 +434,8 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   `MODEL`, or, with `capability-catalog`, when a person chose a model from the
   [catalog](#capability-catalog) the client reported, which then replaces it.
   `thinkingLevel` is sent only with `capability-catalog`, and only when a person chose one.
+  `attachments` is sent only with `attachments`, and only when the message that began the turn
+  carried images or files (see [Images and files in a turn](#images-and-files-in-a-turn)).
   `responseFormat` is `{ "type": "text" }` or
   `{ "type": "json", "schema?": {}, "name?": "", "description?": "" }`; for
   `json`, the turn's text must be that JSON.
@@ -572,7 +575,8 @@ level can therefore never be chosen, and a turn never carries one.
         "id": "", "name": "",
         "provider?": { "id": "", "name?": "" },
         "description?": "",
-        "thinkingLevels?": [""]
+        "thinkingLevels?": [""],
+        "inputTypes?": [""]
       }],
       "default?": { "id": "", "thinkingLevel?": "" }
     },
@@ -604,6 +608,12 @@ level can therefore never be chosen, and a turn never carries one.
   each two levels a person can tell apart, and the turn carries the string they saw. The composer's own first step, which returns the level to the model's own, is called Default, or Model default where the model lists a level of that name, so no level shares its label. A model with none or an empty list has no reasoning control, and the composer
   hides it. An empty string is not a level: it is dropped. Chopin sends back only a level the model
   listed.
+- **`inputTypes`** is what the model reads: `text`, and `image` where it reads images, as strings
+  the client defines (Atomic's own `input` list is sent as it is). Chopin sends a turn an image only
+  when the model the turn names (or the default model, when it names none) lists `image` here, and
+  the composer offers a person an image for a Planner message only then. A model with no
+  `inputTypes`, an empty list, or no catalog at all reads as text only, so a client from before the
+  field is never sent an image. A text file does not depend on it.
 - **`models.default`** is what the client runs when a turn names no model or no level. Its `id`
   should be one of `available`; the composer shows that model as the document's current one until
   somebody chooses another. An operator's `MODEL` takes its place when it is set. A default with an
@@ -639,6 +649,44 @@ available until the document's Chat records that fallback on a turn; it does not
 
 The two fields are independent of the protocol version: nothing here changes an existing message
 for a client that did not offer the feature, so the subprotocol stays `chopin.agent.v1`.
+
+### Images and files in a turn
+
+A person can send images and text files with a message to the Planner (see [Files in Chat](hosted-agent.md#files-in-chat)). With `attachments`, the turn that answers it carries them:
+
+```text
+"attachments": [{
+  "id": "", "name": "", "kind": "image", "mediaType": "", "size": 0, "data": ""
+}]
+```
+
+- **`kind`** is `image` for a PNG, JPEG, WebP or GIF, and `file` for a text file. Chopin decides it
+  from the file's bytes before it keeps one, never from its name. **`mediaType`** is the type it
+  was kept under: one of `image/png`, `image/jpeg`, `image/webp` or `image/gif`, or `text/plain`
+  for every text file whatever it was called, and never HTML or SVG. **`name`** is the file's name
+  as a person sees it (at most 255 characters, with no folder and no control characters); it is a
+  label, not a path, and a client must not use it to name a file on disk without cleaning it
+  again. **`size`** is the length in bytes, and **`data`** the same bytes as base64.
+- **Order and bounds.** The files are in the order the person sent them, at most 20, and
+  together at most 1,048,576 bytes before base64, so they always fit inside the frame's
+  2 MiB with a prompt and the tools. A deployment's own caps are never higher under
+  `HARNESS=remote` (`CHAT_ATTACHMENT_MAX_BYTES` and `CHAT_ATTACHMENT_MAX_TOTAL_BYTES`). `id` is new for
+  each turn and says nothing outside it.
+- **Images only where the model reads them.** An image is in `attachments` only when the model the
+  turn names, or the default model when it names none, lists `image` in its catalog `inputTypes`.
+  Text files are always sent. `prompt` is the message's own text as it always was.
+- **A client that did not offer the feature.** It is never sent the field, so its `turn` is
+  exactly what it was: the message's text files are written into `prompt`, each as
+  `<file name="notes.md">`, the file's text, `</file>`, and an image it cannot be given is said in a
+  line of words in `prompt` (so the model can tell the person it could not see it), not dropped
+  without a word. A client from before the feature, and one that validates `turn` strictly, are
+  unaffected.
+- **Sensitive data.** The bytes are what a person chose to share with the room; Chopin sends them
+  only to the client attached to that document, in the turn that answers the message, and keeps
+  no copy in the link. A client should treat them as it treats the prompt.
+
+The field is optional and additive: nothing here changes an existing message for a client that
+did not offer the feature, so the subprotocol stays `chopin.agent.v1`.
 
 ### Stream parts
 

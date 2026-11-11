@@ -9,6 +9,7 @@ import {
 	AGENT_VERSION,
 	encodeMessage,
 	LINK_CLOSE,
+	MAX_LINK_ATTACHMENT_BYTES,
 	MAX_LINK_MESSAGE_BYTES,
 	MAX_LINK_NOTE_LENGTH,
 	parseClientMessage,
@@ -324,6 +325,7 @@ describe("Agent connection messages", () => {
 			resumableSessions: AGENT_FEATURES.resumableSessions,
 			restartNotice: AGENT_FEATURES.restartNotice,
 			capabilityCatalog: AGENT_FEATURES.capabilityCatalog,
+			attachments: AGENT_FEATURES.attachments,
 			restartResumeRetryMs: RESTART_RESUME_RETRY_MS,
 		});
 		expect(AGENT_FEATURES.restartNotice).toBe("restart-notice");
@@ -668,5 +670,93 @@ describe("What Chopin can offer of a capability catalog", () => {
 		expect(usableCatalog({ commands: [{ name: "", kind: "" }] }).catalog).toEqual({
 			commands: [{ name: "", kind: "" }],
 		});
+	});
+});
+
+describe("Images and files in a turn", () => {
+	let turn = {
+		type: "turn" as const,
+		session: "s",
+		turn: "t",
+		prompt: "@ana: What is this?",
+		tools: [],
+	};
+	let image = {
+		id: "a1",
+		name: "shot.png",
+		kind: "image" as const,
+		mediaType: "image/png",
+		size: 7,
+		data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]).toString("base64"),
+	};
+	let file = {
+		id: "a2",
+		name: "notes.md",
+		kind: "file" as const,
+		mediaType: "text/plain",
+		size: 8,
+		data: Buffer.from("# Notes\n").toString("base64"),
+	};
+
+	it("is a feature a client asks for, named as the documentation names it", () => {
+		expect(AGENT_FEATURES.attachments).toBe("attachments");
+		expect(WIRE.attachments).toBe(AGENT_FEATURES.attachments);
+		// A turn's files fit inside one message with room for its prompt and tools.
+		expect(MAX_LINK_ATTACHMENT_BYTES * 4 / 3).toBeLessThan(MAX_LINK_MESSAGE_BYTES);
+	});
+
+	it("round-trips a turn's files, in order, with their bytes as base64", () => {
+		let message = { ...turn, attachments: [image, file] };
+		let parsed = parseServerMessage(JSON.stringify(message));
+		expect(parsed).toEqual({ ok: true, message });
+		expect(encodeMessage(message)).toBe(JSON.stringify(message));
+	});
+
+	it("keeps the turn an older client sees exactly as it was: the field is optional and never sent empty", () => {
+		expect(parseServerMessage(JSON.stringify(turn))).toEqual({ ok: true, message: turn });
+		expect(encodeMessage(turn)).toBe(JSON.stringify(turn));
+		expect(JSON.stringify(turn)).not.toContain("attachments");
+	});
+
+	it("refuses a file the protocol does not describe", () => {
+		for (
+			let bad of [
+				{ ...file, kind: "document" },
+				{ ...file, size: -1 },
+				{ ...file, name: "" },
+				{ ...file, extra: true },
+				{ id: "a3", name: "x", kind: "file", mediaType: "text/plain", size: 0 },
+			]
+		) {
+			expect(
+				parseServerMessage(JSON.stringify({ ...turn, attachments: [bad] })),
+				JSON.stringify(bad),
+			)
+				.toMatchObject({ ok: false });
+		}
+		expect(parseServerMessage(JSON.stringify({ ...turn, attachments: "shot.png" }))).toMatchObject({
+			ok: false,
+		});
+	});
+
+	it("takes what a model reads as a catalog reports it, and leaves the rest of the catalog alone", () => {
+		let reported = {
+			models: {
+				available: [
+					{ id: "acme/vision", name: "Vision", inputTypes: ["text", "image"] },
+					{ id: "acme/text", name: "Text", inputTypes: ["text"] },
+					{ id: "acme/unsaid", name: "Unsaid" },
+				],
+			},
+		};
+		let message = { type: "capabilities" as const, catalog: reported };
+		expect(parseClientMessage(JSON.stringify(message))).toEqual({ ok: true, message });
+		expect(usableCatalog(reported)).toEqual({ catalog: reported, skipped: [] });
+		expect(
+			parseClientMessage(JSON.stringify({
+				type: "capabilities",
+				catalog: { models: { available: [{ id: "a", name: "A", inputTypes: "image" }] } },
+			})),
+		).toMatchObject({ ok: false });
 	});
 });

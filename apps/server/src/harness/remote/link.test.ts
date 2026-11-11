@@ -1740,6 +1740,114 @@ describe("Agent connection capability catalog", () => {
 		}
 	});
 
+	it("carries a message's images and files to a client that offered attachments, and as words to one that did not", async () => {
+		let png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+		let notes = new TextEncoder().encode("# Notes\n");
+		let files = {
+			readsImages: true,
+			attachments: [
+				{ name: "shot.png", kind: "image" as const, mimeType: "image/png", bytes: png },
+				{ name: "notes.md", kind: "file" as const, mimeType: "text/plain", bytes: notes },
+			],
+		};
+		for (let offered of [true, false]) {
+			let f = await hostInputRoom();
+			cleanups.push(f.close);
+			let linked = await linkAuth(f.room.id);
+			let server = linkServer(linked.auth, 300);
+			cleanups.push(server.stop);
+			let seen: Array<{ prompt: string; attachments?: unknown }> = [];
+			let client = await connectAgent({
+				url: server.url,
+				token: MEMBER_TOKEN,
+				document: f.room.id,
+				resumable: false,
+				attachments: offered,
+				handlers: {
+					async turn(context) {
+						seen.push({
+							prompt: context.message.prompt,
+							...(context.message.attachments ? { attachments: context.message.attachments } : {}),
+						});
+						finishTurn(context);
+					},
+				},
+			});
+			cleanups.push(() => client.detach());
+			expect(client.features.includes("attachments")).toBe(offered);
+			let agent = createPlannerAgent(
+				createRemoteAdapter(sessionId => ({
+					link: server.links.at(-1)!,
+					planner: remotePlanner(sessionId)!,
+				})),
+			);
+			let owner = {
+				channelId: f.room.id,
+				token: "test-token",
+				repository: { id: "R_test", owner: "org", name: "repo", defaultBranch: "main" },
+				signal: new AbortController().signal,
+				currentToken: () => "test-token",
+				revalidate: async () => true,
+				release() {},
+			} as unknown as ActiveOwnerBinding;
+			let opened = await openPlannerSession(owner, {
+				room: f.room,
+				repository: owner.repository,
+				instructions: "Plan.",
+				harness: "remote",
+			}, {
+				githubTools: async () => ({ ok: true, value: {} }),
+				createSandbox: async () => sandboxSession,
+				registerCredential: () => () => {},
+				agent,
+			});
+			if (!opened.ok) throw new Error("Planner unavailable");
+			let session = opened.value;
+			cleanups.push(() => session.destroy());
+			let run = async (sent?: typeof files) => {
+				let result = await session.stream(
+					"@ana: What is this?",
+					new AbortController().signal,
+					undefined,
+					sent,
+				);
+				for await (let _part of result.fullStream);
+			};
+			await run(files);
+			await run();
+			if (offered) {
+				expect(seen[0]!.prompt).toBe("@ana: What is this?");
+				expect(seen[0]!.attachments).toEqual([
+					{
+						id: expect.any(String),
+						name: "shot.png",
+						kind: "image",
+						mediaType: "image/png",
+						size: png.byteLength,
+						data: Buffer.from(png).toString("base64"),
+					},
+					{
+						id: expect.any(String),
+						name: "notes.md",
+						kind: "file",
+						mediaType: "text/plain",
+						size: notes.byteLength,
+						data: Buffer.from(notes).toString("base64"),
+					},
+				]);
+			} else {
+				// Nothing a client did not ask for reaches it: its files are in the prompt, as words.
+				expect(seen[0]).not.toHaveProperty("attachments");
+				expect(seen[0]!.prompt).toBe(
+					"@ana: What is this?\n\n(An image, shot.png, was sent with this message, but this client can't be given images.)\n\n"
+						+ '<file name="notes.md">\n# Notes\n\n</file>',
+				);
+			}
+			// A turn with no files is the turn it always was.
+			expect(seen[1]).toEqual({ prompt: "@ana: What is this?" });
+		}
+	});
+
 	it("is a protocol violation from a client that did not offer the feature", async () => {
 		let { server, channel } = await setup();
 		for (let header of [undefined, "run-stage-deltas"]) {

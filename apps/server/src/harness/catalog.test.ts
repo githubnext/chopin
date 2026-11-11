@@ -123,6 +123,23 @@ describe("the catalog of a remote Planner", () => {
 		expect(catalog.models[709]).toEqual({ id: "p/m709", name: "M 709", provider: { id: "p" } });
 	});
 
+	it("tells the room what each model reads, as the client reported it, and nothing where it did not", () => {
+		let catalog = remoteCatalog({
+			models: {
+				available: [
+					{ id: "a", name: "A", inputTypes: ["text", "image"] },
+					{ id: "b", name: "B", inputTypes: [] },
+					{ id: "c", name: "C" },
+				],
+			},
+		}, undefined)!;
+		expect(catalog.models).toEqual([
+			{ id: "a", name: "A", inputTypes: ["text", "image"] },
+			{ id: "b", name: "B", inputTypes: [] },
+			{ id: "c", name: "C" },
+		]);
+	});
+
 	it("carries a default the client spelled with empty strings as it did", () => {
 		let catalog = remoteCatalog({
 			models: { available: [{ id: "", name: "" }], default: { id: "", thinkingLevel: "" } },

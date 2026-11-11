@@ -30,6 +30,7 @@ import type {
 	RefusalCode,
 	ServerMessage,
 	ServerMessageOf,
+	TurnAttachment,
 } from "@chopin/agent-link";
 import type { Chat as Wire } from "@chopin/protocol";
 import type { JsonValue, PlannerHeldSession } from "../../storage/model";
@@ -138,13 +139,49 @@ function within<T>(operation: Promise<T>, ms: number, message: string): Promise<
 	]).finally(() => clearTimeout(timer));
 }
 
-function promptText(prompt: HarnessV1PromptTurnOptions["prompt"]): string {
-	if (typeof prompt === "string") return prompt;
-	if (typeof prompt.content === "string") return prompt.content;
-	return prompt.content.map(part => {
-		if (part.type !== "text") throw unsupported(`${part.type} prompt parts`);
-		return part.text;
-	}).join("\n\n");
+/**
+ * What a turn's prompt comes to for an attached client. With `attachments` its images and text
+ * files go in the turn's own field, as bytes; without it a client is sent what it has always been
+ * sent, the prompt as text: each text file written into it under its name, and an image, which the
+ * client cannot be given, said in words so the model can tell the person it could not see it.
+ */
+export function promptParts(
+	prompt: HarnessV1PromptTurnOptions["prompt"],
+	takesAttachments: boolean,
+): { prompt: string; attachments: TurnAttachment[] } {
+	if (typeof prompt === "string") return { prompt, attachments: [] };
+	if (typeof prompt.content === "string") return { prompt: prompt.content, attachments: [] };
+	let texts: string[] = [];
+	let attachments: TurnAttachment[] = [];
+	for (let part of prompt.content) {
+		if (part.type === "text") {
+			texts.push(part.text);
+			continue;
+		}
+		let image = part.type === "image";
+		let data = part.type === "image" ? part.image : part.type === "file" ? part.data : undefined;
+		if (!(data instanceof Uint8Array)) throw unsupported(`${part.type} prompt parts`);
+		let name = part.type === "file"
+			? part.filename ?? "file"
+			: String((part.providerOptions?.chopin as { name?: unknown } | undefined)?.name ?? "image");
+		if (takesAttachments) {
+			attachments.push({
+				id: crypto.randomUUID(),
+				name,
+				kind: image ? "image" : "file",
+				mediaType: part.mediaType ?? "application/octet-stream",
+				size: data.byteLength,
+				data: Buffer.from(data).toString("base64"),
+			});
+		} else if (image) {
+			texts.push(
+				`(An image, ${name}, was sent with this message, but this client can't be given images.)`,
+			);
+		} else {
+			texts.push(`<file name=${JSON.stringify(name)}>\n${new TextDecoder().decode(data)}\n</file>`);
+		}
+	}
+	return { prompt: texts.join("\n\n"), attachments };
 }
 
 function hostError(message: string): { error: string } {
@@ -786,7 +823,8 @@ class RemoteSession {
 	async #prompt(options: PlannerTurn): Promise<HarnessV1PromptControl> {
 		this.#ready();
 		if (options.skills.length > 0) throw unsupported("skills");
-		let prompt = promptText(options.prompt);
+		let takesAttachments = this.#port.features?.includes(AGENT_FEATURES.attachments) === true;
+		let { prompt, attachments } = promptParts(options.prompt, takesAttachments);
 		await this.#port.revalidate();
 		this.#ready();
 		// A client that did not ask for option previews is not offered the tool that makes their images.
@@ -818,6 +856,7 @@ class RemoteSession {
 			session: this.id,
 			turn: turn.id,
 			prompt,
+			...(attachments.length ? { attachments } : {}),
 			...(options.instructions === undefined ? {} : { instructions: options.instructions }),
 			...(options.model ? { model: options.model } : {}),
 			...(thinkingLevel ? { thinkingLevel } : {}),

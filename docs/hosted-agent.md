@@ -857,6 +857,18 @@ and `CHAT_ATTACHMENT_MAX_TOTAL_BYTES` for all of a message's (4 MiB). See
 [Self-hosting](self-hosting.md). Under `HARNESS=remote` the per-file and total caps are never more
 than 1 MiB.
 
+**To the Planner.** A file sent with a message to the Planner reaches its turn as the message's own
+parts: a text file as a file part (`text/plain`) and an image as an image part, and only where the
+model the turn would run reads images, by its catalog entry's `inputTypes`. A model that does not
+say so reads as text only, and so does a harness that reports no catalog (`copilot-sdk`), so the
+paperclip explains why images are unavailable there and the server refuses an image sent to the
+Planner all the same ("This model can't read images"); the same image can go to the room. Atomic is
+given images as its own prompt images and each text file written into the prompt under its name;
+the Copilot SDK likewise, with images as blob attachments; a remote Planner's client is sent them
+in the turn's `attachments` if it asked for that feature, and otherwise as words (see [Images and files in a turn](agent-connection.md#images-and-files-in-a-turn)). If the model has stopped
+reading images by the time the turn starts, the prompt says which images were sent and not shown.
+A repair attempt of a turn is given the prompt alone.
+
 **Reading.** `GET /api/channels/:channelId/attachments/:id` answers a person who can read the
 document, and only once a message has been sent with the file (before that only its uploader may). A
 person who cannot, a missing file and another document's file are the same `404`. A raster image is

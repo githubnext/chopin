@@ -456,7 +456,6 @@ export declare namespace Chat {
 		handle: string;
 		text: string;
 		references?: Reference[];
-		attachments?: Attachment[];
 	};
 
 	export type Queue = KIND<"chat:queue"> & { waiting: Waiting[] };
