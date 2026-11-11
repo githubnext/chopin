@@ -67,6 +67,55 @@ describe("the GitHub client", () => {
 		await expect(broken.repositoryFiles("ghu", "o", "r", "main")).rejects.toThrow(GitHubError);
 	});
 
+	it("lists the human collaborators who can read a repository, with their GitHub pictures", async () => {
+		let called: string[] = [];
+		let client = new GitHubClient({
+			fetch: async input => {
+				let url = String(input);
+				called.push(url);
+				if (url.endsWith("page=1")) {
+					return Response.json([
+						{
+							login: "mona",
+							avatar_url: "https://avatars.test/mona",
+							type: "User",
+							permissions: { pull: true, push: true, admin: false },
+						},
+						{
+							login: "dependabot[bot]",
+							avatar_url: "https://avatars.test/bot",
+							type: "Bot",
+							permissions: { pull: true, push: true, admin: false },
+						},
+						{
+							login: "barred",
+							avatar_url: "https://avatars.test/barred",
+							type: "User",
+							permissions: { pull: false, push: false, admin: false },
+						},
+					], {
+						headers: {
+							link:
+								'<https://github.test/repos/octo-org/score/collaborators?per_page=100&page=2>; rel="next"',
+						},
+					});
+				}
+				return Response.json([
+					{ login: "nell_acme", avatar_url: "https://avatars.test/nell" },
+				]);
+			},
+			endpoints: { api: "https://github.test" },
+		});
+		expect(await client.repositoryCollaborators("ghu", "octo-org", "score")).toEqual([
+			{ login: "mona", avatarUrl: "https://avatars.test/mona" },
+			{ login: "nell_acme", avatarUrl: "https://avatars.test/nell" },
+		]);
+		expect(called).toEqual([
+			"https://github.test/repos/octo-org/score/collaborators?per_page=100&page=1",
+			"https://github.test/repos/octo-org/score/collaborators?per_page=100&page=2",
+		]);
+	});
+
 	it("builds an OAuth authorization URL with state and PKCE", () => {
 		let client = new GitHubClient();
 		let url = new URL(client.authorize({
