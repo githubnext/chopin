@@ -220,6 +220,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 					"menu",
 				],
 			},
+			{
+				id: "chat-media",
+				label: "Chat media",
+				source: "apps/web/src/chat/media/layout.ts",
+				states: ["image", "pair", "trio", "quad", "unavailable", "files", "staged", "viewer"],
+			},
 		],
 	},
 	{
