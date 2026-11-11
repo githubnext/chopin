@@ -610,6 +610,7 @@ export function RoomWorkspace(
 	let [chatAttachments, setChatAttachments] = useState<{
 		wire?: Wire;
 		settings?: Session.AttachmentSettings;
+		transcription?: { provider: string };
 	}>({});
 	let [metadata, setMetadata] = useState<WorkspaceMetadata>({
 		archivedAt,
@@ -1246,7 +1247,11 @@ export function RoomWorkspace(
 				setEffectiveCanManage(frame.canManage);
 				setChatReferences({ wire: socket, enabled: frame.chatReferences === true });
 				setChatSendAcks({ wire: socket, enabled: frame.chatSendAcks === true });
-				setChatAttachments({ wire: socket, settings: frame.attachments });
+				setChatAttachments({
+					wire: socket,
+					settings: frame.attachments,
+					transcription: frame.transcription,
+				});
 				setResearchExecution(frame.webResearch === true);
 				updateMetadata(frame);
 				if (accessChanged) onRepositoryAccessChanged();
@@ -2037,6 +2042,9 @@ export function RoomWorkspace(
 								}}
 								referencesEnabled={chatReferences.wire === wire && chatReferences.enabled}
 								attachments={chatAttachments.wire === wire ? chatAttachments.settings : undefined}
+								transcription={chatAttachments.wire === wire
+									? chatAttachments.transcription
+									: undefined}
 								repository={repository}
 								room={room}
 								sendAcknowledgements={chatSendAcks.wire === wire && chatSendAcks.enabled}

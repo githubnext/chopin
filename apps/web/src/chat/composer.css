@@ -555,3 +555,59 @@
 	color: var(--color-text-tertiary);
 	font-size: var(--text-xs);
 }
+
+/* What is being dictated and not yet settled: shown beside the caret in a quieter ink, then replaced. */
+.chat-composer .draft-interim::after {
+	content: attr(data-interim);
+	color: var(--color-text-tertiary);
+}
+
+/* Listening: a dot that breathes, and the time so far. It holds still where motion is reduced. */
+.chat-composer .composer-recording {
+	display: inline-flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	padding-inline: calc(var(--spacing) * 1);
+	color: var(--color-text-tertiary);
+	font-size: var(--text-2xs);
+	font-variant-numeric: tabular-nums;
+}
+.chat-composer .composer-recording-dot {
+	width: calc(var(--spacing) * 2);
+	height: calc(var(--spacing) * 2);
+	border-radius: var(--radius-full);
+	background: var(--color-danger-graphic);
+	animation: composer-recording-breathe calc(var(--duration-linger) * 2.5) var(--ease-out) infinite
+		alternate;
+}
+.chat-composer .composer-recording[data-phase="transcribing"] .composer-recording-dot {
+	background: var(--color-neutral-graphic);
+}
+@keyframes composer-recording-breathe {
+	to {
+		opacity: 0.35;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.chat-composer .composer-recording-dot {
+		animation: none;
+	}
+}
+.chat-composer .composer-dictate[aria-pressed="true"] {
+	color: var(--color-danger-icon);
+}
+
+/* Why dictation stopped without finishing: a line above the field in the danger text, with no frame. */
+.chat-composer .composer-dictation-failure {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: calc(var(--spacing) * 2);
+	margin-bottom: calc(var(--spacing) * 1.5);
+	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2) calc(var(--spacing) * 1.5)
+		calc(var(--spacing) * 3);
+	border-radius: var(--radius-lg);
+	background: var(--color-danger-surface);
+	color: var(--color-danger-text);
+	font-size: var(--text-xs);
+}

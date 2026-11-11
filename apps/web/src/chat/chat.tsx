@@ -83,6 +83,8 @@ import { pointerGroups, useMentionSources } from "./mention-sources";
 import type { PointerOption } from "./mention-sources";
 import { modelReadsImages } from "@chopin/protocol/model-choice";
 import { useFiles } from "./attachments/use-files";
+import { dictationSource, useDictation } from "./dictation/use-dictation";
+import { currentShortcutPlatform, shortcutLabel } from "../shortcuts";
 import { composerModelNotice } from "./model-picker-state";
 import { useModelChoice } from "./use-model-choice";
 import {
@@ -157,6 +159,8 @@ export type ChatProps = {
 	referencesEnabled: boolean;
 	/** The caps on the images and files a message may carry; absent where the server takes none. */
 	attachments?: Session.AttachmentSettings;
+	/** Set where the deployment turns recordings into words, naming who does it. */
+	transcription?: { provider: string };
 	repository: Pick<Repository, "id" | "name" | "owner">;
 	room: string;
 	sendAcknowledgements: boolean;
@@ -284,6 +288,7 @@ export function Chat(
 		onShowResearch,
 		referencesEnabled,
 		attachments,
+		transcription,
 		repository,
 		room,
 		sendAcknowledgements,
@@ -491,6 +496,43 @@ export function Chat(
 		);
 	}, [filesKey]);
 	let submitAgain = useRef<() => void>(() => {});
+	let selectionRef = useRef(selection);
+	selectionRef.current = selection;
+	// Speech becomes words in the draft at the caret: the draft is ordinary text and stays editable.
+	let dictation = useDictation({
+		source: useMemo(
+			() =>
+				typeof window === "undefined"
+					? undefined
+					: dictationSource(window, navigator.mediaDevices, transcription),
+			[transcription?.provider],
+		),
+		room,
+		lang: typeof navigator === "undefined" ? "en-US" : navigator.language || "en-US",
+		read: () => ({ text: draftRef.current.text, caret: selectionRef.current.start }),
+		write: (text, caret, from) => {
+			let revised = reviseComposerDraft(
+				draftRef.current,
+				text,
+				reconcileReferenceDrafts(draftRef.current.text, text, draftRef.current.references, {
+					start: from,
+					end: from,
+				}),
+			);
+			draftRef.current = revised;
+			selectionRef.current = { start: caret, end: caret };
+			setDraft(revised);
+			setSelection({ start: caret, end: caret });
+			setSendError(undefined);
+			pendingCaret.current = caret;
+		},
+	});
+	let dictationRef = useRef(dictation);
+	dictationRef.current = dictation;
+	// A composer that can no longer take words stops listening for them.
+	useEffect(() => {
+		if (!draftable) dictationRef.current?.stop();
+	}, [draftable]);
 	usePendingWork(
 		!!draft.text.trim() || files.files.length > 0 || outbox.some(item => !item.acknowledged)
 			|| retractions.length > 0,
@@ -723,6 +765,20 @@ export function Chat(
 	let submit = () => {
 		if (submission.current || !draftable || awaitingFiles.current) return;
 		typing.current?.stop();
+		// What was being said is sent as it was shown, and listening ends.
+		let spoken = dictationRef.current?.settle(draftRef.current.text);
+		if (spoken && spoken.text !== draftRef.current.text) {
+			let revised = reviseComposerDraft(
+				draftRef.current,
+				spoken.text,
+				reconcileReferenceDrafts(draftRef.current.text, spoken.text, draftRef.current.references, {
+					start: spoken.at,
+					end: spoken.at,
+				}),
+			);
+			draftRef.current = revised;
+			setDraft(revised);
+		}
 		let current = draftRef.current;
 		if (!runsCommand(current.references) && draftCommand(current.text)) {
 			// `#` references stay in the brief as their visible titles.
@@ -1291,6 +1347,25 @@ export function Chat(
 						onRetry: files.retry,
 					}
 					: undefined}
+				dictation={dictation
+					? {
+						active: dictation.active,
+						phase: dictation.phase,
+						seconds: dictation.seconds,
+						announcement: dictation.announcement,
+						failure: dictation.failure,
+						onDismissFailure: dictation.dismiss,
+						disabled: !draftable || sending,
+						onToggle: dictation.toggle,
+						tooltip: `${dictation.active ? "Stop dictating" : "Dictate"} (${
+							shortcutLabel("dictate", currentShortcutPlatform())
+						}). ${
+							dictation.source === "browser"
+								? "Speech is turned into words on this device."
+								: `Your recording is sent to ${transcription?.provider} to be turned into words.`
+						}`,
+					}
+					: undefined}
 				draftable={draftable}
 				sending={sending}
 				sendDisabled={!draftable || sending || (!draft.text.trim() && files.files.length === 0)
@@ -1388,8 +1463,10 @@ export function Chat(
 							start: event.currentTarget.selectionStart,
 							end: event.currentTarget.selectionEnd,
 						});
+						dictation?.follow(event.currentTarget.selectionStart);
 					},
 					onBlur: () => typing.current?.stop(),
+					interim: dictation?.interim,
 					onKeyDown: event => {
 						let composing = event.nativeEvent.isComposing || event.keyCode === 229;
 						let chipAction = agent && draftable && !sending
@@ -1502,11 +1579,13 @@ export function Chat(
 						event.preventDefault();
 						submit();
 					},
-					onSelect: event =>
+					onSelect: event => {
 						setSelection({
 							start: event.currentTarget.selectionStart,
 							end: event.currentTarget.selectionEnd,
-						}),
+						});
+						dictation?.follow(event.currentTarget.selectionStart);
+					},
 					value: draft.text,
 				}}
 			/>

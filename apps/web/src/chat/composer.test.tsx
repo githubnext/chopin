@@ -395,3 +395,69 @@ test("none of the words about files uses a term of Chopin's own", () => {
 	expect(words.some(text => text.includes("Add files"))).toBe(true);
 	for (let text of words) expect(INTERNAL.test(text), text).toBe(false);
 });
+
+const DICTATION = {
+	active: false,
+	phase: "idle" as const,
+	seconds: 0,
+	tooltip: "Dictate (Alt+Shift+M). Speech is turned into words on this device.",
+	announcement: "",
+	onToggle: () => {},
+	onDismissFailure: () => {},
+	disabled: false,
+};
+
+test("offers the microphone only where speech can be turned into words, named as it is", () => {
+	expect(render()).not.toContain('aria-label="Dictate"');
+	expect(render()).not.toContain("data-chat-dictation-announcement");
+	let idle = render({ dictation: DICTATION });
+	expect(idle).toMatch(/<button[^>]*aria-label="Dictate"[^>]*aria-pressed="false"/);
+	expect(idle).toContain(
+		'title="Dictate (Alt+Shift+M). Speech is turned into words on this device."',
+	);
+	expect(idle).toMatch(
+		/<p[^>]*aria-live="polite"[^>]*data-chat-dictation-announcement=""[^>]*role="status"/,
+	);
+	expect(idle).not.toContain("composer-recording");
+});
+
+test("shows that it is listening with the time so far, and says when it is working on a recording", () => {
+	let listening = render({
+		dictation: { ...DICTATION, active: true, phase: "listening", seconds: 65 },
+	});
+	expect(listening).toMatch(/<button[^>]*aria-label="Dictate"[^>]*aria-pressed="true"/);
+	expect(listening).toContain('data-phase="listening"');
+	expect(listening).toContain(">1:05<");
+	let transcribing = render({
+		dictation: { ...DICTATION, active: true, phase: "transcribing", seconds: 3 },
+	});
+	expect(transcribing).toContain(">Transcribing<");
+});
+
+test("says why dictation stopped, as an alert above the field that can be dismissed", () => {
+	let failed = render({
+		dictation: { ...DICTATION, failure: "No microphone was found." },
+	});
+	expect(failed).toMatch(/<div[^>]*data-chat-dictation-failure=""[^>]*role="alert"/);
+	expect(failed).toContain("No microphone was found.");
+	expect(failed).toContain('aria-label="Dismiss"');
+	expect(render({ dictation: DICTATION })).not.toContain("data-chat-dictation-failure");
+});
+
+test("none of the words about dictation uses a term of Chopin's own", () => {
+	let markup = render({
+		dictation: {
+			...DICTATION,
+			active: true,
+			phase: "transcribing",
+			announcement: "Dictation started",
+			failure: "Microphone access is blocked. Allow it in your browser's settings to dictate.",
+		},
+	});
+	let words = [
+		...markup.matchAll(/\b(?:aria-label|data-tooltip|title)="([^"]*)"/g),
+		...markup.matchAll(/>([^<>]+)</g),
+	].map(match => match[1]!);
+	expect(words.some(text => text.includes("Dictation started"))).toBe(true);
+	for (let text of words) expect(INTERNAL.test(text), text).toBe(false);
+});
