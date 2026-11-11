@@ -36,6 +36,20 @@ export function modelLevels(catalog: Catalog | undefined, model: string | undefi
 }
 
 /**
+ * Whether the model a turn would run reads images: the chosen model, or the agent's default when
+ * none is chosen, and only when its catalog entry says `image`. A catalog that names no input
+ * types, or none at all, reads as text only, so an image is never sent to a model that has not
+ * said it can read one.
+ */
+export function modelReadsImages(
+	catalog: Catalog | undefined,
+	choice: Choice | undefined,
+): boolean {
+	let model = resolveChoice(catalog, choice).model ?? catalog?.default?.model;
+	return catalogModel(catalog, model)?.inputTypes?.includes("image") === true;
+}
+
+/**
  * Checks a stored choice against the catalog. A model the catalog does not list is not chosen, and
  * neither is a thinking level its model does not list; each is reported in `unavailable` and the
  * agent's default runs in its place. The stored choice itself is never changed here.
