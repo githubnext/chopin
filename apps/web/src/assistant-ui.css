@@ -1,0 +1,87 @@
+/*
+ * assistant-ui and shadcn's colours, read from Chopin's. Copied components name their colours by role
+ * (`bg-background`, `text-muted-foreground`, `ring-ring/50`) and read these variables; this maps each
+ * role onto the Chopin token that plays it, so a copy looks as assistant-ui draws it, in Chopin's
+ * colours. Colours only: sizes, radii, type and motion are the copies' own (see the geometry layer
+ * below, which `bun scripts/record-registry-sources.ts` writes), and none of Chopin's button fills,
+ * rings or shadows is mapped, because assistant-ui draws none of them.
+ *
+ * `shadcn add` appends the `@import` an item needs here. Keep that line; review anything else it adds.
+ */
+@import "tw-animate-css";
+@import "./components/geometry.css";
+
+/* Chopin is light only (`color-scheme: light`), so `dark:` never follows the system. */
+@custom-variant dark (&:is(.dark *));
+
+@theme static {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	/* `destructive` is Chopin's own role already: `--color-destructive` is the red. */
+	/* The one raw palette colour the copies use (a dialog's scrim) is Chopin's ink. */
+	--color-black: var(--color-gray-900);
+}
+
+:root {
+	--background: var(--color-page);
+	--foreground: var(--color-text-primary);
+	--card: var(--color-page);
+	--card-foreground: var(--color-text-primary);
+	--popover: var(--color-page);
+	--popover-foreground: var(--color-text-primary);
+	/* Petrol is the action colour here, where assistant-ui's default is ink. */
+	--primary: var(--color-brand);
+	--primary-foreground: var(--color-page);
+	/* assistant-ui's secondary, muted and accent are one light surface (97% lightness). */
+	--secondary: var(--color-hover);
+	--secondary-foreground: var(--color-text-primary);
+	--muted: var(--color-inset);
+	--muted-foreground: var(--color-text-tertiary);
+	--accent: var(--color-hover);
+	--accent-foreground: var(--color-text-primary);
+	--destructive: var(--color-destructive);
+	/* One passive edge for borders and fields: assistant-ui draws a hairline, not a ring. */
+	--border: var(--color-edge);
+	--input: var(--color-edge);
+	--ring: var(--focus-ring-color);
+}
+
+/*
+ * Chopin has no dark theme, so `.dark` reads the same tokens and a `dark:` class changes nothing
+ * but its alpha. When a dark theme exists its tokens go here, and nowhere else.
+ */
+.dark {
+	--background: var(--color-page);
+	--foreground: var(--color-text-primary);
+	--card: var(--color-page);
+	--card-foreground: var(--color-text-primary);
+	--popover: var(--color-page);
+	--popover-foreground: var(--color-text-primary);
+	--primary: var(--color-brand);
+	--primary-foreground: var(--color-page);
+	--secondary: var(--color-hover);
+	--secondary-foreground: var(--color-text-primary);
+	--muted: var(--color-inset);
+	--muted-foreground: var(--color-text-tertiary);
+	--accent: var(--color-hover);
+	--accent-foreground: var(--color-text-primary);
+	--destructive: var(--color-destructive);
+	--border: var(--color-edge);
+	--input: var(--color-edge);
+	--ring: var(--focus-ring-color);
+}

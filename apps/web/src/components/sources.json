@@ -16,6 +16,13 @@
 			"sha256": "019d3dca2d33724de16b9eb54757344cd05bd5c89f2fc3cb2885cdcc2590f4d9"
 		},
 		{
+			"file": "apps/web/src/components/geometry.css",
+			"registry": "tailwindcss",
+			"item": "theme.css",
+			"version": "tailwindcss@4.3.0",
+			"sha256": "156a71bef960af8a0f1b9fa407afd5cc2928628900a5efe7840b19741f2ae9d4"
+		},
+		{
 			"file": "apps/web/src/components/ui/button.tsx",
 			"registry": "@shadcn",
 			"item": "button",

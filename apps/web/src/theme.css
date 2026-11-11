@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@chopin/visuals/theme.css";
+@import "./assistant-ui.css";
 @import "./conversation-plan/source.css";
 @import "./build-view.css";
 @import "./criteria.css";

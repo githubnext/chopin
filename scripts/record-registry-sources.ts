@@ -1,0 +1,209 @@
+#!/usr/bin/env bun
+/**
+ * Records what `shadcn add` copied, so the design contract can accept it as third-party source.
+ *
+ *   bunx shadcn@latest add @assistant-ui/<element> --cwd apps/web
+ *   bun scripts/record-registry-sources.ts @assistant-ui/<element>
+ *
+ * For each item named, and the registry items it stands on, this finds the files shadcn wrote,
+ * records the registry, item, upstream revision and sha256 of each in
+ * `apps/web/src/components/sources.json`, and writes the assistant-ui layer
+ * (`scripts/assistant-ui-layer.ts`) again, since it follows the copies' `data-slot` roots.
+ * With no item it only writes the layer, which is what a Tailwind upgrade needs.
+ */
+
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join, posix } from "node:path";
+
+import { LAYER_FILE, layerCss, slotsOf } from "./assistant-ui-layer";
+import { RECORDED_MANIFEST, sha256 } from "./design-contract/registry.mjs";
+
+const ROOT = dirname(import.meta.dir);
+/** What `shadcn` itself resolves a bare name against. */
+const SHADCN = "https://ui.shadcn.com/r/styles/{style}/{name}.json";
+const REPOSITORIES: Record<string, string> = {
+	"@assistant-ui": "assistant-ui/assistant-ui",
+	"@shadcn": "shadcn-ui/ui",
+};
+
+export type Config = {
+	style: string;
+	aliases: Record<"components" | "ui" | "lib" | "hooks", string>;
+	registries?: Record<string, string>;
+};
+export type RegistryFile = { type: string; path: string; target?: string };
+export type Item = {
+	registry: string;
+	name: string;
+	files: RegistryFile[];
+	registryDependencies: string[];
+};
+
+/** `@/components/ui` is `apps/web/src/components/ui`, by `paths` in apps/web/tsconfig.json. */
+function aliased(alias: string): string {
+	if (!alias.startsWith("@/")) throw new Error(`Alias ${alias} is not under @/ (src)`);
+	return posix.join("apps/web/src", alias.slice(2));
+}
+
+/** shadcn's rule: what follows the first directory of the file's path named as the target's last. */
+function nested(path: string, directory: string): string {
+	let segments = path.replace(/^\/|\/$/g, "").split("/");
+	let last = directory.split("/").at(-1);
+	let at = segments.findIndex(segment => segment === last);
+	return at < 0 ? segments.at(-1)! : segments.slice(at + 1).join("/");
+}
+
+/** Where `shadcn add` writes a registry file, with the aliases in `components.json`. */
+export function installedPath(file: RegistryFile, config: Config): string {
+	if (file.target) return posix.join("apps/web/src", file.target.replace(/^src\//, ""));
+	let directory = {
+		"registry:ui": config.aliases.ui,
+		"registry:lib": config.aliases.lib,
+		"registry:hook": config.aliases.hooks,
+		"registry:component": config.aliases.components,
+		"registry:block": config.aliases.components,
+	}[file.type];
+	if (!directory) throw new Error(`Unknown registry file type ${file.type} (${file.path})`);
+	return posix.join(aliased(directory), nested(file.path, directory));
+}
+
+/** Where an item address is fetched from, and the registry it belongs to. */
+export function itemUrl(address: string, config: Config): { url: string; registry: string } {
+	if (/^https?:\/\//.test(address)) {
+		return {
+			url: address,
+			registry: new URL(address).host === "ui.shadcn.com" ? "@shadcn" : "@assistant-ui",
+		};
+	}
+	let named = /^(@[\w-]+)\/(.+)$/.exec(address);
+	let registry = named?.[1] ?? "@shadcn";
+	let template = registry === "@shadcn" ? SHADCN : config.registries?.[registry];
+	if (!template) throw new Error(`${registry} is not a registry in components.json`);
+	return {
+		registry,
+		url: template.replace("{style}", config.style).replace("{name}", named?.[2] ?? address),
+	};
+}
+
+async function fetchItem(address: string, config: Config): Promise<Item> {
+	let { url, registry } = itemUrl(address, config);
+	let response = await fetch(url);
+	if (!response.ok) throw new Error(`${url} answered ${response.status}`);
+	let item = await response.json() as {
+		name: string;
+		files?: RegistryFile[];
+		registryDependencies?: string[];
+	};
+	return {
+		registry,
+		name: item.name,
+		files: item.files ?? [],
+		registryDependencies: item.registryDependencies ?? [],
+	};
+}
+
+/** The item and everything it stands on, each once. */
+async function resolve(addresses: string[], config: Config): Promise<Item[]> {
+	let items = new Map<string, Item>();
+	let pending = [...addresses];
+	while (pending.length) {
+		let item = await fetchItem(pending.shift()!, config);
+		let key = `${item.registry}/${item.name}`;
+		if (items.has(key)) continue;
+		items.set(key, item);
+		pending.push(...item.registryDependencies);
+	}
+	return [...items.values()];
+}
+
+/** The upstream repository's main commit now, which is what the registry serves from. */
+function revision(registry: string): string {
+	let repository = REPOSITORIES[registry];
+	if (!repository) throw new Error(`No upstream repository is known for ${registry}`);
+	let listed = spawnSync("git", [
+		"ls-remote",
+		`https://github.com/${repository}`,
+		"refs/heads/main",
+	], {
+		encoding: "utf8",
+	});
+	let commit = /^([0-9a-f]{40})\s/.exec(listed.stdout)?.[1];
+	if (!commit) throw new Error(`Could not read ${repository}'s main commit: ${listed.stderr}`);
+	return `${repository}@${commit.slice(0, 12)}`;
+}
+
+type Entry = {
+	file: string;
+	registry: string;
+	item: string;
+	version: string;
+	sha256: string;
+};
+
+function readManifest(): Entry[] {
+	let path = join(ROOT, RECORDED_MANIFEST);
+	return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")).files : [];
+}
+
+function write(path: string, content: string) {
+	mkdirSync(dirname(join(ROOT, path)), { recursive: true });
+	writeFileSync(join(ROOT, path), content);
+}
+
+/** The layer, from Tailwind's theme, Chopin's, and the roots of everything recorded. */
+export function writeLayer(entries: Entry[]): Entry {
+	let tailwind = createRequire(join(ROOT, "apps/web/package.json")).resolve(
+		"tailwindcss/theme.css",
+	);
+	let version = JSON.parse(readFileSync(join(dirname(tailwind), "package.json"), "utf8")).version;
+	let slots = entries.filter(entry => /\.tsx?$/.test(entry.file))
+		.flatMap(entry => slotsOf(readFileSync(join(ROOT, entry.file), "utf8")));
+	let css = layerCss({
+		tailwind: readFileSync(tailwind, "utf8"),
+		chopin: readFileSync(join(ROOT, "packages/visuals/theme.css"), "utf8"),
+		slots,
+	});
+	write(LAYER_FILE, css);
+	return {
+		file: LAYER_FILE,
+		registry: "tailwindcss",
+		item: "theme.css",
+		version: `tailwindcss@${version}`,
+		sha256: sha256(css),
+	};
+}
+
+if (import.meta.main) {
+	let config: Config = JSON.parse(readFileSync(join(ROOT, "apps/web/components.json"), "utf8"));
+	let addresses = process.argv.slice(2).filter(argument => !argument.startsWith("-"));
+	let kept = new Map(readManifest().map(entry => [entry.file, entry]));
+	let versions = new Map<string, string>();
+	for (let item of await resolve(addresses, config)) {
+		if (!item.files.length) continue;
+		let version = versions.get(item.registry) ?? revision(item.registry);
+		versions.set(item.registry, version);
+		for (let file of item.files) {
+			let path = installedPath(file, config);
+			if (!existsSync(join(ROOT, path))) {
+				throw new Error(
+					`${item.registry}/${item.name} should have written ${path}: run \`shadcn add\` first`,
+				);
+			}
+			kept.set(path, {
+				file: path,
+				registry: item.registry,
+				item: item.name,
+				version,
+				sha256: sha256(readFileSync(join(ROOT, path))),
+			});
+			console.log(`recorded ${path} (${item.registry}/${item.name})`);
+		}
+	}
+	kept.delete(LAYER_FILE);
+	let layer = writeLayer([...kept.values()]);
+	let files = [...kept.values(), layer].sort((a, b) => a.file.localeCompare(b.file));
+	write(RECORDED_MANIFEST, JSON.stringify({ schemaVersion: 1, files }, null, "\t") + "\n");
+	console.log(`recorded ${layer.file} (${layer.version}); ${files.length} files in all`);
+}
