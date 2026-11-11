@@ -65,6 +65,13 @@ export type Config = {
 	 * force are lower still; see `attachmentLimits`.
 	 */
 	chatAttachments: AttachmentLimits;
+	/**
+	 * Dictation's server transcription: `TRANSCRIPTION_MODEL` as `openai/<model>`, off unless it is
+	 * set. With it, a person's browser that has no on-device speech recognition may send a recording
+	 * of what they dictate to this server, which sends it to the provider; without it no audio is
+	 * ever sent anywhere. `TRANSCRIPTION_MAX_BYTES` bounds a recording.
+	 */
+	transcription?: { provider: "openai"; model: string; maxBytes: number };
 	/** Attempt deadline of one public-web evidence attempt, in milliseconds. Defaults to 10 minutes. */
 	researchEvidenceTimeoutMs?: number;
 	/** Explicitly enables the conversation-derived cards prototype. */
@@ -195,6 +202,25 @@ function whole(name: string, fallback: number, min: number, max: number): number
 		throw new Error(`${name} must be a whole number between ${min} and ${max}`);
 	}
 	return value;
+}
+
+function transcription(): Config["transcription"] {
+	let raw = process.env.TRANSCRIPTION_MODEL;
+	if (!raw || raw === "off") return undefined;
+	let match = /^(openai)\/(\S{1,100})$/.exec(raw);
+	if (!match) {
+		throw new Error(
+			"TRANSCRIPTION_MODEL must be off, or openai/<model> such as openai/gpt-4o-mini-transcribe",
+		);
+	}
+	if (!process.env.OPENAI_API_KEY) {
+		throw new Error("TRANSCRIPTION_MODEL=openai/... needs OPENAI_API_KEY");
+	}
+	return {
+		provider: "openai",
+		model: match[2]!,
+		maxBytes: whole("TRANSCRIPTION_MAX_BYTES", 5_242_880, 1, 26_214_400),
+	};
 }
 
 function chatAttachments(): AttachmentLimits {
@@ -388,6 +414,7 @@ export function load(): Config {
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",
 		chatAttachments: chatAttachments(),
+		transcription: transcription(),
 		researchEvidenceTimeoutMs: researchEvidenceTimeoutMs(),
 		conversationPlan,
 		conversationInitiativeModel,
