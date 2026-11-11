@@ -1,23 +1,18 @@
 /**
- * An image in Chat, and the lightbox that opens it.
+ * An image in Chat, and the message-level lightbox that opens it.
  *
- * Adapted from assistant-ui's Image element, https://github.com/assistant-ui/assistant-ui
- * (`packages/ui/src/components/react/assistant-ui/elements/image.tsx` at commit f92028b4; the file
- * last changed in 3b6591b1), MIT, Copyright (c) 2026 AgentbaseAI Inc. See THIRD_PARTY_NOTICES.
- *
- * Only its standalone lane is taken, driven by props: `ImageRoot`, `ImagePreview`, `ImageActions`
- * and the copy and download helpers (its `ImageFilename` is `ImageCaption`). Nothing needs
- * assistant-ui's runtime. Chopin's changes: Chopin's tokens, icons and buttons in place of
- * Tailwind's palette, lucide and `cva`; a frame that holds the image's own shape while it loads; the
- * alt text always shown; a "Generated" label; the one lightbox of the editor in place of the zoom
- * overlay; a copy that writes PNG, the one image type a browser lets a page copy; and actions that
- * are only offered for an image that loaded.
+ * Rendered through assistant-ui's copied `Image` and `ImageGallery` elements
+ * (`components/assistant-ui/elements/image.tsx` and `image-gallery.tsx`, recorded in
+ * `components/sources.json` with their extension-point patches; see `docs/assistant-ui.md` and
+ * `THIRD_PARTY_NOTICES.md`). Chopin's state drives them through props with none of assistant-ui's
+ * runtime: measured aspect ratios hold each single image's box while pixels arrive, alt text and
+ * captions stay on the page and available to assistive technology, external addresses are probed
+ * without credentials or referrer before offering byte-level copy/download, and all showable images
+ * of one message share `ImageGallery`'s `<Dialog>` lightbox in document order.
  */
 
 import {
 	createContext,
-	lazy,
-	Suspense,
 	useContext,
 	useEffect,
 	useId,
@@ -32,11 +27,14 @@ import {
 	DownloadIcon,
 	ExpandIcon,
 	ExternalLinkIcon,
-	ImageIcon,
 	ImageOffIcon,
 	LinkIcon,
-	SparkleIcon,
-} from "@chopin/icons";
+	SparklesIcon,
+} from "lucide-react";
+
+import { ImageActions, ImagePreview, ImageRoot } from "@/components/assistant-ui/elements/image";
+import { ImageGallery as GalleryElement } from "@/components/assistant-ui/elements/image-gallery";
+import { hostOf } from "@/components/assistant-ui/utils/href";
 
 import {
 	adoptedSize,
@@ -57,13 +55,9 @@ import { dataImageSize } from "./image-size";
 import { loadLocalImage } from "./local-image";
 import "./image.css";
 
-import type { ReactNode, SyntheticEvent } from "react";
-import type { LightboxImage } from "@chopin/editor/image-lightbox";
+import type { ComponentProps, CSSProperties, ReactNode, SyntheticEvent } from "react";
+import type { ImageActionItem } from "@/components/assistant-ui/elements/image";
 import type { Copied, ImageSource, Load, Settled } from "./image-state";
-
-const Lightbox = lazy(() =>
-	import("@chopin/editor/image-lightbox").then(({ ImageLightbox }) => ({ default: ImageLightbox }))
-);
 
 export type ChatImageData = {
 	src: string;
@@ -77,71 +71,115 @@ export type ChatImageData = {
 const DocumentContext = createContext<string | undefined>(undefined);
 export const ChatImageDocument = DocumentContext.Provider;
 
-type Loadable = Exclude<ImageSource, { kind: "unavailable" }>;
+export type Loadable = Exclude<ImageSource, { kind: "unavailable" }>;
 
-type Shown = { source: Loadable; url: string; type?: string };
+export type Shown = { source: Loadable; url: string; type?: string };
 
-type Entry = Shown & { data: ChatImageData; element: HTMLElement; image: LightboxImage };
-
-type Host = {
-	register(id: string, entry: Entry): () => void;
-	open(id: string): void;
+export type RegisteredImage = {
+	data: ChatImageData;
+	element: HTMLElement;
+	label: string;
+	order?: number;
+	shown: Shown;
 };
 
-const HostContext = createContext<Host | undefined>(undefined);
+export type ImageHost = {
+	register(id: string, entry: RegisteredImage): () => void;
+	open(id: string, opener?: HTMLElement | null): void;
+};
+
+const HostContext = createContext<ImageHost | undefined>(undefined);
+
+function compareEntries(
+	[, left]: [string, RegisteredImage],
+	[, right]: [string, RegisteredImage],
+): number {
+	if (left.element === right.element) return (left.order ?? 0) - (right.order ?? 0);
+	return left.element.compareDocumentPosition(right.element) & Node.DOCUMENT_POSITION_FOLLOWING
+		? -1
+		: 1;
+}
 
 export function MessageImages({ children }: { children: ReactNode }) {
-	let entries = useRef(new Map<string, Entry>());
-	let [view, setView] = useState<{ entries: Entry[]; start: number }>();
-	let host = useMemo<Host>(() => ({
+	let entries = useRef(new Map<string, RegisteredImage>());
+	let lastOpener = useRef<HTMLElement | null>(null);
+	let [view, setView] = useState<{
+		activeId: string;
+		entries: Array<[string, RegisteredImage]>;
+	}>();
+
+	useEffect(() => {
+		if (view !== undefined) return;
+		let opener = lastOpener.current;
+		lastOpener.current = null;
+		if (opener?.isConnected) opener.focus({ preventScroll: true });
+	}, [view]);
+
+	let host = useMemo<ImageHost>(() => ({
 		register(id, entry) {
 			entries.current.set(id, entry);
 			return () => void entries.current.delete(id);
 		},
-		open(id) {
-			let ordered = [...entries.current].sort(([, a], [, b]) =>
-				a.element.compareDocumentPosition(b.element) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
-			);
-			setView({
-				entries: ordered.map(([, entry]) => entry),
-				start: Math.max(0, ordered.findIndex(([key]) => key === id)),
-			});
+		open(id, opener) {
+			let ordered = [...entries.current].sort(compareEntries);
+			if (ordered.length === 0) return;
+			let found = ordered.find(([key]) => key === id)?.[0] ?? ordered[0]![0];
+			lastOpener.current = opener ?? (document.activeElement as HTMLElement | null);
+			setView({ activeId: found, entries: ordered });
 		},
 	}), []);
+
 	return (
 		<HostContext.Provider value={host}>
 			{children}
 			{view && (
-				<Suspense fallback={null}>
-					<Lightbox
-						actions={(_, index) => {
-							let { data, source, type, url } = view.entries[index]!;
-							return (
-								<ImageButtons
-									compact={false}
-									data={data}
-									engaged
-									key={index}
-									inLightbox
-									shown={{ source, type, url }}
-								/>
-							);
-						}}
-						images={view.entries.map(entry => entry.image)}
-						onClose={() => setView(undefined)}
-						start={view.start}
-					/>
-				</Suspense>
+				<GalleryElement
+					activeId={view.activeId}
+					dialogActions={(_, index) => {
+						let [, entry] = view.entries[index]!;
+						return (
+							<>
+								{view.entries.length > 1 && (
+									<span className="sr-only" role="status">
+										Image {index + 1} of {view.entries.length}
+									</span>
+								)}
+								<ChatImageActions data={entry.data} engaged shown={entry.shown} />
+							</>
+						);
+					}}
+					hideGrid
+					images={view.entries.map(([key, entry]) => ({
+						id: key,
+						src: entry.shown.url,
+						alt: entry.label,
+						caption: entry.data.caption || entry.label,
+						imgProps: { referrerPolicy: "no-referrer" },
+						source: entry.data.generated
+							? { label: "Generated" }
+							: entry.shown.source.kind === "external"
+							? { label: hostOf(entry.shown.url) }
+							: undefined,
+					}))}
+					onActiveIdChange={nextId => {
+						if (nextId === null) setView(undefined);
+						else setView(current => current ? { ...current, activeId: nextId } : undefined);
+					}}
+				/>
 			)}
 		</HostContext.Provider>
 	);
 }
 
-export function useImageHost(): Host | undefined {
+export function useImageHost(): ImageHost | undefined {
 	return useContext(HostContext);
 }
 
-function pageOrigin(): string {
+export function useImageDocument(): string | undefined {
+	return useContext(DocumentContext);
+}
+
+export function pageOrigin(): string {
 	return typeof location === "undefined" ? "" : location.origin;
 }
 
@@ -198,85 +236,6 @@ function useFrameImage(image: ChatImageData, source: ImageSource): ChatImageData
 	return size ? { ...image, ...size } : image;
 }
 
-function ImageRoot(
-	{ children, image, load, variant }: {
-		children: ReactNode;
-		image: ChatImageData;
-		load: Load;
-		variant: "single" | "tile";
-	},
-) {
-	let ratio = frameRatio(image.width, image.height);
-	return (
-		<figure
-			className="chat-image"
-			data-chat-image={variant}
-			data-generated={image.generated ? "" : undefined}
-			data-load={load}
-			data-sized={ratio ? "" : undefined}
-			style={ratio
-				? { "--image-width": image.width, "--image-height": image.height } as React.CSSProperties
-				: undefined}
-		>
-			{children}
-		</figure>
-	);
-}
-
-function ImagePreview(
-	{ label, load, onError, onLoad, preview, source, url }: {
-		label: string;
-		load: Load;
-		onError: () => void;
-		onLoad: (event: SyntheticEvent<HTMLImageElement>) => void;
-		preview: React.RefObject<HTMLImageElement | null>;
-		source: ImageSource;
-		url: string | undefined;
-	},
-) {
-	if (source.kind === "unavailable" || load === "broken") {
-		let message = source.kind === "unavailable" ? "Image can’t be shown" : "Couldn’t load image";
-		return (
-			<span
-				aria-label={`${message}: ${label}`}
-				className="chat-image-broken"
-				data-chat-image-broken={source.kind}
-				role="img"
-			>
-				<ImageOffIcon aria-hidden="true" size={24} />
-				<span>{message}</span>
-			</span>
-		);
-	}
-	return (
-		<>
-			{load === "loading" && (
-				<span
-					aria-hidden={url ? "true" : undefined}
-					aria-label={url ? undefined : label}
-					className="chat-image-placeholder"
-					role={url ? undefined : "img"}
-				>
-					<ImageIcon size={24} />
-				</span>
-			)}
-			{url && (
-				<img
-					alt={label}
-					className="chat-image-preview"
-					decoding="async"
-					loading="lazy"
-					onError={onError}
-					onLoad={onLoad}
-					ref={preview}
-					referrerPolicy="no-referrer"
-					src={url}
-				/>
-			)}
-		</>
-	);
-}
-
 function ImageCaption({ image, label }: { image: ChatImageData; label: string }) {
 	return (
 		<figcaption className="chat-image-caption">
@@ -284,7 +243,7 @@ function ImageCaption({ image, label }: { image: ChatImageData; label: string })
 			<span aria-hidden="true" className="chat-image-alt">{label}</span>
 			{image.generated && image.alt?.trim() && (
 				<span className="chat-image-generated">
-					<SparkleIcon aria-hidden="true" size={12} />
+					<SparklesIcon aria-hidden="true" size={12} />
 					Generated
 				</span>
 			)}
@@ -348,19 +307,22 @@ async function downloadImage({ source, url }: Shown, name: string): Promise<void
 	setTimeout(() => URL.revokeObjectURL(object), 40_000);
 }
 
-function ImageButtons(
-	{ compact, data, engaged, inLightbox = false, shown }: {
-		compact: boolean;
+export function ChatImageActions(
+	{ data, engaged, label, onOpen, shown }: {
 		data: ChatImageData;
 		engaged: boolean;
-		inLightbox?: boolean;
-		shown: Shown;
+		label?: string;
+		onOpen?: (opener: HTMLElement) => void;
+		shown: Shown | undefined;
 	},
 ) {
 	let [copied, setCopied] = useState<Copied>("idle");
 	let [saved, setSaved] = useState<Copied>("idle");
-	let read = useExternalRead(shown.source.kind === "external" && engaged ? shown.url : undefined);
-	let linked = shown.source.kind === "external" && read !== "readable";
+	let read = useExternalRead(
+		shown?.source.kind === "external" && engaged ? shown.url : undefined,
+	);
+	let linked = shown?.source.kind === "external" && read !== "readable";
+
 	useEffect(() => {
 		if (copied === "idle" && saved === "idle") return;
 		let timer = setTimeout(() => {
@@ -369,72 +331,89 @@ function ImageButtons(
 		}, 1600);
 		return () => clearTimeout(timer);
 	}, [copied, saved]);
+
+	let items: ImageActionItem[] = [];
+	if (onOpen) {
+		items.push({
+			key: "open",
+			slot: "image-open",
+			label: "Open image",
+			icon: <ExpandIcon aria-hidden="true" size={16} />,
+			onClick: () => {},
+			props: {
+				"aria-haspopup": "dialog",
+				"data-chat-image-action": "open",
+				onClick: event => onOpen(event.currentTarget as HTMLElement),
+			} as ImageActionItem["props"],
+		});
+	}
+	items.push({
+		key: "copy",
+		slot: "image-copy",
+		label: linked ? copyLinkLabel(copied) : copyLabel(copied),
+		icon: copied === "copied"
+			? <CheckIcon aria-hidden="true" size={16} />
+			: linked
+			? <LinkIcon aria-hidden="true" size={16} />
+			: <CopyIcon aria-hidden="true" size={16} />,
+		onClick: () => {
+			if (!shown) return;
+			(linked ? copyLink(shown.url) : copyImage(shown.url)).then(
+				() => setCopied("copied"),
+				() => setCopied("failed"),
+			);
+		},
+		props: { "data-chat-image-action": "copy" } as ImageActionItem["props"],
+	});
+	if (linked && shown) {
+		items.push({
+			key: "open-original",
+			slot: "image-download",
+			label: "Open image",
+			href: shown.url,
+			icon: <ExternalLinkIcon aria-hidden="true" size={16} />,
+			props: {
+				"data-chat-image-action": "open-original",
+				rel: "noopener noreferrer",
+				target: "_blank",
+			} as ImageActionItem["props"],
+		});
+	} else {
+		items.push({
+			key: "download",
+			slot: "image-download",
+			label: downloadLabel(saved),
+			icon: <DownloadIcon aria-hidden="true" size={16} />,
+			onClick: () => {
+				if (!shown) return;
+				downloadImage(shown, downloadName(data.alt, data.src, shown.type)).catch(() =>
+					setSaved("failed")
+				);
+			},
+			props: { "data-chat-image-action": "download" } as ImageActionItem["props"],
+		});
+	}
+	if (shown?.source.kind === "external") {
+		items.push({
+			key: "new-tab",
+			slot: "image-new-tab",
+			label: "Open image in a new tab",
+			href: shown.url,
+			icon: <ExternalLinkIcon aria-hidden="true" size={16} />,
+			props: {
+				"data-chat-image-action": "new-tab",
+				rel: "noopener noreferrer",
+				target: "_blank",
+			} as ImageActionItem["props"],
+		});
+	}
+
 	return (
 		<>
-			<button
-				aria-label={linked ? copyLinkLabel(copied) : copyLabel(copied)}
-				className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} ${
-					inLightbox ? "btn-secondary" : "btn-outline"
-				}`}
-				data-chat-image-action="copy"
-				onClick={() =>
-					(linked ? copyLink(shown.url) : copyImage(shown.url)).then(
-						() => setCopied("copied"),
-						() => setCopied("failed"),
-					)}
-				type="button"
-			>
-				{copied === "copied"
-					? <CheckIcon aria-hidden="true" />
-					: linked
-					? <LinkIcon aria-hidden="true" />
-					: <CopyIcon />}
-			</button>
-			{linked
-				? (
-					<a
-						aria-label="Open image"
-						className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} ${
-							inLightbox ? "btn-secondary" : "btn-outline"
-						}`}
-						data-chat-image-action="open-original"
-						href={shown.url}
-						rel="noopener noreferrer"
-						target="_blank"
-					>
-						<ExternalLinkIcon aria-hidden="true" />
-					</a>
-				)
-				: (
-					<button
-						aria-label={downloadLabel(saved)}
-						className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} ${
-							inLightbox ? "btn-secondary" : "btn-outline"
-						}`}
-						data-chat-image-action="download"
-						onClick={() =>
-							downloadImage(shown, downloadName(data.alt, data.src, shown.type)).catch(() =>
-								setSaved("failed")
-							)}
-						type="button"
-					>
-						<DownloadIcon aria-hidden="true" />
-					</button>
-				)}
-			{shown.source.kind === "external" && (
-				<a
-					aria-label="Open image in a new tab"
-					className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} ${
-						inLightbox ? "btn-secondary" : "btn-outline"
-					}`}
-					data-chat-image-action="new-tab"
-					href={shown.url}
-					rel="noopener noreferrer"
-					target="_blank"
-				>
-					<ExternalLinkIcon aria-hidden="true" />
-				</a>
-			)}
+			<ImageActions
+				actions={items}
+				groupProps={label ? { "aria-label": `Actions for ${label}`, role: "group" } : undefined}
+			/>
 			<span aria-live="polite" className="sr-only">
 				{saved === "failed"
 					? downloadLabel(saved)
@@ -446,46 +425,15 @@ function ImageButtons(
 	);
 }
 
-function ImageActions(
-	{ compact, data, engaged, label, onOpen, shown }: {
-		compact: boolean;
-		data: ChatImageData;
-		engaged: boolean;
-		label: string;
-		onOpen: () => void;
-		shown: Shown;
-	},
-) {
-	return (
-		<div
-			aria-label={`Actions for ${label}`}
-			className="chat-image-actions"
-			onClick={event => event.stopPropagation()}
-			role="group"
-		>
-			<button
-				aria-haspopup="dialog"
-				aria-label="Open image"
-				className={`btn ${compact ? "btn-icon-xs" : "btn-icon"} btn-outline`}
-				data-chat-image-action="open"
-				onClick={onOpen}
-				type="button"
-			>
-				<ExpandIcon aria-hidden="true" />
-			</button>
-			<ImageButtons compact={compact} data={data} engaged={engaged} shown={shown} />
-		</div>
-	);
-}
-
 function useImageEntry(
-	host: Host,
+	host: ImageHost,
 	image: ChatImageData,
 	anchor: React.RefObject<HTMLElement | null>,
+	order?: number,
 ) {
 	let id = useId();
-	let document = useContext(DocumentContext);
-	let source = imageSource(image.src, document, pageOrigin());
+	let documentId = useContext(DocumentContext);
+	let source = imageSource(image.src, documentId, pageOrigin());
 	let label = imageLabel(image.alt, image.generated);
 	let local = useLocalImage(source);
 	let url = source.kind === "local"
@@ -500,86 +448,114 @@ function useImageEntry(
 		return host.register(id, {
 			data: image,
 			element,
-			image: { src: url, alt: label, caption: image.caption, generated: image.generated },
-			source,
-			type: local.type,
-			url,
+			label,
+			order,
+			shown: { source, type: local.type, url },
 		});
-	}, [host, anchor, id, url, label, image.src, image.alt, image.caption, image.generated]);
+	}, [
+		host,
+		anchor,
+		id,
+		order,
+		url,
+		label,
+		local.type,
+		image.src,
+		image.alt,
+		image.caption,
+		image.generated,
+	]);
 
 	return { id, label, pending: local.pending, source, type: local.type, url };
 }
 
-export function HiddenImage({ host, image }: { host: Host; image: ChatImageData }) {
-	let anchor = useRef<HTMLSpanElement>(null);
-	useImageEntry(host, image, anchor);
-	return <span aria-hidden="true" hidden ref={anchor} />;
-}
-
-export function ImageFigure(
-	{ host, image, more, onOpen, variant }: {
-		host: Host;
-		image: ChatImageData;
-		more?: number;
-		onOpen?: () => void;
-		variant: "single" | "tile";
-	},
-) {
+export function SingleImage({ host, image }: { host: ImageHost; image: ChatImageData }) {
 	let anchor = useRef<HTMLSpanElement>(null);
 	let { id, label, pending, source, type, url } = useImageEntry(host, image, anchor);
 	let { image: preview, load, natural, onError, onLoad } = useLoad(url, pending);
 	let framed = framedImage(useFrameImage(image, source), natural);
+	let ratio = frameRatio(framed.width, framed.height);
 	let [engaged, setEngaged] = useState(false);
-	let open = () => {
-		host.open(id);
-		onOpen?.();
-	};
+	let brokenMessage = source.kind === "unavailable"
+		? "Image can’t be shown"
+		: "Couldn’t load image";
+	let isBroken = source.kind === "unavailable" || load === "broken";
+
 	return (
-		<ImageRoot image={framed} load={load} variant={variant}>
+		<figure
+			className="chat-image"
+			data-chat-image="single"
+			data-generated={image.generated ? "" : undefined}
+			data-load={isBroken ? "broken" : load}
+			data-sized={ratio ? "" : undefined}
+			style={ratio
+				? { "--image-width": framed.width, "--image-height": framed.height } as CSSProperties
+				: undefined}
+		>
 			<span className="chat-image-anchor" ref={anchor} />
-			<div
-				className="chat-image-frame"
-				data-chat-image-frame
+			<ImageRoot
 				onFocus={() => setEngaged(true)}
 				onPointerEnter={() => setEngaged(true)}
-				onClick={url && load === "shown"
-					? event => {
-						// Focus the Open action so the lightbox gives focus back to it.
-						event.currentTarget.querySelector<HTMLElement>('[data-chat-image-action="open"]')
-							?.focus({ preventScroll: true });
-						open();
-					}
-					: undefined}
+				size="default"
+				variant="outline"
 			>
 				<ImagePreview
-					label={label}
-					load={load}
+					alt={label}
+					containerProps={{
+						"data-chat-image-frame": "",
+						onClick: !isBroken && url && load === "shown"
+							? event => {
+								let opener = event.currentTarget.parentElement?.querySelector<HTMLElement>(
+									'[data-chat-image-action="open"]',
+								) ?? event.currentTarget;
+								opener.focus({ preventScroll: true });
+								host.open(id, opener);
+							}
+							: undefined,
+					} as ComponentProps<typeof ImagePreview>["containerProps"]}
+					decoding="async"
+					errorChildren={<span className="chat-image-error-label">{brokenMessage}</span>}
+					errorProps={{
+						"aria-label": `${brokenMessage}: ${label}`,
+						"data-chat-image-broken": source.kind,
+						role: "img",
+					} as ComponentProps<typeof ImagePreview>["errorProps"]}
+					fit="contain"
+					loading="lazy"
+					loadingProps={url ? { "aria-hidden": "true" } : { "aria-label": label, role: "img" }}
 					onError={onError}
 					onLoad={onLoad}
-					preview={preview}
-					source={source}
-					url={url}
+					ratio={ratio ? "custom" : "auto"}
+					ref={preview}
+					referrerPolicy="no-referrer"
+					src={source.kind === "unavailable" ? undefined : url}
+					status={isBroken ? "error" : load === "shown" ? "loaded" : "loading"}
 				/>
-				{more ? <span aria-hidden="true" className="chat-image-more">+{more}</span> : null}
-				{source.kind !== "unavailable" && url && load === "shown" && (
-					<ImageActions
-						compact={variant === "tile"}
-						data={image}
-						engaged={engaged}
-						label={label}
-						onOpen={open}
-						shown={{ source, type, url }}
-					/>
+				{!isBroken && (
+					<div
+						aria-hidden={load !== "shown" || undefined}
+						className="chat-image-actions-slot"
+						inert={load !== "shown"}
+						onClick={event => event.stopPropagation()}
+					>
+						<ChatImageActions
+							data={image}
+							engaged={engaged}
+							label={label}
+							onOpen={opener => host.open(id, opener)}
+							shown={url && source.kind !== "unavailable" ? { source, type, url } : undefined}
+						/>
+					</div>
 				)}
-			</div>
+			</ImageRoot>
 			<ImageCaption image={image} label={label} />
-		</ImageRoot>
+		</figure>
 	);
 }
 
 export function RefusedImage({ reason }: { reason: string }) {
 	return (
-		<p className="chat-image-refused" data-chat-image-refused role="img" aria-label={reason}>
+		<p aria-label={reason} className="chat-image-refused" data-chat-image-refused role="img">
 			<ImageOffIcon aria-hidden="true" size={16} />
 			<span>{reason}</span>
 		</p>
@@ -589,7 +565,7 @@ export function RefusedImage({ reason }: { reason: string }) {
 export function ChatImage({ image }: { image: ChatImageData }) {
 	let host = useImageHost();
 	return host
-		? <ImageFigure host={host} image={image} variant="single" />
+		? <SingleImage host={host} image={image} />
 		: (
 			<MessageImages>
 				<ChatImage image={image} />

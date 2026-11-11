@@ -1,19 +1,19 @@
 /*
- * An image in Chat. A frame holds the image's own shape from the first paint where it is known, so
- * nothing moves when it loads, and one whose shape is not known is a neutral bar that takes the
- * shape the image turns out to have; its words sit beneath it, always; open, copy and download appear over it on hover or
- * focus, and stay on a touch screen. Adapted from assistant-ui's Image element (MIT), see
- * THIRD_PARTY_NOTICES.
+ * Chat's wrapper layout around assistant-ui's copied `Image` and `ImageGallery` elements
+ * (`components/assistant-ui/elements/image.tsx` and `image-gallery.tsx`). All frame borders, soft
+ * tile fills, radii, button sizes and dialog chrome come from the copied elements themselves.
  */
 
 .chat-image {
 	position: relative;
 	min-inline-size: 0;
+	inline-size: 100%;
+	max-inline-size: 24rem;
 	margin: 0;
 }
 
-.chat-image[data-chat-image="single"] {
-	inline-size: min(100%, 24rem, calc(28rem * var(--image-width, 4) / var(--image-height, 3)));
+.chat-image[data-sized] {
+	inline-size: min(100%, 24rem, calc(28rem * var(--image-width, 4) / var(--image-height, 3) + 2px));
 }
 
 .chat-image-anchor {
@@ -22,164 +22,63 @@
 	pointer-events: none;
 }
 
-.chat-image-frame {
-	position: relative;
+.chat-image[data-sized] [data-slot="image-preview"] {
 	aspect-ratio: var(--image-width, 4) / var(--image-height, 3);
-	overflow: hidden;
-	border-radius: var(--radius-lg);
-	background: var(--color-inset);
 }
 
-.chat-image[data-chat-image="tile"] {
-	inline-size: clamp(5rem, calc(12rem * var(--image-width, 4) / var(--image-height, 3)), 100%);
-}
-
-.chat-image:not([data-sized])[data-load="loading"] .chat-image-frame {
-	aspect-ratio: auto;
-	block-size: 6rem;
-}
-
-/* The frame's hairline edge is drawn over the image, so a pale image never loses its edge. */
-.chat-image-frame::after {
-	position: absolute;
-	inset: 0;
-	border-radius: inherit;
-	outline: var(--edge-width) solid var(--color-edge);
-	outline-offset: calc(-1 * var(--edge-width));
-	content: "";
-	pointer-events: none;
-}
-
-.chat-image[data-load="shown"] .chat-image-frame {
+.chat-image[data-load="shown"] [data-slot="image-preview"] {
 	cursor: zoom-in;
 }
 
-.chat-image-preview {
-	position: absolute;
-	inset: 0;
-	display: block;
-	inline-size: 100%;
-	block-size: 100%;
-	object-fit: contain;
-	opacity: 0;
-}
-
-.chat-image[data-load="shown"] .chat-image-preview {
-	opacity: 1;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-	.chat-image-preview {
-		transition: opacity var(--duration-base) var(--ease-out);
-	}
-
-	.chat-image[data-load="loading"] .chat-image-placeholder {
-		animation: chat-image-breathe calc(var(--duration-linger) * 3) var(--ease-out) infinite;
-	}
-}
-
-@keyframes chat-image-breathe {
-	50% {
-		opacity: 0.45;
-	}
-}
-
-.chat-image-placeholder,
-.chat-image-broken {
-	position: absolute;
-	inset: 0;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 0.25rem;
-	padding: 0.5rem;
-	color: var(--color-text-quaternary);
-	font-size: var(--text-xs);
-	line-height: var(--text-xs--line-height);
-	text-align: center;
-}
-
-.chat-image-broken {
-	color: var(--color-text-tertiary);
+/* Hold the neutral 128px box while an unsized image is still loading, even after its header arrives. */
+.chat-image:not([data-sized])[data-load="loading"] [data-slot="image-preview"] {
+	block-size: calc(var(--spacing) * 32);
+	overflow: hidden;
 }
 
 /*
- * An image that is never loaded, or that failed where its shape was never known, needs no frame at
- * a shape, only a line saying so. One whose shape the server measured keeps it.
+ * An image that is never loaded, or that failed where its shape was never known, needs no measured
+ * aspect ratio, only the element's error box. One whose shape was measured keeps its frame.
  */
 .chat-image:is(:not([data-sized])[data-load="broken"], :has([data-chat-image-broken="unavailable"]))
-	.chat-image-frame {
+	[data-slot="image-preview"] {
 	aspect-ratio: auto;
 }
 
-.chat-image:is(:not([data-sized])[data-load="broken"], :has([data-chat-image-broken="unavailable"]))
-	.chat-image-broken {
-	position: static;
-	padding-block: 1rem;
+.chat-image-error-label {
+	margin-inline-start: calc(var(--spacing) * 2);
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
 }
 
-.chat-image-actions {
-	position: absolute;
-	inset-block-start: 0.5rem;
-	inset-inline-end: 0.5rem;
+.chat-image-tile-error {
 	display: flex;
-	gap: 0.25rem;
-	opacity: 0;
-	transition: opacity var(--duration-fast) var(--ease-out);
+	flex-direction: column;
+	min-inline-size: 0;
+	max-inline-size: calc(100% - var(--spacing) * 12);
+	margin-inline-start: calc(var(--spacing) * 2);
+	text-align: start;
+	overflow-wrap: anywhere;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
 }
 
-.chat-image[data-chat-image="tile"] .chat-image-actions {
-	inset-block-start: 0.25rem;
-	inset-inline-end: 0.25rem;
-	gap: 0.125rem;
+.chat-image-tile-error-alt {
+	color: var(--color-text-secondary);
 }
 
-.chat-image-frame:is(:hover, :focus-within) .chat-image-actions {
-	opacity: 1;
-}
-
-@media (hover: none) {
-	.chat-image-actions {
-		opacity: 1;
-	}
-
-	.chat-image[data-chat-image="tile"] .chat-image-actions {
-		opacity: 0;
-		pointer-events: none;
-	}
-
-	.chat-image[data-chat-image="tile"] .chat-image-frame:focus-within .chat-image-actions {
-		opacity: 1;
-		pointer-events: auto;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.chat-image-actions {
-		transition: none;
-	}
-}
-
-.chat-image-more {
-	position: absolute;
-	inset: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background: var(--color-scrim);
-	color: var(--color-page);
-	font-size: var(--text-xl);
-	font-weight: 500;
-	pointer-events: none;
+/* Reserve the action bar's height while the image loads so nothing shifts when it arrives. */
+.chat-image-actions-slot[inert] {
+	visibility: hidden;
 }
 
 .chat-image-caption {
 	display: flex;
 	flex-direction: column;
-	gap: 0.125rem;
+	gap: calc(var(--spacing) * 0.5);
 	min-inline-size: 0;
-	margin-block-start: 0.375rem;
+	margin-block-start: calc(var(--spacing) * 1.5);
 	overflow-wrap: anywhere;
 	color: var(--color-text-secondary);
 	font-size: var(--text-xs);
@@ -193,42 +92,24 @@
 .chat-image-generated {
 	display: inline-flex;
 	align-items: center;
-	gap: 0.25rem;
+	gap: var(--spacing);
 	color: var(--color-text-tertiary);
 	font-size: var(--text-2xs);
 	line-height: var(--text-2xs--line-height);
 }
 
-.chat-image-gallery {
-	container-type: inline-size;
-	inline-size: 100%;
-	max-inline-size: 28rem;
+.chat-markdown :is(.chat-image, [data-chat-image-gallery]) {
+	margin-block: calc(var(--spacing) * 2);
 }
 
-.chat-image-gallery-grid {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 0.5rem;
-}
-
-@container (min-width: 20rem) {
-	.chat-image-gallery-grid {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-	}
-}
-
-.chat-markdown :is(.chat-image, .chat-image-gallery) {
-	margin-block: 0.5rem;
-}
-
-.chat-message-body > :is(.chat-image, .chat-image-gallery, .chat-image-refused) {
-	margin-block-start: 0.5rem;
+.chat-message-body > :is(.chat-image, [data-chat-image-gallery], .chat-image-refused) {
+	margin-block-start: calc(var(--spacing) * 2);
 }
 
 .chat-image-refused {
 	display: flex;
 	align-items: flex-start;
-	gap: 0.375rem;
+	gap: calc(var(--spacing) * 1.5);
 	max-inline-size: 28rem;
 	margin: 0;
 	overflow-wrap: anywhere;
@@ -241,15 +122,11 @@
 	flex: none;
 }
 
-.chat-image-gallery-grid > .chat-image-refused {
+[data-chat-image-gallery] .chat-image-refused {
 	grid-column: 1 / -1;
 	max-inline-size: none;
 }
 
-.chat-markdown > .chat-image:first-child {
+.chat-markdown > :is(.chat-image, [data-chat-image-gallery]):first-child {
 	margin-block-start: 0;
-}
-
-.chat-image-markdown {
-	display: block;
 }
