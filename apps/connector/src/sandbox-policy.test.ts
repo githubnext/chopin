@@ -42,7 +42,7 @@ function policy(platform: NodeJS.Platform, engine: Policy["engine"]): Policy {
 	};
 }
 
-test("the proxy lets a run reach Chopin, GitHub, the model providers, every common language's registries, the formal-methods toolchains and research", () => {
+test("the proxy lets a run reach Chopin, GitHub, the model providers and every common language's registries", () => {
 	let hosts = allowedHosts("https://chopin.example.com");
 	for (
 		let [host, port] of [
@@ -61,22 +61,11 @@ test("the proxy lets a run reach Chopin, GitHub, the model providers, every comm
 			["static.crates.io", 443],
 			["api.individual.githubcopilot.com", 443],
 			["release-assets.githubusercontent.com", 443],
-			["elan.lean-lang.org", 443],
-			["releases.lean-lang.org", 443],
-			["reservoir.lean-lang.org", 443],
-			["lean-lang.org", 443],
-			["mathlib4.lean-cache.cloud", 443],
-			["lakecache.blob.core.windows.net", 443],
 			["static.rust-lang.org", 443],
 			["sh.rustup.rs", 443],
-			["aka.ms", 443],
 			["opam.ocaml.org", 443],
-			["fstar-lang.org", 443],
 			["builds.dotnet.microsoft.com", 443],
 			["api.nuget.org", 443],
-			["docs.lemmascript.org", 443],
-			["pldb.kirancodes.me", 443],
-			["arxiv.org", 443],
 			["proxy.golang.org", 443],
 			["repo.maven.apache.org", 443],
 			["plugins.gradle.org", 443],
@@ -226,9 +215,6 @@ test("the built-in agents keep their state in known directories, which their own
 	).toEqual(["/home/me/.atomic", "/data/agent"]);
 	expect(agentStateDirectories(["copilot", "--acp"], {}, "/home/me", "linux")).toEqual([
 		"/home/me/.copilot",
-	]);
-	expect(agentStateDirectories(["pdd-kit", "planner"], {}, "/home/me", "linux")).toEqual([
-		"/home/me/.pdd-kit",
 	]);
 	expect(agentStateDirectories(["some-agent"], {}, "/home/me", "linux")).toEqual([]);
 	expect(agentStateDirectories(["C:\\bin\\atomic-acp.cmd"], {}, "C:\\Users\\me", "win32")).toEqual([
