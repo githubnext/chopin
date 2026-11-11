@@ -188,6 +188,8 @@ test("on a phone a table scrolls in its own lane, the page never widens and the 
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /^Chat/ }).click();
 	await expect(chatInput(chatOf(page))).toBeVisible();
+	// The pane slides in from the side; measure its target once it has arrived at the left edge.
+	await expect.poll(async () => (await chatOf(page).boundingBox())?.x).toBe(0);
 	let message = messageOf(page);
 	await expect(message).toBeVisible();
 	await expectNoHorizontalOverflow(page);
@@ -263,6 +265,7 @@ test("on a phone a copy that fails shows it on the button itself, since touch ha
 	let page = await join("ana", PHONE);
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /^Chat/ }).click();
+	await expect.poll(async () => (await chatOf(page).boundingBox())?.x).toBe(0);
 	let message = messageOf(page);
 	await expect(message).toBeVisible();
 	let copy = message.getByRole("button", { name: "Copy code" });
@@ -384,6 +387,7 @@ for (
 		if (name === "phone") {
 			await page.getByRole("navigation", { name: "Workspace view" })
 				.getByRole("button", { name: /^Chat/ }).click();
+			await expect.poll(async () => (await chatOf(page).boundingBox())?.x).toBe(0);
 		}
 		let message = messageOf(page);
 		await expect(message).toBeVisible();
