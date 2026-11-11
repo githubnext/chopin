@@ -3,6 +3,8 @@
  * channel authorization and WebSocket admission still run in the real server.
  */
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 let issuedCodes = new Map<string, string>();
 let nextCode = 0;
@@ -42,6 +44,16 @@ const repositories = [
 ];
 
 const CREATOR_WRITABLE = new Set(["archive-1", "archive-8", "archive-9"]);
+
+// A reader of octo-org/score whose access is whatever the file named for it says whenever GitHub is
+// asked: "revoked" takes the repository away, "unavailable" answers as GitHub does when it cannot be
+// reached, and anything else, or no file, leaves the access as it was. The test that owns the
+// handle writes the file; the same path is made in e2e/reaction-access.e2e.ts.
+const ACCESS_GATED = "gated-access-";
+
+function accessGate(handle: string): string {
+	return join(tmpdir(), "chopin-e2e-access", handle);
+}
 
 // People GitHub reports with less than the default access to the private
 // octo-org/score: a reader may pull but not push, and an outsider cannot see it.
@@ -272,6 +284,20 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 					permissions: {
 						...value.permissions,
 						pull: value.name === "score" ? reads === 0 : value.permissions.pull,
+						push: false,
+					},
+				}));
+			}
+			if (handle.startsWith(ACCESS_GATED)) {
+				let gate = (await readFile(accessGate(handle), "utf8").catch(() => "")).trim();
+				if (gate === "unavailable") {
+					return json({ message: "Service Unavailable" }, { status: 503 });
+				}
+				available = available.map(value => ({
+					...value,
+					permissions: {
+						...value.permissions,
+						pull: gate === "revoked" ? false : value.permissions.pull,
 						push: false,
 					},
 				}));
