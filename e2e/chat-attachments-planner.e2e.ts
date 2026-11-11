@@ -22,7 +22,7 @@ import type { Page } from "@playwright/test";
 import type { CapabilityCatalog } from "../packages/agent-link/src/protocol";
 import type { TurnContext } from "../packages/agent-link/src/client";
 
-const PORT = e2ePort(8804);
+const PORT = e2ePort(8805);
 const ORIGIN = `http://${HOST}:${PORT}`;
 const DATABASE = e2eDatabaseName("chopin_chat_attachments");
 const HANDLE = "mona";
