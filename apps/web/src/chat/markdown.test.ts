@@ -167,8 +167,137 @@ test("every Markdown image draws where it is written, in order, and none is merg
 	expect(markup.indexOf('alt="one"')).toBeLessThan(markup.indexOf('alt="two"'));
 	expect(markup.indexOf('alt="two"')).toBeLessThan(markup.indexOf('alt="Image"'));
 	expect(markup).not.toMatch(/<p[\s>][^]*<figure/);
-	expect(markup).toContain('<div class="aui-md-p chat-markdown-paragraph">First <figure');
+	expect(markup).toContain('<div class="chat-markdown-paragraph">First <figure');
 	expect(markup).toContain('<span aria-hidden="true" class="chat-image-alt">Image</span>');
+});
+
+function tiles(markup: string): string[] {
+	return [...markup.matchAll(/ alt="([^"]*)" class="chat-image-preview"[^>]* src="([^"]*)"/g)].map(
+		found => `${found[1]}|${found[2]}`,
+	);
+}
+
+test("images written side by side in one paragraph are one compact gallery, in the order they were written", () => {
+	for (
+		let separator of [" ", "  ", "\n", " \n ", "  \n", "\\\n"]
+	) {
+		let markup = markdown(
+			`![One](https://example.invalid/1.png)${separator}![Two](https://example.invalid/2.png)${separator}![Three](https://example.invalid/3.png)`,
+		);
+		let name = JSON.stringify(separator);
+		expect(markup.match(/data-chat-image-gallery/g), name).toHaveLength(1);
+		expect(markup.match(/data-chat-image="tile"/g), name).toHaveLength(3);
+		expect(markup, name).not.toContain('data-chat-image="single"');
+		expect(tiles(markup), name).toEqual([
+			"One|https://example.invalid/1.png",
+			"Two|https://example.invalid/2.png",
+			"Three|https://example.invalid/3.png",
+		]);
+		for (let alt of ["One", "Two", "Three"]) {
+			expect(markup, name).toContain(
+				`<span aria-hidden="true" class="chat-image-alt">${alt}</span>`,
+			);
+		}
+	}
+});
+
+test("images in consecutive paragraphs of their own are one gallery, and a paragraph of several is part of it", () => {
+	let markup = markdown(
+		"![One](https://example.invalid/1.png)\n\n![Two](https://example.invalid/2.png) ![Three](https://example.invalid/3.png)\n\n![Four](https://example.invalid/4.png)",
+	);
+
+	expect(markup.match(/data-chat-image-gallery/g)).toHaveLength(1);
+	expect(tiles(markup).map(item => item.split("|")[0])).toEqual(["One", "Two", "Three", "Four"]);
+	expect(markup).not.toContain('data-chat-image="single"');
+});
+
+test("the words around a gallery stay where they were written, and the images are not moved", () => {
+	let markup = markdown(
+		"Before ![One](https://example.invalid/1.png) ![Two](https://example.invalid/2.png) after.\n\nNext paragraph.",
+	);
+
+	expect(markup.match(/data-chat-image-gallery/g)).toHaveLength(1);
+	expect(markup).toContain(
+		'<div class="chat-markdown-paragraph">Before <div class="chat-image-gallery"',
+	);
+	expect(markup.indexOf("Before")).toBeLessThan(markup.indexOf("data-chat-image-gallery"));
+	expect(markup.indexOf("data-chat-image-gallery")).toBeLessThan(markup.indexOf(" after."));
+	expect(markup.indexOf(" after.")).toBeLessThan(markup.indexOf("<p>Next paragraph.</p>"));
+	expect(markup).not.toMatch(/<p>[^]*<div class="chat-image-gallery/);
+});
+
+test("images with words or a paragraph of words between them are not made a gallery", () => {
+	for (
+		let source of [
+			"![One](https://example.invalid/1.png) and ![Two](https://example.invalid/2.png)",
+			"![One](https://example.invalid/1.png)\n\nBetween.\n\n![Two](https://example.invalid/2.png)",
+			"![One](https://example.invalid/1.png) *Between* ![Two](https://example.invalid/2.png)",
+			"Words ![One](https://example.invalid/1.png)\n\n![Two](https://example.invalid/2.png)",
+			"- ![One](https://example.invalid/1.png)\n- ![Two](https://example.invalid/2.png)",
+		]
+	) {
+		let markup = markdown(source);
+		expect(markup, source).not.toContain("data-chat-image-gallery");
+		expect(markup.match(/data-chat-image="single"/g), source).toHaveLength(2);
+		expect(tiles(markup).map(item => item.split("|")[0]), source).toEqual(["One", "Two"]);
+	}
+});
+
+test("a gallery keeps a repeated image, an image without alt text and the reason one cannot be shown", () => {
+	let markup = markdown(
+		"![Same](https://example.invalid/a.png) ![Same](https://example.invalid/a.png) ![](https://example.invalid/b.png) ![nope](javascript:alert(1)) ![svg](data:image/svg+xml;base64,PHN2Zy8+)",
+	);
+
+	expect(markup.match(/data-chat-image-gallery/g)).toHaveLength(1);
+	expect(markup.match(/data-chat-image="tile"/g)).toHaveLength(5);
+	expect(tiles(markup)).toEqual([
+		"Same|https://example.invalid/a.png",
+		"Same|https://example.invalid/a.png",
+		"Image|https://example.invalid/b.png",
+	]);
+	expect(markup.match(/data-chat-image-broken="unavailable"/g)).toHaveLength(2);
+	expect(markup).toContain('<span aria-hidden="true" class="chat-image-alt">nope</span>');
+	expect(markup).toContain('<span aria-hidden="true" class="chat-image-alt">svg</span>');
+	expect(markup).not.toContain("javascript:");
+	expect(markup).not.toContain("svg+xml");
+});
+
+test("every image written together keeps its own tile however many there are, and raw HTML between them is still never drawn", () => {
+	let markup = markdown(
+		`${
+			Array.from({ length: 8 }, (_, index) =>
+				`![Pic ${index + 1}](https://example.invalid/${index + 1}.png)`)
+				.join(" ")
+		}\n\n<img src="https://example.invalid/raw.png" alt="raw">`,
+	);
+
+	expect(markup.match(/data-chat-image-gallery/g)).toHaveLength(1);
+	expect(markup.match(/data-chat-image="tile"/g)).toHaveLength(8);
+	expect(tiles(markup).map(item => item.split("|")[0])).toEqual(
+		Array.from({ length: 8 }, (_, index) => `Pic ${index + 1}`),
+	);
+	expect(markup).not.toContain("chat-image-more");
+	expect(markup).not.toContain("raw.png");
+});
+
+test("images lifted out of one link, or written in a list item or a quotation, are grouped where they are", () => {
+	let linked = markdown(
+		"[![One](https://example.invalid/1.png) ![Two](https://example.invalid/2.png)](https://example.com)",
+	);
+	expect(linked.match(/data-chat-image-gallery/g)).toHaveLength(1);
+	expect(linked).toContain('href="https://example.com"');
+	expect(linked).not.toMatch(/<a [^>]*>[^]*<figure/);
+
+	for (
+		let source of [
+			"- ![One](https://example.invalid/1.png) ![Two](https://example.invalid/2.png)",
+			"> ![One](https://example.invalid/1.png)\n>\n> ![Two](https://example.invalid/2.png)",
+		]
+	) {
+		let markup = markdown(source);
+		expect(markup.match(/data-chat-image-gallery/g), source).toHaveLength(1);
+		expect(markup.match(/data-chat-image="tile"/g), source).toHaveLength(2);
+	}
 });
 
 test("an image whose address is not one Chat loads shows its alt text and is never requested", () => {
