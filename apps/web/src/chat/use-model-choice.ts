@@ -23,6 +23,8 @@ type Held = {
 	catalog?: Wire.ModelCatalog;
 	choice?: Wire.ModelChoice;
 	modelName?: string;
+	/** What the document's agent offers `/` beyond Chat's own commands. */
+	commands?: Wire.CommandOption[];
 	/** The server ran the harness's default because a turn could not read the choice. */
 	unreadable?: boolean;
 };
@@ -52,6 +54,8 @@ export function useModelChoice(
 	saved: Wire.ModelChoice | undefined;
 	savedName: string | undefined;
 	unreadable: boolean;
+	/** The commands the document's agent offers now, none where it reports none. */
+	commands: Wire.CommandOption[] | undefined;
 } {
 	let [held, setHeld] = useState<Held>();
 	let [asked, setAsked] = useState<Asked>();
@@ -73,6 +77,7 @@ export function useModelChoice(
 					catalog: frame.catalog,
 					choice: frame.choice,
 					modelName: frame.modelName,
+					commands: frame.commands,
 				}));
 			}),
 			wire.on<Wire.ModelUnreadable>("chat:model-unreadable", frame => {
@@ -114,8 +119,9 @@ export function useModelChoice(
 	let unreadable = enabled && current?.unreadable === true;
 	let saved = enabled ? current?.choice : undefined;
 	let savedName = enabled ? current?.modelName : undefined;
+	let commands = enabled ? current?.commands : undefined;
 	if (!enabled || !wire || !current?.catalog) {
-		return { control: undefined, saved, savedName, unreadable };
+		return { control: undefined, saved, savedName, unreadable, commands };
 	}
 	let choice = asked && !sameChoice(asked.choice, current.choice) ? asked.choice : current.choice;
 	let modelName = choice?.model === current.choice?.model ? savedName : undefined;
@@ -124,5 +130,6 @@ export function useModelChoice(
 		saved,
 		savedName,
 		unreadable,
+		commands,
 	};
 }

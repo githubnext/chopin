@@ -58,6 +58,36 @@ export function mentionTrigger(
 	return { query, start, end: selectionStart };
 }
 
+/** What a typed query may span: the words of a heading, a path, a login. */
+export const MAX_POINTER_QUERY = 64;
+
+/**
+ * The unfinished `@query` before the caret, where the query may be more than a login: a heading's
+ * words, a Decision's, a path. It follows the same boundary `mentionTrigger` does (the `@` begins
+ * the text or follows what is neither a word character nor another `@`, so an address is not a
+ * mention), stays on its line, and is at most 64 characters. A caret inside a word does not open it.
+ * What `mentionTrigger` finds is always found here, with the same range and query.
+ */
+export function pointerTrigger(
+	text: string,
+	selectionStart: number,
+	selectionEnd = selectionStart,
+): MentionTrigger | undefined {
+	if (
+		!Number.isSafeInteger(selectionStart)
+		|| !Number.isSafeInteger(selectionEnd)
+		|| selectionStart !== selectionEnd
+		|| selectionStart < 0
+		|| selectionStart > text.length
+	) return undefined;
+	if (/[\w-]/.test(text[selectionStart] ?? "")) return undefined;
+	let line = text.lastIndexOf("\n", selectionStart - 1) + 1;
+	let at = text.lastIndexOf("@", selectionStart - 1);
+	if (at < line || selectionStart - at - 1 > MAX_POINTER_QUERY) return undefined;
+	if (at > 0 && /[\w@]/.test(text[at - 1]!)) return undefined;
+	return { query: text.slice(at + 1, selectionStart), start: at, end: selectionStart };
+}
+
 export function mentionTriggerKey(trigger: MentionTrigger): string {
 	return `mention:${trigger.start}:${trigger.end}:${trigger.query}`;
 }

@@ -13,6 +13,7 @@ import {
 	mentionKeyAction,
 	mentionTrigger,
 	mentionTriggerKey,
+	pointerTrigger,
 } from "./mentions";
 
 import type { MentionCandidate } from "./mentions";
@@ -66,6 +67,39 @@ describe("mention trigger", () => {
 		let first = mentionTrigger("@a", 2)!;
 		expect(mentionTriggerKey(first)).not.toBe(mentionTriggerKey(mentionTrigger("@ab", 3)!));
 		expect(mentionTriggerKey(first)).not.toBe(mentionTriggerKey(mentionTrigger("x @a", 4)!));
+	});
+});
+
+describe("the trigger for a part of the document or a file", () => {
+	test("finds what mentionTrigger finds, with the same range and query", () => {
+		for (
+			let [text, caret] of [["@", 1], ["Ask @ch", 7], ["(@octo", 6], ["one\n@oct", 8], [
+				"@a-b",
+				4,
+			]] as const
+		) expect(pointerTrigger(text, caret)).toEqual(mentionTrigger(text, caret));
+	});
+
+	test("goes on past a space, a dot or a slash, for the words of a heading or a path", () => {
+		expect(pointerTrigger("Rewrite @Site 1: harbour", 24)).toEqual({
+			query: "Site 1: harbour",
+			start: 8,
+			end: 24,
+		});
+		expect(pointerTrigger("Look at @src/chat/a.ts", 22)?.query).toBe("src/chat/a.ts");
+		expect(pointerTrigger("@ch ", 4)).toEqual({ query: "ch ", start: 0, end: 4 });
+	});
+
+	test("never opens inside an address, over a line break, past the longest query, or inside a word", () => {
+		expect(pointerTrigger("mail a@b.com", 12)).toBeUndefined();
+		expect(pointerTrigger("hi@chopin", 9)).toBeUndefined();
+		expect(pointerTrigger("see a@b and @", 13)).toEqual({ query: "", start: 12, end: 13 });
+		expect(pointerTrigger("@one\ntwo", 8)).toBeUndefined();
+		expect(pointerTrigger(`@${"a ".repeat(32)}`, 65)?.query).toHaveLength(64);
+		expect(pointerTrigger(`@${"a ".repeat(33)}`, 67)).toBeUndefined();
+		expect(pointerTrigger("@chopin", 3)).toBeUndefined();
+		expect(pointerTrigger("@chopin", 1, 3)).toBeUndefined();
+		expect(pointerTrigger("no at sign", 5)).toBeUndefined();
 	});
 });
 

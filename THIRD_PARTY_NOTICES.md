@@ -39,6 +39,33 @@ standalone (props and callbacks) lane only. It uses neither assistant-ui's runti
   while open and anchored to the composer's edge, so its fit-in-composer measurement was dropped;
   the same menu and row now also draw Chopin's `/` command and `@` mention pickers.
 
+## assistant-ui: Composer's slash commands and mentions
+
+The rows of the Chat composer's `/` command list and `@` mention list
+(`apps/web/src/chat/assistant-ui/composer-commands.tsx`) are adapted from the Composer element of
+[assistant-ui](https://github.com/assistant-ui/assistant-ui), the standalone (props and callbacks)
+lane only. They use neither assistant-ui's runtime nor `AssistantRuntimeProvider` nor `useAui`:
+Chopin's own state drives them through props.
+
+- **Elements:** Slash commands (<https://www.assistant-ui.com/elements/composer-slash-commands>)
+  and Mentions (<https://www.assistant-ui.com/elements/composer-mentions>), both installed from the
+  registry item `elements-composer` (<https://r.assistant-ui.com/elements-composer.json>, file
+  `components/assistant-ui/elements/composer.tsx`): `ComposerCommandItem` and `ComposerPersonItem`,
+  with the `useSlashMatches`, `useMentionMatches` and `applyMention` they are driven by.
+- **Version:** the registry item as served on 2026-11-10; the repository's `main` was at commit
+  `f92028b466cba721846de6851e4dddb6c04ecfad` that day.
+- **What changed:** each row is built on `ComposerMenuItem` (the model picker's row, from the same
+  element) and restyled to Chopin's tokens, text roles and menu geometry, with the Tailwind classes,
+  Lucide icons, initial-letter avatar and `cn` helper replaced by Chopin's classes, icons and faces,
+  which the caller passes as the row's `lead`. The `↵` hint on the active row is drawn only for a
+  pointer that can hover. `useSlashMatches`, `useMentionMatches` and `applyMention` are Chopin's own
+  pure functions (`commands.ts`, `mentions.ts`), because the draft keeps its caret and its chips
+  (the commands the agent reports, matched by name or by what follows a skill's prefix; the `@`
+  query reaching past a space for a heading's words). Added, as the runtime lane's categories are:
+  `ComposerMenuGroup`, a heading over a run of rows, so commands are grouped by where they come from
+  and mentions by what they point at. The list's region is reachable by keyboard, since it can
+  scroll.
+
 ## assistant-ui: MarkdownText
 
 Chopin's read-only Markdown (Chat messages, decision cards, the phrases inside them) is drawn by
@@ -128,8 +155,9 @@ copies as their elements are migrated.
 
 ### License
 
-The adaptations above (the connection and failure banners, the model picker and MarkdownText) and the
-files copied from assistant-ui's registry are under assistant-ui's MIT licence:
+The adaptations above (the connection and failure banners, the model picker, the slash commands and
+mentions rows, and MarkdownText) and the files copied from assistant-ui's registry are under
+assistant-ui's MIT licence:
 
 ```
 MIT License
