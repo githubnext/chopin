@@ -14,6 +14,7 @@ import { Transcript } from "../../chat/transcript";
 import { AuditPlate, StateLabel } from "../frame";
 
 import type { Chat, Session } from "@chopin/protocol";
+import type { FileView } from "../../chat/attachments/files";
 import type { ChatComposerProps } from "../../chat/composer";
 
 const HANDLE = "maggieappleton";
@@ -60,13 +61,58 @@ let MENTIONS = [
 
 type Specimen =
 	& Pick<ChatComposerProps, "banner" | "notice" | "run" | "unavailable">
-	& { sending?: boolean; text?: string; chopin?: boolean };
+	& {
+		sending?: boolean;
+		text?: string;
+		chopin?: boolean;
+		/** Images and files are taken: the + attaches, and these are staged above the text. */
+		files?: FileView[];
+		/** Speech can be turned into words: the microphone, and the voice while it listens. */
+		dictation?: "idle" | "listening";
+	};
+
+/** The files staged for the specimen's message: a picture, one uploading and one refused. */
+const STAGED: FileView[] = [
+	{
+		id: "picture",
+		name: "shot.png",
+		kind: "image",
+		size: 52_000,
+		sizeLabel: "51 KB",
+		state: "done",
+		progress: 100,
+		retry: false,
+	},
+	{
+		id: "uploading",
+		name: "notes.md",
+		kind: "file",
+		size: 2048,
+		sizeLabel: "40%",
+		state: "uploading",
+		progress: 40,
+		retry: false,
+	},
+	{
+		id: "refused",
+		name: "logo.svg",
+		kind: "image",
+		size: 900,
+		sizeLabel: "900 B",
+		state: "error",
+		progress: 0,
+		error: "logo.svg isn't a PNG, JPEG, WebP or GIF image.",
+		retry: false,
+	},
+];
 
 /** The live composer, holding its own draft so the specimen can be typed into. */
 export function ComposerSpecimen(
 	{
 		chopin = false,
 		banner,
+		dictation,
+		files,
 		notice,
 		run,
 		sending = false,
@@ -87,7 +133,29 @@ export function ComposerSpecimen(
 				onRemove: () => setChip(false),
 			}}
 			banner={banner}
+			dictation={dictation
+				? {
+					active: dictation === "listening",
+					phase: dictation === "listening" ? "listening" : "idle",
+					seconds: 65,
+					tooltip: "Dictate (Alt+Shift+M). Speech is turned into words on this device.",
+					announcement: "",
+					disabled: !draftable || sending,
+					onToggle: () => {},
+				}
+				: undefined}
 			draftable={draftable}
+			files={files
+				? {
+					files,
+					source: () => undefined,
+					disabled: !draftable || sending,
+					waiting: false,
+					onAdd: () => {},
+					onRemove: () => {},
+					onRetry: () => {},
+				}
+				: undefined}
 			notice={notice}
 			onSubmit={() => {}}
 			references={{ disabled: false, onMentionDocs: () => setDraft(value => `${value}#`) }}
@@ -316,6 +384,18 @@ export function ConversationPlate() {
 						<ComposerSpecimen banner={{ id: label, node }} />
 					</div>
 				))}
+				<div>
+					<StateLabel>Files staged, and the microphone</StateLabel>
+					<ComposerSpecimen
+						dictation="idle"
+						files={STAGED}
+						text="The plan and a picture of the cap"
+					/>
+				</div>
+				<div>
+					<StateLabel>Dictating</StateLabel>
+					<ComposerSpecimen dictation="listening" text="Ship the cap" />
+				</div>
 				<div>
 					<StateLabel>Chopin working</StateLabel>
 					<ComposerSpecimen run={{ action: "stop", disabled: false, onClick: () => {} }} />

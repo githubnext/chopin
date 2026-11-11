@@ -24,3 +24,12 @@
 	align-items: center;
 	gap: 1rem;
 }
+
+.design-audit-aui-staged {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.5rem;
+	width: 24rem;
+	max-width: 100%;
+}

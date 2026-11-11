@@ -30,7 +30,14 @@ const ROOTS = [
 	'[data-slot="model-selector-content"]',
 	'[data-slot="composer-menu"]',
 	'[data-slot="directive-text-chip"]',
+	'[data-slot="composer-attachments"]',
+	'[data-slot="composer-voice"]',
+	'[data-slot="composer-voice-button"]',
+	'[data-slot="message-attachments"]',
 ] as const;
+
+// The voice's dot pulses for as long as it listens, and a colour is read once nothing is moving.
+test.use({ contextOptions: { reducedMotion: "reduce" } });
 
 type Colour = { r: number; g: number; b: number; a: number };
 type Drawn = { where: string; property: string; value: string; colour: Colour };
@@ -147,15 +154,34 @@ function unthemed(result: Awaited<ReturnType<typeof drawn>>): string[] {
 async function states(page: Page, measure: (state: string) => Promise<void>) {
 	// A colour mid-transition is a blend of two tokens: measure each state once it has settled.
 	let check = async (state: string) => {
-		await expect.poll(() => page.evaluate(() => document.getAnimations().length), {
-			message: state,
-		})
+		// Moving, not merely in effect: an entrance that fills forwards stays listed once it has ended.
+		await expect.poll(
+			() =>
+				page.evaluate(() =>
+					document.getAnimations().filter(animation => animation.playState === "running").length
+				),
+			{ message: state },
+		)
 			.toBe(0);
 		await measure(state);
 	};
 	let first = plate(page, "assistant-ui").getByRole("combobox").first();
 	await first.scrollIntoViewIfNeeded();
 	await check("rest");
+	// What a hover colours in the files and the voice, before the selector opens over them.
+	let message = plate(page, "assistant-ui").locator('[data-slot="message-attachments"] button')
+		.first();
+	await message.scrollIntoViewIfNeeded();
+	await message.hover();
+	await check("a sent file's hover");
+	let voice = plate(page, "assistant-ui").locator('[data-slot="composer-voice-button"]').first();
+	await voice.hover();
+	await check("microphone hover");
+	let remove = plate(page, "assistant-ui").locator('[data-slot="composer-attachment"] button')
+		.first();
+	await remove.hover();
+	await check("a chip's remove hover");
+	await first.scrollIntoViewIfNeeded();
 	await first.hover();
 	await check("trigger hover");
 	await page.keyboard.press("Tab");
