@@ -14,6 +14,7 @@ import { MemoryMachineStore } from "./machines";
 import { MemoryDeferredTurnStore } from "./deferred-turns";
 import { MemoryMcpSessionStore } from "./mcp-sessions";
 import { MemoryPlannerCredentialStore } from "./planner-credentials";
+import { MemoryChatThreadStore } from "./chat-threads";
 import { MemoryPlannerLinkHoldStore } from "./planner-holds";
 import { MemoryPlannerModelChoiceStore } from "./planner-model-choices";
 import { MemoryResearchWorkspaceStore } from "./research";
@@ -58,6 +59,7 @@ import type {
 	BackgroundJobStore,
 	ChannelStore,
 	ChatAttachmentStore,
+	ChatThreadStore,
 	CollaborationStore,
 	DecisionAnswerStore,
 	DeferredTurnStore,
@@ -213,6 +215,11 @@ export class MemoryStorage implements StorageAdapter {
 		assertLease: held => this.#assertLease(held),
 	});
 	readonly plannerModelChoices: PlannerModelChoiceStore = this.#plannerModelChoices;
+	readonly #chatThreads = new MemoryChatThreadStore({
+		channelExists: id => this.#channels.has(id),
+		assertLease: held => this.#assertLease(held),
+	});
+	readonly chatThreads: ChatThreadStore = this.#chatThreads;
 	readonly #plannerCredentials = new MemoryPlannerCredentialStore({
 		machineExists: id => this.#machines.has(id),
 		channelExists: id => this.#channels.has(id),
@@ -680,6 +687,7 @@ export class MemoryStorage implements StorageAdapter {
 		this.#versions.deleteChannel(id);
 		this.#plannerHolds.deleteChannel(id);
 		this.#plannerModelChoices.deleteChannel(id);
+		this.#chatThreads.deleteChannel(id);
 		this.#plannerCredentials.deleteChannel(id);
 		this.#deferredTurns.deleteChannel(id);
 		this.#snapshots.delete(id);

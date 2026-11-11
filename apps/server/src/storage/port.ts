@@ -20,6 +20,8 @@ import type {
 	ChannelRecord,
 	ChannelScanCursor,
 	ChannelScanPage,
+	ChatSessionState,
+	ChatThreadRecord,
 	ClaimBackgroundJobs,
 	CommitChannel,
 	CommitResult,
@@ -465,6 +467,19 @@ export interface PlannerModelChoiceStore {
 }
 
 /**
+ * Shared Chat threads and session-level fork, context-usage and compaction state, stored in
+ * expand-only tables outside the document sidecar so an earlier release reads the sidecar
+ * unchanged. Writes are fenced by the writer lease; rows go with their document.
+ */
+export interface ChatThreadStore {
+	putThread(lease: Lease, thread: ChatThreadRecord): Promise<void>;
+	getThread(channelId: string, rootId: string): Promise<ChatThreadRecord | undefined>;
+	listThreads(channelId: string): Promise<ChatThreadRecord[]>;
+	putSessionState(lease: Lease, state: ChatSessionState): Promise<void>;
+	getSessionState(channelId: string): Promise<ChatSessionState | undefined>;
+}
+
+/**
  * Credentials a paired machine hands to a Planner backend, by digest. A row is written before
  * its credential is handed out, so a process that starts later accepts it while it lasts.
  */
@@ -540,6 +555,7 @@ export interface StorageAdapter {
 	readonly machines: MachineStore;
 	readonly plannerHolds: PlannerLinkHoldStore;
 	readonly plannerModelChoices: PlannerModelChoiceStore;
+	readonly chatThreads: ChatThreadStore;
 	readonly plannerCredentials: PlannerCredentialStore;
 	readonly mcpSessions: McpSessionStore;
 	readonly deferredTurns: DeferredTurnStore;

@@ -10,6 +10,7 @@ import { machineContract } from "./machine-contract";
 import { plannerAttachmentContract } from "./planner-attachment-contract";
 import { plannerHoldContract } from "./planner-hold-contract";
 import { plannerModelChoiceContract } from "./planner-model-choice-contract";
+import { chatThreadContract } from "./chat-thread-contract";
 import { plannerCredentialContract } from "./planner-credential-contract";
 import { deferredTurnContract } from "./deferred-turn-contract";
 import { mcpSessionContract } from "./mcp-session-contract";
@@ -58,6 +59,7 @@ export function storageContract(name: string, factory: Factory): void {
 	plannerAttachmentContract(name, factory);
 	plannerHoldContract(name, factory);
 	plannerModelChoiceContract(name, factory);
+	chatThreadContract(name, factory);
 	plannerCredentialContract(name, factory);
 	deferredTurnContract(name, factory);
 	mcpSessionContract(name, factory);

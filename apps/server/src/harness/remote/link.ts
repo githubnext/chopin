@@ -731,13 +731,27 @@ class RemoteSession {
 			}
 			case "error":
 				return turn.emit({ type: "error", error: new Error(part.error) });
+			case "compacting":
+				return turn.emit({ type: "raw", rawValue: { type: "compacting" } });
 			case "finish-step":
+				if (part.usage.contextWindow !== undefined) {
+					turn.emit({
+						type: "raw",
+						rawValue: { type: "context-window", contextWindow: part.usage.contextWindow },
+					});
+				}
 				return turn.emit({
 					type: "finish-step",
 					finishReason: finishReason(part.finishReason),
 					usage: usage(part.usage),
 				});
 			case "finish":
+				if (part.totalUsage.contextWindow !== undefined) {
+					turn.emit({
+						type: "raw",
+						rawValue: { type: "context-window", contextWindow: part.totalUsage.contextWindow },
+					});
+				}
 				return turn.emit({
 					type: "finish",
 					finishReason: finishReason(part.finishReason),
