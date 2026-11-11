@@ -156,11 +156,11 @@ describe("choosing a command with /", () => {
 		});
 		// Without a Planner there is nobody to run it: the message is the room's.
 		expect(chatSendPayload(text, drafted.references, false, "request", true)?.to).toBe("room");
-		// The mode's @chopin is not put in front of it.
+		// The chip's @chopin is not put in front of it.
 		let prepared = prepareDraftSubmission(
 			{ text, references: drafted.references },
 			() => "request",
-			{ planner: true, mode: true, referencesEnabled: true },
+			{ planner: true, asking: true, referencesEnabled: true },
 		);
 		expect(prepared?.submission.text).toBe("/skill:notes for today");
 	});
@@ -494,10 +494,10 @@ describe("chat send payloads", () => {
 });
 
 describe("acknowledged composer drafts", () => {
-	test("keeps the complete Planner-mode payload and reference projection after reload", () => {
+	test("keeps the complete payload of a message to Chopin and reference projection after reload", () => {
 		let draft = { text: "Compare #Plan", references: [documentDraft("Compare #Plan", "#Plan")] };
 		let first = prepareDraftSubmission(draft, () => REQUEST_ID, {
-			mode: true,
+			asking: true,
 			planner: true,
 			focus: "40cfa671-750b-4ca8-a1d7-024457de5a2a",
 		})!;
@@ -507,7 +507,7 @@ describe("acknowledged composer drafts", () => {
 			restored.submission,
 		);
 		let retry = prepareDraftSubmission(restored, () => crypto.randomUUID(), {
-			mode: false,
+			asking: false,
 			planner: true,
 		})!;
 		expect(retry.submission).toEqual({

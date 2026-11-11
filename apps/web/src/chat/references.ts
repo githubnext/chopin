@@ -59,10 +59,11 @@ export type ComposerDraft = {
 export function prepareDraftSubmission(
 	draft: ComposerDraft,
 	allocate: () => string = () => crypto.randomUUID(),
-	context: { planner?: boolean; mode?: boolean; referencesEnabled?: boolean; focus?: string } = {},
+	context: { planner?: boolean; asking?: boolean; referencesEnabled?: boolean; focus?: string } =
+		{},
 ): (ComposerDraft & { submission: ChatSendPayload }) | undefined {
 	if (draft.submission) return draft as ComposerDraft & { submission: ChatSendPayload };
-	let prefix = context.planner !== false && context.mode
+	let prefix = context.planner !== false && context.asking
 			&& !addressedOutsideReferences(draft.text, draft.references)
 		? `${MENTION} `
 		: "";
@@ -99,7 +100,7 @@ export function restoreDraftSubmission(
 		() => saved.requestId!,
 		{
 			planner: saved.to === "planner" || saved.focus !== undefined,
-			mode: saved.text !== draft.text.trim(),
+			asking: saved.text !== draft.text.trim(),
 			referencesEnabled: saved.references !== undefined,
 			focus: saved.focus,
 		},
