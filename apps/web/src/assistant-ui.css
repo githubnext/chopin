@@ -46,7 +46,8 @@
 	--color-emerald-500: var(--color-success);
 	--color-red-400: var(--color-destructive);
 	--color-red-500: var(--color-destructive);
-	--color-red-600: var(--color-destructive);
+	/* The red a copy draws its words in, such as a file's reason, is Chopin's danger text, which reads on a soft fill. */
+	--color-red-600: var(--color-danger-text);
 }
 
 :root {
