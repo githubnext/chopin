@@ -4,11 +4,13 @@ import { useState } from "react";
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import {
 	ComposerCommandItem,
+	ComposerContext,
 	ComposerMenu,
 	ComposerPersonItem,
 	ComposerVoice,
 	ComposerVoiceButton,
 } from "@/components/assistant-ui/elements/composer";
+import { ContextBreakdown } from "@/components/assistant-ui/elements/context-breakdown";
 import { MessageAttachments } from "@/components/assistant-ui/elements/message-attachment";
 import { createDirectiveText } from "@/components/assistant-ui/elements/directive-text";
 import {
@@ -16,6 +18,7 @@ import {
 	ModelSelectorRoot,
 	ModelSelectorTrigger,
 } from "@/components/assistant-ui/elements/model-selector";
+import { toBreakdownSegments, toComposerUsage } from "../../chat/context/context-usage";
 import { modelOptions } from "../../chat/assistant-ui/model-options";
 import StagedFiles from "../../chat/attachments/staged-files";
 import { AuditPlate, StateLabel } from "../frame";
@@ -163,15 +166,41 @@ const MARKDOWN_SPECIMEN = [
 	"[^1]: Retained for replay.",
 ].join("\n");
 
+const NORMAL_USAGE: Chat.ContextUsage = {
+	system: 2_000,
+	tools: 4_000,
+	messages: 36_000,
+	inputTokens: 36_000,
+	outputTokens: 6_000,
+	cachedTokens: 12_000,
+	totalTokens: 42_000,
+	contextWindow: 128_000,
+};
+
+const WARN_USAGE: Chat.ContextUsage = {
+	system: 4_000,
+	tools: 8_000,
+	messages: 100_000,
+	inputTokens: 104_000,
+	outputTokens: 8_000,
+	cachedTokens: 20_000,
+	totalTokens: 112_000,
+	contextWindow: 128_000,
+};
+
 /**
- * Copied assistant-ui elements, drawn as assistant-ui draws them: the model selector and
- * markdown-text from the registry, driven by Chopin's own state through props. `e2e/design`
- * measures them.
+ * Copied assistant-ui elements, drawn as assistant-ui draws them: the model selector,
+ * markdown-text, the context ring and the context breakdown from the registry, driven by
+ * Chopin's own state through props. `e2e/design` measures them.
  */
 export function AssistantUiPlate() {
 	let models = modelOptions(CATALOG);
 	let [model, setModel] = useState("gpt-5");
 	let [effort, setEffort] = useState("medium");
+	let normalComposerUsage = toComposerUsage(NORMAL_USAGE)!;
+	let warnComposerUsage = toComposerUsage(WARN_USAGE)!;
+	let normalBreakdown = toBreakdownSegments(NORMAL_USAGE)!;
+	let warnBreakdown = toBreakdownSegments(WARN_USAGE)!;
 	return (
 		<AuditPlate
 			description="Copied registry source, unmodified, with assistant-ui's own sizes and Chopin's colours."
@@ -266,6 +295,28 @@ export function AssistantUiPlate() {
 						<MentionChip text=":agent[Chopin]" />
 						<RemovableChip text=":agent[Chopin]" />
 					</div>
+				</div>
+				<div>
+					<StateLabel>Context ring, normal</StateLabel>
+					<ComposerContext usage={normalComposerUsage} />
+				</div>
+				<div>
+					<StateLabel>Context ring, high usage</StateLabel>
+					<ComposerContext usage={warnComposerUsage} />
+				</div>
+				<div>
+					<StateLabel>Context breakdown, normal</StateLabel>
+					<ContextBreakdown
+						limit={normalBreakdown.limit}
+						segments={normalBreakdown.segments}
+					/>
+				</div>
+				<div>
+					<StateLabel>Context breakdown, high usage</StateLabel>
+					<ContextBreakdown
+						limit={warnBreakdown.limit}
+						segments={warnBreakdown.segments}
+					/>
 				</div>
 			</div>
 			<div className="design-audit-aui-markdown">

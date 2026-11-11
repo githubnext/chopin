@@ -36,6 +36,8 @@ const ROOTS = [
 	'[data-slot="message-attachments"]',
 	'[data-slot="markdown-text"]',
 	'[data-slot="tooltip-content"]',
+	'[data-slot="composer-context"]',
+	'[data-slot="context-breakdown"]',
 ] as const;
 
 // The voice's dot pulses for as long as it listens, and a colour is read once nothing is moving.
@@ -225,6 +227,14 @@ async function states(page: Page, measure: (state: string) => Promise<void>) {
 	await page.keyboard.press("Tab");
 	await page.keyboard.press("Shift+Tab");
 	await check("markdown copy focus");
+
+	let rings = plate(page, "assistant-ui").locator('[data-slot="composer-context"] > button');
+	await rings.nth(0).scrollIntoViewIfNeeded();
+	await rings.nth(0).hover();
+	await check("context ring hover");
+	await rings.nth(1).scrollIntoViewIfNeeded();
+	await rings.nth(1).focus();
+	await check("context ring warn focus");
 }
 
 for (let mode of ["light", "dark"] as const) {
