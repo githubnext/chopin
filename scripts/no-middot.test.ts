@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { recordedSources } from "../apps/web/src/recorded-sources.test-fixtures";
+
 /**
  * Chopin never joins inline information with a middle dot, bullet or dot operator.
  * Separate the pieces with layout (sibling elements with a gap, weight, colour or a line
@@ -20,6 +22,9 @@ let escapes = [
 	/&#(?:183|8901|8226|x0*(?:b7|22c5|2022));/i,
 ];
 
+/** Copied registry source is the registry's own words, recorded and held to its hash, not Chopin's. */
+let copied = recordedSources(root);
+
 function tracked(): string[] {
 	let listed = Bun.spawnSync(["git", "ls-files", "-z", "--", "apps", "packages", "e2e"], {
 		cwd: root,
@@ -27,6 +32,7 @@ function tracked(): string[] {
 	if (listed.exitCode !== 0) throw new Error(listed.stderr.toString());
 	return listed.stdout.toString().split("\0").filter(file =>
 		file && file !== self && !/(^|\/)(node_modules|\.lane|design-jig)\//.test(file)
+		&& !copied.has(join(root, file))
 	);
 }
 

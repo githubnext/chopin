@@ -20,6 +20,13 @@
 			"patchSha256": "ddf4a3b22762db4c6d1bba03b26009f138ee1cea8a253b6151e545ad5a0e61b7"
 		},
 		{
+			"file": "apps/web/src/components/assistant-ui/elements/message-attachment.tsx",
+			"registry": "@assistant-ui",
+			"item": "elements-message-attachment",
+			"version": "assistant-ui/assistant-ui@ec601b37f6b6",
+			"sha256": "d577a91802b3caa44e4f1e9d2e2948893b5761c53b4654ef5d94ea66f9f1f30c"
+		},
+		{
 			"file": "apps/web/src/components/assistant-ui/elements/model-selector.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-model-selector",
@@ -30,7 +37,7 @@
 			"file": "apps/web/src/components/assistant-ui/elements/surfaces.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-surfaces",
-			"version": "assistant-ui/assistant-ui@d25a97a22f00",
+			"version": "assistant-ui/assistant-ui@ec601b37f6b6",
 			"sha256": "5d81fbb669e67ae20026cd30ed57efc51a5e3ee0f4f5d265e1723de75359b8fa"
 		},
 		{
@@ -51,7 +58,7 @@
 			"file": "apps/web/src/components/assistant-ui/utils/useIsomorphicLayoutEffect.ts",
 			"registry": "@assistant-ui",
 			"item": "elements-surfaces",
-			"version": "assistant-ui/assistant-ui@d25a97a22f00",
+			"version": "assistant-ui/assistant-ui@ec601b37f6b6",
 			"sha256": "8db117d730e640655e5099e086af4e00d545c283839d9ef5885ca93419d51893"
 		},
 		{
@@ -59,7 +66,7 @@
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "25cbb5a8b8921c365cf347467089524b282cd455e75d4e39e51c735c4f382c94"
+			"sha256": "0fd31e605ecc4028d3cb6fc7a131f3bcf74b457d4b89aa271dc6b666ad342ac4"
 		},
 		{
 			"file": "apps/web/src/components/ui/badge.tsx",
