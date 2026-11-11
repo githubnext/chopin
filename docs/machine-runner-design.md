@@ -141,7 +141,7 @@ Each source below was opened for this document on 2026-11-07.
 
 **ACP client capabilities.** The ACP SDK the connector pins (1.6.0) defines `fs/read_text_file`, `fs/write_text_file` and the `terminal/create`, `terminal/output`, `terminal/wait_for_exit`, `terminal/kill` and `terminal/release` methods, which an agent may call on its client instead of touching the disk itself. _Decision here:_ the first way the agent's hands reach the VM (Stage 3).
 
-**pdd-kit**, a separate project outside this repository, only consumes the CLI: its `pdd-kit connect` runs `chopin connect` and `chopin service install` and passes `--key`. This design keeps both commands and the `--key` flag, so such a wrapper keeps working.
+**Wrappers** outside this repository consume only the CLI: they run `chopin connect` and `chopin service install` and pass `--key`. This design keeps both commands and the `--key` flag, so such a wrapper keeps working.
 
 ## Approaches considered
 
@@ -397,7 +397,7 @@ A bare `irm … | iex` cannot pass arguments to the script, so the PowerShell co
 6. **Start the base-image pull** (Stage 3). The service finishes it in the background; the Machines page shows its progress, and a run that arrives first waits for it with "Preparing the machine" on its card.
 7. **Say one thing:** "Connected as build-box-1. Isolation: microVM. Preparing the base image in the background."
 
-`chopin connect --install-service` keeps working, so scripts and wrappers such as pdd-kit that pass `--key` to `chopin connect` and `chopin service install` are unaffected. They gain the rest by calling `chopin setup` **(inferred; pdd-kit is outside this repository)**.
+`chopin connect --install-service` keeps working, so scripts and wrappers that pass `--key` to `chopin connect` and `chopin service install` are unaffected. They gain the rest by calling `chopin setup` **(inferred; such wrappers are outside this repository)**.
 
 #### Detecting isolation
 
@@ -727,14 +727,14 @@ The zero-downtime design's Stage 4 is the starting point for Stage 1 here.
 - With a seccomp filter and a supervisor that answers `connect()` by installing a socket of its own, all three failed with `EACCES`, while the allowed loopback address worked and carried data. Direct name resolution failed, as it should.
 - A sandboxed process could not read the environment or the memory map of a same-user process outside the sandbox; it could read its command line.
 
-**Inferred** from code or documentation, not run: the refused service's restart loop; the safety of the idle gate's server check and of the queue holding work during a restart; the server answering a below-minimum connector's running work; the launcher's counting under each service manager; WebCrypto Ed25519 in the compiled binary; `sg kvm` in a systemd `ExecStart`; probing WHP by creating a partition; bundling static bubblewrap, socat and ripgrep; the Landlock tier on other kernels from 5.13 with Landlock enabled; the Landlock tier jailing the agent on an Ubuntu 24.04 machine whose `/dev/kvm` the privileged step opens; a Git bundle carrying a push without anything the run wrote being executed on the host; ACP 1.6.0's `agentInfo` and tool-call kinds being enough to check routing; carrying local-only commits as bundles; the guest setting the person as commit author; snapshots holding no real token; Chromium rather than Chrome on arm64 guests; GitHub-hosted Linux runners exposing `/dev/kvm`; pdd-kit adopting `chopin setup`.
+**Inferred** from code or documentation, not run: the refused service's restart loop; the safety of the idle gate's server check and of the queue holding work during a restart; the server answering a below-minimum connector's running work; the launcher's counting under each service manager; WebCrypto Ed25519 in the compiled binary; `sg kvm` in a systemd `ExecStart`; probing WHP by creating a partition; bundling static bubblewrap, socat and ripgrep; the Landlock tier on other kernels from 5.13 with Landlock enabled; the Landlock tier jailing the agent on an Ubuntu 24.04 machine whose `/dev/kvm` the privileged step opens; a Git bundle carrying a push without anything the run wrote being executed on the host; ACP 1.6.0's `agentInfo` and tool-call kinds being enough to check routing; carrying local-only commits as bundles; the guest setting the person as commit author; snapshots holding no real token; Chromium rather than Chrome on arm64 guests; GitHub-hosted Linux runners exposing `/dev/kvm`; wrappers adopting `chopin setup`.
 
 **Untested**, stated plainly:
 
 - **macOS**, including the `com.apple.security.hypervisor` entitlement on the shipped and re-signed binaries, and notarization.
 - **Windows**, including Microsandbox's preview WHP support and MXC's SDK inside a compiled Bun binary.
 - **Push with a repository-scoped installation token**, and `gh --attach` with one.
-- **Long builds**, such as a Rust project verified with Verus, and memory and disk limits.
+- **Long builds**, such as a large Rust project, and memory and disk limits.
 - **Snapshot and resume**, of disk and of memory.
 - **Port publishing**, which live view and VS Code need.
 - **devcontainer.json images** and lifecycle commands (now only a hint, but a drafting agent will read them).

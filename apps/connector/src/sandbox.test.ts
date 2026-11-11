@@ -197,7 +197,7 @@ function repository(name: string) {
 			return launchPolicy(
 				"bubblewrap",
 				{ ...systemHost(), platform: "linux" },
-				{ command: ["pdd-kit", "planner"], cwd, env: {}, stdin: "ignore", writable, own },
+				{ command: ["agent", "planner"], cwd, env: {}, stdin: "ignore", writable, own },
 				{ directory: base, home: join(root, "home"), settings: { writable: added } },
 				"http://127.0.0.1:4000",
 				join(root, "tmp"),
@@ -529,7 +529,7 @@ test("one policy shape for every system: what a launch writes of its git directo
 			platform === "darwin" ? "seatbelt" : platform === "win32" ? "processcontainer" : "bubblewrap",
 			{ ...systemHost(), platform },
 			{
-				command: ["pdd-kit", "planner"],
+				command: ["agent", "planner"],
 				cwd,
 				env: {},
 				stdin: "ignore",
@@ -656,7 +656,7 @@ test("a launch whose working directory holds the connector's state directory, as
 		let policy = launchPolicy(
 			platform === "darwin" ? "seatbelt" : "bubblewrap",
 			{ ...systemHost(), platform },
-			{ command: ["pdd-kit", "planner"], cwd: home, env: {}, stdin: "ignore" },
+			{ command: ["agent", "planner"], cwd: home, env: {}, stdin: "ignore" },
 			{ directory: base, home },
 			"http://127.0.0.1:4000",
 			join(root, "tmp"),
@@ -685,7 +685,7 @@ test("a launch whose working directory holds the connector's state directory, as
 	let owner = launchPolicy(
 		"bubblewrap",
 		{ ...systemHost(), platform: "linux" },
-		{ command: ["pdd-kit", "planner"], cwd: join(root, "work"), env: {}, stdin: "ignore" },
+		{ command: ["agent", "planner"], cwd: join(root, "work"), env: {}, stdin: "ignore" },
 		{ directory: base, home, settings: { writable: [home] } },
 		"http://127.0.0.1:4000",
 		join(root, "tmp"),
@@ -709,7 +709,7 @@ test("a working directory inside the state directory is read by name only where 
 		launchPolicy(
 			"bubblewrap",
 			{ ...systemHost(), platform: "linux" },
-			{ command: ["pdd-kit", "planner"], cwd, env: {}, stdin: "ignore" },
+			{ command: ["agent", "planner"], cwd, env: {}, stdin: "ignore" },
 			{ directory: base, home: join(root, "home") },
 			"http://127.0.0.1:4000",
 			join(root, "tmp"),
@@ -767,7 +767,7 @@ test("a path the owner adds with --sandbox-write never makes the person's checko
 		"bubblewrap",
 		{ ...systemHost(), platform: "linux" },
 		{
-			command: ["pdd-kit", "planner"],
+			command: ["agent", "planner"],
 			cwd: join(outer, "proj"),
 			env: {},
 			stdin: "ignore",
@@ -791,7 +791,7 @@ test("a worktree beside the state directory is written and not also granted to r
 	let policy = launchPolicy(
 		"bubblewrap",
 		{ ...systemHost(), platform: "linux" },
-		{ command: ["pdd-kit", "planner"], cwd: checkout, env: {}, stdin: "ignore", own: [checkout] },
+		{ command: ["agent", "planner"], cwd: checkout, env: {}, stdin: "ignore", own: [checkout] },
 		{ directory: base, home: join(root, "home") },
 		"http://127.0.0.1:4000",
 		join(root, "tmp"),

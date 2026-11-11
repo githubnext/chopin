@@ -45,7 +45,7 @@ RUN mkdir -p /app/apps/web/dist/assets /app/apps/web/kept-assets/assets
 
 FROM ${PREVIOUS_IMAGE} AS previous
 # An image built before kept assets has no kept-assets directory. Making an empty one here keeps the
-# copy below working on Docker's classic builder, which Azure Container Registry builds use and which,
+# copy below working on Docker's classic builder, which some hosted image builds use and which,
 # unlike BuildKit, fails a COPY whose wildcard matches nothing.
 USER root
 RUN mkdir -p /app/apps/web/kept-assets/assets
