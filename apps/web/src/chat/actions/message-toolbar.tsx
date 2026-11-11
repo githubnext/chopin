@@ -1,6 +1,7 @@
-import { memo, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { cloneElement, memo, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { RotateCcwIcon, SmilePlusIcon, XIcon } from "lucide-react";
+import { EllipsisVerticalIcon, RotateCcwIcon, SmilePlusIcon, XIcon } from "lucide-react";
+import { MessageIcon } from "@chopin/icons";
 
 import { MessageActions } from "@/components/assistant-ui/elements/message-actions";
 import {
@@ -27,6 +28,7 @@ const TOOLBAR_MARGIN = 8;
 const SHIFT = "--chat-toolbar-shift";
 const RESERVE = "--chat-toolbar-reserve";
 const TALL = "data-chat-tall";
+const BUTTONS = "--chat-toolbar-buttons";
 
 type Which = "markdown" | "plain";
 
@@ -35,6 +37,7 @@ export type ToolbarActions = {
 	react: (emoji: string, on: boolean) => void;
 	delete: () => void;
 	retry: () => void;
+	thread: () => void;
 };
 
 export type MessageToolbarProps = {
@@ -45,14 +48,17 @@ export type MessageToolbarProps = {
 	canDelete: boolean;
 	canRetry: boolean;
 	actions: RefObject<ToolbarActions>;
-	persistent: boolean;
+	/** Set to what opens this message's emoji picker, for the add-reaction pill under it. */
+	openPicker: RefObject<(() => void) | undefined>;
+	/** The message's id, when Reply in thread can open or start its thread. */
+	thread?: string;
 };
 
 function sameToolbar(before: MessageToolbarProps, after: MessageToolbarProps): boolean {
 	return before.host === after.host && before.markdown === after.markdown
 		&& before.reactable === after.reactable
 		&& before.canDelete === after.canDelete && before.canRetry === after.canRetry
-		&& before.persistent === after.persistent
+		&& before.openPicker === after.openPicker && before.thread === after.thread
 		&& before.actions === after.actions && before.reacted.size === after.reacted.size
 		&& [...before.reacted].every(emoji => after.reacted.has(emoji));
 }
@@ -127,9 +133,10 @@ export let MessageToolbar = memo(function MessageToolbar(
 		canRetry,
 		host,
 		markdown,
-		persistent,
+		openPicker,
 		reactable,
 		reacted,
+		thread,
 	}: MessageToolbarProps,
 ) {
 	let pickerId = useId();
@@ -159,9 +166,19 @@ export let MessageToolbar = memo(function MessageToolbar(
 
 	useEffect(() => {
 		let element = host.current;
-		element?.toggleAttribute("data-chat-engaged", engaged || persistent);
+		element?.toggleAttribute("data-chat-engaged", engaged);
 		return () => element?.removeAttribute("data-chat-engaged");
-	}, [host, engaged, persistent]);
+	}, [host, engaged]);
+
+	useEffect(() => {
+		openPicker.current = () => {
+			setMenuOpen(false);
+			setPickerOpen(true);
+		};
+		return () => {
+			openPicker.current = undefined;
+		};
+	}, [openPicker]);
 
 	// A message taller than the pane has its top, and so its toolbar, above what is shown: while the
 	// pointer or focus is on it, the bar is moved down the message to the top of the visible part.
@@ -304,7 +321,13 @@ export let MessageToolbar = memo(function MessageToolbar(
 		};
 	}, [host]);
 
-	let count = reactable ? QUICK_REACTIONS.length + 2 : 1;
+	let reply = reactable ? QUICK_REACTIONS.length + 1 : 0;
+	let count = reply + (thread ? 1 : 0) + 1;
+	// The room the message's first line leaves for the bar, which stands over its top edge. A passive
+	// effect, as the message's own ref is not yet set when a child's layout effect runs.
+	useEffect(() => {
+		host.current?.style.setProperty(BUTTONS, String(count));
+	}, [host, count]);
 	let tab = (index: number) => Math.min(active, count - 1) === index ? 0 : -1;
 	let toolbarKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		let step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
@@ -365,6 +388,23 @@ export let MessageToolbar = memo(function MessageToolbar(
 			},
 		]
 		: [];
+	if (thread) {
+		items.push({
+			key: "thread",
+			label: "Reply in thread",
+			onClick: () => {
+				setPinned(false);
+				actions.current.thread();
+			},
+			buttonProps: {
+				"data-thread-trigger": thread,
+				"data-tooltip": "Reply in thread",
+				onFocus: () => setActive(reply),
+				tabIndex: tab(reply),
+			} as MessageActionItem["buttonProps"],
+			children: <MessageIcon aria-hidden="true" />,
+		});
+	}
 
 	return (
 		<>
@@ -394,7 +434,12 @@ export let MessageToolbar = memo(function MessageToolbar(
 						tabIndex: tab(count - 1),
 					} as Record<string, unknown>}
 					onKeyDown={toolbarKeyDown}
-					renderMore={button => <DropdownMenuTrigger render={button} tabIndex={tab(count - 1)} />}
+					renderMore={button => (
+						<DropdownMenuTrigger
+							render={cloneElement(button, {}, <EllipsisVerticalIcon aria-hidden="true" />)}
+							tabIndex={tab(count - 1)}
+						/>
+					)}
 					role="toolbar"
 				/>
 				{menuOpen && (

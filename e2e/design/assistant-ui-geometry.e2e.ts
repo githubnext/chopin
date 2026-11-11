@@ -231,7 +231,10 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 	await expect(plate(page, "assistant-ui").locator('[data-slot="image-preview-error"]'))
 		.toBeVisible();
 	for (let name of ROOTS.closed) {
-		let elements = plate(page, "assistant-ui").locator(`[data-slot="${name}"]`);
+		// Chopin's message toolbar is the copied row restyled as Slack's box, measured below.
+		let elements = plate(page, "assistant-ui").locator(
+			`[data-slot="${name}"]:not(.chat-message-toolbar)`,
+		);
 		expect(await elements.count(), `${name} is drawn`).toBeGreaterThan(0);
 		for (let index = 0; index < await elements.count(); index++) {
 			await expectClassGeometry(elements.nth(index), name);
@@ -311,31 +314,29 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 			checked++;
 		}
 	}
-	expect(checked).toBe(132);
+	expect(checked).toBe(131);
 });
 
-test("message-actions, reaction pills and dropdown-menu keep assistant-ui's geometry: no +4px container, no extra ring", async ({ page }) => {
+test("message-actions and dropdown-menu keep their registry geometry; Chopin's toolbar and reaction pills take Slack's", async ({ page }) => {
 	let rows = plate(page, "assistant-ui").locator('[data-slot="message-actions"]');
 	expect(await rows.count()).toBe(5);
-	for (let rowIndex of [0, 4]) {
-		let row = rows.nth(rowIndex);
-		await row.scrollIntoViewIfNeeded();
-		let bar = await measure(row);
-		expect([bar.height, bar.padding, bar.border, bar.radius, bar.gap]).toEqual([
-			28,
-			[0, 0, 0, 0],
-			[0, 0, 0, 0],
-			0,
-			4,
-		]);
-		let chrome = await row.evaluate(node => {
-			let style = getComputedStyle(node);
-			return { outline: style.outlineStyle, shadow: style.boxShadow };
-		});
-		expect(chrome).toEqual({ outline: "none", shadow: "none" });
-	}
+	let row = rows.first();
+	await row.scrollIntoViewIfNeeded();
+	let bar = await measure(row);
+	expect([bar.height, bar.padding, bar.border, bar.radius, bar.gap]).toEqual([
+		28,
+		[0, 0, 0, 0],
+		[0, 0, 0, 0],
+		0,
+		4,
+	]);
+	let chrome = await row.evaluate(node => {
+		let style = getComputedStyle(node);
+		return { outline: style.outlineStyle, shadow: style.boxShadow };
+	});
+	expect(chrome).toEqual({ outline: "none", shadow: "none" });
 
-	let buttons = rows.first().getByRole("button");
+	let buttons = row.getByRole("button");
 	expect(await buttons.count()).toBe(5);
 	for (let index = 0; index < 5; index++) {
 		let button = buttons.nth(index);
@@ -352,24 +353,56 @@ test("message-actions, reaction pills and dropdown-menu keep assistant-ui's geom
 		expect([icon.width, icon.height]).toEqual([14, 14]);
 	}
 
+	// Slack's `c-message_actions__group`: 2px inside a rounded square with a hairline ring and a soft
+	// shadow, its `c-message_actions__button`s 32px squares with 4px corners and no gap between them.
+	let toolbar = plate(page, "assistant-ui").locator(".chat-message-toolbar");
+	await toolbar.scrollIntoViewIfNeeded();
+	let box = await measure(toolbar);
+	expect([box.height, box.padding, box.border, box.radius, box.gap]).toEqual([
+		36,
+		[2, 2, 2, 2],
+		[0, 0, 0, 0],
+		8,
+		0,
+	]);
+	let ring = await toolbar.evaluate(node => {
+		let style = getComputedStyle(node);
+		return { outline: style.outlineStyle, shadow: style.boxShadow !== "none" };
+	});
+	expect(ring).toEqual({ outline: "solid", shadow: true });
+	let tools = toolbar.getByRole("button");
+	expect(await tools.evaluateAll(all => all.map(node => node.getAttribute("aria-label")))).toEqual([
+		"Looks right",
+		"Explain this",
+		"Not quite",
+		"Add reaction",
+		"Reply in thread",
+		"Message actions",
+	]);
+	for (let index = 0; index < 6; index++) {
+		let tool = await measure(tools.nth(index));
+		expect([tool.width, tool.height, tool.radius], `toolbar button ${index}`).toEqual([32, 32, 4]);
+	}
+	for (let index = 3; index < 6; index++) {
+		let icon = await measure(tools.nth(index).locator("svg").first());
+		expect([icon.width, icon.height], `toolbar icon ${index}`).toEqual([18, 18]);
+	}
+
+	// Slack's `c-reaction`: a 24px pill, 6px each side, an emoji and its count 2px apart, with a ring.
 	let pills = plate(page, "assistant-ui").locator("[data-chat-reaction]");
 	expect(await pills.count()).toBe(2);
 	for (let index = 0; index < 2; index++) {
 		let pill = pills.nth(index);
 		let box = await measure(pill);
 		expect([box.height, box.padding[1], box.padding[3], box.border, box.gap]).toEqual([
-			28,
-			10,
-			10,
+			24,
+			6,
+			6,
 			[0, 0, 0, 0],
-			4,
+			2,
 		]);
 		expect(box.radius).toBeGreaterThan(1000);
-		let chrome = await pill.evaluate(node => {
-			let style = getComputedStyle(node);
-			return { outline: style.outlineStyle, shadow: style.boxShadow };
-		});
-		expect(chrome).toEqual({ outline: "none", shadow: "none" });
+		expect(await pill.evaluate(node => getComputedStyle(node).outlineStyle)).toBe("solid");
 	}
 
 	await openMenu(page);

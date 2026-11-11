@@ -1,20 +1,32 @@
 /*
- * A message's hover toolbar, its row highlight, and the reactions under it.
+ * A message's row, its hover toolbar, and the reactions under it, laid out as Slack lays out a
+ * message (`c-message_kit__gutter`, `c-message_actions__group`, `c-reaction`), in Chopin's colours.
  *
- * The action row (`MessageActions`) and overflow menu (`DropdownMenu`) are copied registry source
- * (`THIRD_PARTY_NOTICES.md`, `src/components/sources.json`), keeping their own 28px borderless pill
- * buttons and menu geometry with no wrapper card or extra ring. `.chat-message-toolbar` places the
- * row at the message's top right and reveals it on hover, keyboard focus, or while its menu or
- * emoji picker is open; on a touch screen a long press opens it in its own lane above the message.
+ * The toolbar's row (`MessageActions`) and its overflow menu (`DropdownMenu`) are copied registry
+ * source (`THIRD_PARTY_NOTICES.md`, `src/components/sources.json`). `.chat-message-toolbar` makes the
+ * copied row Slack's box: one rounded square with a hairline ring and a soft shadow, 2px inside,
+ * holding 32px square buttons with 4px corners. It floats at the row's top right, 16px above the row, so it
+ * never moves or covers the text, and shows for one row at a time. On a touch screen a long press
+ * brings it up in its own lane above the message instead.
  */
 
 .chat-message-body {
 	/* How far the highlight reaches above the message: a little, or up over the name line of the first. */
-	--chat-highlight-top: 0.125rem;
-	--chat-bleed-start: 3rem;
+	--chat-highlight-top: 0.25rem;
+	/* Slack's gutter: a 36px avatar and 8px beside it, and the row's 12px beyond that. */
+	--chat-bleed-start: 3.5rem;
 	--chat-bleed-end: 0.75rem;
-	--chat-toolbar-lane: calc(var(--spacing) * 8);
+	/* Slack's actions group: 32px buttons inside 2px, standing 16px above the row it belongs to. */
+	--chat-toolbar-size: calc(var(--spacing) * 9);
+	--chat-toolbar-rise: calc(var(--spacing) * 4);
+	--chat-toolbar-lane: calc(var(--chat-toolbar-size) + var(--spacing));
 	isolation: isolate;
+}
+
+/* Slack's message text: 15px on about 22px. */
+.chat-message-body .chat-markdown {
+	font-size: var(--text-base);
+	line-height: var(--text-base--line-height);
 }
 
 [data-chat-head],
@@ -31,8 +43,20 @@
 	pointer-events: auto;
 }
 
+/* Chopin's mark as the Planner's avatar, a 36px rounded square as Slack draws an app's. */
+[data-chat-avatar] > .agent-mark[data-circle] {
+	width: calc(var(--spacing) * 9);
+	height: calc(var(--spacing) * 9);
+	border-radius: var(--radius-md);
+}
+
+[data-chat-avatar] > .agent-mark[data-circle] svg {
+	width: calc(var(--spacing) * 5);
+	height: calc(var(--spacing) * 5);
+}
+
 .chat-message-body[data-chat-headed] {
-	--chat-highlight-top: calc(var(--text-sm) * var(--text-sm--line-height) + 0.375rem);
+	--chat-highlight-top: calc(var(--text-base) * var(--text-base--line-height) + 0.5rem);
 }
 
 /*
@@ -45,35 +69,51 @@
 	content: "";
 	position: absolute;
 	z-index: 1;
-	inset-block-start: calc(-1 * (var(--text-sm) * var(--text-sm--line-height) + 0.25rem));
+	inset-block-start: calc(-1 * (var(--text-base) * var(--text-base--line-height) + 0.25rem));
 	inset-block-end: 100%;
 	inset-inline: 0;
 }
 
-/* The whole message as one full-width row, in the hover surface. */
+/* The whole message as one full-width row, in the hover surface, as Slack shades a hovered message. */
 .chat-message-body::before {
 	content: "";
 	position: absolute;
 	z-index: -1;
-	inset-block: calc(-1 * var(--chat-highlight-top)) -0.125rem;
+	inset-block: calc(-1 * var(--chat-highlight-top)) -0.25rem;
 	inset-inline: calc(-1 * var(--chat-bleed-start)) calc(-1 * var(--chat-bleed-end));
-	border-radius: var(--radius-md);
 	background: var(--color-hover);
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
-@media (hover: hover) {
-	.chat-message-body:hover::before,
-	[data-chat-head]:hover + .chat-message-body::before {
-		opacity: 1;
-	}
+/* A message after the first of its group shows its time in the avatar's gutter on hover, as Slack does. */
+.chat-gutter-time {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-start: calc(-1 * (var(--chat-bleed-start) - 0.75rem));
+	width: calc(var(--spacing) * 9);
+	font-size: var(--text-2xs);
+	line-height: calc(var(--text-base) * var(--text-base--line-height));
+	text-align: end;
+	white-space: nowrap;
+	color: var(--color-text-tertiary);
+	opacity: 0;
+	pointer-events: none;
 }
 
-.chat-message-body:has(:focus-visible)::before,
-.chat-message-body[data-chat-engaged]::before {
-	opacity: 1;
+/*
+ * The bar stands over the row's top edge, so on a message after the first of its group it reaches
+ * down beside the first line. That line always leaves the bar's width free at its end, shown or not,
+ * so the bar covers none of the text and showing it moves nothing.
+ */
+.chat-toolbar-room {
+	float: inline-end;
+	width: calc(var(--chat-toolbar-buttons, 0) * var(--spacing) * 8 + var(--spacing));
+	height: max(
+		0px,
+		calc(var(--chat-toolbar-size) - var(--chat-toolbar-rise) - var(--chat-highlight-top))
+	);
 }
 
 /* A message taller than the pane leaves the bar's width beside its text, as the bar is kept in view over it. */
@@ -82,37 +122,94 @@
 }
 
 .message-actions-emoji {
-	font-size: var(--text-sm);
+	font-size: var(--text-base);
 	line-height: 1;
 }
 
+/*
+ * Slack's actions group (`c-message_actions__group`): the copied row itself becomes the box, a
+ * rounded square 2px inside its ring, with Slack's soft shadow, holding 32px buttons with 4px corners
+ * (`c-message_actions__button`) and no gap between them.
+ */
 .chat-message-toolbar {
+	gap: 0;
+	padding: calc(var(--spacing) / 2);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting-strong);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
+.chat-message-toolbar > button {
+	width: calc(var(--spacing) * 8);
+	height: calc(var(--spacing) * 8);
+	border-radius: var(--radius-sm);
+}
+
+.chat-message-toolbar > button svg {
+	width: calc(var(--spacing) * 4.5);
+	height: calc(var(--spacing) * 4.5);
+}
+
+.chat-message-body > .chat-message-toolbar {
 	position: absolute;
 	z-index: 2;
-	inset-inline-end: calc(-1 * var(--chat-bleed-end) + 0.25rem);
-	top: calc(-1 * var(--chat-highlight-top));
-	translate: 0 calc(-50% + var(--chat-toolbar-shift, 0px));
+	inset-inline-end: 0;
+	top: calc(-1 * (var(--chat-highlight-top) + var(--chat-toolbar-rise)));
+	translate: 0 var(--chat-toolbar-shift, 0px);
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
-.chat-message-body[data-chat-headed] > .chat-message-toolbar {
-	translate: 0 var(--chat-toolbar-shift, 0px);
+/*
+ * One row at a time, as in Slack: the row whose menu or picker is open; else the hovered row; else
+ * the row with keyboard focus. Its shade, its gutter time and its toolbar show; no other row's do.
+ */
+@media (hover: hover) {
+	.chat-message-body:hover,
+	[data-chat-head]:hover + .chat-message-body {
+		--chat-shown: 1;
+	}
+}
+
+.chat-message-body:has(:focus-visible),
+.chat-message-body[data-chat-engaged] {
+	--chat-shown: 1;
+}
+
+@media (hover: hover) {
+	[data-chat-scroll]:has(.chat-message-body:hover, [data-chat-head]:hover)
+		.chat-message-body:not(:hover):not([data-chat-head]:hover + *):not([data-chat-engaged]) {
+		--chat-shown: 0;
+	}
+}
+
+[data-chat-scroll]:has([data-chat-engaged]) .chat-message-body:not([data-chat-engaged]) {
+	--chat-shown: 0;
+}
+
+.chat-message-body::before,
+.chat-message-body > .chat-gutter-time,
+.chat-message-body > .chat-message-toolbar {
+	opacity: var(--chat-shown, 0);
+}
+
+.chat-message-body > .chat-message-toolbar {
+	pointer-events: none;
+}
+
+.chat-message-body:has(:focus-visible) > .chat-message-toolbar,
+.chat-message-body[data-chat-engaged] > .chat-message-toolbar {
+	pointer-events: auto;
 }
 
 @media (hover: hover) {
 	.chat-message-body:hover > .chat-message-toolbar,
 	[data-chat-head]:hover + .chat-message-body > .chat-message-toolbar {
-		opacity: 1;
 		pointer-events: auto;
 	}
-}
-
-.chat-message-body:has(:focus-visible) > .chat-message-toolbar,
-.chat-message-body[data-chat-engaged] > .chat-message-toolbar {
-	opacity: 1;
-	pointer-events: auto;
 }
 
 /*
@@ -125,7 +222,11 @@
 		flex-direction: column;
 	}
 
-	.chat-message-toolbar {
+	.chat-toolbar-room {
+		display: none;
+	}
+
+	.chat-message-body > .chat-message-toolbar {
 		width: 0;
 		height: 0;
 		overflow: hidden;
@@ -135,13 +236,13 @@
 	.chat-message-body[data-chat-engaged],
 	.chat-message-body:has(:focus-visible) {
 		margin-block-start: var(--chat-toolbar-lane);
-		--chat-highlight-top: calc(var(--chat-toolbar-lane) + 0.125rem);
+		--chat-highlight-top: calc(var(--chat-toolbar-lane) + 0.25rem);
 	}
 
 	.chat-message-body[data-chat-headed][data-chat-engaged],
 	.chat-message-body[data-chat-headed]:has(:focus-visible) {
 		--chat-highlight-top: calc(
-			var(--chat-toolbar-lane) + var(--text-sm) * var(--text-sm--line-height) + 0.375rem
+			var(--chat-toolbar-lane) + var(--text-base) * var(--text-base--line-height) + 0.5rem
 		);
 	}
 
@@ -156,10 +257,9 @@
 		width: auto;
 		height: auto;
 		overflow: visible;
-		padding: 0;
+		padding: calc(var(--spacing) / 2);
 		margin-block: calc(-1 * var(--chat-toolbar-lane)) 0;
 		translate: none;
-		opacity: 1;
 		pointer-events: auto;
 	}
 }
@@ -184,14 +284,14 @@
 
 @media (prefers-reduced-motion: reduce) {
 	.chat-message-body::before,
-	.chat-message-toolbar {
+	.chat-message-body > .chat-message-toolbar {
 		transition: none;
 	}
 }
 
 /*
- * Reactions under a message: assistant-ui's 28px borderless soft pill geometry (no ring or shadow),
- * tinted in Chopin's petrol wash when your own reaction is active.
+ * Reactions under a message, as Slack draws them (`c-reaction`): 24px pills with round ends, 6px
+ * inside, on a faint fill with a hairline; your own in the accent's wash and ring, its count bold.
  */
 .chat-reactions {
 	display: flex;
@@ -203,15 +303,36 @@
 .chat-reaction {
 	display: inline-flex;
 	align-items: center;
-	gap: var(--spacing);
-	height: calc(var(--spacing) * 7);
+	gap: calc(var(--spacing) / 2);
+	height: calc(var(--spacing) * 6);
 	border-radius: var(--radius-full);
 	background: var(--color-inset);
-	padding-inline: calc(var(--spacing) * 2.5);
-	font-size: var(--text-xs);
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+	padding-inline: calc(var(--spacing) * 1.5);
+	font-size: var(--text-2xs);
 	line-height: 1;
 	color: var(--color-text-secondary);
 	transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+/* Slack's add-reaction pill, after the reactions, for a pointer on the row. */
+.chat-reaction-add {
+	justify-content: center;
+	width: calc(var(--spacing) * 8.5);
+	color: var(--color-text-tertiary);
+	opacity: var(--chat-shown, 0);
+}
+
+.chat-reaction-add svg {
+	width: var(--icon-size-default);
+	height: var(--icon-size-default);
+}
+
+@media (hover: none) {
+	.chat-reaction-add {
+		display: none;
+	}
 }
 
 /* What a message says of a reaction the server turned down, as a failed message says it. */
@@ -228,22 +349,30 @@
 }
 
 .chat-reaction-emoji {
-	font-size: var(--text-sm);
+	font-size: var(--text-base);
 }
 
 .chat-reaction-count {
+	padding-inline-start: calc(var(--spacing) / 2);
 	font-variant-numeric: tabular-nums;
 }
 
 @media (hover: hover) {
 	.chat-reaction:hover:not(:disabled) {
-		background: var(--color-selected);
+		background: var(--color-page);
+		outline-color: var(--color-text-tertiary);
 	}
 }
 
-.chat-reaction[aria-pressed="true"] {
+.chat-reaction[aria-pressed="true"],
+.chat-reaction[aria-pressed="true"]:hover {
 	background: var(--color-brand-wash);
+	outline-color: var(--color-brand);
 	color: var(--color-brand-ink);
+}
+
+.chat-reaction[aria-pressed="true"] .chat-reaction-count {
+	font-weight: 700;
 }
 
 /* Where the coarse pointer's target grows, the pill keeps its look. */

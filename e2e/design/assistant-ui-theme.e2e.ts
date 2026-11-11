@@ -434,3 +434,34 @@ for (let name of ["light", "dark"] as const) {
 		expect(strangers).toEqual([]);
 	});
 }
+
+for (let name of ["light", "dark"] as const) {
+	test(`the message toolbar and reaction pills take Slack's shapes in Chopin's colours, in ${name}`, async ({ page }) => {
+		await page.evaluate(
+			dark => document.documentElement.classList.toggle("dark", dark),
+			name === "dark",
+		);
+		let token = (value: string) => computed(page, `var(--color-${value})`);
+		let outline = (element: Locator) =>
+			element.evaluate(node => getComputedStyle(node).outlineColor);
+
+		// Slack's actions group is white with a grey ring; here the page's surface and Chopin's edge.
+		let toolbar = plate(page, "assistant-ui").locator(".chat-message-toolbar");
+		await toolbar.scrollIntoViewIfNeeded();
+		expect(await paint(toolbar, "backgroundColor")).toBe(await token("page"));
+		expect(await outline(toolbar)).toBe(await token("edge"));
+		// Slack greys a button under the pointer; here Chopin's hover surface does.
+		let add = toolbar.getByRole("button", { name: "Add reaction" });
+		await add.hover();
+		await expect.poll(() => paint(add, "backgroundColor")).not.toBe("rgba(0, 0, 0, 0)");
+
+		// Slack's reacted pill is the accent's wash with the accent's ring; here Chopin's brand.
+		let pills = plate(page, "assistant-ui").locator("[data-chat-reaction]");
+		let mine = pills.and(page.locator('[aria-pressed="true"]')).first();
+		let theirs = pills.and(page.locator('[aria-pressed="false"]')).first();
+		expect(await paint(mine, "backgroundColor")).toBe(await token("brand-wash"));
+		expect(await outline(mine)).toBe(await token("brand"));
+		expect(await paint(theirs, "backgroundColor")).toBe(await token("inset"));
+		expect(await outline(theirs)).toBe(await token("edge"));
+	});
+}

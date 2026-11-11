@@ -158,8 +158,8 @@ test("the row highlight shades a message and leaves its avatar, name and time dr
 	let page = await join("ana");
 	let entry = entryOf(page, "m2");
 	let name = entry.getByText("Chopin", { exact: true });
-	let time = entry.locator(".text-2xs");
-	let avatar = entry.locator(".w-6").first();
+	let time = entry.locator("[data-chat-head] .tabular-nums");
+	let avatar = entry.locator("[data-chat-avatar]");
 	await expect(name).toBeVisible();
 	let drawn = async () => ({
 		name: await darkest(page, name),
@@ -188,6 +188,66 @@ test("the row highlight shades a message and leaves its avatar, name and time dr
 	let focused = await drawn();
 	expect(focused.name).toBeLessThan(100);
 	expect(focused.avatar).toBeLessThan(150);
+});
+
+test("the toolbar floats as Slack's does: one box over the row's top edge at its right, 16 px above it, moving and covering nothing", async ({ join, seed }) => {
+	// m5 follows m4 in its group, and its first line runs the whole width of the message.
+	let long = `${PARAGRAPH} ${PARAGRAPH}`;
+	await seed("# Layout\n", {
+		transcript: transcript().map(item => item.id === "m5" ? { ...item, text: long } : item),
+	});
+	let page = await join("ana");
+	for (let id of ["m2", "m3", "m5"]) {
+		await reveal(page, id);
+		let target = message(page, id);
+		let bar = toolbar(target);
+		let before = (await target.boundingBox())!;
+		let text = (await target.locator("[data-chat-message-text]").boundingBox())!;
+		await target.hover({ position: { x: 8, y: 4 } });
+		await expect(bar).toHaveCSS("opacity", "1");
+		let after = (await target.boundingBox())!;
+		expect(after, `${id} keeps its place and height`).toEqual(before);
+		expect((await target.locator("[data-chat-message-text]").boundingBox())!).toEqual(text);
+		let row = await target.evaluate(element => {
+			let style = getComputedStyle(element, "::before");
+			let box = element.getBoundingClientRect();
+			return {
+				top: box.top + Number.parseFloat(style.top),
+				right: box.right - Number.parseFloat(style.right),
+			};
+		});
+		let box = (await bar.boundingBox())!;
+		// Slack's `c-message_actions__container` stands 16px above the message's top edge, inside its right.
+		expect(row.top - box.y, `${id} rises 16 px`).toBeCloseTo(16, 0);
+		expect(row.right - (box.x + box.width), `${id} is inset 12 px`).toBeCloseTo(12, 0);
+		expect(box.height).toBe(36);
+		expect(await coveredText(bar), `${id} covers no text`).toEqual([]);
+	}
+});
+
+test("only one row shows its toolbar and shade: the hovered row, else the row with keyboard focus", async ({ join, seed }) => {
+	await seed("# Layout\n", { transcript: transcript() });
+	let page = await join("ana");
+	await reveal(page, "m3");
+	let shown = () =>
+		chatOf(page).locator(".chat-message-body").evaluateAll(rows =>
+			rows.filter(row =>
+				getComputedStyle(row.querySelector(".chat-message-toolbar")!).opacity === "1"
+				|| getComputedStyle(row, "::before").opacity === "1"
+			).map(row => row.getAttribute("data-chat-message-id"))
+		);
+	await page.mouse.move(0, 0);
+	await message(page, "m3").getByRole("button", { name: "Looks right" }).focus();
+	await page.keyboard.press("ArrowRight");
+	await page.keyboard.press("ArrowLeft");
+	await expect.poll(shown).toEqual(["m3"]);
+
+	await message(page, "m4").hover();
+	await expect.poll(shown).toEqual(["m4"]);
+	await expect(message(page, "m3").getByRole("button", { name: "Looks right" })).toBeFocused();
+
+	await page.mouse.move(0, 0);
+	await expect.poll(shown).toEqual(["m3"]);
 });
 
 async function walk(
@@ -539,8 +599,8 @@ test("on a phone a long press in the middle of a message taller than the screen 
 	expect(barBox.y + barBox.height).toBeLessThanOrEqual(view.y + view.height);
 	for (let button of await bar.getByRole("button").all()) {
 		let size = (await button.boundingBox())!;
-		expect(size.width).toBe(28);
-		expect(size.height).toBe(28);
+		expect(size.width).toBe(32);
+		expect(size.height).toBe(32);
 		let hit = await button.evaluate(element => {
 			let rect = element.getBoundingClientRect();
 			let after = getComputedStyle(element, "::after");
@@ -559,7 +619,7 @@ test("on a phone a long press in the middle of a message taller than the screen 
 		});
 		expect(hit).toEqual({ width: 44, height: 44, up: true, down: true });
 	}
-	await expect(bar.getByRole("button")).toHaveCount(5);
+	await expect(bar.getByRole("button")).toHaveCount(6);
 	expect(barBox.x).toBeGreaterThanOrEqual(0);
 	expect(barBox.x + barBox.width).toBeLessThanOrEqual(390);
 });
