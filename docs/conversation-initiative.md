@@ -33,8 +33,8 @@ turn instruction asks for one concise final conversational reply without separat
 messages, then yields; this is a model instruction, not a hard limit on the number of text
 segments a tool-using turn can emit.
 
-The composer's **Chat**/**Chopin** switch (Shift+Tab) addresses a message to the room or
-directly to Chopin. Addressing Chopin, like `@chopin`, is an explicit immediate request,
+The composer's **@Chopin** chip, at the start of the draft, addresses a message directly to
+Chopin; without it a message goes to the room. Addressing Chopin, like `@chopin`, is an explicit immediate request,
 even while someone types. Room messages and natural-language requests use the short
 typing-aware judgment window. Already prepared delivery retries preserve their original
 destination, text, references and focus.

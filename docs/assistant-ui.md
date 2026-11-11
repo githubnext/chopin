@@ -14,7 +14,10 @@ element has only a connected form, or the connected one cannot express Chopin's 
 several authors, a queue the server keeps), say so in the pull request and draw it from props
 instead of adding the runtime. The model selector, `elements-model-selector`, was the first one
 copied, and the composer, `elements-composer`, with the `surfaces` recipes and `range` helper it
-stands on, is Chat's composer shell.
+stands on, is Chat's composer shell. Its menu and rows (`ComposerMenu`, `ComposerPersonItem`,
+`ComposerCommandItem`) are Chat's `@` and `/` menus, and `elements-directive-text` and the Badge it
+stands on are the Chopin chip; each carries a [recorded patch](#patching-a-copy) where Chat needed an
+extension point.
 
 ## Add it
 
