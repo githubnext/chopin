@@ -41,20 +41,23 @@ extension points and change no class or size. Those on
 | ------------------------------------------------------------ | ------------- | ----------------------------- | ---------------------------------------- |
 | `components/assistant-ui/elements/composer.tsx`              | @assistant-ui | `elements-composer`           | `assistant-ui/assistant-ui@d25a97a22f00` |
 | `components/assistant-ui/elements/directive-text.tsx`        | @assistant-ui | `elements-directive-text`     | `assistant-ui/assistant-ui@2c298dfa8392` |
+| `components/assistant-ui/elements/image-gallery.tsx`         | @assistant-ui | `elements-image-gallery`      | `assistant-ui/assistant-ui@437b410726e2` |
+| `components/assistant-ui/elements/image.tsx`                 | @assistant-ui | `image`                       | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/assistant-ui/elements/markdown-text.tsx`         | @assistant-ui | `markdown-text`               | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/assistant-ui/elements/message-attachment.tsx`    | @assistant-ui | `elements-message-attachment` | `assistant-ui/assistant-ui@ec601b37f6b6` |
 | `components/assistant-ui/elements/model-selector.tsx`        | @assistant-ui | `elements-model-selector`     | `assistant-ui/assistant-ui@d25a97a22f00` |
-| `components/assistant-ui/elements/surfaces.tsx`              | @assistant-ui | `elements-surfaces`           | `assistant-ui/assistant-ui@ec601b37f6b6` |
+| `components/assistant-ui/elements/surfaces.tsx`              | @assistant-ui | `elements-surfaces`           | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/assistant-ui/elements/tooltip-icon-button.tsx`   | @assistant-ui | `tooltip-icon-button`         | `assistant-ui/assistant-ui@437b410726e2` |
+| `components/assistant-ui/utils/href.ts`                      | @assistant-ui | `elements-href`               | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/assistant-ui/utils/model-selection.ts`           | @assistant-ui | `elements-model-selection`    | `assistant-ui/assistant-ui@d25a97a22f00` |
-| `components/assistant-ui/utils/range.ts`                     | @assistant-ui | `elements-range`              | `assistant-ui/assistant-ui@d25a97a22f00` |
-| `components/assistant-ui/utils/useIsomorphicLayoutEffect.ts` | @assistant-ui | `elements-surfaces`           | `assistant-ui/assistant-ui@ec601b37f6b6` |
+| `components/assistant-ui/utils/range.ts`                     | @assistant-ui | `elements-range`              | `assistant-ui/assistant-ui@437b410726e2` |
+| `components/assistant-ui/utils/useIsomorphicLayoutEffect.ts` | @assistant-ui | `elements-surfaces`           | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/geometry.css`                                    | tailwindcss   | `theme.css`                   | `tailwindcss@4.3.0`                      |
 | `components/hooks/use-copy-to-clipboard.ts`                  | @assistant-ui | `use-copy-to-clipboard`       | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/ui/badge.tsx`                                    | @assistant-ui | `badge`                       | `assistant-ui/assistant-ui@2c298dfa8392` |
 | `components/ui/button.tsx`                                   | @shadcn       | `button`                      | `shadcn-ui/ui@dd41d19e2f80`              |
 | `components/ui/command.tsx`                                  | @shadcn       | `command`                     | `shadcn-ui/ui@8ab27715521c`              |
-| `components/ui/dialog.tsx`                                   | @shadcn       | `dialog`                      | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/dialog.tsx`                                   | @shadcn       | `dialog`                      | `shadcn-ui/ui@dd41d19e2f80`              |
 | `components/ui/input-group.tsx`                              | @shadcn       | `input-group`                 | `shadcn-ui/ui@8ab27715521c`              |
 | `components/ui/input.tsx`                                    | @shadcn       | `input`                       | `shadcn-ui/ui@8ab27715521c`              |
 | `components/ui/popover.tsx`                                  | @shadcn       | `popover`                     | `shadcn-ui/ui@8ab27715521c`              |
@@ -73,14 +76,16 @@ shimmer), beside the `@base-ui/react` and `react-markdown` Chopin already used. 
 that were written by hand from assistant-ui's source (the connection and failure banners) are
 unchanged, and are replaced by copies as their elements are migrated.
 
-The Chat composer and read-only Markdown are drawn from these copies. The composer's model pill opens
-the Model selector; its `@` and `/` menus are the Composer's menu with its Mentions row
+The Chat composer, message images and read-only Markdown are drawn from these copies. The composer's
+model pill opens the Model selector; its `@` and `/` menus are the Composer's menu with its Mentions row
 (`ComposerPersonItem`) and Slash commands row (`ComposerCommandItem`), driven by Chopin's own pure
 functions (`mentions.ts`, `commands.ts`) in place of the element's `useMentionMatches`,
 `useSlashMatches` and `applyMention`, because the draft keeps its caret and its references; the Chopin
 chip is Directive text's chip with a Badge; the files a message stages are the Composer's attachment
-chips, the microphone its voice and voice button, the files of a sent message `MessageAttachments`, and
-Chat messages, decision cards and phrases `MarkdownText`. None of assistant-ui's runtime is used.
+chips, the microphone its voice and voice button, the non-image files of a sent message
+`MessageAttachments`, every image in a Chat message (Planner, Markdown or attached) `Image` and
+`ImageGallery` with `ImageGallery`'s `<Dialog>` lightbox, and Chat messages, decision cards and
+phrases `MarkdownText`. None of assistant-ui's runtime is used.
 
 ### License
 
