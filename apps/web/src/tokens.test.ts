@@ -759,12 +759,6 @@ describe("migration", () => {
 				size: "btn-sm",
 				tiers: ["btn-ghost"],
 			}],
-			["apps/web/src/chat/transcript.tsx", {
-				action: "Withdraw",
-				marker: 'title="Withdraw"',
-				size: "btn-icon",
-				tiers: ["btn-ghost"],
-			}],
 			["apps/web/src/chat/composer.tsx", {
 				action: "Resume Planner",
 				marker: 'aria-label="Resume Chopin"',

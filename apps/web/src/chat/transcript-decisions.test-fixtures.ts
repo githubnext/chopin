@@ -208,7 +208,5 @@ export function scopedTranscriptMarkup(entry: Chat.Entry, state: ConversationPla
 		},
 		entries: [entry],
 		handle: "ana",
-		onWithdraw: () => {},
-		queued: [],
 	}));
 }

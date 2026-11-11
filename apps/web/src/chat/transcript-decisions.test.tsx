@@ -38,8 +38,6 @@ test("transcript connects the newest prompt to the shared question and meta snap
 		},
 		entries: [prompt("old-prompt", 0), prompt("new-prompt", 1)],
 		handle: "ana",
-		onWithdraw: () => {},
-		queued: [],
 	}));
 
 	expect(markup).toContain("Superseded by a later prompt");

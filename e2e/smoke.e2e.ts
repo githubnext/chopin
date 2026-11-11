@@ -50,7 +50,6 @@ async function scriptPlanner(page: Page) {
 	let sends: { text: string; to: Chat.Destination }[] = [];
 	let turn = 0;
 	let busy = false;
-	let queued: Chat.Waiting[] = [];
 	let toolCount = 0;
 	let toolEntry = "";
 	let toolEntrySent = false;
@@ -107,19 +106,11 @@ async function scriptPlanner(page: Page) {
 				if (frame.kind === "chat:send") {
 					sends.push({ text: frame.text ?? "", to: frame.to! });
 					let id = `accepted-${sends.length}`;
-					let waiting = frame.to === "planner" && busy;
-					send?.({ kind: "chat:send", ts: 0, rid: frame.rid, id, queued: waiting });
+					send?.({ kind: "chat:send", ts: 0, rid: frame.rid, id });
 					if (frame.to === "planner") {
-						if (busy) {
-							queued = [...queued, {
-								id,
-								handle: "ana",
-								text: frame.text ?? "",
-							}];
-							send?.({ kind: "chat:queue", ts: 0, waiting: queued });
-							return;
-						}
 						announce(id, frame.text ?? "");
+						// A message sent while a turn runs is given to it, in the transcript at once.
+						if (busy) return;
 						start();
 						started.resolve();
 						return;
@@ -128,15 +119,8 @@ async function scriptPlanner(page: Page) {
 					return;
 				}
 				if (frame.kind === "chat:abort") {
-					let next = queued.shift();
-					if (next) {
-						send?.({ kind: "chat:queue", ts: 0, waiting: queued });
-						announce(next.id, next.text);
-						start();
-					} else {
-						busy = false;
-						send?.({ kind: "chat:state", ts: 0, busy: false });
-					}
+					busy = false;
+					send?.({ kind: "chat:state", ts: 0, busy: false });
 					return;
 				}
 			} catch {
@@ -443,7 +427,7 @@ test("chat disables Send once a lost socket outlasts a blip", async ({ join, pag
 	await expectChatValue(draft, "A draft left during reconnect.");
 });
 
-test("chat routes one Send action by @chopin without blocking room messages or its queue", async ({ join, page }) => {
+test("chat routes one Send action by @chopin without blocking room messages, and a message sent while it works is in the transcript at once", async ({ join, page }) => {
 	let planner = await scriptPlanner(page);
 	let chat = chatPane(await join("ana"));
 	let draft = chatInput(chat);
@@ -466,14 +450,17 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 	await draft.fill("Keep the release notes brief.");
 	await expect(send).toBeEnabled();
 	await send.click();
-	await draft.fill("@chopin Queue the rollback checks.");
+	await draft.fill("@chopin Check the rollback too.");
 	await send.click();
 	await expect.poll(planner.sends).toEqual([
 		{ text: "@chopin Start the migration.", to: "planner" },
 		{ text: "Keep the release notes brief.", to: "room" },
-		{ text: "@chopin Queue the rollback checks.", to: "planner" },
+		{ text: "@chopin Check the rollback too.", to: "planner" },
 	]);
-	await expect(chat.locator('[data-chat-state="queued"]')).toBeVisible();
+	// Given to the running turn: an ordinary message at once, never marked as waiting.
+	let steered = chat.locator("[data-chat-entry]").filter({ hasText: "Check the rollback too." });
+	await expect(steered).toHaveCount(1);
+	await expect(chat.locator('[data-chat-state="queued"]')).toHaveCount(0);
 
 	await fillChat(draft, "@chopin Keep\nthe new line.");
 	await draft.press("Shift+Enter");
@@ -485,13 +472,11 @@ test("chat routes one Send action by @chopin without blocking room messages or i
 	});
 
 	await chat.getByRole("button", { name: "Stop generating" }).click();
-	await expect(chat.locator('[data-chat-state="working"]')).toBeVisible();
-	let next = chat.locator("[data-chat-entry]").filter({ hasText: "Queue the rollback checks." });
+	await expect(chat.locator('[data-chat-state="working"]')).toHaveCount(0);
 	let later = chat.locator("[data-chat-entry]").filter({ hasText: /Keep\s+the new line/ });
-	await expect(next).toHaveCount(1);
-	await expect(next).not.toHaveAttribute("data-chat-state", "queued");
+	await expect(steered).toHaveCount(1);
 	await expect(later).toHaveCount(1);
-	await expect(later).toHaveAttribute("data-chat-state", "queued");
+	await expect(chat.locator('[data-chat-state="queued"]')).toHaveCount(0);
 });
 
 test("chat replaces the Planner working row with its response", async ({ join, page }) => {
@@ -843,7 +828,7 @@ test("chat waits for fresh history after reconnect before projecting a stale tur
 });
 
 test(
-	"chat keeps a running turn and its queue readable together",
+	"chat keeps a running turn readable",
 	async ({ join, page }, testInfo) => {
 		await injectChatHistory(page, frame => ({
 			...frame,
@@ -879,10 +864,6 @@ test(
 					],
 				},
 			],
-			queued: [
-				{ id: "q1", handle: "ana", text: "@chopin" },
-				{ id: "q2", handle: "sam", text: "Check the rollback path too." },
-			],
 		}));
 
 		await join("ana");
@@ -893,17 +874,7 @@ test(
 		await expect(chat.getByText("Edit plan", { exact: true })).toHaveCount(0);
 		await expect(chat.getByRole("button", { name: "Stop generating" })).toHaveCount(0);
 
-		let mine = chat.locator("[data-chat-entry]").filter({
-			has: page.getByText("Ana", { exact: true }),
-		});
-		let theirs = chat.locator("[data-chat-entry]").filter({
-			hasText: "Check the rollback path too.",
-		});
-		await expect(mine).toHaveAttribute("data-chat-state", "queued");
-		await expect(mine.getByRole("button", { name: "Withdraw queued message" })).toBeVisible();
-		await expect(theirs.getByRole("button", { name: "Withdraw queued message" })).toHaveCount(0);
-
-		await testInfo.attach("running-turn-with-queue", {
+		await testInfo.attach("running-turn", {
 			body: await chat.screenshot(),
 			contentType: "image/png",
 		});

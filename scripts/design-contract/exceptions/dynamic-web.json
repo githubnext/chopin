@@ -140,20 +140,6 @@
 		"sourceHash": "0a11fe298d25f70f899ec376a04f2e128b8de45e763d36c377d15f55aa8e2f8b"
 	},
 	{
-		"file": "apps/web/src/chat/message-delivery.tsx",
-		"reason": "The message menu is placed from its button's measured rectangle, above or below as there is room, as the document actions menu is: measured popup coordinates and visibility, not design token values.",
-		"cases": [
-			[
-				"dynamic",
-				"*",
-				"position",
-				"unresolved style > MessageMenu > <div>",
-				1
-			]
-		],
-		"sourceHash": "efb8748486bb9224d9e51bfc18b5298365ca9eebad95ee8b7a0c727c98f5a7cb"
-	},
-	{
 		"file": "apps/web/src/terminal-alert.tsx",
 		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
 		"cases": [

@@ -20,7 +20,7 @@ export function researchTranscript(
 	}
 	let items: ResearchTranscriptItem[] = [];
 	for (let group of groups) {
-		if (group.kind !== "messages" || group.queued) {
+		if (group.kind !== "messages") {
 			items.push(group);
 			continue;
 		}

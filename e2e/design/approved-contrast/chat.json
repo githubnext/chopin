@@ -32,39 +32,6 @@
 				"html": "<span class=\"tabular-nums\">600ms</span>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.43 (foreground color: #78766e, background color: #fcfcfb, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
-		},
-		{
-			"approvedRole": "queued author",
-			"finding": {
-				"rule": "color-contrast",
-				"target": [
-					".opacity-60 > .items-baseline.gap-1\\.5.text-sm > .break-all.font-semibold.min-w-0"
-				],
-				"html": "<span class=\"min-w-0 break-all font-semibold\">Maggieappleton</span>",
-				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.21 (foreground color: #adaca6, background color: #fcfcfb, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
-			}
-		},
-		{
-			"approvedRole": "queued status",
-			"finding": {
-				"rule": "color-contrast",
-				"target": [
-					".text-text-quaternary.tabular-nums.text-sm"
-				],
-				"html": "<span class=\"text-sm text-text-quaternary tabular-nums\">queued</span>",
-				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.21 (foreground color: #adaca6, background color: #fcfcfb, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
-			}
-		},
-		{
-			"approvedRole": "queued message",
-			"finding": {
-				"rule": "color-contrast",
-				"target": [
-					"div[data-chat-message-id=\"audit-queued\"] > .items-start.gap-1.flex > .flex-1.min-w-0[data-chat-message-text=\"true\"] > .chat-markdown.break-words.text-chat-body > p"
-				],
-				"html": "<p>Also check the compact layout.</p>",
-				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.64 (foreground color: #9e9d98, background color: #fcfcfb, font size: 10.5pt (14.0351px), font weight: normal). Expected contrast ratio of 4.5:1"
-			}
 		}
 	],
 	"narrow": [
@@ -99,39 +66,6 @@
 				],
 				"html": "<span class=\"tabular-nums\">600ms</span>",
 				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 4.43 (foreground color: #78766e, background color: #fcfcfb, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
-			}
-		},
-		{
-			"approvedRole": "queued author",
-			"finding": {
-				"rule": "color-contrast",
-				"target": [
-					".opacity-60 > .items-baseline.gap-1\\.5.text-sm > .break-all.font-semibold.min-w-0"
-				],
-				"html": "<span class=\"min-w-0 break-all font-semibold\">Maggieappleton</span>",
-				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.21 (foreground color: #adaca6, background color: #fcfcfb, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
-			}
-		},
-		{
-			"approvedRole": "queued status",
-			"finding": {
-				"rule": "color-contrast",
-				"target": [
-					".text-text-quaternary.tabular-nums.text-sm"
-				],
-				"html": "<span class=\"text-sm text-text-quaternary tabular-nums\">queued</span>",
-				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.21 (foreground color: #adaca6, background color: #fcfcfb, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
-			}
-		},
-		{
-			"approvedRole": "queued message",
-			"finding": {
-				"rule": "color-contrast",
-				"target": [
-					"div[data-chat-message-id=\"audit-queued\"] > .items-start.gap-1.flex > .flex-1.min-w-0[data-chat-message-text=\"true\"] > .chat-markdown.break-words.text-chat-body > p"
-				],
-				"html": "<p>Also check the compact layout.</p>",
-				"evidence": "Fix any of the following:\n  Element has insufficient color contrast of 2.64 (foreground color: #9e9d98, background color: #fcfcfb, font size: 10.1pt (13.4107px), font weight: normal). Expected contrast ratio of 4.5:1"
 			}
 		}
 	]

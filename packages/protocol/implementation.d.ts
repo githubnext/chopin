@@ -176,7 +176,8 @@ export type ImplementationSnapshot = {
  * Opening Build asks for them. The request starts a Planner turn without a
  * member message: Chat records only a system notice of who asked, as it does
  * for an accepted comment. One request per document is live at a time;
- * asking again while it is queued or running returns it.
+ * asking again while it is running returns it. A request made while another turn runs is
+ * refused, not held.
  */
 export declare namespace Implementation {
 	export type Incoming = Request<Draft>;
@@ -196,7 +197,7 @@ export declare namespace Implementation {
 	export type Drafted = KIND<"implementation:draft"> & {
 		id: string;
 		planRevision: number;
-		state: "queued" | "running" | "ended";
+		state: "running" | "ended";
 		existing: boolean;
 	};
 
@@ -204,7 +205,7 @@ export declare namespace Implementation {
 	export type Drafting = KIND<"implementation:drafting"> & {
 		id: string;
 		planRevision: number;
-		state: "queued" | "running" | "ended";
+		state: "running" | "ended";
 	};
 
 	/** Broadcast when a document's build readiness judgement changes; read the snapshot again. */

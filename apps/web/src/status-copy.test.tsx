@@ -389,8 +389,6 @@ test("the busy labels, the agent's face and the composer's picker hints are plai
 		emptyHint: { planner: true, references: true },
 		entries: [],
 		handle: "ana",
-		onWithdraw: () => {},
-		queued: [],
 	}));
 	expect(empty).toContain("to ask Chopin");
 	expectPlainWords("the empty Chat", words(empty));

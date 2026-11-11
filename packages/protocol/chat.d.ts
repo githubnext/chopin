@@ -5,10 +5,11 @@ type KIND<K extends string> = Frame & { kind: K };
 /**
  * Chat drives the agent.
  *
- * Shared, like everything else in a room: one transcript, one turn at a time,
- * and anything said while a turn is running joins a queue rather than being
- * refused. The composer stays live even when the plan does not — a turn owns
- * the document, not Chat.
+ * Shared, like everything else in a room: one transcript, one turn at a time.
+ * A message to the agent while a turn is running is given to that turn, which
+ * reads it at its next step, or is refused and says why; nothing is ever held
+ * for the next turn. The composer stays live even when the plan does not — a
+ * turn owns the document, not Chat.
  */
 export declare namespace Chat {
 	export type Incoming =
@@ -18,9 +19,6 @@ export declare namespace Chat {
 		| Request<Resume>
 		| Request<PauseRun>
 		| Request<ResumeRun>
-		| Request<Unqueue>
-		| Request<Delete>
-		| Request<Retry>
 		| Request<Wake>
 		| Request<SetParticipation>
 		| Request<SetModel>
@@ -32,7 +30,6 @@ export declare namespace Chat {
 		| Delta
 		| Tool
 		| State
-		| Queue
 		| Sent
 		| ThreadOpened
 		| ThreadSummaries
@@ -40,10 +37,7 @@ export declare namespace Chat {
 		| ContextState
 		| CompactionState
 		| InThread
-		| Deleted
-		| Retried
 		| Woke
-		| Removed
 		| ParticipationState
 		| ModelState
 		| ModelUnreadable;
@@ -242,15 +236,6 @@ export declare namespace Chat {
 		/** Present as `planner` on a member message sent to the Planner; the mention is stripped from `text`. */
 		to?: "planner";
 		/**
-		 * How far a member message to the Planner has got: `sent` is saved on the server and not
-		 * yet taken by the machine, `delivered` is taken by it, and `failed` can never be
-		 * delivered as sent, for `deliveryFailure`. Absent on any other entry and on one saved
-		 * before this existed, which reads as delivered.
-		 */
-		deliveryState?: DeliveryState;
-		/** Why a `failed` message could not be delivered. */
-		deliveryFailure?: DeliveryFailure;
-		/**
 		 * On a system notice that says a Planner turn ended without finishing its reply: why, so a
 		 * client can offer the way back. Absent on any other entry and on one saved before this
 		 * existed, which is only its `text`.
@@ -272,15 +257,6 @@ export declare namespace Chat {
 		request?: string;
 		focus?: string;
 	};
-
-	export type DeliveryState = "sent" | "delivered" | "failed";
-
-	/**
-	 * Why a message can never be delivered as it was sent: the machine was removed from the
-	 * document, the sender can no longer write to it, or the document or the child it was sent
-	 * from is gone.
-	 */
-	export type DeliveryFailure = "machine-removed" | "access-lost" | "document-unavailable";
 
 	/** Transient Planner turn state. */
 	export type Turn = {
@@ -437,7 +413,6 @@ export declare namespace Chat {
 		busy: boolean;
 		turn?: Turn;
 		runs?: Runs;
-		queued: Waiting[];
 		participation?: Participation;
 	};
 
@@ -457,23 +432,16 @@ export declare namespace Chat {
 		runs?: Runs;
 	};
 
-	/** A message waiting for the current turn to end. */
-	export type Waiting = {
-		id: string;
-		handle: string;
-		text: string;
-		references?: Reference[];
-	};
-
-	export type Queue = KIND<"chat:queue"> & { waiting: Waiting[] };
 	export type Destination = "room" | "planner";
 
 	/**
 	 * Say something.
 	 *
-	 * Accepted whether or not a turn is running. If one is, this joins the
-	 * queue and runs in order when the turn ends — nobody is made to wait in
-	 * silence because somebody else prompted first.
+	 * To the room, always accepted. To the Planner: with no turn running it starts one; while a
+	 * turn runs it is posted at once and given to that turn, to be read at its next step, when
+	 * the document's harness takes input mid-run. Otherwise it is refused (`planner-busy` while
+	 * a turn runs that cannot take it, `planner-not-attached` where no machine can), and nothing
+	 * is held for later. The same write access as starting a turn is required.
 	 */
 	export type Send = KIND<"chat:send"> & {
 		requestId: string;
@@ -605,8 +573,8 @@ export declare namespace Chat {
 		frame: InThreadFrame;
 	};
 
-	/** The member message or queue entry is accepted by the server. */
-	export type Sent = KIND<"chat:send"> & { id: string; queued: boolean };
+	/** The member message is accepted by the server: in the transcript, and started or given to the running turn. */
+	export type Sent = KIND<"chat:send"> & { id: string };
 
 	/**
 	 * Stop the running turn and pause the Planner's workflow runs. Anyone may;
@@ -622,31 +590,6 @@ export declare namespace Chat {
 
 	/** Resume one paused workflow run. Anyone may; the transcript records who did. */
 	export type ResumeRun = KIND<"chat:resume-run"> & { runId: string; thread?: string };
-
-	/** Withdraw a queued message. Only its author may. */
-	export type Unqueue = KIND<"chat:unqueue"> & { id: string; thread?: string };
-
-	/**
-	 * Delete a message the machine has not taken yet. Only its author may, and one that was
-	 * taken, or is already gone, is refused. The message leaves the Chat for everyone and is never
-	 * delivered.
-	 */
-	export type Delete = KIND<"chat:delete"> & { id: string; thread?: string };
-
-	/** The message is deleted. */
-	export type Deleted = KIND<"chat:delete"> & { id: string; thread?: string };
-
-	/** A message was deleted before it was delivered; sent to everyone with the Chat open. */
-	export type Removed = KIND<"chat:removed"> & { id: string };
-
-	/**
-	 * Send a `failed` message again, as it was. Only its author may. It is `sent` again, and
-	 * waits and is delivered like any other.
-	 */
-	export type Retry = KIND<"chat:retry"> & { id: string; thread?: string };
-
-	/** The message is waiting again. */
-	export type Retried = KIND<"chat:retry"> & { id: string };
 
 	/**
 	 * Ask a machine to start the document's Planner now, as sending it a message does, without

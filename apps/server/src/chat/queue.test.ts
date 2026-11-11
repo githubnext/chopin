@@ -24,7 +24,6 @@ type Sent = {
 	kind: string;
 	id?: string;
 	message?: string;
-	queued?: boolean;
 	rid?: string;
 	[key: string]: unknown;
 };
@@ -166,7 +165,6 @@ describe("sending to a named destination", () => {
 		expect(replies[0]).toMatchObject({
 			kind: "chat:send",
 			id: chat.entries[0]?.id,
-			queued: false,
 		});
 	});
 
@@ -236,7 +234,7 @@ describe("sending to a named destination", () => {
 		expect(chat.entries).toEqual([]);
 		expect(chat.waiting).toEqual([]);
 		await Chat.send(context, sender("ana", "U_ana", frames), ask("second"));
-		expect(frames.at(-1)).toMatchObject({ kind: "chat:send", rid: "second", queued: false });
+		expect(frames.at(-1)).toMatchObject({ kind: "chat:send", rid: "second" });
 		expect(chat.entries.filter(item => item.id === requestId)).toHaveLength(1);
 	});
 
@@ -278,7 +276,7 @@ describe("sending to a named destination", () => {
 		release.resolve();
 		await sending;
 		expect(replies).toEqual([
-			expect.objectContaining({ kind: "chat:send", rid: "request", queued: false }),
+			expect.objectContaining({ kind: "chat:send", rid: "request" }),
 		]);
 		expect(replies[0]?.id).toBe(chat.entries[0]?.id);
 		expect(sent[0]).toMatchObject({ kind: "chat:message", entry: { id: replies[0]?.id } });
@@ -299,7 +297,7 @@ describe("sending to a named destination", () => {
 
 		await Chat.send(context, sender("ana", "U_ana", replies), legacy as Request<Wire.Send>);
 
-		expect(replies[0]).toMatchObject({ kind: "chat:send", queued: false });
+		expect(replies[0]).toMatchObject({ kind: "chat:send" });
 		expect(chat.entries[0]?.text).toBe("legacy");
 		expect(chat.entries[0]?.id).toMatch(
 			/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
@@ -340,8 +338,8 @@ describe("sending to a named destination", () => {
 		await Promise.all([first, second]);
 		expect(resolving).toEqual(["first", "second"]);
 		expect(chat.entries.map(entry => entry.text)).toEqual(["first", "second"]);
-		expect(firstReplies[0]).toMatchObject({ rid: "first-rid", queued: false });
-		expect(secondReplies[0]).toMatchObject({ rid: "second-rid", queued: false });
+		expect(firstReplies[0]).toMatchObject({ rid: "first-rid" });
+		expect(secondReplies[0]).toMatchObject({ rid: "second-rid" });
 	});
 
 	it("fails closed and persistence-rejected sends without success replies", async () => {
@@ -456,8 +454,8 @@ describe("sending to a named destination", () => {
 		expect(chat.entries[0]?.id).toBe(requestId);
 		expect(resolutions).toBe(1);
 		expect(persists).toBe(1);
-		expect(firstReplies[0]).toMatchObject({ id: requestId, queued: false });
-		expect(retryReplies[0]).toMatchObject({ id: requestId, queued: false, rid: "retry" });
+		expect(firstReplies[0]).toMatchObject({ id: requestId });
+		expect(retryReplies[0]).toMatchObject({ id: requestId, rid: "retry" });
 	});
 
 	it("replays a lost immediate Planner acknowledgement without starting a duplicate entry", async () => {
@@ -481,7 +479,7 @@ describe("sending to a named destination", () => {
 		expect(chat.entries).toHaveLength(2);
 		expect(chat.entries.filter(entry => entry.id === requestId)).toHaveLength(1);
 		expect(persists).toBe(1);
-		expect(replies[0]).toMatchObject({ id: requestId, queued: false });
+		expect(replies[0]).toMatchObject({ id: requestId });
 	});
 
 	it("rejects conflicting reuse of a request id before another resolution", async () => {

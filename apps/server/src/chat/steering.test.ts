@@ -36,7 +36,7 @@ test("a message sent while a turn runs is posted at once and given to that turn,
 
 	// Acknowledged and in the transcript before the Planner has read it.
 	expect(frames).toEqual([
-		expect.objectContaining({ kind: "chat:send", id: second.requestId, queued: false }),
+		expect.objectContaining({ kind: "chat:send", id: second.requestId }),
 	]);
 	expect(h.chat.entries.map(entry => [entry.author, entry.text])).toEqual([
 		[{ kind: "member", handle: "ana" }, "plan the rollout"],

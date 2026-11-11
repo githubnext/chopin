@@ -222,27 +222,19 @@ export declare namespace Session {
 		 * failure. `planner-not-attached`: a Planner request under `HARNESS=remote`
 		 * to a document no client is attached to; `message` says how to attach one.
 		 * `planner-busy`: a message to the Planner while its turn runs, and the harness cannot take
-		 * input mid-run (or the running turn is a background job's): it is refused, not held, and
-		 * `message` says to stop the turn to ask now.
-		 * `planner-queue-full`: too many requests wait behind the Planner's running turn right now
-		 * (never said of a machine that is away, which keeps every request). The request itself is
-		 * fine and is sent again, with the same request id, once some have been answered.
+		 * input mid-run (or the running turn is a background job's): it is refused, never held, and
+		 * `message` says to stop the turn to ask now. Final.
 		 * `temporarily-unavailable`: a refusal of a `chat:send` for a passing reason (storage busy,
-		 * the room changing, too many sends being handled for a machine that is there, a lookup of a
-		 * reference or of the open child that failed). The message is fine and is sent again, with
-		 * the same request id, and is kept once and delivered once even if an earlier attempt was
-		 * saved before its answer was lost. Any
-		 * refusal of a send without a code or with `planner-not-attached` is final.
-		 * `message-not-deletable`: the answer to a `chat:delete` that is final: the machine already
-		 * took the message, or it is not the sender's. Any other refusal of a delete is for a passing
-		 * reason, and the delete is asked again.
+		 * the room changing, too many sends being handled, a lookup of a reference or of the open
+		 * child that failed, a turn only beginning or finishing). The message is fine and is sent
+		 * again, with the same request id, and is kept once even if an earlier attempt was saved
+		 * before its answer was lost. Any refusal of a send without a code, or with
+		 * `planner-not-attached` or `planner-busy`, is final.
 		 */
 		code?:
 			| "planner-not-attached"
 			| "planner-busy"
-			| "planner-queue-full"
-			| "temporarily-unavailable"
-			| "message-not-deletable";
+			| "temporarily-unavailable";
 	};
 
 	/** Liveness, and the smallest thing that proves request correlation works. */

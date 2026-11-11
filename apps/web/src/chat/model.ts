@@ -17,14 +17,9 @@ export type Message = {
 	attachments?: Chat.Attachment[];
 	/** Set only when the sender addressed the Planner. */
 	to?: Chat.Destination;
-	/** How far a message to the machine has got; see `deliveryOf`. */
-	deliveryState?: Chat.DeliveryState;
-	deliveryFailure?: Chat.DeliveryFailure;
-	/** Only this browser has it so far (`delivery.ts`), why it was refused, and whether it can be dropped. */
+	/** Only this browser has it so far (`delivery.ts`), and why the server refused it. */
 	echo?: true;
 	failure?: string;
-	deletable?: boolean;
-	queued: boolean;
 	working?: boolean;
 	workDisconnected?: boolean;
 	workStreaming?: boolean;
@@ -32,7 +27,7 @@ export type Message = {
 };
 
 export type Group =
-	| { kind: "messages"; author: Speaker; messages: Message[]; queued: boolean }
+	| { kind: "messages"; author: Speaker; messages: Message[] }
 	| {
 		kind: "system";
 		id: string;
@@ -106,7 +101,6 @@ export function displayText(value: string): string {
 
 export function group(
 	entries: Chat.Entry[],
-	queued: Chat.Waiting[],
 	working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">,
 	completed: CompletedWork[] = [],
 	suspended?: CompletedWork,
@@ -158,7 +152,6 @@ export function group(
 			...anchor.entry,
 			author: { kind: "agent" },
 			tools,
-			queued: false,
 			...(span.disconnected ? { workDisconnected: true } : {}),
 			...(span.active
 				? {
@@ -185,68 +178,48 @@ export function group(
 				author: { kind: "agent" as const },
 				text: "",
 				ts: working.started,
-				queued: false,
 				working: true,
 			}]
 			: []),
-		...queued.map(item => ({
-			id: item.id,
-			author: { kind: "member" as const, handle: item.handle },
-			text: item.text,
-			references: item.references,
-			to: "planner" as const,
-			queued: true,
-		})),
 	];
 	let result: Group[] = [];
 
 	for (let row of rows) {
-		if ("queued" in row) {
-			append(result, row);
-			continue;
-		}
 		if (row.author.kind === "system") {
+			let notice = row as Chat.Entry;
 			// Filter at presentation time so saved turn offsets and comment references stay intact.
 			if (
-				row.decision?.kind === "activity"
-				&& /^Chopin (?:drafted|updated|refined|suggested|wrote up)\b/.test(row.text)
+				notice.decision?.kind === "activity"
+				&& /^Chopin (?:drafted|updated|refined|suggested|wrote up)\b/.test(notice.text)
 			) continue;
 			if (
-				!row.decision && !row.comment
+				!notice.decision && !notice.comment
 				&& /^(?:@[\w-]+|Chopin) (?:joined|left|connecting|connected|disconnected)\.?$/i
-					.test(row.text)
+					.test(notice.text)
 			) continue;
 			result.push({
 				kind: "system",
-				id: row.id,
-				text: row.text,
-				ts: row.ts,
-				decision: row.decision,
-				...(row.comment ? { comment: row.comment } : {}),
+				id: notice.id,
+				text: notice.text,
+				ts: notice.ts,
+				decision: notice.decision,
+				...(notice.comment ? { comment: notice.comment } : {}),
 			});
 			continue;
 		}
-		append(result, { ...row, author: row.author, queued: false });
+
+		append(result, { ...row, author: row.author });
 	}
 	return result;
 }
 
 function append(result: Group[], message: Message): void {
 	let previous = result.at(-1);
-	if (
-		previous?.kind === "messages"
-		&& previous.queued === message.queued
-		&& speaker(previous.author) === speaker(message.author)
-	) {
+	if (previous?.kind === "messages" && speaker(previous.author) === speaker(message.author)) {
 		previous.messages.push(message);
 		return;
 	}
-	result.push({
-		kind: "messages",
-		author: message.author,
-		messages: [message],
-		queued: message.queued,
-	});
+	result.push({ kind: "messages", author: message.author, messages: [message] });
 }
 
 export type ToolKind = "ask" | "read" | "write" | "other";
