@@ -218,9 +218,16 @@ ${copies(0)} :focus-visible${OWN} {
 @media (prefers-reduced-motion: reduce) {
 	.animate-pulse:is(${roots.join(", ")}),
 	.shimmer:is(${roots.join(", ")}),
+	.animate-in:is(${roots.join(", ")}),
+	[data-open]:is(${roots.join(", ")}),
+	[data-closed]:is(${roots.join(", ")}),
 	${copies(1)} .animate-pulse,
-	${copies(1)} .shimmer {
+	${copies(1)} .shimmer,
+	${copies(1)} .animate-in,
+	${copies(1)} [data-open],
+	${copies(1)} [data-closed] {
 		animation: none;
+		transition: none;
 	}
 }
 

@@ -7,11 +7,13 @@ import {
   ImageOffIcon,
 } from "lucide-react";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useRef,
   useState,
   type ComponentProps,
+  type ReactNode,
 } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -25,6 +27,18 @@ export interface GalleryImage {
   alt: string;
   caption?: string | undefined;
   source?: { label?: string | undefined; url?: string | undefined } | undefined;
+  failed?: boolean | undefined;
+  failedLabel?: string | undefined;
+  pending?: boolean | undefined;
+  tileProps?:
+    | Omit<
+        ComponentProps<"button"> & ComponentProps<"div">,
+        "children" | "className" | "style"
+      >
+    | undefined;
+  imgProps?:
+    | Omit<ComponentProps<"img">, "src" | "alt" | "className" | "style">
+    | undefined;
 }
 
 export interface ImageGalleryProps extends Omit<
@@ -34,6 +48,14 @@ export interface ImageGalleryProps extends Omit<
   images: readonly GalleryImage[];
   maxVisible?: number | undefined;
   onOpen?: ((id: string) => void) | undefined;
+  activeId?: string | null | undefined;
+  onActiveIdChange?: ((id: string | null) => void) | undefined;
+  onTileOpen?: ((id: string, trigger: HTMLButtonElement) => void) | undefined;
+  hideGrid?: boolean | undefined;
+  between?: ((beforeIndex: number) => ReactNode) | undefined;
+  dialogActions?:
+    | ((image: GalleryImage, index: number) => ReactNode)
+    | undefined;
 }
 
 const keyForImage = (image: GalleryImage) => `${image.id}\u0000${image.src}`;
@@ -42,10 +64,29 @@ export function ImageGallery({
   images,
   maxVisible = 6,
   onOpen,
+  activeId: controlledActiveId,
+  onActiveIdChange,
+  onTileOpen,
+  hideGrid,
+  between,
+  dialogActions,
   className,
   ...props
 }: ImageGalleryProps) {
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [uncontrolledActiveId, setUncontrolledActiveId] = useState<
+    string | null
+  >(null);
+  const activeId =
+    controlledActiveId !== undefined
+      ? controlledActiveId
+      : uncontrolledActiveId;
+  const setActiveId = useCallback(
+    (next: string | null) => {
+      if (controlledActiveId === undefined) setUncontrolledActiveId(next);
+      onActiveIdChange?.(next);
+    },
+    [controlledActiveId, onActiveIdChange],
+  );
   const [failedImages, setFailedImages] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -53,7 +94,9 @@ export function ImageGallery({
   const previousRef = useRef<HTMLButtonElement | null>(null);
   const nextRef = useRef<HTMLButtonElement | null>(null);
   const index = images.findIndex((image) => image.id === activeId);
-  if (activeId !== null && index === -1) setActiveId(null);
+  if (activeId !== null && index === -1 && controlledActiveId === undefined) {
+    setUncontrolledActiveId(null);
+  }
   const activeImage = index === -1 ? undefined : images[index];
   const sourceHref = safeHref(activeImage?.source?.url);
   const visibleCount = Math.floor(clamp(maxVisible, 1, images.length));
@@ -83,7 +126,7 @@ export function ImageGallery({
       }
       setActiveId(image.id);
     },
-    [images],
+    [images, setActiveId],
   );
 
   useEffect(() => {
@@ -107,6 +150,11 @@ export function ImageGallery({
   const open = (nextIndex: number, trigger: HTMLButtonElement) => {
     const image = images[nextIndex];
     if (!image) return;
+    if (onTileOpen) {
+      onTileOpen(image.id, trigger);
+      onOpen?.(image.id);
+      return;
+    }
     triggerRef.current = trigger;
     setActiveId(image.id);
     onOpen?.(image.id);
@@ -119,9 +167,11 @@ export function ImageGallery({
     );
   };
 
-  if (images.length === 0) return null;
+  if (images.length === 0 && !between) return null;
 
   return (
+    <>
+      {!hideGrid ? (
     <div
       data-slot="image-gallery"
       className={cn("@container w-full max-w-md", className)}
@@ -129,16 +179,30 @@ export function ImageGallery({
     >
       <div className="grid grid-cols-2 gap-2 @sm:grid-cols-3">
         {visibleImages.map((image, imageIndex) => {
-          const failed = failedImages.has(keyForImage(image));
+          const failed =
+            Boolean(image.failed) || failedImages.has(keyForImage(image));
           const overflow =
             imageIndex === visibleCount - 1 && images.length > visibleCount;
+          const TileTag = failed && image.failedLabel ? "div" : "button";
 
           return (
-            <button
-              key={image.id}
-              type="button"
-              aria-label={`Open image: ${image.alt}`}
-              onClick={(event) => open(imageIndex, event.currentTarget)}
+            <Fragment key={image.id}>
+              {between?.(imageIndex)}
+            <TileTag
+              type={TileTag === "button" ? "button" : undefined}
+              role={TileTag === "div" ? "img" : undefined}
+              aria-label={
+                failed && image.failedLabel
+                  ? image.failedLabel
+                  : `Open image: ${image.alt}`
+              }
+              onClick={
+                TileTag === "button"
+                  ? (event) =>
+                      open(imageIndex, event.currentTarget as HTMLButtonElement)
+                  : undefined
+              }
+              {...image.tileProps}
               className={cn(
                 field,
                 "focus-visible:ring-foreground/30 relative aspect-square overflow-hidden rounded-xl transition-[transform,background-color] duration-150 outline-none hover:scale-[1.01] focus-visible:ring-1 active:scale-[0.98] motion-reduce:transition-none",
@@ -148,13 +212,14 @@ export function ImageGallery({
                 <span className="text-muted-foreground flex size-full items-center justify-center">
                   <ImageOffIcon aria-hidden className="size-6" />
                 </span>
-              ) : (
+              ) : image.pending ? null : (
                 <img
                   src={image.src}
                   alt={image.alt}
                   loading="lazy"
                   className="size-full object-cover"
                   onError={() => markFailed(image)}
+                  {...image.imgProps}
                 />
               )}
               {overflow ? (
@@ -162,10 +227,14 @@ export function ImageGallery({
                   +{images.length - visibleCount}
                 </span>
               ) : null}
-            </button>
+            </TileTag>
+            </Fragment>
           );
         })}
+        {between?.(visibleImages.length)}
       </div>
+    </div>
+      ) : null}
       {activeImage ? (
         <Dialog
           open
@@ -181,7 +250,8 @@ export function ImageGallery({
               ref={focusDialog}
               className="flex min-h-0 items-center justify-center px-10"
             >
-              {failedImages.has(keyForImage(activeImage)) ? (
+              {Boolean(activeImage.failed) ||
+              failedImages.has(keyForImage(activeImage)) ? (
                 <div className="text-muted-foreground flex h-[min(75vh,32rem)] w-full items-center justify-center">
                   <ImageOffIcon aria-hidden className="size-8" />
                 </div>
@@ -191,6 +261,7 @@ export function ImageGallery({
                   alt={activeImage.alt}
                   className="max-h-[75vh] max-w-full object-contain"
                   onError={() => markFailed(activeImage)}
+                  {...activeImage.imgProps}
                 />
               )}
             </div>
@@ -238,6 +309,7 @@ export function ImageGallery({
                   )
                 ) : null}
               </div>
+              {dialogActions?.(activeImage, index)}
               <span className={cn(mono, "text-muted-foreground shrink-0")}>
                 {index + 1} / {images.length}
               </span>
@@ -258,6 +330,6 @@ export function ImageGallery({
           </DialogContent>
         </Dialog>
       ) : null}
-    </div>
+    </>
   );
 }
