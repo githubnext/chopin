@@ -133,6 +133,14 @@ export function retryPayload(
 				start: reference.start,
 				end: reference.end,
 			}
+			: reference.kind === "command"
+			? {
+				kind: "command",
+				name: reference.name,
+				commandKind: reference.commandKind,
+				start: reference.start,
+				end: reference.end,
+			}
 			: {
 				kind: "research",
 				workspaceId: reference.workspaceId,

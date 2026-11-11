@@ -23,6 +23,9 @@ import { GitHubError } from "../github/client";
 import { laterTimers } from "../testing/decisions";
 import { expectPlainStatusLines } from "../testing/plain-words";
 import * as Chat from "./service";
+import { ReferenceService } from "./references";
+import { plannerCommands } from "../harness/harnesses";
+import { attachedLink } from "../harness/remote/registry";
 import * as Question from "@chopin/question";
 import { answerTurns } from "../questions/answer-turns";
 import * as Questions from "../questions/service";
@@ -30,6 +33,8 @@ import * as Store from "../questions/store";
 import { member } from "../questions/text-response.test-fixtures";
 
 import type { Server } from "bun";
+import type { Chat as Wire } from "@chopin/protocol";
+import type { CapabilityCatalog } from "@chopin/agent-link";
 import type { AgentClient, AgentHandlers } from "@chopin/agent-link/client";
 import type { HostedAuth } from "../auth/routes";
 import type { Socket, SocketData } from "../wire";
@@ -126,7 +131,11 @@ async function remoteRoom(graceMs?: number, operationMs?: number) {
 			replies.push(JSON.parse(text));
 		},
 	} as unknown as Socket;
-	let send = async (text: string, to: "planner" | "room" = "planner") => {
+	let send = async (
+		text: string,
+		to: "planner" | "room" = "planner",
+		references?: Wire.ReferenceRequest[],
+	) => {
 		let rid = crypto.randomUUID();
 		await Chat.send(context, ws, {
 			kind: "chat:send",
@@ -134,6 +143,7 @@ async function remoteRoom(graceMs?: number, operationMs?: number) {
 			requestId: crypto.randomUUID(),
 			to,
 			text,
+			...(references ? { references } : {}),
 			ts: 0,
 		} as never);
 		return replies.find(reply => reply.rid === rid);
@@ -1221,4 +1231,126 @@ test("a Stop the client confirms after the wait for it ended is not sent again w
 	await down.reconnect();
 	await Bun.sleep(300);
 	expect(down.controls).toEqual(["stop"]);
+});
+
+const COMMANDS: NonNullable<CapabilityCatalog["commands"]> = [
+	{ name: "skill:notes", kind: "skill", description: "Take notes" },
+	{ name: "review", kind: "prompt" },
+	{ name: "ship", kind: "workflow", description: "Ship it" },
+];
+
+function command(name: string, commandKind: string, start: number): Wire.CommandRequest {
+	return { kind: "command", name, commandKind, start, end: start + name.length + 1 };
+}
+
+/** A remote room that checks commands against what its attached client reports, as main.ts does. */
+async function commandRoom() {
+	let room = await remoteRoom();
+	room.context.references = new ReferenceService({
+		storage: room.storage,
+		current: async () => undefined,
+		research: {} as never,
+	});
+	room.context.commands = () =>
+		plannerCommands("remote", room.channel.id, { owner: "octo-org", name: "score" });
+	return room;
+}
+
+async function reportingClient(
+	room: Awaited<ReturnType<typeof commandRoom>>,
+	catalog: CapabilityCatalog | undefined,
+) {
+	let script = scriptedPlanner();
+	let client = await connectAgent({
+		url: room.server.url,
+		token: MEMBER_TOKEN,
+		document: room.channel.id,
+		handlers: script.handlers,
+		resumable: false,
+		...(catalog ? { capabilities: catalog } : {}),
+	});
+	cleanups.push(() => client.detach());
+	return { client, turns: script.turns };
+}
+
+test("a command the attached client reports runs on that client as its own /name args, and one it does not report is refused where the person reads it", async () => {
+	let room = await commandRoom();
+	let { turns } = await reportingClient(room, { commands: COMMANDS });
+	await until(() => attachedLink(room.channel.id)?.catalog?.commands?.length === 3);
+	let { context } = room;
+
+	// A skill: Atomic's own invocation opens the prompt, with nothing in front of it.
+	await room.send("we should write release notes", "room");
+	expect(
+		await room.send("@chopin /skill:notes for today", "planner", [
+			command("skill:notes", "skill", "@chopin ".length),
+		]),
+	).toMatchObject({ kind: "chat:send", queued: false });
+	await context.chat.running;
+	expect(turns.map(turn => turn.prompt)).toEqual(["/skill:notes for today"]);
+	let said = context.chat.entries.findLast(entry => entry.author.kind === "member");
+	expect(said).toMatchObject({
+		text: "/skill:notes for today",
+		delivery: { destination: "planner" },
+		references: [{ kind: "command", name: "skill:notes", commandKind: "skill", start: 0, end: 12 }],
+	});
+
+	// The prompt is the command alone, and the Planner still has what the room said: a fresh
+	// session is told it in its instructions.
+	expect((turns[0] as { instructions?: string }).instructions).toContain(
+		"Durable conversation context follows:\n@rival: we should write release notes",
+	);
+
+	// A prompt template, then a workflow, which is asked for by name.
+	await room.send("/review the diff", "planner", [command("review", "prompt", 0)]);
+	await context.chat.running;
+	expect(turns.at(-1)!.prompt).toBe("/review the diff");
+	await room.send("/ship the v2 branch", "planner", [command("ship", "workflow", 0)]);
+	await context.chat.running;
+	expect(turns.at(-1)!.prompt).toContain('Start the registered workflow "ship" now');
+	expect(turns.at(-1)!.prompt.endsWith("the v2 branch")).toBe(true);
+
+	// An unknown command is refused, says so, and posts and runs nothing.
+	let before = context.chat.entries.length;
+	let ran = turns.length;
+	expect(await room.send("/deploy now", "planner", [command("deploy", "workflow", 0)]))
+		.toMatchObject({
+			kind: "session:error",
+			message: "/deploy is not one of the commands the Planner offers.",
+		});
+	// The same name as another kind is not the command either.
+	expect(await room.send("/review", "planner", [command("review", "skill", 0)])).toMatchObject({
+		message: "/review is not one of the commands the Planner offers.",
+	});
+	expect(context.chat.entries).toHaveLength(before);
+	expect(turns).toHaveLength(ran);
+});
+
+test("a command is refused while the attached client reports none, and again once it has left", async () => {
+	let room = await commandRoom();
+	let { client } = await reportingClient(room, undefined);
+	let { context } = room;
+	await until(() => attachedLink(room.channel.id) !== undefined);
+	let said = "The Planner has not reported any commands, so /review cannot run.";
+	expect(await room.send("/review", "planner", [command("review", "prompt", 0)])).toMatchObject({
+		kind: "session:error",
+		message: said,
+	});
+	await client.detach();
+	expect(await room.send("/review", "planner", [command("review", "prompt", 0)])).toMatchObject({
+		message: expect.stringContaining("cannot run"),
+	});
+	expect(context.chat.entries.filter(entry => entry.author.kind === "member")).toHaveLength(0);
+});
+
+test("a command goes only to the Planner, and not to the people in the room", async () => {
+	let room = await commandRoom();
+	await reportingClient(room, { commands: COMMANDS });
+	await until(() => attachedLink(room.channel.id)?.catalog?.commands?.length === 3);
+	expect(await room.send("/review the diff", "room", [command("review", "prompt", 0)]))
+		.toMatchObject({
+			kind: "session:error",
+			message: "A command runs in the Planner's turn, so it goes to Chopin.",
+		});
+	expect(room.context.chat.entries).toHaveLength(0);
 });

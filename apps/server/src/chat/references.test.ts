@@ -12,6 +12,7 @@ import type { DocumentTarget } from "../plan/service";
 import type { ResearchWorkspaceService, ResearchWorkspaceView } from "../research/service";
 
 let NOW = new Date("2026-08-23T12:00:00.000Z");
+let ULID_SHAPE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
 function researchReferencePath(
 	owner: string,
@@ -433,6 +434,106 @@ describe("chat reference requests", () => {
 				reference: resolved.references![0]!,
 			}),
 		).toMatchObject({ href });
+	});
+});
+
+function request(name: string, commandKind: string, start: number, end: number) {
+	return { kind: "command", name, commandKind, start, end };
+}
+
+describe("chat command requests", () => {
+	let commands: Wire.CommandOption[] = [
+		{ name: "skill:notes", kind: "skill", description: "Take notes" },
+		{ name: "review", kind: "prompt" },
+		{ name: "review", kind: "workflow" },
+	];
+	let run = async (
+		text: string,
+		requests: unknown[],
+		reported: Wire.CommandOption[] | null = commands,
+		destination: Wire.Destination = "planner",
+	) => {
+		let { service, parent } = await setup();
+		return service.resolve({
+			channelId: parent.id,
+			repositoryId: parent.repositoryId,
+			text,
+			destination,
+			requests: requests as Wire.ReferenceRequest[],
+			...(reported ? { commands: reported } : {}),
+		});
+	};
+	it("keeps the command's token as the opening of the message, with its name and kind", async () => {
+		let result = await run("@chopin /skill:notes for today", [
+			request("skill:notes", "skill", 8, 20),
+		]);
+		expect(result.text).toBe("/skill:notes for today");
+		expect(result.references).toEqual([{
+			kind: "command",
+			id: expect.stringMatching(ULID_SHAPE),
+			start: 0,
+			end: 12,
+			label: "/skill:notes",
+			name: "skill:notes",
+			commandKind: "skill",
+		}]);
+	});
+
+	it("tells two commands that share a name apart by their kind", async () => {
+		let prompt = await run("/review the diff", [request("review", "prompt", 0, 7)]);
+		let workflow = await run("/review the diff", [request("review", "workflow", 0, 7)]);
+		expect(prompt.references?.[0]).toMatchObject({ name: "review", commandKind: "prompt" });
+		expect(workflow.references?.[0]).toMatchObject({ name: "review", commandKind: "workflow" });
+		await expect(run("/review", [request("review", "skill", 0, 7)])).rejects.toThrow(
+			"/review is not one of the commands the Planner offers",
+		);
+	});
+
+	it("refuses a command the Planner does not report, in words a person can read", async () => {
+		await expect(run("/ship it", [request("ship", "workflow", 0, 5)])).rejects.toMatchObject({
+			name: "ChatCommandError",
+			message: "/ship is not one of the commands the Planner offers.",
+		});
+		await expect(run("/Review", [request("Review", "prompt", 0, 7)])).rejects.toThrow(
+			"/Review is not one of the commands the Planner offers",
+		);
+	});
+
+	it("refuses every command while the Planner has reported none, and says so", async () => {
+		let said = "The Planner has not reported any commands, so /review cannot run.";
+		await expect(run("/review", [request("review", "prompt", 0, 7)], null)).rejects
+			.toMatchObject({ name: "ChatCommandError", message: said });
+		await expect(run("/review", [request("review", "prompt", 0, 7)], [])).rejects
+			.toMatchObject({ message: said });
+	});
+
+	it("takes a command only at the start of a message to the Planner, once", async () => {
+		await expect(run("please /review", [request("review", "prompt", 7, 14)])).rejects.toThrow(
+			"A command has to open the message.",
+		);
+		await expect(run("/review the diff", [request("review", "prompt", 0, 7)], commands, "room"))
+			.rejects.toThrow("A command runs in the Planner's turn");
+		await expect(run("/review /skill:notes", [
+			request("review", "prompt", 0, 7),
+			request("skill:notes", "skill", 8, 20),
+		])).rejects.toThrow("A message can run one command.");
+	});
+
+	it("keeps the command's chip when other references follow it", async () => {
+		let { service, parent, target } = await setup();
+		let result = await service.resolve({
+			channelId: parent.id,
+			repositoryId: parent.repositoryId,
+			text: "/review #notes",
+			destination: "planner",
+			requests: [
+				request("review", "prompt", 0, 7),
+				documentRequest(target.id, 8, 14),
+			] as Wire.ReferenceRequest[],
+			commands,
+		});
+		expect(result.text).toBe("/review #Release Notes");
+		expect(result.references?.map(reference => reference.kind)).toEqual(["command", "document"]);
 	});
 });
 

@@ -104,6 +104,26 @@ The list is the document's Planner's alone. A remote Planner's commands are held
 link, so another person's machine, or an earlier client of the same document, never shows its own.
 A list that cannot be read leaves the field out and never fails the model state.
 
+Choosing a command in the composer inserts it as a chip at the start of the draft, and the send
+carries it as a `command` reference (`name` and `commandKind`, the `kind` the Planner reported, so a
+name two kinds share is never run as the other) over the range of its `/name` token. The server
+checks it against what the Planner reports at that moment and refuses what it does not offer, in
+words the composer shows under the draft it keeps: `/name is not one of the commands the Planner
+offers.`, `The Planner has not reported any commands, so /name cannot run.` (nothing attached, or
+a client that reports none), `A command has to open the message.` and `A message can run one
+command.` A command goes to the Planner; sent to the room it is refused. The reference is kept
+with the message (the same persisted shape as a document reference, so a queued or saved request
+keeps it across a restart) and the Planner's turn is built from it:
+
+| Kind                            | The turn's prompt                                                                                                                                                                                                         |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `skill`, `prompt` and any other | Atomic's own invocation, `/name args`, alone: the room's earlier words and the focused child's line wait for the next turn (a fresh session has them in its instructions), so the prompt opens with the `/`.              |
+| `workflow`                      | A request, in the person's turn as any message is, to start the registered workflow by name with the workflow tool's run action; the words after the chip are given as its input, said to be data and not an instruction. |
+
+Chopin's own commands (`/research`) keep their behaviour: they are never sent to the Planner, and
+the Planner's list never replaces them. A command in a queued message is not checked again when its
+turn starts: if the Planner has since lost it, Atomic reads `/name` as text.
+
 ## Coaching in an invoked turn
 
 The Planner is instructed to develop a small, provisional account of the problem

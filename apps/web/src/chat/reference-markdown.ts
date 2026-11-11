@@ -32,7 +32,8 @@ function text(value: string): MarkdownNode {
 function referenceNode(reference: Chat.Reference, index: number): MarkdownNode {
 	return {
 		type: "link",
-		url: reference.href,
+		// A command is a chip and never a link, so it has no address.
+		url: reference.kind === "command" ? "" : reference.href,
 		children: [text(reference.label)],
 		data: {
 			hProperties: {

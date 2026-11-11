@@ -460,7 +460,7 @@ export function shownSendFailure<T extends SendFailure>(
 }
 
 function validPersistedRange(source: string, reference: Chat.Reference): boolean {
-	let marker = reference.kind === "document" ? "#" : "%";
+	let marker = reference.kind === "document" ? "#" : reference.kind === "command" ? "/" : "%";
 	return Number.isSafeInteger(reference.start)
 		&& Number.isSafeInteger(reference.end)
 		&& reference.start >= 0

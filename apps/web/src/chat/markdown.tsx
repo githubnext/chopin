@@ -166,8 +166,8 @@ function MessageLink(props: ComponentProps<"a">) {
 	let index = typeof property === "string" ? Number(property) : -1;
 	let reference = Number.isSafeInteger(index) ? references[index] : undefined;
 	if (!reference) return <ChatLink href={props.href}>{props.children}</ChatLink>;
-	return reference.kind === "research"
-		? <span className="chat-reference" data-chat-reference="research">{reference.label}</span>
+	return reference.kind === "research" || reference.kind === "command"
+		? <span className="chat-reference" data-chat-reference={reference.kind}>{reference.label}</span>
 		: (
 			<a className="chat-reference" data-chat-reference={reference.kind} href={reference.href}>
 				{reference.label}
