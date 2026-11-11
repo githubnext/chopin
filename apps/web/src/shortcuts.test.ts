@@ -69,12 +69,20 @@ describe("platform", () => {
 		expect(shortcutLabel("toggle-sidebar", "mac")).toBe("⌘\\");
 		expect(shortcutLabel("new-document", "mac")).toBe("⌥N");
 		expect(shortcutLabel("new-document", "other")).toBe("Alt+N");
+		// The composer's chord for asking Chopin, as the tooltip and the sheet print it.
+		expect(shortcutLabel("ask-chopin", "mac")).toBe("⌘J");
+		expect(shortcutLabel("ask-chopin", "other")).toBe("Ctrl+J");
 		expect(shortcutKeys("redo", "mac")).toEqual(["⌘", "⇧", "Z"]);
 		expect(shortcutKeys("redo", "other")).toEqual(["Ctrl", "Shift", "Z"]);
 	});
 });
 
 describe("matchShortcut", () => {
+	test("leaves the composer's chord to the composer, which owns the key", () => {
+		expect(matchShortcut(key("j", { metaKey: true }), "mac", typing)).toBeUndefined();
+		expect(matchShortcut(key("j", { ctrlKey: true }), "other", idle)).toBeUndefined();
+	});
+
 	test("matches the platform's modifier only", () => {
 		expect(matchShortcut(key("k", { metaKey: true }), "mac", idle)).toBe("search");
 		expect(matchShortcut(key("k", { ctrlKey: true }), "mac", idle)).toBeUndefined();

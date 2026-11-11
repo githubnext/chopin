@@ -14,6 +14,7 @@ export type ShortcutId =
 	| "bold"
 	| "italic"
 	| "link"
+	| "ask-chopin"
 	| "undo"
 	| "redo";
 
@@ -69,6 +70,8 @@ export const SHORTCUTS: readonly Shortcut[] = [
 	{ id: "bold", label: "Bold", group: "Editing", key: "b", mod: true, display: true },
 	{ id: "italic", label: "Italic", group: "Editing", key: "i", mod: true, display: true },
 	{ id: "link", label: "Link selected text", group: "Editing", key: "k", mod: true, display: true },
+	// The composer owns the key: it puts the @Chopin chip at the start of the draft (`chopin-chip.ts`).
+	{ id: "ask-chopin", label: "Ask Chopin", group: "Editing", key: "j", mod: true, display: true },
 	{ id: "undo", label: "Undo", group: "Editing", key: "z", mod: true, display: true },
 	{ id: "redo", label: "Redo", group: "Editing", key: "z", mod: true, shift: true, display: true },
 ];

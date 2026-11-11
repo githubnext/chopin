@@ -372,9 +372,11 @@
 		margin: 0.625rem 0.375rem 0 0.5rem;
 		line-height: 1.5;
 	}
-	/* A narrow box shortens the hint rather than wrapping it out of view. */
+	/*
+	 * A narrow box shortens the hint rather than wrapping it out of view. It is left where the first
+	 * line would begin, which is after the chip when there is one, so it has no inset of its own.
+	 */
 	.chat-composer .composer-draft-input[data-empty]::before {
-		inset-inline: 0.5rem;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
