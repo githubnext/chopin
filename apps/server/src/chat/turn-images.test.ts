@@ -251,6 +251,29 @@ describe("images a turn makes", () => {
 		});
 	});
 
+	it("show why a stored Planner upload with an unreadable header cannot be shown, with its alt", async () => {
+		let { chat, context, frames, stored } = turn();
+		let damaged = png(640, 480).slice(0, 20);
+		let { path: src } = await documentRoom(context).uploadImage!({
+			bytes: damaged,
+			mimeType: "image/png",
+			alt: "Floor plan of the ground floor",
+		});
+		await chat.turnImages?.work;
+		expect(src).toBe(path(damaged));
+		expect(stored).toHaveLength(1);
+		let entries = chat.entries.filter(entry => entry.refusedImages);
+		expect(entries).toHaveLength(1);
+		expect(entries[0]!.refusedImages).toEqual([{
+			before: 0,
+			reason:
+				"Image couldn't be shown: its PNG header can't be read, so the image is cut short or damaged. Alt: Floor plan of the ground floor",
+		}]);
+		expect(frames.filter(frame => frame.kind === "chat:message").at(-1)?.entry).toMatchObject({
+			refusedImages: entries[0]!.refusedImages,
+		});
+	});
+
 	it("never show an upload that settles after its turn ended, nor let it take the next turn's", async () => {
 		let release!: () => void;
 		let gate = new Promise<void>(resolve => (release = resolve));

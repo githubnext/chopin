@@ -2545,6 +2545,19 @@ test("a message with no image to show says why, for every reason a tool's image 
 	await expect(chat(page).locator("[data-chat-image]")).toHaveCount(0);
 });
 
+test("a stored Planner upload with an unreadable header shows its reason and accessible alt", async ({ join, page, seed }) => {
+	let reason = `${REASONS.header} Alt: Floor plan of the ground floor`;
+	await seed("# Damaged upload\n", {
+		transcript: turn([], "Here is my upload.", [{ before: 0, reason }]),
+	});
+	await join("ana");
+	let message = chat(page).locator('[data-chat-message-id="drawn"]');
+	await expect(message.getByText(reason, { exact: true })).toBeVisible();
+	await expect(message.getByRole("img", { name: reason, exact: true })).toBeVisible();
+	await page.reload();
+	await expect(message.getByRole("img", { name: reason, exact: true })).toBeVisible();
+});
+
 test("a refusal's reason is on the page whole on a phone, and nothing overflows", async ({ baseURL, join, room, seed }) => {
 	let stored = await store(baseURL, room);
 	await seed("# Phone\n", {

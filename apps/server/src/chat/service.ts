@@ -20,7 +20,7 @@
 
 import { createHash } from "node:crypto";
 import { imagePath, imageSize } from "../images/format";
-import { inspectImages, STORE_REFUSAL, toolRowOutput } from "./images";
+import { headerRefusal, inspectImages, STORE_REFUSAL, toolRowOutput } from "./images";
 import type { ToolImage } from "./images";
 
 import { ulid } from "@chopin/dialect";
@@ -2316,14 +2316,19 @@ export function documentRoom(context: Room): DocumentRoom {
 				});
 				let path = imagePath(sha256, mimeType);
 				let size = imageSize(mimeType, bytes);
-				if (size && chat.turnImages === images) {
+				if (chat.turnImages === images) {
 					later(images, () =>
-						showImages(context, images, [{
-							src: path,
-							...(alt === undefined ? {} : { alt }),
-							...size,
-							generated: true,
-						}]));
+						size
+							? showImages(context, images, [{
+								src: path,
+								...(alt === undefined ? {} : { alt }),
+								...size,
+								generated: true,
+							}])
+							: showImages(context, images, [], undefined, [{
+								before: 0,
+								reason: `${headerRefusal(mimeType)}${alt ? ` Alt: ${alt}` : ""}`,
+							}]));
 				}
 				return { path };
 			},

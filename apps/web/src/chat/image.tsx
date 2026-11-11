@@ -579,7 +579,7 @@ export function ImageFigure(
 
 export function RefusedImage({ reason }: { reason: string }) {
 	return (
-		<p className="chat-image-refused" data-chat-image-refused>
+		<p className="chat-image-refused" data-chat-image-refused role="img" aria-label={reason}>
 			<ImageOffIcon aria-hidden="true" size={16} />
 			<span>{reason}</span>
 		</p>

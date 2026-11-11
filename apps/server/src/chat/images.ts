@@ -45,6 +45,12 @@ const REFUSAL_START = "Image couldn't be shown: ";
 
 export const STORE_REFUSAL = `${REFUSAL_START}Chopin couldn't store it.`;
 
+export function headerRefusal(type: HostedImageType): string {
+	return `${REFUSAL_START}its ${
+		IMAGE_LABELS[type]
+	} header can't be read, so the image is cut short or damaged.`;
+}
+
 function refusal(reason: string): { reason: string } {
 	return { reason: `${REFUSAL_START}${reason}` };
 }
@@ -103,11 +109,7 @@ function hosted(block: unknown, maxBytes: number): ToolImage | { reason: string 
 		);
 	}
 	let dimensions = imageSize(named, bytes);
-	if (!dimensions) {
-		return refusal(
-			`its ${IMAGE_LABELS[named]} header can't be read, so the image is cut short or damaged.`,
-		);
-	}
+	if (!dimensions) return { reason: headerRefusal(named) };
 	return {
 		bytes,
 		mimeType: named,
