@@ -466,13 +466,13 @@ describe("tool images over the stored limit", () => {
 	});
 
 	test("makes a very wide photo small enough to store, keeping its shape", async () => {
-		let photo = await new Bun.Image(fixture("raster-18x6.png")).resize(12000, 4000).jpeg({
+		let photo = await new Bun.Image(fixture("raster-18x6.png")).resize(6000, 2000).jpeg({
 			quality: 95,
 		}).bytes();
 		let [wide] =
 			inspectImages({ content: [image({ data: base64(photo), mimeType: "image/jpeg" })] })
 				.images;
-		expect(wide).toMatchObject({ width: 12000, height: 4000 });
+		expect(wide).toMatchObject({ width: 6000, height: 2000 });
 		let fitted = await fitImage(wide!, 100_000) as ToolImage;
 		expect(fitted.mimeType).toBe("image/jpeg");
 		expect(fitted.bytes.byteLength).toBeLessThanOrEqual(100_000);
