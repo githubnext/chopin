@@ -89,8 +89,11 @@ let paragraph = ({ children }: ComponentProps<"p">) => (
 );
 
 /** A link someone wrote: a path in the repository opens the file on GitHub, as in the document. */
-export const ChatLink = ({ children, className, href }: ComponentProps<"a">) => (
+export const ChatLink = (
+	{ "aria-label": label, children, className, href }: ComponentProps<"a">,
+) => (
 	<UpstreamLink
+		aria-label={label}
 		className={className}
 		href={useLinkHref(href)}
 		rel="noopener noreferrer"
@@ -201,7 +204,9 @@ function MessageLink(props: ComponentProps<"a">) {
 	let property = attributes["data-chat-reference-index"] ?? attributes["dataChatReferenceIndex"];
 	let index = typeof property === "string" ? Number(property) : -1;
 	let reference = Number.isSafeInteger(index) ? references[index] : undefined;
-	if (!reference) return <ChatLink href={props.href}>{props.children}</ChatLink>;
+	if (!reference) {
+		return <ChatLink aria-label={props["aria-label"]} href={props.href}>{props.children}</ChatLink>;
+	}
 	return reference.kind !== "document"
 		? <span className="chat-reference" data-chat-reference={reference.kind}>{reference.label}</span>
 		: (
