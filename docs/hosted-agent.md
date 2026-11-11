@@ -880,11 +880,32 @@ Chat references are typed server-side resources, not URLs the model can
 follow. `#` selects another ordinary document in the current repository.
 References persist with their message, but `read_reference` accepts only the
 bounded set retained by the active Planner session. A document reference reads
-latest canonical source and reports whether it changed since selection. New
-messages no longer offer `%` research references; persisted references from the
-removed Research Workspace interface still return a bounded compatibility
-projection. Both forms are untrusted evidence, and neither changes the
-room-fixed target of `read_plan` or editing tools.
+latest canonical source and reports whether it changed since selection. Typing `%`
+no longer opens anything; a research card of this document is chosen from `@` (below),
+and persisted references from the removed Research Workspace interface still return a
+bounded compatibility projection. Both forms are untrusted evidence, and neither changes
+the room-fixed target of `read_plan` or editing tools.
+
+`@` also points at the document's own parts and at its repository, as references the
+Planner receives as identities and not as words. A request names the part and never
+its text; the server resolves it against the document as it stands when the message
+is sent, writes the label the person saw from it, and refuses one that has gone, in
+words the composer shows (`That heading is no longer in the document.`,
+`That Decision is no longer in the document.`, `That file is not in the repository.`,
+`This repository's files cannot be listed right now, so a file cannot be mentioned.`,
+`That path is too long to mention.`):
+
+| Kind       | Request       | What the Planner is told beside the words                                                                                                                                                                   |
+| ---------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `heading`  | `anchor`      | `[heading anchor "overview", level 1, line 1 of this document]`. The anchor is the heading's text as GitHub slugs it, `-1`, `-2` after a repeat, in document order, over the document's top-level headings. |
+| `decision` | `decisionId`  | `[Decision id "<id>" of this document]`. The label is the Decision's header (its prompt where it has none).                                                                                                 |
+| `file`     | `path`        | `[file path "src/index.ts" in the repository]`. A plain path from the root: no `..`, `.`, empty part, backslash or control character.                                                                       |
+| `research` | `workspaceId` | As before: a reference read by id with `read_reference`, drawn `%Title`. Only a workspace of this document is accepted.                                                                                     |
+
+None but a document or a research reference can be read by id: a heading, a Decision and a file
+are places the prompt already says how to find (`read_plan` shows the document with its Decisions,
+the repository tools read a file), and are quoted so a name with a quote or a line break stays one
+value. Each is kept with its message, in the same persisted shape, strictly checked on restore.
 
 Messages from people retain their GitHub handles so disagreement is not merged
 into one anonymous user voice.

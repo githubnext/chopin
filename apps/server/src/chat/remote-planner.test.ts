@@ -1244,11 +1244,16 @@ function command(name: string, commandKind: string, start: number): Wire.Command
 }
 
 /** A remote room that checks commands against what its attached client reports, as main.ts does. */
-async function commandRoom() {
+async function commandRoom(source = "") {
 	let room = await remoteRoom();
 	room.context.references = new ReferenceService({
 		storage: room.storage,
-		current: async () => undefined,
+		current: async channelId => ({
+			channelId,
+			revision: 2,
+			source,
+			sourceHash: Plan.sourceHash(source),
+		}),
 		research: {} as never,
 	});
 	room.context.commands = () =>
@@ -1353,4 +1358,70 @@ test("a command goes only to the Planner, and not to the people in the room", as
 			message: "A command runs in the Planner's turn, so it goes to Chopin.",
 		});
 	expect(room.context.chat.entries).toHaveLength(0);
+});
+
+test("a heading, a Decision and a file mentioned in a message reach the attached client as structured references, and a part that has gone is refused", async () => {
+	let source = [
+		"# Overview",
+		"",
+		'<Questionnaire id="01HQ0000000000000000000000">',
+		'<Question id="q1" header="Rollout" prompt="How?" multiple="false">',
+		'<Option id="o1" label="Canary" />',
+		"</Question>",
+		"</Questionnaire>",
+		"",
+	].join("\n");
+	let room = await commandRoom(source);
+	room.context.fileExists = async (path, session) =>
+		session === room.logins.get("rival") ? path === "src/index.ts" : undefined;
+	let { turns } = await reportingClient(room, undefined);
+	let { context } = room;
+	let text = "@chopin compare @ov with @ro in @idx";
+	let at = (token: string) => text.indexOf(token);
+	let mention = [
+		{ kind: "heading", anchor: "overview", start: at("@ov"), end: at("@ov") + 3 },
+		{
+			kind: "decision",
+			decisionId: "01HQ0000000000000000000000",
+			start: at("@ro"),
+			end: at("@ro") + 3,
+		},
+		{ kind: "file", path: "src/index.ts", start: at("@idx"), end: at("@idx") + 4 },
+	] as Wire.ReferenceRequest[];
+	expect(await room.send(text, "planner", mention)).toMatchObject({ kind: "chat:send" });
+	await context.chat.running;
+	let said = context.chat.entries.find(entry => entry.author.kind === "member");
+	expect(said?.text).toBe("compare @Overview with @Rollout in @src/index.ts");
+	expect(said?.references?.map(reference => reference.kind)).toEqual([
+		"heading",
+		"decision",
+		"file",
+	]);
+	expect(turns.at(-1)!.prompt).toBe(
+		'@rival: compare @Overview [heading anchor "overview", level 1, line 1 of this document] with '
+			+ '@Rollout [Decision id "01HQ0000000000000000000000" of this document] in '
+			+ '@src/index.ts [file path "src/index.ts" in the repository]',
+	);
+
+	let before = context.chat.entries.length;
+	expect(
+		await room.send("@chopin see @x", "planner", [
+			{ kind: "heading", anchor: "removed", start: 12, end: 14 },
+		]),
+	).toMatchObject({
+		kind: "session:error",
+		message: "That heading is no longer in the document.",
+	});
+	expect(
+		await room.send("@chopin see @x", "planner", [
+			{ kind: "file", path: "../etc/passwd", start: 12, end: 14 },
+		]),
+	).toMatchObject({ kind: "session:error", message: "invalid or unavailable chat reference" });
+	// A file the sender's session cannot list is not one it can mention.
+	expect(
+		await room.send("@chopin see @x", "planner", [
+			{ kind: "file", path: "src/other.ts", start: 12, end: 14 },
+		]),
+	).toMatchObject({ kind: "session:error", message: "That file is not in the repository." });
+	expect(context.chat.entries).toHaveLength(before);
 });

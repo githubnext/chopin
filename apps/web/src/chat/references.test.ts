@@ -13,6 +13,8 @@ import {
 	MAX_REFERENCES,
 	prepareDraftSubmission,
 	reconcileReferenceDrafts,
+	referenceMarker,
+	referenceRequest,
 	referenceTrigger,
 	REPLIES_OFF,
 	repliesOffNotice,
@@ -25,6 +27,7 @@ import {
 } from "./references";
 import { WireLost, WireRefusal } from "../wire";
 
+import type { Chat } from "@chopin/protocol";
 import type { ReferenceDraft, ReferenceTarget } from "./references";
 
 let REQUEST_ID = "123e4567-e89b-42d3-a456-426614174000";
@@ -39,6 +42,32 @@ function select(text: string, target: ReferenceTarget, references: ReferenceDraf
 	if (!trigger) throw new Error("expected a reference trigger");
 	return insertReference(text, references, trigger, target);
 }
+
+describe("a sent reference asked for again", () => {
+	let base = { id: "r", start: 2, end: 9, label: "@x" };
+	test("is the request that made it, whatever its kind, with the same range", () => {
+		let sent: Chat.Reference[] = [
+			{ ...base, kind: "heading", anchor: "overview", level: 2, line: 3 },
+			{ ...base, kind: "decision", decisionId: "d1" },
+			{ ...base, kind: "file", path: "src/a.ts" },
+			{ ...base, kind: "command", name: "review", commandKind: "prompt" },
+		];
+		expect(sent.map(referenceRequest)).toEqual([
+			{ kind: "heading", anchor: "overview", start: 2, end: 9 },
+			{ kind: "decision", decisionId: "d1", start: 2, end: 9 },
+			{ kind: "file", path: "src/a.ts", start: 2, end: 9 },
+			{ kind: "command", name: "review", commandKind: "prompt", start: 2, end: 9 },
+		]);
+	});
+
+	test("opens its token with the character of its kind", () => {
+		expect(
+			(["document", "research", "command", "heading", "decision", "file"] as const).map(
+				referenceMarker,
+			),
+		).toEqual(["#", "%", "/", "@", "@", "@"]);
+	});
+});
 
 describe("typed reference triggers", () => {
 	test("finds bare and queried tokens only at a whitespace boundary", () => {

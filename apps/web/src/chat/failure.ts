@@ -8,8 +8,9 @@
  * The words are a machine's and a person's own, none of Chopin's terms (`status-copy.test.tsx`).
  */
 
-import type { Chat } from "@chopin/protocol";
+import { referenceRequest } from "./references";
 
+import type { Chat } from "@chopin/protocol";
 import type { ChatSendPayload, SendFailure } from "./references";
 
 export type FailureKind = Exclude<Chat.TurnFailure["kind"], "dropped"> | "send";
@@ -125,29 +126,7 @@ export function retryPayload(
 	let failure = notice?.turnFailure;
 	let asked = failure?.request ? entries.find(entry => entry.id === failure.request) : undefined;
 	if (!failure || !asked || asked.to !== "planner") return undefined;
-	let references = (asked.references ?? []).map((reference): Chat.ReferenceRequest =>
-		reference.kind === "document"
-			? {
-				kind: "document",
-				channelId: reference.channelId,
-				start: reference.start,
-				end: reference.end,
-			}
-			: reference.kind === "command"
-			? {
-				kind: "command",
-				name: reference.name,
-				commandKind: reference.commandKind,
-				start: reference.start,
-				end: reference.end,
-			}
-			: {
-				kind: "research",
-				workspaceId: reference.workspaceId,
-				start: reference.start,
-				end: reference.end,
-			}
-	);
+	let references = (asked.references ?? []).map(referenceRequest);
 	return {
 		requestId: requestId(),
 		text: asked.text,

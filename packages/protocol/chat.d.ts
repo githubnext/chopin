@@ -52,7 +52,25 @@ export declare namespace Chat {
 	export type ReferenceRequest =
 		| { kind: "document"; channelId: string; start: number; end: number }
 		| { kind: "research"; workspaceId: string; start: number; end: number }
-		| CommandRequest;
+		| CommandRequest
+		| HeadingRequest
+		| DecisionRequest
+		| FileRequest;
+
+	/**
+	 * A mention of one of this document's own parts, by its identity and not its words: a heading
+	 * by its `anchor` (its text as a lowercase slug, `-1`, `-2` after a repeat, in document order),
+	 * a Decision by its id and a file of the document's repository by its path. The range holds
+	 * the `@` token the person saw.
+	 */
+	export type HeadingRequest = { kind: "heading"; anchor: string; start: number; end: number };
+	export type DecisionRequest = {
+		kind: "decision";
+		decisionId: string;
+		start: number;
+		end: number;
+	};
+	export type FileRequest = { kind: "file"; path: string; start: number; end: number };
 
 	/**
 	 * A command the composer's `/` list offered, run as the Planner's own: `commandKind` is the
@@ -91,20 +109,43 @@ export declare namespace Chat {
 	};
 
 	/**
-	 * A command, kept with the message that ran it. It names no document, so it has no address,
-	 * repository or revision: `label` is the `/name` token the message opens with.
+	 * What a reference that names no other document carries: where its token sits and what it
+	 * reads. It has no address, repository or revision of its own.
 	 */
-	export type CommandReference = {
+	type PointerBase = { id: string; start: number; end: number; label: string };
+
+	/** A command, kept with the message that ran it; `label` is the `/name` token it opens with. */
+	export type CommandReference = PointerBase & {
 		kind: "command";
-		id: string;
-		start: number;
-		end: number;
-		label: string;
 		name: string;
 		commandKind: string;
 	};
 
-	export type Reference = DocumentReference | ResearchReference | CommandReference;
+	/**
+	 * A heading of this document, as it read when the message was sent: `label` is `@` and its
+	 * text, `level` its depth (1 to 6) and `line` the line of the source it starts on. `anchor`
+	 * identifies it, as `HeadingRequest` describes.
+	 */
+	export type HeadingReference = PointerBase & {
+		kind: "heading";
+		anchor: string;
+		level: number;
+		line: number;
+	};
+
+	/** A Decision of this document: `label` is `@` and its header, `decisionId` the record's id. */
+	export type DecisionReference = PointerBase & { kind: "decision"; decisionId: string };
+
+	/** A file of this document's repository, by its path from the root; `label` is `@` and the path. */
+	export type FileReference = PointerBase & { kind: "file"; path: string };
+
+	export type Reference =
+		| DocumentReference
+		| ResearchReference
+		| CommandReference
+		| HeadingReference
+		| DecisionReference
+		| FileReference;
 
 	/** One tool call, as it appears beneath the message that made it. */
 	export type Activity = {
