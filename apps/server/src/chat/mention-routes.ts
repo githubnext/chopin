@@ -9,14 +9,20 @@ import { GitHubError } from "../github/client";
 import { documentPointers, matchPointers } from "./pointers";
 import { matchFiles } from "./repository-files";
 
-import type { MentionSources } from "@chopin/protocol/mention-sources";
+import type {
+	DocumentPeople,
+	DocumentPerson,
+	MentionSources,
+} from "@chopin/protocol/mention-sources";
 import type { HostedAuth } from "../auth/routes";
 import type { Router } from "../http/router";
 import type { DocumentTarget } from "../plan/service";
 import type { RepositoryFiles } from "./repository-files";
+import type { RepositoryPeople } from "./repository-people";
 
 /** A reference's label, `@` and the path, holds at most this many characters less one. */
 const MAX_FILE_TOKEN = 121;
+const PEOPLE_VERSION_LIMIT = 50;
 
 export type MentionRouteOptions = {
 	/** The document as it stands now. */
@@ -25,6 +31,8 @@ export type MentionRouteOptions = {
 	research: (channelId: string) => Promise<Array<{ id: string; title: string }>>;
 	/** The files of the document's repository; absent where nothing lists them. */
 	files?: RepositoryFiles;
+	/** The collaborators who can read the document's repository; absent where nothing lists them. */
+	people?: RepositoryPeople;
 };
 
 function json(value: unknown, status = 200): Response {
@@ -120,6 +128,63 @@ export function registerMentionRoutes(
 			}
 			console.error("[chat] could not list what can be mentioned:", error);
 			return json({ error: "mentions are temporarily unavailable" }, 503);
+		}
+	});
+
+	router.on("GET", "/api/channels/:channelId/people", async (request, _url, params) => {
+		try {
+			let session = await auth.sessions.authenticate(request);
+			if (!session) return json({ error: "authentication required" }, 401);
+			let id = params.channelId!;
+			if (!isChannelId(id)) return json({ error: "channel not found" }, 404);
+			let channel = await auth.storage.channels.get(id);
+			if (!channel) return json({ error: "channel not found" }, 404);
+			let access = await auth.sessions.use(
+				session,
+				token =>
+					auth.github.repositoryAccess(token, channel.repositoryOwner, channel.repositoryName),
+			);
+			let repository = access.value;
+			if (
+				!repository || repository.id !== channel.repositoryId || !repository.permissions.pull
+			) return json({ error: "channel not found" }, 404);
+
+			let collaborators = await options.people?.list({
+				id: repository.id,
+				owner: repository.owner,
+				name: repository.name,
+			}, access.authenticated.session.id);
+			if (collaborators) {
+				let body: DocumentPeople = { people: collaborators, authoritative: true };
+				return json(body);
+			}
+
+			let [creator, versions] = await Promise.all([
+				auth.storage.users.get(channel.createdBy),
+				auth.storage.versions.list(channel.id, PEOPLE_VERSION_LIMIT),
+			]);
+			let seen = new Set<string>();
+			let people: DocumentPerson[] = [];
+			let add = (login: string | undefined, avatarUrl: string | undefined) => {
+				if (!login) return;
+				let key = login.toLowerCase();
+				if (seen.has(key)) return;
+				seen.add(key);
+				people.push({ login, avatarUrl: avatarUrl ?? "" });
+			};
+			add(creator?.login, creator?.avatarUrl);
+			for (let version of versions) add(version.authorLogin, version.authorAvatarUrl);
+			let body: DocumentPeople = { people, authoritative: false };
+			return json(body);
+		} catch (error) {
+			if (error instanceof GitHubError && error.status === 401) {
+				return Response.json({ error: "GitHub authorization expired" }, {
+					status: 401,
+					headers: { "cache-control": "no-store", "set-cookie": auth.sessions.clearCookie() },
+				});
+			}
+			console.error("[chat] could not list the document's people:", error);
+			return json({ error: "people are temporarily unavailable" }, 503);
 		}
 	});
 }

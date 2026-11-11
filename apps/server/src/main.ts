@@ -64,6 +64,7 @@ import { CHAT_CAPABILITIES, incomingFrame, sidebarFrame } from "./chat/incoming"
 import { registerMentionRoutes } from "./chat/mention-routes";
 import { ReferenceService } from "./chat/references";
 import { RepositoryFiles } from "./chat/repository-files";
+import { RepositoryPeople } from "./chat/repository-people";
 import { createConversationRuntime } from "./conversation-plan/runtime";
 import { createEditingUnlocked } from "./plan/editing-unlocked";
 import { researchBriefDefinition } from "./jobs/research-brief";
@@ -281,6 +282,19 @@ const repositoryFiles = new RepositoryFiles({
 			session,
 			token =>
 				github.repositoryFiles(token, repository.owner, repository.name, repository.defaultBranch),
+		);
+		return value;
+	},
+});
+const repositoryPeople = new RepositoryPeople({
+	remote: async (sessionId, repository) => {
+		let github = hostedAuth.github;
+		if (!github.repositoryCollaborators) return undefined;
+		let session = await hostedAuth.sessions.resolve(sessionId);
+		if (!session) return undefined;
+		let { value } = await hostedAuth.sessions.use(
+			session,
+			token => github.repositoryCollaborators!(token, repository.owner, repository.name),
 		);
 		return value;
 	},
@@ -3280,6 +3294,7 @@ registerMentionRoutes(router, hostedAuth, {
 	research: async channelId =>
 		(await storage.research.list(channelId, 100, true)).map(({ id, title }) => ({ id, title })),
 	files: repositoryFiles,
+	people: repositoryPeople,
 });
 registerResearchWorkspaceRoutes(router, hostedAuth, {
 	service: researchService,

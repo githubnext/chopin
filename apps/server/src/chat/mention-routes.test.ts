@@ -8,8 +8,9 @@ import { sourceHash } from "../plan/service";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { registerMentionRoutes } from "./mention-routes";
 import { RepositoryFiles } from "./repository-files";
+import { RepositoryPeople } from "./repository-people";
 
-import type { MentionSources } from "@chopin/protocol/mention-sources";
+import type { DocumentPeople, MentionSources } from "@chopin/protocol/mention-sources";
 import type { HostedAuth } from "../auth/routes";
 import type { GitHub, Repository } from "../github/client";
 
@@ -177,5 +178,149 @@ describe("what @ can point at in a document", () => {
 		expect((await ask(context, "?limit=0")).status).toBe(400);
 		expect((await ask(context, "?limit=21")).status).toBe(400);
 		expect((await ask(context, "?limit=two")).status).toBe(400);
+	});
+});
+
+describe("the people who can read a document", () => {
+	async function setupPeople(
+		options: {
+			collaborators?: Array<{ login: string; avatarUrl: string }>;
+			pull?: boolean;
+		} = {},
+	) {
+		let now = new Date("2026-08-23T12:00:00.000Z");
+		let storage = new MemoryStorage();
+		await storage.users.put({
+			id: USER_ID,
+			login: "octocat",
+			avatarUrl: "https://avatars.test/octocat",
+			now,
+		});
+		await storage.users.put({
+			id: "U_editor",
+			login: "hubot",
+			avatarUrl: "https://avatars.test/hubot",
+			now,
+		});
+		let channel = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: REPOSITORY_ID,
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Release plan",
+			createdBy: USER_ID,
+			now,
+		});
+		await storage.versions.record({
+			channelId: channel.id,
+			authorId: "U_editor",
+			revision: 1,
+			source: "# Overview\n",
+			sourceHash: sourceHash("# Overview\n"),
+			idleMs: 0,
+			now,
+		});
+		let repository: Repository = {
+			id: REPOSITORY_ID,
+			owner: "octo-org",
+			name: "score",
+			fullName: "octo-org/score",
+			private: true,
+			url: "https://github.test/octo-org/score",
+			defaultBranch: "main",
+			permissions: { pull: options.pull ?? true, push: true, admin: false },
+		};
+		let github = {
+			async repositoryAccess(_token: string, owner: string, name: string) {
+				return owner === "octo-org" && name === "score" ? repository : undefined;
+			},
+		} as unknown as GitHub;
+		let config = {
+			origin: "https://chopin.test",
+			appSlug: "chopin-test",
+			clientId: "client-id",
+			clientSecret: "client-secret",
+			encryptionKey: new Uint8Array(32).fill(4),
+		};
+		let sessions = new Sessions(storage, true, () => now);
+		let issued = await sessions.issue(USER_ID, {
+			accessToken: "ghu_user",
+			accessExpiresIn: 28_800,
+			refreshToken: "ghr_user",
+			refreshExpiresIn: 15_897_600,
+		});
+		let auth: HostedAuth = {
+			config,
+			storage,
+			github,
+			admission: new Admission(config, github, () => now.getTime()),
+			sessions,
+			clock: () => now,
+			machines: new Machines(storage, () => new Date(), {
+				origin: "https://chopin.test",
+				clientId: "test",
+			}),
+			pairings: {},
+		};
+		let router = new Router();
+		registerMentionRoutes(router, auth, {
+			current: async channelId => ({
+				channelId,
+				revision: 1,
+				source: "# Overview\n",
+				sourceHash: sourceHash("# Overview\n"),
+			}),
+			research: async () => [],
+			people: new RepositoryPeople({
+				remote: async () => options.collaborators,
+			}),
+		});
+		return { channel, router, cookie: issued.cookie.split(";", 1)[0]! };
+	}
+
+	async function askPeople(
+		context: Awaited<ReturnType<typeof setupPeople>>,
+		cookie: string | undefined = context.cookie,
+		channel: string = context.channel.id,
+	) {
+		let headers = new Headers();
+		if (cookie) headers.set("cookie", cookie);
+		let response = await context.router.handle(
+			new Request(`https://chopin.test/api/channels/${channel}/people`, { headers }),
+		);
+		if (!response) throw new Error("the people route was not registered");
+		return response;
+	}
+
+	it("lists GitHub's repository collaborators with their avatars when GitHub reports them", async () => {
+		let context = await setupPeople({
+			collaborators: [
+				{ login: "mona", avatarUrl: "https://avatars.test/mona" },
+				{ login: "nell_acme", avatarUrl: "https://avatars.test/nell" },
+			],
+		});
+		let response = await askPeople(context);
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual<DocumentPeople>({
+			authoritative: true,
+			people: [
+				{ login: "mona", avatarUrl: "https://avatars.test/mona" },
+				{ login: "nell_acme", avatarUrl: "https://avatars.test/nell" },
+			],
+		});
+	});
+
+	it("falls back to the document's known authors when collaborators cannot be listed, and refuses strangers", async () => {
+		let fallback = await setupPeople();
+		expect(await (await askPeople(fallback)).json()).toEqual<DocumentPeople>({
+			authoritative: false,
+			people: [
+				{ login: "octocat", avatarUrl: "https://avatars.test/octocat" },
+				{ login: "hubot", avatarUrl: "https://avatars.test/hubot" },
+			],
+		});
+		expect((await askPeople(fallback, "")).status).toBe(401);
+		let denied = await setupPeople({ pull: false });
+		expect((await askPeople(denied)).status).toBe(404);
 	});
 });
