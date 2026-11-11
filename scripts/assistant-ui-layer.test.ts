@@ -38,12 +38,12 @@ let tailwindOwn = variables(
 let scoped = variables(
 	layer,
 	node =>
-		node.type === "rule" && node.selector.startsWith(":where(")
+		node.type === "rule" && node.selector.startsWith("[data-slot|=")
 		&& !node.selector.includes("chopin-control"),
 );
 let ownControl = variables(
 	layer,
-	node => node.type === "rule" && node.selector === ":where([data-chopin-control])",
+	node => node.type === "rule" && node.selector === "[data-chopin-control]",
 );
 let dropped = variables(layer, node => node.type === "atrule" && node.name === "theme");
 let chopinOwn = variables(chopin, node => node.type === "atrule" && node.name === "theme");
@@ -66,12 +66,10 @@ describe("the assistant-ui geometry layer", () => {
 	test("restores Tailwind's own value for everything on a copy's root, and invents none", () => {
 		expect(scoped.size).toBeGreaterThan(20);
 		for (let [name, value] of scoped) {
-			// One declaration is ours: preflight's border colour, read from the border role.
-			if (name === "--color-gray-200") expect(value).toBe("var(--color-border)");
 			// Only a colour is Chopin's: a shadow is Tailwind's at the same opacity, tinted.
-			else {expect(value).toBe(
-					/shadow/.test(name) ? tinted(tailwindOwn.get(name)!) : tailwindOwn.get(name),
-				);}
+			expect(value).toBe(
+				/shadow/.test(name) ? tinted(tailwindOwn.get(name)!) : tailwindOwn.get(name),
+			);
 		}
 	});
 
@@ -86,6 +84,20 @@ describe("the assistant-ui geometry layer", () => {
 
 	test("reads no universal selector under a copy: a `*` rule makes every element walk its ancestors", () => {
 		expect(layer).not.toMatch(/\)\s*\*\s*[,{]/);
+	});
+
+	test("colours a bare border with the border role, found by its class and in the base layer", () => {
+		let base = layer.slice(
+			layer.indexOf("@layer base"),
+			layer.indexOf("/*", layer.indexOf("@layer base")),
+		);
+		expect(base).toContain("border-color: var(--color-border)");
+		for (let name of ["border", "border-t", "border-b", "border-x"]) {
+			expect(base).toContain(`.${name}:not([data-chopin-control])`);
+		}
+		// No subject that every element has, and a Chopin control keeps its own.
+		expect(base).not.toContain("[class*=");
+		expect(base).not.toMatch(/(^|,)\s*\*\s*[,{]/m);
 	});
 
 	test("is Tailwind's scale where Chopin's is not: assistant-ui's radii, 14px and 12px type", () => {
@@ -107,21 +119,56 @@ describe("the assistant-ui geometry layer", () => {
 			expect(chopinOwn.has(name)).toBe(false);
 			expect(scoped.get(name)).toBe(value);
 		}
-		expect(dropped.has("--color-gray-200")).toBe(false);
 		expect(dropped.has("--radius-2xl")).toBe(true);
 		expect(dropped.has("--radius-xl")).toBe(false);
 	});
 
 	test("is scoped to every root the copies set, and Chopin's own elements are not among them", () => {
-		let scope = layer.slice(layer.indexOf(":where("), layer.indexOf(") {"));
-		for (let slot of new Set(slots)) expect(scope).toContain(`[data-slot="${slot}"]`);
+		// By the first word of a slot (`command` is `command-item` and the rest): a handful of selectors.
+		let words = [...new Set(slots.map(slot => slot.split("-")[0]!))];
+		let scope = layer.slice(
+			layer.indexOf('[data-slot|="'),
+			layer.indexOf("{", layer.indexOf('[data-slot|="')),
+		);
+		for (let word of words) expect(scope).toContain(`[data-slot|="${word}"]`);
+		expect(words.length).toBeLessThan(slots.length);
 		let recordedFiles = new Set(recorded.map(entry => entry.file));
 		let owned = ["apps", "packages"].flatMap(directory => sources(directory))
 			.filter(file => !recordedFiles.has(file));
 		for (let file of owned) {
 			for (let slot of slotsOf(read(file))) {
-				expect({ file, slot, scoped: slots.includes(slot) }).toEqual({ file, slot, scoped: false });
+				let word = slot.split("-")[0]!;
+				expect({ file, slot, scoped: words.includes(word) }).toEqual({ file, slot, scoped: false });
 			}
+		}
+	});
+
+	test("tries only subjects the browser can find by tag, class or attribute, never one every element has", () => {
+		// `:is(a, b)` or `:where(...)` as a subject, `*`, `[class*=]`: each is tried on every element on
+		// every style recalculation, and the last was enough to miss a 100ms browser spec's budget.
+		let selectors = [...layer.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{/g)]
+			.map(match => match[1]!.trim()).filter(selector => !selector.startsWith("@"));
+		let top = (text: string, separator: RegExp) => {
+			let parts: string[] = [];
+			let depth = 0;
+			let current = "";
+			for (let character of text) {
+				if (character === "(" || character === "[") depth++;
+				if (character === ")" || character === "]") depth--;
+				if (depth === 0 && separator.test(character)) {
+					if (current.trim()) parts.push(current.trim());
+					current = "";
+				} else current += character;
+			}
+			if (current.trim()) parts.push(current.trim());
+			return parts;
+		};
+		let complex = selectors.flatMap(list => top(list, /,/));
+		expect(complex.length).toBeGreaterThan(40);
+		for (let selector of complex) {
+			// The subject is the last compound after the last combinator.
+			let subject = top(selector, /\s/).at(-1)!;
+			expect(subject, selector).not.toMatch(/^(:is\(|:where\(|\*|\[class\*=)/);
 		}
 	});
 
@@ -129,8 +176,8 @@ describe("the assistant-ui geometry layer", () => {
 		// Chopin's values, from its own theme, for exactly the variables the roots restored that it declares.
 		expect(ownControl.size).toBeGreaterThan(10);
 		for (let [name, value] of ownControl) {
-			expect(chopinOwn.get(name)).toBe(value);
 			expect(scoped.has(name)).toBe(true);
+			expect(chopinOwn.get(name)).toBe(value);
 		}
 		expect(ownControl.get("--text-sm")).toBe(chopinOwn.get("--text-sm"));
 		expect(ownControl.get("--radius-xl")).toBe("0.625rem");

@@ -20,7 +20,7 @@
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "a2a300f3916889c2c85ea020f389623739bb2b1f6cf9668f4be2c51bed5df186"
+			"sha256": "ceabef09e07bb709c4bc043fcf86467c65ba7e412a16a353be7f8aa9ec395426"
 		},
 		{
 			"file": "apps/web/src/components/ui/button.tsx",

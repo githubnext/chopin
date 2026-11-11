@@ -76,9 +76,10 @@ you find out that a registry update moved under a patch.
 Chopin's theme rewrites Tailwind's scale (`rounded-xl` is 10px, `text-sm` a fluid step, and
 `rounded-2xl`, `shadow-md` and `ease-in` do not exist), and a copied class cannot change. So
 `apps/web/src/components/geometry.css` restores Tailwind's own value of every variable Chopin's theme
-changed or dropped, on the copy's own roots (every `data-slot` the copied sources set, which is also
-where a popup portalled to `<body>` is found). Chopin's elements are never inside one, so its scale
-is untouched, and a copy is never given Chopin's control, pill or menu tokens. It is generated from
+changed or dropped, on the copy's own roots (`[data-slot|="command"]` for every `data-slot` whose first word a copied source
+sets, which is also where a popup portalled to `<body>` is found; Chopin's own code never sets a
+`data-slot` that starts with one of those words, and a unit test says so). Chopin's elements are
+never inside one, so its scale is untouched, and a copy is never given Chopin's control, pill or menu tokens. It is generated from
 Tailwind's `theme.css` and checked against it; do not edit it. It also keeps Chopin's global button
 rules (a `scale` press, a transition that is only `scale`, a focus outline) out of a copy, and when
 the primary pointer is coarse (`(pointer: coarse)`, mirrored as `data-plan-coarse-pointer`; a touch
@@ -158,8 +159,12 @@ mapping `--accent` to a green: the spec names the trigger's hover fill.
 Add both for every element; a copy without them is not accepted. To keep a spec honest, change a
 mapping or a class on purpose once and see it fail.
 
-If a spec is timing-sensitive on a page that is, make the layer cheaper rather than the spec looser:
-the first draft of the layer put a `*` rule under every copy, which made the browser walk every
-element's ancestors on each style recalculation and tipped a 100ms assertion of an unrelated
-workspace spec (`responsive-workspace.e2e.ts`, content swaps) from nine passes in ten to none. The
-layer now reads no universal selector, and a unit test says so.
+The layer is on every page, so its selectors have to be cheap: every rule's subject is a tag, a class,
+an attribute or a pseudo-class the browser can find an element by (`button`, `.border-t`,
+`[role="option"]`, `:focus-visible`), the ancestors it asks about are a handful of
+`[data-slot|=word]`, and no subject is `*`, `[class*=]`, `:is(...)` or `:where(...)`; a unit test reads
+the generated file for it. The first draft put a `*` rule under every copy, which made the browser
+test every element's ancestors against some forty selectors on each style recalculation, and a 100ms
+assertion of an unrelated workspace spec (`responsive-workspace.e2e.ts`, content swaps) went from
+nine passes in ten to none. If a spec that races a timer starts failing after a layer change, make the
+layer cheaper rather than the spec looser.
