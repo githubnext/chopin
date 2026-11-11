@@ -14,9 +14,8 @@ function entry(
 	id: string,
 	author: Chat.Author,
 	ts: number,
-	extra: Partial<Chat.Entry> = {},
 ): Chat.Entry {
-	return { id, author, text: `msg-${id}`, ts, ...extra };
+	return { id, author, text: `msg-${id}`, ts };
 }
 
 describe("protocol/threads", () => {
@@ -26,7 +25,6 @@ describe("protocol/threads", () => {
 			entry("e2", { kind: "agent" }, 1025),
 			entry("e3", { kind: "system" }, 1030),
 			entry("e4", { kind: "member", handle: "alice" }, 1040),
-			entry("e5", { kind: "member", handle: "bob" }, 1055, { deliveryState: "failed" }),
 			entry("e6", { kind: "member", handle: "carol" }, 1060),
 			entry("e7", { kind: "member", handle: "dave" }, 1075),
 		];

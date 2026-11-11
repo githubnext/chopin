@@ -1,10 +1,8 @@
 import type { Chat } from "./chat";
 
 /** Whether an entry in a thread transcript counts as a conversation reply (member or Planner). */
-export function isReplyEntry(entry: Pick<Chat.Entry, "author" | "deliveryState">): boolean {
-	if (entry.author.kind === "system") return false;
-	if (entry.deliveryState === "failed") return false;
-	return true;
+export function isReplyEntry(entry: Pick<Chat.Entry, "author">): boolean {
+	return entry.author.kind !== "system";
 }
 
 function authorKey(author: Chat.Author): string {
@@ -15,8 +13,8 @@ function authorKey(author: Chat.Author): string {
 /**
  * Derive a thread's summary from its root message, fork time and reply entries.
  *
- * Unique repliers keep the order in which they first spoke in the thread. System notices
- * and failed sends do not count as replies.
+ * Unique repliers keep the order in which they first spoke in the thread. System notices do not
+ * count as replies.
  */
 export function summarizeThread(
 	rootId: string,

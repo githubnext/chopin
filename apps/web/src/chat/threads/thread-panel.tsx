@@ -50,7 +50,6 @@ import {
 import { runCounts, RunStack } from "../run-card";
 import { Transcript } from "../transcript";
 import { progressOf } from "../transcript-state";
-import { canWithdraw } from "../withdraw";
 import { ThreadComposerBoundary } from "./composer-boundary";
 import "./thread-panel.css";
 
@@ -506,7 +505,7 @@ export function ThreadPanel(
 				Forked from Chat at {clocked}. Chopin remembers everything up to here.
 			</p>
 			{view.root && <RootMessageCard entry={view.root} room={room} />}
-			{(replyCount > 0 || view.queue.length > 0 || !!workingTurn) && (
+			{(replyCount > 0 || !!workingTurn) && (
 				<div className="thread-replies-rule" data-thread-replies-rule="">
 					<span>{replyCountLabel(Math.max(1, replyCount))}</span>
 				</div>
@@ -569,14 +568,6 @@ export function ThreadPanel(
 				handle={handle}
 				lead={lead}
 				live={connected && view.loaded}
-				onDelete={id => void wire?.ask("chat:delete", { id, thread: view.rootId }).catch(() => {})}
-				onRetry={id => void wire?.ask("chat:retry", { id, thread: view.rootId }).catch(() => {})}
-				onWithdraw={id => {
-					if (canWithdraw(view.queue, id, handle)) {
-						wire?.send("chat:unqueue", { id, thread: view.rootId });
-					}
-				}}
-				queued={view.queue}
 				room={room}
 				suspendedWork={suspendedWork}
 				working={workingTurn}

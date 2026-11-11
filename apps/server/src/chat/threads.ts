@@ -370,6 +370,7 @@ function buildThreadRoom(
 		repository: topContext.repository,
 		plannerNotAttached: topContext.plannerNotAttached,
 		plannerStarting: topContext.plannerStarting,
+		steers: topContext.steers,
 		activeOwner: topContext.activeOwner,
 		openPlannerSession: topContext.openPlannerSession,
 		modelChoice: topContext.modelChoice,
@@ -563,7 +564,6 @@ export async function openThread(
 		busy: managed?.chat.busy ?? false,
 		...(managed?.chat.turn ? { turn: managed.chat.turn } : {}),
 		...(managed?.chat.runs ? { runs: managed.chat.runs } : {}),
-		queued: managed ? Chat.visible(managed.chat) : [],
 		...(managed?.chat.usage ? { usage: managed.chat.usage } : {}),
 		...(managed?.chat.compactions?.length ? { compactions: managed.chat.compactions } : {}),
 		...(managed?.chat.compacting ? { compacting: true } : {}),
@@ -606,7 +606,6 @@ export async function sendMessage(
 		return;
 	}
 	let beforeEntries = new Set(managed.chat.entries.map(entry => entry.id));
-	let beforeWaiting = new Set(managed.chat.waiting.map(item => item.id));
 	let tRoom = buildThreadRoom(boundTop, managed, override);
 	await Chat.send(tRoom, ws, msg);
 
@@ -614,23 +613,18 @@ export async function sendMessage(
 		let addedEntry = managed.chat.entries.find(
 			entry => !beforeEntries.has(entry.id) && entry.author.kind === "member",
 		);
-		let addedWaiting = !addedEntry
-			? managed.chat.waiting.find(item => !beforeWaiting.has(item.id))
-			: undefined;
-		let crossText = addedEntry?.text ?? addedWaiting?.text;
-		let crossReferences = addedEntry?.references ?? addedWaiting?.references;
-		if (crossText) {
+		if (addedEntry) {
 			await Chat.postAlsoToChat(boundTop, ws, {
 				handle: ws.data.handle,
-				text: crossText,
-				references: crossReferences,
+				text: addedEntry.text,
+				references: addedEntry.references,
 				focus: typeof msg.focus === "string" ? msg.focus : undefined,
 			});
 		}
 	}
 }
 
-/** Route turn-control frames (`abort`, `unqueue`, `delete`, `retry`, run controls) for threads or top-level Chat. */
+/** Route turn-control frames (`abort`, `resume`, run controls) for threads or top-level Chat. */
 export async function controlMessage(
 	topContext: Chat.Room,
 	ws: Socket,
@@ -638,19 +632,13 @@ export async function controlMessage(
 		| Request<Wire.Abort>
 		| Request<Wire.Resume>
 		| Request<Wire.PauseRun>
-		| Request<Wire.ResumeRun>
-		| Request<Wire.Unqueue>
-		| Request<Wire.Delete>
-		| Request<Wire.Retry>,
+		| Request<Wire.ResumeRun>,
 	override?: ThreadPersistence,
 ): Promise<void> {
 	let boundTop = bindTopLevel(topContext, override);
 	if (frame.thread === undefined) {
 		if (frame.kind === "chat:abort") await Chat.abort(boundTop, ws);
 		else if (frame.kind === "chat:resume") await Chat.resume(boundTop, ws);
-		else if (frame.kind === "chat:unqueue") Chat.unqueue(boundTop, ws, frame);
-		else if (frame.kind === "chat:delete") await Chat.remove(boundTop, ws, frame);
-		else if (frame.kind === "chat:retry") await Chat.retry(boundTop, ws, frame);
 		else await Chat.controlRun(boundTop, ws, frame);
 		return;
 	}
@@ -667,8 +655,5 @@ export async function controlMessage(
 	let tRoom = buildThreadRoom(boundTop, managed, override);
 	if (frame.kind === "chat:abort") await Chat.abort(tRoom, ws);
 	else if (frame.kind === "chat:resume") await Chat.resume(tRoom, ws);
-	else if (frame.kind === "chat:unqueue") Chat.unqueue(tRoom, ws, frame);
-	else if (frame.kind === "chat:delete") await Chat.remove(tRoom, ws, frame);
-	else if (frame.kind === "chat:retry") await Chat.retry(tRoom, ws, frame);
 	else await Chat.controlRun(tRoom, ws, frame);
 }

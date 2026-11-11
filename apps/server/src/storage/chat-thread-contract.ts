@@ -70,7 +70,6 @@ export function chatThreadContract(name: string, factory: StorageFactory) {
 							text: "Side question",
 							ts: 125,
 							to: "planner",
-							deliveryState: "delivered",
 						},
 						{
 							id: "reply-1b",

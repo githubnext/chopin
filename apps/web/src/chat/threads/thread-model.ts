@@ -11,7 +11,6 @@ export type ThreadViewState = {
 	transcript: TranscriptState;
 	busy: boolean;
 	runs?: Chat.Runs;
-	queue: Chat.Waiting[];
 	usage?: Chat.ContextUsage;
 	compactions: Chat.CompactionRecord[];
 	compacting: boolean;
@@ -54,7 +53,6 @@ function emptyThreadView(rootId: string, forkedAt: number, root?: Chat.Entry): T
 		loaded: false,
 		transcript: initialTranscript,
 		busy: false,
-		queue: [],
 		compactions: [],
 		compacting: false,
 		alsoToChat: false,
@@ -108,19 +106,6 @@ function applyInThreadFrame(
 				transcript: transcriptReducer(view.transcript, {
 					kind: "turn",
 					turn: inner.turn,
-				}),
-			};
-		case "chat:queue":
-			return {
-				...view,
-				queue: inner.waiting,
-			};
-		case "chat:removed":
-			return {
-				...view,
-				transcript: transcriptReducer(view.transcript, {
-					kind: "removed",
-					id: inner.id,
 				}),
 			};
 		case "chat:context":
@@ -208,7 +193,6 @@ export function threadsReducer(state: ThreadsState, action: ThreadsAction): Thre
 				}),
 				busy: action.frame.busy,
 				runs: action.frame.runs,
-				queue: action.frame.queued,
 				usage: action.frame.usage,
 				compactions: action.frame.compactions ?? [],
 				compacting: !!action.frame.compacting,
