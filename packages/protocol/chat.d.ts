@@ -51,7 +51,22 @@ export declare namespace Chat {
 
 	export type ReferenceRequest =
 		| { kind: "document"; channelId: string; start: number; end: number }
-		| { kind: "research"; workspaceId: string; start: number; end: number };
+		| { kind: "research"; workspaceId: string; start: number; end: number }
+		| CommandRequest;
+
+	/**
+	 * A command the composer's `/` list offered, run as the Planner's own: `commandKind` is the
+	 * `kind` the Planner reported for it, so a name two kinds share is never run as the other. The
+	 * server checks both against the commands the document's Planner reports now. The range holds
+	 * its `/name` token, which opens the message.
+	 */
+	export type CommandRequest = {
+		kind: "command";
+		name: string;
+		commandKind: string;
+		start: number;
+		end: number;
+	};
 
 	type ReferenceBase = {
 		id: string;
@@ -75,7 +90,21 @@ export declare namespace Chat {
 		workspaceId: string;
 	};
 
-	export type Reference = DocumentReference | ResearchReference;
+	/**
+	 * A command, kept with the message that ran it. It names no document, so it has no address,
+	 * repository or revision: `label` is the `/name` token the message opens with.
+	 */
+	export type CommandReference = {
+		kind: "command";
+		id: string;
+		start: number;
+		end: number;
+		label: string;
+		name: string;
+		commandKind: string;
+	};
+
+	export type Reference = DocumentReference | ResearchReference | CommandReference;
 
 	/** One tool call, as it appears beneath the message that made it. */
 	export type Activity = {

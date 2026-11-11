@@ -736,6 +736,7 @@ function conversation(
 				}),
 			}),
 		modelChoice: () => turnModel(modelChoices, room.id),
+		commands: () => modelChoices.commands?.(room.id) ?? Promise.resolve(undefined),
 		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => ownerAvailable(room.id),
 		jobs: config.backgroundJobs ? jobService : undefined,

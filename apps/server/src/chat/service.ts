@@ -32,12 +32,20 @@ import type { VisualAdmission } from "../agent/visual-admission";
 import type { ChildDocuments } from "./children";
 import * as Service from "../plan/service";
 import { instruction } from "@chopin/protocol/address";
+import { COMMAND_KINDS } from "@chopin/protocol/commands";
 import { UNREADABLE_NOTICE } from "@chopin/protocol/model-choice";
 import { settledStages } from "@chopin/protocol/run-stages";
 
-import { annotatedText, compose, focusContext, referenceCatalog, remember } from "./address";
+import {
+	annotatedText,
+	commandReference,
+	compose,
+	focusContext,
+	referenceCatalog,
+	remember,
+} from "./address";
 import { createNotices } from "./notices";
-import { ChatReferenceError } from "./references";
+import { ChatCommandError, ChatReferenceError } from "./references";
 import {
 	cancelledNotice,
 	type Deferred,
@@ -562,7 +570,17 @@ function canonicalFingerprint(
 	references: Wire.Reference[] = [],
 ): string {
 	let targets = references.map(reference =>
-		reference.kind === "document"
+		reference.kind === "command"
+			? [
+				reference.kind,
+				reference.id,
+				reference.start,
+				reference.end,
+				reference.label,
+				reference.name,
+				reference.commandKind,
+			]
+			: reference.kind === "document"
 			? [
 				reference.kind,
 				reference.id,
@@ -835,6 +853,11 @@ export type Room = {
 	 * what its harness offers now. Absent where nothing can be chosen.
 	 */
 	modelChoice?: () => Promise<import("./model-choice").TurnModel>;
+	/**
+	 * The commands the document's Planner offers now, which a command in a message is checked
+	 * against: none where it reports none, and none for a Planner that is not attached.
+	 */
+	commands?: () => Promise<Wire.CommandOption[] | undefined>;
 	invokedBy?: string;
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
@@ -1150,12 +1173,18 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	let projected: { text: string; references?: Wire.Reference[] };
 	try {
 		if (context.references) {
+			// Asked only when a command is in the message: nothing else reads what the Planner offers.
+			let commands = Array.isArray(msg.references)
+					&& msg.references.some(item => (item as { kind?: unknown })?.kind === "command")
+				? await context.commands?.()
+				: undefined;
 			projected = await context.references.resolve({
 				channelId: room,
 				repositoryId: context.repository.id,
 				text: msg.text,
 				destination,
 				requests: msg.references,
+				...(commands ? { commands } : {}),
 			});
 		} else {
 			if (
@@ -1169,6 +1198,8 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	} catch (err) {
 		// Only a reference the server found at fault is final. Anything else it threw, such as a
 		// storage error while it looked a target up, passes: the same message is sent again.
+		// A refused command says why: it is what the person reads under the draft they keep.
+		if (err instanceof ChatCommandError) return fail(ws, msg.rid, err.message);
 		if (err instanceof ChatReferenceError) {
 			return fail(ws, msg.rid, "invalid or unavailable chat reference");
 		}
@@ -2934,10 +2965,14 @@ async function run(
 		if (jobTurn) {
 			prompt = jobTurn.prompt;
 		} else {
+			// A skill or a prompt template is Atomic's own `/name args`, which has to open the prompt:
+			// what the room said and the focus line wait for the next turn instead of standing before it.
+			let command = commandReference(references);
+			let opening = command !== undefined && command.commandKind !== COMMAND_KINDS.workflow;
 			// Drained rather than copied: what the agent has been told once should
 			// not arrive again on the next turn.
-			let backscroll = chat.backscroll;
-			chat.backscroll = [];
+			let backscroll = opening ? [] : chat.backscroll;
+			if (!opening) chat.backscroll = [];
 			let promptReferences = [
 				...backscroll.flatMap(said => said.references ?? []),
 				...references,
@@ -2946,7 +2981,7 @@ async function run(
 			let available = promptReferences.filter(reference => chat.referenceCache.has(reference.id));
 			prompt = compose(backscroll, handle, text, references, available, !!context.invokedBy);
 			let focus = chat.focus;
-			if (focus) prompt = `${focusContext(focus)}\n\n${prompt}`;
+			if (focus && !opening) prompt = `${focusContext(focus)}\n\n${prompt}`;
 		}
 		if (member) markDelivered(context, member.entryId);
 		sendStarted = true;

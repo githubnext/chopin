@@ -8,6 +8,7 @@ import {
 	parseDocumentPath,
 } from "@chopin/protocol/document-url";
 import { instruction, MENTION } from "@chopin/protocol/address";
+import { offeredCommand } from "@chopin/protocol/commands";
 
 import { isChannelId } from "../channels/id";
 import {
@@ -77,6 +78,17 @@ export class ChatReferenceError extends Error {
 	}
 }
 
+/**
+ * A command that cannot run, refused in words a person reads in the composer: the Planner does not
+ * offer it, offers none, or the message is not one a command can open.
+ */
+export class ChatCommandError extends ChatReferenceError {
+	constructor(message: string) {
+		super(message);
+		this.name = "ChatCommandError";
+	}
+}
+
 export type ReferenceServiceOptions = {
 	storage: StorageAdapter;
 	current: (channelId: string) => Promise<DocumentTarget | undefined>;
@@ -90,6 +102,8 @@ export type ResolveReferences = {
 	text: string;
 	destination: Wire.Destination;
 	requests?: Wire.ReferenceRequest[];
+	/** What the document's Planner reports now, which a command request is checked against. */
+	commands?: readonly Wire.CommandOption[];
 };
 
 export type ResolvedMessage = {
@@ -130,7 +144,14 @@ function safeBoundary(text: string, boundary: number): boolean {
 	return !(previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff);
 }
 
-function token(text: string, start: number, end: number, marker: "#" | "%"): string {
+type Marker = "#" | "%" | "/";
+
+/** The character a reference's token opens with. */
+function markerOf(kind: Wire.Reference["kind"]): Marker {
+	return kind === "document" ? "#" : kind === "research" ? "%" : "/";
+}
+
+function token(text: string, start: number, end: number, marker: Marker): string {
 	if (
 		!Number.isSafeInteger(start) || !Number.isSafeInteger(end)
 		|| start < 0 || end <= start || end > text.length || end - start > MAX_TOKEN
@@ -170,11 +191,27 @@ function request(value: unknown): Wire.ReferenceRequest {
 		) throw new ChatReferenceError("Research reference is invalid.");
 		return item as Wire.ReferenceRequest;
 	}
+	if (item.kind === "command") {
+		if (
+			!exact(item, ["commandKind", "end", "kind", "name", "start"])
+			|| typeof item.name !== "string" || typeof item.commandKind !== "string"
+		) throw new ChatReferenceError("Command request is invalid.");
+		return item as Wire.ReferenceRequest;
+	}
 	throw new ChatReferenceError("Reference kind is invalid.");
 }
 
 function isWord(value: string | undefined): boolean {
 	return value !== undefined && /[A-Za-z0-9_]/.test(value);
+}
+
+/** What a request points at, so two requests for one target are told apart from two targets. */
+function requestTarget(item: Wire.ReferenceRequest): string {
+	return item.kind === "document"
+		? `document:${item.channelId}`
+		: item.kind === "research"
+		? `research:${item.workspaceId}`
+		: `command:${item.commandKind}:${item.name}`;
 }
 
 function requests(text: string, value: unknown): Wire.ReferenceRequest[] {
@@ -192,12 +229,14 @@ function requests(text: string, value: unknown): Wire.ReferenceRequest[] {
 		if (item.start < previousEnd) {
 			throw new ChatReferenceError("References must be sorted and disjoint.");
 		}
-		let marker: "#" | "%" = item.kind === "document" ? "#" : "%";
-		token(text, item.start, item.end, marker);
+		token(text, item.start, item.end, markerOf(item.kind));
 		previousEnd = item.end;
-		let target = `${item.kind}:${item.kind === "document" ? item.channelId : item.workspaceId}`;
+		let target = requestTarget(item);
 		if (targets.has(target)) throw new ChatReferenceError("Reference targets must be unique.");
 		targets.add(target);
+	}
+	if (parsed.filter(item => item.kind === "command").length > 1) {
+		throw new ChatCommandError("A message can run one command.");
 	}
 	return parsed;
 }
@@ -416,6 +455,17 @@ function reference(value: unknown): Wire.Reference {
 		) throw new ChatReferenceError("Stored research reference is invalid.");
 		return item as Wire.ResearchReference;
 	}
+	if (item.kind === "command") {
+		if (
+			!(typeof item.id === "string" && ULID.test(item.id))
+			|| !exact(item, ["commandKind", "end", "id", "kind", "label", "name", "start"])
+			|| !Number.isSafeInteger(item.start) || !Number.isSafeInteger(item.end)
+			|| typeof item.name !== "string" || typeof item.commandKind !== "string"
+			|| item.label !== `/${item.name}`
+			|| hasControlCharacter(item.label) || item.label.length > MAX_TOKEN
+		) throw new ChatReferenceError("Stored command reference is invalid.");
+		return item as unknown as Wire.CommandReference;
+	}
 	throw new ChatReferenceError("Stored reference kind is invalid.");
 }
 
@@ -436,19 +486,21 @@ export function restoreReferences(
 		if (item.start < previousEnd) {
 			throw new ChatReferenceError("Stored references are not disjoint.");
 		}
-		token(text, item.start, item.end, item.kind === "document" ? "#" : "%");
+		token(text, item.start, item.end, markerOf(item.kind));
 		if (text.slice(item.start, item.end) !== item.label) {
 			throw new ChatReferenceError("Stored reference label does not match its range.");
 		}
 		if (
-			scope
+			scope && item.kind !== "command"
 			&& (item.repositoryId !== scope.repositoryId
 				|| item.kind === "document" && item.channelId === scope.channelId
 				|| item.kind === "research" && item.parentChannelId !== scope.channelId)
 		) throw new ChatReferenceError("Stored reference is outside its parent document.");
 		if (seenIds.has(item.id)) throw new ChatReferenceError("Stored reference id is duplicated.");
 		seenIds.add(item.id);
-		let target = `${item.kind}:${item.kind === "document" ? item.channelId : item.workspaceId}`;
+		let target = item.kind === "command"
+			? `command:${item.commandKind}:${item.name}`
+			: `${item.kind}:${item.kind === "document" ? item.channelId : item.workspaceId}`;
 		if (targets.has(target)) throw new ChatReferenceError("Stored reference target is duplicated.");
 		targets.add(target);
 		previousEnd = item.end;
@@ -640,6 +692,30 @@ export class ReferenceService {
 		}
 
 		let resolved = await Promise.all(requested.map(async item => {
+			if (item.kind === "command") {
+				if (input.destination !== "planner") {
+					throw new ChatCommandError("A command runs in the Planner's turn, so it goes to Chopin.");
+				}
+				if (!input.commands?.length) {
+					throw new ChatCommandError(
+						`The Planner has not reported any commands, so /${item.name} cannot run.`,
+					);
+				}
+				let offered = offeredCommand(input.commands, item.name, item.commandKind);
+				if (!offered) {
+					throw new ChatCommandError(
+						`/${item.name} is not one of the commands the Planner offers.`,
+					);
+				}
+				return {
+					kind: "command" as const,
+					start: item.start,
+					end: item.end,
+					label: `/${offered.name}`,
+					name: offered.name,
+					commandKind: offered.kind,
+				};
+			}
 			if (item.kind === "document") {
 				if (item.channelId === parent.id) {
 					throw new ChatReferenceError("A document cannot reference itself.");
@@ -693,11 +769,19 @@ export class ReferenceService {
 			ids.add(id);
 			return reference({ id, ...item });
 		});
-		return canonicalMessage(input.text, input.destination, references);
+		let message = canonicalMessage(input.text, input.destination, references);
+		let command = message.references?.find(reference => reference.kind === "command");
+		if (command && command.start !== 0) {
+			throw new ChatCommandError("A command has to open the message.");
+		}
+		return message;
 	}
 
 	async read(input: ReadReference): Promise<unknown> {
 		let stored = reference(input.reference);
+		if (stored.kind === "command") {
+			throw new ChatReferenceError("A command is run, not read.");
+		}
 		let parent = await this.#storage.channels.get(input.channelId);
 		if (
 			!parent || parent.repositoryId !== input.repositoryId

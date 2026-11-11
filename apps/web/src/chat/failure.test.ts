@@ -158,6 +158,33 @@ test("asking again repeats the same turn: its text, its references, its destinat
 	});
 });
 
+test("asking again repeats a command as the command it was, with its kind", () => {
+	let ran = member("ask", "mona", {
+		to: "planner",
+		text: "/review the diff",
+		references: [{
+			id: "c1",
+			kind: "command",
+			start: 0,
+			end: 7,
+			label: "/review",
+			name: "review",
+			commandKind: "prompt",
+		}],
+	});
+	let payload = retryPayload(
+		[ran, failed("f1", { kind: "error", request: "ask" })],
+		"f1",
+		() => "r",
+	);
+	expect(payload).toEqual({
+		requestId: "r",
+		text: "/review the diff",
+		to: "planner",
+		references: [{ kind: "command", name: "review", commandKind: "prompt", start: 0, end: 7 }],
+	});
+});
+
 test("the failed reply's own line leaves the transcript only while the banner tells it", () => {
 	let entries = [ASK, failed("f1", { kind: "error", request: "ask" })];
 	expect(withoutFailure(entries, "f1").map(entry => entry.id)).toEqual(["ask"]);

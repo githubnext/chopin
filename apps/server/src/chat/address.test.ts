@@ -194,6 +194,72 @@ describe("composing a turn", () => {
 	});
 });
 
+function commandOf(name: string, commandKind: string, start = 0): Wire.CommandReference {
+	return {
+		id: `command-${name}`,
+		kind: "command",
+		start,
+		end: start + name.length + 1,
+		label: `/${name}`,
+		name,
+		commandKind,
+	};
+}
+
+describe("composing a turn that runs a command", () => {
+	it("is Atomic's own /name args for a skill, a prompt template or any other kind, and nothing else", () => {
+		let skill = commandOf("skill:notes", "skill");
+		expect(compose([], "alice", "/skill:notes for today", [skill]))
+			.toBe("/skill:notes for today");
+		let template = commandOf("review", "prompt");
+		expect(compose([], "alice", "/review", [template])).toBe("/review");
+		let other = commandOf("deploy", "Pipeline");
+		expect(compose([], "alice", "/deploy  to staging", [other])).toBe("/deploy to staging");
+	});
+
+	it("leaves what the room said for the next turn, since a command must open the prompt", () => {
+		let prompt = compose(
+			[{ handle: "bob", text: "let us go with OAuth" }],
+			"alice",
+			"/review the diff",
+			[commandOf("review", "prompt")],
+		);
+		expect(prompt).toBe("/review the diff");
+	});
+
+	it("keeps a reference in the command's words readable by its id, after them", () => {
+		let reference = duplicateLabelReference("ref-shared", "/review ".length);
+		let prompt = compose(
+			[],
+			"alice",
+			"/review #Shared",
+			[commandOf("review", "prompt"), reference],
+		);
+		expect(prompt.startsWith("/review #Shared [reference id: ref-shared]\n\n")).toBe(true);
+		expect(prompt).toContain("- ref-shared: document");
+		expect(prompt).not.toContain("command-review");
+	});
+
+	it("asks for a workflow by name, from the person, after what the room said", () => {
+		let prompt = compose(
+			[{ handle: "bob", text: "the v2 branch is ready" }],
+			"alice",
+			"/ship the v2 branch",
+			[commandOf("ship", "workflow")],
+		);
+		expect(prompt).toContain("@bob: the v2 branch is ready");
+		expect(prompt).toContain('@alice: Start the registered workflow "ship" now');
+		expect(prompt.trimEnd().endsWith("the v2 branch")).toBe(true);
+		expect(prompt).not.toContain("/ship");
+	});
+
+	it("never lists a command among the references a turn can read", () => {
+		let command = commandOf("review", "prompt");
+		expect(referenceCatalog([command])).toBeUndefined();
+		expect(annotatedText("/review", [command])).toBe("/review");
+	});
+});
+
 it("names the focused child with a quoted, bounded title and its tools", () => {
 	let line = focusContext({
 		channelId: "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b",

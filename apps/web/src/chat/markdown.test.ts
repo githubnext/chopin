@@ -210,6 +210,26 @@ test("chips preserve the server label and href rather than reparsing token text"
 	expect(markup).toContain('href="/documents/octo-org/score/release-at-send-time"');
 });
 
+test("a command that opened a message is a chip, not a link, and the words after it are its own", () => {
+	let source = "/skill:release-notes for **v2**";
+	let command: Chat.CommandReference = {
+		id: "command-reference",
+		kind: "command",
+		start: 0,
+		end: "/skill:release-notes".length,
+		label: "/skill:release-notes",
+		name: "skill:release-notes",
+		commandKind: "skill",
+	};
+	let markup = markdown(source, [command]);
+
+	expect(markup).toContain(
+		'<span class="chat-reference" data-chat-reference="command">/skill:release-notes</span>',
+	);
+	expect(markup).toContain('<strong class="aui-md-strong">v2</strong>');
+	expect(markup).not.toContain("<a");
+});
+
 test("historical research references remain readable without composer discovery", () => {
 	let source = "See %OAuth evidence";
 	let start = source.indexOf("%OAuth evidence");

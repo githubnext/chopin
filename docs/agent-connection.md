@@ -615,7 +615,11 @@ level can therefore never be chosen, and a turn never carries one.
   attached client holds in the `commands` of `chat:model`. They are the attached client's alone:
   nothing a client reported is offered once it has left, and another machine's are never sent to
   this document. Send them only when they are real: a client that has none omits the field, and
-  its composer then offers Chopin's own commands only.
+  its composer then offers Chopin's own commands only. A person's message that runs one reaches
+  the client as the `prompt` of an ordinary `turn`: `/name args` for a `skill`, a `prompt` or any
+  kind other than `workflow`, as the client reported the name, and a request to start the
+  workflow of that name, with the words after it as its input, for a `workflow`. Chopin checks the
+  name and kind against the last report when the message is sent and refuses an unknown one.
 
 A person's choice reaches the client in the next turn: `model` is the chosen model's `id`, and
 `thinkingLevel` one of that model's levels (or the default model's, when no model was chosen),
