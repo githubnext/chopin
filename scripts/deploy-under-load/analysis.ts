@@ -113,49 +113,57 @@ export type Request = {
 	document: string;
 	/** What the request carries for the backend to quote back; a draft carries none. */
 	tag?: string;
-	/** Whether the server acknowledged it, and whether it said the turn is queued. */
+	/** Whether the server acknowledged it. */
 	acknowledged: boolean;
-	queued?: boolean;
-	/** The acknowledgement named a refusal rather than a queue. */
+	/** The acknowledgement named a refusal. */
 	refusal?: string;
 	retries: number;
 	sentAt: number;
 	ackedAt?: number;
 };
 
-export type Row = { document: string; kind: string; state: string };
-export type Prompt = { document: string; tag?: string };
+/** What a backend was given: a turn's own prompt, or a message given to the turn it was running. */
+export type Prompt = { document: string; tag?: string; steered?: true };
 
 export type TurnCheck = {
 	/** Requests acknowledged, by kind. */
 	acknowledged: Record<string, number>;
 	/** Requests refused or never acknowledged, with why. */
 	unacknowledged: string[];
+	/** Requests that needed a turn of their own and were refused because one was running. */
+	refusedWhileRunning: Record<string, number>;
 	/** Tagged requests whose prompt reached a backend not exactly once, with how many times. */
 	misdelivered: Array<{ tag: string; times: number }>;
-	/** Documents whose turns that began (saved rows that ended or were interrupted) differ from the prompts received. */
-	turnsDiffer: Array<{ document: string; rows: number; prompts: number }>;
-	/** Rows by kind and state. */
-	rows: Record<string, Record<string, number>>;
-	/** Rows left waiting or started when the run ended. */
-	unsettled: number;
-	cancelled: number;
-	interrupted: number;
+	/** How many messages were given to a turn that was running rather than starting one. */
+	steered: number;
 };
 
+/** The kinds that need a turn of their own, which a running turn cannot give them. */
+const OWN_TURN: ReadonlySet<RequestKind> = new Set(["system", "comment", "draft"]);
+/** How the server says a turn is running: `planner-busy`, or the words a note or a draft is refused in. */
+const BUSY = /planner-busy|busy|working on something else/i;
+
 /**
- * Whether everything a person was told was queued was started exactly once, or is accounted for.
- * A row that began a turn (`ended` or `interrupted`) is one prompt at a backend; no request is
- * quoted twice, none that was acknowledged is missing, and nothing is left waiting.
+ * Whether everything a person was told was accepted reached the Planner exactly once, or is
+ * accounted for. Nothing is held for a Planner: a request is acknowledged and starts a turn or is
+ * given to the one running, or it is refused, and a refusal is only expected of a kind that needs
+ * a turn of its own while one runs. No request is quoted twice, and none that was acknowledged is
+ * missing.
  */
-export function checkTurns(requests: Request[], rows: Row[], prompts: Prompt[]): TurnCheck {
+export function checkTurns(requests: Request[], prompts: Prompt[]): TurnCheck {
 	let acknowledged: Record<string, number> = {};
 	let unacknowledged: string[] = [];
+	let refusedWhileRunning: Record<string, number> = {};
 	for (let request of requests) {
-		if (request.acknowledged) acknowledged[request.kind] = (acknowledged[request.kind] ?? 0) + 1;
-		else {unacknowledged.push(
+		if (request.acknowledged) {
+			acknowledged[request.kind] = (acknowledged[request.kind] ?? 0) + 1;
+		} else if (OWN_TURN.has(request.kind) && BUSY.test(request.refusal ?? "")) {
+			refusedWhileRunning[request.kind] = (refusedWhileRunning[request.kind] ?? 0) + 1;
+		} else {
+			unacknowledged.push(
 				`${request.kind} ${request.tag ?? ""} ${request.refusal ?? "no answer"}`.trim(),
-			);}
+			);
+		}
 	}
 	let received = new Map<string, number>();
 	for (let prompt of prompts) {
@@ -167,36 +175,12 @@ export function checkTurns(requests: Request[], rows: Row[], prompts: Prompt[]):
 			let times = received.get(request.tag!) ?? 0;
 			return times === 1 ? [] : [{ tag: request.tag!, times }];
 		});
-	let byKind: Record<string, Record<string, number>> = {};
-	let began = new Map<string, number>();
-	for (let row of rows) {
-		byKind[row.kind] ??= {};
-		byKind[row.kind]![row.state] = (byKind[row.kind]![row.state] ?? 0) + 1;
-		if (row.state === "ended" || row.state === "interrupted") {
-			began.set(row.document, (began.get(row.document) ?? 0) + 1);
-		}
-	}
-	let delivered = new Map<string, number>();
-	for (let prompt of prompts) {
-		delivered.set(prompt.document, (delivered.get(prompt.document) ?? 0) + 1);
-	}
-	let turnsDiffer = [...new Set([...began.keys(), ...delivered.keys()])]
-		.map(document => ({
-			document,
-			rows: began.get(document) ?? 0,
-			prompts: delivered.get(document) ?? 0,
-		}))
-		.filter(entry => entry.rows !== entry.prompts);
-	let count = (state: string) => rows.filter(row => row.state === state).length;
 	return {
 		acknowledged,
 		unacknowledged,
+		refusedWhileRunning,
 		misdelivered,
-		turnsDiffer,
-		rows: byKind,
-		unsettled: count("waiting") + count("started"),
-		cancelled: count("cancelled"),
-		interrupted: count("interrupted"),
+		steered: prompts.filter(prompt => prompt.steered).length,
 	};
 }
 
@@ -393,26 +377,20 @@ export function gates(measures: Measures): Gate[] {
 		} out of order`,
 	);
 	gate(
-		"every Planner request was acknowledged",
+		"every Planner request was acknowledged, or refused only for needing a turn while one ran",
 		turns.unacknowledged.length === 0,
 		turns.unacknowledged.length === 0
-			? `${sum(Object.values(turns.acknowledged))} acknowledged`
+			? `${sum(Object.values(turns.acknowledged))} acknowledged, ${
+				sum(Object.values(turns.refusedWhileRunning))
+			} refused while a turn ran`
 			: turns.unacknowledged.slice(0, 5).join("; "),
 	);
 	gate(
-		"every acknowledged request reached the Planner exactly once",
-		turns.misdelivered.length === 0 && turns.turnsDiffer.length === 0,
-		turns.misdelivered.length === 0 && turns.turnsDiffer.length === 0
-			? "each tagged request once; turns started equal prompts received for every document"
-			: JSON.stringify({
-				misdelivered: turns.misdelivered.slice(0, 5),
-				turnsDiffer: turns.turnsDiffer.slice(0, 5),
-			}),
-	);
-	gate(
-		"no saved request was left waiting, cancelled or interrupted without a reason",
-		turns.unsettled === 0 && turns.cancelled === 0,
-		`${turns.unsettled} unsettled, ${turns.cancelled} cancelled, ${turns.interrupted} interrupted`,
+		"every acknowledged request reached the Planner exactly once, as a turn or given to the running one",
+		turns.misdelivered.length === 0,
+		turns.misdelivered.length === 0
+			? `each tagged request once, ${turns.steered} of them given to a running turn`
+			: JSON.stringify({ misdelivered: turns.misdelivered.slice(0, 5) }),
 	);
 	gate(
 		"every MCP call was answered, through the deploys",
