@@ -220,9 +220,17 @@ test("Copy as plain text writes the message as the page shows it", async ({ join
 	await expect.poll(() => clipboard(page)).toBe("I renamed the section.\n\none\ntwo");
 
 	let spaced = message(page, SPACED.id);
-	let drawn = await spaced.locator("[data-chat-message-text]").evaluate(element =>
-		(element as HTMLElement).innerText.trim()
-	);
+	// The words the page draws; an image is a picture, not words, and plain text leaves it out, as
+	// a browser's own text copy of a picture does.
+	await expect(spaced.locator(".chat-image")).toHaveCount(1);
+	let drawn = await spaced.locator("[data-chat-message-text]").evaluate(element => {
+		let words = element.cloneNode(true) as HTMLElement;
+		for (let image of words.querySelectorAll(".chat-image")) image.replaceWith(" ");
+		document.body.append(words);
+		let text = words.innerText.replace(/ {2,}/g, " ").trim();
+		words.remove();
+		return text;
+	});
 	expect(drawn).toBe("Spaced out words and a gap.\n\nSecond paragraph with html inside.");
 	let spacedMenu = await openMenu(page, spaced);
 	await spacedMenu.getByRole("menuitem", { name: "Copy as plain text" }).click();
