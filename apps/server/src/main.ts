@@ -47,6 +47,8 @@ import { registerExperimentRoutes } from "./experiments/routes";
 import { attachmentLimits } from "./attachments/limits";
 import { registerAttachmentRoutes } from "./attachments/routes";
 import { registerImageRoutes } from "./images/routes";
+import { openaiTranscriber } from "./transcription/openai";
+import { registerTranscriptionRoutes } from "./transcription/routes";
 import type { ExperimentRuntime } from "./experiments/routes";
 import type { Instruction, ServerInstructionDeps } from "./chat/server-instruction";
 import { fingerprint } from "./experiments/service";
@@ -2053,6 +2055,7 @@ function openRoomSocket(ws: Socket): void {
 		webResearch: config.webResearch,
 		...CHAT_CAPABILITIES,
 		...(chatAttachmentLimits ? { attachments: chatAttachmentLimits } : {}),
+		...(config.transcription ? { transcription: { provider: "OpenAI" } } : {}),
 		...(CLIENT_BUILD && !config.devClient ? { build: CLIENT_BUILD } : {}),
 	});
 	if (plannerAttachments) {
@@ -3439,6 +3442,19 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 registerNavigationRoutes(router, hostedAuth, { storage });
 registerImageRoutes(router, hostedAuth);
 registerAttachmentRoutes(router, hostedAuth, { limits: chatAttachmentLimits });
+registerTranscriptionRoutes(
+	router,
+	hostedAuth,
+	config.transcription
+		? {
+			maxBytes: config.transcription.maxBytes,
+			transcribe: openaiTranscriber({
+				model: config.transcription.model,
+				apiKey: process.env.OPENAI_API_KEY!,
+			}),
+		}
+		: undefined,
+);
 registerConnectorScript(router, {
 	bundle: join(import.meta.dir, "../../connector/dist/connector.js"),
 	source: join(import.meta.dir, "../../connector/src/main.ts"),
