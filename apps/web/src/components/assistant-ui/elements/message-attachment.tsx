@@ -8,14 +8,13 @@ import { field, mono, paper } from "./surfaces";
 export interface MessageAttachmentItem {
   id: string;
   name: string;
-  size: string;
+  /** A node, so a surface can draw the file's type beside its size as an element of its own. */
+  size: ReactNode;
   kind: "image" | "document" | "file";
   pages?: number;
   swatch?: string;
   /** Drawn in the box of the icon in place of the icon of its kind. */
   icon?: ReactNode;
-  /** Drawn before the size, on its line. */
-  detail?: ReactNode;
   /** Drawn beside the file, over it: what a surface offers for it besides opening it. */
   actions?: ReactNode;
 }
@@ -75,7 +74,6 @@ export function MessageAttachments({
                   {item.name}
                 </span>
                 <span className={cn(mono, "text-muted-foreground")}>
-                  {item.detail}
                   {item.size}
                   {item.pages !== undefined && ` · ${item.pages} pages`}
                 </span>

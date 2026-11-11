@@ -8,20 +8,24 @@
  import { FileTextIcon, ImageIcon, PaperclipIcon } from "lucide-react";
  import { cn } from "@/lib/utils";
  import { field, mono, paper } from "./surfaces";
-@@ -12,6 +12,12 @@ Item slots for a file type's own icon, its type beside the size, and the actions a surface offers for it
+@@ -8,10 +8,15 @@ Item slots for a file type's own icon and the actions a surface offers for it, and a size that can be a node so a type can sit beside it as an element
+ export interface MessageAttachmentItem {
+   id: string;
+   name: string;
+-  size: string;
++  /** A node, so a surface can draw the file's type beside its size as an element of its own. */
++  size: ReactNode;
    kind: "image" | "document" | "file";
    pages?: number;
    swatch?: string;
 +  /** Drawn in the box of the icon in place of the icon of its kind. */
 +  icon?: ReactNode;
-+  /** Drawn before the size, on its line. */
-+  detail?: ReactNode;
 +  /** Drawn beside the file, over it: what a surface offers for it besides opening it. */
 +  actions?: ReactNode;
  }
  
  export function MessageAttachments({
-@@ -58,17 +64,18 @@ Draw a given icon in the icon box in place of the kind's
+@@ -58,11 +63,11 @@ Draw a given icon in the icon box in place of the kind's
            ) : (
              <>
                <span className="bg-background/70 text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
@@ -35,14 +39,7 @@
                </span>
                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                  <span className="text-foreground/90 truncate text-[13.5px]">
-                   {item.name}
-                 </span>
-                 <span className={cn(mono, "text-muted-foreground")}>
-+                  {item.detail}
-                   {item.size}
-                   {item.pages !== undefined && ` · ${item.pages} pages`}
-                 </span>
-@@ -85,7 +92,7 @@ Draw the given detail before the size
+@@ -85,7 +90,7 @@ Name the file's element so its actions can sit beside it
                ),
          );
  
@@ -51,7 +48,7 @@
            <button
              key={item.id}
              type="button"
-@@ -99,6 +106,14 @@ Keep a file's actions beside it, outside the button that opens it
+@@ -99,6 +104,14 @@ Keep a file's actions beside it, outside the button that opens it
              {content}
            </div>
          );

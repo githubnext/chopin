@@ -122,7 +122,7 @@ test("a sent message draws its images from Slack's thumbnail widths and its othe
 	expect(markup).toContain('data-slot="message-attachments"');
 	expect(markup).toContain('aria-label="Files sent with this message"');
 	expect(markup).toContain(">notes.md<");
-	expect(markup).toContain('<span class="chat-file-type">Markdown</span>2 KB');
+	expect(markup).toContain('<span class="chat-file-type">Markdown</span><span>2 KB</span>');
 	expect(markup).toContain('aria-label="Download notes.md"');
 	expect(markup).not.toContain("background-image:");
 });

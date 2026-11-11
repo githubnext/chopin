@@ -76,7 +76,7 @@
 			"version": "assistant-ui/assistant-ui@ec601b37f6b6",
 			"sha256": "d577a91802b3caa44e4f1e9d2e2948893b5761c53b4654ef5d94ea66f9f1f30c",
 			"patch": "apps/web/src/components/assistant-ui/elements/message-attachment.tsx.patch",
-			"patchSha256": "dcf225e121794dc819706cf70a95b639b3a821a12075c555e21a3e6a77116178"
+			"patchSha256": "74d4b29aa5cb602fe73027f382737e935e05333df8c33759ab455c2ac6a827dd"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/elements/model-selector.tsx",
