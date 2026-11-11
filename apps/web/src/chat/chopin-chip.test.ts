@@ -3,9 +3,11 @@ import { describe, expect, test } from "bun:test";
 import {
 	asksChopin,
 	chipKeyAction,
+	chipShown,
 	draftPlaceholder,
 	restoredChip,
 	takeChopinMention,
+	withoutChopinMentions,
 } from "./chopin-chip";
 
 import type { ReferenceDraft } from "./references";
@@ -65,6 +67,73 @@ describe("who a message is for", () => {
 		expect(asksChopin({ agent: false, chip: true, text: "@chopin hi", references: [] })).toBe(
 			false,
 		);
+	});
+});
+
+describe("when the chip is shown", () => {
+	let shown = (over: Partial<Parameters<typeof chipShown>[0]> = {}) =>
+		chipShown({ agent: true, chip: false, text: "what breaks?", references: [], ...over });
+
+	test("is the state: on once put on, and off until then", () => {
+		expect(shown({ chip: true })).toBe(true);
+		expect(shown()).toBe(false);
+	});
+
+	test("is shown for a message that names Chopin in its words, since that asks it too", () => {
+		expect(shown({ text: "can @chopin look?" })).toBe(true);
+		expect(shown({ text: "a@chopin.example" })).toBe(false);
+	});
+
+	test("is shown for a send already prepared for Chopin, which is held until it goes", () => {
+		expect(shown({ submitted: "planner" })).toBe(true);
+		expect(shown({ submitted: "room" })).toBe(false);
+	});
+
+	test("gives way to a command, which is an address of its own and has no @chopin to take out", () => {
+		expect(shown({ chip: true, text: "/plan go", references: [COMMAND] })).toBe(false);
+		expect(shown({ text: "/plan go", references: [COMMAND] })).toBe(false);
+	});
+
+	test("is never shown where there is no agent", () => {
+		expect(shown({ agent: false, chip: true })).toBe(false);
+	});
+});
+
+describe("taking Chopin out of the words, as removing the chip does", () => {
+	let take = (text: string, start = 0, end = start, references: ReferenceDraft[] = []) =>
+		withoutChopinMentions(text, references, { start, end });
+
+	test("takes each @chopin typed in the words, and the space it leaned on", () => {
+		expect(take("@chopin outline it")).toMatchObject({ text: "outline it" });
+		expect(take("so @chopin outline it")).toMatchObject({ text: "so outline it" });
+		expect(take("@chopin and @Chopin again")).toMatchObject({ text: "and again" });
+		expect(take("outline it @chopin")).toMatchObject({ text: "outline it " });
+	});
+
+	test("leaves a word that only looks like it", () => {
+		expect(take("mail a@chopin.example")).toMatchObject({ text: "mail a@chopin.example" });
+		expect(take("@chopins and @chopina")).toMatchObject({ text: "@chopins and @chopina" });
+	});
+
+	test("keeps one inside a reference's own words, and the reference where it moved to", () => {
+		// `@chopin See #Export @chopin`: the first is typed, the one in the reference is its title's.
+		let text = "@chopin See #Export @chopin";
+		let ref: ReferenceDraft = {
+			kind: "document",
+			channelId: "c",
+			start: 12,
+			end: 27,
+			token: "#Export @chopin",
+		};
+		let result = take(text, 0, 0, [ref]);
+		expect(result.text).toBe("See #Export @chopin");
+		expect(result.references).toEqual([{ ...ref, start: 4, end: 19 }]);
+	});
+
+	test("moves the caret back by what was taken before it, and not past the start", () => {
+		expect(take("@chopin outline it", 12)).toMatchObject({ start: 4, end: 4 });
+		expect(take("@chopin outline it", 3)).toMatchObject({ start: 0, end: 0 });
+		expect(take("outline it", 4)).toMatchObject({ text: "outline it", start: 4, end: 4 });
 	});
 });
 

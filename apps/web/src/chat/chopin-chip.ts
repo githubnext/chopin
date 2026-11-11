@@ -41,6 +41,60 @@ export function restoredChip(draft: ComposerDraft, submitted?: ChatSendPayload["
 	return submitted === "planner" && !addressedOutsideReferences(draft.text, draft.references);
 }
 
+/**
+ * Whether the chip is drawn. It is the state (on once it is put on), and it is also shown for a
+ * message that names Chopin in its words and for a send already prepared for Chopin, which are
+ * for Chopin as much as the chip is. A command has an address of its own, so the chip gives way
+ * to it.
+ */
+export function chipShown(
+	{ agent, chip, references, submitted, text }: {
+		agent: boolean;
+		chip: boolean;
+		text: string;
+		references: ReadonlyArray<Pick<ReferenceDraft, "start" | "end" | "kind">>;
+		submitted?: ChatSendPayload["to"];
+	},
+): boolean {
+	if (!agent || references.some(reference => reference.kind === "command")) return false;
+	return chip || submitted === "planner" || addressedOutsideReferences(text, [...references]);
+}
+
+/**
+ * Taking the chip off a draft that names Chopin in its words takes those words out too, or the
+ * message would still ask Chopin and the chip would come straight back. Each `@chopin` outside a
+ * reference goes, with the one space it leaned on, and the references and the selection follow.
+ */
+export function withoutChopinMentions(
+	text: string,
+	references: ReferenceDraft[],
+	selection: { start: number; end: number },
+): { text: string; references: ReferenceDraft[]; start: number; end: number } {
+	let removals = [...text.matchAll(/(^|[^\w@])@chopin\b/gi)]
+		.map(match => {
+			let start = match.index + match[1]!.length;
+			let end = match.index + match[0].length;
+			// Take one following space too where the mention began the text or followed one, so removing
+			// it leaves no doubled or leading space.
+			if (text[end] === " " && (start === 0 || text[start - 1] === " ")) end += 1;
+			return { start, end };
+		})
+		.filter(edit =>
+			!references.some(reference => edit.start < reference.end && edit.end > reference.start)
+		);
+	let next = text;
+	let kept = references;
+	let { start, end } = selection;
+	for (let edit of removals.toReversed()) {
+		let revised = next.slice(0, edit.start) + next.slice(edit.end);
+		kept = reconcileReferenceDrafts(next, revised, kept, edit);
+		if (edit.start < start) start -= Math.min(edit.end - edit.start, start - edit.start);
+		if (edit.start < end) end -= Math.min(edit.end - edit.start, end - edit.start);
+		next = revised;
+	}
+	return { text: next, references: kept, start, end };
+}
+
 type KeyEvent = {
 	key: string;
 	keyCode?: number;

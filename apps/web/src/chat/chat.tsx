@@ -55,7 +55,14 @@ import { silencesFailedSends } from "./connection-phase";
 import { ErrorState } from "./error-state";
 import { failureBanner, retryPayload, sendFailureView, withoutFailure } from "./failure";
 import { TypingReporter } from "./typing";
-import { asksChopin, chipKeyAction, restoredChip, takeChopinMention } from "./chopin-chip";
+import {
+	asksChopin,
+	chipKeyAction,
+	chipShown,
+	restoredChip,
+	takeChopinMention,
+	withoutChopinMentions,
+} from "./chopin-chip";
 import { ChatComposer } from "./composer";
 import type { ComposerNotice } from "./composer";
 
@@ -446,7 +453,13 @@ export function Chat(
 	let outboxed = agent && sendAcknowledgements;
 	// A draft never waits on the connection; only sending does.
 	let draftable = !readonly && !archived;
-	let chip = !!agent && chipOn;
+	let chip = chipShown({
+		agent: !!agent,
+		chip: chipOn,
+		text: draft.text,
+		references: draft.references,
+		submitted: draft.submission?.to,
+	});
 	let commandDraft = runsCommand(draft.references);
 	let plannerBound = outboxed && asksChopin({
 		agent: !!agent,
@@ -915,15 +928,21 @@ export function Chat(
 		pendingCaret.current = caret;
 	};
 
-	// Puts the chip on or takes it off. A send prepared for the other audience is not the one to make
-	// now, so the draft is made again when it goes.
+	// Puts the chip on or takes it off. Taking it off also takes out any @chopin typed in the words,
+	// or the message would still ask Chopin and the chip would come straight back. A send prepared
+	// for the other audience is not the one to make now, so the draft is made again when it goes.
 	let setChip = (on: boolean) => {
-		if (!draftable || sending || !agent || chipOn === on) return;
+		if (!draftable || sending || !agent || chip === on) return;
 		let current = draftRef.current;
 		setChipOn(on);
-		setDraft({ text: current.text, references: current.references });
+		let next = on
+			? { text: current.text, references: current.references, ...selection }
+			: withoutChopinMentions(current.text, current.references, selection);
+		setDraft({ text: next.text, references: next.references });
+		setSelection({ start: next.start, end: next.end });
 		setSendError(undefined);
-		pendingCaret.current = { start: selection.start, end: selection.end };
+		setDismissedPicker(triggerKey ?? mentionKey);
+		pendingCaret.current = { start: next.start, end: next.end };
 	};
 
 	let chooseReference = (target: ReferenceTarget) => {
@@ -1307,7 +1326,7 @@ export function Chat(
 								ctrlKey: event.ctrlKey,
 								metaKey: event.metaKey,
 							}, {
-								chip: chipOn,
+								chip,
 								selectionStart: textarea.current?.selectionStart ?? 0,
 								selectionEnd: textarea.current?.selectionEnd ?? 0,
 							})
