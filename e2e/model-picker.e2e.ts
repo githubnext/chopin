@@ -1336,11 +1336,11 @@ test("names the model on a phone trigger, opens a list as wide as the composer a
 	let model = trigger(page);
 	await expect(model).toBeVisible();
 	await expect(model).toHaveAccessibleName("Model: Small");
-	// The pill keeps the model's name, drawn as the element's 32px pill with a 44px touch target.
+	// The pill keeps the model's name, drawn as a 28px ghost pill with a 44px touch target.
 	await expect(name(model)).toBeVisible();
 	await expect(name(model)).toHaveText("Small");
 	let box = (await model.boundingBox())!;
-	expect(box.height).toBeCloseTo(32, 0);
+	expect(box.height).toBeCloseTo(28, 0);
 	expect(await model.evaluate(element => getComputedStyle(element, "::after").height)).toBe("44px");
 	await expectInsideViewport(model);
 	await expectNoHorizontalOverflow(page);
@@ -1416,7 +1416,7 @@ test("keeps the model's name on a touch phone's trigger at every phone width, cu
 			let mention = chat(page).getByRole("button", { name: "Mention docs" });
 			let mode = chat(page).getByRole("button", { name: "Talk to Chopin" });
 			let send = chat(page).getByRole("button", { name: "Send message" });
-			let controls = [mode, model, mention, send];
+			let controls = [mention, mode, model, send];
 			let boxes = await Promise.all(controls.map(async control => (await control.boundingBox())!));
 			for (let control of controls) await expectInsideViewport(control);
 			for (let index = 1; index < boxes.length; index++) {
@@ -1429,7 +1429,7 @@ test("keeps the model's name on a touch phone's trigger at every phone width, cu
 			// The draft keeps its own row above them, as wide as the box.
 			expect((await chatInput(chat(page)).boundingBox())!.width, `draft at ${width}px`)
 				.toBeGreaterThanOrEqual(width - 60);
-			expect(boxes[1]!.height).toBeCloseTo(32, 0);
+			expect(boxes[2]!.height).toBeCloseTo(28, 0);
 			await expectNoHorizontalOverflow(page);
 		};
 

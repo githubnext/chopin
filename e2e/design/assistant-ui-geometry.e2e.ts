@@ -88,7 +88,7 @@ const ROOTS = {
 	],
 } as const;
 const TARGETS =
-	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [role="radio"], [data-slot="composer-send"]';
+	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [role="radio"]';
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 const effortRadios = (page: Page) => slot(page, "model-selector-effort").getByRole("radio");
 
@@ -225,85 +225,68 @@ test("Chopin's global button behaviour does not reach a copy: its press, transit
 	expect(ring.shadow).not.toBe("none");
 });
 
-/** The icons of a round button, by size, measured as laid out (a faded icon is scaled, so not by its box). */
-async function iconSizes(button: Locator): Promise<Record<"arrow" | "square", [number, number]>> {
-	return button.evaluate(element => {
-		let size = (name: string): [number, number] => {
-			let style = getComputedStyle(element.querySelector(`svg.lucide-${name}`)!);
-			return [Number.parseFloat(style.width), Number.parseFloat(style.height)];
-		};
-		return { arrow: size("arrow-up"), square: size("square") };
-	});
-}
+/**
+ * The message box is Chopin's own, in Slack's proportions as built: an 8px box with a hairline, a
+ * toolbar and a row of 28px ghost buttons with 16px icons, and a 28px rounded-square send. It is
+ * measured where Chat draws it, on the chat plate of the audit.
+ */
+test("the message box is an 8px box with a 1px border, 28px controls with 16px icons and a 28px rounded-square send, under both pointers", async ({ page }) => {
+	let composer = plate(page, "chat").locator(".chat-composer").first();
+	await composer.scrollIntoViewIfNeeded();
+	let box = composer.locator(".composer-surface");
+	let boxed = await measure(box);
+	expect(boxed.radius).toBe(8);
+	expect(boxed.border).toEqual([1, 1, 1, 1]);
 
-test("the round send and stop button is a 32px circle with no border, its arrow 16px and its square 12px, under both pointers", async ({ page }) => {
-	let buttons = plate(page, "assistant-ui").locator('[data-slot="composer-send"]');
-	// Five states beside the composer drawn as the element draws it.
-	expect(await buttons.count()).toBe(6);
-	let measured = async () => {
+	let controls = composer.locator(".composer-format button, .composer-row .btn-icon");
+	let icons = controls.locator("svg:not([data-send-stop-status])");
+	expect(await controls.count()).toBeGreaterThanOrEqual(10);
+	let sized = async () => {
 		let found = [];
-		for (let index = 0; index < await buttons.count(); index++) {
-			let button = buttons.nth(index);
-			await expectClassGeometry(button, "composer-send");
-			let box = await measure(button);
-			// `grid size-8 place-items-center rounded-full`: 32px, round, and not drawn with a border.
-			expect([box.width, box.height], `button ${index} size`).toEqual([32, 32]);
-			expect(box.radius, `button ${index} radius`).toBeGreaterThan(1000);
-			expect(box.border, `button ${index} border`).toEqual([0, 0, 0, 0]);
-			expect(await iconSizes(button), `button ${index} icons`).toEqual({
-				arrow: [16, 16],
-				square: [12, 12],
-			});
-			found.push(box);
+		for (let index = 0; index < await controls.count(); index++) {
+			let control = controls.nth(index);
+			if (!await control.isVisible()) continue;
+			let size = await measure(control);
+			expect([size.width, size.height], `control ${index} size`).toEqual([28, 28]);
+			found.push(size);
 		}
 		return found;
 	};
-	let fine = await measured();
-	for (let index = 0; index < fine.length; index++) {
+	let fine = await sized();
+	for (let index = 0; index < await icons.count(); index++) {
+		let icon = icons.nth(index);
+		if (!await icon.isVisible()) continue;
 		expect(
-			await buttons.nth(index).evaluate(node => getComputedStyle(node, "::after").content),
-			`button ${index} has no target on a fine pointer`,
+			await icon.evaluate(
+				node => [node.getBoundingClientRect().width, node.getBoundingClientRect().height],
+			),
+			`icon ${index}`,
+		).toEqual([16, 16]);
+	}
+	let send = composer.locator("[data-send-stop]");
+	let rounded = await measure(send);
+	// A rounded square, not a circle: Chopin's medium radius.
+	expect(rounded.radius).toBe(6);
+	expect(rounded.border).toEqual([0, 0, 0, 0]);
+
+	for (let index = 0; index < fine.length; index++) {
+		let visible = [];
+		for (let item = 0; item < await controls.count(); item++) {
+			if (await controls.nth(item).isVisible()) visible.push(item);
+		}
+		expect(
+			await controls.nth(visible[index]!).evaluate(node =>
+				getComputedStyle(node, "::after").content
+			),
+			`control ${index} has no target on a fine pointer`,
 		).toBe("none");
 	}
-	// A coarse pointer grows only the target, to 44px; the circle, its border and its icons do not move.
+	// A coarse pointer grows only the target, to 44px: the boxes, border and icons do not move.
 	await page.evaluate(() => document.documentElement.setAttribute("data-plan-coarse-pointer", ""));
-	expect(await measured()).toEqual(fine);
-	for (let index = 0; index < fine.length; index++) {
-		let after = await buttons.nth(index).evaluate(node => {
-			let style = getComputedStyle(node, "::after");
-			return [style.content, Number.parseFloat(style.width), Number.parseFloat(style.height)];
-		});
-		expect(after, `button ${index} target`).toEqual(['""', 44, 44]);
-	}
-});
-
-test("the composer's box is the element's own: 24px corners, 10px padding and a hairline, the field 44px tall, the toolbar's controls 32px", async ({ page }) => {
-	let shell = plate(page, "assistant-ui").locator('[data-slot="composer"]');
-	let bar = shell.locator('[data-slot="composer-bar"]');
-	let box = await measure(bar);
-	expect(box.radius).toBe(24);
-	expect(box.padding).toEqual([10, 10, 10, 10]);
-	expect(box.border).toEqual([1, 1, 1, 1]);
-	expect(box.gap).toBe(8);
-	let field = await measure(shell.locator('[data-slot="composer-input"]'));
-	expect([field.height, field.padding[3], field.fontSize]).toEqual([44, 12, 15]);
-	// Each control in the toolbar is what its own classes say: 32px circles, and a 32px pill.
-	for (
-		let name of ["composer-attach", "composer-voice-button", "composer-send"] as const
-	) {
-		let control = shell.locator(`[data-slot="${name}"]`).first();
-		await expectClassGeometry(control, name);
-		let size = await measure(control);
-		expect([size.width, size.height], name).toEqual([32, 32]);
-	}
-	let model = shell.locator('[data-slot="composer-model-trigger"]');
-	await expectClassGeometry(model, "composer-model-trigger");
-	let pill = await measure(model);
-	expect([pill.height, pill.padding[1], pill.padding[3], pill.fontSize]).toEqual([
-		32,
-		12,
-		12,
-		12.5,
-	]);
-	expect(pill.radius).toBeGreaterThan(1000);
+	expect(await sized()).toEqual(fine);
+	let after = await send.evaluate(node => {
+		let style = getComputedStyle(node, "::after");
+		return [style.content, Number.parseFloat(style.width), Number.parseFloat(style.height)];
+	});
+	expect(after).toEqual(['""', 44, 44]);
 });

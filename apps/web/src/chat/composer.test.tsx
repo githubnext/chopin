@@ -31,8 +31,7 @@ function render(props: Partial<ChatComposerProps> = {}): string {
 
 test("renders the draft as a combobox in the field", () => {
 	let markup = render();
-	expect(markup).toContain('data-slot="composer-bar"');
-	expect(markup).toMatch(/data-slot="composer-bar" class="[^"]* composer-surface"/);
+	expect(markup).toContain('class="composer-surface"');
 	expect(markup).toContain('role="combobox"');
 	expect(markup).toContain('aria-label="Message"');
 	expect(markup).toContain("Message your collaborators…");
@@ -85,9 +84,9 @@ test("shows one run control, and no connection state of its own", () => {
 	expect(markup).not.toContain("Retry");
 });
 
-/** The round button's own tag: assistant-ui's `ComposerSend`, the only one in the composer. */
+/** The one send control's tag, which is send or stop and the only one in the composer. */
 function roundButton(markup: string): string {
-	let buttons = markup.match(/<button[^>]*data-slot="composer-send"[^>]*>/g) ?? [];
+	let buttons = markup.match(/<button[^>]*data-send-stop="[^"]*"[^>]*>/g) ?? [];
 	expect(buttons).toHaveLength(1);
 	return buttons[0]!;
 }

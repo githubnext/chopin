@@ -1,12 +1,13 @@
 /**
- * The composer's model pill: assistant-ui's own `ComposerModelTrigger`, which opens its Model
- * selector, both copied unmodified and driven by Chopin's catalog and choice through props
- * (`modelSelection`). `useModelChoice` owns the choice and the wire.
+ * The composer's model pill: a small ghost button that names the model that will run and, in
+ * lighter ink, its level, and opens assistant-ui's Model selector, copied unmodified and driven by
+ * Chopin's catalog and choice through props (`modelSelection`). `useModelChoice` owns the choice and
+ * the wire.
  */
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
-import { ComposerModelTrigger } from "@/components/assistant-ui/elements/composer";
+import { ChevronIcon } from "@chopin/icons";
 import {
 	ModelSelectorContent,
 	ModelSelectorEffort,
@@ -28,23 +29,25 @@ import {
 } from "../model-picker-state";
 import { modelSelection } from "./model-options";
 
-import type { ReactNode } from "react";
 import type { ModelControl } from "../use-model-choice";
 
 export function ModelPill({ control }: { control: ModelControl }) {
 	let { catalog, choice, choose, modelName } = control;
 	let [open, setOpen] = useState(false);
+	// The selector is 288px wide and opens level with the pill, which a phone's row can put near the
+	// right edge: it is moved along the pill's edge, as far as it needs, to stay inside the screen.
+	let pill = useRef<HTMLButtonElement>(null);
+	let [offset, setOffset] = useState(0);
+	useLayoutEffect(() => {
+		let node = pill.current;
+		if (!open || !node) return;
+		let edge = node.getBoundingClientRect().left;
+		let width = Math.min(288, innerWidth - 16);
+		setOffset(Math.max(8, Math.min(edge, innerWidth - width - 8)) - edge);
+	}, [open]);
 	let { groups, value, effort, modelOf, levelOf } = modelSelection(catalog, choice);
 	let { name, level } = triggerText(catalog, choice);
 	let notice = fallbackNotice(catalog, choice, modelName);
-	// The element types `model` as a string and draws it as a child, so a node is drawn as it is:
-	// the name, which gives way to an ellipsis, and the level in lighter ink.
-	let shown: ReactNode = (
-		<>
-			<span className="min-w-0 truncate">{name}</span>
-			{level && <span className="shrink-0 text-text-tertiary">{level}</span>}
-		</>
-	);
 	return (
 		<ModelSelectorRoot
 			effort={effort ?? ""}
@@ -57,16 +60,22 @@ export function ModelPill({ control }: { control: ModelControl }) {
 		>
 			<PopoverTrigger
 				render={
-					<ComposerModelTrigger
+					<button
+						ref={pill}
 						aria-label={triggerLabel(catalog, choice, modelName)}
-						className="min-w-0"
-						model={shown as unknown as string}
-						open={open}
+						className="btn btn-sm btn-ghost composer-model-pill"
+						data-press="none"
 						title={triggerTitle(catalog, choice)}
-					/>
+						type="button"
+					>
+						<span className="composer-model-name">{name}</span>
+						{level && <span className="composer-model-level">{level}</span>}
+						<ChevronIcon aria-hidden="true" className="composer-model-chevron" size={12} />
+					</button>
 				}
 			/>
 			<ModelSelectorContent
+				alignOffset={offset}
 				aria-label="Model and reasoning"
 				searchable
 				side="top"
@@ -81,7 +90,7 @@ export function ModelPill({ control }: { control: ModelControl }) {
 						</ModelSelectorGroup>
 					))}
 				</ModelSelectorList>
-				<ModelSelectorEffort />
+				<ModelSelectorEffort className="flex-wrap" />
 			</ModelSelectorContent>
 		</ModelSelectorRoot>
 	);

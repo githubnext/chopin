@@ -10,14 +10,3 @@
 	align-items: flex-start;
 	gap: 0.5rem;
 }
-
-.design-audit-aui-shell {
-	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: 0.5rem;
-	margin-top: 1.5rem;
-}
-.design-audit-aui + .design-audit-aui {
-	margin-top: 1.5rem;
-}

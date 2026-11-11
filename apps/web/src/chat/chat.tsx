@@ -45,6 +45,9 @@ import {
 	withoutRetracted,
 } from "./delivery";
 import type { DraftInputHandle } from "./draft-input";
+import { applyFormat } from "./format-markdown";
+import { keepFormatPreference, readFormatPreference } from "./format-preference";
+import type { Format } from "./format-markdown";
 import { bannerSlot } from "./banner-slot";
 import { ConnectionBannerView } from "./connection-banner";
 import type { ConnectionBanner, TranscriptFacts } from "./connection-banner";
@@ -837,6 +840,48 @@ export function Chat(
 		}
 	});
 
+	// The formatting toolbar above the draft, which each person turns on or off for themselves.
+	let [formatting, setFormatting] = useState(() => readFormatPreference(handle));
+	let toggleFormatting = () => {
+		keepFormatPreference(handle, !formatting);
+		setFormatting(on => !on);
+	};
+	// A mark is inserted into the draft's text as Markdown, round the selection, and what it
+	// replaced is told so that the references outside it are kept.
+	let formatDraft = (kind: Format) => {
+		let current = draftRef.current;
+		let result = applyFormat(kind, current.text, selection);
+		setDraft(
+			reviseComposerDraft(
+				current,
+				result.text,
+				reconcileReferenceDrafts(current.text, result.text, current.references, result.edit),
+			),
+		);
+		setSelection({ start: result.start, end: result.end });
+		setSendError(undefined);
+		pendingCaret.current = { start: result.start, end: result.end };
+	};
+	// An `@` at the caret, which opens the mentions.
+	let startMention = () => {
+		let current = draftRef.current;
+		let before = current.text.slice(0, selection.start);
+		let lead = before && !/\s$/.test(before) ? " @" : "@";
+		let next = before + lead + current.text.slice(selection.end);
+		let caret = before.length + lead.length;
+		setDraft(
+			reviseComposerDraft(
+				current,
+				next,
+				reconcileReferenceDrafts(current.text, next, current.references, selection),
+			),
+		);
+		setSelection({ start: caret, end: caret });
+		setSendError(undefined);
+		setDismissedPicker(undefined);
+		pendingCaret.current = caret;
+	};
+
 	let toggleMode = () => {
 		if (!draftable || sending || !agent) return;
 		let current = draftRef.current;
@@ -1100,6 +1145,13 @@ export function Chat(
 						},
 					}
 					: undefined}
+				format={{
+					shown: formatting,
+					disabled: !composerShown || submitting,
+					onToggle: toggleFormatting,
+					onFormat: formatDraft,
+				}}
+				mention={{ disabled: !composerShown || submitting, onMention: startMention }}
 				draftable={draftable}
 				sending={sending}
 				sendDisabled={!draftable || sending || !draft.text.trim()
