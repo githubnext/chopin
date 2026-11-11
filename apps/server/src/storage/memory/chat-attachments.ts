@@ -13,7 +13,12 @@ function typed(value: { kind: string; mimeType: string }): boolean {
 }
 
 function copy(value: StoredChatAttachment): StoredChatAttachment {
-	return { ...value, bytes: new Uint8Array(value.bytes), createdAt: new Date(value.createdAt) };
+	return {
+		...value,
+		bytes: new Uint8Array(value.bytes),
+		createdAt: new Date(value.createdAt),
+		...(value.original ? { original: { ...value.original } } : {}),
+	};
 }
 
 export class MemoryChatAttachmentStore implements ChatAttachmentStore {

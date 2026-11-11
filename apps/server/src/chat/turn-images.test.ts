@@ -43,7 +43,13 @@ const base64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
 const path = (bytes: Uint8Array) =>
 	`/images/${createHash("sha256").update(bytes).digest("hex")}.png`;
 
-type Stored = { channelId: string; sha256: string; mimeType: string; uploadedBy: string };
+type Stored = {
+	channelId: string;
+	sha256: string;
+	mimeType: string;
+	uploadedBy: string;
+	bytes: Uint8Array;
+};
 
 function turn(
 	options: {

@@ -139,6 +139,9 @@ const MIGRATIONS = [{
 }, {
 	id: "039_plan_image_types",
 	path: join(import.meta.dir, "migrations/039_plan_image_types.sql"),
+}, {
+	id: "040_chat_attachment_originals",
+	path: join(import.meta.dir, "migrations/040_chat_attachment_originals.sql"),
 }] satisfies Migration[];
 
 /** Navigation shipped as 002 before document slugs claimed that number on main. */

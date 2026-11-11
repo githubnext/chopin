@@ -349,6 +349,23 @@ describe("reading a file sent with a message", () => {
 		expect((await read(undefined, "attachment-1?w=480"))?.status).toBe(404);
 	});
 
+	it("says what an image was before a smaller copy was sent, only of a larger image", async () => {
+		let { upload, storage, channel } = await setup();
+		let copied = await upload("octocat", PNG, "name=photo.png&original=23000000x12000x8000");
+		expect((await copied!.json()).attachment.original).toEqual({
+			size: 23_000_000,
+			width: 12000,
+			height: 8000,
+		});
+		for (let original of ["5x12000x8000", "23000000x0x8000", "big", "23000000x12000"]) {
+			let whole = await upload("octocat", PNG, `name=photo.png&original=${original}`);
+			expect((await whole!.json()).attachment, original).not.toHaveProperty("original");
+		}
+		let text = await upload("octocat", "notes", "name=notes.md&original=23000000x12000x8000");
+		expect((await text!.json()).attachment).not.toHaveProperty("original");
+		expect((await stored(storage, channel.id, "attachment-1"))?.original?.width).toBe(12000);
+	});
+
 	it("gives a text file as a download of plain text, even when it is a page", async () => {
 		let { upload, read, send } = await setup();
 		await upload("octocat", PAGE, "name=%22%3E%3Cb%3Eindex.html&type=text/html");

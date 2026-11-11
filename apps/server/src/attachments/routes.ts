@@ -17,7 +17,7 @@ import { wireAttachment } from "./wire";
 import type { HostedAuth } from "../auth/routes";
 import type { AuthenticatedSession } from "../auth/session";
 import type { Router } from "../http/router";
-import type { ChannelRecord } from "../storage/model";
+import type { ChannelRecord, ChatAttachmentOriginal } from "../storage/model";
 
 /** Uploads one person may leave unsent in a document, as a multiple of what a message may carry. */
 const STAGED_FACTOR = 4;
@@ -96,6 +96,24 @@ async function boundedBody(request: Request, limit: number): Promise<Uint8Array 
 	return body;
 }
 
+const ORIGINAL = /^(\d{1,12})x(\d{1,6})x(\d{1,6})$/;
+
+/**
+ * What an image was before the browser made it smaller, as `?original=<bytes>x<width>x<height>`:
+ * only for an image, and only larger than what was sent. It is the sender's word about their own
+ * file, kept so the viewer can say the image is shown smaller.
+ */
+function originalOf(
+	raw: string | null,
+	kind: "image" | "file",
+	sent: number,
+): ChatAttachmentOriginal | undefined {
+	let match = raw === null || kind !== "image" ? null : ORIGINAL.exec(raw);
+	if (!match) return undefined;
+	let [size, width, height] = match.slice(1).map(Number) as [number, number, number];
+	return size > sent && width > 0 && height > 0 ? { size, width, height } : undefined;
+}
+
 /** `filename*` carries the name as UTF-8, so no character of it can end the header. */
 function disposition(kind: "inline" | "attachment", name: string): string {
 	let ascii = name.replace(/[^\x20-\x7e]|["\\;]/g, "_");
@@ -155,6 +173,11 @@ export function registerAttachmentRoutes(
 			if (staged.bytes + bytes.byteLength > limits.maxTotalBytes * STAGED_FACTOR) {
 				return refused("too-much", 429, limits);
 			}
+			let original = originalOf(
+				url.searchParams.get("original"),
+				checked.kind,
+				bytes.byteLength,
+			);
 			let attachment = {
 				id: options.id?.() ?? crypto.randomUUID(),
 				channelId,
@@ -164,6 +187,7 @@ export function registerAttachmentRoutes(
 				bytes,
 				uploadedBy: userId,
 				now,
+				...(original ? { original } : {}),
 			};
 			await storage.chatAttachments.put(attachment);
 			return json({

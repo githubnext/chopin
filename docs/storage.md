@@ -169,7 +169,9 @@ it is stored and a restart only makes it again. A GIF is served whole, so it kee
 image too large to store (`MAX_STORED_IMAGE_BYTES` for an image a tool made, 1 MiB for an
 `upload_image`, `CHAT_ATTACHMENT_MAX_BYTES` for an attachment, which the browser makes smaller
 before it uploads) is stored as a smaller copy of itself, so a release that never made copies reads
-everything this one stores.
+everything this one stores. Where the browser made the copy, `chat_attachments.original_size`,
+`original_width` and `original_height` (migration 040, additive and nullable) keep what the sender's
+file was, and the attachment carries it as `original` so the viewer can say it is shown smaller.
 
 A transcript entry keeps what the composer's `@` and `/` point at (a command, a heading of the
 document, a Decision, a file of the repository) under `pointers`, and only references to other

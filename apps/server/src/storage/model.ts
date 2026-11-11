@@ -52,7 +52,11 @@ export type StoredChatAttachment = {
 	createdAt: Date;
 	entryId?: string;
 	position?: number;
+	/** What an image was before the browser sent a smaller copy of it, as its sender said. */
+	original?: ChatAttachmentOriginal;
 };
+
+export type ChatAttachmentOriginal = { size: number; width: number; height: number };
 
 export type PutChatAttachment =
 	& Omit<StoredChatAttachment, "size" | "createdAt" | "entryId" | "position">

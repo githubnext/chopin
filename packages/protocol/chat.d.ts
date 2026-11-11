@@ -64,6 +64,11 @@ export declare namespace Chat {
 		kind: "image" | "file";
 		mimeType: string;
 		size: number;
+		/**
+		 * What an image was before the browser sent a smaller copy of it (bytes and pixels), so
+		 * the viewer can say it is shown smaller. Additive: an older browser ignores it.
+		 */
+		original?: { size: number; width: number; height: number };
 	};
 
 	export type ReferenceRequest =

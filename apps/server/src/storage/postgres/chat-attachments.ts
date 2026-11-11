@@ -14,19 +14,25 @@ type AttachmentRow = {
 	createdAt: Date | string;
 	entryId: string | null;
 	position: number | null;
+	originalSize: number | string | null;
+	originalWidth: number | null;
+	originalHeight: number | null;
 };
 
 /** Raised inside a transaction to roll it back when the files cannot all be sent. */
 class Refused extends Error {}
 
 function stored(row: AttachmentRow): StoredChatAttachment {
-	let { entryId, position, ...rest } = row;
+	let { entryId, position, originalSize, originalWidth, originalHeight, ...rest } = row;
 	return {
 		...rest,
 		bytes: new Uint8Array(row.bytes),
 		createdAt: new Date(row.createdAt),
 		...(entryId !== null ? { entryId } : {}),
 		...(position !== null ? { position } : {}),
+		...(originalSize !== null && originalWidth !== null && originalHeight !== null
+			? { original: { size: Number(originalSize), width: originalWidth, height: originalHeight } }
+			: {}),
 	};
 }
 
@@ -39,10 +45,13 @@ export class PostgresChatAttachmentStore implements ChatAttachmentStore {
 		return this.run("save chat attachment", async () => {
 			await this.sql`
 				INSERT INTO chat_attachments
-					(id, channel_id, name, kind, mime_type, bytes, size, uploaded_by, created_at)
+					(id, channel_id, name, kind, mime_type, bytes, size, uploaded_by, created_at,
+						original_size, original_width, original_height)
 				VALUES (
 					${input.id}, ${input.channelId}, ${input.name}, ${input.kind}, ${input.mimeType},
-					${input.bytes}, ${input.bytes.byteLength}, ${input.uploadedBy}, ${input.now}
+					${input.bytes}, ${input.bytes.byteLength}, ${input.uploadedBy}, ${input.now},
+					${input.original?.size ?? null}, ${input.original?.width ?? null},
+					${input.original?.height ?? null}
 				)
 				ON CONFLICT (id) DO NOTHING
 			`;
@@ -52,7 +61,9 @@ export class PostgresChatAttachmentStore implements ChatAttachmentStore {
 		return this.run("read chat attachment", async () => {
 			let [row] = await this.sql<AttachmentRow[]>`
 				SELECT id, channel_id AS "channelId", name, kind, mime_type AS "mimeType", bytes, size,
-					uploaded_by AS "uploadedBy", created_at AS "createdAt", entry_id AS "entryId", position
+					uploaded_by AS "uploadedBy", created_at AS "createdAt", entry_id AS "entryId", position,
+					original_size AS "originalSize", original_width AS "originalWidth",
+					original_height AS "originalHeight"
 				FROM chat_attachments
 				WHERE channel_id = ${channelId} AND id = ${id}
 			`;
@@ -97,7 +108,9 @@ export class PostgresChatAttachmentStore implements ChatAttachmentStore {
 		return this.run("read a message's chat attachments", async () => {
 			let rows = await this.sql<AttachmentRow[]>`
 				SELECT id, channel_id AS "channelId", name, kind, mime_type AS "mimeType", bytes, size,
-					uploaded_by AS "uploadedBy", created_at AS "createdAt", entry_id AS "entryId", position
+					uploaded_by AS "uploadedBy", created_at AS "createdAt", entry_id AS "entryId", position,
+					original_size AS "originalSize", original_width AS "originalWidth",
+					original_height AS "originalHeight"
 				FROM chat_attachments
 				WHERE channel_id = ${channelId} AND entry_id = ${entryId}
 				ORDER BY position
