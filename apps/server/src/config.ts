@@ -210,7 +210,7 @@ function transcription(): Config["transcription"] {
 	let match = /^(openai)\/(\S{1,100})$/.exec(raw);
 	if (!match) {
 		throw new Error(
-			"TRANSCRIPTION_MODEL must be off, or openai/<model> such as openai/gpt-4o-mini-transcribe",
+			"TRANSCRIPTION_MODEL must be off, or openai/<model> such as openai/gpt-transcribe",
 		);
 	}
 	if (!process.env.OPENAI_API_KEY) {

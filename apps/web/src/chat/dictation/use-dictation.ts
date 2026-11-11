@@ -11,27 +11,32 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { browserRecognition, createRecognizer, FAILURE_WORDS } from "./recognizer";
 import { begin, flush, follow, merge, shown } from "./transcript";
 
-import type { DictationFailure, RecognitionConstructor, Recognizer } from "./recognizer";
+import type { RecognitionConstructor, Recognizer } from "./recognizer";
 import type { Dictation } from "./transcript";
 
 export type DictationSource =
 	| { kind: "browser"; Native: RecognitionConstructor }
-	| { kind: "server"; provider: string };
+	| { kind: "server"; provider: string; maxBytes: number };
 
 /**
- * Where speech is turned into words: the browser's own recognition if it runs on the device,
- * else the deployment's transcription if it set one up, else nowhere, and there is no button.
+ * Where speech is turned into words: the deployment's transcription wherever it set one up (in
+ * every browser, without touching the browser's own recognition), else the browser's own
+ * recognition if it runs on the device, else nowhere, and there is no button. `null` means the
+ * server has not yet said whether it set one up.
  */
 export function dictationSource(
 	win: Parameters<typeof browserRecognition>[0] & { MediaRecorder?: unknown },
 	media: unknown,
-	transcription: { provider: string } | undefined,
+	transcription: { provider: string; maxBytes: number } | null | undefined,
 ): DictationSource | undefined {
+	if (transcription === null) return undefined;
+	if (transcription) {
+		return win.MediaRecorder && media
+			? { kind: "server", provider: transcription.provider, maxBytes: transcription.maxBytes }
+			: undefined;
+	}
 	let Native = browserRecognition(win);
-	if (Native) return { kind: "browser", Native };
-	return transcription && win.MediaRecorder && media
-		? { kind: "server", provider: transcription.provider }
-		: undefined;
+	return Native ? { kind: "browser", Native } : undefined;
 }
 
 export type DictationPhase = "idle" | "starting" | "listening" | "transcribing";
@@ -82,6 +87,9 @@ export function useDictation(options: {
 	let recognizer = useRef<Recognizer>(undefined);
 	let recording = useRef<import("./server-recording").Recording>(undefined);
 	let running = useRef(false);
+	/** Which press this is: what a transcription answers after a later press is not this one's. */
+	let press = useRef(0);
+	let transcribing = useRef<AbortController>(undefined);
 	let timer = useRef<ReturnType<typeof setInterval>>(undefined);
 
 	let update = useCallback((next: Dictation) => {
@@ -94,6 +102,8 @@ export function useDictation(options: {
 		clearInterval(timer.current);
 		recognizer.current = undefined;
 		recording.current = undefined;
+		transcribing.current?.abort();
+		transcribing.current = undefined;
 		setPhase("idle");
 		setSeconds(0);
 		// A failure is told by its own alert, which a screen reader hears once; only a plain stop is announced here.
@@ -144,53 +154,83 @@ export function useDictation(options: {
 		void made.start().catch(() => finish(FAILURE_WORDS.failed));
 	}, [finish, update]);
 
-	let startServer = useCallback(async () => {
-		let { record, microphoneFailure } = await import("./server-recording");
+	/**
+	 * Stops recording and turns what was said into words at the caret: what comes back is shown
+	 * beside it as it comes, then written. `note` is said once the words are in.
+	 */
+	let stopServer = useCallback(async (note?: string) => {
+		let made = recording.current;
+		if (!made) return finish();
+		let mine = press.current;
+		recording.current = undefined;
+		clearInterval(timer.current);
+		setPhase("transcribing");
+		setAnnouncement("Transcribing");
+		let controller = new AbortController();
+		transcribing.current = controller;
+		let audio = await made.stop();
+		if (press.current !== mine) return;
+		if (!audio) return finish();
+		let { transcribe, TranscriptionFailed } = await import("./server-recording");
 		try {
-			let made = await record(navigator.mediaDevices, MediaRecorder);
-			if (!running.current) return made.discard();
+			let words = await transcribe(
+				latest.current.room,
+				audio,
+				sofar => {
+					if (press.current === mine) report(sofar, false);
+				},
+				controller.signal,
+			);
+			if (press.current !== mine) return;
+			report(words, true);
+			finish(note);
+		} catch (error) {
+			if (press.current !== mine) return;
+			finish(
+				error instanceof TranscriptionFailed && error.tooLong
+					? FAILURE_WORDS["too-long"]
+					: FAILURE_WORDS.transcription,
+			);
+		}
+	}, [finish, report]);
+
+	let startServer = useCallback(async (maxBytes: number) => {
+		let { record, microphoneFailure } = await import("./server-recording");
+		let mine = press.current;
+		try {
+			let made = await record(navigator.mediaDevices, MediaRecorder, {
+				maxBytes,
+				full: () => {
+					if (press.current === mine) void stopServer(FAILURE_WORDS.full);
+				},
+			});
+			if (!running.current || press.current !== mine) return made.discard();
 			recording.current = made;
 			setPhase("listening");
 			setAnnouncement("Dictation started");
 			timer.current = setInterval(() => setSeconds(value => value + 1), 1000);
 		} catch (error) {
-			finish(FAILURE_WORDS[microphoneFailure(error) as DictationFailure]);
+			if (press.current === mine) finish(FAILURE_WORDS[microphoneFailure(error)]);
 		}
-	}, [finish]);
-
-	let stopServer = useCallback(async () => {
-		let made = recording.current;
-		if (!made) return finish();
-		clearInterval(timer.current);
-		setPhase("transcribing");
-		setAnnouncement("Transcribing");
-		let audio = await made.stop();
-		if (!audio) return finish();
-		try {
-			let { transcribe } = await import("./server-recording");
-			let words = await transcribe(latest.current.room, audio);
-			if (running.current) report(words, true);
-			finish();
-		} catch {
-			finish("The recording couldn't be transcribed. Try again.");
-		}
-	}, [finish, report]);
+	}, [finish, stopServer]);
 
 	let start = useCallback(() => {
 		if (!latest.current.source || running.current) return;
 		running.current = true;
+		press.current++;
 		setFailure(undefined);
 		setSeconds(0);
 		setPhase("starting");
 		update(begin(latest.current.read().caret));
 		if (latest.current.source.kind === "browser") startBrowser(latest.current.source.Native);
-		else void startServer();
+		else void startServer(latest.current.source.maxBytes);
 	}, [startBrowser, startServer, update]);
 
 	let stop = useCallback(() => {
 		if (!running.current) return;
 		if (recognizer.current) recognizer.current.stop();
-		else void stopServer();
+		// Once it is being transcribed there is nothing left to stop: the words are on their way.
+		else if (!transcribing.current) void stopServer();
 	}, [stopServer]);
 
 	/** Ends it at once and reports nothing more, for a composer that is going. */
@@ -198,13 +238,15 @@ export function useDictation(options: {
 		if (!running.current) return;
 		recognizer.current?.abort();
 		recording.current?.discard();
+		press.current++;
 		finish();
 	}, [finish]);
 
 	// Never in the background: hidden, or gone, it stops, and it does not come back by itself.
 	useEffect(() => {
+		// A recording already being transcribed is said, and its words still come back to the draft.
 		let hidden = () => {
-			if (document.visibilityState === "hidden") abort();
+			if (document.visibilityState === "hidden" && !transcribing.current) abort();
 		};
 		document.addEventListener("visibilitychange", hidden);
 		window.addEventListener("pagehide", abort);

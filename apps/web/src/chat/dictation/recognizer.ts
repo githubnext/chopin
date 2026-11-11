@@ -46,14 +46,28 @@ export function browserRecognition(win: SpeechWindow): RecognitionConstructor | 
 }
 
 /** Why dictation stopped without finishing, as the words a person reads. */
-export type DictationFailure = "denied" | "no-device" | "language" | "network" | "failed";
+export type DictationFailure =
+	| "denied"
+	| "no-device"
+	| "language"
+	| "network"
+	| "failed"
+	| "transcription"
+	| "too-long"
+	| "full";
 
 export const FAILURE_WORDS: Record<DictationFailure, string> = {
 	denied: "Microphone access is blocked. Allow it in your browser's settings to dictate.",
 	"no-device": "No microphone was found.",
-	language: "Dictation isn't available in your language on this device.",
+	// Only where the deployment has no transcription: the device was all there was to ask.
+	language:
+		"Dictation isn't set up on this server, and this device can't recognize speech in your language by itself.",
 	network: "Dictation lost its connection. Try again.",
 	failed: "Dictation stopped unexpectedly. Try again.",
+	transcription: "The recording couldn't be transcribed. Try again.",
+	"too-long": "That recording is longer than this server takes. Try a shorter one.",
+	full:
+		"That's the longest recording this server takes, so dictation stopped there. Dictate again to go on.",
 };
 
 /** What a recognizer's error says, or nothing for one that is not a failure (silence, a stop). */
@@ -131,7 +145,7 @@ export function createRecognizer(
 					let installed = await Native.install?.({ langs, processLocally: true }).catch(() =>
 						false
 					);
-					if (installed === false) return void emit({ type: "failed", failure: "language" });
+					if (!installed) return void emit({ type: "failed", failure: "language" });
 				}
 			}
 			recognition.start();

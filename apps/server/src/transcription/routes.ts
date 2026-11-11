@@ -5,7 +5,7 @@ import { sniffAudio } from "./audio";
 
 import type { HostedAuth } from "../auth/routes";
 import type { Router } from "../http/router";
-import type { Transcriber } from "./openai";
+import type { Transcriber, TranscriptEvent } from "./openai";
 
 function json(value: unknown, status = 200): Response {
 	return Response.json(value, {
@@ -39,6 +39,36 @@ async function bounded(request: Request, limit: number): Promise<Uint8Array | un
 		offset += chunk.byteLength;
 	}
 	return body;
+}
+
+/**
+ * The words as the provider gives them, one JSON line each: `{ "delta" }` for words added to the
+ * end, then `{ "text" }` with the whole of it, or `{ "error" }` if the provider stopped part way.
+ */
+function lines(events: AsyncIterator<TranscriptEvent>): ReadableStream<Uint8Array> {
+	let encoder = new TextEncoder();
+	let line = (value: unknown) => encoder.encode(`${JSON.stringify(value)}\n`);
+	return new ReadableStream({
+		async pull(controller) {
+			try {
+				let next = await events.next();
+				if (next.done) return controller.close();
+				if ("text" in next.value) {
+					controller.enqueue(line({ text: next.value.text.trim() }));
+					await events.return?.();
+					return controller.close();
+				}
+				controller.enqueue(line({ delta: next.value.delta }));
+			} catch (error) {
+				console.error("[transcription] the provider failed:", error);
+				controller.enqueue(line({ error: "the recording could not be transcribed" }));
+				controller.close();
+			}
+		},
+		async cancel() {
+			await events.return?.();
+		},
+	});
 }
 
 /**
@@ -79,12 +109,21 @@ export function registerTranscriptionRoutes(
 			if (!bytes) return json({ error: "that recording is too long" }, 413);
 			let type = sniffAudio(bytes);
 			if (!type) return json({ error: "that is not a recording" }, 422);
+			let events: AsyncIterator<TranscriptEvent>;
 			try {
-				return json({ text: (await options.transcribe({ bytes, type }, request.signal)).trim() });
+				let transcript = await options.transcribe({ bytes, type }, request.signal);
+				events = transcript[Symbol.asyncIterator]();
 			} catch (error) {
 				console.error("[transcription] the provider failed:", error);
 				return json({ error: "the recording could not be transcribed" }, 502);
 			}
+			return new Response(lines(events), {
+				headers: {
+					"content-type": "application/x-ndjson; charset=utf-8",
+					"cache-control": "no-store",
+					"x-content-type-options": "nosniff",
+				},
+			});
 		} catch (error) {
 			if (error instanceof GitHubError && error.status === 401) {
 				return json({ error: "GitHub authorization expired" }, 401);

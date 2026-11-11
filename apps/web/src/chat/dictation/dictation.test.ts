@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import { browserRecognition, createRecognizer, FAILURE_WORDS, failureOf } from "./recognizer";
 import { begin, flush, follow, merge, shown } from "./transcript";
+import { record, transcribe, TranscriptionFailed } from "./server-recording";
+import { dictationSource } from "./use-dictation";
 
 import type { NativeRecognition, NativeResultEvent, RecognitionEvent } from "./recognizer";
 
@@ -275,5 +277,216 @@ describe("the browser's recognition, as dictation uses it", () => {
 		await again.start();
 		expect(FakeRecognition.installs).toBe(1);
 		expect(FakeRecognition.instances[0]!.started).toBe(1);
+
+		let WithoutInstall = class extends FakeRecognition {
+			static override install = undefined as never;
+		};
+		FakeRecognition.instances = [];
+		FakeRecognition.availability = "downloadable";
+		let missingInstall: RecognitionEvent[] = [];
+		await createRecognizer(WithoutInstall, { lang: "xx" }, event => missingInstall.push(event))
+			.start();
+		expect(FakeRecognition.instances[0]!.started).toBe(0);
+		expect(missingInstall).toEqual([{ type: "failed", failure: "language" }]);
+	});
+});
+
+describe("choosing where speech becomes words", () => {
+	let Recorder = {} as unknown as typeof MediaRecorder;
+	let media = { getUserMedia: async () => ({}) };
+
+	it("uses server transcription in every browser where the deployment configured it, never the browser's recognizer", () => {
+		let server = { provider: "OpenAI", maxBytes: 5_242_880 };
+		expect(
+			dictationSource(
+				{ SpeechRecognition: FakeRecognition, MediaRecorder: Recorder },
+				media,
+				server,
+			),
+		).toEqual({ kind: "server", provider: "OpenAI", maxBytes: 5_242_880 });
+		expect(dictationSource({ MediaRecorder: Recorder }, media, server)).toEqual({
+			kind: "server",
+			provider: "OpenAI",
+			maxBytes: 5_242_880,
+		});
+		// Never falls back to the browser's recognizer where server transcription is configured.
+		expect(dictationSource({ SpeechRecognition: FakeRecognition }, media, server)).toBeUndefined();
+		expect(
+			dictationSource(
+				{ SpeechRecognition: FakeRecognition, MediaRecorder: Recorder },
+				undefined,
+				server,
+			),
+		).toBeUndefined();
+	});
+
+	it("waits until the server has said whether transcription is configured, and uses on-device recognition only where it is off", () => {
+		expect(
+			dictationSource({ SpeechRecognition: FakeRecognition, MediaRecorder: Recorder }, media, null),
+		).toBeUndefined();
+		expect(
+			dictationSource(
+				{ SpeechRecognition: FakeRecognition, MediaRecorder: Recorder },
+				media,
+				undefined,
+			),
+		).toEqual({ kind: "browser", Native: FakeRecognition });
+		expect(dictationSource({ MediaRecorder: Recorder }, media, undefined)).toBeUndefined();
+	});
+});
+
+/** A `MediaRecorder` that records nothing: the spec hands it what it "heard", a slice at a time. */
+class FakeRecorder extends EventTarget {
+	static made: FakeRecorder[] = [];
+	state: "inactive" | "recording" = "inactive";
+	mimeType = "audio/webm;codecs=opus";
+	slice: number | undefined;
+	constructor(readonly stream: { stopped: number }) {
+		super();
+		FakeRecorder.made.push(this);
+	}
+	start(slice?: number) {
+		this.slice = slice;
+		this.state = "recording";
+	}
+	/** One slice of what the recorder heard, as `dataavailable` hands it over. */
+	hear(bytes: number) {
+		this.dispatchEvent(
+			Object.assign(new Event("dataavailable"), { data: new Blob([new Uint8Array(bytes)]) }),
+		);
+	}
+	stop() {
+		this.state = "inactive";
+		this.hear(10);
+		this.dispatchEvent(new Event("stop"));
+	}
+}
+
+function microphone() {
+	let stream = { stopped: 0, getTracks: () => [{ stop: () => stream.stopped++ }] };
+	return {
+		stream,
+		media: { getUserMedia: async () => stream as unknown as MediaStream },
+	};
+}
+
+/** A transcription route that answers the way this deployment's does, in pieces cut anywhere. */
+function standIn(pieces: string[], status = 200) {
+	let seen: Array<{ url: string; method?: string; type: string | null; size: number }> = [];
+	let fetcher = (async (url: string, init: RequestInit) => {
+		seen.push({
+			url,
+			method: init.method,
+			type: new Headers(init.headers).get("content-type"),
+			size: (init.body as Blob).size,
+		});
+		let encoder = new TextEncoder();
+		return new Response(
+			new ReadableStream({
+				start(controller) {
+					for (let piece of pieces) controller.enqueue(encoder.encode(piece));
+					controller.close();
+				},
+			}),
+			{ status },
+		);
+	}) as unknown as typeof fetch;
+	return { seen, fetcher };
+}
+
+describe("a recording, through the deployment's transcription", () => {
+	it("records in slices until stopped, then gives back all of it and lets go of the microphone", async () => {
+		FakeRecorder.made = [];
+		let { stream, media } = microphone();
+		let full = 0;
+		let recording = await record(media, FakeRecorder as unknown as typeof MediaRecorder, {
+			maxBytes: 1000,
+			full: () => full++,
+		});
+		let recorder = FakeRecorder.made[0]!;
+		expect(recorder.slice).toBe(1000);
+		recorder.hear(100);
+		recorder.hear(100);
+		let audio = await recording.stop();
+		expect(audio?.size).toBe(210);
+		expect(audio?.type).toBe("audio/webm;codecs=opus");
+		expect(stream.stopped).toBe(1);
+		expect(full).toBe(0);
+	});
+
+	it("says it is full once, before one more slice could take it past what the server takes", async () => {
+		FakeRecorder.made = [];
+		let { media } = microphone();
+		let full = 0;
+		let recording = await record(media, FakeRecorder as unknown as typeof MediaRecorder, {
+			maxBytes: 999,
+			full: () => full++,
+		});
+		let recorder = FakeRecorder.made[0]!;
+		recorder.hear(200);
+		recorder.hear(200);
+		expect(full).toBe(0);
+		// 600 heard, and two more slices of 200 would make 1000, past 999: it stops here, not past it.
+		recorder.hear(200);
+		expect(full).toBe(1);
+		recorder.hear(200);
+		expect(full).toBe(1);
+		let audio = await recording.stop();
+		expect(audio!.size).toBeLessThanOrEqual(999);
+	});
+
+	it("throws a discarded recording away", async () => {
+		FakeRecorder.made = [];
+		let { stream, media } = microphone();
+		let recording = await record(media, FakeRecorder as unknown as typeof MediaRecorder, {
+			maxBytes: 1000,
+			full: () => {},
+		});
+		FakeRecorder.made[0]!.hear(100);
+		recording.discard();
+		expect(await recording.stop()).toBeUndefined();
+		expect(stream.stopped).toBe(1);
+	});
+
+	it("sends the recording to the document's own route and tells each word as it comes back", async () => {
+		let { seen, fetcher } = standIn([
+			'{"delta":" Ship"}\n{"del',
+			'ta":" it"}\n',
+			'{"text":"Ship it."}\n',
+		]);
+		let heard: string[] = [];
+		let audio = new Blob([new Uint8Array(42)], { type: "audio/webm" });
+		expect(await transcribe("room/1", audio, sofar => heard.push(sofar), undefined, fetcher)).toBe(
+			"Ship it.",
+		);
+		expect(heard).toEqual([" Ship", " Ship it"]);
+		expect(seen).toEqual([{
+			url: "/api/channels/room%2F1/transcriptions",
+			method: "POST",
+			type: "audio/webm",
+			size: 42,
+		}]);
+	});
+
+	it("fails plainly: too long for the server, a provider that stopped part way, or no words at the end", async () => {
+		let audio = new Blob([new Uint8Array(1)], { type: "audio/webm" });
+		let tooLong = await transcribe("r", audio, () => {}, undefined, standIn([], 413).fetcher)
+			.catch(error => error);
+		expect(tooLong).toBeInstanceOf(TranscriptionFailed);
+		expect(tooLong.tooLong).toBe(true);
+		for (
+			let pieces of [
+				['{"delta":"half"}\n{"error":"the recording could not be transcribed"}\n'],
+				['{"delta":"half"}\n'],
+			]
+		) {
+			let failed = await transcribe("r", audio, () => {}, undefined, standIn(pieces).fetcher)
+				.catch(error => error);
+			expect(failed).toBeInstanceOf(TranscriptionFailed);
+			expect(failed.tooLong).toBe(false);
+		}
+		let refused = await transcribe("r", audio, () => {}, undefined, standIn([], 502).fetcher)
+			.catch(error => error);
+		expect(refused.tooLong).toBe(false);
 	});
 });

@@ -170,8 +170,11 @@ export type ChatProps = {
 	referencesEnabled: boolean;
 	/** The caps on the images and files a message may carry; absent where the server takes none. */
 	attachments?: Session.AttachmentSettings;
-	/** Set where the deployment turns recordings into words, naming who does it. */
-	transcription?: { provider: string };
+	/**
+	 * Set where the deployment turns recordings into words, naming who does it and the longest
+	 * recording it takes; `null` until the server has said whether it does.
+	 */
+	transcription?: { provider: string; maxBytes: number } | null;
 	repository: Pick<Repository, "id" | "name" | "owner">;
 	room: string;
 	sendAcknowledgements: boolean;
@@ -585,7 +588,7 @@ export function Chat(
 				typeof window === "undefined"
 					? undefined
 					: dictationSource(window, navigator.mediaDevices, transcription),
-			[transcription?.provider],
+			[transcription === null, transcription?.provider, transcription?.maxBytes],
 		),
 		room,
 		lang: typeof navigator === "undefined" ? "en-US" : navigator.language || "en-US",

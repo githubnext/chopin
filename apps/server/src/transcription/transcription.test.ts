@@ -12,6 +12,7 @@ import { registerTranscriptionRoutes } from "./routes";
 
 import type { HostedAuth } from "../auth/routes";
 import type { GitHub, GitHubTokenGrant, Repository } from "../github/client";
+import type { TranscriptEvent } from "./openai";
 
 const ORIGIN = "https://chopin.test";
 const WEBM = Uint8Array.from([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3, 4]);
@@ -36,32 +37,84 @@ describe("what is audio, from its bytes", () => {
 	});
 });
 
+/** Everything a transcription reports, in order. */
+async function all<T>(events: AsyncIterable<T>): Promise<T[]> {
+	let seen: T[] = [];
+	for await (let event of events) seen.push(event);
+	return seen;
+}
+
+/** A response of server-sent events, as OpenAI streams a transcription. */
+function eventStream(...events: string[]): Response {
+	return new Response(events.map(event => `data: ${event}\n\n`).join(""), {
+		headers: { "content-type": "text/event-stream" },
+	});
+}
+
 describe("OpenAI's transcription", () => {
-	it("sends the recording with the operator's model and key, and gives back the words", async () => {
-		let seen: { url: string; auth: string | null; model: unknown; file: File } | undefined;
+	it("sends the recording with the operator's model and key, asks for the words as they come, and gives them back", async () => {
+		let seen:
+			| {
+				url: string;
+				auth: string | null;
+				fields: string[];
+				model: unknown;
+				stream: unknown;
+				file: File;
+			}
+			| undefined;
 		let transcribe = openaiTranscriber({
-			model: "gpt-4o-mini-transcribe",
+			model: "gpt-transcribe",
 			apiKey: "sk-test",
 			fetch: (async (url: string, init: RequestInit) => {
 				let form = init.body as FormData;
 				seen = {
 					url,
 					auth: new Headers(init.headers).get("authorization"),
+					fields: [...form.keys()],
 					model: form.get("model"),
+					stream: form.get("stream"),
 					file: form.get("file") as File,
 				};
-				return Response.json({ text: " hello there " });
+				return eventStream(
+					JSON.stringify({ type: "transcript.text.delta", delta: " hello" }),
+					JSON.stringify({ type: "transcript.text.delta", delta: " there" }),
+					JSON.stringify({ type: "transcript.text.done", text: " hello there " }),
+				);
 			}) as unknown as typeof fetch,
 		});
-		expect(await transcribe({ bytes: WEBM, type: "audio/webm" })).toBe(" hello there ");
+		expect(await all(await transcribe({ bytes: WEBM, type: "audio/webm" }))).toEqual([
+			{ delta: " hello" },
+			{ delta: " there" },
+			{ text: " hello there " },
+		]);
 		expect(seen).toMatchObject({
 			url: "https://api.openai.com/v1/audio/transcriptions",
 			auth: "Bearer sk-test",
-			model: "gpt-4o-mini-transcribe",
+			model: "gpt-transcribe",
+			stream: "true",
 		});
+		// The fields `gpt-transcribe` takes, and none it refuses (no singular `language`).
+		expect(seen!.fields).toEqual(["model", "stream", "file"]);
 		expect(seen!.file.name).toBe("dictation.webm");
 		expect(seen!.file.type).toBe("audio/webm");
 		expect(new Uint8Array(await seen!.file.arrayBuffer())).toEqual(WEBM);
+	});
+
+	it("waits for the whole text from whisper-1, which does not stream", async () => {
+		let stream: unknown = "unset";
+		let transcribe = openaiTranscriber({
+			model: "whisper-1",
+			apiKey: "sk-test",
+			fetch: (async (_url: string, init: RequestInit) => {
+				stream = (init.body as FormData).get("stream");
+				return Response.json({ text: " hello there " });
+			}) as unknown as typeof fetch,
+		});
+		expect(await all(await transcribe({ bytes: WEBM, type: "audio/webm" }))).toEqual([
+			{ text: " hello there " },
+		]);
+		expect(stream).toBeNull();
 	});
 
 	it("fails with what the provider did, not with its key", async () => {
@@ -74,13 +127,23 @@ describe("OpenAI's transcription", () => {
 		expect(String(error)).toContain("429");
 		expect(String(error)).not.toContain("sk-secret");
 		let odd = openaiTranscriber({
-			model: "m",
+			model: "whisper-1",
 			apiKey: "k",
 			fetch: (async () => Response.json({ error: "x" })) as unknown as typeof fetch,
 		});
 		expect(String(await odd({ bytes: WEBM, type: "audio/webm" }).catch(value => value))).toContain(
 			"no text",
 		);
+		let cut = openaiTranscriber({
+			model: "gpt-transcribe",
+			apiKey: "k",
+			fetch: (async () =>
+				eventStream(
+					JSON.stringify({ type: "transcript.text.delta", delta: "half" }),
+				)) as unknown as typeof fetch,
+		});
+		expect(String(await all(await cut({ bytes: WEBM, type: "audio/webm" })).catch(value => value)))
+			.toContain("no text");
 	});
 });
 
@@ -170,6 +233,7 @@ function grant(accessToken: string): GitHubTokenGrant {
 async function setup(
 	options: { maxBytes: number } | null = { maxBytes: 64 },
 	failure?: Error,
+	events: TranscriptEvent[] = [{ delta: " the cap" }, { text: " the cap is one hundred " }],
 ) {
 	let now = new Date("2026-10-09T12:00:00.000Z");
 	let storage = new MemoryStorage();
@@ -211,7 +275,14 @@ async function setup(
 				transcribe: async recording => {
 					heard.push(recording);
 					if (failure) throw failure;
-					return " the cap is one hundred ";
+					return (async function*() {
+						for (let event of events) {
+							if ("delta" in event && event.delta === "!") {
+								throw new Error("cut off with sk-secret");
+							}
+							yield event;
+						}
+					})();
 				},
 			}
 			: undefined,
@@ -243,11 +314,14 @@ async function setup(
 }
 
 describe("the transcription route", () => {
-	it("turns a writer's recording into words, and sends the provider only what it is", async () => {
+	it("turns a writer's recording into words as they come, and sends the provider only what it is", async () => {
 		let { post, heard } = await setup();
 		let response = await post("octocat", WEBM);
 		expect(response?.status).toBe(200);
-		expect(await response!.json()).toEqual({ text: "the cap is one hundred" });
+		expect(response!.headers.get("content-type")).toBe("application/x-ndjson; charset=utf-8");
+		expect(await response!.text()).toBe(
+			'{"delta":" the cap"}\n{"text":"the cap is one hundred"}\n',
+		);
 		expect(heard).toHaveLength(1);
 		expect(heard[0]).toMatchObject({ type: "audio/webm" });
 		expect(heard[0]!.bytes).toEqual(WEBM);
@@ -277,5 +351,13 @@ describe("the transcription route", () => {
 		let failed = await post("octocat", WEBM);
 		expect(failed?.status).toBe(502);
 		expect(JSON.stringify(await failed!.json())).not.toContain("sk-secret");
+		let { post: postCut } = await setup({ maxBytes: 64 }, undefined, [{ delta: " the" }, {
+			delta: "!",
+		}]);
+		let cut = await postCut("octocat", WEBM);
+		expect(cut?.status).toBe(200);
+		expect(await cut!.text()).toBe(
+			'{"delta":" the"}\n{"error":"the recording could not be transcribed"}\n',
+		);
 	});
 });

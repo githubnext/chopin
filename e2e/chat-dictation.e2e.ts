@@ -4,7 +4,9 @@
  * the device, nothing is asked of the microphone before it is pressed, interim words are shown beside
  * the caret and then written there, the draft stays ordinary editable text, and every way of
  * stopping stops it for good. Server transcription is off on this server, so a browser without
- * recognition has no button and sends no audio.
+ * recognition has no button and sends no audio. Where a deployment says it has transcription (the
+ * spec says so in its `session:hello` and answers its route), every browser records instead, and
+ * the browser's own recognition is never started.
  */
 import AxeBuilder from "@axe-core/playwright";
 
@@ -17,6 +19,7 @@ import type { Browser, Page } from "@playwright/test";
 
 declare global {
 	interface Window {
+		__recording: { microphone: number; released: number; recorders: number };
 		__speech: {
 			started: number;
 			stopped: number;
@@ -365,7 +368,8 @@ for (
 		{ code: "audio-capture", words: "No microphone was found." },
 		{
 			code: "language-not-supported",
-			words: "Dictation isn't available in your language on this device.",
+			words:
+				"Dictation isn't set up on this server, and this device can't recognize speech in your language by itself.",
 		},
 		{ code: "network", words: "Dictation lost its connection. Try again." },
 	]
@@ -475,4 +479,197 @@ test("fits a phone's width, listening and failing, with nothing outside the scre
 		parseFloat(getComputedStyle(element).fontSize)
 	);
 	expect(size).toBeGreaterThanOrEqual(16);
+});
+
+/**
+ * The deployment's transcription, stood in for: the hello says it is there, with the longest
+ * recording it takes, and its route answers what `answer` gives, once the spec lets it.
+ */
+async function openThroughServer(
+	browser: Browser,
+	baseURL: string,
+	room: string,
+	options: { maxBytes?: number; answer: { status?: number; lines: string[] } },
+) {
+	let context = await browser.newContext({ baseURL });
+	await context.addInitScript(installRecognizer);
+	await context.addInitScript(() => {
+		window.__recording = { microphone: 0, released: 0, recorders: 0 };
+		navigator.mediaDevices.getUserMedia = async () => {
+			window.__recording.microphone++;
+			return { getTracks: () => [{ stop: () => window.__recording.released++ }] } as never;
+		};
+		/** Hands over a slice of 20 bytes every slice, the first starting as WebM does. */
+		class FakeRecorder extends EventTarget {
+			state = "inactive";
+			mimeType = "audio/webm;codecs=opus";
+			#timer: ReturnType<typeof setInterval> | undefined;
+			#slices = 0;
+			constructor() {
+				super();
+				window.__recording.recorders++;
+			}
+			start(slice: number) {
+				this.state = "recording";
+				this.#timer = setInterval(() => this.#hand(), slice);
+			}
+			stop() {
+				clearInterval(this.#timer);
+				this.state = "inactive";
+				this.#hand();
+				this.dispatchEvent(new Event("stop"));
+			}
+			#hand() {
+				let bytes = new Uint8Array(20);
+				if (this.#slices++ === 0) bytes.set([0x1a, 0x45, 0xdf, 0xa3]);
+				this.dispatchEvent(
+					Object.assign(new Event("dataavailable"), {
+						data: new Blob([bytes], { type: this.mimeType }),
+					}),
+				);
+			}
+		}
+		(window as any).MediaRecorder = FakeRecorder;
+	});
+	let page = await context.newPage();
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			if (typeof message === "string") {
+				let frame = JSON.parse(message) as { kind?: string };
+				if (frame.kind === "session:hello") {
+					return route.send(JSON.stringify({
+						...frame,
+						transcription: { provider: "OpenAI", maxBytes: options.maxBytes ?? 1_000_000 },
+					}));
+				}
+			}
+			route.send(message);
+		});
+	});
+	let release = Promise.withResolvers<void>();
+	let sent: Array<{ type: string | null; size: number }> = [];
+	await page.route("**/api/channels/*/transcriptions", async route => {
+		let request = route.request();
+		sent.push({
+			type: request.headers()["content-type"] ?? null,
+			size: request.postDataBuffer()!.length,
+		});
+		await release.promise;
+		await route.fulfill({
+			status: options.answer.status ?? 200,
+			contentType: "application/x-ndjson; charset=utf-8",
+			body: options.answer.lines.map(line => `${line}\n`).join(""),
+		});
+	});
+	await authenticate(page, "ana", baseURL);
+	await page.goto(roomPath(room));
+	await ready(page);
+	let tab = page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: /^Chat/ });
+	if (await tab.isVisible()) await tab.click();
+	await expect(chatInput(chat(page))).toBeVisible();
+	return { page, sent, release: () => release.resolve() };
+}
+
+function recorded(page: Page) {
+	return page.evaluate(() => ({ ...window.__recording }));
+}
+
+test("dictates through the deployment's transcription even where the browser recognizes speech: records with a clock, transcribes, and writes the words at the caret", async ({ browser, baseURL, room }) => {
+	let { page, sent, release } = await openThroughServer(browser, baseURL!, room, {
+		answer: { lines: ['{"delta":" ship"}', '{"delta":" the cap"}', '{"text":"ship the cap"}'] },
+	});
+	let input = chatInput(chat(page));
+	let button = dictate(page);
+	await expect(button).toHaveAttribute(
+		"title",
+		/^Dictate \(Alt\+Shift\+M\)\. Your recording is sent to OpenAI to be turned into words\.$/,
+	);
+	expect(await recorded(page)).toEqual({ microphone: 0, released: 0, recorders: 0 });
+	await fillChat(input, "Plan:  today");
+	await input.evaluate(element => {
+		let text = element.firstChild as Text;
+		window.getSelection()!.setBaseAndExtent(text, 6, text, 6);
+	});
+
+	await button.click();
+	await expect(voice(page)).toHaveAttribute("data-recording", "true");
+	await expect(announcement(page)).toHaveText("Dictation started");
+	await expect(voice(page)).toContainText(/0:0\d/);
+	expect(await recorded(page)).toEqual({ microphone: 1, released: 0, recorders: 1 });
+
+	await button.click();
+	// Stopped: it is being turned into words, and the draft is as it was until they come.
+	await expect(voice(page)).toContainText("Transcribing");
+	await expect(voice(page)).not.toHaveAttribute("data-recording", "true");
+	await expect(announcement(page)).toHaveText("Transcribing");
+	await expect.poll(() => sent.length).toBe(1);
+	expect(sent[0]!.type).toBe("audio/webm;codecs=opus");
+	expect(sent[0]!.size).toBeGreaterThan(0);
+	expect(await recorded(page)).toMatchObject({ released: 1 });
+	await expectChatValue(input, "Plan:  today");
+
+	release();
+	await expectChatValue(input, "Plan: ship the cap today");
+	await expect.poll(() => chatCaret(input)).toBe("Plan: ship the cap".length);
+	await expect(voice(page)).toHaveCount(0);
+	await expect(button).toHaveAttribute("aria-pressed", "false");
+	await expect(failure(page)).toHaveCount(0);
+	// The browser's own recognition was never started, and nothing else was sent.
+	expect(await heard(page)).toMatchObject({ started: 0 });
+	expect(sent).toHaveLength(1);
+});
+
+test("keeps what the person types while it is transcribing, and puts the words where their caret went", async ({ browser, baseURL, room }) => {
+	let { page, release } = await openThroughServer(browser, baseURL!, room, {
+		answer: { lines: ['{"text":"big world"}'] },
+	});
+	let input = chatInput(chat(page));
+	await fillChat(input, "Hello");
+	await dictate(page).click();
+	await expect(voice(page)).toHaveAttribute("data-recording", "true");
+	await dictate(page).click();
+	await expect(voice(page)).toContainText("Transcribing");
+	await input.press("End");
+	await page.keyboard.type(" there");
+	await expectChatValue(input, "Hello there");
+	release();
+	await expectChatValue(input, "Hello there big world");
+	await expect(voice(page)).toHaveCount(0);
+});
+
+test("stops at the longest recording the deployment takes, transcribes what it has, and says so", async ({ browser, baseURL, room }) => {
+	// Slices of 20 bytes: after the second, two more could pass 70, so it stops there by itself.
+	let { page, sent, release } = await openThroughServer(browser, baseURL!, room, {
+		maxBytes: 70,
+		answer: { lines: ['{"text":"all of it"}'] },
+	});
+	release();
+	await dictate(page).click();
+	await expect(voice(page)).toHaveAttribute("data-recording", "true");
+	await expectChatValue(chatInput(chat(page)), "all of it");
+	expect(sent).toHaveLength(1);
+	expect(sent[0]!.size).toBeLessThanOrEqual(70);
+	await expect(failure(page)).toContainText(
+		"That's the longest recording this server takes, so dictation stopped there. Dictate again to go on.",
+	);
+	await expect(dictate(page)).toHaveAttribute("aria-pressed", "false");
+	expect(await recorded(page)).toMatchObject({ microphone: 1, released: 1 });
+});
+
+test("says plainly when the recording couldn't be transcribed, and leaves the draft as it was", async ({ browser, baseURL, room }) => {
+	let { page, release } = await openThroughServer(browser, baseURL!, room, {
+		answer: { status: 502, lines: ['{"error":"the recording could not be transcribed"}'] },
+	});
+	release();
+	let input = chatInput(chat(page));
+	await fillChat(input, "Kept");
+	await dictate(page).click();
+	await expect(voice(page)).toHaveAttribute("data-recording", "true");
+	await dictate(page).click();
+	await expect(failure(page)).toContainText("The recording couldn't be transcribed. Try again.");
+	await expectChatValue(input, "Kept");
+	await expect(dictate(page)).toHaveAttribute("aria-pressed", "false");
 });
