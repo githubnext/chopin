@@ -576,7 +576,7 @@
 	width: calc(var(--spacing) * 2);
 	height: calc(var(--spacing) * 2);
 	border-radius: var(--radius-full);
-	background: var(--color-danger-graphic);
+	background: var(--color-danger-icon);
 	animation: composer-recording-breathe calc(var(--duration-linger) * 2.5) var(--ease-out) infinite
 		alternate;
 }
