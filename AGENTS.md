@@ -318,7 +318,9 @@ durable.
 ## Conversation and Planner addressing
 
 The web composer uses `packages/protocol/address.ts` to translate `@chopin` into
-`Chat.Send.to = "planner"`; ordinary messages use `to = "room"`. The wire
+`Chat.Send.to = "planner"`; ordinary messages use `to = "room"`. A person addresses Chopin with
+the @Chopin chip at the start of the draft (`apps/web/src/chat/chopin-chip.ts` holds its rules);
+the message on the wire is the same `@chopin`-prefixed one a typed mention makes. The wire
 destination is authoritative on the server. Do not describe `@chopin` as a server
 authorization boundary: a custom write-authorized client can send an explicit
 Planner destination without a mention.
