@@ -164,13 +164,16 @@ export function notAttachedMessage(url: string, repository: string, machines = f
 }
 
 /**
- * What `@chopin` and `invoke_planner` say while the document's Planner is disconnected: it has
- * not stopped, the work is kept, and it carries on when the machine is back. It names only its
- * owner's login, never the machine.
+ * What `@chopin` and `invoke_planner` say while the document's Planner is disconnected: that the
+ * message was not sent, since nothing is kept for a machine that is away, and what to do. It does
+ * not speak of the machine's own work (that is kept, and the document says so where it shows the
+ * machine). It names only its owner's login, never the machine.
  */
 export function disconnectedMessage(login: string | undefined): string {
-	return `${login ? `@${login}'s machine` : "The machine"} is offline, so it can't reply now. `
-		+ "Your work is kept and picks up when it's back.";
+	return `${
+		login ? `@${login}'s machine` : "The machine"
+	} is offline, so this message wasn't sent. `
+		+ "Send it again when it's back.";
 }
 
 /**

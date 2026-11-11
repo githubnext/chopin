@@ -261,6 +261,15 @@ describe("the words", () => {
 		expect(refusalText("planner-not-attached", "anything")).toBe(
 			"No machine is connected to reply.",
 		);
+		// A machine that is only away says so, and what to do: the message was not kept.
+		expect(
+			refusalText(
+				"planner-not-attached",
+				"@mona's machine is offline, so this message wasn't sent. Send it again when it's back.",
+			),
+		).toBe(
+			"@mona's machine is offline, so this message wasn't sent. Send it again when it's back.",
+		);
 		expect(
 			refusalText(
 				"planner-busy",

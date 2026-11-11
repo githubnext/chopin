@@ -27,11 +27,19 @@ export function passing(code: Session.Failure["code"]): boolean {
 }
 
 const NO_MACHINE = "No machine is connected to reply.";
+/**
+ * What the server says of a machine that is only away: that this message was not sent, which is
+ * what happened, and to send it again when the machine is back, which is what to do. It names whose
+ * machine it is, so it is shown as it is.
+ */
+const MACHINE_AWAY = / is offline, so this message wasn't sent\. Send it again when it's back\.$/;
 const MAX_REASON = 120;
 
 /** What a refusal of the send itself says, in plain words and no longer than a line. */
 export function refusalText(code: string | undefined, message: string): string {
-	if (code === "planner-not-attached") return NO_MACHINE;
+	if (code === "planner-not-attached") {
+		return MACHINE_AWAY.test(message.trim()) ? message.trim() : NO_MACHINE;
+	}
 	let detail = message.trim();
 	if (!detail) return "The server turned it down.";
 	detail = detail[0]!.toUpperCase() + detail.slice(1);
