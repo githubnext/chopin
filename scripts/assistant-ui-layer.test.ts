@@ -33,7 +33,8 @@ function variables(css: string, select: (rule: postcss.Rule | postcss.AtRule) =>
 let layer = read(LAYER_FILE);
 let tailwindOwn = variables(
 	tailwind,
-	node => node.type === "atrule" && node.name === "theme" && node.params === "default",
+	node =>
+		node.type === "atrule" && node.name === "theme" && node.params.split(/\s+/).includes("default"),
 );
 let scoped = variables(
 	layer,
@@ -101,6 +102,7 @@ describe("the assistant-ui geometry layer", () => {
 	});
 
 	test("is Tailwind's scale where Chopin's is not: assistant-ui's radii, 14px and 12px type", () => {
+		expect(scoped.get("--radius")).toBe("0.25rem");
 		expect(scoped.get("--radius-sm")).toBe("0.25rem");
 		expect(scoped.get("--radius-md")).toBe("0.375rem");
 		expect(scoped.get("--radius-lg")).toBe("0.5rem");
@@ -187,6 +189,13 @@ describe("the assistant-ui geometry layer", () => {
 		for (let [rule] of reverts) expect(rule).toContain(":not([data-chopin-control])");
 		let hit = layer.slice(layer.indexOf("@layer components"));
 		expect(hit).toContain(":not([data-chopin-control])");
+	});
+
+	test("holds endless pulse and shimmer animations still under reduced motion", () => {
+		expect(layer).toContain("@media (prefers-reduced-motion: reduce)");
+		expect(layer).toContain(".animate-pulse");
+		expect(layer).toContain(".shimmer");
+		expect(layer).toContain("animation: none;");
 	});
 
 	test("gives a coarse pointer an invisible target and never a bigger visible box", () => {

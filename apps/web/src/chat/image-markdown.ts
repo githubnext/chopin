@@ -167,7 +167,10 @@ function markImageBlocks(node: Node): void {
 		(node.type === "paragraph" || node.type === "heading")
 		&& node.children?.some(child => child.type === "image" || child.type === "imageGallery")
 	) {
-		node.data = { ...node.data, hProperties: { ...node.data?.hProperties, dataChatImageBlock: "" } };
+		node.data = {
+			...node.data,
+			hProperties: { ...node.data?.hProperties, dataChatImageBlock: "" },
+		};
 	}
 }
 

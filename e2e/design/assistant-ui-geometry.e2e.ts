@@ -103,6 +103,20 @@ const ROOTS = {
 		"markdown-text",
 		"composer-context",
 		"context-breakdown",
+		"image-root",
+		"image-preview",
+		"image-preview-error",
+		"image-generating",
+		"image-content-filter-error",
+		"image-filename",
+		"image-source",
+		"image-source-icon-fallback",
+		"image-source-label",
+		"image-actions",
+		"image-download",
+		"image-copy",
+		"image-regenerate",
+		"image-gallery",
 	],
 	open: [
 		"model-selector-content",
@@ -116,10 +130,12 @@ const ROOTS = {
 		"model-selector-effort",
 	],
 } as const;
-/** What a staged chip's picture box and a sent file's tiles are, which the roots above hold. */
+/** What a staged chip's picture box, a sent file's tiles and a gallery's grid/tiles are. */
 const BOXES = [
 	'[data-slot="composer-attachment"] > span:first-child',
 	'[data-slot="message-attachments"] > *',
+	'[data-slot="image-gallery"] > div',
+	'[data-slot="image-gallery"] button',
 ] as const;
 const MARKDOWN_PARTS: readonly [label: string, select: (root: Locator) => Locator][] = [
 	["h1", root => root.locator(".aui-md-h1")],
@@ -149,7 +165,7 @@ const MARKDOWN_PARTS: readonly [label: string, select: (root: Locator) => Locato
 	["pre", root => root.locator(".aui-md-pre")],
 ];
 const TARGETS =
-	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button, [data-slot="markdown-text"] .aui-button-icon, [data-slot="markdown-text"] .aui-md-a, [data-slot="composer-context"] > button';
+	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button, [data-slot="markdown-text"] .aui-button-icon, [data-slot="markdown-text"] .aui-md-a, [data-slot="composer-context"] > button, [data-slot="image-download"], [data-slot="image-copy"], [data-slot="image-regenerate"], [data-slot="image-source-label"], [data-slot="image-gallery"] button';
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 const effortRadios = (page: Page) => slot(page, "model-selector-effort").getByRole("radio");
 
@@ -166,20 +182,48 @@ async function openSelector(page: Page): Promise<Locator> {
 	return trigger;
 }
 
+async function openGalleryDialog(page: Page): Promise<Locator> {
+	let tile = plate(page, "assistant-ui").locator('[data-slot="image-gallery"] button').first();
+	await tile.scrollIntoViewIfNeeded();
+	await tile.click();
+	let dialog = slot(page, "dialog-content");
+	await expect(dialog).toBeVisible();
+	await expect.poll(() => dialog.evaluate(node => getComputedStyle(node).opacity)).toBe("1");
+	return dialog;
+}
+
+function restChrome(locator: Locator) {
+	return locator.evaluate(node => {
+		let style = getComputedStyle(node);
+		return {
+			border: [
+				style.borderTopWidth,
+				style.borderRightWidth,
+				style.borderBottomWidth,
+				style.borderLeftWidth,
+			].map(value => Number.parseFloat(value) || 0),
+			borderColor: style.borderTopColor,
+			shadow: style.boxShadow,
+			outline: style.outlineStyle,
+		};
+	});
+}
+
 test("a copied element is as many pixels as its Tailwind classes say, not as Chopin's scale would make it", async ({ page }) => {
 	let checked = 0;
+	await expect(plate(page, "assistant-ui").locator('[data-slot="image-preview-error"]'))
+		.toBeVisible();
 	for (let name of ROOTS.closed) {
 		let elements = plate(page, "assistant-ui").locator(`[data-slot="${name}"]`);
-		expect(await elements.count()).toBeGreaterThan(0);
+		expect(await elements.count(), `${name} is drawn`).toBeGreaterThan(0);
 		for (let index = 0; index < await elements.count(); index++) {
 			await expectClassGeometry(elements.nth(index), name);
 			checked++;
 		}
 	}
-	// The box of a chip's icon, and the tiles of a sent message's files, which the roots hold.
 	for (let selector of BOXES) {
 		let boxes = plate(page, "assistant-ui").locator(selector);
-		expect(await boxes.count(), `${selector} is drawn`).toBeGreaterThan(1);
+		expect(await boxes.count(), `${selector} is drawn`).toBeGreaterThan(0);
 		for (let index = 0; index < await boxes.count(); index++) {
 			await expectClassGeometry(boxes.nth(index), selector);
 			checked++;
@@ -233,15 +277,22 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 	await expect.poll(() => floatingPanel.evaluate(node => getComputedStyle(node).opacity)).toBe("1");
 	await expectClassGeometry(floatingPanel, "composer-context floating");
 	checked++;
-	expect(checked).toBe(86);
+	await page.keyboard.press("Escape");
+
+	let dialog = await openGalleryDialog(page);
+	await expectClassGeometry(dialog, "dialog-content");
+	await expectClassGeometry(dialog.getByRole("button", { name: "Previous image" }), "previous");
+	await expectClassGeometry(dialog.getByRole("button", { name: "Next image" }), "next");
+	checked += 3;
+	expect(checked).toBe(122);
 });
 
 test("assistant-ui's own radii, in pixels, where Chopin's scale differs", async ({ page }) => {
 	// Tailwind's `rounded-xl` is 12px and Chopin's is 10px, and `rounded-2xl` (16px, the context
-	// breakdown) is absent from Chopin's scale: the popup, its list and the code block
-	// header and body are the proof. The hand-adapted code header was 28px tall (9px shorter), with a
-	// 6px radius and 2px by 12px/4px padding; assistant-ui's is 37px tall (`py-1.5` + `size-6` + 1px
-	// top border), with 12px top corners and 6px by 14px padding.
+	// breakdown) is absent from Chopin's scale: the popup, its list, the code block header and body,
+	// the gallery tiles and the lightbox are the proof. The hand-adapted code header was 28px tall
+	// (9px shorter), with a 6px radius and 2px by 12px/4px padding; assistant-ui's is 37px tall
+	// (`py-1.5` + `size-6` + 1px top border), with 12px top corners and 6px by 14px padding.
 	let markdown = plate(page, "assistant-ui").locator('[data-slot="markdown-text"]');
 	let codeHeader = await measure(markdown.locator(".aui-code-header-root"));
 	expect(codeHeader.height).toBeCloseTo(37, 1);
@@ -284,17 +335,76 @@ test("assistant-ui's own radii, in pixels, where Chopin's scale differs", async 
 	);
 	expect([ringButton.width, ringButton.height]).toEqual([32, 32]);
 	expect(ringButton.radius).toBeGreaterThan(1000);
-	// And its type: `text-sm` is 14px on 20px, not Chopin's fluid step on 1.5.
+	await page.keyboard.press("Escape");
+
+	let tile = plate(page, "assistant-ui").locator('[data-slot="image-gallery"] button').first();
+	expect((await measure(tile)).radius).toBe(12);
+	expect(
+		(await measure(plate(page, "assistant-ui").locator('[data-slot="image-root"]').first()))
+			.radius,
+	).toBe(8);
+	// And its type: `text-sm` is 14px on 20px, not Chopin's fluid step on 1.5; `text-xs` is 12px on 16px.
 	let trigger = await measure(plate(page, "assistant-ui").getByRole("combobox").first());
 	expect([trigger.fontSize, trigger.lineHeight]).toEqual([14, 20]);
 	expect([trigger.height, trigger.padding[1], trigger.padding[3]]).toEqual([36, 12, 12]);
+	let filename = await measure(
+		plate(page, "assistant-ui").locator('[data-slot="image-filename"]')
+			.first(),
+	);
+	expect([filename.fontSize, filename.lineHeight]).toEqual([12, 16]);
+});
+
+test("tile buttons, single-image actions and lightbox prev/next carry no resting rings, borders or shadows", async ({ page }) => {
+	let tiles = plate(page, "assistant-ui").locator('[data-slot="image-gallery"] button');
+	expect(await tiles.count()).toBe(6);
+	for (let index = 0; index < 6; index++) {
+		expect(await restChrome(tiles.nth(index)), `tile ${index}`).toMatchObject({
+			border: [0, 0, 0, 0],
+			shadow: "none",
+			outline: "none",
+		});
+	}
+
+	for (let name of ["image-download", "image-copy", "image-regenerate"]) {
+		let action = plate(page, "assistant-ui").locator(`[data-slot="${name}"]`);
+		let sized = await measure(action);
+		expect([sized.width, sized.height, sized.radius], name).toEqual([28, 28, 4]);
+		expect(await restChrome(action), name).toMatchObject({
+			border: [0, 0, 0, 0],
+			shadow: "none",
+			outline: "none",
+		});
+	}
+
+	let dialog = await openGalleryDialog(page);
+	for (let name of ["Previous image", "Next image"]) {
+		let arrow = dialog.getByRole("button", { name });
+		let sized = await measure(arrow);
+		expect([sized.width, sized.height], name).toEqual([32, 32]);
+		expect(sized.radius, name).toBeGreaterThan(1000);
+		expect(await restChrome(arrow), name).toMatchObject({
+			border: [0, 0, 0, 0],
+			shadow: "none",
+			outline: "none",
+		});
+	}
+	let close = dialog.locator('[data-slot="dialog-close"]');
+	let closeSize = await measure(close);
+	expect([closeSize.width, closeSize.height, closeSize.radius]).toEqual([28, 28, 6]);
+	// shadcn's ghost button reserves a 1px transparent border (`border border-transparent`).
+	expect(await restChrome(close)).toEqual({
+		border: [1, 1, 1, 1],
+		borderColor: "rgba(0, 0, 0, 0)",
+		shadow: "none",
+		outline: "none",
+	});
 });
 
 test("a coarse pointer grows only the hit area: the visible box, border, radius and type do not move", async ({ page }) => {
 	let trigger = await openSelector(page);
 	let targets = page.locator(TARGETS);
 	let count = await targets.count();
-	expect(count).toBeGreaterThan(8);
+	expect(count).toBeGreaterThan(14);
 	let fine = [];
 	for (let index = 0; index < count; index++) fine.push(await measure(targets.nth(index)));
 	// A fine pointer has no invisible target.

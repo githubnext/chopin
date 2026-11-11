@@ -38,6 +38,11 @@ const ROOTS = [
 	'[data-slot="tooltip-content"]',
 	'[data-slot="composer-context"]',
 	'[data-slot="context-breakdown"]',
+	'[data-slot="image-root"]',
+	'[data-slot="image-zoom-overlay"]',
+	'[data-slot="image-gallery"]',
+	'[data-slot="dialog-overlay"]',
+	'[data-slot="dialog-content"]',
 ] as const;
 
 // The voice's dot pulses for as long as it listens, and a colour is read once nothing is moving.
@@ -164,7 +169,10 @@ async function states(page: Page, measure: (state: string) => Promise<void>) {
 		await expect.poll(
 			() =>
 				page.evaluate(() =>
-					document.getAnimations().filter(animation => animation.playState === "running").length
+					document.getAnimations().filter(animation =>
+						animation.playState === "running"
+						&& (animation.effect?.getComputedTiming().iterations ?? 1) !== Infinity
+					).length
 				),
 			{ message: state },
 		)
@@ -174,7 +182,7 @@ async function states(page: Page, measure: (state: string) => Promise<void>) {
 	let first = plate(page, "assistant-ui").getByRole("combobox").first();
 	await first.scrollIntoViewIfNeeded();
 	await check("rest");
-	// What a hover colours in the files and the voice, before the selector opens over them.
+	// What a hover colours in the files, the voice and the images, before the selector opens over them.
 	let message = plate(page, "assistant-ui").locator('[data-slot="message-attachments"] button')
 		.first();
 	await message.scrollIntoViewIfNeeded();
@@ -187,6 +195,39 @@ async function states(page: Page, measure: (state: string) => Promise<void>) {
 		.first();
 	await remove.hover();
 	await check("a chip's remove hover");
+
+	let action = plate(page, "assistant-ui").locator('[data-slot="image-download"]');
+	await action.scrollIntoViewIfNeeded();
+	await action.hover();
+	await check("image action hover");
+
+	let zoom = plate(page, "assistant-ui").locator(".aui-image-zoom-trigger").first();
+	await zoom.click();
+	await expect(page.locator('[data-slot="image-zoom-overlay"]')).toBeVisible();
+	await check("image zoom open");
+	await page.keyboard.press("Escape");
+	await expect(page.locator('[data-slot="image-zoom-overlay"]')).toHaveCount(0);
+
+	let tile = plate(page, "assistant-ui").locator('[data-slot="image-gallery"] button').first();
+	await tile.scrollIntoViewIfNeeded();
+	await tile.hover();
+	await check("gallery tile hover");
+	await tile.focus();
+	await page.keyboard.press("Tab");
+	await page.keyboard.press("Shift+Tab");
+	await check("gallery tile focus");
+	await tile.click();
+	let dialog = page.locator('[data-slot="dialog-content"]');
+	await expect(dialog).toBeVisible();
+	await expect.poll(() => dialog.evaluate(node => getComputedStyle(node).opacity)).toBe("1");
+	await check("gallery dialog open");
+	await dialog.getByRole("button", { name: "Next image" }).hover();
+	await check("gallery next hover");
+	await dialog.getByRole("button", { name: "Next image" }).click();
+	await dialog.locator('a[target="_blank"]').hover();
+	await check("gallery source hover");
+	await page.keyboard.press("Escape");
+	await expect(dialog).toHaveCount(0);
 	await first.scrollIntoViewIfNeeded();
 	await first.hover();
 	await check("trigger hover");
@@ -254,7 +295,7 @@ for (let mode of ["light", "dark"] as const) {
 			).toEqual([]);
 			checked += result.drawn.length;
 		});
-		expect(checked).toBeGreaterThan(300);
+		expect(checked).toBeGreaterThan(600);
 	});
 }
 

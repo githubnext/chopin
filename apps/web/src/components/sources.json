@@ -27,6 +27,20 @@
 			"patchSha256": "ddf4a3b22762db4c6d1bba03b26009f138ee1cea8a253b6151e545ad5a0e61b7"
 		},
 		{
+			"file": "apps/web/src/components/assistant-ui/elements/image-gallery.tsx",
+			"registry": "@assistant-ui",
+			"item": "elements-image-gallery",
+			"version": "assistant-ui/assistant-ui@437b410726e2",
+			"sha256": "059480306d8ec9461efb1c34929c16db6a980dcb3c9ba7c03baff7fa7dd7c20d"
+		},
+		{
+			"file": "apps/web/src/components/assistant-ui/elements/image.tsx",
+			"registry": "@assistant-ui",
+			"item": "image",
+			"version": "assistant-ui/assistant-ui@437b410726e2",
+			"sha256": "916b2ca0f1097a2eb22e6e5c3ffd39a918dec71abff424b6b8795939733d53fb"
+		},
+		{
 			"file": "apps/web/src/components/assistant-ui/elements/markdown-text.tsx",
 			"registry": "@assistant-ui",
 			"item": "markdown-text",
@@ -64,6 +78,13 @@
 			"sha256": "98580531a6f5a213cccd6964c0c75fd097d97b77bcca05f904df562512273363"
 		},
 		{
+			"file": "apps/web/src/components/assistant-ui/utils/href.ts",
+			"registry": "@assistant-ui",
+			"item": "elements-href",
+			"version": "assistant-ui/assistant-ui@437b410726e2",
+			"sha256": "edcbea291ec6c5d506be4ddd76c6e0b6cabba4a14193f389a44fb6bfa8d81c40"
+		},
+		{
 			"file": "apps/web/src/components/assistant-ui/utils/model-selection.ts",
 			"registry": "@assistant-ui",
 			"item": "elements-model-selection",
@@ -89,7 +110,7 @@
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "139bc51a5987412b20520ab115126b038c37a3ec98fbd121315902488d7643ac"
+			"sha256": "b90d3bc25f1afb7b49605e5aa46ba42a53b9c4e22ca8caa321d5980244fdd3b4"
 		},
 		{
 			"file": "apps/web/src/components/hooks/use-copy-to-clipboard.ts",
@@ -123,7 +144,7 @@
 			"file": "apps/web/src/components/ui/dialog.tsx",
 			"registry": "@shadcn",
 			"item": "dialog",
-			"version": "shadcn-ui/ui@8ab27715521c",
+			"version": "shadcn-ui/ui@dd41d19e2f80",
 			"sha256": "e1a331d1617ef6381511f537c5652b13e1f9a4d627a25d80853d6171b7e8b8a5"
 		},
 		{

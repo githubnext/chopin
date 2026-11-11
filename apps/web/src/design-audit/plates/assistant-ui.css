@@ -41,3 +41,7 @@
 	flex-direction: column;
 	gap: 0.5rem;
 }
+
+.design-audit-aui-wide {
+	inline-size: min(100%, 24rem);
+}
