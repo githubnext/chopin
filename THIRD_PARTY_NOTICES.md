@@ -116,8 +116,9 @@ The Chat composer is drawn from these copies. Its model pill opens the Model sel
 `/` menus are the Composer's menu with its Mentions row (`ComposerPersonItem`) and Slash commands row
 (`ComposerCommandItem`), driven by Chopin's own pure functions (`mentions.ts`, `commands.ts`) in place
 of the element's `useMentionMatches`, `useSlashMatches` and `applyMention`, because the draft keeps its
-caret and its references; and the Chopin chip is Directive text's chip with a Badge. None of
-assistant-ui's runtime is used.
+caret and its references; the Chopin chip is Directive text's chip with a Badge; the files a message
+stages are the Composer's attachment chips, the microphone its voice and voice button, and the files
+of a sent message `MessageAttachments`. None of assistant-ui's runtime is used.
 
 ### License
 

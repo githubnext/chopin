@@ -827,8 +827,9 @@ using that revision. The next turn creates a fresh session with the new token.
 
 ## Files in Chat
 
-A message can carry images and text files: the paperclip in the composer, a drop on it and a paste
-add them, and each shows as a thumbnail or a chip with its name and size until the message is sent.
+A message can carry images and text files: the `+` in the composer, a drop on it and a paste
+add them, and each shows as a chip, with its picture for an image, its name and its size until the
+message is sent.
 The server keeps them in the document's storage (the `chat_attachments` table and the memory
 adapter's equivalent; see [Storage](storage.md)), not in the sidecar, and a sent message shows them
 to everyone in the room.
@@ -861,7 +862,7 @@ than 1 MiB.
 parts: a text file as a file part (`text/plain`) and an image as an image part, and only where the
 model the turn would run reads images, by its catalog entry's `inputTypes`. A model that does not
 say so reads as text only, and so does a harness that reports no catalog (`copilot-sdk`), so the
-paperclip explains why images are unavailable there and the server refuses an image sent to the
+`+` explains why images are unavailable there and the server refuses an image sent to the
 Planner all the same ("This model can't read images"); the same image can go to the room. Atomic is
 given images as its own prompt images and each text file written into the prompt under its name;
 the Copilot SDK likewise, with images as blob attachments; a remote Planner's client is sent them
