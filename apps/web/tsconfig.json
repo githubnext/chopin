@@ -11,6 +11,7 @@
 		"lib": ["esnext", "dom", "dom.iterable"],
 		"jsx": "react-jsx",
 		"types": ["vite/client", "bun"],
+		"paths": { "@/*": ["./src/*"] },
 
 		"allowSyntheticDefaultImports": true,
 
