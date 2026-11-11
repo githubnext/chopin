@@ -127,6 +127,7 @@ applied migration. The application schema contains:
 | `planner_deferred_turns` | One row per acknowledged Planner request whose turn had not started (`composer`, `invoke_planner`, `invoke_system`, `comment` or `draft`): what its turn and a retried request need, its state (`waiting`, `started`, `ended`, `interrupted`, `cancelled`), the fencing token of its latest transition, when it was resolved and, for a request Chopin cancelled, why (`agent`, `access` or `unavailable`). A request ID is unique within a document, and a comment thread has at most one `waiting` row. Rows go with the document. |
 | `mcp_sessions` | MCP sessions: ID, user, client name and version, creation and last-seen times. Idle sessions are swept. |
 | `decision_answers` | Saved answers to decisions the Planner left open, one row per document and decision: the saved generation, when it was saved, the Planner turn claimed to carry it and when that turn was delivered. A newer generation replaces the row and waits again; a delivered row stays marked so it never runs twice. Rows go with the document. |
+| `chat_attachments` | The images and text files sent with Chat messages, one row per file: its bytes, its sniffed type (a PNG, JPEG, WebP or GIF image, or plain text, held by a check, never HTML or SVG), its name and size, who uploaded it and when. A row has no message until one is sent with it (then the message's request ID and the file's place in it); until then only its uploader reads it, and one nobody sent within a day is forgotten. Deleting the message or the document removes it. |
 
 `channel_state.unanswered_decisions` is maintained in JavaScript rather than a
 generated column. Sidecar text may contain an escaped NUL or an unpaired UTF-16
@@ -151,6 +152,11 @@ display title and slug in the same fenced collaboration transaction.
 A rename promotes a new collision-suffixed slug but retains all former slugs as
 aliases that cannot be assigned to another channel while it exists. Archived
 channels continue to reserve their aliases.
+
+Files sent with a Chat message (see [Files in Chat](hosted-agent.md#files-in-chat)) are rows of
+`chat_attachments`, kept with the document and never in the sidecar: the sidecar's transcript entry
+carries only their names, kinds, types and sizes. The same rows are the memory adapter's, and the
+storage contract holds both to the same rules.
 
 ## Archival and deletion
 

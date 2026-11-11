@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { delimiter } from "node:path";
 
+import { attachmentLimits } from "./attachments/limits";
 import { describe as description } from "./config";
 import { configured, LOCAL, REQUIRED } from "./testing/config";
 
@@ -20,6 +21,62 @@ describe("configuration", () => {
 
 	it("defaults the built-in adapter to PostgreSQL", () => {
 		expect(configured({ STORAGE_DRIVER: undefined }).storage.driver).toBe("postgres");
+	});
+
+	it("names what a Chat message may carry, with limits of its own that an operator can change", () => {
+		expect(configured().chatAttachments).toEqual({
+			maxBytes: 1_048_576,
+			maxCount: 5,
+			maxTotalBytes: 4_194_304,
+		});
+		expect(
+			configured({
+				CHAT_ATTACHMENT_MAX_BYTES: "2048",
+				CHAT_ATTACHMENT_MAX_COUNT: "3",
+				CHAT_ATTACHMENT_MAX_TOTAL_BYTES: "4096",
+			}).chatAttachments,
+		).toEqual({ maxBytes: 2048, maxCount: 3, maxTotalBytes: 4096 });
+		for (
+			let [name, value] of [
+				["CHAT_ATTACHMENT_MAX_BYTES", "0"],
+				["CHAT_ATTACHMENT_MAX_BYTES", "1.5"],
+				["CHAT_ATTACHMENT_MAX_BYTES", "99999999999"],
+				["CHAT_ATTACHMENT_MAX_COUNT", "-1"],
+				["CHAT_ATTACHMENT_MAX_COUNT", "21"],
+				["CHAT_ATTACHMENT_MAX_TOTAL_BYTES", "many"],
+			] as const
+		) {
+			expect(() => configured({ [name]: value }), `${name}=${value}`).toThrow(
+				`${name} must be a whole number between`,
+			);
+		}
+		// One file that could never fit in a message is a mistake, not a setting.
+		expect(() =>
+			configured({ CHAT_ATTACHMENT_MAX_BYTES: "2000", CHAT_ATTACHMENT_MAX_TOTAL_BYTES: "1000" })
+		)
+			.toThrow("CHAT_ATTACHMENT_MAX_TOTAL_BYTES must be at least CHAT_ATTACHMENT_MAX_BYTES");
+	});
+
+	it("takes no files at a count of zero, and never more than a remote Planner's connection carries", () => {
+		expect(attachmentLimits(configured({ CHAT_ATTACHMENT_MAX_COUNT: "0" }))).toBeUndefined();
+		expect(attachmentLimits(configured({ HARNESS: "copilot-sdk" }))).toEqual({
+			maxBytes: 1_048_576,
+			maxCount: 5,
+			maxTotalBytes: 4_194_304,
+		});
+		let remote = attachmentLimits(
+			configured({ HARNESS: "remote", CHAT_ATTACHMENT_MAX_BYTES: "4000000" }),
+		);
+		expect(remote).toEqual({ maxBytes: 1_048_576, maxCount: 5, maxTotalBytes: 1_048_576 });
+		expect(
+			attachmentLimits(
+				configured({
+					HARNESS: "remote",
+					CHAT_ATTACHMENT_MAX_BYTES: "1000",
+					CHAT_ATTACHMENT_MAX_TOTAL_BYTES: "3000",
+				}),
+			),
+		).toEqual({ maxBytes: 1000, maxCount: 5, maxTotalBytes: 3000 });
 	});
 
 	it("keeps foreground visuals opt-in and requires a decisions model", () => {

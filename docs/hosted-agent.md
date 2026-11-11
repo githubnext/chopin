@@ -825,6 +825,45 @@ A harness session is bound to one credential revision. Before an eight-hour
 GitHub App token refresh, Chopin aborts and discards every Planner session
 using that revision. The next turn creates a fresh session with the new token.
 
+## Files in Chat
+
+A message can carry images and text files: the paperclip in the composer, a drop on it and a paste
+add them, and each shows as a thumbnail or a chip with its name and size until the message is sent.
+The server keeps them in the document's storage (the `chat_attachments` table and the memory
+adapter's equivalent; see [Storage](storage.md)), not in the sidecar, and a sent message shows them
+to everyone in the room.
+
+**Upload.** The browser sends each file's bytes to `POST /api/channels/:channelId/attachments`, with
+its name and declared type in the query (`name`, `type`), and sees progress as the bytes go. The
+route needs a session, the app's own origin, and repository write access to a document that is not
+archived. It answers `201` with the file as the server kept it (`id`, `name`, `kind`, `mimeType`,
+`size`), or a refusal with a `reason` (`too-large` 413, `empty`, `unsupported` and `image-type` 422,
+`too-many` and `too-much` 429, `not-allowed` 403). A file is its uploader's alone until a message is
+sent with it: `DELETE` on the same path with the file's `id` takes back one that has not been sent,
+and an upload nobody sent within a day is forgotten. One person may leave unsent at most four times
+what a message may carry.
+
+**What a file is.** The server reads the bytes and decides, whatever the name or declared type say
+(`packages/protocol/attachment.ts`, which the browser runs too, before the upload): a PNG, JPEG,
+WebP or GIF is an image; UTF-8 text with no stray control character is a text file; anything else
+is refused. A file whose name or declared type says it is an image must be one of those four rasters
+by its bytes, so an SVG, a HEIC or a page named `.png` is refused rather than stored under a type
+it is not. The file is stored under the type its bytes have, and a text file, whatever it is called,
+as `text/plain`.
+
+**Limits.** Three settings, each also told to the browser when it joins: `CHAT_ATTACHMENT_MAX_BYTES`
+for one file (1 MiB by default), `CHAT_ATTACHMENT_MAX_COUNT` for a message (5; `0` turns files off)
+and `CHAT_ATTACHMENT_MAX_TOTAL_BYTES` for all of a message's (4 MiB). See
+[Self-hosting](self-hosting.md). Under `HARNESS=remote` the per-file and total caps are never more
+than 1 MiB.
+
+**Reading.** `GET /api/channels/:channelId/attachments/:id` answers a person who can read the
+document, and only once a message has been sent with the file (before that only its uploader may). A
+person who cannot, a missing file and another document's file are the same `404`. A raster image is
+served inline under its own type; a text file is a download of `text/plain; charset=utf-8`; every
+answer carries `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none';
+sandbox`, so a stored file is never rendered as HTML or SVG.
+
 ## Chat context
 
 [Automatic participation](conversation-initiative.md) is enabled with the Planner and lets

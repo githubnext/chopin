@@ -65,6 +65,12 @@ export const AGENT_FEATURES_HEADER = "chopin-agent-features";
 /** The largest message either side may send, in UTF-8 bytes. */
 export const MAX_LINK_MESSAGE_BYTES = 2 * 1024 * 1024;
 
+/**
+ * The most a turn's images and files may total, in bytes before base64: they travel inside the
+ * turn's own message, which the cap above bounds, with room left for the prompt and the tools.
+ */
+export const MAX_LINK_ATTACHMENT_BYTES = 1024 * 1024;
+
 /** WebSocket close codes a Chopin server uses to end a link. */
 export const LINK_CLOSE = {
 	detached: 1000,

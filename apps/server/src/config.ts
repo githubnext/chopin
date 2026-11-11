@@ -14,6 +14,7 @@ import { setupAgents } from "./setup-agents";
 import { DEFAULT_COPILOT_MODEL } from "./harness/copilot-sdk/model";
 
 import type { SetupAgent } from "@chopin/protocol/agents";
+import type { AttachmentLimits } from "@chopin/protocol/attachment";
 import type { AuthConfig } from "./auth/config";
 import type { StorageConfig } from "./storage/registry";
 
@@ -57,6 +58,13 @@ export type Config = {
 	agent: boolean;
 	backgroundJobs: boolean;
 	webResearch: boolean;
+	/**
+	 * What a Chat message may carry, as configured: `CHAT_ATTACHMENT_MAX_BYTES` for one file,
+	 * `CHAT_ATTACHMENT_MAX_COUNT` files per message (0 turns files off) and
+	 * `CHAT_ATTACHMENT_MAX_TOTAL_BYTES` for all of a message's. Under `HARNESS=remote` the limits in
+	 * force are lower still; see `attachmentLimits`.
+	 */
+	chatAttachments: AttachmentLimits;
 	/** Attempt deadline of one public-web evidence attempt, in milliseconds. Defaults to 10 minutes. */
 	researchEvidenceTimeoutMs?: number;
 	/** Explicitly enables the conversation-derived cards prototype. */
@@ -176,6 +184,31 @@ function port(): number {
 		throw new Error(`PORT must be a number between 1 and 65535, got ${JSON.stringify(raw)}`);
 	}
 	return value;
+}
+
+/** A whole-number setting between `min` and `max`, read from the environment. */
+function whole(name: string, fallback: number, min: number, max: number): number {
+	let raw = process.env[name];
+	if (raw === undefined || raw === "") return fallback;
+	let value = Number(raw);
+	if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < min || value > max) {
+		throw new Error(`${name} must be a whole number between ${min} and ${max}`);
+	}
+	return value;
+}
+
+function chatAttachments(): AttachmentLimits {
+	let limits = {
+		maxBytes: whole("CHAT_ATTACHMENT_MAX_BYTES", 1_048_576, 1, 16_777_216),
+		maxCount: whole("CHAT_ATTACHMENT_MAX_COUNT", 5, 0, 20),
+		maxTotalBytes: whole("CHAT_ATTACHMENT_MAX_TOTAL_BYTES", 4_194_304, 1, 67_108_864),
+	};
+	if (limits.maxTotalBytes < limits.maxBytes) {
+		throw new Error(
+			"CHAT_ATTACHMENT_MAX_TOTAL_BYTES must be at least CHAT_ATTACHMENT_MAX_BYTES",
+		);
+	}
+	return limits;
 }
 
 /** A duration setting that may be zero, in whole milliseconds up to `max`. */
@@ -354,6 +387,7 @@ export function load(): Config {
 		agent,
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",
+		chatAttachments: chatAttachments(),
 		researchEvidenceTimeoutMs: researchEvidenceTimeoutMs(),
 		conversationPlan,
 		conversationInitiativeModel,

@@ -44,6 +44,8 @@ import { documentUrl } from "./channels/document-url";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
+import { attachmentLimits } from "./attachments/limits";
+import { registerAttachmentRoutes } from "./attachments/routes";
 import { registerImageRoutes } from "./images/routes";
 import type { ExperimentRuntime } from "./experiments/routes";
 import type { Instruction, ServerInstructionDeps } from "./chat/server-instruction";
@@ -187,6 +189,8 @@ import type {
 type ResearchRequestView = ResearchWire.RequestView;
 
 const config = load();
+/** What a message may carry in force now; none where the server takes no files. */
+const chatAttachmentLimits = attachmentLimits(config);
 /** The one decisions boundary, checked against Atomic's registry before anything starts. */
 const decide = await openDecisions(config);
 const visualAdmission = createVisualAdmission(decide);
@@ -2047,6 +2051,7 @@ function openRoomSocket(ws: Socket): void {
 		backgroundJobs: config.backgroundJobs,
 		webResearch: config.webResearch,
 		...CHAT_CAPABILITIES,
+		...(chatAttachmentLimits ? { attachments: chatAttachmentLimits } : {}),
 		...(CLIENT_BUILD && !config.devClient ? { build: CLIENT_BUILD } : {}),
 	});
 	if (plannerAttachments) {
@@ -3432,6 +3437,7 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 });
 registerNavigationRoutes(router, hostedAuth, { storage });
 registerImageRoutes(router, hostedAuth);
+registerAttachmentRoutes(router, hostedAuth, { limits: chatAttachmentLimits });
 registerConnectorScript(router, {
 	bundle: join(import.meta.dir, "../../connector/dist/connector.js"),
 	source: join(import.meta.dir, "../../connector/src/main.ts"),
