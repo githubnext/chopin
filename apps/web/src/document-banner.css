@@ -73,9 +73,6 @@
 	.document-banner [data-banner] {
 		animation: document-banner-enter var(--duration-base) var(--motion-smooth-out) both;
 	}
-	.document-banner .composer-notice-spin {
-		animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
-	}
 }
 
 /*

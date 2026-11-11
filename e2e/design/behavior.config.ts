@@ -11,6 +11,7 @@ export default defineConfig<DesignOptions>({
 		"assistant-ui-geometry.e2e.ts",
 		"assistant-ui-theme.e2e.ts",
 		"touch-targets.e2e.ts",
+		"connecting-indicator.e2e.ts",
 	],
 	workers: 2,
 	outputDir: "../test-results/design-behavior",

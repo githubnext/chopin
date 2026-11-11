@@ -674,7 +674,7 @@ changes: an attach, a detach into the grace period with the time it ends, a drop
 that keeps work (`disconnected`, with no deadline), the grace period ending, a sign-out, a Planner reset, or the server closing a connection
 whose ownership was released. It names only the holder's GitHub login and
 state, never a machine, checkout, or token. A healthy, attached Planner shows
-nothing. Otherwise the document's machine button carries it (a thin spinner while
+nothing. Otherwise the document's machine button carries it (the connecting dots while
 the machine is connecting, a warning dot where it cannot connect, a muted grey dot
 while the Planner is away, and no dot at all where no machine is connected, the same
 bare icon as a button with no machine, never the machine's own green) with its words in

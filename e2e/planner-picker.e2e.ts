@@ -21,10 +21,14 @@ import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { chatInput, fillChat } from "./chat-input";
 import {
 	announced,
+	connectingDots,
+	expectConnectingStill,
+	expectConnectingWave,
 	expectHealthy,
 	expectNoMachineWords,
 	expectPlannerAttached,
 	expectSaidOnce,
+	expectSteadyLayout,
 	heard,
 	listenForAnnouncements,
 	machineButton,
@@ -514,6 +518,50 @@ test("a document on Default machine runs its Planner on its creator's favorite m
 	await page.keyboard.press("Escape");
 	await first.detach().catch(() => {});
 	await second.detach();
+});
+
+test("connecting to a machine is the calm dots on the banner and on the machine button, still under reduced motion, and told in words", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	let page = await open(browser, "mona", room, DESKTOP, { listen: true });
+	await createdBy(room, "mona");
+	let studio = await machine(page, "studio", true);
+	await page.reload();
+	await ready(page);
+	expect((await studio.poll([])).planners).toHaveLength(1);
+
+	// The banner: the dots in its icon's place, the words its own, said once by the live region.
+	let banner = strip(page);
+	await expect(banner).toHaveText("Connecting to studio");
+	await expect(banner).toHaveAttribute("data-layer", "planner");
+	await expect(announced(page)).toHaveText(/^Connecting to (studio|@mona's machine)$/);
+	let dots = connectingDots(banner);
+	await expect(dots).toHaveCount(1);
+	await expect(dots).toHaveAttribute("aria-hidden", "true");
+	await expectConnectingWave(dots);
+	await expectSteadyLayout([banner, dots, banner.getByText("Connecting to studio")]);
+	await shoot(page, "connecting-banner-desktop", page.locator(".chat-composer"));
+
+	// Reduced motion holds the dots still and says the same.
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await expectConnectingStill(dots);
+	await expect(banner).toHaveText("Connecting to studio");
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+
+	// With Chat put away the machine button tells it, in its name and in its badge.
+	await page.getByRole("button", { name: "Expand document" }).click();
+	let button = machineButton(page);
+	await expect(button).toHaveAttribute("data-planner", "starting");
+	await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
+	let badge = connectingDots(button.locator('.machine-glyph-dot[data-planner="starting"]'));
+	await expect(badge).toHaveCount(1);
+	await expectConnectingWave(badge);
+	await expectSteadyLayout([button, badge]);
+	await shoot(page, "connecting-button-desktop");
+
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await expectConnectingStill(badge);
+	await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
 });
 
 test("@chopin in a document on Default machine waits for the Planner its machine is starting", async ({ browser }) => {

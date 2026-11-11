@@ -7,12 +7,14 @@
  * at assistant-ui/assistant-ui f92028b4), MIT License, Copyright (c) 2026 AgentbaseAI Inc.; see
  * THIRD_PARTY_NOTICES.md. Kept: the exclusive `phase` prop (`online` renders nothing), `attempt`,
  * `onRetry`, one entrance and no exit. Changed: Chopin's strip, icons and roles in place of its
- * Tailwind and lucide classes; the resumed counter is words (`caught`); the message can be the
- * machine's own words; the button exists only where there is something to retry; the root takes
- * only an `id`. It is no live region: `ConnectionAnnouncement` speaks each phase once.
+ * Tailwind and lucide classes, and the shared connecting dots (`ConnectingIndicator`) in place of
+ * its spinner; the resumed counter is words (`caught`); the message can be the machine's own
+ * words; the button exists only where there is something to retry; the root takes only an `id`. It is no live region: `ConnectionAnnouncement` speaks each phase once.
  */
 
-import { CheckIcon, LoaderIcon, WarningIcon } from "@chopin/icons";
+import { CheckIcon, WarningIcon } from "@chopin/icons";
+
+import { ConnectingIndicator } from "../connecting-indicator";
 
 import { OFFLINE_MESSAGE } from "./connection-phase";
 import type { ConnectionPhase } from "./connection-phase";
@@ -77,12 +79,7 @@ export function ConnectionState(
 				? <WarningIcon className="composer-notice-icon icon-first-line" size={16} />
 				: phase === "resumed"
 				? <CheckIcon className="composer-notice-icon icon-first-line" size={16} />
-				: (
-					<LoaderIcon
-						className="composer-notice-icon composer-notice-spin icon-first-line"
-						size={16}
-					/>
-				)}
+				: <ConnectingIndicator className="composer-notice-icon icon-first-line" />}
 			<span>
 				{words}
 				{detail?.map((line, index) => (
