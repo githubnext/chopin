@@ -1,0 +1,84 @@
+--- a/apps/web/src/components/assistant-ui/elements/markdown-text.tsx
++++ b/apps/web/src/components/assistant-ui/elements/markdown-text.tsx
+@@ -10,7 +10,7 @@ import ReactNode for CodeHeader's action slot
+   useIsMarkdownCodeBlock,
+ } from "@assistant-ui/react-markdown";
+ import remarkGfm from "remark-gfm";
+-import { type FC, memo, useMemo, useRef } from "react";
++import { type FC, type ReactNode, memo, useMemo, useRef } from "react";
+ import type { TextMessagePartProps } from "@assistant-ui/react";
+ import { CheckIcon, CopyIcon } from "lucide-react";
+ 
+@@ -18,10 +18,11 @@ export MarkdownTextProps with react-markdown primitive props so surfaces drive it without a runtime
+ import { useCopyToClipboard } from "@/components/hooks/use-copy-to-clipboard";
+ import { cn } from "@/lib/utils";
+ 
+-type MarkdownTextProps = Partial<TextMessagePartProps> & {
+-  components?: Parameters<typeof memoizeMarkdownComponents>[0];
+-  componentsByLanguage?: MarkdownTextPrimitiveProps["componentsByLanguage"];
+-};
++export type MarkdownTextProps = Partial<TextMessagePartProps> &
++  Omit<MarkdownTextPrimitiveProps, "components" | "componentsByLanguage"> & {
++    components?: Parameters<typeof memoizeMarkdownComponents>[0];
++    componentsByLanguage?: MarkdownTextPrimitiveProps["componentsByLanguage"];
++  };
+ 
+ const useShallowStable = <T extends Record<string, unknown> | undefined>(
+   value: T,
+@@ -42,6 +43,7 @@ accept text, status and react-markdown options as props on MarkdownText
+ const MarkdownTextImpl: FC<MarkdownTextProps> = ({
+   components,
+   componentsByLanguage,
++  ...props
+ }) => {
+   const stableComponents = useShallowStable(components);
+   const stableComponentsByLanguage = useShallowStable(componentsByLanguage);
+@@ -55,18 +57,24 @@ tag the root data-slot for the geometry layer, forward props, and expose CodeHeader's action prop
+ 
+   return (
+     <MarkdownTextPrimitive
++      data-slot="markdown-text"
+       remarkPlugins={[remarkGfm]}
+       className="aui-md"
+       components={markdownComponents}
+       componentsByLanguage={stableComponentsByLanguage}
+       defer
++      {...props}
+     />
+   );
+ };
+ 
+ export const MarkdownText = memo(MarkdownTextImpl);
+ 
+-const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
++export const CodeHeader: FC<CodeHeaderProps & { action?: ReactNode }> = ({
++  language,
++  code,
++  action,
++}) => {
+   const { isCopied, copyToClipboard } = useCopyToClipboard();
+   const onCopy = () => {
+     if (!code || isCopied) return;
+@@ -78,6 +86,7 @@ allow a surface to supply CodeHeader's copy button while keeping the header's own box
+       <span className="aui-code-header-language text-muted-foreground font-medium lowercase">
+         {language}
+       </span>
++      {action ??
+       <TooltipIconButton tooltip="Copy" onClick={onCopy}>
+         {!isCopied && (
+           <CopyIcon className="animate-in zoom-in-75 fade-in duration-150" />
+@@ -85,12 +94,12 @@ close the action slot fallback and export defaultComponents so surfaces reuse its p and a
+         {isCopied && (
+           <CheckIcon className="animate-in zoom-in-50 fade-in duration-200 ease-out" />
+         )}
+-      </TooltipIconButton>
++      </TooltipIconButton>}
+     </div>
+   );
+ };
+ 
+-const defaultComponents = memoizeMarkdownComponents({
++export const defaultComponents = memoizeMarkdownComponents({
+   h1: ({ className, ...props }) => (
+     <h1
+       className={cn(
