@@ -417,6 +417,13 @@
 	color: var(--viewer-ink);
 }
 
+/* As Slack's, an arrow with nowhere to go is not drawn; it stays named, and disabled, for a reader. */
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header])
+	> [data-slot="dialog-title"]
+	+ div + div > button:is([aria-label="Previous image"], [aria-label="Next image"]):disabled {
+	opacity: 0;
+}
+
 [data-slot="dialog-content"]:has(> [data-chat-viewer-header])
 	> [data-slot="dialog-title"]
 	+ div + div > button[aria-label="Previous image"] {
