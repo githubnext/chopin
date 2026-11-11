@@ -1097,6 +1097,7 @@ if (url) {
 				"033_planner_hold_machine_owner",
 				"034_planner_model_choices",
 				"035_planner_model_name",
+				"036_chat_attachments",
 			]);
 			expect([
 				...await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`,

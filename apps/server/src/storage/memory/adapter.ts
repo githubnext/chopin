@@ -5,6 +5,7 @@ import { sidecarUnansweredDecisions } from "../../questions/unanswered";
 import { childSidecarWithoutConversation } from "../child-conversation";
 import { MemoryBackgroundJobStore } from "./jobs";
 import { MemoryExperimentStore } from "./experiments";
+import { MemoryChatAttachmentStore } from "./chat-attachments";
 import { MemoryImageStore } from "./images";
 import { MemoryRunStageStore } from "./run-stages";
 import { MemoryDecisionAnswerStore } from "./decision-answers";
@@ -56,6 +57,7 @@ import type {
 import type {
 	BackgroundJobStore,
 	ChannelStore,
+	ChatAttachmentStore,
 	CollaborationStore,
 	DecisionAnswerStore,
 	DeferredTurnStore,
@@ -178,6 +180,11 @@ export class MemoryStorage implements StorageAdapter {
 		userExists: id => this.#users.has(id),
 	});
 	readonly images: ImageStore = this.#images;
+	readonly #chatAttachments = new MemoryChatAttachmentStore({
+		channelExists: id => this.#channels.has(id),
+		userExists: id => this.#users.has(id),
+	});
+	readonly chatAttachments: ChatAttachmentStore = this.#chatAttachments;
 	readonly #runStages = new MemoryRunStageStore(id => this.#channels.has(id));
 	readonly runStages: RunStageStore = this.#runStages;
 	readonly #decisionAnswers = new MemoryDecisionAnswerStore(id => this.#channels.has(id));
@@ -667,6 +674,7 @@ export class MemoryStorage implements StorageAdapter {
 		await this.#research.deleteChannel(id);
 		this.#jobs.deleteChannel(id);
 		this.#images.deleteChannel(id);
+		this.#chatAttachments.deleteChannel(id);
 		this.#runStages.deleteChannel(id);
 		this.#decisionAnswers.deleteChannel(id);
 		this.#versions.deleteChannel(id);
