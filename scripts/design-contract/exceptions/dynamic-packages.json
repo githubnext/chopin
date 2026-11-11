@@ -518,6 +518,76 @@
 		"sourceHash": "399f3d192bc61cae7904baf1d5d814ce711651efec54e691f73e85e72fe4cb5c"
 	},
 	{
+		"file": "packages/icons/src/format.tsx",
+		"reason": "Icon wrapper forwards SVG accessibility, sizing, and caller styling props. Literal style/class call sites are scanned; no ambient rendering code is executed.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > BoldIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > ItalicIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > StrikethroughIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > NumberedListIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > BulletedListIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > CodeBlockIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > AtSignIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > SendIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > StopIcon > <LineIcon>",
+				1
+			]
+		],
+		"sourceHash": "c29565c35d8ba447f91d88d2cdc9affd5a1f0256845c0087f159638749122612"
+	},
+	{
 		"file": "packages/visuals/src/ui/mini-bars.tsx",
 		"reason": "Public visual primitive forwards typed DOM/Base UI props. Literal style/class call sites remain scanned; runtime caller values need browser review.",
 		"cases": [
