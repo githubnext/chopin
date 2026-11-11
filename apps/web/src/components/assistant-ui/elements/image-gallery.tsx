@@ -57,6 +57,9 @@ export interface ImageGalleryProps extends Omit<
   dialogActions?:
     | ((image: GalleryImage, index: number) => ReactNode)
     | undefined;
+  dialogHeader?:
+    | ((image: GalleryImage, index: number) => ReactNode)
+    | undefined;
 }
 
 const keyForImage = (image: GalleryImage) => `${image.id}\u0000${image.src}`;
@@ -71,6 +74,7 @@ export function ImageGallery({
   hideGrid,
   between,
   dialogActions,
+  dialogHeader,
   className,
   ...props
 }: ImageGalleryProps) {
@@ -245,6 +249,7 @@ export function ImageGallery({
           }}
         >
           <DialogContent className="gap-3 p-3 duration-150 motion-reduce:animate-none sm:max-w-[min(56rem,calc(100%-2rem))]">
+            {dialogHeader?.(activeImage, index)}
             <DialogTitle className="sr-only">
               Image {index + 1} of {images.length}
             </DialogTitle>

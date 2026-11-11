@@ -15,7 +15,6 @@ import {
 	isDataImage,
 	loadState,
 	settledOnMount,
-	tooLargeImageReason,
 } from "./image-state";
 
 const SHA = "a".repeat(64);
@@ -120,7 +119,6 @@ test("a sent message attachment of this document loads as hosted, and one of ano
 	expect(imageSource(`${ORIGIN}${path}`, "doc/1", ORIGIN)).toEqual({ kind: "hosted", url: path });
 	expect(imageSource(path, "other-doc", ORIGIN)).toEqual({ kind: "unavailable" });
 	expect(imageSource(path, undefined, ORIGIN)).toEqual({ kind: "unavailable" });
-	expect(tooLargeImageReason(12 * 1_048_576)).toBe("Image too large to show (12 MB, limit 10 MB)");
 });
 
 test("a path or address on this site that is not an upload is read without the reader's credentials, as written", () => {
@@ -591,12 +589,12 @@ test("a frame keeps the image's own shape, and has none when the size is not kno
 	expect(frameRatio(0, 10)).toBeUndefined();
 });
 
-test("a gallery draws up to six tiles and the last stands for the rest", () => {
+test("a gallery draws up to four tiles, as Slack does, and the last stands for the rest", () => {
 	expect(galleryTiles(0)).toEqual({ shown: 0, more: 0 });
 	expect(galleryTiles(2)).toEqual({ shown: 2, more: 0 });
-	expect(galleryTiles(6)).toEqual({ shown: 6, more: 0 });
-	expect(galleryTiles(9)).toEqual({ shown: 6, more: 3 });
-	expect(galleryTiles(9, 4)).toEqual({ shown: 4, more: 5 });
+	expect(galleryTiles(4)).toEqual({ shown: 4, more: 0 });
+	expect(galleryTiles(9)).toEqual({ shown: 4, more: 5 });
+	expect(galleryTiles(9, 2)).toEqual({ shown: 2, more: 7 });
 });
 
 test("a download is named for what the image shows, or for the stored image", () => {

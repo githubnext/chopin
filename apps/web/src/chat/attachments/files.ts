@@ -45,6 +45,8 @@ export type FilesAction =
 	| { type: "add"; file: DraftFile }
 	/** The bytes were read: what they are replaces what the name and declared type claimed. */
 	| { type: "read"; id: string; kind: AttachmentKind; mimeType: string }
+	/** An image too large to send was made smaller: the copy's name and size replace the original's. */
+	| { type: "resized"; id: string; name: string; size: number }
 	| { type: "progress"; id: string; progress: number }
 	| { type: "uploaded"; id: string; sent: Chat.Attachment }
 	| { type: "failed"; id: string; refusal: AttachmentRefusal; message: string; retry: boolean }
@@ -74,6 +76,8 @@ export function filesReducer(
 				kind: action.kind,
 				mimeType: action.mimeType,
 			}));
+		case "resized":
+			return change(files, action.id, file => ({ ...file, name: action.name, size: action.size }));
 		case "progress":
 			return change(files, action.id, file =>
 				file.status.type === "running"
@@ -243,16 +247,4 @@ export function chipProps(view: FileView): ChipProps {
 		progress: view.progress,
 		kind: view.kind === "image" ? "image" : "text",
 	};
-}
-
-/** What a sent message's file takes: the id it is opened by, its name, size in words and kind. */
-export type MessageFileProps = {
-	id: string;
-	name: string;
-	size: string;
-	kind: "image" | "file";
-};
-
-export function messageFileProps(file: Chat.Attachment): MessageFileProps {
-	return { id: file.id, name: file.name, size: formatBytes(file.size), kind: file.kind };
 }

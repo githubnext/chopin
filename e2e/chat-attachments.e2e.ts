@@ -541,7 +541,7 @@ test("two files with one name are two: removing one leaves the other", async ({ 
 	await expect(chips.nth(0)).toHaveAttribute("data-file-id", first!);
 });
 
-test("sent image attachments draw as a gallery, share the message's lightbox with Markdown images, and show placeholders when broken or over 10 MB", async ({ join, seed }) => {
+test("sent image attachments draw as a gallery, share the message's lightbox with Markdown images, and stand Slack's placeholder where one cannot load, whatever its size", async ({ join, seed }) => {
 	let inline = `data:image/png;base64,${PNG.toString("base64")}`;
 	await seed("# Unified\n", {
 		transcript: [
@@ -579,16 +579,20 @@ test("sent image attachments draw as a gallery, share the message's lightbox wit
 	let page = await join("ana");
 	await openChat(page);
 
+	// Neither stored image is there, and the one of 12 MB is never refused for its size: both are
+	// tiles of Slack's grid that say they could not load.
 	let seeded = messages(page).filter({ hasText: "Stored attachments" });
-	let broken = seeded.locator('[data-chat-image="single"]');
-	await expect(broken).toHaveAttribute("data-load", "broken");
+	let broken = seeded.locator('[data-chat-image="tile"]');
+	await expect(broken).toHaveCount(2);
+	await expect(broken.nth(0)).toHaveAttribute("data-load", "broken");
+	await expect(broken.nth(1)).toHaveAttribute("data-load", "broken");
 	await expect(
-		broken.getByRole("img", { name: "Couldn’t load image: missing.png", exact: true }),
+		seeded.getByRole("img", { name: "Couldn’t load image: missing.png", exact: true }),
 	).toHaveCount(1);
-	await expect(seeded.getByText("missing.png")).toBeVisible();
 	await expect(
-		seeded.getByRole("img", { name: "Image too large to show (12 MB, limit 10 MB)", exact: true }),
-	).toBeVisible();
+		seeded.getByRole("img", { name: "Couldn’t load image: huge.png", exact: true }),
+	).toHaveCount(1);
+	await expect(seeded).not.toContainText("too large");
 	await expect(
 		seeded.getByRole("group", { name: "Files sent with this message" }).getByRole("button", {
 			name: /^readme\.md/,
@@ -618,9 +622,12 @@ test("sent image attachments draw as a gallery, share the message's lightbox wit
 	await expect(tiles.nth(1)).toHaveAttribute("data-load", "shown");
 	let fileTiles = sent.getByRole("group", { name: "Files sent with this message" }).getByRole(
 		"button",
+		{ name: /\.md/ },
 	);
-	await expect(fileTiles).toHaveCount(1);
+	await expect(fileTiles).toHaveCount(3);
 	await expect(fileTiles.first()).toHaveAccessibleName(/^notes\.md/);
+	await expect(fileTiles.nth(1)).toHaveAccessibleName("Download notes.md");
+	await expect(fileTiles.nth(2)).toHaveAccessibleName("Copy link to notes.md");
 
 	// Clicking the first gallery tile opens the shared message lightbox at Image 2 of 3 (after the Markdown image).
 	await tiles.nth(0).focus();

@@ -208,14 +208,18 @@ test("an image holds its shape while it loads, so nothing moves when it arrives"
 	let inside = await layout(figure);
 	let frameBefore = (await frame.boundingBox())!;
 	expect(frameBefore.width / frameBefore.height).toBeCloseTo(1.5, 1);
-	expect(frameBefore.width).toBeLessThanOrEqual(384.5);
+	expect(frameBefore.width).toBeLessThanOrEqual(480.5);
 	await expect(figure.getByRole("button", { name: "Copy image" })).toHaveCount(0);
 
 	release();
 	await expect(figure).toHaveAttribute("data-load", "shown");
+	// It is drawn from Slack's 480px copy of the 1536px original, which keeps its shape.
 	await expect.poll(() =>
 		figure.locator("img").evaluate(image => (image as HTMLImageElement).naturalWidth)
-	).toBe(1536);
+	).toBe(480);
+	await expect.poll(() =>
+		figure.locator("img").evaluate(image => (image as HTMLImageElement).naturalHeight)
+	).toBe(320);
 	let after = (await figure.boundingBox())!;
 	expect(after.y).toBe(before.y);
 	expect(after.height).toBe(before.height);
@@ -236,7 +240,8 @@ test("a tall image is fitted to the height a message allows, whatever its shape"
 	let frame = figures(page).first().locator("[data-chat-image-frame]");
 	await expect(figures(page).first()).toHaveAttribute("data-load", "shown");
 	let box = (await frame.boundingBox())!;
-	expect(box.height).toBeCloseTo(448, 0);
+	// Slack's `thumb_360` height bounds an image in a message.
+	expect(box.height).toBeCloseTo(360, 0);
 	expect(box.width / box.height).toBeCloseTo(1 / 3, 2);
 });
 
@@ -310,7 +315,7 @@ test("an image that cannot be loaded says so in the place it would have been", a
 	await expect(figures(page).nth(1)).toHaveAttribute("data-load", "shown");
 });
 
-test("several images of one turn are a compact gallery of square tile buttons with accessible names", async ({ baseURL, join, page, room, seed }) => {
+test("three images of one turn are Slack's grid of tile buttons with accessible names: one tall beside two", async ({ baseURL, join, page, room, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	let stored = await store(baseURL, room);
 	await seed("# Gallery\n", { transcript: turn(three(stored)) });
@@ -322,15 +327,18 @@ test("several images of one turn are a compact gallery of square tile buttons wi
 	for (let [index, tile] of (await tiles.all()).entries()) {
 		await expect(tile).toHaveAttribute("data-load", "shown");
 		let box = (await tile.boundingBox())!;
-		expect(box.width / box.height).toBeCloseTo(1, 2);
+		if (index > 0) expect(box.width / box.height).toBeCloseTo(1, 2);
 		await expect(tile).toHaveAttribute("aria-label", `Open image: ${three(stored)[index]!.alt}`);
 	}
 	let first = (await tiles.nth(0).boundingBox())!;
+	let second = (await tiles.nth(1).boundingBox())!;
 	let third = (await tiles.nth(2).boundingBox())!;
-	expect(third.y).toBe(first.y);
+	expect(second.y).toBe(first.y);
+	expect(third.x).toBe(second.x);
+	expect(first.height).toBeCloseTo(second.height + third.height + 4, 0);
 });
 
-test("a gallery tile holds its square shape before the image arrives, and does not shift when it loads", async ({ baseURL, join, page, room, seed }) => {
+test("a gallery tile holds its shape before the image arrives, and does not shift when it loads", async ({ baseURL, join, page, room, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	let at = port(baseURL);
 	let sizes = [[300, 200], [400, 100], [90, 270]] as const;
@@ -360,9 +368,11 @@ test("a gallery tile holds its square shape before the image arrives, and does n
 	let before = await tiles.evaluateAll(all =>
 		all.map(tile => tile.getBoundingClientRect().toJSON())
 	);
-	for (let box of before) {
+	// Slack's three: the first tall beside two squares, whatever shape the images are.
+	for (let box of before.slice(1)) {
 		expect(Math.abs(box.width / box.height - 1)).toBeLessThan(0.01);
 	}
+	expect(before[0]!.height).toBeCloseTo(before[1]!.height * 2 + 4, 0);
 
 	release();
 	for (let tile of await tiles.all()) await expect(tile).toHaveAttribute("data-load", "shown");
@@ -375,11 +385,17 @@ test("a gallery tile holds its square shape before the image arrives, and does n
 			height: (image as HTMLImageElement).naturalHeight,
 			width: (image as HTMLImageElement).naturalWidth,
 		}));
-		expect([natural.width, natural.height]).toEqual([...sizes[index]!]);
+		// A tile is drawn from Slack's 360px copy, or the image itself where it is narrower.
+		let [width, height] = sizes[index]!;
+		let scale = Math.min(1, 360 / width);
+		expect([natural.width, natural.height]).toEqual([
+			Math.round(width * scale),
+			Math.round(height * scale),
+		]);
 	}
 });
 
-test("more than six images show six tiles, and the lightbox reaches all of them", async ({ baseURL, join, page, room, seed }) => {
+test("more than four images show four tiles, as Slack does, and the lightbox reaches all of them", async ({ baseURL, join, page, room, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	let at = port(baseURL);
 	let images: Chat.Image[] = [];
@@ -396,15 +412,14 @@ test("more than six images show six tiles, and the lightbox reaches all of them"
 	await join("ana");
 
 	let tiles = chat(page).locator('[data-chat-image="tile"]');
-	await expect(tiles).toHaveCount(6);
-	await expect(tiles.nth(5)).toContainText("+2");
-	await tiles.nth(5).click({ position: { x: 20, y: 60 } });
+	await expect(tiles).toHaveCount(4);
+	await expect(tiles.nth(3)).toContainText("+4");
+	await tiles.nth(3).click({ position: { x: 20, y: 60 } });
 	let box = lightbox(page);
 	await expect(box).toBeVisible();
-	await expect(box.getByRole("img", { name: "Variant 6" })).toBeVisible();
-	await expect(box.getByRole("status")).toHaveText("Image 6 of 8");
-	await page.keyboard.press("ArrowRight");
-	await page.keyboard.press("ArrowRight");
+	await expect(box.getByRole("img", { name: "Variant 4" })).toBeVisible();
+	await expect(box.getByRole("status")).toHaveText("Image 4 of 8");
+	for (let step = 0; step < 4; step++) await page.keyboard.press("ArrowRight");
 	await expect(box.getByRole("img", { name: "Variant 8" })).toBeVisible();
 	await expect(box.getByRole("button", { name: "Next image" })).toBeDisabled();
 });
@@ -440,7 +455,8 @@ test("the lightbox opens, steps and closes by mouse", async ({ baseURL, join, pa
 
 	await tiles.nth(0).click({ position: { x: 20, y: 20 } });
 	await expect(box).toBeVisible();
-	await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 6, y: 300 } });
+	// Pressing the dark ground around the image closes it, as Slack's viewer does.
+	await lightbox(page).click({ position: { x: 6, y: 300 } });
 	await expect(box).toHaveCount(0);
 });
 
@@ -974,11 +990,13 @@ test("images in paragraphs of their own are one gallery, and the message's light
 	await expect(box).toHaveCount(0);
 
 	let apart = chat(page).locator('[data-chat-image="single"]').nth(0);
-	await apart.locator("[data-chat-image-frame]").click({ position: { x: 20, y: 20 } });
+	// It is drawn at its own 20 by 30, never larger, so it is pressed in its middle.
+	await apart.locator("[data-chat-image-frame]").click();
 	await expect(box.getByRole("status")).toHaveText("Image 4 of 4");
 	await box.getByRole("button", { name: "Previous image" }).click();
 	await expect(box.getByRole("img", { name: "A dot" })).toBeVisible();
-	await page.locator('[data-slot="dialog-overlay"]').click({ position: { x: 6, y: 300 } });
+	// Pressing the dark ground around the image closes it, as Slack's viewer does.
+	await lightbox(page).click({ position: { x: 6, y: 300 } });
 	await expect(box).toHaveCount(0);
 
 	let other = chat(page).locator('[data-chat-image="single"]').nth(1);
@@ -1212,7 +1230,8 @@ test("a raster image of any format is drawn, from this site or written into the 
 					`![written, ${extension}](data:${type};base64,${bytes.toString("base64")})`
 				),
 				`![written, svg](${svg})`,
-			].join("\n\n"),
+				// Words between them keep each its own image, rather than Slack's grid of four.
+			].join("\n\nAnd:\n\n"),
 			ts: 1_700_000_000_000,
 		}],
 	});
@@ -1284,7 +1303,7 @@ async function holdDecodingOfWrittenImages(page: Page) {
 		>();
 		new MutationObserver(() => {
 			for (let figure of document.querySelectorAll("[data-chat-image]")) {
-				let key = figure.querySelector("figcaption")?.textContent ?? "";
+				let key = figure.querySelector(".chat-image-alt")?.textContent ?? "";
 				let frame = figure.querySelector("[data-chat-image-frame]");
 				if (!frame || firstSeen.has(key)) continue;
 				let box = frame.getBoundingClientRect();
@@ -1328,7 +1347,8 @@ async function figureBox(figure: Locator) {
 	return { ...(await layout(figure)), frame: { height: frame.height, width: frame.width } };
 }
 
-const NEUTRAL_BOX = 128;
+/** Slack's quiet box for an image whose shape is not known yet: 360 by 240 at most. */
+const NEUTRAL_BOX = 240;
 
 async function ownShape(figure: Locator, name: string) {
 	let natural = await naturalSize(figure);
@@ -1337,7 +1357,7 @@ async function ownShape(figure: Locator, name: string) {
 		Math.abs(frame.height - frame.width * natural.height / natural.width),
 		`${name}: the box is within a pixel of the image's own shape`,
 	).toBeLessThanOrEqual(1);
-	expect(frame.width, name).toBeLessThanOrEqual(384.5);
+	expect(frame.width, name).toBeLessThanOrEqual(480.5);
 	expect(frame.height, name).toBeLessThanOrEqual(448.5);
 	expect(await figure.locator("img").boundingBox(), `${name}: the image fills the box`).toEqual(
 		await figure.locator("[data-chat-image-frame]").boundingBox(),
@@ -1588,16 +1608,15 @@ test("an image whose shape is not known before it arrives, from another site or 
 		let figure = all.nth(index);
 		expect(firstSeen[name]?.load, name).toBe("loading");
 		expect(firstSeen[name]!.height, `${name} at the first paint`).toBe(NEUTRAL_BOX);
-		expect(firstSeen[name]!.width, `${name} at the first paint`).toBeLessThanOrEqual(384.5);
-		expect(Math.abs(firstSeen[name]!.ratio / (4 / 3) - 1), `${name} is not a framed 4:3 image`)
-			.toBeGreaterThan(0.5);
+		// Slack's quiet box of 360 by 240, the same for every image whose shape is not known.
+		expect(firstSeen[name]!.width, `${name} at the first paint`).toBe(360);
 		await expect(figure).toHaveAttribute("data-load", "loading");
 		await expect(figure).not.toHaveAttribute("data-sized");
 		await expect(figure.locator('[data-slot="image-preview-loading"]')).toBeVisible();
 		await expect(figure.locator(".chat-image-alt")).toHaveText(name);
 		let held = await figureBox(figure);
 		expect(held.frame.height, name).toBe(NEUTRAL_BOX);
-		expect(held.frame.width, name).toBe((await figure.boundingBox())!.width - 2);
+		expect(held.frame.width, name).toBe(360);
 		await expect(figure.getByRole("button", { name: "Open image" })).toHaveCount(0);
 	}
 
@@ -2158,7 +2177,8 @@ test("an address on this site that is not a raster image is never drawn or run, 
 				"![a page](docs/diagram.png)",
 				"![sign in](/auth/github)",
 				"![sign out](auth/logout)",
-			].join("\n\n"),
+				// Words between them keep each its own image, rather than Slack's grid of four.
+			].join("\n\nAnd:\n\n"),
 			ts: 1_700_000_000_000,
 		}],
 	});
@@ -2736,12 +2756,13 @@ async function readWhole(page: Page, width: number): Promise<void> {
 		parseFloat(getComputedStyle(document.documentElement).fontSize)
 	);
 	let gallery = (await chat(page).locator("[data-chat-image-gallery]").boundingBox())!;
-	for (let tile of await tiles.all()) {
+	// Slack's grid of three: one tall tile beside two squares, inside its 480px.
+	for (let [index, tile] of (await tiles.all()).entries()) {
 		let box = (await tile.boundingBox())!;
 		expect(box.x).toBeGreaterThanOrEqual(gallery.x - 0.5);
 		expect(box.x + box.width).toBeLessThanOrEqual(gallery.x + gallery.width + 0.5);
-		expect(box.height).toBeLessThanOrEqual(12 * rem + 1);
-		expect(box.width / box.height).toBeCloseTo(1, 1);
+		expect(box.height).toBeLessThanOrEqual(30 * rem + 1);
+		if (index > 0) expect(box.width / box.height).toBeCloseTo(1, 1);
 	}
 	for (let figure of await all.all()) {
 		let box = (await figure.boundingBox())!;

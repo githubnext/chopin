@@ -311,7 +311,7 @@ let markdownGallery = ({ children }: ComponentProps<"figure">) => {
 			}]
 			: []
 	);
-	return <ImageGallery images={images} maxVisible={images.length} />;
+	return <ImageGallery images={images} />;
 };
 let DefaultPre = defaultComponents.pre!;
 

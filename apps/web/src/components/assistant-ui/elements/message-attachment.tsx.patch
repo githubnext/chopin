@@ -1,0 +1,68 @@
+--- a/apps/web/src/components/assistant-ui/elements/message-attachment.tsx
++++ b/apps/web/src/components/assistant-ui/elements/message-attachment.tsx
+@@ -1,6 +1,6 @@ ReactNode for the item's slots
+ "use client";
+ 
+-import type { ComponentProps } from "react";
++import type { ComponentProps, ReactNode } from "react";
+ import { FileTextIcon, ImageIcon, PaperclipIcon } from "lucide-react";
+ import { cn } from "@/lib/utils";
+ import { field, mono, paper } from "./surfaces";
+@@ -12,6 +12,12 @@ Item slots for a file type's own icon, its type beside the size, and the actions a surface offers for it
+   kind: "image" | "document" | "file";
+   pages?: number;
+   swatch?: string;
++  /** Drawn in the box of the icon in place of the icon of its kind. */
++  icon?: ReactNode;
++  /** Drawn before the size, on its line. */
++  detail?: ReactNode;
++  /** Drawn beside the file, over it: what a surface offers for it besides opening it. */
++  actions?: ReactNode;
+ }
+ 
+ export function MessageAttachments({
+@@ -58,17 +64,18 @@ Draw a given icon in the icon box in place of the kind's
+           ) : (
+             <>
+               <span className="bg-background/70 text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
+-                {item.kind === "document" ? (
++                {item.icon ?? (item.kind === "document" ? (
+                   <FileTextIcon className="size-3.5" />
+                 ) : (
+                   <PaperclipIcon className="size-3.5" />
+-                )}
++                ))}
+               </span>
+               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                 <span className="text-foreground/90 truncate text-[13.5px]">
+                   {item.name}
+                 </span>
+                 <span className={cn(mono, "text-muted-foreground")}>
++                  {item.detail}
+                   {item.size}
+                   {item.pages !== undefined && ` · ${item.pages} pages`}
+                 </span>
+@@ -85,7 +92,7 @@ Draw the given detail before the size
+               ),
+         );
+ 
+-        return onOpen ? (
++        const element = onOpen ? (
+           <button
+             key={item.id}
+             type="button"
+@@ -99,6 +106,14 @@ Keep a file's actions beside it, outside the button that opens it
+             {content}
+           </div>
+         );
++        return item.actions ? (
++          <div key={item.id} data-slot="message-attachment" data-kind={item.kind}>
++            {element}
++            {item.actions}
++          </div>
++        ) : (
++          element
++        );
+       })}
+     </div>
+   );

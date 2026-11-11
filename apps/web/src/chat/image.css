@@ -1,25 +1,81 @@
 /*
- * Chat's wrapper layout around assistant-ui's copied `Image` and `ImageGallery` elements
- * (`components/assistant-ui/elements/image.tsx` and `image-gallery.tsx`). All frame borders, soft
- * tile fills, radii, button sizes and dialog chrome come from the copied elements themselves.
+ * Chat's images, drawn the way Slack draws them, around assistant-ui's copied `Image` and
+ * `ImageGallery` elements (`components/assistant-ui/elements/image.tsx` and `image-gallery.tsx`).
+ * The copies keep their structure and behaviour; these unlayered rules give them Slack's
+ * proportions and Chopin's colours, as the message rows' toolbar does. Each value's source is in
+ * the pull request that set it: Slack's web client CSS (`.p-file_image_thumbnail__wrapper`, 1px
+ * edge at 13%, 8px corners, `zoom-in`; `.c-file__actions--image`, 10px from the top and end,
+ * fading in over 100ms; `.c-message_kit__file__meta`, the line above an image, 4px below it) and
+ * Slack's thumbnail sizes (`thumb_480` wide and `thumb_360` tall bound an image in a message).
  */
 
 .chat-image {
+	--image-edge: var(--color-button-outline-edge);
 	position: relative;
+	display: flex;
+	flex-direction: column;
 	min-inline-size: 0;
-	inline-size: 100%;
-	max-inline-size: 24rem;
+	inline-size: min(100%, 480px);
 	margin: 0;
 }
 
-.chat-image[data-sized] {
-	inline-size: min(100%, 24rem, calc(28rem * var(--image-width, 4) / var(--image-height, 3) + 2px));
+/*
+ * An image of a known shape is drawn at it, inside Slack's 480 by 360 and never larger than it is.
+ * Only the frame takes its size, so the name above and the caption below keep the message's width.
+ */
+/* The stage is the image's own box: its frame, and its toolbar over it. */
+.chat-image-stage {
+	position: relative;
+	container: chat-image / inline-size;
+	inline-size: min(100%, calc(360px + var(--edge-width) * 2));
+	max-inline-size: 100%;
+}
+
+.chat-image[data-sized] .chat-image-stage {
+	inline-size: min(100%, calc(var(--image-box, 360px) + var(--edge-width) * 2));
+}
+
+/* A placeholder is never too small to say what happened, however small the image was. */
+.chat-image[data-load="broken"] .chat-image-stage {
+	min-inline-size: min(100%, 160px);
+}
+
+.chat-image[data-load="broken"] [data-slot="image-preview"] {
+	min-block-size: 96px;
 }
 
 .chat-image-anchor {
 	position: absolute;
 	inset: 0;
 	pointer-events: none;
+}
+
+.chat-image-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: calc(var(--spacing) * 2);
+	min-inline-size: 0;
+	margin-block-end: var(--spacing);
+	overflow-wrap: anywhere;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+.chat-image-generated {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--spacing);
+	font-size: var(--text-2xs);
+	line-height: var(--text-2xs--line-height);
+}
+
+.chat-image .chat-image-frame {
+	max-inline-size: none;
+	border: var(--edge-width) solid var(--image-edge);
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
 }
 
 .chat-image[data-sized] [data-slot="image-preview"] {
@@ -30,26 +86,150 @@
 	cursor: zoom-in;
 }
 
-/* Hold the neutral 128px box while an unsized image is still loading, even after its header arrives. */
-.chat-image:not([data-sized])[data-load="loading"] [data-slot="image-preview"] {
-	block-size: calc(var(--spacing) * 32);
+/*
+ * Slack's quiet box stands where the image will be. One whose shape is not known yet holds a 3:2
+ * box of 360px, and keeps it if the image never arrives, so nothing moves when it settles.
+ */
+.chat-image:not([data-sized]):not([data-load="shown"]) [data-slot="image-preview"] {
+	block-size: 240px;
+	min-block-size: 0;
 	overflow: hidden;
 }
 
-/*
- * An image that is never loaded, or that failed where its shape was never known, needs no measured
- * aspect ratio, only the element's error box. One whose shape was measured keeps its frame.
- */
-.chat-image:is(:not([data-sized])[data-load="broken"], :has([data-chat-image-broken="unavailable"]))
-	[data-slot="image-preview"] {
-	aspect-ratio: auto;
+.chat-image [data-slot="image-preview-loading"],
+.chat-image [data-slot="image-preview-error"] {
+	background: var(--color-inset);
+}
+
+.chat-image [data-slot="image-preview-loading"] svg,
+.chat-image [data-slot="image-preview-error"] > svg {
+	inline-size: calc(var(--spacing) * 6);
+	block-size: calc(var(--spacing) * 6);
+	color: var(--color-icon);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chat-image [data-slot="image-preview-loading"] svg {
+		animation: none;
+	}
+}
+
+/* Slack's placeholder: its glyph, what happened, and the image's name, in the image's own box. */
+.chat-image [data-slot="image-preview-error"] {
+	flex-direction: column;
+	gap: calc(var(--spacing) * 2);
+	min-block-size: 0;
+	block-size: 100%;
+	padding: calc(var(--spacing) * 4);
+	text-align: center;
+}
+
+.chat-image-error {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--spacing) * 0.5);
+	max-inline-size: 100%;
+	overflow-wrap: anywhere;
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
 }
 
 .chat-image-error-label {
-	margin-inline-start: calc(var(--spacing) * 2);
+	color: var(--color-text-secondary);
+	font-weight: 500;
+}
+
+/* The image's own toolbar, on the image, as Slack's is: the message's toolbar stays on its row. */
+.chat-image-actions-slot {
+	position: absolute;
+	inset-block-start: 10px;
+	inset-inline-end: 10px;
+	z-index: 1;
+	opacity: 0;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.chat-image:hover .chat-image-actions-slot,
+.chat-image-actions-slot:focus-within {
+	opacity: 1;
+}
+
+.chat-image-actions-slot[inert] {
+	visibility: hidden;
+}
+
+/* An image narrower than its toolbar keeps the toolbar beside it, so it never covers the picture. */
+@container chat-image (max-width: 160px) {
+	.chat-image-actions-slot {
+		inset-block-start: 0;
+		inset-inline-start: calc(100% + var(--spacing) * 2);
+		inset-inline-end: auto;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chat-image-actions-slot {
+		transition: none;
+	}
+}
+
+.chat-image-actions-slot [data-slot="image-actions"],
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header]) [data-slot="image-actions"] {
+	gap: 0;
+	padding: 2px;
+}
+
+.chat-image-actions-slot [data-slot="image-actions"] {
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	box-shadow: var(--shadow-resting-strong);
+	outline: var(--edge-width) solid var(--color-edge);
+}
+
+.chat-image-actions-slot [data-slot="image-actions"] > :is(button, a),
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header])
+	[data-slot="image-actions"]
+	> :is(button, a) {
+	inline-size: calc(var(--spacing) * 8);
+	block-size: calc(var(--spacing) * 8);
+	border-radius: var(--radius-sm);
+	color: var(--color-text-secondary);
+}
+
+.chat-image-text {
+	margin-block-start: calc(var(--spacing) * 1.5);
+	overflow-wrap: anywhere;
 	color: var(--color-text-tertiary);
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
+}
+
+/* Several images: Slack's grid of two, three (one tall beside two) or four, 4px apart. */
+[data-chat-image-gallery] {
+	max-inline-size: 480px;
+}
+
+[data-chat-image-gallery] > div {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--spacing);
+}
+
+[data-chat-image-gallery] [data-chat-image="tile"] {
+	border-radius: var(--radius-lg);
+	background: var(--color-inset);
+	outline: var(--edge-width) solid var(--color-button-outline-edge);
+	outline-offset: calc(var(--edge-width) * -1);
+	scale: none;
+	cursor: zoom-in;
+}
+
+[data-chat-image-gallery] [data-chat-image="tile"][data-load="broken"] {
+	cursor: default;
+}
+
+[data-chat-image-gallery][data-shape="trio"] > div > [data-chat-image="tile"]:first-child {
+	grid-row: span 2;
+	aspect-ratio: auto;
 }
 
 .chat-image-tile-error {
@@ -60,42 +240,13 @@
 	margin-inline-start: calc(var(--spacing) * 2);
 	text-align: start;
 	overflow-wrap: anywhere;
+	color: var(--color-text-secondary);
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);
 }
 
 .chat-image-tile-error-alt {
-	color: var(--color-text-secondary);
-}
-
-/* Reserve the action bar's height while the image loads so nothing shifts when it arrives. */
-.chat-image-actions-slot[inert] {
-	visibility: hidden;
-}
-
-.chat-image-caption {
-	display: flex;
-	flex-direction: column;
-	gap: calc(var(--spacing) * 0.5);
-	min-inline-size: 0;
-	margin-block-start: calc(var(--spacing) * 1.5);
-	overflow-wrap: anywhere;
-	color: var(--color-text-secondary);
-	font-size: var(--text-xs);
-	line-height: var(--text-xs--line-height);
-}
-
-.chat-image-text {
 	color: var(--color-text-tertiary);
-}
-
-.chat-image-generated {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--spacing);
-	color: var(--color-text-tertiary);
-	font-size: var(--text-2xs);
-	line-height: var(--text-2xs--line-height);
 }
 
 .chat-markdown :is(.chat-image, [data-chat-image-gallery]) {
@@ -134,4 +285,186 @@
 
 .chat-markdown > :is(.chat-image, [data-chat-image-gallery]):first-child {
 	margin-block-start: 0;
+}
+
+/*
+ * The viewer: Slack's full-screen image viewer on Chopin's ink ground, with who sent the image and
+ * when along its top, the image in the middle, the arrows at the window's edges and the keys.
+ */
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header]) {
+	--viewer-ink: var(--color-page);
+	--viewer-muted: color-mix(in oklch, var(--color-page) 70%, transparent);
+	--viewer-control: color-mix(in oklch, var(--color-page) 12%, transparent);
+	--viewer-control-hover: color-mix(in oklch, var(--color-page) 20%, transparent);
+	/* Slack's viewer fades in; it does not grow from the middle. */
+	--tw-enter-scale: 1;
+	inset: 0;
+	translate: none;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+	gap: 0;
+	inline-size: 100%;
+	max-inline-size: none;
+	block-size: 100dvh;
+	padding: 0;
+	padding-block-end: env(safe-area-inset-bottom, 0px);
+	border-radius: 0;
+	background: var(--color-text-primary);
+	box-shadow: none;
+	color: var(--viewer-ink);
+}
+
+.chat-viewer-header {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 3);
+	min-inline-size: 0;
+	min-block-size: calc(var(--spacing) * 16);
+	padding-block: calc(var(--spacing) * 3);
+	padding-inline: calc(env(safe-area-inset-left, 0px) + var(--spacing) * 5)
+		calc(env(safe-area-inset-right, 0px) + var(--spacing) * 44);
+	padding-block-start: calc(env(safe-area-inset-top, 0px) + var(--spacing) * 3);
+}
+
+.chat-viewer-face {
+	display: flex;
+	flex: none;
+}
+
+.chat-viewer-who {
+	display: flex;
+	flex-direction: column;
+	min-inline-size: 0;
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+}
+
+.chat-viewer-name {
+	overflow: hidden;
+	font-weight: 700;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.chat-viewer-detail {
+	display: flex;
+	flex-wrap: wrap;
+	column-gap: calc(var(--spacing) * 2);
+	min-inline-size: 0;
+	color: var(--viewer-muted);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+.chat-viewer-note {
+	white-space: nowrap;
+}
+
+.chat-viewer-file {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* The picture, between the header and the footer, with room either side for the arrows. */
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header]) > [data-slot="dialog-title"] + div {
+	min-block-size: 0;
+	padding-inline: calc(var(--spacing) * 18);
+}
+
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header])
+	> [data-slot="dialog-title"]
+	+ div img {
+	max-block-size: 100%;
+}
+
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header])
+	> [data-slot="dialog-title"]
+	+ div > div {
+	block-size: 100%;
+	color: var(--viewer-muted);
+}
+
+/* The footer: the caption and the place in the message, with the arrows lifted to the edges. */
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header])
+	> [data-slot="dialog-title"]
+	+ div + div {
+	justify-content: center;
+	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 5) calc(var(--spacing) * 4);
+	color: var(--viewer-muted);
+	font-size: var(--text-xs);
+}
+
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header])
+	> [data-slot="dialog-title"]
+	+ div + div > div {
+	flex: 0 1 auto;
+}
+
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header]) :is(p, span, a) {
+	color: inherit;
+}
+
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header])
+	> [data-slot="dialog-title"]
+	+ div + div > button:is([aria-label="Previous image"], [aria-label="Next image"]) {
+	position: absolute;
+	inset-block-start: 50%;
+	inline-size: calc(var(--spacing) * 10);
+	block-size: calc(var(--spacing) * 10);
+	translate: 0 -50%;
+	border-radius: var(--radius-full);
+	background: var(--viewer-control);
+	color: var(--viewer-ink);
+}
+
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header])
+	> [data-slot="dialog-title"]
+	+ div + div > button[aria-label="Previous image"] {
+	inset-inline-start: calc(env(safe-area-inset-left, 0px) + var(--spacing) * 4);
+}
+
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header])
+	> [data-slot="dialog-title"]
+	+ div + div > button[aria-label="Next image"] {
+	inset-inline-end: calc(env(safe-area-inset-right, 0px) + var(--spacing) * 4);
+}
+
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header]) button:hover:not(:disabled),
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header]) a:hover {
+	background: var(--viewer-control-hover);
+}
+
+/* Download and copy sit in the top bar beside close, where Slack's viewer keeps them. */
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header]) [data-slot="image-actions"] {
+	position: absolute;
+	inset-block-start: calc(env(safe-area-inset-top, 0px) + var(--spacing) * 4);
+	inset-inline-end: calc(env(safe-area-inset-right, 0px) + var(--spacing) * 13);
+}
+
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header])
+	[data-slot="image-actions"]
+	> :is(button, a) {
+	color: var(--viewer-ink);
+}
+
+[data-slot="dialog-content"]:has(> [data-chat-viewer-header]) > [data-slot="dialog-close"] {
+	inset-block-start: calc(env(safe-area-inset-top, 0px) + var(--spacing) * 4);
+	inset-inline-end: calc(env(safe-area-inset-right, 0px) + var(--spacing) * 4);
+	inline-size: calc(var(--spacing) * 8);
+	block-size: calc(var(--spacing) * 8);
+	color: var(--viewer-ink);
+}
+
+@media (max-width: 600px) {
+	[data-slot="dialog-content"]:has(> [data-chat-viewer-header]) > [data-slot="dialog-title"] + div {
+		padding-inline: 0;
+	}
+
+	[data-slot="dialog-content"]:has(> [data-chat-viewer-header])
+		> [data-slot="dialog-title"]
+		+ div + div > button:is([aria-label="Previous image"], [aria-label="Next image"]) {
+		inset-block-start: auto;
+		inset-block-end: calc(env(safe-area-inset-bottom, 0px) + var(--spacing) * 2);
+		translate: none;
+	}
 }

@@ -40,7 +40,7 @@
 			"version": "assistant-ui/assistant-ui@437b410726e2",
 			"sha256": "059480306d8ec9461efb1c34929c16db6a980dcb3c9ba7c03baff7fa7dd7c20d",
 			"patch": "apps/web/src/components/assistant-ui/elements/image-gallery.tsx.patch",
-			"patchSha256": "a6ce47a8c4bb57baa4755fe64ad38488438e7446b86d0185d34b0804d5770636"
+			"patchSha256": "8f93f1143d0665875e3457dad355a7151eb58504d45ab85ec0487a48e33a25d6"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/elements/image.tsx",
@@ -74,7 +74,9 @@
 			"registry": "@assistant-ui",
 			"item": "elements-message-attachment",
 			"version": "assistant-ui/assistant-ui@ec601b37f6b6",
-			"sha256": "d577a91802b3caa44e4f1e9d2e2948893b5761c53b4654ef5d94ea66f9f1f30c"
+			"sha256": "d577a91802b3caa44e4f1e9d2e2948893b5761c53b4654ef5d94ea66f9f1f30c",
+			"patch": "apps/web/src/components/assistant-ui/elements/message-attachment.tsx.patch",
+			"patchSha256": "dcf225e121794dc819706cf70a95b639b3a821a12075c555e21a3e6a77116178"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/elements/model-selector.tsx",

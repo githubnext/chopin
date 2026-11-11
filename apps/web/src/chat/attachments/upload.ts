@@ -75,6 +75,8 @@ export type UploadInput = {
 	signal?: AbortSignal;
 	/** 0 to 100, as the bytes go. */
 	onProgress?: (percent: number) => void;
+	/** What an image was before a smaller copy of it was made to send. */
+	original?: { bytes: number; width: number; height: number };
 	request?: () => UploadRequest;
 };
 
@@ -103,7 +105,11 @@ export function uploadFile(input: UploadInput): Promise<Chat.Attachment> {
 	let { channelId, file, name } = input;
 	return new Promise((resolve, reject) => {
 		let request = (input.request ?? (() => new XMLHttpRequest() as unknown as UploadRequest))();
-		let query = `name=${encodeURIComponent(name)}&type=${encodeURIComponent(file.type)}`;
+		let query = `name=${encodeURIComponent(name)}&type=${encodeURIComponent(file.type)}${
+			input.original
+				? `&original=${input.original.bytes}x${input.original.width}x${input.original.height}`
+				: ""
+		}`;
 		request.open("POST", `${attachmentsPath(channelId)}?${query}`);
 		request.setRequestHeader("content-type", "application/octet-stream");
 		request.upload.addEventListener("progress", event => {

@@ -32,6 +32,7 @@ import {
 	SparklesIcon,
 } from "lucide-react";
 
+import { formatBytes } from "@chopin/protocol/attachment";
 import { ImageActions, ImagePreview, ImageRoot } from "@/components/assistant-ui/elements/image";
 import { ImageGallery as GalleryElement } from "@/components/assistant-ui/elements/image-gallery";
 import { hostOf } from "@/components/assistant-ui/utils/href";
@@ -53,6 +54,7 @@ import {
 import { useExternalRead } from "./image-read";
 import { dataImageSize } from "./image-size";
 import { loadLocalImage } from "./local-image";
+import { copyWidth, fittedBox, placeholderOf, thumbnailUrl, VIEWER_WIDTH } from "./media/layout";
 import "./image.css";
 
 import type { ComponentProps, CSSProperties, ReactNode, SyntheticEvent } from "react";
@@ -67,6 +69,8 @@ export type ChatImageData = {
 	height?: number;
 	generated?: boolean;
 	mimeType?: string;
+	/** What the image was before its sender's browser sent a smaller copy of it. */
+	original?: { size: number; width: number; height: number };
 };
 
 const DocumentContext = createContext<string | undefined>(undefined);
@@ -101,13 +105,34 @@ function compareEntries(
 		: 1;
 }
 
-export function MessageImages({ children }: { children: ReactNode }) {
+/** Who sent a message's images and when, for the top of the viewer, as Slack's viewer shows. */
+export type ImageSender = { name: string; face: ReactNode; time?: string };
+
+export function MessageImages(
+	{ children, sender }: { children: ReactNode; sender?: ImageSender },
+) {
 	let entries = useRef(new Map<string, RegisteredImage>());
 	let lastOpener = useRef<HTMLElement | null>(null);
 	let [view, setView] = useState<{
 		activeId: string;
 		entries: Array<[string, RegisteredImage]>;
 	}>();
+
+	// Pressing the dark ground around the image closes the viewer, as Slack's does.
+	let viewing = view !== undefined;
+	useEffect(() => {
+		if (!viewing) return;
+		let onClick = (event: MouseEvent) => {
+			let target = event.target as Element | null;
+			if (
+				target?.matches(
+					'[data-slot="dialog-content"]:has(> [data-chat-viewer-header]), [data-slot="dialog-content"]:has(> [data-chat-viewer-header]) > [data-slot="dialog-title"] + div',
+				)
+			) setView(undefined);
+		};
+		document.addEventListener("click", onClick);
+		return () => document.removeEventListener("click", onClick);
+	}, [viewing]);
 
 	useEffect(() => {
 		if (view !== undefined) return;
@@ -149,10 +174,36 @@ export function MessageImages({ children }: { children: ReactNode }) {
 							</>
 						);
 					}}
+					dialogHeader={(_, index) => {
+						let [, entry] = view.entries[index]!;
+						return (
+							<div className="chat-viewer-header" data-chat-viewer-header="">
+								{sender && (
+									<span aria-hidden="true" className="chat-viewer-face">{sender.face}</span>
+								)}
+								<span className="chat-viewer-who">
+									{sender && <span className="chat-viewer-name">{sender.name}</span>}
+									<span className="chat-viewer-detail">
+										{sender?.time && <span>{sender.time}</span>}
+										<span className="chat-viewer-file">{entry.label}</span>
+										{entry.data.original && (
+											<span className="chat-viewer-note">
+												Shown smaller. The original was {formatBytes(entry.data.original.size)},
+												{" "}
+												{entry.data.original.width} × {entry.data.original.height}.
+											</span>
+										)}
+									</span>
+								</span>
+							</div>
+						);
+					}}
 					hideGrid
 					images={view.entries.map(([key, entry]) => ({
 						id: key,
-						src: entry.shown.url,
+						src: entry.shown.source.kind === "hosted"
+							? thumbnailUrl(entry.shown.url, VIEWER_WIDTH)
+							: entry.shown.url,
 						alt: entry.label,
 						caption: entry.data.caption || entry.label,
 						imgProps: { referrerPolicy: "no-referrer" },
@@ -237,9 +288,10 @@ function useFrameImage(image: ChatImageData, source: ImageSource): ChatImageData
 	return size ? { ...image, ...size } : image;
 }
 
-function ImageCaption({ image, label }: { image: ChatImageData; label: string }) {
+/** Slack's line above an image: its name (the alt text, or an attachment's file name). */
+function ImageMeta({ image, label }: { image: ChatImageData; label: string }) {
 	return (
-		<figcaption className="chat-image-caption">
+		<span className="chat-image-meta">
 			{/* The picture, or its fallback where none is drawn, already names it to a screen reader, so the visible words are hidden from it. */}
 			<span aria-hidden="true" className="chat-image-alt">{label}</span>
 			{image.generated && image.alt?.trim() && (
@@ -248,8 +300,7 @@ function ImageCaption({ image, label }: { image: ChatImageData; label: string })
 					Generated
 				</span>
 			)}
-			{image.caption && <span className="chat-image-text">{image.caption}</span>}
-		</figcaption>
+		</span>
 	);
 }
 
@@ -471,17 +522,28 @@ function useImageEntry(
 	return { id, label, pending: local.pending, source, type: local.type, url };
 }
 
+export function screenDensity(): number {
+	return typeof devicePixelRatio === "number" ? devicePixelRatio : 1;
+}
+
+/** Slack's bounds for an image in a message: its `thumb_480` width and `thumb_360` height. */
+const MESSAGE_BOUNDS = { width: 480, height: 360 };
+
 export function SingleImage({ host, image }: { host: ImageHost; image: ChatImageData }) {
 	let anchor = useRef<HTMLSpanElement>(null);
 	let { id, label, pending, source, type, url } = useImageEntry(host, image, anchor);
 	let { image: preview, load, natural, onError, onLoad } = useLoad(url, pending);
 	let framed = framedImage(useFrameImage(image, source), natural);
 	let ratio = frameRatio(framed.width, framed.height);
+	let box = ratio ? fittedBox(framed.width!, framed.height!, MESSAGE_BOUNDS) : undefined;
 	let [engaged, setEngaged] = useState(false);
-	let brokenMessage = source.kind === "unavailable"
-		? "Image can’t be shown"
-		: "Couldn’t load image";
-	let isBroken = source.kind === "unavailable" || load === "broken";
+	let placeholder = placeholderOf(source.kind === "unavailable" ? "unavailable" : "loadable", load);
+	let brokenMessage = placeholder && "words" in placeholder ? placeholder.words : undefined;
+	let isBroken = brokenMessage !== undefined;
+	// An upload is read at Slack's thumbnail widths; any other address is drawn as it is.
+	let copies = source.kind === "hosted" && url
+		? thumbnailUrl(url, copyWidth(MESSAGE_BOUNDS.width, screenDensity()))
+		: undefined;
 
 	return (
 		<figure
@@ -489,50 +551,66 @@ export function SingleImage({ host, image }: { host: ImageHost; image: ChatImage
 			data-chat-image="single"
 			data-generated={image.generated ? "" : undefined}
 			data-load={isBroken ? "broken" : load}
-			data-sized={ratio ? "" : undefined}
-			style={ratio
-				? { "--image-width": framed.width, "--image-height": framed.height } as CSSProperties
+			data-sized={box ? "" : undefined}
+			onFocus={() => setEngaged(true)}
+			onPointerEnter={() => setEngaged(true)}
+			style={box
+				? {
+					"--image-width": framed.width,
+					"--image-height": framed.height,
+					"--image-box": `${box.width}px`,
+				} as CSSProperties
 				: undefined}
 		>
 			<span className="chat-image-anchor" ref={anchor} />
-			<ImageRoot
-				onFocus={() => setEngaged(true)}
-				onPointerEnter={() => setEngaged(true)}
-				size="default"
-				variant="outline"
-			>
-				<ImagePreview
-					alt={label}
-					containerProps={{
-						"data-chat-image-frame": "",
-						onClick: !isBroken && url && load === "shown"
-							? event => {
-								let opener = event.currentTarget.parentElement?.querySelector<HTMLElement>(
-									'[data-chat-image-action="open"]',
-								) ?? event.currentTarget;
-								opener.focus({ preventScroll: true });
-								host.open(id, opener);
-							}
-							: undefined,
-					} as ComponentProps<typeof ImagePreview>["containerProps"]}
-					decoding="async"
-					errorChildren={<span className="chat-image-error-label">{brokenMessage}</span>}
-					errorProps={{
-						"aria-label": `${brokenMessage}: ${label}`,
-						"data-chat-image-broken": source.kind,
-						role: "img",
-					} as ComponentProps<typeof ImagePreview>["errorProps"]}
-					fit="contain"
-					loading="lazy"
-					loadingProps={url ? { "aria-hidden": "true" } : { "aria-label": label, role: "img" }}
-					onError={onError}
-					onLoad={onLoad}
-					ratio={ratio ? "custom" : "auto"}
-					ref={preview}
-					referrerPolicy="no-referrer"
-					src={source.kind === "unavailable" ? undefined : url}
-					status={isBroken ? "error" : load === "shown" ? "loaded" : "loading"}
-				/>
+			<ImageMeta image={image} label={label} />
+			<div className="chat-image-stage">
+				<ImageRoot
+					className="chat-image-frame"
+					size="default"
+					variant="outline"
+				>
+					<ImagePreview
+						alt={label}
+						containerProps={{
+							"data-chat-image-frame": "",
+							onClick: !isBroken && url && load === "shown"
+								? event => {
+									let opener = event.currentTarget.closest(".chat-image-stage")
+										?.querySelector<HTMLElement>('[data-chat-image-action="open"]')
+										?? event.currentTarget;
+									opener.focus({ preventScroll: true });
+									host.open(id, opener);
+								}
+								: undefined,
+						} as ComponentProps<typeof ImagePreview>["containerProps"]}
+						decoding="async"
+						errorChildren={
+							// The image's name is the line just above, as Slack's placeholder keeps it.
+
+
+								<span aria-hidden="true" className="chat-image-error">
+									<span className="chat-image-error-label">{brokenMessage}</span>
+								</span>
+
+						}
+						errorProps={{
+							"aria-label": `${brokenMessage}: ${label}`,
+							"data-chat-image-broken": source.kind,
+							role: "img",
+						} as ComponentProps<typeof ImagePreview>["errorProps"]}
+						fit="contain"
+						loading="lazy"
+						loadingProps={url ? { "aria-hidden": "true" } : { "aria-label": label, role: "img" }}
+						onError={onError}
+						onLoad={onLoad}
+						ratio={ratio ? "custom" : "auto"}
+						ref={preview}
+						referrerPolicy="no-referrer"
+						src={source.kind === "unavailable" || !url ? undefined : copies ?? url}
+						status={isBroken ? "error" : load === "shown" ? "loaded" : "loading"}
+					/>
+				</ImageRoot>
 				{!isBroken && (
 					<div
 						aria-hidden={load !== "shown" || undefined}
@@ -549,8 +627,8 @@ export function SingleImage({ host, image }: { host: ImageHost; image: ChatImage
 						/>
 					</div>
 				)}
-			</ImageRoot>
-			<ImageCaption image={image} label={label} />
+			</div>
+			{image.caption && <figcaption className="chat-image-text">{image.caption}</figcaption>}
 		</figure>
 	);
 }

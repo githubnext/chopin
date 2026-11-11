@@ -248,21 +248,23 @@ test("a gallery keeps a repeated image, an image without alt text and the reason
 		"![Same](https://example.invalid/a.png) ![Same](https://example.invalid/a.png) ![](https://example.invalid/b.png) ![nope](javascript:alert(1)) ![svg](data:image/svg+xml;base64,PHN2Zy8+)",
 	);
 
+	// Slack's grid holds four, and the last says how many more the viewer has.
 	expect(markup.match(/data-chat-image-gallery/g)).toHaveLength(1);
-	expect(markup.match(/data-chat-image="tile"/g)).toHaveLength(5);
+	expect(markup.match(/data-chat-image="tile"/g)).toHaveLength(4);
+	expect(markup).toContain('data-shape="quad"');
 	expect(tiles(markup)).toEqual([
 		"Same|https://example.invalid/a.png",
 		"Same|https://example.invalid/a.png",
 		"Image|https://example.invalid/b.png",
 	]);
-	expect(markup.match(/data-chat-image-broken="unavailable"/g)).toHaveLength(2);
+	expect(markup.match(/data-chat-image-broken="unavailable"/g)).toHaveLength(1);
 	expect(markup).toContain('aria-label="Image can’t be shown: nope"');
-	expect(markup).toContain('aria-label="Image can’t be shown: svg"');
+	expect(markup).toContain(">+1<");
 	expect(markup).not.toContain("javascript:");
 	expect(markup).not.toContain("svg+xml");
 });
 
-test("every image written together keeps its own tile however many there are, and raw HTML between them is still never drawn", () => {
+test("every image written together is one gallery, four tiles and the rest behind +N, and raw HTML between them is still never drawn", () => {
 	let markup = markdown(
 		`${
 			Array.from({ length: 8 }, (_, index) =>
@@ -272,11 +274,11 @@ test("every image written together keeps its own tile however many there are, an
 	);
 
 	expect(markup.match(/data-chat-image-gallery/g)).toHaveLength(1);
-	expect(markup.match(/data-chat-image="tile"/g)).toHaveLength(8);
+	expect(markup.match(/data-chat-image="tile"/g)).toHaveLength(4);
 	expect(tiles(markup).map(item => item.split("|")[0])).toEqual(
-		Array.from({ length: 8 }, (_, index) => `Pic ${index + 1}`),
+		Array.from({ length: 4 }, (_, index) => `Pic ${index + 1}`),
 	);
-	expect(markup).not.toContain("chat-image-more");
+	expect(markup).toContain(">+4<");
 	expect(markup).not.toContain("raw.png");
 });
 
@@ -426,7 +428,7 @@ test("a link containing only an empty-alt image is named by its title or destina
 
 test("a Markdown image's title is its caption on a single image, and a gallery keeps its tiles in order", () => {
 	let single = markdown('![alt text](https://example.invalid/u.png "The title of it")');
-	expect(single).toContain('<span class="chat-image-text">The title of it</span>');
+	expect(single).toContain('<figcaption class="chat-image-text">The title of it</figcaption>');
 
 	let gallery = markdown(
 		'![One](https://example.invalid/1.png "First caption") ![Two](https://example.invalid/2.png) ![Three][c]\n\n[c]: https://example.invalid/3.png "Third caption"',
