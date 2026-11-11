@@ -259,13 +259,12 @@ function MessageBody(
 	let delivery = own ? deliveryOf(message) : undefined;
 	let threadSummary = markers.threads?.summaries[message.id];
 	let rootOpen = markers.threads?.openRootId === message.id;
-	let hasAnalysisMarker = ANALYSIS && !message.queued && !!markers.onCardLink
+	let hasAnalysisMarker = ANALYSIS && !!markers.onCardLink
 		&& !!markers.onRetryAnalysis;
 	let canThread = !!markers.threads
 		&& !rootOpen
 		&& (!!threadSummary || markers.threads.canStart)
-		&& !message.queued && !message.streaming
-		&& delivery !== "waiting" && delivery !== "failed";
+		&& !message.streaming && delivery === undefined;
 
 	return (
 		<div

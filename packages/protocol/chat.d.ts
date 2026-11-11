@@ -523,7 +523,6 @@ export declare namespace Chat {
 		busy: boolean;
 		turn?: Turn;
 		runs?: Runs;
-		queued: Waiting[];
 		usage?: ContextUsage;
 		compactions?: CompactionRecord[];
 		compacting?: boolean;
@@ -562,8 +561,6 @@ export declare namespace Chat {
 		| Delta
 		| Tool
 		| State
-		| Queue
-		| Removed
 		| ContextState
 		| CompactionState;
 

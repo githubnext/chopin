@@ -23,7 +23,6 @@ describe("threadsReducer", () => {
 				forkedAt: 12,
 				entries: [],
 				busy: false,
-				queued: [],
 			},
 		});
 		expect(state.threads.m1?.loaded).toBe(true);
