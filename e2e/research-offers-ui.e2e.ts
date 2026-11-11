@@ -387,3 +387,113 @@ test(
 		}
 	},
 );
+
+test(
+	"accepted research draws its handoff and workers as an app attachment, then the research child speaks as a tagged app row",
+	async ({ baseURL, browser, room, seed }) => {
+		let spec: OfferSpec = {
+			id: "ui-delegation-stages",
+			brief: "Compare self-hosted search engines for SSO.",
+			status: "accepted",
+		};
+		let handle = "delegation-writer";
+		let { state, transcript } = offerSources([spec], handle);
+		await seed("# Research delegation stage fixture\n", { transcript });
+		await saveConversationState(room, state);
+		let socket: Awaited<ReturnType<typeof routeResearchNotification>> | undefined;
+		let isolated = await openIsolatedRoom(browser, baseURL!, room, handle, {}, async context => {
+			socket = await routeResearchNotification(context, false, false);
+		});
+
+		try {
+			let page = isolated.page;
+			let workspaceId = await seedRequest(room, spec, "linked", handle);
+			let child = await seedChildChannel(
+				port(baseURL!),
+				room,
+				crypto.randomUUID(),
+				"Self-hosted search report",
+				"# Self-hosted search report\n\nCompared three engines.\n",
+			);
+
+			let currentStage: "queued" | "writing" | "ready" = "queued";
+			await page.route(`**/api/channels/${room}/research-requests/**`, async route => {
+				let request = route.request();
+				let path = new URL(request.url()).pathname;
+				if (
+					request.method() === "GET"
+					&& path === `/api/channels/${room}/research-requests/${workspaceId}`
+				) {
+					let base = {
+						id: workspaceId,
+						channelId: room,
+						question: spec.brief,
+						sources: [],
+						createdAt: new Date().toISOString(),
+						updatedAt: new Date().toISOString(),
+					};
+					let payload: Research.RequestView = currentStage === "ready"
+						? {
+							...base,
+							state: "completed",
+							stage: "ready",
+							child: {
+								id: child.id,
+								slug: child.slug,
+								sourceCount: 2,
+								summary: "Compared three engines.",
+								title: "Self-hosted search report",
+							},
+						}
+						: {
+							...base,
+							state: currentStage === "queued" ? "pending" : "running",
+							stage: currentStage,
+						};
+					await route.fulfill({ json: payload });
+					return;
+				}
+				await route.continue();
+			});
+			socket!.notify(workspaceId);
+
+			let card = offerCard(page, spec.id);
+			let attachment = card.getByRole("group", { name: "Research handoff" });
+			await expect(attachment).toHaveAttribute("data-active", "");
+			let handoff = attachment.locator('[data-slot="agent-handoff"]');
+			let subagents = attachment.locator('[data-slot="subagent-list"]');
+			await expect(handoff).toBeVisible();
+			await expect(handoff).toContainText("Chopin");
+			await expect(handoff).toContainText("Research");
+			await expect(handoff).toContainText("Handing off the research brief to a child document.");
+			await expect(subagents).toBeVisible();
+			await expect(subagents.getByRole("progressbar")).toHaveCount(2);
+
+			currentStage = "writing";
+			await expect(subagents).toContainText("Write research report");
+			await expect(subagents.getByRole("progressbar")).toHaveCount(3);
+
+			currentStage = "ready";
+			await expect(subagents).toHaveCount(0);
+			await expect(attachment).not.toHaveAttribute("data-active");
+			await expect(handoff).toContainText("Published findings in a child document.");
+			let subagentSpeaker = card.locator('[data-speaker-kind="subagent"]');
+			await expect(subagentSpeaker).toBeVisible();
+			await expect(subagentSpeaker.locator("[data-speaker-name]")).toHaveText("Research");
+			await expect(subagentSpeaker.locator('[data-speaker-tag="subagent"]')).toHaveText("Subagent");
+			// The child's avatar stands in Slack's 36px gutter, where every speaker's does.
+			let avatar = await subagentSpeaker.locator("[data-app-avatar]").boundingBox();
+			expect([Math.round(avatar!.width), Math.round(avatar!.height)]).toEqual([36, 36]);
+			let text = await card.getByRole("group", { name: "Research handoff" }).boundingBox();
+			expect(Math.round(text!.x - avatar!.x)).toBe(44);
+			await expect(
+				subagentSpeaker.getByRole("button", {
+					name: "Open Self-hosted search report",
+					exact: true,
+				}),
+			).toBeVisible();
+		} finally {
+			await isolated.close();
+		}
+	},
+);
