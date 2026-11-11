@@ -100,23 +100,28 @@ item, upstream revision (the registry's repository at its main commit when it wa
 sha256 of its bytes, and the design contract fails if one is edited
 ([how](docs/assistant-ui.md)). Those on 2026-11-10:
 
-| File (under `apps/web/src/`)                          | Registry      | Item                       | Upstream revision                        |
-| ----------------------------------------------------- | ------------- | -------------------------- | ---------------------------------------- |
-| `components/assistant-ui/elements/model-selector.tsx` | @assistant-ui | `elements-model-selector`  | `assistant-ui/assistant-ui@d25a97a22f00` |
-| `components/assistant-ui/utils/model-selection.ts`    | @assistant-ui | `elements-model-selection` | `assistant-ui/assistant-ui@d25a97a22f00` |
-| `components/geometry.css`                             | tailwindcss   | `theme.css`                | `tailwindcss@4.3.0`                      |
-| `components/ui/button.tsx`                            | @shadcn       | `button`                   | `shadcn-ui/ui@8ab27715521c`              |
-| `components/ui/command.tsx`                           | @shadcn       | `command`                  | `shadcn-ui/ui@8ab27715521c`              |
-| `components/ui/dialog.tsx`                            | @shadcn       | `dialog`                   | `shadcn-ui/ui@8ab27715521c`              |
-| `components/ui/input-group.tsx`                       | @shadcn       | `input-group`              | `shadcn-ui/ui@8ab27715521c`              |
-| `components/ui/input.tsx`                             | @shadcn       | `input`                    | `shadcn-ui/ui@8ab27715521c`              |
-| `components/ui/popover.tsx`                           | @shadcn       | `popover`                  | `shadcn-ui/ui@8ab27715521c`              |
-| `components/ui/textarea.tsx`                          | @shadcn       | `textarea`                 | `shadcn-ui/ui@8ab27715521c`              |
-| `lib/utils.ts`                                        | @assistant-ui | `utils`                    | `assistant-ui/assistant-ui@d25a97a22f00` |
+| File (under `apps/web/src/`)                                 | Registry      | Item                       | Upstream revision                        |
+| ------------------------------------------------------------ | ------------- | -------------------------- | ---------------------------------------- |
+| `components/assistant-ui/elements/composer.tsx`              | @assistant-ui | `elements-composer`        | `assistant-ui/assistant-ui@d25a97a22f00` |
+| `components/assistant-ui/elements/model-selector.tsx`        | @assistant-ui | `elements-model-selector`  | `assistant-ui/assistant-ui@d25a97a22f00` |
+| `components/assistant-ui/elements/surfaces.tsx`              | @assistant-ui | `elements-surfaces`        | `assistant-ui/assistant-ui@d25a97a22f00` |
+| `components/assistant-ui/utils/model-selection.ts`           | @assistant-ui | `elements-model-selection` | `assistant-ui/assistant-ui@d25a97a22f00` |
+| `components/assistant-ui/utils/range.ts`                     | @assistant-ui | `elements-range`           | `assistant-ui/assistant-ui@d25a97a22f00` |
+| `components/assistant-ui/utils/useIsomorphicLayoutEffect.ts` | @assistant-ui | `elements-surfaces`        | `assistant-ui/assistant-ui@d25a97a22f00` |
+| `components/geometry.css`                                    | tailwindcss   | `theme.css`                | `tailwindcss@4.3.0`                      |
+| `components/ui/button.tsx`                                   | @shadcn       | `button`                   | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/command.tsx`                                  | @shadcn       | `command`                  | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/dialog.tsx`                                   | @shadcn       | `dialog`                   | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/input-group.tsx`                              | @shadcn       | `input-group`              | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/input.tsx`                                    | @shadcn       | `input`                    | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/popover.tsx`                                  | @shadcn       | `popover`                  | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/textarea.tsx`                                 | @shadcn       | `textarea`                 | `shadcn-ui/ui@8ab27715521c`              |
+| `lib/utils.ts`                                               | @assistant-ui | `utils`                    | `assistant-ui/assistant-ui@d25a97a22f00` |
 
 `components/geometry.css` is generated from Tailwind CSS's own `theme.css` (MIT, Tailwind Labs, Inc.)
 and holds only its values. The packages these files import, none copied, are `cmdk` (MIT),
-`class-variance-authority` (Apache-2.0), `cn` (MIT), `lucide-react` (ISC) and `tw-animate-css` (MIT),
+`class-variance-authority` (Apache-2.0), `cn` (MIT), `lucide-react` (ISC), `tw-animate-css` (MIT) and
+`tw-shimmer` (MIT, assistant-ui's own, for `surfaces.tsx`'s shimmer),
 beside the `@base-ui/react` Chopin already used. The adaptations above that were written by hand from
 assistant-ui's source (the banners, model picker and MarkdownText) are unchanged, and are replaced by
 copies as their elements are migrated.

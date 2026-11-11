@@ -58,7 +58,6 @@ export function ComposerMenu(props: MenuProps) {
 			data-chat-model-picker={props.variant === "models" ? "" : undefined}
 			data-focus-boundary=""
 			data-menu-enter=""
-			data-slot="composer-menu"
 			data-variant={props.variant}
 			id={props.id}
 			onBlur={props.onBlur}
@@ -95,7 +94,6 @@ export function ComposerMenuItem(props: ItemProps) {
 			className="composer-menu-item menu-item"
 			data-active={props.active || undefined}
 			data-press={props["data-press"]}
-			data-slot="composer-menu-item"
 			data-variant={props.variant}
 			id={props.id}
 			onClick={props.onClick}
@@ -137,7 +135,6 @@ export function ComposerModelTrigger(props: TriggerProps) {
 			aria-label={props["aria-label"]}
 			className="composer-model-trigger btn btn-sm btn-ghost"
 			data-press="none"
-			data-slot="composer-model-trigger"
 			onClick={props.onClick}
 			title={props.title}
 			type="button"

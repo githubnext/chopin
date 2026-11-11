@@ -12,8 +12,9 @@ assistant-ui ships each element twice. The **standalone** lane, `elements-<name>
 callbacks; the **connected** lane, `<name>`, reads a runtime. Copy the standalone one. Where an
 element has only a connected form, or the connected one cannot express Chopin's state (one thread,
 several authors, a queue the server keeps), say so in the pull request and draw it from props
-instead of adding the runtime. The model selector, `elements-model-selector`, is the first one
-copied.
+instead of adding the runtime. The model selector, `elements-model-selector`, was the first one
+copied, and the composer, `elements-composer`, with the `surfaces` recipes and `range` helper it
+stands on, is Chat's composer shell.
 
 ## Add it
 
