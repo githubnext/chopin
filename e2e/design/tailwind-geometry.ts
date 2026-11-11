@@ -77,6 +77,11 @@ export function expected(className: string): Geometry {
 		let width = /^w-(.+)$/.exec(item)?.[1];
 		if (size && step(size) !== undefined) result.height = result.width = step(size);
 		if (height && step(height) !== undefined) result.height = step(height);
+		// A minimum is the height of a box with less than that inside it, which is what the audit draws.
+		let least = /^min-h-(.+)$/.exec(item)?.[1];
+		if (least && step(least) !== undefined && !classes.some(other => /^(h|size)-/.test(other))) {
+			result.height = step(least);
+		}
 		if (width && step(width) !== undefined) result.width = step(width);
 		let gap = /^gap-(.+)$/.exec(item)?.[1];
 		if (gap && step(gap) !== undefined) result.gap = step(gap);

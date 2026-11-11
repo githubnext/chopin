@@ -79,6 +79,11 @@ const ROOTS = {
 		"composer-menu",
 		"composer-menu-item",
 		"directive-text-chip",
+		"composer-attachments",
+		"composer-attachment",
+		"composer-voice",
+		"composer-voice-button",
+		"message-attachments",
 	],
 	open: [
 		"model-selector-content",
@@ -92,8 +97,13 @@ const ROOTS = {
 		"model-selector-effort",
 	],
 } as const;
+/** What a staged chip's picture box and a sent file's tiles are, which the roots above hold. */
+const BOXES = [
+	'[data-slot="composer-attachment"] > span:first-child',
+	'[data-slot="message-attachments"] > *',
+] as const;
 const TARGETS =
-	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"]';
+	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button';
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 const effortRadios = (page: Page) => slot(page, "model-selector-effort").getByRole("radio");
 
@@ -120,6 +130,15 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 			checked++;
 		}
 	}
+	// The box of a chip's icon, and the tiles of a sent message's files, which the roots hold.
+	for (let selector of BOXES) {
+		let boxes = plate(page, "assistant-ui").locator(selector);
+		expect(await boxes.count(), `${selector} is drawn`).toBeGreaterThan(1);
+		for (let index = 0; index < await boxes.count(); index++) {
+			await expectClassGeometry(boxes.nth(index), selector);
+			checked++;
+		}
+	}
 	await openSelector(page);
 	for (let name of ROOTS.open) {
 		let elements = slot(page, name);
@@ -135,7 +154,7 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 		await expectClassGeometry(radios.nth(index), "effort radio");
 		checked++;
 	}
-	expect(checked).toBe(28);
+	expect(checked).toBe(52);
 });
 
 test("assistant-ui's own radii, in pixels, where Chopin's scale differs", async ({ page }) => {
@@ -294,4 +313,67 @@ test("the message box is an 8px box with a 1px border, 28px controls with 16px i
 		return [style.content, Number.parseFloat(style.width), Number.parseFloat(style.height)];
 	});
 	expect(after).toEqual(['""', 44, 44]);
+});
+
+/**
+ * The slots the box fills from the hooks: the `+` is one of its 28px ghost buttons, the files it
+ * stages (assistant-ui's chips) and the voice it listens with sit inside the box above the text, and
+ * the microphone (assistant-ui's own 32px round button) is in the bottom row with the other controls.
+ */
+test("the + is a 28px ghost button in the row; the staged files and the voice are inside the box above the text; the microphone is in the row", async ({ page }) => {
+	let staged = plate(page, "chat").locator(".chat-composer").filter({
+		has: page.locator(".composer-staging [data-slot='composer-attachment']"),
+	}).first();
+	await staged.scrollIntoViewIfNeeded();
+	let box = (await staged.locator(".composer-surface").boundingBox())!;
+	let row = (await staged.locator(".composer-row").boundingBox())!;
+	let field = (await staged.locator(".composer-field").boundingBox())!;
+
+	let plus = staged.getByRole("button", { name: "Add files", exact: true });
+	await expect(plus).toBeVisible();
+	let sized = await measure(plus);
+	expect([sized.width, sized.height]).toEqual([28, 28]);
+	expect(sized.radius).toBe(6);
+	expect(
+		await plus.locator("svg").evaluate(node => [node.clientWidth, node.clientHeight]),
+	).toEqual([16, 16]);
+	let at = (await plus.boundingBox())!;
+	expect(at.y).toBeGreaterThanOrEqual(row.y);
+	expect(at.y + at.height).toBeLessThanOrEqual(row.y + row.height);
+
+	// The chips are in the box, above the field, and below nothing else of the draft's.
+	let chips = staged.locator(".composer-staging [data-slot='composer-attachment']");
+	expect(await chips.count()).toBe(3);
+	for (let index = 0; index < 3; index++) {
+		let chip = (await chips.nth(index).boundingBox())!;
+		expect(chip.x, `chip ${index} is inside the box`).toBeGreaterThanOrEqual(box.x);
+		expect(chip.x + chip.width, `chip ${index} is inside the box`).toBeLessThanOrEqual(
+			box.x + box.width + 0.5,
+		);
+		expect(chip.y + chip.height, `chip ${index} is above the text`).toBeLessThanOrEqual(field.y);
+	}
+
+	// The microphone is the element's own 32px round button, in the row beside the other controls.
+	let mic = staged.getByRole("button", { name: "Dictate", exact: true });
+	let round = await measure(mic);
+	expect([round.width, round.height]).toEqual([32, 32]);
+	expect(round.radius).toBeGreaterThan(1000);
+	let micAt = (await mic.boundingBox())!;
+	expect(micAt.y).toBeGreaterThanOrEqual(row.y);
+	expect(micAt.y + micAt.height).toBeLessThanOrEqual(row.y + row.height);
+	expect(micAt.x).toBeGreaterThan(at.x);
+
+	// Listening shows the element's voice above the text, 44px tall, with its clock in whole minutes.
+	let listening = plate(page, "chat").locator(".chat-composer").filter({
+		has: page.locator("[data-slot='composer-voice']"),
+	}).first();
+	await listening.scrollIntoViewIfNeeded();
+	let voice = listening.locator("[data-slot='composer-voice']");
+	let heard = (await voice.boundingBox())!;
+	expect(heard.height).toBe(44);
+	expect(heard.y + heard.height).toBeLessThanOrEqual(
+		(await listening.locator(".composer-field").boundingBox())!.y,
+	);
+	await expect(voice).toContainText("1:05");
+	await expect(voice).toHaveAttribute("data-recording", "true");
 });
