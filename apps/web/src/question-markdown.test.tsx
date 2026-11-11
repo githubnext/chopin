@@ -9,6 +9,15 @@ import type { QuestionViewProps } from "@chopin/question/react";
 
 const DOCUMENT = "0b5c6f0e-8d0e-4d7e-9a43-5d4c4a8f1b2e";
 const IMAGE = `/images/${"a".repeat(64)}.png`;
+const P_CLASS = "aui-md-p my-3 leading-relaxed first:mt-0 last:mb-0";
+const STRONG_CLASS = "aui-md-strong font-semibold";
+const A_CLASS = "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2";
+const CODE_CLASS = "aui-md-inline-code bg-muted rounded-md px-1.5 py-0.5 font-mono text-[0.85em]";
+const UL_CLASS = "aui-md-ul marker:text-muted-foreground my-3 ms-5 list-disc [&amp;&gt;li]:mt-1";
+const OL_CLASS = "aui-md-ol marker:text-muted-foreground my-3 ms-5 list-decimal [&amp;&gt;li]:mt-1";
+const LI_CLASS = "aui-md-li leading-relaxed";
+const PRE_CLASS =
+	"aui-md-pre border-border/50 bg-muted/30 overflow-x-auto rounded-t-none rounded-b-xl border border-t-0 p-3.5 text-[13px] leading-relaxed";
 
 function card(question: string, extra: Partial<QuestionViewProps> = {}, item: object = {}) {
 	let definition = {
@@ -61,10 +70,10 @@ test("a question body renders a Markdown list with Chat's renderer under its hea
 	);
 	expect(heading(markup)).toContain(">Confirm the earlier answers</span></h4>");
 	expect(markup).toContain(
-		'<div data-status="complete" data-question-markdown="" class="question-body aui-md"><ul class="aui-md-ul">\n<li class="aui-md-li">Storage: <strong class="aui-md-strong">PostgreSQL</strong></li>\n<li class="aui-md-li">Rollout: <code class="aui-md-inline-code">pilot</code></li>\n</ul>',
+		`<div data-status="complete" data-question-markdown="" class="question-body aui-md"><ul class="${UL_CLASS}">\n<li class="${LI_CLASS}">Storage: <strong class="${STRONG_CLASS}">PostgreSQL</strong></li>\n<li class="${LI_CLASS}">Rollout: <code class="${CODE_CLASS}">pilot</code></li>\n</ul>`,
 	);
 	expect(markup).toContain(
-		'<a class="aui-md-a" href="https://example.com/notes" rel="noopener noreferrer" target="_blank">the notes</a>',
+		`<a class="${A_CLASS}" href="https://example.com/notes" rel="noopener noreferrer" target="_blank">the notes</a>`,
 	);
 });
 
@@ -72,7 +81,7 @@ test("the heading carries inline Markdown, but never a block", () => {
 	let markup = heading(card("Use `pg` with *pooling* or [a proxy](https://example.com)?"));
 	expect(markup).toContain('<code class="inline-code">pg</code>');
 	expect(markup).toContain("<em>pooling</em>");
-	expect(markup).toContain('<a class="aui-md-a" href="https://example.com"');
+	expect(markup).toContain(`<a class="${A_CLASS}" href="https://example.com"`);
 	// Linked to its prose, the heading is a button, which cannot hold a link.
 	let linked = heading(card("Read [the notes](https://example.com)?", { places: { q: 1 } }));
 	expect(linked).not.toContain("<a ");
@@ -120,7 +129,7 @@ test("a mermaid fence becomes a lazily drawn diagram; any other fence stays code
 	expect(markup).toContain('data-question-diagram="pending"');
 	expect(markup).not.toContain("flowchart LR");
 	expect(markup).toContain(
-		'<pre class="aui-md-pre"><code class="language-ts">let a = 1;\n</code></pre>',
+		`<pre class="${PRE_CLASS}"><code class="language-ts">let a = 1;\n</code></pre>`,
 	);
 });
 
@@ -133,17 +142,17 @@ test("descriptions and option text render through the same renderer", () => {
 		],
 	});
 	expect(markup).toContain(
-		'<div data-status="complete" data-question-markdown="" class="question-hint aui-md"><p class="aui-md-p">Both keep:</p>',
+		`<div data-status="complete" data-question-markdown="" class="question-hint aui-md"><p class="${P_CLASS}">Both keep:</p>`,
 	);
-	expect(markup).toContain('<ol class="aui-md-ol">');
+	expect(markup).toContain(`<ol class="${OL_CLASS}">`);
 	expect(markup).toContain(
-		'<span class="question-label">Use <strong class="aui-md-strong">Postgres</strong></span>',
+		`<span class="question-label">Use <strong class="${STRONG_CLASS}">Postgres</strong></span>`,
 	);
 	expect(markup).toContain(
 		'<span class="question-desc">Managed, <em>familiar</em></span>',
 	);
 	expect(markup).toContain(
-		'<div data-status="complete" data-question-markdown="" class="question-desc aui-md"><p class="aui-md-p">Trade-offs:</p>',
+		`<div data-status="complete" data-question-markdown="" class="question-desc aui-md"><p class="${P_CLASS}">Trade-offs:</p>`,
 	);
 });
 
@@ -153,7 +162,7 @@ test("an answered card keeps its rendered body", () => {
 		status: "answered",
 		answers: [{ question, optionIds: ["a"], choices: ["Keep them"] }],
 	});
-	expect(markup).toContain('<li class="aui-md-li">Storage: PostgreSQL</li>');
+	expect(markup).toContain(`<li class="${LI_CLASS}">Storage: PostgreSQL</li>`);
 	expect(heading(markup)).not.toContain("Storage");
 });
 
@@ -182,10 +191,10 @@ test("a repository path in a decision card opens the file on GitHub", () => {
 			</QuestionMarkdownProvider>
 		</RepositoryLinksProvider>,
 	);
-	expect(markup).toContain(`<a class="aui-md-a" href="${blob}/docs/review.md#L10-L20"`);
-	expect(markup).toContain(`<a class="aui-md-a" href="${blob}/config/app.toml"`);
-	expect(markup).toContain('<a class="aui-md-a" href="https://example.com"');
+	expect(markup).toContain(`<a class="${A_CLASS}" href="${blob}/docs/review.md#L10-L20"`);
+	expect(markup).toContain(`<a class="${A_CLASS}" href="${blob}/config/app.toml"`);
+	expect(markup).toContain(`<a class="${A_CLASS}" href="https://example.com"`);
 	expect(card("Read [the review](docs/review.md)")).toContain(
-		'<a class="aui-md-a" href="docs/review.md"',
+		`<a class="${A_CLASS}" href="docs/review.md"`,
 	);
 });

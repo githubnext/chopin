@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import { allMessageGfmParts, messageGfmRemarkPlugin } from "./gfm";
-import { MarkdownText } from "./markdown-text";
 
 function draw(text: string, plugin: unknown): string {
 	return renderToStaticMarkup(

@@ -1,8 +1,25 @@
-import { createContext, memo, useContext, useDeferredValue, useMemo, useRef } from "react";
+import {
+	createContext,
+	memo,
+	useContext,
+	useDeferredValue,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import { useLinkHref } from "@chopin/editor";
-import { messageGfmRemarkPlugin } from "../markdown-text/gfm";
-import { MarkdownText } from "../markdown-text/markdown-text";
+import { WarningIcon } from "@chopin/icons";
+
+import {
+	CodeHeader,
+	defaultComponents,
+	MarkdownText,
+} from "@/components/assistant-ui/elements/markdown-text";
+import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { sameJson } from "../same-json";
+import { messageGfmRemarkPlugin } from "./gfm";
 import { orderedRunsRemarkPlugin } from "./ordered-runs";
 import { referenceRemarkPlugin } from "./reference-markdown";
 import { referenceRenderModel } from "./references";
@@ -10,7 +27,8 @@ import "./markdown.css";
 
 import type { ComponentProps, ReactNode } from "react";
 import type { Chat } from "@chopin/protocol";
-import type { MarkdownTextProps } from "../markdown-text/markdown-text";
+import type { MarkdownTextProps } from "@/components/assistant-ui/elements/markdown-text";
+import type { CodeHeaderProps } from "./assistant-ui/markdown-primitive";
 import type { ReferenceRenderModel } from "./references";
 
 /** MarkdownText's `components` prop: the elements a surface draws its own way. */
@@ -49,19 +67,24 @@ export const MESSAGE_ELEMENTS = [
 	"tr",
 ];
 
+let UpstreamParagraph = defaultComponents.p!;
+let UpstreamLink = defaultComponents.a!;
+
 /** A heading in Chat is a line of text: a message has no document structure. */
-let paragraph = ({ children }: ComponentProps<"p">) => <p className="aui-md-p">{children}</p>;
+let paragraph = ({ children }: ComponentProps<"p">) => (
+	<UpstreamParagraph>{children}</UpstreamParagraph>
+);
 
 /** A link someone wrote: a path in the repository opens the file on GitHub, as in the document. */
 export const ChatLink = ({ children, className, href }: ComponentProps<"a">) => (
-	<a
-		className={["aui-md-a", className].filter(Boolean).join(" ")}
+	<UpstreamLink
+		className={className}
 		href={useLinkHref(href)}
 		rel="noopener noreferrer"
 		target="_blank"
 	>
 		{children}
-	</a>
+	</UpstreamLink>
 );
 
 export const CHAT_COMPONENTS: MarkdownComponents = {
@@ -169,7 +192,12 @@ function MessageLink(props: ComponentProps<"a">) {
 	return reference.kind !== "document"
 		? <span className="chat-reference" data-chat-reference={reference.kind}>{reference.label}</span>
 		: (
-			<a className="chat-reference" data-chat-reference={reference.kind} href={reference.href}>
+			<a
+				className="chat-reference"
+				data-chat-reference={reference.kind}
+				data-chopin-control=""
+				href={reference.href}
+			>
 				{reference.label}
 			</a>
 		);
@@ -180,7 +208,63 @@ function TaskBox({ checked }: ComponentProps<"input">) {
 	return <input aria-label="Task" checked={!!checked} disabled readOnly type="checkbox" />;
 }
 
-let MESSAGE_COMPONENTS: MarkdownComponents = { ...CHAT_COMPONENTS, a: MessageLink, input: TaskBox };
+/** How long the copy button shows its check or warning after a copy attempt, as upstream's does. */
+const COPIED_MS = 3000;
+
+/**
+ * Chat's code header: upstream's `CodeHeader` and `TooltipIconButton` at their exact geometry,
+ * naming `Copy code`, `Copied` and `Couldn't copy` (with a danger warning glyph on touch where no
+ * tooltip opens) when a page has no clipboard or the browser refuses the write.
+ */
+function ChatCodeHeader({ code, language }: Omit<CodeHeaderProps, "node">) {
+	let [outcome, setOutcome] = useState<"copied" | "failed">();
+	let timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+	useEffect(() => () => clearTimeout(timer.current), []);
+	let copy = () => {
+		if (!code || outcome === "copied") return;
+		let done = (next: "copied" | "failed") => {
+			setOutcome(next);
+			clearTimeout(timer.current);
+			timer.current = setTimeout(() => setOutcome(undefined), COPIED_MS);
+		};
+		try {
+			if (!navigator.clipboard) {
+				done("failed");
+				return;
+			}
+			navigator.clipboard.writeText(code).then(() => done("copied"), () => done("failed"));
+		} catch {
+			done("failed");
+		}
+	};
+	let label = outcome === "copied"
+		? "Copied"
+		: outcome === "failed"
+		? "Couldn't copy"
+		: "Copy code";
+	return (
+		<CodeHeader
+			action={
+				<TooltipIconButton onClick={copy} tooltip={label}>
+					{outcome === "copied"
+						? <CheckIcon aria-hidden="true" />
+						: outcome === "failed"
+						? <WarningIcon aria-hidden="true" className="icon-danger" />
+						: <CopyIcon aria-hidden="true" />}
+				</TooltipIconButton>
+			}
+			code={code}
+			language={language}
+		/>
+	);
+}
+
+let MESSAGE_COMPONENTS: MarkdownComponents = {
+	...CHAT_COMPONENTS,
+	CodeHeader: ChatCodeHeader,
+	a: MessageLink,
+	input: TaskBox,
+};
 
 /** Keeps the identity of the references while what they say is unchanged. */
 function useSame<T>(value: T): T {
