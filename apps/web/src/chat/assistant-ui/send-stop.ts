@@ -16,17 +16,28 @@ export type SendStopInput = {
 	canSend: boolean;
 	/** This person may stop the Planner now, by Chat's own rules for Stop. */
 	canStop: boolean;
+	/**
+	 * The draft to Chopin was just refused because Chopin cannot take messages while it works on this
+	 * machine ("Stop it to ask now."): Stop is offered while Chopin runs so the person can stop it
+	 * without clearing their draft, and gives way to Send once Chopin stops or the draft changes.
+	 */
+	refusedWhileBusy?: boolean;
 };
 
 export type SendStop = { action: SendStopAction; disabled: boolean };
 
 /**
- * Stop appears only for a Planner that runs, an empty draft and a person who may stop it. Someone
- * who may not sees a disabled send, never a stop they cannot use; a draft with words keeps the send
- * and goes back to stop once it is sent or cleared.
+ * Stop appears only for a Planner that runs, an empty draft (or a draft to Chopin that was just
+ * refused because Chopin is working) and a person who may stop it. Someone who may not sees a
+ * disabled send, never a stop they cannot use; a draft with words keeps the send and goes back to
+ * stop once it is sent or cleared.
  */
-export function sendStop({ running, hasDraft, canSend, canStop }: SendStopInput): SendStop {
-	if (running && !hasDraft && canStop) return { action: "stop", disabled: false };
+export function sendStop(
+	{ running, hasDraft, canSend, canStop, refusedWhileBusy = false }: SendStopInput,
+): SendStop {
+	if (running && (!hasDraft || refusedWhileBusy) && canStop) {
+		return { action: "stop", disabled: false };
+	}
 	return { action: "send", disabled: !canSend };
 }
 

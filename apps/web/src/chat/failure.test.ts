@@ -216,4 +216,34 @@ test("a message the machine could not take says so as the server did, and points
 		retry: false,
 		link: { label: "Open machines", href: "/machines" },
 	});
+	let handover = sendFailureView(
+		sendFailure(
+			new WireRefusal(
+				"Still connecting to @mona's machine, so this message wasn't sent. Send it again in a moment.",
+				"planner-not-attached",
+			),
+		),
+		"planner-not-attached",
+	);
+	expect(handover).toEqual({
+		kind: "send",
+		title:
+			"Still connecting to @mona's machine, so this message wasn't sent. Send it again in a moment.",
+		retry: false,
+		link: { label: "Open machines", href: "/machines" },
+	});
+	let busy = sendFailureView(
+		sendFailure(
+			new WireRefusal(
+				"Chopin can't take messages while it works on this machine. Stop it to ask now.",
+				"planner-busy",
+			),
+		),
+		"planner-busy",
+	);
+	expect(busy).toEqual({
+		kind: "send",
+		title: "Chopin can't take messages while it works on this machine. Stop it to ask now.",
+		retry: false,
+	});
 });

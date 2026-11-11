@@ -238,8 +238,8 @@ it too, provided it follows the rules below.
   answers and unheard Stops to storage, with a hand-over window of `HANDOVER_PLANNER_WINDOW_MS`
   from the release: the next process counts it from the moment it rebuilds the hold, so a slow
   write or release takes nothing from what the client was told. Until it ends, the document shows the machine as connected; a message sent to it
-  meanwhile is refused like one sent to a machine that is away, and nothing is kept for when
-  the client returns.
+  meanwhile is refused saying _Still connecting to @<login>'s machine, so this message wasn't sent.
+  Send it again in a moment._, with the typed text kept in the draft and nothing kept on the server.
 - A client that offered the `restart-notice` feature is sent `restarting` with
   `reconnectWithinMs` before the close. It must connect again at once and, if its `resume` is
   refused with `retry`, try again every 250 ms until `reconnectWithinMs` has passed, then on its
@@ -260,8 +260,9 @@ it too, provided it follows the rules below.
   Planners and would stop the backend.
 
 A message to the document's machine is never held while the machine is away: it is refused,
-says **Couldn't send** on itself, and is sent again by the person. A deploy is one more reason
-the machine can be away for a moment. A message sent while a turn runs is given to that turn. See
+puts the typed text back in the composer draft with the reason above it, and is sent again by the
+person. A deploy is one more reason the machine can be reconnecting for a moment. A message sent
+while a turn runs is given to that turn. See
 [Messages while the Planner works](hosted-agent.md#messages-while-the-planner-works).
 
 ## Rollback
@@ -320,9 +321,10 @@ at Sending:
   and the next two, sent while it runs, one before the deploy and one while the old process waits
   for it, are given to it, which reads both. One sent while the page is between processes is held
   by the browser alone, goes to the new process while the machine's client has not resumed, inside
-  its window, and is refused on the message (_Couldn't send. No machine is connected to reply._)
-  with nothing kept. One sent once the machine is back starts a turn. A tab opened afterwards has
-  every message but the refused one, once, and the server holds no row for any.
+  its window, and is refused (_Still connecting to @mona's machine, so this message wasn't sent.
+  Send it again in a moment._) with the typed text kept in the draft and nothing kept on the server.
+  One sent once the machine is back starts a turn. A tab opened afterwards has every message but
+  the refused one, once, and the server holds no row for any.
 - A turn running when the deploy begins is not cut off or run twice, and ends in one reply, with
   no notice of being stopped. A message sent to it while the old process waits for it reaches it
   when its machine takes a message mid-run; when the machine does not, the message is refused

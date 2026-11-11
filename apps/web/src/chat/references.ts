@@ -609,7 +609,8 @@ export type SendFailure = { text: string; lost: boolean };
 
 export function sendFailure(error: unknown): SendFailure {
 	let detail = error instanceof Error ? error.message.trim() : "";
-	if (detail && (error as { code?: unknown }).code === "planner-not-attached") {
+	let code = (error as { code?: unknown } | null)?.code;
+	if (detail && (code === "planner-not-attached" || code === "planner-busy")) {
 		return { text: detail, lost: false };
 	}
 	if (!detail || /^(connection lost|disposed|not connected)$/i.test(detail)) {

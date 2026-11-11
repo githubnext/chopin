@@ -31,6 +31,8 @@ export type FilesControl = {
 	retry: (id: string) => void;
 	/** Forgets the files once a message has been sent with them. The server keeps them. */
 	clear: () => void;
+	/** Puts uploaded files back in the draft when the server refused the send without taking them. */
+	restore: (files: readonly Chat.Attachment[]) => void;
 	/** The browser's own copy of a file, for its thumbnail. */
 	source: (id: string) => File | undefined;
 	uploading: number;
@@ -176,6 +178,10 @@ export function useFiles({ channelId, limits, imagesAllowed }: Config): FilesCon
 		dispatch({ type: "clear" });
 	}, []);
 
+	let restore = useCallback((restored: readonly Chat.Attachment[]) => {
+		dispatch({ type: "restore", files: restored });
+	}, []);
+
 	// A composer that goes away stops what it was uploading; the server forgets what nobody sent.
 	useEffect(() => {
 		let held = sources.current;
@@ -199,6 +205,7 @@ export function useFiles({ channelId, limits, imagesAllowed }: Config): FilesCon
 		remove,
 		retry,
 		clear,
+		restore,
 		source: id => sources.current.get(id)?.file,
 		uploading: state.uploading,
 		failed: state.failed,

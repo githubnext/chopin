@@ -9,7 +9,7 @@
  */
 
 import type { Chat, Session } from "@chopin/protocol";
-import type { ChatSendPayload } from "./references";
+import type { ChatSendPayload, ReferenceDraft } from "./references";
 
 export type Mark = "sending";
 
@@ -59,10 +59,18 @@ export type LocalEntry = Chat.Entry & {
 	failure?: string;
 };
 
+export type OutgoingDraft = {
+	text: string;
+	references: ReferenceDraft[];
+	chip: boolean;
+};
+
 export type Outgoing = {
 	payload: ChatSendPayload;
 	handle: string;
 	ts: number;
+	/** What the composer held when this message left it, so a refused send can put it back. */
+	draft?: OutgoingDraft;
 	/** Put on the wire at least once, so the server may already hold it. */
 	attempted?: true;
 	/** The server said it has it; it is shown until its entry arrives. */
@@ -202,12 +210,13 @@ export function keepOutbox(room: string, handle: string, outbox: readonly Outgoi
 		sessionStorage.setItem(
 			outboxKey(room, handle),
 			JSON.stringify(
-				pending.map(({ payload, handle, ts, attempted, attachments }) => ({
+				pending.map(({ payload, handle, ts, attempted, attachments, draft }) => ({
 					payload,
 					handle,
 					ts,
 					...(attempted ? { attempted } : {}),
 					...(attachments?.length ? { attachments } : {}),
+					...(draft ? { draft } : {}),
 				})),
 			),
 		);
@@ -232,6 +241,11 @@ export function restoreOutbox(room: string, handle: string): readonly Outgoing[]
 					...(item.attempted === true ? { attempted: true as const } : {}),
 					...(Array.isArray(item.attachments) && item.attachments.length
 						? { attachments: item.attachments }
+						: {}),
+					...(item.draft && typeof item.draft.text === "string"
+							&& Array.isArray(item.draft.references)
+							&& typeof item.draft.chip === "boolean"
+						? { draft: item.draft }
 						: {}),
 				}]
 				: [];

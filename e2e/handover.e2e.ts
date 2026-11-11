@@ -1215,12 +1215,13 @@ async function holdRow(database: string, room: string, text: string): Promise<vo
 
 /**
  * What the page said of a deploy that was meant to be invisible: nothing, but for the one message
- * it could not send, which says so on itself. The machine was shown attached throughout.
+ * it could not send, which says why above the composer and keeps the draft. The machine was shown
+ * attached throughout.
  */
-async function expectOnlyRefusals(page: Page, loads: { count: number }, refused: boolean) {
+async function expectOnlyRefusals(page: Page, loads: { count: number }, expectedBanner?: string) {
 	let seen = await probe(page);
 	expect(seen.violations, seen.timeline.join("\n")).toEqual(
-		refused ? ["a message says it could not be sent"] : [],
+		expectedBanner ? [`composer error ${expectedBanner}`, `composer strip ${expectedBanner}`] : [],
 	);
 	expect(seen.planner.filter(state => state !== "attached")).toEqual([]);
 	expect(seen.resets).toEqual([]);
@@ -1261,10 +1262,14 @@ test("messages sent before, during and after the machine's hand-over window each
 	await expectGap(done, page);
 
 	// The new process has the lease and the machine is shown attached, but its client has not
-	// resumed, inside its window: the browser sent the message again, and it was refused, on the
-	// message, with nothing kept for when the machine is back.
-	await expect(failure(page, "[m4]")).toContainText("Couldn't send.");
-	await expect(failure(page, "[m4]")).toContainText("No machine is connected to reply.");
+	// resumed, inside its window: the browser sent the message again, and it was refused saying
+	// still connecting, with the typed text kept in the draft and nothing kept on the server.
+	let banner = chat(page).locator('[data-error-banner][data-kind="send"]');
+	let inWindowWords =
+		`Still connecting to @${HANDLE}'s machine, so this message wasn't sent. Send it again in a moment.`;
+	await expect(banner).toContainText(inWindowWords);
+	await expectChatValue(chatInput(page), "@chopin [m4] sent while the page is between processes");
+	await expect(message(page, "[m4]")).toHaveCount(0);
 	expect(planner.prompts.map(prompt => prompt.tag)).toEqual(["m1"]);
 	expect(planner.resumes).toEqual([]);
 
@@ -1274,17 +1279,17 @@ test("messages sent before, during and after the machine's hand-over window each
 	await quiet(planner);
 	await say(page, keys, "[m5] sent once the machine is back");
 	await expect(replies(page, "Reply m5")).toHaveCount(1);
+	await expect(banner).toHaveCount(0);
 
 	// Each one's end, in the Chat and at the machine: started (m1, m5), given to the running turn,
-	// which read it (m2, m3), or refused (m4). None twice, none at Sending, none waiting.
+	// which read it (m2, m3), or refused with its draft kept (m4). None twice, none at Sending, none waiting.
 	await expect(replies(page, "Reply m1")).toHaveCount(1);
 	await expect(replies(page, "Read m2")).toHaveCount(1);
 	await expect(replies(page, "Read m3")).toHaveCount(1);
 	await expect(replies(page, "Reply m4")).toHaveCount(0);
-	for (let tag of ["m1", "m2", "m3", "m4", "m5"]) {
-		await expect(message(page, `[${tag}]`)).toHaveCount(1);
-	}
+	await expect(message(page, "[m4]")).toHaveCount(0);
 	for (let tag of ["m1", "m2", "m3", "m5"]) {
+		await expect(message(page, `[${tag}]`)).toHaveCount(1);
 		await expect(failure(page, `[${tag}]`)).toHaveCount(0);
 	}
 	await expect(sending(page)).toHaveCount(0);
@@ -1293,7 +1298,7 @@ test("messages sent before, during and after the machine's hand-over window each
 	expect(tagsOf(planner.prompts)).toEqual(["m1", "m5"]);
 	expect(tagsOf(planner.steered)).toEqual(["m2", "m3"]);
 	expect(planner.errors).toEqual([]);
-	await expectOnlyRefusals(page, loads, true);
+	await expectOnlyRefusals(page, loads, `${inWindowWords} Open machines`);
 
 	// The refused message was never kept: a tab opened afterwards has the other four, once, and
 	// the server holds no row for any of them.
@@ -1319,15 +1324,20 @@ for (let steers of [true, false]) {
 		let deploy = beginDeploy(world);
 		await deploy.told;
 		await say(page, keys, "[m2] sent to the turn the old process waits for");
+		let busyWords =
+			"Chopin can't take messages while it works on this machine. Stop it to ask now.";
+		let banner = chat(page).locator('[data-error-banner][data-kind="send"]');
 		if (steers) {
 			await until("the message to reach the turn", () => planner.steered.length === 1);
 			await expect(message(page, "[m2]")).toHaveCount(1);
 			await expect(failure(page, "[m2]")).toHaveCount(0);
 		} else {
-			await expect(failure(page, "[m2]")).toContainText("Couldn't send.");
-			await expect(failure(page, "[m2]")).toContainText(
-				"Chopin can't take messages while it works on this machine. Stop it to ask now.",
+			await expect(banner).toContainText(busyWords);
+			await expectChatValue(
+				chatInput(page),
+				"@chopin [m2] sent to the turn the old process waits for",
 			);
+			await expect(message(page, "[m2]")).toHaveCount(0);
 			expect(planner.steered).toEqual([]);
 		}
 		// Still running: the old process has not cut it off, and it has not begun again.
@@ -1345,24 +1355,29 @@ for (let steers of [true, false]) {
 		await expect(replies(page, "Reply m1")).toHaveCount(1);
 		await expect(replies(page, "Read m2")).toHaveCount(steers ? 1 : 0);
 		await expect(chat(page).getByText(/stopped|cut off|interrupted|did not read/i)).toHaveCount(0);
-		await expect(message(page, "[m2]")).toHaveCount(1);
+		await expect(message(page, "[m2]")).toHaveCount(steers ? 1 : 0);
 		await Bun.sleep(1_000);
 		expect(tagsOf(planner.prompts)).toEqual(["m1"]);
 		expect(tagsOf(planner.steered)).toEqual(steers ? ["m2"] : []);
 		expect(await rowStates(world.database, room)).toEqual([]);
 
 		if (!steers) {
-			// Nothing was kept for it, so the person says it again, and the new process answers it once.
-			await expect(failure(page, "[m2]")).toHaveCount(1);
+			// Nothing was kept on the server, and the typed text stayed in the draft through the
+			// deploy: pressing Enter sends it, and the new process answers it once.
+			await expectChatValue(
+				chatInput(page),
+				"@chopin [m2] sent to the turn the old process waits for",
+			);
 			await quiet(planner);
-			await message(page, "[m2]").getByRole("button", { name: "Try again" }).click();
+			await keys.run(() => chatInput(page).press("Enter"), true);
 			await expect(replies(page, "Reply m2")).toHaveCount(1);
-			await expect(failure(page, "[m2]")).toHaveCount(0);
+			await expect(banner).toHaveCount(0);
+			await expectChatValue(chatInput(page), "");
 			expect(tagsOf(planner.prompts)).toEqual(["m1", "m2"]);
 		}
 		await expect(sending(page)).toHaveCount(0);
 		expect(planner.errors).toEqual([]);
-		await expectOnlyRefusals(page, loads, !steers);
+		await expectOnlyRefusals(page, loads, steers ? undefined : busyWords);
 	});
 }
 
@@ -1424,7 +1439,7 @@ test("once the new release has the lease the transcript holds no waiting or ghos
 	expect(tagsOf(planner.steered)).toEqual(["m2"]);
 	expect(planner.prompts.some(prompt => prompt.prompt.includes("[h1]"))).toBe(false);
 	expect(planner.errors).toEqual([]);
-	await expectOnlyRefusals(page, loads, false);
+	await expectOnlyRefusals(page, loads);
 });
 
 test("a Decision answered while the old process waits for the turn that asked it reaches that turn once, and starts no second one after the deploy", async ({ page }) => {

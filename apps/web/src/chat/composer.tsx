@@ -147,7 +147,12 @@ export type ChatComposerProps = {
 	 * What the Planner's run offers. Stop shares the round button with Send, which stops only while
 	 * the draft is empty and `disabled` is false; Resume is a button of its own.
 	 */
-	run?: { action: "stop" | "resume"; disabled: boolean; onClick: () => void };
+	run?: {
+		action: "stop" | "resume";
+		disabled: boolean;
+		refusedWhileBusy?: boolean;
+		onClick: () => void;
+	};
 	/** Reference, command and mention pickers, open over the field. */
 	pickers?: ReactNode;
 	/** Context-window usage ring in the composer rail, when reported by the harness. */
@@ -219,6 +224,7 @@ export function ChatComposer(
 		hasDraft,
 		canSend: !sendDisabled,
 		canStop: !!run && !run.disabled,
+		refusedWhileBusy: !!run?.refusedWhileBusy,
 	});
 	// A failed send is shown at once; any other strip eases open and shut, so it does not jump
 	// what is above it, and keeps its words while it fades.
