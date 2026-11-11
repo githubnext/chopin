@@ -64,15 +64,16 @@ kept, so it returns to force if the model does. Background jobs never carry a ch
 
 The composer says so even where nothing can be chosen any longer. When a client withdraws all its
 models, or an older client takes its place, there is no catalog and the picker is gone, but the
-stored choice is still sent in `chat:model` and the composer's notice still says that the model is no longer
-available and the default runs, before and after a turn, until somebody's client offers it again.
+stored choice is still sent in `chat:model` and the composer's notice says that the model is no longer
+available and the default runs until a turn records that fallback in Chat. It does not repeat the
+transcript line.
 A document nobody chose for says nothing. The choice is held back while what a remote Planner
 offers is unknown: with no client attached (a machine that is away, a server that has just restarted)
 or one that offered the catalog and has yet to report it. The choice is then neither gone nor
 honored, and the machine's own status speaks. It stops being unknown for a client that offered the
 catalog and never reports it once a turn has run for want of it and fallen back on the saved
-choice: that has happened, Chat says it, and the room is told the choice so every composer says it
-too, for as long as that client stays attached and reports nothing. A report that comes later, or
+choice: that has happened, Chat says it, and the room is told the choice without repeating the
+same fallback above the composer. A report that comes later, or
 another client, starts again from what it reports. A person who can only read the document sees
 none of it.
 

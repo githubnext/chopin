@@ -227,6 +227,40 @@ describe("what the composer's strip says about the document's model", () => {
 			.toBeUndefined();
 	});
 
+	test("names a saved choice before and after the picker goes away", () => {
+		let text = "Large is no longer available, so Chopin used its default model.";
+		let gone = { ...held, choice: { model: "acme/gone" }, modelName: "Large" };
+		expect(composerModelNotice(gone, false)).toEqual({ tone: "info", text });
+		expect(composerModelNotice(undefined, false, { model: "acme/gone" }, [], "Large"))
+			.toEqual({ tone: "info", text });
+		expect(triggerLabel(catalog, gone.choice, gone.modelName)).toBe(`Model: Small, ${text}`);
+	});
+
+	test("does not repeat a fallback already recorded in Chat, but keeps other notices", () => {
+		let gone = { ...held, choice: { model: "acme/gone" } };
+		let text = "acme/gone is no longer available, so Chopin used its default model.";
+		let entries = [{ id: "1", author: { kind: "system" as const }, text, ts: 1 }];
+		expect(composerModelNotice(gone, false, undefined, entries)).toBeUndefined();
+		expect(composerModelNotice(gone, true, undefined, entries)).toEqual({
+			tone: "info",
+			text: unread,
+		});
+		expect(composerModelNotice({ ...gone, refusal: "Refused" }, false, undefined, entries))
+			.toEqual({ tone: "warning", text: "Refused" });
+		expect(composerModelNotice(gone, false, undefined, [])).toEqual({ tone: "info", text });
+		expect(
+			composerModelNotice(gone, false, undefined, [{ ...entries[0]!, text: "Another notice" }]),
+		)
+			.toEqual({ tone: "info", text });
+		expect(
+			composerModelNotice(gone, false, undefined, [{
+				...entries[0]!,
+				author: { kind: "member", handle: "mona" },
+			}]),
+		)
+			.toEqual({ tone: "info", text });
+	});
+
 	test("puts a refused choice first, then what could not be read, then a model that has gone", () => {
 		let refused = { ...held, refusal: "That model isn't available." };
 		expect(composerModelNotice(refused, true)).toEqual({

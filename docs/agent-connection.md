@@ -627,8 +627,8 @@ browser's `chat:model` state includes an optional `modelName` for that saved nam
 without a name use the current catalog's name if known, otherwise the id. Older browsers can ignore
 this optional field. A client must still treat an unknown `model` as an error, because its catalog can have changed
 since the report. Without a catalog (an older client, or one that reported none) the composer
-offers no choice and `thinkingLevel` is never sent, and a model a person had chosen is said, in the
-composer, to be no longer available, as the document's Chat says on the next turn.
+offers no choice and `thinkingLevel` is never sent. The composer says a chosen model is no longer
+available until the document's Chat records that fallback on a turn; it does not repeat the record.
 
 The two fields are independent of the protocol version: nothing here changes an existing message
 for a client that did not offer the feature, so the subprotocol stays `chopin.agent.v1`.
