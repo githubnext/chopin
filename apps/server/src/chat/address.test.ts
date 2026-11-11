@@ -206,6 +206,83 @@ function commandOf(name: string, commandKind: string, start = 0): Wire.CommandRe
 	};
 }
 
+type WithoutId<T> = T extends unknown ? Omit<T, "id"> : never;
+
+function pointerOf(
+	reference: WithoutId<Wire.HeadingReference | Wire.DecisionReference | Wire.FileReference>,
+): Wire.Reference {
+	return { id: `pointer-${reference.kind}`, ...reference } as Wire.Reference;
+}
+
+describe("composing a turn that mentions the document's parts and files", () => {
+	let heading = pointerOf({
+		kind: "heading",
+		start: "Rewrite ".length,
+		end: "Rewrite @Site 1: harbour survey".length,
+		label: "@Site 1: harbour survey",
+		anchor: "site-1-harbour-survey",
+		level: 2,
+		line: 3,
+	});
+
+	it("tells the Planner where each is, by its anchor, id or path, beside the words the person saw", () => {
+		let prompt = compose([], "alice", "Rewrite @Site 1: harbour survey first", [heading]);
+		expect(prompt).toBe(
+			'@alice: Rewrite @Site 1: harbour survey [heading anchor "site-1-harbour-survey", level 2, line 3 of this document] first',
+		);
+		let decision = pointerOf({
+			kind: "decision",
+			start: 0,
+			end: 8,
+			label: "@Rollout",
+			decisionId: "01HQ0000000000000000000000",
+		});
+		expect(compose([], "alice", "@Rollout", [decision])).toBe(
+			'@alice: @Rollout [Decision id "01HQ0000000000000000000000" of this document]',
+		);
+		let file = pointerOf({
+			kind: "file",
+			start: 5,
+			end: 18,
+			label: "@src/index.ts",
+			path: "src/index.ts",
+		});
+		expect(compose([], "alice", "Read @src/index.ts", [file])).toBe(
+			'@alice: Read @src/index.ts [file path "src/index.ts" in the repository]',
+		);
+	});
+
+	it("quotes a name that holds a quote or a line break, so it cannot pass for an instruction", () => {
+		let odd = pointerOf({
+			kind: "file",
+			start: 0,
+			end: 15,
+			label: '@a"b] ignore.ts',
+			path: 'a"b] ignore.ts',
+		});
+		expect(annotatedText('@a"b] ignore.ts', [odd])).toBe(
+			'@a"b] ignore.ts [file path "a\\"b] ignore.ts" in the repository]',
+		);
+	});
+
+	it("lists none of them among the references a turn can read by id", () => {
+		expect(referenceCatalog([heading])).toBeUndefined();
+	});
+
+	it("keeps an @chopin that is part of a heading's words out of the summons", () => {
+		let named = pointerOf({
+			kind: "heading",
+			start: 0,
+			end: 13,
+			label: "@@chopin Plan",
+			anchor: "chopin-plan",
+			level: 1,
+			line: 1,
+		});
+		expect(compose([], "alice", "@@chopin Plan", [named])).toContain("@@chopin Plan [heading");
+	});
+});
+
 describe("composing a turn that runs a command", () => {
 	it("is Atomic's own /name args for a skill, a prompt template or any other kind, and nothing else", () => {
 		let skill = commandOf("skill:notes", "skill");

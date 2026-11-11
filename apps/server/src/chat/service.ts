@@ -45,7 +45,7 @@ import {
 	remember,
 } from "./address";
 import { createNotices } from "./notices";
-import { ChatCommandError, ChatReferenceError } from "./references";
+import { ChatCommandError, ChatMentionError, ChatReferenceError } from "./references";
 import {
 	cancelledNotice,
 	type Deferred,
@@ -569,43 +569,38 @@ function canonicalFingerprint(
 	text: string,
 	references: Wire.Reference[] = [],
 ): string {
-	let targets = references.map(reference =>
-		reference.kind === "command"
-			? [
-				reference.kind,
-				reference.id,
-				reference.start,
-				reference.end,
-				reference.label,
-				reference.name,
-				reference.commandKind,
-			]
-			: reference.kind === "document"
-			? [
-				reference.kind,
-				reference.id,
-				reference.start,
-				reference.end,
-				reference.label,
-				reference.href,
-				reference.repositoryId,
-				reference.observedRevision,
-				reference.channelId,
-				reference.observedSourceHash,
-			]
-			: [
-				reference.kind,
-				reference.id,
-				reference.start,
-				reference.end,
-				reference.label,
-				reference.href,
-				reference.repositoryId,
-				reference.observedRevision,
-				reference.parentChannelId,
-				reference.workspaceId,
-			]
-	);
+	let targets = references.map(reference => {
+		// Each kind is hashed by what makes it that reference, in a fixed order.
+		let base = [reference.kind, reference.id, reference.start, reference.end, reference.label];
+		switch (reference.kind) {
+			case "command":
+				return [...base, reference.name, reference.commandKind];
+			case "heading":
+				return [...base, reference.anchor, reference.level, reference.line];
+			case "decision":
+				return [...base, reference.decisionId];
+			case "file":
+				return [...base, reference.path];
+			case "document":
+				return [
+					...base,
+					reference.href,
+					reference.repositoryId,
+					reference.observedRevision,
+					reference.channelId,
+					reference.observedSourceHash,
+				];
+			case "research":
+				return [
+					...base,
+					reference.href,
+					reference.repositoryId,
+					reference.observedRevision,
+					reference.parentChannelId,
+					reference.workspaceId,
+				];
+		}
+	});
 	return digest(JSON.stringify([destination, text, targets]));
 }
 
@@ -858,6 +853,11 @@ export type Room = {
 	 * against: none where it reports none, and none for a Planner that is not attached.
 	 */
 	commands?: () => Promise<Wire.CommandOption[] | undefined>;
+	/**
+	 * Whether a path is a file of the document's repository, as the sender's session can read it,
+	 * or undefined when the repository's files cannot be listed. Absent where nothing lists them.
+	 */
+	fileExists?: (path: string, sessionId: string) => Promise<boolean | undefined>;
 	invokedBy?: string;
 	ownerAvailable?: () => Promise<void>;
 	jobs?: JobService;
@@ -1185,6 +1185,9 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 				destination,
 				requests: msg.references,
 				...(commands ? { commands } : {}),
+				...(context.fileExists
+					? { fileExists: (path: string) => context.fileExists!(path, ws.data.sessionId) }
+					: {}),
 			});
 		} else {
 			if (
@@ -1199,7 +1202,9 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		// Only a reference the server found at fault is final. Anything else it threw, such as a
 		// storage error while it looked a target up, passes: the same message is sent again.
 		// A refused command says why: it is what the person reads under the draft they keep.
-		if (err instanceof ChatCommandError) return fail(ws, msg.rid, err.message);
+		if (err instanceof ChatCommandError || err instanceof ChatMentionError) {
+			return fail(ws, msg.rid, err.message);
+		}
 		if (err instanceof ChatReferenceError) {
 			return fail(ws, msg.rid, "invalid or unavailable chat reference");
 		}

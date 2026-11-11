@@ -49,11 +49,11 @@ export function commandReference(
 
 /** Tell the model which opaque ids name the references visible in this prompt. */
 export function referenceCatalog(references: Wire.Reference[]): string | undefined {
-	// A command is run, not read: it is never one of the references a turn can open.
+	// Only a document or a research workspace is read by id. A command is run, and a heading, a
+	// Decision or a file is a place the prompt already says where to find.
 	let unique = new Map(
-		references.filter(reference => reference.kind !== "command").map(
-			reference => [reference.id, reference],
-		),
+		references.filter(reference => reference.kind === "document" || reference.kind === "research")
+			.map(reference => [reference.id, reference]),
 	);
 	if (unique.size === 0) return undefined;
 	let heading =
@@ -69,6 +69,25 @@ export function referenceCatalog(references: Wire.Reference[]): string | undefin
 	return entries.length > 0 ? `${heading}\n${entries.join("\n")}` : undefined;
 }
 
+/**
+ * Where a mentioned part of the document, or a file, is: its anchor, id or path, as the server
+ * resolved it. Quoted, so a name that holds a quote or a line break stays one value.
+ */
+function placeNote(reference: Wire.Reference): string | undefined {
+	switch (reference.kind) {
+		case "heading":
+			return `heading anchor ${
+				JSON.stringify(reference.anchor)
+			}, level ${reference.level}, line ${reference.line} of this document`;
+		case "decision":
+			return `Decision id ${JSON.stringify(reference.decisionId)} of this document`;
+		case "file":
+			return `file path ${JSON.stringify(reference.path)} in the repository`;
+		default:
+			return undefined;
+	}
+}
+
 /** Add code-owned model context without changing the canonical member message. */
 export function annotatedText(
 	text: string,
@@ -78,14 +97,15 @@ export function annotatedText(
 	let cursor = 0;
 	let output = "";
 	for (let reference of references) {
+		let place = placeNote(reference);
 		if (
 			reference.kind === "command"
-			|| !readableIds.has(reference.id)
+			|| (!place && !readableIds.has(reference.id))
 			|| reference.start < cursor || reference.end > text.length
 			|| text.slice(reference.start, reference.end) !== reference.label
 		) continue;
 		output += text.slice(cursor, reference.start);
-		output += `${reference.label} [reference id: ${reference.id}]`;
+		output += `${reference.label} [${place ?? `reference id: ${reference.id}`}]`;
 		cursor = reference.end;
 	}
 	return output + text.slice(cursor);

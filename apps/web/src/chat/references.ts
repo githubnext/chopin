@@ -459,8 +459,44 @@ export function shownSendFailure<T extends SendFailure>(
 	return offline || (failure?.lost && !connected) ? undefined : failure;
 }
 
+/** The character a sent reference's token opens with. */
+export function referenceMarker(kind: Chat.Reference["kind"]): "#" | "%" | "/" | "@" {
+	return kind === "document"
+		? "#"
+		: kind === "research"
+		? "%"
+		: kind === "command"
+		? "/"
+		: "@";
+}
+
+/** What a sent reference asks the server for, so the same message can be sent again as it was. */
+export function referenceRequest(reference: Chat.Reference): Chat.ReferenceRequest {
+	let { start, end } = reference;
+	switch (reference.kind) {
+		case "document":
+			return { kind: "document", channelId: reference.channelId, start, end };
+		case "research":
+			return { kind: "research", workspaceId: reference.workspaceId, start, end };
+		case "command":
+			return {
+				kind: "command",
+				name: reference.name,
+				commandKind: reference.commandKind,
+				start,
+				end,
+			};
+		case "heading":
+			return { kind: "heading", anchor: reference.anchor, start, end };
+		case "decision":
+			return { kind: "decision", decisionId: reference.decisionId, start, end };
+		case "file":
+			return { kind: "file", path: reference.path, start, end };
+	}
+}
+
 function validPersistedRange(source: string, reference: Chat.Reference): boolean {
-	let marker = reference.kind === "document" ? "#" : reference.kind === "command" ? "/" : "%";
+	let marker = referenceMarker(reference.kind);
 	return Number.isSafeInteger(reference.start)
 		&& Number.isSafeInteger(reference.end)
 		&& reference.start >= 0
