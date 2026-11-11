@@ -8,7 +8,7 @@
 			"version": "assistant-ui/assistant-ui@d25a97a22f00",
 			"sha256": "397fb48354d73ae3eb2e51fc4872601eb8cc863e981520a4a7de65865db65308",
 			"patch": "apps/web/src/components/assistant-ui/elements/composer.tsx.patch",
-			"patchSha256": "2439cb5d476212de4273d801ef552b63baafa7259cc71c7ba0bf0540b1f22606"
+			"patchSha256": "0218b24a9992b131a5be6f1d5e99fecfcc323b5112dda272ac9de1c66028a347"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/elements/directive-text.tsx",
