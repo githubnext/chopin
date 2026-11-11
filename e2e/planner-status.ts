@@ -121,3 +121,87 @@ export async function expectNoMachineWords(page: Page, said: string | RegExp): P
 	);
 	expect(described.filter(text => MACHINE_WORDS.test(text))).toEqual([]);
 }
+
+/** The connecting dots inside `within`: the banner's icon or the machine button's badge. */
+export function connectingDots(within: Locator): Locator {
+	return within.locator("svg[data-connecting]");
+}
+
+/**
+ * The dots brighten in turn: each runs the one endless wave, by opacity alone, a step after the one
+ * before it, so nothing turns, grows or moves.
+ */
+export async function expectConnectingWave(dots: Locator): Promise<void> {
+	await expect(dots).toBeVisible();
+	let waves = await dots.evaluate(svg =>
+		[...svg.querySelectorAll("circle")].map(circle =>
+			circle.getAnimations().map(animation => {
+				let effect = animation.effect as KeyframeEffect;
+				return {
+					name: (animation as CSSAnimation).animationName,
+					state: animation.playState,
+					iterations: effect.getComputedTiming().iterations,
+					delay: effect.getTiming().delay,
+					changes: [
+						...new Set(
+							effect.getKeyframes().flatMap(frame =>
+								Object.keys(frame).filter(key =>
+									!["offset", "computedOffset", "easing", "composite"].includes(key)
+								)
+							),
+						),
+					],
+				};
+			})
+		)
+	);
+	expect(waves).toEqual([0, 200, 400].map(delay => [{
+		name: "connecting-wave",
+		state: "running",
+		iterations: Infinity,
+		delay,
+		changes: ["opacity"],
+	}]));
+}
+
+/**
+ * Under reduced motion the dots hold still, stepped from faint to full: an ellipsis, which reads as
+ * under way with nothing moving.
+ */
+export async function expectConnectingStill(dots: Locator): Promise<void> {
+	await expect(dots).toBeVisible();
+	await expect.poll(() =>
+		dots.evaluate(svg =>
+			[...svg.querySelectorAll("circle")].map(circle => ({
+				moving: circle.getAnimations().length,
+				opacity: getComputedStyle(circle).opacity,
+			}))
+		)
+	).toEqual([
+		{ moving: 0, opacity: "0.35" },
+		{ moving: 0, opacity: "0.65" },
+		{ moving: 0, opacity: "1" },
+	]);
+}
+
+/**
+ * Over one whole wave and a little more, every frame lays out `targets` exactly where the first did:
+ * the dots, and what is around them, never shift.
+ */
+export async function expectSteadyLayout(targets: Locator[]): Promise<void> {
+	let handles = await Promise.all(targets.map(target => target.elementHandle()));
+	let page = targets[0]!.page();
+	let boxes = await page.evaluate(async elements => {
+		let seen = new Set<string>();
+		let end = performance.now() + 1_400;
+		while (performance.now() < end) {
+			seen.add(JSON.stringify(elements.map(element => {
+				let box = element!.getBoundingClientRect();
+				return [box.x, box.y, box.width, box.height];
+			})));
+			await new Promise(resolve => requestAnimationFrame(resolve));
+		}
+		return [...seen];
+	}, handles);
+	expect(boxes).toHaveLength(1);
+}

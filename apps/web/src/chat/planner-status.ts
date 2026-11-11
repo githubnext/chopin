@@ -109,7 +109,7 @@ export function plannerSentence(status: PlannerStatus): string {
 }
 
 /**
- * What the machine button's status dot becomes: a spinner while the Planner starts, a warning
+ * What the machine button's status dot becomes: three dots while the Planner starts, a warning
  * where it cannot, and a muted grey while it is away. With no machine connected there is no dot
  * at all, the bare icon of a button that has no machine; the machine's own green is never lent to
  * it. Only a healthy Planner leaves the machine's own dot as it is.

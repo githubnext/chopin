@@ -576,8 +576,8 @@ function tab(page: Page, name: RegExp) {
 }
 
 /**
- * Every entrance and slide has finished. The reconnecting banner's spinner turns for as long as the
- * phase lasts, by design, so an animation that repeats forever is not one to wait for: waiting for
+ * Every entrance and slide has finished. The reconnecting banner's dots brighten in turn for as long
+ * as the phase lasts, by design, so an animation that repeats forever is not one to wait for: waiting for
  * it would outlast the phase itself.
  */
 async function settled(page: Page): Promise<void> {

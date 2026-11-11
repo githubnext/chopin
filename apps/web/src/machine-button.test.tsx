@@ -251,7 +251,7 @@ test("a healthy Planner leaves the button and its machine's dot exactly as they 
 	expect(healthy).not.toContain("aria-describedby");
 });
 
-test("a starting Planner turns the dot into a spinner and says where it is starting", () => {
+test("a starting Planner turns the dot into the connecting dots and says where it is starting", () => {
 	let markup = button({ state: "starting", login: "mona" });
 	expect(markup).toContain('aria-label="Runs on build-box. Connecting to build-box"');
 	expect(markup).toContain('data-tooltip="Runs on build-box. Connecting to build-box"');

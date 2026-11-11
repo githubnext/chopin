@@ -5,6 +5,7 @@ import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { CloudIcon, MachineIcon, PlusIcon, WarningIcon } from "@chopin/icons";
 
 import { PLANNER_HOW_TO_FIX, plannerButtonLabel, plannerGlyph } from "./chat/planner-status";
+import { ConnectingIndicator } from "./connecting-indicator";
 import type { PlannerGlyph, PlannerStatus } from "./chat/planner-status";
 import { documentMenuKeyAction } from "./document-actions-menu";
 import {
@@ -40,9 +41,9 @@ export function openMachinePicker() {
  * A machine as an icon with its state as a dot on the icon's corner: the cloud icon for one the
  * background service runs, the laptop otherwise, the same two as Add machine's menu. The dot is
  * the Machines page's status dot. With no machine it is the laptop in tertiary ink, no dot.
- * While the document's Planner is not simply attached the dot is its, never the machine's: a
- * thin petrol spinner as it starts, a warning where it cannot, a muted grey while it is away, and
- * with no machine connected no dot at all, the same bare icon as with no machine.
+ * While the document's Planner is not simply attached the dot is its, never the machine's: the
+ * shared connecting dots as it starts, a warning where it cannot, a muted grey while it is away,
+ * and with no machine connected no dot at all, the same bare icon as with no machine.
  */
 export function MachineGlyph(
 	{ machine, planner, size = 16 }: {
@@ -64,6 +65,12 @@ export function MachineGlyph(
 			<Icon size={size} />
 			{planner === "none"
 				? undefined
+				: planner === "starting"
+				? (
+					<span className="status-dot machine-glyph-dot" data-planner={planner}>
+						<ConnectingIndicator />
+					</span>
+				)
 				: planner
 				? <span className="status-dot machine-glyph-dot" data-planner={planner} />
 				: state && <span className="status-dot machine-glyph-dot" data-state={state} />}

@@ -42,8 +42,9 @@
 
 /*
  * The Planner's own state, where it is not simply attached. Away is the muted grey of an offline
- * machine and a warning is the warning role, each replacing the machine's green. Starting is a
- * thin petrol ring turning on the surface, so it reads as work under way and not as a state.
+ * machine and a warning is the warning role, each replacing the machine's green. Starting is the
+ * shared connecting dots (`connecting-indicator.css`) on a capsule cut from the surface, so it reads
+ * as work under way and not as a state.
  */
 .machine-glyph .machine-glyph-dot[data-planner="away"] {
 	background: var(--color-text-tertiary);
@@ -53,31 +54,17 @@
 	background: var(--color-warning-graphic);
 }
 
+/* Wider than a dot and as tall, so three dots fit where one sat; its name says it is starting. */
 .machine-glyph .machine-glyph-dot[data-planner="starting"] {
-	background: var(--machine-dot-ring);
-	/* Larger than a dot, so the ring has room to read as a ring. */
-	width: calc(var(--spacing) * 3);
-	height: calc(var(--spacing) * 3);
+	display: flex;
+	width: calc(var(--spacing) * 3.5);
 	right: calc(var(--spacing) * -1.5);
-	bottom: calc(var(--spacing) * -1.5);
+	background: var(--machine-dot-ring);
 }
 
-.machine-glyph .machine-glyph-dot[data-planner="starting"]::after {
-	content: "";
-	position: absolute;
-	inset: 0;
-	border-width: calc(var(--spacing) * 0.5);
-	border-style: solid;
-	border-color: var(--color-selected-strong);
-	border-top-color: var(--color-brand);
-	border-radius: var(--radius-full);
-}
-
-/* Reduced motion keeps the still ring: its tooltip and name say it is starting. */
-@media (prefers-reduced-motion: no-preference) {
-	.machine-glyph .machine-glyph-dot[data-planner="starting"]::after {
-		animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
-	}
+.machine-glyph-dot[data-planner="starting"] > .connecting-indicator {
+	width: 100%;
+	height: 100%;
 }
 
 /* The icon alone; its accessible name and tooltip say which machine. */

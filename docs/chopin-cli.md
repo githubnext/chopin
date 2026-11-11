@@ -506,7 +506,7 @@ however long nobody views the document.
 A Planner stays on its machine while that machine is connected, even when
 another comes online; it moves when the machine disconnects or the creator
 changes the document's machine or their default. Until it attaches, the
-machine button's dot is a thin spinner and its name says **Connecting to
+machine button's dot is three petrol dots that brighten in turn and its name says **Connecting to
 studio** (the machine's name), and an `@chopin` message sent meanwhile waits for
 it. Once it has attached the button says nothing more about it.
 

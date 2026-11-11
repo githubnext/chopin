@@ -1,0 +1,49 @@
+/*
+ * Connecting: three petrol dots, stepped from faint to full when still, brightening in turn when
+ * motion is allowed. Opacity is the only thing that moves, so the indicator never shifts what is
+ * around it, and a still frame is an ellipsis, which reads as under way on its own.
+ */
+.connecting-indicator {
+	flex: none;
+	fill: var(--color-brand);
+}
+
+.connecting-indicator circle:nth-child(1) {
+	opacity: 0.35;
+}
+
+.connecting-indicator circle:nth-child(2) {
+	opacity: 0.65;
+}
+
+@keyframes connecting-wave {
+	0%,
+	60%,
+	100% {
+		opacity: 0.35;
+	}
+
+	30% {
+		opacity: 1;
+	}
+}
+
+/*
+ * Each dot waits faint for its turn, a step after the one before, so the wave starts from the
+ * left.
+ */
+@media (prefers-reduced-motion: no-preference) {
+	.connecting-indicator circle {
+		animation: connecting-wave calc(var(--duration-linger) * 2) var(--motion-move) 0s infinite both;
+	}
+
+	.connecting-indicator circle:nth-child(2) {
+		animation: connecting-wave calc(var(--duration-linger) * 2) var(--motion-move)
+			var(--duration-base) infinite both;
+	}
+
+	.connecting-indicator circle:nth-child(3) {
+		animation: connecting-wave calc(var(--duration-linger) * 2) var(--motion-move)
+			calc(var(--duration-base) * 2) infinite both;
+	}
+}

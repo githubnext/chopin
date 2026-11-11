@@ -259,6 +259,20 @@
 		"sourceHash": "ef95f80b0d05b634dfbc54c1cf26cf950bbae85a1052b2980054499a8065e351"
 	},
 	{
+		"file": "apps/web/src/connecting-indicator.tsx",
+		"reason": "Component forwards or combines caller class names; static call-site classes are scanned. Runtime/cross-module values require review at this exact component boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"className",
+				"class > ConnectingIndicator > <svg>",
+				1
+			]
+		],
+		"sourceHash": "b0580ccca5e71a0a658b432dff33b14e2dc748a9adfb6a70d9057e5264c079b5"
+	},
+	{
 		"file": "apps/web/src/machine-button.tsx",
 		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
 		"cases": [
@@ -270,7 +284,7 @@
 				1
 			]
 		],
-		"sourceHash": "697c8f2d817dd031d8a323abe80169afa398349b95cf5c5396a4b1b7b8467e16"
+		"sourceHash": "1322920acfbc51a6bda26cf9d13c8d56cf82fd87bf8402f7cd35fe44393145ad"
 	},
 	{
 		"file": "apps/web/src/experiments/machine-setup.tsx",
