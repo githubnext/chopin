@@ -12,7 +12,8 @@ export const PLANNER_HOW_TO_FIX =
  *
  * Plain words, with none of Chopin's own terms (no Planner, attach, hold or Decisions, and no
  * mention of Chopin) and a machine, not a Planner, as the subject: `starting` is connecting to it,
- * `cant-start` is not being able to, with why as the machine reported it and what has been tried,
+ * `cant-start` is not being able to, with why as the machine reported it (or, from one that cannot
+ * say, what Chopin saw of it) and what has been tried,
  * and a `starting` one says which launch it waits on (`attempt`) once an earlier one exited;
  * `disconnected` and `held` say the work is kept; `none` says a machine is needed. Only the GitHub
  * login is ever named, never someone else's machine, so another person's machine is "@mona's
@@ -93,9 +94,12 @@ export function plannerStatus(
 		title: `Can't connect to ${where}`,
 		// Exactly as the machine reported it: a path, a command or a code is not ours to tidy.
 		reason: failure.reason,
-		detail: `${
-			failure.attempts === 1 ? "Tried once" : `Tried ${failure.attempts} times`
-		}, last at ${clockTime(failure.at)}. Still trying.`,
+		detail: failure.attempts === 0
+			// Nothing has been tried and ended yet: the machine has only not answered.
+			? `Waiting since ${clockTime(failure.at)}. Still trying.`
+			: `${failure.attempts === 1 ? "Tried once" : `Tried ${failure.attempts} times`}, last at ${
+				clockTime(failure.at)
+			}. Still trying.`,
 	};
 }
 

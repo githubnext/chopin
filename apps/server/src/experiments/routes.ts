@@ -236,11 +236,60 @@ export const CONNECTOR_PROTOCOLS: { min: number; max: number } = { min: 2, max: 
 
 /** A document's people read why a Planner backend keeps failing from this launch in a row on. */
 export const PLANNER_FAILURE_SHOWN_AT = 2;
+/**
+ * The first chopin release whose connector tells Chopin why a Planner backend keeps exiting before
+ * it attaches (`/api/connector/planner/failure`). A machine on an older one cannot, so Chopin says
+ * what it saw of that machine itself, and that updating it shows why.
+ */
+export const PLANNER_REPORTS_FROM = "0.0.23";
+/**
+ * How long a machine asked to run a document's Planner may go without one attaching before the
+ * document's people are told it is not answering, whatever its connector says or cannot say: long
+ * enough for a first start that clones a repository and builds what the backend needs.
+ */
+export const PLANNER_PATIENCE_MS = 2 * 60_000;
 /** The longest reason shown, in characters. */
 const START_REASON_CHARS = 300;
 
 /** What a machine's connector last said about its Planner backend failing to start. */
 type StartFailure = { attempts: number; reason: string; at: number };
+
+/**
+ * What Chopin saw itself of a machine starting a document's Planner, which needs nothing from its
+ * connector: when it began to wait, and each time the connector asked for a credential to launch
+ * the backend with. A launch that attached ends it, so more than one without that is a backend
+ * that exited before it attached.
+ */
+type StartTrail = { since: number; launches: number; lastLaunch?: number; stalled?: boolean };
+
+/** Whether the release `version` is older than `minimum`; a version that is not known is not. */
+function olderThan(version: string | undefined, minimum: string): boolean {
+	if (!version) return false;
+	let [have, need] = [version, minimum].map(value =>
+		value.split(/[-+]/, 1)[0]!.split(".").map(Number)
+	);
+	for (let index = 0; index < 3; index++) {
+		let difference = (have![index] ?? 0) - (need![index] ?? 0);
+		if (difference) return difference < 0;
+	}
+	return false;
+}
+
+/**
+ * Why a machine asked to run a Planner has not attached one, from what Chopin itself saw: `launches`
+ * is how many times it asked for a credential to start a backend with. A connector that cannot say
+ * why a backend exited (releases before `PLANNER_REPORTS_FROM`) is named with what to update.
+ */
+function silentReason(launches: number, version: string | undefined): string {
+	let why = launches >= 2
+		? "It started and stopped again before it connected"
+		: launches === 1
+		? "It started but hasn't connected yet"
+		: "It hasn't answered yet";
+	return olderThan(version, PLANNER_REPORTS_FROM)
+		? `${why}. It runs chopin ${version}, which can't say why: run \`chopin update\` on it`
+		: why;
+}
 
 /** Text from a connector, safe to show: no control characters, one line, short. */
 function plainText(text: string): string {
@@ -596,12 +645,44 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * restart.
 	 */
 	let startFailures = new Map<string, Map<string, StartFailure>>();
+	/**
+	 * What Chopin saw of each machine starting each document's Planner, by document id and then
+	 * machine id, for a connector that cannot say (see `StartTrail`). Forgotten as a failure is, and
+	 * when the document's machine is another: a machine that was waited on is not waited on again
+	 * from where it left off. Forgotten with a restart.
+	 */
+	let startTrails = new Map<string, Map<string, StartTrail>>();
 	function forgetStartFailure(documentId: string, machineId?: string) {
-		let failures = startFailures.get(documentId);
-		if (!failures) return;
-		if (machineId === undefined) failures.clear();
-		else failures.delete(machineId);
-		if (!failures.size) startFailures.delete(documentId);
+		for (let known of [startFailures, startTrails] as Array<Map<string, Map<string, unknown>>>) {
+			let machines = known.get(documentId);
+			if (!machines) continue;
+			if (machineId === undefined) machines.clear();
+			else machines.delete(machineId);
+			if (!machines.size) known.delete(documentId);
+		}
+	}
+	/** The trail of `machineId` starting `documentId`'s Planner, begun now if none was, and no other machine's. */
+	function startTrail(documentId: string, machineId: string): StartTrail {
+		let trails = startTrails.get(documentId) ?? new Map<string, StartTrail>();
+		startTrails.set(documentId, trails);
+		for (let other of trails.keys()) if (other !== machineId) trails.delete(other);
+		let trail = trails.get(machineId) ?? { since: auth.clock().getTime(), launches: 0 };
+		trails.set(machineId, trail);
+		return trail;
+	}
+	/** Whether a machine has been waited on for `PLANNER_PATIENCE_MS` without attaching. */
+	function stalled(trail: StartTrail) {
+		return auth.clock().getTime() - trail.since >= PLANNER_PATIENCE_MS;
+	}
+	/** Tells the rooms of the documents a machine has now waited on for its patience, once each. */
+	function announceStalled() {
+		for (let [documentId, trails] of startTrails) {
+			for (let trail of trails.values()) {
+				if (trail.stalled || !stalled(trail)) continue;
+				trail.stalled = true;
+				options.plannerStatus?.(documentId);
+			}
+		}
 	}
 	/**
 	 * Whether someone can push to a repository, by who was asked and the repository id, as GitHub
@@ -1023,17 +1104,24 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				serves(value, channel.repositoryId) && runsPlanners(value)
 			);
 			if (!live) continue;
-			let failure = startFailures.get(documentId)?.get(machineId);
+			// What the connector said, else what Chopin saw: the launches that ended without attaching,
+			// and the time that has passed, which a connector that never answers cannot report.
+			let trail = startTrail(documentId, machineId);
+			let reported = startFailures.get(documentId)?.get(machineId);
+			let ended = reported?.attempts ?? Math.max(0, trail.launches - 1);
+			let told = reported
+				? ended >= PLANNER_FAILURE_SHOWN_AT
+				: ended >= PLANNER_FAILURE_SHOWN_AT || stalled(trail);
 			return {
 				login: live.login,
 				machineId,
-				...(failure ? { attempt: failure.attempts + 1 } : {}),
-				...(failure && failure.attempts >= PLANNER_FAILURE_SHOWN_AT
+				...(ended ? { attempt: ended + 1 } : {}),
+				...(told
 					? {
 						failure: {
-							attempts: failure.attempts,
-							reason: failure.reason,
-							at: new Date(failure.at).toISOString(),
+							attempts: ended,
+							reason: reported?.reason ?? silentReason(trail.launches, live.version),
+							at: new Date(reported?.at ?? trail.lastLaunch ?? trail.since).toISOString(),
 						},
 					}
 					: {}),
@@ -1568,9 +1656,21 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let { channel } = await documentAccess(await machineCaller(machine), located.channel.id, true);
 		await auth.machines.seen(machine);
 		let url = new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
+		let issued = await planners.issue(machine, channel.id);
+		// Each launch of a backend asks for one, from every release. One asked while nothing attached
+		// is a launch Chopin can count whatever the connector can say of it; one asked while the
+		// Planner is attached is a running backend's renewal, which is not.
+		if (
+			dispatched.get(machine.id)?.has(channel.id) && !options.attachments?.()?.holding(channel.id)
+		) {
+			let trail = startTrail(channel.id, machine.id);
+			trail.launches++;
+			trail.lastLaunch = auth.clock().getTime();
+			options.plannerStatus?.(channel.id);
+		}
 		// The repository says which of the machine's checkouts the Planner runs in.
 		return json({
-			...await planners.issue(machine, channel.id),
+			...issued,
 			document: {
 				id: channel.id,
 				url,
@@ -2821,6 +2921,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	async function sweep() {
 		connections.sweep();
+		announceStalled();
 		await finishShared().catch(error =>
 			console.error("chopin: could not stop a machine's finished teammate Planners -", error)
 		);

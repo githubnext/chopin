@@ -733,6 +733,21 @@ route, not a new connector protocol: a connector that does not report is
 unaffected, and a server without the route answers a reporting connector 404,
 which it takes to mean no.
 
+A connector from before the report (chopin releases before 0.0.23, `PLANNER_REPORTS_FROM`) cannot say why
+its backend exited, and one whose backend never attaches says nothing at all, so Chopin tells what it saw
+itself rather than let _Connecting_ go on for ever. Every launch of a backend asks for a credential from
+every release, so each one asked while the Planner is not attached counts (one asked while it is
+attached is a running backend's renewal, which does not): a second means the first ended, and from the
+third in a row `starting` carries a `failure` whose `attempts` are the launches that ended and whose
+`reason` is Chopin's own (_It started and stopped again before it connected_), naming the release the
+machine runs and that `chopin update` there shows why, where it is older than 0.0.23. A machine asked
+to run a document's Planner that has not attached one after `PLANNER_PATIENCE_MS` (2 minutes: enough for
+a first start that clones and builds) is told the same way, whichever connector it runs: _It hasn't
+answered yet_ or _It started but hasn't connected yet_, with `attempts` 0, which the banner words as
+_Waiting since 7:26 PM. Still trying._ The 15-second sweep announces it once. What a connector reports,
+when it does, is told instead. All of it is forgotten as a report is, and when the document's machine
+is another, so a machine that was waited on is never waited on again from where it left off.
+
 **Unattached documents.** Members, MCP callers, and research requests never claim
 ownership under `HARNESS=remote`. An `@chopin` message or `invoke_planner` call
 for a document with no attached client, including one within its grace period or

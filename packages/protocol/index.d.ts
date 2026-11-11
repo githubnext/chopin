@@ -169,6 +169,11 @@ export declare namespace Session {
 	 * with credentials masked and the home directory as `~`. `attempts` counts the launches
 	 * in a row that exited before staying up and `at` is when the last one did (ISO 8601).
 	 * The connector is retrying until the Planner attaches, which clears it.
+	 *
+	 * For a machine whose connector cannot say (releases before 0.0.23 have no such report), or that
+	 * has not answered at all, Chopin tells what it saw itself: `reason` is then Chopin's own
+	 * words, which name the release to update, `attempts` counts the launches it saw end (none
+	 * while only waiting: 0) and `at` is when the last one began, or when the waiting did.
 	 */
 	export type PlannerStartFailure = {
 		attempts: number;

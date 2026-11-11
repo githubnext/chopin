@@ -10,6 +10,7 @@ import { Machines } from "../../auth/machines";
 import {
 	offlineMessage,
 	PLANNER_IDLE_MS,
+	PLANNER_PATIENCE_MS,
 	registerExperimentRoutes,
 	unavailableMessage,
 } from "../../experiments/routes";
@@ -47,6 +48,8 @@ async function dispatchServer(
 	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
 	/** Documents open in Chopin now, as `main.ts` says from its rooms; and how far the clock moved. */
 	let open = new Set<string>();
+	/** The documents whose Planner status was announced to their rooms, in order. */
+	let announced: string[] = [];
 	let skew = { ms: 0 };
 	let clock = () => new Date(Date.now() + skew.ms);
 	let machines!: Machines;
@@ -85,6 +88,7 @@ async function dispatchServer(
 				...runsPlanners ? { planners } : {},
 				attachments: () => server.attachments,
 				documentOpen: id => open.has(id),
+				plannerStatus: id => announced.push(id),
 				// No builds wait anywhere; only the Planner poll is exercised.
 				implementations: () =>
 					({
@@ -312,6 +316,7 @@ async function dispatchServer(
 		},
 		restart,
 		open,
+		announced,
 		skew,
 		send,
 		machine,
@@ -539,6 +544,143 @@ describe("a Planner backend that keeps failing to start", () => {
 		expect((await runtime.plannerStarting(channel.id))?.failure).toBeUndefined();
 	});
 
+	it("is told from the machine's own launches when its connector cannot say why, with what to update", async () => {
+		let { machine, choose, runtime, channel } = await dispatchServer();
+		// chopin 0.0.22 asks for a credential before each launch of its backend, as every release does,
+		// and has no way to report that the backend exited before it attached.
+		let laptop = await machine("member", "U_member", "laptop", { version: "0.0.22" });
+		await choose("member", laptop.id);
+		await laptop.poll([]);
+		await laptop.credential();
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "member",
+			machineId: laptop.id,
+		});
+		// The second credential means the first launch is over, and it never attached.
+		await laptop.credential();
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "member",
+			machineId: laptop.id,
+			attempt: 2,
+		});
+		// The third: two launches in a row exited, as a connector that could say so would have told.
+		await laptop.credential();
+		let starting = (await runtime.plannerStarting(channel.id))!;
+		expect(starting).toMatchObject({ attempt: 3, failure: { attempts: 2 } });
+		expect(starting.failure!.reason).toBe(
+			"It started and stopped again before it connected. It runs chopin 0.0.22, "
+				+ "which can't say why: run `chopin update` on it",
+		);
+		expect(Date.parse(starting.failure!.at)).toBeGreaterThan(0);
+		// The people of the document are told it as they are told a connector's own report.
+		expect(startingMessage(starting.login, starting.failure)).toStartWith(
+			"Can't connect to @member's machine: It started and stopped again before it connected.",
+		);
+	});
+
+	it("is told from the machine's own launches without asking a current connector to update", async () => {
+		let { machine, choose, runtime, channel } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop", { version: "0.0.26" });
+		await choose("member", laptop.id);
+		await laptop.poll([]);
+		for (let launch = 0; launch < 3; launch++) await laptop.credential();
+		let reason = (await runtime.plannerStarting(channel.id))!.failure!.reason;
+		expect(reason).toBe("It started and stopped again before it connected");
+		// What the connector itself reports is more than this, and is what is told instead.
+		await laptop.report(failing(channel.id, 3, "exit 127: node: not found"));
+		expect((await runtime.plannerStarting(channel.id))!.failure).toEqual({
+			attempts: 3,
+			reason: "exit 127: node: not found",
+			at: expect.any(String),
+		});
+	});
+
+	it("goes once the Planner attaches, and a launch that attached is not counted against the next", async () => {
+		let { machine, choose, runtime, channel, server } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop", { version: "0.0.22" });
+		await choose("member", laptop.id);
+		await laptop.poll([]);
+		await laptop.credential();
+		await laptop.credential();
+		let link = await laptop.backend();
+		await link.next("attached");
+		// While attached its credentials are renewed and nothing is told.
+		await laptop.credential();
+		await laptop.credential();
+		expect(await runtime.plannerStarting(channel.id)).toBeUndefined();
+		link.send({ type: "detach" });
+		for (let deadline = Date.now() + 4_000; server.attachments.holding(channel.id);) {
+			if (Date.now() > deadline) throw new Error("the Planner was never released");
+			await Bun.sleep(50);
+		}
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "member",
+			machineId: laptop.id,
+		});
+	});
+
+	it("says a machine that was asked and has not answered is not answering, once it has had its time", async () => {
+		let { machine, choose, runtime, channel, skew, announced } = await dispatchServer();
+		let old = await machine("member", "U_member", "old-box", { version: "0.0.22" });
+		await choose("member", old.id);
+		await old.poll([]);
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "member",
+			machineId: old.id,
+		});
+		// Within its time, it is only connecting, and a sweep says nothing new.
+		skew.ms += PLANNER_PATIENCE_MS - 1_000;
+		announced.length = 0;
+		await runtime.sweep();
+		expect(announced).toEqual([]);
+		expect((await runtime.plannerStarting(channel.id))?.failure).toBeUndefined();
+
+		// Past it, the people of the document are told, and the sweep announces it once.
+		skew.ms += 2_000;
+		await runtime.sweep();
+		await runtime.sweep();
+		expect(announced).toEqual([channel.id]);
+		let starting = (await runtime.plannerStarting(channel.id))!;
+		expect(starting.failure).toEqual({
+			attempts: 0,
+			reason: "It hasn't answered yet. It runs chopin 0.0.22, which can't say why: "
+				+ "run `chopin update` on it",
+			at: expect.any(String),
+		});
+
+		// One that started its backend and has none attached says so instead.
+		await old.credential();
+		expect((await runtime.plannerStarting(channel.id))!.failure).toMatchObject({
+			attempts: 0,
+			reason: expect.stringContaining("It started but hasn't connected yet."),
+		});
+	});
+
+	it("does not run its patience out for a machine that is not the one asked, or for one that attached", async () => {
+		let { machine, choose, runtime, channel, skew } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		let desk = await machine("member", "U_member", "desk");
+		await choose("member", laptop.id);
+		await laptop.poll([]);
+		await runtime.plannerStarting(channel.id);
+		skew.ms += PLANNER_PATIENCE_MS + 1_000;
+		expect((await runtime.plannerStarting(channel.id))?.failure?.attempts).toBe(0);
+		// The document moves to the desk: it has not waited at all yet.
+		await choose("member", desk.id);
+		await desk.poll([]);
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "member",
+			machineId: desk.id,
+		});
+		// And back: the laptop's wait does not carry over.
+		await choose("member", laptop.id);
+		await laptop.poll([]);
+		expect(await runtime.plannerStarting(channel.id)).toEqual({
+			login: "member",
+			machineId: laptop.id,
+		});
+	});
+
 	it("is what an @chopin request is told while the Planner cannot start, instead of to try again in a moment", () => {
 		expect(startingMessage("mona")).toBe(
 			"Still connecting to @mona's machine. Try again in a moment.",
@@ -552,6 +694,17 @@ describe("a Planner backend that keeps failing to start", () => {
 		).toBe(
 			"Can't connect to @mona's machine: unsafe-checkout: refused "
 				+ "(3 attempts in a row). It keeps trying; try again once that is fixed.",
+		);
+		// A machine that has not answered has no attempts in a row to count.
+		expect(
+			startingMessage("mona", {
+				attempts: 0,
+				reason: "It hasn't answered yet",
+				at: "2026-11-04T02:00:00.000Z",
+			}),
+		).toBe(
+			"Can't connect to @mona's machine: It hasn't answered yet. "
+				+ "It keeps trying; try again once that is fixed.",
 		);
 	});
 
