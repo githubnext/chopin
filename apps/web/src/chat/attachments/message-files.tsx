@@ -11,7 +11,7 @@
  */
 
 import { useState } from "react";
-import { CheckIcon, DownloadIcon, LinkIcon } from "lucide-react";
+import { CheckIcon, DownloadIcon, LinkIcon } from "@chopin/icons";
 
 import { attachmentPath, formatBytes } from "@chopin/protocol/attachment";
 import { MessageAttachments } from "@/components/assistant-ui/elements/message-attachment";

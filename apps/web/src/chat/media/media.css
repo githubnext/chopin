@@ -48,6 +48,18 @@
 	background: var(--color-warning-ink);
 }
 
+.chat-file-icon[data-file-kind="image"] {
+	background: var(--color-plum-9);
+}
+
+.chat-file-icon[data-file-kind="video"] {
+	background: var(--color-plum-11);
+}
+
+.chat-file-icon[data-file-kind="audio"] {
+	background: var(--color-lime-11);
+}
+
 /* Sent files: Slack's stack of cards, 8px apart. */
 [data-chat-files] {
 	gap: calc(var(--spacing) * 2);

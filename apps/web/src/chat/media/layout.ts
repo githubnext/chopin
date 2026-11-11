@@ -82,6 +82,9 @@ export type FileKind =
 	| "code"
 	| "text"
 	| "archive"
+	| "image"
+	| "video"
+	| "audio"
 	| "generic";
 
 const KINDS: Record<string, [FileKind, string]> = {
@@ -117,6 +120,23 @@ const KINDS: Record<string, [FileKind, string]> = {
 	xz: ["archive", "Archive"],
 	"7z": ["archive", "Archive"],
 	rar: ["archive", "Archive"],
+	svg: ["image", "SVG image"],
+	png: ["image", "PNG image"],
+	jpg: ["image", "JPEG image"],
+	jpeg: ["image", "JPEG image"],
+	gif: ["image", "GIF image"],
+	webp: ["image", "WebP image"],
+	avif: ["image", "AVIF image"],
+	heic: ["image", "HEIC image"],
+	mp4: ["video", "MP4 video"],
+	mov: ["video", "QuickTime video"],
+	webm: ["video", "WebM video"],
+	mkv: ["video", "Video"],
+	mp3: ["audio", "MP3 audio"],
+	wav: ["audio", "WAV audio"],
+	m4a: ["audio", "Audio"],
+	ogg: ["audio", "Ogg audio"],
+	flac: ["audio", "FLAC audio"],
 	ts: ["code", "TypeScript"],
 	tsx: ["code", "TypeScript"],
 	mts: ["code", "TypeScript"],
