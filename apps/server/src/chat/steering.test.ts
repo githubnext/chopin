@@ -301,3 +301,29 @@ test("an idle Chat starts a turn for the message, as it always did, and nothing 
 	h.emit("session.idle");
 	await until(() => !h.chat.busy);
 });
+
+test("an invoke_planner call while the process is stopping and idle is answered planner-unavailable, for its caller to ask the next process", async () => {
+	let h = harness();
+	Chat.holdStarts();
+	try {
+		expect(await Chat.invoke(h.context, { id: "U_ana", login: "ana" }, "Review the plan")).toBe(
+			"planner-unavailable",
+		);
+		expect(
+			await Chat.invoke(
+				h.context,
+				{ id: "U_ana", login: "ana" },
+				"follow up",
+				undefined,
+				undefined,
+				undefined,
+				"Automatic follow-up requested by @ana.",
+			),
+		).toBe("planner-unavailable");
+	} finally {
+		Chat.holdStarts(false);
+	}
+	expect(h.chat.entries).toEqual([]);
+	expect(h.chat.waiting).toEqual([]);
+	expect(h.prompts).toEqual([]);
+});
