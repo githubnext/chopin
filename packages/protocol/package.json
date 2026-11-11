@@ -25,6 +25,10 @@
 			"types": "./commands.ts",
 			"default": "./commands.ts"
 		},
+		"./mention-sources": {
+			"types": "./mention-sources.ts",
+			"default": "./mention-sources.ts"
+		},
 		"./model-choice": {
 			"types": "./model-choice.ts",
 			"default": "./model-choice.ts"
