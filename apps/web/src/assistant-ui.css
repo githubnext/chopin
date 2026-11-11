@@ -48,13 +48,17 @@
 	/* The one raw palette colour the copies use (a dialog's scrim) is Chopin's ink. */
 	--color-black: var(--color-gray-900);
 	/*
-	 * The raw palette the composer names: its accent blue (caret, recording dot, upload bar, a drop
-	 * target's tint) is Chopin's petrol, its green check is Chopin's success and its reds are
-	 * Chopin's destructive. Chopin has no Tailwind palette, so none of these would draw otherwise.
+	 * The raw palette the composer and context breakdown name: accent blue (caret, recording dot,
+	 * upload bar, a drop target's tint) is Chopin's petrol, green is Chopin's success, amber is
+	 * Chopin's warning and reds are Chopin's destructive. Chopin has no Tailwind palette, so none
+	 * of these would draw otherwise.
 	 */
 	--color-blue-400: var(--color-brand);
 	--color-blue-500: var(--color-brand);
 	--color-emerald-500: var(--color-success);
+	--color-amber-400: var(--color-warning);
+	--color-amber-500: var(--color-warning);
+	--color-amber-600: var(--color-warning-ink);
 	--color-red-400: var(--color-destructive);
 	--color-red-500: var(--color-destructive);
 	/* The red a copy draws its words in, such as a file's reason, is Chopin's danger text, which reads on a soft fill. */

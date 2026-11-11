@@ -101,6 +101,8 @@ const ROOTS = {
 		"composer-voice-button",
 		"message-attachments",
 		"markdown-text",
+		"composer-context",
+		"context-breakdown",
 	],
 	open: [
 		"model-selector-content",
@@ -147,7 +149,7 @@ const MARKDOWN_PARTS: readonly [label: string, select: (root: Locator) => Locato
 	["pre", root => root.locator(".aui-md-pre")],
 ];
 const TARGETS =
-	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button, [data-slot="markdown-text"] .aui-button-icon, [data-slot="markdown-text"] .aui-md-a';
+	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button, [data-slot="markdown-text"] .aui-button-icon, [data-slot="markdown-text"] .aui-md-a, [data-slot="composer-context"] > button';
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 const effortRadios = (page: Page) => slot(page, "model-selector-effort").getByRole("radio");
 
@@ -215,11 +217,28 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 		await expectClassGeometry(radios.nth(index), "effort radio");
 		checked++;
 	}
-	expect(checked).toBe(79);
+	let ringButtons = plate(page, "assistant-ui").locator('[data-slot="composer-context"] > button');
+	expect(await ringButtons.count()).toBe(2);
+	for (let index = 0; index < 2; index++) {
+		await expectClassGeometry(ringButtons.nth(index), "composer-context button");
+		checked++;
+	}
+	await page.keyboard.press("Escape");
+	let firstRing = ringButtons.first();
+	await firstRing.scrollIntoViewIfNeeded();
+	await firstRing.focus();
+	let floatingPanel = plate(page, "assistant-ui")
+		.locator('[data-slot="composer-context"] > div')
+		.first();
+	await expect.poll(() => floatingPanel.evaluate(node => getComputedStyle(node).opacity)).toBe("1");
+	await expectClassGeometry(floatingPanel, "composer-context floating");
+	checked++;
+	expect(checked).toBe(86);
 });
 
 test("assistant-ui's own radii, in pixels, where Chopin's scale differs", async ({ page }) => {
-	// Tailwind's `rounded-xl` is 12px and Chopin's is 10px: the popup, its list and the code block
+	// Tailwind's `rounded-xl` is 12px and Chopin's is 10px, and `rounded-2xl` (16px, the context
+	// breakdown) is absent from Chopin's scale: the popup, its list and the code block
 	// header and body are the proof. The hand-adapted code header was 28px tall (9px shorter), with a
 	// 6px radius and 2px by 12px/4px padding; assistant-ui's is 37px tall (`py-1.5` + `size-6` + 1px
 	// top border), with 12px top corners and 6px by 14px padding.
@@ -259,6 +278,12 @@ test("assistant-ui's own radii, in pixels, where Chopin's scale differs", async 
 	expect((await measure(slot(page, "command").first())).radius).toBe(12);
 	expect((await measure(slot(page, "model-selector-item").first())).radius).toBe(8);
 	expect((await measure(effortRadios(page).first())).radius).toBe(6);
+	expect((await measure(slot(page, "context-breakdown").first())).radius).toBe(16);
+	let ringButton = await measure(
+		plate(page, "assistant-ui").locator('[data-slot="composer-context"] > button').first(),
+	);
+	expect([ringButton.width, ringButton.height]).toEqual([32, 32]);
+	expect(ringButton.radius).toBeGreaterThan(1000);
 	// And its type: `text-sm` is 14px on 20px, not Chopin's fluid step on 1.5.
 	let trigger = await measure(plate(page, "assistant-ui").getByRole("combobox").first());
 	expect([trigger.fontSize, trigger.lineHeight]).toEqual([14, 20]);

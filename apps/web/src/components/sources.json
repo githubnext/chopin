@@ -11,6 +11,13 @@
 			"patchSha256": "0218b24a9992b131a5be6f1d5e99fecfcc323b5112dda272ac9de1c66028a347"
 		},
 		{
+			"file": "apps/web/src/components/assistant-ui/elements/context-breakdown.tsx",
+			"registry": "@assistant-ui",
+			"item": "elements-context-breakdown",
+			"version": "assistant-ui/assistant-ui@7db1f744a09e",
+			"sha256": "f52f206457afc4be9071f7d0604136c054c84fc56a48251d445ecc92b8af5cd3"
+		},
+		{
 			"file": "apps/web/src/components/assistant-ui/elements/directive-text.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-directive-text",
@@ -46,7 +53,7 @@
 			"file": "apps/web/src/components/assistant-ui/elements/surfaces.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-surfaces",
-			"version": "assistant-ui/assistant-ui@ec601b37f6b6",
+			"version": "assistant-ui/assistant-ui@7db1f744a09e",
 			"sha256": "5d81fbb669e67ae20026cd30ed57efc51a5e3ee0f4f5d265e1723de75359b8fa"
 		},
 		{
@@ -67,14 +74,14 @@
 			"file": "apps/web/src/components/assistant-ui/utils/range.ts",
 			"registry": "@assistant-ui",
 			"item": "elements-range",
-			"version": "assistant-ui/assistant-ui@d25a97a22f00",
+			"version": "assistant-ui/assistant-ui@7db1f744a09e",
 			"sha256": "555d880ea1ac3a2b8f0cdbe76bece147e72f6748a07a643dbe404957c64d451d"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/utils/useIsomorphicLayoutEffect.ts",
 			"registry": "@assistant-ui",
 			"item": "elements-surfaces",
-			"version": "assistant-ui/assistant-ui@ec601b37f6b6",
+			"version": "assistant-ui/assistant-ui@7db1f744a09e",
 			"sha256": "8db117d730e640655e5099e086af4e00d545c283839d9ef5885ca93419d51893"
 		},
 		{
@@ -82,7 +89,7 @@
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "860d72c3045ae296ac5878e3915c3df1f71765864783ca78b3c9a8314e33660a"
+			"sha256": "139bc51a5987412b20520ab115126b038c37a3ec98fbd121315902488d7643ac"
 		},
 		{
 			"file": "apps/web/src/components/hooks/use-copy-to-clipboard.ts",
