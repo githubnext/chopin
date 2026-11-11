@@ -17,7 +17,8 @@ import { ulid } from "@chopin/dialect";
 import * as Service from "../plan/service";
 import { openPlan } from "../testing/plan";
 import { setup } from "./attachments.test-fixtures";
-import { installJobCleanup, until } from "./job.test-fixtures";
+import { harness, installJobCleanup, member, until } from "./job.test-fixtures";
+import * as Chat from "./service";
 import * as Threads from "./threads";
 
 import type { Chat as Wire } from "@chopin/protocol";
@@ -370,6 +371,48 @@ describe("a document with Chat threads and session compactions, on the server it
 				"Root message before thread",
 				"Summary shared back to Chat",
 			]);
+		},
+		240_000,
+	);
+});
+
+describe("a transcript with a message given to the running turn, on the server it would be rolled back to", () => {
+	it.skipIf(!available)(
+		`is opened by the real ${BASE} reader with every message, the steered one included, as an ordinary one`,
+		async () => {
+			let older = olderServer();
+			await Bun.write(join(older, READER), Bun.file(join(ROOT, READER)));
+			let h = harness();
+			let speaking = (handle: string) =>
+				({ data: { handle, principalId: `U_${handle}` }, send: () => {} }) as never;
+			await Chat.send(h.context, speaking("ana"), member("@chopin plan the rollout"));
+			await until(() => h.prompts.length === 1);
+			await Chat.send(h.context, speaking("bo"), member("@chopin also cover the rollback"));
+			await until(() => h.steered.length === 1);
+			await Chat.send(h.context, speaking("bo"), { ...member("Thanks, team"), to: "room" });
+			h.emit("session.idle");
+			await until(() => !h.chat.busy);
+			let context = await openPlan();
+			context.plan.chat.entries.push(...(structuredClone(h.chat.entries) as Wire.Entry[]));
+			await Service.persist(context.plan);
+			await Service.close(context.plan);
+			let loaded = (await context.storage.collaboration.load(context.channel.id, context.now))!;
+			let sidecar = structuredClone(loaded.sidecar ?? loaded.snapshot!.sidecar) as Record<
+				string,
+				unknown
+			>;
+			let file = join(scratch, "steered-written.json");
+			await Bun.write(file, JSON.stringify(sidecar));
+			let result = await read(older, file);
+			expect(result.ok, JSON.stringify(result)).toBe(true);
+			let entries = (result as Extract<Read, { ok: true }>).entries;
+			expect(entries.map(entry => entry.text)).toEqual([
+				"plan the rollout",
+				"also cover the rollback",
+				"Thanks, team",
+			]);
+			// Nothing the older server reads says a message waits, was sent or failed.
+			for (let entry of entries) expect(entry.deliveryState).toBeUndefined();
 		},
 		240_000,
 	);
