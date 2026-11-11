@@ -443,11 +443,6 @@ export type CommitChannel = {
 	researchProjections?: ResearchProjectionChange[];
 	/** Lifecycle and shutdown maintenance may persist after document archival. */
 	allowArchived?: boolean;
-	/**
-	 * Deferred Planner turns written or moved in this commit's transaction, so a request is
-	 * durable no later than the entry that acknowledges it. A repeated operation applies none.
-	 */
-	deferredTurns?: DeferredTurnChange[];
 };
 
 export type ResearchProjectionChange = { id: string; action: "add" | "remove" };
@@ -461,8 +456,6 @@ export class ResearchProjectionConflict extends StorageError {
 }
 
 export type CommitResult = {
-	/** What each of the commit's `deferredTurns` did, in the same order; absent for a repeat. */
-	deferredTurns?: DeferredTurnOutcome[];
 	sidecar?: JsonValue;
 	/** Present when the operation synchronizes an authored title. */
 	channel?: ChannelRecord;
@@ -1105,109 +1098,3 @@ export type McpSession = {
 	createdAt: Date;
 	lastSeenAt: Date;
 };
-
-export const DEFERRED_TURN_KINDS = [
-	"composer",
-	"invoke_planner",
-	"invoke_system",
-	"comment",
-	"draft",
-] as const;
-export type DeferredTurnKind = (typeof DEFERRED_TURN_KINDS)[number];
-
-export const DEFERRED_TURN_STATES = [
-	"waiting",
-	"started",
-	"ended",
-	"interrupted",
-	"cancelled",
-] as const;
-export type DeferredTurnState = (typeof DEFERRED_TURN_STATES)[number];
-
-/**
- * Why Chopin cancelled a request it could not run, for what its sender is told: the agent was
- * reset, the sender can no longer write, or the document is gone. A request its sender took back
- * or a comment whose thread was resolved has none.
- */
-export const DEFERRED_CANCEL_REASONS = ["agent", "access", "unavailable"] as const;
-export type DeferredCancelReason = (typeof DEFERRED_CANCEL_REASONS)[number];
-
-/** An acknowledged Planner request whose turn had not started, kept until it runs or is resolved. */
-export type DeferredTurn = {
-	id: string;
-	/** The root document whose Chat and Planner the request is for. */
-	documentId: string;
-	/** What the acknowledgement named; unique within the document. */
-	requestId: string;
-	kind: DeferredTurnKind;
-	handle: string;
-	userId: string;
-	/** Empty for a comment, whose prompt is built from its thread when it starts. */
-	text: string;
-	references: JsonValue[];
-	/** A composer message's destination and fingerprints, for recognising a retried send. */
-	delivery?: JsonValue;
-	focusChannelId?: string;
-	focusTitle?: string;
-	/** The comment thread, and the child holding it when it is not in the document. */
-	threadId?: string;
-	threadChannelId?: string;
-	/** The revision a task draft was asked for. */
-	planRevision?: number;
-	claimantSessionId?: string;
-	ownerSessionIdAtAccept?: string;
-	state: DeferredTurnState;
-	createdAt: Date;
-	/** The writer lease the latest transition was written under. */
-	fencing: number;
-	resolvedAt?: Date;
-	/** Set only on a cancelled turn, when Chopin cancelled it. */
-	cancelReason?: DeferredCancelReason;
-};
-
-export type NewDeferredTurn = Omit<
-	DeferredTurn,
-	"state" | "fencing" | "resolvedAt" | "cancelReason"
->;
-
-/**
- * Moves one turn from the state it is expected to be in. Only `waiting` to `started` or
- * `cancelled`, and `started` to `ended` or `interrupted`, are legal; anything else changes nothing.
- */
-export type DeferredTurnTransition = {
-	id: string;
-	from: DeferredTurnState;
-	to: DeferredTurnState;
-	at: Date;
-	/** Why Chopin cancelled it; kept only with a move to `cancelled`. */
-	reason?: DeferredCancelReason;
-};
-
-export type DeferredTurnChange =
-	| { action: "insert"; turn: NewDeferredTurn }
-	| ({ action: "transition" } & DeferredTurnTransition);
-
-export type DeferredTurnOutcome =
-	| {
-		action: "insert";
-		/**
-		 * `repeated`: the document already has this request, returned as it first was.
-		 * `thread-waiting`: a comment thread already has a waiting turn, returned, and nothing was
-		 * written.
-		 */
-		status: "inserted" | "repeated" | "thread-waiting";
-		turn: DeferredTurn;
-	}
-	| { action: "transition"; changed: true; turn: DeferredTurn }
-	| {
-		action: "transition";
-		changed: false;
-		/** No such row, a pair the states do not allow, or a row not in the state asked for. */
-		reason: "missing" | "illegal" | "state";
-		turn?: DeferredTurn;
-	};
-
-export function legalDeferredTransition(from: DeferredTurnState, to: DeferredTurnState): boolean {
-	return (from === "waiting" && (to === "started" || to === "cancelled"))
-		|| (from === "started" && (to === "ended" || to === "interrupted"));
-}

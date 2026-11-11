@@ -34,10 +34,6 @@ import type {
 	CreateResearchWorkspaceResult,
 	CreateWebSession,
 	DecisionAnswer,
-	DeferredTurn,
-	DeferredTurnOutcome,
-	DeferredTurnState,
-	DeferredTurnTransition,
 	DocumentVersion,
 	EnqueueBackgroundJob,
 	FailBackgroundJob,
@@ -50,7 +46,6 @@ import type {
 	MachineFavorite,
 	MachineRepository,
 	McpSession,
-	NewDeferredTurn,
 	PauseBackgroundJob,
 	PlannerCredential,
 	PlannerLinkHold,
@@ -511,28 +506,19 @@ export interface McpSessionStore {
  * nothing and says why. The same changes can ride a `collaboration.commit`, which is how a row
  * is made durable no later than the entry that acknowledges it.
  */
+/**
+ * The rows an earlier release kept for Planner requests that waited for a turn. Nothing waits for a
+ * Planner now, so nothing reads or writes them; the table is kept, with its rows, so a rollback
+ * finds them as they were, and only closed.
+ */
 export interface DeferredTurnStore {
 	/**
-	 * Adds a `waiting` row. A request id the document already has returns that row, and a comment
-	 * thread that already has a waiting row returns it, writing nothing.
+	 * Closes every row still open, under the writer lease: a `waiting` row becomes `cancelled`
+	 * and a `started` one `interrupted`, so the message each was kept for stays in its Chat as an
+	 * ordinary posted one that no Planner ever took. Returns how many rows it closed. A row already
+	 * closed is left as it is, so this can run at every start.
 	 */
-	insert(lease: Lease, turn: NewDeferredTurn): Promise<DeferredTurnOutcome>;
-	/**
-	 * Moves a row from the state it is expected to be in, recording the lease's fencing token and,
-	 * for a final state, `at`. A turn ends only under the lease it started under.
-	 */
-	transition(lease: Lease, change: DeferredTurnTransition): Promise<DeferredTurnOutcome>;
-	/**
-	 * Marks every `started` row written under an older fencing token interrupted, in a document or
-	 * in all, and returns them in the order they were accepted. Fencing tokens compare only within
-	 * one lease: the deployment's writer lease, which every row is written under.
-	 */
-	interruptStale(lease: Lease, at: Date, documentId?: string): Promise<DeferredTurn[]>;
-	get(documentId: string, requestId: string): Promise<DeferredTurn | undefined>;
-	/** A document's rows in the order they were accepted, optionally only in these states. */
-	list(documentId: string, states?: DeferredTurnState[]): Promise<DeferredTurn[]>;
-	/** Documents with a row in any of these states, by id. */
-	documents(states: DeferredTurnState[]): Promise<string[]>;
+	retire(lease: Lease, at: Date): Promise<number>;
 }
 
 /** The complete durable boundary. No provider-specific primitive crosses it. */

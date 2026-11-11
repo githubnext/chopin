@@ -15,7 +15,7 @@ import { PostgresRunStageStore } from "./run-stages";
 import { PostgresDecisionAnswerStore } from "./decision-answers";
 import { PostgresDocumentVersionStore } from "./versions";
 import { PostgresMachineStore } from "./machines";
-import { applyDeferredTurnChanges, PostgresDeferredTurnStore } from "./deferred-turns";
+import { PostgresDeferredTurnStore } from "./deferred-turns";
 import { PostgresMcpSessionStore } from "./mcp-sessions";
 import { PostgresPlannerCredentialStore } from "./planner-credentials";
 import { PostgresChatThreadStore } from "./chat-threads";
@@ -1666,9 +1666,6 @@ export class PostgresStorage implements StorageAdapter {
 					WHERE channel_id = ${input.channelId}
 				`;
 				}
-				let deferredTurns = input.deferredTurns?.length
-					? await applyDeferredTurnChanges(transaction, input.lease, input.deferredTurns)
-					: undefined;
 				for (let [ordinal, item] of input.events.entries()) {
 					await transaction`
 					INSERT INTO channel_events (
@@ -1701,7 +1698,6 @@ export class PostgresStorage implements StorageAdapter {
 					revision,
 					sequence,
 					repeated: false,
-					...(deferredTurns ? { deferredTurns } : {}),
 					...(saved ? { channel: saved } : {}),
 					...(sidecar !== undefined ? { sidecar } : {}),
 				};
