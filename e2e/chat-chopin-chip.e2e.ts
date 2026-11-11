@@ -330,10 +330,16 @@ test("the first line runs after the chip and the rest run under it, and the draf
 	);
 	await expect(chip).toBeVisible();
 	let lines = await draft.evaluate(element => {
+		// The boxes of the words, not of the paragraph that holds them.
 		let range = document.createRange();
-		range.selectNodeContents(element);
 		let starts = new Map<number, number>();
-		for (let box of range.getClientRects()) {
+		let walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+		let boxes: DOMRect[] = [];
+		while (walker.nextNode()) {
+			range.selectNodeContents(walker.currentNode);
+			boxes.push(...range.getClientRects());
+		}
+		for (let box of boxes) {
 			let line = Math.round(box.y);
 			starts.set(line, Math.min(starts.get(line) ?? Infinity, box.x));
 		}

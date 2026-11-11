@@ -85,6 +85,16 @@ export default defineConfig({
 	},
 	optimizeDeps: {
 		esbuildOptions: { minifyWhitespace: true, minifySyntax: true },
+		// The Chat draft's editor loads after the page, so the development server would find these
+		// only then and reload the page to bundle them; it bundles them at start instead.
+		include: [
+			"lexical",
+			"@lexical/history",
+			"@lexical/link",
+			"@lexical/list",
+			"@lexical/rich-text",
+			"@lexical/utils",
+		],
 	},
 
 	resolve: {
@@ -97,10 +107,10 @@ export default defineConfig({
 				),
 			},
 		],
-		// Only what this app resolves itself. Lexical and Yjs belong to the
-		// editor package, and listing them here would ask Vite to resolve them
-		// from a root that does not have them. Their single-copy guarantee comes
-		// from the catalog pin instead, which `singleton.test.ts` asserts.
+		// Only what this app resolves itself. Yjs belongs to the editor package,
+		// and listing it here would ask Vite to resolve it from a root that does
+		// not have it. Lexical's single copy, which the Chat draft shares with
+		// the editor, comes from the catalog pin both depend on.
 		dedupe: ["react", "react-dom"],
 	},
 

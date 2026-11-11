@@ -159,7 +159,7 @@ export function ComposerSpecimen(
 			notice={notice}
 			onSubmit={() => {}}
 			references={{ disabled: false, onMentionDocs: () => setDraft(value => `${value}#`) }}
-			format={{ shown: true, disabled: !draftable, onToggle: () => {}, onFormat: () => {} }}
+			format={{ shown: true, disabled: !draftable, onToggle: () => {} }}
 			mention={{ disabled: !draftable, onMention: () => setDraft(value => `${value}@`) }}
 			run={run}
 			sendDisabled={!draftable || sending || !draft.trim()}

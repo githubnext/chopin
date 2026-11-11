@@ -4,12 +4,10 @@ import {
 	acknowledgeDraft,
 	addressedOutsideReferences,
 	addressesPlanner,
-	beforeInputSelection,
 	boundedChatError,
 	chatSendPayload,
 	contiguousReplacement,
 	destinationCue,
-	expandToChips,
 	insertCommand,
 	insertPointer,
 	insertReference,
@@ -345,7 +343,7 @@ describe("textarea replacement reconciliation", () => {
 			.toEqual([]);
 	});
 
-	test("uses beforeinput selection to drop whole replacements and composition overlap", () => {
+	test("uses the selection an edit replaced to drop whole replacements", () => {
 		let text = "Use #Plan now";
 		let reference = documentDraft(text, "#Plan");
 		let pasted = "Pasted #Plan";
@@ -358,10 +356,6 @@ describe("textarea replacement reconciliation", () => {
 			start: 0,
 			end: text.length,
 		})).toEqual([]);
-		expect(beforeInputSelection(4, 4, "deleteContentBackward", text.length)).toEqual({
-			start: 3,
-			end: 4,
-		});
 	});
 });
 
@@ -711,32 +705,5 @@ describe("focus", () => {
 		});
 		expect(chatSendPayload("@chopin tighten it", [], false, REQUEST_ID, true, CHILD)?.focus)
 			.toBeUndefined();
-	});
-});
-
-describe("a chip is edited whole", () => {
-	let chips = [{ start: 4, end: 11 }, { start: 12, end: 16 }];
-
-	test("deleting at its edge, or inside it, takes all of it, and only in the direction it is deleted", () => {
-		expect(expandToChips(chips, 11, 11, "deleteContentBackward")).toEqual({ start: 4, end: 11 });
-		expect(expandToChips(chips, 8, 8, "deleteContentBackward")).toEqual({ start: 4, end: 11 });
-		expect(expandToChips(chips, 4, 4, "deleteContentForward")).toEqual({ start: 4, end: 11 });
-		expect(expandToChips(chips, 4, 4, "deleteContentBackward")).toEqual({ start: 4, end: 4 });
-		expect(expandToChips(chips, 11, 11, "deleteContentForward")).toEqual({ start: 11, end: 11 });
-		expect(expandToChips(chips, 12, 12, "deleteWordForward")).toEqual({ start: 12, end: 16 });
-	});
-
-	test("a selection that reaches into one takes the whole of it, as far as the next", () => {
-		expect(expandToChips(chips, 8, 14, "deleteContentBackward")).toEqual({ start: 4, end: 16 });
-		expect(expandToChips(chips, 0, 5, "insertText")).toEqual({ start: 0, end: 11 });
-		expect(expandToChips(chips, 0, 3, "insertText")).toEqual({ start: 0, end: 3 });
-		expect(expandToChips(chips, 11, 12, "deleteContentBackward")).toEqual({ start: 11, end: 12 });
-	});
-
-	test("typing with the caret inside one goes after it, and typing at its edges is untouched", () => {
-		expect(expandToChips(chips, 6, 6, "insertText")).toEqual({ start: 11, end: 11 });
-		expect(expandToChips(chips, 11, 11, "insertText")).toEqual({ start: 11, end: 11 });
-		expect(expandToChips(chips, 4, 4, "insertText")).toEqual({ start: 4, end: 4 });
-		expect(expandToChips([], 3, 3, "deleteContentBackward")).toEqual({ start: 3, end: 3 });
 	});
 });

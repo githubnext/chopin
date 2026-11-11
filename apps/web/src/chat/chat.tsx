@@ -43,9 +43,7 @@ import {
 	restoreOutbox,
 } from "./delivery";
 import type { DraftInputHandle } from "./draft-input";
-import { applyFormat } from "./format-markdown";
 import { keepFormatPreference, readFormatPreference } from "./format-preference";
-import type { Format } from "./format-markdown";
 import { bannerSlot } from "./banner-slot";
 import { ConnectionBannerView } from "./connection-banner";
 import type { ConnectionBanner, TranscriptFacts } from "./connection-banner";
@@ -1103,22 +1101,6 @@ export function Chat(
 		keepFormatPreference(handle, !formatting);
 		setFormatting(on => !on);
 	};
-	// A mark is inserted into the draft's text as Markdown, round the selection, and what it
-	// replaced is told so that the references outside it are kept.
-	let formatDraft = (kind: Format) => {
-		let current = draftRef.current;
-		let result = applyFormat(kind, current.text, selection);
-		setDraft(
-			reviseComposerDraft(
-				current,
-				result.text,
-				reconcileReferenceDrafts(current.text, result.text, current.references, result.edit),
-			),
-		);
-		setSelection({ start: result.start, end: result.end });
-		setSendError(undefined);
-		pendingCaret.current = { start: result.start, end: result.end };
-	};
 	// An `@` at the caret, which opens the mentions, or a `#`, which opens the documents and parts.
 	let startMention = (marker: "#" | "@" = "@") => {
 		let current = draftRef.current;
@@ -1504,7 +1486,6 @@ export function Chat(
 					shown: formatting,
 					disabled: !composerShown || submitting,
 					onToggle: toggleFormatting,
-					onFormat: formatDraft,
 				}}
 				mention={{ disabled: !composerShown || submitting, onMention: () => startMention("@") }}
 				files={attachments

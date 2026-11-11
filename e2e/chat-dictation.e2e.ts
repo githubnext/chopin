@@ -231,7 +231,7 @@ test("shows what is being said beside the caret, then writes it there, around th
 	await fillChat(input, "Plan:  today");
 	// Put the caret between the two spaces.
 	await input.evaluate(element => {
-		let text = element.firstChild as Text;
+		let text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode() as Text;
 		window.getSelection()!.setBaseAndExtent(text, 6, text, 6);
 	});
 	await dictate(page).click();
@@ -590,7 +590,7 @@ test("dictates through the deployment's transcription even where the browser rec
 	expect(await recorded(page)).toEqual({ microphone: 0, released: 0, recorders: 0 });
 	await fillChat(input, "Plan:  today");
 	await input.evaluate(element => {
-		let text = element.firstChild as Text;
+		let text = document.createTreeWalker(element, NodeFilter.SHOW_TEXT).nextNode() as Text;
 		window.getSelection()!.setBaseAndExtent(text, 6, text, 6);
 	});
 
