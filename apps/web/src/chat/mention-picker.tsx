@@ -93,7 +93,11 @@ export function MentionPicker(
 				{groups.length === 0
 					? people
 					: options.length > 0 && (
-						<ComposerMenuGroup id={`${headingId}-people`} label="People">
+						<ComposerMenuGroup
+							id={`${headingId}-people`}
+							// Chopin alone is not a group of people.
+							label={options.some(option => option.kind === "person") ? "People" : "Chopin"}
+						>
 							{people}
 						</ComposerMenuGroup>
 					)}

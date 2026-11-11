@@ -238,7 +238,7 @@ test("lists Chat's own command and the commands the attached client reports, gro
 	await expect(commands.getByRole("group").getByRole("option")).toHaveCount(5);
 	// The active row, the first, also shows its enter hint.
 	await expect(commands.getByRole("group", { name: "Built in" }).getByRole("option")).toHaveText([
-		"/researchSearch the web and add what it finds to the document↵",
+		"/researchSearch the web for this document↵",
 	]);
 	await expect(commands.getByRole("group", { name: "Prompt templates" }).getByRole("option"))
 		.toHaveText(["/reviewReview the current diff"]);
@@ -284,7 +284,7 @@ test("lists Chat's own command and the commands the attached client reports, gro
 	await expect(commands.getByRole("option")).toHaveCount(2);
 	await client.detach();
 	await expect(commands.getByRole("option")).toHaveText([
-		"/researchSearch the web and add what it finds to the document↵",
+		"/researchSearch the web for this document↵",
 	]);
 });
 
@@ -406,7 +406,7 @@ test("a client that reports no commands offers only Chat's own, and another docu
 	await input.click();
 	await page.keyboard.type("/");
 	await expect(commands.getByRole("option")).toHaveText([
-		"/researchSearch the web and add what it finds to the document↵",
+		"/researchSearch the web for this document↵",
 	]);
 	await expect(commands.getByRole("group")).toHaveCount(1);
 	await page.keyboard.press("Escape");
@@ -416,7 +416,7 @@ test("a client that reports no commands offers only Chat's own, and another docu
 	let elsewhere = await attachClient(other, { commands: COMMANDS });
 	await input.fill("/");
 	await expect(commands.getByRole("option")).toHaveText([
-		"/researchSearch the web and add what it finds to the document↵",
+		"/researchSearch the web for this document↵",
 	]);
 	await elsewhere.client.detach();
 
@@ -535,7 +535,7 @@ test("@ also lists the document's sections, Decisions and research cards and the
 		"src/index.ts",
 		"src/chat/composer.tsx",
 	]);
-	await expect(mentions.getByRole("group", { name: "People" }).getByRole("option")).toHaveText([
+	await expect(mentions.getByRole("group", { name: "Chopin" }).getByRole("option")).toHaveText([
 		"chopin",
 	]);
 	await shoot(page, "mentions-desktop");
@@ -574,6 +574,7 @@ test("@ also lists the document's sections, Decisions and research cards and the
 
 	// The message goes to Chopin with each part as what it is.
 	await page.keyboard.type("compare these");
+	await shoot(page, "chips-draft-desktop");
 	await input.press("Home");
 	await page.keyboard.type("@chopin ");
 	await input.press("Enter");
@@ -594,9 +595,13 @@ test("@ also lists the document's sections, Decisions and research cards and the
 	let message = chat(page).locator("[data-chat-message-id]").filter({ hasText: "compare these" });
 	await expect(message.locator('[data-chat-reference="heading"]')).toHaveText("@Site survey");
 	await expect(message.locator('[data-chat-reference="decision"]')).toHaveText("@Rollout");
+	await expect(message.locator('[data-chat-reference="research"]')).toHaveText("%Release Research");
 	await expect(message.locator('[data-chat-reference="file"]')).toHaveText(
 		"@src/chat/composer.tsx",
 	);
+	// Each is a chip, and none a link.
+	await expect(message.locator("a[data-chat-reference]")).toHaveCount(0);
+	await shoot(page, "chips-sent-desktop");
 });
 
 test("@ keeps Chopin and the people here, and offers no part of a document that has none", async ({ browser }) => {
