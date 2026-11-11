@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 
-import { CloseIcon, ImageIcon, PageIcon, WarningIcon } from "@chopin/icons";
+import { CloseIcon, ImageIcon, PageIcon, RestartIcon, WarningIcon } from "@chopin/icons";
 
 import type { FileView } from "./files";
 import "./attachments.css";
@@ -67,11 +67,11 @@ export default function FileStrip({ files, id, onRemove, onRetry, source }: File
 					{view.retry && (
 						<button
 							aria-label={`Try ${view.name} again`}
-							className="btn btn-xs btn-ghost"
+							className="btn btn-icon-xs btn-ghost"
 							onClick={() => onRetry(view.id)}
 							type="button"
 						>
-							Try again
+							<RestartIcon aria-hidden="true" size={12} />
 						</button>
 					)}
 					<button
