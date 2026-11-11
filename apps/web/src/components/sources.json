@@ -9,6 +9,13 @@
 			"sha256": "397fb48354d73ae3eb2e51fc4872601eb8cc863e981520a4a7de65865db65308"
 		},
 		{
+			"file": "apps/web/src/components/assistant-ui/elements/directive-text.tsx",
+			"registry": "@assistant-ui",
+			"item": "elements-directive-text",
+			"version": "assistant-ui/assistant-ui@2c298dfa8392",
+			"sha256": "7865b18353476c4963a1f59cd6c0d72a994899ee2acf27eeb849e7942bf0b3d4"
+		},
+		{
 			"file": "apps/web/src/components/assistant-ui/elements/model-selector.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-model-selector",
@@ -48,7 +55,14 @@
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "c18ec4635601f5d0ae292d3c83a64f19531508e5a7862a010a9ae4be1605f42d"
+			"sha256": "25cbb5a8b8921c365cf347467089524b282cd455e75d4e39e51c735c4f382c94"
+		},
+		{
+			"file": "apps/web/src/components/ui/badge.tsx",
+			"registry": "@assistant-ui",
+			"item": "badge",
+			"version": "assistant-ui/assistant-ui@2c298dfa8392",
+			"sha256": "610c24620259c690cacbb8a79fe3278aad6eaacb66e78e365de6337cdd73920c"
 		},
 		{
 			"file": "apps/web/src/components/ui/button.tsx",
