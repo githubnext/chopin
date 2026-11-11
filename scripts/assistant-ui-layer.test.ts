@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 
 import postcss from "postcss";
 
-import { LAYER_FILE, layerCss, slotsOf } from "./assistant-ui-layer";
+import { LAYER_FILE, layerCss, slotsOf, tinted } from "./assistant-ui-layer";
 import { RECORDED_MANIFEST } from "./design-contract/registry.mjs";
 
 let root = resolve(import.meta.dir, "..");
@@ -35,7 +35,16 @@ let tailwindOwn = variables(
 	tailwind,
 	node => node.type === "atrule" && node.name === "theme" && node.params === "default",
 );
-let scoped = variables(layer, node => node.type === "rule" && node.selector.startsWith(":where("));
+let scoped = variables(
+	layer,
+	node =>
+		node.type === "rule" && node.selector.startsWith(":where(")
+		&& !node.selector.includes("chopin-control"),
+);
+let ownControl = variables(
+	layer,
+	node => node.type === "rule" && node.selector === ":where([data-chopin-control])",
+);
 let dropped = variables(layer, node => node.type === "atrule" && node.name === "theme");
 let chopinOwn = variables(chopin, node => node.type === "atrule" && node.name === "theme");
 
@@ -56,7 +65,27 @@ describe("the assistant-ui geometry layer", () => {
 
 	test("restores Tailwind's own value for everything on a copy's root, and invents none", () => {
 		expect(scoped.size).toBeGreaterThan(20);
-		for (let [name, value] of scoped) expect(tailwindOwn.get(name)).toBe(value);
+		for (let [name, value] of scoped) {
+			// One declaration is ours: preflight's border colour, read from the border role.
+			if (name === "--color-gray-200") expect(value).toBe("var(--color-border)");
+			// Only a colour is Chopin's: a shadow is Tailwind's at the same opacity, tinted.
+			else {expect(value).toBe(
+					/shadow/.test(name) ? tinted(tailwindOwn.get(name)!) : tailwindOwn.get(name),
+				);}
+		}
+	});
+
+	test("draws a shadow in Chopin's tint, never raw black", () => {
+		let shadows = [...scoped, ...dropped].filter(([name]) => /shadow/.test(name));
+		expect(shadows.length).toBeGreaterThan(10);
+		for (let [, value] of shadows) {
+			expect(value).not.toMatch(/rgb\(0 0 0/);
+			expect(value).toContain("oklch(var(--shadow-color) /");
+		}
+	});
+
+	test("reads no universal selector under a copy: a `*` rule makes every element walk its ancestors", () => {
+		expect(layer).not.toMatch(/\)\s*\*\s*[,{]/);
 	});
 
 	test("is Tailwind's scale where Chopin's is not: assistant-ui's radii, 14px and 12px type", () => {
@@ -78,6 +107,7 @@ describe("the assistant-ui geometry layer", () => {
 			expect(chopinOwn.has(name)).toBe(false);
 			expect(scoped.get(name)).toBe(value);
 		}
+		expect(dropped.has("--color-gray-200")).toBe(false);
 		expect(dropped.has("--radius-2xl")).toBe(true);
 		expect(dropped.has("--radius-xl")).toBe(false);
 	});
@@ -93,6 +123,23 @@ describe("the assistant-ui geometry layer", () => {
 				expect({ file, slot, scoped: slots.includes(slot) }).toEqual({ file, slot, scoped: false });
 			}
 		}
+	});
+
+	test("hands a Chopin control inside a copy back its own scale, focus ring, press and touch rules", () => {
+		// Chopin's values, from its own theme, for exactly the variables the roots restored that it declares.
+		expect(ownControl.size).toBeGreaterThan(10);
+		for (let [name, value] of ownControl) {
+			expect(chopinOwn.get(name)).toBe(value);
+			expect(scoped.has(name)).toBe(true);
+		}
+		expect(ownControl.get("--text-sm")).toBe(chopinOwn.get("--text-sm"));
+		expect(ownControl.get("--radius-xl")).toBe("0.625rem");
+		// Every rule that reverts a Chopin behaviour for a copy skips a control that opts out.
+		let reverts = [...layer.matchAll(/([^{}]*)\{\s*(?:transition|scale|outline): revert-layer/g)];
+		expect(reverts.length).toBeGreaterThanOrEqual(3);
+		for (let [rule] of reverts) expect(rule).toContain(":not([data-chopin-control])");
+		let hit = layer.slice(layer.indexOf("@layer components"));
+		expect(hit).toContain(":not([data-chopin-control])");
 	});
 
 	test("gives a coarse pointer an invisible target and never a bigger visible box", () => {
