@@ -22,7 +22,7 @@ import { imagePath } from "../images/format";
 import { ulid } from "@chopin/dialect";
 
 import { PLANNER_TOOL_NAMES } from "../harness/tool-names";
-import type { PlannerFiles, PlannerSession } from "../harness/session";
+import type { PlannerFiles, PlannerForkHooks, PlannerSession } from "../harness/session";
 import { verifiedCheckout } from "../harness/atomic/checkout";
 import { rememberCheckout } from "../harness/atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
@@ -463,6 +463,18 @@ export type Chat = {
 	 * when the queue next starts, and put back in the queue and the transcript if they are there.
 	 */
 	unsure?: Set<string>;
+	/** Compaction markers recorded for this Chat or thread session. */
+	compactions?: Wire.CompactionRecord[];
+	/** True while the harness is actively compacting context. */
+	compacting?: boolean;
+	/** Latest context-window usage reported by the harness. */
+	usage?: Wire.ContextUsage;
+	/** Model context window size reported by the harness for this session. */
+	contextWindow?: number;
+	/** For a thread Chat: frozen top-level entries up to and including the root message. */
+	forkBootstrap?: Wire.Entry[];
+	/** Open thread `Chat` instances owned by this top-level Chat, closed when it closes. */
+	childChats?: Map<string, Chat>;
 };
 
 const MAX_RETRACTED = 200;
@@ -624,7 +636,7 @@ function delivery(
 	};
 }
 
-function publicEntry(value: Wire.Entry): Wire.Entry {
+export function publicEntry(value: Wire.Entry): Wire.Entry {
 	let { delivery, ...entry } = value as MemberEntry;
 	return delivery?.destination === "planner" ? { ...entry, to: "planner" } : entry;
 }
@@ -752,7 +764,7 @@ function responded(chat: Chat, server: Server<SocketData>, room: string, text: s
  * None of it belongs in the wire projection. Queued background jobs are not messages
  * anyone sent, so they stay off the wire entirely.
  */
-function visible(chat: Chat): Wire.Waiting[] {
+export function visible(chat: Chat): Wire.Waiting[] {
 	return chat.waiting.filter(item =>
 		!item.draft && !item.job && !item.quiet && !(item.deferred && item.message)
 	).map((
@@ -891,6 +903,20 @@ export type Room = {
 	rootChannelId?: string;
 	/** Set only when this room is a child: how its comments reach the root's Chat. */
 	root?: RootChat;
+	/** Session-tree and remote fork hooks for top-level Chat and threads. */
+	sessionForks?: {
+		prepareTurn: (currentEntryId?: string) => {
+			fork?: PlannerForkHooks;
+			skipBootstrap?: boolean;
+			untrackedEntries?: Wire.Entry[];
+		};
+		finishTurn: (
+			requestEntryId: string | undefined,
+			turnEntries: Wire.Entry[],
+		) => Promise<void> | void;
+	};
+	/** Called when harness-reported context usage or compactions change. */
+	onSessionMetaChanged?: () => Promise<void> | void;
 };
 
 type Retained = {
@@ -2647,18 +2673,66 @@ export function retainReferences(chat: Chat, references: Wire.Reference[]): void
 	}
 }
 
+/**
+ * Post a thread reply into top-level Chat when "Also send to Chat" was selected.
+ * Persists before broadcasting and enters top-level backscroll so the next top-level
+ * Planner turn sees it in context.
+ */
+export async function postAlsoToChat(
+	context: Room,
+	ws: Socket,
+	input: { handle: string; text: string; references?: Wire.Reference[]; focus?: string },
+): Promise<Wire.Entry | undefined> {
+	let { chat, server, room } = context;
+	if (chat.closed || context.rootChannelId) return undefined;
+	let entry: Wire.Entry = {
+		id: ulid(),
+		author: { kind: "member", handle: input.handle },
+		text: input.text,
+		ts: now(),
+		...(input.references?.length ? { references: input.references } : {}),
+	};
+	if (!context.commitRoomMessage) chat.entries.push(entry);
+	try {
+		if (context.commitRoomMessage) await context.commitRoomMessage(entry);
+		else await context.persist();
+	} catch (err) {
+		if (!context.commitRoomMessage) {
+			chat.entries = chat.entries.filter(value => value.id !== entry.id);
+		}
+		console.error("[chat] could not cross-post thread reply to Chat:", err);
+		return undefined;
+	}
+	announce(server, room, entry);
+	context.roomMessagePublished?.();
+	context.memberMessagePersisted?.(entry, context.claimantSessionId);
+	chat.backscroll = remember(chat.backscroll, {
+		entryId: entry.id,
+		handle: input.handle,
+		text: input.text,
+		...(input.references?.length ? { references: input.references } : {}),
+	});
+	contributed(context, ws, entry, input.focus);
+	return entry;
+}
+
 export function sessionBootstrap(
 	chat: Chat,
 	cursor: number,
 	summary: string,
 	currentEntryId?: string,
 	currentReferences: Wire.Reference[] = [],
+	overrideEntries?: Wire.Entry[],
 ): string | undefined {
 	let start = Number.isSafeInteger(cursor) && cursor >= 0 && cursor <= chat.entries.length
 		? cursor
 		: 0;
+	let baseEntries = overrideEntries
+		?? (chat.forkBootstrap
+			? [...chat.forkBootstrap, ...chat.entries.slice(start)]
+			: chat.entries.slice(start));
 	// A message the Planner has not been given, or never will be, is not part of what it was told.
-	let candidates = chat.entries.slice(start)
+	let candidates = baseEntries
 		.filter(entry =>
 			entry.id !== currentEntryId && entry.deliveryState !== "sent"
 			&& entry.deliveryState !== "failed"
@@ -2813,25 +2887,41 @@ async function repositorySession(
 			now: new Date(),
 		});
 		chat.referenceCache.clear();
-		let bootstrap = sessionBootstrap(
+		let forkSetup = !chat.job ? context.sessionForks?.prepareTurn(currentEntryId) : undefined;
+		let fullBootstrap = sessionBootstrap(
 			chat,
 			ownership.transcriptCursor,
 			ownership.summary,
 			currentEntryId,
 			currentReferences,
 		);
+		let nativeBootstrap = forkSetup?.skipBootstrap
+			? sessionBootstrap(
+				chat,
+				ownership.transcriptCursor,
+				ownership.summary,
+				currentEntryId,
+				currentReferences,
+				forkSetup.untrackedEntries ?? [],
+			)
+			: fullBootstrap;
 		let open = context.openPlannerSession
 			?? (await import("../harness/session")).openPlannerSession;
 		let result = await open(binding, {
 			room: documentRoom(context),
 			repository,
-			instructions: workspace =>
-				plannerInstructions(
+			chat,
+			...(forkSetup?.fork ? { fork: forkSetup.fork } : {}),
+			instructions: workspace => {
+				let usedNative = !!forkSetup?.skipBootstrap
+					&& !(workspace && "remote" in workspace && workspace.forkedNatively === false);
+				return plannerInstructions(
 					`${repository.owner}/${repository.name}`,
-					bootstrap,
+					usedNative ? nativeBootstrap : fullBootstrap,
 					workspace,
 					visualRouting(context),
-				),
+				);
+			},
 			model: context.config.model || undefined,
 			harness: context.config.harness,
 		});
@@ -3283,6 +3373,13 @@ async function run(
 			? [move(about.deferred.row, "started", chat.restarted ? "interrupted" : "ended")]
 			: undefined;
 		chat.restarted = undefined;
+		if (!jobTurn && context.sessionForks) {
+			try {
+				await context.sessionForks.finishTurn(began.request, chat.entries.slice(firstEntry));
+			} catch (err) {
+				console.error("[chat] could not save session fork state:", err);
+			}
+		}
 		try {
 			if (!chat.closed || ending) logRefused(await save(context, ending));
 		} catch (err) {
@@ -4159,14 +4256,94 @@ export async function recover(context: Room): Promise<void> {
 	await kick(context);
 }
 
+function readTokenNumber(value: unknown): number {
+	if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+		return Math.floor(value);
+	}
+	if (value && typeof value === "object" && "total" in value) {
+		let total = (value as { total?: unknown }).total;
+		if (typeof total === "number" && Number.isFinite(total) && total >= 0) {
+			return Math.floor(total);
+		}
+	}
+	return 0;
+}
+
+function readCachedTokens(value: unknown): number {
+	if (!value || typeof value !== "object") return 0;
+	let item = value as { cachedInputTokens?: unknown; inputTokens?: unknown };
+	if (typeof item.cachedInputTokens === "number" && item.cachedInputTokens > 0) {
+		return Math.floor(item.cachedInputTokens);
+	}
+	if (item.inputTokens && typeof item.inputTokens === "object") {
+		let cacheRead = (item.inputTokens as { cacheRead?: unknown }).cacheRead;
+		if (typeof cacheRead === "number" && cacheRead > 0) return Math.floor(cacheRead);
+	}
+	return 0;
+}
+
+function recordUsage(context: Room, rawUsage: unknown): void {
+	if (!rawUsage || typeof rawUsage !== "object") return;
+	let item = rawUsage as { inputTokens?: unknown; outputTokens?: unknown; totalTokens?: unknown };
+	let inputTokens = readTokenNumber(item.inputTokens);
+	let outputTokens = readTokenNumber(item.outputTokens);
+	let totalTokens = readTokenNumber(item.totalTokens) || inputTokens + outputTokens;
+	if (totalTokens <= 0) return;
+	let cachedTokens = readCachedTokens(rawUsage);
+	let contextWindow = context.chat.contextWindow && context.chat.contextWindow > 0
+		? context.chat.contextWindow
+		: 128_000;
+	let usage: Wire.ContextUsage = {
+		messages: totalTokens,
+		inputTokens,
+		outputTokens,
+		...(cachedTokens > 0 ? { cachedTokens } : {}),
+		totalTokens,
+		contextWindow,
+	};
+	context.chat.usage = usage;
+	broadcast(context.server, context.room, { kind: "chat:context", ts: 0, usage });
+	void Promise.resolve(context.onSessionMetaChanged?.()).catch(err =>
+		console.error("[chat] could not persist context usage:", err)
+	);
+}
+
+function isHarnessCompactionCall(
+	part: { toolCallId: string; toolName: string; providerExecuted?: boolean },
+): boolean {
+	return part.providerExecuted === true && part.toolName === "compaction"
+		&& part.toolCallId.startsWith("harness-compaction-");
+}
+
 /** Project one AI SDK stream part into the shared Conversation. */
 export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 	let { chat, room, server } = context;
 	if (chat.job || chat.jobToolNames) return translateJob(context, part);
 	let ids = chat.messageIds ??= new Map();
 	switch (part.type) {
+		case "raw": {
+			let raw = part.rawValue as Record<string, unknown> | null | undefined;
+			if (!raw || typeof raw !== "object") return;
+			if (raw.type === "compacting") {
+				chat.compacting = true;
+				broadcast(server, room, { kind: "chat:compaction", ts: 0, status: "compacting" });
+			} else if (raw.type === "compaction-idle") {
+				chat.compacting = false;
+				broadcast(server, room, { kind: "chat:compaction", ts: 0, status: "idle" });
+			} else if (
+				raw.type === "context-window" && typeof raw.contextWindow === "number"
+				&& raw.contextWindow > 0
+			) {
+				chat.contextWindow = Math.floor(raw.contextWindow);
+			}
+			return;
+		}
+		case "finish-step":
+			recordUsage(context, part.usage);
+			return;
 		case "finish":
 			chat.tooling = undefined;
+			recordUsage(context, part.totalUsage);
 			return;
 		case "text-start": {
 			let id = ulid();
@@ -4222,6 +4399,7 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 			return;
 		}
 		case "tool-call": {
+			if (isHarnessCompactionCall(part)) return;
 			if (!permitted(context, part.toolName)) return;
 			begun(chat, part.toolCallId);
 			publish(context, {
@@ -4236,6 +4414,49 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 		case "tool-result":
 		case "tool-error":
 		case "tool-output-denied": {
+			if (part.type === "tool-result" && isHarnessCompactionCall(part)) {
+				let output = (part.output ?? {}) as {
+					trigger?: unknown;
+					summary?: unknown;
+					tokensBefore?: unknown;
+					tokensAfter?: unknown;
+				};
+				let priorSummarized = (chat.compactions ?? []).reduce(
+					(sum, item) => sum + item.messagesSummarized,
+					0,
+				);
+				let allMessages = [
+					...(chat.forkBootstrap ?? []),
+					...chat.entries,
+				].filter(entry => entry.author.kind !== "system").length;
+				let messagesSummarized = Math.max(1, allMessages - priorSummarized);
+				let compaction: Wire.CompactionRecord = {
+					id: ulid(),
+					...(chat.entries.at(-1)?.id ? { afterEntryId: chat.entries.at(-1)!.id } : {}),
+					summary: typeof output.summary === "string" ? output.summary : "",
+					messagesSummarized,
+					...(typeof output.tokensBefore === "number"
+						? { tokensBefore: Math.floor(output.tokensBefore) }
+						: {}),
+					...(typeof output.tokensAfter === "number"
+						? { tokensAfter: Math.floor(output.tokensAfter) }
+						: {}),
+					trigger: output.trigger === "manual" ? "manual" : "auto",
+					ts: now(),
+				};
+				(chat.compactions ??= []).push(compaction);
+				chat.compacting = false;
+				broadcast(server, room, {
+					kind: "chat:compaction",
+					ts: 0,
+					status: "compacted",
+					compaction,
+				});
+				void Promise.resolve(context.onSessionMetaChanged?.()).catch(err =>
+					console.error("[chat] could not persist compaction:", err)
+				);
+				return;
+			}
 			let preliminary = part.type === "tool-result" && part.preliminary === true;
 			let success = part.type === "tool-result";
 			let output = part.type === "tool-result"
@@ -4459,10 +4680,18 @@ export async function resetAgent(
 	chat.referenceCache.clear();
 	chat.bootstrapEntries = undefined;
 	chat.openingOwner = undefined;
+	if (chat.childChats) {
+		for (let child of chat.childChats.values()) {
+			await resetAgent(child, sessionId, revision, reason);
+		}
+	}
 }
 
 /** Let go of the session. The conversation is resumable by id. */
 export async function close(chat: Chat): Promise<void> {
+	let childChats = chat.childChats ? [...chat.childChats.values()] : [];
+	chat.childChats?.clear();
+	await Promise.all(childChats.map(child => close(child)));
 	// What was admitted before this finishes first: a message that was being saved is saved and
 	// answered, not refused as closed. Whatever arrives once the Chat is closed is refused.
 	for (let admitted: Promise<void> | undefined; admitted !== chat.sending;) {

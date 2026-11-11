@@ -37,6 +37,12 @@ export type FullPlanner = {
 	 * its model step ends, so this is how the chat sees them as they happen.
 	 */
 	toolReport?: (id: string, output: unknown, state: "running" | "done" | "failed") => void;
+	/** Serialized Atomic `FileEntry[]` (`[header, ...entries]`) to restore before running a turn. */
+	sessionEntries?: unknown[];
+	/** Entry id to branch from (`SessionManager.branch`) before prompting; `null` resets to root. */
+	branchLeafId?: string | null;
+	/** Called as Atomic appends entries so fork points and session trees stay durable. */
+	onSessionEntries?: (entries: unknown[], leafId: string | null) => void;
 };
 
 let planners = new Map<string, FullPlanner>();

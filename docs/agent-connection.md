@@ -472,7 +472,9 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   nothing; answer it `ok: true`. A client that answers `ok: false`, for a run that
   has since ended, only has the refusal logged for a `stop` sent again.
 - `destroy` ends the session; abandon its turn, its waiting host calls, and its
-  questions.
+  questions. A client offering `session-forks` may retain the finished session's
+  conversation history so a later `fork` naming `from.session` can branch from
+  it, or answer `start-failed` once it has evicted it.
 - `restarting`, with `restart-notice`, precedes a close with 1012 when the server is
   restarting. `reconnectWithinMs` is how long, in milliseconds, a new process is expected to
   take to take over; see [When the server is restarting](#when-the-server-is-restarting). A

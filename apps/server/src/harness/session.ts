@@ -41,16 +41,35 @@ type Sandbox = Awaited<ReturnType<typeof createJustBashNetworkSandboxSession>>;
 
 type PlannerAgent = typeof plannerAgent;
 
+export type PlannerForkHooks = {
+	atomicEntries?: unknown[];
+	atomicLeafId?: string | null;
+	onAtomicEntries?: (entries: unknown[], leafId: string | null) => void;
+	remoteFrom?: { session: string; turn?: string };
+	onRemoteTurn?: (point: { session: string; turn: string }) => void;
+};
+
 export type PlannerChannel = {
 	room: DocumentRoom;
 	repository: HostedRepository;
-	instructions: string | ((workspace?: PlannerWorkspace | RemoteWorkspace) => string);
+	instructions:
+		| string
+		| ((
+			workspace?: PlannerWorkspace | (RemoteWorkspace & { forkedNatively?: boolean }),
+		) => string);
 	model?: string;
 	/**
 	 * `atomic` runs the session as a full Atomic session in the channel's workspace;
 	 * `remote` runs it in the client attached to the channel.
 	 */
 	harness?: string;
+	/** Active Chat instance for tool progress and job state; defaults to `room.plan.chat`. */
+	chat?: Pick<
+		NonNullable<DocumentRoom["plan"]["chat"]>,
+		"job" | "toolProgress" | "toolFinished"
+	>;
+	/** Session-tree and remote fork hooks for Chat threads. */
+	fork?: PlannerForkHooks;
 };
 
 /** Atomic answers an action it could not carry out with `noop` or `cancelled`; report it rather than claim success. */
@@ -166,7 +185,8 @@ export async function openPlannerSession(
 	channel: PlannerChannel,
 	deps: PlannerSessionDependencies = {},
 ): Promise<Result<PlannerSession, OpenError>> {
-	let job = channel.room.plan.chat?.job;
+	let activeChat = channel.chat ?? channel.room.plan.chat;
+	let job = activeChat?.job;
 	if (job && !Object.hasOwn(BACKGROUND_TOOL_NAMES, job.kind)) {
 		return {
 			ok: false,
@@ -224,16 +244,30 @@ export async function openPlannerSession(
 					for (let listener of listeners) listener(runs);
 				},
 				toolReport: (id, output, state) => {
-					let chat = channel.room.plan.chat;
+					let chat = channel.chat ?? channel.room.plan.chat;
 					if (state === "running") chat?.toolProgress?.(id, output);
 					else chat?.toolFinished?.(id, output, state === "done");
 				},
+				...(channel.fork?.atomicEntries !== undefined
+					? { sessionEntries: channel.fork.atomicEntries }
+					: {}),
+				...(channel.fork?.atomicLeafId !== undefined
+					? { branchLeafId: channel.fork.atomicLeafId }
+					: {}),
+				...(channel.fork?.onAtomicEntries
+					? { onSessionEntries: channel.fork.onAtomicEntries }
+					: {}),
 			};
 			unregisterFull = registerFullPlanner(sessionId, planner);
 		}
 		let remote: RemotePlanner | undefined;
 		if (channel.harness === "remote") {
-			let held: RemotePlanner = { channelId: channel.room.id, isolated: !!job };
+			let held: RemotePlanner = {
+				channelId: channel.room.id,
+				isolated: !!job,
+				...(channel.fork?.remoteFrom ? { forkFrom: { ...channel.fork.remoteFrom } } : {}),
+				...(channel.fork?.onRemoteTurn ? { onRemoteTurn: channel.fork.onRemoteTurn } : {}),
+			};
 			if (!job) {
 				held.humanInput = report =>
 					createHumanInput(
@@ -250,7 +284,7 @@ export async function openPlannerSession(
 					for (let listener of listeners) listener(runs);
 				};
 				held.toolReport = (id, output, state) => {
-					let chat = channel.room.plan.chat;
+					let chat = channel.chat ?? channel.room.plan.chat;
 					if (state === "running") chat?.toolProgress?.(id, output);
 					else chat?.toolFinished?.(id, output, state === "done");
 				};
@@ -258,9 +292,6 @@ export async function openPlannerSession(
 			remote = held;
 			unregisterRemote = registerRemotePlanner(sessionId, held);
 		}
-		let instructions = typeof channel.instructions === "function"
-			? channel.instructions(workspace ?? (remote && !job ? { remote: true } : undefined))
-			: channel.instructions;
 		let agent = deps.agent ?? (job?.kind === "heading"
 			? deps.headingAgent ?? headingPlannerAgent
 			: job?.kind === "refine" || job?.kind === "suggest"
@@ -285,6 +316,14 @@ export async function openPlannerSession(
 			void opening.then(late => late.destroy()).catch(() => {});
 			throw cause;
 		}
+		let instructions = typeof channel.instructions === "function"
+			? channel.instructions(
+				workspace
+					?? (remote && !job
+						? { remote: true, forkedNatively: remote.forkedNatively === true }
+						: undefined),
+			)
+			: channel.instructions;
 		if (owner.signal.aborted) throw new Error("Planner owner unavailable");
 		let active = session;
 		let stopped: Promise<void> | undefined;

@@ -18,6 +18,7 @@ import * as Service from "../plan/service";
 import { openPlan } from "../testing/plan";
 import { setup } from "./attachments.test-fixtures";
 import { installJobCleanup, until } from "./job.test-fixtures";
+import * as Threads from "./threads";
 
 import type { Chat as Wire } from "@chopin/protocol";
 
@@ -310,6 +311,65 @@ describe("a transcript with pointers in it, on the server it would be rolled bac
 			expect(entries.find(entry => entry.id === id)!.text).toBe(
 				"/research @Overview, @src/index.ts and @Choice",
 			);
+		},
+		240_000,
+	);
+});
+
+describe("a document with Chat threads and session compactions, on the server it would be rolled back to", () => {
+	it.skipIf(!available)(
+		`is opened by the real ${BASE} reader with top-level and alsoToChat messages intact and thread replies outside the sidecar`,
+		async () => {
+			let older = olderServer();
+			await Bun.write(join(older, READER), Bun.file(join(ROOT, READER)));
+			let { h, ana } = await setup();
+			let topRoom = Threads.bindTopLevel(h.context);
+			let rootId = crypto.randomUUID();
+			await Threads.sendMessage(topRoom, ana, {
+				kind: "chat:send",
+				rid: "rb-1",
+				requestId: rootId,
+				to: "room",
+				text: "Root message before thread",
+				ts: 0,
+			});
+			await Threads.sendMessage(topRoom, ana, {
+				kind: "chat:send",
+				rid: "rb-2",
+				requestId: crypto.randomUUID(),
+				to: "room",
+				thread: rootId,
+				text: "Private side-thread reply",
+				ts: 0,
+			});
+			await Threads.sendMessage(topRoom, ana, {
+				kind: "chat:send",
+				rid: "rb-3",
+				requestId: crypto.randomUUID(),
+				to: "room",
+				thread: rootId,
+				alsoToChat: true,
+				text: "Summary shared back to Chat",
+				ts: 0,
+			});
+			let context = await openPlan();
+			context.plan.chat.entries.push(...(structuredClone(h.chat.entries) as Wire.Entry[]));
+			await Service.persist(context.plan);
+			await Service.close(context.plan);
+			let loaded = (await context.storage.collaboration.load(context.channel.id, context.now))!;
+			let sidecar = structuredClone(loaded.sidecar ?? loaded.snapshot!.sidecar) as Record<
+				string,
+				unknown
+			>;
+			let file = join(scratch, "threads-written.json");
+			await Bun.write(file, JSON.stringify(sidecar));
+			let result = await read(older, file);
+			expect(result.ok, JSON.stringify(result)).toBe(true);
+			let entries = (result as Extract<Read, { ok: true }>).entries;
+			expect(entries.map(entry => entry.text)).toEqual([
+				"Root message before thread",
+				"Summary shared back to Chat",
+			]);
 		},
 		240_000,
 	);
