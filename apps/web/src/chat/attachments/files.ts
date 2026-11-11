@@ -50,6 +50,7 @@ export type FilesAction =
 	| { type: "failed"; id: string; refusal: AttachmentRefusal; message: string; retry: boolean }
 	| { type: "retry"; id: string }
 	| { type: "remove"; id: string }
+	| { type: "restore"; files: readonly Chat.Attachment[] }
 	| { type: "clear" };
 
 function change(
@@ -106,6 +107,18 @@ export function filesReducer(
 			return files.filter(file => file.id !== action.id);
 		case "clear":
 			return files.length === 0 ? files : [];
+		case "restore":
+			return files.length > 0
+				? files
+				: action.files.map(sent => ({
+					id: sent.id,
+					name: sent.name,
+					kind: sent.kind,
+					size: sent.size,
+					mimeType: sent.mimeType,
+					status: { type: "complete" as const },
+					sent,
+				}));
 	}
 }
 

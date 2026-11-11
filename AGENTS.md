@@ -359,9 +359,13 @@ its outbox (`apps/web/src/chat/delivery.ts`) as the person's own, saying Sending
 waiting, queued or a clock), until the server's entry for the same request ID arrives; from
 then it carries no mark. The outbox holds a message only for the browser's own connection:
 it sends one message at a time, oldest first, once the current connection's transcript has
-arrived, and only to a server that acknowledges sends. A refused send says "Couldn't send" on
-the message with Try again and Delete (which act on the outbox alone, since the server kept
-nothing), never in a strip above the composer, and not while the page's connection banner
+arrived, and only to a server that acknowledges sends. When `planner-not-attached` or
+`planner-busy` refuses a send and the composer holds no newer draft, the typed text (with its
+chip, references and staged files) returns to the composer draft under the refusal banner,
+and while Chopin works the one button offers Stop so the person can stop Chopin and send it;
+when a newer draft was already typed, or another refusal rejected the message, it says
+"Couldn't send" on the message with Try again and Delete (which act on the outbox alone, since
+the server kept nothing), and not while the page's connection banner
 shows. A refusal with a passing reason is not a refusal of the message: a storage, room or
 authorization trouble that will pass, or a turn that is only beginning or finishing
 (`temporarily-unavailable`). The browser keeps the message sending and sends it again, in order

@@ -545,6 +545,8 @@ export function Chat(
 		submitted: draft.submission?.to,
 	});
 	let plannerBound = outboxed && askingChopin;
+	let busyRefused = askingChopin && sendError?.code === "planner-busy"
+		&& (busy || counts.active > 0);
 	// An image goes where people read it, and to the Planner only if its model does.
 	let imagesAllowed = !agent || !askingChopin
 		|| modelReadsImages(modelControl?.catalog, modelControl?.choice);
@@ -900,13 +902,19 @@ export function Chat(
 			if (outgoing?.submission.to === "planner") {
 				// In the Chat at once, and goes out by itself, in order, once there is a connection. It
 				// says Sending until the server has it. A machine that is away, or a turn that cannot
-				// take it, refuses it, and it then says so on itself: nothing is kept for later.
+				// take it, refuses it and puts the draft back so nothing typed is lost.
+				setSendError(undefined);
 				dispatchOutbox({
 					kind: "add",
 					item: {
 						payload: withFiles(outgoing.submission),
 						handle,
 						ts: Math.floor(Date.now() / 1000),
+						draft: {
+							text: outgoing.text,
+							references: outgoing.references,
+							chip: chipOn,
+						},
 						...(sentFiles.length ? { attachments: sentFiles } : {}),
 					},
 				});
@@ -1003,6 +1011,35 @@ export function Chat(
 				if (passing(error.code)) {
 					dispatchOutbox({ kind: "trouble", id });
 					setTimeout(() => dispatchOutbox({ kind: "recovered" }), TROUBLE_RETRY_MS);
+				} else if (
+					(error.code === "planner-not-attached" || error.code === "planner-busy")
+					&& next.draft
+					&& !draftRef.current.text.trim()
+					&& filesRef.current.files.length === 0
+				) {
+					// Nothing is kept for later, and nothing new was typed: the words return to the draft,
+					// with the refusal above the composer, ready to send again.
+					let dropped = outboxReducer(outbox, { kind: "drop", id });
+					dispatchOutbox({ kind: "drop", id });
+					keepOutbox(room, handle, dropped);
+					let restored: ComposerDraft = {
+						text: next.draft.text,
+						references: next.draft.references,
+						submission: next.payload,
+					};
+					draftRef.current = restored;
+					setDraft(restored);
+					keepDraft(room, handle, restored);
+					setChipOn(next.draft.chip);
+					setSelection({ start: restored.text.length, end: restored.text.length });
+					setDismissedPicker(undefined);
+					setHistoryKey(current => current + 1);
+					pendingCaret.current = restored.text.length;
+					if (next.attachments?.length) filesRef.current.restore(next.attachments);
+					setSendError({
+						...sendFailure(error),
+						...(error.code ? { code: error.code } : {}),
+					});
 				} else {
 					dispatchOutbox({ kind: "refuse", id, reason: refusalText(error.code, error.message) });
 				}
@@ -1503,12 +1540,14 @@ export function Chat(
 				sendDisabled={!draftable || sending || (!draft.text.trim() && files.files.length === 0)
 					|| files.failed > 0
 					|| blockedCommand
+					|| busyRefused
 					|| (connectionNotice !== "none" && !draftCommand(draft.text) && !plannerBound)}
 				onSubmit={submit}
 				run={agent && (busy || counts.active > 0)
 					? {
 						action: "stop",
 						disabled: !composerReady && connectionNotice !== "none",
+						refusedWhileBusy: busyRefused,
 						onClick: () => control("chat:abort"),
 					}
 					: agent && !busy && !counts.active && counts.paused > 0

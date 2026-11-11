@@ -270,10 +270,14 @@ test("a message sent while Chopin works is in the Chat at once, given to that tu
 	try {
 		await say(page, "outline the plan");
 		await expect(READING(page)).toBeVisible();
-		await expect(chat(page).getByRole("button", { name: "Stop Chopin" })).toBeVisible();
+		await expect(chat(page).getByRole("button", { name: "Stop generating" })).toBeVisible();
 
-		// A second message while the turn runs: an ordinary message, at once, with nothing waiting.
-		await say(page, "and cover the rollback too");
+		// Typing a second message while the turn runs turns the one button into Send, which steers
+		// the running turn as an ordinary message at once and returns the empty draft to Stop.
+		await fillChat(input, "@chopin and cover the rollback too");
+		let send = chat(page).getByRole("button", { name: "Send message" });
+		await expect(send).toBeEnabled();
+		await send.click();
 		let steering = message(page, "cover the rollback too");
 		await expect(steering).toHaveCount(1);
 		await expectChatValue(input, "");
@@ -285,7 +289,7 @@ test("a message sent while Chopin works is in the Chat at once, given to that tu
 		await expect(nextStep(page, "and cover the rollback too")).toHaveCount(1);
 		expect(planner.steered).toEqual([`@${HANDLE}: and cover the rollback too`]);
 		expect(planner.prompts).toHaveLength(1);
-		await expect(chat(page).getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
+		await expect(chat(page).getByRole("button", { name: "Stop generating" })).toHaveCount(0);
 
 		// Still there, once, after a reload: it was kept as a message, not as something to run.
 		await page.reload();
@@ -308,7 +312,7 @@ test("Stop with an empty draft ends the running turn, and the draft being empty 
 		await say(page, "outline the plan");
 		await expect(READING(page)).toBeVisible();
 		await expectChatValue(input, "");
-		let stop = chat(page).getByRole("button", { name: "Stop Chopin" });
+		let stop = chat(page).getByRole("button", { name: "Stop generating" });
 		await expect(stop).toBeVisible();
 		await stop.click();
 		await expect(chat(page).getByText(/stopped the turn\./)).toBeVisible();
@@ -326,78 +330,100 @@ test("Stop with an empty draft ends the running turn, and the draft being empty 
 	}
 });
 
-test("a message to a machine that is away is refused on the message, nothing is kept, and Try again sends it when the machine is back", async ({ page }) => {
+test("a message to a machine that is away is refused with the draft kept, nothing is saved, and sending again when the machine is back answers once", async ({ page }) => {
 	test.setTimeout(90_000);
 	let room = await open(page);
 	let input = chatInput(page);
 
-	// No machine is connected to take it.
+	// No machine is connected to take it: refused above the composer, and the typed text stays in
+	// the draft so nothing is lost.
 	await say(page, "outline the plan");
-	let sent = message(page, "outline the plan");
-	let failed = sent.locator("[data-chat-failed]");
-	await expect(failed).toContainText("Couldn't send.");
-	await expect(failed).toContainText("No machine is connected to reply.");
-	await expectChatValue(input, "");
-	await expect(sent.getByText("Sending", { exact: true })).toHaveCount(0);
+	let refusal = chat(page).locator('[data-error-banner][data-kind="send"]');
+	await expect(refusal).toContainText("Connect a machine to get a reply.");
+	await expectChatValue(input, "@chopin outline the plan");
+	await expect(message(page, "outline the plan")).toHaveCount(0);
 	await expect(chat(page).locator('[data-chat-state="queued"]')).toHaveCount(0);
 
-	// The server kept nothing: after a reload there is no such message anywhere.
+	// The server kept nothing: after a reload there is no message in Chat and no deferred row.
 	expect(await heldRows()).toBe(0);
 	await page.reload();
 	await ready(page);
 	await expect(message(page, "outline the plan")).toHaveCount(0);
+	await expectChatValue(input, "@chopin outline the plan");
 
-	// The machine comes back: the person says it again, and it is answered once.
+	// The machine comes back: pressing Enter on the kept draft sends it and answers once.
 	let planner = await machine(room);
 	try {
-		await say(page, "outline the plan again");
+		await input.press("Enter");
 		await expect(READING(page)).toBeVisible();
-		await expect(message(page, "outline the plan again").locator("[data-chat-failed]")).toHaveCount(
-			0,
-		);
+		await expect(refusal).toHaveCount(0);
+		await expectChatValue(input, "");
 		expect(planner.prompts).toHaveLength(1);
-		expect(planner.prompts[0]).toContain("outline the plan again");
+		expect(planner.prompts[0]).toContain("outline the plan");
 		planner.release();
 	} finally {
 		await planner.client.detach();
 	}
 });
 
-test("a refused message offers Try again and Delete, and Delete takes it away from the person's own browser only", async ({ page }) => {
+test("when a newer draft is already in the composer, a refused earlier message offers Try again and Delete on itself, and Delete takes it away from this browser only", async ({ page }) => {
 	test.setTimeout(90_000);
+	let hold = true;
+	let release: (() => void) | undefined;
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(raw => {
+			if (hold && typeof raw === "string" && raw.includes('"chat:send"')) {
+				hold = false;
+				release = () => server.send(raw);
+				return;
+			}
+			server.send(raw);
+		});
+		server.onMessage(raw => route.send(raw));
+	});
 	await open(page);
+	let input = chatInput(page);
 	await say(page, "outline the plan");
+	await expect.poll(() => release !== undefined).toBe(true);
+	await fillChat(input, "another thought");
+	release!();
+
 	let sent = message(page, "outline the plan");
 	await expect(sent.locator("[data-chat-failed]")).toContainText("Couldn't send.");
+	await expectChatValue(input, "another thought");
 	await sent.getByRole("button", { name: "Delete" }).click();
 	await expect(sent).toHaveCount(0);
+	await input.fill("");
 	await page.reload();
 	await ready(page);
 	await expect(sent).toHaveCount(0);
 });
 
-test("a machine that takes no message mid-run refuses one sent while it works, saying how to ask now, and keeps nothing", async ({ page }) => {
+test("a machine that takes no message mid-run refuses one sent while it works, keeps the draft, and Stop then Send starts a turn", async ({ page }) => {
 	test.setTimeout(90_000);
 	let room = await open(page);
 	let planner = await machine(room, { steers: false });
+	let input = chatInput(page);
 	try {
 		await say(page, "outline the plan");
 		await expect(READING(page)).toBeVisible();
 		await say(page, "and cover the rollback too");
-		let refused = message(page, "cover the rollback too");
-		let failed = refused.locator("[data-chat-failed]");
-		await expect(failed).toContainText("Couldn't send.");
-		await expect(failed).toContainText(CANNOT);
+		let refusal = chat(page).locator('[data-error-banner][data-kind="send"]');
+		await expect(refusal).toContainText(CANNOT);
+		await expectChatValue(input, "@chopin and cover the rollback too");
+		await expect(message(page, "cover the rollback too")).toHaveCount(0);
 		expect(planner.steered).toEqual([]);
 		expect(planner.prompts).toHaveLength(1);
 
-		// Stop is how to ask now; the turn ends, and the same words, sent again, start a turn.
-		await chat(page).getByRole("button", { name: "Stop Chopin" }).click();
+		// Stop is how to ask now; the turn ends, the button becomes Send, and the kept draft starts a turn.
+		await chat(page).getByRole("button", { name: "Stop generating" }).click();
 		await expect.poll(planner.aborted).toBe(1);
-		await refused.getByRole("button", { name: "Try again" }).click();
+		await chat(page).getByRole("button", { name: "Send message" }).click();
 		await expect.poll(() => planner.prompts.length).toBe(2);
 		expect(planner.prompts[1]).toContain("cover the rollback too");
-		await expect(refused.locator("[data-chat-failed]")).toHaveCount(0);
+		await expect(refusal).toHaveCount(0);
+		await expectChatValue(input, "");
 		planner.release();
 	} finally {
 		await planner.client.detach();
@@ -427,8 +453,8 @@ test("two people steer one turn: each message is in both Chats at once and the t
 		expect(planner.steered).toEqual(["@hubot: keep it short"]);
 		expect(planner.prompts).toHaveLength(1);
 		await expect(nextStep(other, "keep it short")).toHaveCount(1);
-		await expect(chat(page).getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
-		await expect(chat(other).getByRole("button", { name: "Stop Chopin" })).toHaveCount(0);
+		await expect(chat(page).getByRole("button", { name: "Stop generating" })).toHaveCount(0);
+		await expect(chat(other).getByRole("button", { name: "Stop generating" })).toHaveCount(0);
 	} finally {
 		await planner.client.detach();
 	}

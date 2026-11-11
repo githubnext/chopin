@@ -45,6 +45,27 @@ describe("the one button turns from send into stop", () => {
 		let offline = { running: true, hasDraft: false, canSend: false, canStop: true };
 		expect(sendStop(offline)).toEqual({ action: "stop", disabled: false });
 	});
+
+	test("offers stop when a draft to Chopin was refused because Chopin is working, and send once it stops or goes to the team", () => {
+		let refused = {
+			...READY,
+			running: true,
+			canSend: false,
+			refusedWhileBusy: true,
+		};
+		expect(sendStop(refused)).toEqual({ action: "stop", disabled: false });
+		// Someone who may not stop still sees a disabled send, never a stop.
+		expect(sendStop({ ...refused, canStop: false })).toEqual({ action: "send", disabled: true });
+		// Once Chopin stops, or the chip is taken off for the team, the draft sends as usual.
+		expect(sendStop({ ...refused, running: false, canSend: true })).toEqual({
+			action: "send",
+			disabled: false,
+		});
+		expect(sendStop({ ...refused, refusedWhileBusy: false, canSend: true })).toEqual({
+			action: "send",
+			disabled: false,
+		});
+	});
 });
 
 describe("a screen reader is told once when the button changes", () => {

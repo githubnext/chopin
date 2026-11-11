@@ -322,9 +322,16 @@ describe("the outbox across a reload", () => {
 
 	test("remembers which messages were put on the wire, so that a reload sends them again with the same request id", () => {
 		// 1 was put on the wire and its answer never came; 2 never left the page.
-		let outbox = outboxReducer(build(item(1), item(2)), { kind: "attempt", id: uuid(1) });
+		let outbox = outboxReducer(
+			build(
+				{ ...item(1), draft: { text: "outline the plan", references: [], chip: true } },
+				item(2),
+			),
+			{ kind: "attempt", id: uuid(1) },
+		);
 		keepOutbox("room", "ana", outbox);
 		let restored = restoreOutbox("room", "ana");
+		expect(restored[0]?.draft).toEqual({ text: "outline the plan", references: [], chip: true });
 		expect(restored.map(entry => entry.attempted)).toEqual([true, undefined]);
 		// Whatever the flag says, a reload keeps no refusal and no trouble: those are not saved.
 		expect(restored.every(entry => !entry.failure && !entry.trouble)).toBe(true);

@@ -34,6 +34,7 @@ async function scriptPlanner(target: Page | BrowserContext) {
 	let aborts = 0;
 	let offline = false;
 	let busy = false;
+	let canSteer = true;
 	let steers = 0;
 	let turn = 0;
 	let entries = 0;
@@ -87,6 +88,16 @@ async function scriptPlanner(target: Page | BrowserContext) {
 			};
 			if (frame.kind === "chat:send") {
 				sends.push({ text: frame.text ?? "", to: frame.to! });
+				if (frame.to === "planner" && busy && !canSteer) {
+					return tell({
+						kind: "session:error",
+						ts: 0,
+						rid: frame.rid,
+						code: "planner-busy",
+						message:
+							"Chopin can't take messages while it works on this machine. Stop it to ask now.",
+					});
+				}
 				let id = `accepted-${sends.length}`;
 				// Posted at once; one for the Planner while it runs steers the turn that is running.
 				tell({ kind: "chat:send", ts: 0, rid: frame.rid, id });
@@ -118,6 +129,10 @@ async function scriptPlanner(target: Page | BrowserContext) {
 		sends: () => sends,
 		aborts: () => aborts,
 		steers: () => steers,
+		/** The harness running the turn takes no input mid-run. */
+		refuseSteer() {
+			canSteer = false;
+		},
 		/** One token of the reply: the button must not announce it. */
 		token(text: string) {
 			if (!streaming) {
@@ -249,6 +264,51 @@ test("a message typed while the Planner runs is posted by the button as by Enter
 		.toHaveCount(1);
 	await expect.poll(planner.steers).toBe(2);
 	expect(planner.aborts()).toBe(0);
+});
+
+test("while the Planner runs, a message to people only is posted as usual, and a refused steer keeps the draft and offers Stop", async ({ join, page }) => {
+	let planner = await scriptPlanner(page);
+	let chat = chatPane(await join("ana"));
+	let draft = chatInput(chat);
+	await startPlanner(chat);
+
+	// Taking the @Chopin chip off addresses the team: Send posts to the room without steering, and
+	// the empty draft returns to Stop.
+	let removeChip = chat.getByRole("button", { name: "Remove Chopin", exact: true });
+	if (await removeChip.count()) await removeChip.click();
+	await fillChat(draft, "Keep the release notes brief.");
+	let send = chat.getByRole("button", { name: "Send message" });
+	await expect(send).toBeEnabled();
+	await send.click();
+	await expect.poll(planner.sends).toContainEqual({
+		text: "Keep the release notes brief.",
+		to: "room",
+	});
+	expect(planner.steers()).toBe(0);
+	await expect(chat.getByRole("button", { name: "Stop generating" })).toBeVisible();
+
+	// Addressed to Chopin when the running turn cannot take a steer: refused with words, the draft
+	// is kept, and Stop is offered so the person can stop Chopin and send it.
+	planner.refuseSteer();
+	await chat.getByRole("button", { name: "Ask Chopin", exact: true }).click();
+	await fillChat(draft, "Cover the rollback too.");
+	await expect(send).toBeEnabled();
+	await send.click();
+	await expect(chat.locator('[data-error-banner][data-kind="send"]')).toContainText(
+		"Chopin can't take messages while it works on this machine. Stop it to ask now.",
+	);
+	await expectChatValue(draft, "Cover the rollback too.");
+	let stop = chat.getByRole("button", { name: "Stop generating" });
+	await expect(stop).toBeEnabled();
+	await stop.click();
+	await expect.poll(planner.aborts).toBe(1);
+	await expect(send).toBeEnabled();
+	await send.click();
+	await expect.poll(planner.sends).toContainEqual({
+		text: "@chopin Cover the rollback too.",
+		to: "planner",
+	});
+	await expectChatValue(draft, "");
 });
 
 test("the button is reached and pressed from the keyboard, whichever it is", async ({ join, page }) => {
