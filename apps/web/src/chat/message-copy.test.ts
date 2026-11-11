@@ -70,3 +70,24 @@ test("plain text starts with what the page draws before the text, such as the Pl
 	expect(plainTextOf("", undefined, "@chopin")).toBe("@chopin");
 	expect(plainTextOf("explain the cache", undefined, undefined)).toBe("explain the cache");
 });
+
+test("plain text reads strikethrough, task lists and tables as MarkdownText draws them, and leaves footnotes and bare URLs as text", () => {
+	expect(plainTextOf("~~gone~~ and ~one~ and ~~two words~~")).toBe("gone and ~one~ and two words");
+	expect(plainTextOf("keep ~~~three tildes~~~ plain")).toBe("keep ~~~three tildes~~~ plain");
+	expect(plainTextOf("- [x] done\n- [ ] open\n- plain")).toBe("done\nopen\nplain");
+	expect(plainTextOf("1. [X] numbered task")).toBe("numbered task");
+	expect(plainTextOf("[x] outside a list and - [xx] two")).toBe(
+		"[x] outside a list and - [xx] two",
+	);
+	expect(plainTextOf("| Queue | Owner |\n| :-- | --: |\n| shared | ~~old~~ live |")).toBe(
+		"Queue\tOwner\nshared\told live",
+	);
+	expect(plainTextOf("A | B\n:- | -:\n1 | 2")).toBe("A\tB\n1\t2");
+	expect(plainTextOf("A | B\n- | -\n1 | 2")).toBe("A | B\n\n| - 1 | 2");
+	expect(plainTextOf("a\n:-")).toBe("a");
+	expect(plainTextOf("> | A | B |\n> | - | - |\n> | 1 | 2 |")).toBe("A\tB\n1\t2");
+	expect(plainTextOf("a | b without a delimiter row")).toBe("a | b without a delimiter row");
+	expect(plainTextOf("Footnote[^1] and https://example.com\n\n[^1]: The note.")).toBe(
+		"Footnote[^1] and https://example.com\n\n[^1]: The note.",
+	);
+});

@@ -29,6 +29,12 @@ const SPACED = {
 		"Spaced  out   words\tand ![alt](https://example.com/p.png) a gap.\n\nSecond  paragraph with <b>html</b>  inside.",
 };
 
+const GFM = {
+	id: "message-gfm",
+	text:
+		"Ship ~~draft~~ live and keep ~tilde~.\n\n- [x] build\n- [ ] verify\n\n| Stage | State |\n| - | - |\n| build | ~~red~~ green |",
+};
+
 function transcript() {
 	return [
 		{
@@ -182,12 +188,21 @@ test("Copy writes the Markdown of a person's message and of the Planner's reply 
 
 test("Copy as plain text writes the message as the page shows it", async ({ join, seed }) => {
 	await seed("# Actions\n", {
-		transcript: [...transcript(), {
-			id: SPACED.id,
-			author: { kind: "member", handle: "ben" },
-			text: SPACED.text,
-			ts: 1_700_000_003,
-		}],
+		transcript: [
+			...transcript(),
+			{
+				id: SPACED.id,
+				author: { kind: "member", handle: "ben" },
+				text: SPACED.text,
+				ts: 1_700_000_003,
+			},
+			{
+				id: GFM.id,
+				author: { kind: "agent" },
+				text: GFM.text,
+				ts: 1_700_000_004,
+			},
+		],
 	});
 	let page = await join("ana");
 	await page.context().grantPermissions([...CLIPBOARD]);
@@ -211,6 +226,16 @@ test("Copy as plain text writes the message as the page shows it", async ({ join
 	let spacedMenu = await openMenu(page, spaced);
 	await spacedMenu.getByRole("menuitem", { name: "Copy as plain text" }).click();
 	await expect.poll(() => clipboard(page)).toBe(drawn);
+
+	let gfm = message(page, GFM.id);
+	await expect(gfm.locator("del")).toHaveText(["draft", "red"]);
+	await expect(gfm.getByRole("checkbox", { name: "Task" })).toHaveCount(2);
+	await expect(gfm.getByRole("table")).toBeVisible();
+	let gfmMenu = await openMenu(page, gfm);
+	await gfmMenu.getByRole("menuitem", { name: "Copy as plain text" }).click();
+	await expect.poll(() => clipboard(page)).toBe(
+		"Ship draft live and keep ~tilde~.\n\nbuild\nverify\n\nStage\tState\nbuild\tred green",
+	);
 });
 
 test("nothing Chopin draws around a message is copied with it", async ({ join, seed }) => {
