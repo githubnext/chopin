@@ -257,6 +257,20 @@ export class PlannerAttachments {
 	}
 
 	/**
+	 * What a Planner request is refused with while the document's machine is still connecting in its
+	 * hand-over window, or away (disconnected, or stepped away within its grace period); nothing when
+	 * it is neither.
+	 */
+	unavailable(channelId: string): string | undefined {
+		if (this.reconnecting(channelId)) return reconnectingMessage(this.holder(channelId));
+		let { state } = this.status(channelId);
+		if (state === "disconnected" || state === "held") {
+			return disconnectedMessage(this.holder(channelId));
+		}
+		return undefined;
+	}
+
+	/**
 	 * Whether the client attached to the document waits on its members: an open question or run.
 	 * So does one that disconnected, whose work is kept for it.
 	 */

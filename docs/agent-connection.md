@@ -398,8 +398,8 @@ Elsewhere it names the document URL:
 Connect a machine to get a reply. Connect an agent client to <document URL> over the agent connection from a session in a checkout of <owner/name>.
 ```
 
-A document whose Planner is disconnected is refused with the machine named by its
-owner's login, never by its own name. It says what happened to the message and what to do,
+A document whose Planner is disconnected, or stepped away within its grace period, is refused
+with the machine named by its owner's login, never by its own name. It says what happened to the message and what to do,
 and nothing of keeping it, since nothing is kept for a machine that is away (the machine's own
 work, its runs and open questions, is kept, and the document says so where it shows the machine):
 
