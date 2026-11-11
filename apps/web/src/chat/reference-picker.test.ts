@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
 	currentReferencePickerRequest,
+	referenceMenuShown,
 	ReferencePicker,
 	referencePickerKeyAction,
 	referencePickerRequestKey,
@@ -183,6 +184,55 @@ describe("reference picker requests", () => {
 		expect(referencePickerKeyAction({ key: "ArrowDown", keyCode: 229 }, true)).toBeUndefined();
 		expect(referencePickerKeyAction({ key: "Escape", isComposing: true }, false)).toBeUndefined();
 		expect(referencePickerKeyAction({ key: "Enter" }, true)).toBe("select");
+	});
+});
+
+describe("the # menu with this document's parts", () => {
+	let pointers = [
+		{ id: "heading:a", kind: "heading" as const, anchor: "a", label: "Overview", meta: "H1" },
+		{ id: "decision:d", kind: "decision" as const, decisionId: "d", label: "Pick a store" },
+		{ id: "file:f", kind: "file" as const, path: "src/a.ts", label: "src/a.ts" },
+	];
+	let render = () =>
+		renderToStaticMarkup(createElement(ReferencePicker, {
+			active: 3,
+			id: "references",
+			onActive: () => {},
+			onSelect: () => {},
+			pointers,
+			state: {
+				status: "ready",
+				options: [{ kind: "document", channelId: "release", title: "Release plan" }],
+			},
+		}));
+
+	test("lists the parts before the other documents, each tagged with its level or what it is", () => {
+		let html = render();
+		expect(html.indexOf(">Overview<")).toBeLessThan(html.indexOf(">Release plan<"));
+		expect(html).toMatch(/>Overview<\/span><span [^>]*>H1</);
+		expect(html).toMatch(/>Pick a store<\/span><span [^>]*>decision</);
+		expect(html).toMatch(/>src\/a.ts<\/span><span [^>]*>file</);
+	});
+
+	test("numbers the documents after the parts, so the keys and the pointer agree on which is active", () => {
+		let html = render();
+		expect(html.match(/<button[^>]*id="references-option-3"[^>]*>/)![0]).toContain(
+			'aria-label="Release plan"',
+		);
+		expect(html.match(/<button[^>]*id="references-option-3"[^>]*>/)![0]).toContain(
+			'aria-selected="true"',
+		);
+		expect(html.match(/<button[^>]*id="references-option-0"[^>]*>/)![0]).toContain(
+			'aria-selected="false"',
+		);
+	});
+
+	test("shows while its query is one word, and past a space only while something matches", () => {
+		expect(referenceMenuShown("", 0, false)).toBe(true);
+		expect(referenceMenuShown("road", 0, false)).toBe(true);
+		expect(referenceMenuShown("12 is fixed", 0, false)).toBe(false);
+		expect(referenceMenuShown("site s", 1, false)).toBe(true);
+		expect(referenceMenuShown("a b", 0, true)).toBe(true);
 	});
 });
 

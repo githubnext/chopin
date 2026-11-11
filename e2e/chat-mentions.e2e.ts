@@ -43,20 +43,18 @@ function rows(page: Page) {
 		);
 }
 
-/**
- * Chopin and the people: the rows that are there as soon as `@` is typed. The document's sections,
- * Decisions, research cards and files are asked of the server and come in below them a moment
- * later, so a read of the whole list is of whichever of the two moments it lands in.
- */
+/** `@` lists Chopin and people, and nothing else: every row is tagged one or the other. */
 async function people(page: Page) {
-	return (await rows(page)).filter(row => row.tag === "agent" || row.tag === "human");
+	let shown = await rows(page);
+	expect(shown.every(row => row.tag === "agent" || row.tag === "human")).toBe(true);
+	return shown;
 }
 
 async function names(page: Page) {
 	return (await people(page)).map(row => row.name);
 }
 
-test("the @ picker lists the Planner, people here and past authors, and sends only @chopin to the Planner", async ({ join, page }) => {
+test("the @ picker lists the Planner and the people, those here first, and sends only @chopin to the Planner", async ({ join, page }) => {
 	let sent: Chat.Send[] = [];
 	await enablePlanner(page);
 	await stubAvatars(page);
@@ -95,10 +93,14 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 	await draft.fill("Ask @");
 	await expect(list).toBeVisible();
 	await expect(draft).toHaveAttribute("aria-expanded", "true");
-	// Chopin first, tagged `agent`; the people after it, tagged `human`.
-	expect(await people(ana)).toEqual([
+	// Chopin first, tagged `agent`; the people after it, tagged `human`: the one here, then the
+	// others who can read the document (the account that made it, as the server lists them once
+	// GitHub will not), then the one who spoke and left. The readers are asked of the server, so the
+	// list is read once that answer is in.
+	await expect.poll(() => people(ana)).toEqual([
 		{ name: "Chopin", tag: "agent" },
 		{ name: "cy", tag: "human" },
+		{ name: "e2e", tag: "human" },
 		{ name: "bo", tag: "human" },
 	]);
 	await expect(list.getByRole("option", { name: "cy" }).locator("img")).toHaveAttribute(
@@ -113,10 +115,9 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 		"true",
 	);
 
-	// The keys run through every row, the document's parts and files too, so they are read once
-	// those are in: the last row is where ArrowUp from the first one lands.
-	let last = list.getByRole("option", { name: "src/chat/composer.tsx" });
-	await expect(last).toBeVisible();
+	// The document's parts and files are `#`'s, never `@`'s.
+	await expect(list.getByRole("option", { name: "src/chat/composer.tsx" })).toHaveCount(0);
+	let last = list.getByRole("option", { name: "bo" });
 
 	await draft.press("ArrowDown");
 	await expect(list.getByRole("option", { name: "cy" })).toHaveAttribute("aria-selected", "true");
@@ -125,7 +126,7 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 		(await list.getByRole("option", { name: "cy" }).getAttribute("id"))!,
 	);
 	await draft.press("ArrowDown");
-	await expect(list.getByRole("option", { name: "bo" })).toHaveAttribute("aria-selected", "true");
+	await expect(list.getByRole("option", { name: "e2e" })).toHaveAttribute("aria-selected", "true");
 	await draft.press("ArrowUp");
 	await draft.press("ArrowUp");
 	await expect(list.getByRole("option", { name: /^Chopin/ })).toHaveAttribute(
@@ -133,13 +134,14 @@ test("the @ picker lists the Planner, people here and past authors, and sends on
 		"true",
 	);
 	await draft.press("ArrowUp");
+	// ArrowUp from the first row lands on the last.
 	await expect(last).toHaveAttribute("aria-selected", "true");
 
 	await draft.pressSequentially("C");
-	expect(await names(ana)).toEqual(["Chopin", "cy"]);
+	await expect.poll(() => names(ana)).toEqual(["Chopin", "cy"]);
 	await draft.press("Backspace");
 	await draft.pressSequentially("ch");
-	expect(await names(ana)).toEqual(["Chopin"]);
+	await expect.poll(() => names(ana)).toEqual(["Chopin"]);
 	await draft.press("Enter");
 	// Chopin is the chip at the start of the draft, not an @chopin in its words.
 	await expectChatValue(draft, "Ask ");
@@ -200,13 +202,41 @@ test("the @ picker stays inside a narrow Chat panel", async ({ join, page }) => 
 	await draft.fill("@");
 	let list = chat.locator("[data-chat-mention-picker]");
 	await expect(list).toBeVisible();
-	expect(await names(opened)).toEqual(["Chopin"]);
+	await expect.poll(() => names(opened)).toEqual(["Chopin", "e2e"]);
 	await expectInsideViewport(list);
 	await expectNoHorizontalOverflow(opened);
 	let panel = await chat.boundingBox();
 	let box = await list.boundingBox();
 	expect(box!.x).toBeGreaterThanOrEqual(panel!.x);
 	expect(box!.x + box!.width).toBeLessThanOrEqual(panel!.x + panel!.width);
+});
+
+test("# and Mention docs list the document's parts and files, and @ never does", async ({ join, page }) => {
+	await enablePlanner(page);
+	await stubAvatars(page);
+	let ana = await join("ana");
+	let chat = chatPane(ana);
+	let draft = chatInput(chat);
+	let documents = chat.getByRole("listbox", { name: "Document references" });
+	let file = documents.getByRole("option", { name: "src/chat/composer.tsx" });
+
+	await chat.getByRole("button", { name: "Mention docs", exact: true }).click();
+	await expectChatValue(draft, "#");
+	await expect(draft).toBeFocused();
+	await expect(file).toBeVisible();
+	// The words of a path go on past a slash, and the row becomes a chip the server reads as a file.
+	await draft.pressSequentially("comp");
+	await expect(documents.getByRole("option")).toHaveText(["src/chat/composer.tsxfile"]);
+	await draft.press("Enter");
+	await expectChatValue(draft, "@src/chat/composer.tsx ");
+	await expect(draft.locator('.draft-reference[data-reference="file"]')).toHaveText(
+		"@src/chat/composer.tsx",
+	);
+	await expect(documents).toHaveCount(0);
+
+	// A `#` past a space with nothing to match holds no menu open over the sentence.
+	await draft.pressSequentially("and #12 is");
+	await expect(documents).toHaveCount(0);
 });
 
 test("the @ picker closes on Escape or an outside press and keeps the draft", async ({ join, page }) => {

@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { InfoIcon, LoaderIcon, SearchIcon } from "@chopin/icons";
+import {
+	DecisionIcon,
+	DocumentIcon,
+	GlobeSearchIcon,
+	InfoIcon,
+	LoaderIcon,
+	SearchIcon,
+	TextStyleIcon,
+} from "@chopin/icons";
 import { ReferenceErrorIcon } from "./reference-status-icon";
 
 import * as Api from "../api";
 import { MAX_REFERENCES, referenceTriggerKey } from "./references";
 
+import type { PointerOption } from "./mention-sources";
 import type { ReferenceTarget, ReferenceTrigger } from "./references";
 
 const SEARCH_DELAY = 160;
@@ -201,6 +210,46 @@ export function useReferencePicker(
 	return { ...loaded, active, setActive };
 }
 
+/**
+ * Every row `#` offers, in the order the keys move through them: the parts of this document and
+ * its repository's files first, then the other documents.
+ */
+export type ReferenceRow =
+	| { type: "pointer"; option: PointerOption }
+	| { type: "document"; target: ReferenceTarget };
+
+export function referenceRows(
+	pointers: readonly PointerOption[],
+	documents: readonly ReferenceTarget[],
+): ReferenceRow[] {
+	return [
+		...pointers.map((option): ReferenceRow => ({ type: "pointer", option })),
+		...documents.map((target): ReferenceRow => ({ type: "document", target })),
+	];
+}
+
+/**
+ * Whether the `#` menu shows: while its query is one word, as soon as it is typed, and once the
+ * words go past a space only while something matches them, so `#12 is fixed` does not hold a menu
+ * of nothing open over the rest of the sentence.
+ */
+export function referenceMenuShown(query: string, rows: number, limit: boolean): boolean {
+	return limit || rows > 0 || !/\s/.test(query);
+}
+
+function pointerIcon(option: PointerOption) {
+	switch (option.kind) {
+		case "heading":
+			return <TextStyleIcon size={16} />;
+		case "decision":
+			return <DecisionIcon size={16} />;
+		case "research":
+			return <GlobeSearchIcon size={16} />;
+		case "file":
+			return <DocumentIcon size={16} />;
+	}
+}
+
 export function referenceOptionId(listId: string, index: number): string {
 	return `${listId}-option-${index}`;
 }
@@ -215,12 +264,17 @@ export function ReferencePicker(
 		id,
 		onActive,
 		onSelect,
+		onSelectPointer,
+		pointers = [],
 		state,
 	}: {
 		active: number;
 		id: string;
 		onActive: (index: number) => void;
 		onSelect: (target: ReferenceTarget) => void;
+		onSelectPointer?: (option: PointerOption) => void;
+		/** This document's sections, Decisions and research cards and its repository's files. */
+		pointers?: readonly PointerOption[];
 		state: ReferencePickerState;
 	},
 ) {
@@ -232,13 +286,14 @@ export function ReferencePicker(
 		? "No matches in the available documents."
 		: "No matching documents.";
 
+	let rows = pointers.length + state.options.length;
 	useEffect(() => {
-		if (state.options.length === 0) return;
+		if (rows === 0) return;
 		let frame = requestAnimationFrame(() => {
 			document.getElementById(referenceOptionId(id, active))?.scrollIntoView({ block: "nearest" });
 		});
 		return () => cancelAnimationFrame(frame);
-	}, [active, id, state.options.length]);
+	}, [active, id, rows]);
 
 	return (
 		<div
@@ -247,6 +302,9 @@ export function ReferencePicker(
 			data-animate={animate || undefined}
 			data-menu-enter=""
 			data-focus-boundary=""
+			// It scrolls once this document's parts and the other documents are more than it holds, so
+			// it is reachable by keyboard.
+			tabIndex={0}
 		>
 			<div aria-busy={state.status === "loading"} aria-label={label} id={id} role="listbox">
 				{state.status === "loading" && (
@@ -265,7 +323,7 @@ export function ReferencePicker(
 						{failureMessage(state.error)}
 					</p>
 				)}
-				{state.status === "ready" && state.options.length === 0 && (
+				{state.status === "ready" && rows === 0 && (
 					<p className="composer-picker-status" role="status">
 						<SearchIcon size={16} />
 						{empty}
@@ -276,7 +334,32 @@ export function ReferencePicker(
 						<InfoIcon size={16} />Some documents are not shown.
 					</p>
 				)}
-				{state.options.map((option, index) => {
+				{pointers.map((option, index) => (
+					<button
+						aria-label={option.label}
+						aria-selected={index === active}
+						className="menu-item"
+						data-active={index === active || undefined}
+						id={referenceOptionId(id, index)}
+						key={option.id}
+						onClick={() => onSelectPointer?.(option)}
+						onMouseDown={event => event.preventDefault()}
+						onMouseEnter={() => onActive(index)}
+						role="option"
+						tabIndex={-1}
+						type="button"
+					>
+						<span aria-hidden="true" className="shrink-0 text-text-quaternary">
+							{pointerIcon(option)}
+						</span>
+						<span className="min-w-0 flex-1 truncate text-sm font-medium">{option.label}</span>
+						<span className="text-text-tertiary" data-reference-meta="kind">
+							{option.meta ?? option.kind}
+						</span>
+					</button>
+				))}
+				{state.options.map((option, at) => {
+					let index = pointers.length + at;
 					let generatedDescription = option.description
 						? `${referenceOptionId(id, index)}-description`
 						: undefined;

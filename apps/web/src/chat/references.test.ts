@@ -48,11 +48,11 @@ function select(text: string, target: ReferenceTarget, references: ReferenceDraf
 	return insertReference(text, references, trigger, target);
 }
 
-describe("choosing a part of the document or a file with @", () => {
+describe("choosing a part of the document or a file with #", () => {
 	let heading = { kind: "heading" as const, anchor: "site-1", label: "Site 1: harbour" };
 
 	test("puts its own words in the draft as one chip with a space after it, and the caret after that", () => {
-		let text = "Rewrite @sit";
+		let text = "Rewrite #sit";
 		let result = insertPointer(text, [], { query: "sit", start: 8, end: 12 }, heading);
 		expect(result.text).toBe("Rewrite @Site 1: harbour ");
 		expect(result.caret).toBe(result.text.length);
@@ -62,7 +62,7 @@ describe("choosing a part of the document or a file with @", () => {
 	});
 
 	test("opens a research card with a % and takes the space already there", () => {
-		let result = insertPointer("See @re later", [], { query: "re", start: 4, end: 7 }, {
+		let result = insertPointer("See #re later", [], { query: "re", start: 4, end: 7 }, {
 			kind: "research",
 			workspaceId: "w1",
 			label: "Release",
@@ -79,14 +79,14 @@ describe("choosing a part of the document or a file with @", () => {
 	});
 
 	test("moves a part already in the draft to its new place, and keeps others where their words are", () => {
-		let first = insertPointer("@a", [], { query: "a", start: 0, end: 2 }, heading);
-		let second = insertPointer(`${first.text}and @f`, first.references, {
+		let first = insertPointer("#a", [], { query: "a", start: 0, end: 2 }, heading);
+		let second = insertPointer(`${first.text}and #f`, first.references, {
 			query: "f",
 			start: first.text.length + 4,
 			end: first.text.length + 6,
 		}, { kind: "file", path: "src/a.ts", label: "src/a.ts" });
 		expect(second.references.map(reference => reference.kind)).toEqual(["heading", "file"]);
-		let again = insertPointer(`${second.text}see @s`, second.references, {
+		let again = insertPointer(`${second.text}see #s`, second.references, {
 			query: "s",
 			start: second.text.length + 4,
 			end: second.text.length + 6,
@@ -96,7 +96,7 @@ describe("choosing a part of the document or a file with @", () => {
 	});
 
 	test("leaves the draft as it was when its range is not the typed query, or ten references are held", () => {
-		expect(insertPointer("@x", [], { query: "y", start: 0, end: 2 }, heading).text).toBe("@x");
+		expect(insertPointer("#x", [], { query: "y", start: 0, end: 2 }, heading).text).toBe("#x");
 		let full: ReferenceDraft[] = Array.from({ length: 10 }, (_, index) => ({
 			kind: "file",
 			path: `f${index}`,
@@ -104,7 +104,7 @@ describe("choosing a part of the document or a file with @", () => {
 			end: index * 4 + 3,
 			token: `@f${index}`,
 		}));
-		let text = "@f0 @f1 @f2 @f3 @f4 @f5 @f6 @f7 @f8 @f9 @q";
+		let text = "@f0 @f1 @f2 @f3 @f4 @f5 @f6 @f7 @f8 @f9 #q";
 		let result = insertPointer(
 			text,
 			full,
@@ -205,11 +205,21 @@ describe("typed reference triggers", () => {
 		expect(referenceTrigger("Line one\n#release:v2", 20)?.query).toBe("release:v2");
 	});
 
-	test("ignores URLs, embedded markers, whitespace queries, and selections", () => {
-		for (let value of ["https://example.com/#release", "issue#12", "100%ready", "#two words"]) {
+	test("ignores URLs, embedded markers, other lines and selections", () => {
+		for (let value of ["https://example.com/#release", "issue#12", "100%ready", "#one\ntwo"]) {
 			expect(referenceTrigger(value, value.length)).toBeUndefined();
 		}
 		expect(referenceTrigger("#release", 0, 4)).toBeUndefined();
+		expect(referenceTrigger("#release", 0)).toBeUndefined();
+	});
+
+	test("goes on past a space or a slash, for the words of a title, a heading or a path", () => {
+		expect(referenceTrigger("Rewrite #Site 1: harbour", 24)).toMatchObject({
+			query: "Site 1: harbour",
+			start: 8,
+			end: 24,
+		});
+		expect(referenceTrigger("Look at #src/chat/a.ts", 22)?.query).toBe("src/chat/a.ts");
 	});
 
 	test("bounds the active query", () => {

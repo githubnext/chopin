@@ -58,37 +58,6 @@ export function mentionTrigger(
 	return { query, start, end: selectionStart };
 }
 
-/** What a typed query may span: the words of a heading, a path, a login. */
-export const MAX_POINTER_QUERY = 64;
-
-/**
- * The unfinished `@query` before the caret, where the query may be more than a login: a heading's
- * words, a Decision's, a path. It follows the same boundary `mentionTrigger` does (the `@` begins
- * the text or follows what is neither a word character nor another `@`, so an address is not a
- * mention), stays on its line, and is at most 64 characters. A caret inside a word does not open it.
- * What `mentionTrigger` finds is always found here, with the same range and query.
- */
-export function pointerTrigger(
-	text: string,
-	selectionStart: number,
-	selectionEnd = selectionStart,
-): MentionTrigger | undefined {
-	if (
-		!Number.isSafeInteger(selectionStart)
-		|| !Number.isSafeInteger(selectionEnd)
-		|| selectionStart !== selectionEnd
-		|| selectionStart < 0
-		|| selectionStart > text.length
-	) return undefined;
-	if (/[\w-]/.test(text[selectionStart] ?? "")) return undefined;
-	let line = text.lastIndexOf("\n", selectionStart - 1) + 1;
-	// With the caret at the very start, `lastIndexOf` would find an `@` after it, which is no trigger.
-	let at = selectionStart > 0 ? text.lastIndexOf("@", selectionStart - 1) : -1;
-	if (at < line || selectionStart - at - 1 > MAX_POINTER_QUERY) return undefined;
-	if (at > 0 && /[\w@]/.test(text[at - 1]!)) return undefined;
-	return { query: text.slice(at + 1, selectionStart), start: at, end: selectionStart };
-}
-
 export function mentionTriggerKey(trigger: MentionTrigger): string {
 	return `mention:${trigger.start}:${trigger.end}:${trigger.query}`;
 }
@@ -104,23 +73,26 @@ export function chatAuthors(entries: readonly Pick<Chat.Entry, "author">[]): str
 }
 
 /**
- * The Planner, then people here, then people who have spoken in this Chat.
+ * The Planner, then people here, then the others who can read the document, then people who have
+ * spoken in this Chat.
  *
  * Logins are GitHub identities, so duplicates are case-insensitive. The
  * Planner's name is reserved: a person who happens to hold it would be
  * unreachable, because `@chopin` always addresses the Planner.
  */
 export function mentionCandidates(
-	{ authors, people, planner, self }: {
+	{ authors, people, readers = [], planner, self }: {
 		authors: readonly string[];
 		people: readonly string[];
+		/** Who can read the document, as the server listed them. */
+		readers?: readonly string[];
 		planner: boolean;
 		self: string;
 	},
 ): MentionCandidate[] {
 	let seen = new Set([self.toLowerCase(), PLANNER_LOGIN]);
 	let candidates: MentionCandidate[] = planner ? [{ kind: "planner", login: PLANNER_LOGIN }] : [];
-	for (let login of [...people, ...authors]) {
+	for (let login of [...people, ...readers, ...authors]) {
 		let identity = login.toLowerCase();
 		if (seen.has(identity)) continue;
 		seen.add(identity);

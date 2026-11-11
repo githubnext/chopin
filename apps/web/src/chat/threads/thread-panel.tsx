@@ -16,7 +16,8 @@ import { sendFailureView } from "../failure";
 import { applyFormat } from "../format-markdown";
 import { keepFormatPreference, readFormatPreference } from "../format-preference";
 import { MessageMarkdown } from "../markdown";
-import { MentionPicker, mentionRows } from "../mention-picker";
+import { useDocumentPeople } from "../document-people";
+import { MentionPicker } from "../mention-picker";
 import { pointerGroups, useMentionSources } from "../mention-sources";
 import {
 	chatAuthors,
@@ -24,14 +25,16 @@ import {
 	insertMention,
 	mentionCandidates,
 	mentionKeyAction,
+	mentionTrigger,
 	mentionTriggerKey,
-	pointerTrigger,
 } from "../mentions";
 import { capitalize, displayText } from "../model";
 import {
+	referenceMenuShown,
 	referenceOptionId,
 	ReferencePicker,
 	referencePickerKeyAction,
+	referenceRows,
 	useReferencePicker,
 } from "../reference-picker";
 import {
@@ -58,7 +61,7 @@ import type { Wire as Socket } from "../../wire";
 import type { ComposerNotice } from "../composer";
 import type { DraftInputHandle } from "../draft-input";
 import type { Format } from "../format-markdown";
-import type { MentionRow } from "../mention-picker";
+import type { ReferenceRow } from "../reference-picker";
 import type { PointerOption } from "../mention-sources";
 import type { MentionCandidate } from "../mentions";
 import type { ComposerDraft, ReferenceTarget, SendFailure } from "../references";
@@ -241,8 +244,15 @@ export function ThreadPanel(
 		submitted: draft.submission?.to,
 	});
 
-	let detected = referencesEnabled && composerReady && !submitting
+	// `#` and `@` both open at the caret; the one typed nearer to it is the one being written.
+	let hashed = referencesEnabled && composerReady && !submitting
 		? referenceTrigger(draft.text, selection.start, selection.end)
+		: undefined;
+	let typedMention = composerReady && !submitting
+		? mentionTrigger(draft.text, selection.start, selection.end)
+		: undefined;
+	let detected = hashed && !(typedMention && typedMention.start > hashed.start)
+		? hashed
 		: undefined;
 	let trigger = detected
 			&& !draft.references.some(reference =>
@@ -251,20 +261,35 @@ export function ThreadPanel(
 		? detected
 		: undefined;
 	let triggerKey = trigger ? referenceTriggerKey(trigger) : undefined;
-	let pickerOpen = !submitting && trigger !== undefined && triggerKey !== dismissedPicker;
+	let pickerWanted = !submitting && trigger !== undefined && triggerKey !== dismissedPicker;
 	let atReferenceLimit = draft.references.length >= MAX_REFERENCES;
 	let picker = useReferencePicker(
-		pickerOpen && !atReferenceLimit && referencesEnabled ? trigger : undefined,
+		pickerWanted && !atReferenceLimit && referencesEnabled ? trigger : undefined,
 		repository,
 		room,
 	);
+	let sources = useMentionSources(
+		room,
+		pickerWanted && !atReferenceLimit ? trigger!.query : undefined,
+	);
+	let pointers = atReferenceLimit
+		? []
+		: pointerGroups(sources).flatMap(group => group.options);
+	let rows = referenceRows(pointers, picker.options);
+	let pickerOpen = pickerWanted
+		&& referenceMenuShown(
+			trigger!.query,
+			rows.length,
+			atReferenceLimit || picker.status === "error",
+		);
+	let activeRow: ReferenceRow | undefined = rows.length === 0
+		? undefined
+		: rows[Math.min(picker.active, rows.length - 1)];
 	let authors = chatAuthors([
 		...(view.root ? [view.root] : []),
 		...view.transcript.entries,
 	]);
-	let mention = composerReady && !submitting && !detected
-		? pointerTrigger(draft.text, selection.start, selection.end)
-		: undefined;
+	let mention = detected ? undefined : typedMention;
 	let mentionKey = mention ? mentionTriggerKey(mention) : undefined;
 	let freeMention = mention
 			&& !draft.references.some(reference =>
@@ -272,32 +297,20 @@ export function ThreadPanel(
 			)
 		? mention
 		: undefined;
+	let readers = useDocumentPeople(room, !!freeMention);
 	let mentionOptions = freeMention
 		? filterMentions(
-			mentionCandidates({ authors, people, planner: agent, self: handle }),
+			mentionCandidates({ authors, people, readers, planner: agent, self: handle }),
 			freeMention.query,
 		)
 		: [];
-	let sources = useMentionSources(
-		room,
-		referencesEnabled && freeMention && mentionKey !== dismissedPicker
-			? freeMention.query
-			: undefined,
-	);
-	let mentionRowsShown = mentionRows(
-		mentionOptions,
-		atReferenceLimit ? [] : pointerGroups(sources),
-	);
-	let mentionOpen = mentionRowsShown.length > 0 && mentionKey !== dismissedPicker;
+	let mentionOpen = mentionOptions.length > 0 && mentionKey !== dismissedPicker;
 	let mentionActive = mentionCursor.key === mentionKey
-		? Math.min(mentionCursor.index, mentionRowsShown.length - 1)
+		? Math.min(mentionCursor.index, mentionOptions.length - 1)
 		: 0;
-	let activeMention: MentionRow | undefined = mentionOpen
-		? mentionRowsShown[mentionActive]
+	let activeMention: MentionCandidate | undefined = mentionOpen
+		? mentionOptions[mentionActive]
 		: undefined;
-	let activeOption = picker.options.length === 0
-		? undefined
-		: picker.options[Math.min(picker.active, picker.options.length - 1)];
 
 	usePopoverDismissal(
 		mentionOpen || pickerOpen,
@@ -329,10 +342,10 @@ export function ThreadPanel(
 		pendingCaret.current = { start: result.start, end: result.end };
 	};
 
-	let startMention = () => {
+	let startMention = (marker: "#" | "@" = "@") => {
 		let current = draftRef.current;
 		let before = current.text.slice(0, selection.start);
-		let lead = before && !/\s$/.test(before) ? " @" : "@";
+		let lead = before && !/\s$/.test(before) ? ` ${marker}` : marker;
 		let next = before + lead + current.text.slice(selection.end);
 		let caret = before.length + lead.length;
 		setDraft(
@@ -404,8 +417,8 @@ export function ThreadPanel(
 	};
 
 	let choosePointer = (option: PointerOption) => {
-		if (!freeMention) return;
-		let next = insertPointer(draft.text, draft.references, freeMention, option);
+		if (!trigger) return;
+		let next = insertPointer(draft.text, draft.references, trigger, option);
 		setDraft(current => reviseComposerDraft(current, next.text, next.references));
 		setSelection({ start: next.caret, end: next.caret });
 		setSendError(undefined);
@@ -413,8 +426,8 @@ export function ThreadPanel(
 		pendingCaret.current = next.caret;
 	};
 
-	let chooseRow = (row: MentionRow) =>
-		row.type === "candidate" ? chooseMention(row.candidate) : choosePointer(row.option);
+	let chooseRow = (row: ReferenceRow) =>
+		row.type === "pointer" ? choosePointer(row.option) : chooseReference(row.target);
 
 	let clearSubmittedDraft = (submitted: ComposerDraft) => {
 		if (draftRef.current !== submitted) return;
@@ -619,8 +632,8 @@ export function ThreadPanel(
 				input={{
 					"aria-activedescendant": mentionOpen
 						? referenceOptionId(mentionPickerId, mentionActive)
-						: pickerOpen && activeOption
-						? referenceOptionId(pickerId, picker.options.indexOf(activeOption))
+						: pickerOpen && activeRow
+						? referenceOptionId(pickerId, rows.indexOf(activeRow))
 						: undefined,
 					"aria-controls": mentionOpen
 						? mentionPickerId
@@ -693,7 +706,7 @@ export function ThreadPanel(
 						if (mentionAction === "next") {
 							setMentionCursor({
 								key: mentionKey,
-								index: (mentionActive + 1) % mentionRowsShown.length,
+								index: (mentionActive + 1) % mentionOptions.length,
 							});
 							event.preventDefault();
 							return;
@@ -701,13 +714,13 @@ export function ThreadPanel(
 						if (mentionAction === "previous") {
 							setMentionCursor({
 								key: mentionKey,
-								index: (mentionActive - 1 + mentionRowsShown.length) % mentionRowsShown.length,
+								index: (mentionActive - 1 + mentionOptions.length) % mentionOptions.length,
 							});
 							event.preventDefault();
 							return;
 						}
 						if (mentionAction === "select" && activeMention) {
-							chooseRow(activeMention);
+							chooseMention(activeMention);
 							event.preventDefault();
 							return;
 						}
@@ -717,26 +730,22 @@ export function ThreadPanel(
 								keyCode: event.keyCode,
 								isComposing: event.nativeEvent.isComposing,
 								shiftKey: event.shiftKey,
-							}, activeOption !== undefined)
+							}, activeRow !== undefined)
 							: undefined;
 						if (action === "next") {
-							picker.setActive(value =>
-								picker.options.length === 0 ? 0 : (value + 1) % picker.options.length
-							);
+							picker.setActive(value => rows.length === 0 ? 0 : (value + 1) % rows.length);
 							event.preventDefault();
 							return;
 						}
 						if (action === "previous") {
 							picker.setActive(value =>
-								picker.options.length === 0
-									? 0
-									: (value - 1 + picker.options.length) % picker.options.length
+								rows.length === 0 ? 0 : (value - 1 + rows.length) % rows.length
 							);
 							event.preventDefault();
 							return;
 						}
-						if (action === "select" && activeOption) {
-							chooseReference(activeOption);
+						if (action === "select" && activeRow) {
+							chooseRow(activeRow);
 							event.preventDefault();
 							return;
 						}
@@ -753,7 +762,7 @@ export function ThreadPanel(
 					value: draft.text,
 				}}
 				inputRef={textarea}
-				mention={{ disabled: !composerReady || submitting, onMention: startMention }}
+				mention={{ disabled: !composerReady || submitting, onMention: () => startMention("@") }}
 				model={modelControl}
 				notice={composerNotice}
 				onAlsoToChatChange={onAlsoToChatChange}
@@ -762,10 +771,12 @@ export function ThreadPanel(
 					<>
 						{pickerOpen && trigger && (
 							<ReferencePicker
-								active={picker.active}
+								active={Math.min(picker.active, Math.max(rows.length - 1, 0))}
 								id={pickerId}
 								onActive={picker.setActive}
 								onSelect={chooseReference}
+								onSelectPointer={choosePointer}
+								pointers={pointers}
 								state={atReferenceLimit
 									? { status: "limit", options: [] }
 									: picker}
@@ -774,11 +785,9 @@ export function ThreadPanel(
 						{mentionOpen && (
 							<MentionPicker
 								active={mentionActive}
-								groups={atReferenceLimit ? [] : pointerGroups(sources)}
 								id={mentionPickerId}
 								onActive={index => setMentionCursor({ key: mentionKey, index })}
 								onSelect={chooseMention}
-								onSelectPointer={choosePointer}
 								options={mentionOptions}
 							/>
 						)}
@@ -787,15 +796,7 @@ export function ThreadPanel(
 				references={referencesEnabled
 					? {
 						disabled: !composerReady || submitting,
-						onMentionDocs: () => {
-							let current = draftRef.current;
-							let next = current.text
-								+ (current.text && !current.text.endsWith(" ") ? " #" : "#");
-							setDraft(reviseComposerDraft(current, next, current.references));
-							setSelection({ start: next.length, end: next.length });
-							setDismissedPicker(undefined);
-							pendingCaret.current = next.length;
-						},
+						onMentionDocs: () => startMention("#"),
 					}
 					: undefined}
 				rootRef={composerRoot}
