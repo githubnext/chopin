@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
 
 import { writeDraft } from "./draft-highlights";
-import { beforeInputSelection, reconcileReferenceDrafts } from "./references";
+import { beforeInputSelection, expandToChips, reconcileReferenceDrafts } from "./references";
 import type { HTMLAttributes } from "react";
 import type { ReferenceDraft } from "../chat/references";
 
@@ -240,6 +240,22 @@ export let DraftInput = forwardRef<DraftInputHandle, DraftInputProps>(function D
 				input.preventDefault();
 				restoreHistory(input.inputType === "historyRedo");
 				return;
+			}
+			// A chip is one thing: deleting any of it deletes all of it, and typing never lands inside.
+			let before = event().currentTarget;
+			let whole = expandToChips(
+				references,
+				before.selectionStart,
+				before.selectionEnd,
+				input.inputType,
+			);
+			if (whole.start !== before.selectionStart || whole.end !== before.selectionEnd) {
+				setSelection(element.current!, whole.start, whole.end);
+				if (input.inputType.startsWith("delete")) {
+					input.preventDefault();
+					insert("");
+					return;
+				}
 			}
 			if (input.inputType === "insertParagraph" && !input.isComposing && !composing.current) {
 				input.preventDefault();

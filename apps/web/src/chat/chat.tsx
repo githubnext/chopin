@@ -63,13 +63,16 @@ import {
 	CHAT_COMMANDS,
 	commandBrief,
 	commandKeyAction,
+	commandList,
 	commandText,
 	commandTrigger,
 	commandTriggerKey,
 	draftCommand,
 	filterCommands,
 } from "./commands";
-import { MentionPicker } from "./mention-picker";
+import { MentionPicker, mentionRows } from "./mention-picker";
+import { pointerGroups, useMentionSources } from "./mention-sources";
+import type { PointerOption } from "./mention-sources";
 import { composerModelNotice } from "./model-picker-state";
 import { useModelChoice } from "./use-model-choice";
 import {
@@ -78,8 +81,8 @@ import {
 	insertMention,
 	mentionCandidates,
 	mentionKeyAction,
-	mentionTrigger,
 	mentionTriggerKey,
+	pointerTrigger,
 } from "./mentions";
 import {
 	referenceOptionId,
@@ -91,6 +94,8 @@ import {
 	acknowledgeDraft,
 	addressedOutsideReferences,
 	addressesPlanner,
+	insertCommand,
+	insertPointer,
 	insertReference,
 	MAX_REFERENCES,
 	PLANNER_UNAVAILABLE_NOTICE,
@@ -101,6 +106,7 @@ import {
 	repliesOffNotice,
 	restoreDraftSubmission,
 	reviseComposerDraft,
+	runsCommand,
 	sendFailure,
 	shownSendFailure,
 	withNoticesAfter,
@@ -124,6 +130,7 @@ import type { Chat as Wire, ConversationPlan } from "@chopin/protocol";
 import type { Repository } from "../api";
 import type { ResearchLaunchBlock, ResearchLaunchResult } from "@chopin/editor";
 import type { ChatCommand } from "./commands";
+import type { MentionRow } from "./mention-picker";
 import type { MentionCandidate } from "./mentions";
 import type { ComposerDraft, ReferenceTarget, SendFailure } from "./references";
 import type { Wire as Socket } from "../wire";
@@ -312,6 +319,7 @@ export function Chat(
 		saved: modelSaved,
 		savedName: modelSavedName,
 		unreadable: modelUnreadable,
+		commands: agentCommands,
 	} = useModelChoice({
 		wire,
 		room,
@@ -440,6 +448,7 @@ export function Chat(
 	let draftable = !readonly && !archived;
 	let effectiveMode = !!agent && (mode || draft.submission?.to === "planner"
 		|| addressedOutsideReferences(draft.text, draft.references));
+	let commandDraft = runsCommand(draft.references);
 	let plannerBound = outboxed && effectiveMode;
 	let { working: workingTurn, suspended: suspendedWork } = progressOf(
 		transcript,
@@ -465,36 +474,55 @@ export function Chat(
 	);
 	let authors = chatAuthors(entries);
 	let mention = composerReady && !submitting && !detected
-		? mentionTrigger(draft.text, selection.start, selection.end)
+		? pointerTrigger(draft.text, selection.start, selection.end)
 		: undefined;
 	let mentionKey = mention ? mentionTriggerKey(mention) : undefined;
-	let mentionOptions = mention
+	let freeMention = mention
 			&& !draft.references.some(reference =>
 				reference.start < mention.end && reference.end > mention.start
 			)
+		? mention
+		: undefined;
+	let mentionOptions = freeMention
 		? filterMentions(
 			mentionCandidates({ authors, people, planner: agent, self: handle }),
-			mention.query,
+			freeMention.query,
 		)
 		: [];
-	let mentionOpen = mentionOptions.length > 0 && mentionKey !== dismissedPicker;
+	// The document's parts and files are asked for as the person types, while the menu can show.
+	let sources = useMentionSources(
+		room,
+		referencesEnabled && freeMention && mentionKey !== dismissedPicker
+			? freeMention.query
+			: undefined,
+	);
+	let mentionRowsShown = mentionRows(
+		mentionOptions,
+		atReferenceLimit ? [] : pointerGroups(sources),
+	);
+	let mentionOpen = mentionRowsShown.length > 0 && mentionKey !== dismissedPicker;
 	let mentionActive = mentionCursor.key === mentionKey
-		? Math.min(mentionCursor.index, mentionOptions.length - 1)
+		? Math.min(mentionCursor.index, mentionRowsShown.length - 1)
 		: 0;
-	let activeMention: MentionCandidate | undefined = mentionOpen
-		? mentionOptions[mentionActive]
+	let activeMention: MentionRow | undefined = mentionOpen
+		? mentionRowsShown[mentionActive]
 		: undefined;
 	let command = composerReady && !submitting
 		? commandTrigger(draft.text, selection.start, selection.end)
 		: undefined;
 	let commandKey = command ? commandTriggerKey(command) : undefined;
-	let commandOptions = command && onResearch ? filterCommands(CHAT_COMMANDS, command.query) : [];
+	// Chat's own commands, and the agent's for a person who can send to it.
+	let commandPool = commandList(
+		onResearch ? CHAT_COMMANDS : [],
+		agent && composerReady ? agentCommands : undefined,
+	);
+	let commandOptions = command ? filterCommands(commandPool, command.query) : [];
 	let commandOpen = commandOptions.length > 0 && commandKey !== dismissedPicker;
 	let commandActive = commandCursor.key === commandKey
 		? Math.min(commandCursor.index, commandOptions.length - 1)
 		: 0;
 	// Without research here, a `/research` draft is held with a notice rather than posted.
-	let blockedCommand = !onResearch && !!draftCommand(draft.text);
+	let blockedCommand = !onResearch && !commandDraft && !!draftCommand(draft.text);
 	// Escape keeps the draft and the composer's focus; only the picker closes.
 	usePopoverDismissal(
 		commandOpen || mentionOpen || pickerOpen,
@@ -651,7 +679,7 @@ export function Chat(
 		if (submission.current || !draftable) return;
 		typing.current?.stop();
 		let current = draftRef.current;
-		if (draftCommand(current.text)) {
+		if (!runsCommand(current.references) && draftCommand(current.text)) {
 			// `#` references stay in the brief as their visible titles.
 			launchResearch(commandBrief(current.text));
 			return;
@@ -935,8 +963,8 @@ export function Chat(
 	};
 
 	let chooseMention = (candidate: MentionCandidate) => {
-		if (!mention) return;
-		let next = insertMention(draft.text, mention, candidate);
+		if (!freeMention) return;
+		let next = insertMention(draft.text, freeMention, candidate);
 		if (candidate.kind === "planner") setMode(true);
 		setDraft(current =>
 			reviseComposerDraft(
@@ -946,7 +974,7 @@ export function Chat(
 					current.text,
 					next.text,
 					current.references,
-					{ start: mention.start, end: mention.end },
+					{ start: freeMention.start, end: freeMention.end },
 				),
 			)
 		);
@@ -956,10 +984,40 @@ export function Chat(
 		pendingCaret.current = next.caret;
 	};
 
+	/** A part of the document or a file becomes a chip, which the Planner receives as what it is. */
+	let choosePointer = (option: PointerOption) => {
+		if (!freeMention) return;
+		let next = insertPointer(draft.text, draft.references, freeMention, option);
+		setDraft(current => reviseComposerDraft(current, next.text, next.references));
+		setSelection({ start: next.caret, end: next.caret });
+		setSendError(undefined);
+		setDismissedPicker(undefined);
+		pendingCaret.current = next.caret;
+	};
+
+	let chooseRow = (row: MentionRow) =>
+		row.type === "candidate" ? chooseMention(row.candidate) : choosePointer(row.option);
+
 	let moveMention = (to: (index: number) => number) =>
 		setMentionCursor({ key: mentionKey, index: to(mentionActive) });
 
-	let chooseCommand = (choice: ChatCommand) => launchResearch("", commandText(choice));
+	let chooseCommand = (choice: ChatCommand) => {
+		if (choice.source === "chat") {
+			launchResearch("", commandText(choice));
+			return;
+		}
+		// The agent's command opens the draft as a chip, and the person goes on with its words.
+		if (!command) return;
+		let next = insertCommand(draft.text, draft.references, command, {
+			name: choice.name,
+			commandKind: choice.commandKind ?? "",
+		});
+		setDraft(current => reviseComposerDraft(current, next.text, next.references));
+		setSelection({ start: next.caret, end: next.caret });
+		setSendError(undefined);
+		setDismissedPicker(undefined);
+		pendingCaret.current = next.caret;
+	};
 
 	let researchCopy: Record<ResearchLaunchBlock, string> = {
 		"too-long": `Briefs can be up to ${MAX_RESEARCH_BRIEF.toLocaleString("en-US")} characters`,
@@ -1196,9 +1254,11 @@ export function Chat(
 						{mentionOpen && (
 							<MentionPicker
 								active={mentionActive}
+								groups={atReferenceLimit ? [] : pointerGroups(sources)}
 								id={mentionPickerId}
 								onActive={index => setMentionCursor({ key: mentionKey, index })}
 								onSelect={chooseMention}
+								onSelectPointer={choosePointer}
 								options={mentionOptions}
 							/>
 						)}
@@ -1300,17 +1360,17 @@ export function Chat(
 							}, true)
 							: undefined;
 						if (mentionAction === "next") {
-							moveMention(index => (index + 1) % mentionOptions.length);
+							moveMention(index => (index + 1) % mentionRowsShown.length);
 							event.preventDefault();
 							return;
 						}
 						if (mentionAction === "previous") {
-							moveMention(index => (index - 1 + mentionOptions.length) % mentionOptions.length);
+							moveMention(index => (index - 1 + mentionRowsShown.length) % mentionRowsShown.length);
 							event.preventDefault();
 							return;
 						}
 						if (mentionAction === "select" && activeMention) {
-							chooseMention(activeMention);
+							chooseRow(activeMention);
 							event.preventDefault();
 							return;
 						}
