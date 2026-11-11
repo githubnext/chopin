@@ -203,9 +203,11 @@ test("a single tilde takes the strikethrough syntax, so a link in emphasis aroun
 	);
 });
 
+// Twelve thousand renders take about 2.5 s alone; CI's `--parallel` workers share the runner's cores
+// with the other files of a shard, which can take it past Bun's 5 s default with no change to the work.
 test("nor does it for six thousand generated sources of the marks that matter", () => {
 	for (let source of sources(6000)) expectSame(source);
-});
+}, 15_000);
 
 test("a column with no pipe is a table the choice keeps, and a row of hyphens alone is not", () => {
 	for (let source of ["a\n:-", "a\n-:", ":-\n:-"]) {

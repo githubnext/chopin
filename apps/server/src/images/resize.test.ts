@@ -63,7 +63,9 @@ describe("thumbnail", () => {
 
 describe("shrinkToFit", () => {
 	it("stores a very wide image at a size that fits, never at its full width", async () => {
-		let original = await made(12000, 6000);
+		// Wider than the stored side, and small enough to make quickly: these tests share the runner's
+		// cores with other test files, and an encode of 72 million pixels took a second of all of them.
+		let original = await made(6000, 3000);
 		let fitted = await shrinkToFit(original, "image/jpeg", 300_000);
 		expect(fitted).toBeDefined();
 		expect(fitted!.bytes.byteLength).toBeLessThanOrEqual(300_000);

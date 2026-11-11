@@ -123,12 +123,12 @@ export function MessageImages(
 	useEffect(() => {
 		if (!viewing) return;
 		let onClick = (event: MouseEvent) => {
+			// Found from Chopin's own header, never by the copy's slot names, which are the copy's to set:
+			// the ground is the viewer itself (the header's parent) or the picture's row (two after it).
 			let target = event.target as Element | null;
-			if (
-				target?.matches(
-					'[data-slot="dialog-content"]:has(> [data-chat-viewer-header]), [data-slot="dialog-content"]:has(> [data-chat-viewer-header]) > [data-slot="dialog-title"] + div',
-				)
-			) setView(undefined);
+			let header = target?.querySelector(":scope > [data-chat-viewer-header]")
+				?? target?.previousElementSibling?.previousElementSibling;
+			if (header?.hasAttribute("data-chat-viewer-header")) setView(undefined);
 		};
 		document.addEventListener("click", onClick);
 		return () => document.removeEventListener("click", onClick);
