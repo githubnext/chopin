@@ -111,11 +111,11 @@ export function MessageActions({
         );
         return items ? null : button;
       })()}
-      {(items ?? [undefined]).map((item) => {
+      {(items ?? [undefined]).map((item, index) => {
         const pressed = item ? item.pressed : reaction === "up";
         return (
       <button
-        key={item?.key}
+        key={item?.key ?? index}
         type="button"
         aria-label={item ? item.label : "Mark response helpful"}
         aria-pressed={pressed}

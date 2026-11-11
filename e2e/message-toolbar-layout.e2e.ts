@@ -539,8 +539,25 @@ test("on a phone a long press in the middle of a message taller than the screen 
 	expect(barBox.y + barBox.height).toBeLessThanOrEqual(view.y + view.height);
 	for (let button of await bar.getByRole("button").all()) {
 		let size = (await button.boundingBox())!;
-		expect(size.width).toBeGreaterThanOrEqual(44);
-		expect(size.height).toBeGreaterThanOrEqual(44);
+		expect(size.width).toBe(28);
+		expect(size.height).toBe(28);
+		let hit = await button.evaluate(element => {
+			let rect = element.getBoundingClientRect();
+			let after = getComputedStyle(element, "::after");
+			let x = rect.x + rect.width / 2;
+			let y = rect.y + rect.height / 2;
+			let at = (px: number, py: number) => {
+				let found = document.elementFromPoint(px, py);
+				return !!found && element.contains(found);
+			};
+			return {
+				width: Number.parseFloat(after.width),
+				height: Number.parseFloat(after.height),
+				up: at(x, y - 21),
+				down: at(x, y + 21),
+			};
+		});
+		expect(hit).toEqual({ width: 44, height: 44, up: true, down: true });
 	}
 	await expect(bar.getByRole("button")).toHaveCount(5);
 	expect(barBox.x).toBeGreaterThanOrEqual(0);

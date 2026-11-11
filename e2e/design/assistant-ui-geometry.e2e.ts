@@ -171,7 +171,7 @@ const MARKDOWN_PARTS: readonly [label: string, select: (root: Locator) => Locato
 	["pre", root => root.locator(".aui-md-pre")],
 ];
 const TARGETS =
-	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button, [data-slot="markdown-text"] .aui-button-icon, [data-slot="markdown-text"] .aui-md-a, [data-slot="composer-context"] > button, [data-slot="message-actions"] button, [data-slot="dropdown-menu-item"], [data-slot="image-download"], [data-slot="image-copy"], [data-slot="image-regenerate"], [data-slot="image-source-label"], [data-slot="image-gallery"] button';
+	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button, [data-slot="markdown-text"] .aui-button-icon, [data-slot="markdown-text"] .aui-md-a, [data-slot="composer-context"] > button, [data-slot="message-actions"] button, [data-slot="dropdown-menu-item"], [data-chat-reaction], [data-slot="image-download"], [data-slot="image-copy"], [data-slot="image-regenerate"], [data-slot="image-source-label"], [data-slot="image-gallery"] button';
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 const effortRadios = (page: Page) => slot(page, "model-selector-effort").getByRole("radio");
 
@@ -311,29 +311,31 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 			checked++;
 		}
 	}
-	expect(checked).toBe(131);
+	expect(checked).toBe(132);
 });
 
-test("message-actions and dropdown-menu keep their registry geometry: no +4px container, no extra ring", async ({ page }) => {
+test("message-actions, reaction pills and dropdown-menu keep assistant-ui's geometry: no +4px container, no extra ring", async ({ page }) => {
 	let rows = plate(page, "assistant-ui").locator('[data-slot="message-actions"]');
-	expect(await rows.count()).toBe(4);
-	let row = rows.first();
-	await row.scrollIntoViewIfNeeded();
-	let bar = await measure(row);
-	expect([bar.height, bar.padding, bar.border, bar.radius, bar.gap]).toEqual([
-		28,
-		[0, 0, 0, 0],
-		[0, 0, 0, 0],
-		0,
-		4,
-	]);
-	let chrome = await row.evaluate(node => {
-		let style = getComputedStyle(node);
-		return { outline: style.outlineStyle, shadow: style.boxShadow };
-	});
-	expect(chrome).toEqual({ outline: "none", shadow: "none" });
+	expect(await rows.count()).toBe(5);
+	for (let rowIndex of [0, 4]) {
+		let row = rows.nth(rowIndex);
+		await row.scrollIntoViewIfNeeded();
+		let bar = await measure(row);
+		expect([bar.height, bar.padding, bar.border, bar.radius, bar.gap]).toEqual([
+			28,
+			[0, 0, 0, 0],
+			[0, 0, 0, 0],
+			0,
+			4,
+		]);
+		let chrome = await row.evaluate(node => {
+			let style = getComputedStyle(node);
+			return { outline: style.outlineStyle, shadow: style.boxShadow };
+		});
+		expect(chrome).toEqual({ outline: "none", shadow: "none" });
+	}
 
-	let buttons = row.getByRole("button");
+	let buttons = rows.first().getByRole("button");
 	expect(await buttons.count()).toBe(5);
 	for (let index = 0; index < 5; index++) {
 		let button = buttons.nth(index);
@@ -348,6 +350,26 @@ test("message-actions and dropdown-menu keep their registry geometry: no +4px co
 		expect(box.radius).toBeGreaterThan(1000);
 		let icon = await measure(button.locator("svg").first());
 		expect([icon.width, icon.height]).toEqual([14, 14]);
+	}
+
+	let pills = plate(page, "assistant-ui").locator("[data-chat-reaction]");
+	expect(await pills.count()).toBe(2);
+	for (let index = 0; index < 2; index++) {
+		let pill = pills.nth(index);
+		let box = await measure(pill);
+		expect([box.height, box.padding[1], box.padding[3], box.border, box.gap]).toEqual([
+			28,
+			10,
+			10,
+			[0, 0, 0, 0],
+			4,
+		]);
+		expect(box.radius).toBeGreaterThan(1000);
+		let chrome = await pill.evaluate(node => {
+			let style = getComputedStyle(node);
+			return { outline: style.outlineStyle, shadow: style.boxShadow };
+		});
+		expect(chrome).toEqual({ outline: "none", shadow: "none" });
 	}
 
 	await openMenu(page);

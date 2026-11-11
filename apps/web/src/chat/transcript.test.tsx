@@ -36,7 +36,7 @@ test("routine presence entries stay out of the conversation", () => {
 	expect(markup).not.toContain("data-motion-feedback");
 });
 
-test("a message keeps its actions behind one standard icon button, with nothing to take it back", () => {
+test("a message keeps its actions behind the copied message-actions overflow button, with nothing to take it back", () => {
 	let markup = renderToStaticMarkup(
 		createElement(Transcript, {
 			active: true,
@@ -50,9 +50,9 @@ test("a message keeps its actions behind one standard icon button, with nothing 
 		}),
 	);
 
-	expect(markup).toMatch(/aria-label="Message actions"[^>]*>.*?height="16"/s);
-	expect(markup).toMatch(/aria-label="Message actions"[^>]*>.*?width="16"/s);
-	expect(markup).toContain('<circle cx="9" cy="3.75"');
+	expect(markup).toContain('data-slot="message-actions"');
+	expect(markup).toMatch(/aria-label="Message actions"[^>]*>.*?class="[^"]*size-3\.5"/s);
+	expect(markup).toContain('<circle cx="12" cy="12" r="1"');
 	expect(markup).not.toContain(">×</button>");
 	expect(markup).not.toContain('aria-label="Withdraw queued message"');
 });

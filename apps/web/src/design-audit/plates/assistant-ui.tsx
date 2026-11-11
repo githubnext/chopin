@@ -1,4 +1,12 @@
-import { CopyIcon, EllipsisIcon, GlobeIcon, RotateCcwIcon, SparklesIcon, XIcon } from "lucide-react";
+import {
+	CopyIcon,
+	EllipsisIcon,
+	GlobeIcon,
+	RotateCcwIcon,
+	SmilePlusIcon,
+	SparklesIcon,
+	XIcon,
+} from "lucide-react";
 import { useState } from "react";
 
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
@@ -38,8 +46,10 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ReactionPills } from "../../chat/actions/reaction-pills";
 import { modelOptions } from "../../chat/assistant-ui/model-options";
 import StagedFiles from "../../chat/attachments/staged-files";
+import { QUICK_REACTIONS } from "../../chat/reactions";
 import { AuditPlate, StateLabel } from "../frame";
 
 import type { Reaction } from "@/components/assistant-ui/elements/message-actions";
@@ -272,10 +282,16 @@ const GALLERY_IMAGES = [
 	},
 ] as const;
 
+const AUDIT_PENDING = new Set<string>();
+const AUDIT_REACTIONS: readonly Chat.Reaction[] = [
+	{ emoji: QUICK_REACTIONS[0].emoji, handles: ["ana", "ben"] },
+	{ emoji: QUICK_REACTIONS[1].emoji, handles: ["ben"] },
+];
+
 /**
  * Copied assistant-ui and shadcn elements, drawn as their registries draw them: the model
- * selector, markdown-text, image, image gallery, the context ring and breakdown, message actions
- * and the overflow dropdown menu, driven by Chopin's own state through props. `e2e/design`
+ * selector, markdown-text, image, image gallery, the context ring and breakdown, message actions,
+ * Chopin's toolbar extension and overflow dropdown menu, plus the reaction pills. `e2e/design`
  * measures their geometry and colours.
  */
 export function AssistantUiPlate() {
@@ -288,6 +304,7 @@ export function AssistantUiPlate() {
 	let warnBreakdown = toBreakdownSegments(WARN_USAGE)!;
 	let [reaction, setReaction] = useState<Reaction>("up");
 	let [copied, setCopied] = useState(false);
+	let [reactions, setReactions] = useState(AUDIT_REACTIONS);
 	return (
 		<AuditPlate
 			description="Copied registry source, unmodified, with assistant-ui's own sizes and Chopin's colours."
@@ -465,6 +482,52 @@ export function AssistantUiPlate() {
 						/>
 					</div>
 				))}
+				<div>
+					<StateLabel>Chopin toolbar</StateLabel>
+					<MessageActions
+						aria-label="Reactions and actions"
+						items={[
+							...QUICK_REACTIONS.map((item, index) => ({
+								key: item.emoji,
+								label: item.label,
+								pressed: index === 0,
+								children: (
+									<span aria-hidden="true" className="message-actions-emoji">{item.emoji}</span>
+								),
+							})),
+							{
+								key: "add",
+								label: "Add reaction",
+								children: <SmilePlusIcon aria-hidden="true" size={14} />,
+							},
+						]}
+						moreProps={{ "aria-label": "Message actions" }}
+						role="toolbar"
+					/>
+				</div>
+				<div>
+					<StateLabel>Reactions</StateLabel>
+					<div data-audit-reactions="">
+						<ReactionPills
+							handle="ana"
+							onToggle={(emoji, on) =>
+								setReactions(current =>
+									current.map(item =>
+										item.emoji !== emoji
+											? item
+											: {
+												emoji,
+												handles: on
+													? [...item.handles, "ana"]
+													: item.handles.filter(handle => handle !== "ana"),
+											}
+									)
+								)}
+							pending={AUDIT_PENDING}
+							reactions={reactions}
+						/>
+					</div>
+				</div>
 				<div>
 					<StateLabel>Overflow menu</StateLabel>
 					<DropdownMenu modal={false}>

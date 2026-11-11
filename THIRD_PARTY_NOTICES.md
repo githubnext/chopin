@@ -17,31 +17,26 @@ and `elements-error-state.json`), which match `assistant-ui/assistant-ui` at com
 shadcn `cn` utility are not used; the classes are replaced with Chopin's tokens, text roles, button
 sizes and icons.
 
-## assistant-ui: Message actions
+## assistant-ui: Copy confirmation hook
 
-The Chat message toolbar's row and its copy confirmation are adapted from the standalone (props and
-callbacks) lane of [assistant-ui](https://github.com/assistant-ui/assistant-ui)'s MessageActions
-element and its `use-copy-to-clipboard` hook. They use neither assistant-ui's runtime nor
-`AssistantRuntimeProvider` nor `useAui` nor any primitive that needs one, and Chopin does not depend
-on the library: its own state drives them through props.
+The Chat message toolbar's action row (`components/assistant-ui/elements/message-actions.tsx`, with a
+recorded extension-point patch `message-actions.tsx.patch`) and its overflow menu
+(`components/ui/dropdown-menu.tsx`) are copied directly from their registries and listed in the
+recorded-source table below. The clipboard confirmation hook (`apps/web/src/chat/actions/use-copy-to-clipboard.ts`)
+is adapted from [assistant-ui](https://github.com/assistant-ui/assistant-ui)'s standalone
+`use-copy-to-clipboard` registry item (no runtime, `AssistantRuntimeProvider` or `useAui`).
 
-- **Element and hook:** MessageActions, from the registry item `elements-message-actions`
-  (<https://r.assistant-ui.com/elements-message-actions.json>), documented at
-  <https://www.assistant-ui.com/elements/message-actions>, and `use-copy-to-clipboard`, from the
-  registry item of that name. Chopin's files are `apps/web/src/chat/actions/message-actions.tsx`,
-  `use-copy-to-clipboard.ts` and the icon swap in `message-actions.css`.
-- **Version:** commit `f92028b466cba721846de6851e4dddb6c04ecfad` of `assistant-ui/assistant-ui`. The
-  registry content is byte-identical to
-  `packages/ui/src/components/react/assistant-ui/elements/message-actions.tsx` and
-  `packages/ui/src/hooks/use-copy-to-clipboard.ts` at that commit.
-- **What was kept:** the controlled-props shape (`copied`, `onCopy`, `onMore`, toggles with
-  `aria-pressed`), the `data-slot="message-actions"` row, the copy and check icons crossfading in one
-  grid cell, and the copy hook that turns `isCopied` on only after the clipboard accepts the text and
-  off after a delay.
-- **What changed:** the copy hook also writes an empty message instead of ignoring it and reports a
-  write the clipboard refused; icons come from `@chopin/icons`, styles use Chopin's tokens in
-  `message-actions.css`, the toggles are quick reactions, Copy moved into the overflow menu, and the
-  thumbs and regenerate buttons are left out because Chopin cannot honour them.
+- **Hook:** `use-copy-to-clipboard` (<https://r.assistant-ui.com/styles/base-nova/use-copy-to-clipboard.json>),
+  documented with <https://www.assistant-ui.com/elements/message-actions>.
+- **Version:** commit `f92028b466cba721846de6851e4dddb6c04ecfad` of `assistant-ui/assistant-ui`
+  (`packages/ui/src/hooks/use-copy-to-clipboard.ts`).
+- **What was kept:** `isCopied` turning on only once `navigator.clipboard.writeText` resolves and off
+  after `copiedDuration`, with a generation counter cancelling stale completions on unmount.
+- **What changed:** empty messages (`""`) are copied instead of ignored, and a refused clipboard write
+  sets `isFailed` for `copiedDuration` so the menu item and live region say _Couldn't copy_.
+  assistant-ui's registry ships no separate multi-user reactions element, so `reaction-pills.tsx`
+  renders Chopin's per-person emoji counts directly from props in assistant-ui's 28px borderless pill
+  proportions.
 
 ## assistant-ui and shadcn/ui: copied registry source
 
@@ -121,7 +116,6 @@ The adaptations above (the connection and failure banners) and the files copied 
 assistant-ui's registry are under assistant-ui's MIT licence:
 The adaptations above (the connection and failure banners, the message actions and MarkdownText)
 and the files copied from assistant-ui's registry are under assistant-ui's MIT licence:
-
 
 ```
 MIT License
