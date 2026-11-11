@@ -1,5 +1,6 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
 
+import { messageGfmExtensions } from "./gfm";
 import { orderedRunsRemarkPlugin } from "./ordered-runs";
 import { referenceRemarkPlugin } from "./reference-markdown";
 import { referenceRenderModel } from "./references";
@@ -9,7 +10,7 @@ import type { MarkdownNode } from "./reference-markdown";
 
 type Node = MarkdownNode;
 
-let BLOCKS = new Set(["paragraph", "heading", "code", "blockquote", "list"]);
+let BLOCKS = new Set(["paragraph", "heading", "code", "blockquote", "list", "table"]);
 
 function inline(node: Node): string {
 	switch (node.type) {
@@ -37,7 +38,12 @@ function block(node: Node): string {
 	if (node.type === "list") {
 		return (node.children ?? []).map(item =>
 			(item.children ?? []).filter(child => BLOCKS.has(child.type)).map(block).join("\n")
-		).join("\n");
+		).filter(text => text !== "").join("\n");
+	}
+	if (node.type === "table") {
+		return (node.children ?? []).map(row =>
+			(row.children ?? []).map(cell => rendered(inline(cell)).trim()).join("\t")
+		).filter(text => text !== "").join("\n");
 	}
 	if (node.type === "blockquote") {
 		return (node.children ?? []).filter(child => BLOCKS.has(child.type)).map(block).join("\n\n");
@@ -52,7 +58,7 @@ export function plainTextOf(
 	lead?: string,
 ): string {
 	let model = referenceRenderModel(source, references);
-	let tree = fromMarkdown(model.source) as unknown as Node;
+	let tree = fromMarkdown(model.source, messageGfmExtensions(model.source)) as unknown as Node;
 	referenceRemarkPlugin(model)(tree);
 	orderedRunsRemarkPlugin()(tree, { value: model.source });
 	let body = (tree.children ?? []).filter(child => BLOCKS.has(child.type))

@@ -6,6 +6,13 @@ import { gfmTable } from "micromark-extension-gfm-table";
 import { gfmTaskListItem } from "micromark-extension-gfm-task-list-item";
 
 type Plugin = (this: { data(): unknown }) => void;
+type MicromarkExtension = ReturnType<typeof gfmTable>;
+type FromMarkdownExtension = ReturnType<typeof gfmTableFromMarkdown>;
+
+export type MessageGfmExtensions = {
+	extensions: MicromarkExtension[];
+	mdastExtensions: FromMarkdownExtension[];
+};
 
 const TABLE = 1;
 const STRIKETHROUGH = 2;
@@ -47,30 +54,47 @@ function partsOf(source: string): number {
 		| (TASK_BOX.test(source) ? TASKS : 0);
 }
 
+function extensionsFor(parts: number): MessageGfmExtensions {
+	let extensions: MicromarkExtension[] = [];
+	let mdastExtensions: FromMarkdownExtension[] = [];
+	if (parts & TABLE) {
+		extensions.push(gfmTable());
+		mdastExtensions.push(gfmTableFromMarkdown());
+	}
+	if (parts & STRIKETHROUGH) {
+		extensions.push(gfmStrikethrough({ singleTilde: false }));
+		mdastExtensions.push(gfmStrikethroughFromMarkdown());
+	}
+	if (parts & TASKS) {
+		extensions.push(gfmTaskListItem());
+		mdastExtensions.push(gfmTaskListItemFromMarkdown());
+	}
+	return { extensions, mdastExtensions };
+}
+
 function plugin(parts: number): Plugin {
 	return function() {
 		let data = this.data() as {
 			micromarkExtensions?: unknown[];
 			fromMarkdownExtensions?: unknown[];
 		};
-		let syntax = (data.micromarkExtensions ??= []);
-		let tree = (data.fromMarkdownExtensions ??= []);
-		if (parts & TABLE) {
-			syntax.push(gfmTable());
-			tree.push(gfmTableFromMarkdown());
-		}
-		if (parts & STRIKETHROUGH) {
-			syntax.push(gfmStrikethrough({ singleTilde: false }));
-			tree.push(gfmStrikethroughFromMarkdown());
-		}
-		if (parts & TASKS) {
-			syntax.push(gfmTaskListItem());
-			tree.push(gfmTaskListItemFromMarkdown());
-		}
+		let { extensions, mdastExtensions } = extensionsFor(parts);
+		(data.micromarkExtensions ??= []).push(...extensions);
+		(data.fromMarkdownExtensions ??= []).push(...mdastExtensions);
 	};
 }
 
 let plugins = new Map<number, Plugin>();
+let extensionSets = new Map<number, MessageGfmExtensions>();
+
+/** The same GFM extensions as `messageGfmRemarkPlugin`, shaped for `mdast-util-from-markdown`. */
+export function messageGfmExtensions(source: string): MessageGfmExtensions | undefined {
+	let parts = partsOf(source);
+	if (!parts) return undefined;
+	let held = extensionSets.get(parts);
+	if (!held) extensionSets.set(parts, held = extensionsFor(parts));
+	return held;
+}
 
 /**
  * The parts of GitHub's Markdown that a Chat message reads: pipe tables, strikethrough written
