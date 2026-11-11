@@ -7,6 +7,7 @@ import { INTERNAL } from "@chopin/protocol/plain-words";
 import { ChatComposer } from "./composer";
 import { composerModelNotice } from "./model-picker-state";
 
+import type { FileView } from "./attachments/files";
 import type { ChatComposerProps } from "./composer";
 
 const INPUT: ChatComposerProps["input"] = {
@@ -344,18 +345,29 @@ const FILES = {
 	onRetry: () => {},
 };
 
-test("offers a paperclip only where the server takes files, and names it as it is", () => {
+const VIEW: FileView = {
+	id: "a",
+	name: "notes.md",
+	kind: "file",
+	size: 100,
+	sizeLabel: "100 B",
+	state: "done",
+	progress: 100,
+	retry: false,
+};
+
+test("offers a + that attaches only where the server takes files, and names it as it is", () => {
 	let without = render();
 	expect(without).not.toContain("Add files");
 	expect(without).not.toContain('type="file"');
 	let markup = render({ files: FILES });
 	expect(markup).toMatch(/<button[^>]*aria-label="Add files"[^>]*title="Add files"/);
-	// The picker is a hidden input the paperclip opens: it is never a second control to tab to.
+	// The picker is a hidden input the + opens: it is never a second control to tab to.
 	expect(markup).toMatch(/<input[^>]*hidden=""[^>]*multiple=""[^>]*type="file"/);
 	expect(markup).not.toContain("aria-describedby");
 });
 
-test("says in the paperclip's own words why images cannot be added, and offers text to pick", () => {
+test("says in the + button's own words why images cannot be added, and offers text to pick", () => {
 	let reason = "This model can't read images, so only text files can be sent to it.";
 	let markup = render({ files: { ...FILES, imagesReason: reason } });
 	expect(markup).toContain(`title="Add files. ${reason}"`);
@@ -368,7 +380,7 @@ test("says in the paperclip's own words why images cannot be added, and offers t
 	expect(render({ files: FILES })).not.toContain("accept=");
 });
 
-test("switches the paperclip off while a message is being sent, and says what a waiting send waits for", () => {
+test("switches the + off while a message is being sent, and says what a waiting send waits for", () => {
 	let sending = render({ files: { ...FILES, disabled: true }, sending: true });
 	expect(sending).toMatch(/<button[^>]*aria-label="Add files"[^>]*disabled=""/);
 	let waiting = render({ files: { ...FILES, waiting: true }, sending: true });
@@ -376,7 +388,7 @@ test("switches the paperclip off while a message is being sent, and says what a 
 	expect(render({ files: FILES })).not.toContain("Sending once your files");
 });
 
-test("an archived or read-only document offers no paperclip", () => {
+test("an archived or read-only document offers no + that attaches", () => {
 	expect(render({ files: FILES, unavailable: "archived" })).not.toContain("Add files");
 });
 
@@ -403,7 +415,6 @@ const DICTATION = {
 	tooltip: "Dictate (Alt+Shift+M). Speech is turned into words on this device.",
 	announcement: "",
 	onToggle: () => {},
-	onDismissFailure: () => {},
 	disabled: false,
 };
 
@@ -412,36 +423,48 @@ test("offers the microphone only where speech can be turned into words, named as
 	expect(render()).not.toContain("data-chat-dictation-announcement");
 	let idle = render({ dictation: DICTATION });
 	expect(idle).toMatch(/<button[^>]*aria-label="Dictate"[^>]*aria-pressed="false"/);
+	expect(idle).toContain('data-slot="composer-voice-button"');
 	expect(idle).toContain(
 		'title="Dictate (Alt+Shift+M). Speech is turned into words on this device."',
 	);
 	expect(idle).toMatch(
 		/<p[^>]*aria-live="polite"[^>]*data-chat-dictation-announcement=""[^>]*role="status"/,
 	);
-	expect(idle).not.toContain("composer-recording");
+	expect(idle).not.toContain('data-slot="composer-voice"');
 });
 
-test("shows that it is listening with the time so far, and says when it is working on a recording", () => {
+test("puts the microphone in the bottom row, with the other controls and before the model pill", () => {
+	let markup = render({ dictation: DICTATION });
+	let row = markup.slice(markup.indexOf('class="composer-row"'));
+	let left = row.slice(0, row.indexOf('class="composer-actions"'));
+	expect(left).toContain('aria-label="Dictate"');
+	// The staged files and the voice are above the text, never in the row.
+	expect(left).not.toContain('data-slot="composer-voice"');
+});
+
+test("shows that it is listening with the time so far above the text, and says when it is working on a recording", () => {
 	let listening = render({
 		dictation: { ...DICTATION, active: true, phase: "listening", seconds: 65 },
 	});
 	expect(listening).toMatch(/<button[^>]*aria-label="Dictate"[^>]*aria-pressed="true"/);
-	expect(listening).toContain('data-phase="listening"');
+	let voice = listening.indexOf('data-slot="composer-voice"');
+	expect(voice).toBeGreaterThan(-1);
+	// Above the field the words go in, as the staged files are.
+	expect(voice).toBeLessThan(listening.indexOf('role="combobox"'));
+	expect(listening).toMatch(/data-slot="composer-voice"[^>]*data-recording="true"/);
+	// A minute is a minute: the element's own clock would say 0:65.
 	expect(listening).toContain(">1:05<");
+	expect(listening).not.toContain("0:65");
 	let transcribing = render({
 		dictation: { ...DICTATION, active: true, phase: "transcribing", seconds: 3 },
 	});
-	expect(transcribing).toContain(">Transcribing<");
+	expect(transcribing).toContain("Transcribing");
+	expect(transcribing).not.toContain("data-recording");
 });
 
-test("says why dictation stopped, as an alert above the field that can be dismissed", () => {
-	let failed = render({
-		dictation: { ...DICTATION, failure: "No microphone was found." },
-	});
-	expect(failed).toMatch(/<div[^>]*data-chat-dictation-failure=""[^>]*role="alert"/);
-	expect(failed).toContain("No microphone was found.");
-	expect(failed).toContain('aria-label="Dismiss"');
-	expect(render({ dictation: DICTATION })).not.toContain("data-chat-dictation-failure");
+test("starting, before the browser has let it listen, draws no voice yet", () => {
+	let starting = render({ dictation: { ...DICTATION, active: false, phase: "starting" } });
+	expect(starting).not.toContain('data-slot="composer-voice"');
 });
 
 test("none of the words about dictation uses a term of Chopin's own", () => {
@@ -451,7 +474,11 @@ test("none of the words about dictation uses a term of Chopin's own", () => {
 			active: true,
 			phase: "transcribing",
 			announcement: "Dictation started",
-			failure: "Microphone access is blocked. Allow it in your browser's settings to dictate.",
+		},
+		notice: {
+			tone: "warning",
+			text: "Microphone access is blocked. Allow it in your browser's settings to dictate.",
+			action: { label: "Dismiss", onClick: () => {} },
 		},
 	});
 	let words = [
@@ -460,4 +487,17 @@ test("none of the words about dictation uses a term of Chopin's own", () => {
 	].map(match => match[1]!);
 	expect(words.some(text => text.includes("Dictation started"))).toBe(true);
 	for (let text of words) expect(INTERNAL.test(text), text).toBe(false);
+});
+
+test("a message of only files is sent by the round button, which stops Chopin only for an empty one", () => {
+	let running: Partial<ChatComposerProps> = {
+		run: { action: "stop", disabled: false, onClick: () => {} },
+	};
+	let staged = { ...FILES, files: [{ ...VIEW, state: "done" as const }] };
+	// With nothing to send, the button that sends is the one that stops.
+	expect(render({ ...running, files: FILES })).toContain('aria-label="Stop generating"');
+	// A file is a message: the same button sends it.
+	let withFile = render({ ...running, files: staged });
+	expect(withFile).toContain('aria-label="Send message"');
+	expect(withFile).not.toContain('aria-label="Stop generating"');
 });

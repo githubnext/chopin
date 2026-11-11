@@ -1294,6 +1294,13 @@ export function Chat(
 					: undefined}
 				notice={slot.quietsNotices
 					? undefined
+					// Why dictation stopped without finishing, in the composer's own strip, until it is dismissed.
+					: dictation?.failure
+					? {
+						tone: "warning",
+						text: dictation.failure,
+						action: { label: "Dismiss", onClick: dictation.dismiss },
+					}
 					: researchBlock && !(offline && researchBlock === "disconnected")
 					? {
 						tone: "info",
@@ -1353,8 +1360,6 @@ export function Chat(
 						phase: dictation.phase,
 						seconds: dictation.seconds,
 						announcement: dictation.announcement,
-						failure: dictation.failure,
-						onDismissFailure: dictation.dismiss,
 						disabled: !draftable || sending,
 						onToggle: dictation.toggle,
 						tooltip: `${dictation.active ? "Stop dictating" : "Dictate"} (${

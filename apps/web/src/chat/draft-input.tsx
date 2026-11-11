@@ -377,7 +377,8 @@ export let DraftInput = forwardRef<DraftInputHandle, DraftInputProps>(function D
 			suppressContentEditableWarning
 			aria-readonly={readOnly}
 			aria-multiline="true"
-			data-empty={!value || undefined}
+			// Words being said into an empty draft are drawn where the hint is, so the hint gives way to them.
+			data-empty={(!value && !interim?.text) || undefined}
 			data-placeholder={placeholder}
 			tabIndex={0}
 			onInput={change}

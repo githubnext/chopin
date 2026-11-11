@@ -381,35 +381,6 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	/*
-	 * Adding files and dictating are one tap away once the draft has the focus (or while it is
-	 * listening), floating above the pill's trailing corner, so at rest the pill is the one line it
-	 * always was, the draft keeps its room beside the longest model name, and showing or hiding
-	 * them never moves the pill (a tap that began on something above it still lands on it).
-	 */
-	.chat-composer .composer-phone-extra {
-		display: none;
-	}
-	.chat-composer[data-extras] .composer-phone-extra {
-		position: absolute;
-		z-index: 2;
-		bottom: calc(100% + var(--spacing));
-		display: inline-flex;
-		align-items: center;
-		background: var(--color-inset);
-		border-radius: var(--radius-full);
-	}
-	.chat-composer[data-extras] .composer-phone-extra[aria-label="Add files"] {
-		inset-inline-end: 0;
-	}
-	.chat-composer[data-extras] .composer-dictate {
-		inset-inline-end: calc(var(--composer-pill-control) + var(--spacing));
-	}
-	.chat-composer[data-extras] .composer-recording {
-		inset-inline-end: calc((var(--composer-pill-control) + var(--spacing)) * 2);
-		height: var(--composer-pill-control);
-		padding-inline: calc(var(--spacing) * 3);
-	}
 	.chat-composer .composer-notice-slot {
 		margin-bottom: 0;
 	}
@@ -591,52 +562,14 @@
 	color: var(--color-text-tertiary);
 }
 
-/* Listening: a dot that breathes, and the time so far. It holds still where motion is reduced. */
-.chat-composer .composer-recording {
-	display: inline-flex;
-	align-items: center;
-	gap: calc(var(--spacing) * 1.5);
-	padding-inline: calc(var(--spacing) * 1);
-	color: var(--color-text-tertiary);
-	font-size: var(--text-2xs);
-	font-variant-numeric: tabular-nums;
+/* What is staged for the message sits above its text: the chips of its files, and the voice while it is listened to. */
+.chat-composer .composer-staging {
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2) 0;
 }
-.chat-composer .composer-recording-dot {
-	width: calc(var(--spacing) * 2);
-	height: calc(var(--spacing) * 2);
-	border-radius: var(--radius-full);
-	background: var(--color-danger-icon);
-	animation: composer-recording-breathe calc(var(--duration-linger) * 2.5) var(--ease-out) infinite
-		alternate;
-}
-.chat-composer .composer-recording[data-phase="transcribing"] .composer-recording-dot {
-	background: var(--color-neutral-graphic);
-}
-@keyframes composer-recording-breathe {
-	to {
-		opacity: 0.35;
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.chat-composer .composer-recording-dot {
-		animation: none;
-	}
-}
-.chat-composer .composer-dictate[aria-pressed="true"] {
-	color: var(--color-danger-icon);
-}
-
-/* Why dictation stopped without finishing: a line above the field in the danger text, with no frame. */
-.chat-composer .composer-dictation-failure {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: calc(var(--spacing) * 2);
-	margin-bottom: calc(var(--spacing) * 1.5);
-	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2) calc(var(--spacing) * 1.5)
-		calc(var(--spacing) * 3);
-	border-radius: var(--radius-lg);
-	background: var(--color-danger-surface);
-	color: var(--color-danger-text);
-	font-size: var(--text-xs);
+/* The picture of an image fills the box of its chip's icon. */
+.chat-composer .composer-file-thumb {
+	width: 100%;
+	height: 100%;
+	border-radius: inherit;
+	object-fit: cover;
 }
