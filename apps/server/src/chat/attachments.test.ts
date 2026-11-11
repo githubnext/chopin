@@ -1,12 +1,9 @@
 import { expect, test } from "bun:test";
 
-import * as Chat from "./service";
 import { installJobCleanup, until } from "./job.test-fixtures";
 import { LIMITS, PNG, setup } from "./attachments.test-fixtures";
 
-import type { Chat as Wire } from "@chopin/protocol";
 import type { Config } from "../config";
-import type { Socket } from "../wire";
 
 installJobCleanup();
 
@@ -149,43 +146,85 @@ test("gives the Planner an image where its model reads images", async () => {
 	await until(() => !h.chat.busy);
 });
 
-test("a queued message keeps its files until its turn, then shows and sends them", async () => {
-	let { h, upload, send, turns } = await setup();
-	let first = await send({ to: "planner", text: "First turn" });
-	expect(first.reply?.kind).toBe("chat:send");
-	let notes = await upload("U_ana", "notes.md", "queued notes");
-	let queued = await send({ to: "planner", text: "Then this", attachments: [notes] });
-	await until(() => turns.length >= 1);
-	await until(() => !h.chat.busy && turns.length === 2);
-	let entry = h.chat.entries.find(value => value.id === queued.request.requestId);
-	expect(entry?.attachments?.map(value => value.name)).toEqual(["notes.md"]);
-	expect(turns[1]!.files?.attachments.map(value => value.name)).toEqual(["notes.md"]);
-	expect(turns[0]!.files).toBeUndefined();
+test("a steered message shows its files in Chat and gives text files to the running turn", async () => {
+	let { h, upload, send } = await setup();
+	let opened = Promise.withResolvers<void>();
+	let finish = Promise.withResolvers<void>();
+	let steered: string[] = [];
+	h.context.steers = () => true;
+	h.context.openPlannerSession = async () => ({
+		ok: true,
+		value: {
+			async stream() {
+				opened.resolve();
+				return {
+					fullStream: (async function*() {
+						await finish.promise;
+						yield { type: "finish" };
+					})(),
+				} as never;
+			},
+			steer: async (text: string) => {
+				steered.push(text);
+			},
+			destroy: async () => {},
+		},
+	});
+	try {
+		expect((await send({ to: "planner", text: "First turn" })).reply?.kind).toBe("chat:send");
+		await opened.promise;
+		let notes = await upload("U_ana", "notes.md", "steered notes");
+		let second = await send({ to: "planner", text: "Read this too", attachments: [notes] });
+		expect(second.reply?.kind).toBe("chat:send");
+		await until(() => steered.length === 1);
+		let entry = h.chat.entries.find(value => value.id === second.request.requestId);
+		expect(entry?.attachments?.map(value => value.name)).toEqual(["notes.md"]);
+		expect(steered[0]).toContain('<file name="notes.md">\nsteered notes\n</file>');
+	} finally {
+		finish.resolve();
+		await until(() => !h.chat.busy);
+	}
 });
 
-test("deleting a message takes its files with it", async () => {
-	let { h, upload, send, storage } = await setup();
-	h.context.deferred = undefined;
-	let id = await upload("U_ana", "notes.txt", "hi");
-	let { request } = await send({ to: "room", text: "Look", attachments: [id] });
-	let entry = h.chat.entries.find(value => value.id === request.requestId)!;
-	(entry as Wire.Entry).deliveryState = "failed";
-	let deleted: unknown;
-	let ana = {
-		data: { handle: "ana", principalId: "U_ana" },
-		send: (text: string) => deleted = JSON.parse(text),
-	} as unknown as Socket;
-	await Chat.remove(h.context, ana, {
-		kind: "chat:delete",
-		rid: "d",
-		id: request.requestId,
-		ts: 0,
+test("a message with files refused while Chopin works leaves its files free to send once the turn ends", async () => {
+	let { h, upload, send, turns, storage } = await setup();
+	let opened = Promise.withResolvers<void>();
+	let finish = Promise.withResolvers<void>();
+	h.context.steers = () => false;
+	h.context.openPlannerSession = async () => ({
+		ok: true,
+		value: {
+			async stream(prompt, _signal, _choice, files) {
+				turns.push({ prompt, files });
+				opened.resolve();
+				return {
+					fullStream: (async function*() {
+						await finish.promise;
+						yield { type: "finish" };
+					})(),
+				} as never;
+			},
+			destroy: async () => {},
+		},
 	});
-	expect(deleted).toMatchObject({ kind: "chat:delete" });
-	await until(() =>
-		storage.chatAttachments.get("room", id).then(value => value === undefined) as never
-	);
-	expect(await storage.chatAttachments.forEntry("room", request.requestId)).toEqual([]);
+	try {
+		expect((await send({ to: "planner", text: "First turn" })).reply?.kind).toBe("chat:send");
+		await opened.promise;
+		let notes = await upload("U_ana", "notes.md", "kept notes");
+		let refused = await send({ to: "planner", text: "Then this", attachments: [notes] });
+		expect(refused.reply).toMatchObject({ kind: "session:error", code: "planner-busy" });
+		expect((await storage.chatAttachments.get("room", notes))?.entryId).toBeUndefined();
+
+		finish.resolve();
+		await until(() => !h.chat.busy);
+		let resent = await send({ to: "planner", text: "Then this", attachments: [notes] });
+		expect(resent.reply?.kind).toBe("chat:send");
+		await until(() => turns.length === 2);
+		expect(turns[1]!.files?.attachments.map(value => value.name)).toEqual(["notes.md"]);
+	} finally {
+		finish.resolve();
+		await until(() => !h.chat.busy);
+	}
 });
 
 test("a send with no files keeps the shape it always had", async () => {

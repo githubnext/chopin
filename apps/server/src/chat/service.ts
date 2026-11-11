@@ -904,6 +904,25 @@ async function give(context: Room, message: Given): Promise<void> {
 				message.invoked,
 			);
 			if (message.focus) prompt = `${focusContext(message.focus)}\n\n${prompt}`;
+			if (chat.entries.find(value => value.id === message.entry)?.attachments?.length) {
+				let sent = await context.auth.storage.chatAttachments.forEntry(context.room, message.entry);
+				let parts: string[] = [];
+				let images: string[] = [];
+				for (let file of sent) {
+					if (file.kind === "image") images.push(file.name);
+					else {
+						parts.push(
+							`<file name=${JSON.stringify(file.name)}>\n${
+								new TextDecoder().decode(file.bytes)
+							}\n</file>`,
+						);
+					}
+				}
+				if (images.length) {
+					parts.push(`(Sent with this message, shown in Chat: ${images.join(", ")}.)`);
+				}
+				if (parts.length) prompt = `${prompt}\n\n${parts.join("\n\n")}`;
+			}
 			await session.steer(prompt);
 			return;
 		} catch (err) {
@@ -1075,7 +1094,13 @@ async function acceptAttachments(
 	requestId: string,
 	destination: Wire.Destination,
 	supplied: unknown,
-): Promise<{ attachments: Wire.Attachment[] } | { refusal: string; code?: typeof PASSING }> {
+): Promise<
+	| {
+		attachments: Wire.Attachment[];
+		bind: () => Promise<{ refusal: string; code?: typeof PASSING } | undefined>;
+	}
+	| { refusal: string; code?: typeof PASSING }
+> {
 	let limits = attachmentLimits(context.config);
 	if (!limits) return { refusal: "files are not accepted here" };
 	if (
@@ -1100,15 +1125,23 @@ async function acceptAttachments(
 			destination === "planner" && files.some(value => value.kind === "image")
 			&& !await context.readsImages?.()
 		) return { refusal: refusalText("images-unavailable") };
-		if (
-			!await chatAttachments.bind({
-				channelId: context.room,
-				userId: ws.data.principalId,
-				ids,
-				entryId: requestId,
-			})
-		) return { refusal: refusalText("gone") };
-		return { attachments: files.map(wireAttachment) };
+		return {
+			attachments: files.map(wireAttachment),
+			bind: async () => {
+				try {
+					let bound = await chatAttachments.bind({
+						channelId: context.room,
+						userId: ws.data.principalId,
+						ids,
+						entryId: requestId,
+					});
+					return bound ? undefined : { refusal: refusalText("gone") };
+				} catch (err) {
+					console.error("[chat] could not bind a message's files:", err);
+					return { refusal: "files are temporarily unavailable", code: PASSING };
+				}
+			},
+		};
 	} catch (err) {
 		console.error("[chat] could not read a message's files:", err);
 		return { refusal: "files are temporarily unavailable", code: PASSING };
@@ -1206,6 +1239,9 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	let text = projected.text;
 	let references = projected.references;
 	let attached: Wire.Attachment[] = [];
+	let bindAttachments:
+		| (() => Promise<{ refusal: string; code?: typeof PASSING } | undefined>)
+		| undefined;
 	let suppliedAttachments = (msg as { attachments?: unknown }).attachments;
 	if (suppliedAttachments !== undefined) {
 		let accepted = await acceptAttachments(
@@ -1217,6 +1253,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		);
 		if ("refusal" in accepted) return fail(ws, msg.rid, accepted.refusal, accepted.code);
 		attached = accepted.attachments;
+		bindAttachments = accepted.bind;
 	}
 	if (!text && attached.length === 0) return fail(ws, msg.rid, "message text is empty");
 	if (chat.closed) return refuseClosed(ws, msg.rid);
@@ -1224,6 +1261,8 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	let withAttachments = attached.length ? { attachments: attached } : {};
 
 	if (destination === "room") {
+		let bindFailure = await bindAttachments?.();
+		if (bindFailure) return fail(ws, msg.rid, bindFailure.refusal, bindFailure.code);
 		let entry: MemberEntry = {
 			id: requestId,
 			author: { kind: "member", handle },
@@ -1257,6 +1296,8 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		return;
 	}
 	if (!context.config.agent) {
+		let bindFailure = await bindAttachments?.();
+		if (bindFailure) return fail(ws, msg.rid, bindFailure.refusal, bindFailure.code);
 		let entries: MemberEntry[] = [{
 			id: requestId,
 			author: { kind: "member", handle },
@@ -1303,6 +1344,8 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			refusedWhileRunning(context);
 			return fail(ws, msg.rid, CANNOT_STEER, "planner-busy");
 		}
+		let bindFailure = await bindAttachments?.();
+		if (bindFailure) return fail(ws, msg.rid, bindFailure.refusal, bindFailure.code);
 		let entry: MemberEntry = {
 			id: requestId,
 			author: { kind: "member", handle },
@@ -1337,6 +1380,8 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	// again to the next one, with the same request id.
 	if (startsHeld) return refuseClosed(ws, msg.rid);
 
+	let bindFailure = await bindAttachments?.();
+	if (bindFailure) return fail(ws, msg.rid, bindFailure.refusal, bindFailure.code);
 	let entry: MemberEntry = {
 		id: requestId,
 		author: { kind: "member", handle },

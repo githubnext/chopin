@@ -177,6 +177,17 @@ export function disconnectedMessage(login: string | undefined): string {
 }
 
 /**
+ * What `@chopin` and `invoke_planner` say while a process that has just taken over waits inside its
+ * hand-over window for the machine's connection to return: still connecting, so this message was
+ * not sent, and to send it again in a moment. It names only its owner's login, never the machine.
+ */
+export function reconnectingMessage(login: string | undefined): string {
+	return `Still connecting to ${
+		login ? `@${login}'s machine` : "the machine"
+	}, so this message wasn't sent. Send it again in a moment.`;
+}
+
+/**
  * What `@chopin` and `invoke_planner` say when the Planner a machine is starting is not ready:
  * still connecting to it, wait a moment, or, once its backend has failed to start more than once,
  * that it can't connect and why, as the machine reported it. It speaks of the machine, as the
@@ -237,6 +248,12 @@ export class PlannerAttachments {
 	/** Whether a client is attached to the document now, not merely holding it through a grace period. */
 	attached(channelId: string): boolean {
 		return this.#holds.get(channelId)?.link !== undefined;
+	}
+
+	/** Whether a hold's link was closed by a cut and its hand-over window is still open. */
+	reconnecting(channelId: string): boolean {
+		let hold = this.#holds.get(channelId);
+		return hold !== undefined && this.#inWindow(hold);
 	}
 
 	/**

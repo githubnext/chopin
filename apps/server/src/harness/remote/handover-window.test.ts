@@ -758,6 +758,22 @@ describe("a remote Planner whose link a cut closed", () => {
 		await until(async () => (await d.storage.plannerHolds.get(d.channel.id)) === undefined);
 	});
 
+	it("reports reconnecting only while a rebuilt hold is inside its hand-over window", async () => {
+		let d = await deploy();
+		expect(d.first.attachments.reconnecting(d.channel.id)).toBe(false);
+		let next = await d.cut();
+		expect(next.attachments.reconnecting(d.channel.id)).toBe(true);
+		await next.browserReturns();
+		let client = await rawLink(next.second.url, MEMBER_TOKEN, OFFER);
+		client.send({ type: "attach", version: 1, document: d.channel.id });
+		await client.next("attached");
+		client.send({ type: "resume", sessions: [{ session: d.sessionId, requests: ["ask-1"] }] });
+		await client.next("resumed");
+		expect(next.attachments.reconnecting(d.channel.id)).toBe(false);
+		client.send({ type: "detach" });
+		await client.closed;
+	});
+
 	it("keeps no state at the cut for a hold in its grace period, which the deploy did not cause", async () => {
 		let d = await deploy();
 		d.raw.send({ type: "detach" });

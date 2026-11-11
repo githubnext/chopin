@@ -24,7 +24,12 @@ import {
 } from "../../testing/agent-link";
 import { createHumanInput } from "../atomic/human-input";
 import { hostInputRoom } from "../../testing/decisions";
-import { disconnectedMessage, notAttachedMessage, startingMessage } from "./attachments";
+import {
+	disconnectedMessage,
+	notAttachedMessage,
+	reconnectingMessage,
+	startingMessage,
+} from "./attachments";
 import { MachinePlanners } from "./machine-planners";
 
 import type { RepositoryPage } from "../../github/client";
@@ -720,6 +725,8 @@ describe("a Planner backend that keeps failing to start", () => {
 			notAttachedMessage("https://chopin.test/documents/octo-org/score/plan", "octo-org/score"),
 			disconnectedMessage("mona"),
 			disconnectedMessage(undefined),
+			reconnectingMessage("mona"),
+			reconnectingMessage(undefined),
 			startingMessage("mona"),
 			// The reason is the machine's own words, kept as reported, so a neutral one is used here.
 			startingMessage("mona", { attempts: 3, reason: "exit 127", at }),
@@ -734,7 +741,20 @@ describe("a Planner backend that keeps failing to start", () => {
 		expect(disconnectedMessage(undefined)).toBe(
 			"The machine is offline, so this message wasn't sent. Send it again when it's back.",
 		);
-		for (let message of [disconnectedMessage("mona"), disconnectedMessage(undefined)]) {
+		expect(reconnectingMessage("mona")).toBe(
+			"Still connecting to @mona's machine, so this message wasn't sent. Send it again in a moment.",
+		);
+		expect(reconnectingMessage(undefined)).toBe(
+			"Still connecting to the machine, so this message wasn't sent. Send it again in a moment.",
+		);
+		for (
+			let message of [
+				disconnectedMessage("mona"),
+				disconnectedMessage(undefined),
+				reconnectingMessage("mona"),
+				reconnectingMessage(undefined),
+			]
+		) {
 			expect(message, message).not.toMatch(/kept|picks up/);
 		}
 	});

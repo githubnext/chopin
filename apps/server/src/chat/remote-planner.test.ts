@@ -3,7 +3,12 @@ import { afterEach, expect, test } from "bun:test";
 import { ActiveOwnerBindings } from "../agent/active-owner";
 import { createPlannerAgent } from "../harness/agents";
 import { createRemoteAdapter } from "../harness/remote/adapter";
-import { disconnectedMessage, notAttachedMessage } from "../harness/remote/attachments";
+import {
+	disconnectedMessage,
+	notAttachedMessage,
+	PlannerAttachments,
+	reconnectingMessage,
+} from "../harness/remote/attachments";
 import { openPlannerSession } from "../harness/session";
 import * as Plan from "../plan/service";
 import { configured } from "../testing/config";
@@ -101,6 +106,8 @@ async function remoteRoom(graceMs?: number, operationMs?: number) {
 		plannerNotAttached: async () =>
 			await server.attachments.confirmed(channel.id)
 				? undefined
+				: server.attachments.reconnecting(channel.id)
+				? reconnectingMessage(server.attachments.holder(channel.id))
 				: server.attachments.status(channel.id).state === "disconnected"
 				? disconnectedMessage(server.attachments.holder(channel.id))
 				: notAttachedMessage(url, "octo-org/score"),
@@ -241,6 +248,33 @@ test("a message to a machine whose link dropped is refused saying it was not sen
 	expect(context.chat.waiting).toEqual([]);
 	expect(saves).toBe(0);
 	expect(context.chat.retained).toBeDefined();
+});
+
+test("a message sent in the hand-over window before the machine resumes is refused saying still connecting, and nothing is posted", async () => {
+	let room = await remoteRoom();
+	let { channel, context, server } = room;
+	let member = await attach(server.url, channel.id, scriptedPlanner().handlers);
+	cleanups.push(() => member.detach());
+	let rows = server.attachments.freeze(GRACE_MS);
+	let next = new PlannerAttachments(context.auth as never, GRACE_MS);
+	cleanups.push(() => next.close());
+	await next.restore(rows.map(row => ({ ...row, fencing: 1 })));
+	context.plannerNotAttached = async () =>
+		await next.confirmed(channel.id)
+			? undefined
+			: next.reconnecting(channel.id)
+			? reconnectingMessage(next.holder(channel.id))
+			: disconnectedMessage(next.holder(channel.id));
+	expect(next.status(channel.id)).toEqual({ state: "attached", login: "member" });
+	let refused = await room.send("@chopin outline the plan");
+	expect(refused).toMatchObject({
+		kind: "session:error",
+		code: "planner-not-attached",
+		message: "Still connecting to @member's machine, so this message wasn't sent. "
+			+ "Send it again in a moment.",
+	});
+	expect(context.chat.entries).toEqual([]);
+	expect(context.chat.waiting).toEqual([]);
 });
 
 test("other harnesses keep claiming ownership for the sender as before", async () => {
@@ -1271,7 +1305,7 @@ test("a command the attached client reports runs on that client as its own /name
 		await room.send("@chopin /skill:notes for today", "planner", [
 			command("skill:notes", "skill", "@chopin ".length),
 		]),
-	).toMatchObject({ kind: "chat:send", queued: false });
+	).toMatchObject({ kind: "chat:send" });
 	await context.chat.running;
 	expect(turns.map(turn => turn.prompt)).toEqual(["/skill:notes for today"]);
 	let said = context.chat.entries.findLast(entry => entry.author.kind === "member");
