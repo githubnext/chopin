@@ -45,7 +45,7 @@ export function ModelPickerTrigger(
 	},
 ) {
 	let { name, level } = triggerText(control.catalog, control.choice);
-	let label = triggerLabel(control.catalog, control.choice);
+	let label = triggerLabel(control.catalog, control.choice, control.modelName);
 	return (
 		<ComposerModelTrigger
 			ref={triggerRef}
@@ -89,7 +89,7 @@ export function ModelPicker(
 		cursor?.query === query ? cursor.index : start,
 		Math.max(0, options.length - 1),
 	);
-	let notice = fallbackNotice(catalog, choice);
+	let notice = fallbackNotice(catalog, choice, control.modelName);
 	let { levels, current } = reasoningLevels(catalog, choice);
 
 	useEffect(() => {

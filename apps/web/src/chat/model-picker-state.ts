@@ -119,13 +119,17 @@ export function triggerText(
 }
 
 /** The words a person who cannot see the trigger hears: the model, its level, and what went missing. */
-export function triggerLabel(catalog: Catalog, choice: Choice | undefined): string {
+export function triggerLabel(
+	catalog: Catalog,
+	choice: Choice | undefined,
+	modelName?: string,
+): string {
 	let { name, level } = triggerText(catalog, choice);
 	let lost = resolveChoice(catalog, choice).unavailable;
 	return [
 		`Model: ${name}`,
 		level ? `reasoning ${level}` : undefined,
-		lost ? unavailableNotice(catalog, lost) : undefined,
+		lost ? unavailableNotice(catalog, lost, modelName) : undefined,
 	].filter(Boolean).join(", ");
 }
 
@@ -146,9 +150,10 @@ export function triggerTitle(catalog: Catalog, choice: Choice | undefined): stri
 export function fallbackNotice(
 	catalog: Catalog | undefined,
 	choice: Choice | undefined,
+	modelName?: string,
 ): string | undefined {
 	let lost = resolveChoice(catalog, choice).unavailable;
-	return lost ? unavailableNotice(catalog, lost) : undefined;
+	return lost ? unavailableNotice(catalog, lost, modelName) : undefined;
 }
 
 /**
@@ -156,21 +161,31 @@ export function fallbackNotice(
  * refused comes first, then the server's word that a turn could not read the choice and ran the
  * harness's default (which holds even where this browser has no catalog), then a stored choice
  * the catalog no longer offers. Where there is no catalog and so no control, `saved` (the choice
- * the room holds) is checked against it in the control's place: the picker is gone, but a model
- * somebody chose has not become the default, and the notice still says so.
+ * the room holds) is checked against it in the control's place. A fallback already recorded as a
+ * system entry is not repeated above the composer; refusals and unreadable choices are independent.
  */
 export function composerModelNotice(
 	control:
-		| { catalog: Catalog; choice: Choice | undefined; refusal: string | undefined }
+		| {
+			catalog: Catalog;
+			choice: Choice | undefined;
+			refusal: string | undefined;
+			modelName?: string;
+		}
 		| undefined,
 	unreadable: boolean,
 	saved?: Choice,
+	entries: readonly Chat.Entry[] = [],
+	savedName?: string,
 ): { tone: "warning" | "info"; text: string } | undefined {
 	if (control?.refusal) return { tone: "warning", text: control.refusal };
 	if (unreadable) return { tone: "info", text: UNREADABLE_NOTICE };
 	let lost = control
-		? fallbackNotice(control.catalog, control.choice)
-		: fallbackNotice(undefined, saved);
+		? fallbackNotice(control.catalog, control.choice, control.modelName)
+		: fallbackNotice(undefined, saved, savedName);
+	if (lost && entries.some(entry => entry.author.kind === "system" && entry.text === lost)) {
+		return undefined;
+	}
 	return lost ? { tone: "info", text: lost } : undefined;
 }
 
