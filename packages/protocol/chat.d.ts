@@ -13,6 +13,7 @@ type KIND<K extends string> = Frame & { kind: K };
 export declare namespace Chat {
 	export type Incoming =
 		| Request<Send>
+		| Request<OpenThread>
 		| Request<Abort>
 		| Request<Resume>
 		| Request<PauseRun>
@@ -33,6 +34,12 @@ export declare namespace Chat {
 		| State
 		| Queue
 		| Sent
+		| ThreadOpened
+		| ThreadSummaries
+		| ThreadSummaryUpdated
+		| ContextState
+		| CompactionState
+		| InThread
 		| Deleted
 		| Retried
 		| Woke
@@ -486,6 +493,116 @@ export declare namespace Chat {
 		 * refuses one it cannot, and the Planner's child tools recheck it again.
 		 */
 		focus?: string;
+		/**
+		 * The root message id of the thread this reply belongs to. Absent for top-level
+		 * Chat messages.
+		 */
+		thread?: string;
+		/**
+		 * With `thread`: also post this reply into the top-level Chat so collaborators
+		 * and the top-level Planner see it there.
+		 */
+		alsoToChat?: boolean;
+	};
+
+	/** Summary of replies under a root Chat message, shown in the main transcript. */
+	export type ThreadSummary = {
+		rootId: string;
+		replyCount: number;
+		/** Unique repliers in order of first reply (members and the Planner). */
+		participants: Author[];
+		lastReplyTs: number;
+		forkedAt: number;
+	};
+
+	/** Token usage of a Chat or thread session, reported by its harness. */
+	export type ContextUsage = {
+		system?: number;
+		tools?: number;
+		messages: number;
+		inputTokens: number;
+		outputTokens: number;
+		cachedTokens?: number;
+		totalTokens: number;
+		contextWindow: number;
+	};
+
+	/** A completed context compaction in a Chat or thread transcript. */
+	export type CompactionRecord = {
+		id: string;
+		/** Entry id immediately preceding this compaction divider; absent when before all remaining entries. */
+		afterEntryId?: string;
+		summary: string;
+		messagesSummarized: number;
+		tokensBefore?: number;
+		tokensAfter?: number;
+		trigger: "manual" | "auto";
+		ts: number;
+	};
+
+	/** Open a thread rooted at `rootId` (readable by any viewer; `create` records the fork when editable). */
+	export type OpenThread = KIND<"chat:thread"> & {
+		rootId: string;
+		create?: boolean;
+	};
+
+	/** Full snapshot of an opened thread, answering `OpenThread`. */
+	export type ThreadOpened = KIND<"chat:thread"> & {
+		rootId: string;
+		root: Entry;
+		forkedAt: number;
+		entries: Entry[];
+		busy: boolean;
+		turn?: Turn;
+		runs?: Runs;
+		queued: Waiting[];
+		usage?: ContextUsage;
+		compactions?: CompactionRecord[];
+		compacting?: boolean;
+	};
+
+	/** Sent after `History` on join: summaries of threads in this document, plus top-level usage/compactions. */
+	export type ThreadSummaries = KIND<"chat:threads"> & {
+		summaries: ThreadSummary[];
+		usage?: ContextUsage;
+		compactions?: CompactionRecord[];
+		compacting?: boolean;
+	};
+
+	/** Broadcast when a thread's reply count, participants or last-reply timestamp changes. */
+	export type ThreadSummaryUpdated = KIND<"chat:thread-summary"> & {
+		summary: ThreadSummary;
+	};
+
+	/** Latest context-window usage reported by the harness. */
+	export type ContextState = KIND<"chat:context"> & {
+		usage?: ContextUsage;
+	};
+
+	/** Compaction progress or completion in a session. */
+	export type CompactionState =
+		& KIND<"chat:compaction">
+		& (
+			| { status: "compacting" }
+			| { status: "idle" }
+			| { status: "compacted"; compaction: CompactionRecord }
+		);
+
+	/** Any live frame belonging to a specific thread rather than top-level Chat. */
+	export type InThreadFrame =
+		| Message
+		| Delta
+		| Tool
+		| State
+		| Queue
+		| Removed
+		| ContextState
+		| CompactionState;
+
+	/** Multiplexes a thread's live frames over the room socket; older clients ignore it. */
+	export type InThread = KIND<"chat:in-thread"> & {
+		rootId: string;
+		frame: InThreadFrame;
 	};
 
 	/** The member message or queue entry is accepted by the server. */
@@ -495,29 +612,29 @@ export declare namespace Chat {
 	 * Stop the running turn and pause the Planner's workflow runs. Anyone may;
 	 * the transcript records who did.
 	 */
-	export type Abort = KIND<"chat:abort">;
+	export type Abort = KIND<"chat:abort"> & { thread?: string };
 
 	/** Resume the workflow runs the Planner paused. Anyone may; the transcript records who did. */
-	export type Resume = KIND<"chat:resume">;
+	export type Resume = KIND<"chat:resume"> & { thread?: string };
 
 	/** Pause one workflow run. Anyone may; the transcript records who did. */
-	export type PauseRun = KIND<"chat:pause-run"> & { runId: string };
+	export type PauseRun = KIND<"chat:pause-run"> & { runId: string; thread?: string };
 
 	/** Resume one paused workflow run. Anyone may; the transcript records who did. */
-	export type ResumeRun = KIND<"chat:resume-run"> & { runId: string };
+	export type ResumeRun = KIND<"chat:resume-run"> & { runId: string; thread?: string };
 
 	/** Withdraw a queued message. Only its author may. */
-	export type Unqueue = KIND<"chat:unqueue"> & { id: string };
+	export type Unqueue = KIND<"chat:unqueue"> & { id: string; thread?: string };
 
 	/**
 	 * Delete a message the machine has not taken yet. Only its author may, and one that was
 	 * taken, or is already gone, is refused. The message leaves the Chat for everyone and is never
 	 * delivered.
 	 */
-	export type Delete = KIND<"chat:delete"> & { id: string };
+	export type Delete = KIND<"chat:delete"> & { id: string; thread?: string };
 
 	/** The message is deleted. */
-	export type Deleted = KIND<"chat:delete"> & { id: string };
+	export type Deleted = KIND<"chat:delete"> & { id: string; thread?: string };
 
 	/** A message was deleted before it was delivered; sent to everyone with the Chat open. */
 	export type Removed = KIND<"chat:removed"> & { id: string };
@@ -526,7 +643,7 @@ export declare namespace Chat {
 	 * Send a `failed` message again, as it was. Only its author may. It is `sent` again, and
 	 * waits and is delivered like any other.
 	 */
-	export type Retry = KIND<"chat:retry"> & { id: string };
+	export type Retry = KIND<"chat:retry"> & { id: string; thread?: string };
 
 	/** The message is waiting again. */
 	export type Retried = KIND<"chat:retry"> & { id: string };
