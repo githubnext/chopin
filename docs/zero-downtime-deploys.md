@@ -309,9 +309,30 @@ processes itself.
 lease from one to the other under open tabs, with a paired machine's Planner backend (and, in two
 cases, a Planner attached under its owner's own sign-in) attached through the proxy. It is part of
 `bun run e2e`, on ports 8801 to 8803 and a database of its own in the fourth database's cluster.
-It no longer sends the Planner messages across a deploy: since nothing is held for a Planner, what
-a hand-over does to one is the load run's to measure ([Deploy under load](#deploy-under-load)), and what a browser does with
-a send that gets no answer is the outbox's, in its unit tests. Its cases:
+Since nothing is held for a Planner, it sends no stream of Planner messages across a deploy and
+reads no saved rows for them; what a hand-over does to a stream of them under load is the load run's
+to measure ([Deploy under load](#deploy-under-load)). Three of its cases (the second runs once for a
+machine that takes a message mid-run and once for one that does not) send a few, each of which
+must end visibly as started, given to the running turn, or refused, and none lost, doubled or left
+at Sending:
+
+- Messages sent before, during and after the machine's hand-over window: the first starts a turn
+  and the next two, sent while it runs, one before the deploy and one while the old process waits
+  for it, are given to it, which reads both. One sent while the page is between processes is held
+  by the browser alone, goes to the new process while the machine's client has not resumed, inside
+  its window, and is refused on the message (_Couldn't send. No machine is connected to reply._)
+  with nothing kept. One sent once the machine is back starts a turn. A tab opened afterwards has
+  every message but the refused one, once, and the server holds no row for any.
+- A turn running when the deploy begins is not cut off or run twice, and ends in one reply, with
+  no notice of being stopped. A message sent to it while the old process waits for it reaches it
+  when its machine takes a message mid-run; when the machine does not, the message is refused
+  (_Chopin can't take messages while it works on this machine. Stop it to ask now._), kept
+  nowhere, and starts a turn once the person sends it again.
+- Once the new release has the lease, the transcript, in the tab that lived through the deploy
+  and in one opened after it, holds what was said once and nothing waiting, sending or refused; a row an earlier release left open (`waiting`) is closed by the release that took the
+  lease and never reaches the machine; and a new `@chopin` message starts a turn of its own.
+
+The others:
 
 - A person types without stopping, with an unsent message in the composer, while the old process
   is stopped. The page is sampled every 25 ms: it says nothing of the connection or the machine
