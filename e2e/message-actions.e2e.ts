@@ -382,6 +382,70 @@ test("Add reaction opens a picker for any emoji: listed, searched, or typed and 
 	await expect(add).toBeFocused();
 });
 
+test("a reaction the server turns down is not shown, and its message says why: a 21st different emoji from one person, or one that is not a single emoji", async ({ join, seed }) => {
+	let twenty = "😀😃😄😁😆😅🤣😂🙂🙃😉😊😇🥰😍🤩😘😗😚😙";
+	let held = [...new Intl.Segmenter().segment(twenty)].map(part => part.segment);
+	expect(held).toHaveLength(20);
+	await seed("# Actions\n", {
+		transcript: [
+			{
+				...transcript()[0]!,
+				reactions: held.map(emoji => ({ emoji, handles: ["ana"] })),
+			},
+			transcript()[1]!,
+		],
+	});
+	let ana = await join("ana");
+	let ben = await join("ben", {});
+	let mine = message(ana, PERSON.id);
+	let theirs = message(ben, PERSON.id);
+	await expect(mine.locator("[data-chat-reaction]")).toHaveCount(20);
+	let refusal = mine.getByRole("status").filter({ hasText: "Couldn't react" });
+
+	await mine.hover();
+	await toolbar(mine).getByRole("button", { name: "Add reaction" }).click();
+	let picker = ana.getByRole("dialog", { name: "Add reaction" });
+	await picker.getByRole("textbox", { name: "Search emoji, or paste one" }).fill("party");
+	await picker.getByRole("button", { name: "🎉" }).click();
+	await expect(refusal).toHaveText(
+		"Couldn't react. You can react to a message with at most 20 different emoji.",
+	);
+	await expect(mine.locator('[data-chat-reaction="🎉"]')).toHaveCount(0);
+
+	// Ben's reaction is told after anything Ana's refused one could have been, so seeing it is the
+	// proof that the room was told nothing of hers; and the Chat opened again is what was saved.
+	await theirs.hover();
+	await toolbar(theirs).getByRole("button", { name: "Looks right" }).click();
+	await expect(theirs.getByRole("button", { name: "You reacted with ✅" })).toHaveText("✅1");
+	await expect(mine.getByRole("button", { name: "Ben reacted with ✅" })).toHaveText("✅1");
+	await expect(theirs.locator('[data-chat-reaction="🎉"]')).toHaveCount(0);
+	await ana.reload();
+	await expect(mine.locator("[data-chat-reaction]")).toHaveCount(21);
+	await expect(mine.locator('[data-chat-reaction="🎉"]')).toHaveCount(0);
+	await expect(refusal).toHaveCount(0);
+
+	// Giving one up frees a place, and her next reaction is taken.
+	await mine.getByRole("button", { name: "You reacted with 😀" }).click();
+	await expect(mine.locator('[data-chat-reaction="😀"]')).toHaveCount(0);
+	await mine.hover();
+	await toolbar(mine).getByRole("button", { name: "Add reaction" }).click();
+	await picker.getByRole("textbox", { name: "Search emoji, or paste one" }).fill("party");
+	await picker.getByRole("button", { name: "🎉" }).click();
+	await expect(mine.getByRole("button", { name: "You reacted with 🎉" })).toHaveText("🎉1");
+
+	// A single cluster too long for an emoji is turned down in the same way, and goes at her next ask.
+	await mine.hover();
+	await toolbar(mine).getByRole("button", { name: "Add reaction" }).click();
+	await picker.getByRole("textbox", { name: "Search emoji, or paste one" }).fill(
+		"👍" + "\u0301".repeat(40),
+	);
+	await picker.getByRole("textbox", { name: "Search emoji, or paste one" }).press("Enter");
+	await expect(refusal).toHaveText("Couldn't react. A reaction is a single emoji.");
+	await expect(mine.locator("[data-chat-reaction]")).toHaveCount(21);
+	await mine.getByRole("button", { name: "You reacted with 🎉" }).click();
+	await expect(refusal).toHaveCount(0);
+});
+
 test("a reader who cannot edit the document can still react", async ({ baseURL, browser, room, seed }) => {
 	await seed("# Actions\n", { transcript: transcript() });
 	let context = await browser.newContext({ baseURL });
