@@ -7,7 +7,6 @@ import {
 	disconnectedMessage,
 	notAttachedMessage,
 	PlannerAttachments,
-	reconnectingMessage,
 } from "../harness/remote/attachments";
 import { openPlannerSession } from "../harness/session";
 import * as Plan from "../plan/service";
@@ -106,11 +105,8 @@ async function remoteRoom(graceMs?: number, operationMs?: number) {
 		plannerNotAttached: async () =>
 			await server.attachments.confirmed(channel.id)
 				? undefined
-				: server.attachments.reconnecting(channel.id)
-				? reconnectingMessage(server.attachments.holder(channel.id))
-				: server.attachments.status(channel.id).state === "disconnected"
-				? disconnectedMessage(server.attachments.holder(channel.id))
-				: notAttachedMessage(url, "octo-org/score"),
+				: server.attachments.unavailable(channel.id)
+					?? notAttachedMessage(url, "octo-org/score"),
 		activeOwner: () => owners.resolve(channel.id),
 		persist: () => Plan.persist(plan),
 		openPlannerSession: (binding, options) =>
@@ -262,9 +258,7 @@ test("a message sent in the hand-over window before the machine resumes is refus
 	context.plannerNotAttached = async () =>
 		await next.confirmed(channel.id)
 			? undefined
-			: next.reconnecting(channel.id)
-			? reconnectingMessage(next.holder(channel.id))
-			: disconnectedMessage(next.holder(channel.id));
+			: next.unavailable(channel.id) ?? disconnectedMessage(next.holder(channel.id));
 	expect(next.status(channel.id)).toEqual({ state: "attached", login: "member" });
 	let refused = await room.send("@chopin outline the plan");
 	expect(refused).toMatchObject({
@@ -808,6 +802,10 @@ test("a dropped link's grace period only leases ownership: a Stop that ends a qu
 	await until(() => context.plan.records.get(id)?.status === "cancelled");
 	expect(down.said().at(-1)).toBe("@rival stopped Chopin and withdrew its open question.");
 	await until(() => server.attachments.status(down.channel.id).state === "held");
+	// The machine stepped away: a message to it is refused as one to a machine that is offline.
+	expect(await context.plannerNotAttached!()).toBe(
+		"@member's machine is offline, so this message wasn't sent. Send it again when it's back.",
+	);
 	await clock.pass(GRACE_MS - 1);
 	expect(server.attachments.status(down.channel.id)).toMatchObject({ state: "held" });
 	await clock.pass(1);

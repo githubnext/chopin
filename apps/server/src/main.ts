@@ -35,10 +35,8 @@ import {
 	openAgentSocket,
 } from "./harness/remote/endpoint";
 import {
-	disconnectedMessage,
 	notAttachedMessage,
 	PlannerAttachments,
-	reconnectingMessage,
 	startingMessage,
 } from "./harness/remote/attachments";
 import type { PlannerAttachment } from "./harness/remote/attachments";
@@ -1072,12 +1070,8 @@ async function closeRoom(room: Rooms.Room, force = false): Promise<void> {
  * still starting it, or how to get one.
  */
 async function plannerNotAttached(channelId: string, url: string, repository: string) {
-	if (plannerAttachments?.reconnecting(channelId)) {
-		return reconnectingMessage(plannerAttachments.holder(channelId));
-	}
-	if (plannerAttachments?.status(channelId).state === "disconnected") {
-		return disconnectedMessage(plannerAttachments.holder(channelId));
-	}
+	let unavailable = plannerAttachments?.unavailable(channelId);
+	if (unavailable) return unavailable;
 	let starting = await experiments?.plannerStarting(channelId);
 	if (starting) return startingMessage(starting.login, starting.failure);
 	return notAttachedMessage(url, repository, !!experiments?.plannerMachines);
