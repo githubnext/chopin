@@ -12,6 +12,11 @@ import { delimiter, join } from "node:path";
 import { loadAuth } from "./auth/config";
 import { setupAgents } from "./setup-agents";
 import { DEFAULT_COPILOT_MODEL } from "./harness/copilot-sdk/model";
+import {
+	DEFAULT_STORED_IMAGE_BYTES,
+	MAX_STORED_IMAGE_BYTES,
+	MIN_STORED_IMAGE_BYTES,
+} from "./images/format";
 
 import type { SetupAgent } from "@chopin/protocol/agents";
 import type { AttachmentLimits } from "@chopin/protocol/attachment";
@@ -46,6 +51,11 @@ export type Config = {
 	 * server queued for it drains meanwhile, before it counts as dropped.
 	 */
 	agentConnectionMaxSilenceMs: number;
+	/**
+	 * MAX_STORED_IMAGE_BYTES: the largest image a tool made that Chat hosts, whichever harness ran the
+	 * tool. A larger one is shown as a placeholder naming its size and this limit. 10 MiB by default.
+	 */
+	imageMaxBytes: number;
 	/**
 	 * Whether to run the agent at all.
 	 *
@@ -287,6 +297,22 @@ function researchEvidenceTimeoutMs(): number {
 	return value;
 }
 
+/** MAX_STORED_IMAGE_BYTES: whole bytes, 1 MiB to 256 MiB, 10 MiB by default. */
+function imageMaxBytes(): number {
+	let raw = process.env.MAX_STORED_IMAGE_BYTES;
+	if (raw === undefined) return DEFAULT_STORED_IMAGE_BYTES;
+	let value = Number(raw);
+	if (
+		!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < MIN_STORED_IMAGE_BYTES
+		|| value > MAX_STORED_IMAGE_BYTES
+	) {
+		throw new Error(
+			`MAX_STORED_IMAGE_BYTES must be an integer between ${MIN_STORED_IMAGE_BYTES} and ${MAX_STORED_IMAGE_BYTES} bytes`,
+		);
+	}
+	return value;
+}
+
 function storage(): StorageConfig {
 	let driver = process.env.STORAGE_DRIVER || "postgres";
 	if (driver !== "postgres") {
@@ -410,6 +436,7 @@ export function load(): Config {
 		agentConnectionPingMs,
 		agentConnectionTimeoutMs,
 		agentConnectionMaxSilenceMs,
+		imageMaxBytes: imageMaxBytes(),
 		agent,
 		backgroundJobs,
 		webResearch: agent && backgroundJobs && process.env.WEB_RESEARCH !== "off",

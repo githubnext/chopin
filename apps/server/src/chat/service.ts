@@ -3524,7 +3524,10 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 			let staged: ToolImage[] = [];
 			let refused: Wire.ImageRefusal[] = [];
 			if (success && !preliminary && !chat.turnImages?.calls.has(part.toolCallId)) {
-				({ images: staged, refusals: refused } = inspectImages(output));
+				({ images: staged, refusals: refused } = inspectImages(
+					output,
+					context.config.imageMaxBytes,
+				));
 				if (staged.length || refused.length) turnImages(chat).calls.add(part.toolCallId);
 			}
 			conclude(
