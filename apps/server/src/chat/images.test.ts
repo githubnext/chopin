@@ -3,6 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { apng, bigPng, fixture } from "../images/raster.test-fixtures";
 import { inspectImages, savedImages, savedRefusals, toolImages, toolRowOutput } from "./images";
 
+const MIB = 1_048_576;
+
 const PNG = new Uint8Array([
 	0x89,
 	0x50,
@@ -417,5 +419,107 @@ describe("saved refused images", () => {
 				[{ before: 0, reason, extra: true }],
 			]
 		) expect(savedRefusals(value)).toBe(false);
+	});
+});
+
+describe("tool images over the stored limit", () => {
+	const png = (size: number, extra: Record<string, unknown> = {}) =>
+		image({ data: base64(bigPng(size)), ...extra });
+
+	test("hosts an image of exactly 10 MiB by default and refuses one byte more with the size and the limit", () => {
+		let found = inspectImages({
+			content: [png(10 * MIB, { alt: "At" }), png(10 * MIB + 1, { alt: "Over" })],
+		});
+		expect(found.images.map(item => [item.alt, item.bytes.byteLength])).toEqual([
+			["At", 10 * MIB],
+		]);
+		expect(found.refusals).toEqual([
+			{ before: 1, reason: "Image too large to show (10.1 MB, limit 10 MB)" },
+		]);
+	});
+
+	test("says a 30 MiB image is too large without reading its data", () => {
+		let found = inspectImages({
+			content: [image({ data: "!".repeat(30 * MIB * 4 / 3) })],
+		});
+		expect(found.images).toEqual([]);
+		expect(found.refusals).toEqual([
+			{ before: 0, reason: "Image too large to show (30 MB, limit 10 MB)" },
+		]);
+	});
+
+	test("applies the limit it is given, in whole or tenths of a megabyte", () => {
+		let found = inspectImages({
+			content: [png(MIB + 100, { alt: "Over" }), png(MIB, { alt: "At" })],
+		}, MIB);
+		expect(found.images.map(item => item.alt)).toEqual(["At"]);
+		expect(found.refusals).toEqual([
+			{ before: 0, reason: "Image too large to show (1.1 MB, limit 1 MB)" },
+		]);
+		expect(
+			inspectImages({ content: [png(3 * MIB)] }, 1.5 * MIB).refusals.map(item => item.reason),
+		).toEqual(["Image too large to show (3 MB, limit 1.5 MB)"]);
+		expect(inspectImages({ content: [png(3 * MIB)] }, 3 * MIB).refusals).toEqual([]);
+	});
+
+	test("counts the decoded bytes of padded, unpadded and line-broken data alike", () => {
+		let bytes = bigPng(5_000);
+		for (let size of [bytes.byteLength, bytes.byteLength + 1, bytes.byteLength + 2]) {
+			let sized = bigPng(size);
+			let padded = base64(sized);
+			let forms = [padded, padded.replace(/=+$/, ""), padded.replace(/(.{76})/g, "$1\r\n")];
+			for (let data of forms) {
+				let at = inspectImages({ content: [image({ data })] }, size);
+				expect(at.refusals, `${size} ${data.slice(-4)}`).toEqual([]);
+				expect(at.images, `${size} ${data.slice(-4)}`).toHaveLength(1);
+				let over = inspectImages({ content: [image({ data })] }, size - 1);
+				expect(over.images, `${size} ${data.slice(-4)}`).toEqual([]);
+				expect(over.refusals, `${size} ${data.slice(-4)}`).toHaveLength(1);
+				expect(over.refusals[0]!.reason).toStartWith("Image too large to show (");
+			}
+		}
+	});
+
+	test("keeps the place of an image it refuses among the images around it", () => {
+		let found = inspectImages({
+			content: [
+				image({ alt: "first" }),
+				png(3 * MIB, { alt: "big" }),
+				image({ data: base64(SVG), mimeType: "image/svg+xml" }),
+				image({ alt: "last" }),
+			],
+		}, 2 * MIB);
+		expect(found.images.map(item => item.alt)).toEqual(["first", "last"]);
+		expect(found.refusals).toEqual([
+			{ before: 1, reason: "Image too large to show (3 MB, limit 2 MB)" },
+			{
+				before: 1,
+				reason:
+					"Image couldn't be shown: its type image/svg+xml isn't one Chat shows (PNG, JPEG, WebP, GIF, AVIF, BMP or ICO).",
+			},
+		]);
+	});
+});
+
+describe("saved too-large refusals", () => {
+	test("admits the sentence a turn saved for an image over the limit, beside the others", () => {
+		let large = "Image too large to show (30 MB, limit 10 MB)";
+		expect(savedRefusals([{ before: 0, reason: large }])).toBe(true);
+		expect(savedRefusals([
+			{ before: 0, reason: "Image couldn't be shown: its data isn't valid base64." },
+			{ before: 1, reason: "Image too large to show (10.1 MB, limit 1.5 MB)" },
+		])).toBe(true);
+	});
+
+	test("refuses a sentence that only starts like it", () => {
+		for (
+			let reason of [
+				"Image too large to show",
+				"Image too large to show (big, limit 10 MB)",
+				"Image too large to show (30 MB, limit 10 MB) and more",
+				"image too large to show (30 MB, limit 10 MB)",
+				" Image too large to show (30 MB, limit 10 MB)",
+			]
+		) expect(savedRefusals([{ before: 0, reason }]), reason).toBe(false);
 	});
 });

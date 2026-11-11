@@ -4,6 +4,9 @@
  */
 
 export const MAX_IMAGE_BYTES = 1_048_576;
+export const DEFAULT_STORED_IMAGE_BYTES = 10 * 1_048_576;
+export const MIN_STORED_IMAGE_BYTES = 1_048_576;
+export const MAX_STORED_IMAGE_BYTES = 256 * 1_048_576;
 
 export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
 export type ImageType = (typeof IMAGE_TYPES)[number];

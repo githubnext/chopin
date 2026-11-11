@@ -36,6 +36,7 @@ export function configured(overrides: Record<string, string | undefined> = {}) {
 		AGENT_CONNECTION_PING_MS: undefined,
 		AGENT_CONNECTION_TIMEOUT_MS: undefined,
 		AGENT_CONNECTION_MAX_SILENCE_MS: undefined,
+		MAX_STORED_IMAGE_BYTES: undefined,
 		TYPESAFE_API_KEY: undefined,
 		HARNESS: undefined,
 		HARNESS_AUTH: undefined,

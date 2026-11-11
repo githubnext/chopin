@@ -1,7 +1,13 @@
 import { MAX_LINK_MESSAGE_BYTES, toolContentSchema, toolImageSchema } from "@chopin/agent-link";
 import { HOSTED_IMAGE_PATH } from "@chopin/dialect";
 
-import { IMAGE_LABELS, imageSize, namedImageType, sniffImageType } from "../images/format";
+import {
+	DEFAULT_STORED_IMAGE_BYTES,
+	IMAGE_LABELS,
+	imageSize,
+	namedImageType,
+	sniffImageType,
+} from "../images/format";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { HostedImageType } from "../images/format";
@@ -43,9 +49,16 @@ function refusal(reason: string): { reason: string } {
 	return { reason: `${REFUSAL_START}${reason}` };
 }
 
-function megabytes(bytes: number): string {
-	let size = bytes / 1_048_576;
-	return `${Number.isInteger(size) ? size : size.toFixed(1)} MiB`;
+const TOO_LARGE = /^Image too large to show \(\d+(\.\d)? MB, limit \d+(\.\d)? MB\)$/;
+
+function megabytes(bytes: number, round = Math.round): string {
+	let size = round(bytes * 10 / 1_048_576) / 10;
+	return Number.isInteger(size) ? `${size}` : size.toFixed(1);
+}
+
+function decodedBytes(data: string): number {
+	let padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
+	return Math.floor((data.length - padding) * 3 / 4);
 }
 
 function typeNamed(declared: string): string {
@@ -53,14 +66,14 @@ function typeNamed(declared: string): string {
 	return TYPE_TOKEN.test(name) ? ` ${name}` : "";
 }
 
-function hosted(block: unknown): ToolImage | { reason: string } {
+function hosted(block: unknown, maxBytes: number): ToolImage | { reason: string } {
 	let image = toolImageSchema.safeParse(block).data;
 	if (!image) return refusal("its block has no base64 data or no type.");
 	if (image.tooLarge !== undefined) {
 		return refusal(
-			`it is ${megabytes(image.tooLarge)}, which did not fit in one agent connection message (${
+			`it is ${megabytes(image.tooLarge)} MiB, which did not fit in one agent connection message (${
 				megabytes(MAX_LINK_MESSAGE_BYTES)
-			} at most).`,
+			} MiB at most).`,
 		);
 	}
 	let named = namedImageType(image.mimeType);
@@ -68,6 +81,14 @@ function hosted(block: unknown): ToolImage | { reason: string } {
 		return refusal(`its type${typeNamed(image.mimeType)} isn't one Chat shows (${SHOWN}).`);
 	}
 	let data = image.data.replace(/\s+/g, "");
+	let size = decodedBytes(data);
+	if (size > maxBytes) {
+		return {
+			reason: `Image too large to show (${megabytes(size, Math.ceil)} MB, limit ${
+				megabytes(maxBytes, Math.floor)
+			} MB)`,
+		};
+	}
 	let leftover = data.length % 4;
 	if (!BASE64.test(data) || (data.endsWith("=") ? leftover !== 0 : leftover === 1)) {
 		return refusal("its data isn't valid base64.");
@@ -81,8 +102,8 @@ function hosted(block: unknown): ToolImage | { reason: string } {
 				: `its bytes aren't ${IMAGE_LABELS[named]} data, as its type says.`,
 		);
 	}
-	let size = imageSize(named, bytes);
-	if (!size) {
+	let dimensions = imageSize(named, bytes);
+	if (!dimensions) {
 		return refusal(
 			`its ${IMAGE_LABELS[named]} header can't be read, so the image is cut short or damaged.`,
 		);
@@ -90,7 +111,7 @@ function hosted(block: unknown): ToolImage | { reason: string } {
 	return {
 		bytes,
 		mimeType: named,
-		...size,
+		...dimensions,
 		...(image.alt === undefined ? {} : { alt: image.alt }),
 		...(image.caption === undefined ? {} : { caption: image.caption }),
 	};
@@ -98,19 +119,23 @@ function hosted(block: unknown): ToolImage | { reason: string } {
 
 export function inspectImages(
 	output: unknown,
+	maxBytes = DEFAULT_STORED_IMAGE_BYTES,
 ): { images: ToolImage[]; refusals: Wire.ImageRefusal[] } {
 	let images: ToolImage[] = [];
 	let refusals: Wire.ImageRefusal[] = [];
 	for (let block of (contentBlocks(output) ?? []).filter(isImageBlock)) {
-		let found = hosted(block);
+		let found = hosted(block, maxBytes);
 		if ("reason" in found) refusals.push({ before: images.length, reason: found.reason });
 		else images.push(found);
 	}
 	return { images, refusals };
 }
 
-export function toolImages(output: unknown): { images: ToolImage[]; refused: number } {
-	let { images, refusals } = inspectImages(output);
+export function toolImages(
+	output: unknown,
+	maxBytes = DEFAULT_STORED_IMAGE_BYTES,
+): { images: ToolImage[]; refused: number } {
+	let { images, refusals } = inspectImages(output, maxBytes);
 	return { images, refused: refusals.length };
 }
 
@@ -141,7 +166,7 @@ export function savedRefusals(value: unknown): value is Wire.ImageRefusal[] {
 		let { before, reason } = refusal as Record<string, unknown>;
 		return Object.keys(refusal).every(key => REFUSAL_KEYS.has(key))
 			&& typeof before === "number" && Number.isSafeInteger(before) && before >= 0
-			&& typeof reason === "string" && reason.startsWith(REFUSAL_START);
+			&& typeof reason === "string" && (reason.startsWith(REFUSAL_START) || TOO_LARGE.test(reason));
 	});
 }
 

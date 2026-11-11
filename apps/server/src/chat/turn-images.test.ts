@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
 import { ulid } from "@chopin/dialect";
 
+import { bigPng } from "../images/raster.test-fixtures";
 import { create, documentRoom, endTurnImages, translate } from "./service";
 
 import type { Server } from "bun";
@@ -50,6 +51,7 @@ function turn(
 		gate?: Promise<void>;
 		failing?: (image: Stored) => Error | undefined;
 		owner?: false;
+		imageMaxBytes?: number;
 	} = {},
 ) {
 	let chat: Chat = create();
@@ -65,7 +67,7 @@ function turn(
 		server,
 		room: "doc",
 		plan: {},
-		config: {},
+		config: options.imageMaxBytes === undefined ? {} : { imageMaxBytes: options.imageMaxBytes },
 		auth: {
 			clock: () => new Date(0),
 			storage: {
@@ -484,6 +486,43 @@ describe("images a turn makes", () => {
 		expect(entry!.refusedImages).toEqual([
 			{ before: 0, reason: "Image couldn't be shown: Chopin couldn't store it." },
 			{ before: 0, reason: "Image couldn't be shown: Chopin couldn't store it." },
+		]);
+	});
+
+	it("host a tool's image of exactly the stored limit and say an image one byte over was too large, storing nothing of it", async () => {
+		let limit = 2 * 1_048_576;
+		let { chat, send, stored } = turn({ imageMaxBytes: limit });
+		let at = bigPng(limit);
+		let over = bigPng(limit + 1);
+		send({ type: "tool-call", toolCallId: "c1", toolName: "codemode", input: {} });
+		send(toolResult("c1", [
+			{ type: "image", data: base64(over), mimeType: "image/png", alt: "Over" },
+			{ type: "image", data: base64(at), mimeType: "image/png", alt: "At" },
+		]));
+		await chat.turnImages?.work;
+		expect(stored.map(image => image.sha256)).toEqual([path(at).slice(8, 72)]);
+		let entry = chat.entries.find(item => item.images);
+		expect(entry!.images!.map(image => image.alt)).toEqual(["At"]);
+		expect(entry!.refusedImages).toEqual([
+			{ before: 0, reason: "Image too large to show (2.1 MB, limit 2 MB)" },
+		]);
+		expect(entry!.tools?.find(tool => tool.id === "c1")?.result).toBe("2 images");
+		expect(JSON.stringify(chat.entries)).not.toContain(base64(over).slice(0, 5000));
+	});
+
+	it("say on a message of its own that an image was too large when none could be shown, with the 10 MiB default", async () => {
+		let { chat, send, stored } = turn();
+		let over = bigPng(10 * 1_048_576 + 1);
+		send({ type: "tool-call", toolCallId: "c1", toolName: "codemode", input: {} });
+		send(toolResult("c1", [{ type: "image", data: base64(over), mimeType: "image/png" }]));
+		await chat.turnImages?.work;
+		expect(stored).toEqual([]);
+		let holders = chat.entries.filter(entry => entry.refusedImages);
+		expect(holders).toHaveLength(1);
+		expect(holders[0]).toMatchObject({ author: { kind: "agent" }, text: "" });
+		expect(holders[0]!.images).toBeUndefined();
+		expect(holders[0]!.refusedImages).toEqual([
+			{ before: 0, reason: "Image too large to show (10.1 MB, limit 10 MB)" },
 		]);
 	});
 });

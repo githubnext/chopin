@@ -57,7 +57,7 @@ const SVG = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'
 const hashOf = (bytes: Uint8Array) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 const encoded = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
 
-async function drawn(content: Array<Record<string, string>>) {
+async function drawn(content: Array<Record<string, string>>, config: object = {}) {
 	let { auth, storage, channel } = await linkAuth();
 	let server = linkServer(auth, 300);
 	cleanups.push(server.stop);
@@ -129,7 +129,7 @@ async function drawn(content: Array<Record<string, string>>) {
 		server: { publish() {} },
 		room: channel.id,
 		plan: {},
-		config: {},
+		config,
 		auth: { clock: () => new Date(), storage },
 	} as unknown as Room;
 	let stream = await agent.stream({ session, prompt: "Draw it" });
@@ -294,5 +294,45 @@ describe("images over the agent connection", () => {
 		}]);
 		expect(entry?.tools?.[0]?.result).toBe("Drew two\n2 images");
 		expect(await storage.images.channels(hashOf(large))).toEqual([]);
+	});
+
+	it("host an image that fits one agent connection message as before, whatever the stored limit allows beyond it", async () => {
+		let fits = bigPng(1_500_000);
+		for (let config of [{}, { imageMaxBytes: 256 * 1_048_576 }]) {
+			let { chat, storage } = await drawn([
+				{ type: "image", data: encoded(fits), mimeType: "image/png", alt: "Fits" },
+			], config);
+			let entry = chat.entries.find(item => item.images);
+			expect(entry?.images?.map(image => image.alt)).toEqual(["Fits"]);
+			expect(entry?.refusedImages).toBeUndefined();
+			expect(await storage.images.channels(hashOf(fits))).toHaveLength(1);
+		}
+	});
+
+	it("keep the client's own account of an image that did not fit one message, however large the stored limit", async () => {
+		let large = bigPng(2_400_000);
+		let { chat, storage } = await drawn([
+			{ type: "image", data: encoded(large), mimeType: "image/png", alt: "Too large" },
+		], { imageMaxBytes: 256 * 1_048_576 });
+		let entry = chat.entries.find(item => item.refusedImages);
+		expect(entry?.refusedImages).toEqual([{
+			before: 0,
+			reason:
+				"Image couldn't be shown: it is 2.3 MiB, which did not fit in one agent connection message (2 MiB at most).",
+		}]);
+		expect(await storage.images.channels(hashOf(large))).toEqual([]);
+	});
+
+	it("say a client's image that fits one message is too large when the stored limit is below it", async () => {
+		let fits = bigPng(1_500_000);
+		let { chat, storage } = await drawn([
+			{ type: "image", data: encoded(fits), mimeType: "image/png", alt: "Fits" },
+		], { imageMaxBytes: 1_048_576 });
+		let entry = chat.entries.find(item => item.refusedImages);
+		expect(entry?.images).toBeUndefined();
+		expect(entry?.refusedImages).toEqual([
+			{ before: 0, reason: "Image too large to show (1.5 MB, limit 1 MB)" },
+		]);
+		expect(await storage.images.channels(hashOf(fits))).toEqual([]);
 	});
 });
