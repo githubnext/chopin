@@ -216,9 +216,10 @@ test("an empty draft's hint gives way to the first words being said, which would
 	// The draft is still empty, and the hint is not drawn under what is being said.
 	await expectChatValue(input, "");
 	await expect(input).not.toHaveAttribute("data-empty", "true");
-	// Stopped with nothing written, the hint is back.
+	// What was being said when it stopped stays, as words in the draft, so the hint does not return.
 	await dictate(page).click();
-	await expect(input).toHaveAttribute("data-empty", "true");
+	await expectChatValue(input, "ship the cap");
+	await expect(input).not.toHaveAttribute("data-empty", "true");
 });
 
 test("shows what is being said beside the caret, then writes it there, around the words already typed", async ({ browser, baseURL, room }) => {

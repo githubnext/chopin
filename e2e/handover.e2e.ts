@@ -294,6 +294,9 @@ async function watch(page: Page): Promise<void> {
 				}`;
 			let composer = document.querySelector(".chat-composer");
 			let field = composer?.querySelector("[aria-label='Message']");
+			// Who the message is for is the person's own state: the @Chopin chip comes on when they ask
+			// Chopin and stays, and the sparkle that puts it on is spent while it is. A deploy changes neither.
+			let asking = !!composer?.querySelector("[aria-label='Asking Chopin']");
 			return {
 				"Build plan": [
 					...document.querySelectorAll(".build-plan, .build-capsule, .build-status-link"),
@@ -306,11 +309,14 @@ async function watch(page: Page): Promise<void> {
 						[...composer.querySelectorAll("button")]
 							// Send follows what is typed, and Stop and Resume follow whether a turn is running.
 							.filter(button =>
-								!/^(Send message|Stop generating|Resume Chopin)$/.test(
+								!/^(Send message|Stop generating|Resume Chopin|Remove Chopin)$/.test(
 									button.getAttribute("aria-label") ?? "",
 								)
 							)
-							.map(state).join(" | ")
+							.map(button => {
+								let said = state(button);
+								return asking && said === "Ask Chopin (not available)" ? "Ask Chopin" : said;
+							}).join(" | ")
 					}`
 					: "absent",
 				"document": document.querySelector(".plan-content")?.getAttribute("contenteditable")
