@@ -313,6 +313,29 @@ let markdownGallery = ({ children }: ComponentProps<"figure">) => {
 	);
 	return <ImageGallery images={images} maxVisible={images.length} />;
 };
+let DefaultPre = defaultComponents.pre!;
+
+/**
+ * Upstream's code block, reachable by the keyboard: its lines scroll sideways once the message is
+ * narrower than they are, as it is beside the toolbar kept in view on a tall message.
+ */
+function CodeBlock(props: ComponentProps<typeof DefaultPre>) {
+	return <DefaultPre {...props} tabIndex={0} />;
+}
+
+let DefaultTable = defaultComponents.table!;
+
+/**
+ * Upstream's table, its scroll lane reachable by the keyboard once the table is wider than the
+ * message. The copied lane takes no props of its own, so the table, which it holds alone, marks it.
+ */
+function TableLane(props: ComponentProps<typeof DefaultTable>) {
+	return <DefaultTable {...props} ref={keyboardLane} />;
+}
+
+function keyboardLane(table: HTMLTableElement | null) {
+	table?.parentElement?.setAttribute("tabindex", "0");
+}
 
 let MESSAGE_COMPONENTS: MarkdownComponents = {
 	...CHAT_COMPONENTS,
@@ -328,6 +351,8 @@ let MESSAGE_COMPONENTS: MarkdownComponents = {
 	img: markdownImage,
 	input: TaskBox,
 	p: imageParagraph,
+	pre: CodeBlock,
+	table: TableLane,
 };
 
 /** Keeps the identity of the references while what they say is unchanged. */
