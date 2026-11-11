@@ -66,7 +66,7 @@
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "0fd31e605ecc4028d3cb6fc7a131f3bcf74b457d4b89aa271dc6b666ad342ac4"
+			"sha256": "b9fbc0e484bc84330463cf8e53c6f9a298f865dd80cf794321810a735cfad13a"
 		},
 		{
 			"file": "apps/web/src/components/ui/badge.tsx",

@@ -281,9 +281,13 @@ describe("assistant-ui's colours", () => {
 		expect(theme.get("--color-blue-500")).toBe("var(--color-brand)");
 		expect(theme.get("--color-blue-400")).toBe("var(--color-brand)");
 		expect(theme.get("--color-emerald-500")).toBe("var(--color-success)");
-		for (let shade of ["400", "500", "600"]) {
+		// The red of an icon or a ring is the destructive one; the red a copy writes words in
+		// (`text-red-600`, a file's reason) is Chopin's danger text, because the destructive red does
+		// not reach the contrast of text on a soft fill (the chip's browser spec runs axe on it).
+		for (let shade of ["400", "500"]) {
 			expect(theme.get(`--color-red-${shade}`)).toBe("var(--color-destructive)");
 		}
+		expect(theme.get("--color-red-600")).toBe("var(--color-danger-text)");
 	});
 
 	test("every role has its Tailwind colour, except the one Chopin already names", () => {

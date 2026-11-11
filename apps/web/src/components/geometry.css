@@ -454,6 +454,43 @@ button:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"]
 }
 
 /*
+ * Where motion is reduced the endless motion of a copy (the pulse of a recording's dot, and the
+ * shimmer of a label that says it is working, which assistant-ui's own `motion-reduce` utility does
+ * not stop) holds still, as Chopin's own motion does. The subject is the class, a handful of roots
+ * above it.
+ */
+@media (prefers-reduced-motion: reduce) {
+	.animate-pulse:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]),
+	.shimmer:is([data-slot|="button"], [data-slot|="command"], [data-slot|="composer"], [data-slot|="dialog"], [data-slot|="directive"], [data-slot|="input"], [data-slot|="message"], [data-slot|="model"], [data-slot|="popover"], [data-slot|="textarea"]),
+	:is(
+		[data-slot|="button"],
+		[data-slot|="command"],
+		[data-slot|="composer"],
+		[data-slot|="dialog"],
+		[data-slot|="directive"],
+		[data-slot|="input"],
+		[data-slot|="message"],
+		[data-slot|="model"],
+		[data-slot|="popover"],
+		[data-slot|="textarea"]
+	) .animate-pulse,
+	:is(
+		[data-slot|="button"],
+		[data-slot|="command"],
+		[data-slot|="composer"],
+		[data-slot|="dialog"],
+		[data-slot|="directive"],
+		[data-slot|="input"],
+		[data-slot|="message"],
+		[data-slot|="model"],
+		[data-slot|="popover"],
+		[data-slot|="textarea"]
+	) .shimmer {
+		animation: none;
+	}
+}
+
+/*
  * A small control keeps its look; an invisible target of the coarse size grows around it, so the
  * visible box is the same on touch. In the components layer so utilities such as `absolute` win.
  */

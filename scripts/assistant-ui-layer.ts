@@ -204,6 +204,21 @@ ${copies(0)} :focus-visible${OWN} {
 }
 
 /*
+ * Where motion is reduced the endless motion of a copy (the pulse of a recording's dot, and the
+ * shimmer of a label that says it is working, which assistant-ui's own \`motion-reduce\` utility does
+ * not stop) holds still, as Chopin's own motion does. The subject is the class, a handful of roots
+ * above it.
+ */
+@media (prefers-reduced-motion: reduce) {
+	.animate-pulse:is(${roots.join(", ")}),
+	.shimmer:is(${roots.join(", ")}),
+	${copies(1)} .animate-pulse,
+	${copies(1)} .shimmer {
+		animation: none;
+	}
+}
+
+/*
  * A small control keeps its look; an invisible target of the coarse size grows around it, so the
  * visible box is the same on touch. In the components layer so utilities such as \`absolute\` win.
  */
