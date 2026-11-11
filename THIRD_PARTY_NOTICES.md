@@ -86,10 +86,45 @@ element's default here. Chat's messages pass a plugin built from `micromark-exte
 `-strikethrough` and `-task-list-item` and their `mdast-util-*` counterparts (MIT, unified collective),
 because `remark-gfm` also reads footnotes and bare addresses, which Chat has always shown as text.
 
+## assistant-ui and shadcn/ui: copied registry source
+
+Components in `apps/web/src/components/` (and `apps/web/src/lib/utils.ts`) are **copied unmodified**
+with `shadcn add` from the [assistant-ui](https://github.com/assistant-ui/assistant-ui) registry
+(`https://r.assistant-ui.com/styles/base-nova/{name}.json`, MIT) and from the
+[shadcn/ui](https://github.com/shadcn-ui/ui) registry they stand on
+(`https://ui.shadcn.com/r/styles/base-nova/{name}.json`, MIT), and they keep those registries'
+Tailwind classes. They are the standalone (props-driven) lane of assistant-ui's elements: nothing of
+its runtime is used and no `@assistant-ui/*` package is a dependency. Each file is recorded in
+[`apps/web/src/components/sources.json`](apps/web/src/components/sources.json) with its registry,
+item, upstream revision (the registry's repository at its main commit when it was fetched) and the
+sha256 of its bytes, and the design contract fails if one is edited
+([how](docs/assistant-ui.md)). Those on 2026-11-10:
+
+| File (under `apps/web/src/`)                          | Registry      | Item                       | Upstream revision                        |
+| ----------------------------------------------------- | ------------- | -------------------------- | ---------------------------------------- |
+| `components/assistant-ui/elements/model-selector.tsx` | @assistant-ui | `elements-model-selector`  | `assistant-ui/assistant-ui@d25a97a22f00` |
+| `components/assistant-ui/utils/model-selection.ts`    | @assistant-ui | `elements-model-selection` | `assistant-ui/assistant-ui@d25a97a22f00` |
+| `components/geometry.css`                             | tailwindcss   | `theme.css`                | `tailwindcss@4.3.0`                      |
+| `components/ui/button.tsx`                            | @shadcn       | `button`                   | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/command.tsx`                           | @shadcn       | `command`                  | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/dialog.tsx`                            | @shadcn       | `dialog`                   | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/input-group.tsx`                       | @shadcn       | `input-group`              | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/input.tsx`                             | @shadcn       | `input`                    | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/popover.tsx`                           | @shadcn       | `popover`                  | `shadcn-ui/ui@8ab27715521c`              |
+| `components/ui/textarea.tsx`                          | @shadcn       | `textarea`                 | `shadcn-ui/ui@8ab27715521c`              |
+| `lib/utils.ts`                                        | @assistant-ui | `utils`                    | `assistant-ui/assistant-ui@d25a97a22f00` |
+
+`components/geometry.css` is generated from Tailwind CSS's own `theme.css` (MIT, Tailwind Labs, Inc.)
+and holds only its values. The packages these files import, none copied, are `cmdk` (MIT),
+`class-variance-authority` (Apache-2.0), `cn` (MIT), `lucide-react` (ISC) and `tw-animate-css` (MIT),
+beside the `@base-ui/react` Chopin already used. The adaptations above that were written by hand from
+assistant-ui's source (the banners, model picker and MarkdownText) are unchanged, and are replaced by
+copies as their elements are migrated.
+
 ### License
 
-The adaptations above (the connection and failure banners, the model picker and MarkdownText) are
-under assistant-ui's MIT licence:
+The adaptations above (the connection and failure banners, the model picker and MarkdownText) and the
+files copied from assistant-ui's registry are under assistant-ui's MIT licence:
 
 ```
 MIT License
@@ -115,3 +150,26 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 `remark-gfm` and the strikethrough and task-list packages of `micromark-extension-gfm-*` and
 `mdast-util-gfm-*` are the new dependencies (MIT, unified collective); the table packages were already
 one. `remark-gfm` is there because the upstream element passes it to its renderer.
+
+The files copied from shadcn/ui's registry are under its MIT licence:
+
+```
+MIT License
+
+Copyright (c) 2023 shadcn
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
+OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
