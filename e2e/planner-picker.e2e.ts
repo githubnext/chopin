@@ -2335,6 +2335,103 @@ test("with no machine of their own, a person still opens the Machines menu to a 
 	await expect(runs.getByRole("menuitemradio", { name: /^Desk Connected/ })).toHaveCount(1);
 });
 
+/**
+ * Choose `row` in the machine menu and read what the page says from then on. The button names
+ * `to` at once; from then until the person has read it, nothing says `from` (the machine's name,
+ * or whose it is by login), by the strip or by the live region, and "Connecting to" the new one
+ * comes within a moment, not after the grace a restart's silence is given.
+ */
+async function moveTo(
+	page: Page,
+	row: RegExp,
+	{ from, to }: { from: RegExp; to: string },
+) {
+	let stop = await sampling(page);
+	await (await runOn(page)).getByRole("menuitemradio", { name: row }).click();
+	await expect(strip(page)).toContainText(`Connecting to ${to}`);
+	await page.waitForTimeout(800);
+	let samples = await stop();
+	let named = samples.findIndex(sample => sample.name === `Runs on ${to}`);
+	let connecting = samples.findIndex(sample => sample.strip.includes(`Connecting to ${to}`));
+	expect(named, JSON.stringify(samples)).toBeGreaterThanOrEqual(0);
+	expect(connecting).toBeGreaterThanOrEqual(named);
+	// Nothing is said of the machine just left once the button names the new one.
+	for (let sample of samples.slice(named)) {
+		expect(`${sample.strip} | ${sample.said}`, `at ${sample.at} ms`).not.toMatch(from);
+	}
+	// The new one is said as soon as it is known, well inside the 1.5 s a restart is given.
+	expect(samples[connecting]!.at - samples[named]!.at).toBeLessThan(1_200);
+	expect(samples.at(-1)).toMatchObject({ name: `Runs on ${to}`, strip: `Connecting to ${to}` });
+}
+
+test("choosing another machine says that machine at once, and never names the one just left, whether it was the person's own or a teammate's", async ({ browser }) => {
+	test.setTimeout(180_000);
+	let room = await remoteServer();
+	let owner = await open(browser, "casey", room, DESKTOP);
+	await machine(owner, "Build box", true, { service: true });
+	await share(owner, "Build box");
+	// mona created the document and has a machine of her own, besides casey's shared one.
+	let page = await open(browser, "mona", room, DESKTOP);
+	await createdBy(room, "mona");
+	await machine(page, "Box A", true);
+	await page.reload();
+	await ready(page);
+	await expect(strip(page)).toContainText("Connecting to Box A");
+
+	await moveTo(page, /^Build box/, { from: /Box A/, to: "Build box" });
+	// A teammate's machine is named by its owner's login while the list that names it is not read
+	// yet, and that must not be what is said of the one just left.
+	await moveTo(page, /^Box A/, { from: /Build box|@casey/, to: "Box A" });
+	await moveTo(page, /^Build box/, { from: /Box A/, to: "Build box" });
+});
+
+test("a person whose choice does not place the document's replies is told whose does, and the status goes on naming where they are", async ({ browser }) => {
+	test.setTimeout(150_000);
+	let room = await remoteServer();
+	// drew created the document and chose his Laptop for it; quinn edits it and has a machine too.
+	let creator = await open(browser, "drew", room, DESKTOP);
+	await createdBy(room, "drew");
+	await machine(creator, "Laptop", true);
+	let list = await (await creator.request.get(`${ORIGIN}/api/documents/${room}/machine`))
+		.json() as { machines: Array<{ id: string; label: string }> };
+	let chosen = await creator.request.post(`${ORIGIN}/api/documents/${room}/machine`, {
+		data: { machine: list.machines.find(value => value.label === "Laptop")!.id },
+		headers: { origin: ORIGIN },
+	});
+	expect(chosen.status()).toBe(200);
+	let page = await open(browser, "quinn", room, DESKTOP);
+	await machine(page, "Quinn box", true);
+	await page.reload();
+	await ready(page);
+	await expect(strip(page)).toContainText("Connecting to @drew's machine");
+
+	// The menu says the document's creator decides, before and after they choose theirs.
+	let menu = await runOn(page);
+	let note = menu.getByRole("group", { name: "Replies" });
+	await expect(note).toHaveText(
+		"The document's creator chose where its replies come from, so your choice runs your builds and runs.",
+	);
+	let stop = await sampling(page);
+	await menu.getByRole("menuitemradio", { name: /^Quinn box/ }).click();
+	await expect(menu).toBeHidden();
+	await expect(machineButton(page)).toHaveAccessibleName("Runs on Quinn box");
+	await page.waitForTimeout(2_500);
+	let samples = await stop();
+	// Where the replies are asked for is still drew's, and said so without a gap or another name.
+	for (let sample of samples) {
+		expect(`${sample.strip} | ${sample.said}`).not.toContain("Quinn box");
+	}
+	expect(samples.at(-1)).toMatchObject({ strip: "Connecting to @drew's machine" });
+	expect(samples.filter(sample => sample.strip === "")).toEqual([]);
+	await runOn(page);
+	await expect(note).toBeVisible();
+	await shoot(page, "planner-creator-decides");
+	// The creator is not told it of himself.
+	await creator.reload();
+	await ready(creator);
+	await expect((await runOn(creator)).getByRole("group", { name: "Replies" })).toHaveCount(0);
+});
+
 test("a machine whose connector cannot say why its backend keeps stopping is said not to connect, with the release to update, and goes when it attaches", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();

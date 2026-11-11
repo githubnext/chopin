@@ -42,7 +42,12 @@ export function plannerWordHeard(view: PlannerView, word: Session.PlannerAttachm
  * only so the same state returning is not made to wait out its grace again; it is never drawn in
  * place of a different one.
  */
-export type PlannerMemory = { shown: PlannerStatus | undefined; gapped: boolean };
+export type PlannerMemory = {
+	shown: PlannerStatus | undefined;
+	gapped: boolean;
+	/** How many of the person's choices of a machine have been said, once they showed a status. */
+	chosen?: number;
+};
 
 function samePlannerState(shown: PlannerStatus, status: PlannerStatus): boolean {
 	return shown.kind === status.kind && plannerSentence(shown) === plannerSentence(status);
@@ -54,15 +59,19 @@ function samePlannerState(shown: PlannerStatus, status: PlannerStatus): boolean 
  * new one has lasted its grace. After a gap (`gapped`) what was shown is not the last state any
  * more, only a state that may be returning, so it skips the grace only if it is that same state.
  * A placeholder (`held`) never does: the last state stays until the machine's own word comes.
+ * `asked` says the person chose a machine since the last state was said: what follows is not a
+ * restart passing, it is what they asked for, so it is said at once, whatever it is and whatever
+ * was shown or left out before.
  */
 export function plannerShownAtOnce(
 	shown: PlannerStatus | undefined,
 	status: PlannerStatus | undefined,
 	held = false,
 	gapped = false,
+	asked = false,
 ): boolean {
 	if (held) return false;
-	if (plannerGrace(status) === 0) return true;
+	if (asked || plannerGrace(status) === 0) return true;
 	return gapped
 		? !!shown && !!status && samePlannerState(shown, status)
 		: shown?.kind === status?.kind;
@@ -79,9 +88,10 @@ export function plannerDrawn(
 	held = false,
 	withheld = false,
 	gapped = false,
+	asked = false,
 ): PlannerStatus | undefined {
 	if (withheld) return undefined;
-	if (plannerShownAtOnce(shown, status, held, gapped)) return status;
+	if (plannerShownAtOnce(shown, status, held, gapped, asked)) return status;
 	return gapped ? undefined : shown;
 }
 
@@ -95,16 +105,21 @@ export function plannerRemembered(
 	held: boolean,
 	withheld: boolean,
 	lapsed = false,
+	chosen = memory.chosen ?? 0,
 ): PlannerMemory {
 	if (withheld) {
 		return memory.gapped || !memory.shown
 			? memory
 			: { shown: memory.shown, gapped: true };
 	}
-	if (held || !(lapsed || plannerShownAtOnce(memory.shown, status, held, memory.gapped))) {
+	let asked = chosen > (memory.chosen ?? 0);
+	if (held || !(lapsed || plannerShownAtOnce(memory.shown, status, held, memory.gapped, asked))) {
 		return memory;
 	}
-	return memory.shown === status && !memory.gapped ? memory : { shown: status, gapped: false };
+	let spent = chosen ? { chosen } : {};
+	return memory.shown === status && !memory.gapped && !asked
+		? memory
+		: { shown: status, gapped: false, ...spent };
 }
 
 /**
@@ -118,25 +133,39 @@ export function useSettledPlannerStatus(
 	status: PlannerStatus | undefined,
 	held?: boolean,
 	withheld?: boolean,
+	/** How many times the person has chosen a machine for the document: each says what follows at once. */
+	chosen = 0,
 ): PlannerStatus | undefined {
 	let [memory, setMemory] = useState<PlannerMemory>(() => ({
 		shown: plannerGrace(status) === 0 ? status : undefined,
 		gapped: false,
+		...(chosen ? { chosen } : {}),
 	}));
-	let atOnce = plannerShownAtOnce(memory.shown, status, held, memory.gapped);
-	let latest = useRef(status);
-	latest.current = status;
+	let asked = chosen > (memory.chosen ?? 0);
+	let atOnce = plannerShownAtOnce(memory.shown, status, held, memory.gapped, asked);
+	let latest = useRef({ status, chosen });
+	latest.current = { status, chosen };
 	useEffect(() => {
-		let next = plannerRemembered(memory, status, !!held, !!withheld);
+		let next = plannerRemembered(memory, status, !!held, !!withheld, false, chosen);
 		if (next !== memory) setMemory(next);
 	});
 	useEffect(() => {
 		if (atOnce || held || withheld) return;
 		let timer = setTimeout(
-			() => setMemory(current => plannerRemembered(current, latest.current, false, false, true)),
+			() =>
+				setMemory(current =>
+					plannerRemembered(
+						current,
+						latest.current.status,
+						false,
+						false,
+						true,
+						latest.current.chosen,
+					)
+				),
 			plannerGrace(status),
 		);
 		return () => clearTimeout(timer);
 	}, [atOnce, held, withheld, status?.kind]);
-	return plannerDrawn(memory.shown, status, held, withheld, memory.gapped);
+	return plannerDrawn(memory.shown, status, held, withheld, memory.gapped, asked);
 }

@@ -2793,6 +2793,26 @@ describe("an editor's choice of a teammate's shared machine, on a document on De
 			.toEqual({ state: "attached", login: "member", machine: laptop.id });
 	});
 
+	it("tells another person, and no one else, that the creator's choice decides where it runs", async () => {
+		let { choose, choice, box, laptop } = await contested();
+		// The creator, member, has chosen nothing: rival's choice of build-box can place it.
+		await choose("rival", box.id);
+		expect((await choice("rival")).creatorDecides).toBeUndefined();
+		// The creator chooses a machine, which decides: rival's choice goes with the Planner it placed.
+		await choose("member", laptop.id);
+		expect((await choice("rival")).choice).toBeNull();
+		// Rival chooses again: it is stored for their own builds and runs, and they are told that.
+		await choose("rival", box.id);
+		let told = await choice("rival");
+		expect(told.choice).toBe(box.id);
+		expect(told.creatorDecides).toBe(true);
+		// The creator is not told it of themselves.
+		expect((await choice("member")).creatorDecides).toBeUndefined();
+		// The creator goes back to Default machine, and it is rival's choice again.
+		await choose("member", null);
+		expect((await choice("rival")).creatorDecides).toBeUndefined();
+	});
+
 	it("keeps an attached Default machine Planner when the chosen machine runs no Planners", async () => {
 		let { choose, choice, box, laptop, channel, server, url } = await contested({
 			plannerCommand: false,

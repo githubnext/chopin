@@ -618,7 +618,10 @@ running keeps going until it finishes, like a Planner mid-reply.
   goes, even if that machine had not been asked yet. An editor's choice made
   while the creator's own stood is only stored, for their own builds and runs,
   and counts again once the creator chooses no machine. Builds and runs follow
-  each person's own choice, whoever created the document.
+  each person's own choice, whoever created the document. A person whose choice does
+  not place it is told so in the machine menu, above the machines: _The document's
+  creator chose where its replies come from, so your choice runs your builds and
+  runs._ What Chat says of the Planner keeps naming the machine it is on.
 - A document left on **Default machine** whose creator has no connected
   machine that can run Planners uses a shared one too. Builds, runs and
   investigations never go to a teammate's machine unless the person chose it for

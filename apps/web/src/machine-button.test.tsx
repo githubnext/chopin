@@ -10,7 +10,14 @@ import {
 	plannerStatus,
 } from "./chat/planner-status";
 import { connectionStep, INITIAL_MEMORY, plannerForBanner } from "./chat/connection-phase";
-import { MachineButton, MachineGlyph, PlannerNote } from "./machine-button";
+import {
+	CREATOR_DECIDES,
+	CreatorNote,
+	MachineButton,
+	MachineGlyph,
+	PlannerNote,
+} from "./machine-button";
+import { INTERNAL_IN_STATUS } from "@chopin/protocol/plain-words";
 
 import type { MachineChoice } from "./machine-choice";
 
@@ -42,6 +49,7 @@ function choice(service: boolean, connected: boolean): MachineChoice {
 		},
 		read: 1,
 		saving: false,
+		chosen: 0,
 		choose: async () => {},
 		refresh: () => {},
 	};
@@ -379,4 +387,14 @@ test("the menu and the button's description keep a reason exactly as the machine
 	// Not trimmed, and no stop added to a path that ends in a slash.
 	expect(note).toContain(`<p>${reason}</p>`);
 	expect(button(planner)).toContain(`<p>${reason}</p>`);
+});
+
+test("a person whose choice does not place the document's replies is told whose does, in plain words", () => {
+	let note = renderToStaticMarkup(createElement(CreatorNote));
+	expect(note).toContain(`<p>${CREATOR_DECIDES}</p>`);
+	expect(note).toContain('role="group"');
+	expect(CREATOR_DECIDES).toBe(
+		"The document's creator chose where its replies come from, so your choice runs your builds and runs.",
+	);
+	expect(INTERNAL_IN_STATUS.test(CREATOR_DECIDES)).toBe(false);
 });

@@ -63,6 +63,36 @@ test("a state replaces the one shown at once unless it is one that waits, and wh
 	}
 });
 
+test("a state that follows the person's own choice of a machine is said at once, as it is theirs and not a restart's", () => {
+	// Choosing Box C while Box B was shown: Box C's being connected to is what they asked for.
+	// The list that names Box C is read after a gap, in which nothing was said, and a different
+	// state after a gap waits out its grace, as one after a restart does.
+	expect(plannerShownAtOnce(STARTING_B, STARTING_C, false, true)).toBe(false);
+	expect(plannerShownAtOnce(STARTING_B, STARTING_C, false, true, true)).toBe(true);
+	// With nothing shown before it, too.
+	expect(plannerShownAtOnce(undefined, STARTING_C, false, false)).toBe(false);
+	expect(plannerShownAtOnce(undefined, STARTING_C, false, false, true)).toBe(true);
+	// A placeholder is still no word of the machine's own.
+	expect(plannerShownAtOnce(STARTING_B, STARTING_C, true, false, true)).toBe(false);
+	// Once said, the choice is spent: the next state of that kind waits out its grace again.
+	let after = plannerRemembered(
+		{ shown: STARTING_B, gapped: true },
+		STARTING_C,
+		false,
+		false,
+		false,
+		1,
+	);
+	expect(after).toEqual({ shown: STARTING_C, gapped: false, chosen: 1 });
+	// Remembered through a later gap, the next state of that kind waits out its grace again.
+	expect(plannerShownAtOnce(after.shown, STARTING_B, false, true, false)).toBe(false);
+	// A choice is not spent while the status is withheld, or by a placeholder.
+	expect(plannerRemembered({ shown: STARTING_B, gapped: false }, STARTING_C, false, true, false, 1))
+		.toEqual({ shown: STARTING_B, gapped: true });
+	expect(plannerRemembered({ shown: STARTING_B, gapped: false }, STARTING_C, true, false, false, 1))
+		.toEqual({ shown: STARTING_B, gapped: false });
+});
+
 test("a placeholder changes nothing shown: not at once, and not for whichever state is shown", () => {
 	for (let shown of [undefined, STARTING, NONE, OFFLINE, AWAY, FAILING]) {
 		expect(plannerShownAtOnce(shown, NONE, true)).toBe(false);
