@@ -13,7 +13,12 @@ export type ShortcutId =
 	| "shortcuts"
 	| "bold"
 	| "italic"
+	| "strikethrough"
 	| "link"
+	| "numbered-list"
+	| "bulleted-list"
+	| "code"
+	| "code-block"
 	| "ask-chopin"
 	| "dictate"
 	| "undo"
@@ -70,7 +75,48 @@ export const SHORTCUTS: readonly Shortcut[] = [
 	{ id: "shortcuts", label: "Keyboard shortcuts", group: "General", key: "?" },
 	{ id: "bold", label: "Bold", group: "Editing", key: "b", mod: true, display: true },
 	{ id: "italic", label: "Italic", group: "Editing", key: "i", mod: true, display: true },
+	{
+		id: "strikethrough",
+		label: "Strikethrough",
+		group: "Editing",
+		key: "x",
+		mod: true,
+		shift: true,
+		display: true,
+	},
 	{ id: "link", label: "Link selected text", group: "Editing", key: "k", mod: true, display: true },
+	// The Chat composer's, as Slack's message box has them (`chat/rich/shortcuts.ts`).
+	{
+		id: "numbered-list",
+		label: "Numbered list",
+		group: "Editing",
+		key: "7",
+		code: "Digit7",
+		mod: true,
+		shift: true,
+		display: true,
+	},
+	{
+		id: "bulleted-list",
+		label: "Bulleted list",
+		group: "Editing",
+		key: "8",
+		code: "Digit8",
+		mod: true,
+		shift: true,
+		display: true,
+	},
+	{ id: "code", label: "Code", group: "Editing", key: "c", mod: true, shift: true, display: true },
+	{
+		id: "code-block",
+		label: "Code block",
+		group: "Editing",
+		key: "c",
+		mod: true,
+		alt: true,
+		shift: true,
+		display: true,
+	},
 	// The composer owns the key: it puts the @Chopin chip at the start of the draft (`chopin-chip.ts`).
 	{ id: "ask-chopin", label: "Ask Chopin", group: "Editing", key: "j", mod: true, display: true },
 	{
