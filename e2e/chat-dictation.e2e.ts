@@ -421,9 +421,15 @@ test("is accessible while listening, and while it says why it stopped", async ({
 
 test("fits a phone's width, listening and failing, with nothing outside the screen", async ({ browser, baseURL, room }) => {
 	let page = await open(browser, baseURL!, room, installRecognizer, PHONE);
-	// At rest the pill is one line, so the microphone comes with the focus, on a row below the draft.
+	// At rest the pill is one line, so the microphone comes with the focus, above the pill and without moving it.
+	let surface = composer(page).locator(".composer-surface");
 	await expect(dictate(page)).toBeHidden();
+	// Measured once the pane has slid in and come to rest.
+	await expect.poll(async () => (await chat(page).boundingBox())?.x).toBe(0);
+	let resting = (await surface.boundingBox())!;
 	await chatInput(chat(page)).tap();
+	await expect(dictate(page)).toBeVisible();
+	expect(await surface.boundingBox()).toEqual(resting);
 	await expect(async () => {
 		await expectInsideViewport(dictate(page));
 	}).toPass({ timeout: 10_000 });

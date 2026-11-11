@@ -457,12 +457,19 @@ test("a message may be only a picture", async ({ join }) => {
 test("keeps the composer's files usable at a phone's width, and accessible", async ({ join }) => {
 	let page = await join("ana", PHONE);
 	await openChat(page);
-	// At rest the pill is one line: adding files appears with the focus, on a row below the draft.
+	// At rest the pill is one line: adding files appears with the focus, above the pill and
+	// without moving it, so a tap that began on something above it still lands on it.
+	let surface = composer(page).locator(".composer-surface");
 	await expect(paperclip(page)).toBeHidden();
+	// Measured once the pane has slid in and come to rest.
+	await expect.poll(async () => (await chat(page).boundingBox())?.x).toBe(0);
+	let resting = (await surface.boundingBox())!;
 	await chatInput(chat(page)).tap();
 	await expect(paperclip(page)).toBeVisible();
-	let draft = (await chatInput(chat(page)).boundingBox())!;
-	expect((await paperclip(page).boundingBox())!.y).toBeGreaterThan(draft.y + draft.height - 1);
+	let focused = (await surface.boundingBox())!;
+	expect(focused).toEqual(resting);
+	expect((await paperclip(page).boundingBox())!.y + (await paperclip(page).boundingBox())!.height)
+		.toBeLessThanOrEqual(resting.y);
 	await choose(page, SHOT, NOTES, {
 		name: "logo.svg",
 		mimeType: "image/svg+xml",
