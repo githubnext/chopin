@@ -17,55 +17,6 @@ and `elements-error-state.json`), which match `assistant-ui/assistant-ui` at com
 shadcn `cn` utility are not used; the classes are replaced with Chopin's tokens, text roles, button
 sizes and icons.
 
-## assistant-ui: Composer's model picker
-
-The Chat composer's model picker (`apps/web/src/chat/assistant-ui/composer-model.tsx`) is adapted
-from the Composer element of [assistant-ui](https://github.com/assistant-ui/assistant-ui), the
-standalone (props and callbacks) lane only. It uses neither assistant-ui's runtime nor
-`AssistantRuntimeProvider` nor `useAui`: Chopin's own state drives it through props.
-
-- **Element:** Composer, the model picker's parts (`ComposerMenu`, `ComposerMenuItem`,
-  `ComposerModelTrigger`, `ComposerModelItem` and the `ComposerModel` type), from the registry item `elements-composer`
-  (<https://r.assistant-ui.com/elements-composer.json>, file
-  `components/assistant-ui/elements/composer.tsx`) and documented at
-  <https://www.assistant-ui.com/elements/composer-model-picker>.
-- **Version:** the registry item as served on 2026-11-10; the repository's `main` was at commit
-  `f92028b466cba721846de6851e4dddb6c04ecfad` that day.
-- **What changed:** restyled to Chopin's tokens, text roles, menu geometry and motion, with its
-  Tailwind utility classes, `lucide-react` icons and `cn` helper replaced by Chopin's own classes
-  and icons; each element names its props and takes a finite `variant` instead of spreading a
-  caller's props, as Chopin's design contract requires; rows show the chosen model with a tint,
-  with no check mark, and carry a description and a right-aligned detail; the menu is mounted
-  while open and anchored to the composer's edge, so its fit-in-composer measurement was dropped;
-  the same menu and row now also draw Chopin's `/` command and `@` mention pickers.
-
-## assistant-ui: Composer's slash commands and mentions
-
-The rows of the Chat composer's `/` command list and `@` mention list
-(`apps/web/src/chat/assistant-ui/composer-commands.tsx`) are adapted from the Composer element of
-[assistant-ui](https://github.com/assistant-ui/assistant-ui), the standalone (props and callbacks)
-lane only. They use neither assistant-ui's runtime nor `AssistantRuntimeProvider` nor `useAui`:
-Chopin's own state drives them through props.
-
-- **Elements:** Slash commands (<https://www.assistant-ui.com/elements/composer-slash-commands>)
-  and Mentions (<https://www.assistant-ui.com/elements/composer-mentions>), both installed from the
-  registry item `elements-composer` (<https://r.assistant-ui.com/elements-composer.json>, file
-  `components/assistant-ui/elements/composer.tsx`): `ComposerCommandItem` and `ComposerPersonItem`,
-  with the `useSlashMatches`, `useMentionMatches` and `applyMention` they are driven by.
-- **Version:** the registry item as served on 2026-11-10; the repository's `main` was at commit
-  `f92028b466cba721846de6851e4dddb6c04ecfad` that day.
-- **What changed:** each row is built on `ComposerMenuItem` (the model picker's row, from the same
-  element) and restyled to Chopin's tokens, text roles and menu geometry, with the Tailwind classes,
-  Lucide icons, initial-letter avatar and `cn` helper replaced by Chopin's classes, icons and faces,
-  which the caller passes as the row's `lead`. The `↵` hint on the active row is drawn only for a
-  pointer that can hover. `useSlashMatches`, `useMentionMatches` and `applyMention` are Chopin's own
-  pure functions (`commands.ts`, `mentions.ts`), because the draft keeps its caret and its chips
-  (the commands the agent reports, matched by name or by what follows a skill's prefix; the `@`
-  query reaching past a space for a heading's words). Added, as the runtime lane's categories are:
-  `ComposerMenuGroup`, a heading over a run of rows, so commands are grouped by where they come from
-  and mentions by what they point at. The list's region is reachable by keyboard, since it can
-  scroll.
-
 ## assistant-ui: MarkdownText
 
 Chopin's read-only Markdown (Chat messages, decision cards, the phrases inside them) is drawn by
@@ -155,14 +106,20 @@ and holds only its values. The packages these files import, none copied, are `cm
 `class-variance-authority` (Apache-2.0), `cn` (MIT), `lucide-react` (ISC), `tw-animate-css` (MIT) and
 `tw-shimmer` (MIT, assistant-ui's own, for `surfaces.tsx`'s shimmer),
 beside the `@base-ui/react` Chopin already used. The adaptations above that were written by hand from
-assistant-ui's source (the banners, model picker and MarkdownText) are unchanged, and are replaced by
-copies as their elements are migrated.
+assistant-ui's source (the banners and MarkdownText) are unchanged, and are replaced by copies as
+their elements are migrated.
+
+The Chat composer is drawn from these copies. Its model pill opens the Model selector; its `@` and
+`/` menus are the Composer's menu with its Mentions row (`ComposerPersonItem`) and Slash commands row
+(`ComposerCommandItem`), driven by Chopin's own pure functions (`mentions.ts`, `commands.ts`) in place
+of the element's `useMentionMatches`, `useSlashMatches` and `applyMention`, because the draft keeps its
+caret and its references; and the Chopin chip is Directive text's chip with a Badge. None of
+assistant-ui's runtime is used.
 
 ### License
 
-The adaptations above (the connection and failure banners, the model picker, the slash commands and
-mentions rows, and MarkdownText) and the files copied from assistant-ui's registry are under
-assistant-ui's MIT licence:
+The adaptations above (the connection and failure banners and MarkdownText) and the files copied from
+assistant-ui's registry are under assistant-ui's MIT licence:
 
 ```
 MIT License

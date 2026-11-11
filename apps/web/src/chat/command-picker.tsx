@@ -1,30 +1,31 @@
-import { CodeIcon, GlobeSearchIcon, PlayIcon, SparkleIcon, TerminalIcon } from "@chopin/icons";
 import { COMMAND_KINDS } from "@chopin/protocol/commands";
-import { useEffect, useId } from "react";
-
-import { ComposerCommandItem, ComposerMenuGroup } from "./assistant-ui/composer-commands";
-import { ComposerMenu } from "./assistant-ui/composer-model";
+import { GlobeIcon, PlayIcon, SparklesIcon, TerminalIcon, WrenchIcon } from "lucide-react";
+import { useEffect } from "react";
+import { ComposerCommandItem } from "@/components/assistant-ui/elements/composer";
+import { ComposerPopover } from "./assistant-ui/composer-popover";
 import { referenceOptionId } from "./reference-picker";
 
 import type { ChatCommand } from "./commands";
 
-function lead(command: ChatCommand) {
-	if (command.source === "chat") return <GlobeSearchIcon size={16} />;
+/** The row's icon is the kind the command is: Chat's own, a skill, a prompt template, a workflow. */
+function icon(command: ChatCommand) {
+	if (command.source === "chat") return GlobeIcon;
 	switch (command.commandKind) {
 		case COMMAND_KINDS.skill:
-			return <SparkleIcon size={16} />;
+			return SparklesIcon;
 		case COMMAND_KINDS.prompt:
-			return <TerminalIcon size={16} />;
+			return TerminalIcon;
 		case COMMAND_KINDS.workflow:
-			return <PlayIcon size={16} />;
+			return PlayIcon;
 		default:
-			return <CodeIcon size={16} />;
+			return WrenchIcon;
 	}
 }
 
 /**
- * The `/` menu, anchored above the Chat composer: Chat's own commands and the agent's, each under
- * the heading of where it comes from, one line each with its description.
+ * The `/` menu over the Chat composer, assistant-ui's Slash commands: the icon of what each is,
+ * `/name`, one line of its description, and a `↵` on the row that Enter runs. Chat's own command
+ * comes first, then the ones the document's agent reports, in the order it reported them.
  */
 export function CommandPicker(
 	{
@@ -41,7 +42,6 @@ export function CommandPicker(
 		options: readonly ChatCommand[];
 	},
 ) {
-	let groupId = useId();
 	useEffect(() => {
 		let frame = requestAnimationFrame(() => {
 			document.getElementById(referenceOptionId(id, active))?.scrollIntoView({ block: "nearest" });
@@ -49,39 +49,26 @@ export function CommandPicker(
 		return () => cancelAnimationFrame(frame);
 	}, [active, id]);
 
-	// Consecutive rows of one group share its heading.
-	let groups: Array<{ group: string; rows: Array<{ command: ChatCommand; index: number }> }> = [];
-	for (let [index, command] of options.entries()) {
-		let last = groups.at(-1);
-		if (last?.group === command.group) last.rows.push({ command, index });
-		else groups.push({ group: command.group, rows: [{ command, index }] });
-	}
-
 	return (
-		<ComposerMenu variant="commands">
-			<div aria-label="Commands" id={id} role="listbox">
-				{groups.map((section, position) => (
-					<ComposerMenuGroup
-						id={`${groupId}-${position}`}
-						key={`${section.group}:${position}`}
-						label={section.group}
-					>
-						{section.rows.map(({ command, index }) => (
-							<ComposerCommandItem
-								active={index === active}
-								description={command.description}
-								id={referenceOptionId(id, index)}
-								key={command.id}
-								lead={lead(command)}
-								name={command.name}
-								onClick={() => onSelect(command)}
-								onMouseDown={event => event.preventDefault()}
-								onMouseEnter={() => onActive(index)}
-							/>
-						))}
-					</ComposerMenuGroup>
-				))}
-			</div>
-		</ComposerMenu>
+		<ComposerPopover id={id} kind="commands" label="Commands">
+			{options.map((command, index) => (
+				<ComposerCommandItem
+					active={index === active}
+					aria-selected={index === active}
+					command={{
+						name: command.name,
+						description: command.description ?? "",
+						icon: icon(command),
+					}}
+					id={referenceOptionId(id, index)}
+					key={command.id}
+					onClick={() => onSelect(command)}
+					onMouseDown={event => event.preventDefault()}
+					onMouseEnter={() => onActive(index)}
+					role="option"
+					tabIndex={-1}
+				/>
+			))}
+		</ComposerPopover>
 	);
 }

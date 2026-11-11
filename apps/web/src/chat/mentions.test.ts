@@ -274,30 +274,32 @@ describe("mention picker markup", () => {
 		}),
 	);
 
-	test("is a listbox of options named by login with the active one selected", () => {
+	test("is a listbox of options with the active one selected", () => {
 		expect(html).toContain('role="listbox"');
+		expect(html).toContain('aria-label="Mentions"');
 		expect(html).toContain('id="mentions-option-0"');
-		expect(html).toContain('aria-label="chopin"');
-		expect(html).toContain('aria-label="octocat"');
+		expect(html).toContain('id="mentions-option-1"');
 		expect(html.match(/aria-selected="true"/g)).toHaveLength(1);
-		expect(html).toContain('id="mentions-option-1" role="option" tabindex="-1" type="button"');
 		// And the one selected is that active option.
 		expect(html.match(/<button[^>]*id="mentions-option-1"[^>]*>/)![0]).toContain(
 			'aria-selected="true"',
 		);
+		// A row is not a tab stop: the draft keeps focus and points at it.
+		expect(html.match(/<button[^>]*id="mentions-option-0"[^>]*>/)![0]).toContain('tabindex="-1"');
+	});
+
+	test("lists Chopin first as an agent, and the people as human", () => {
+		expect(html.indexOf(">Chopin<")).toBeLessThan(html.indexOf(">octocat<"));
+		expect(html).toMatch(/>Chopin<\/span><span class="[^"]*">agent</);
+		expect(html).toMatch(/>octocat<\/span><span class="[^"]*">human</);
 	});
 
 	test("draws a decorative avatar for people and the Planner mark for the Planner", () => {
 		expect(html).toContain('alt=""');
 		expect(html).toContain("https://github.com/octocat.png?size=40");
 		expect(html).not.toContain("github.com/chopin.png");
-		expect(html).toContain('aria-label="Chopin"');
-	});
-
-	test("shows nothing but the login in a row", () => {
-		let text = html.replace(/<span aria-hidden="true">[^<]*<\/span>/g, "").replace(/<[^>]*>/g, " ")
-			.replace(/\s+/g, " ").trim();
-		expect(text).toBe("chopin octocat");
+		// The badge is hidden from a screen reader, which reads the row's own words.
+		expect(html).toContain('<span aria-hidden="true"><span aria-hidden="true"');
 	});
 });
 
@@ -306,6 +308,8 @@ describe("the @ menu with the document's parts", () => {
 		label: "Sections",
 		options: [
 			{ id: "heading:a", kind: "heading" as const, anchor: "a", label: "Overview", meta: "H1" },
+			{ id: "decision:d", kind: "decision" as const, decisionId: "d", label: "Pick a store" },
+			{ id: "file:f", kind: "file" as const, path: "src/a.ts", label: "src/a.ts" },
 		],
 	}];
 	let render = (options: MentionCandidate[]) =>
@@ -321,16 +325,14 @@ describe("the @ menu with the document's parts", () => {
 			}),
 		);
 
-	test("heads Chopin alone as Chopin, people with Chopin as People, and each kind of part by its own", () => {
-		let alone = render([{ kind: "planner", login: "chopin" }]);
-		expect(alone).toContain(">Chopin</div>");
-		expect(alone).not.toContain(">People</div>");
-		let together = render([{ kind: "planner", login: "chopin" }, {
-			kind: "person",
-			login: "octocat",
-		}]);
-		expect(together).toContain(">People</div>");
-		expect(together).toContain(">Sections</div>");
+	test("lists each kind of part after the people, tagged with its level or what it is", () => {
+		let html = render([{ kind: "planner", login: "chopin" }, { kind: "person", login: "octocat" }]);
+		expect(html.indexOf(">octocat<")).toBeLessThan(html.indexOf(">Overview<"));
+		expect(html).toMatch(/>Overview<\/span><span class="[^"]*">H1</);
+		expect(html).toMatch(/>Pick a store<\/span><span class="[^"]*">decision</);
+		expect(html).toMatch(/>src\/a.ts<\/span><span class="[^"]*">file</);
+		// No heading divides them: the tag says what a row is.
+		expect(html).not.toContain('role="group"');
 	});
 
 	test("numbers the rows after the people, so the keys and the pointer agree on which is active", () => {
