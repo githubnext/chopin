@@ -10,6 +10,7 @@
  */
 @import "tw-animate-css";
 @import "./components/geometry.css";
+@import "tw-shimmer";
 
 /* Chopin is light only (`color-scheme: light`), so `dark:` never follows the system. */
 @custom-variant dark (&:is(.dark *));

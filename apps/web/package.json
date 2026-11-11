@@ -38,7 +38,8 @@
 		"react": "catalog:react",
 		"react-dom": "catalog:react",
 		"react-markdown": "^10.1.0",
-		"remark-gfm": "4.0.1"
+		"remark-gfm": "4.0.1",
+		"tw-shimmer": "^0.4.14"
 	},
 	"devDependencies": {
 		"@tailwindcss/vite": "catalog:ui",

@@ -2,11 +2,25 @@
 	"schemaVersion": 1,
 	"files": [
 		{
+			"file": "apps/web/src/components/assistant-ui/elements/composer.tsx",
+			"registry": "@assistant-ui",
+			"item": "elements-composer",
+			"version": "assistant-ui/assistant-ui@d25a97a22f00",
+			"sha256": "397fb48354d73ae3eb2e51fc4872601eb8cc863e981520a4a7de65865db65308"
+		},
+		{
 			"file": "apps/web/src/components/assistant-ui/elements/model-selector.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-model-selector",
 			"version": "assistant-ui/assistant-ui@d25a97a22f00",
 			"sha256": "b8cf3a7ebf2c9ae778c2e65680bbb834aa140dc8acd38811e23b1b1f149f809b"
+		},
+		{
+			"file": "apps/web/src/components/assistant-ui/elements/surfaces.tsx",
+			"registry": "@assistant-ui",
+			"item": "elements-surfaces",
+			"version": "assistant-ui/assistant-ui@d25a97a22f00",
+			"sha256": "5d81fbb669e67ae20026cd30ed57efc51a5e3ee0f4f5d265e1723de75359b8fa"
 		},
 		{
 			"file": "apps/web/src/components/assistant-ui/utils/model-selection.ts",
@@ -16,11 +30,25 @@
 			"sha256": "019d3dca2d33724de16b9eb54757344cd05bd5c89f2fc3cb2885cdcc2590f4d9"
 		},
 		{
+			"file": "apps/web/src/components/assistant-ui/utils/range.ts",
+			"registry": "@assistant-ui",
+			"item": "elements-range",
+			"version": "assistant-ui/assistant-ui@d25a97a22f00",
+			"sha256": "555d880ea1ac3a2b8f0cdbe76bece147e72f6748a07a643dbe404957c64d451d"
+		},
+		{
+			"file": "apps/web/src/components/assistant-ui/utils/useIsomorphicLayoutEffect.ts",
+			"registry": "@assistant-ui",
+			"item": "elements-surfaces",
+			"version": "assistant-ui/assistant-ui@d25a97a22f00",
+			"sha256": "8db117d730e640655e5099e086af4e00d545c283839d9ef5885ca93419d51893"
+		},
+		{
 			"file": "apps/web/src/components/geometry.css",
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "ceabef09e07bb709c4bc043fcf86467c65ba7e412a16a353be7f8aa9ec395426"
+			"sha256": "c18ec4635601f5d0ae292d3c83a64f19531508e5a7862a010a9ae4be1605f42d"
 		},
 		{
 			"file": "apps/web/src/components/ui/button.tsx",
