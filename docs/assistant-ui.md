@@ -16,8 +16,13 @@ instead of adding the runtime. The model selector, `elements-model-selector`, wa
 copied, and the composer, `elements-composer`, with the `surfaces` recipes and `range` helper it
 stands on, is Chat's composer shell. Its menu and rows (`ComposerMenu`, `ComposerPersonItem`,
 `ComposerCommandItem`) are Chat's `@` and `/` menus, and `elements-directive-text` and the Badge it
-stands on are the Chopin chip; each carries a [recorded patch](#patching-a-copy) where Chat needed an
-extension point.
+stands on are the Chopin chip. The same Composer holds the standalone elements for what a message
+carries: its staged-file chips (`ComposerAttachments`, `ComposerAttachmentChip`) and the dictation's
+voice and button (`ComposerVoice`, `ComposerVoiceButton`) fill the box's slots, and
+`elements-message-attachment` draws a sent message's files. The tile the registry calls `attachment`
+draws a live runtime attachment through `AttachmentPrimitive` and has no props-driven form, so it is
+not copied and the chip carries a file's states from props. Each carries a
+[recorded patch](#patching-a-copy) where Chat needed an extension point.
 
 ## Add it
 
@@ -123,7 +128,9 @@ Shadows are Tailwind's, tinted: each `rgb(0 0 0 / x)` of Tailwind's shadow value
 (`--shadow-color`) at the same opacity, so no raw black is drawn. It maps roles only. Chopin's `btn-outline` edge, `btn-secondary` fill and depth shadows are not mapped,
 because assistant-ui draws none of them. Chopin is light only, so `.dark` reads the same tokens and
 `dark:` classes follow `.dark`, never the system setting. A copy that names a raw palette colour
-(`blue-500`) needs a line in that file's `@theme`, mapped to the Chopin token that plays the role.
+(`blue-500`) needs a line in that file's `@theme`, mapped to the Chopin token that plays the role:
+`red-600`, which a copy writes words in (a file's reason), is the danger text, since the destructive
+red does not read as text on a soft fill (a browser spec checks the contrast).
 
 ## Drive it from Chopin's state
 
