@@ -59,6 +59,7 @@ export type { Announcer, NoticeInput } from "./notices";
 import { isChannelId } from "../channels/id";
 import { holdsQuestion } from "../questions/records";
 import { broadcast, fail, PASSING, reply, tell } from "../wire";
+import { introduce } from "../people";
 import { MAX_MESSAGE_BYTES } from "./limits";
 import { contributed } from "./initiative";
 import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./reply-policy";
@@ -951,7 +952,7 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
  */
 export async function invoke(
 	context: Room,
-	user: { id: string; login: string },
+	user: { id: string; login: string; avatarUrl?: string },
 	text: string,
 	checkout?: string,
 	focus?: Focus,
@@ -1039,6 +1040,8 @@ export async function invoke(
 		}
 		if (chat.closed) return "planner-unavailable" as const;
 		if (verified) rememberCheckout(room, verified);
+		// The caller has no socket in the room, so nothing else has told it who they are.
+		introduce(server, room, { login: user.login, avatarUrl: user.avatarUrl });
 		announce(server, room, entry);
 		if (waits || occupied(chat)) {
 			chat.waiting.push({

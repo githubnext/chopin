@@ -349,8 +349,14 @@ than simultaneous document panes.
 
 1. The HTTP upgrade validates the exact Origin, browser session, instance
    admission, App installation, repository identity, and pull access.
-2. `session:hello` establishes the socket's identity and edit capability.
-3. The editor asks `plan:open` when the transport becomes available. Questions,
+2. `session:hello` establishes the socket's identity and edit capability. It
+   and every `session:presence` name each member with the profile picture
+   GitHub's API returned at sign-in (`Member.avatarUrl`, stored in
+   `users.avatar_url`), never for a demo actor.
+3. The editor asks `plan:open` when the transport becomes available. Before its
+   snapshots, the socket is sent `session:people`: the stored pictures of the
+   people the document's Chat, comments, decisions and builds name who are not
+   in the room, so an author who has left is still drawn as themselves. Questions,
    comments, and Chat receive their own current snapshots.
 4. The open request supplies the client's epoch and Yjs state vector so the
    server can return only missing state when histories are compatible.
@@ -362,6 +368,17 @@ than simultaneous document panes.
 7. When a room becomes empty, the server removes its registry entry and starts
    an asynchronous final close and checkpoint. That close is not yet serialized
    against opening a replacement room for the same channel.
+
+Pictures travel only on frames for sockets joined to the room, which are the
+sockets allowed to read the document, and never on awareness, which clients write
+themselves. The browser keeps one map from login to picture; a face uses it first,
+then `github.com/<login>.png`, which does not exist for every account (an Enterprise
+Managed User's `name_company` has none), then the person's initial. `avatarUrl` and
+`session:people` are optional: an older client ignores them and an older server
+omits them, and the face falls back to the guess. A coding agent's message posted
+through `invoke_planner` introduces its caller to the room with a `session:people`
+frame, since the caller has no socket there. The history of a document's versions
+(`GET /api/channels/:id/versions`) already names each author with `avatarUrl`.
 
 Opening is driven by connection state, not only editor mount. This is what makes
 a late initial connection and a later reconnect both request missed state and

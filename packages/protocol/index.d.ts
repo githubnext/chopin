@@ -44,6 +44,7 @@ export declare namespace Session {
 	export type Outgoing =
 		| Hello
 		| Presence
+		| People
 		| Access
 		| Channel
 		| Deleted
@@ -60,6 +61,20 @@ export declare namespace Session {
 		client: string;
 		/** Roster profile when the connection claimed a demo actor; the handle is the roster ID. */
 		actor?: { name: string; avatar: string };
+		/**
+		 * The profile picture GitHub's API returned for this login when they signed in, as the server
+		 * stored it. Optional: absent for a demo actor and from a server that predates it, and a
+		 * client then falls back to the picture at `github.com/<handle>.png`, which does not exist
+		 * for every account (an Enterprise Managed User's `name_company`, for one).
+		 */
+		avatarUrl?: string;
+	};
+
+	/** A person a document names, with the picture GitHub gave their login. */
+	export type Person = {
+		/** The GitHub login, as written wherever the document names the person. */
+		login: string;
+		avatarUrl: string;
 	};
 
 	/** Sent once, immediately, to the socket that just joined. */
@@ -163,6 +178,18 @@ export declare namespace Session {
 	export type Presence = KIND<"session:presence"> & {
 		members: Member[];
 	};
+
+	/**
+	 * The profile pictures of people this document names who are not in the room, so that an
+	 * author who has left is drawn as themselves: whoever spoke in Chat or in a comment thread,
+	 * whoever settled or was asked about a decision, and whoever started a build. Sent to a
+	 * socket before it is greeted with the document, and to the whole room when someone the room
+	 * has not met is named by something said after, such as a coding agent's message posted
+	 * through MCP. Present people carry theirs in `Member`. It goes only to sockets joined to the
+	 * room, which are allowed to read it. Optional: an older client ignores the frame and guesses
+	 * from each login.
+	 */
+	export type People = KIND<"session:people"> & { people: Person[] };
 
 	/** A request could not be served. Carries the `rid` it answers. */
 	export type Failure = KIND<"session:error"> & {

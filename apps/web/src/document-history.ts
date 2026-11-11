@@ -1,3 +1,5 @@
+import { rememberAvatars } from "@chopin/editor/people";
+
 import { response } from "./api";
 
 export type VersionAuthor = { login: string; avatarUrl?: string };
@@ -25,8 +27,20 @@ export type DocumentVersionSource = {
 	source: string;
 };
 
-export function documentHistory(channelId: string, signal?: AbortSignal): Promise<DocumentHistory> {
-	return response(`/api/channels/${encodeURIComponent(channelId)}/versions`, { signal });
+export async function documentHistory(
+	channelId: string,
+	signal?: AbortSignal,
+): Promise<DocumentHistory> {
+	let history = await response<DocumentHistory>(
+		`/api/channels/${encodeURIComponent(channelId)}/versions`,
+		{ signal },
+	);
+	// Each author arrives with the picture the server stored for them; every face for them uses it.
+	rememberAvatars(
+		[history.created.author, ...history.versions.map(version => version.author)]
+			.flatMap(author => author ? [{ login: author.login, avatarUrl: author.avatarUrl }] : []),
+	);
+	return history;
 }
 
 export function documentVersion(

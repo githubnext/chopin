@@ -449,6 +449,38 @@ test("an invoked instruction persists verbatim as a member message before public
 	}
 });
 
+test("an invoking caller is introduced to the room with their picture before their message is posted", async () => {
+	let { context, events, user } = await setup();
+	let finished = Promise.withResolvers<void>();
+	context.openPlannerSession = async () => ({
+		ok: true,
+		value: {
+			async stream() {
+				return {
+					fullStream: (async function*() {
+						await finished.promise;
+						yield { type: "finish" };
+					})(),
+				} as never;
+			},
+			destroy: async () => {},
+		},
+	});
+	try {
+		let caller = { ...user, avatarUrl: "https://avatars.test/u/7" };
+		expect(await Chat.invoke(context, caller, "Plan this.")).toBeUndefined();
+		let kinds = events.map(event => event.kind);
+		expect(kinds.indexOf("session:people")).toBeGreaterThanOrEqual(0);
+		expect(kinds.indexOf("session:people")).toBeLessThan(kinds.indexOf("chat:message"));
+		expect(events.find(event => event.kind === "session:people")).toMatchObject({
+			people: [{ login: "ana", avatarUrl: "https://avatars.test/u/7" }],
+		});
+	} finally {
+		finished.resolve();
+		await context.chat.running;
+	}
+});
+
 test("queued invocations post their durable message exactly once", async () => {
 	let fixture = await setup();
 	let { context, user } = fixture;

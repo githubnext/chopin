@@ -1,3 +1,4 @@
+import { rememberAvatars } from "@chopin/editor/people";
 import { lazy, Suspense, useEffect, useState } from "react";
 
 import * as Api from "./api";
@@ -22,6 +23,10 @@ export function App() {
 		// a second round trip; it stays out of the initial bundle.
 		void loadHostedLogin().catch(() => {});
 		Api.session().then(value => {
+			// The picture GitHub's API returned at sign-in is every face for this person's.
+			if (value.user) {
+				rememberAvatars([{ login: value.user.login, avatarUrl: value.user.avatarUrl }]);
+			}
 			if (active) setSession(value);
 		}, reason => {
 			if (active) setError(reason);

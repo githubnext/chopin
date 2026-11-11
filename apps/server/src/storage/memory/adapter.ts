@@ -232,6 +232,16 @@ export class MemoryStorage implements StorageAdapter {
 			return Promise.resolve(user(saved));
 		},
 		get: id => Promise.resolve(this.#users.get(id)).then(value => value && user(value)),
+		byLogins: logins => {
+			let wanted = new Set(logins.map(login => login.toLowerCase()));
+			let owners = new Map<string, UserRecord>();
+			for (let value of this.#users.values()) {
+				let key = value.login.toLowerCase();
+				let held = owners.get(key);
+				if (wanted.has(key) && (!held || held.updatedAt < value.updatedAt)) owners.set(key, value);
+			}
+			return Promise.resolve([...owners.values()].map(user));
+		},
 	};
 
 	readonly sessions: SessionStore = {

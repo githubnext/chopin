@@ -77,6 +77,7 @@ import { clientBuild, proxy, serve } from "./client";
 import { describe, load } from "./config";
 import { GitHubClient, GitHubError } from "./github/client";
 import { GitHubReferences } from "./github/references";
+import { builders, named, pictures, present } from "./people";
 import { registerConnectorScript } from "./http/connector-script";
 import { cut } from "./handover/cut";
 import { acquireWhenFree } from "./handover/lease-wait";
@@ -1347,6 +1348,15 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				if (currentChannel) applyChannelAccess(ws, currentChannel, ws.data.canManage);
 				implementations?.track(room.id);
 				let parent = room.parentChannelId;
+				// Who the document names but the room does not hold, ahead of the frames that name them.
+				let people = await pictures(storage.users, {
+					logins: named(opened),
+					ids: builders(opened),
+				}).catch(err => {
+					console.error("chopin: could not read the pictures of a document's people -", err);
+					return [];
+				});
+				if (!ws.data.closed && room.members.get(ws.data.client) === ws) present(ws, people);
 				await greetJoinedPlan(
 					opened,
 					ws,
@@ -1991,13 +2001,7 @@ function openRoomSocket(ws: Socket): void {
 		...(ws.data.channelDescription
 			? { description: ws.data.channelDescription }
 			: {}),
-		you: {
-			handle: ws.data.handle,
-			client: ws.data.client,
-			...(ws.data.actor
-				? { actor: { name: ws.data.actor.name, avatar: ws.data.actor.avatar } }
-				: {}),
-		},
+		you: Rooms.member(ws),
 		members: Rooms.members(room),
 		canEdit: ws.data.canEdit,
 		canManage: ws.data.canManage,
