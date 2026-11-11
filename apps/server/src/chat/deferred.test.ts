@@ -1128,6 +1128,51 @@ test("under AUTH_MODE=local with a Planner on the same computer, the server's wi
 	expect(await w.rows()).toEqual([]);
 });
 
+test("under AUTH_MODE=local, an MCP invocation that waited behind a running turn starts after the reply that was running, and the room is told it moved", async () => {
+	let config = configured({ ...LOCAL, AGENT: "on", HARNESS: "copilot-sdk" });
+	let w = await world({ config });
+	expect(w.context.deferred).toBeUndefined();
+	let said = () =>
+		w.context.chat.entries.filter(entry => entry.author.kind !== "system").map(entry => entry.text);
+	w.planner.hold();
+	await w.send("first");
+	await waitFor(() => w.planner.running === 1);
+	expect(await Chat.invoke(w.context, w.ana, "second via mcp")).toBeUndefined();
+	// Saved where it was said, before the reply, and listed as waiting until its turn starts.
+	expect(said()).toEqual(["first", "second via mcp"]);
+	let waiting = w.events.findLast(event => event.kind === "chat:queue") as unknown as {
+		waiting: Array<{ text: string }>;
+	};
+	expect(waiting.waiting.map(item => item.text)).toEqual(["second via mcp"]);
+	let id = memberEntry(w.context, "second via mcp")!.id;
+
+	w.planner.release();
+	await waitFor(() => w.planner.running === 1 && w.prompts.length === 2);
+
+	// Its turn has started: the reply the reader was watching stays where it was, above it.
+	expect(said()).toEqual(["first", "answer 1", "second via mcp"]);
+	expect(
+		w.events.some(event =>
+			event.kind === "chat:message" && (event.entry as { id: string }).id === id
+			&& event.moved === true
+		),
+	).toBe(true);
+	let chat = w.context.chat;
+	expect(chat.entries[chat.turn!.entryOffset - 1]!.text).toBe("second via mcp");
+	let stored = (await w.storage.collaboration.load(w.channel.id, new Date()))!
+		.sidecar as unknown as {
+			transcript: Array<{ text: string; author: { kind: string } }>;
+		};
+	expect(
+		stored.transcript.filter(entry => entry.author.kind !== "system").map(entry => entry.text),
+	).toEqual(["first", "answer 1", "second via mcp"]);
+
+	w.planner.hold(false);
+	w.planner.release();
+	await w.turns(2);
+	expect(said()).toEqual(["first", "answer 1", "second via mcp", "answer 2"]);
+});
+
 test("a message to a machine's Planner is kept while the machine is away in local mode too, and a local Planner that is never away keeps its queue in memory", () => {
 	// Hosted mode, and the local mode that runs its Planner on a machine, save every request.
 	expect(keepsRequests(configured({ AGENT: "on", HARNESS: "remote" }))).toBe(true);

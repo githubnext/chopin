@@ -3349,8 +3349,7 @@ async function startNext(
 		let begun: Begun = "started";
 		let turnContext = { ...context, invokedBy: next.invokedBy, draft: next.draft };
 		try {
-			if (next.deferred && context.deferred) begun = await beginTurn(turnContext, next);
-			else await context.persist();
+			begun = await beginTurn(turnContext, next);
 		} catch (err) {
 			if (chat.handoffJob === next.job) chat.handoffJob = undefined;
 			console.error("[chat] could not save a queued turn:", err);
@@ -3620,8 +3619,17 @@ async function beginTurn(context: Room, next: Waiting): Promise<Begun> {
 	let { chat } = context;
 	let held = next.deferred;
 	if (!held || !context.deferred) {
-		await context.persist();
-		return "started";
+		// A message saved where it was sent, with no row, waits just as a saved one does.
+		if (!next.message || !next.posted) {
+			await context.persist();
+			return "started";
+		}
+		chat.beginning = next;
+		try {
+			return await beginPosted(context, next);
+		} finally {
+			if (chat.beginning === next) chat.beginning = undefined;
+		}
 	}
 	chat.beginning = next;
 	try {
@@ -3660,13 +3668,7 @@ async function beginRow(
 			// A message that waited was saved where it was sent, and is not drawn there while it waits.
 			// Its turn starts after whatever was said meanwhile, which the reader has already seen, so
 			// it is saved after it, with its start.
-			entry
-				? () => ({
-					entries: [...chat.entries.filter(value => value !== entry), entry],
-					runs: chat.runs,
-					initiativePaused: chat.initiativePaused,
-				})
-				: undefined,
+			entry ? endingWith(chat, entry) : undefined,
 			[move(held.row, "waiting", "started")],
 		);
 	} catch (err) {
@@ -3681,17 +3683,49 @@ async function beginRow(
 		await discard(context, opened);
 		return "gone";
 	}
-	let at = entry ? chat.entries.indexOf(entry) : -1;
-	let moved = at >= 0 && at < chat.entries.length - 1;
-	if (entry && moved) {
-		chat.entries.splice(at, 1);
-		chat.entries.push(entry);
-		// The ended turn still counts its entries from the start: what left ahead of it moves it up.
-		if (chat.turn && at < chat.turn.entryOffset) chat.turn.entryOffset--;
-	}
-	if (entry) announce(server, room, entry, moved);
+	if (entry) announce(server, room, entry, moveLast(chat, entry));
 	next.opened = opened;
 	return "started";
+}
+
+/**
+ * Saves the start of a message that waited in the transcript with no row of its own, and moves it
+ * after whatever was said meanwhile, as `beginRow` does for one kept as a row. The room is told
+ * only once the move is saved.
+ */
+async function beginPosted(context: Room, next: Waiting): Promise<Begun> {
+	let { chat, room, server } = context;
+	let entry = chat.entries.find(value => value.id === next.id);
+	if (!entry) {
+		await context.persist();
+		return "started";
+	}
+	await context.persist(endingWith(chat, entry));
+	if (moveLast(chat, entry)) announce(server, room, entry, true);
+	return "started";
+}
+
+/** The transcript as it will be once a waiting message's turn starts: the message last. */
+function endingWith(
+	chat: Chat,
+	entry: Wire.Entry,
+): () => Pick<Chat, "entries" | "runs" | "initiativePaused"> {
+	return () => ({
+		entries: [...chat.entries.filter(value => value !== entry), entry],
+		runs: chat.runs,
+		initiativePaused: chat.initiativePaused,
+	});
+}
+
+/** Moves a waiting message to the end of the transcript, once that is saved. Whether it moved. */
+function moveLast(chat: Chat, entry: Wire.Entry): boolean {
+	let at = chat.entries.indexOf(entry);
+	if (at < 0 || at === chat.entries.length - 1) return false;
+	chat.entries.splice(at, 1);
+	chat.entries.push(entry);
+	// The ended turn still counts its entries from the start: what left ahead of it moves it up.
+	if (chat.turn && at < chat.turn.entryOffset) chat.turn.entryOffset--;
+	return true;
 }
 
 /**
