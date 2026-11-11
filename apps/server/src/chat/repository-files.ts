@@ -120,7 +120,7 @@ export class RepositoryFiles {
  * An empty query is the first files, in order.
  */
 export function matchFiles(paths: readonly string[], query: string, limit: number): string[] {
-	let wanted = query.trim().toLowerCase();
+	let wanted = query.trimStart().toLowerCase();
 	if (!wanted) return paths.slice(0, limit);
 	let buckets: string[][] = [[], [], [], []];
 	for (let path of paths) {

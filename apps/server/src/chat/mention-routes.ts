@@ -15,6 +15,9 @@ import type { Router } from "../http/router";
 import type { DocumentTarget } from "../plan/service";
 import type { RepositoryFiles } from "./repository-files";
 
+/** A reference's label, `@` and the path, holds at most this many characters less one. */
+const MAX_FILE_TOKEN = 121;
+
 export type MentionRouteOptions = {
 	/** The document as it stands now. */
 	current: (channelId: string) => Promise<DocumentTarget | undefined>;
@@ -96,7 +99,16 @@ export function registerMentionRoutes(
 				headings: headings.map(({ anchor, text, level }) => ({ anchor, text, level })),
 				decisions: decisions.map(({ id, title }) => ({ id, title })),
 				research,
-				...(listing ? { files: matchFiles(listing.paths, query, asked) } : {}),
+				// A path a token cannot hold is not offered, since it could not be sent.
+				...(listing
+					? {
+						files: matchFiles(
+							listing.paths.filter(path => [...path].length < MAX_FILE_TOKEN),
+							query,
+							asked,
+						),
+					}
+					: {}),
 			};
 			return json(body);
 		} catch (error) {

@@ -53,6 +53,15 @@ function components(node: RootContent, visit: (element: MdxJsxFlowElement) => vo
 	}
 }
 
+/** The most of a heading's or a Decision's words a mention shows, so its label fits one token. */
+export const MAX_POINTER_TEXT = 100;
+
+/** `text` cut to a whole number of characters, with an ellipsis where it was cut. */
+export function shortened(text: string, limit = MAX_POINTER_TEXT): string {
+	let characters = [...text];
+	return characters.length <= limit ? text : `${characters.slice(0, limit - 1).join("")}…`;
+}
+
 /** What the document's source holds; empty for a source that does not parse. */
 export function documentPointers(source: string): DocumentPointers {
 	let root: Root;
@@ -71,7 +80,7 @@ export function documentPointers(source: string): DocumentPointers {
 		seen.set(base, repeats + 1);
 		headings.push({
 			anchor: repeats === 0 ? base : `${base}-${repeats}`,
-			text,
+			text: shortened(text),
 			level: node.depth,
 			line: node.position?.start.line ?? 1,
 		});
@@ -91,7 +100,7 @@ export function documentPointers(source: string): DocumentPointers {
 			let title = question
 				? (attribute(question, "header") || attribute(question, "prompt") || "")
 				: "";
-			decisions.push({ id, title });
+			decisions.push({ id, title: shortened(title) });
 		});
 	}
 	return { headings, decisions, research };
@@ -103,7 +112,7 @@ export function documentPointers(source: string): DocumentPointers {
  * given. The case of the query and of a title does not matter. An empty query is every title.
  */
 export function matchPointers(titles: readonly string[], query: string, limit: number): number[] {
-	let wanted = query.trim().toLowerCase();
+	let wanted = query.trimStart().toLowerCase();
 	let ranked: Array<{ index: number; rank: number }> = [];
 	for (let [index, title] of titles.entries()) {
 		let lower = title.toLowerCase();

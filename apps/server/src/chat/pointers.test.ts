@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { documentPointers, headingAnchor, matchPointers } from "./pointers";
+import { documentPointers, headingAnchor, matchPointers, shortened } from "./pointers";
 
 const SOURCE = [
 	"# Overview",
@@ -56,6 +56,15 @@ describe("what a document's own parts are", () => {
 			decisions: [],
 			research: [],
 		});
+	});
+
+	it("cuts a long heading or Decision header for its label, and keeps the anchor of all of it", () => {
+		let long = "x".repeat(150);
+		let found = documentPointers(`# ${long}\n`);
+		expect(found.headings[0]!.anchor).toBe(long);
+		expect([...found.headings[0]!.text]).toHaveLength(100);
+		expect(found.headings[0]!.text.endsWith("…")).toBe(true);
+		expect(shortened("short")).toBe("short");
 	});
 
 	it("slugs a heading as GitHub does, keeping letters, digits, hyphens and underscores", () => {
