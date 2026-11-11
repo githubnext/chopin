@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { handler, TOOLS } from "./mcp";
+import { MAX_IMAGE_REQUEST_BYTES } from "./mcp/image";
 
 import type { DocumentReader, Implementations, LinkedDocument } from "./mcp";
 import type { Run } from "./tasks/graphs";
@@ -478,7 +479,7 @@ describe("the MCP read protocol", () => {
 				method: "POST",
 				headers: {
 					authorization: "Bearer allowed",
-					"content-length": "1463641",
+					"content-length": String(MAX_IMAGE_REQUEST_BYTES + 1),
 					"content-type": "application/json",
 				},
 				body: "{}",
@@ -493,7 +494,8 @@ describe("the MCP read protocol", () => {
 				},
 				body: new ReadableStream({
 					start(controller) {
-						for (let index = 0; index < 12; index++) {
+						let chunks = Math.ceil((MAX_IMAGE_REQUEST_BYTES + 1) / 131_072);
+						for (let index = 0; index < chunks; index++) {
 							controller.enqueue(new Uint8Array(131_072));
 						}
 						controller.close();

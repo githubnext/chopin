@@ -1,5 +1,6 @@
 import { GitHubError } from "../github/client";
 import { extensionType, HOSTED_IMAGE_FILE } from "./format";
+import { requestedWidth, served } from "./resize";
 
 import type { HostedAuth } from "../auth/routes";
 import type { Router } from "../http/router";
@@ -18,7 +19,8 @@ function plain(status: number, message: string): Response {
 /**
  * Serve uploaded document images to people who can read a document holding
  * them. Every refusal is the same 404, so a URL reveals nothing to anyone else.
- * `?document=<id>` serves only that document's own upload of the image.
+ * `?document=<id>` serves only that document's own upload of the image, and `?w=<width>` a copy
+ * that wide where the image is wider (Slack's thumbnail widths only).
  */
 export function registerImageRoutes(router: Router, auth: HostedAuth): void {
 	router.on("GET", "/images/:file", async (request, url, params) => {
@@ -48,12 +50,18 @@ export function registerImageRoutes(router: Router, auth: HostedAuth): void {
 				}
 				let image = await auth.storage.images.get(channelId, sha256);
 				if (!image || image.mimeType !== type) return missing;
-				return new Response(image.bytes.slice(), {
+				let shown = await served(
+					`image:${sha256}`,
+					image,
+					type,
+					requestedWidth(url.searchParams.get("w")),
+				);
+				return new Response(shown.bytes.slice(), {
 					headers: {
 						"cache-control": "private, max-age=31536000, immutable",
 						"content-disposition": "inline",
 						"content-security-policy": "default-src 'none'; sandbox",
-						"content-type": image.mimeType,
+						"content-type": shown.mimeType,
 						"x-content-type-options": "nosniff",
 					},
 				});

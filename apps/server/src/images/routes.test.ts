@@ -183,6 +183,30 @@ describe("hosted image routes", () => {
 		});
 	});
 
+	it("serves a smaller copy at a thumbnail width, and the stored image without one", async () => {
+		let { router, github, storage, upload, cookie } = await setup();
+		let channel = await upload("score");
+		github.access.set("score", { pull: true, push: false, admin: false });
+		let photo = await new Bun.Image(fixture("option-write-back.png")).resize(1600, 800).png()
+			.bytes();
+		let photoSha = new Bun.CryptoHasher("sha256").update(photo).digest("hex");
+		await storage.images.put({
+			channelId: channel.id,
+			sha256: photoSha,
+			mimeType: "image/png",
+			bytes: photo,
+			uploadedBy: "U_octocat",
+			now: new Date(),
+		});
+		let copy = await router.handle(get(`/images/${photoSha}.png?w=360`, cookie));
+		expect(copy?.headers.get("content-type")).toBe("image/png");
+		let meta = await new Bun.Image(new Uint8Array(await copy!.arrayBuffer())).metadata();
+		expect([meta.width, meta.height]).toEqual([360, 180]);
+		let whole = await router.handle(get(`/images/${photoSha}.png`, cookie));
+		expect(new Uint8Array(await whole!.arrayBuffer())).toEqual(new Uint8Array(photo));
+		await expectNotFound(await router.handle(get(`/images/${photoSha}.png?w=360`)));
+	});
+
 	it("serves the image through any readable document it was uploaded to", async () => {
 		let { router, github, upload, sha256, cookie } = await setup();
 		await upload("hidden");

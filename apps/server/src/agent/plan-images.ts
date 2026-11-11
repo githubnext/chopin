@@ -8,7 +8,8 @@ export const MAX_ALT_LENGTH = 200;
 export type PlanImage = { bytes: Uint8Array; mimeType: ImageType; alt: string };
 
 const REFUSALS = {
-	"too-large": "The image is larger than 1 MiB. Make it smaller, or use a JPEG or WebP.",
+	"too-large":
+		"The image is larger than 16 MiB, or could not be read to make a smaller copy. Send a smaller PNG, JPEG or WebP.",
 	"unsupported-type": "Only PNG, JPEG, WebP and GIF images can be stored.",
 	"signature-mismatch": "The bytes are not the image type given as mimeType.",
 } as const;
@@ -20,9 +21,10 @@ export function altText(value: string): string {
 
 /**
  * Validate `upload_plan_image` arguments. The document is the Planner's own, so the image is not
- * given a document; the bytes get the same checks `upload_image` makes.
+ * given a document; the bytes get the same checks `upload_image` makes, and one over 1 MiB is
+ * stored as a smaller copy.
  */
-export function planImage(raw: unknown, document: string): PlanImage {
+export async function planImage(raw: unknown, document: string): Promise<PlanImage> {
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
 		throw new Error("upload_plan_image arguments must be an object");
 	}
@@ -36,7 +38,7 @@ export function planImage(raw: unknown, document: string): PlanImage {
 	}
 	let alt = altText(args.alt);
 	if (alt.length > MAX_ALT_LENGTH) throw new Error(`alt exceeds ${MAX_ALT_LENGTH} characters`);
-	let prepared = prepareImage({ id: document, data: args.data, mimeType: args.mimeType });
+	let prepared = await prepareImage({ id: document, data: args.data, mimeType: args.mimeType });
 	if (!prepared) throw new Error("data must be standard base64 and mimeType an image type");
 	if ("refusal" in prepared) throw new Error(REFUSALS[prepared.refusal]);
 	return { bytes: prepared.input.bytes, mimeType: prepared.input.mimeType, alt };

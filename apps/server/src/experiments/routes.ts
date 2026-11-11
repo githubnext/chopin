@@ -2823,7 +2823,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 							args.progress === undefined ? undefined : z.string().max(2000).parse(args.progress),
 						);
 					} else if (name === "upload_investigation_image") {
-						let prepared = prepareImage({ id: current.documentId, ...args });
+						let prepared = await prepareImage({ id: current.documentId, ...args });
 						if (!prepared) fail("invalid-image");
 						if ("refusal" in prepared) fail(prepared.refusal);
 						let { bytes, mimeType } = prepared.input;

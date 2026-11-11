@@ -873,12 +873,13 @@ with a plain sentence that starts `Image couldn't be shown:` and says why, and
 its type is not one Chat shows, that its data is not base64, that its bytes are
 not the type it names (or are another type, or are cut short), that its block
 has no data or type, that it did not fit one message, that Chopin could not
-store it, which gives no detail of the failure, and that it is larger than the
-server's `MAX_STORED_IMAGE_BYTES`, 10 MiB by default. That last sentence is
-`Image too large to show (N MB, limit M MB)`, with the image's size rounded up
-and the limit rounded down to a tenth of a megabyte, shown without the decimal
-when whole, and does not start with `Image couldn't be shown:`; a saved
-`refusedImages` entry is valid with either. `refusedImages` is an optional field that old browsers ignore,
+store it, which gives no detail of the failure, and that it is more pixels than
+Chopin can make smaller. An image is never refused for its size: one larger than
+the server's `MAX_STORED_IMAGE_BYTES`, 10 MiB by default, is stored as a smaller
+copy of itself, as below. Turns before that saved
+`Image too large to show (N MB, limit M MB)` for such an image, which does not
+start with `Image couldn't be shown:`; a saved `refusedImages` entry is valid with
+either. `refusedImages` is an optional field that old browsers ignore,
 saved with the message; a message may have it without `images`. The tool's row
 in Work details shows the `text` blocks and how many images the result carried,
 never their bytes. A `preliminary` or failed result shows no images and no
@@ -887,21 +888,24 @@ reasons.
 [structured tool error](#structured-tool-errors), it is a convention, not a new
 wire shape: `result` is still any JSON, so a client sends it to any server, and a
 server that does not know it shows the result as before. A picture has no
-size limit of its own beyond the server's, unlike the 1 MiB of `upload_image`: the
-`MAX_STORED_IMAGE_BYTES` setting (10 MiB by default, see
-[Self-hosting](self-hosting.md)) bounds the decoded bytes of every image a tool made,
-whichever harness ran the tool, and a larger one is never stored and is said to be
-too large, as above. Over this connection the whole message, images included, stays
-within the 2 MiB message limit as well, so the tighter of the two applies: with the
-default setting that is the message limit, and a setting below 2 MiB refuses a
-picture that would have fitted one message, with the same sentence.
+size limit of its own: the `MAX_STORED_IMAGE_BYTES` setting (10 MiB by default, see
+[Self-hosting](self-hosting.md)) bounds the decoded bytes Chopin stores for every image a
+tool made, whichever harness ran the tool, and a larger one is stored as a smaller copy of
+itself (at most 4096 pixels on its longest side, then narrower until it fits; a JPEG stays a
+JPEG and anything else becomes a WebP, which keeps transparency), the way Slack keeps a
+large photo and shows a smaller one. Chat then reads it at Slack's thumbnail widths
+(`?w=360` and so on, see [Storage](storage.md)). Over this connection the whole message,
+images included, stays within the 2 MiB message limit as well.
 
 A connection refuses a message over that limit before the server reads it, so
-only the client can say that an image did not fit. The `@chopin/agent-link`
-client does: when a `tool-result` part would be over the limit, it sends the
-image blocks that do not fit, largest first and the later of equals first, with
-`data` empty and `tooLarge` set to the bytes the image would have taken, and
-Chat then says so beside the images. A block with `tooLarge` is never stored,
+only the client can make an image fit. The `@chopin/agent-link` client does:
+when a `tool-result` part would be over the limit, it sends each image that does
+not fit, largest first and the later of equals first, as a smaller copy of itself
+that fits what is left of the message, made with `Bun.Image` on the client's own
+machine, and the parts after it wait for it, so they arrive in order. Only where no
+copy can be made (a runtime without `Bun.Image`, or bytes that do not decode) does it
+send the block with `data` empty and `tooLarge` set to the bytes the image would have
+taken, and Chat then says so beside the images. A block with `tooLarge` is never stored,
 whatever else it holds. A client that does not do this, as before it did, has its
 message refused with the generic `error` whose `code` is `message-too-large`,
 which names no image, and its link closed with 1009 (see [Closing](#closing)),
@@ -1129,14 +1133,15 @@ document's own images and returns the Markdown to use, in an option's `preview`,
 a question's body, or the plan:
 
 ```text
-input:  { "data": "<standard base64, at most 1 MiB decoded>", "mimeType": "image/png" | "image/jpeg" | "image/webp" | "image/gif", "alt": "" }
+input:  { "data": "<standard base64, at most 16 MiB decoded>", "mimeType": "image/png" | "image/jpeg" | "image/webp" | "image/gif", "alt": "" }
 output: { "path": "/images/<sha256>.<ext>", "markdown": "![alt](/images/<sha256>.<ext>)" }
 ```
 
 `alt` is required, one line of at most 200 characters. The same bytes uploaded
 twice give the same path. The server never reads a path on the Planner's side:
 a remote Planner encodes its own file. A call fails with the usual host tool
-error for an image over 1 MiB, an unsupported type, bytes that are not the
+error for an image over 16 MiB (one over 1 MiB is stored as a smaller copy of
+itself, so it fits a document's images), an unsupported type, bytes that are not the
 declared type, an archived document, or a call outside a live Planner turn. The
 image loads only for people who can read this document. Chat also shows the
 image, with its `alt`, as a generated image on the turn's message, like the

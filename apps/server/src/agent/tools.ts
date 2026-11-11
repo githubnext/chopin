@@ -313,7 +313,8 @@ export const documentTools = {
 
 	upload_plan_image: tool({
 		contextSchema: roomContext,
-		description: "Store an image you made, a PNG, JPEG, WebP or GIF of at most 1 MiB, in this "
+		description: "Store an image you made, a PNG, JPEG, WebP or GIF of at most 16 MiB (one over "
+			+ "1 MiB is stored as a smaller copy), in this "
 			+ "document's images and get back the Markdown that shows it. Put that Markdown in a "
 			+ "decision option's `preview` (or a question body, or the plan) so people can compare "
 			+ "choices by looking. Only people who can read this document can load the image; the "
@@ -324,7 +325,7 @@ export const documentTools = {
 				data: {
 					type: "string",
 					contentEncoding: "base64",
-					description: "Standard base64 image bytes, at most 1 MiB decoded.",
+					description: "Standard base64 image bytes, at most 16 MiB decoded.",
 				},
 				mimeType: { type: "string", enum: ["image/png", "image/jpeg", "image/webp", "image/gif"] },
 				alt: { type: "string", minLength: 1, maxLength: 200 },
@@ -336,7 +337,7 @@ export const documentTools = {
 		execute: (raw, { context: { room: context } }) =>
 			answer("upload_plan_image", async () => {
 				if (!context.uploadImage) throw new Error("images cannot be stored in this session");
-				let image = planImage(raw, context.id);
+				let image = await planImage(raw, context.id);
 				let { path } = await context.uploadImage({
 					bytes: image.bytes,
 					mimeType: image.mimeType,

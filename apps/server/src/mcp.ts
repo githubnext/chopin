@@ -632,7 +632,8 @@ export const TOOLS: Tool[] = [
 	},
 	{
 		name: "upload_image",
-		description: "Upload a PNG, JPEG, WebP or GIF image of at most 1 MiB to a Chopin document "
+		description: "Upload a PNG, JPEG, WebP or GIF image of at most 16 MiB (one over 1 MiB is "
+			+ "stored as a smaller copy) to a Chopin document "
 			+ "and return its path and Markdown. Place the Markdown in the document with "
 			+ "update_document. Only people who can read the document can load the image; "
 			+ "uploading the same bytes again returns the same path.",
@@ -649,7 +650,7 @@ export const TOOLS: Tool[] = [
 					type: "string",
 					contentEncoding: "base64",
 					maxLength: MAX_IMAGE_DATA_LENGTH,
-					description: "Standard base64 image bytes, at most 1 MiB decoded.",
+					description: "Standard base64 image bytes, at most 16 MiB decoded.",
 				},
 				mimeType: { type: "string", enum: [...IMAGE_TYPES] },
 			},
@@ -1244,7 +1245,7 @@ export function handler<Caller>(
 						}, true));
 				}
 				if (tool.name === "upload_image" && options.upload) {
-					let prepared = prepareImage(tool.arguments);
+					let prepared = await prepareImage(tool.arguments);
 					if (!prepared) {
 						return notification
 							? undefined

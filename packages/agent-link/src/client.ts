@@ -278,32 +278,108 @@ function decodedBytes(data: string): number {
 	return Math.max(1, Math.floor(clean.length * 3 / 4));
 }
 
-function fitImages(message: ClientMessageOf<"part">): ClientMessageOf<"part"> {
+type ImageAt = { index: number; data: string; mimeType: unknown };
+
+/** A tool result's content blocks and how to put changed ones back into its message. */
+function imageBlocks(message: ClientMessageOf<"part">) {
 	let { part } = message;
-	if (part.type !== "tool-result" || bytes(message) <= WIRE.maxMessageBytes) return message;
+	if (part.type !== "tool-result") return undefined;
 	let asText = typeof part.result === "string";
 	let result: unknown = part.result;
 	if (typeof result === "string") {
 		try {
 			result = JSON.parse(result);
 		} catch {
-			return message;
+			return undefined;
 		}
 	}
 	let content = (result as { content?: unknown } | null)?.content;
-	if (!result || typeof result !== "object" || !Array.isArray(content)) return message;
+	if (!result || typeof result !== "object" || !Array.isArray(content)) return undefined;
 	let blocks: unknown[] = [...content];
-	let images = blocks.flatMap((block, index) => {
-		let { type, data } = (block ?? {}) as { type?: unknown; data?: unknown };
-		return type === "image" && typeof data === "string" ? [{ index, data }] : [];
+	let images: ImageAt[] = blocks.flatMap((block, index) => {
+		let { type, data, mimeType } = (block ?? {}) as Record<string, unknown>;
+		return type === "image" && typeof data === "string" ? [{ index, data, mimeType }] : [];
 	}).sort((a, b) => b.data.length - a.data.length || b.index - a.index);
-	for (let { index, data } of images) {
-		blocks[index] = { ...blocks[index] as object, data: "", tooLarge: decodedBytes(data) };
-		let sent = { ...result, content: blocks };
-		let fitted: ClientMessageOf<"part"> = {
+	let rebuild = (next: unknown[]): ClientMessageOf<"part"> => {
+		let sent = { ...result as object, content: next };
+		return {
 			...message,
 			part: { ...part, result: asText ? JSON.stringify(sent) : sent } as typeof part,
 		};
+	};
+	return { blocks, images, rebuild };
+}
+
+/** Whether a part over a frame would fit once its images were made smaller or left out. */
+function fitsWithoutImages(message: ClientMessageOf<"part">): boolean {
+	if (bytes(message) <= WIRE.maxMessageBytes) return true;
+	let found = imageBlocks(message);
+	if (!found?.images.length) return false;
+	let stripped = found.blocks.map(block =>
+		found.images.some(image => found.blocks[image.index] === block)
+			? { ...block as object, data: "", tooLarge: Number.MAX_SAFE_INTEGER }
+			: block
+	);
+	return bytes(found.rebuild(stripped)) <= WIRE.maxMessageBytes;
+}
+
+/** The image made small enough to be `budget` bytes, where this runtime can decode it (Bun). */
+async function smaller(
+	data: string,
+	mimeType: unknown,
+	budget: number,
+): Promise<{ data: string; mimeType: string } | undefined> {
+	let Image = (globalThis as { Bun?: { Image?: typeof Bun.Image } }).Bun?.Image;
+	if (!Image || budget <= 0) return undefined;
+	let jpeg = mimeType === "image/jpeg";
+	try {
+		let bytes = new Uint8Array(Buffer.from(data, "base64"));
+		let { width, height } = await new Image(bytes).metadata();
+		for (
+			let side = Math.min(Math.max(width, height), 4096);
+			side >= 128;
+			side = Math.floor(side * 0.75)
+		) {
+			let resized = new Image(bytes, { maxPixels: 268_402_689 }).resize(side, side, {
+				fit: "inside",
+				withoutEnlargement: true,
+			});
+			let out = await (jpeg ? resized.jpeg({ quality: 80 }) : resized.webp({ quality: 80 }))
+				.bytes();
+			if (out.byteLength <= budget) {
+				return {
+					data: Buffer.from(out).toString("base64"),
+					mimeType: jpeg ? "image/jpeg" : "image/webp",
+				};
+			}
+		}
+	} catch {}
+	return undefined;
+}
+
+/**
+ * A tool result that fits one frame. An image too large for it is sent as a smaller copy of
+ * itself (Chat stores and shows that copy), and only where none can be made is its data left out
+ * and `tooLarge` said instead, largest first.
+ */
+export async function fitImages(
+	message: ClientMessageOf<"part">,
+): Promise<ClientMessageOf<"part">> {
+	if (bytes(message) <= WIRE.maxMessageBytes) return message;
+	let found = imageBlocks(message);
+	if (!found) return message;
+	let { blocks, images, rebuild } = found;
+	for (let { index, data, mimeType } of images) {
+		let without = rebuild(
+			blocks.map((block, at) => at === index ? { ...block as object, data: "" } : block),
+		);
+		// What is left of the frame, less the encoding's own overhead, in decoded bytes.
+		let budget = Math.floor((WIRE.maxMessageBytes - bytes(without) - 1024) * 3 / 4);
+		let copy = await smaller(data, mimeType, budget);
+		blocks[index] = copy
+			? { ...blocks[index] as object, ...copy }
+			: { ...blocks[index] as object, data: "", tooLarge: decodedBytes(data) };
+		let fitted = rebuild(blocks);
 		if (bytes(fitted) <= WIRE.maxMessageBytes) return fitted;
 	}
 	return message;
@@ -351,6 +427,8 @@ type TurnState = {
 	controller: AbortController;
 	ended: boolean;
 	calls: Map<string, (result: HostToolResult) => void>;
+	/** A part being made to fit a frame, which what the turn sends next waits for. */
+	outbox?: Promise<unknown>;
 };
 
 function hostFailure(message: string): HostToolResult {
@@ -431,12 +509,30 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 			signal: state.controller.signal,
 			emit: part => {
 				if (state.ended) return;
-				send(fitImages({
+				let made: ClientMessageOf<"part"> = {
 					type: "part",
 					session: message.session,
 					turn: message.turn,
 					part: part.type === "error" ? { ...part, error: note(part.error) } : part,
-				}));
+				};
+				if (!state.outbox && !fitsWithoutImages(made)) {
+					// Too large even without its images: it fails here, as it always has.
+					send(made);
+					return;
+				}
+				if (!state.outbox && bytes(made) <= WIRE.maxMessageBytes) {
+					send(made);
+					return;
+				}
+				// Made smaller off this call, so the parts after it wait their turn behind it.
+				let outbox: Promise<unknown> = (state.outbox ?? Promise.resolve())
+					.then(() => fitImages(made))
+					.then(send)
+					.catch(() => {})
+					.finally(() => {
+						if (state.outbox === outbox) state.outbox = undefined;
+					});
+				state.outbox = outbox;
 			},
 			offerTools: names =>
 				send({
@@ -448,6 +544,9 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 			callHostTool: (toolName, input) => {
 				if (state.ended || state.controller.signal.aborted) {
 					return Promise.resolve(hostFailure("The turn has ended."));
+				}
+				if (state.outbox) {
+					return state.outbox.then(() => context.callHostTool(toolName, input));
 				}
 				let toolCallId = `host-${++calls}-${crypto.randomUUID()}`;
 				let result = Promise.withResolvers<HostToolResult>();
@@ -477,13 +576,16 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 				state.ended = true;
 				turns.delete(key);
 				settleCalls(state, "The turn has ended.");
-				send({
-					type: "turn-end",
-					session: message.session,
-					turn: message.turn,
-					status,
-					...(text === undefined ? {} : { message: note(text) }),
-				});
+				let finish = () =>
+					send({
+						type: "turn-end",
+						session: message.session,
+						turn: message.turn,
+						status,
+						...(text === undefined ? {} : { message: note(text) }),
+					});
+				if (state.outbox) void state.outbox.then(finish).catch(() => {});
+				else finish();
 			},
 		};
 		Promise.resolve()

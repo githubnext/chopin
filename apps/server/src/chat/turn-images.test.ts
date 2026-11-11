@@ -512,7 +512,7 @@ describe("images a turn makes", () => {
 		]);
 	});
 
-	it("host a tool's image of exactly the stored limit and say an image one byte over was too large, storing nothing of it", async () => {
+	it("host a tool's image of exactly the stored limit, and one a byte over as a smaller copy of it", async () => {
 		let limit = 2 * 1_048_576;
 		let { chat, send, stored } = turn({ imageMaxBytes: limit });
 		let at = bigPng(limit);
@@ -523,29 +523,30 @@ describe("images a turn makes", () => {
 			{ type: "image", data: base64(at), mimeType: "image/png", alt: "At" },
 		]));
 		await chat.turnImages?.work;
-		expect(stored.map(image => image.sha256)).toEqual([path(at).slice(8, 72)]);
+		expect(stored).toHaveLength(2);
+		expect(stored[0]!.mimeType).toBe("image/webp");
+		expect(stored[0]!.bytes.byteLength).toBeLessThanOrEqual(limit);
+		expect(stored[1]!.sha256).toBe(path(at).slice(8, 72));
 		let entry = chat.entries.find(item => item.images);
-		expect(entry!.images!.map(image => image.alt)).toEqual(["At"]);
-		expect(entry!.refusedImages).toEqual([
-			{ before: 0, reason: "Image too large to show (2.1 MB, limit 2 MB)" },
+		expect(entry!.images!.map(image => [image.alt, image.width, image.height])).toEqual([
+			["Over", 40, 30],
+			["At", 40, 30],
 		]);
-		expect(entry!.tools?.find(tool => tool.id === "c1")?.result).toBe("2 images");
+		expect(entry!.images![0]!.src).toEndWith(".webp");
+		expect(entry!.refusedImages).toBeUndefined();
+		expect(JSON.stringify(chat.entries)).not.toContain("too large");
 		expect(JSON.stringify(chat.entries)).not.toContain(base64(over).slice(0, 5000));
 	});
 
-	it("say on a message of its own that an image was too large when none could be shown, with the 10 MiB default", async () => {
+	it("never says an image was too large under the 10 MiB default", async () => {
 		let { chat, send, stored } = turn();
 		let over = bigPng(10 * 1_048_576 + 1);
 		send({ type: "tool-call", toolCallId: "c1", toolName: "codemode", input: {} });
 		send(toolResult("c1", [{ type: "image", data: base64(over), mimeType: "image/png" }]));
 		await chat.turnImages?.work;
-		expect(stored).toEqual([]);
-		let holders = chat.entries.filter(entry => entry.refusedImages);
-		expect(holders).toHaveLength(1);
-		expect(holders[0]).toMatchObject({ author: { kind: "agent" }, text: "" });
-		expect(holders[0]!.images).toBeUndefined();
-		expect(holders[0]!.refusedImages).toEqual([
-			{ before: 0, reason: "Image too large to show (10.1 MB, limit 10 MB)" },
-		]);
+		expect(stored).toHaveLength(1);
+		expect(stored[0]!.bytes.byteLength).toBeLessThanOrEqual(10 * 1_048_576);
+		expect(chat.entries.some(entry => entry.refusedImages)).toBe(false);
+		expect(chat.entries.find(entry => entry.images)?.images).toHaveLength(1);
 	});
 });

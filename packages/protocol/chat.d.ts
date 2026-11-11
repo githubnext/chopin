@@ -216,8 +216,9 @@ export declare namespace Chat {
 		/** How many of the entry's `images` come before it, from 0 to `images.length`. */
 		before: number;
 		/**
-		 * A plain sentence that says why: it starts `Image couldn't be shown: `, or is
-		 * `Image too large to show (N MB, limit M MB)` for an image over the server's limit.
+		 * A plain sentence that says why: it starts `Image couldn't be shown: `. Turns saved before
+		 * a large image was stored as a smaller copy may say `Image too large to show (N MB, limit
+		 * M MB)`.
 		 */
 		reason: string;
 	};

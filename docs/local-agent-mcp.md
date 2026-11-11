@@ -315,7 +315,10 @@ Document images are either absolute `https:` URLs or images Chopin hosts itself.
 `upload_image` accepts a document `id` or canonical URL, the image bytes as
 standard base64 in `data`, and a `mimeType` of `image/png`, `image/jpeg`,
 `image/webp`, or `image/gif`. SVG is never accepted. The decoded image may be at
-most 1 MiB, and its file signature must match the declared type.
+most 16 MiB, and its file signature must match the declared type. A document keeps an
+image of at most 1 MiB, so a larger one is stored as a smaller copy of itself (a JPEG
+stays a JPEG, anything else becomes a WebP); `too-large` is only an image over 16 MiB or
+one whose bytes do not decode.
 
 ```json
 {

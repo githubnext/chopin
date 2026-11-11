@@ -161,6 +161,16 @@ Files sent with a Chat message (see [Files in Chat](hosted-agent.md#files-in-cha
 carries only their names, kinds, types and sizes. The same rows are the memory adapter's, and the
 storage contract holds both to the same rules.
 
+An image, whether a Chat attachment or one of a document's images, is stored once, as it is, and
+read at Slack's thumbnail widths (64, 80, 160, 360, 480, 720, 800, 960 and 1024 pixels: `?w=480` on
+its address): the copy is made with `Bun.Image` the first time it is read, never wider than the
+image, and kept in a bounded cache in memory (`apps/server/src/images/resize.ts`), so nothing about
+it is stored and a restart only makes it again. A GIF is served whole, so it keeps moving. An
+image too large to store (`MAX_STORED_IMAGE_BYTES` for an image a tool made, 1 MiB for an
+`upload_image`, `CHAT_ATTACHMENT_MAX_BYTES` for an attachment, which the browser makes smaller
+before it uploads) is stored as a smaller copy of itself, so a release that never made copies reads
+everything this one stores.
+
 A transcript entry keeps what the composer's `@` and `/` point at (a command, a heading of the
 document, a Decision, a file of the repository) under `pointers`, and only references to other
 documents and to research cards under `references`. A server from before pointers restores
