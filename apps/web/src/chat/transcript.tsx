@@ -261,7 +261,10 @@ function MessageBody(
 	let delivery = own ? deliveryOf(message) : undefined;
 	let threadSummary = markers.threads?.summaries[message.id];
 	let rootOpen = markers.threads?.openRootId === message.id;
+	let hasAnalysisMarker = ANALYSIS && !message.queued && !!markers.onCardLink
+		&& !!markers.onRetryAnalysis;
 	let canThread = !!markers.threads
+		&& !rootOpen
 		&& (!!threadSummary || markers.threads.canStart)
 		&& !message.queued && !message.streaming
 		&& delivery !== "waiting" && delivery !== "failed";
@@ -310,7 +313,9 @@ function MessageBody(
 						{message.streaming && <span className="ml-0.5">▍</span>}
 					</div>
 					{canThread && markers.threads && (
-						<ThreadEntryButton onOpen={markers.threads.onOpen} rootId={message.id} />
+						<span className={hasAnalysisMarker ? "mr-5 shrink-0" : "shrink-0"}>
+							<ThreadEntryButton onOpen={markers.threads.onOpen} rootId={message.id} />
+						</span>
 					)}
 					{delivery && delivery !== "failed" && <DeliveryMark mark={delivery} />}
 					{delivery && deletable(message) && delivery !== "failed"
