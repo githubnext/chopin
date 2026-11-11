@@ -698,6 +698,35 @@ export class GitHubClient implements GitHub, GitHubReferenceSource {
 		return sha;
 	}
 
+	/**
+	 * The files of a branch: the blobs of its tree, as GitHub lists them, and whether it cut the
+	 * list short. A branch name is encoded as one path segment.
+	 */
+	async repositoryFiles(
+		token: string,
+		owner: string,
+		name: string,
+		ref: string,
+	): Promise<{ paths: string[]; truncated: boolean }> {
+		let tree = record(
+			await this.#api(
+				`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/git/trees/${
+					encodeURIComponent(ref)
+				}?recursive=1`,
+				token,
+			),
+		);
+		if (!tree || !Array.isArray(tree.tree)) {
+			throw new GitHubError("GitHub returned an invalid tree");
+		}
+		let paths: string[] = [];
+		for (let entry of tree.tree) {
+			let item = record(entry);
+			if (item?.type === "blob" && typeof item.path === "string") paths.push(item.path);
+		}
+		return { paths, truncated: tree.truncated === true };
+	}
+
 	async repositoryAccess(
 		token: string,
 		owner: string,

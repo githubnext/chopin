@@ -58,7 +58,9 @@ import { createRootChat } from "./chat/root";
 import { serverInstruction as runServerInstruction } from "./chat/server-instruction";
 import { resolveChild } from "./chat/children";
 import { CHAT_CAPABILITIES, incomingFrame, sidebarFrame } from "./chat/incoming";
+import { registerMentionRoutes } from "./chat/mention-routes";
 import { ReferenceService } from "./chat/references";
+import { RepositoryFiles } from "./chat/repository-files";
 import { createConversationRuntime } from "./conversation-plan/runtime";
 import { createEditingUnlocked } from "./plan/editing-unlocked";
 import { researchBriefDefinition } from "./jobs/research-brief";
@@ -77,6 +79,7 @@ import * as Comments from "./comments/service";
 import { clientBuild, proxy, serve } from "./client";
 import { describe, load } from "./config";
 import { GitHubClient, GitHubError } from "./github/client";
+import { plannerWorkspace } from "./harness/atomic/workspace";
 import { GitHubReferences } from "./github/references";
 import { builders, named, pictures, present } from "./people";
 import { registerConnectorScript } from "./http/connector-script";
@@ -254,6 +257,29 @@ let researchService: ResearchWorkspaceService | undefined;
 let researchRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
 let recoveringResearch: Promise<void> | undefined;
 let referenceService: ReferenceService | undefined;
+/**
+ * The files a person can mention: a checkout the Planner works in, where the document has one,
+ * and else what GitHub lists for the default branch, read as the person's own session.
+ */
+const repositoryFiles = new RepositoryFiles({
+	checkout: async (channelId, repository) => {
+		if (config.harness !== "atomic") return undefined;
+		let workspace = await plannerWorkspace(channelId, repository);
+		return workspace.checkout ? workspace.cwd : undefined;
+	},
+	remote: async (sessionId, repository) => {
+		let github = hostedAuth.github;
+		if (!(github instanceof GitHubClient)) return undefined;
+		let session = await hostedAuth.sessions.resolve(sessionId);
+		if (!session) return undefined;
+		let { value } = await hostedAuth.sessions.use(
+			session,
+			token =>
+				github.repositoryFiles(token, repository.owner, repository.name, repository.defaultBranch),
+		);
+		return value;
+	},
+});
 let summaryCoordinator: DocumentSummaryCoordinator | undefined;
 let liveSync: LiveSyncCoordinator | undefined;
 let buildReadiness: BuildReadiness | undefined;
@@ -737,6 +763,7 @@ function conversation(
 			}),
 		modelChoice: () => turnModel(modelChoices, room.id),
 		commands: () => modelChoices.commands?.(room.id) ?? Promise.resolve(undefined),
+		fileExists: (path, sessionId) => repositoryFiles.has(room.id, repository, sessionId, path),
 		activeOwner: () => ownerBindings!.resolve(room.id),
 		ownerAvailable: () => ownerAvailable(room.id),
 		jobs: config.backgroundJobs ? jobService : undefined,
@@ -3379,6 +3406,12 @@ registerChannelRoutes(router, hostedAuth, {
 	references: hostedAuth.github instanceof GitHubClient
 		? new GitHubReferences(hostedAuth.github)
 		: undefined,
+});
+registerMentionRoutes(router, hostedAuth, {
+	current: currentDocumentTarget,
+	research: async channelId =>
+		(await storage.research.list(channelId, 100, true)).map(({ id, title }) => ({ id, title })),
+	files: repositoryFiles,
 });
 registerResearchWorkspaceRoutes(router, hostedAuth, {
 	service: researchService,

@@ -36,6 +36,37 @@ function installation(id = 123) {
 }
 
 describe("the GitHub client", () => {
+	it("lists a repository's files from the tree of a branch, the files only, as many as it has", async () => {
+		let called: string[] = [];
+		let client = new GitHubClient({
+			fetch: async input => {
+				called.push(String(input));
+				return Response.json({
+					truncated: false,
+					tree: [
+						{ path: "README.md", type: "blob" },
+						{ path: "src", type: "tree" },
+						{ path: "src/index.ts", type: "blob" },
+						{ path: "vendor/lib", type: "commit" },
+						{ path: 7, type: "blob" },
+					],
+				});
+			},
+			endpoints: { api: "https://github.test" },
+		});
+		expect(await client.repositoryFiles("ghu", "octo-org", "score", "main")).toEqual({
+			paths: ["README.md", "src/index.ts"],
+			truncated: false,
+		});
+		expect(called).toEqual(["https://github.test/repos/octo-org/score/git/trees/main?recursive=1"]);
+		let cut = new GitHubClient({
+			fetch: async () => Response.json({ truncated: true, tree: [{ path: "a", type: "blob" }] }),
+		});
+		expect((await cut.repositoryFiles("ghu", "o", "r", "feature/x y")).truncated).toBe(true);
+		let broken = new GitHubClient({ fetch: async () => Response.json({ nope: 1 }) });
+		await expect(broken.repositoryFiles("ghu", "o", "r", "main")).rejects.toThrow(GitHubError);
+	});
+
 	it("builds an OAuth authorization URL with state and PKCE", () => {
 		let client = new GitHubClient();
 		let url = new URL(client.authorize({

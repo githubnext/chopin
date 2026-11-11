@@ -902,6 +902,18 @@ words the composer shows (`That heading is no longer in the document.`,
 | `file`     | `path`        | `[file path "src/index.ts" in the repository]`. A plain path from the root: no `..`, `.`, empty part, backslash or control character.                                                                       |
 | `research` | `workspaceId` | As before: a reference read by id with `read_reference`, drawn `%Title`. Only a workspace of this document is accepted.                                                                                     |
 
+The composer asks for what it can offer with `GET /api/channels/:channelId/mentions?query=&limit=`
+(`limit`, 1 to 20 of each kind, is 6 by default; a query is at most 64 characters). A person who
+can read the document gets its headings (`anchor`, `text`, `level`), its Decisions (`id`,
+`title`), its research cards (`workspaceId`, `title`: the workspaces the document holds a card
+for) and its repository's files (`files`, paths), each narrowed by the query (a title or name
+that starts with it first, then a word, then any part) and read from the same source a message's
+mentions are resolved against. Anybody else is told the document does not exist. Files are those
+of the Planner's checkout where the document has one (`HARNESS=atomic`, what `git` tracks and has
+not ignored, kept 10 seconds) and else what GitHub lists for the default branch, read with the
+asking person's own session and kept a minute per repository, up to 50,000 paths; with neither,
+`files` is left out and a file mention is refused.
+
 None but a document or a research reference can be read by id: a heading, a Decision and a file
 are places the prompt already says how to find (`read_plan` shows the document with its Decisions,
 the repository tools read a file), and are quoted so a name with a quote or a line break stays one
