@@ -481,12 +481,14 @@ test("an invoking caller is introduced to the room with their picture before the
 	}
 });
 
-test("queued invocations post their durable message exactly once", async () => {
+test("invocations while a turn runs are given to it and post their durable message exactly once", async () => {
 	let fixture = await setup();
 	let { context, user } = fixture;
 	let first = Promise.withResolvers<void>();
 	let opened = Promise.withResolvers<void>();
 	let prompts: string[] = [];
+	let steered: string[] = [];
+	context.steers = () => true;
 	context.openPlannerSession = async () => ({
 		ok: true,
 		value: {
@@ -500,6 +502,9 @@ test("queued invocations post their durable message exactly once", async () => {
 					})(),
 				} as never;
 			},
+			steer: async text => {
+				steered.push(text);
+			},
 			destroy: async () => {},
 		},
 	});
@@ -508,12 +513,14 @@ test("queued invocations post their durable message exactly once", async () => {
 		await opened.promise;
 		await Chat.invoke(context, user, "Second");
 		await Chat.invoke(context, user, "Second");
-		expect(context.chat.waiting.map(item => item.text)).toEqual(["Second", "Second"]);
+		await until(() => steered.length === 2);
+		expect(context.chat.waiting).toEqual([]);
 		expect(context.chat.entries.map(entry => entry.text)).toEqual(["First", "Second", "Second"]);
 		expect(new Set(context.chat.entries.map(entry => entry.id)).size).toBe(3);
 		first.resolve();
 		await context.chat.running;
-		expect(prompts).toEqual(["@ana: First", "@ana: Second", "@ana: Second"]);
+		expect(prompts).toEqual(["@ana: First"]);
+		expect(steered).toEqual(["@ana: Second", "@ana: Second"]);
 		expect(context.chat.entries.map(entry => entry.text)).toEqual(["First", "Second", "Second"]);
 		expect(context.chat.waiting).toEqual([]);
 		expect(context.chat.busy).toBe(false);
@@ -525,6 +532,13 @@ test("queued invocations post their durable message exactly once", async () => {
 		first.resolve();
 	}
 });
+
+/** Waits for what a detached delivery has yet to do. */
+async function until(done: () => boolean): Promise<void> {
+	for (let deadline = Date.now() + 2_000; !done(); await Bun.sleep(5)) {
+		if (Date.now() > deadline) throw new Error("timed out waiting");
+	}
+}
 
 test("a child document's Planner cannot be invoked, so its Chat stays empty", async () => {
 	let { context, user } = await setup();
@@ -544,18 +558,14 @@ test("an invoked instruction with focus names the child in its turn", async () =
 	expect(seen[0]!.prompt).toContain(`child id ${focus.channelId}`);
 });
 
-test("failed persistence, an unavailable Planner and a full queue start no invoked turn", async () => {
+test("failed persistence, an unavailable Planner and a busy one that takes no message mid-run start no invoked turn", async () => {
 	let { context, events, user } = await setup();
 	context.config.agent = false;
 	expect(await Chat.invoke(context, user, "Review")).toBe("planner-unavailable");
 	context.config.agent = true;
 	context.chat.busy = true;
-	context.chat.waiting = Array.from(
-		{ length: 20 },
-		(_, index) => ({ id: String(index), handle: "ana", text: "Waiting" }),
-	);
-	expect(await Chat.invoke(context, user, "Review")).toBe("planner-queue-full");
-	context.chat.waiting = [];
+	expect(await Chat.invoke(context, user, "Review")).toBe("planner-busy");
+	expect(context.chat.waiting).toEqual([]);
 	context.chat.busy = false;
 	context.persist = async () => {
 		throw new Error("storage failed");
@@ -2081,7 +2091,7 @@ test("a focused member turn names the child before the member's words", async ()
 		.toBe("shorten the summary");
 });
 
-test("a focused message queued behind a busy turn still names the child when it drains", async () => {
+test("a focused message given to a running turn still names the child", async () => {
 	let { context } = await setup();
 	let child = "0f5b2c1e-8d3a-4b6f-9a21-7c4e5d6f7a8b";
 	context.children = {
@@ -2094,6 +2104,8 @@ test("a focused message queued behind a busy turn still names the child when it 
 	let first = Promise.withResolvers<void>();
 	let opened = Promise.withResolvers<void>();
 	let prompts: string[] = [];
+	let steered: string[] = [];
+	context.steers = () => true;
 	context.openPlannerSession = async () => ({
 		ok: true,
 		value: {
@@ -2102,10 +2114,13 @@ test("a focused message queued behind a busy turn still names the child when it 
 				opened.resolve();
 				return {
 					fullStream: (async function*() {
-						if (prompts.length === 1) await first.promise;
+						await first.promise;
 						yield { type: "finish" };
 					})(),
 				} as never;
+			},
+			steer: async text => {
+				steered.push(text);
 			},
 			destroy: async () => {},
 		},
@@ -2124,14 +2139,15 @@ test("a focused message queued behind a busy turn still names the child when it 
 	await send("@chopin first");
 	await opened.promise;
 	await send("@chopin shorten the summary", child);
-	expect(context.chat.waiting).toHaveLength(1);
+	await until(() => steered.length === 1);
+	expect(context.chat.waiting).toHaveLength(0);
 	first.resolve();
 	await context.chat.running;
-	expect(prompts).toHaveLength(2);
+	expect(prompts).toHaveLength(1);
 	expect(prompts[0]).not.toContain(child);
-	let drained = prompts[1]!;
-	expect(drained.indexOf(`child id ${child}`)).toBeGreaterThanOrEqual(0);
-	expect(drained.indexOf(`child id ${child}`)).toBeLessThan(drained.indexOf("shorten the summary"));
+	let given = steered[0]!;
+	expect(given.indexOf(`child id ${child}`)).toBeGreaterThanOrEqual(0);
+	expect(given.indexOf(`child id ${child}`)).toBeLessThan(given.indexOf("shorten the summary"));
 });
 
 function failingMemberTurn(

@@ -11,7 +11,7 @@ import type { HarnessV1 } from "@ai-sdk/harness";
 import type { Socket } from "../wire";
 
 for (let destroyThrows of [false, true]) {
-	test(`stopping a Planner ask drains the next turn when teardown ${destroyThrows ? "fails" : "succeeds"}`, async () => {
+	test(`stopping a Planner ask lets the next message start a turn when teardown ${destroyThrows ? "fails" : "succeeds"}`, async () => {
 		let opened = await openPlan("Related prose.\n");
 		let identity = await authenticatedMemory(opened);
 		let asked = Promise.withResolvers<void>();
@@ -144,15 +144,6 @@ for (let destroyThrows of [false, true]) {
 					throw new Error("Planner ask did not publish a question");
 				}),
 			]);
-			await Chat.send(identity.context, socket, {
-				kind: "chat:send",
-				rid: "second",
-				requestId: crypto.randomUUID(),
-				text: "Try again",
-				to: "planner",
-				ts: 0,
-			});
-			expect(opened.plan.chat.waiting).toHaveLength(1);
 			await Chat.abort(identity.context, socket);
 			await Chat.abort(identity.context, socket);
 			await Promise.race([
@@ -161,12 +152,22 @@ for (let destroyThrows of [false, true]) {
 					throw new Error("Planner turn did not settle");
 				}),
 			]);
+			// Stopped for good: the Planner takes the next message as a turn of its own.
+			await Chat.send(identity.context, socket, {
+				kind: "chat:send",
+				rid: "second",
+				requestId: crypto.randomUUID(),
+				text: "Try again",
+				to: "planner",
+				ts: 0,
+			});
 			await Promise.race([
 				secondStarted.promise,
 				Bun.sleep(3_000).then(() => {
-					throw new Error("Queued Planner turn did not start");
+					throw new Error("The next Planner turn did not start");
 				}),
 			]);
+			await opened.plan.chat.running;
 			expect(opened.plan.chat.entries.filter(entry => entry.text === "@ana stopped the turn."))
 				.toHaveLength(1);
 			expect([...opened.plan.records.values()].map(record => record.status)).toEqual(["cancelled"]);

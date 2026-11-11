@@ -31,7 +31,7 @@ test.each([false, true])(
 	},
 );
 
-test("jobs and human turns drain in arrival order without leaking job scope", async () => {
+test("a job waits for a human turn, and a person's message while a job runs is refused, without leaking job scope", async () => {
 	let first = harness();
 	await Chat.send(first.context, socket(), member("Human first"));
 	await until(() => first.prompts.length === 1);
@@ -47,16 +47,29 @@ test("jobs and human turns drain in arrival order without leaking job scope", as
 	let second = harness();
 	let ahead = Chat.job(second.context, JOB, "job first", "session");
 	await until(() => second.prompts.length === 1);
-	await Chat.send(second.context, socket(), member("Human second"));
-	expect(second.chat.waiting).toHaveLength(1);
+	// A job's session is isolated: nobody talks to it, and nothing waits for it to end.
+	let refusals: Array<Record<string, unknown>> = [];
+	let sender = {
+		data: { handle: "ana", principalId: "U_ana" },
+		send: (frame: string) => refusals.push(JSON.parse(frame)),
+	} as unknown as Parameters<typeof Chat.send>[1];
+	await Chat.send(second.context, sender, member("Human second"));
+	expect(refusals).toEqual([
+		expect.objectContaining({
+			kind: "session:error",
+			message: "Chopin can't take messages while it works on this machine. Stop it to ask now.",
+			code: "planner-busy",
+		}),
+	]);
+	expect(second.chat.waiting).toHaveLength(0);
+	expect(second.chat.entries).toEqual([]);
 	await runJobTool(second.chat, "refine_decision", async () => ({ output: { added: 0 } }));
 	second.emit("session.idle");
 	expect(await ahead).toEqual({ status: "done", output: '{"added":0}' });
-	await until(() => second.prompts.length === 2);
-	expect(second.chat.job).toBeUndefined();
-	expect(second.prompts[1]).toContain("Human second");
-	second.emit("session.idle");
 	await until(() => !second.chat.busy);
+	expect(second.chat.job).toBeUndefined();
+	expect(second.prompts).toEqual(["job first"]);
+	expect(second.steered).toEqual([]);
 });
 
 test("archiving cancels a job queued behind a human turn without dropping human work", async () => {
@@ -72,7 +85,6 @@ test("archiving cancels a job queued behind a human turn without dropping human 
 		reason: "This document was archived.",
 	});
 	expect(state.chat.waiting.map(item => item.id)).toEqual(["human-later"]);
-	expect(state.frames.at(-1)).toMatchObject({ kind: "chat:queue" });
 	state.emit("session.idle");
 	await until(() => state.prompts.length === 2);
 	expect(state.prompts).not.toContain("job later");
@@ -105,21 +117,4 @@ test("archive reset fences a job shifted out of the queue during persistence", a
 		reason: "This document was archived.",
 	});
 	expect(state.prompts).toHaveLength(1);
-});
-
-test("a job queued behind a turn never reaches clients as a queued message", async () => {
-	let state = harness();
-	await Chat.send(state.context, socket(), member("Human first"));
-	await until(() => state.prompts.length === 1);
-	let queued = Chat.job(state.context, JOB, "job later", "session");
-	await Chat.send(state.context, socket(), member("Human later"));
-	expect(state.chat.waiting).toHaveLength(2);
-	let frame = state.frames.findLast(f => f.kind === "chat:queue");
-	expect(frame).toMatchObject({ waiting: [{ text: "Human later" }] });
-	Chat.cancelQueuedJobs(state.context, "This document was archived.");
-	await queued;
-	state.emit("session.idle");
-	await until(() => state.prompts.length === 2);
-	state.emit("session.idle");
-	await until(() => !state.chat.busy);
 });

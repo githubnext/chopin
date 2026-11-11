@@ -26,6 +26,8 @@ export function harness(agent = true, chats: Chat.Chat[]) {
 		claimantSessionId: "session",
 		repository,
 		persist: async () => {},
+		// This harness's session takes a message while its turn runs.
+		steers: () => true,
 		activeOwner: async () => ({
 			ownerSessionId: "session",
 			ownerGeneration: 1,

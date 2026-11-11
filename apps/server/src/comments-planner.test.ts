@@ -2,14 +2,15 @@
  * Sending a comment to the Planner.
  *
  * What matters: the note is durable and the room has it before any turn is
- * asked for; a full queue refuses before anything is saved; one thread never
- * queues two turns; the Planner may only speak in the thread its turn was sent;
- * and when it forgets to, its last word in Chat is posted there for it.
+ * asked for; a turn that is running refuses before anything is saved (nothing is
+ * held for the next one); the Planner may only speak in the thread its turn was
+ * sent; and when it forgets to, its last word in Chat is posted there for it.
  */
 
 import { afterEach, describe, expect, it } from "bun:test";
 
 import { documentTools } from "./agent/tools";
+import { authenticatedMemory } from "./chat/job-authenticated-memory.test-fixtures";
 import { createRootChat } from "./chat/root";
 import * as Chat from "./chat/service";
 import * as Comments from "./comments/service";
@@ -44,24 +45,70 @@ afterEach(async () => {
 	opens = [];
 });
 
-/** A room whose Planner is busy, so instructions queue rather than open a session. */
+/** One turn the Planner was asked for, held open until the test lets it end. */
+type Turn = {
+	prompt: string;
+	/** Ends the turn after the Planner says `parts`. */
+	finish(parts?: unknown[]): void;
+	/** Fails the turn as a model's error would. */
+	fail(error: Error): void;
+};
+
+/**
+ * A room whose Planner takes each turn on a session the test holds open. With `busy`, a turn is
+ * already running, so a note sent to Chopin is refused.
+ */
 async function opened(options: { agent?: boolean; busy?: boolean } = {}) {
 	let fixture = await openPlan(SOURCE);
 	let { broadcasts, plan, server } = fixture;
 	opens.push(plan);
-	plan.chat.busy = options.busy ?? true;
+	let identity = await authenticatedMemory(fixture);
+	cleanups.push(async () => {
+		for (let turn of turns) turn.finish();
+		await plan.chat.running?.catch(() => {});
+		identity.revokeAll();
+	});
+	let turns: Turn[] = [];
 	let context: Chat.Room = {
-		chat: plan.chat,
+		...identity.context,
 		config: { agent: options.agent ?? true } as Config,
-		plan,
-		room: "test",
-		server,
-		auth: {} as Chat.Room["auth"],
-		claimantSessionId: "session",
-		repository: { id: "repo", owner: "owner", name: "repo", defaultBranch: "main" },
-		persist: chat => Service.persist(plan, chat),
+		openPlannerSession: async () => ({
+			ok: true,
+			value: {
+				async stream(prompt: string, signal: AbortSignal) {
+					let gate = Promise.withResolvers<unknown[]>();
+					turns.push({
+						prompt,
+						finish: (parts = []) => gate.resolve(parts),
+						fail: error => gate.reject(error),
+					});
+					signal.addEventListener("abort", () => gate.resolve([]), { once: true });
+					return {
+						fullStream: (async function*() {
+							yield* await gate.promise;
+							yield { type: "finish" };
+						})(),
+					} as never;
+				},
+				async destroy() {},
+			},
+		}),
 	};
-	return { broadcasts: broadcasts as Sent[], context, plan, server, storage: fixture.storage };
+	plan.chat.busy = options.busy ?? false;
+	return {
+		broadcasts: broadcasts as Sent[],
+		context,
+		plan,
+		server,
+		storage: fixture.storage,
+		turns,
+		/** Settles once `count` turns have reached the model. */
+		async started(count = 1) {
+			for (let deadline = Date.now() + 2_000; turns.length < count; await Bun.sleep(2)) {
+				if (Date.now() > deadline) throw new Error("the turn did not reach the model");
+			}
+		},
+	};
 }
 
 function member(handle: string) {
@@ -137,13 +184,13 @@ function working(broadcasts: Sent[]) {
 }
 
 describe("sending a new comment to the Planner", () => {
-	it("saves the note, tells the room, then queues a turn about the thread", async () => {
-		let { broadcasts, context, plan, storage } = await opened();
+	it("saves the note, tells the room, then starts a turn about the thread", async () => {
+		let { broadcasts, context, plan, started, storage, turns } = await opened();
 		let ana = member("ana");
 
 		let answered = await start(context, ana);
 
-		expect(answered).toMatchObject({ ok: true, planner: "queued" });
+		expect(answered).toMatchObject({ ok: true, planner: "running" });
 		let thread = answered?.thread as { id: string; notes: unknown[] };
 		expect(thread.notes[0]).toMatchObject({
 			author: "member",
@@ -157,10 +204,12 @@ describe("sending a new comment to the Planner", () => {
 		let saved = await storage.collaboration.load(plan.id, new Date());
 		expect(JSON.stringify(saved?.sidecar)).toContain("Rephrase this.");
 
-		let waiting = plan.chat.waiting.find(item => item.thread === thread.id);
-		expect(waiting?.text).toContain("Rephrase this.");
-		expect(waiting?.text).toContain(`thread ${thread.id}`);
-		expect(waiting?.handle).toBe("ana");
+		await started();
+		expect(turns[0]?.prompt).toContain("Rephrase this.");
+		expect(turns[0]?.prompt).toContain(`thread ${thread.id}`);
+		expect(turns[0]?.prompt).toStartWith("@ana:");
+		expect(plan.chat.acting).toBe(thread.id);
+		expect(plan.chat.waiting).toEqual([]);
 
 		let notice = plan.chat.entries.at(-1);
 		expect(notice).toMatchObject({
@@ -186,16 +235,20 @@ describe("sending a new comment to the Planner", () => {
 		expect(plan.chat.waiting).toHaveLength(0);
 	});
 
-	it("refuses before saving anything when the Planner's queue is full", async () => {
-		let { context, plan } = await opened();
-		for (let i = 0; i < 20; i++) plan.chat.waiting.push({ id: `w${i}`, handle: "kris", text: "x" });
+	it("refuses before saving anything while a turn runs, and holds nothing for the next one", async () => {
+		let { context, plan } = await opened({ busy: true });
 		let ana = member("ana");
 
 		let answered = await start(context, ana);
 
-		expect(answered).toMatchObject({ ok: false, reason: "busy" });
+		expect(answered).toMatchObject({
+			ok: false,
+			reason: "busy",
+			message: "Chopin is working on something else. Try again when it has finished.",
+		});
 		expect(plan.threads.size).toBe(0);
-		expect(plan.chat.waiting).toHaveLength(20);
+		expect(plan.chat.waiting).toHaveLength(0);
+		expect(plan.chat.entries).toEqual([]);
 	});
 
 	it("refuses before saving anything when no remote Planner is attached", async () => {
@@ -240,6 +293,9 @@ describe("sending a new comment to the Planner", () => {
 
 	it("says the turn failed when no session could be opened for it", async () => {
 		let { broadcasts, context } = await opened({ busy: false });
+		context.openPlannerSession = async () => {
+			throw new Error("no session could be opened");
+		};
 		let ana = member("ana");
 
 		let answered = await start(context, ana);
@@ -255,42 +311,48 @@ describe("sending a new comment to the Planner", () => {
 });
 
 describe("one thread, one turn", () => {
-	it("folds a later note into the turn already waiting for its thread", async () => {
-		let { context, plan } = await opened();
+	it("refuses a later note to Chopin while the turn for its thread runs, and keeps the thread as it was", async () => {
+		let { context, plan, started } = await opened();
 		let ana = member("ana");
 		let id = idOf(await start(context, ana));
+		await started();
 
 		let answered = await reply(context, member("kris"), id, "And shorten it.");
 
-		expect(answered).toMatchObject({ ok: true, planner: "queued" });
-		let queued = plan.chat.waiting.filter(item => item.thread === id);
-		expect(queued).toHaveLength(1);
-		expect(queued[0]?.text).toContain("And shorten it.");
-		expect(queued[0]?.handle).toBe("kris");
-		// Folding is not refused by a full queue: it adds nothing to it.
-		expect(Chat.admission(context, id)).toBe("queued");
+		expect(answered).toMatchObject({
+			ok: false,
+			reason: "busy",
+			message: "Chopin is working on something else. Try again when it has finished.",
+		});
+		expect(plan.threads.get(id)?.notes).toHaveLength(1);
+		expect(plan.chat.waiting).toEqual([]);
+		// A plain note is still welcome: it is not asked of Chopin.
+		expect(await reply(context, member("kris"), id, "Just us.", null)).toMatchObject({ ok: true });
+		expect(Chat.admission(context)).toBe("busy");
 	});
 
-	it("queues one follow-up while a turn for the thread is running", async () => {
-		let { context, plan } = await opened();
+	it("takes a later note to Chopin once the turn for the thread has ended", async () => {
+		let { context, plan, started, turns } = await opened();
 		let ana = member("ana");
 		let id = idOf(await start(context, ana));
-		// The queued turn starts: it leaves the queue and becomes the running one.
-		plan.chat.waiting = [];
-		plan.chat.acting = id;
+		await started();
+		turns[0]!.finish();
+		await context.chat.running;
 
-		await reply(context, ana, id, "One more thing.");
-		await reply(context, ana, id, "And another.");
+		let answered = await reply(context, ana, id, "One more thing.");
 
-		let queued = plan.chat.waiting.filter(item => item.thread === id);
-		expect(queued).toHaveLength(1);
-		expect(queued[0]?.text).toContain("And another.");
+		expect(answered).toMatchObject({ ok: true, planner: "running" });
+		await started(2);
+		expect(turns[1]!.prompt).toContain("One more thing.");
+		expect(plan.chat.acting).toBe(id);
 	});
 
-	it("drops a waiting turn once its thread is resolved, and stops working", async () => {
-		let { broadcasts, context, plan, server } = await opened();
+	it("stops working on a thread once it is resolved", async () => {
+		let { broadcasts, context, plan, server, started } = await opened();
 		let ana = member("ana");
 		let id = idOf(await start(context, ana));
+		await started();
+		expect(Comments.working(plan, id)).toBe(true);
 
 		await Comments.resolve(
 			plan,
@@ -303,34 +365,31 @@ describe("one thread, one turn", () => {
 			}),
 		);
 		expect(Comments.working(plan, id)).toBe(false);
-		expect(Chat.pending(plan.chat)).toBeUndefined();
-		await Bun.sleep(0);
-
-		expect(working(broadcasts).at(-1)).toEqual(
-			expect.objectContaining({ id, working: false }),
-		);
+		expect(broadcasts).toContainEqual(expect.objectContaining({ kind: "comment:resolved", id }));
 	});
 });
 
+/** What the Planner says in Chat, as stream parts. */
+let said = (text: string) => [
+	{ type: "text-start", id: "m" },
+	{ type: "text-delta", id: "m", text },
+	{ type: "text-end", id: "m" },
+];
+
 describe("how a turn ends on its thread", () => {
-	async function ending(status: Chat.Ended["status"], text?: string) {
+	async function ending() {
 		let fixture = await opened();
 		let ana = member("ana");
 		let id = idOf(await start(fixture.context, ana));
-		let waiting = fixture.plan.chat.waiting.shift()!;
-		fixture.plan.chat.acting = id;
-		return {
-			...fixture,
-			ana,
-			end: () => waiting.ended!({ status, ...(text ? { text } : {}) }),
-			id,
-		};
+		await fixture.started();
+		return { ...fixture, ana, id, turn: fixture.turns[0]! };
 	}
 
 	it("posts the Planner's last word in Chat when it never replied in the thread", async () => {
-		let { broadcasts, end, id, plan, storage } = await ending("done", "Shortened it to 30s.");
+		let { broadcasts, context, id, plan, storage, turn } = await ending();
 
-		await end();
+		turn.finish(said("Shortened it to 30s."));
+		await context.chat.running;
 
 		let notes = plan.threads.get(id)!.notes;
 		expect(notes.at(-1)).toMatchObject({ author: "planner", text: "Shortened it to 30s." });
@@ -344,87 +403,67 @@ describe("how a turn ends on its thread", () => {
 	});
 
 	it("does not repeat itself when the Planner already replied", async () => {
-		let { end, id, plan, server } = await ending("done", "Shortened it.");
+		let { context, id, plan, server, turn } = await ending();
 
 		expect(await Comments.answer(plan, server, "test", id, "Done — 30s now.", plan.chat.acting))
 			.toMatchObject({
 				ok: true,
 			});
-		await end();
+		turn.finish(said("Shortened it."));
+		await context.chat.running;
 
 		let notes = plan.threads.get(id)!.notes;
 		expect(notes.filter(note => note.author === "planner")).toHaveLength(1);
 	});
 
 	it("says why it stopped", async () => {
-		for (let status of ["stopped", "failed"] as const) {
-			let { broadcasts, end, id, plan } = await ending(status, "Half a thought");
-			await end();
-			expect(plan.threads.get(id)!.notes).toHaveLength(1);
-			expect(working(broadcasts).at(-1)).toEqual(
-				expect.objectContaining({ id, working: false, reason: status }),
+		let quiet = console.error;
+		console.error = () => {};
+		try {
+			let stopped = await ending();
+			await Chat.abort(stopped.context, stopped.ana.socket);
+			await stopped.context.chat.running;
+			expect(stopped.plan.threads.get(stopped.id)!.notes).toHaveLength(1);
+			expect(working(stopped.broadcasts).at(-1)).toEqual(
+				expect.objectContaining({ id: stopped.id, working: false, reason: "stopped" }),
 			);
+
+			let failed = await ending();
+			failed.turn.fail(new Error("The model stopped answering."));
+			await failed.context.chat.running;
+			expect(failed.plan.threads.get(failed.id)!.notes).toHaveLength(1);
+			expect(working(failed.broadcasts).at(-1)).toEqual(
+				expect.objectContaining({ id: failed.id, working: false, reason: "failed" }),
+			);
+		} finally {
+			console.error = quiet;
 		}
-	});
-});
-
-describe("a note that arrives while Chopin is working", () => {
-	it("is answered by its own turn, not by the running turn's last word", async () => {
-		let { broadcasts, context, plan } = await opened();
-		let ana = member("ana");
-		let id = idOf(await start(context, ana));
-		let running = plan.chat.waiting.shift()!;
-		plan.chat.acting = id;
-		running.started?.();
-
-		await reply(context, ana, id, "Also, what about tunnels?");
-		expect(Chat.queuedFor(plan.chat, id)).toBeDefined();
-		await running.ended!({ status: "done", text: "Unrelated chatter about the header." });
-
-		expect(plan.threads.get(id)!.notes.some(note => note.author === "planner")).toBe(false);
-		expect(working(broadcasts).at(-1)).toEqual(expect.objectContaining({ id, working: true }));
-	});
-
-	it("does not count notes the turn never saw", async () => {
-		let { context, plan, server } = await opened();
-		let ana = member("ana");
-		let id = idOf(await start(context, ana));
-		let running = plan.chat.waiting.shift()!;
-		plan.chat.acting = id;
-		running.started?.();
-		await Comments.answer(plan, server, "test", id, "Shortened it.", plan.chat.acting);
-		await reply(context, ana, id, "And the next one?");
-		// The follow-up is withdrawn, so nothing is queued when the first turn ends.
-		let follow = Chat.queuedFor(plan.chat, id)!;
-		plan.chat.waiting = plan.chat.waiting.filter(item => item !== follow);
-		await follow.ended!({ status: "skipped" });
-
-		await running.ended!({ status: "done", text: "Unrelated chatter." });
-
-		let planner = plan.threads.get(id)!.notes.filter(note => note.author === "planner");
-		expect(planner.map(note => note.text)).toEqual(["Shortened it."]);
 	});
 });
 
 describe("the Planner's reply", () => {
 	it("is refused for any thread but the one its turn was sent", async () => {
-		let { context, plan, server } = await opened();
+		let { context, plan, server, started } = await opened();
 		let ana = member("ana");
-		let id = idOf(await start(context, ana));
+		let sent = idOf(await start(context, ana));
+		await started();
+		let other = idOf(await start(context, ana, "Plain note.", null));
 
-		expect(await Comments.answer(plan, server, "test", id, "Hello", plan.chat.acting))
+		expect(await Comments.answer(plan, server, "test", other, "Hello", plan.chat.acting))
 			.toMatchObject({
 				ok: false,
 				reason: "not-asked",
 			});
-		expect(plan.threads.get(id)!.notes).toHaveLength(1);
+		expect(plan.threads.get(other)!.notes).toHaveLength(1);
+		expect(await Comments.answer(plan, server, "test", sent, "Hello", plan.chat.acting))
+			.toMatchObject({ ok: true });
 	});
 
 	it("is refused once the thread is resolved", async () => {
-		let { context, plan, server } = await opened();
+		let { context, plan, server, started } = await opened();
 		let ana = member("ana");
 		let id = idOf(await start(context, ana));
-		plan.chat.acting = id;
+		await started();
 		await Comments.resolve(
 			plan,
 			server,
@@ -445,10 +484,10 @@ describe("the Planner's reply", () => {
 	});
 
 	it("tells nobody, and keeps nothing, when it cannot be saved", async () => {
-		let { broadcasts, context, plan, server } = await opened();
+		let { broadcasts, context, plan, server, started } = await opened();
 		let ana = member("ana");
 		let id = idOf(await start(context, ana));
-		plan.chat.acting = id;
+		await started();
 		broadcasts.length = 0;
 
 		let original = plan.persistence.storage.collaboration.commit;
@@ -476,17 +515,19 @@ describe("the Planner's reply", () => {
 });
 
 describe("what a thread looks like to someone joining", () => {
-	it("says the Planner is working while its turn is waiting, and only then", async () => {
-		let { context, plan } = await opened();
+	it("says the Planner is working while its turn runs, and only then", async () => {
+		let { context, plan, started, turns } = await opened();
 		let ana = member("ana");
 		let id = idOf(await start(context, ana));
+		await started();
 
 		let joiner = member("kris");
 		Comments.greet(plan, joiner.socket);
 		let sync = joiner.replies.find(frame => frame.kind === "comment:sync");
 		expect(sync?.threads).toEqual([expect.objectContaining({ id, working: true })]);
 
-		plan.chat.waiting = [];
+		turns[0]!.finish();
+		await context.chat.running;
 		Comments.greet(plan, joiner.socket);
 		let later = joiner.replies.findLast(frame => frame.kind === "comment:sync");
 		expect((later!.threads as Array<object>)[0]).not.toHaveProperty("working");
@@ -633,11 +674,8 @@ async function rootAndChild() {
 			root.plan.chat.actingChannel = undefined;
 			return replyAs(childThread, "Wrong place.");
 		},
-		async fillRootQueue() {
+		async busyRoot() {
 			root.plan.chat.busy = true;
-			for (let i = 0; i < 20; i++) {
-				root.plan.chat.waiting.push({ id: `w${i}`, handle: "kris", text: "x" });
-			}
 		},
 		async endRootTurnWithChatOnly(text: string) {
 			await turns.finish([
@@ -705,9 +743,9 @@ describe("a comment sent to Chopin inside a child document", () => {
 		});
 	});
 
-	it("a busy root queue refuses the child comment before saving it", async () => {
-		let { child, fillRootQueue } = await rootAndChild();
-		await fillRootQueue();
+	it("a busy root refuses the child comment before saving it", async () => {
+		let { child, busyRoot } = await rootAndChild();
+		await busyRoot();
 		let refused = await child.sendToChopin("tighten this");
 		expect(refused).toMatchObject({ ok: false, reason: "busy" });
 		expect(child.plan.threads.size).toBe(0);
@@ -723,23 +761,15 @@ describe("a comment sent to Chopin inside a child document", () => {
 		});
 	});
 
-	it("keeps the root and child rooms held until a queued child turn has itself ended", async () => {
-		let { child, childContext, events, holds, rootChat, rootContext, turns, user } =
-			await rootAndChild();
-		// Busy without a running turn of its own, as while a member's message is being saved.
-		rootChat.busy = true;
+	it("keeps the root and child rooms held until the child's turn has itself ended", async () => {
+		let { child, childContext, events, holds, rootChat, turns } = await rootAndChild();
 		let answered = await start(childContext, member("ana"), "tighten this");
-		expect(answered).toMatchObject({ ok: true, planner: "queued" });
+		expect(answered).toMatchObject({ ok: true, planner: "running" });
 		let thread = idOf(answered);
-		// Admission released its hold; the queued turn's is still held.
+		await turns.started();
+		// Admission released its hold; the running turn's is still held.
 		expect(holds).toEqual({ opened: 2, released: 1 });
-
-		rootChat.busy = false;
-		expect(await Chat.invoke(rootContext, user, "First")).toBeUndefined();
-		await turns.finish();
-		await turns.started(2);
 		expect(rootChat.acting).toBe(thread);
-		expect(holds.released).toBe(1);
 
 		await turns.finish();
 		await rootChat.running;
@@ -768,16 +798,19 @@ describe("a comment sent to Chopin inside a child document", () => {
 		});
 	});
 
-	it("releases the root at once when a note folds into a turn already waiting", async () => {
-		let { childContext, holds, rootChat } = await rootAndChild();
-		rootChat.busy = true;
+	it("refuses a later note in the child while its thread's turn runs, and holds nothing more", async () => {
+		let { child, childContext, holds, rootChat, turns } = await rootAndChild();
 		let thread = idOf(await start(childContext, member("ana"), "tighten this"));
+		await turns.started();
 		expect(holds).toEqual({ opened: 2, released: 1 });
-		await reply(childContext, member("kris"), thread, "And shorten it.");
-		expect(holds).toEqual({ opened: 4, released: 3 });
-		expect(rootChat.waiting.filter(item => item.thread === thread)).toHaveLength(1);
-		rootChat.waiting = [];
-		rootChat.busy = false;
+		let refused = await reply(childContext, member("kris"), thread, "And shorten it.");
+		expect(refused).toMatchObject({ ok: false, reason: "busy" });
+		// Admission opened the root again and let it go; nothing waits for the turn to end.
+		expect(holds).toEqual({ opened: 3, released: 2 });
+		expect(rootChat.waiting).toEqual([]);
+		expect(child.plan.threads.get(thread)?.notes).toHaveLength(1);
+		await turns.finish();
+		await rootChat.running;
 	});
 
 	it("says the turn failed when the root cannot take it after the note is saved", async () => {
@@ -819,52 +852,19 @@ describe("a comment sent to Chopin inside a child document", () => {
 });
 
 describe("a comment sent to Chopin while its machine is away", () => {
-	let away = async () => {
-		let fixture = await opened({ busy: false });
-		let { context, plan } = fixture;
-		// Rows belong to a stored document.
-		context.room = plan.id;
-		context.persist = (chat, deferred) => Service.persistDeferred(plan, chat, deferred);
-		context.deferred = {};
-		context.plannerReady = async () => false;
+	it("is refused before it is saved, with the connection's own words, and nothing is held", async () => {
+		let { broadcasts, context, plan } = await opened({ busy: false });
 		context.plannerNotAttached = async () => "No machine is connected.";
-		return fixture;
-	};
-
-	it("is accepted and kept as a row, never refused, and the thread shows Chopin working on it", async () => {
-		let { context, plan, broadcasts } = await away();
 		let ana = member("ana");
 		let answered = await start(context, ana, "Rephrase this.");
-		expect(answered).toMatchObject({ ok: true, planner: "queued" });
-		let id = idOf(answered);
-		let [row] = await plan.persistence.storage.deferredTurns.list(plan.id, ["waiting"]);
-		expect(row).toMatchObject({ kind: "comment", threadId: id, state: "waiting", text: "" });
-		expect(Chat.workingFor(plan.chat, id)).toBe(true);
-		expect(working(broadcasts)).toContainEqual(expect.objectContaining({ id, working: true }));
-		expect(context.chat.entries.some(entry => entry.comment?.thread === id)).toBe(true);
-	});
-
-	it("is built again from the thread as it reads after a restart, with every note in it, and not at all once the thread is resolved", async () => {
-		let { context, plan } = await away();
-		let ana = member("ana");
-		let id = idOf(await start(context, ana, "Rephrase this."));
-		await reply(context, member("bob"), id, "Shorter, please.");
-		let restored = Comments.restore(context, id, "ana");
-		expect(restored?.text).toContain("Rephrase this.");
-		expect(restored?.text).toContain("Shorter, please.");
-		expect(restored).toMatchObject({ thread: id });
-		expect(restored?.spent?.()).toBe(false);
-
-		plan.threads.set(id, { ...plan.threads.get(id)!, status: "resolved" });
-		expect(Comments.restore(context, id, "ana")).toBeUndefined();
-		expect(Comments.restore(context, "no-such-thread", "ana")).toBeUndefined();
-	});
-
-	it("is refused as before when rows are off, which is local mode", async () => {
-		let { context } = await away();
-		context.deferred = undefined;
-		let ana = member("ana");
-		let answered = await start(context, ana, "Rephrase this.");
-		expect(answered).toMatchObject({ ok: false, code: "planner-not-attached" });
+		expect(answered).toMatchObject({
+			ok: false,
+			code: "planner-not-attached",
+			message: "No machine is connected.",
+		});
+		expect(plan.threads.size).toBe(0);
+		expect(plan.chat.waiting).toEqual([]);
+		expect(plan.chat.entries).toEqual([]);
+		expect(working(broadcasts)).toHaveLength(0);
 	});
 });

@@ -221,6 +221,9 @@ export declare namespace Session {
 		 * Set for a refusal the client presents in full rather than as a generic
 		 * failure. `planner-not-attached`: a Planner request under `HARNESS=remote`
 		 * to a document no client is attached to; `message` says how to attach one.
+		 * `planner-busy`: a message to the Planner while its turn runs, and the harness cannot take
+		 * input mid-run (or the running turn is a background job's): it is refused, not held, and
+		 * `message` says to stop the turn to ask now.
 		 * `planner-queue-full`: too many requests wait behind the Planner's running turn right now
 		 * (never said of a machine that is away, which keeps every request). The request itself is
 		 * fine and is sent again, with the same request id, once some have been answered.
@@ -236,6 +239,7 @@ export declare namespace Session {
 		 */
 		code?:
 			| "planner-not-attached"
+			| "planner-busy"
 			| "planner-queue-full"
 			| "temporarily-unavailable"
 			| "message-not-deletable";

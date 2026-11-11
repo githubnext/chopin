@@ -165,6 +165,8 @@ describe("refusals of a send", () => {
 	 */
 	const CODES: Record<Code, "passing" | "final"> = {
 		"planner-not-attached": "final",
+		// A turn is running and cannot be given the message: refused, never held.
+		"planner-busy": "final",
 		"planner-queue-full": "passing",
 		"temporarily-unavailable": "passing",
 		// Answers a delete only, and is its last word; a send never gets it.

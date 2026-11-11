@@ -6,6 +6,8 @@ type Part = TextStreamPart<ToolSet>;
 /** Legacy test commands feed the current typed stream, without a Copilot SDK session. */
 export function jobStream() {
 	let prompts: string[] = [];
+	/** What the running turn was given after its prompt, as its model reads it. */
+	let steered: string[] = [];
 	let parts: Part[] = [];
 	let wake = Promise.withResolvers<void>();
 	let ended = false;
@@ -93,6 +95,9 @@ export function jobStream() {
 				})();
 				return { fullStream } as never;
 			},
+			async steer(text) {
+				steered.push(text);
+			},
 			async destroy() {
 				end();
 			},
@@ -100,6 +105,7 @@ export function jobStream() {
 	}
 	return {
 		prompts,
+		steered,
 		emit,
 		emitPart: push,
 		session,

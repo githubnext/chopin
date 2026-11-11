@@ -29,6 +29,8 @@ export type Frame = { kind: string; [key: string]: unknown };
  */
 export function observe(context: Chat.Room) {
 	let prompts: string[] = [];
+	/** What a running turn was given, as its model reads it, after the turn's own prompt. */
+	let steered: string[] = [];
 	let gates: Array<PromiseWithResolvers<unknown[]>> = [];
 	let released = 0;
 	let after: unknown[] | undefined;
@@ -46,16 +48,20 @@ export function observe(context: Chat.Room) {
 				createSession: async ({ sessionId }: { sessionId: string }) => ({
 					sessionId,
 					destroy: async () => {},
+					experimental_steerTurn: async (text: string) => {
+						steered.push(text);
+					},
 				}),
 				stream: async (call: { prompt: string }) => {
 					prompts.push(call.prompt);
 					let gate = Promise.withResolvers<unknown[]>();
 					gates.push(gate);
 					if (after) gate.resolve(after);
-					let parts = await gate.promise;
+					// Returned at once, as a harness does once its turn is under way: the turn ends when
+					// its stream does.
 					return {
 						fullStream: (async function*() {
-							yield* parts;
+							yield* await gate.promise;
 						})(),
 					};
 				},
@@ -63,6 +69,7 @@ export function observe(context: Chat.Room) {
 		});
 	return {
 		prompts,
+		steered,
 		/** Settles once `count` turns have reached the model. */
 		started: (count = 1) => seen(count),
 		/** Lets the oldest turn still held end after streaming `parts`. */

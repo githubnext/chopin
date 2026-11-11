@@ -112,7 +112,7 @@ test("invoke_planner exposes each refusal as an object code", async () => {
 			"planner-owner-unavailable",
 			"checkout-unverified",
 			"planner-unavailable",
-			"planner-queue-full",
+			"planner-busy",
 			"system-turn-forbidden",
 			"system-turn-limited",
 		] as const
@@ -207,22 +207,27 @@ test("a system invocation starts a Planner turn with its instruction behind a sy
 	expect(root.plan.chat.entries.some(entry => entry.text.includes(FOLLOW_UP))).toBe(false);
 });
 
-test("a system invocation behind a running turn waits out of the visible queue", async () => {
-	let { events, invoke, released, root, turns, user } = await routed();
+test("a system invocation while a turn runs is refused, not held, and gives the allowance back", async () => {
+	let { invoke, released, root, turns, user } = await routed();
 	expect(await Chat.invoke(root.context, user, "First")).toBeUndefined();
 	await turns.started(1);
+	let notices = root.plan.chat.entries.length;
 	expect(await invoke(root.channel.id, undefined, { system: true, instruction: FOLLOW_UP }))
-		.toBeUndefined();
-	let queues = events.filter(event => event.frame.kind === "chat:queue");
-	expect(JSON.stringify(queues)).not.toContain(FOLLOW_UP);
+		.toBe("planner-busy");
+	// It needs a turn of its own: nothing waits for it, and nothing says it was asked.
+	expect(root.plan.chat.waiting).toEqual([]);
+	expect(root.plan.chat.entries).toHaveLength(notices);
+	expect(released()).toBe(1);
 
 	await turns.finish();
+	await root.plan.chat.running;
+	expect(await invoke(root.channel.id, undefined, { system: true, instruction: FOLLOW_UP }))
+		.toBeUndefined();
 	await turns.started(2);
 	expect(turns.prompts[1]).toContain(FOLLOW_UP);
-	expect(released()).toBe(0);
 	await turns.finish();
 	await root.plan.chat.running;
-	expect(released()).toBe(1);
+	expect(released()).toBe(2);
 });
 
 test("only the document's creator or the account holding its Planner may start a system turn", async () => {
@@ -250,6 +255,9 @@ test("system turns are limited per document per hour", async () => {
 	let system = { system: true, instruction: FOLLOW_UP };
 	for (let i = 0; i < MAX_SYSTEM_TURNS_PER_HOUR; i++) {
 		expect(await invoke(root.channel.id, undefined, system)).toBeUndefined();
+		// Each needs a turn of its own, so the one before has ended.
+		turns.finishAll();
+		await root.plan.chat.running;
 	}
 	let notices = root.plan.chat.entries.length;
 	expect(await invoke(root.channel.id, undefined, system)).toBe("system-turn-limited");
@@ -296,19 +304,41 @@ test("invoke_planner on a child that no longer belongs to its root fails closed"
 	expect(released()).toBe(opened.length);
 });
 
-test("a child instruction queued behind a root turn holds the root until its own turn ends", async () => {
+test("a child instruction while a root turn runs is refused when the harness takes no message mid-run, and holds nothing", async () => {
 	let { child, invoke, released, root, turns, user } = await routed();
 	expect(await Chat.invoke(root.context, user, "First")).toBeUndefined();
 	await turns.started(1);
-	expect(await invoke(child.channel.id)).toBeUndefined();
-	expect(released()).toBe(0);
-
-	await turns.finish();
-	await turns.started(2);
-	expect(turns.prompts[1]).toContain(`child id ${child.channel.id}`);
-	expect(released()).toBe(0);
+	expect(await invoke(child.channel.id)).toBe("planner-busy");
+	expect(root.plan.chat.waiting).toEqual([]);
+	expect(root.plan.chat.entries.map(entry => entry.text)).toEqual(["First"]);
+	expect(released()).toBe(1);
 
 	await turns.finish();
 	await root.plan.chat.running;
+	expect(turns.prompts).toHaveLength(1);
+});
+
+test("a child instruction while a root turn runs is given to it, with the child as focus, when its harness takes input mid-run", async () => {
+	let { child, invoke, released, root, turns, user } = await routed();
+	root.context.steers = () => true;
+	expect(await Chat.invoke(root.context, user, "First")).toBeUndefined();
+	await turns.started(1);
+	expect(await invoke(child.channel.id)).toBeUndefined();
+	for (let deadline = Date.now() + 2_000; released() < 1 && Date.now() < deadline;) {
+		await Bun.sleep(5);
+	}
+	expect(turns.steered).toHaveLength(1);
+	expect(turns.steered[0]).toContain(`child id ${child.channel.id}`);
+	expect(turns.steered[0]).toContain("Summarize the open findings.");
+	expect(root.plan.chat.entries.map(entry => entry.text)).toEqual([
+		"First",
+		"Summarize the open findings.",
+	]);
+	expect(root.plan.chat.waiting).toEqual([]);
+	// Given to the turn that was running: no turn of its own, and the root is let go.
 	expect(released()).toBe(1);
+
+	await turns.finish();
+	await root.plan.chat.running;
+	expect(turns.prompts).toHaveLength(1);
 });
