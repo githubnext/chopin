@@ -392,7 +392,13 @@ test("when a newer draft is already in the composer, a refused earlier message o
 	let sent = message(page, "outline the plan");
 	await expect(sent.locator("[data-chat-failed]")).toContainText("Couldn't send.");
 	await expectChatValue(input, "another thought");
-	await sent.getByRole("button", { name: "Delete" }).click();
+	// Delete is in the message's menu, from the toolbar a pointer on the message brings up.
+	await sent.hover();
+	await sent.getByRole("button", { name: "Message actions" }).click();
+	await page.getByRole("menu", { name: "Message actions" }).getByRole("menuitem", {
+		name: "Delete",
+	})
+		.click();
 	await expect(sent).toHaveCount(0);
 	await input.fill("");
 	await page.reload();

@@ -253,9 +253,8 @@ test("nothing Chopin draws around a message is copied with it", async ({ join, s
 			"Looks right",
 			"Explain this",
 			"Not quite",
-			"queued",
-			"Delivered",
-			"Sent",
+			"Reply in thread",
+			"Sending",
 		]
 	) {
 		expect(written).not.toContain(drawn);
@@ -699,7 +698,7 @@ test("a message only this browser has can be reacted to, and the reaction is kep
 	await draft.fill("@chopin Hold this thought");
 	await draft.press("Enter");
 	let mine = chatOf(ana).locator("[data-chat-message-id]").filter({ hasText: "Hold this thought" });
-	await expect(mine.getByRole("img", { name: "Waiting to send" })).toBeVisible();
+	await expect(mine.locator('[data-chat-delivery="sending"]')).toHaveText("Sending");
 
 	await mine.hover();
 	await expect(toolbar(mine).getByRole("button")).toHaveCount(5);
