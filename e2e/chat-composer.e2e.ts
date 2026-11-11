@@ -104,19 +104,20 @@ test("Control+J preserves the draft and sends with the chip, which stays on afte
 	await input.press("Enter");
 	await expect.poll(() => sent.length).toBe(1);
 	expect(sent[0]).toMatchObject({ text: "@chopin Outline export options", to: "planner" });
-	// The message is in the Chat at once, waiting to send, and the composer is empty and free for
-	// the next one, with the chip still on: nothing waits on the acknowledgement.
+	// The message is in the Chat at once, saying Sending while only this browser has it, and the
+	// composer is empty and free for the next one, with the chip still on: nothing waits on the
+	// acknowledgement.
 	let outline = chat.locator("[data-chat-message-id]").filter({
 		hasText: "Outline export options",
 	});
 	await expect(outline).toHaveCount(1);
-	await expect(outline.getByRole("img", { name: "Waiting to send" })).toBeVisible();
+	await expect(outline.getByText("Sending", { exact: true })).toBeVisible();
 	await expect(input).toHaveAttribute("contenteditable", "true");
 	await expectChatValue(input, "");
 	await expect(remove).toBeEnabled();
 	await expect(chip).toBeVisible();
 	release!();
-	await expect(outline.getByRole("img", { name: "Waiting to send" })).toHaveCount(0);
+	await expect(outline.getByText("Sending", { exact: true })).toHaveCount(0);
 	await expect(outline).toHaveCount(1);
 	await expectChatValue(input, "");
 	await expect(chip).toBeVisible();
