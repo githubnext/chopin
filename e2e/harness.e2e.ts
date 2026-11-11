@@ -779,7 +779,18 @@ test("images the Planner makes reach Chat as stored, generated images only reade
 		await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth))
 			.toBe(picture.width);
 	}
-	await expect(chat.getByText("Generated", { exact: true })).toHaveCount(3);
+	// Three images are a gallery, whose tiles carry no attribution: each image is told as generated
+	// in the lightbox, as it is shown.
+	await chat.getByRole("button", { name: `Open image: ${pictures[0]!.alt}`, exact: true }).click();
+	let box = opened.getByRole("dialog");
+	for (let [index, picture] of pictures.entries()) {
+		if (index > 0) await box.getByRole("button", { name: "Next image" }).click();
+		await expect(box.getByRole("status")).toHaveText(`Image ${index + 1} of ${pictures.length}`);
+		await expect(box.getByRole("img", { name: picture.alt, exact: true })).toBeVisible();
+		await expect(box.getByText("Generated", { exact: true })).toBeVisible();
+	}
+	await opened.keyboard.press("Escape");
+	await expect(box).toHaveCount(0);
 
 	await opened.reload();
 	await ready(opened);
