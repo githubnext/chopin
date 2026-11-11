@@ -53,6 +53,13 @@ export declare namespace Session {
 		| Failure
 		| Ping;
 
+	/** The per-file, per-message count and per-message total caps, each a server setting. */
+	export type AttachmentSettings = {
+		maxBytes: number;
+		maxCount: number;
+		maxTotalBytes: number;
+	};
+
 	/** A member, as everyone else sees them. */
 	export type Member = {
 		/** Verified GitHub login, used for attribution, avatar and cursor colour. */
@@ -96,6 +103,16 @@ export declare namespace Session {
 		webResearch: boolean;
 		chatReferences: boolean;
 		chatSendAcks: boolean;
+		/**
+		 * The caps on what a message may carry, where this server takes images and files: absent
+		 * from a server that does not, and the composer then offers none.
+		 */
+		attachments?: AttachmentSettings;
+		/**
+		 * Set where the deployment configured a transcription model for dictation, naming the
+		 * provider it sends audio to. Absent by default: no audio is ever sent to the server.
+		 */
+		transcription?: { provider: string };
 		/**
 		 * The build of the client this server serves: the entry script its page names. A tab whose own
 		 * build, sent as the socket's `build` query parameter, differs knows a newer server answered.

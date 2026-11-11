@@ -21,6 +21,10 @@
 			"types": "./address.ts",
 			"default": "./address.ts"
 		},
+		"./attachment": {
+			"types": "./attachment.ts",
+			"default": "./attachment.ts"
+		},
 		"./commands": {
 			"types": "./commands.ts",
 			"default": "./commands.ts"

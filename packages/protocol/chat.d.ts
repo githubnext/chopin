@@ -49,6 +49,19 @@ export declare namespace Chat {
 
 	export type ToolStatus = "running" | "done" | "failed";
 
+	/**
+	 * A file or image sent with a message, as the server keeps it. `kind` is what its bytes are:
+	 * `image` for a PNG, JPEG, WebP or GIF, `file` for text. `mimeType` is the type it is served
+	 * as, never the one the sender claimed, and `size` is in bytes.
+	 */
+	export type Attachment = {
+		id: string;
+		name: string;
+		kind: "image" | "file";
+		mimeType: string;
+		size: number;
+	};
+
 	export type ReferenceRequest =
 		| { kind: "document"; channelId: string; start: number; end: number }
 		| { kind: "research"; workspaceId: string; start: number; end: number }
@@ -213,6 +226,12 @@ export declare namespace Chat {
 		streaming?: boolean;
 		tools?: Activity[];
 		references?: Reference[];
+		/**
+		 * Images and files the sender sent with the message, in the order they were added. Everyone
+		 * who can read the document reads them by `id` (see `attachmentPath`); a client that
+		 * predates them ignores the field.
+		 */
+		attachments?: Attachment[];
 		/** Present as `planner` on a member message sent to the Planner; the mention is stripped from `text`. */
 		to?: "planner";
 		/**
@@ -332,6 +351,12 @@ export declare namespace Chat {
 		provider?: { id: string; name?: string };
 		description?: string;
 		thinkingLevels?: string[];
+		/**
+		 * What the model reads, as its client reported it: `image` where it reads images, `text`
+		 * where it reads text. Absent when nothing was reported, which reads as text only: an
+		 * image is sent to a model only when it says it reads them.
+		 */
+		inputTypes?: string[];
 	};
 
 	/** What a document's agent offers: absent entirely where its harness offers no choice. */
@@ -431,6 +456,7 @@ export declare namespace Chat {
 		handle: string;
 		text: string;
 		references?: Reference[];
+		attachments?: Attachment[];
 	};
 
 	export type Queue = KIND<"chat:queue"> & { waiting: Waiting[] };
@@ -448,6 +474,13 @@ export declare namespace Chat {
 		text: string;
 		to: Destination;
 		references?: ReferenceRequest[];
+		/**
+		 * The images and files to send with the message, by the `id` the upload returned (at most
+		 * the server's per-message count). The server reads each from its own record, and refuses
+		 * one that is not the sender's, not from this document, already sent with another
+		 * message, or a kind the destination cannot take.
+		 */
+		attachments?: string[];
 		/**
 		 * The child document open beside this Chat, by channel id. Context for the
 		 * Planner only: the server resolves it against this root's children and

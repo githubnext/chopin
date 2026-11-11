@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	levelLabel,
 	modelLevels,
+	modelReadsImages,
 	refusedChoice,
 	resolveChoice,
 	unavailableNotice,
@@ -185,5 +186,43 @@ describe("the words for a level and for a choice that could not be honoured", ()
 		expect(unavailableNotice(catalog, { thinkingLevel: "xhigh" })).toBe(
 			"xhigh reasoning is no longer available for this model, so Chopin used its default.",
 		);
+	});
+});
+
+describe("whether the model a turn would run reads images", () => {
+	let reading: Chat.ModelCatalog = {
+		models: [
+			{ id: "acme/vision", name: "Vision", inputTypes: ["text", "image"] },
+			{ id: "acme/text", name: "Text", inputTypes: ["text"] },
+			{ id: "acme/unsaid", name: "Unsaid" },
+		],
+		default: { model: "acme/vision" },
+	};
+
+	it("is true only for a model whose catalog entry lists images", () => {
+		expect(modelReadsImages(reading, { model: "acme/vision" })).toBe(true);
+		expect(modelReadsImages(reading, { model: "acme/text" })).toBe(false);
+		expect(modelReadsImages(reading, { model: "acme/unsaid" })).toBe(false);
+	});
+
+	it("asks the agent's default model when nobody has chosen one", () => {
+		expect(modelReadsImages(reading, undefined)).toBe(true);
+		expect(modelReadsImages(reading, {})).toBe(true);
+		expect(modelReadsImages({ ...reading, default: { model: "acme/text" } }, undefined)).toBe(
+			false,
+		);
+		expect(modelReadsImages({ models: reading.models }, undefined)).toBe(false);
+	});
+
+	it("falls back to the default when the chosen model has gone, as a turn does", () => {
+		expect(modelReadsImages(reading, { model: "acme/gone" })).toBe(true);
+		expect(
+			modelReadsImages({ ...reading, default: { model: "acme/text" } }, { model: "acme/gone" }),
+		).toBe(false);
+	});
+
+	it("is false where there is no catalog, so an image is never sent to a model not known to read it", () => {
+		expect(modelReadsImages(undefined, undefined)).toBe(false);
+		expect(modelReadsImages(undefined, { model: "acme/vision" })).toBe(false);
 	});
 });
