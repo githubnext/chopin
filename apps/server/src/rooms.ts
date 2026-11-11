@@ -97,14 +97,21 @@ export function forget(room: Room): void {
 	if (rooms.get(room.id) === room) rooms.delete(room.id);
 }
 
+/** One connection as the room sees it: who, which tab, and the picture to draw them with. */
+export function member(ws: Socket): Session.Member {
+	return {
+		handle: ws.data.handle,
+		client: ws.data.client,
+		...(ws.data.actor
+			? { actor: { name: ws.data.actor.name, avatar: ws.data.actor.avatar } }
+			: ws.data.avatarUrl
+			? { avatarUrl: ws.data.avatarUrl }
+			: {}),
+	};
+}
+
 export function members(room: Room): Session.Member[] {
 	return [...room.members.values()]
-		.map(ws => ({
-			handle: ws.data.handle,
-			client: ws.data.client,
-			...(ws.data.actor
-				? { actor: { name: ws.data.actor.name, avatar: ws.data.actor.avatar } }
-				: {}),
-		}))
+		.map(member)
 		.sort((a, b) => a.handle.localeCompare(b.handle) || a.client.localeCompare(b.client));
 }

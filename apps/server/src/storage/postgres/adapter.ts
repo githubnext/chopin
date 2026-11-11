@@ -627,6 +627,18 @@ export class PostgresStorage implements StorageAdapter {
 			`;
 				return found ? user(found) : undefined;
 			}),
+		byLogins: logins =>
+			this.#run("read users by login", async () => {
+				let wanted = [...new Set(logins.map(login => login.toLowerCase()))];
+				if (!wanted.length) return [];
+				let rows = await this.#sql<UserRow[]>`
+				SELECT DISTINCT ON (lower(login)) ${this.#sql.unsafe(USER_COLUMNS)}
+				FROM users
+				WHERE lower(login) IN ${this.#sql(wanted)}
+				ORDER BY lower(login), updated_at DESC
+			`;
+				return rows.map(user);
+			}),
 	};
 
 	readonly sessions: SessionStore = {

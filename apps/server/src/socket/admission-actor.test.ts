@@ -137,7 +137,10 @@ describe("socket admission of demo actors", () => {
 		let { github, connect } = await setup(true);
 		let plain = await connect();
 		expect("data" in plain && plain.data.actor).toBeUndefined();
+		// The operator's own picture is theirs alone: a demo actor never carries it.
+		expect("data" in plain && plain.data.avatarUrl).toBe("avatar");
 		let first = await connect(["demo:lily"]);
+		expect("data" in first && first.data).not.toHaveProperty("avatarUrl");
 		expect("data" in first && first.data).toMatchObject({
 			handle: "demo:lily",
 			actor: { id: "demo:lily", name: "Lily" },

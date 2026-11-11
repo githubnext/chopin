@@ -1,6 +1,7 @@
+import { avatarOf } from "@chopin/editor/people";
 import { describe, expect, it } from "bun:test";
 
-import { peopleHere } from "./presence";
+import { peopleHere, rememberMembers } from "./presence";
 
 describe("people here", () => {
 	it("represents one verified GitHub account once across its connections", () => {
@@ -33,5 +34,23 @@ describe("people here", () => {
 			{ handle: "demo:lily", client: "c", actor: lily },
 			{ handle: "demo:felix", client: "d", actor: { name: "Felix", avatar: "/demo/felix.svg" } },
 		])).toEqual(["maggie", "demo:lily", "demo:felix"]);
+	});
+});
+
+describe("the pictures a roster carries", () => {
+	it("are learned by login, for each member who has one, and never for a demo actor", () => {
+		rememberMembers([
+			{ handle: "ana_acme", client: "a", avatarUrl: "https://avatars.test/u/10" },
+			{ handle: "bo_acme", client: "b" },
+			{
+				handle: "demo:lily",
+				client: "c",
+				actor: { name: "Lily", avatar: "/demo/lily.svg" },
+				avatarUrl: "https://avatars.test/u/11",
+			},
+		]);
+		expect(avatarOf("ana_acme")).toBe("https://avatars.test/u/10");
+		expect(avatarOf("bo_acme")).toBeUndefined();
+		expect(avatarOf("demo:lily")).toBeUndefined();
 	});
 });

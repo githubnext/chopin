@@ -115,7 +115,11 @@ export async function admit(
 					? { channelArchivedAt: channel.archivedAt.toISOString() }
 					: {}),
 				handle: actor ? actor.id : session.user.login,
-				...(actor ? { actor } : {}),
+				...(actor
+					? { actor }
+					: session.user.avatarUrl
+					? { avatarUrl: session.user.avatarUrl }
+					: {}),
 				client: uid(),
 				canEdit: canManage && !channel.archivedAt && !options.readOnly?.(channel.id),
 				canManage,

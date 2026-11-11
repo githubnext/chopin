@@ -13,20 +13,22 @@
  * answered rather than who is speaking — and a person with a photograph would
  * be the same shape as the agent.
  *
- * Until the photograph arrives, and for good if it never does, the mark is a
+ * The photograph is the picture GitHub's API returned when the person signed in,
+ * which the server stored and the page learned (`people.ts`); only without one is it
+ * the guess at `github.com/<login>.png`, which names no picture for an account such
+ * as an Enterprise Managed User's `name_company`. Each source that fails to load
+ * gives way to the next (`face-photo.ts`).
+ *
+ * Until the photograph arrives, and for good if none ever does, the mark is a
  * square tinted with the person's cursor colour and carrying their initial, so a
  * dead URL never shows the browser's broken-image glyph.
  */
 
-import { useState } from "react";
+import { useReducer, useSyncExternalStore } from "react";
 
 import { color } from "./cursor";
-import { isDemoHandle, personName, profiles } from "./people";
-
-/** Retina-sharp at the rendered size. */
-function photograph(handle: string, size: number): string {
-	return `https://github.com/${encodeURIComponent(handle)}.png?size=${size * 2}`;
-}
+import { faceSources, nextPhoto, photoShown, photoSource } from "./face-photo";
+import { avatarOf, personName, subscribeAvatars } from "./people";
 
 export type FaceProps = {
 	/** Unverified, so the photograph may not exist. */
@@ -75,12 +77,17 @@ export function Face({ decorative, handle, ring, size, textSize, titled }: FaceP
 function Portrait(
 	{ decorative, handle, ring, size = 20, textSize = "xs", titled = true }: FaceProps,
 ) {
-	let [failed, setFailed] = useState(false);
-	let [loaded, setLoaded] = useState(false);
+	let [photo, settle] = useReducer(nextPhoto, { failed: [] });
+	// Server-rendered markup reads the same map, since there is no snapshot to hydrate from.
+	let stored = useSyncExternalStore(
+		subscribeAvatars,
+		() => avatarOf(handle),
+		() => avatarOf(handle),
+	);
 	let tone = color(handle);
 	let name = personName(handle);
-	let local = profiles.get(handle)?.avatar;
-	let source = local ?? (isDemoHandle(handle) ? undefined : photograph(handle, size));
+	let source = photoSource(faceSources(handle, size, stored), photo);
+	let loaded = photoShown(photo, source);
 	let edge = `${FACE_RADIUS_CLASS[faceCorner(size)]} ${ring ? FACE_RING_CLASS[ring] : ""}`;
 
 	return (
@@ -100,12 +107,13 @@ function Portrait(
 			title={titled ? name : undefined}
 		>
 			{!loaded && <span aria-hidden="true">{name.slice(0, 1)}</span>}
-			{!failed && source && (
+			{source && (
 				<img
 					alt=""
 					className={`absolute inset-0 size-full object-cover ${loaded ? "" : "opacity-0"}`}
-					onError={() => setFailed(true)}
-					onLoad={() => setLoaded(true)}
+					key={source}
+					onError={() => settle({ kind: "failed", source })}
+					onLoad={() => settle({ kind: "loaded", source })}
 					referrerPolicy="no-referrer"
 					src={source}
 				/>

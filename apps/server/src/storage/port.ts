@@ -102,6 +102,12 @@ import type { ExperimentStore } from "./experiments";
 export interface UserStore {
 	put(user: PutUser): Promise<UserRecord>;
 	get(id: string): Promise<UserRecord | undefined>;
+	/**
+	 * The user each login names, in one read, compared case-insensitively as GitHub's logins are;
+	 * a login nobody signed in under is left out. A login a person has given up stays on their row
+	 * until they sign in again, so where two rows carry it the one saved last owns it.
+	 */
+	byLogins(logins: readonly string[]): Promise<UserRecord[]>;
 }
 
 export interface SessionStore {

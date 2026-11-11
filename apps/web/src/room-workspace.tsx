@@ -10,6 +10,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { createPortal, flushSync } from "react-dom";
+import { rememberAvatars } from "@chopin/editor/people";
 import { documentPath } from "@chopin/protocol/document-url";
 import {
 	ArchiveIcon,
@@ -131,7 +132,7 @@ import { motionImmediately } from "./motion-input";
 import { useNavigationDocument } from "./navigation-shell";
 import { titleEdits } from "./title-edit";
 import { useTitlingReport } from "./title-presence";
-import { peopleHere } from "./presence";
+import { peopleHere, rememberMembers } from "./presence";
 import {
 	discardDecision,
 	DiscardDecisionDialog,
@@ -1234,6 +1235,7 @@ export function RoomWorkspace(
 					|| latestCanManage.current !== frame.canManage;
 				latestCanEdit.current = editable;
 				latestCanManage.current = frame.canManage;
+				rememberMembers([frame.you, ...frame.members]);
 				setMembers(frame.members);
 				setEffectiveCanEdit(editable);
 				setEffectiveCanManage(frame.canManage);
@@ -1255,7 +1257,11 @@ export function RoomWorkspace(
 				updateMetadata(frame);
 				if (accessChanged) onRepositoryAccessChanged();
 			}),
-			socket.on<Session.Presence>("session:presence", frame => setMembers(frame.members)),
+			socket.on<Session.Presence>("session:presence", frame => {
+				rememberMembers(frame.members);
+				setMembers(frame.members);
+			}),
+			socket.on<Session.People>("session:people", frame => rememberAvatars(frame.people)),
 			socket.on<Session.Planner>("session:planner", frame => {
 				plannerView = plannerWordHeard(plannerView, frame.planner);
 				setPlannerAttachment({

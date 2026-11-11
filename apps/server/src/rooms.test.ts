@@ -33,3 +33,36 @@ test("a Planner hold opens a memberless room, cancels eviction, and releases wit
 		Rooms.forget(room);
 	}
 });
+
+test("a member is listed with the picture GitHub gave their login, and a demo actor with its roster's", () => {
+	let id = crypto.randomUUID();
+	let room = Rooms.hold(id);
+	let ana = {
+		data: { room: id, client: "a", handle: "ana_acme", avatarUrl: "https://avatars.test/u/1" },
+	} as Socket;
+	let bare = { data: { room: id, client: "b", handle: "bo" } } as Socket;
+	let lily = {
+		data: {
+			room: id,
+			client: "c",
+			handle: "demo:lily",
+			actor: { id: "demo:lily", name: "Lily", avatar: "/demo/lily.svg" },
+		},
+	} as Socket;
+	try {
+		for (let socket of [lily, bare, ana]) Rooms.join(socket);
+		expect(Rooms.members(room.room)).toEqual([
+			{ handle: "ana_acme", client: "a", avatarUrl: "https://avatars.test/u/1" },
+			{ handle: "bo", client: "b" },
+			{ actor: { name: "Lily", avatar: "/demo/lily.svg" }, handle: "demo:lily", client: "c" },
+		]);
+		expect(Rooms.member(ana)).toEqual({
+			handle: "ana_acme",
+			client: "a",
+			avatarUrl: "https://avatars.test/u/1",
+		});
+	} finally {
+		room.release();
+		Rooms.forget(room.room);
+	}
+});

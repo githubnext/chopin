@@ -30,9 +30,12 @@ export type JavaScriptBudget = { gzip: number; raw: number };
 // Telling a lost connection once, by the banner and not again at the top of the page, measures
 // 259,493 B raw and 83,031 B gzip in the container's Linux build; allow about 500 B raw and 200 B
 // gzip above that.
+// Every face drawing the picture the server stored for its login, with the page's one map of them,
+// the order a face tries its pictures in and what the room's frames teach the map, measures
+// 260,106 B raw and 83,267 B gzip in the container build; allow about 400 B raw and 180 B gzip above that.
 export const INITIAL_JAVASCRIPT_BUDGET: JavaScriptBudget = {
-	gzip: 83_250,
-	raw: 260_000,
+	gzip: 83_450,
+	raw: 260_500,
 };
 
 export function enforceInitialJavaScript(

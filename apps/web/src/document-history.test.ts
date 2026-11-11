@@ -1,6 +1,19 @@
-import { describe, expect, test } from "bun:test";
+import { avatarOf } from "@chopin/editor/people";
+import { afterEach, describe, expect, test } from "bun:test";
 
-import { historyAge, historyEntries, historyExact, historyGap } from "./document-history";
+import {
+	documentHistory,
+	historyAge,
+	historyEntries,
+	historyExact,
+	historyGap,
+} from "./document-history";
+
+let originalFetch = globalThis.fetch;
+
+afterEach(() => {
+	globalThis.fetch = originalFetch;
+});
 
 const NOW = new Date(2026, 9, 14, 11, 30);
 
@@ -47,5 +60,41 @@ describe("document history", () => {
 		expect(entries[0]).toMatchObject({ kind: "edits", current: true, at: at(14, 11) });
 		expect(entries[1]).toMatchObject({ kind: "edits", current: false });
 		expect(entries[2]).toEqual({ kind: "created", at: at(10, 8), author: { login: "mona" } });
+	});
+
+	test("the authors it lists teach the page their pictures for its faces", async () => {
+		globalThis.fetch = Object.assign(
+			async () =>
+				Response.json({
+					created: {
+						at: at(10, 8),
+						author: { login: "history_mona", avatarUrl: "https://avatars.test/u/21" },
+					},
+					versions: [
+						{ id: "c", revision: 3, startedAt: at(14, 10), updatedAt: at(14, 11) },
+						{
+							id: "b",
+							revision: 2,
+							startedAt: at(14, 8),
+							updatedAt: at(14, 9),
+							author: { login: "history_hubot", avatarUrl: "https://avatars.test/u/22" },
+						},
+						{
+							id: "a",
+							revision: 1,
+							startedAt: at(11, 8),
+							updatedAt: at(11, 9),
+							author: { login: "history_unpictured" },
+						},
+					],
+				}),
+			{ preconnect: originalFetch.preconnect },
+		) as typeof fetch;
+
+		await documentHistory("channel");
+
+		expect(avatarOf("history_mona")).toBe("https://avatars.test/u/21");
+		expect(avatarOf("history_hubot")).toBe("https://avatars.test/u/22");
+		expect(avatarOf("history_unpictured")).toBeUndefined();
 	});
 });

@@ -384,7 +384,8 @@ function chipBox(element: Element) {
 
 /**
  * One photograph for every face, and a wait for it before a picture. A face (`face.tsx`) shows its
- * person's initial until their photograph arrives from github.com, so the page a picture shows
+ * person's initial until their photograph arrives (the picture the server stored for their login,
+ * which the fake GitHub puts on example.invalid, or else github.com), so the page a picture shows
  * depends on how long github.com took. The drag's picture is taken on the first load and the
  * keyboard step's after a reload, which finds the photograph in the cache; when it arrives between
  * the two, they differ in the faces and nowhere else. Answering the requests here takes the network
@@ -397,7 +398,7 @@ const FACE = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80">'
 
 function fixFaces(page: Page) {
 	return page.route(
-		/^https:\/\/(avatars\.githubusercontent\.com\/|github\.com\/[^/?]+\.png(\?|$))/,
+		/^https:\/\/(avatars\.githubusercontent\.com\/|(github\.com|example\.invalid)\/[^/?]+\.png(\?|$))/,
 		route => route.fulfill({ body: FACE, contentType: "image/svg+xml" }),
 	);
 }

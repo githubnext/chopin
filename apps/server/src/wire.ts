@@ -22,6 +22,8 @@ export type Identity = {
 	client: string;
 	/** Validated demo actor bound at admission; `handle` is then the roster ID. */
 	actor?: DemoActor;
+	/** The picture the user table stores for the login; never set for a demo actor. */
+	avatarUrl?: string;
 };
 
 export type AuthorizationResult = "allowed" | "denied" | "unavailable";

@@ -1,4 +1,11 @@
+import { rememberAvatars } from "@chopin/editor/people";
+
 import type { Session } from "@chopin/protocol";
+
+/** Learn the picture each present member's login carries, for every face drawn for them. */
+export function rememberMembers(members: readonly Session.Member[]): void {
+	rememberAvatars(members.map(({ avatarUrl, handle }) => ({ avatarUrl, login: handle })));
+}
 
 /**
  * Derive people from a connection roster.

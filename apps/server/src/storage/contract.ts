@@ -13,6 +13,7 @@ import { plannerCredentialContract } from "./planner-credential-contract";
 import { deferredTurnContract } from "./deferred-turn-contract";
 import { mcpSessionContract } from "./mcp-session-contract";
 import { leasePeekContract } from "./lease-peek-contract";
+import { userContract } from "./user-contract";
 import { researchInlineContract } from "./research-inline-contract";
 import { describe, expect, it } from "bun:test";
 
@@ -59,6 +60,7 @@ export function storageContract(name: string, factory: Factory): void {
 	deferredTurnContract(name, factory);
 	mcpSessionContract(name, factory);
 	leasePeekContract(name, factory);
+	userContract(name, factory);
 	describe(`${name} storage`, () => {
 		it("supports expiring metadata-only sessions for local authentication", async () => {
 			let storage = await opened(factory);
