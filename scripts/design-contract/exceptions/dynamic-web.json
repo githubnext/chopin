@@ -235,7 +235,7 @@
 				1
 			]
 		],
-		"sourceHash": "262e2b1e5c5dc9aaf0c14bd5c853051fda90e6b7c340dbe8186f124a7e50ec55"
+		"sourceHash": "f77a641c8ddd8d4f4af452911e237e7cf98a8d2af01ecfc8866f880129668e68"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
@@ -340,7 +340,7 @@
 				1
 			]
 		],
-		"sourceHash": "4a274a795c3cc65ad14b7bc3c60483bfa62243d60f6c40fe5195142a85289123"
+		"sourceHash": "bf7bae6600e0e702f1319b63652bd7e488457966ba2aca8b6eb4b2acfc57a614"
 	},
 	{
 		"file": "apps/web/src/question-markdown.tsx",

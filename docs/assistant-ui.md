@@ -19,12 +19,16 @@ stands on, is Chat's composer shell. Its menu and rows (`ComposerMenu`, `Compose
 stands on are the Chopin chip. The same Composer holds the standalone elements for what a message
 carries: its staged-file chips (`ComposerAttachments`, `ComposerAttachmentChip`) and the dictation's
 voice and button (`ComposerVoice`, `ComposerVoiceButton`) fill the box's slots, and
-`elements-message-attachment` draws a sent message's files. `markdown-text` has only a connected
-entry, so its `@assistant-ui/react` and `@assistant-ui/react-markdown` imports map in `tsconfig.json`
-to Chopin's props-driven `react-markdown` seam (`src/chat/assistant-ui/markdown-primitive.tsx`). The
-tile the registry calls `attachment` draws a live runtime attachment through `AttachmentPrimitive` and
-has no props-driven form, so it is not copied and the chip carries a file's states from props. Each
-carries a [recorded patch](#patching-a-copy) where Chat needed an extension point.
+`elements-message-attachment` draws a sent message's files. `ComposerContext` (from
+`elements-composer`) and `elements-context-breakdown` draw the composer's context-window ring and
+token breakdown from harness-reported usage; because assistant-ui ships no compaction marker, the
+expandable compaction divider is Chopin's own `Unfold` disclosure. `markdown-text` has only a
+connected entry, so its `@assistant-ui/react` and `@assistant-ui/react-markdown` imports map in
+`tsconfig.json` to Chopin's props-driven `react-markdown` seam
+(`src/chat/assistant-ui/markdown-primitive.tsx`). The tile the registry calls `attachment` draws a
+live runtime attachment through `AttachmentPrimitive` and has no props-driven form, so it is not
+copied and the chip carries a file's states from props. Each carries a
+[recorded patch](#patching-a-copy) where Chat needed an extension point.
 
 ## Add it
 
