@@ -47,7 +47,6 @@ export type Report = {
 		ackMs: Summary;
 		outboxPeak: number;
 		requests: Record<string, number>;
-		requestsQueued: Record<string, number>;
 		retriedRequests: number;
 		mcp: { sessions: number; calls: number; failures: unknown[] };
 		api: { calls: number; failures: unknown[] };
@@ -79,10 +78,9 @@ export function render(report: Report): string {
 		`Planner requests acknowledged: ${
 			Object.entries(workload.requests).map(([kind, count]) => `${count} ${kind}`).join(", ")
 			|| "none"
-		}; told they were queued: ${
-			JSON.stringify(workload.requestsQueued)
-		}; sent again after a lost connection: ${workload.retriedRequests}; `
-			+ `rows ${JSON.stringify(report.turns.rows)}`,
+		}; given to a turn that was running: ${report.turns.steered}; refused for needing a turn while one ran: ${
+			JSON.stringify(report.turns.refusedWhileRunning)
+		}; sent again after a lost connection: ${workload.retriedRequests}`,
 		"",
 		"Each hand-over, in ms from the old process hearing SIGTERM",
 		"  #  told>unready  listener  released  acquired  ready  first served  | clients: lost  gap p50/p95/max  upgrade@1.2s max  | Planners resumed (max ms)",

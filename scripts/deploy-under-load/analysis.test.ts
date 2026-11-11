@@ -100,55 +100,67 @@ function request(partial: Partial<Request> & Pick<Request, "kind">): Request {
 	return { document: "d1", acknowledged: true, retries: 0, sentAt: 0, ...partial };
 }
 
-describe("every acknowledged request is started exactly once", () => {
+describe("every acknowledged request reaches the Planner exactly once", () => {
 	let requests = [
 		request({ kind: "composer", tag: "x1" }),
 		request({ kind: "comment", tag: "x2" }),
 		request({ kind: "draft" }),
 	];
-	let rows = [
-		{ document: "d1", kind: "composer", state: "ended" },
-		{ document: "d1", kind: "comment", state: "ended" },
-		{ document: "d1", kind: "draft", state: "ended" },
-	];
 	let prompts = [{ document: "d1", tag: "x1" }, { document: "d1", tag: "x2" }, { document: "d1" }];
 
-	it("accepts one prompt per tagged request and one per turn that began", () => {
-		let check = checkTurns(requests, rows, prompts);
+	it("accepts one prompt per tagged request", () => {
+		let check = checkTurns(requests, prompts);
 		expect(check.misdelivered).toEqual([]);
-		expect(check.turnsDiffer).toEqual([]);
-		expect(check.unsettled).toBe(0);
+		expect(check.steered).toBe(0);
 		expect(check.acknowledged).toEqual({ composer: 1, comment: 1, draft: 1 });
+	});
+
+	it("counts a message given to a running turn as reaching the Planner once", () => {
+		let check = checkTurns(
+			requests,
+			[{ document: "d1", tag: "x1", steered: true }, { document: "d1", tag: "x2" }, {
+				document: "d1",
+			}],
+		);
+		expect(check.misdelivered).toEqual([]);
+		expect(check.steered).toBe(1);
 	});
 
 	it("names a request that was quoted twice and one that never was", () => {
 		let check = checkTurns(
 			requests,
-			rows,
-			[{ document: "d1", tag: "x1" }, { document: "d1", tag: "x1" }, { document: "d1" }],
+			[{ document: "d1", tag: "x1" }, { document: "d1", tag: "x1", steered: true }, {
+				document: "d1",
+			}],
 		);
 		expect(check.misdelivered).toEqual([{ tag: "x1", times: 2 }, { tag: "x2", times: 0 }]);
-		expect(check.turnsDiffer).toEqual([]);
 	});
 
-	it("counts rows left waiting, cancelled and interrupted, and requests nobody answered", () => {
+	it("accounts for a refusal only of a kind that needs a turn of its own, for a turn that was running", () => {
 		let check = checkTurns(
 			[
 				...requests,
-				request({ kind: "invoke", tag: "x3", acknowledged: false, refusal: "planner-queue-full" }),
+				request({ kind: "system", tag: "x3", acknowledged: false, refusal: "planner-busy" }),
+				request({ kind: "comment", tag: "x4", acknowledged: false, refusal: "busy" }),
+				request({
+					kind: "draft",
+					acknowledged: false,
+					refusal: "Chopin is working on something else. Try again when it has finished.",
+				}),
+				request({ kind: "composer", tag: "x5", acknowledged: false, refusal: "planner-busy" }),
+				request({ kind: "invoke", tag: "x6", acknowledged: false, refusal: "no answer" }),
+				request({ kind: "system", tag: "x7", acknowledged: false, refusal: "no answer" }),
 			],
-			[...rows, { document: "d1", kind: "invoke", state: "waiting" }, {
-				document: "d1",
-				kind: "invoke",
-				state: "cancelled",
-			}, { document: "d1", kind: "system", state: "interrupted" }],
 			prompts,
 		);
-		expect(check.unsettled).toBe(1);
-		expect(check.cancelled).toBe(1);
-		expect(check.interrupted).toBe(1);
-		expect(check.unacknowledged).toEqual(["invoke x3 planner-queue-full"]);
-		expect(check.turnsDiffer).toEqual([{ document: "d1", rows: 4, prompts: 3 }]);
+		expect(check.refusedWhileRunning).toEqual({ system: 1, comment: 1, draft: 1 });
+		// A message the backend takes mid-run is never refused for it, and an unanswered call is a failure.
+		expect(check.unacknowledged).toEqual([
+			"composer x5 planner-busy",
+			"invoke x6 no answer",
+			"system x7 no answer",
+		]);
+		expect(check.misdelivered).toEqual([]);
 	});
 });
 
@@ -289,12 +301,9 @@ const clean = (): Measures => ({
 	turns: {
 		acknowledged: { composer: 1 },
 		unacknowledged: [],
+		refusedWhileRunning: {},
 		misdelivered: [],
-		turnsDiffer: [],
-		rows: {},
-		unsettled: 0,
-		cancelled: 0,
-		interrupted: 0,
+		steered: 0,
 	},
 	mcp: { calls: 10, failures: 0 },
 	connector: { withdrawn: 0 },

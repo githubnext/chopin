@@ -261,8 +261,6 @@ export class EditorClient {
 					return record;
 				}
 				record.acknowledged = true;
-				record.queued = answer.queued === true || answer.planner === "queued"
-					|| answer.state === "queued";
 				record.ackedAt = performance.now();
 				return record;
 			} catch (error) {

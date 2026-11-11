@@ -193,6 +193,10 @@ export async function startBackend(
 		held = Promise.withResolvers<void>();
 	};
 	let handlers: AgentHandlers = {
+		// A message given to the turn this backend is running, which is quoted once, as a turn's prompt is.
+		steer(message) {
+			prompts.push({ document, tag: [...message.prompt.matchAll(TAG)].at(-1)?.[1], steered: true });
+		},
 		async turn(context: TurnContext) {
 			let prompt = context.message.prompt;
 			if (prompt.startsWith("[Background job")) {

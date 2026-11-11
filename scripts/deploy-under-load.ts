@@ -27,7 +27,6 @@ import { render } from "./deploy-under-load/report";
 import {
 	McpClient,
 	promptsOf,
-	readRows,
 	readSources,
 	Requests,
 	seedDocuments,
@@ -35,7 +34,7 @@ import {
 	startPlanners,
 } from "./deploy-under-load/workload";
 
-import type { Measures, Request } from "./deploy-under-load/analysis";
+import type { Measures } from "./deploy-under-load/analysis";
 import type { Build } from "./deploy-under-load/build";
 import type { Report } from "./deploy-under-load/report";
 import type { Environment, EnvironmentOptions, Slot } from "./deploy-under-load/environment";
@@ -193,17 +192,6 @@ function sampling(env: Environment) {
 	};
 }
 
-/** How many acknowledged requests of each kind were told they were queued behind something. */
-function queuedBy(requests: Request[]): Record<string, number> {
-	let counts: Record<string, number> = {};
-	for (let request of requests) {
-		if (request.acknowledged && request.queued) {
-			counts[request.kind] = (counts[request.kind] ?? 0) + 1;
-		}
-	}
-	return counts;
-}
-
 async function until(
 	what: string,
 	ready: () => boolean | Promise<boolean>,
@@ -281,7 +269,7 @@ export async function run(options: Options): Promise<{ report: Report; passed: b
 			}, {
 				before: async () => {
 					step(`hand-over ${index}: the idle slot waits; turns are started`);
-					// A turn is running, and a request waits behind it, when the signal comes.
+					// A turn is running, and a message is given to it, when the signal comes.
 					for (let document of held) {
 						let running = await requests.composer(document, "hold me");
 						let backend = backends.get(document.id)!;
@@ -291,19 +279,18 @@ export async function run(options: Options): Promise<{ report: Report; passed: b
 							15_000,
 						);
 						if (!started) {
-							let rows = (await readRows(env.database)).filter(row => row.document === document.id);
 							throw new Error(
 								`the turn of ${running.tag} on document ${document.index} did not start: `
 									+ `acknowledged ${running.acknowledged}, refusal ${running.refusal}; `
-									+ `${backend.prompts.length} prompts received, owner client synced ${document.owner.synced}; `
-									+ `rows ${rows.map(row => `${row.kind} ${row.state}`).join(", ")}`,
+									+ `${backend.prompts.length} prompts received, owner client synced ${document.owner.synced}`,
 							);
 						}
-						await requests.composer(document, "waits behind the turn");
+						await requests.composer(document, "is given to the turn");
 					}
 				},
 				during: async () => {
-					// The old process is still serving and takes every kind of request, starting none.
+					// The old process is still serving and takes every kind of request, starting none: a
+					// message is given to the turn that is running, and the rest are refused for it.
 					await Promise.all(held.map(document => requests.everyKind(document)));
 					for (let document of held) backends.get(document.id)!.release();
 				},
@@ -347,14 +334,6 @@ export async function run(options: Options): Promise<{ report: Report; passed: b
 			documents.flatMap(document => document.editors.map(client => client.drain(30_000))),
 		);
 		await requests.settled();
-		await until(
-			"every saved request to be settled",
-			async () =>
-				(await readRows(env.database)).every(row =>
-					row.state !== "waiting" && row.state !== "started"
-				),
-			30_000,
-		);
 		await Bun.sleep(1_000);
 
 		for (let backend of planners.backends) {
@@ -369,8 +348,7 @@ export async function run(options: Options): Promise<{ report: Report; passed: b
 				Object.fromEntries(document.editors.map(client => [client.marker, client.tokens])),
 			)
 		);
-		let rows = await readRows(env.database);
-		let turns = checkTurns(requests.all, rows, promptsOf(planners.backends));
+		let turns = checkTurns(requests.all, promptsOf(planners.backends));
 		let stats = await sample.stop();
 		sample = undefined;
 
@@ -520,7 +498,6 @@ export async function run(options: Options): Promise<{ report: Report; passed: b
 				ackMs: summarize(clients.flatMap(client => client.ackMs)),
 				outboxPeak: Math.max(0, ...clients.map(client => client.maxOutbox)),
 				requests: turns.acknowledged,
-				requestsQueued: queuedBy(requests.all),
 				retriedRequests: requests.all.filter(request => request.retries > 0).length,
 				mcp: {
 					sessions: mcpClients.length,

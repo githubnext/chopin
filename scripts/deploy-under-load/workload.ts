@@ -10,7 +10,7 @@ import { bearerOf, Calls, signIn } from "./session";
 import { EditorClient } from "./client";
 import { pairMachine, pollPlanners, startBackend } from "./planner";
 
-import type { Prompt, Request, Row } from "./analysis";
+import type { Prompt, Request } from "./analysis";
 import type { Backend, Machine } from "./planner";
 import type { Environment } from "./environment";
 
@@ -201,7 +201,11 @@ export class McpClient {
 		});
 		record.acknowledged = ok;
 		record.ackedAt = performance.now();
-		if (!ok) record.refusal = this.failures.at(-1)?.detail;
+		if (!ok) {
+			record.refusal = this.failures.at(-1)?.detail;
+			// A follow-up needs a turn of its own: refused while one runs is an answer, not a failure.
+			if (system && /planner-busy/.test(record.refusal ?? "")) this.failures.pop();
+		}
 		return record;
 	}
 
@@ -321,18 +325,6 @@ export class Requests {
 
 	async settled(): Promise<void> {
 		while (this.#pending.length > 0) await Promise.all(this.#pending.splice(0));
-	}
-}
-
-/** The saved Planner requests of every document, as they ended. */
-export async function readRows(database: string): Promise<Row[]> {
-	let sql = new SQL(database);
-	try {
-		return (await sql<{ document: string; kind: string; state: string }[]>`
-			SELECT document_id AS document, kind, state FROM planner_deferred_turns ORDER BY created_at, seq
-		`);
-	} finally {
-		await sql.close();
 	}
 }
 
