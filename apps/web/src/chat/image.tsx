@@ -235,19 +235,28 @@ function ImagePreview(
 	},
 ) {
 	if (source.kind === "unavailable" || load === "broken") {
+		let message = source.kind === "unavailable" ? "Image can’t be shown" : "Couldn’t load image";
 		return (
-			<span className="chat-image-broken" data-chat-image-broken={source.kind}>
+			<span
+				aria-label={`${message}: ${label}`}
+				className="chat-image-broken"
+				data-chat-image-broken={source.kind}
+				role="img"
+			>
 				<ImageOffIcon aria-hidden="true" size={24} />
-				<span>
-					{source.kind === "unavailable" ? "Image can’t be shown" : "Couldn’t load image"}
-				</span>
+				<span>{message}</span>
 			</span>
 		);
 	}
 	return (
 		<>
 			{load === "loading" && (
-				<span aria-hidden="true" className="chat-image-placeholder">
+				<span
+					aria-hidden={url ? "true" : undefined}
+					aria-label={url ? undefined : label}
+					className="chat-image-placeholder"
+					role={url ? undefined : "img"}
+				>
 					<ImageIcon size={24} />
 				</span>
 			)}
@@ -271,7 +280,7 @@ function ImagePreview(
 function ImageCaption({ image, label }: { image: ChatImageData; label: string }) {
 	return (
 		<figcaption className="chat-image-caption">
-			{/* The img already names the picture to a screen reader, so the visible words are hidden from it. */}
+			{/* The picture, or its fallback where none is drawn, already names it to a screen reader, so the visible words are hidden from it. */}
 			<span aria-hidden="true" className="chat-image-alt">{label}</span>
 			{image.generated && image.alt?.trim() && (
 				<span className="chat-image-generated">

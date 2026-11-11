@@ -2591,3 +2591,179 @@ test("the reasons images were not shown pass an accessibility check", async ({ b
 	)
 		.toEqual([]);
 });
+
+test("an image that cannot be shown or loaded still gives its alt text to a screen reader, once, in a single image and in a tile", async ({ baseURL, join, page, room, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let stored = await store(baseURL, room);
+	await seed("# Named\n", {
+		transcript: [
+			{
+				id: "singles",
+				author: { kind: "member", handle: "bo" },
+				text: [
+					"Unsupported: ![Bar chart of weekly signups](ftp://example.invalid/a.png)",
+					"",
+					`Gone: ![Chart of monthly churn](${NEVER})`,
+					"",
+					`Fine: ![The cap](${stored.cap})`,
+				].join("\n"),
+				ts: 1_700_000_000_000,
+			},
+			{
+				id: "tiles",
+				author: { kind: "member", handle: "bo" },
+				text:
+					`![Tile that cannot be shown](ftp://example.invalid/b.png) ![Tile that is gone](${NEVER}) ![Tile that is fine](${stored.back})`,
+				ts: 1_700_000_100_000,
+			},
+		],
+	});
+	await join("ana");
+
+	let all = figures(page);
+	await expect(all).toHaveCount(6);
+	await expect(all.nth(1)).toHaveAttribute("data-load", "broken");
+	await expect(all.nth(2)).toHaveAttribute("data-load", "shown");
+	await expect(all.nth(4)).toHaveAttribute("data-load", "broken");
+	await expect(all.nth(5)).toHaveAttribute("data-load", "shown");
+
+	for (
+		let name of [
+			"Image can’t be shown: Bar chart of weekly signups",
+			"Couldn’t load image: Chart of monthly churn",
+			"The cap",
+			"Image can’t be shown: Tile that cannot be shown",
+			"Couldn’t load image: Tile that is gone",
+			"Tile that is fine",
+		]
+	) {
+		await expect(chat(page).getByRole("img", { name, exact: true }), name).toHaveCount(1);
+	}
+	await expect(chat(page).getByRole("img", { name: /Bar chart of weekly signups/ })).toHaveCount(1);
+	await expect(chat(page).getByRole("img", { name: /Tile that is gone/ })).toHaveCount(1);
+
+	let found = await new AxeBuilder({ page }).include("[data-chat-scroll]").analyze();
+	expect(
+		found.violations.map(item => `${item.id}: ${item.nodes.map(node => node.target).join(" ")}`),
+	)
+		.toEqual([]);
+});
+
+const LONG_ALT =
+	"A chart of weekly signups by plan, region and channel across the whole of last year, with each quarter's best week marked and the three outliers explained";
+const LONG_CAPTION =
+	"Signups doubled after the March launch and held through the summer, then fell back in the last two weeks of December when the campaign ended.";
+
+function longTurns(stored: Stored): Chat.Entry[] {
+	let ts = 1_700_000_000_000;
+	return [
+		...turn([
+			{
+				src: stored.cap,
+				alt: LONG_ALT,
+				caption: LONG_CAPTION,
+				width: 1536,
+				height: 1024,
+				generated: true,
+			},
+			{ src: stored.back, alt: "Short", width: 960, height: 420, generated: true },
+			{
+				src: stored.through,
+				alt: `${LONG_ALT}, second`,
+				width: 960,
+				height: 420,
+				generated: true,
+			},
+		]),
+		{
+			id: "solo",
+			author: { kind: "agent" },
+			text: "On its own.",
+			ts: ts + 2000,
+			images: [{
+				src: stored.cap,
+				alt: `${LONG_ALT}, alone`,
+				caption: LONG_CAPTION,
+				width: 1536,
+				height: 1024,
+				generated: true,
+			}],
+		},
+		{
+			id: "unshown",
+			author: { kind: "member", handle: "bo" },
+			text: `Not shown: ![${LONG_ALT}, unshown](ftp://example.invalid/c.png)`,
+			ts: ts + 3000,
+		},
+	];
+}
+
+async function readWhole(page: Page, width: number): Promise<void> {
+	let all = figures(page);
+	await expect(all).toHaveCount(5);
+	await expect(all.nth(0)).toHaveAttribute("data-load", "shown");
+	await expect(all.nth(3)).toHaveAttribute("data-load", "shown");
+	await expect(chat(page).locator(".chat-image-alt")).toHaveText([
+		LONG_ALT,
+		"Short",
+		`${LONG_ALT}, second`,
+		`${LONG_ALT}, alone`,
+		`${LONG_ALT}, unshown`,
+	]);
+	await expect(chat(page).locator(".chat-image-text")).toHaveText([LONG_CAPTION, LONG_CAPTION]);
+
+	let clipped = await chat(page).locator(".chat-image-alt, .chat-image-text").evaluateAll(
+		elements =>
+			elements.flatMap(element => {
+				let range = document.createRange();
+				range.selectNodeContents(element);
+				let text = range.getBoundingClientRect();
+				let box = element.getBoundingClientRect();
+				let hidden = element.scrollHeight > element.clientHeight + 1
+					|| text.bottom > box.bottom + 1 || text.right > box.right + 1 || text.left < box.left - 1;
+				return hidden ? [element.textContent ?? ""] : [];
+			}),
+	);
+	expect(clipped).toEqual([]);
+
+	let rem = await page.evaluate(() =>
+		parseFloat(getComputedStyle(document.documentElement).fontSize)
+	);
+	let gallery = (await chat(page).locator("[data-chat-image-gallery]").boundingBox())!;
+	for (let tile of await chat(page).locator('[data-chat-image="tile"]').all()) {
+		let box = (await tile.boundingBox())!;
+		expect(box.x).toBeGreaterThanOrEqual(gallery.x - 0.5);
+		expect(box.x + box.width).toBeLessThanOrEqual(gallery.x + gallery.width + 0.5);
+		let frame = (await tile.locator("[data-chat-image-frame]").boundingBox())!;
+		expect(frame.height).toBeLessThanOrEqual(12 * rem + 1);
+	}
+	let [cap, back] = [all.nth(0), all.nth(1)];
+	for (let [tile, size] of [[cap, 1536 / 1024], [back, 960 / 420]] as const) {
+		let frame = (await tile.locator("[data-chat-image-frame]").boundingBox())!;
+		expect(frame.width / frame.height).toBeCloseTo(size, 1);
+	}
+	for (let figure of await all.all()) {
+		let box = (await figure.boundingBox())!;
+		expect(box.x).toBeGreaterThanOrEqual(0);
+		expect(box.x + box.width).toBeLessThanOrEqual(width);
+	}
+	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+		width,
+	);
+}
+
+test("the whole of an alt text and a caption is on the page, in a tile, a single image and one that is not shown", async ({ baseURL, join, page, room, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await seed("# Long\n", { transcript: longTurns(await store(baseURL, room)) });
+	await join("ana");
+
+	await readWhole(page, 1280);
+});
+
+test("on a phone the whole of an alt text and a caption is on the page, and nothing overflows", async ({ baseURL, join, room, seed }) => {
+	await seed("# Long\n", { transcript: longTurns(await store(baseURL, room)) });
+	let phone = await join("ana", PHONE);
+	await openChat(phone);
+
+	await readWhole(phone, 390);
+});

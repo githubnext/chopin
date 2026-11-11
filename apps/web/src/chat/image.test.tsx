@@ -186,3 +186,67 @@ test("a gallery tile of a data address has its own shape at the first render as 
 	expect(figures[0]).toContain("--image-width:90;--image-height:30");
 	expect(figures[1]).toContain("--image-width:30;--image-height:90");
 });
+
+function names(markup: string): string[] {
+	return (markup.match(/<[a-z][^>]*>/g) ?? []).flatMap(tag => {
+		let alt = tag.startsWith("<img ") ? /\balt="([^"]*)"/.exec(tag)?.[1] : undefined;
+		let label = /\brole="img"/.test(tag) ? /\baria-label="([^"]*)"/.exec(tag)?.[1] : undefined;
+		return alt ?? label ?? [];
+	});
+}
+
+test("an image that is not shown still gives its alt text to a screen reader, once", () => {
+	let cases: Array<[ChatImageData, string]> = [
+		[
+			{ src: "ftp://x/a.png", alt: "Bar chart of weekly signups" },
+			"Image can’t be shown: Bar chart of weekly signups",
+		],
+		[
+			{ src: "data:image/svg+xml;base64,PHN2Zy8+", alt: "A vector drawing", generated: true },
+			"Image can’t be shown: A vector drawing",
+		],
+		[{ src: "javascript:alert(1)" }, "Image can’t be shown: Image"],
+		[{ src: "/auth/logout", generated: true }, "Image can’t be shown: Generated image"],
+	];
+
+	for (let [image, name] of cases) {
+		let markup = firstRender(image);
+
+		expect(markup, image.src).not.toContain("<img");
+		expect(names(markup), image.src).toEqual([name]);
+		expect(markup, image.src).toContain(
+			`<span aria-hidden="true" class="chat-image-alt">${image.alt ?? name.split(": ")[1]}</span>`,
+		);
+	}
+});
+
+test("an image the page has not read yet is named by its alt text, and one that is drawn is named once, by its picture", () => {
+	let waiting = firstRender({ src: "/icons/icon-192.png", alt: "On this site" });
+
+	expect(waiting).not.toContain("<img");
+	expect(names(waiting)).toEqual(["On this site"]);
+
+	let drawn = firstRender({ src: png(90, 30), alt: "A picture the author wrote" });
+	expect(names(drawn)).toEqual(["A picture the author wrote"]);
+	expect(drawn).toContain(
+		'<span aria-hidden="true" class="chat-image-alt">A picture the author wrote</span>',
+	);
+});
+
+test("each gallery tile that is not shown is named by its alt text", () => {
+	let markup = renderToStaticMarkup(
+		<ImageGallery
+			images={[
+				{ src: "ftp://x/a.png", alt: "Unsupported address" },
+				{ src: png(30, 90), alt: "Fine" },
+				{ src: "data:image/svg+xml;base64,PHN2Zy8+", alt: "Scripted" },
+			]}
+		/>,
+	);
+
+	expect(names(markup)).toEqual([
+		"Image can’t be shown: Unsupported address",
+		"Fine",
+		"Image can’t be shown: Scripted",
+	]);
+});
