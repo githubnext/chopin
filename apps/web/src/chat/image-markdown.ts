@@ -63,15 +63,33 @@ function around(node: Node): Node[] {
 	return out;
 }
 
-function lift(node: Node): void {
+function lift(node: Node, found: Map<string, Node>): void {
 	if (!node.children) return;
 	node.children = node.children.flatMap(child => {
-		lift(child);
+		lift(child, found);
 		if (!isLink(child) || !hasImage(child)) return [child];
 		let pieces = around(child).filter(piece => isImage(piece) || isVisible(piece));
 		if (pieces.some(piece => !isImage(piece))) return pieces;
-		let label = pieces.find(piece => piece.alt)?.alt ?? child.url ?? "";
-		return [...pieces, { ...child, children: [{ type: "text", value: label }] }];
+		let alt = pieces.find(piece => piece.alt?.trim())?.alt;
+		let destination = child.type === "linkReference"
+			? found.get(child.identifier?.toUpperCase() ?? "")
+			: child;
+		let url = destination?.url ?? "";
+		let name = destination?.title?.trim();
+		if (!name) {
+			try {
+				let parsed = new URL(url);
+				name = `${parsed.host}${parsed.pathname}` || "Current page";
+			} catch {
+				name = url.split(/[?#]/)[0] || "Current page";
+			}
+		}
+		let label = alt ?? child.url ?? name;
+		return [...pieces, {
+			...child,
+			...(!alt && name ? { data: { ...child.data, hProperties: { ariaLabel: name } } } : {}),
+			children: [{ type: "text", value: label }],
+		}];
 	});
 }
 
@@ -79,7 +97,7 @@ function lift(node: Node): void {
 export function imagesOutOfLinksRemarkPlugin() {
 	return (tree: Node) => {
 		resolveImageReferences(tree);
-		lift(tree);
+		lift(tree, definitions(tree));
 	};
 }
 

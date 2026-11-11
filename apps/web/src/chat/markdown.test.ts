@@ -385,6 +385,45 @@ test("an image alone in emphasis in a link, or in a link written as a reference,
 	}
 });
 
+test("a link containing only an empty-alt image is named by its title or destination", () => {
+	for (
+		let [source, href, name] of [
+			[
+				'[![](https://example.invalid/i.png)](https://docs.example.com/guide?q=1#top "Guide title")',
+				"https://docs.example.com/guide?q=1#top",
+				"Guide title",
+			],
+			[
+				"[![](https://example.invalid/i.png)](https://docs.example.com/guide?q=1#top)",
+				"https://docs.example.com/guide?q=1#top",
+				"docs.example.com/guide",
+			],
+			[
+				'[![](https://example.invalid/i.png)][ref]\n\n[ref]: https://docs.example.com/guide?q=1#top "Reference title"',
+				"https://docs.example.com/guide?q=1#top",
+				"Reference title",
+			],
+			[
+				"[![](https://example.invalid/i.png)][ref]\n\n[ref]: https://docs.example.com/guide?q=1#top",
+				"https://docs.example.com/guide?q=1#top",
+				"docs.example.com/guide",
+			],
+			["[![](https://example.invalid/i.png)](/docs/guide?q=1)", "/docs/guide?q=1", "/docs/guide"],
+			["[![](https://example.invalid/i.png)]()", "", "Current page"],
+			[
+				"[![ ](https://example.invalid/i.png)](https://docs.example.com/guide)",
+				"https://docs.example.com/guide",
+				"docs.example.com/guide",
+			],
+		] as const
+	) {
+		let markup = markdown(source);
+		expect(insideLink(markup), source).toBe(false);
+		expect(markup, source).toContain(`href="${href.replaceAll("&", "&amp;")}"`);
+		expect(markup, source).toContain(`aria-label="${name}"`);
+	}
+});
+
 test("a Markdown image's title is its caption, as a single image and as a tile", () => {
 	let single = markdown('![alt text](https://example.invalid/u.png "The title of it")');
 	expect(single).toContain('<span class="chat-image-text">The title of it</span>');
