@@ -6,6 +6,7 @@
  * the same conversion through MDXEditor against the same registry.
  */
 
+import { $isListNode } from "@lexical/list";
 import { $getRoot } from "lexical";
 import { exportLexicalTreeToMdast, importMdastTreeToLexical } from "@mdxeditor/editor";
 
@@ -15,7 +16,7 @@ import { registry as buildRegistry } from "./registry";
 import { serialize } from "./serialize";
 import { assert } from "./validate";
 
-import type { ImportPoint } from "@mdxeditor/editor";
+import type { ImportPoint, LexicalExportVisitor } from "@mdxeditor/editor";
 import type { LexicalEditor, LexicalNode, RootNode } from "lexical";
 import type { Nodes, Parent, Root } from "mdast";
 import type { Registry } from "./registry";
@@ -131,6 +132,61 @@ export function $exportPlanTree(options: ConvertOptions = {}): Root {
 export function $exportPlan(options: ConvertOptions = {}): string {
 	let tree = $exportPlanTree(options);
 	if (options.validate !== false) assert(tree);
+	return serialize(tree);
+}
+
+/**
+ * Project some of the editor's blocks to Markdown, in the order given: what a copy of them as
+ * blocks carries. List items are written inside a list of their own list's kind. Not validated,
+ * since a few blocks are not a document. Must run inside a read or update.
+ */
+export function $exportBlocks(
+	blocks: readonly LexicalNode[],
+	options: ConvertOptions = {},
+): string {
+	let reg = options.registry ?? buildRegistry();
+	// Stands for the root the export starts from; only the first visitor is shown it.
+	let start = {} as RootNode;
+	let first: LexicalExportVisitor<LexicalNode, Nodes> = {
+		priority: Number.MAX_SAFE_INTEGER,
+		testLexicalNode: (node): node is LexicalNode => node === start,
+		visitLexicalNode: ({ actions }) => {
+			// The first node appended with no parent becomes the tree's root.
+			let root = actions.appendToParent(
+				null as never,
+				{ type: "root", children: [] } as never,
+			) as Root;
+			let list: Parent | undefined;
+			let listOf: LexicalNode | undefined;
+			for (let block of blocks) {
+				let parent = block.getParent();
+				if (!$isListNode(parent)) {
+					listOf = undefined;
+					actions.visit(block, root);
+					continue;
+				}
+				if (listOf !== parent) {
+					listOf = parent;
+					list = actions.appendToParent(root, {
+						type: "list",
+						ordered: parent.getListType() === "number",
+						spread: false,
+						children: [],
+					}) as Parent;
+				}
+				actions.visit(block, list!);
+			}
+		},
+	};
+	let tree = exportLexicalTreeToMdast({
+		root: start,
+		visitors: [first, ...reg.exportVisitors],
+		jsxComponentDescriptors: reg.jsxComponentDescriptors,
+		jsxIsAvailable: reg.jsxIsAvailable,
+		addImportStatements: false,
+	});
+	normalizeMarks(tree);
+	dropEmptyParagraphs(tree);
 	return serialize(tree);
 }
 
