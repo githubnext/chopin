@@ -578,6 +578,63 @@
 	color: var(--color-text-tertiary);
 	transform: rotate(90deg);
 }
+
+/*
+ * The pill's Model selector, portalled out of the composer. It is never taller than the screen has
+ * room for beside the pill (Base UI's `--available-height`): the model list gives up its height
+ * and scrolls, so the search field and the Thinking row stay on screen.
+ */
+.composer-model-selector {
+	max-height: var(--available-height, none);
+}
+/* A wrapper the levels' lane is reached through; it draws no box of its own. */
+.composer-model-levels {
+	display: contents;
+}
+/*
+ * The Thinking row keeps the label above the levels when they cannot sit beside it, and the levels
+ * are one lane that scrolls sideways when even the row's width cannot hold them. Its padding,
+ * taken back by the margin, keeps the 44px a finger aims at inside the lane on touch, and its
+ * scroll padding keeps a level brought into view clear of the fade.
+ */
+.composer-model-effort {
+	--composer-level-fade: 1.5rem;
+	flex-wrap: wrap;
+}
+.composer-model-effort > [role="radiogroup"] {
+	position: relative;
+	max-width: calc(100% + 1rem);
+	margin: -0.625rem -0.5rem;
+	padding: 0.625rem 0.5rem;
+	overflow-x: auto;
+	overflow-y: hidden;
+	overscroll-behavior-x: contain;
+	scroll-padding-inline: var(--composer-level-fade);
+	scrollbar-width: none;
+}
+.composer-model-effort > [role="radiogroup"]::-webkit-scrollbar {
+	display: none;
+}
+/* The side that still hides levels fades, as a wide table's does. */
+.composer-model-effort[data-more="end"] > [role="radiogroup"] {
+	mask-image: linear-gradient(
+		to right,
+		black calc(100% - var(--composer-level-fade)),
+		transparent
+	);
+}
+.composer-model-effort[data-more="start"] > [role="radiogroup"] {
+	mask-image: linear-gradient(to right, transparent, black var(--composer-level-fade));
+}
+.composer-model-effort[data-more="both"] > [role="radiogroup"] {
+	mask-image: linear-gradient(
+		to right,
+		transparent,
+		black var(--composer-level-fade),
+		black calc(100% - var(--composer-level-fade)),
+		transparent
+	);
+}
 /* The toolbar gives way where the pane is narrow, and on a phone, where the draft has the room. */
 @container composer (max-width: 20rem) {
 	.chat-composer .composer-format,

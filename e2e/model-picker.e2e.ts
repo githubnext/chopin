@@ -893,6 +893,159 @@ test("lists every model of a catalog as large as two gateways' together, and sea
 	await client.detach();
 });
 
+/** 112 models, each with six levels: what an agent with several gateways can report. */
+const WIDE: CapabilityCatalog = {
+	models: {
+		available: Array.from({ length: 112 }, (_, index) => ({
+			id: `gateway/model-${index}`,
+			name: `Model ${index}`,
+			provider: { id: `p${index % 4}`, name: `Provider ${index % 4}` },
+			description: "Reasons at six levels.",
+			thinkingLevels: ["off", "low", "medium", "high", "xhigh", "max"],
+		})),
+		default: { id: "gateway/model-0" },
+	},
+};
+
+/**
+ * Whether a level is wholly in sight: inside the levels' scroll lane, the popover and the screen,
+ * so nothing clips any of it.
+ */
+function inSight(radio: Locator) {
+	return radio.evaluate(element => {
+		let box = element.getBoundingClientRect();
+		let lane = element.closest("[role='radiogroup']")!.getBoundingClientRect();
+		let popup = element.closest("[data-slot='model-selector-content']")!.getBoundingClientRect();
+		let screen = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+		return [lane, popup, screen].every(edge =>
+			box.left >= edge.left - 0.5 && box.right <= edge.right + 0.5 && box.top >= edge.top - 0.5
+			&& box.bottom <= edge.bottom + 0.5
+		);
+	});
+}
+
+/** A finger drawn across `target` from its centre by `dx` and `dy`, as the touch screen sends it. */
+async function swipe(page: Page, target: Locator, dx: number, dy: number) {
+	let box = (await target.boundingBox())!;
+	let x = box.x + box.width / 2;
+	let y = box.y + box.height / 2;
+	let touch = await page.context().newCDPSession(page);
+	await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+	for (let step = 1; step <= 10; step++) {
+		await touch.send("Input.dispatchTouchEvent", {
+			type: "touchMove",
+			touchPoints: [{ x: x + dx * step / 10, y: y + dy * step / 10 }],
+		});
+	}
+	await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+	await touch.detach();
+}
+
+for (
+	let [screen, options] of [
+		["a desktop", DESKTOP],
+		["a short window", { viewport: { width: 1280, height: 400 }, deviceScaleFactor: 2 }],
+		["a phone", PHONE],
+		["a phone on its side", { ...PHONE, viewport: { width: 844, height: 390 } }],
+	] as const
+) {
+	test(`scrolls a large catalog's models and every Thinking level into reach on ${screen}, inside the screen`, async ({ browser }) => {
+		test.setTimeout(120_000);
+		let touch = "hasTouch" in options;
+		let room = await newRoom();
+		let page = await open(browser, HANDLE, room, options);
+		let { client } = await attachClient(room, WIDE);
+		if (touch) {
+			await page.getByRole("navigation", { name: "Workspace view" })
+				.getByRole("button", { name: /^Chat/ }).tap();
+			await expect.poll(async () => (await chat(page).boundingBox())?.x).toBe(0);
+		}
+		await expect(trigger(page)).toHaveAccessibleName("Model: Model 0");
+		await (touch ? trigger(page).tap() : trigger(page).click());
+		let menu = popover(page);
+		await expect(menu).toBeVisible();
+		await settled(menu);
+		let list = menu.getByRole("listbox");
+		let lane = levels(page);
+		await expect(lane.getByRole("radio")).toHaveText([
+			"Default",
+			"off",
+			"low",
+			"medium",
+			"high",
+			"xhigh",
+			"max",
+		]);
+		// The popover, its search field and the Thinking row are on screen, however short it is.
+		await expectInsideViewport(menu);
+		await expectInsideViewport(search(page));
+		await expectInsideViewport(lane);
+		await expectNoHorizontalOverflow(page);
+		await shoot(page, `model-picker-levels-${screen.replaceAll(" ", "-")}`);
+
+		// The levels are wider than the popover: the last is out of sight until the lane is moved.
+		expect(await inSight(level(page, "Default"))).toBe(true);
+		expect(await inSight(level(page, "max"))).toBe(false);
+		let scrolled = (target: Locator, axis: "scrollLeft" | "scrollTop") =>
+			target.evaluate((element, axis) => element[axis], axis);
+		if (touch) {
+			await swipe(page, lane, -200, 0);
+			await expect.poll(() => scrolled(lane, "scrollLeft")).toBeGreaterThan(0);
+			await expect.poll(() => inSight(level(page, "max"))).toBe(true);
+			await swipe(page, list, 0, -150);
+			await expect.poll(() => scrolled(list, "scrollTop")).toBeGreaterThan(0);
+		} else {
+			// A wheel turned over the row moves the lane sideways; over the list it moves the list.
+			await lane.hover();
+			await page.mouse.wheel(0, 200);
+			await expect.poll(() => scrolled(lane, "scrollLeft")).toBeGreaterThan(0);
+			await expect.poll(() => inSight(level(page, "max"))).toBe(true);
+			await list.hover();
+			await page.mouse.wheel(0, 300);
+			await expect.poll(() => scrolled(list, "scrollTop")).toBeGreaterThan(0);
+		}
+		await expectInsideViewport(menu);
+
+		// From the keyboard (a tablet's too, whose tap does not focus): the arrows choose a level and
+		// bring it into sight, and the list's End reaches its last model.
+		await (touch ? level(page, "Default").focus() : level(page, "Default").click());
+		await expect(level(page, "Default")).toBeFocused();
+		await expect.poll(() => scrolled(lane, "scrollLeft")).toBe(0);
+		for (let name of ["off", "low", "medium", "high", "xhigh", "max"]) {
+			await page.keyboard.press("ArrowRight");
+			await expect(level(page, name)).toHaveAttribute("aria-checked", "true");
+			await expect.poll(() => inSight(level(page, name))).toBe(true);
+		}
+		await expect(level(page, "max")).toBeFocused();
+		await expect(level(page, "max")).toHaveAttribute("aria-checked", "true");
+		await expect.poll(() => inSight(level(page, "max"))).toBe(true);
+		await expect(trigger(page)).toHaveAccessibleName("Model: Model 0, reasoning max");
+		await search(page).focus();
+		await page.keyboard.press("End");
+		await expect(list.getByRole("option").last()).toHaveAttribute("aria-selected", "true");
+		await expect.poll(() =>
+			list.getByRole("option").last().evaluate(option => {
+				let box = option.getBoundingClientRect();
+				let edge = option.closest("[role='listbox']")!.getBoundingClientRect();
+				return box.top >= edge.top - 0.5 && box.bottom <= edge.bottom + 0.5;
+			})
+		).toBe(true);
+		await page.keyboard.press("Escape");
+		await expect(menu).toHaveCount(0);
+
+		// Opened again, the chosen level is already in sight.
+		await (touch ? trigger(page).tap() : trigger(page).click());
+		await expect(menu).toBeVisible();
+		await settled(menu);
+		await expect(level(page, "max")).toHaveAttribute("aria-checked", "true");
+		await expect.poll(() => inSight(level(page, "max"))).toBe(true);
+		await expectInsideViewport(menu);
+		await shoot(page, `model-picker-level-chosen-${screen.replaceAll(" ", "-")}`);
+		await expectAccessible(page);
+		await client.detach();
+	});
+}
+
 test("keeps the choice across a reload and shows it live to a second person", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await newRoom();
