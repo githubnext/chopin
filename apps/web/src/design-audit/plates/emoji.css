@@ -1,0 +1,14 @@
+.design-audit-emoji {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.75rem;
+	inline-size: min(100%, 32rem);
+	margin-block-end: 1.5rem;
+}
+
+/* The picker in place on the plate, not floating over it. */
+.design-audit-emoji > .chat-message-picker {
+	position: relative;
+	z-index: auto;
+}

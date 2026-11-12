@@ -74,7 +74,7 @@
  */
 .chat-markdown .chat-emoji {
 	font-family: var(--font-emoji);
-	font-size: var(--text-lg);
+	font-size: var(--text-xl);
 	line-height: 1;
 	vertical-align: -0.1em;
 }

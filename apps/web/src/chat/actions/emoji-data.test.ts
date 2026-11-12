@@ -1,6 +1,14 @@
 import { expect, test } from "bun:test";
 
-import { buildGroups, fullyQualified, loadEmoji, searchEmoji, shownAt } from "./emoji-data";
+import {
+	buildGroups,
+	emojiIndex,
+	fullyQualified,
+	loadEmoji,
+	searchEmoji,
+	shortcodeAt,
+	shownAt,
+} from "./emoji-data";
 
 let everything = async () => await loadEmoji();
 let all = (groups: Awaited<ReturnType<typeof everything>>) =>
@@ -74,13 +82,52 @@ test("skin tones: the setting picks one of five, and searching reaches every var
 	expect(handshake.length).toBeGreaterThan(0);
 });
 
-test("a short list builds into groups in Unicode's order and drops the empty ones", () => {
+test("a short list builds into Slack's categories in Slack's order, leaving out what Slack does", () => {
 	let groups = buildGroups([
-		{ unicode: "😀", label: "grinning face", group: 0, tags: ["smile"] },
-		{ unicode: "🇦", label: "regional indicator A" },
+		{ unicode: "\u{1F1F3}\u{1F1F4}", label: "flag: Norway", group: 9 },
+		{ unicode: "\u{1F600}", label: "grinning face", group: 0, tags: ["smile"], hexcode: "1F600" },
+		{ unicode: "\u{1F44B}", label: "waving hand", group: 1 },
+		{ unicode: "\u{1F3FB}", label: "light skin tone", group: 2 },
+		{ unicode: "\u{1F1E6}", label: "regional indicator A" },
+		{ unicode: "\u{1F436}", label: "dog face", group: 3 },
+	], { "1F600": ["grinning", "grinning_face"] });
+	expect(groups.map(group => [group.id, group.label])).toEqual([
+		["people", "Smileys and people"],
+		["nature", "Animals and nature"],
+		["flags", "Flags"],
 	]);
-	expect(groups.map(group => group.label)).toEqual(["Smileys and emotion", "Flags"]);
-	expect(groups[0]!.entries[0]).toMatchObject({ emoji: "😀", name: "grinning face" });
+	expect(groups[0]!.entries.map(entry => entry.emoji)).toEqual(["\u{1F600}", "\u{1F44B}"]);
+	expect(groups[0]!.entries[0]).toMatchObject({ name: "grinning face", shortcode: "grinning" });
+	// Without a Slack name, one is made from Unicode's.
+	expect(groups[0]!.entries[1]!.shortcode).toBe("waving_hand");
+});
+
+test("the categories are Slack's, smileys and people first and flags last", async () => {
+	let groups = await loadEmoji();
+	expect(groups.map(group => group.id)).toEqual([
+		"people",
+		"nature",
+		"food",
+		"activity",
+		"travel",
+		"objects",
+		"symbols",
+		"flags",
+	]);
+	expect(all(groups)).not.toContain("\u{1F1E6}");
+	expect(all(groups)).not.toContain("\u{1F3FB}");
+});
+
+test("every emoji has Slack's short name, toned as Slack writes a tone, and is found by it", async () => {
+	let groups = await loadEmoji();
+	let index = emojiIndex(groups);
+	expect(index.get("\u{1F44D}")?.shortcode).toBe(":+1:");
+	expect(index.get("\u2705")?.shortcode).toBe(":white_check_mark:");
+	expect(index.get("\u{1F44D}\u{1F3FD}")).toMatchObject({ shortcode: ":+1::skin-tone-4:" });
+	expect(searchEmoji(":tada:", groups).map(item => item.emoji)).toContain("\u{1F389}");
+	expect(searchEmoji("+1", groups).map(item => item.emoji)).toContain("\u{1F44D}");
+	expect(shortcodeAt("wave", 0)).toBe(":wave:");
+	expect(shortcodeAt("wave", 5)).toBe(":wave::skin-tone-6:");
 });
 
 test("the catalog spells an emoji as Unicode's fully-qualified form, so a picked one is the quick reaction's own string", async () => {

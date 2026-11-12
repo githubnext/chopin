@@ -33,6 +33,7 @@ import {
 } from "@chopin/editor";
 import { chatDraftKey } from "../demo-actor";
 import { WireLost, WireRefusal } from "../wire";
+import { noteEmojiUse } from "./actions/emoji-frequent";
 import { dueNow, intentsReducer } from "./pending-reactions";
 import {
 	echoes,
@@ -1131,6 +1132,7 @@ export function Chat(
 	}, [transcriptReady, intents.length, savedIds, outboxIds, workingTurn?.id]);
 	let reactionSeq = useRef(0);
 	let reactTo = (id: string, emoji: string, on: boolean) => {
+		if (on) noteEmojiUse(emoji);
 		dispatchIntents({ kind: "ask", id, emoji, on, seq: ++reactionSeq.current });
 	};
 

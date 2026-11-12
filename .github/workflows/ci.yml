@@ -293,6 +293,11 @@ jobs:
 
       - run: bun node_modules/@playwright/test/cli.js install chromium
 
+      # The emoji spec checks that an emoji is drawn in colour, from the platform's emoji font.
+      - name: Colour emoji font
+        if: ${{ matrix.suite == 'design' }}
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-color-emoji
+
       - name: Design behaviour (keyboard, focus, motion, and scrolling)
         if: ${{ matrix.suite == 'design' }}
         run: bun run design:behavior

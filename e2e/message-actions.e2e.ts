@@ -393,6 +393,8 @@ test("Add reaction opens a picker for any emoji: listed, searched, or typed and 
 	await expect(add).toBeFocused();
 	await expect(target.getByRole("button", { name: "You reacted with 🎉" })).toHaveText("🎉1");
 
+	// The picker is Slack's height, so the pointer that picked from it is no longer on the message.
+	await target.hover();
 	await add.click();
 	await field.fill("zzzzzz");
 	await expect(picker.getByRole("status")).toHaveText("No emoji found");
@@ -400,11 +402,13 @@ test("Add reaction opens a picker for any emoji: listed, searched, or typed and 
 	await field.press("Enter");
 	await expect(target.getByRole("button", { name: "You reacted with 🇳🇴" })).toHaveText("🇳🇴1");
 
+	await target.hover();
 	await add.click();
 	await field.fill("👨‍👩‍👧‍👦");
 	await picker.getByRole("button", { name: "👨‍👩‍👧‍👦" }).click();
 	await expect(target.locator('[data-chat-reaction="👨‍👩‍👧‍👦"]')).toHaveText("👨‍👩‍👧‍👦1");
 
+	await target.hover();
 	await add.click();
 	await field.press("ArrowDown");
 	await expect(picker.getByRole("button").first()).toBeFocused();
@@ -413,6 +417,94 @@ test("Add reaction opens a picker for any emoji: listed, searched, or typed and 
 	await page.keyboard.press("Escape");
 	await expect(picker).toHaveCount(0);
 	await expect(add).toBeFocused();
+});
+
+test("the picker is Slack's: categories, frequently used from this person's reactions, a preview and a remembered skin tone", async ({ join, seed }) => {
+	await seed("# Actions\n", { transcript: transcript() });
+	let page = await join("ana");
+	let target = message(page, PERSON.id);
+	let add = toolbar(target).getByRole("button", { name: "Add reaction" });
+	let picker = page.getByRole("dialog", { name: "Add reaction" });
+	let open = async () => {
+		await target.hover();
+		await add.click();
+		await expect(picker.locator("[data-emoji]").nth(100)).toBeAttached();
+	};
+	await open();
+	await expect(picker.getByRole("tablist", { name: "Emoji categories" }).getByRole("tab"))
+		.toHaveText(
+			Array(9).fill(""),
+		);
+	await expect(picker.getByRole("tab", { name: "Frequently used" })).toHaveAttribute(
+		"aria-selected",
+		"true",
+	);
+	let frequent = picker.getByRole("group", { name: "Frequently used" }).getByRole("button");
+	await expect(frequent.first()).toHaveText("\u{1F44D}");
+
+	// A tab scrolls to its section, and the preview names what is under the pointer.
+	await picker.getByRole("tab", { name: "Animals and nature" }).click();
+	await expect(picker.getByRole("tab", { name: "Animals and nature" })).toHaveAttribute(
+		"aria-selected",
+		"true",
+	);
+	await picker.getByRole("button", { name: "\u{1F98A}" }).hover();
+	await expect(picker.locator(".emoji-picker-preview-name")).toHaveText(":fox_face:");
+
+	// Search by Slack's name, then the emoji picked leads Frequently used the next time.
+	await picker.getByRole("textbox", { name: "Search emoji, or paste one" }).fill(":crab:");
+	await picker.getByRole("button", { name: "\u{1F980}" }).click();
+	await expect(target.getByRole("button", { name: "You reacted with \u{1F980}" })).toBeVisible();
+	await open();
+	await expect(frequent.first()).toHaveText("\u{1F980}");
+
+	// The skin tone is chosen from the hand in the footer and kept after a reload.
+	await picker.getByRole("button", { name: "Skin tone: Default skin tone" }).click();
+	await picker.getByRole("button", { name: "Medium dark" }).click();
+	await expect(picker.getByRole("button", { name: "\u{1F44B}\u{1F3FE}" })).toBeAttached();
+	await page.keyboard.press("Escape");
+	await expect(picker).toHaveCount(0);
+	await page.reload();
+	await open();
+	await expect(picker.getByRole("button", { name: "Skin tone: Medium dark" })).toBeVisible();
+	await expect(picker.getByRole("button", { name: "\u{1F44B}\u{1F3FE}" })).toBeAttached();
+	await expect(frequent.first()).toHaveText("\u{1F980}");
+});
+
+test("reactions and emoji in messages are text in the platform's emoji font, not images", async ({ join, seed }) => {
+	await seed("# Actions\n", {
+		transcript: [
+			{
+				id: "emoji-words",
+				author: { kind: "member", handle: "ben" },
+				text: "Green \u2705 and shipped \u{1F680}",
+				ts: 1_700_000_001,
+				reactions: [{ emoji: "\u{1F389}", handles: ["ana", "ben"] }],
+			},
+			{
+				id: "emoji-only",
+				author: { kind: "member", handle: "ben" },
+				text: "\u{1F525}\u{1F525}",
+				ts: 1_700_000_002,
+			},
+		],
+	});
+	let page = await join("ana");
+	let words = message(page, "emoji-words");
+	let pill = words.getByRole("button", { name: "You and Ben reacted with \u{1F389}" });
+	await expect(pill).toHaveText("\u{1F389}2");
+	await expect(words.locator("img")).toHaveCount(0);
+	let emojiFont = /^"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Inter Variable"/;
+	expect(
+		await pill.locator(".chat-reaction-emoji").evaluate(node => getComputedStyle(node).fontFamily),
+	)
+		.toMatch(emojiFont);
+	let inline = words.locator(".chat-emoji");
+	await expect(inline).toHaveText(["\u2705", "\u{1F680}"]);
+	expect(await inline.first().evaluate(node => getComputedStyle(node).fontFamily)).toMatch(
+		emojiFont,
+	);
+	await expect(message(page, "emoji-only").locator("[data-chat-jumbo]")).toBeVisible();
 });
 
 test("a reaction the server turns down is not shown, and its message says why: a 21st different emoji from one person, or one that is not a single emoji", async ({ join, seed }) => {
@@ -611,6 +703,9 @@ test("the toolbar, its menu and the picker have no accessibility violations", as
 
 	await target.hover();
 	await toolbar(target).getByRole("button", { name: "Add reaction" }).click();
+	// The picker loads when it first opens.
+	await expect(page.getByRole("dialog", { name: "Add reaction" }).locator("[data-emoji]").first())
+		.toBeVisible();
 	let picker = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
 	expect(picker.violations.map(item => item.id)).toEqual([]);
 });

@@ -226,6 +226,12 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				source: "apps/web/src/chat/media/layout.ts",
 				states: ["image", "trio", "quad", "unavailable", "files", "staged", "viewer"],
 			},
+			{
+				id: "emoji",
+				label: "Emoji",
+				source: "apps/web/src/chat/actions/emoji-picker.tsx",
+				states: ["inline", "jumbo", "reactions", "picker", "search", "skin-tones"],
+			},
 		],
 	},
 	{

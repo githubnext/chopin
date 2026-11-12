@@ -1,4 +1,14 @@
-import { cloneElement, memo, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+	cloneElement,
+	lazy,
+	memo,
+	Suspense,
+	useEffect,
+	useId,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import { createPortal } from "react-dom";
 import {
 	CloseIcon,
@@ -19,7 +29,6 @@ import {
 import { useMenuDismissal } from "../../menu-dismissal";
 import { LongPress } from "../long-press";
 import { QUICK_REACTIONS } from "../reactions";
-import { EmojiPicker } from "./emoji-picker";
 import { useCopyToClipboard } from "./use-copy-to-clipboard";
 
 import "./message-actions.css";
@@ -29,7 +38,13 @@ import type { CSSProperties, KeyboardEvent, RefObject } from "react";
 
 export let COPIED_MS = 1500;
 
+// The picker, its styles and its catalogue load the first time someone opens one.
+const EmojiPicker = lazy(() =>
+	import("./emoji-picker").then(module => ({ default: module.EmojiPicker }))
+);
+
 const TOOLBAR_MARGIN = 8;
+const SHEET_WIDTH = 600;
 const SHIFT = "--chat-toolbar-shift";
 const RESERVE = "--chat-toolbar-reserve";
 const TALL = "data-chat-tall";
@@ -83,6 +98,13 @@ function useAnchored(
 		let margin = 8;
 		let gap = 4;
 		let place = () => {
+			// A phone's picker is a sheet along the bottom edge, as Slack's is.
+			if (window.innerWidth <= SHEET_WIDTH) {
+				setPosition(current =>
+					current?.bottom === 0 ? current : { left: 0, right: 0, bottom: 0, visibility: "visible" }
+				);
+				return;
+			}
 			let box = anchor.current?.getBoundingClientRect();
 			if (!box) return;
 			let width = element.offsetWidth;
@@ -351,8 +373,16 @@ export let MessageToolbar = memo(function MessageToolbar(
 		setCopying(which);
 		copyToClipboard(which === "markdown" ? markdown : actions.current.plain());
 	};
+	// Tab moves through the picker's field, tabs, grid and skin tone, and closes it past either end.
 	let pickerKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-		if (event.key === "Tab") closePicker();
+		if (event.key !== "Tab") return;
+		let stops = [
+			...event.currentTarget.querySelectorAll<HTMLElement>(
+				"input, button[tabindex='0'], button:not([tabindex])",
+			),
+		];
+		let at = stops.indexOf(document.activeElement as HTMLElement);
+		if (at === -1 || (event.shiftKey ? at === 0 : at === stops.length - 1)) closePicker();
 	};
 
 	let items: MessageActionItem[] = reactable
@@ -502,18 +532,21 @@ export let MessageToolbar = memo(function MessageToolbar(
 			{pickerOpen && createPortal(
 				<div
 					className="chat-message-picker"
+					data-sheet={pickerPosition?.bottom === 0 ? "" : undefined}
 					onKeyDownCapture={pickerKeyDown}
 					ref={picker}
 					style={pickerPosition ?? { visibility: "hidden" }}
 				>
-					<EmojiPicker
-						id={pickerId}
-						onPick={emoji => {
-							actions.current.react(emoji, true);
-							closePicker(true);
-							setPinned(false);
-						}}
-					/>
+					<Suspense fallback={<p className="sr-only" role="status">Loading emoji</p>}>
+						<EmojiPicker
+							id={pickerId}
+							onPick={emoji => {
+								actions.current.react(emoji, true);
+								closePicker(true);
+								setPinned(false);
+							}}
+						/>
+					</Suspense>
 				</div>,
 				document.body,
 			)}
