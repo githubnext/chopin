@@ -491,7 +491,7 @@ test("reactions and emoji in messages are text in the platform's emoji font, not
 	});
 	let page = await join("ana");
 	let words = message(page, "emoji-words");
-	let pill = words.getByRole("button", { name: "You and Ben reacted with \u{1F389}" });
+	let pill = words.getByRole("button", { name: "You and ben reacted with \u{1F389}" });
 	await expect(pill).toHaveText("\u{1F389}2");
 	await expect(words.locator("img")).toHaveCount(0);
 	let emojiFont = /^"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Inter Variable"/;
@@ -969,7 +969,7 @@ test("a reaction added again is kept when a client that numbers nothing is heard
 		let anaThenMina = (tab: Page) =>
 			message(tab, PLANNER.id).getByRole("button", { name: "You and mina reacted with ✅" });
 		let minaThenAna = (tab: Page) =>
-			message(tab, PLANNER.id).getByRole("button", { name: "Mina and You reacted with ✅" });
+			message(tab, PLANNER.id).getByRole("button", { name: "mina and You reacted with ✅" });
 		await expect(message(ana, PLANNER.id).getByRole("button", { name: "You reacted with ✅" }))
 			.toHaveText("✅1");
 

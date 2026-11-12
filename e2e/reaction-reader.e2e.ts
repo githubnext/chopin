@@ -139,7 +139,7 @@ test("a stop pressed during a read-only person's turn stops it like any turn, an
 	let stop = writer.getByRole("button", { name: "Stop generating" });
 	await expect(stop).toBeVisible({ timeout: 30_000 });
 	await stop.click();
-	await expect(chatOf(writer)).toContainText("Ana stopped the turn.");
+	await expect(chatOf(writer)).toContainText("ana stopped the turn.");
 	await expect.poll(() => frames.of("chat:state").at(-1)?.frame.busy).toBe(false);
 	await writer.waitForTimeout(6_000);
 	await expect(chatOf(writer)).not.toContainText(READER_REPLY);

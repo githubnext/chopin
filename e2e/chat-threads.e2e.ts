@@ -68,7 +68,7 @@ test("opens a thread, syncs replies and summary rows to a second collaborator, p
 	let panel = threadPanel(ana);
 	await expect(panel).toBeVisible();
 	await expect(panel.locator("[data-thread-provenance]")).toContainText(
-		"Chopin remembers everything up to here.",
+		"chopin remembers everything up to here.",
 	);
 	await expect(rootMessage).toHaveAttribute("data-thread-root-open", "true");
 	await expect(chatInput(panel)).toBeFocused();
