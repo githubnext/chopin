@@ -71,6 +71,14 @@ test("without an agent there is nobody to ask: no button, and the team's placeho
 	expect(markup.toLowerCase()).not.toContain("@chopin");
 });
 
+test("alone in the document, the draft says it goes to chopin; with no agent it never does", () => {
+	let markup = render({ alone: true, chopin: CHOPIN });
+	expect(markup).toContain('data-placeholder="Message chopin"');
+	expect(markup).not.toContain("Message the team");
+	expect(markup).toContain('aria-label="Ask chopin"');
+	expect(render({ alone: true, agent: false })).toContain('data-placeholder="Message the team"');
+});
+
 test("a failed send alerts above the field and describes the draft", () => {
 	let markup = render({
 		notice: {

@@ -146,4 +146,10 @@ describe("who a message is for follows its words", () => {
 		expect(draftPlaceholder(false)).toBe("Message the team");
 		expect(draftPlaceholder(true)).toBe("Message the team, or @chopin to ask");
 	});
+
+	test("alone in the document, a person is talking to chopin", () => {
+		expect(draftPlaceholder(true, true)).toBe("Message chopin");
+		expect(draftPlaceholder(true, false)).toBe("Message the team, or @chopin to ask");
+		expect(draftPlaceholder(false, true)).toBe("Message the team");
+	});
 });

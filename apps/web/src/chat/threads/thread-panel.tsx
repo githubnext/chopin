@@ -69,6 +69,8 @@ export type ThreadPanelProps = {
 	summaryCount?: number;
 	sheet: boolean;
 	agent: boolean;
+	/** Whether this person is alone in the document, so that a reply goes to chopin. */
+	alone?: boolean;
 	offline: boolean;
 	connected: boolean;
 	readonly: boolean;
@@ -101,6 +103,7 @@ export function ThreadPanel(
 		summaryCount,
 		sheet,
 		agent,
+		alone,
 		offline,
 		connected,
 		readonly,
@@ -555,6 +558,7 @@ export function ThreadPanel(
 
 			<ThreadComposerBoundary
 				agent={agent}
+				alone={alone}
 				alsoDisabled={!draftable || submitting}
 				alsoToChat={view.alsoToChat}
 				banner={failureNode ? { id: bannerId, node: failureNode } : undefined}

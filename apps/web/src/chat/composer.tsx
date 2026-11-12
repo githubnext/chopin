@@ -116,6 +116,8 @@ export type ChatComposerProps = {
 	inputRef?: Ref<DraftInputHandle>;
 	/** Whether this document's Planner is on; without it the composer is marked off. */
 	agent: boolean;
+	/** Whether this person is alone in the document, so that what they send goes to chopin. */
+	alone?: boolean;
 	/**
 	 * Present where Chopin can be asked: the sparkle button, which writes `@chopin` into the draft,
 	 * at the caret when the field has the focus (`atCaret`) and at its start when it has not.
@@ -182,6 +184,7 @@ export function ChatComposer(
 		rootRef,
 		inputRef,
 		agent,
+		alone = false,
 		chopin,
 		model,
 		notice,
@@ -466,7 +469,7 @@ export function ChatComposer(
 											aria-label="Message"
 											className="composer-draft-input"
 											data-empty=""
-											data-placeholder={draftPlaceholder(agent)}
+											data-placeholder={draftPlaceholder(agent, alone)}
 											role="combobox"
 										/>
 									}
@@ -495,7 +498,7 @@ export function ChatComposer(
 										readOnly={!draftable || sending}
 										role="combobox"
 										onSubmit={onSubmit}
-										placeholder={draftPlaceholder(agent)}
+										placeholder={draftPlaceholder(agent, alone)}
 										ref={setInput}
 									/>
 								</Suspense>

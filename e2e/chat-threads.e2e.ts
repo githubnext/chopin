@@ -316,9 +316,12 @@ test("opens threads as a full-height sheet on phones with Back to Chat and no ho
 
 	await sendInScope(sheet, "Reply from phone sheet");
 	await expect(sheet.getByText("Reply from phone sheet")).toBeVisible();
+	// Alone in the document, the reply is Chopin's to answer, in the thread: its reading of the
+	// document and its answer are the thread's other two replies.
+	await expect(sheet.getByText("Plan: Phone threads", { exact: false })).toBeVisible();
 	await expectNoHorizontalOverflow(page);
 
 	await sheet.getByRole("button", { name: "Back to Chat" }).click();
 	await expect(sheet).toHaveCount(0);
-	await expect(rootMsg.locator("[data-thread-summary]")).toContainText("1 reply");
+	await expect(rootMsg.locator("[data-thread-summary]")).toContainText("3 replies");
 });
