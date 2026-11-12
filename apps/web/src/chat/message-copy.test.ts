@@ -32,7 +32,7 @@ test("plain text breaks a line where the page does and joins a soft break with a
 });
 
 test("plain text leaves out what the page does not draw", () => {
-	expect(plainTextOf("keep <b>x</b> ![alt](https://example.com/p.png)")).toBe("keep x");
+	expect(plainTextOf("keep ![alt](https://example.com/p.png)")).toBe("keep");
 	expect(plainTextOf("")).toBe("");
 });
 
@@ -40,7 +40,7 @@ test("plain text collapses whitespace as the page does, also where something the
 	expect(plainTextOf("a  b")).toBe("a b");
 	expect(plainTextOf("x   y\tz")).toBe("x y z");
 	expect(plainTextOf("image ![alt](https://example.com/image.png) end")).toBe("image end");
-	expect(plainTextOf("keep <b>x</b>  and <i>y</i>")).toBe("keep x and y");
+	expect(plainTextOf("keep <b>x</b>  and <i>y</i>")).toBe("keep <b>x</b> and <i>y</i>");
 	expect(plainTextOf("a **bold**  *and* `code`   tail")).toBe("a bold and code tail");
 	expect(plainTextOf("one  \n  two  three")).toBe("one\ntwo three");
 	expect(plainTextOf("first  line\n\nsecond   line")).toBe("first line\n\nsecond line");
@@ -93,4 +93,12 @@ test("plain text reads strikethrough, task lists and tables as MarkdownText draw
 	expect(plainTextOf("Footnote[^1] and https://example.com\n\n[^1]: The note.")).toBe(
 		"Footnote[^1] and https://example.com\n\n[^1]: The note.",
 	);
+});
+
+test("plain text keeps text in angle brackets as written, as the page draws it", () => {
+	expect(plainTextOf("Returns Option<u64> or Vec<Result<T, E>>")).toBe(
+		"Returns Option<u64> or Vec<Result<T, E>>",
+	);
+	expect(plainTextOf("x < y && y > z")).toBe("x < y && y > z");
+	expect(plainTextOf("<not-a-tag>\n**bold**")).toBe("<not-a-tag> bold");
 });

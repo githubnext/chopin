@@ -96,6 +96,16 @@ test("raw HTML is shown as text, never rendered", () => {
 	expect(markup).not.toContain("<b>");
 });
 
+test("text in angle brackets shows as written in a question and its options", () => {
+	let markup = card(
+		"Return Option<u64> or Vec<Result<T, E>>?\n\n<not-a-tag>\n**when** x < y && y > z",
+	);
+	expect(markup).toContain("Return Option&lt;u64&gt; or Vec&lt;Result&lt;T, E&gt;&gt;?");
+	expect(markup).toContain("&lt;not-a-tag&gt;");
+	expect(markup).toContain("<strong");
+	expect(markup).toContain("x &lt; y &amp;&amp; y &gt; z");
+});
+
 test("only this document's own image loads, and every other image shows its alt text", () => {
 	let markup = card(
 		[

@@ -19,6 +19,7 @@ import { gfmTable } from "micromark-extension-gfm-table";
 
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import { CHAT_COMPONENTS, CHAT_ELEMENTS, MarkdownPhrase } from "./chat/markdown";
+import { noHtmlRemarkPlugin } from "./chat/no-html";
 import { orderedRunsRemarkPlugin } from "./chat/ordered-runs";
 
 import type { ReactNode } from "react";
@@ -164,8 +165,13 @@ export function lineBreaksRemarkPlugin() {
 	return (tree: MarkdownNode) => walk(tree);
 }
 
-let PLAIN_BLOCKS = [orderedRunsRemarkPlugin, lineBreaksRemarkPlugin];
-let PREVIEW_BLOCKS = [tablesRemarkPlugin, orderedRunsRemarkPlugin, lineBreaksRemarkPlugin];
+let PLAIN_BLOCKS = [noHtmlRemarkPlugin, orderedRunsRemarkPlugin, lineBreaksRemarkPlugin];
+let PREVIEW_BLOCKS = [
+	noHtmlRemarkPlugin,
+	tablesRemarkPlugin,
+	orderedRunsRemarkPlugin,
+	lineBreaksRemarkPlugin,
+];
 
 export function questionMarkdown(document: string): QuestionMarkdownRenderer {
 	let components = blockComponents(document);
@@ -174,7 +180,6 @@ export function questionMarkdown(document: string): QuestionMarkdownRenderer {
 			<MarkdownPhrase
 				components={INLINE_COMPONENTS}
 				links={links}
-				skipHtml={false}
 				source={source}
 			/>
 		),

@@ -231,7 +231,8 @@ test("Copy as plain text writes the message as the page shows it", async ({ join
 		words.remove();
 		return text;
 	});
-	expect(drawn).toBe("Spaced out words and a gap.\n\nSecond paragraph with html inside.");
+	// A tag someone typed is the text they typed, on the page and in the copy.
+	expect(drawn).toBe("Spaced out words and a gap.\n\nSecond paragraph with <b>html</b> inside.");
 	let spacedMenu = await openMenu(page, spaced);
 	await spacedMenu.getByRole("menuitem", { name: "Copy as plain text" }).click();
 	await expect.poll(() => clipboard(page)).toBe(drawn);

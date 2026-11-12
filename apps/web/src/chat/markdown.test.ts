@@ -156,6 +156,7 @@ test("raw HTML in a Chat message is never drawn, an image tag included", () => {
 	expect(markup).toContain("Ordinary message text");
 	expect(markup).not.toContain("<h1>");
 	expect(markup).not.toContain("<img");
+	expect(markup).toContain("&lt;img src=");
 });
 
 test("every Markdown image draws where it is written, in order, and none is merged or dropped", () => {
@@ -279,7 +280,9 @@ test("every image written together is one gallery, four tiles and the rest behin
 		Array.from({ length: 4 }, (_, index) => `Pic ${index + 1}`),
 	);
 	expect(markup).toContain(">+4<");
-	expect(markup).not.toContain("raw.png");
+	// The tag is the text it was written as, never an image.
+	expect(markup).not.toContain('src="https://example.invalid/raw.png"');
+	expect(markup).toContain("&lt;img src=");
 });
 
 test("images lifted out of one link, or written in a list item or a quotation, are grouped where they are", () => {
@@ -812,8 +815,39 @@ test("inline Markdown formats code, emphasis and links without blocks", () => {
 	expect(inline("    indented `code`")).toBe(
 		`indented <code class="${CODE_CLASS}">code</code>`,
 	);
-	expect(inline("<b>raw</b> ![image](https://example.invalid/i.png)")).toBe("raw ");
+	expect(inline("<b>raw</b> ![image](https://example.invalid/i.png)")).toBe(
+		"&lt;b&gt;raw&lt;/b&gt; ",
+	);
 	expect(inline("one\n\ntwo")).toBe("one two");
+});
+
+/** Text with angle brackets that is not HTML: generics, comparisons and a placeholder. */
+const ANGLE_TEXT = ["Option<u64>", "Vec<Result<T, E>>", "x < y && y > z", "<not-a-tag>"];
+
+function escaped(text: string): string {
+	return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+test("text in angle brackets shows as written in a message, in a line of its own or mid-sentence", () => {
+	for (let text of ANGLE_TEXT) {
+		expect(markdown(text)).toContain(escaped(text));
+		expect(markdown(`Returns ${text} -> **done**`)).toContain(`Returns ${escaped(text)} -&gt; `);
+	}
+	// A line that starts like a tag no longer swallows the Markdown under it.
+	let markup = markdown("<not-a-tag>\n**bold** and `code`");
+	expect(markup).toContain("&lt;not-a-tag&gt;");
+	expect(markup).toContain(`<strong class="${STRONG_CLASS}">bold</strong>`);
+	expect(markup).toContain(`<code class="${CODE_CLASS}">code</code>`);
+	// An autolink is still a link.
+	expect(markdown("See <https://example.com/page>")).toContain('href="https://example.com/page"');
+});
+
+test("text in angle brackets shows as written in a task title and in its accessible name", () => {
+	for (let text of ANGLE_TEXT) {
+		expect(inline(`Return ${text} from \`parse\``)).toContain(`Return ${escaped(text)} from `);
+		expect(inline(text, false)).toBe(escaped(text));
+		expect(inlineText(`Return ${text}`)).toBe(`Return ${text}`);
+	}
 });
 
 test("the plain text of inline Markdown is the text it shows, with single spaces", () => {
@@ -826,12 +860,12 @@ test("the plain text of inline Markdown is the text it shows, with single spaces
 		"one\n\ntwo",
 	];
 	for (let source of sources) {
-		let shown = inline(source, false).replace(/<[^>]+>/g, "").replaceAll("&gt;", ">")
-			.replaceAll("&amp;", "&");
+		let shown = inline(source, false).replace(/<[^>]+>/g, "").replaceAll("&lt;", "<")
+			.replaceAll("&gt;", ">").replaceAll("&amp;", "&");
 		expect(inlineText(source)).toBe(shown.replace(/\s+/g, " ").trim());
 	}
 	expect(inlineText("Deploy on `main`")).toBe("Deploy on main");
-	expect(inlineText("<b>raw</b> ![image](https://example.invalid/i.png)")).toBe("raw");
+	expect(inlineText("<b>raw</b> ![image](https://example.invalid/i.png)")).toBe("<b>raw</b>");
 });
 
 const REPOSITORY = { owner: "octo-org", name: "score", ref: "main" };
