@@ -430,6 +430,11 @@ function documentBackend(): Service.Backend {
 		},
 		liveBuild: !!config.liveBuild,
 		onBuildStopped: id => liveSync?.stopped(id),
+		onBuildNotice: (id, notice) => {
+			announceBuildNotice(id, notice).catch(err =>
+				console.error(`[build] could not post ${notice.id} in ${id}'s Chat:`, err)
+			);
+		},
 		onEditingUnlocked: createEditingUnlocked({
 			withDocumentLock,
 			opened: id => Rooms.get(id)?.plan,
@@ -2685,6 +2690,32 @@ function announceResearchTerminal(channelId: string, id: string, text: string): 
 				id,
 				existing?.text ?? text,
 			);
+		} finally {
+			await Service.close(detached);
+		}
+	});
+}
+
+/**
+ * A build's line in Chat, after the change it reports was persisted. It waits for the document lock
+ * the report may still hold, then posts on the open room, or on the document opened for it.
+ */
+function announceBuildNotice(
+	channelId: string,
+	notice: { id: string; text: string },
+): Promise<void> {
+	if (cutting) return Promise.resolve();
+	return withDocumentLock(channelId, async () => {
+		let post = (plan: Service.Plan) =>
+			Chat.noticeOnce({ chat: plan.chat, plan, server, room: channelId }, notice.id, notice.text);
+		let active = Rooms.get(channelId)?.plan;
+		if (active) {
+			await post(active);
+			return;
+		}
+		let detached = await Service.open(channelId, documentBackend(), server);
+		try {
+			await post(detached);
 		} finally {
 			await Service.close(detached);
 		}

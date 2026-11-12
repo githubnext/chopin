@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { rememberAvatars } from "@chopin/editor/people";
 import { markdownClass } from "./assistant-ui/markdown-classes.test-fixtures";
-import { Transcript } from "./transcript";
+import { systemParts, Transcript } from "./transcript";
 import { childDocumentPath } from "@chopin/protocol/document-url";
 import {
 	answerArtifact,
@@ -307,4 +307,38 @@ test("people speak with their own picture and no tag; Chopin, a research child a
 	expect(markup.match(/data-speaker-tag=/g)).toHaveLength(2);
 	expect(markup).toContain('data-slot="agent-handoff"');
 	expect(markup).toContain("Compare VPS pricing");
+});
+
+test("a build's line links its pull requests and nothing else", () => {
+	let url = "https://github.com/o/r/pull/12";
+	expect(
+		systemParts(
+			`Build finished: 2 tasks, [#12](${url}) and [#13](https://github.com/o/r/pull/13).`,
+		),
+	)
+		.toEqual([
+			"Build finished: 2 tasks, ",
+			{ number: "12", url },
+			" and ",
+			{ number: "13", url: "https://github.com/o/r/pull/13" },
+			".",
+		]);
+	// Any other Markdown link, or a label that is not its pull request's number, stays as written.
+	for (
+		let text of [
+			"Build opened [#12](https://example.com/o/r/pull/12).",
+			`Build opened [#13](${url}).`,
+			"Build opened [here](https://github.com/o/r/pull/12).",
+		]
+	) expect(systemParts(text)).toEqual([text]);
+	let markup = renderToStaticMarkup(createElement(Transcript, {
+		entries: [{
+			id: "n",
+			author: { kind: "system" },
+			text: `Build opened [#12](${url}) for “A”.`,
+			ts: 1,
+		}],
+	} as never));
+	expect(markup).toContain(`href="${url}"`);
+	expect(markup).toContain(">#12</a> for “A”.");
 });

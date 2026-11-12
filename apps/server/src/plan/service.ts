@@ -151,6 +151,11 @@ export type Backend = {
 	onBuildStopped?: (channelId: string) => void;
 	/** A document's editing lock was released and announced. */
 	onEditingUnlocked?: (channelId: string) => void;
+	/**
+	 * A build opened a pull request or ended, after it was persisted: post the line in Chat. Called
+	 * once per notice for each open plan; the notice's ID keeps a repeat to one line.
+	 */
+	onBuildNotice?: (channelId: string, notice: { id: string; text: string }) => void;
 };
 
 export type DocumentTarget = {
