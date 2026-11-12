@@ -46,7 +46,7 @@ import {
 import { $createCodeBlockNode, $isCalloutNode, $isCodeBlockNode } from "@chopin/dialect";
 
 import type { CodeBlockNode } from "@chopin/dialect";
-import type { LexicalNode } from "lexical";
+import type { LexicalEditor, LexicalNode } from "lexical";
 
 /** The language a typed fence names (`""` for none), or nothing for text that is not a fence. */
 export function fenceOf(text: string): string | undefined {
@@ -103,6 +103,9 @@ export function $leaveCode(code: CodeBlockNode): void {
 	code.insertAfter(paragraph);
 	paragraph.select();
 }
+
+/** The code block an Escape just left, so the next Escape can select it (`block-selection.tsx`). */
+export const leftCode = new WeakMap<LexicalEditor, string>();
 
 export function CodeKeysPlugin() {
 	let [editor] = useLexicalComposerContext();
@@ -173,7 +176,16 @@ export function CodeKeysPlugin() {
 				previous?.removeEventListener("beforeinput", typed, true);
 				root?.addEventListener("beforeinput", typed, true);
 			}),
-			editor.registerCommand(KEY_ESCAPE_COMMAND, leave, COMMAND_PRIORITY_LOW),
+			editor.registerCommand(
+				KEY_ESCAPE_COMMAND,
+				event => {
+					let code = $selectedCode();
+					if (!leave(event)) return false;
+					leftCode.set(editor, code!.getKey());
+					return true;
+				},
+				COMMAND_PRIORITY_LOW,
+			),
 			editor.registerCommand(
 				KEY_ENTER_COMMAND,
 				event => {

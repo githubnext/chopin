@@ -1,0 +1,74 @@
+/*
+ * Blocks selected as blocks (`block-selection.tsx`) and the handle that drags them
+ * (`block-handle.tsx`). Loaded with the first editable document, not with the page.
+ */
+
+/*
+ * Notion's wash over the whole block, in the brand's hue, laid over whatever background the block
+ * has (code keeps its own), with a ring in the brand that holds 3:1 on the page.
+ */
+[data-block-selected] {
+	border-radius: var(--radius-sm);
+	background-image: linear-gradient(
+		color-mix(in oklch, var(--color-brand) 12%, transparent),
+		color-mix(in oklch, var(--color-brand) 12%, transparent)
+	);
+	outline: 1px solid var(--color-brand);
+	caret-color: transparent;
+}
+
+/* While a drag selects blocks, the text under it is not painted as selected as well. */
+[data-block-dragging] ::selection {
+	background: transparent;
+}
+
+.plan-block-handle {
+	position: fixed;
+	z-index: 40;
+	display: grid;
+	place-items: center;
+	width: 20px;
+	height: 20px;
+	border-radius: var(--radius-sm);
+	color: var(--color-text-tertiary);
+	cursor: grab;
+	touch-action: none;
+	transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.plan-block-handle:hover,
+.plan-block-handle[aria-expanded="true"] {
+	background: var(--color-hover);
+	color: var(--color-text-primary);
+}
+
+.plan-block-handle:active {
+	cursor: grabbing;
+}
+
+/* Where dropped blocks will land. */
+.plan-block-drop {
+	position: fixed;
+	z-index: 40;
+	height: 2px;
+	border-radius: var(--radius-full);
+	background: var(--color-brand);
+	pointer-events: none;
+}
+
+.plan-block-menu-group + .plan-block-menu-group {
+	margin-top: var(--menu-separator-margin);
+	padding-top: var(--menu-separator-margin);
+	border-top: 1px solid var(--color-divider);
+}
+
+.plan-block-menu-label {
+	padding: var(--menu-padding) calc(var(--menu-padding) * 2) 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+}
+
+.plan-block-menu-shortcut {
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+}
