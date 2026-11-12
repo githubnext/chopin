@@ -326,27 +326,27 @@ test("reacting puts a pill under the message that is yours to take back, and a s
 	await expect(pill).toHaveAttribute("aria-pressed", "true");
 	await expect(pill).toHaveText("✅1");
 	await expect(quick).toHaveAttribute("aria-pressed", "true");
-	let seen = theirs.getByRole("button", { name: "Ana reacted with ✅" });
+	let seen = theirs.getByRole("button", { name: "ana reacted with ✅" });
 	await expect(seen).toHaveText("✅1");
 	await expect(seen).toHaveAttribute("aria-pressed", "false");
 
 	await seen.click();
-	await expect(theirs.getByRole("button", { name: "Ana and You reacted with ✅" })).toHaveText(
+	await expect(theirs.getByRole("button", { name: "ana and You reacted with ✅" })).toHaveText(
 		"✅2",
 	);
-	await expect(mine.getByRole("button", { name: "You and Ben reacted with ✅" })).toHaveText("✅2");
-	await expect(mine.getByRole("button", { name: "You and Ben reacted with ✅" }))
+	await expect(mine.getByRole("button", { name: "You and ben reacted with ✅" })).toHaveText("✅2");
+	await expect(mine.getByRole("button", { name: "You and ben reacted with ✅" }))
 		.toHaveAttribute("aria-pressed", "true");
 
 	await ana.reload();
 	await expect(
-		message(ana, PLANNER.id).getByRole("button", { name: "You and Ben reacted with ✅" }),
+		message(ana, PLANNER.id).getByRole("button", { name: "You and ben reacted with ✅" }),
 	)
 		.toHaveText("✅2");
 
-	await message(ana, PLANNER.id).getByRole("button", { name: "You and Ben reacted with ✅" })
+	await message(ana, PLANNER.id).getByRole("button", { name: "You and ben reacted with ✅" })
 		.click();
-	await expect(message(ana, PLANNER.id).getByRole("button", { name: "Ben reacted with ✅" }))
+	await expect(message(ana, PLANNER.id).getByRole("button", { name: "ben reacted with ✅" }))
 		.toHaveAttribute("aria-pressed", "false");
 	await expect(theirs.getByRole("button", { name: "You reacted with ✅" })).toHaveText("✅1");
 	await theirs.getByRole("button", { name: "You reacted with ✅" }).click();
@@ -542,7 +542,7 @@ test("a reaction the server turns down is not shown, and its message says why: a
 	await theirs.hover();
 	await toolbar(theirs).getByRole("button", { name: "Looks right" }).click();
 	await expect(theirs.getByRole("button", { name: "You reacted with ✅" })).toHaveText("✅1");
-	await expect(mine.getByRole("button", { name: "Ben reacted with ✅" })).toHaveText("✅1");
+	await expect(mine.getByRole("button", { name: "ben reacted with ✅" })).toHaveText("✅1");
 	await expect(theirs.locator('[data-chat-reaction="🎉"]')).toHaveCount(0);
 	await ana.reload();
 	await expect(mine.locator("[data-chat-reaction]")).toHaveCount(21);
@@ -766,7 +766,7 @@ test("a reaction asked for while the connection is down shows at once, dimmed, a
 	await ana.evaluate(() => dispatchEvent(new Event("online")));
 	await expect(pill).not.toHaveAttribute("data-pending");
 	expect(wire.state.reactions).toEqual([{ id: PLANNER.id, emoji: "👎", on: true }]);
-	await expect(message(ben, PLANNER.id).getByRole("button", { name: "Ana reacted with 👎" }))
+	await expect(message(ben, PLANNER.id).getByRole("button", { name: "ana reacted with 👎" }))
 		.toHaveText("👎1");
 
 	wire.state.offline = true;
@@ -821,7 +821,7 @@ test("a message only this browser has can be reacted to, and the reaction is kep
 	let theirs = chatOf(ben).locator("[data-chat-message-id]").filter({
 		hasText: "Hold this thought",
 	});
-	await expect(theirs.getByRole("button", { name: "Ana reacted with ✅" })).toHaveText("✅1");
+	await expect(theirs.getByRole("button", { name: "ana reacted with ✅" })).toHaveText("✅1");
 	await expect(mine.getByRole("button", { name: "You reacted with ✅" })).not.toHaveAttribute(
 		"data-pending",
 	);
@@ -967,7 +967,7 @@ test("a reaction added again is kept when a client that numbers nothing is heard
 	);
 	try {
 		let anaThenMina = (tab: Page) =>
-			message(tab, PLANNER.id).getByRole("button", { name: "You and Mina reacted with ✅" });
+			message(tab, PLANNER.id).getByRole("button", { name: "You and mina reacted with ✅" });
 		let minaThenAna = (tab: Page) =>
 			message(tab, PLANNER.id).getByRole("button", { name: "Mina and You reacted with ✅" });
 		await expect(message(ana, PLANNER.id).getByRole("button", { name: "You reacted with ✅" }))

@@ -6,7 +6,9 @@
  * beside its name. The handoff and subagent list are the props of assistant-ui's standalone
  * `AgentHandoff` and `SubagentList`.
  */
-import { capitalize, duration, toolCopy } from "./model";
+import { displayName, PLANNER_NAME } from "@chopin/editor";
+
+import { duration, toolCopy } from "./model";
 
 import type { SubagentItem } from "@/components/assistant-ui/elements/subagent-list";
 import type { Chat, ConversationPlan, Research } from "@chopin/protocol";
@@ -50,8 +52,8 @@ export function messageSpeaker(input: {
 		? when(input.ts)
 		: undefined;
 	let speaker: Speaker = input.author.kind === "member"
-		? { kind: "user", name: capitalize(input.author.handle), handle: input.author.handle }
-		: { kind: "agent", name: "Chopin" };
+		? { kind: "user", name: displayName(input.author.handle), handle: input.author.handle }
+		: { kind: "agent", name: PLANNER_NAME };
 	if (time !== undefined) speaker.time = time;
 	return speaker;
 }
@@ -117,7 +119,7 @@ export function researchOfferHandoff(
 		: stage === "cancelled"
 		? "Cancelled before publishing a child document."
 		: "Investigating sources for a child document.";
-	return { from: "Chopin", to: "Research", reason, carried, settled: stage !== "queued" };
+	return { from: PLANNER_NAME, to: "Research", reason, carried, settled: stage !== "queued" };
 }
 
 export type SubagentsProps = {
@@ -188,7 +190,7 @@ export function plannerResearchHandoff(
 		}
 	}
 	return {
-		from: "Chopin",
+		from: PLANNER_NAME,
 		to: "Research",
 		reason: question ?? "Handing off the research brief to a child document.",
 		carried: [],

@@ -104,7 +104,7 @@ test("with no chip the draft is for the team, and says how to ask Chopin", async
 	let chat = chatPane(await join("ana"));
 	let draft = chatInput(chat);
 	let { chip, remove, ask } = parts(chat);
-	await expect(draft).toHaveAttribute("data-placeholder", "Message the team, or @Chopin to ask");
+	await expect(draft).toHaveAttribute("data-placeholder", "Message the team, or @chopin to ask");
 	await expect(chip).toHaveCount(0);
 	await expect(remove).toHaveCount(0);
 	await expect(ask).toBeEnabled();
@@ -128,7 +128,7 @@ test("the sparkle button puts the chip at the start without touching the words o
 
 	await ask.click();
 	await expect(chip).toBeVisible();
-	await expect(chip).toHaveText("Chopin");
+	await expect(chip).toHaveText("chopin");
 	await expectChatValue(draft, "outline the export options");
 	await expect(draft).toBeFocused();
 	expect(await chatCaret(draft)).toBe(caret);
@@ -190,7 +190,7 @@ test("choosing Chopin in the @ menu puts the chip on and takes the typed @ out o
 	await draft.fill("Hey @ch");
 	let menu = chat.getByRole("listbox", { name: "Mentions" });
 	await expect(menu).toBeVisible();
-	let chopin = menu.getByRole("option", { name: /^Chopin/ });
+	let chopin = menu.getByRole("option", { name: /^chopin/ });
 	await expect(chopin).toHaveAttribute("aria-selected", "true");
 	await draft.press("Enter");
 	await expect(menu).toHaveCount(0);
@@ -232,7 +232,7 @@ test("Backspace at the very start takes the chip off, and anywhere else is only 
 	await expectChatValue(draft, "line it");
 	expect(await chatCaret(draft)).toBe(0);
 	await expect(ask).toBeEnabled();
-	await expect(draft).toHaveAttribute("data-placeholder", "Message the team, or @Chopin to ask");
+	await expect(draft).toHaveAttribute("data-placeholder", "Message the team, or @chopin to ask");
 	await expect(draft).toBeFocused();
 });
 
@@ -365,7 +365,7 @@ test("on a phone the chip is the same chip, with a full touch target on its cros
 	await expect.poll(async () => (await chat.boundingBox())?.x).toBe(0);
 	let draft = chatInput(chat);
 	let { chip, remove, ask } = parts(chat);
-	await expect(draft).toHaveAttribute("data-placeholder", "Message the team, or @Chopin to ask");
+	await expect(draft).toHaveAttribute("data-placeholder", "Message the team, or @chopin to ask");
 
 	await ask.tap();
 	await expect(chip).toBeVisible();

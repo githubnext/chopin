@@ -272,9 +272,9 @@ describe("mention picker markup", () => {
 		expect(html.match(/<button[^>]*id="mentions-option-0"[^>]*>/)![0]).toContain('tabindex="-1"');
 	});
 
-	test("lists Chopin first as an agent, and the people as human", () => {
-		expect(html.indexOf(">Chopin<")).toBeLessThan(html.indexOf(">octocat<"));
-		expect(html).toMatch(/>Chopin<\/span><span class="[^"]*">agent</);
+	test("lists chopin first as an agent, and the people as human", () => {
+		expect(html.indexOf(">chopin<")).toBeLessThan(html.indexOf(">octocat<"));
+		expect(html).toMatch(/>chopin<\/span><span class="[^"]*">agent</);
 		expect(html).toMatch(/>octocat<\/span><span class="[^"]*">human</);
 	});
 

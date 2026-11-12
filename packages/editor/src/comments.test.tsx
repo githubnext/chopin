@@ -69,19 +69,25 @@ describe("ThreadCard controls", () => {
 			markup.indexOf("plan-comment-note-body"),
 		);
 
-		expect(head).toContain(">Ana<");
+		expect(head).toContain(">ana<");
 		expect(head).toContain('aria-label="Resolve"');
 		expect(markup).not.toContain("data-plan-comment-context");
 	});
 
-	it("shows authors as chat does: a face, a display name and the handle for assistive tech", () => {
+	it("shows authors as chat does: a face and the handle as written, read once", () => {
 		let markup = render(view(), true);
 
 		expect(markup).toContain('<span aria-hidden="true" class="relative grid');
 		expect(markup).toContain('alt=""');
 		expect(markup).not.toContain('aria-label="ana"');
-		expect(markup).toContain(">Ana<");
-		expect(markup).toContain("(@ana)");
+		expect(markup).toContain(">ana<");
+		expect(markup).not.toContain("(@ana)");
+	});
+
+	it("keeps a handle's capitals, digits, underscores and hyphens", () => {
+		let markup = render(view([note("note-1", "Hubot-Bot_acme2", "Ship it.")]), true);
+
+		expect(markup).toContain(">Hubot-Bot_acme2<");
 	});
 
 	it("folds the middle of a long thread behind a count", () => {
@@ -168,8 +174,10 @@ describe("Comment composer keys", () => {
 });
 
 describe("displayName", () => {
-	it("names a person as Chat does", () => {
-		expect(displayName("ana")).toBe("Ana");
+	it("names a person by their handle exactly as written, as Chat does", () => {
+		for (let handle of ["ana", "mona_acme", "Hubot-Bot", "lavaman131", "Octo-Cat_42"]) {
+			expect(displayName(handle)).toBe(handle);
+		}
 		expect(displayName("")).toBe("");
 	});
 });
@@ -210,7 +218,7 @@ describe("Sending to Chopin", () => {
 		let sent = { ...note("note-1", "ana", "Shorter, please."), to: "planner" as const };
 		let markup = render(view([sent]), true);
 
-		expect(markup).toContain('class="plan-comment-mention">@Chopin</span>');
+		expect(markup).toContain('class="plan-comment-mention">@chopin</span>');
 		expect(markup).toContain("Shorter, please.");
 	});
 
@@ -223,8 +231,8 @@ describe("Sending to Chopin", () => {
 			true,
 		);
 
-		expect(markup).toContain('aria-label="Chopin"');
-		expect(markup).toContain(">Chopin</span>");
+		expect(markup).toContain('aria-label="chopin"');
+		expect(markup).toContain(">chopin</span>");
 		expect(markup).toContain("It matches the CDN TTL.");
 	});
 

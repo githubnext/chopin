@@ -15,11 +15,16 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Provenance, when } from "./card";
+import { setFaceProfiles } from "./people";
 
 it("attributes a decision to its demo persona while preserving GitHub handles", () => {
-	let actor = renderToStaticMarkup(
-		createElement(Provenance, { by: "demo:lily", verb: "Answered" }),
-	);
+	setFaceProfiles([{ id: "demo:lily", name: "Lily", avatar: "/demo/lily.svg" }]);
+	let actor: string;
+	try {
+		actor = renderToStaticMarkup(createElement(Provenance, { by: "demo:lily", verb: "Answered" }));
+	} finally {
+		setFaceProfiles([]);
+	}
 	expect(actor).toContain(">Lily</span>");
 	expect(actor).not.toContain("@demo:");
 	let member = renderToStaticMarkup(createElement(Provenance, { by: "ana", verb: "Answered" }));

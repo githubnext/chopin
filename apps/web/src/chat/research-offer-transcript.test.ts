@@ -131,7 +131,7 @@ test("the speaker's messages after an offer card continue without a repeated hea
 			onRetryLink: () => {},
 		},
 	}));
-	expect(markup.match(/>Ana<\/span>/g)).toHaveLength(1);
+	expect(markup.match(/>ana<\/span>/g)).toHaveLength(1);
 });
 
 test("a ready request linked from a visible offer card announces itself only on the card", () => {

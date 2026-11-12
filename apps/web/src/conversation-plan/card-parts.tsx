@@ -1,3 +1,5 @@
+import { PLANNER_NAME } from "@chopin/editor/people";
+
 import type { ConversationPlan } from "@chopin/protocol";
 
 export type SourceDestination = { source: ConversationPlan.SourceRef; itemId: string };
@@ -17,7 +19,7 @@ export function Sources({ itemId, onSource, sources }: {
 					key={`${source.messageId}-${source.start}-${index}`}
 					onClick={() => onSource({ itemId, source })}
 					title={`${
-						source.author.kind === "member" ? source.author.handle : "Chopin"
+						source.author.kind === "member" ? source.author.handle : PLANNER_NAME
 					}: “${source.quote}”`}
 					type="button"
 				>

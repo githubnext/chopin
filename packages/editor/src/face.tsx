@@ -28,7 +28,7 @@ import { useReducer, useSyncExternalStore } from "react";
 
 import { color } from "./cursor";
 import { faceSources, nextPhoto, photoShown, photoSource } from "./face-photo";
-import { avatarOf, personName, subscribeAvatars } from "./people";
+import { avatarOf, personName, PLANNER_NAME, subscribeAvatars } from "./people";
 
 export type FaceProps = {
 	/** Unverified, so the photograph may not exist. */
@@ -126,11 +126,11 @@ function Portrait(
 export function AgentFace({ ring, size = 20 }: { ring?: boolean; size?: number }) {
 	return (
 		<span
-			aria-label="Chopin"
+			aria-label={PLANNER_NAME}
 			className={`block shrink-0 rounded-full bg-brand ${ring ? "ring-2 ring-page" : ""}`}
 			role="img"
 			style={{ width: size, height: size }}
-			title="Chopin"
+			title={PLANNER_NAME}
 		/>
 	);
 }

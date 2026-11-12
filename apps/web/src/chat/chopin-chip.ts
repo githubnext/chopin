@@ -157,5 +157,5 @@ export function takeChopinMention(
 /** What the empty draft says: the way to Chopin until the chip says it. */
 export function draftPlaceholder({ agent, chip }: { agent: boolean; chip: boolean }): string {
 	if (!agent) return "Message the team";
-	return chip ? "Ask Chopin…" : "Message the team, or @Chopin to ask";
+	return chip ? "Ask Chopin…" : "Message the team, or @chopin to ask";
 }

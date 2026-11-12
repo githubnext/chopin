@@ -1,5 +1,5 @@
 import { AgentFace, Face } from "@chopin/editor/face";
-import { personName } from "@chopin/editor/people";
+import { personName, PLANNER_NAME } from "@chopin/editor/people";
 import { StaticPlanEditor } from "@chopin/editor/static";
 import { ArrowLeftIcon, CloseIcon } from "@chopin/icons";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -40,7 +40,7 @@ const SUMMARY_POLL_MS = 2_000;
 const SUMMARY_WAIT_MS = 30_000;
 
 function who(author: VersionAuthor | undefined, self: string): string {
-	if (!author) return "Chopin";
+	if (!author) return PLANNER_NAME;
 	return author.login === self ? "You" : personName(author.login);
 }
 

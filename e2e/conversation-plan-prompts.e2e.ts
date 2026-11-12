@@ -145,7 +145,7 @@ test("one person's scoped choice saves through the authenticated wire and surviv
 	let notice = scopedPrompt(ana);
 	await expect(notice).toBeVisible();
 	await expect(notice).toContainText("Save Lexical for this spike?");
-	await expect(notice).toContainText("Ana");
+	await expect(notice).toContainText("ana");
 	await expect(notice).toContainText("I'd pick Lexical for the spike;");
 	await expect(notice.getByRole("button", { name: "Save for this spike" })).toBeEnabled();
 	await expect(cardById(ana, cardId)).toBeVisible();
@@ -256,7 +256,7 @@ test("a second member refreshes the scoped choice notice with both exact sources
 	).toBe(false);
 	await expect(scopedPrompt(ana)).toHaveCount(1);
 	let refreshed = scopedPrompt(ana);
-	await expect(refreshed).toContainText("Ana");
+	await expect(refreshed).toContainText("ana");
 	await expect(refreshed).toContainText("I'd pick Lexical for the spike;");
 	await expect(refreshed).toContainText("Bo");
 	await expect(refreshed).toContainText("yep, Lexical for the spike.");

@@ -17,7 +17,7 @@ test("a comment sent to Chopin with no Planner running is saved and says Chopin 
 	await page.getByRole("button", { name: /^Comment on “.*”\. / }).click();
 	let thread = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(thread.getByText("Can you shorten this?")).toBeVisible();
-	await expect(thread.locator(".plan-comment-mention")).toHaveText("@Chopin");
+	await expect(thread.locator(".plan-comment-mention")).toHaveText("@chopin");
 	await expect(thread.getByText("Chopin isn't running")).toBeVisible();
 
 	// Backspace at the start of a reply drops the address it was given.
@@ -38,6 +38,6 @@ test("a comment sent to Chopin with no Planner running is saved and says Chopin 
 	await expect(thread.locator(".plan-comment-mention")).toHaveCount(2);
 	await expect(thread.getByText("shorter please", { exact: true })).toHaveCount(0);
 	await expect(thread.locator(".plan-comment-note-body").last()).toHaveText(
-		"@Chopin shorter please",
+		"@chopin shorter please",
 	);
 });

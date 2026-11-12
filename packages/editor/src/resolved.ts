@@ -8,6 +8,7 @@
  */
 
 import { claimDecision, releaseDecision } from "./decision-pin";
+import { PLANNER_NAME } from "./people";
 import type { Question } from "@chopin/dialect";
 import type { Question as ProtocolQuestion } from "@chopin/protocol";
 import type { Point, Rect } from "./comment-geometry";
@@ -272,6 +273,6 @@ export function resolvedCommentMeta(
 	return [
 		...(replies > 0 ? [`${replies} ${replies === 1 ? "reply" : "replies"}`] : []),
 		...(resolver ? [`Resolved by ${name(resolver)}`] : ["Resolved"]),
-		"Edited by Chopin",
+		`Edited by ${PLANNER_NAME}`,
 	];
 }

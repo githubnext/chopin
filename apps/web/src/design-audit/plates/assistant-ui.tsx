@@ -81,7 +81,7 @@ const CATALOG: Chat.ModelCatalog = {
 };
 
 const MENTION = {
-	parse: () => [{ kind: "mention" as const, type: "agent", label: "Chopin", id: "chopin" }],
+	parse: () => [{ kind: "mention" as const, type: "agent", label: "chopin", id: "chopin" }],
 };
 /** The chip as Directive text draws it for a mention, and with the control the patch lets it hold. */
 const MentionChip = createDirectiveText(MENTION, { iconMap: { agent: SparkleIcon } });
@@ -343,7 +343,7 @@ export function AssistantUiPlate() {
 					<StateLabel>Mentions menu</StateLabel>
 					<div className="design-audit-aui-menu">
 						<ComposerMenu open>
-							<ComposerPersonItem active person={{ name: "Chopin", role: "agent" }} />
+							<ComposerPersonItem active person={{ name: "chopin", role: "agent" }} />
 							{/* The avatar slot the patch adds, drawn here as a plain node. */}
 							<ComposerPersonItem
 								active={false}
@@ -408,8 +408,8 @@ export function AssistantUiPlate() {
 				<div>
 					<StateLabel>Mention chip, and with a trailing control</StateLabel>
 					<div className="design-audit-aui-chips">
-						<MentionChip text=":agent[Chopin]" />
-						<RemovableChip text=":agent[Chopin]" />
+						<MentionChip text=":agent[chopin]" />
+						<RemovableChip text=":agent[chopin]" />
 					</div>
 				</div>
 				<div>
@@ -589,7 +589,7 @@ export function AssistantUiPlate() {
 					<StateLabel>Handoff, in transit</StateLabel>
 					<AgentHandoff
 						carried={["Compare self-hosted options", "Keep single-sign-on support"]}
-						from="Chopin"
+						from="chopin"
 						reason="Handing off the research brief to a child document."
 						settled={false}
 						to="Research"
@@ -599,7 +599,7 @@ export function AssistantUiPlate() {
 					<StateLabel>Handoff, settled</StateLabel>
 					<AgentHandoff
 						carried={[]}
-						from="Chopin"
+						from="chopin"
 						reason="Published findings in a child document."
 						settled
 						to="Research"

@@ -1,6 +1,6 @@
 import { MessageForwardIcon } from "@chopin/icons";
 import { InlineCode } from "@chopin/question/react";
-import { Face } from "@chopin/editor";
+import { Face, PLANNER_NAME } from "@chopin/editor";
 
 import type { SourceDestination } from "./card-parts";
 import type { EvidenceRow } from "./evidence";
@@ -70,7 +70,7 @@ export function EvidencePopover({ rows, onSource }: {
 							<span className="shrink-0 text-text-tertiary">
 								{row.source.author.kind === "member"
 									? `@${row.source.author.handle}`
-									: "Chopin"}
+									: PLANNER_NAME}
 							</span>
 							<q className="min-w-0 flex-1 text-text-primary [overflow-wrap:anywhere]">
 								{row.source.quote}

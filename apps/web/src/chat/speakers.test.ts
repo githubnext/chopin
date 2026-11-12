@@ -12,25 +12,31 @@ import {
 } from "./speakers";
 
 describe("messageSpeaker", () => {
-	test("a person is an untagged user with their handle and the time", () => {
+	test("a person is an untagged user named by their handle as written, with the time", () => {
 		let sent = messageSpeaker({
 			author: { kind: "member", handle: "mona_acme" },
 			ts: 1_700_000_000,
 		});
 		expect(sent.kind).toBe("user");
-		expect(sent.name).toBe("Mona_acme");
+		expect(sent.name).toBe("mona_acme");
 		expect(sent.handle).toBe("mona_acme");
 		expect(sent.time).toMatch(/\d{2}:\d{2}/);
 	});
 
-	test("Chopin is the agent, and says when a running turn started", () => {
+	test("handles keep their capitals, digits, underscores and hyphens", () => {
+		for (let handle of ["Hubot-Bot", "lavaman131", "Octo_Cat-2"]) {
+			expect(messageSpeaker({ author: { kind: "member", handle } }).name).toBe(handle);
+		}
+	});
+
+	test("chopin is the agent, and says when a running turn started", () => {
 		let working = messageSpeaker({
 			author: { kind: "agent" },
 			ts: 1_700_000_000,
 			activeTs: 1_700_000_001,
 		});
 		expect(working.kind).toBe("agent");
-		expect(working.name).toBe("Chopin");
+		expect(working.name).toBe("chopin");
 		expect(working.handle).toBeUndefined();
 		expect(working.time).toMatch(/^Started at /);
 	});
@@ -123,7 +129,7 @@ describe("research delegation views", () => {
 
 		let queued = researchOfferHandoff(offer, "queued");
 		expect(queued).toEqual({
-			from: "Chopin",
+			from: "chopin",
 			to: "Research",
 			reason: "Handing off the research brief to a child document.",
 			carried: ["Compare self-hosted search", "Needs SSO support"],
@@ -157,7 +163,7 @@ describe("research delegation views", () => {
 				},
 			]),
 		).toEqual({
-			from: "Chopin",
+			from: "chopin",
 			to: "Research",
 			reason: "Check OAuth device flow limits",
 			carried: [],

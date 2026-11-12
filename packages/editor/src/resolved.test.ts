@@ -242,17 +242,17 @@ function name(handle: string): string {
 }
 
 describe("a resolved comment's preview line", () => {
-	it("counts replies, names the resolver and says Chopin edited", () => {
+	it("counts replies, names the resolver and says chopin edited", () => {
 		expect(resolvedCommentMeta({ notes: 3, resolver: "jev" }, name)).toEqual(
-			["2 replies", "Resolved by JEV", "Edited by Chopin"],
+			["2 replies", "Resolved by JEV", "Edited by chopin"],
 		);
 		expect(resolvedCommentMeta({ notes: 2, resolver: "jev" }, name)).toEqual(
-			["1 reply", "Resolved by JEV", "Edited by Chopin"],
+			["1 reply", "Resolved by JEV", "Edited by chopin"],
 		);
 	});
 
 	it("drops the reply count for a lone note", () => {
-		expect(resolvedCommentMeta({ notes: 1 }, name)).toEqual(["Resolved", "Edited by Chopin"]);
+		expect(resolvedCommentMeta({ notes: 1 }, name)).toEqual(["Resolved", "Edited by chopin"]);
 	});
 
 	it("keys comments apart from decisions", () => {

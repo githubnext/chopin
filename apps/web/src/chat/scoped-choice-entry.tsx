@@ -1,9 +1,8 @@
 /** A provisional spike choice in Chat, separate from the card's final decision. */
 
 import { useState } from "react";
+import { displayName, PLANNER_NAME } from "@chopin/editor";
 import { DecisionIcon } from "@chopin/icons";
-
-import { capitalize } from "./model";
 
 import type { Chat, ConversationPlan } from "@chopin/protocol";
 import type { Transport } from "@chopin/question/react";
@@ -98,7 +97,7 @@ export function ScopedChoicePrompt({
 						key={`${source.messageId}:${source.start}:${source.end}`}
 					>
 						<span className="font-medium text-text-primary">
-							{source.author.kind === "member" ? capitalize(source.author.handle) : "Chopin"}
+							{source.author.kind === "member" ? displayName(source.author.handle) : PLANNER_NAME}
 						</span>
 						{" “"}
 						{source.quote}

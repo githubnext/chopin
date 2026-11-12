@@ -106,6 +106,28 @@ test("system notices with arbitrary Markdown remain text", () => {
 	expect(markup).toContain("[Outside](https://example.com) &lt;b&gt;unsafe&lt;/b&gt;");
 });
 
+test("a message to the Planner draws one @chopin chip, whichever spelling it was sent with", () => {
+	for (let spelling of ["@chopin", "@Chopin"]) {
+		let markup = renderToStaticMarkup(createElement(Transcript, {
+			active: true,
+			entries: [{
+				author: { kind: "member", handle: "Hubot-Bot" },
+				id: "asked",
+				text: `${spelling} what would a review need?`,
+				to: "planner",
+				ts: 1_700_000_000,
+			}],
+			handle: "ana",
+		}));
+
+		expect(markup).toContain('data-speaker-name="">Hubot-Bot</span>');
+		expect(markup).toContain('<span class="chat-mention">@chopin</span> ');
+		// Only the stored text, kept for Copy, still says it as it was sent.
+		expect(markup.replace(/data-chat-raw="[^"]*"/, "")).not.toContain("@Chopin");
+		expect(markup).toContain("what would a review need?");
+	}
+});
+
 test("a ready notice cannot turn an external destination into a system link", () => {
 	let markup = renderToStaticMarkup(createElement(Transcript, {
 		active: true,
@@ -272,12 +294,12 @@ test("people speak with their own picture and no tag; Chopin, a research child a
 	expect(markup.match(/data-speaker-kind="user"/g)).toHaveLength(2);
 	expect(markup.match(/data-speaker-kind="agent"/g)).toHaveLength(1);
 	expect(markup.match(/data-speaker-kind="subagent"/g)).toHaveLength(1);
-	expect(markup).toContain('data-speaker-name="">Mona_speaker</span>');
-	expect(markup).toContain('data-speaker-name="">Hubot_speaker</span>');
+	expect(markup).toContain('data-speaker-name="">mona_speaker</span>');
+	expect(markup).toContain('data-speaker-name="">hubot_speaker</span>');
 	expect(markup).toContain('src="https://avatars.example.invalid/mona.png"');
 	expect(markup).toContain('src="https://avatars.example.invalid/hubot.png"');
 	expect(markup).toContain(
-		'data-speaker-name="">Chopin</span><span class="chat-speaker-tag" data-speaker-tag="agent">Agent</span>',
+		'data-speaker-name="">chopin</span><span class="chat-speaker-tag" data-speaker-tag="agent">Agent</span>',
 	);
 	expect(markup).toContain(
 		'data-speaker-name="">Research</span><span class="chat-speaker-tag" data-speaker-tag="subagent">Subagent</span>',

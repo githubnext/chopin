@@ -463,7 +463,7 @@ test(
 			let handoff = attachment.locator('[data-slot="agent-handoff"]');
 			let subagents = attachment.locator('[data-slot="subagent-list"]');
 			await expect(handoff).toBeVisible();
-			await expect(handoff).toContainText("Chopin");
+			await expect(handoff).toContainText("chopin");
 			await expect(handoff).toContainText("Research");
 			await expect(handoff).toContainText("Handing off the research brief to a child document.");
 			await expect(subagents).toBeVisible();
