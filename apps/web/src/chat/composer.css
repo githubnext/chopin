@@ -587,6 +587,40 @@
 .composer-model-selector {
 	max-height: var(--available-height, none);
 }
+/*
+ * The row under the pointer, or the keyboard's active row, is one shade darker than the popover, as
+ * a row of Chopin's own menus is when it is active (`--color-selected`), with its words at AA on it;
+ * every other row lies on the popover. The copied row asks for a shade wherever cmdk sets
+ * `data-selected`, which it sets to `false` as well as `true`, so every row had the shade and the
+ * one under the pointer looked like the rest. The chosen model keeps its check.
+ */
+.composer-model-selector [data-slot="model-selector-item"] {
+	background: transparent;
+	transition: background-color var(--duration-fast) var(--ease-out);
+}
+.composer-model-selector [data-slot="model-selector-item"][data-selected="true"] {
+	background: var(--color-selected);
+}
+/*
+ * A level under the pointer takes the same shade. The chosen level is marked as the emoji picker's
+ * chosen skin tone is, the petrol wash inside a petrol edge, in primary ink and medium weight, so a
+ * level that is only pointed at never reads as chosen.
+ */
+.composer-model-effort [role="radio"] {
+	cursor: pointer;
+}
+@media (hover: hover) {
+	.composer-model-effort [role="radio"]:hover {
+		background: var(--color-selected);
+		color: var(--color-text-primary);
+	}
+}
+.composer-model-effort [role="radio"][data-checked] {
+	background: var(--color-brand-wash);
+	color: var(--color-text-primary);
+	outline: var(--edge-width) solid var(--color-brand);
+	outline-offset: calc(-1 * var(--edge-width));
+}
 /* A wrapper the levels' lane is reached through; it draws no box of its own. */
 .composer-model-levels {
 	display: contents;
