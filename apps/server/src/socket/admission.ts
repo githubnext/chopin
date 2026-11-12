@@ -114,6 +114,7 @@ export async function admit(
 				...(channel.archivedAt
 					? { channelArchivedAt: channel.archivedAt.toISOString() }
 					: {}),
+				...(channel.fullWidth ? { channelFullWidth: true as const } : {}),
 				handle: actor ? actor.id : session.user.login,
 				...(actor
 					? { actor }

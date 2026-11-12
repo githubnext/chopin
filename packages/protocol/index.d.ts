@@ -99,6 +99,8 @@ export declare namespace Session {
 		/** Repository mutation capability, independent of document archival. */
 		canManage: boolean;
 		archivedAt?: string;
+		/** Full width, the document's own layout setting: every block uses the sheet's width. */
+		fullWidth?: boolean;
 		backgroundJobs: boolean;
 		webResearch: boolean;
 		chatReferences: boolean;
@@ -132,6 +134,8 @@ export declare namespace Session {
 		description?: string;
 		canManage: boolean;
 		archivedAt?: string;
+		/** Full width, the document's own layout setting. Absent: the readable column. */
+		fullWidth?: boolean;
 	};
 
 	/** Repository or document permission changed while the socket was open. */

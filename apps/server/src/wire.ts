@@ -37,6 +37,7 @@ export type SocketData = Identity & {
 	channelDescriptionRevision: number;
 	channelDescription?: string;
 	channelArchivedAt?: string;
+	channelFullWidth?: true;
 	canEdit: boolean;
 	canManage: boolean;
 	principalId: string;

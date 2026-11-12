@@ -34,6 +34,7 @@ import type {
 	ChannelScanPage,
 	ChannelSnapshot,
 	ChannelUpdate,
+	ChannelWidthInput,
 	CommitChannel,
 	CommitResult,
 	CreateChannel,
@@ -412,6 +413,7 @@ export class MemoryStorage implements StorageAdapter {
 			);
 		},
 		rename: input => this.#renameChannel(input),
+		setFullWidth: input => this.#setChannelWidth(input),
 		archive: input => this.#setChannelArchived(input, true),
 		restore: input => this.#setChannelArchived(input, false),
 		delete: id => this.#deleteChannel(id),
@@ -634,6 +636,22 @@ export class MemoryStorage implements StorageAdapter {
 			: new Date(found.updatedAt.getTime() + 1);
 		let slug = this.#reserveSlug(found.repositoryId, found.id, input.title);
 		let saved = { ...found, title: input.title, slug, updatedAt };
+		this.#channels.set(saved.id, saved);
+		return { channel: channel(saved), changed: true };
+	}
+
+	async #setChannelWidth(input: ChannelWidthInput): Promise<RenameResult> {
+		let found = this.#channels.get(input.id);
+		if (!found) throw missing(`channel ${input.id} does not exist`);
+		if (found.archivedAt) throw conflict(`channel ${input.id} is archived`);
+		if (!!found.fullWidth === input.fullWidth) return { channel: channel(found), changed: false };
+		let updatedAt = input.now > found.updatedAt
+			? new Date(input.now)
+			: new Date(found.updatedAt.getTime() + 1);
+		let { fullWidth: _, ...rest } = found;
+		let saved: ChannelRecord = input.fullWidth
+			? { ...rest, fullWidth: true, updatedAt }
+			: { ...rest, updatedAt };
 		this.#channels.set(saved.id, saved);
 		return { channel: channel(saved), changed: true };
 	}

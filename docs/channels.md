@@ -167,6 +167,16 @@ the document revision. Stable UUID identity and old URL aliases survive a rename
 submitting the current authored title is a no-op. Publication follows persistence,
 with the document delta preceding the metadata notification.
 
+The same route accepts `{ "fullWidth": true }` or `{ "fullWidth": false }` instead of a
+title: the document's Full width, a layout setting every reader shares, as Notion's page
+setting is. It is channel metadata (`channels.full_width`, added by migration 041, default
+off), not document content, so it takes no plan lock, leaves the document revision alone
+and has no Yjs history; like a rename it advances `updatedAt`, and an archived document
+refuses it. The channel record carries `fullWidth: true` only while it is on, and every
+socket in the room hears it in `session:hello` and the `session:channel` sent after the
+commit. Rollback drops the column: `ALTER TABLE channels DROP COLUMN full_width;` and
+`DELETE FROM chopin_migrations WHERE id = '041_document_full_width';`.
+
 Existing documents adopt their leading H1 on first product open, or initialize one
 from their display name when missing. This migration waits while an implementation
 locks the document, then activates when that lock releases without needing a room restart. Standalone room fixtures use the generic dialect without title
