@@ -890,6 +890,27 @@ test("a build that ran for an hour reads as built when it finished, not when it 
 	await expect(view.getByText(/^built /)).toHaveText("built 2m ago");
 });
 
+test("a build whose agent was stopped at its time limit after every task reads as built, and says how its agent ended", async ({ seed, join: enter }) => {
+	let now = Date.now();
+	let built = builtBuild(preparedGraph(), new Date(now - 4 * 60 * 60_000), new Date(now - 60_000));
+	built.builds = built.builds.map(build => ({
+		...build,
+		state: "failed",
+		error: "Its agent ran for 4 hours, so chopin stopped it.",
+	}));
+	await seed("# Long build\n\nIts agent kept going after the last task.\n", built);
+	let page = await enter("ana");
+	await page.getByRole("group", { name: "Document view" })
+		.getByRole("button", { name: "Build", exact: true }).click();
+	let view = buildView(page);
+	await expect(view.getByText("Built", { exact: true })).toBeVisible();
+	await expect(
+		view.getByText("Every task finished, then its agent ran for 4 hours and chopin stopped it", {
+			exact: true,
+		}),
+	).toBeVisible();
+});
+
 test("a task that needed no change reads as done without a pull request, with its evidence", async ({ seed, join: enter }) => {
 	let now = Date.now();
 	let graph = preparedGraph();
