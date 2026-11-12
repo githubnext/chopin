@@ -50,13 +50,14 @@ test("a connection that was never lost shows nothing", () => {
 	expect(step(INITIAL_MEMORY, {}).view).toEqual({ phase: "online" });
 });
 
-test("a lost socket reconnects, counting the attempt in flight", () => {
+test("a lost socket reconnects, and never counts its attempts for a person", () => {
 	let { view } = step(INITIAL_MEMORY, { socket: "lost", failures: 0 });
-	expect(view).toMatchObject({ phase: "reconnecting", layer: "socket", attempt: 1 });
-	expect(run({ socket: "lost", failures: 2 }).view).toMatchObject({
+	expect(view).toEqual({
 		phase: "reconnecting",
-		attempt: 3,
+		layer: "socket",
+		text: "Connecting\u2026 Your changes are kept.",
 	});
+	expect(run({ socket: "lost", failures: 2 }).view).toEqual(view);
 });
 
 test("a socket whose automatic attempts keep failing is dropped, and Reconnect asks for the socket", () => {
@@ -77,9 +78,10 @@ test("Reconnect is offered once enough automatic attempts have failed, and kept 
 	}
 });
 
-test("Reconnect shows the attempt it starts until that attempt fails", () => {
+test("Reconnect shows connecting until the attempt it starts fails", () => {
 	let pressed = run({ socket: "lost", failures: 4, retrying: 4 });
-	expect(pressed.view).toMatchObject({ phase: "reconnecting", layer: "socket", attempt: 5 });
+	expect(pressed.view).toMatchObject({ phase: "reconnecting", layer: "socket" });
+	expect("attempt" in pressed.view).toBe(false);
 	let failed = run(
 		{ socket: "lost", failures: 4, retrying: 4 },
 		{ socket: "lost", failures: 5, retrying: 4 },
@@ -192,7 +194,7 @@ test("the resumed words go once their time is up, and not before", () => {
 
 test("a new loss ends a resume and is itself shown", () => {
 	let { view } = run({ socket: "lost" }, {}, { socket: "lost", failures: 1 });
-	expect(view).toMatchObject({ phase: "reconnecting", layer: "socket", attempt: 2 });
+	expect(view).toMatchObject({ phase: "reconnecting", layer: "socket" });
 });
 
 test("the Planner's connection is told in a machine's words when the socket is up", () => {
@@ -693,29 +695,21 @@ test("the machine's return is spoken once, and spoken again after a later drop",
 	);
 });
 
-test("the attempt that reopened the socket is kept through catching up, and never made up", () => {
-	let lostThenBack = run({ socket: "lost", failures: 2 }, { synced: false, reopened: 3 });
-	expect(lostThenBack.view).toEqual({
-		phase: "reconnecting",
-		layer: "sync",
-		text: "Catching up",
-		attempt: 3,
-	});
-	// With no attempt known the count is left out rather than guessed.
-	let unknown = run({ socket: "lost", failures: 2 }, { synced: false });
-	expect(unknown.view).toEqual({ phase: "reconnecting", layer: "sync", text: "Catching up" });
-	let transcript = run({ socket: "lost" }, { current: false, reopened: 1 });
-	expect(transcript.view).toMatchObject({ layer: "sync", attempt: 1 });
+test("catching up says only that, never which attempt reopened the socket", () => {
+	let lostThenBack = run({ socket: "lost", failures: 2 }, { synced: false });
+	expect(lostThenBack.view).toEqual({ phase: "reconnecting", layer: "sync", text: "Catching up" });
+	let transcript = run({ socket: "lost" }, { current: false });
+	expect(transcript.view).toEqual({ phase: "reconnecting", layer: "sync", text: "Catching up" });
 });
 
-test("a machine being connected to shows no attempt count it does not know", () => {
+test("a machine being connected to shows no attempt count", () => {
 	let starting = plannerStatus({ state: "starting", login: "mona" }, "Build box");
 	let { view } = step(INITIAL_MEMORY, { planner: starting });
 	expect(view).toMatchObject({ phase: "reconnecting", layer: "planner" });
 	expect("attempt" in view).toBe(false);
 });
 
-test("a machine being connected to shows the launch it waits on once an earlier one exited", () => {
+test("a machine being connected to says only that, whichever launch it waits on", () => {
 	let starting = plannerStatus({ state: "starting", login: "mona", attempt: 2 }, "Build box");
 	let { view } = step(INITIAL_MEMORY, { planner: starting });
 	expect(view).toEqual({
@@ -723,7 +717,6 @@ test("a machine being connected to shows the launch it waits on once an earlier 
 		layer: "planner",
 		text: "Connecting to Build box",
 		plannerKind: "starting",
-		attempt: 2,
 	});
 	// Said once, as a state: one launch more is not a new thing to hear.
 	let again = plannerStatus({ state: "starting", login: "mona", attempt: 3 }, "Build box");
@@ -744,4 +737,23 @@ test("a return after edits were dropped never says the changes are synced", () =
 	expect(run({ socket: "lost", lostEdits: 1 }, { lostEdits: 1 }).view).toMatchObject({
 		caught: "Your changes are synced",
 	});
+});
+
+test("connecting to a machine the person moved it to is said once, though connecting went on", () => {
+	let toA = plannerStatus({ state: "starting", login: "mona" }, "Box A");
+	let toB = plannerStatus({ state: "starting", login: "mona" }, "Box B");
+	let first = connectionSpeech(NOTHING_SPOKEN, step(INITIAL_MEMORY, { planner: toA }).view)!;
+	expect(first.said).toBe("Connecting to Box A");
+	// Without a move the same kind of state is not news, whatever machine it names.
+	expect(connectionSpeech(first.spoken, step(INITIAL_MEMORY, { planner: toB }).view))
+		.toBeUndefined();
+	let moved = connectionSpeech(
+		first.spoken,
+		step(INITIAL_MEMORY, { planner: toB, plannerMove: 1 }).view,
+	)!;
+	expect(moved.said).toBe("Connecting to Box B");
+	// And only once for that move.
+	expect(
+		connectionSpeech(moved.spoken, step(INITIAL_MEMORY, { planner: toB, plannerMove: 1 }).view),
+	).toBeUndefined();
 });

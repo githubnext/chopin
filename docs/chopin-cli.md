@@ -516,8 +516,8 @@ Chopin asked a machine to run a document's Planner, and the Planner's backend
 exited before it stayed up, more than once in a row. Nothing about it is drawn in
 Chat. The machine button, left of **Build plan**, has a warning dot, and its menu
 opens onto **Can't connect to studio**: one sentence of why, numbered steps (such
-as `chopin status` on the machine, in a block with a **Copy** button), how often
-it was tried (_Tried 3 times_) and **Learn more**, which links here. **Show
+as `chopin status` on the machine, in a block with a **Copy** button) and
+**Learn more**, which links here. **Show
 details** unfolds the last line the backend wrote to stderr that says why, exactly
 as reported, and when it was last tried. chopin's avatar carries the same warning
 dot. A person who has no machine button, such as a teammate with no machine of

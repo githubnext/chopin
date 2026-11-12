@@ -67,7 +67,13 @@ import {
 	showsMachineChoice,
 	useMachineChoice,
 } from "./machine-choice";
-import { plannerPresence, plannerStatus, plannerWithheld } from "./chat/planner-status";
+import { switchedStatus } from "./chat/machine-switch";
+import {
+	plannerPresence,
+	plannerSentence,
+	plannerStatus,
+	plannerWithheld,
+} from "./chat/planner-status";
 import { machineFix } from "./machine-fix";
 import {
 	ConnectionAnnouncement,
@@ -780,14 +786,35 @@ export function RoomWorkspace(
 		listCurrent,
 	);
 	let lastSeen = plannerLastSeen(machineChoice.state);
-	let plannerNow = useMemo(
+	let plannerReal = useMemo(
 		() => plannerStatus(attachment, machineName, lastSeen),
 		[attachment, machineName, lastSeen],
 	);
-	let plannerWithheldNow = plannerWithheld(attachment, machineName);
+	let realWithheld = plannerWithheld(attachment, machineName);
+	// A move to another machine is one state, connecting to it, from the click until the server's
+	// word after it is known; only then does the server's own status say the rest.
+	let switching = machineChoice.switching;
+	let switched = switchedStatus(switching, {
+		status: plannerReal,
+		saving: machineChoice.saving,
+		heard: plannerAttachment.wire === wire ? plannerAttachment.heard : undefined,
+		withheld: realWithheld,
+	});
+	let endSwitch = machineChoice.endSwitch;
+	useEffect(() => {
+		if (switching && switched.over) endSwitch(switching);
+	}, [switching, switched.over, endSwitch]);
+	let midSwitch = !!switching && !switched.over;
+	let switchedText = switched.status && plannerSentence(switched.status);
+	let plannerNow = useMemo(
+		() => midSwitch ? switched.status : plannerReal,
+		// oxlint-disable-next-line react-hooks/exhaustive-deps -- the switch's status is its words
+		[midSwitch, switchedText, plannerReal],
+	);
+	let plannerWithheldNow = !midSwitch && realWithheld;
 	let plannerNote = useSettledPlannerStatus(
 		plannerNow,
-		plannerAttachment.placeholder,
+		!midSwitch && plannerAttachment.placeholder,
 		plannerWithheldNow,
 		machineChoice.chosen,
 	);
@@ -1382,9 +1409,10 @@ export function RoomWorkspace(
 		planner: profile.chat ? plannerForBanner(plannerNote, hasMachineButton) : undefined,
 		// Only the machine's own word on this socket is a return; a status that is withheld, hidden
 		// by the machine button or from another socket is not.
-		plannerAttached: profile.chat && attachment?.state === "attached",
+		plannerAttached: profile.chat && !midSwitch && attachment?.state === "attached",
 		lostEdits: planState.lost ?? 0,
 		plannerHeld: plannerWithheldNow,
+		plannerMove: machineChoice.moves,
 		reconnect: () => wire?.reconnect(),
 	});
 	// Only the viewer's own machine is told to run something; another's owner is asked to.
@@ -1399,7 +1427,10 @@ export function RoomWorkspace(
 		choose: hasMachineButton,
 		place: "note",
 	});
-	let presence = agent ? plannerPresence(attachment, plannerNote) : undefined;
+	// Mid-switch the old machine's attachment is not chopin's state: it is connecting to the new one.
+	let presence = agent
+		? plannerPresence(midSwitch ? undefined : attachment, plannerNote)
+		: undefined;
 	useTitlingReport({
 		wire: workspaceCanEdit ? wire : undefined,
 		room,

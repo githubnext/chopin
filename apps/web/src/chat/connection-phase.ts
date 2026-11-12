@@ -55,8 +55,8 @@ export type ConnectionView =
 		text: string;
 		/** The Planner's status, where this phase tells it. */
 		plannerKind?: PlannerStatus["kind"];
-		/** The attempt in flight, or the next, where attempts are counted. */
-		attempt?: number;
+		/** How many times the person moved it to another machine: each move is news to hear. */
+		plannerMove?: number;
 	}
 	| {
 		phase: "dropped";
@@ -64,6 +64,8 @@ export type ConnectionView =
 		text: string;
 		/** The Planner's status, where this phase tells it. */
 		plannerKind?: PlannerStatus["kind"];
+		/** How many times the person moved it to another machine: each move is news to hear. */
+		plannerMove?: number;
 		/** What a person may ask for from here; absent where only the machine can act. */
 		action?: ConnectionAction;
 	}
@@ -107,8 +109,11 @@ export type ConnectionFacts = {
 	 * hidden for a person whose machine button tells it, so only this is a return.
 	 */
 	plannerAttached?: boolean;
-	/** The reconnect attempt that opened the socket, as the banner last counted it; unknown if none. */
-	reopened?: number;
+	/**
+	 * How many times the person moved the Planner to another machine. Connecting to the new one is
+	 * the same kind of state as connecting to the old, but it is what they asked for, so it is said.
+	 */
+	plannerMove?: number;
 };
 
 /** What a loss that was shown leaves to say when it ends. */
@@ -198,17 +203,18 @@ function withAway(memory: ConnectionMemory, away: ConnectionMemory["away"]): Con
 	return away ? { ...rest, away } : rest;
 }
 
-function plannerView(status: PlannerStatus): ConnectionView {
+function plannerView(status: PlannerStatus, move: number | undefined): ConnectionView {
 	let text = plannerSentence(status);
+	let moved = move ? { plannerMove: move } : {};
 	return status.kind === "starting"
 		? {
 			phase: "reconnecting",
 			layer: "planner",
 			text,
 			plannerKind: status.kind,
-			...(status.attempt === undefined ? {} : { attempt: status.attempt }),
+			...moved,
 		}
-		: { phase: "dropped", layer: "planner", text, plannerKind: status.kind };
+		: { phase: "dropped", layer: "planner", text, plannerKind: status.kind, ...moved };
 }
 
 /**
@@ -252,13 +258,11 @@ export function connectionStep(
 				phase: "reconnecting",
 				layer: "socket",
 				text: RECONNECTING_MESSAGE,
-				attempt: facts.failures + 1,
 			},
 		};
 	}
 	if (memory.lost) {
-		// The socket is open again, and a shown loss ends once what it missed has arrived. The
-		// attempt that opened it is kept, as `failures` starts over with the open socket.
+		// The socket is open again, and a shown loss ends once what it missed has arrived.
 		if (!facts.synced || !facts.current) {
 			return {
 				memory: withAway(memory, away),
@@ -266,7 +270,6 @@ export function connectionStep(
 					phase: "reconnecting",
 					layer: "sync",
 					text: CATCHING_UP,
-					...(facts.reopened === undefined ? {} : { attempt: facts.reopened }),
 				},
 			};
 		}
@@ -304,7 +307,7 @@ export function connectionStep(
 	}
 	return {
 		memory: withAway(memory, away),
-		view: facts.planner ? plannerView(facts.planner) : { phase: "online" },
+		view: facts.planner ? plannerView(facts.planner, facts.plannerMove) : { phase: "online" },
 	};
 }
 
@@ -380,7 +383,7 @@ export function connectionSpeech(
 		};
 	}
 	let key = view.layer === "planner"
-		? `${view.phase}:${view.layer}:${view.plannerKind}`
+		? `${view.phase}:${view.layer}:${view.plannerKind}:${view.plannerMove ?? 0}`
 		: `${view.phase}:${view.layer}`;
 	if (view.layer !== "planner") {
 		return key === previous.key ? undefined : { spoken: { ...previous, key }, said: view.text };

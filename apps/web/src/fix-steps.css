@@ -2,7 +2,7 @@
  * The machine fix-it steps: a bold title, why in one secondary line, then numbered steps, each a
  * quiet number beside its one action, with a command alone under it in a well like Chat's code
  * blocks and its Copy button. A hairline sets the foot apart: Show details at its start, how often
- * it was tried and Learn more at its end, apart by space alone. No alarm colour: nothing is lost,
+ * Learn more at its end. No alarm colour: nothing is lost,
  * and Chopin keeps trying.
  */
 .fix-steps {
@@ -119,11 +119,6 @@
 	align-items: center;
 	gap: calc(var(--spacing) * 3);
 	margin-inline-start: auto;
-}
-
-.fix-steps-tried {
-	color: var(--color-text-secondary);
-	font-variant-numeric: tabular-nums;
 }
 
 .fix-steps-toggle {

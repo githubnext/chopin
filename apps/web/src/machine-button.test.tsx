@@ -48,6 +48,8 @@ function choice(service: boolean, connected: boolean): MachineChoice {
 		chosen: 0,
 		choose: async () => {},
 		refresh: () => {},
+		moves: 0,
+		endSwitch: () => {},
 	};
 }
 
@@ -295,13 +297,11 @@ test("the fix-it steps: a title, why in a sentence, numbered steps, each command
 		'<span>On Build box, see why it stops:</span><div class="fix-steps-command"><span class="fix-steps-code">chopin status</span>',
 	);
 	expect(markup).toContain('aria-label="Copy chopin status"');
-	// The machine's words, folded away, and how often it was tried, quietly at the foot, set apart
-	// by space alone.
+	// The machine's words, folded away, and Learn more at the foot; how often it was tried is never
+	// said, there or anywhere.
 	expect(markup).toContain(">Show details");
 	expect(markup).toContain('aria-expanded="false"');
-	expect(markup).toContain(
-		'<span class="fix-steps-tried">Tried 3 times</span><a class="fix-steps-link"',
-	);
+	expect(markup).not.toMatch(/Tried (once|\d)|\d times|tries|attempt|Still trying/i);
 	expect(markup).not.toContain(String.fromCodePoint(0xb7));
 	expect(markup).toContain(`href="${PLANNER_HOW_TO_FIX}"`);
 	expect(markup).toContain(">Learn more</a>");
@@ -329,9 +329,9 @@ test("the steps keep a reason exactly as the machine gave it, under Show details
 		choose: false,
 		place: "menu",
 	});
-	// Not trimmed, and no stop added to a path that ends in a slash; when it was tried under it.
+	// Not trimmed, and no stop added to a path that ends in a slash; when it was last tried under it.
 	expect(steps(fix)).toMatch(
-		new RegExp(`<pre class="fix-steps-output">${reason}\nTried 2 times, last at [^<]+</pre>`),
+		new RegExp(`<pre class="fix-steps-output">${reason}\nLast tried at [^<]+\\.</pre>`),
 	);
 });
 

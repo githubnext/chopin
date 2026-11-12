@@ -38,13 +38,12 @@ test("a machine of the viewer's own that can't start: why in words, then numbere
 			{ text: "Wait a moment.", hint: "It connects again by itself once it's fixed." },
 			{ text: "Or choose another machine below." },
 		],
-		// The machine's own line, word for word, and when it was tried, for Show details; how often,
-		// said quietly at the foot.
+		// The machine's own line, word for word, and when it was last tried, for Show details; how
+		// often is never said.
 		details: [
 			"exit 127: /usr/bin/env: 'node': No such file or directory",
-			expect.stringMatching(/^Tried 3 times, last at .+\. Still trying\.$/),
+			expect.stringMatching(/^Last tried at .+\.$/),
 		],
-		tried: "Tried 3 times",
 		learnMore: PLANNER_HOW_TO_FIX,
 	});
 });
@@ -84,8 +83,7 @@ test("a release that can't say why is told to update, and one that hasn't answer
 	})!;
 	expect(silent.why).toBe("It hasn't answered yet.");
 	expect(silent.steps.map(step => step.command)).toEqual([undefined, "chopin status", undefined]);
-	expect(silent.tried).toBe("Not answered yet");
-	expect(silent.details![1]).toMatch(/^Waiting since /);
+	expect(silent.details![1]).toMatch(/^Waiting since [^.]+\.$/);
 });
 
 test("an offline machine says when it was last seen and that the work is kept, then how to start it again", () => {

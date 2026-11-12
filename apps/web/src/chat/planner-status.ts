@@ -13,14 +13,14 @@ export const PLANNER_HOW_TO_FIX =
  * Plain words, with none of Chopin's own terms (no Planner, attach, hold or Decisions, and no
  * mention of Chopin) and a machine, not a Planner, as the subject: `starting` is connecting to it,
  * `cant-start` is not being able to, with why as the machine reported it (or, from one that cannot
- * say, what Chopin saw of it) and what has been tried,
- * and a `starting` one says which launch it waits on (`attempt`) once an earlier one exited;
+ * say, what Chopin saw of it) and when it was last tried, never how often (`attempt` and
+ * `attempts` are for the rules, not the words);
  * `disconnected` and `held` say the work is kept; `none` says a machine is needed. Only the GitHub
  * login is ever named, never someone else's machine, so another person's machine is "@mona's
  * machine"; the viewer's own machine is named plainly (`where`). `status-copy.test.tsx` keeps it so.
  */
 export type PlannerStatus =
-	| { kind: "starting"; text: string; attempt?: number }
+	| { kind: "starting"; text: string }
 	| {
 		kind: "cant-start";
 		title: string;
@@ -96,7 +96,6 @@ export function plannerStatus(
 		return {
 			kind: "starting",
 			text: `Connecting to ${where}`,
-			...(planner.attempt === undefined ? {} : { attempt: planner.attempt }),
 		};
 	}
 	return {
@@ -107,12 +106,11 @@ export function plannerStatus(
 		title: `Can't connect to ${where}`,
 		// Exactly as the machine reported it: a path, a command or a code is not ours to tidy.
 		reason: failure.reason,
+		// When, never how often: a person sees only that it connects or that it can't.
 		detail: failure.attempts === 0
 			// Nothing has been tried and ended yet: the machine has only not answered.
-			? `Waiting since ${clockTime(failure.at)}. Still trying.`
-			: `${failure.attempts === 1 ? "Tried once" : `Tried ${failure.attempts} times`}, last at ${
-				clockTime(failure.at)
-			}. Still trying.`,
+			? `Waiting since ${clockTime(failure.at)}.`
+			: `Last tried at ${clockTime(failure.at)}.`,
 	};
 }
 

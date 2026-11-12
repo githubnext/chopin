@@ -697,10 +697,9 @@ describe("a Planner backend that keeps failing to start", () => {
 				at: "2026-11-04T02:00:00.000Z",
 			}),
 		).toBe(
-			"Can't connect to @mona's machine: unsafe-checkout: refused "
-				+ "(3 attempts in a row). It keeps trying; try again once that is fixed.",
+			"Can't connect to @mona's machine: unsafe-checkout: refused. Try again once that is fixed.",
 		);
-		// A machine that has not answered has no attempts in a row to count.
+		// How often it was tried is never said, whether it was or the machine has not answered.
 		expect(
 			startingMessage("mona", {
 				attempts: 0,
@@ -708,8 +707,7 @@ describe("a Planner backend that keeps failing to start", () => {
 				at: "2026-11-04T02:00:00.000Z",
 			}),
 		).toBe(
-			"Can't connect to @mona's machine: It hasn't answered yet. "
-				+ "It keeps trying; try again once that is fixed.",
+			"Can't connect to @mona's machine: It hasn't answered yet. Try again once that is fixed.",
 		);
 	});
 
