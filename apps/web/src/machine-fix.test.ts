@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { PLANNER_HOW_TO_FIX, plannerStatus } from "./chat/planner-status";
-import { ADD_MACHINE_PATH, machineFix, startWhy } from "./machine-fix";
+import { ADD_MACHINE_PATH, machineFix, refusedSentence, startWhy } from "./machine-fix";
 import { INTERNAL_IN_STATUS } from "@chopin/protocol/plain-words";
 
 import type { MachineFix } from "./machine-fix";
@@ -147,4 +147,20 @@ test("every word of the steps is plain: none of Chopin's own terms, one action p
 		}
 		for (let step of fix.steps) expect(step.text.split(/[.:] /).length, step.text).toBe(1);
 	}
+});
+
+test("chopin's row says a refused message's cause in one sentence, the steps' own title, never the machine's raw line", () => {
+	let fix = machineFix(plannerStatus(failing()), { mine: false, choose: false, place: "note" })!;
+	expect(refusedSentence(fix)).toBe(
+		"Can't connect to @mona's machine, so this message wasn't sent.",
+	);
+	let away = machineFix(plannerStatus({ state: "disconnected", login: "mona" }), {
+		mine: false,
+		choose: false,
+		place: "note",
+	})!;
+	expect(refusedSentence(away)).toBe("@mona's machine is offline, so this message wasn't sent.");
+	expect(refusedSentence(machineFix(plannerStatus({ state: "none" }), MINE)!)).toBe(
+		"No machine is connected, so this message wasn't sent.",
+	);
 });

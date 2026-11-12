@@ -148,3 +148,12 @@ export function machineFix(
 	}
 	return undefined;
 }
+
+/**
+ * What chopin's row says of a message it could not take, where the machine has something to fix:
+ * one sentence, the steps' own title, since How to fix beside it unfolds the rest. The machine's
+ * reported line is the steps' details, never the sentence.
+ */
+export function refusedSentence(fix: MachineFix): string {
+	return `${fix.title}, so this message wasn't sent.`;
+}

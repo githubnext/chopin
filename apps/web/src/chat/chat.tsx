@@ -50,6 +50,7 @@ import { bannerSlot } from "./banner-slot";
 import { ConnectionBannerView } from "./connection-banner";
 import type { ConnectionBanner, TranscriptFacts } from "./connection-banner";
 import type { PlannerPresence } from "./planner-status";
+import { refusedSentence } from "../machine-fix";
 import type { MachineFix } from "../machine-fix";
 import { silencesFailedSends } from "./connection-phase";
 import { ErrorState } from "./error-state";
@@ -1438,18 +1439,31 @@ export function Chat(
 	let steadyOpenChild = useSteadyCallback(onOpenChild);
 	let steadyRetryAnalysis = useSteadyCallback(onRetryAnalysis);
 	let steadyRetryJob = useSteadyCallback(onRetryJob);
-	let transcriptView = (
-		<Transcript
-			tail={note && (
+	// Where the machine has something to fix, chopin's row says so in one sentence, and How to fix
+	// unfolds the rest; any other refusal is the server's own words.
+	let noteFix = note?.code === "planner-not-attached" ? machine?.fix : undefined;
+	// The room builds the steps anew with each of its renders; the row is kept the same element while
+	// they say the same, so the memoized transcript is not rendered again for it.
+	let noteFixWords = noteFix ? JSON.stringify(noteFix) : "";
+	let steadyChoose = useSteadyCallback(machine?.choose);
+	let noteRow = useMemo(
+		() =>
+			note && (
 				<QuietNote
-					fix={note.code === "planner-not-attached" ? machine?.fix : undefined}
+					fix={noteFix}
 					key={note.ts}
-					onChoose={machine?.choose}
+					onChoose={steadyChoose}
 					onNavigate={navigateTo}
-					text={note.text}
+					text={noteFix ? refusedSentence(noteFix) : note.text}
 					ts={note.ts}
 				/>
-			)}
+			),
+		// oxlint-disable-next-line react-hooks/exhaustive-deps -- noteFix is compared by its words
+		[note, noteFixWords, steadyChoose],
+	);
+	let transcriptView = (
+		<Transcript
+			tail={noteRow}
 			active={active}
 			canEdit={composerShown}
 			compacting={threadsState.topCompacting}
