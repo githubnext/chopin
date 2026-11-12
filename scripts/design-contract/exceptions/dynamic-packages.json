@@ -399,6 +399,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > GripIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > ActualSizeIcon > <LineIcon>",
 				1
 			],
@@ -494,7 +501,7 @@
 				1
 			]
 		],
-		"sourceHash": "c907f4f28609560b2921b81482901fe8bf3dd933c462690dcd7c8e4dcc52c7bc"
+		"sourceHash": "03bac4455624293f63cbe1b6aa26c28919399780493de7ce59ddc489364faf6b"
 	},
 	{
 		"file": "packages/icons/src/warning.tsx",

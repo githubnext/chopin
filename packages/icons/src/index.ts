@@ -78,6 +78,7 @@ export {
 	ExternalLinkIcon,
 	FitWidthIcon,
 	FormulaIcon,
+	GripIcon,
 	ImageIcon,
 	ImageOffIcon,
 	InfoIcon,
