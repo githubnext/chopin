@@ -92,6 +92,15 @@
 	--color-icon: var(--color-gray-500);
 	--color-chat-body: oklch(0.38064 0.01903 136.21);
 	--color-chat-pane: color-mix(in srgb, var(--color-ground) 30%, var(--color-page));
+	/*
+	 * A Chat row that is shown (hovered, focused, its menu open) and the row whose thread is open:
+	 * ink laid over whatever the transcript sits on (the ground, the Chat pane, a phone's page), so
+	 * each is the same darker step on all of them. Slack's hovered row is #f8f8f8 on its white pane,
+	 * 1.06:1; a shown row is 1.08:1, and the open thread's root one such step past it, 1.16:1,
+	 * where petrol links still read at 4.55:1.
+	 */
+	--color-chat-row-hover: oklch(var(--shadow-color) / 4%);
+	--color-chat-row-selected: oklch(var(--shadow-color) / 6.5%);
 	/* Phone chrome floats over content: a translucent page that blurs what scrolls beneath. */
 	--color-glass: color-mix(in oklch, var(--color-page) 72%, transparent);
 	/* Dims the page beneath a phone sheet. Every sheet shares it, and one grabber. */
