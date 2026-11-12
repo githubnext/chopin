@@ -94,6 +94,11 @@ export const ANY_REPOSITORY_PROTOCOL = 5;
  * that restarted can find the build again and its machine can carry on with it.
  */
 export const RESUME_PROTOCOL = 6;
+/**
+ * A connector from this protocol on takes the GitHub App's installation tokens, so its builds push
+ * as the App's bot and credit the person who asked.
+ */
+export const APP_TOKEN_PROTOCOL = 7;
 
 /** A build's run, as its durable credential names it. */
 export type DurableRun = { id: string; documentId: string; kind: "implementation" | "rebuild" };

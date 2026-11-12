@@ -24,6 +24,7 @@ import type { GitHub } from "../github/client";
 import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { CONNECTOR_PROTOCOLS, registerExperimentRoutes } from "./routes";
+import type { GitHubApp } from "../github/app";
 import { Connections } from "./connections";
 import type { ImplementationConnector } from "../tasks/connector";
 
@@ -47,6 +48,7 @@ async function setup(
 		implementations?: () => ImplementationConnector | undefined;
 		/** Whether machines hold their own GitHub authorization, as everywhere but AUTH_MODE=local. */
 		durable?: boolean;
+		app?: GitHubApp;
 	} = {},
 ) {
 	let storage = shared?.storage ?? new MemoryStorage();
@@ -98,6 +100,18 @@ async function setup(
 				permissions: { pull: true, push, admin: false },
 			};
 		},
+		/** The App is installed on every repository and may write; `readonly` is only read. */
+		installedRepository: async (_token: string, owner: string, name: string) => ({
+			repository: {
+				id: name,
+				owner,
+				name,
+				fullName: `${owner}/${name}`,
+				defaultBranch: "main",
+				permissions: { pull: true, push: name !== "readonly", admin: false },
+			},
+			installation: { id: "1", writable: { contents: true, pullRequests: true } },
+		}),
 		/** Each repository's default branch is at a commit of its name's first letter. */
 		branchHead: async (_token: string, _owner: string, name: string) =>
 			(/^[a-f]/.test(name) ? name[0]! : "c").repeat(40),
@@ -1989,4 +2003,114 @@ test("stopping the waits wakes every connector that waits for work, and none wai
 	let started = Date.now();
 	await connections.wait(connection, controller.signal);
 	expect(Date.now() - started).toBeLessThan(100);
+});
+
+/** A GitHub App installed on org/repo that can push, whose bot is `test[bot]`, and who may push. */
+function fakeApp(pushers = new Set(["alice"])) {
+	let minted: Record<string, string>[] = [];
+	let app: GitHubApp = {
+		installation: async (owner, name) =>
+			`${owner}/${name}` === "org/repo"
+				? {
+					id: "7",
+					suspended: false,
+					permissions: { contents: "write", pull_requests: "write", metadata: "read" },
+				}
+				: undefined,
+		token: async (_installation, _name, permissions) => {
+			minted.push(permissions);
+			return { token: `ghs_${minted.length}`, expiresAt: Date.now() + 3_600_000, permissions };
+		},
+		revoke: async () => {},
+		account: async (_token, login) =>
+			login === "test[bot]"
+				? { login, id: 900, nodeId: "BOT" }
+				: { login, id: login === "alice" ? 11 : 12, nodeId: login },
+		canPush: async (_token, _owner, _name, login) => pushers.has(login),
+	};
+	return { app, minted };
+}
+
+test("a protocol 7 connector gets the App's token for the run it claimed, as the bot", async () => {
+	let { app, minted } = fakeApp();
+	let { alice, documentId, request, tool, pair } = await setup(undefined, { app });
+	let connection = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	await request(`/api/documents/${documentId}/experiments`, { id, brief: "Measure" }, alice.cookie);
+	await request(`/api/documents/${documentId}/experiments/${id}/run`, {}, alice.cookie);
+	text(await tool(connection.token, "claim_experiment", { id }));
+	let token = (body: unknown) =>
+		request("/api/connector/github-token", body, undefined, connection.machineToken);
+	let issued = await token({ repository: "org/repo", purpose: "run", run: id });
+	expect(issued.status).toBe(200);
+	expect(await issued.json()).toMatchObject({
+		token: "ghs_1",
+		kind: "installation",
+		permissions: { contents: "write", pull_requests: "write" },
+		identity: { login: "test[bot]", email: "900+test[bot]@users.noreply.github.com" },
+		starter: { login: "alice", email: "11+alice@users.noreply.github.com" },
+	});
+	let unknown = await token({ repository: "org/repo", purpose: "run", run: crypto.randomUUID() });
+	expect(unknown.status).toBe(409);
+	expect(await unknown.json()).toMatchObject({ error: "run-unknown" });
+	let elsewhere = await token({ repository: "org/other", purpose: "run", run: id });
+	expect(await elsewhere.json()).toMatchObject({ error: "run-unknown" });
+	expect(await (await token({ repository: "org/repo", purpose: "check" })).json()).toEqual({
+		ok: true,
+	});
+	expect(minted).toHaveLength(1);
+	// A run names what it is for; one with no purpose is an older connector's, which names nothing.
+	expect(await (await token({ repository: "org/repo", run: id })).json()).toEqual({
+		error: "invalid-request",
+	});
+});
+
+test("a build's token goes only to the build's machine, for whoever asked for it", async () => {
+	let { app } = fakeApp(new Set(["bob"]));
+	let builds = new Map<string, { repository: string; starter: string; machineId?: string }>();
+	let { alice, request, pair } = await setup(undefined, {
+		app,
+		implementations: () =>
+			({
+				build: async (document: string, id: string) => builds.get(`${document} ${id}`),
+			}) as unknown as ImplementationConnector,
+	});
+	let connection = await pair(alice.cookie);
+	builds.set("D bob-build", {
+		repository: "org/repo",
+		starter: "bob",
+		machineId: connection.machine,
+	});
+	builds.set("D alice-build", { repository: "org/repo", starter: "alice" });
+	builds.set("D other-build", { repository: "org/repo", starter: "bob", machineId: "M_other" });
+	let token = (run: string, document?: string) =>
+		request(
+			"/api/connector/github-token",
+			{ repository: "org/repo", purpose: "run", run, ...(document ? { document } : {}) },
+			undefined,
+			connection.machineToken,
+		).then(response => response.json());
+	expect(await token("bob-build", "D")).toMatchObject({ starter: { login: "bob" } });
+	expect(await token("bob-build")).toMatchObject({ error: "run-unknown" });
+	expect(await token("other-build", "D")).toMatchObject({ error: "run-unknown" });
+	expect(await token("alice-build", "D")).toMatchObject({
+		error: "starter-cannot-push",
+		message: "alice can't push to org/repo, so their run there gets no token.",
+	});
+});
+
+test("an older connector still gets its owner's token, marked legacy; without the App's key, no-grant", async () => {
+	let { alice, request, pair } = await setup();
+	let connection = await pair(alice.cookie);
+	let token = (body: unknown) =>
+		request("/api/connector/github-token", body, undefined, connection.machineToken)
+			.then(response => response.json());
+	expect(await token({ repository: "org/repo" })).toMatchObject({
+		token: expect.stringMatching(/^ghu_machine_/),
+		legacy: true,
+	});
+	expect(await token({ repository: "org/repo", purpose: "planner" })).toEqual({
+		error: "no-grant",
+		message: "This Chopin has no GitHub App key, so it gives no machine a token for org/repo.",
+	});
 });

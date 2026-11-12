@@ -1,4 +1,11 @@
-import { createHash } from "node:crypto";
+import { createHash, createPrivateKey } from "node:crypto";
+import { readFileSync } from "node:fs";
+
+import type { KeyObject } from "node:crypto";
+
+/** The GitHub App's own identity, with which it mints installation tokens for paired machines. */
+export type AppCredentials = { id: string; privateKey: KeyObject };
+
 export type AuthConfig = {
 	origin: string;
 	/** Origins the deployment was served from before APP_ORIGIN (PREVIOUS_ORIGINS). */
@@ -11,6 +18,8 @@ export type AuthConfig = {
 	allowedOrganizations?: ReadonlySet<string>;
 	local?: { installation: string; credentialsDir: string; port: number };
 	demoPersonas?: true;
+	/** GITHUB_APP_ID and its private key; without them no installation token is minted. */
+	app?: AppCredentials;
 };
 
 const GITHUB_USER_LOGIN = /^[a-z0-9](?:[a-z0-9_-]{0,37}[a-z0-9_])?$/i;
@@ -70,6 +79,46 @@ function encryptionKey(raw: string | undefined): Uint8Array {
 	return new Uint8Array(Buffer.from(raw, "hex"));
 }
 
+/**
+ * The App's numeric ID and private key (PEM), from GITHUB_APP_PRIVATE_KEY or the file named by
+ * GITHUB_APP_PRIVATE_KEY_FILE. Neither the key nor its path is ever part of an error.
+ */
+export function appCredentials(
+	env: Record<string, string | undefined>,
+): AppCredentials | undefined {
+	let id = env.GITHUB_APP_ID?.trim();
+	let inline = env.GITHUB_APP_PRIVATE_KEY;
+	let file = env.GITHUB_APP_PRIVATE_KEY_FILE?.trim();
+	if (!id && !inline && !file) return undefined;
+	if (!id || !/^[1-9][0-9]{0,19}$/.test(id)) {
+		throw new Error("GITHUB_APP_ID must be the GitHub App's numeric ID");
+	}
+	if (inline && file) {
+		throw new Error("Set GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_FILE, not both");
+	}
+	if (!inline && !file) {
+		throw new Error("GITHUB_APP_ID needs GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_FILE");
+	}
+	let pem: string;
+	if (file) {
+		try {
+			pem = readFileSync(file, "utf8");
+		} catch {
+			throw new Error("GITHUB_APP_PRIVATE_KEY_FILE can't be read");
+		}
+	} else pem = inline!.replace(/\\n/g, "\n");
+	let privateKey: KeyObject;
+	try {
+		privateKey = createPrivateKey(pem);
+	} catch {
+		throw new Error("The GitHub App private key must be a PEM private key");
+	}
+	if (privateKey.asymmetricKeyType !== "rsa") {
+		throw new Error("The GitHub App private key must be an RSA key");
+	}
+	return { id, privateKey };
+}
+
 function allowed(
 	name: string,
 	raw: string | undefined,
@@ -111,7 +160,9 @@ export function loadAuth(port = 8787, host = process.env.SERVER_HOST || "127.0.0
 		throw new Error("DEMO_PERSONAS=on requires AUTH_MODE=local on a loopback bind");
 	}
 	let previousOrigins = previous(process.env.PREVIOUS_ORIGINS, appOrigin);
+	let app = appCredentials(process.env);
 	return {
+		...(app ? { app } : {}),
 		origin: appOrigin,
 		...(previousOrigins ? { previousOrigins } : {}),
 		appSlug,

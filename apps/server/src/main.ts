@@ -84,6 +84,7 @@ import { DocumentHistory } from "./channels/history";
 import * as Comments from "./comments/service";
 import { clientBuild, proxy, serve } from "./client";
 import { describe, load } from "./config";
+import { GitHubAppClient } from "./github/app";
 import { GitHubClient, GitHubError } from "./github/client";
 import { plannerWorkspace } from "./harness/atomic/workspace";
 import { GitHubReferences } from "./github/references";
@@ -2962,6 +2963,7 @@ let machinePlanners = config.agent && config.harness === "remote"
 	? new MachinePlanners(hostedAuth)
 	: undefined;
 experiments = registerExperimentRoutes(router, hostedAuth, {
+	...(config.auth.app ? { app: new GitHubAppClient(config.auth.app) } : {}),
 	planners: machinePlanners,
 	attachments: () => plannerAttachments,
 	documentOpen: id => Rooms.all().some(room => room.id === id || room.parentChannelId === id),
@@ -3271,6 +3273,7 @@ implementations = registerImplementationRoutes(router, hostedAuth, {
 	refuseOffline: experiments.refuseOffline,
 	takers: experiments.takers,
 	mayTake: experiments.mayTake,
+	identity: experiments.identity,
 	machineChoices: experiments.machineChoices,
 	sourceFor: experiments.sourceFor,
 	busy: async connectionId =>

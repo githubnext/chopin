@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { RESUME_PROTOCOL, serves } from "../experiments/connections";
+import { APP_TOKEN_PROTOCOL, RESUME_PROTOCOL, serves } from "../experiments/connections";
 import type { Connection, Connections, DurableRun, Grant } from "../experiments/connections";
 import { ExperimentError } from "@chopin/experiment";
 import { fail } from "../experiments/service";
@@ -179,6 +179,8 @@ export function implementationConnector(
 		mayTake?: (connection: Connection, person: string, documentId: string) => Promise<boolean>;
 		/** The GitHub login of a person, for the agent to credit in the pull requests it opens. */
 		login?: (userId: string) => Promise<string | undefined>;
+		/** Their GitHub name and noreply email, once a launch token was issued for them. */
+		identity?: (userId: string) => { name: string; email: string } | undefined;
 	} = {},
 ) {
 	let mayTake = options.mayTake
@@ -201,11 +203,36 @@ export function implementationConnector(
 		return back === undefined || Date.now() < back + RECONNECTED_MS;
 	};
 	/**
-	 * What the agent of a build on a teammate's shared machine is told besides the document: who
-	 * asked for it, and the note for every pull request it opens. The pull requests come from the
-	 * machine owner's GitHub account, so the note says whose request it was.
+	 * What the agent of a build is told besides the document: who asked for it, and the note for
+	 * every pull request it opens. A connector that takes the GitHub App's installation tokens
+	 * (protocol 7) pushes as the App's bot, so every build credits the person who asked: in each
+	 * pull request, its reviewers and each commit's co-author. An older one pushes with the machine
+	 * owner's account, so only a build on a teammate's shared machine says whose request it was.
 	 */
 	let requestedBy = async (plan: Plan, build: BuildRequest, connection: Connection) => {
+		if ((connection.protocol ?? 1) >= APP_TOKEN_PROTOCOL) {
+			let login = await options.login?.(build.user);
+			let known = options.identity?.(build.user);
+			let who = login ?? "the person who asked";
+			return {
+				requestedBy: {
+					...(login ? { login } : {}),
+					...(known ? { name: known.name, email: known.email } : {}),
+					instructions: `${who} asked for this build. Its commits and pull requests come from `
+						+ "Chopin's GitHub App, so credit them: put pullRequestNote, unchanged, at the end of "
+						+ "the body of every pull request you open or update"
+						+ (login ? `, and request a review from ${login} on it` : "")
+						+ (known
+							? `; end every commit message with the trailer \`Co-authored-by: ${known.name} <${known.email}>\`.`
+							: "."),
+					pullRequestNote: `Requested by ${
+						login ? `@${login}` : "a teammate"
+					} in ${await documentUrl(
+						plan.id,
+					)}. Built by a coding agent with Chopin's GitHub App.`,
+				},
+			};
+		}
 		if (build.machineOwner === undefined) return;
 		let asked = await options.login?.(build.user) ?? "a teammate";
 		let owner = connection.login;
@@ -257,6 +284,22 @@ export function implementationConnector(
 	let api = {
 		track(id: string) {
 			tracked.add(id);
+		},
+		/**
+		 * A build of a document that is still queued or running, as the GitHub token for it needs it:
+		 * its repository, who asked for it and the machine it went to.
+		 */
+		async build(documentId: string, id: string) {
+			if (!await documentExists(documentId)) return undefined;
+			return await withPlan(documentId, async plan => {
+				let build = plan.builds.find(item => item.id === id);
+				if (!build || !["queued", "starting", "running"].includes(build.state)) return undefined;
+				return {
+					repository: build.checkout.repository,
+					starter: build.user,
+					...(build.machineId ? { machineId: build.machineId } : {}),
+				};
+			});
 		},
 		/**
 		 * Accept a build's durable run credential again after a restart, for the connection that holds

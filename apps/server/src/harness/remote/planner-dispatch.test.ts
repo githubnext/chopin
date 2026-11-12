@@ -3097,8 +3097,12 @@ describe("a machine's GitHub token", () => {
 		let issued = await ask(member.token, "octo-org/score");
 		expect(issued.status).toBe(200);
 		let body = await issued.json();
-		// The machine's own access token, never its refresh token.
-		expect(body).toEqual({ token: machineToken("member"), expiresAt: expect.any(Number) });
+		// The machine's own access token, never its refresh token: an older connector's, marked so.
+		expect(body).toEqual({
+			token: machineToken("member"),
+			expiresAt: expect.any(Number),
+			legacy: true,
+		});
 		expect(JSON.stringify(body)).not.toContain("refresh");
 		// A viewer can't push, so its machine gets none; neither does a bearer that isn't a machine.
 		let viewer = await machines.pair({

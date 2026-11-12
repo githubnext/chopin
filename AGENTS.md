@@ -212,7 +212,9 @@ durable.
   consents to the Planner, builds and runs of a document whose editor chose it, or made it
   their favorite and chose none, in repositories the owner can push to (checked with the machine's
   own token, as Default machine does). The
-  agent runs with the owner's GitHub account; the build records the editor as `user` and the
+  agent pushes with a GitHub App installation token for the one repository, as the App's bot,
+  crediting the editor (the server checks the editor can push; an older connector still runs with
+  the owner's GitHub account); the build records the editor as `user` and the
   owner as `machineOwner`, and only the connection it was queued on may claim or report it.
   Work Chopin starts by itself never leaves its builder's own machines. Where a document's Planner runs is
   derived from stored choices (the creator's, else an editor's whose machine can run it now),
