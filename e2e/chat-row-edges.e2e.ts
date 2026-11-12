@@ -164,7 +164,12 @@ function pitches(scroller: Locator): Promise<string[]> {
 		let half = Number.parseFloat(getComputedStyle(stack).rowGap) / 2;
 		type Unit = { top: number; bottom: number; body?: HTMLElement; drawn?: [number, number] };
 		let units: Unit[] = [];
-		for (let row of stack.children) {
+		// A thread's lead holds its root's row between its provenance and the replies' rule.
+		let rows = (at: Element): Element[] =>
+			!at.matches("[data-chat-entry]") && at.querySelector("[data-chat-entry]")
+				? [...at.children].flatMap(rows)
+				: [at];
+		for (let row of [...stack.children].flatMap(rows)) {
 			let box = row.getBoundingClientRect();
 			if (getComputedStyle(row).position === "absolute" || box.height === 0) continue;
 			let bodies = row.matches("[data-chat-entry]")

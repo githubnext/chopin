@@ -67,6 +67,11 @@
 	line-height: 1.4;
 }
 
+/* The root's row reaches halfway to the provenance above it and to the replies' rule below it. */
+[data-thread-root-message] .chat-message-body {
+	--chat-row-half: calc(var(--spacing) * 1.5);
+}
+
 .thread-replies-rule {
 	display: flex;
 	align-items: center;
