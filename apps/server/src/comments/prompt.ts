@@ -10,6 +10,8 @@
  * cannot tell which objection it answers.
  */
 
+import { PLANNER_NAME } from "@chopin/protocol/planner-name";
+
 import { speaker } from "./store";
 
 import type { Record as Thread } from "./service";
@@ -32,10 +34,10 @@ export function address(thread: Thread, quote: string, child?: string): string {
 		"",
 		...quote.split("\n").map(line => `> ${line}`),
 		"",
-		"The thread, oldest first. Notes marked → Chopin were sent to you:",
+		`The thread, oldest first. Notes marked → ${PLANNER_NAME} were sent to you:`,
 		"",
 		...thread.notes.map(note =>
-			`@${speaker(note)}${note.to === "planner" ? " → Chopin" : ""}: ${note.text}`
+			`@${speaker(note)}${note.to === "planner" ? ` → ${PLANNER_NAME}` : ""}: ${note.text}`
 		),
 		"",
 		`Answer the latest note sent to you with \`reply_comment\`, using thread ${thread.id}. `

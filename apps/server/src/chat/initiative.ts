@@ -1,3 +1,4 @@
+import { PLANNER_NAME } from "@chopin/protocol/planner-name";
 import type { Chat as Wire, Request } from "@chopin/protocol";
 import type { Socket } from "../wire";
 import { fail } from "../wire";
@@ -109,7 +110,7 @@ export function initiative(context: Room) {
 				started = true;
 				await instruct(
 					context,
-					"Chopin",
+					PLANNER_NAME,
 					initiativeInstruction(move, source.id),
 					"",
 					{

@@ -99,7 +99,7 @@ export function answerInstruction(
 		}
 		lines.push(
 			record.followUp
-				? "Chopin rewrites the passage beside this decision separately, so leave that passage to it."
+				? "A separate job rewrites the passage beside this decision, so leave that passage to it."
 				: "Update the document where this answer changes it.",
 		);
 	}

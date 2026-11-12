@@ -159,13 +159,16 @@ addressed: its Chat row and avatar, the `@` menu, notes, sources,
 History, the research handoff, busy labels (_chopin is working_), controls and
 their names (_Ask chopin_, _Send to chopin_), notices,
 refusals and the lines the server writes in Chat (_ana stopped chopin and
-paused its workflows._), all from `PLANNER_NAME` in `@chopin/protocol/address`.
+paused its workflows._), all from `PLANNER_NAME` in `@chopin/protocol/planner-name`.
 A sentence that begins with it, or with a handle, begins in lower case, and
 `sentenceCase` leaves it so. Only the product keeps its capital: the logo, page
 and window titles, settings and help prose about the product (_Chopin plans and
 builds on your machines_, _Your Chopin session has ended_), and a connection to
 the server (_Chopin isn't connected_). `@chopin` and an older `@Chopin` address
-it alike.
+it alike. What chopin writes follows the same rule: every model whose words a
+person reads (the Planner and its background writers, reaction replies, research
+and History's summaries) is told it in `NAMES_AS_WRITTEN`
+(`apps/server/src/agent/identity.ts`).
 
 Never separate inline metadata with a middle dot or bullet. Separate the pieces
 with layout (sibling elements with a gap, weight, tertiary color, or a line

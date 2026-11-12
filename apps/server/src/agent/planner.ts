@@ -26,6 +26,7 @@ import type { Component } from "@chopin/dialect/dialect";
 import type { PlannerWorkspace } from "../harness/atomic/workspace";
 import { READ_BYTES } from "../document-reading";
 import { COACHING } from "./coaching";
+import { NAMES_AS_WRITTEN } from "./identity";
 import { DIAGRAM_AUTHORING, ROUTED_DIAGRAM_AUTHORING } from "./visual-authoring";
 
 export { DIAGRAM_AUTHORING };
@@ -136,6 +137,8 @@ row flush h=xl
 
 export const PROMPT = `You are the planner. You produce and maintain the plan — the shared document
 the team works from. You do not implement.
+
+${NAMES_AS_WRITTEN}
 
 ${COACHING}
 

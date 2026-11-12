@@ -1,5 +1,6 @@
 import type { ConversationPlan } from "@chopin/protocol";
 import type { Config } from "../config";
+import { NAMES_AS_WRITTEN } from "../agent/identity";
 import { researchBriefAgent } from "../harness/agents";
 import { assertResearchContext, researchSources } from "../conversation-plan/research-state";
 import { id, knownKeys, record, text, version } from "../conversation-plan/validation-fields";
@@ -115,6 +116,7 @@ async function generate(
 						"In automatic mode, synthesize the full current brief. In human mode, return only a concise addition supported by the newest source; do not rewrite the human brief.",
 						"When parentBrief is present, research only the additional scope, making that scope self-contained without repeating already requested work.",
 						"Do not perform research. Do not ask for approval. Do not output commentary outside the structured result.",
+						NAMES_AS_WRITTEN,
 					].join(" "),
 				},
 			}),
