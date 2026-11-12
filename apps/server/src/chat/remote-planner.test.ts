@@ -1378,6 +1378,35 @@ test("each turn's fresh session gets the same instructions, and what the room sa
 	expect(second!.prompt.endsWith("now the risks")).toBe(true);
 });
 
+test("an attached Planner's reply reaches Chat as it is written, before its message or turn ends", async () => {
+	let room = await remoteRoom();
+	let { context } = room;
+	let script = scriptedPlanner();
+	let release = Promise.withResolvers<void>();
+	let client = await attach(room.server.url, room.channel.id, {
+		...script.handlers,
+		async turn(turn) {
+			turn.emit({ type: "text-start", id: "reply" });
+			turn.emit({ type: "text-delta", id: "reply", delta: "First words" });
+			await release.promise;
+			turn.emit({ type: "text-delta", id: "reply", delta: ", then the rest." });
+			turn.emit({ type: "text-end", id: "reply" });
+			finishTurn(turn);
+		},
+	});
+	cleanups.push(() => client.detach());
+
+	await room.send("@chopin draft the plan");
+	let reply = () => context.chat.entries.find(entry => entry.author.kind === "agent");
+	await until(() => reply()?.text === "First words");
+	expect(context.chat.busy).toBe(true);
+	expect(reply()!.streaming).toBe(true);
+	release.resolve();
+	await context.chat.running;
+	expect(reply()!.text).toBe("First words, then the rest.");
+	expect(reply()!.streaming).toBeUndefined();
+});
+
 test("a command is refused while the attached client reports none, and again once it has left", async () => {
 	let room = await commandRoom();
 	let { client } = await reportingClient(room, undefined);

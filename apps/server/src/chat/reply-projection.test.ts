@@ -9,7 +9,7 @@ import type { Chat } from "@chopin/protocol";
 import type { Room } from "./service";
 import type { SocketData } from "../wire";
 
-test("a complete checked reply reaches Chat through its message without depending on delta count", async () => {
+test("a reply reaches Chat through its message as it streams, before its check ends, without depending on delta count", async () => {
 	let checked = Promise.withResolvers<void>();
 	let release = Promise.withResolvers<void>();
 	let frames: Chat.Outgoing[] = [];
@@ -54,11 +54,11 @@ test("a complete checked reply reaches Chat through its message without dependin
 		publish: part => translate(context, part),
 	});
 	await checked.promise;
-	expect(frames).toHaveLength(0);
+	expect(frames.find(frame => frame.kind === "chat:message")?.entry.text).toBe("Plan: ");
 	release.resolve();
 	await pending;
 	let messages = frames.filter(frame => frame.kind === "chat:message");
-	expect(messages[0]?.entry.text).toBe("Plan: Harness parent.");
+	expect(messages[0]?.entry).toMatchObject({ text: "Plan: ", streaming: true });
 	expect(messages.at(-1)?.entry).toMatchObject({ text: "Plan: Harness parent." });
 	expect(messages.at(-1)?.entry.streaming).toBeUndefined();
 	expect(context.chat.entries.at(-1)?.text).toBe("Plan: Harness parent.");
