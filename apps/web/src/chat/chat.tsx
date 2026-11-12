@@ -609,10 +609,10 @@ export function Chat(
 	usePendingWork(
 		!!draft.text.trim() || files.files.length > 0 || outbox.some(item => !item.acknowledged),
 	);
-	let { working: workingTurn, suspended: suspendedWork } = progressOf(
-		transcript,
-		transcriptReady,
-		quietRestart.current,
+	let quiet = quietRestart.current;
+	let { working: workingTurn, suspended: suspendedWork } = useMemo(
+		() => progressOf(transcript, transcriptReady, quiet),
+		[transcript, transcriptReady, quiet],
 	);
 	// `#` and `@` both open at the caret; the one typed nearer to it is the one being written.
 	let hashed = referencesEnabled && composerReady && !submitting
@@ -1080,8 +1080,8 @@ export function Chat(
 	}, [wire, transcriptReady, outbox, flushed, room, handle]);
 
 	// A message the server refused is dropped from here: the server never kept it.
-	let deleteMessage = (id: string) => dispatchOutbox({ kind: "drop", id });
-	let retryMessage = (id: string) => dispatchOutbox({ kind: "again", id });
+	let deleteMessage = useCallback((id: string) => dispatchOutbox({ kind: "drop", id }), []);
+	let retryMessage = useCallback((id: string) => dispatchOutbox({ kind: "again", id }), []);
 	let savedIds = useMemo(() => new Set(entries.map(entry => entry.id)), [entries]);
 	let latestEntries = useRef(entries);
 	latestEntries.current = entries;
@@ -1131,10 +1131,10 @@ export function Chat(
 		dispatchIntents({ kind: "prune", present });
 	}, [transcriptReady, intents.length, savedIds, outboxIds, workingTurn?.id]);
 	let reactionSeq = useRef(0);
-	let reactTo = (id: string, emoji: string, on: boolean) => {
+	let reactTo = useCallback((id: string, emoji: string, on: boolean) => {
 		if (on) noteEmojiUse(emoji);
 		dispatchIntents({ kind: "ask", id, emoji, on, seq: ++reactionSeq.current });
-	};
+	}, []);
 
 	// Stop and Resume pressed during a blip are sent once it is over, or never.
 	let heldControl = useRef<"chat:abort" | "chat:resume">(undefined);
@@ -1388,19 +1388,39 @@ export function Chat(
 		)
 		: undefined;
 
+	// Typing in the composer renders Chat again with each key; what the transcript is given is kept
+	// the same object while it means the same thing, so that the transcript is not rendered with it.
+	let hiddenFailure = slot.lead === "failure" ? failed?.entry : undefined;
+	let shownEntries = useMemo(
+		() => [
+			...withNoticesAfter(withoutFailure(entries, hiddenFailure), unanswered),
+			...echoes(outbox),
+		],
+		[entries, hiddenFailure, unanswered, outbox],
+	);
+	let canStartThread = !readonly && !archived && transcriptReady;
+	let transcriptThreads = useMemo(
+		() => ({
+			summaries: threadsState.summaries,
+			openRootId: threadsState.openRootId,
+			canStart: canStartThread,
+			onOpen: openThread,
+		}),
+		[threadsState.summaries, threadsState.openRootId, canStartThread, openThread],
+	);
+	let hinted = !readonly && !archived;
+	let automatic = participationState?.enabled;
+	let emptyHint = useMemo(
+		() => hinted ? { planner: !!agent, references: referencesEnabled, automatic } : undefined,
+		[hinted, agent, referencesEnabled, automatic],
+	);
 	let transcriptView = (
 		<Transcript
 			active={active}
 			canEdit={composerShown}
 			compacting={threadsState.topCompacting}
 			compactions={threadsState.topCompactions}
-			emptyHint={readonly || archived
-				? undefined
-				: {
-					planner: !!agent,
-					references: referencesEnabled,
-					automatic: participationState?.enabled,
-				}}
+			emptyHint={emptyHint}
 			conversationPlanJobs={conversationPlanJobs}
 			onCardLink={onCardLink}
 			onAddExcerpt={onAddExcerpt}
@@ -1416,19 +1436,8 @@ export function Chat(
 				: undefined}
 			researchOffers={researchOffers}
 			sourceDestination={sourceDestination}
-			threads={{
-				summaries: threadsState.summaries,
-				openRootId: threadsState.openRootId,
-				canStart: !readonly && !archived && transcriptReady,
-				onOpen: openThread,
-			}}
-			entries={[
-				...withNoticesAfter(
-					withoutFailure(entries, slot.lead === "failure" ? failed?.entry : undefined),
-					unanswered,
-				),
-				...echoes(outbox),
-			]}
+			threads={transcriptThreads}
+			entries={shownEntries}
 			onDelete={deleteMessage}
 			onReact={reactTo}
 			reactionIntents={intents}

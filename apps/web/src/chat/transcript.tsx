@@ -3,6 +3,7 @@
 import {
 	Fragment,
 	lazy,
+	memo,
 	Suspense,
 	useCallback,
 	useEffect,
@@ -507,7 +508,11 @@ function MessageGroup(
 let noop = () => {};
 let NO_INTENTS: readonly Intent[] = [];
 
-export function Transcript(
+/**
+ * Memoized: Chat renders again with every key typed in its composer, and a long transcript is
+ * hundreds of messages that the key does not change.
+ */
+export let Transcript = memo(function Transcript(
 	{
 		active,
 		canEdit,
@@ -1039,4 +1044,4 @@ export function Transcript(
 			</div>
 		</div>
 	);
-}
+});
