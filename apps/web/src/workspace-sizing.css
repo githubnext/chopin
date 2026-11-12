@@ -33,17 +33,13 @@
 
 /*
  * The document's views keep a closed view in the page (`ContentSwapLayer`'s `retain`): skipped, so
- * nothing in it is drawn, focused, found or exposed. A leaving or closed view lies under the open
- * one, so it takes no pointer without `pointer-events: none`, an inherited property whose change
- * reaches every element of the view.
+ * nothing in it is drawn, focused, found or exposed, and taking no pointer, as a leaving view takes
+ * none (`.is-closing`). It keeps its place in the stack, so the views paint in the order they always
+ * have; on a phone with reduced motion a closed view is a transparent box over the open one.
  */
-.workspace-document-layer.motion-content-swap:is(.is-closing, [data-content-swap-state="closed"]) {
-	z-index: -1;
-	pointer-events: auto;
-}
-
 .workspace-document-layer[data-content-swap-state="closed"] {
 	content-visibility: hidden;
+	pointer-events: none;
 }
 
 /*

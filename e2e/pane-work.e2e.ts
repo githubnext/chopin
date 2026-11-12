@@ -90,6 +90,9 @@ async function open(
 	await join("ana");
 	let chat = page.getByRole("complementary", { name: "Chat", exact: true });
 	await expect(chat.locator(`[data-chat-message-id="message-${MESSAGES - 1}"]`)).toBeVisible();
+	// A long Chat mounts its newest messages first and the rest when the page is idle; every count
+	// here is of the whole Chat.
+	await expect(chat.locator("[data-chat-message-id]")).toHaveCount(MESSAGES);
 	await settle(page);
 	return chat;
 }
@@ -270,4 +273,30 @@ test("expanding the document over Chat and back restyles part of the page, and t
 	// Chat was made inert as it left and taken out of the page once it had: each restyled all of it.
 	expect(expanding).toBeLessThan(elements / 2);
 	expect(showing).toBeLessThan(elements / 2);
+});
+
+test("on a phone with reduced motion, the document takes the pointer again after Decisions", async ({ join, seed }) => {
+	await seed(document(), { transcript: transcript() });
+	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	let views = page.getByRole("navigation", { name: "Workspace view" });
+	await views.getByRole("button", { name: /^Decisions/ }).click();
+	await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeFocused();
+	await views.getByRole("button", { name: "Document", exact: true }).click();
+	let heading = page.getByRole("heading", { name: "Section 0" });
+	await expect(heading).toBeVisible();
+	await settle(page);
+	// A closed view stays in the page, over the open one in a phone's stack and transparent there; it
+	// must take no pointer, or every press on the document lands on it.
+	let box = (await heading.boundingBox())!;
+	expect(
+		await page.evaluate(
+			({ x, y }) =>
+				!!window.document.elementFromPoint(x, y)?.closest('[data-document-view="plan"]'),
+			{
+				x: box.x + box.width / 2,
+				y: box.y + box.height / 2,
+			},
+		),
+	).toBe(true);
 });
