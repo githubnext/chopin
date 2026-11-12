@@ -61,10 +61,9 @@
 /*
  * Split Chat lies on the ground from the sidebar's edge (or the window's) to the document's sheet,
  * and a shown row is shaded across all of it, as Slack shades its message pane. The pane keeps its
- * box and its track; its clip lets it draw into the frame's gutter before it, and the one after it
- * while the document is folded to its bar (theme.css). Each transcript reaches into the gutters
- * beside it and into the 8px before the sheet, and its rows keep their 20px gutter inside that, so
- * the text stays where it was (overlay-scrollbar.css).
+ * box and its track; its clip lets it draw into the frame's gutter before it (theme.css). Each
+ * transcript reaches into the gutter beside it and into the 8px before the sheet, and its rows keep
+ * their 20px gutter inside that, so the text stays where it was (overlay-scrollbar.css).
  *
  * The 8px before the sheet is where Resize chat is taken: rows are shaded across it, and the thumb
  * stays clear of it, where it was. While a thread is open they are the thread's, and main Chat ends
@@ -104,17 +103,20 @@
 	inset-inline-end: 0;
 }
 
-/* With the document folded to its bar, the thread reaches the window's edge, and so does its thumb. */
+/*
+ * With the document folded to its bar there is no sheet: the thread ends at its own panel's edge,
+ * where its header's rule ends, and so does its thumb.
+ */
 .workspace-root[data-workspace-mode="split"][data-document-collapsed]
 	.chat-split-thread
 	.chat-scroll-host {
-	margin-inline-end: calc(-1 * (var(--spacing) * 5 + env(safe-area-inset-right)));
+	margin-inline-end: 0;
 }
 
 .workspace-root[data-workspace-mode="split"][data-document-collapsed]
 	.chat-split-thread
 	[data-chat-stack] {
-	padding-inline-end: calc(var(--spacing) * 10 + env(safe-area-inset-right));
+	padding-inline-end: calc(var(--spacing) * 5);
 }
 
 .workspace-root[data-workspace-mode="split"][data-document-collapsed]

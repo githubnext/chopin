@@ -1,11 +1,13 @@
 /**
  * Every row state Slack shades spans the Chat container from edge to edge, as Slack's message pane
- * does, and nothing of the first message is cut off at the top of the transcript.
+ * does, and its row's whole pitch from top to bottom, and nothing of the first message is cut off at
+ * the top of the transcript.
  *
  * The container is what a person sees Chat lie on. Beside the document, Chat has no frame of its
  * own: it lies on the ground from the sidebar's edge (or the window's) to the document's sheet, or
- * to the thread's divider, and the thread from that divider to the sheet (or the window's edge when
- * the document folds to its bar). Alone, on a phone or in a narrow window, it is the pane it fills.
+ * to the thread's divider, and the thread from that divider to the sheet (or to its own panel's
+ * edge when the document folds to its bar). Alone, on a phone or in a narrow window, it is the pane
+ * it fills.
  *
  * The browser here keeps the system's classic scrollbars (Playwright hides them in headless
  * Chromium), which is where a native bar set a lane aside and the shade stopped short of the edge.
@@ -91,7 +93,11 @@ async function shade(row: Locator, part: "::before" | ".chat-source-tint" = "::b
 			let thread = root.querySelector<HTMLElement>("[data-thread-pane]");
 			if (pane) {
 				let divider = Number.parseFloat(getComputedStyle(pane).borderLeftWidth);
-				view = { left: pane.getBoundingClientRect().left + divider, right: end };
+				let panel = pane.querySelector("[data-thread-panel]")!.getBoundingClientRect();
+				view = {
+					left: pane.getBoundingClientRect().left + divider,
+					right: sheet ? end : panel.right,
+				};
 			} else {
 				view = { left: ground.left, right: thread ? thread.getBoundingClientRect().left : end };
 			}
@@ -137,6 +143,107 @@ async function shade(row: Locator, part: "::before" | ".chat-source-tint" = "::b
 
 const EDGE_TO_EDGE = { start: 0, end: 0, radius: "0px", opacity: "1" };
 
+/**
+ * Where each message's shade begins and ends against its pitch, as Slack's rows tile its message
+ * pane: from the middle of the gap to the row before it to the middle of the gap to the row after
+ * it. A message's row is its own box, from its group's top when it heads the group and to its
+ * group's foot when it ends it; any other row of the transcript (a notice, a thread's lead, the
+ * transcript's foot) is its box and has no shade. So neighbouring shades meet with no band between
+ * them and none over another. The first row reaches as far above as half the transcript's gap.
+ *
+ * Then, under a mouse, down three lines (the container's start, the avatars' middle, the text's
+ * start), what the pointer finds at every pixel is the row whose pitch it is in, or no message
+ * between rows that are not messages: no band where a pointer moving down the transcript shades
+ * nothing. A touch screen has no pointer moving down it, and keeps the rows' own boxes.
+ *
+ * It returns what is out of place, as words, so none is what is right.
+ */
+function pitches(scroller: Locator): Promise<string[]> {
+	return scroller.evaluate(view => {
+		let stack = view.querySelector<HTMLElement>(":scope > [data-chat-stack]")!;
+		let half = Number.parseFloat(getComputedStyle(stack).rowGap) / 2;
+		type Unit = { top: number; bottom: number; body?: HTMLElement; drawn?: [number, number] };
+		let units: Unit[] = [];
+		for (let row of stack.children) {
+			let box = row.getBoundingClientRect();
+			if (getComputedStyle(row).position === "absolute" || box.height === 0) continue;
+			let bodies = row.matches("[data-chat-entry]")
+				? [...row.querySelectorAll<HTMLElement>(".chat-message-body")]
+				: [];
+			if (!bodies.length) {
+				units.push({ top: box.top, bottom: box.bottom });
+				continue;
+			}
+			bodies.forEach((body, index) => {
+				let own = body.getBoundingClientRect();
+				let style = getComputedStyle(body, "::before");
+				let top = own.top + Number.parseFloat(style.top);
+				// On a touch screen an engaged message's toolbar stands in a lane above it, its own.
+				let lane = Number.parseFloat(getComputedStyle(body).marginBlockStart);
+				units.push({
+					top: index === 0 ? box.top : own.top - lane,
+					bottom: index === bodies.length - 1 ? box.bottom : own.bottom,
+					body,
+					drawn: [top, top + Number.parseFloat(style.height)],
+				});
+			});
+		}
+		let wrong: string[] = [];
+		let owners: { top: number; bottom: number; body?: HTMLElement }[] = [];
+		units.forEach((unit, index) => {
+			let before = units[index - 1];
+			let after = units[index + 1];
+			let top = before ? (before.bottom + unit.top) / 2 : unit.top - half;
+			let bottom = after ? (unit.bottom + after.top) / 2 : unit.bottom + half;
+			owners.push({ top, bottom, body: unit.body });
+			if (!unit.body) return;
+			let id = unit.body.dataset.chatMessageId;
+			let [drawnTop, drawnBottom] = unit.drawn!;
+			if (Math.abs(drawnTop - top) >= 0.5) {
+				wrong.push(`${id}'s shade starts ${(drawnTop - top).toFixed(1)}px from its pitch`);
+			}
+			if (Math.abs(drawnBottom - bottom) >= 0.5) {
+				wrong.push(`${id}'s shade ends ${(drawnBottom - bottom).toFixed(1)}px from its pitch`);
+			}
+		});
+		if (!matchMedia("(hover: hover) and (pointer: fine)").matches) return wrong;
+		let frame = view.getBoundingClientRect();
+		let first = stack.querySelector<HTMLElement>(".chat-message-body")!.getBoundingClientRect();
+		let avatar = stack.querySelector("[data-chat-entry] > [data-chat-avatar]")!
+			.getBoundingClientRect();
+		let lines = {
+			container: frame.left + 1,
+			avatars: avatar.left + avatar.width / 2,
+			text: first.left + 4,
+		};
+		// Below what runs under a phone's top bar; the pixel either side of a boundary is either row's.
+		let from = frame.top + (Number.parseFloat(getComputedStyle(view).scrollPaddingTop) || 0);
+		for (let [line, x] of Object.entries(lines)) {
+			for (let y = Math.ceil(from) + 1; y < frame.bottom - 1; y++) {
+				let owner = owners.find(owner => y >= owner.top + 1 && y < owner.bottom - 1);
+				if (!owner) continue;
+				let hit = document.elementFromPoint(x, y);
+				// What is drawn over the transcript (a resize grip at its edge, a bar over its top) is not
+				// a band in it, nor is a neighbour's touch target that stands past its row.
+				if (!hit || !view.contains(hit)) continue;
+				let found = hit.closest<HTMLElement>(".chat-message-body")
+					?? hit.closest("[data-chat-head]")?.nextElementSibling as HTMLElement | null
+					?? undefined;
+				if (found && found !== owner.body && hit.closest("button")) continue;
+				if (found !== owner.body) {
+					wrong.push(
+						`at ${line} ${Math.round(y - frame.top)}px down the pointer finds ${
+							found?.dataset.chatMessageId ?? "no message"
+						}, in ${owner.body?.dataset.chatMessageId ?? "no message"}'s pitch`,
+					);
+					y = Math.ceil(owner.bottom);
+				}
+			}
+		}
+		return wrong;
+	});
+}
+
 /** Whether the container sets a lane aside for a scrollbar: its client width short of its width. */
 function lane(scroller: Locator): Promise<number> {
 	return scroller.evaluate(node => (node as HTMLElement).offsetWidth - node.clientWidth);
@@ -157,7 +264,7 @@ function overhang(parts: Locator): Promise<number[]> {
 	);
 }
 
-test("on a desktop every shaded row spans the Chat container edge to edge, under classic scrollbars, with the thumb drawn over the rows", async ({ join, seed }) => {
+test("on a desktop every shaded row spans the Chat container edge to edge and its whole pitch, under classic scrollbars, with the thumb drawn over the rows", async ({ join, seed }) => {
 	await seed("# Rows\n", { transcript: transcript() });
 	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
 	expect(await page.evaluate(() => document.documentElement.dataset.scrollbars)).toBe("classic");
@@ -168,10 +275,20 @@ test("on a desktop every shaded row spans the Chat container edge to edge, under
 
 	let row = message(page, "note-20");
 	await row.scrollIntoViewIfNeeded();
+	await expect.poll(() => pitches(scroller)).toEqual([]);
 
 	// Hovered.
 	await row.locator("[data-chat-message-text]").hover();
 	await expect.poll(() => shade(row)).toEqual(EDGE_TO_EDGE);
+	// And in the gap above its row and the gap below it, halfway to its neighbours.
+	for (let [at, past] of [["top", -4], ["bottom", 4]] as const) {
+		let point = await row.evaluate((node, [at, past]) => {
+			let entry = node.closest("[data-chat-entry]")!.getBoundingClientRect();
+			return { x: node.getBoundingClientRect().left + 4, y: entry[at] + past };
+		}, [at, past] as const);
+		await page.mouse.move(point.x, point.y);
+		await expect.poll(() => shade(row), `${past}px past its ${at}`).toEqual(EDGE_TO_EDGE);
+	}
 
 	// Keyboard focus within the row.
 	await page.mouse.move(0, 0);
@@ -210,6 +327,18 @@ test("on a desktop every shaded row spans the Chat container edge to edge, under
 		node.prepend(tint);
 	});
 	expect(await shade(row, ".chat-source-tint")).toEqual(EDGE_TO_EDGE);
+	// Over the same pitch as the shade.
+	expect(
+		await row.evaluate(node => {
+			let tint = node.querySelector(".chat-source-tint")!.getBoundingClientRect();
+			let style = getComputedStyle(node, "::before");
+			let top = node.getBoundingClientRect().top + Number.parseFloat(style.top);
+			return [
+				Math.round(tint.top - top),
+				Math.round(tint.bottom - top - Number.parseFloat(style.height)),
+			];
+		}),
+	).toEqual([0, 0]);
 	await row.evaluate(node => node.querySelector(".chat-source-tint")!.remove());
 
 	// The scrollbar is drawn over the rows' end: shown while the pane is scrolled or pointed at,
@@ -257,6 +386,8 @@ test("on a desktop every shaded row spans the Chat container edge to edge, under
 	await expect(reply).toBeVisible();
 	await page.mouse.move(0, 0);
 	await expect.poll(() => shade(second)).toEqual(EDGE_TO_EDGE);
+	// The document folds to its bar here: the thread's rows end at its own panel's edge.
+	await expect(page.locator(".workspace-root")).toHaveAttribute("data-document-collapsed", "true");
 	await reply.locator("[data-chat-message-text]").hover();
 	await expect.poll(() => shade(reply)).toEqual(EDGE_TO_EDGE);
 	expect(await lane(panel.locator("[data-chat-scroll]"))).toBe(0);
@@ -266,9 +397,16 @@ test("on a desktop every shaded row spans the Chat container edge to edge, under
 	expect(await overhang(replyBar)).toEqual([0]);
 	expect(await overhang(reply.locator(".chat-emoji"))).toEqual([0]);
 	expect(await overhang(panel.locator("[data-thread-root-message] .chat-emoji"))).toEqual([0, 0]);
+	// The thread's rows and Chat's tile their panes, the document folded.
+	await page.mouse.move(0, 0);
+	await expect.poll(() => pitches(panel.locator("[data-chat-scroll]"))).toEqual([]);
+	await expect.poll(() => pitches(scroller)).toEqual([]);
 });
 
-/** A person's message and one grouped under it, the agent's two, and a last pair. */
+/**
+ * A person's message and one grouped under it, a notice, the agent's two (the second with an
+ * image), and a last pair.
+ */
 function kinds() {
 	return [
 		{
@@ -284,6 +422,12 @@ function kinds() {
 			ts: 1_700_000_030,
 		},
 		{
+			id: "notice",
+			author: { kind: "system" as const },
+			text: "ana asked chopin to break the plan into tasks.",
+			ts: 1_700_000_060,
+		},
+		{
 			id: "agent-1",
 			author: { kind: "agent" as const },
 			text: "I moved the key into `router.ts`.",
@@ -294,6 +438,7 @@ function kinds() {
 			author: { kind: "agent" as const },
 			text: "And left the drill on the plan.",
 			ts: 1_700_000_100,
+			images: [{ src: `/images/${"b".repeat(64)}.png`, width: 640, height: 360 }],
 		},
 		{
 			id: "ana-1",
@@ -317,7 +462,7 @@ for (
 		["a 640 window, where Chat fills the frame", 640, false],
 	] as const
 ) {
-	test(`in ${label} every kind of row is shaded edge to edge, in Chat and in its thread`, async ({ join, seed }) => {
+	test(`in ${label} every kind of row is shaded edge to edge and over its whole pitch, in Chat and in its thread`, async ({ join, seed }) => {
 		await seed("# Rows\n", { transcript: kinds() });
 		let page = await join("ana", { viewport: { width, height: 900 } });
 		if (!split) {
@@ -333,6 +478,20 @@ for (
 			await row.locator("[data-chat-message-text]").hover({ position: { x: 4, y: 4 } });
 			await expect.poll(() => shade(row), id).toEqual(EDGE_TO_EDGE);
 		}
+		let main = chatOf(page).locator(".chat-split-main [data-chat-scroll]");
+		await page.mouse.move(0, 0);
+		await expect.poll(() => pitches(main)).toEqual([]);
+		// In the gap between the notice and the agent's row, 4px above the row, the pointer is on it.
+		let agent = message(page, "agent-1");
+		let gap = await agent.evaluate(node => {
+			let text = node.getBoundingClientRect();
+			return {
+				x: text.left + 4,
+				y: node.closest("[data-chat-entry]")!.getBoundingClientRect().top - 4,
+			};
+		});
+		await page.mouse.move(gap.x, gap.y);
+		await expect.poll(() => shade(agent)).toEqual(EDGE_TO_EDGE);
 
 		let root = message(page, "ben-2");
 		await root.locator("[data-chat-message-text]").hover({ position: { x: 4, y: 4 } });
@@ -343,11 +502,17 @@ for (
 		await panel.getByRole("button", { name: "Send message" }).click();
 		let reply = panel.locator(".chat-message-body", { hasText: "Booked for three" });
 		await expect(reply).toBeVisible();
+		await chatInput(panel).fill("And the room.");
+		await panel.getByRole("button", { name: "Send message" }).click();
+		await expect(panel.locator(".chat-message-body", { hasText: "And the room." })).toBeVisible();
 		await reply.locator("[data-chat-message-text]").hover({ position: { x: 4, y: 4 } });
 		await expect.poll(() => shade(reply)).toEqual(EDGE_TO_EDGE);
+		await page.mouse.move(0, 0);
+		// The thread's replies, grouped under its lead, tile it as Chat's rows tile Chat.
+		await expect.poll(() => pitches(panel.locator("[data-chat-scroll]"))).toEqual([]);
 		if (split) {
-			await page.mouse.move(0, 0);
 			await expect.poll(() => shade(root)).toEqual(EDGE_TO_EDGE);
+			await expect.poll(() => pitches(main)).toEqual([]);
 		}
 	});
 }
@@ -395,8 +560,11 @@ test("on a phone an engaged row spans the Chat container edge to edge, and the f
 
 	let row = message(page, "note-20");
 	await row.scrollIntoViewIfNeeded();
+	await expect.poll(() => pitches(scroller)).toEqual([]);
 	await holdOn(page, row.locator("[data-chat-message-text]"));
 	await expect.poll(() => shade(row)).toEqual(EDGE_TO_EDGE);
+	// Its toolbar's lane above it is its own, and its shade still meets its neighbours'.
+	await expect.poll(() => pitches(scroller)).toEqual([]);
 
 	await page.locator("body").evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 	await page.mouse.click(1, 1).catch(() => {});
