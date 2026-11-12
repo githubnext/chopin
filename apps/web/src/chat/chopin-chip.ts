@@ -10,7 +10,7 @@
  */
 
 import { addressedOutsideReferences, reconcileReferenceDrafts } from "./references";
-import { PLANNER_NAME } from "@chopin/protocol/address";
+import { PLANNER_NAME } from "@chopin/editor/people";
 
 import type { MentionTrigger } from "./mentions";
 import type { ChatSendPayload, ComposerDraft, ReferenceDraft } from "./references";

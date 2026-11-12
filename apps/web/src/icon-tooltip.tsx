@@ -1,4 +1,4 @@
-import { sentenceCase } from "@chopin/protocol/address";
+import { PLANNER_NAME } from "@chopin/editor/people";
 import { useEffect } from "react";
 
 // Every route waits for this chunk before it mounts (main.tsx), so the cursor contract rides with
@@ -55,6 +55,9 @@ function openPopup(element: HTMLElement): boolean {
 	return element.getAttribute("aria-expanded") === "true" && popup !== null && popup !== "false";
 }
 
+// Sentence case, unless the label begins with the agent's name, which keeps its lower case.
+const FIRST_LETTER = new RegExp(`^(?!${PLANNER_NAME}\\b)[a-z]`);
+
 /**
  * Tooltips use sentence case, except where they begin with chopin's name.
  * Names and handles opt out so they keep their own casing.
@@ -62,7 +65,7 @@ function openPopup(element: HTMLElement): boolean {
 export function tooltipText(label: string, verbatim: boolean): string {
 	return verbatim
 		? label.trim()
-		: sentenceCase(label.trim());
+		: label.trim().replace(FIRST_LETTER, letter => letter.toUpperCase());
 }
 
 /** Hover tooltips never show on coarse pointers; focus ones only for keyboard focus. */

@@ -1,4 +1,4 @@
-import { PLANNER_NAME } from "@chopin/protocol/address";
+import { PLANNER_NAME } from "@chopin/editor/people";
 /**
  * Whether the Planner is writing, or has written, document changes the reader
  * has not seen because another view (Decisions or Chat) is in front.

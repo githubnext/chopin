@@ -371,7 +371,7 @@ test("a desktop comment card opens beside its passage instead of over it", async
 	expect(cardBox.x).toBeGreaterThanOrEqual(paragraphBox.x - 1);
 	expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(paragraphBox.x + paragraphBox.width + 1);
 	// The visible name carries the handle; the adjacent face is decorative.
-	await expect(card.getByTitle("@dev")).toContainText("Dev");
+	await expect(card.getByTitle("@dev")).toHaveText("dev");
 	await expect(card.getByRole("img", { name: "dev" })).toHaveCount(0);
 	await page.keyboard.press("Escape");
 

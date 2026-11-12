@@ -26,7 +26,7 @@ import { cardRelation, RelationNote } from "./relation-note";
 import { ResolvedActions } from "./resolved-actions";
 import { TextAnswer } from "./text-answer";
 import { usePendingWork } from "./use-pending-work";
-import { PLANNER_NAME } from "@chopin/protocol/address";
+import { PLANNER_NAME } from "@chopin/protocol/planner-name";
 import type { VisibleSuggestion } from "./project-suggestion";
 import type { Relation } from "../relation";
 

@@ -21,6 +21,10 @@
 			"types": "./address.ts",
 			"default": "./address.ts"
 		},
+		"./planner-name": {
+			"types": "./planner-name.ts",
+			"default": "./planner-name.ts"
+		},
 		"./attachment": {
 			"types": "./attachment.ts",
 			"default": "./attachment.ts"
