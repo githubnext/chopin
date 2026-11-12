@@ -18,6 +18,7 @@
 	 * before it and to the row after it, so the shades of neighbouring rows meet with no band between
 	 * them and none over another. Messages of a group are 4px apart; the transcript's rows are 16px.
 	 */
+	--chat-row-half: calc(var(--spacing) * 2);
 	--chat-gap-above: calc(var(--spacing) / 2);
 	--chat-gap-below: calc(var(--spacing) / 2);
 	/* How far the highlight reaches above the message: to the gap's middle, or over the name line. */
@@ -95,16 +96,16 @@
  * stands 2px above the row, to the same middle (`c-message_kit__gutter`).
  */
 .chat-message-body:first-child {
-	--chat-gap-above: calc(var(--spacing) * 2);
+	--chat-gap-above: var(--chat-row-half);
 }
 
 .chat-message-body:last-child {
-	--chat-gap-below: calc(var(--spacing) * 2);
+	--chat-gap-below: var(--chat-row-half);
 }
 
 .chat-message-body[data-chat-headed] {
 	--chat-highlight-top: calc(
-		var(--text-base) * var(--text-base--line-height) - var(--spacing) / 2 + var(--spacing) * 2
+		var(--text-base) * var(--text-base--line-height) - var(--spacing) / 2 + var(--chat-row-half)
 	);
 }
 
@@ -377,7 +378,7 @@
 		--chat-highlight-top: calc(
 			var(--chat-toolbar-lane) + var(--spacing) + var(--text-base) * var(--text-base--line-height) -
 				var(--spacing) / 2 +
-				var(--spacing) * 2
+				var(--chat-row-half)
 		);
 	}
 
