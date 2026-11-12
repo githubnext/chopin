@@ -664,7 +664,10 @@ export let RichDraftInput = forwardRef<RichDraftHandle, RichDraftInputProps>(
 		}, [editor, readOnly]);
 
 		// A login the draft now knows, or no longer does, is marked or unmarked where it is written.
+		// An empty draft has nothing to mark, and an update would read the page's selection, which lays
+		// the page out: the logins change several times while a long Chat opens.
 		useLayoutEffect(() => {
+			if (editor.getEditorState().read(() => $getRoot().getTextContentSize() === 0)) return;
 			editor.update(() => {
 				for (let node of $getRoot().getAllTextNodes()) {
 					if (node.isSimpleText() || $isMentionNode(node)) node.markDirty();
