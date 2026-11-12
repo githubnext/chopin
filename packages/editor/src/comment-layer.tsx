@@ -331,6 +331,9 @@ function useCommentPresence<T>(value: T | undefined, duration: number, immediate
 	};
 }
 
+/** How many comment cards are open, across every editor on the page. */
+let commentCards = 0;
+
 function CommentSurface(
 	{
 		compact,
@@ -348,6 +351,19 @@ function CommentSurface(
 	let measure = useRef(surface?.onMeasure);
 	measure.current = surface?.onMeasure;
 	let open = !!surface;
+	// An open card hides a lingering selection's toolbar (styles.css). The page is marked rather than
+	// asked with `:root:has()`, which restyled the whole page whenever an element came or went.
+	let card = !!surface?.className.split(" ").includes("plan-comment-card")
+		&& lifecycle.presence.phase !== "closing";
+	useLayoutEffect(() => {
+		if (!card) return;
+		let root = document.documentElement;
+		commentCards++;
+		root.setAttribute("data-plan-comment-card", "");
+		return () => {
+			if (--commentCards === 0) root.removeAttribute("data-plan-comment-card");
+		};
+	}, [card]);
 	// Content can grow after the card is placed, as when a long thread unfolds its replies,
 	// so the card is measured again and re-placed rather than running off the document.
 	useLayoutEffect(() => {
