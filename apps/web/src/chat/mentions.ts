@@ -124,28 +124,10 @@ export function insertMention(
 	return { text: next, caret: trigger.start + token.length + 1 };
 }
 
-/** Tab also selects, as it does for `@` lists elsewhere; the `#` picker leaves Tab alone. */
+/** The `@` menu's keys are every composer menu's: Enter and Tab choose. */
 export function mentionKeyAction(
-	event: {
-		key: string;
-		keyCode?: number;
-		isComposing?: boolean;
-		shiftKey?: boolean;
-		altKey?: boolean;
-		ctrlKey?: boolean;
-		metaKey?: boolean;
-	},
+	event: Parameters<typeof referencePickerKeyAction>[0],
 	selectable: boolean,
 ): ReferencePickerKeyAction | undefined {
-	if (
-		event.key === "Tab"
-		&& selectable
-		&& !event.isComposing
-		&& event.keyCode !== 229
-		&& !event.shiftKey
-		&& !event.altKey
-		&& !event.ctrlKey
-		&& !event.metaKey
-	) return "select";
 	return referencePickerKeyAction(event, selectable);
 }

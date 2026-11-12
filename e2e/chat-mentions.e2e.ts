@@ -170,15 +170,13 @@ test("the @ picker lists the Planner and the people, those here first, and sends
 	await expect(list).toHaveCount(0);
 	await draft.fill("@c");
 	await expect(list).toBeVisible();
+	// Tab completes the highlighted row, as Enter does, and the draft keeps the focus.
 	await draft.press("Tab");
-	await draft.evaluate(() =>
-		new Promise<void>(resolve =>
-			requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-		)
-	);
-	await expect(draft).not.toBeFocused();
-	await expectChatValue(draft, "@c");
-	await draft.focus();
+	await expectChatValue(draft, "@chopin ");
+	await expect(list).toHaveCount(0);
+	await expect(draft).toBeFocused();
+	await draft.fill("@c");
+	await expect(list).toBeVisible();
 	await draft.press("Escape");
 	await expect(list).toHaveCount(0);
 	await expectChatValue(draft, "@c");

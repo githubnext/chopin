@@ -1773,10 +1773,6 @@ export function Chat(
 							event.preventDefault();
 							return;
 						}
-						if (!composing && event.key === "Tab" && !event.shiftKey) {
-							setDismissedPicker(mentionKey ?? triggerKey);
-							return;
-						}
 						let mentionAction = mentionOpen
 							? mentionKeyAction({
 								key: event.key,
@@ -1809,6 +1805,9 @@ export function Chat(
 								keyCode: event.keyCode,
 								isComposing: event.nativeEvent.isComposing,
 								shiftKey: event.shiftKey,
+								altKey: event.altKey,
+								ctrlKey: event.ctrlKey,
+								metaKey: event.metaKey,
 							}, activeRow !== undefined)
 							: undefined;
 						if (action === "next") {
@@ -1826,6 +1825,11 @@ export function Chat(
 						if (action === "select" && activeRow) {
 							chooseRow(activeRow);
 							event.preventDefault();
+							return;
+						}
+						// A Tab no menu took moves the focus on, and a menu it leaves stays shut.
+						if (!composing && event.key === "Tab" && !event.shiftKey) {
+							setDismissedPicker(mentionKey ?? triggerKey);
 							return;
 						}
 						if (composing) return;
