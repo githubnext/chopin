@@ -9,11 +9,15 @@ import * as Chat from "./service";
 import { alone, announceAlone, people } from "./initiative";
 import { installInitiativeCleanup, message } from "./initiative.test-fixtures";
 import { until } from "./job.test-fixtures";
+import { sessionContextOf } from "./session-context";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Socket } from "../wire";
 
 let setup = installInitiativeCleanup();
+
+/** What a turn was asked, without what a fresh session is told of the room before it. */
+let turn = (prompt: string | undefined) => sessionContextOf(prompt ?? "").turn;
 
 type Frame = { kind: string; [key: string]: unknown };
 
@@ -45,15 +49,15 @@ test("alone, a message to the room starts chopin's turn at once, with no wait an
 	// Saved, shown and read as a message to chopin, as one that named it would be.
 	let shown = h.frames.find(frame => frame.kind === "chat:message")?.entry as Wire.Entry;
 	expect(shown).toMatchObject({ id: source.requestId, text: source.text, to: "planner" });
-	expect(h.prompts[0]).toContain(`@ana: ${source.text}`);
-	expect(h.prompts[0]).not.toContain("one concise final conversational reply");
+	expect(turn(h.prompts[0])).toContain(`@ana: ${source.text}`);
+	expect(turn(h.prompts[0])).not.toContain("one concise final conversational reply");
 	expect(h.chat.backscroll).toEqual([]);
 
 	let addressed = await setup.harness();
 	await Chat.send(addressed.context, addressed.ws, message(`@chopin ${source.text}`, "planner"));
 	await until(() => addressed.prompts.length === 1);
-	expect(h.prompts[0]!.replace(source.requestId, "")).toBe(
-		addressed.prompts[0]!.replace(addressed.chat.entries[0]!.id, ""),
+	expect(turn(h.prompts[0]).replace(source.requestId, "")).toBe(
+		turn(addressed.prompts[0]).replace(addressed.chat.entries[0]!.id, ""),
 	);
 });
 
@@ -68,7 +72,7 @@ test("with a second person there, a message to the room waits for silence and th
 	await h.clock.advance(1);
 	await until(() => h.prompts.length === 1);
 	expect(h.judge).toHaveBeenCalledTimes(1);
-	expect(h.prompts[0]).toContain("one concise final conversational reply");
+	expect(turn(h.prompts[0])).toContain("one concise final conversational reply");
 	let shown = h.frames.find(frame => frame.kind === "chat:message")?.entry as Wire.Entry;
 	expect(shown.to).toBeUndefined();
 });
