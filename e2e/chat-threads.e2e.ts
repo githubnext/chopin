@@ -191,7 +191,7 @@ test("forks the Planner session at the root message without leaking into main Ch
 	await expect(alsoCheckbox).not.toBeChecked();
 });
 
-test("renders harness context ring and expandable compaction divider", async ({ join, seed }) => {
+test("draws no context ring where the harness reports usage, and an expandable compaction divider", async ({ join, seed }) => {
 	await seed("# Compaction and context\nTrack token window and compactions.\n");
 	let ana = await join("ana", { viewport: { width: 1600, height: 900 } });
 	let anaMain = mainColumn(ana);
@@ -209,18 +209,17 @@ test("renders harness context ring and expandable compaction divider", async ({ 
 		"Summarized earlier goals and storage trade-offs.",
 	);
 
-	let ring = anaMain.locator('[data-slot="composer-context"] > button');
-	await expect(ring).toBeVisible();
-	await ring.focus();
-	await expect(
-		anaMain.locator('[data-slot="composer-context"]'),
-	).toContainText("42k / 128k");
-
-	let axe = await new AxeBuilder({ page: ana })
-		.include("[data-chat-compaction]")
-		.include('[data-slot="composer-context"]')
-		.analyze();
+	let axe = await new AxeBuilder({ page: ana }).include("[data-chat-compaction]").analyze();
 	expect(axe.violations.map(v => `${v.id}: ${v.help}`)).toEqual([]);
+
+	// The turn reported its context usage; neither composer draws it.
+	let root = anaMain.locator(".chat-message-body", { hasText: "COMPACT-TURN" });
+	await root.hover();
+	await root.getByRole("button", { name: "Reply in thread" }).click();
+	let thread = threadPanel(ana);
+	await sendInScope(thread, "@chopin USAGE-REPORT");
+	await expect(thread.getByText("Reported context window usage.")).toBeVisible();
+	await expect(chatPane(ana).locator('[data-slot="composer-context"]')).toHaveCount(0);
 });
 
 test("balances Chat, Thread and Document at 1600, collapses Document cleanly at 1280, and drags Resize thread", async ({ join, seed }) => {

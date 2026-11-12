@@ -31,8 +31,8 @@ copies keep their structure, behaviour and recorded bytes; the plate's pristine 
 assistant-ui's geometry, and `e2e/design/chat-media.e2e.ts` and `e2e/chat-code-blocks.e2e.ts` hold
 Chat's to Slack's. A code block's colours come through the `SyntaxHighlighter` slot that
 `markdown-primitive.tsx` already offers, so the copy needs no patch for them.
-`ComposerContext` (from `elements-composer`) and `elements-context-breakdown` draw the composer's
-context-window ring and token breakdown from harness-reported usage; because assistant-ui ships no
+Chat draws no context-window usage: `ComposerContext` stays in the copied `elements-composer` unused, and
+`elements-context-breakdown` is drawn only on the design-audit plate. Because assistant-ui ships no
 compaction marker, the expandable compaction divider is Chopin's own `Unfold` disclosure.
 Every copy's `lucide-react` import is mapped in `tsconfig.json` to `src/chat/assistant-ui/lucide.tsx`, which draws each icon it names with Chopin's own (`packages/icons`), so Chat has one icon language and no lucide artwork ships; a copy that names an icon the file lacks fails `bun run types`, and the icon is added there, drawn in `packages/icons`. `markdown-text` has only a connected entry, so its `@assistant-ui/react` and
 `@assistant-ui/react-markdown` imports map in `tsconfig.json` to Chopin's props-driven

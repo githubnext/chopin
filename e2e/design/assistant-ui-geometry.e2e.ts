@@ -100,7 +100,6 @@ const ROOTS = {
 		"composer-voice-button",
 		"message-attachments",
 		"markdown-text",
-		"composer-context",
 		"context-breakdown",
 		"image-root",
 		"image-preview",
@@ -172,7 +171,7 @@ const MARKDOWN_PARTS: readonly [label: string, select: (root: Locator) => Locato
 	["pre", root => root.locator(".aui-md-pre")],
 ];
 const TARGETS =
-	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button, [data-slot="markdown-text"] .aui-button-icon, [data-slot="markdown-text"] .aui-md-a, [data-slot="composer-context"] > button, [data-slot="message-actions"] button, [data-slot="dropdown-menu-item"], [data-chat-reaction], [data-slot="image-download"], [data-slot="image-copy"], [data-slot="image-regenerate"], [data-slot="image-source-label"], [data-slot="image-gallery"] button';
+	'[data-slot="model-selector-trigger"], [data-slot="model-selector-item"], [data-slot="composer-menu-item"], [role="radio"], [data-slot="composer-voice-button"], [data-slot="composer-attachment"] button:not([data-chopin-control]), [data-slot="message-attachments"] button, [data-slot="markdown-text"] .aui-button-icon, [data-slot="markdown-text"] .aui-md-a, [data-slot="message-actions"] button, [data-slot="dropdown-menu-item"], [data-chat-reaction], [data-slot="image-download"], [data-slot="image-copy"], [data-slot="image-regenerate"], [data-slot="image-source-label"], [data-slot="image-gallery"] button';
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 const effortRadios = (page: Page) => slot(page, "model-selector-effort").getByRole("radio");
 
@@ -282,22 +281,6 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 		await expectClassGeometry(radios.nth(index), "effort radio");
 		checked++;
 	}
-	let ringButtons = plate(page, "assistant-ui").locator('[data-slot="composer-context"] > button');
-	expect(await ringButtons.count()).toBe(2);
-	for (let index = 0; index < 2; index++) {
-		await expectClassGeometry(ringButtons.nth(index), "composer-context button");
-		checked++;
-	}
-	await page.keyboard.press("Escape");
-	let firstRing = ringButtons.first();
-	await firstRing.scrollIntoViewIfNeeded();
-	await firstRing.focus();
-	let floatingPanel = plate(page, "assistant-ui")
-		.locator('[data-slot="composer-context"] > div')
-		.first();
-	await expect.poll(() => floatingPanel.evaluate(node => getComputedStyle(node).opacity)).toBe("1");
-	await expectClassGeometry(floatingPanel, "composer-context floating");
-	checked++;
 	await page.keyboard.press("Escape");
 
 	let dialog = await openGalleryDialog(page);
@@ -315,7 +298,7 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 			checked++;
 		}
 	}
-	expect(checked).toBe(133);
+	expect(checked).toBe(128);
 });
 
 test("handoff and subagent list keep assistant-ui's exact proportions", async ({ page }) => {
@@ -501,11 +484,6 @@ test("assistant-ui's own radii, in pixels, where Chopin's scale differs", async 
 	expect((await measure(slot(page, "model-selector-item").first())).radius).toBe(8);
 	expect((await measure(effortRadios(page).first())).radius).toBe(6);
 	expect((await measure(slot(page, "context-breakdown").first())).radius).toBe(16);
-	let ringButton = await measure(
-		plate(page, "assistant-ui").locator('[data-slot="composer-context"] > button').first(),
-	);
-	expect([ringButton.width, ringButton.height]).toEqual([32, 32]);
-	expect(ringButton.radius).toBeGreaterThan(1000);
 	await page.keyboard.press("Escape");
 
 	let tile = plate(page, "assistant-ui").locator('[data-slot="image-gallery"] button').first();

@@ -20,7 +20,6 @@ export function ThreadComposerBoundary(
 				agent={props.agent}
 				banner={props.banner}
 				chopin={props.chopin}
-				contextRing={props.contextRing}
 				dictation={props.dictation}
 				draftable={props.draftable}
 				files={props.files}

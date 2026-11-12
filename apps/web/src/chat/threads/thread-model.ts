@@ -11,7 +11,6 @@ export type ThreadViewState = {
 	transcript: TranscriptState;
 	busy: boolean;
 	runs?: Chat.Runs;
-	usage?: Chat.ContextUsage;
 	compactions: Chat.CompactionRecord[];
 	compacting: boolean;
 	alsoToChat: boolean;
@@ -21,7 +20,6 @@ export type ThreadsState = {
 	summaries: Record<string, Chat.ThreadSummary>;
 	openRootId?: string;
 	threads: Record<string, ThreadViewState>;
-	topUsage?: Chat.ContextUsage;
 	topCompactions: Chat.CompactionRecord[];
 	topCompacting: boolean;
 };
@@ -35,7 +33,6 @@ export type ThreadsAction =
 	| { kind: "summary"; summary: Chat.ThreadSummary }
 	| { kind: "opened"; frame: Chat.ThreadOpened }
 	| { kind: "in-thread"; frame: Chat.InThread }
-	| { kind: "top-context"; frame: Chat.ContextState }
 	| { kind: "top-compaction"; frame: Chat.CompactionState };
 
 export const initialThreadsState: ThreadsState = {
@@ -109,10 +106,7 @@ function applyInThreadFrame(
 				}),
 			};
 		case "chat:context":
-			return {
-				...view,
-				usage: inner.usage,
-			};
+			return view;
 		case "chat:compaction":
 			if (inner.status === "compacting") return { ...view, compacting: true };
 			if (inner.status === "idle") return { ...view, compacting: false };
@@ -165,7 +159,6 @@ export function threadsReducer(state: ThreadsState, action: ThreadsAction): Thre
 			return {
 				...state,
 				summaries,
-				topUsage: action.frame.usage,
 				topCompactions: action.frame.compactions ?? [],
 				topCompacting: !!action.frame.compacting,
 			};
@@ -193,7 +186,6 @@ export function threadsReducer(state: ThreadsState, action: ThreadsAction): Thre
 				}),
 				busy: action.frame.busy,
 				runs: action.frame.runs,
-				usage: action.frame.usage,
 				compactions: action.frame.compactions ?? [],
 				compacting: !!action.frame.compacting,
 				alsoToChat: previous?.alsoToChat ?? false,
@@ -217,8 +209,6 @@ export function threadsReducer(state: ThreadsState, action: ThreadsAction): Thre
 				},
 			};
 		}
-		case "top-context":
-			return { ...state, topUsage: action.frame.usage };
 		case "top-compaction":
 			if (action.frame.status === "compacting") return { ...state, topCompacting: true };
 			if (action.frame.status === "idle") return { ...state, topCompacting: false };
