@@ -77,10 +77,12 @@ test("images open a keyboard-accessible lightbox and return focus on close", asy
 		.toBeFocused();
 	await page.keyboard.press("Enter");
 	await expect(preview).toBeVisible();
-	// Focus starts on the viewer, and Tab reaches its controls without leaving it.
-	await expect(preview).toBeFocused();
-	await page.keyboard.press("Tab");
-	await expect(preview.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+	// Focus starts on Close, and Tab reaches the controls without leaving the viewer. On its dark
+	// ground the focus ring is the page's colour, not petrol.
+	let close = preview.getByRole("button", { name: "Close", exact: true });
+	await expect(close).toBeFocused();
+	await expect(close).toHaveCSS("outline-style", "solid");
+	await expect(close).toHaveCSS("outline-color", "oklch(1 0 0)");
 	await page.keyboard.press("Shift+Tab");
 	await expect(preview.getByRole("button", { name: "Download image", exact: true })).toBeFocused();
 	await page.keyboard.press("Tab");
