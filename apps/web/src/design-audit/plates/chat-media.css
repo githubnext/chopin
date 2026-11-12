@@ -6,3 +6,9 @@
 	inline-size: min(100%, 32rem);
 	margin-block-end: 1.5rem;
 }
+
+.design-audit-chat-media-kinds {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}

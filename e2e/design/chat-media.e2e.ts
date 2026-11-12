@@ -70,8 +70,9 @@ test("an image is Slack's frame, at most 480 wide, with its toolbar 10px into it
 
 test("several images are Slack's grid: 4px apart, 8px corners, at most 480 wide", async ({ page }) => {
 	let galleries = media(page).locator("[data-chat-image-gallery]");
-	await expect(galleries).toHaveCount(3);
-	for (let [index, shape] of ["pair", "trio", "quad"].entries()) {
+	// Two of Slack's grids; the pair is measured in Chat itself (e2e/chat-media.e2e.ts).
+	await expect(galleries).toHaveCount(2);
+	for (let [index, shape] of ["trio", "quad"].entries()) {
 		let gallery = galleries.nth(index);
 		await expect(gallery).toHaveAttribute("data-shape", shape);
 		expect((await box(gallery)).width).toBeLessThanOrEqual(480);
@@ -81,10 +82,10 @@ test("several images are Slack's grid: 4px apart, 8px corners, at most 480 wide"
 		expect(Math.round(second.x - (first.x + first.width))).toBe(4);
 		expect(await css(tiles.nth(0), "border-top-left-radius")).toEqual(["8px"]);
 	}
-	let quad = galleries.nth(2).locator('[data-chat-image="tile"]');
+	let quad = galleries.nth(1).locator('[data-chat-image="tile"]');
 	await expect(quad).toHaveCount(4);
 	await expect(quad.nth(3)).toContainText("+2");
-	let trio = galleries.nth(1).locator('[data-chat-image="tile"]');
+	let trio = galleries.nth(0).locator('[data-chat-image="tile"]');
 	expect((await box(trio.nth(0))).height).toBeCloseTo((await box(trio.nth(1))).height * 2 + 4, 0);
 });
 
@@ -100,20 +101,18 @@ test("an image that cannot be shown is Slack's quiet box of 360 by 240, saying w
 
 test("a file is Slack's card: 12px corners, a 1px edge, 12px padding, a 40px icon, 8px apart", async ({ page }) => {
 	let cards = media(page).locator('[data-chat-files] [data-slot="message-attachment"]');
-	await expect(cards).toHaveCount(8);
-	let kinds = await cards.locator(".chat-file-icon").evaluateAll(icons =>
-		icons.map(icon => icon.getAttribute("data-file-kind"))
-	);
-	expect(kinds).toEqual([
-		"pdf",
-		"text",
-		"spreadsheet",
-		"slides",
-		"code",
-		"archive",
-		"document",
-		"generic",
-	]);
+	// Two cards; every type's icon is drawn beside them, and coloured below.
+	await expect(cards).toHaveCount(2);
+	expect(
+		await cards.locator(".chat-file-icon").evaluateAll(icons =>
+			icons.map(icon => icon.getAttribute("data-file-kind"))
+		),
+	).toEqual(["spreadsheet", "generic"]);
+	expect(
+		await media(page).locator(".design-audit-chat-media-kinds .chat-file-icon").evaluateAll(
+			icons => icons.map(icon => icon.getAttribute("data-file-kind")),
+		),
+	).toEqual(["pdf", "document", "spreadsheet", "slides", "code", "text", "archive", "generic"]);
 	let card = cards.nth(0).locator("button").first();
 	expect(await css(card, "border-top-width", "border-top-left-radius", "padding-top", "min-height"))
 		.toEqual(["1px", "12px", "12px", "64px"]);
