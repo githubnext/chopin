@@ -292,15 +292,19 @@ test(
 		await expect(tools).toHaveCount(3);
 		await expectNoHorizontalOverflow(page);
 
-		// The research child's link opens the child document.
+		// The research child's link opens the child document in this tab, as Chopin's own links do,
+		// and Back returns to the document and its Chat.
 		await page.setViewportSize({ width: 1280, height: 800 });
 		let childLink = subagentRow.getByRole("link", { name: "Open the research document" });
 		await expect(childLink).toHaveAttribute("href", childHref);
-		let [childPage] = await Promise.all([
-			page.context().waitForEvent("page"),
-			childLink.click(),
-		]);
-		await expect(childPage).toHaveURL(new RegExp(`/children/${child.slug}$`));
-		await childPage.close();
+		await expect(childLink).not.toHaveAttribute("target", "_blank");
+		let documentUrl = page.url();
+		let tabs = page.context().pages().length;
+		await childLink.click();
+		await expect(page).toHaveURL(new RegExp(`/children/${child.slug}$`));
+		expect(page.context().pages()).toHaveLength(tabs);
+		await page.goBack();
+		await expect(page).toHaveURL(documentUrl);
+		await expect(subagentRow).toBeVisible();
 	},
 );

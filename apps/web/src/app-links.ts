@@ -3,9 +3,10 @@
  *
  * A link to a section of the document on show (`#overview`, or the document's own address with
  * that hash) goes there; a link to another document opens it in the app, at its section when it
- * names one. Anything else, another site included, is not the app's to follow. The shell follows
- * these for a click anywhere on the page, and the editor's Open and Chat's links ask here too, so
- * a link goes to the same place from wherever it is written.
+ * names one. Anything else, another site included, is not the app's to follow. The document on
+ * show follows a click on a section link anywhere on its page (`section-links.ts`), the shell's
+ * router another page, and the editor's Open and Chat's links ask here too, so a link goes to the
+ * same place from wherever it is written. Loaded with the document, not the shell.
  */
 
 /** A page of the app, as the path after the origin. Every other path belongs to the server. */
