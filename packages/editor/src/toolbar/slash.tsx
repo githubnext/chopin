@@ -45,9 +45,12 @@ import {
 } from "@chopin/dialect";
 
 import { $createTableNodeWithDimensions } from "@lexical/table";
+import { $createHorizontalRuleNode } from "@lexical/react/LexicalHorizontalRuleNode";
+import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
 import { $createParagraphNode, $createTextNode, $insertNodes } from "lexical";
 
 import {
+	BulletedListIcon,
 	CheckIcon,
 	CodeIcon,
 	ColumnsIcon,
@@ -58,6 +61,8 @@ import {
 	InfoIcon,
 	InvestigationIcon,
 	MagnifierIcon,
+	MinusIcon,
+	NumberedListIcon,
 	TableIcon,
 	TabsIcon,
 } from "@chopin/icons";
@@ -78,6 +83,7 @@ import {
 import { aboveDock } from "./dock-clearance";
 import { PLANNER_NAME } from "../people";
 import type { ReactElement } from "react";
+import type { HeadingTagType } from "@lexical/rich-text";
 import type { IconProps } from "@chopin/icons";
 import type { ElementNode, LexicalCommand, LexicalEditor, LexicalNode } from "lexical";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
@@ -153,25 +159,114 @@ function insertContainer(
 	});
 }
 
+/** A text style's mark, drawn in an icon's place as the block menu draws it. */
+function glyph(mark: string) {
+	return function Glyph() {
+		return (
+			<span
+				aria-hidden="true"
+				className="inline-grid size-4 shrink-0 place-items-center text-xs leading-none font-semibold"
+			>
+				{mark}
+			</span>
+		);
+	};
+}
+
+function heading(level: 1 | 2 | 3): SlashCommand {
+	let tag = `h${level}` as HeadingTagType;
+	return {
+		id: tag,
+		label: `Heading ${level}`,
+		hint: level === 1
+			? "Big section heading"
+			: level === 2
+			? "Medium section heading"
+			: "Small section heading",
+		icon: glyph(`H${level}`),
+		group: "Basic blocks",
+		keywords: ["heading", "title", tag, "#".repeat(level)],
+		kind: "insert",
+		run: editor => replace(editor, () => $createHeadingNode(tag)),
+	};
+}
+
 /**
- * What the menu offers.
- *
- * Only blocks markdown cannot type. Headings, quotes and lists have shortcuts
- * — `# `, `> `, `- `, `1. ` — and a control in the selection bubble, so listing
- * them here would be a third way to do what two already do, and would bury the
- * things that have no other route.
- *
- * Task lists are the second exception: `[ ] ` converts a line, but nobody
- * guesses that, so the menu is where they are found.
- *
- * A code fence is the other exception: ``` is not wired, because
- * MDXEditor's transformer builds its own code node rather than the dialect's.
+ * What the menu offers, as Notion's does: the basic blocks first, each of
+ * which also has a Markdown shortcut (`# `, `- `, `1. `, `[] `, `> `, `---`,
+ * ```), then the blocks only the menu makes.
  *
  * Order is the menu order, and the first match is preselected: ordinary blocks
  * come first and Research stays last, so a bare `/` then Enter never starts a
  * durable job. It becomes the first match only once the query narrows to it.
  */
 const COMMANDS: SlashCommand[] = [
+	{
+		id: "text",
+		label: "Text",
+		hint: "Plain writing",
+		icon: glyph("Aa"),
+		group: "Basic blocks",
+		keywords: ["text", "paragraph", "plain"],
+		kind: "insert",
+		run: editor => replace(editor, $createParagraphNode),
+	},
+	heading(1),
+	heading(2),
+	heading(3),
+	{
+		id: "bullet",
+		label: "Bulleted list",
+		hint: "A simple list",
+		icon: BulletedListIcon,
+		group: "Basic blocks",
+		keywords: ["bullet", "list", "unordered", "-"],
+		kind: "insert",
+		run: placed(editor => insertList(editor, "bullet")),
+	},
+	{
+		id: "number",
+		label: "Numbered list",
+		hint: "A list in order",
+		icon: NumberedListIcon,
+		group: "Basic blocks",
+		keywords: ["number", "list", "ordered", "1."],
+		kind: "insert",
+		run: placed(editor => insertList(editor, "number")),
+	},
+	{
+		id: "quote",
+		label: "Quote",
+		hint: "Set a passage apart",
+		icon: glyph("\u201c"),
+		group: "Basic blocks",
+		keywords: ["quote", "blockquote", ">"],
+		kind: "insert",
+		run: editor => replace(editor, $createQuoteNode),
+	},
+	{
+		id: "divider",
+		label: "Divider",
+		hint: "A line between sections",
+		icon: MinusIcon,
+		group: "Basic blocks",
+		keywords: ["divider", "rule", "separator", "line", "---"],
+		kind: "insert",
+		run: placed(editor =>
+			editor.update(() => {
+				let selection = $getSelection();
+				let block = $isRangeSelection(selection)
+					? selection.anchor.getNode().getTopLevelElement()
+					: null;
+				let rule = $createHorizontalRuleNode();
+				// The line the menu was opened on, emptied of its `/query`, becomes the line after.
+				if ($isParagraphNode(block) && block.getTextContentSize() === 0) {
+					block.insertBefore(rule);
+					block.selectStart();
+				} else $insertBlock(rule);
+			})
+		),
+	},
 	{
 		id: "callout",
 		label: "Callout",

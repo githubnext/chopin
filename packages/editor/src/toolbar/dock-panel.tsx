@@ -56,8 +56,8 @@ export type PanelChoice = {
 	run: (editor: LexicalEditor) => void;
 };
 
-/** Kinds of list belong with the other text styles, not with the blocks. */
-const STYLED = new Set(["tasks"]);
+/** Text styles and kinds of list have their own panel, not a place among the blocks. */
+const STYLED = new Set(["tasks", "text", "h1", "h2", "h3", "bullet", "number", "quote"]);
 
 /** The slash menu's blocks, and the actions (Research, Investigate) the host offers. */
 export function insertChoices(actions: ReadonlySet<string>): PanelChoice[] {
