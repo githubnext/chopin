@@ -10,29 +10,6 @@
 	padding-block-end: env(safe-area-inset-bottom);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-	.chat-message-picker {
-		animation: emoji-picker-in var(--duration-fast) var(--ease-out);
-	}
-
-	.chat-message-picker[data-sheet] {
-		animation-name: emoji-picker-rise;
-	}
-}
-
-@keyframes emoji-picker-in {
-	from {
-		opacity: 0;
-		scale: 0.98;
-	}
-}
-
-@keyframes emoji-picker-rise {
-	from {
-		translate: 0 1rem;
-	}
-}
-
 .emoji-picker {
 	display: flex;
 	min-height: 0;

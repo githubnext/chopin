@@ -1,6 +1,14 @@
 import { expect, test } from "bun:test";
 
-import { ownEmoji, QUICK_REACTIONS, reactedBy, reactionHint, withReactions } from "./reactions";
+import {
+	ownEmoji,
+	QUICK_REACTIONS,
+	reactedBy,
+	reactionChanges,
+	reactionCounts,
+	reactionHint,
+	withReactions,
+} from "./reactions";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -50,4 +58,27 @@ test("a message's reactions are replaced, and cleared when the list is empty", (
 	expect(next[1]).toBe(entries[1]!);
 	expect(withReactions(next, "b", [])[1]!.reactions).toBeUndefined();
 	expect(entries[0]!.reactions).toBeUndefined();
+});
+
+test("only a pill that appeared or a count that changed since the message was last drawn moves", () => {
+	let first: Chat.Reaction[] = [
+		{ emoji: "🎉", handles: ["ana", "ben"] },
+		{ emoji: "👀", handles: ["ben"] },
+	];
+	// Drawn for the first time, history or not, nothing has changed.
+	expect(reactionChanges(undefined, first)).toEqual({ entered: new Set(), counted: new Set() });
+	let next: Chat.Reaction[] = [
+		{ emoji: "🎉", handles: ["ana", "ben", "cy"] },
+		{ emoji: "👀", handles: ["ben"] },
+		{ emoji: "✅", handles: ["ana"] },
+	];
+	expect(reactionChanges(reactionCounts(first), next)).toEqual({
+		entered: new Set(["✅"]),
+		counted: new Set(["🎉"]),
+	});
+	// The same reactions again move nothing; one taken away is simply gone.
+	expect(reactionChanges(reactionCounts(next), next.slice(1))).toEqual({
+		entered: new Set(),
+		counted: new Set(),
+	});
 });

@@ -42,3 +42,30 @@ export function withReactions(
 			: entry
 	);
 }
+
+/** How many reacted with each emoji, as a message last showed them. */
+export type ReactionCounts = ReadonlyMap<string, number>;
+
+export function reactionCounts(reactions: readonly Chat.Reaction[]): ReactionCounts {
+	return new Map(reactions.map(reaction => [reaction.emoji, reaction.handles.length]));
+}
+
+/**
+ * Which pills are new and which counts changed since a message last showed its reactions, so only
+ * those move. With nothing shown before (the message has just been drawn, history included) nothing
+ * has changed.
+ */
+export function reactionChanges(
+	before: ReactionCounts | undefined,
+	reactions: readonly Chat.Reaction[],
+): { entered: Set<string>; counted: Set<string> } {
+	let entered = new Set<string>();
+	let counted = new Set<string>();
+	if (!before) return { entered, counted };
+	for (let reaction of reactions) {
+		let count = before.get(reaction.emoji);
+		if (count === undefined) entered.add(reaction.emoji);
+		else if (count !== reaction.handles.length) counted.add(reaction.emoji);
+	}
+	return { entered, counted };
+}

@@ -48,6 +48,17 @@
 	pointer-events: none;
 	color: var(--color-text-quaternary);
 }
+/* Once a message is sent the words leave at once and the hint fades back in their place. */
+@media (prefers-reduced-motion: no-preference) {
+	.chat-composer .composer-draft-input[data-empty]::before {
+		animation: composer-hint-in var(--duration-base) var(--ease-out);
+	}
+}
+@keyframes composer-hint-in {
+	from {
+		opacity: 0;
+	}
+}
 .chat-composer .composer-draft-input[aria-disabled="true"] {
 	color: var(--color-text-tertiary);
 }
@@ -514,6 +525,7 @@
 	margin-inline: 0.25rem;
 	background: var(--color-edge);
 }
+/* Slack's footer: 28px buttons 4px from its top and foot and 6px from its sides. */
 .chat-composer .composer-row {
 	display: flex;
 	align-items: center;
@@ -525,7 +537,6 @@
 	display: flex;
 	align-items: center;
 	gap: 0.125rem;
-/* Slack's footer: 28px buttons 4px from its top and foot and 6px from its sides. */
 	min-width: 0;
 }
 .chat-composer .composer-left {

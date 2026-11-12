@@ -7,7 +7,11 @@ import "./message-actions.css";
 import type { Chat } from "@chopin/protocol";
 
 export function ReactionPills(
-	{ handle, onAdd, onToggle, pending, reactions }: {
+	{ counted, entered, handle, onAdd, onToggle, pending, reactions }: {
+		/** Emoji whose count changed since the message last drew them: the count rolls in. */
+		counted?: ReadonlySet<string>;
+		/** Emoji whose pill is new since the message last drew them: the pill pops in. */
+		entered?: ReadonlySet<string>;
 		handle: string;
 		/** Opens the message's emoji picker, from the add pill a pointer finds after the reactions. */
 		onAdd?: () => void;
@@ -31,12 +35,19 @@ export function ReactionPills(
 						data-tooltip-detail=""
 						data-tooltip-verbatim=""
 						data-pending={pending.has(reaction.emoji) || undefined}
+						data-reaction-enter={entered?.has(reaction.emoji) || undefined}
 						key={reaction.emoji}
 						onClick={() => onToggle(reaction.emoji, !own)}
 						type="button"
 					>
 						<span aria-hidden="true" className="chat-reaction-emoji">{reaction.emoji}</span>
-						<span aria-hidden="true" className="chat-reaction-count">
+						<span
+							aria-hidden="true"
+							className="chat-reaction-count"
+							data-reaction-counted={counted?.has(reaction.emoji) || undefined}
+							// A new count is a new element, so it can roll in from where a count rises.
+							key={reaction.handles.length}
+						>
 							{reaction.handles.length}
 						</span>
 					</button>
