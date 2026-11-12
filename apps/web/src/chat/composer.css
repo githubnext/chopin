@@ -621,9 +621,77 @@
 	outline: var(--edge-width) solid var(--color-brand);
 	outline-offset: calc(-1 * var(--edge-width));
 }
-/* A wrapper the levels' lane is reached through; it draws no box of its own. */
+/*
+ * Wrappers the list and the levels' lane are reached through, which hold each one's scrollbar
+ * (`ScrollThumb`). They draw no box of their own; the list's gives up its height as the list does.
+ */
+.composer-model-list {
+	position: relative;
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+}
 .composer-model-levels {
-	display: contents;
+	position: relative;
+	flex: none;
+}
+/*
+ * The selector's scrollbars: drawn whenever the list or the levels overflow, with no pointer over
+ * them, so a person sees there is more; gone when everything fits. Chat's thumb (6px, round, inset
+ * 2px in a 10px lane, the strongest scrollbar ink), darkening under the pointer and while dragged.
+ * A finger scrolls what is under it, as in Chat; only a pointer that hovers takes the thumb.
+ */
+.model-scroll-track {
+	position: absolute;
+	z-index: 1;
+	contain: strict;
+	pointer-events: none;
+}
+.model-scroll-track[data-idle] {
+	display: none;
+}
+.model-scroll-track[data-axis="y"] {
+	inset-inline-end: 0;
+	width: var(--scrollbar-size);
+}
+.model-scroll-track[data-axis="x"] {
+	bottom: 0;
+	height: var(--scrollbar-size);
+}
+.model-scroll-thumb {
+	border: solid transparent;
+	border-width: var(--scrollbar-inset);
+	border-radius: var(--radius-full);
+	background: var(--color-scrollbar-thumb-active) padding-box;
+	transition: background-color var(--duration-fast) var(--ease-out);
+}
+.model-scroll-track[data-axis="y"] > .model-scroll-thumb {
+	width: 100%;
+	min-height: var(--scrollbar-thumb-min);
+}
+.model-scroll-track[data-axis="x"] > .model-scroll-thumb {
+	height: 100%;
+	min-width: var(--scrollbar-thumb-min);
+}
+@media (hover: hover) and (pointer: fine) {
+	.model-scroll-thumb {
+		pointer-events: auto;
+	}
+	.model-scroll-thumb:hover,
+	.model-scroll-track[data-dragging] > .model-scroll-thumb {
+		background-color: var(--color-text-tertiary);
+	}
+}
+/* Forced colours draw no background of ours: the thumb is its edge, in the system's text colour. */
+@media (forced-colors: active) {
+	.model-scroll-thumb {
+		border-color: currentcolor;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.model-scroll-thumb {
+		transition: none;
+	}
 }
 /*
  * The Thinking row keeps the label above the levels when they cannot sit beside it, and the levels
@@ -634,6 +702,10 @@
 .composer-model-effort {
 	--composer-level-fade: 1.5rem;
 	flex-wrap: wrap;
+}
+/* Levels that overflow leave room under them for their scrollbar. */
+.composer-model-effort[data-more] {
+	padding-bottom: calc(var(--scrollbar-size) + 0.25rem);
 }
 .composer-model-effort > [role="radiogroup"] {
 	position: relative;
