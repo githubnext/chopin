@@ -79,7 +79,11 @@ export function asksChopinKey(event: {
 		&& !event.shiftKey && !event.altKey;
 }
 
-/** What the empty draft says: the way to Chopin, where there is one. */
-export function draftPlaceholder(agent: boolean): string {
+/**
+ * What the empty draft says: the way to Chopin, where there is one. Alone in the document, a person
+ * is talking to it (the server sends their every message to it), and the draft says so.
+ */
+export function draftPlaceholder(agent: boolean, alone = false): string {
+	if (agent && alone) return `Message ${PLANNER_NAME}`;
 	return agent ? `Message the team, or ${MENTION} to ask` : "Message the team";
 }

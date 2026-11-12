@@ -367,6 +367,43 @@ test("a message to a machine that is away is refused with the draft kept, nothin
 	}
 });
 
+test("alone, a message without the mention is Chopin's: refused while no machine is there, then a turn at once, and given to the turn that runs", async ({ page }) => {
+	test.setTimeout(90_000);
+	let room = await open(page);
+	let input = chatInput(page);
+	let sent = (text: string) =>
+		chat(page).locator("[data-chat-message-id]").getByText(text, { exact: true });
+	await expect(input).toHaveAttribute("data-placeholder", "Message chopin");
+
+	// With nobody else here the message is for Chopin, so no machine means the same refusal.
+	await fillChat(input, "outline the plan");
+	await input.press("Enter");
+	let refusal = chat(page).locator("[data-quiet-note]");
+	await expect(refusal).toContainText("No machine is connected, so this message wasn't sent.");
+	await expectChatValue(input, "outline the plan");
+	await expect(sent("outline the plan")).toHaveCount(0);
+
+	let planner = await machine(room);
+	try {
+		await input.press("Enter");
+		await expect(READING(page)).toBeVisible();
+		await expect(refusal).toHaveCount(0);
+		await expectChatValue(input, "");
+		expect(planner.prompts).toHaveLength(1);
+		expect(planner.prompts[0]).toContain("outline the plan");
+
+		// While its turn runs, the next one is given to that turn, as a mention's would be.
+		await fillChat(input, "and cover the rollback too");
+		await input.press("Enter");
+		await expect(nextStep(page, "and cover the rollback too")).toHaveCount(1);
+		expect(planner.steered).toEqual([`@${HANDLE}: and cover the rollback too`]);
+		expect(planner.prompts).toHaveLength(1);
+		await expect(sent("and cover the rollback too")).toHaveCount(1);
+	} finally {
+		await planner.client.detach();
+	}
+});
+
 test("when a newer draft is already in the composer, a refused earlier message offers Try again and Delete on itself, and Delete takes it away from this browser only", async ({ page }) => {
 	test.setTimeout(90_000);
 	let hold = true;

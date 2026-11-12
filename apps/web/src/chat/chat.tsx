@@ -556,6 +556,8 @@ export function Chat(
 		? participation.state
 		: undefined;
 	let typingEnabled = composerReady && active && agent && !!participationState?.enabled;
+	// Alone in the document, everything this person sends goes to chopin, as the server decides it.
+	let alone = !!agent && !!participationState?.enabled && !!participationState.alone;
 	// A message to the machine is kept in the outbox, so it needs neither the connection nor the
 	// machine to be there when it is sent. Only a server that acknowledges sends can be asked to.
 	let outboxed = agent && sendAcknowledgements;
@@ -569,10 +571,10 @@ export function Chat(
 		submitted: draft.submission?.to,
 	});
 	let plannerBound = outboxed && askingChopin;
-	let busyRefused = askingChopin && sendError?.code === "planner-busy"
+	let busyRefused = (askingChopin || alone) && sendError?.code === "planner-busy"
 		&& (busy || counts.active > 0);
 	// An image goes where people read it, and to the Planner only if its model does.
-	let imagesAllowed = !agent || !askingChopin
+	let imagesAllowed = !agent || !(askingChopin || alone)
 		|| modelReadsImages(modelControl?.catalog, modelControl?.choice);
 	let files = useFiles({ channelId: room, limits: attachments, imagesAllowed });
 	let filesRef = useRef(files);
@@ -814,7 +816,15 @@ export function Chat(
 			}),
 			wire.on<Wire.ParticipationState>("chat:participation", frame => {
 				if (!loaded || synchronized.current !== wire) return;
-				setParticipation({ room, wire, state: { enabled: frame.enabled, paused: frame.paused } });
+				setParticipation({
+					room,
+					wire,
+					state: {
+						enabled: frame.enabled,
+						paused: frame.paused,
+						...(frame.alone ? { alone: true } : {}),
+					},
+				});
 			}),
 			wire.on<Wire.ThreadSummaries>("chat:threads", frame => {
 				dispatchThreads({ kind: "summaries", frame });
@@ -1032,7 +1042,8 @@ export function Chat(
 		void wire.ask<Wire.Sent>("chat:send", payload).then(() => {
 			clearSubmittedDraft(submitted);
 			files.clear();
-			if (payload.to === "planner") setNote(undefined);
+			// Alone, a message to the room went to chopin, which took it.
+			if (payload.to === "planner" || alone) setNote(undefined);
 		}, error => {
 			// A restart cut the send off. The draft keeps its request id, so it is made again once
 			// the server is back, and the server answers one it already holds with that message.
@@ -1376,6 +1387,7 @@ export function Chat(
 			<Suspense fallback={null}>
 				<LazyThreadPanel
 					agent={!!agent}
+					alone={alone}
 					archived={archived}
 					connected={transcriptReady}
 					decisions={decisions}
@@ -1582,6 +1594,7 @@ export function Chat(
 				rootRef={composerRoot}
 				inputRef={textarea}
 				agent={!!agent}
+				alone={alone}
 				model={modelControl}
 				chopin={agent ? { disabled: !draftable || sending, onAsk: askChopin } : undefined}
 				banner={leadNode

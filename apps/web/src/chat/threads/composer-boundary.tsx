@@ -18,6 +18,7 @@ export function ThreadComposerBoundary(
 		<div className="thread-composer-boundary shrink-0" data-thread-composer="">
 			<ChatComposer
 				agent={props.agent}
+				alone={props.alone}
 				banner={props.banner}
 				chopin={props.chopin}
 				dictation={props.dictation}

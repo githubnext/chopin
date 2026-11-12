@@ -143,7 +143,9 @@ test("a message the sparkle button addressed reaches the Planner, which takes a 
 	await expect.poll(() => entries.get(sent[0]!.requestId)?.to).toBe("planner");
 
 	// Nothing stays on: without the mention the message is the team's. It is in the Chat, and the
-	// Planner is not asked.
+	// Planner is not asked. A teammate is there: alone, every message would be Chopin's.
+	await join("bo");
+	await expect(draft).toHaveAttribute("data-placeholder", "Message the team, or @chopin to ask");
 	await draft.fill("thanks, both of you");
 	await draft.press("Enter");
 	await expect(chat.getByText("thanks, both of you", { exact: true })).toBeVisible();
