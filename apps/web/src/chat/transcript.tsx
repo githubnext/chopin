@@ -331,8 +331,9 @@ function MessageBody(
 		<ChatImageDocument value={room}>
 			<MessageImages
 				sender={{
-					// The viewer names who sent it and when, as the row's own head does.
-					...messageSpeaker({ author: message.author, ts: message.ts }),
+					// The viewer names who sent it and how long ago, as Slack's does.
+					name: messageSpeaker({ author: message.author }).name,
+					...(message.ts === undefined ? {} : { ts: message.ts }),
 					face: message.author.kind === "agent"
 						? <ChopinMark circle />
 						: <Face decorative handle={message.author.handle} size={36} titled={false} />,

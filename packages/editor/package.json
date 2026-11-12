@@ -43,6 +43,10 @@
 			"types": "./src/widgets/image-lightbox.tsx",
 			"default": "./src/widgets/image-lightbox.tsx"
 		},
+		"./image-place": {
+			"types": "./src/widgets/image-place.ts",
+			"default": "./src/widgets/image-place.ts"
+		},
 		"./people": {
 			"types": "./src/people.ts",
 			"default": "./src/people.ts"

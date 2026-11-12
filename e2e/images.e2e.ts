@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 
+import { seedChannelImage, titleChannel } from "./database";
 import { content, expect, ready, test, written } from "./room";
 
 import type { Page, WebSocketRoute } from "@playwright/test";
@@ -33,12 +34,15 @@ async function width(page: Page) {
 }
 
 test("images open a keyboard-accessible lightbox and return focus on close", async ({
+	baseURL,
 	join,
 	page,
+	room,
 	seed,
 }, testInfo) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	await loadImage(page);
+	await titleChannel(Number(new URL(baseURL!).port), room, "Prototype review");
 	await seed(SOURCE);
 	await join("ana");
 	await expect.poll(() =>
@@ -48,20 +52,24 @@ test("images open a keyboard-accessible lightbox and return focus on close", asy
 	await image(page).click();
 	let preview = page.getByRole("dialog", { name: "Image preview", exact: true });
 	await expect(preview).toBeVisible();
-	await expect(preview.getByRole("img", { name: "An open working document", exact: true }))
-		.toBeVisible();
-	await expect(preview.getByRole("button", { name: "Close image preview", exact: true }))
-		.toBeFocused();
-	let fitted = await preview.getByRole("img").evaluate(element =>
-		element.getBoundingClientRect().width
+	let shown = preview.getByRole("img", { name: "An open working document", exact: true });
+	await expect(shown).toBeVisible();
+	// A document's picture has no sender: the document's title, then the picture's name.
+	await expect(preview.locator(".image-viewer-name")).toHaveText("Prototype review");
+	await expect(preview.locator(".image-viewer-detail-text")).toHaveText(
+		"An open working document",
 	);
+	await expect(preview).toHaveAccessibleDescription(/Prototype review/);
+	// One picture has no Previous or Next and no count.
+	await expect(preview.getByRole("button", { name: "Next", exact: true })).toHaveCount(0);
+	await expect(preview.getByRole("status")).toHaveCount(0);
+	let fitted = await shown.evaluate(element => element.getBoundingClientRect().width);
 	await preview.getByRole("button", { name: "Zoom in", exact: true }).click();
-	await expect(preview.getByRole("button", { name: "Zoom out", exact: true })).toBeVisible();
-	await expect.poll(() =>
-		preview.getByRole("img").evaluate(element => element.getBoundingClientRect().width)
-	)
+	await expect(preview.getByRole("button", { name: "Zoom out", exact: true })).toBeEnabled();
+	await expect.poll(() => shown.evaluate(element => element.getBoundingClientRect().width))
 		.toBeGreaterThan(fitted);
 	await preview.getByRole("button", { name: "Zoom out", exact: true }).click();
+	await expect(preview.getByRole("button", { name: "Zoom out", exact: true })).toBeDisabled();
 	await page.screenshot({ path: testInfo.outputPath("image-lightbox.png") });
 	await page.keyboard.press("Escape");
 	await expect(preview).toHaveCount(0);
@@ -69,7 +77,41 @@ test("images open a keyboard-accessible lightbox and return focus on close", asy
 		.toBeFocused();
 	await page.keyboard.press("Enter");
 	await expect(preview).toBeVisible();
-	await preview.getByRole("button", { name: "Close image preview", exact: true }).click();
+	// Focus starts on the viewer, and Tab reaches its controls without leaving it.
+	await expect(preview).toBeFocused();
+	await page.keyboard.press("Tab");
+	await expect(preview.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+	await page.keyboard.press("Shift+Tab");
+	await expect(preview.getByRole("button", { name: "Download image", exact: true })).toBeFocused();
+	await page.keyboard.press("Tab");
+	await expect(preview.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+	await page.keyboard.press("Enter");
+	await expect(preview).toHaveCount(0);
+	await expect(content(page).getByRole("button", { name: "View image", exact: true }))
+		.toBeFocused();
+});
+
+test("a document's own upload downloads as the stored file under the picture's name, and fades in", async ({ baseURL, join, page, room, seed }) => {
+	await page.setViewportSize({ width: 1280, height: 900 });
+	let bytes = readFileSync(new URL("./fixtures/raster-18x6.png", import.meta.url));
+	let src = await seedChannelImage(Number(new URL(baseURL!).port), room, bytes, "image/png");
+	await seed(`# Floor plan\n\n![Ground floor](${src})\n`);
+	await join("ana");
+	let picture = content(page).getByRole("img", { name: "Ground floor", exact: true });
+	await expect(picture).toBeVisible();
+	// So small a picture is under its own resize corner, so it is opened from its button.
+	await content(page).getByRole("button", { name: "View image", exact: true }).focus();
+	await page.keyboard.press("Enter");
+	let preview = page.getByRole("dialog", { name: "Image preview", exact: true });
+	await expect(preview).toHaveCSS("animation-name", "image-viewer-in");
+	let [saved] = await Promise.all([
+		page.waitForEvent("download"),
+		preview.getByRole("button", { name: "Download image", exact: true }).click(),
+	]);
+	expect(saved.suggestedFilename()).toBe("Ground floor.png");
+	let body = await (await saved.createReadStream()).toArray().then(parts => Buffer.concat(parts));
+	expect(body.equals(bytes)).toBe(true);
+	await page.keyboard.press("Escape");
 	await expect(preview).toHaveCount(0);
 });
 
@@ -218,11 +260,12 @@ test("keyboard resizing is undoable and stored widths stay inside narrow documen
 	await image(page).click();
 	let preview = page.getByRole("dialog", { name: "Image preview", exact: true });
 	await expect(preview).toBeVisible();
-	expect(
-		await preview.getByRole("img").evaluate(element => {
+	await expect(preview.getByRole("img")).toHaveAttribute("data-shown", "");
+	await expect.poll(() =>
+		preview.getByRole("img").evaluate(element => {
 			let box = element.getBoundingClientRect();
 			return box.x >= 0 && box.right <= innerWidth;
-		}),
+		})
 	).toBe(true);
 	await page.keyboard.press("Escape");
 });

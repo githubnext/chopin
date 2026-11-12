@@ -161,6 +161,9 @@ export function IconTooltip() {
 				let label = button.getAttribute("data-tooltip") ?? button.getAttribute("aria-label")
 					?? heldTitle ?? button.querySelector(".sr-only")?.textContent;
 				if (!label) return hide();
+				// A modal dialog is drawn above the page, so a tooltip for its controls is drawn inside it.
+				let layer = button.closest("dialog[open]") ?? document.body;
+				if (tooltip.parentElement !== layer) layer.append(tooltip);
 				tooltip.textContent = tooltipText(label, button.hasAttribute("data-tooltip-verbatim"));
 				tooltip.setAttribute("data-shortcut", button.dataset.tooltipShortcut ?? "");
 				let rect = button.getBoundingClientRect();

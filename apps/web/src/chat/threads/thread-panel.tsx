@@ -1,6 +1,7 @@
 import { useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { PLANNER_NAME, usePopoverDismissal } from "@chopin/editor";
+import { ImagePlace } from "@chopin/editor/image-place";
 import { ArrowLeftIcon, CloseIcon } from "@chopin/icons";
 import { formatForkedClock, isReplyEntry, replyCountLabel } from "@chopin/protocol/threads";
 
@@ -455,6 +456,9 @@ export function ThreadPanel(
 		? repliesOffNotice(offline)
 		: modelNotice;
 
+	// A thread's pictures are "in a thread in" the document, as Slack names a thread's files.
+	let outer = useContext(ImagePlace);
+	let place = outer && `a thread in ${outer}`;
 	let lead = (
 		<div className="thread-lead">
 			<p className="thread-provenance" data-thread-provenance="">
@@ -462,13 +466,15 @@ export function ThreadPanel(
 			</p>
 			{root && (
 				<div data-thread-root-message={root.id}>
-					<ThreadRoot
-						entry={root}
-						handle={handle}
-						intents={reactions.intents}
-						onReact={reactions.react}
-						room={room}
-					/>
+					<ImagePlace.Provider value={place}>
+						<ThreadRoot
+							entry={root}
+							handle={handle}
+							intents={reactions.intents}
+							onReact={reactions.react}
+							room={room}
+						/>
+					</ImagePlace.Provider>
 				</div>
 			)}
 			{(replyCount > 0 || !!workingTurn) && (
@@ -523,23 +529,25 @@ export function ThreadPanel(
 				)}
 			</header>
 
-			<Transcript
-				active
-				canEdit={composerReady}
-				compacting={view.compacting}
-				compactions={view.compactions}
-				completedWork={view.transcript.completedWork}
-				decisions={decisions}
-				entries={withoutFailure(view.transcript.entries, failureNode ? failed?.entry : undefined)}
-				handle={handle}
-				lead={lead}
-				live={connected && view.loaded}
-				onReact={reactions.react}
-				reactionIntents={reactions.intents}
-				room={room}
-				suspendedWork={suspendedWork}
-				working={workingTurn}
-			/>
+			<ImagePlace.Provider value={place}>
+				<Transcript
+					active
+					canEdit={composerReady}
+					compacting={view.compacting}
+					compactions={view.compactions}
+					completedWork={view.transcript.completedWork}
+					decisions={decisions}
+					entries={withoutFailure(view.transcript.entries, failureNode ? failed?.entry : undefined)}
+					handle={handle}
+					lead={lead}
+					live={connected && view.loaded}
+					onReact={reactions.react}
+					reactionIntents={reactions.intents}
+					room={room}
+					suspendedWork={suspendedWork}
+					working={workingTurn}
+				/>
+			</ImagePlace.Provider>
 
 			{agent && !!view.runs?.length && (
 				<div className="flex shrink-0 flex-col px-2.5 pb-2" data-thread-runs="">

@@ -82,19 +82,19 @@ test("opening a gallery tile tells onOpen which tile it was, by its picture, its
 	await expect(tiles.nth(3)).toContainText("+4");
 	for (let tile of await tiles.all()) await expect(tile).toHaveAttribute("data-load", "shown");
 	let opened = () => page.evaluate(() => (window as unknown as { __opened: number[] }).__opened);
-	let lightbox = page.locator('[data-slot="dialog-content"]');
+	let lightbox = page.locator("[data-image-viewer]");
 
 	await tiles.nth(2).locator("img").click();
-	await expect(lightbox.getByRole("status")).toHaveText("Image 3 of 8");
+	await expect(lightbox.getByRole("status")).toHaveText("3 of 8");
 	expect(await opened()).toEqual([2]);
 	await page.keyboard.press("ArrowRight");
-	await expect(lightbox.getByRole("status")).toHaveText("Image 4 of 8");
+	await expect(lightbox.getByRole("status")).toHaveText("4 of 8");
 	expect(await opened()).toEqual([2]);
 	await page.keyboard.press("Escape");
 	await expect(lightbox).toHaveCount(0);
 
 	await tiles.nth(3).click();
-	await expect(lightbox.getByRole("status")).toHaveText("Image 4 of 8");
+	await expect(lightbox.getByRole("status")).toHaveText("4 of 8");
 	expect(await opened()).toEqual([2, 3]);
 	await page.keyboard.press("Escape");
 	await expect(lightbox).toHaveCount(0);
@@ -102,12 +102,12 @@ test("opening a gallery tile tells onOpen which tile it was, by its picture, its
 	let first = tiles.nth(0);
 	await first.focus();
 	await page.keyboard.press("Enter");
-	await expect(lightbox.getByRole("status")).toHaveText("Image 1 of 8");
+	await expect(lightbox.getByRole("status")).toHaveText("1 of 8");
 	expect(await opened()).toEqual([2, 3, 0]);
 	await page.keyboard.press("Escape");
 	await expect(lightbox).toHaveCount(0);
 	await expect(first).toBeFocused();
 	await page.keyboard.press("Space");
-	await expect(lightbox.getByRole("status")).toHaveText("Image 1 of 8");
+	await expect(lightbox.getByRole("status")).toHaveText("1 of 8");
 	expect(await opened()).toEqual([2, 3, 0, 0]);
 });
