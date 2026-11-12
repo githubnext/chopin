@@ -12,9 +12,42 @@ function selected(page: Page) {
 	return content(page).locator("[data-block-selected]");
 }
 
-/** Let the browser's selectionchange reach Lexical before the next key. */
+/**
+ * Wait until the editor has read the page's caret. Lexical takes a caret the browser moved (a
+ * click, Home, End) from the `selectionchange` that follows, a task later; on a slow runner the
+ * next key can arrive first and act where the caret was before.
+ */
 async function settle(page: Page): Promise<void> {
-	await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+	await expect.poll(() =>
+		page.evaluate(() => {
+			type Point = { key: string; offset: number; type: string };
+			let root = document.querySelector<HTMLElement>(".plan-content");
+			let editor = (root as unknown as {
+				__lexicalEditor?: {
+					getEditorState(): { _selection: { anchor?: Point; focus?: Point } | null };
+					getElementByKey(key: string): HTMLElement | null;
+				};
+			} | null)?.__lexicalEditor;
+			let dom = getSelection();
+			let selection = editor?.getEditorState()._selection;
+			if (!editor || !dom?.anchorNode || !dom.focusNode) return false;
+			// Blocks selected as blocks have no caret to agree on.
+			if (!selection?.anchor || !selection.focus) return true;
+			let agrees = (point: Point, node: Node, offset: number) => {
+				let element = editor.getElementByKey(point.key);
+				if (!element?.contains(node)) return false;
+				return point.type !== "text" || point.offset === offset;
+			};
+			return agrees(selection.anchor, dom.anchorNode, dom.anchorOffset)
+				&& agrees(selection.focus, dom.focusNode, dom.focusOffset);
+		})
+	).toBe(true);
+}
+
+/** Press a key that moves the browser's caret, and wait for the editor to read where it went. */
+async function move(page: Page, key: string): Promise<void> {
+	await page.keyboard.press(key);
+	await settle(page);
 }
 
 test("Escape selects the block, arrows move and extend the selection, Delete removes it", async ({ join, room, seed }) => {
@@ -51,7 +84,7 @@ test("a second Escape lets go, Enter edits at the block's end, and a click leave
 	let page = await join("ana");
 	await content(page).getByText("One.").click();
 	await settle(page);
-	await page.keyboard.press("Home");
+	await move(page, "Home");
 	await page.keyboard.press("Escape");
 	await expect(selected(page)).toHaveText("One.");
 	await page.keyboard.press("Enter");
@@ -69,7 +102,7 @@ test("a second Escape lets go, Enter edits at the block's end, and a click leave
 	await content(page).getByText("Two.").click();
 	await settle(page);
 	await expect(selected(page)).toHaveCount(0);
-	await page.keyboard.press("End");
+	await move(page, "End");
 	await page.keyboard.type(" Clicked.");
 	await written(page, room, /^Two\. Clicked\.$/m);
 });
@@ -90,7 +123,7 @@ test("selected blocks copy as Markdown and paste back as the same blocks; cut re
 
 	await content(page).getByText("After.").click();
 	await settle(page);
-	await page.keyboard.press("End");
+	await move(page, "End");
 	await page.keyboard.press("Enter");
 	await settle(page);
 	await page.keyboard.press("ControlOrMeta+v");
@@ -193,6 +226,7 @@ test("the handle drags a block to where the line shows, and its menu turns, dupl
 	await page.keyboard.press("ControlOrMeta+/");
 	await expect(menu).toBeVisible();
 	await expect(selected(page)).toHaveText("Three.");
+	// The menu's own End: its last item.
 	await page.keyboard.press("End");
 	await expect(menu.getByRole("menuitem", { name: "Delete" })).toHaveAttribute(
 		"data-active",
@@ -207,7 +241,7 @@ test("Backspace at the start of a heading or a list item makes it text, then mer
 	let page = await join("ana");
 	await content(page).getByText("Section").click();
 	await settle(page);
-	await page.keyboard.press("Home");
+	await move(page, "Home");
 	await page.keyboard.press("Backspace");
 	await written(page, room, /^Intro\.\n\nSection\n\n/m);
 	await page.keyboard.press("Backspace");
@@ -215,7 +249,7 @@ test("Backspace at the start of a heading or a list item makes it text, then mer
 
 	await content(page).getByText("Next").click();
 	await settle(page);
-	await page.keyboard.press("Home");
+	await move(page, "Home");
 	await page.keyboard.press("Backspace");
 	await written(page, room, /^- Item\n\nNext\s*$/m);
 });
@@ -225,7 +259,7 @@ test("Enter on an empty list item leaves the list, and Tab and Shift+Tab nest an
 	let page = await join("ana");
 	await content(page).getByText("Two").click();
 	await settle(page);
-	await page.keyboard.press("End");
+	await move(page, "End");
 	await page.keyboard.press("Tab");
 	await written(page, room, /^- One\n {2,4}- Two\s*$/m);
 	await page.keyboard.press("Shift+Tab");
@@ -242,7 +276,7 @@ test("a collaborator's block moves and deletes while another person types in it"
 	let bo = await join("bo");
 	await content(bo).getByText("Beta.").click();
 	await settle(bo);
-	await bo.keyboard.press("End");
+	await move(bo, "End");
 	await bo.keyboard.type(" Bo");
 
 	await content(ana).getByText("Beta").click();
@@ -257,7 +291,7 @@ test("a collaborator's block moves and deletes while another person types in it"
 	// Deleting the block Bo is in leaves both documents the same and still editable.
 	await content(bo).getByText("Gamma.").click();
 	await settle(bo);
-	await bo.keyboard.press("End");
+	await move(bo, "End");
 	await content(ana).getByText("Gamma.").click();
 	await settle(ana);
 	await ana.keyboard.press("Escape");
@@ -266,7 +300,7 @@ test("a collaborator's block moves and deletes while another person types in it"
 	await expect(content(bo).getByText("Gamma.")).toHaveCount(0);
 	await content(bo).getByText("Alpha.").click();
 	await settle(bo);
-	await bo.keyboard.press("End");
+	await move(bo, "End");
 	await bo.keyboard.type(" Typed.");
 	await written(ana, room, /Alpha\. Typed\.\s*$/);
 });
