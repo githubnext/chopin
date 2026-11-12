@@ -573,12 +573,13 @@
 }
 
 @container (max-width: 40rem) {
-	/* Anchor state keeps this lane stable when its marker leaves the viewport. */
+	/*
+	 * A writer's gutter holds the block handle's column beside the prose and, left of it, a resolved
+	 * decision's slim marker: 24px and 12px. Set while the document has one at all, so the lane stays
+	 * put when its marker leaves the viewport.
+	 */
 	.plan-document[data-plan-decision-lane] :is(.plan-content, .plan-preface) {
-		--plan-leading-gutter: max(
-			calc(var(--decision-marker-size) + var(--spacing) * 2),
-			var(--plan-gutter)
-		);
+		--plan-leading-gutter: max(calc(var(--spacing) * 9), var(--plan-gutter));
 	}
 
 	/* Wide authored surfaces keep their own visible, keyboard-operable lane. */
@@ -2932,8 +2933,16 @@
 	inset-block-end: -0.75rem;
 }
 
+/*
+ * A left corner reaches inward, not out: the gutter's column beside the image is the block handle's,
+ * so the corner's square stays on the corner and its reach ends where the handle's column does.
+ */
 .plan-content .plan-image-resize[data-corner$="left"] {
-	inset-inline-start: -0.75rem;
+	inset-inline-start: -0.25rem;
+}
+
+.plan-content .plan-image-resize[data-corner$="left"]::after {
+	inset-inline: 0 1rem;
 }
 
 .plan-content .plan-image-resize[data-corner$="right"] {

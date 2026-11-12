@@ -141,6 +141,11 @@ type Group = { label?: string; items: Item[] };
 
 const HANDLE = 20;
 const GAP = 4;
+/**
+ * The column beside the content the handle always stands in. A block's own buttons in the gutter,
+ * such as a resolved decision's marker, stand to its left and never in it.
+ */
+export const HANDLE_LANE = HANDLE + GAP;
 
 /** Where the handle sits for a block: to the left of its first line, past a list's marker. */
 function handleAt(editor: LexicalEditor, key: string, list: boolean): Hover | undefined {

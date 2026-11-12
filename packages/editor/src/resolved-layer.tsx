@@ -67,6 +67,7 @@ import { blockElement } from "./scroll";
 import { openCommentThread } from "./threads";
 import { useTransitionPresence } from "./transition-presence";
 import { widgets$ } from "./widget-options";
+import { HANDLE_LANE } from "./widgets/block-handle";
 
 import type { CSSProperties, ReactNode } from "react";
 import type { Rect } from "./comment-geometry";
@@ -159,7 +160,7 @@ function markerStyle(
 	vertical: { top: number; bottom: number },
 ): CSSProperties {
 	let width = marker.compact ? COMPACT_GUTTER : markerSize;
-	let reach = markerReach(marker.left, width, prose);
+	let reach = markerReach(marker.left, width, prose - marker.lane);
 	return {
 		top: marker.top,
 		left: marker.left,
@@ -522,7 +523,14 @@ export function ResolvedLayer(
 				let first = rects.reduce((top, value) => value.top < top.top ? value : top);
 				let element = elements[rects.indexOf(first)]!;
 				let lineHeight = lineHeightOf(element);
-				let marker = markerPoint(first, lineHeight, markerHost, markerSize);
+				// A writer's block handle stands in the column beside the prose; the marker keeps out of it.
+				let marker = markerPoint(
+					first,
+					lineHeight,
+					markerHost,
+					markerSize,
+					editable ? HANDLE_LANE : 0,
+				);
 				let prose = first.left - markerHost.left;
 				// Content coordinates let the browser carry markers with native scrolling.
 				if (scroller) {
@@ -546,7 +554,15 @@ export function ResolvedLayer(
 		});
 		setPlaced(next);
 		act({ type: "prune", live: new Set(next.map(entry => entry.item.key)) });
-	}, [act, editor, host, scroller]);
+	}, [act, editable, editor, host, scroller]);
+
+	// A narrow gutter widens for a writer so a marker can stand left of the block handle's column.
+	let lane = editable && items.length > 0;
+	useLayoutEffect(() => {
+		if (!host || !lane) return;
+		host.setAttribute("data-plan-decision-lane", "");
+		return () => host.removeAttribute("data-plan-decision-lane");
+	}, [host, lane]);
 
 	useLayoutEffect(() => {
 		measure();
