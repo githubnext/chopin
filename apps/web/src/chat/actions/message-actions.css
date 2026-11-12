@@ -13,8 +13,15 @@
  */
 
 .chat-message-body {
-	/* How far the highlight reaches above the message: a little, or up over the name line of the first. */
-	--chat-highlight-top: 0.25rem;
+	/*
+	 * A row's pitch, as Slack's: its shade and its hit area reach halfway across the gap to the row
+	 * before it and to the row after it, so the shades of neighbouring rows meet with no band between
+	 * them and none over another. Messages of a group are 4px apart; the transcript's rows are 16px.
+	 */
+	--chat-gap-above: calc(var(--spacing) / 2);
+	--chat-gap-below: calc(var(--spacing) / 2);
+	/* How far the highlight reaches above the message: to the gap's middle, or over the name line. */
+	--chat-highlight-top: var(--chat-gap-above);
 	/* Slack's gutter: a 36px avatar and 8px beside it, and the row's 12px beyond that. */
 	--chat-bleed-start: 3.5rem;
 	--chat-bleed-end: 0.75rem;
@@ -83,11 +90,22 @@
 }
 
 /*
- * Slack's row is shaded 8px above its name line and 8px below its last line
- * (`c-message_kit__gutter`); a message after the first of its group, 4px above it.
+ * A group's first message reaches to the middle of the 16px before its row, and its last to the
+ * middle of the 16px after it; a message that heads its group reaches over its name line, which
+ * stands 2px above the row, to the same middle (`c-message_kit__gutter`).
  */
+.chat-message-body:first-child {
+	--chat-gap-above: calc(var(--spacing) * 2);
+}
+
+.chat-message-body:last-child {
+	--chat-gap-below: calc(var(--spacing) * 2);
+}
+
 .chat-message-body[data-chat-headed] {
-	--chat-highlight-top: calc(var(--text-base) * var(--text-base--line-height) + var(--spacing) * 2);
+	--chat-highlight-top: calc(
+		var(--text-base) * var(--text-base--line-height) - var(--spacing) / 2 + var(--spacing) * 2
+	);
 }
 
 /*
@@ -106,14 +124,14 @@
 }
 
 /*
- * The whole message as one row as wide as the pane, square, as Slack shades a hovered message: a
- * darker step of whatever the transcript lies on, never a lighter one.
+ * The whole message as one row as wide as the pane and as tall as its pitch, square, as Slack
+ * shades a hovered message: a darker step of whatever the transcript lies on, never a lighter one.
  */
 .chat-message-body::before {
 	content: "";
 	position: absolute;
 	z-index: -1;
-	inset-block: calc(-1 * var(--chat-highlight-top)) calc(-1 * var(--spacing));
+	inset-block: calc(-1 * var(--chat-highlight-top)) calc(-1 * var(--chat-gap-below));
 	inset-inline: calc(-1 * var(--chat-shade-start) - 100vw) calc(-1 * var(--chat-shade-end) - 100vw);
 	background: var(--color-chat-row-hover);
 	opacity: 0;
@@ -121,9 +139,20 @@
 	transition: opacity var(--chat-fade) var(--ease-out);
 }
 
-/* The last message of a group is shaded 8px below, to the gap before the next. */
-.chat-message-body:last-child::before {
-	inset-block-end: calc(-1 * var(--spacing) * 2);
+/*
+ * Under a mouse the shade is also where the pointer finds its row, behind its content, and so is
+ * the avatar, as in Slack: a pointer moving down the transcript passes from one row's shade straight
+ * into the next one's. Only inside a transcript, whose stack clips the shade at its sides. A touch
+ * screen keeps the rows' own boxes, so a reaction's 44px target past its row still takes the tap.
+ */
+@media (hover: hover) and (pointer: fine) {
+	[data-chat-stack] .chat-message-body::before {
+		pointer-events: auto;
+	}
+
+	[data-chat-entry] > [data-chat-avatar] {
+		pointer-events: none;
+	}
 }
 
 /*
@@ -133,15 +162,11 @@
 .chat-source-tint {
 	position: absolute;
 	z-index: -1;
-	inset-block: calc(-1 * var(--chat-highlight-top)) calc(-1 * var(--spacing));
+	inset-block: calc(-1 * var(--chat-highlight-top)) calc(-1 * var(--chat-gap-below));
 	inset-inline: calc(-1 * var(--chat-shade-start) - 100vw) calc(-1 * var(--chat-shade-end) - 100vw);
 	background: var(--color-brand-wash);
 	pointer-events: none;
 	animation: chat-source-tint calc(var(--duration-linger) * 2) var(--ease-out) forwards;
-}
-
-.chat-message-body:last-child > .chat-source-tint {
-	inset-block-end: calc(-1 * var(--spacing) * 2);
 }
 
 @keyframes chat-source-tint {
@@ -339,7 +364,7 @@
 	.chat-message-body[data-chat-engaged],
 	.chat-message-body:has(:focus-visible) {
 		margin-block-start: var(--chat-toolbar-lane);
-		--chat-highlight-top: calc(var(--chat-toolbar-lane) + 0.25rem);
+		--chat-highlight-top: calc(var(--chat-toolbar-lane) + var(--chat-gap-above));
 	}
 
 	/*
@@ -350,8 +375,9 @@
 	.chat-message-body[data-chat-headed]:has(:focus-visible) {
 		margin-block-start: calc(var(--chat-toolbar-lane) + var(--spacing));
 		--chat-highlight-top: calc(
-			var(--chat-toolbar-lane) + var(--text-base) * var(--text-base--line-height) +
-				var(--spacing) * 3
+			var(--chat-toolbar-lane) + var(--spacing) + var(--text-base) * var(--text-base--line-height) -
+				var(--spacing) / 2 +
+				var(--spacing) * 2
 		);
 	}
 

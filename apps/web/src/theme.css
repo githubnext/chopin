@@ -1186,11 +1186,11 @@ body {
 
 /*
  * Split Chat is a track: its width moves the document, and Chat slides under its clip.
- * Only the width clips, so the composer's focus ring can pass the panel's bottom edge, and only
- * beyond the frame's gutters, which Chat's rows are shaded across (workspace-sizing.css). Its top
- * and foot are unbounded, not merely far: an image's lazy loading counts a clip path's edges, and
- * one a screen above and below Chat kept the images further up from loading. (An overflow clip's
- * margin would do, but Chromium draws one only where both axes clip.)
+ * Only the width clips, so the composer's focus ring can pass the panel's bottom edge, and at its
+ * start only beyond the frame's gutter, which Chat's rows are shaded across (workspace-sizing.css).
+ * Its top and foot are unbounded, not merely far: an image's lazy loading counts a clip path's
+ * edges, and one a screen above and below Chat kept the images further up from loading. (An
+ * overflow clip's margin would do, but Chromium draws one only where both axes clip.)
  */
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
 	overflow: visible;
@@ -1209,15 +1209,6 @@ body {
 
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel > .workspace-chat-body {
 	width: var(--chat-width, 0px);
-}
-
-.workspace-root[data-workspace-mode="split"][data-document-collapsed] .workspace-chat-panel {
-	clip-path: inset(
-		calc(-1px * infinity)
-		calc(-1 * (var(--spacing) * 3 + env(safe-area-inset-right)))
-		calc(-1px * infinity)
-		calc(-1 * (var(--spacing) * 3 + env(safe-area-inset-left)))
-	);
 }
 
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel.is-open {
