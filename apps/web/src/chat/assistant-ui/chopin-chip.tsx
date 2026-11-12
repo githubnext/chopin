@@ -9,12 +9,13 @@
  * drawn over it, outside the badge, where the target can grow.
  */
 
+import { PLANNER_NAME } from "@chopin/editor/people";
 import { CloseIcon, SparkleIcon } from "@chopin/icons";
 import { createDirectiveText } from "@/components/assistant-ui/elements/directive-text";
 import { ASKING_CHOPIN, REMOVE_CHOPIN } from "../chopin-chip";
 
 const ChipText = createDirectiveText(
-	{ parse: () => [{ kind: "mention", type: "agent", label: "Chopin", id: "chopin" }] },
+	{ parse: () => [{ kind: "mention", type: "agent", label: PLANNER_NAME, id: "chopin" }] },
 	{
 		iconMap: { agent: SparkleIcon },
 		trailing: () => <CloseIcon aria-hidden="true" size={12} />,
@@ -27,7 +28,7 @@ export function ChopinChip(
 ) {
 	return (
 		<span aria-label={ASKING_CHOPIN} className="composer-chip" role="group">
-			<ChipText text=":agent[Chopin]" />
+			<ChipText text={`:agent[${PLANNER_NAME}]`} />
 			<button
 				aria-label={REMOVE_CHOPIN}
 				className="composer-chip-remove"

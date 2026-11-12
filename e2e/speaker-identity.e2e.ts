@@ -91,7 +91,7 @@ test(
 				await expect(entries).toHaveCount(2);
 
 				let monaRow = entries.nth(0);
-				await expect(monaRow.locator("[data-speaker-name]")).toHaveText("Mona_acme");
+				await expect(monaRow.locator("[data-speaker-name]")).toHaveText("mona_acme");
 				await expect(monaRow.locator("[data-speaker-name]")).toHaveCSS("font-weight", "700");
 				// A person is never tagged: only an app is.
 				await expect(monaRow.locator("[data-speaker-tag]")).toHaveCount(0);
@@ -115,7 +115,7 @@ test(
 				expect(secondX).toBe(firstX);
 
 				let hubotRow = entries.nth(1);
-				await expect(hubotRow.locator("[data-speaker-name]")).toHaveText("Hubot_acme");
+				await expect(hubotRow.locator("[data-speaker-name]")).toHaveText("hubot_acme");
 				let hubotImg = hubotRow.locator("[data-chat-avatar] img");
 				await expect(hubotImg).toHaveAttribute("src", "https://example.invalid/hubot_acme.png");
 				await expect.poll(() => hubotImg.evaluate((img: HTMLImageElement) => img.naturalWidth))
@@ -207,7 +207,7 @@ test(
 		// The Planner: Chopin's mark as a 36px app avatar, and the Agent tag beside its name.
 		let agentRow = pane.locator('[data-chat-entry][data-speaker-kind="agent"]');
 		await expect(agentRow).toHaveCount(1);
-		await expect(agentRow.locator("[data-speaker-name]")).toHaveText("Chopin");
+		await expect(agentRow.locator("[data-speaker-name]")).toHaveText("chopin");
 		let agentTag = agentRow.locator('[data-chat-head] [data-speaker-tag="agent"]');
 		await expect(agentTag).toHaveText("Agent");
 		await expect(agentTag).toHaveCSS("text-transform", "uppercase");
@@ -219,7 +219,7 @@ test(
 		let handoff = agentRow.getByRole("group", { name: "Research handoff" })
 			.locator('[data-slot="agent-handoff"]');
 		await expect(handoff).toBeVisible();
-		await expect(handoff).toContainText("Chopin");
+		await expect(handoff).toContainText("chopin");
 		await expect(handoff).toContainText("Research");
 		await expect(handoff).toContainText("Compare self-hosted search engines");
 

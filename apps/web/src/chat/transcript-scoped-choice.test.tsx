@@ -17,7 +17,7 @@ test("a scoped proposal appears as an inline Save action with its proposer sourc
 
 	expect(markup).toContain("Save for this spike");
 	expect(markup).toMatch(/<button(?![^>]*disabled)[^>]*>Save for this spike<\/button>/);
-	expect(markup).toContain("Mei");
+	expect(markup).toContain(">mei</span>");
 	expect(markup).toContain("I&#x27;d pick Lexical for the spike;");
 	expect(markup).not.toContain("Save decision");
 	expect(markup).not.toContain("Decision prompt:");
@@ -31,8 +31,8 @@ test("an agreement refresh shows both exact source authors and quotes", () => {
 
 	expect(markup).toContain("Save for this spike");
 	expect(markup).toMatch(/<button(?![^>]*disabled)[^>]*>Save for this spike<\/button>/);
-	expect(markup).toContain("Mei");
-	expect(markup).toContain("Rob");
+	expect(markup).toContain(">mei</span>");
+	expect(markup).toContain(">rob</span>");
 	expect(markup).toContain("I&#x27;d pick Lexical for the spike;");
 	expect(markup).toContain("yep, Lexical for the spike.");
 	expect(markup).not.toContain("Save decision");

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
-import { ChopinMark, Face, usePopoverDismissal } from "@chopin/editor";
+import { ChopinMark, displayName, Face, PLANNER_NAME, usePopoverDismissal } from "@chopin/editor";
 import { ArrowLeftIcon, CloseIcon } from "@chopin/icons";
 import { formatForkedClock, isReplyEntry, replyCountLabel } from "@chopin/protocol/threads";
 
@@ -27,7 +27,7 @@ import {
 	mentionTrigger,
 	mentionTriggerKey,
 } from "../mentions";
-import { capitalize, displayText } from "../model";
+import { displayText } from "../model";
 import {
 	referenceMenuShown,
 	referenceOptionId,
@@ -90,9 +90,9 @@ function RootMessageCard({ entry, room }: { entry: Wire.Entry; room: string }) {
 		text = "Ask Chopin";
 	}
 	let name = entry.author.kind === "agent"
-		? "Chopin"
+		? PLANNER_NAME
 		: entry.author.kind === "member"
-		? capitalize(entry.author.handle)
+		? displayName(entry.author.handle)
 		: "System";
 
 	return (

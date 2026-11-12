@@ -210,13 +210,13 @@ test("only a resolved comment that led to edits leaves a marker, stacked with a 
 	await editedMarker.hover();
 	let preview = page.getByRole("tooltip");
 	await expect(preview).toContainText("Should the review have a date?");
-	await expect(preview).toContainText("2 replies Resolved by Ana Edited by Chopin");
+	await expect(preview).toContainText("2 replies Resolved by ana Edited by chopin");
 	await expect(preview).not.toContainText("Reads right now");
 	await expect.poll(() => sizes(page)).toMatchObject({ "plan-comment-resolved": 1 });
 
 	await editedMarker.click();
 	let card = page.getByRole("dialog", { name: "Resolved comment" });
-	await expect(card).toContainText("Resolved by Ana");
+	await expect(card).toContainText("Resolved by ana");
 	await expect(card).toContainText("Reads right now. Resolving.");
 	await expect(card.getByRole("button", { name: "Reopen" })).toBeVisible();
 	await expect(card.getByRole("textbox")).toHaveCount(0);

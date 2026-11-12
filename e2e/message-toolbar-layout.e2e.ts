@@ -182,7 +182,7 @@ test("the row highlight shades a message and leaves its avatar, name and time dr
 	await seed("# Layout\n", { transcript: transcript() });
 	let page = await join("ana");
 	let entry = entryOf(page, "m2");
-	let name = entry.getByText("Chopin", { exact: true });
+	let name = entry.getByText("chopin", { exact: true });
 	let time = entry.locator("[data-chat-head] .tabular-nums");
 	let avatar = entry.locator("[data-chat-avatar]");
 	await expect(name).toBeVisible();
@@ -361,7 +361,7 @@ test("a heading shows the toolbar and the row highlight over its whole width, an
 	let bar = toolbar(target);
 	let shade = () => target.evaluate(element => getComputedStyle(element, "::before").opacity);
 	let headBox = (await head.boundingBox())!;
-	let nameBox = (await entry.getByText("Chopin", { exact: true }).boundingBox())!;
+	let nameBox = (await entry.getByText("chopin", { exact: true }).boundingBox())!;
 	let bodyBox = (await target.boundingBox())!;
 	expect(headBox.y + headBox.height).toBeLessThan(bodyBox.y);
 

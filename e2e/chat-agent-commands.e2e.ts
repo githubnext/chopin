@@ -601,7 +601,7 @@ test("@ keeps Chopin and the people, and # offers no part of a document that has
 	let mentions = menu(page, "Mentions");
 	await input.click();
 	await page.keyboard.type("@ch");
-	await expect(mentions.getByRole("option", { name: /^Chopin/ })).toBeVisible();
+	await expect(mentions.getByRole("option", { name: /^chopin/ })).toBeVisible();
 	await page.keyboard.press("Enter");
 	// Chopin is the chip, not words in the draft.
 	await expectChatValue(input, "");

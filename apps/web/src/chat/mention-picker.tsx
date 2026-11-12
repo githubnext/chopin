@@ -1,4 +1,4 @@
-import { ChopinMark, Face } from "@chopin/editor";
+import { ChopinMark, Face, PLANNER_NAME } from "@chopin/editor";
 import { useEffect } from "react";
 import { ComposerPersonItem } from "@/components/assistant-ui/elements/composer";
 import { ComposerPopover } from "./assistant-ui/composer-popover";
@@ -47,7 +47,7 @@ export function MentionPicker(
 		<ComposerPopover id={id} kind="mentions" label="Mentions">
 			{options.map((candidate, index) => {
 				let planner = candidate.kind === "planner";
-				let name = planner ? "Chopin" : candidate.login;
+				let name = planner ? PLANNER_NAME : candidate.login;
 				return (
 					<ComposerPersonItem
 						active={index === active}

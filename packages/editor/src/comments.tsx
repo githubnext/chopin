@@ -19,6 +19,7 @@ import { ChopinMark } from "./chopin-mark";
 import { displayName } from "./display-name";
 import { Face } from "./face";
 import { usePendingWork } from "./pending-work";
+import { PLANNER_NAME } from "./people";
 import { PRIMARY_COARSE_POINTER_QUERY } from "./pointer";
 
 import type { KeyboardEvent, ReactNode } from "react";
@@ -45,7 +46,7 @@ export function stamp(ts: number, now = new Date()): string {
 	);
 }
 
-/** Chat's author row: face, display name, quiet timestamp. The handle stays in the name. */
+/** Chat's author row: face, the handle as written (or a demo actor's name), quiet timestamp. */
 export function Author(
 	{ handle, textSize = "sm", ts }: {
 		handle: string;
@@ -53,14 +54,15 @@ export function Author(
 		ts?: number;
 	},
 ) {
+	let name = displayName(handle);
 	return (
 		<span
 			className={`flex min-w-0 items-center gap-2 ${textSize === "xs" ? "text-xs" : "text-sm"}`}
 		>
 			<Face decorative handle={handle} size={20} titled={false} />
 			<span className="min-w-0 truncate font-semibold text-text-primary" title={`@${handle}`}>
-				{displayName(handle)}
-				<span className="sr-only">(@{handle})</span>
+				{name}
+				{name !== handle && <span className="sr-only">(@{handle})</span>}
 			</span>
 			{ts !== undefined && (
 				<time
@@ -83,7 +85,7 @@ function ChopinAuthor({ textSize = "sm", ts }: { textSize?: "xs" | "sm"; ts?: nu
 			<span aria-hidden="true" className="plan-comment-agent">
 				<ChopinMark circle />
 			</span>
-			<span className="min-w-0 truncate font-semibold text-text-primary">Chopin</span>
+			<span className="min-w-0 truncate font-semibold text-text-primary">{PLANNER_NAME}</span>
 			{ts !== undefined && (
 				<time
 					className="shrink-0 text-xs text-text-quaternary tabular-nums"
@@ -107,7 +109,7 @@ export function NoteAuthor(
 
 /** The address a note was sent with, drawn from `to` because the text never carries it. */
 function Mention() {
-	return <span className="plan-comment-mention">@Chopin</span>;
+	return <span className="plan-comment-mention">@{PLANNER_NAME}</span>;
 }
 
 /** One note: its author row and body. Also read back, without actions, in a resolved thread. */
@@ -455,7 +457,7 @@ function Composer({
 			<div className="plan-comment-composer-input">
 				{to && (
 					<span aria-hidden="true" className="plan-comment-address-chip" ref={chip}>
-						@Chopin
+						@{PLANNER_NAME}
 					</span>
 				)}
 				<textarea

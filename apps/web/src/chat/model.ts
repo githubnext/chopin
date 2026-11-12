@@ -1,4 +1,3 @@
-import { displayName as capitalize } from "@chopin/editor";
 import { instruction } from "@chopin/protocol/address";
 
 import type { Chat } from "@chopin/protocol";
@@ -87,19 +86,21 @@ function speaker(author: Speaker): string {
 	return author.kind === "agent" ? "agent" : `member:${author.handle}`;
 }
 
-export { capitalize };
-
-/** Tool names are protocol identifiers; the transcript is for people. */
+/** Tool names are protocol identifiers; the transcript is for people, in sentence case. */
 export function toolCopy(name: string): string {
 	if (name === "ask") return "Questions";
-	return capitalize(name.replaceAll(/[_/]/g, " "));
+	let words = name.replaceAll(/[_/]/g, " ");
+	return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** Mentions remain useful input syntax, but are not part of rail typography. */
+/**
+ * Mentions remain useful input syntax, but are not part of rail typography: the `@` goes and the
+ * handle stays exactly as written, an Enterprise Managed User's `_shortcode` included.
+ */
 export function displayText(value: string): string {
 	return instruction(value).replace(
-		/(^|[^\w@])@([a-z0-9][a-z0-9-]*)\b/gi,
-		(_match, before: string, handle: string) => `${before}${capitalize(handle)}`,
+		/(^|[^\w@])@([a-z0-9][\w-]*)/gi,
+		(_match, before: string, handle: string) => `${before}${handle}`,
 	);
 }
 

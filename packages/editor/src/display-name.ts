@@ -1,7 +1,9 @@
 import { personName } from "./people";
 
-/** How a person is named beside their face, in comments and in Chat. */
+/**
+ * How a person is named beside their face, in comments and in Chat: their handle exactly as
+ * GitHub has it, as Slack names a person by their username, or a demo actor's roster name.
+ */
 export function displayName(handle: string): string {
-	let name = personName(handle);
-	return name ? name[0]!.toUpperCase() + name.slice(1) : name;
+	return personName(handle);
 }

@@ -34,6 +34,11 @@ describe("who a message is for", () => {
 	test("Chopin named in the words still asks it, as it always has", () => {
 		expect(asksChopin({ agent: true, chip: false, text: "can @chopin look?", references: [] }))
 			.toBe(true);
+		// The name is drawn as `chopin` now; an `@Chopin` typed out of habit asks it the same.
+		for (let text of ["@chopin look", "@Chopin look", "can @CHOPIN look?"]) {
+			expect(asksChopin({ agent: true, chip: false, text, references: [] })).toBe(true);
+			expect(chipShown({ agent: true, chip: false, text, references: [] })).toBe(true);
+		}
 		// A reference's own words are never an address.
 		let reference = {
 			kind: "document" as const,
@@ -252,9 +257,9 @@ describe("choosing Chopin in the @ menu", () => {
 });
 
 describe("the draft's placeholder", () => {
-	test("tells the way to Chopin until the chip says it", () => {
+	test("tells the way to Chopin, by the address as typed, until the chip says it", () => {
 		expect(draftPlaceholder({ agent: true, chip: false })).toBe(
-			"Message the team, or @Chopin to ask",
+			"Message the team, or @chopin to ask",
 		);
 		expect(draftPlaceholder({ agent: true, chip: true })).toBe("Ask Chopin…");
 	});

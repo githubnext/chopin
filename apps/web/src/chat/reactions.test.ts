@@ -15,11 +15,11 @@ test("the three quick reactions are the exact emoji and the exact words", () => 
 
 test("who reacted: the reader is You, the others are named in the order they reacted", () => {
 	let reaction = (...handles: string[]): Chat.Reaction => ({ emoji: "✅", handles });
-	expect(reactionHint(reaction("mina"), "ana")).toBe("Mina reacted with ✅");
+	expect(reactionHint(reaction("mina"), "ana")).toBe("mina reacted with ✅");
 	expect(reactionHint(reaction("ana"), "ana")).toBe("You reacted with ✅");
-	expect(reactionHint(reaction("mina", "ana"), "ana")).toBe("Mina and You reacted with ✅");
-	expect(reactionHint(reaction("mina", "sam", "ana"), "ana")).toBe(
-		"Mina, Sam and You reacted with ✅",
+	expect(reactionHint(reaction("mina", "ana"), "ana")).toBe("mina and You reacted with ✅");
+	expect(reactionHint(reaction("mina_acme", "Hubot-Bot", "ana"), "ana")).toBe(
+		"mina_acme, Hubot-Bot and You reacted with ✅",
 	);
 });
 

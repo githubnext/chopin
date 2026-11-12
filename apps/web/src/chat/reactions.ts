@@ -1,4 +1,4 @@
-import { capitalize } from "./model";
+import { displayName } from "@chopin/editor";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -24,7 +24,7 @@ export function ownEmoji(
 }
 
 export function reactionHint(reaction: Chat.Reaction, self: string): string {
-	let names = reaction.handles.map(handle => handle === self ? "You" : capitalize(handle));
+	let names = reaction.handles.map(handle => handle === self ? "You" : displayName(handle));
 	let who = names.length < 2
 		? names[0] ?? ""
 		: `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;

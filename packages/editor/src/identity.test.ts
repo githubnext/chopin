@@ -24,8 +24,8 @@ describe("face identity", () => {
 		setFaceProfiles([{ id: "demo:lily", name: "Lily", avatar: "/demo/lily.svg" }]);
 		try {
 			expect(displayName("demo:lily")).toBe("Lily");
-			expect(displayName("demo:felix")).toBe("Felix");
-			expect(displayName("octocat")).toBe("Octocat");
+			expect(displayName("demo:felix")).toBe("felix");
+			expect(displayName("octocat")).toBe("octocat");
 		} finally {
 			setFaceProfiles([]);
 		}

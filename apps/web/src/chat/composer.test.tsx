@@ -37,7 +37,7 @@ test("renders the draft as a combobox in the field", () => {
 	expect(markup).toContain('class="composer-surface"');
 	expect(markup).toContain('role="combobox"');
 	expect(markup).toContain('aria-label="Message"');
-	expect(markup).toContain("Message the team, or @Chopin to ask");
+	expect(markup).toContain("Message the team, or @chopin to ask");
 	expect(markup).not.toContain("composer-notice");
 	expect(markup).not.toContain('data-planner="off"');
 });

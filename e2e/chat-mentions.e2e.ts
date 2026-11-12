@@ -98,7 +98,7 @@ test("the @ picker lists the Planner and the people, those here first, and sends
 	// GitHub will not), then the one who spoke and left. The readers are asked of the server, so the
 	// list is read once that answer is in.
 	await expect.poll(() => people(ana)).toEqual([
-		{ name: "Chopin", tag: "agent" },
+		{ name: "chopin", tag: "agent" },
 		{ name: "cy", tag: "human" },
 		{ name: "e2e", tag: "human" },
 		{ name: "bo", tag: "human" },
@@ -110,7 +110,7 @@ test("the @ picker lists the Planner and the people, those here first, and sends
 	// The failed photograph falls back to the login's initial.
 	await expect(list.getByRole("option", { name: "bo" }).locator("img")).toHaveCount(0);
 	await expect(list.getByRole("option", { name: "bo" })).toHaveText("bbohuman");
-	await expect(list.getByRole("option", { name: /^Chopin/ })).toHaveAttribute(
+	await expect(list.getByRole("option", { name: /^chopin/ })).toHaveAttribute(
 		"aria-selected",
 		"true",
 	);
@@ -129,7 +129,7 @@ test("the @ picker lists the Planner and the people, those here first, and sends
 	await expect(list.getByRole("option", { name: "e2e" })).toHaveAttribute("aria-selected", "true");
 	await draft.press("ArrowUp");
 	await draft.press("ArrowUp");
-	await expect(list.getByRole("option", { name: /^Chopin/ })).toHaveAttribute(
+	await expect(list.getByRole("option", { name: /^chopin/ })).toHaveAttribute(
 		"aria-selected",
 		"true",
 	);
@@ -138,10 +138,10 @@ test("the @ picker lists the Planner and the people, those here first, and sends
 	await expect(last).toHaveAttribute("aria-selected", "true");
 
 	await draft.pressSequentially("C");
-	await expect.poll(() => names(ana)).toEqual(["Chopin", "cy"]);
+	await expect.poll(() => names(ana)).toEqual(["chopin", "cy"]);
 	await draft.press("Backspace");
 	await draft.pressSequentially("ch");
-	await expect.poll(() => names(ana)).toEqual(["Chopin"]);
+	await expect.poll(() => names(ana)).toEqual(["chopin"]);
 	await draft.press("Enter");
 	// Chopin is the chip at the start of the draft, not an @chopin in its words.
 	await expectChatValue(draft, "Ask ");
@@ -202,7 +202,7 @@ test("the @ picker stays inside a narrow Chat panel", async ({ join, page }) => 
 	await draft.fill("@");
 	let list = chat.locator("[data-chat-mention-picker]");
 	await expect(list).toBeVisible();
-	await expect.poll(() => names(opened)).toEqual(["Chopin", "e2e"]);
+	await expect.poll(() => names(opened)).toEqual(["chopin", "e2e"]);
 	await expectInsideViewport(list);
 	await expectNoHorizontalOverflow(opened);
 	let panel = await chat.boundingBox();

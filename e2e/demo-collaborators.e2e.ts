@@ -59,13 +59,13 @@ function lilyCursor(page: Page) {
 
 async function authorship(page: Page) {
 	await expect(message(page, "Lily message").getByText("Lily", { exact: true })).toBeVisible();
-	await expect(message(page, "Presenter message").getByText("Octocat", { exact: true }))
+	await expect(message(page, "Presenter message").getByText("octocat", { exact: true }))
 		.toBeVisible();
 	await page.getByRole("button", { name: "Document", exact: true }).click();
 	await page.getByRole("button", { name: /Comment on “A second paragraph/ }).click();
 	let thread = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(thread.getByText("Lily(@demo:lily)", { exact: true })).toBeVisible();
-	await expect(thread.getByText("Octocat(@octocat)", { exact: true })).toBeVisible();
+	await expect(thread.getByText("octocat", { exact: true })).toBeVisible();
 	await expect(thread).toContainText("Presenter reply");
 	await page.keyboard.press("Escape");
 	await page.getByRole("button", { name: /^Decisions/ }).click();
@@ -109,7 +109,7 @@ test("shared-cookie tabs keep distinct presence, edits and durable authorship", 
 	await say(page, "Presenter message");
 	await say(lily, "Lily message");
 	for (let peer of [page, lily]) {
-		await expect(message(peer, "Presenter message").getByText("Octocat", { exact: true }))
+		await expect(message(peer, "Presenter message").getByText("octocat", { exact: true }))
 			.toBeVisible();
 		await expect(message(peer, "Lily message").getByText("Lily", { exact: true })).toBeVisible();
 	}
@@ -132,7 +132,7 @@ test("shared-cookie tabs keep distinct presence, edits and durable authorship", 
 	await expect(thread.getByText("Lily(@demo:lily)", { exact: true })).toBeVisible();
 	await thread.getByRole("textbox", { name: "Reply", exact: true }).fill("Presenter reply");
 	await thread.getByRole("button", { name: "Send reply", exact: true }).click();
-	await expect(thread.getByText("Octocat(@octocat)", { exact: true })).toBeVisible();
+	await expect(thread.getByText("octocat", { exact: true })).toBeVisible();
 	await page.keyboard.press("Escape");
 
 	await lily.getByRole("button", { name: /^Decisions/ }).click();
@@ -274,7 +274,7 @@ test("unknown actors are refused and disabling personas restores ordinary shared
 	await append(lily, " Ordinary actor after disabling.");
 	await expect(content(page)).toContainText("Ordinary actor after disabling.");
 	await say(lily, "Ordinary Chat after disabling");
-	await expect(message(page, "Ordinary Chat after disabling")).toContainText("Octocat");
+	await expect(message(page, "Ordinary Chat after disabling")).toContainText("octocat");
 	await lily.close();
 	await people(page, ["octocat"]);
 });

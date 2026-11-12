@@ -1,5 +1,7 @@
 import { ChopinIcon } from "@chopin/icons";
 
+import { PLANNER_NAME } from "./people";
+
 /** Chopin's mark, as Chat shows the Planner and comments will show its notes. */
 
 export function ChopinMark({ circle = false }: { circle?: boolean }) {
@@ -8,7 +10,7 @@ export function ChopinMark({ circle = false }: { circle?: boolean }) {
 			className="agent-mark"
 			data-circle={circle || undefined}
 			role="img"
-			aria-label="Chopin"
+			aria-label={PLANNER_NAME}
 		>
 			<ChopinIcon />
 		</span>

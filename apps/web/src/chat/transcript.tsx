@@ -15,7 +15,7 @@ import type { ReactNode } from "react";
 import { MessageForwardIcon, MessageIcon, SignInIcon } from "@chopin/icons";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
-import { ChopinMark, Face, openCommentThread, useCardMeta } from "@chopin/editor";
+import { ChopinMark, Face, openCommentThread, PLANNER_NAME, useCardMeta } from "@chopin/editor";
 import { EmptyState } from "@chopin/visuals";
 
 import { deliveryOf, failureOf } from "./delivery";
@@ -187,7 +187,7 @@ function CommentSystemEntry(
 				</span>
 			</span>
 			<span className="chat-comment-notice-body">
-				<span className="chat-comment-notice-mention">@Chopin</span> {comment.note}
+				<span className="chat-comment-notice-mention">@{PLANNER_NAME}</span> {comment.note}
 			</span>
 		</button>
 	);

@@ -6,7 +6,7 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
-import { Face, ResearchBrief, ResearchCard } from "@chopin/editor";
+import { Face, PLANNER_NAME, ResearchBrief, ResearchCard } from "@chopin/editor";
 import { CheckIcon, CloseIcon, PlusIcon, SearchIcon, WarningIcon } from "@chopin/icons";
 
 import { AgentHandoff } from "@/components/assistant-ui/elements/agent-handoff";
@@ -525,7 +525,7 @@ export function ResearchOfferCard(
 	let authors = [
 		...new Set(
 			sources.map(source =>
-				source.author.kind === "member" ? `@${source.author.handle}` : "Chopin"
+				source.author.kind === "member" ? `@${source.author.handle}` : PLANNER_NAME
 			),
 		),
 	];
