@@ -381,10 +381,10 @@ say or a machine that has not answered in two minutes, from what Chopin saw itse
 [Hosted agent](hosted-agent.md#remote-planner)), and still only names the login:
 
 ```text
-Can't connect to @<login>'s machine: <reason> (3 attempts in a row). It keeps trying; try again once that is fixed.
+Can't connect to @<login>'s machine: <reason>. Try again once that is fixed.
 ```
 
-A machine that has not answered yet has no attempts in a row to count, so the parentheses are left out.
+How often it was tried is never said: it connects, or it can't, and why.
 
 If no machine is starting one, the message says how to get one, in plain words:
 a machine is needed. Where Chopin runs Planners on paired machines:

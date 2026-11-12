@@ -226,7 +226,7 @@ let NOTES: { label: string; node: ReactNode }[] = [
 		node: (
 			<QuietNote
 				fix={machineFix(plannerStatus(FAILING), { mine: false, choose: true, place: "note" })}
-				text="Can't connect to @mona's machine: exit 1. It keeps trying; try again once that is fixed."
+				text="Can't connect to @mona's machine: exit 1. Try again once that is fixed."
 				ts={1_787_913_720}
 			/>
 		),

@@ -495,6 +495,38 @@ test("says nothing of a machine while the list was read before the socket's word
 	expect(told(undefined, starting("mona"), "mona", true, false)).toBeNull();
 });
 
+test("a word that says which machine starts it names the document's own machine without waiting for the list", () => {
+	let boxA = machine({ id: "M_a", label: "Box A" });
+	let boxB = machine({ id: "M_b", label: "Box B" });
+	// The list was read before the word and still says the Planner is on Box A; the word says Box B.
+	let listed = state({
+		choice: "M_b",
+		machines: [boxA, boxB],
+		planner: { state: "starting", login: null, machine: "M_a" },
+	});
+	let failure = { attempts: 2, reason: "exit 1", at: new Date(NOW).toISOString() };
+	for (
+		let word of [{ ...starting("mona"), machine: "M_b" }, {
+			...starting("mona"),
+			machine: "M_b",
+			failure,
+		}]
+	) {
+		expect(told(listed, word, "mona", true, false)).toBe("Box B");
+	}
+	// A word naming a machine other than the document's own still waits for the list to agree.
+	expect(told(listed, { ...starting("mona"), machine: "M_a" }, "mona", true, false)).toBeNull();
+	// Where the creator decides, the login names it, as before.
+	expect(
+		told(
+			{ ...listed, creatorDecides: true },
+			{ ...starting("drew"), machine: "M_b" },
+			"mona",
+			true,
+		),
+	).toBeUndefined();
+});
+
 test("a word that waits for a newer read of the list says nothing, never what the status said of an older word, and is drawn at once", () => {
 	let listed = state({
 		choice: "M_box",

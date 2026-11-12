@@ -164,7 +164,17 @@ export declare namespace Session {
 		| { state: "attached"; login: string }
 		| { state: "held"; login: string; until: string }
 		| { state: "disconnected"; login: string }
-		| { state: "starting"; login: string; failure?: PlannerStartFailure; attempt?: number }
+		| {
+			state: "starting";
+			login: string;
+			/**
+			 * The id of the machine asked to start it, so a page that lists that machine names it from
+			 * this word alone, with no second read of the list in between.
+			 */
+			machine?: string;
+			failure?: PlannerStartFailure;
+			attempt?: number;
+		}
 		| { state: "none" };
 
 	/**

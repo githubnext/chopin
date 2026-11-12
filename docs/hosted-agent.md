@@ -686,7 +686,10 @@ connector retries on its own within seconds; the server still answers it. The pa
 hear the machine while the room's own connection is lost, so the live region then tells that
 connection alone and tells the machine again, with the state then known, once the connection
 is back. `plannerForBanner` and `connectionStep` decide this, so the button and the live region
-cannot disagree. A screen reader hears each phase once as it begins, from
+cannot disagree. A move to another machine is one state, connecting to it, from the
+person's click until the server's word after it is known (`machine-switch.ts`): the `starting`
+word carries the id of the machine asked (`machine`), so a page names its own machine from the
+word alone, and how often a machine was tried is never shown or said. A screen reader hears each phase once as it begins, from
 one live region of the page, and nothing when it clears; the region remembers the machine
 state it last said, so one that carried on through a loss is not said again when the
 connection returns, and a different one is said once. Other harnesses never send it, and
@@ -741,8 +744,9 @@ third in a row `starting` carries a `failure` whose `attempts` are the launches 
 machine runs and that `chopin update` there shows why, where it is older than 0.0.23. A machine asked
 to run a document's Planner that has not attached one after `PLANNER_PATIENCE_MS` (2 minutes: enough for
 a first start that clones and builds) is told the same way, whichever connector it runs: _It hasn't
-answered yet_ or _It started but hasn't connected yet_, with `attempts` 0, which the menu words as
-_Not answered yet_, with _Waiting since 7:26 PM. Still trying._ under _Show details_. The 15-second sweep announces it once. What a connector reports,
+answered yet_ or _It started but hasn't connected yet_, with `attempts` 0, which the menu says with
+_Waiting since 7:26 PM._ under _Show details_ (_Last tried at 7:26 PM._ once launches have ended; the
+count is never said). The 15-second sweep announces it once. What a connector reports,
 when it does, is told instead. All of it is forgotten as a report is, and when the document's machine
 is another, so a machine that was waited on is never waited on again from where it left off.
 

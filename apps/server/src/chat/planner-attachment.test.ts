@@ -13,6 +13,12 @@ test("a Planner nobody holds is told as starting with the launch its machine wai
 		login: "mona",
 		attempt: 2,
 	});
+	// Which machine it is, so a page names it from the word alone.
+	expect(plannerAttachment(none, { login: "mona", machineId: "m-1" })).toEqual({
+		state: "starting",
+		login: "mona",
+		machine: "m-1",
+	});
 	let failure = { attempts: 2, reason: "no git", at: "2026-11-10T00:00:00.000Z" };
 	expect(plannerAttachment(none, { login: "mona", attempt: 3, failure })).toEqual({
 		state: "starting",

@@ -31,12 +31,10 @@ test("says what is happening and where while a Planner starts, naming the viewer
 	});
 });
 
-test("carries the launch a starting Planner waits on once an earlier one exited, and none before", () => {
+test("a starting Planner is connecting, whichever launch it waits on: no count is carried to a person", () => {
 	expect(
 		plannerStatus({ state: "starting", login: "mona", attempt: 2 }, "Build box"),
-	).toEqual({ kind: "starting", text: "Connecting to Build box", attempt: 2 });
-	let first = plannerStatus({ state: "starting", login: "mona" }, "Build box")!;
-	expect("attempt" in first).toBe(false);
+	).toEqual({ kind: "starting", text: "Connecting to Build box" });
 	// A machine that cannot start is told by what it tried, not by the launch it waits on.
 	expect(plannerStatus({ ...failing(), attempt: 4 }, "Build box")).toMatchObject({
 		kind: "cant-start",
@@ -69,13 +67,13 @@ test("says why a Planner that keeps failing cannot start, and what has been trie
 		attempts: 3,
 		title: "Can't connect to Build box",
 		reason: "The checkout's git config sets a credential helper",
-		detail: `Tried 3 times, last at ${clockTime(AT)}. Still trying.`,
+		detail: `Last tried at ${clockTime(AT)}.`,
 		where: "Build box",
 		login: "mona",
 	});
 	expect(plannerStatus(failing(1))).toMatchObject({
 		title: "Can't connect to @mona's machine",
-		detail: expect.stringMatching(/^Tried once, last at /),
+		detail: `Last tried at ${clockTime(AT)}.`,
 	});
 });
 
@@ -85,7 +83,7 @@ test("says a machine that has not answered has not, instead of counting launches
 		attempts: 0,
 		title: "Can't connect to Build box",
 		reason: "It hasn't answered yet",
-		detail: `Waiting since ${clockTime(AT)}. Still trying.`,
+		detail: `Waiting since ${clockTime(AT)}.`,
 		where: "Build box",
 		login: "mona",
 	});

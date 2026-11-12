@@ -11,7 +11,7 @@ import "./fix-steps.css";
  * The machine fix-it steps (`machine-fix.ts`), drawn once for the machine button's menu and for
  * the How to fix of chopin's ephemeral row: a bold title, one plain sentence of why, numbered steps
  * of one action each with any command alone in a block that copies it, and a foot with Show details
- * at its start and, at its end, how often it was tried and Learn more. The machine's own words
+ * at its start and Learn more at its end; how often it was tried is never said. The machine's own words
  * unfold under the foot.
  *
  * Calm on purpose, as Slack's help is: no alarm colour, since nothing is lost and Chopin keeps
@@ -60,7 +60,6 @@ export default function FixSteps(
 						</UnfoldToggle>
 					)}
 					<span className="fix-steps-end">
-						{fix.tried && <span className="fix-steps-tried">{fix.tried}</span>}
 						<a
 							className="fix-steps-link"
 							href={fix.learnMore}

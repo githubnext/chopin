@@ -57,6 +57,7 @@ export function useConnectionBanner(
 		planner,
 		plannerAttached,
 		plannerHeld,
+		plannerMove,
 		lostEdits,
 		reconnect,
 	}: {
@@ -77,6 +78,8 @@ export function useConnectionBanner(
 		lostEdits: number;
 		/** The Planner's status is only withheld for a moment, not over. */
 		plannerHeld: boolean;
+		/** How many times the person moved it to another machine (`ConnectionFacts.plannerMove`). */
+		plannerMove?: number;
 		reconnect: () => void;
 	},
 ): ConnectionBanner {
@@ -87,9 +90,6 @@ export function useConnectionBanner(
 		if (pressed !== undefined && (!lost || failures > pressed)) setPressed(undefined);
 	}, [lost, failures, pressed]);
 	let [memory, setMemory] = useState<ConnectionMemory>(INITIAL_MEMORY);
-	// `failures` starts over when the socket opens, so the attempt that opened it is the last one
-	// counted while the loss was shown. Left unknown, never guessed, where none was.
-	let attempt = useRef<number>(undefined);
 	let facts: ConnectionFacts = {
 		socket: shown ? "lost" : "up",
 		failures,
@@ -102,13 +102,11 @@ export function useConnectionBanner(
 		planner,
 		lostEdits,
 		plannerAttached,
-		reopened: attempt.current,
+		...(plannerMove ? { plannerMove } : {}),
 	};
 	let step = connectionStep(memory, facts);
 	useEffect(() => {
 		if (step.memory !== memory) setMemory(step.memory);
-		if (lost && shown) attempt.current = failures + 1;
-		else if (!step.memory.lost) attempt.current = undefined;
 	});
 	let resumed = step.view.phase === "resumed";
 	useEffect(() => {
@@ -128,6 +126,7 @@ export function useConnectionBanner(
 		step.view.phase,
 		"layer" in step.view ? step.view.layer : undefined,
 		"plannerKind" in step.view ? step.view.plannerKind : undefined,
+		"plannerMove" in step.view ? step.view.plannerMove : undefined,
 		plannerHeld,
 	]);
 

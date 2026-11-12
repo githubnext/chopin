@@ -160,6 +160,8 @@ function choice(): MachineChoice {
 		chosen: 0,
 		choose: async () => {},
 		refresh: () => {},
+		moves: 0,
+		endSwitch: () => {},
 	};
 }
 

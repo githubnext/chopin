@@ -1663,9 +1663,9 @@ test("a Planner its machine keeps failing to start is a warning dot on the machi
 		"Wait a moment.It connects again by itself once it's fixed.",
 		"Or choose another machine below.",
 	]);
-	// The machine's own words are folded away; how often it was tried is said quietly.
+	// The machine's own words are folded away; how often it was tried is never said.
 	await expect(steps.getByText(REASON)).toBeHidden();
-	await expect(steps.getByText("Tried 2 times", { exact: true })).toBeVisible();
+	await expect(menu).not.toContainText(/Tried (once|\d)|\d times|attempt|Still trying/i);
 	await expect(steps.getByRole("menuitem", { name: "Learn more" })).toHaveAttribute(
 		"href",
 		/docs\/chopin-cli\.md#cant-connect-to-a-machine$/,
@@ -1684,19 +1684,18 @@ test("a Planner its machine keeps failing to start is a warning dot on the machi
 	await expect(steps.getByRole("menuitem", { name: "Show details" })).toBeFocused();
 	await page.keyboard.press("Enter");
 	await expect(steps.getByText(REASON)).toBeVisible();
-	await expect(steps.locator(".fix-steps-output")).toContainText(
-		/Tried 2 times, last at .+\. Still trying\./,
-	);
+	await expect(steps.locator(".fix-steps-output")).toContainText(/Last tried at [^.]+\.$/);
 	await shoot(page, "planner-failing-menu-details-desktop");
 	await expectAccessible(page, ".machine-menu");
 	await page.keyboard.press("Escape");
 	await expect(menu).toBeHidden();
 	await expect(button).toBeFocused();
 
-	// More failures update the count and say nothing more aloud.
+	// More failures change nothing a person sees, and say nothing more aloud.
 	await studio.reportFailure(refused(room, 3));
 	await button.click();
-	await expect(steps.getByText("Tried 3 times", { exact: true })).toBeVisible();
+	await expect(steps).toContainText("It stops each time before it connects.");
+	await expect(menu).not.toContainText(/\d times|attempt|Still trying/i);
 	await page.keyboard.press("Escape");
 
 	// @chopin while it can't connect: the server waits for the machine, then turns it away. Nothing
@@ -1729,7 +1728,7 @@ test("a Planner its machine keeps failing to start is a warning dot on the machi
 	let link = await studio.backend(room);
 	await expectHealthy(button);
 	await expect(announced(page)).toHaveText("");
-	await expect(page.getByText("Tried 3 times")).toHaveCount(0);
+	await expect(page.getByText(/Last tried at/)).toHaveCount(0);
 	// A screen reader was told each state once, and not again as the count rose or it cleared.
 	let said = await heard(page);
 	let connecting = said.filter(text => text.startsWith("Connecting to "));
@@ -2573,7 +2572,7 @@ test("a machine whose connector cannot say why its backend keeps stopping is sai
 	await expect(steps.locator(".fix-steps-output")).toHaveText(
 		new RegExp(
 			"^It started and stopped again before it connected\\. It runs chopin 0\\.0\\.22, which "
-				+ "can't say why: run `chopin update` on it\nTried 2 times, last at .+\\. Still trying\\.$",
+				+ "can't say why: run `chopin update` on it\nLast tried at [^.]+\\.$",
 		),
 	);
 	await shoot(page, "planner-silent-connector");
@@ -2586,3 +2585,109 @@ test("a machine whose connector cannot say why its backend keeps stopping is sai
 	await expect(page.getByText("chopin update")).toHaveCount(0);
 	await link.detach();
 });
+
+/**
+ * Records every state the machine button draws from now on, in the page, each time it changes: its
+ * dot and what its name says of the Planner, without the machine it names, which the choice itself
+ * changes. Also what the live region says from then on, each time it changes.
+ */
+async function recordStates(page: Page) {
+	await page.evaluate(() => {
+		let w = window as unknown as { states: string[]; spoken: string[] };
+		w.states = [];
+		w.spoken = [];
+		// What was said before the recording began is not said again by it.
+		let said = document.querySelector("[data-connection-status]")?.textContent ?? "";
+		let read = () => {
+			let button = document.querySelector('button[aria-label^="Runs on"]');
+			let name = button?.getAttribute("aria-label") ?? "";
+			let state = `${button?.getAttribute("data-planner") ?? "quiet"}: ${
+				name.replace(/^Runs on [^.]+(\. )?/, "")
+			}`;
+			if (w.states.at(-1) !== state) w.states.push(state);
+			let now = document.querySelector("[data-connection-status]")?.textContent ?? "";
+			if (now !== said) {
+				said = now;
+				if (now) w.spoken.push(now);
+			}
+			requestAnimationFrame(read);
+		};
+		read();
+	});
+	return () =>
+		page.evaluate(() => {
+			let w = window as unknown as { states: string[]; spoken: string[] };
+			return { states: w.states, spoken: w.spoken };
+		});
+}
+
+for (
+	let [from, to] of [
+		["attached", "attaches"],
+		["attached", "can't start"],
+		["connecting", "attaches"],
+		["connecting", "never answers"],
+	] as const
+) {
+	test(`moving the document from a machine that is ${from} to one that ${to} is one state, connecting, with nothing between`, async ({ browser }) => {
+		test.setTimeout(120_000);
+		let room = await remoteServer();
+		let page = await open(browser, "mona", room, DESKTOP);
+		await createdBy(room, "mona");
+		let a = await machine(page, "Box A", true);
+		let b = await machine(page, "Box B", true);
+		await page.reload();
+		await ready(page);
+		let list = await (await page.request.get(`${ORIGIN}/api/documents/${room}/machine`))
+			.json() as { machines: Array<{ id: string; label: string }> };
+		let chosen = await page.request.post(`${ORIGIN}/api/documents/${room}/machine`, {
+			data: { machine: list.machines.find(value => value.label === "Box A")!.id },
+			headers: { origin: ORIGIN },
+		});
+		expect(chosen.status()).toBe(200);
+		expect((await a.poll([])).planners).toHaveLength(1);
+		let linkA = from === "attached" ? await a.backend(room) : undefined;
+		let button = machineButton(page);
+		if (linkA) await expectHealthy(button);
+		else await expect(button).toHaveAccessibleName("Runs on Box A. Connecting to Box A");
+
+		let stop = await recordStates(page);
+		await (await runOn(page)).getByRole("menuitemradio", { name: /^Box B/ }).click();
+		await expect(button).toHaveAccessibleName("Runs on Box B. Connecting to Box B");
+		// chopin's own presence says the same, never the old machine's attached state.
+		let input = chatInput(page);
+		await fillChat(input, "@");
+		await expect(
+			page.getByRole("listbox", { name: "Mentions" }).getByRole("option", { name: /^chopin/i }),
+		).toHaveAccessibleName(/^chopin, agent, Connecting$/i);
+		await fillChat(input, "");
+		await shoot(page, `switch-from-${from}-connecting`);
+		// Box B's connector is asked to run it, as its next poll is told; it then attaches, fails to,
+		// or never answers.
+		expect((await b.poll([])).planners).toHaveLength(1);
+		await page.waitForTimeout(2_000);
+		let linkB = to === "attaches" ? await b.backend(room) : undefined;
+		if (to === "can't start") {
+			expect((await b.reportFailure(refused(room, 2))).status).toBe(200);
+		}
+		if (to === "attaches") await expectHealthy(button);
+		if (to === "can't start") await expect(button).toHaveAttribute("data-planner", "failing");
+		await page.waitForTimeout(to === "never answers" ? 6_000 : 1_500);
+		let { states, spoken } = await stop();
+		let before = from === "attached" ? "quiet: " : "starting: Connecting to Box A";
+		let after = to === "attaches"
+			? ["quiet: "]
+			: to === "can't start"
+			? ["failing: Can't connect to Box B."]
+			: [];
+		// Exactly: what was, then connecting to Box B once, then what it came to. No blink, no idle,
+		// no state of the machine just left, and no return said between.
+		expect(states).toEqual([before, "starting: Connecting to Box B", ...after]);
+		expect(spoken.filter(words => /Box A|machine is back|Back/.test(words))).toEqual([]);
+		// A screen reader hears the move as it begins, connecting to Box B, once.
+		expect(spoken.filter(words => words === "Connecting to Box B")).toHaveLength(1);
+		await shoot(page, `switch-from-${from}-${to.replace(/\W+/g, "-")}`);
+		await linkA?.detach().catch(() => {});
+		await linkB?.detach().catch(() => {});
+	});
+}

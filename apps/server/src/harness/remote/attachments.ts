@@ -194,11 +194,9 @@ export function reconnectingMessage(login: string | undefined): string {
  * document's machine button does, and names only its owner's login, never the machine.
  */
 export function startingMessage(login: string, failure?: Session.PlannerStartFailure): string {
+	// What was tried is never counted for a person: it connects, or it can't, and why.
 	if (failure) {
-		// A machine that has not answered has no launches in a row to count yet.
-		let rows = failure.attempts >= 2 ? ` (${failure.attempts} attempts in a row)` : "";
-		return `Can't connect to @${login}'s machine: ${failure.reason}${rows}. `
-			+ "It keeps trying; try again once that is fixed.";
+		return `Can't connect to @${login}'s machine: ${failure.reason}. Try again once that is fixed.`;
 	}
 	return `Still connecting to @${login}'s machine. Try again in a moment.`;
 }

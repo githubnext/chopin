@@ -5,7 +5,7 @@
  *
  * A short title, one plain sentence of why, then numbered steps of one action each, a command
  * standing alone in its own block so it can be copied whole. What the machine reported, word for
- * word, is kept for "Show details", and how often it was tried is said quietly at the foot. Only
+ * word, is kept for "Show details", with when it was last tried; how often is never said. Only
  * the owner's login names someone else's machine (`planner-status.ts`); the viewer's own is named
  * plainly, and only the viewer's own machine is told to run something.
  */
@@ -41,8 +41,6 @@ export type MachineFix = {
 	steps: FixStep[];
 	/** What the machine reported, word for word, and when it was last tried, under "Show details". */
 	details?: string[];
-	/** How often it was tried, said quietly at the foot ("Tried 3 times"). */
-	tried?: string;
 	learnMore: string;
 };
 
@@ -106,11 +104,6 @@ export function machineFix(
 			why: startWhy(status.reason),
 			steps: [...steps, ...wait, ...another],
 			details: [status.reason, status.detail],
-			tried: silent
-				? "Not answered yet"
-				: status.attempts === 1
-				? "Tried once"
-				: `Tried ${status.attempts} times`,
 			learnMore: PLANNER_HOW_TO_FIX,
 		};
 	}
