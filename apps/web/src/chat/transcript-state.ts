@@ -17,6 +17,7 @@ export type TranscriptAction =
 	| { kind: "tool"; entryId: string; activity: Chat.Activity }
 	| { kind: "turn"; turn?: Chat.Turn }
 	| { kind: "reactions"; id: string; reactions: Chat.Reaction[] }
+	| { kind: "removed"; ids: string[] }
 	| { kind: "responded" };
 
 /**
@@ -159,6 +160,19 @@ export function transcriptReducer(
 			return state.entries.some(entry => entry.id === action.id)
 				? { ...state, entries: withReactions(state.entries, action.id, action.reactions) }
 				: state;
+		case "removed": {
+			// A failed attempt a Retry replaced: its entries go, and with them the work it showed.
+			let gone = new Set(action.ids);
+			if (!state.entries.some(entry => gone.has(entry.id))) return state;
+			return {
+				...state,
+				entries: state.entries.filter(entry => !gone.has(entry.id)),
+				completedWork: state.completedWork.filter(item => !gone.has(item.anchorId)),
+				...(state.activeAnchorId && gone.has(state.activeAnchorId)
+					? { activeAnchorId: undefined }
+					: {}),
+			};
+		}
 		case "responded":
 			return state.turn && !state.turn.responded
 				? { ...state, turn: { ...state.turn, responded: true } }

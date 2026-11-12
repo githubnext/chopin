@@ -2,13 +2,7 @@ import { expect, test } from "bun:test";
 
 import { INTERNAL_IN_STATUS } from "@chopin/protocol/plain-words";
 
-import {
-	failureBanner,
-	failureView,
-	retryPayload,
-	sendFailureView,
-	withoutFailure,
-} from "./failure";
+import { failureBanner, failureView, sendFailureView, withoutFailure } from "./failure";
 import { sendFailure } from "./references";
 import { WireRefusal } from "../wire";
 
@@ -106,83 +100,17 @@ test("a failure whose request is not in the transcript, or never had one, has no
 		.toBe(false);
 });
 
-test("asking again repeats the same turn: its text, its references, its destination and the document it was about", () => {
-	let referenced = member("ask", "mona", {
-		to: "planner",
-		text: "Compare with the plan",
-		references: [
-			{
-				id: "r1",
-				kind: "document",
-				channelId: "ch-1",
-				start: 13,
-				end: 22,
-				label: "The plan",
-				href: "/x",
-				repositoryId: "R1",
-				observedRevision: 3,
-				observedSourceHash: "sha256:a",
-			},
-			{
-				id: "r2",
-				kind: "research",
-				workspaceId: "w-1",
-				parentChannelId: "ch-0",
-				start: 0,
-				end: 7,
-				label: "Compare",
-				href: "/y",
-				repositoryId: "R1",
-				observedRevision: 1,
-			},
-		],
+test("Retry names the message whose turn failed, for its sender alone: the server runs that message again, so nothing new is sent", () => {
+	let entries = [ASK, failed("f1", { kind: "timed-out", request: "ask", focus: "child-7" })];
+	expect(failureBanner(entries, undefined, "mona")).toMatchObject({
+		entry: "f1",
+		request: "ask",
+		retry: true,
 	});
-	let entries = [referenced, failed("f1", { kind: "timed-out", request: "ask", focus: "child-7" })];
-	let payload = retryPayload(entries, "f1", () => "req-new");
-	expect(payload).toEqual({
-		requestId: "req-new",
-		text: "Compare with the plan",
-		to: "planner",
-		references: [
-			{ kind: "document", channelId: "ch-1", start: 13, end: 22 },
-			{ kind: "research", workspaceId: "w-1", start: 0, end: 7 },
-		],
-		focus: "child-7",
-	});
-	// Nothing is added that the original did not have.
-	let bare = [ASK, failed("f2", { kind: "error", request: "ask" })];
-	expect(retryPayload(bare, "f2", () => "req-2")).toEqual({
-		requestId: "req-2",
-		text: "from ask",
-		to: "planner",
-	});
-});
-
-test("asking again repeats a command as the command it was, with its kind", () => {
-	let ran = member("ask", "mona", {
-		to: "planner",
-		text: "/review the diff",
-		references: [{
-			id: "c1",
-			kind: "command",
-			start: 0,
-			end: 7,
-			label: "/review",
-			name: "review",
-			commandKind: "prompt",
-		}],
-	});
-	let payload = retryPayload(
-		[ran, failed("f1", { kind: "error", request: "ask" })],
-		"f1",
-		() => "r",
-	);
-	expect(payload).toEqual({
-		requestId: "r",
-		text: "/review the diff",
-		to: "planner",
-		references: [{ kind: "command", name: "review", commandKind: "prompt", start: 0, end: 7 }],
-	});
+	expect(failureBanner(entries, undefined, "ada")?.request).toBeUndefined();
+	// A failure asking again cannot help names nothing to run again.
+	let refused = [ASK, failed("f1", { kind: "refused", request: "ask" })];
+	expect(failureBanner(refused, undefined, "mona")?.request).toBeUndefined();
 });
 
 test("the failed reply's own line leaves the transcript only while the banner tells it", () => {

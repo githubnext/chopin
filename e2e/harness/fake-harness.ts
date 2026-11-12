@@ -69,6 +69,16 @@ const PROVISIONAL = "The first version remains provisional.";
  */
 const FAIL_PROMPT = /FAIL-(MODEL|TIMEOUT|TOOL|REFUSED)/;
 const FAIL_ONCE_PROMPT = "FAIL-ONCE";
+/**
+ * `RETRY-CONTEXT-<n> <marker>` fails its first `n` turns as the model does, each after a partial
+ * reply, and then answers with what that turn was given: how many times its marker is in the
+ * instructions and the prompt together, and whether the failed attempts' partial reply or error
+ * are, so a Retry can be seen to give the model the message once and nothing of a failed attempt.
+ */
+const RETRY_CONTEXT_PROMPT = /RETRY-CONTEXT-(\d) (\S+)/;
+const RETRY_PARTIAL = "Partial draft before the failure.";
+const RETRY_ERROR = "503 Service Unavailable";
+const retryAttempts = new Map<string, number>();
 const THREAD_ECHO_PROMPT = "THREAD-ECHO";
 const USAGE_REPORT_PROMPT = "USAGE-REPORT";
 const USAGE_WARN_PROMPT = "USAGE-WARN";
@@ -308,6 +318,39 @@ export function createFakeHarness(
 							} catch (error) {
 								turn.emit({ type: "error", error });
 								settled.reject(error);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (RETRY_CONTEXT_PROMPT.test(requested)) {
+						void (async () => {
+							let [, failures, marker] = RETRY_CONTEXT_PROMPT.exec(requested)!;
+							let attempt = (retryAttempts.get(marker!) ?? 0) + 1;
+							retryAttempts.set(marker!, attempt);
+							let given = `${turn.instructions ?? ""}\n${prompt}`;
+							let id = crypto.randomUUID();
+							try {
+								turn.emit({ type: "text-start", id });
+								if (attempt <= Number(failures)) {
+									turn.emit({ type: "text-delta", id, delta: RETRY_PARTIAL });
+									turn.emit({ type: "text-end", id });
+									let error = new Error(`${RETRY_ERROR} (attempt ${attempt})`);
+									turn.emit({ type: "error", error });
+									settled.reject(error);
+									return;
+								}
+								let times = given.split(marker!).length - 1;
+								let seen = (words: string) =>
+									given.includes(words) ? "in context" : "not in context";
+								turn.emit({
+									type: "text-delta",
+									id,
+									delta: `Attempt ${attempt}: the message ${times} time(s); the partial reply `
+										+ `${seen(RETRY_PARTIAL)}; the error ${seen(RETRY_ERROR)}.`,
+								});
+								turn.emit({ type: "text-end", id });
+								finish();
+								settled.resolve();
 							} finally {
 								turn.abortSignal?.removeEventListener("abort", onAbort);
 							}

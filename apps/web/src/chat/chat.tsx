@@ -57,7 +57,7 @@ import { silencesFailedSends } from "./connection-phase";
 import { ErrorState } from "./error-state";
 import { QuietNote } from "./quiet-note";
 import { PlannerPresenceContext } from "./presence";
-import { failureBanner, retryPayload, sendFailureView, withoutFailure } from "./failure";
+import { failureBanner, sendFailureView, withoutFailure } from "./failure";
 import { TypingReporter } from "./typing";
 import { useSteadyCallback, useSteadyFields } from "./steady";
 import { asksChopin, asksChopinKey, withChopinMention } from "./ask-chopin";
@@ -521,25 +521,29 @@ export function Chat(
 		transcriptReady,
 		connectionNotice !== "none",
 	);
-	let [retried, setRetried] = useState<string>();
+	// The failure notice a Retry was pressed for, and the server's words when it refused one.
+	let [retried, setRetried] = useState<{ entry: string; refusal?: string }>();
 	let failed = failureBanner(entries, turn, handle);
 	let sendBanner = shownSend ? sendFailureView(shownSend, shownSend.code) : undefined;
-	let retryTurn = failed?.retry
+	// Retry runs the same message's turn again: nothing new is sent, and the failed attempt leaves
+	// the transcript for everyone (`chat:removed`) as the turn starts.
+	let retryTurn = failed?.retry && failed.request && wire
 		? () => {
-			let payload = retryPayload(entries, failed.entry, () => crypto.randomUUID());
-			if (!payload) return;
-			setRetried(payload.requestId);
-			dispatchOutbox({
-				kind: "add",
-				item: { payload, handle, ts: Math.floor(Date.now() / 1000) },
-			});
+			let entry = failed.entry;
+			setRetried({ entry });
+			wire.ask<Wire.Retried>("chat:retry", { message: failed.request }).catch((error: Error) =>
+				setRetried(current =>
+					current?.entry !== entry
+						? current
+						: error instanceof WireRefusal
+						? { entry, refusal: error.message }
+						: undefined
+				)
+			);
 		}
 		: undefined;
-	let retrying = !!retried
-		&& outbox.some(item => item.payload.requestId === retried && !item.failure);
-	useEffect(() => {
-		if (retried && !retrying) setRetried(undefined);
-	}, [retried, retrying]);
+	let retrying = !!failed && retried?.entry === failed.entry && retried.refusal === undefined;
+	let retryRefusal = failed && retried?.entry === failed.entry ? retried.refusal : undefined;
 	// Only a banner that says why a send could not go gives a refused message's line its quiet;
 	// a Planner's absence is another fact, and the message still says it was not sent.
 	let quietFailures = !!banner && silencesFailedSends(banner.view);
@@ -776,6 +780,9 @@ export function Chat(
 				dispatchTranscript({ kind: "message", entry: frame.entry });
 				dispatchOutbox({ kind: "seen", ids: [frame.entry.id] });
 				response(frame.entry.author.kind === "agent", frame.entry.text);
+			}),
+			wire.on<Wire.Removed>("chat:removed", frame => {
+				dispatchTranscript({ kind: "removed", ids: frame.ids });
 			}),
 			wire.on<Wire.Reactions>("chat:reactions", frame => {
 				dispatchTranscript({ kind: "reactions", id: frame.id, reactions: frame.reactions });
@@ -1347,11 +1354,12 @@ export function Chat(
 		: slot.lead === "failure" && failed
 		? (
 			<ErrorState
-				detail={failed.detail}
+				detail={retryRefusal ?? failed.detail}
 				id={bannerId}
 				kind={failed.kind}
 				link={failed.link}
 				onRetry={retryTurn}
+				retryDisabled={!composerReady}
 				retrying={retrying}
 				title={failed.title}
 			/>

@@ -302,3 +302,29 @@ describe("message reactions", () => {
 		expect(finished.entries[0]!.reactions).toEqual([reaction("👎", "ana")]);
 	});
 });
+
+describe("a retried reply", () => {
+	it("drops the failed attempt's entries and the work they showed, and keeps the message", () => {
+		let state = transcriptReducer(initialTranscript, {
+			kind: "history",
+			entries: [entry("prompt", { kind: "member", handle: "ana" })],
+			turn,
+		});
+		state = transcriptReducer(state, {
+			kind: "message",
+			entry: entry("partial", { kind: "agent" }, "Partial draft."),
+		});
+		state = transcriptReducer(state, { kind: "turn" });
+		state = transcriptReducer(state, {
+			kind: "message",
+			entry: entry("failure", { kind: "system" }, "503 Service Unavailable"),
+		});
+		expect(state.completedWork.map(item => item.anchorId)).toEqual(["partial"]);
+
+		state = transcriptReducer(state, { kind: "removed", ids: ["partial", "failure"] });
+		expect(state.entries.map(item => item.id)).toEqual(["prompt"]);
+		expect(state.completedWork).toEqual([]);
+		// Ids it no longer has change nothing.
+		expect(transcriptReducer(state, { kind: "removed", ids: ["partial"] })).toBe(state);
+	});
+});

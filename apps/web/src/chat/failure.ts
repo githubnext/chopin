@@ -8,10 +8,8 @@
  * The words are a machine's and a person's own, none of Chopin's terms (`status-copy.test.tsx`).
  */
 
-import { referenceRequest } from "./references";
-
 import type { Chat } from "@chopin/protocol";
-import type { ChatSendPayload, SendFailure } from "./references";
+import type { SendFailure } from "./references";
 
 export type FailureKind = Exclude<Chat.TurnFailure["kind"], "dropped"> | "send";
 
@@ -73,14 +71,16 @@ export function sendFailureView(
 export type FailureBanner = FailureView & {
 	/** The failed turn's notice in the transcript, which the banner stands in for. */
 	entry: string;
+	/** The message whose turn failed, which Retry runs again; set wherever `retry` is. */
+	request?: string;
 };
 
 /**
  * The failed reply the banner tells now: the latest failed turn, until anyone says something
  * after it (a member or the agent has moved on) or a reply is running (a new turn). A system
  * notice after it, such as a pause, does not end it. `retry` is also false unless this person
- * asked for the reply that failed, in a message that was sent to the Planner: nobody sends
- * another's words again.
+ * asked for the reply that failed, in a message that was sent to the Planner: nobody runs
+ * another's message again. Retry runs that message's turn again (`chat:retry`); it sends nothing new.
  */
 export function failureBanner(
 	entries: readonly Chat.Entry[],
@@ -98,7 +98,12 @@ export function failureBanner(
 				: undefined;
 			let mine = !!asked && asked.author.kind === "member" && asked.author.handle === handle
 				&& asked.to === "planner";
-			return { ...view, retry: view.retry && mine, entry: entry.id };
+			return {
+				...view,
+				retry: view.retry && mine,
+				entry: entry.id,
+				...(view.retry && mine ? { request: asked!.id } : {}),
+			};
 		}
 		if (entry.author.kind !== "system") return undefined;
 	}
@@ -111,27 +116,4 @@ export function withoutFailure<T extends { id: string }>(
 	entry: string | undefined,
 ): T[] {
 	return entry === undefined ? entries : entries.filter(item => item.id !== entry);
-}
-
-/**
- * The turn asked for again, as it was: its text, its references, its destination and the document
- * that was open. Only a request id is new, so the server answers it as a message of its own.
- */
-export function retryPayload(
-	entries: readonly Chat.Entry[],
-	failed: string,
-	requestId: () => string,
-): ChatSendPayload | undefined {
-	let notice = entries.find(entry => entry.id === failed);
-	let failure = notice?.turnFailure;
-	let asked = failure?.request ? entries.find(entry => entry.id === failure.request) : undefined;
-	if (!failure || !asked || asked.to !== "planner") return undefined;
-	let references = (asked.references ?? []).map(referenceRequest);
-	return {
-		requestId: requestId(),
-		text: asked.text,
-		to: "planner",
-		...(references.length > 0 ? { references } : {}),
-		...(failure.focus ? { focus: failure.focus } : {}),
-	};
 }
