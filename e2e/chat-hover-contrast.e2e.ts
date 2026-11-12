@@ -356,6 +356,15 @@ test("a shown Chat row is a shade people can see, and every text and icon on it 
 	failures.push(
 		...below(await measure(page, reply, "thread reply, hovered", threadGround), HOVER_STEP),
 	);
+	// The root at the head of its thread is drawn as Chat draws it, with its toolbar and reactions.
+	let threadRoot = panel.locator("[data-thread-root-message] [data-chat-message-id]");
+	await page.mouse.move(0, 0);
+	let rootGround = await groundAt(page, threadRoot);
+	await threadRoot.locator("[data-chat-message-text]").hover();
+	await expect(threadRoot.getByRole("toolbar")).toHaveCSS("opacity", "1");
+	failures.push(
+		...below(await measure(page, threadRoot, "thread root, hovered", rootGround), HOVER_STEP),
+	);
 
 	expect(failures).toEqual([]);
 });

@@ -110,4 +110,36 @@ describe("threadsReducer", () => {
 		});
 		expect(state.threads.m1?.transcript.entries.map(entry => entry.id)).toEqual(["r1"]);
 	});
+
+	test("a reply's reactions, told in the thread, replace the ones it had", () => {
+		let reply = { id: "r1", author: { kind: "agent" as const }, text: "Yes.", ts: 13 };
+		let state = threadsReducer(initialThreadsState, {
+			kind: "opened",
+			frame: {
+				kind: "chat:thread",
+				ts: 12,
+				rootId: "m1",
+				root: { id: "m1", author: { kind: "member", handle: "ana" }, text: "Hi", ts: 10 },
+				forkedAt: 12,
+				entries: [reply],
+				busy: false,
+			},
+		});
+		let told = (reactions: { emoji: string; handles: string[] }[]) =>
+			threadsReducer(state, {
+				kind: "in-thread",
+				frame: {
+					kind: "chat:in-thread",
+					ts: 14,
+					rootId: "m1",
+					frame: { kind: "chat:reactions", ts: 14, id: "r1", reactions },
+				},
+			});
+		state = told([{ emoji: "❓", handles: ["ana"] }]);
+		expect(state.threads.m1?.transcript.entries[0]?.reactions).toEqual([
+			{ emoji: "❓", handles: ["ana"] },
+		]);
+		state = told([]);
+		expect(state.threads.m1?.transcript.entries[0]?.reactions).toBeUndefined();
+	});
 });

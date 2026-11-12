@@ -528,6 +528,38 @@ let MessageGroup = memo(function MessageGroup(
 
 let noop = () => {};
 let NO_INTENTS: readonly Intent[] = [];
+let NONE_ENTERING: ReadonlySet<string> = new Set();
+
+/**
+ * A thread's root at the head of its panel: the row Chat draws for it, with its toolbar and its
+ * reactions, and no Reply in thread, since it is that thread.
+ */
+export function ThreadRoot(
+	{ entry, handle, intents, onReact, room }: {
+		entry: Chat.Entry;
+		handle: string;
+		intents: readonly Intent[];
+		onReact: (id: string, emoji: string, on: boolean) => void;
+		room: string;
+	},
+) {
+	let item = useMemo(() => group([entry])[0], [entry]);
+	if (item?.kind !== "messages") return null;
+	return (
+		<MessageGroup
+			enter={false}
+			entering={NONE_ENTERING}
+			group={item}
+			handle={handle}
+			intents={intents}
+			onDelete={noop}
+			onReact={onReact}
+			onRetry={noop}
+			quietFailures={false}
+			room={room}
+		/>
+	);
+}
 
 /**
  * Memoized: Chat renders again with every key typed in its composer, and a long transcript is

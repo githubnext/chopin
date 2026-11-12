@@ -667,7 +667,8 @@ export declare namespace Chat {
 		| State
 		| Removed
 		| ContextState
-		| CompactionState;
+		| CompactionState
+		| Reactions;
 
 	/** Multiplexes a thread's live frames over the room socket; older clients ignore it. */
 	export type InThread = KIND<"chat:in-thread"> & {
@@ -726,6 +727,11 @@ export declare namespace Chat {
 	 * of an earlier ask are told from those of a later one. `tab` names the sender's tab, which
 	 * numbers its own asks: the broadcast of a numbered ask carries it, because the sequences of one
 	 * person's tabs are not comparable.
+	 *
+	 * `thread` says the reaction was made in that thread's view, to its root or to one of its
+	 * replies. A reply's reactions are told as `chat:in-thread` frames and a root's as the Chat's own,
+	 * since the root is a Chat message. A reaction the Planner answers is answered in that thread, by
+	 * its own session.
 	 */
 	export type React = KIND<"chat:react"> & {
 		id: string;
@@ -733,6 +739,7 @@ export declare namespace Chat {
 		on: boolean;
 		seq?: number;
 		tab?: string;
+		thread?: string;
 	};
 
 	/** The reaction is as asked, saved. `seq` is the ask's own. */

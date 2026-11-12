@@ -67,11 +67,6 @@
 	line-height: 1.4;
 }
 
-.thread-root-entry {
-	display: flex;
-	gap: calc(var(--spacing) * 2);
-}
-
 .thread-replies-rule {
 	display: flex;
 	align-items: center;
