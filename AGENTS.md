@@ -377,6 +377,15 @@ are `planner-busy` and `planner-not-attached`. One the server kept, though the c
 was lost, is answered with its first answer when the same request is sent again, and is given
 to a turn once.
 
+A reply that fails is retried on the same message (`chat:retry`), never as a new one. Only the
+message's sender may, while its failure is the latest Planner turn and asking again can help. The
+server takes the failed attempt out of the transcript (the failure notice and every agent entry
+the attempt wrote, `retryTarget` in `apps/server/src/chat/retry.ts`), saves that, tells the room
+with `chat:removed`, and runs the message's turn as it began: the agent reads the message once and
+nothing of the attempt. An Atomic session branches back to its leaf before the attempt; a remote
+client that offered `retry-turn` is told `message` and `retry` to drop the attempt from what it
+keeps ([Retrying a failed turn](docs/agent-connection.md#retrying-a-failed-turn)).
+
 `instruction()` strips the mention before model input. Recent room messages that
 did not address the Planner still enter a bounded backscroll for the next turn.
 `implementation:draft` from Build also starts an explicit Planner turn: the

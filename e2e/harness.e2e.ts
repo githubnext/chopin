@@ -1,6 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
 
-import { instruction } from "../packages/protocol/address";
 import { allBanners, connectionBanner, failureBanner, phaseVoice, watchBanners } from "./banner";
 import { chatInput, expectChatValue } from "./chat-input";
 import { expectFocusIndicator } from "./focus";
@@ -519,44 +518,98 @@ for (let ending of ENDINGS) {
 	);
 }
 
-test("Retry sends the same turn again, once, as a new request, and the banner goes with the answer", async ({ join, page, seed }) => {
-	await seed("# Retried turn\nThe harp needs new strings.\n");
-	let sent: Chat.Send[] = [];
+/** What the fake Planner says of the turn a Retry ran, in the words `RETRY-CONTEXT` answers with. */
+const CLEAN_CONTEXT =
+	"the message 1 time(s); the partial reply not in context; the error not in context.";
+const RETRY_PARTIAL = "Partial draft before the failure.";
+
+/** Every Chat frame the page sends, by kind. */
+async function recordSends(
+	page: Page,
+): Promise<Array<{ kind: string; requestId?: string; message?: string }>> {
+	let sent: Array<{ kind: string; requestId?: string; message?: string }> = [];
 	await page.routeWebSocket("**/ws?**", route => {
 		let server = route.connectToServer();
 		route.onMessage(message => {
 			if (typeof message === "string") {
-				let frame = JSON.parse(message) as Chat.Send;
-				if (frame.kind === "chat:send") sent.push(frame);
+				let frame = JSON.parse(message) as { kind: string };
+				if (frame.kind.startsWith("chat:send") || frame.kind === "chat:retry") sent.push(frame);
 			}
 			server.send(message);
 		});
 		server.onMessage(message => route.send(message));
 	});
-	let opened = await join("ana");
-	let chat = chatPane(opened);
-	let words = `FAIL-ONCE ${crypto.randomUUID()} compare the export options`;
-	await ask(opened, words);
-	let banner = chatBanner(opened, "error");
+	return sent;
+}
+
+test("Retry runs the same message's turn again: one message for everyone, the failed attempt gone, and the agent given the message once and nothing of the failure", async ({ join, seed }) => {
+	await seed("# Retried turn\nThe harp needs new strings.\n");
+	let ana = await join("ana");
+	let sent = await recordSends(ana);
+	await ana.reload();
+	await ready(ana);
+	let ben = await join("ben");
+	let marker = crypto.randomUUID();
+	await ask(ana, `RETRY-CONTEXT-1 ${marker} compare the export options`);
+	let banner = chatBanner(ana, "error");
 	await expect(banner).toContainText("Couldn't finish the reply.", { timeout: 20_000 });
-	expect(sent).toHaveLength(1);
-	expect(sent[0]).toMatchObject({ text: `@chopin ${words}`, to: "planner" });
+	await expect(chatBanner(ben, "error")).toContainText("Couldn't finish the reply.");
+	await expect(chatPane(ben)).toContainText(RETRY_PARTIAL);
 
 	await banner.getByRole("button", { name: "Retry", exact: true }).click();
-	// The same words to the same place, as a request of its own, and nothing more than one.
-	await expect.poll(() => sent.length).toBe(2);
-	// The room keeps the instruction without its summons, and the destination is what addresses it.
-	expect(sent[1]).toMatchObject({ text: instruction(sent[0]!.text), to: sent[0]!.to });
-	expect(sent[1]!.requestId).not.toBe(sent[0]!.requestId);
-	expect(sent[1]!.focus).toBe(sent[0]!.focus);
-	expect(sent[1]!.references).toEqual(sent[0]!.references);
-	// It worked this time: the reply is in the Chat and no banner is left.
-	await expect(chat.getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible({
-		timeout: 20_000,
-	});
-	await expect(failureBanner(opened)).toHaveCount(0);
-	await expect(allBanners(opened)).toHaveCount(0);
-	expect(sent).toHaveLength(2);
+	for (let page of [ana, ben]) {
+		let chat = chatPane(page);
+		await expect(chat).toContainText(`Attempt 2: ${CLEAN_CONTEXT}`, { timeout: 20_000 });
+		// One message, one reply, and nothing left of the attempt that failed.
+		await expect.poll(async () => said(await chat.innerText(), marker)).toBe(1);
+		await expect.poll(async () => said(await chat.innerText(), "Attempt 2:")).toBe(1);
+		await expect(chat).not.toContainText(RETRY_PARTIAL);
+		await expect(chat).not.toContainText("503 Service Unavailable");
+		await expect(allBanners(page)).toHaveCount(0);
+	}
+	// The page sent the message once and asked for its turn again, by its id: no second send.
+	expect(sent.filter(frame => frame.kind === "chat:send")).toHaveLength(1);
+	let retries = sent.filter(frame => frame.kind === "chat:retry");
+	expect(retries).toHaveLength(1);
+	expect(retries[0]!.message).toBe(sent[0]!.requestId);
+
+	// It is the room's record: a reload reads the same one message and one reply.
+	await ben.reload();
+	await ready(ben);
+	let reloaded = chatPane(ben);
+	await expect(reloaded).toContainText(`Attempt 2: ${CLEAN_CONTEXT}`);
+	expect(said(await reloaded.innerText(), marker)).toBe(1);
+	await expect(reloaded).not.toContainText(RETRY_PARTIAL);
+});
+
+test("a Retry that fails again says the new failure in the same place, and the next Retry still runs the one message", async ({ join, seed }) => {
+	await seed("# Twice failed\nThe harp needs new strings.\n");
+	let ana = await join("ana");
+	let chat = chatPane(ana);
+	let marker = crypto.randomUUID();
+	await ask(ana, `RETRY-CONTEXT-2 ${marker} shorten the summary`);
+	let banner = chatBanner(ana, "error");
+	await expect(banner.locator(".composer-notice-line")).toHaveText(
+		"503 Service Unavailable (attempt 1)",
+		{ timeout: 20_000 },
+	);
+	let retry = banner.getByRole("button", { name: "Retry", exact: true });
+	await retry.click();
+	// The new failure takes the old one's place: one banner, its own words, still offering Retry.
+	await expect(banner.locator(".composer-notice-line")).toHaveText(
+		"503 Service Unavailable (attempt 2)",
+		{ timeout: 20_000 },
+	);
+	await expect(allBanners(ana)).toHaveCount(1);
+	await expect(chat).not.toContainText("(attempt 1)");
+	expect(said(await chat.innerText(), marker)).toBe(1);
+	expect(said(await chat.innerText(), RETRY_PARTIAL)).toBe(1);
+
+	await retry.click();
+	await expect(chat).toContainText(`Attempt 3: ${CLEAN_CONTEXT}`, { timeout: 20_000 });
+	await expect.poll(async () => said(await chat.innerText(), marker)).toBe(1);
+	await expect(chat).not.toContainText(RETRY_PARTIAL);
+	await expect(allBanners(ana)).toHaveCount(0);
 });
 
 test("only the person who asked is offered Retry; another member reads the same failure with no button, and it goes for both with the answer", async ({ join, seed }) => {
@@ -590,11 +643,11 @@ for (
 		let page = await join("ana", options);
 		await page.emulateMedia({ reducedMotion: "reduce" });
 		let chat = chatPane(page);
-		let sent = 0;
+		let retried = 0;
 		await page.routeWebSocket("**/ws?**", route => {
 			let server = route.connectToServer();
 			route.onMessage(message => {
-				if (typeof message === "string" && message.includes('"chat:send"')) sent++;
+				if (typeof message === "string" && message.includes('"chat:retry"')) retried++;
 				server.send(message);
 			});
 			server.onMessage(message => route.send(message));
@@ -633,9 +686,10 @@ for (
 		expect(visited.at(-1) ?? "", `Tab visited ${visited.join(" > ")}`).toContain("Retry");
 		await expectFocusIndicator(retry);
 		await expect(banner).toBeInViewport();
-		let before = sent;
+		let before = retried;
 		await page.keyboard.press("Enter");
-		await expect.poll(() => sent).toBe(before + 1);
+		// Enter runs the failed message's turn again; it sends no message.
+		await expect.poll(() => retried).toBe(before + 1);
 		await expect(chat.getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible({
 			timeout: 20_000,
 		});
