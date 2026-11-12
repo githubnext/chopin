@@ -33,7 +33,7 @@ Chat's to Slack's.
 `ComposerContext` (from `elements-composer`) and `elements-context-breakdown` draw the composer's
 context-window ring and token breakdown from harness-reported usage; because assistant-ui ships no
 compaction marker, the expandable compaction divider is Chopin's own `Unfold` disclosure.
-`markdown-text` has only a connected entry, so its `@assistant-ui/react` and
+Every copy's `lucide-react` import is mapped in `tsconfig.json` to `src/chat/assistant-ui/lucide.tsx`, which draws each icon it names with Chopin's own (`packages/icons`), so Chat has one icon language and no lucide artwork ships; a copy that names an icon the file lacks fails `bun run types`, and the icon is added there, drawn in `packages/icons`. `markdown-text` has only a connected entry, so its `@assistant-ui/react` and
 `@assistant-ui/react-markdown` imports map in `tsconfig.json` to Chopin's props-driven
 `react-markdown` seam (`src/chat/assistant-ui/markdown-primitive.tsx`). The tile the registry calls
 `attachment` draws a live runtime attachment through `AttachmentPrimitive` and has no props-driven
