@@ -175,12 +175,26 @@ export function plannerMachineName(
 	// The creator's choice decides where it runs, and the list tells nothing of that machine: the
 	// word's own login names it, however old the list is, and a choice made here changes nothing.
 	if (state.creatorDecides) return undefined;
-	// A word that says which machine starts it names the document's own machine by itself, however
-	// old the list's other news is: the list is read only for the machine's label.
-	if (planner.state === "starting" && planner.machine) {
-		let shown = shownMachine(state);
-		if (shown?.id === planner.machine) return shown.label;
-	}
+	// A word that says which machine starts it is the authority on which machine it describes. The
+	// document's own machine is named from it alone, however old the list's other news is, and a word
+	// about another machine is never named as the document's own, however new the list is: a list
+	// read after the person or Default machine moved the document describes the new machine while
+	// the word may still describe the old one, whose failure would otherwise be told as the new
+	// machine's. Anything else follows the list, as a word that names no machine does.
+	let named = planner.state === "starting" ? planner.machine : undefined;
+	let shown = shownMachine(state);
+	if (named && shown?.id === named) return shown.label;
+	let listed = listedName(state, planner, viewer, current);
+	return named && shown && listed === shown.label ? null : listed;
+}
+
+/** What the list says of a word's machine, for a word that does not name the shown machine. */
+function listedName(
+	state: MachineChoiceState,
+	planner: Session.PlannerAttachment & { login: string },
+	viewer: string,
+	current: boolean,
+): string | null | undefined {
 	if (!current) return null;
 	let name = plannerRunsOn(state);
 	if (name !== undefined) {

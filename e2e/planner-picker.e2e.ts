@@ -2691,3 +2691,200 @@ for (
 		await linkB?.detach().catch(() => {});
 	});
 }
+
+/**
+ * Records, on every frame, the machine button's dot (its planner state and computed colour), what its
+ * name says of the Planner and why it says it can't connect, each time any of them changes.
+ */
+async function recordDots(page: Page) {
+	await page.evaluate(() => {
+		let w = window as unknown as { dots: string[] };
+		w.dots = [];
+		let read = () => {
+			let button = document.querySelector('button[aria-label^="Runs on"]');
+			let dot = button?.querySelector(".machine-glyph-dot");
+			let colour = dot ? getComputedStyle(dot).backgroundColor : "none";
+			let words = (button?.getAttribute("aria-label") ?? "").replace(/^Runs on [^.]+(\. )?/, "");
+			let described = button?.getAttribute("aria-describedby");
+			let why = described ? document.getElementById(described)?.textContent ?? "" : "";
+			let frame = `${
+				button?.getAttribute("data-planner") ?? "quiet"
+			} ${colour} | ${words} | ${why}`;
+			if (w.dots.at(-1) !== frame) w.dots.push(frame);
+			requestAnimationFrame(read);
+		};
+		read();
+	});
+	return () => page.evaluate(() => (window as unknown as { dots: string[] }).dots);
+}
+
+/** A connector's report that `document`'s backend stopped `attempts` times in a row, for `reason`. */
+function stopped(document: string, attempts: number, reason: string) {
+	return { document, failure: { attempts, how: "exit 1", reason, at: Date.now() } };
+}
+
+const REASON_A = "exit 127: /usr/bin/env: 'node': No such file or directory";
+const REASON_B = "EACCES: permission denied, open '~/.config/claude'";
+
+for (
+	let [from, to] of [
+		["can't connect", "attaches"],
+		["attached", "can't start"],
+		["can't connect", "can't start for another reason"],
+		["can't connect", "attaches, on Default machine"],
+	] as const
+) {
+	test(`after a move from a machine that ${from} to one that ${to}, every mark of the machine is the new one's`, async ({ browser }) => {
+		test.setTimeout(150_000);
+		let room = await remoteServer();
+		let page = await open(browser, "mona", room, DESKTOP);
+		await createdBy(room, "mona");
+		let a = await machine(page, "Box A", true);
+		let b = await machine(page, "Box B", true);
+		await page.reload();
+		await ready(page);
+		let list = await (await page.request.get(`${ORIGIN}/api/documents/${room}/machine`))
+			.json() as { machines: Array<{ id: string; label: string }> };
+		let id = (label: string) => list.machines.find(value => value.label === label)!.id;
+		let defaults = to.endsWith("Default machine");
+		let favor = async (label: string) => {
+			let favorite = await page.request.post(
+				`${ORIGIN}/api/connector/machines/${id(label)}/favorite`,
+				{ data: { favorite: true }, headers: { origin: ORIGIN } },
+			);
+			expect(favorite.status()).toBe(200);
+		};
+		// On Default machine nobody chooses: the person's favorite runs it, and moving the favorite
+		// moves the document, as the Machines page does.
+		if (defaults) await favor("Box A");
+		else {
+			let chosen = await page.request.post(`${ORIGIN}/api/documents/${room}/machine`, {
+				data: { machine: id("Box A") },
+				headers: { origin: ORIGIN },
+			});
+			expect(chosen.status()).toBe(200);
+		}
+		// The room's word of the Planner reaches the page a moment after the list does, as it can on a
+		// hosted deployment, where the word is read from storage after the choice is answered.
+		await page.routeWebSocket("**/ws?**", socket => {
+			let server = socket.connectToServer();
+			let queue = Promise.resolve();
+			server.onMessage(message => {
+				let late = typeof message === "string" && message.includes('"session:planner"');
+				queue = queue.then(() =>
+					late ? new Promise(resolve => setTimeout(resolve, 1_500)) : undefined
+				)
+					.then(() => socket.send(message));
+			});
+		});
+		await page.reload();
+		await ready(page);
+		expect((await a.poll([])).planners).toHaveLength(1);
+		let button = machineButton(page);
+		let linkA = from === "attached" ? await a.backend(room) : undefined;
+		if (linkA) await expectHealthy(button);
+		else {
+			expect((await a.reportFailure(stopped(room, 2, REASON_A))).status).toBe(200);
+			await expect(button).toHaveAttribute("data-planner", "failing");
+		}
+		let dot = button.locator(".machine-glyph-dot");
+		let failingColour = from === "attached"
+			? undefined
+			: await dot.evaluate(node => getComputedStyle(node).backgroundColor);
+		let stop = await recordDots(page);
+		if (defaults) {
+			await favor("Box B");
+			// The page reads its machine list again, as it does on focus.
+			await page.evaluate(() => dispatchEvent(new Event("focus")));
+		} else await (await runOn(page)).getByRole("menuitemradio", { name: /^Box B/ }).click();
+		expect((await b.poll([])).planners).toHaveLength(1);
+		let linkB = to.startsWith("attaches") ? await b.backend(room) : undefined;
+		if (to.startsWith("can't")) {
+			expect(
+				(await b.reportFailure(stopped(room, 2, to === "can't start" ? REASON_A : REASON_B)))
+					.status,
+			).toBe(200);
+			await expect(button).toHaveAccessibleName(/\. Can't connect to Box B\.$/);
+		} else {
+			await expectHealthy(button);
+		}
+		await page.waitForTimeout(1_500);
+		let frames = await stop();
+		let shot = `dots-${from}-to-${to}`.replace(/\W+/g, "-");
+		await shoot(page, shot);
+
+		// From the move on, nothing says Box A, and the dot is the warning colour only while the words
+		// say Box B can't connect.
+		// A move nobody chose (Default machine following the favorite) may go straight to attached,
+		// so it begins with the first change; a chosen one with the first word of Box B.
+		let moved = defaults ? 1 : frames.findIndex(frame => frame.includes("Box B"));
+		expect(moved, frames.join("\n")).toBeGreaterThanOrEqual(0);
+		expect(frames.length, frames.join("\n")).toBeGreaterThan(moved);
+		await expect(button).toHaveAccessibleName(/^Runs on Box B(\.|$)/);
+		let why = to === "can't start"
+			? "A program it needs can't be found on it."
+			: "It isn't allowed to run something it needs.";
+		// The colours main's palette gives each state: the warning icon role where it can't connect,
+		// the machine's own success green once it has, as the browser computes them.
+		let [warning, connected] = await page.evaluate(() =>
+			["--color-warning-icon", "--color-success"].map(token => {
+				let probe = document.createElement("span");
+				probe.style.background = `var(${token})`;
+				document.body.append(probe);
+				let colour = getComputedStyle(probe).backgroundColor;
+				probe.remove();
+				return colour;
+			})
+		);
+		for (let frame of frames) {
+			if (frame.startsWith("failing ")) expect(frame, frames.join("\n")).toContain(` ${warning} |`);
+			if (frame.startsWith("quiet ")) expect(frame, frames.join("\n")).toContain(` ${connected} |`);
+		}
+		for (let frame of frames.slice(moved)) {
+			let all = frames.join("\n");
+			expect(frame, all).not.toContain("Box A");
+			let failing = frame.startsWith("failing ");
+			// The warning is Box B's own, with Box B's reason, and only where Box B can't start.
+			if (failing) {
+				expect(to.startsWith("can't"), all).toBe(true);
+				expect(frame, all).toContain(`| Can't connect to Box B. | ${why}`);
+			}
+			if (failingColour && !failing) expect(frame, all).not.toContain(failingColour);
+		}
+		let last = frames.at(-1)!;
+		expect(last.startsWith(to.startsWith("can't") ? "failing " : "quiet "), frames.join("\n"))
+			.toBe(true);
+
+		// The menu explains Box B, with Box B's own reason, or nothing at all once it attached.
+		let menu = await runOn(page);
+		let steps = menu.getByRole("group", { name: "Can't connect to Box B", exact: true });
+		await expect(menu.getByRole("group", { name: "Can't connect to Box A", exact: true }))
+			.toHaveCount(0);
+		if (to.startsWith("can't")) {
+			await steps.getByRole("menuitem", { name: "Show details" }).click();
+			await expect(steps.locator(".fix-steps-output")).toContainText(
+				to === "can't start" ? REASON_A : REASON_B,
+			);
+			if (to !== "can't start") {
+				await expect(steps.locator(".fix-steps-output")).not.toContainText(REASON_A);
+				await expect(steps).toContainText("It isn't allowed to run something it needs.");
+			}
+		} else {
+			await expect(steps).toHaveCount(0);
+			await expect(menu.getByRole("group", { name: "Connection", exact: true })).toHaveCount(0);
+		}
+		await shoot(page, `${shot}-menu`);
+		await page.keyboard.press("Escape");
+		// chopin's presence says the same.
+		let input = chatInput(page);
+		await fillChat(input, "@");
+		await expect(
+			page.getByRole("listbox", { name: "Mentions" }).getByRole("option", { name: /^chopin/i }),
+		).toHaveAccessibleName(
+			to.startsWith("can't") ? /^chopin, agent, Can't connect$/i : /^chopin, agent, Active$/i,
+		);
+		await fillChat(input, "");
+		await linkA?.detach().catch(() => {});
+		await linkB?.detach().catch(() => {});
+	});
+}

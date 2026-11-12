@@ -514,8 +514,22 @@ test("a word that says which machine starts it names the document's own machine 
 	) {
 		expect(told(listed, word, "mona", true, false)).toBe("Box B");
 	}
-	// A word naming a machine other than the document's own still waits for the list to agree.
+	// A word naming a machine other than the document's own says nothing, even where a newer list
+	// says the Planner moved there: the word is about the machine left, and its failure is not Box B's.
 	expect(told(listed, { ...starting("mona"), machine: "M_a" }, "mona", true, false)).toBeNull();
+	let moved = state({
+		choice: "M_b",
+		machines: [boxA, boxB],
+		planner: { state: "starting", login: null, machine: "M_b" },
+	});
+	for (let current of [false, true]) {
+		expect(told(moved, { ...starting("mona"), machine: "M_a", failure }, "mona", true, current))
+			.toBeNull();
+	}
+	// A machine the list does not hold, a teammate's this person cannot use, is named by its
+	// owner's login, as a word with no machine is.
+	expect(told(state({ machines: [] }), { ...starting("mona"), machine: "M_x" }, "hubot", true))
+		.toBeUndefined();
 	// Where the creator decides, the login names it, as before.
 	expect(
 		told(
