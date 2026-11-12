@@ -482,6 +482,12 @@ export function ResolvedLayer(
 
 	let measure = useCallback(() => {
 		if (sheetOpen.current) return;
+		// Reading geometry makes the browser lay the page out there and then, on every edit; with no
+		// resolved decision or comment there is nothing to place, so nothing is read.
+		if (itemsRef.current.length === 0) {
+			setPlaced(current => current.length === 0 ? current : []);
+			return;
+		}
 		if (!host || !decisionHostVisible(host)) {
 			if (wasVisible.current) act({ type: "dismiss" });
 			wasVisible.current = false;

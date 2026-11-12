@@ -3,7 +3,8 @@
  * does, not how long it takes, so that a busy machine cannot fail it and a regression cannot pass:
  *
  * - a collaborator starting paragraphs and typing in a table cell restyles what they changed, not
- *   every element on the reader's page.
+ *   every element on the reader's page;
+ * - a key typed into a document with no comments or decisions in its margin measures no margin.
  */
 
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
@@ -93,4 +94,39 @@ test("a collaborator starting paragraphs and typing in a table restyles what the
 	} finally {
 		await other.close();
 	}
+});
+
+test("a key typed with nothing in the margin measures no margin", async ({ join, seed }) => {
+	await seed("# Margins\n\nA paragraph to type into.\n\nAnother paragraph below it.\n");
+	let ana = await join("ana");
+	// Count geometry read from the document's frame, which both margins measure against.
+	await ana.evaluate(() => {
+		let reads = 0;
+		for (let name of ["getBoundingClientRect", "getClientRects"] as const) {
+			let read = Element.prototype[name] as (this: Element) => unknown;
+			Object.defineProperty(Element.prototype, name, {
+				configurable: true,
+				value(this: Element) {
+					if (this.classList.contains("plan-document")) reads++;
+					return read.call(this);
+				},
+			});
+		}
+		Object.defineProperty(window, "__marginReads", { get: () => reads });
+	});
+	await content(ana).getByText("A paragraph to type into.").click();
+	await ana.keyboard.press("End");
+	await settle(ana);
+	let before = await ana.evaluate(() =>
+		(window as unknown as { __marginReads: number }).__marginReads
+	);
+	await ana.keyboard.type(" Twelve keys.", { delay: 20 });
+	await expect(content(ana)).toContainText("Twelve keys.");
+	await settle(ana);
+	let after = await ana.evaluate(() =>
+		(window as unknown as { __marginReads: number }).__marginReads
+	);
+	// The comment margin and the resolved-decision margin each read it on every edit, with nothing
+	// to place, and each read made the browser lay the page out there and then.
+	expect(after - before).toBe(0);
 });

@@ -528,6 +528,16 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	}, [leave]);
 	let measure = () => {
 		if (!host) return;
+		// Reading geometry makes the browser lay the page out there and then, on every edit; with no
+		// open thread there is nothing to place, so nothing is read.
+		if (!state.threads.some(view => view.thread.status === "open")) {
+			if (placedRef.current.length === 0 && markersRef.current.length === 0) return;
+			placedRef.current = [];
+			markersRef.current = [];
+			setPlaced([]);
+			setMarkers([]);
+			return;
+		}
 		let page = rect(host.getBoundingClientRect());
 		let measured: MeasuredThread[] = [];
 
