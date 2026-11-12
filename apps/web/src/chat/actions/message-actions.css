@@ -5,9 +5,10 @@
  * The toolbar's row (`MessageActions`) and its overflow menu (`DropdownMenu`) are copied registry
  * source (`THIRD_PARTY_NOTICES.md`, `src/components/sources.json`). `.chat-message-toolbar` makes the
  * copied row Slack's box: one rounded square with a hairline ring and a soft shadow, 2px inside,
- * holding 32px square buttons with 4px corners. It floats at the row's top right, 16px above the row, so it
- * never moves or covers the text, and shows for one row at a time. On a touch screen a long press
- * brings it up in its own lane above the message instead.
+ * holding 32px square buttons with 4px corners. It floats at the row's top right, 16px above the row,
+ * and never moves the text: like Slack's, it may cover the end of the first line while it shows, its
+ * own fill, ring and shadow setting it apart. It shows for one row at a time. On a touch screen a long
+ * press brings it up in its own lane above the message instead.
  */
 
 .chat-message-body {
@@ -102,30 +103,6 @@
 	color: var(--color-text-tertiary);
 	opacity: 0;
 	pointer-events: none;
-}
-
-/*
- * The bar stands over the row's top edge, so on a message after the first of its group it reaches
- * down beside the first line. That line always leaves the bar's width free at its end, shown or not,
- * so the bar covers none of the text and showing it moves nothing.
- */
-.chat-toolbar-room {
-	float: inline-end;
-	width: calc(var(--chat-toolbar-buttons, 0) * var(--spacing) * 8 + var(--spacing));
-	height: max(
-		0px,
-		calc(var(--chat-toolbar-size) - var(--chat-toolbar-rise) - var(--chat-highlight-top))
-	);
-}
-
-/*
- * A message that opens with a picture, a code block or a table keeps it whole: none is a line of
- * words to keep clear, and a room beside it would only narrow it, so the bar stands over its corner,
- * as Slack's stands over an image.
- */
-.chat-toolbar-room:has(+ [data-chat-markdown]
-	> :first-child:is(figure, .chat-image, [data-slot="image-gallery"], .chat-markdown-paragraph, .aui-code-header-root, .aui-md-table-wrapper)) {
-	display: none;
 }
 
 .message-actions-emoji {
@@ -235,10 +212,6 @@
 	.chat-message-body {
 		display: flex;
 		flex-direction: column;
-	}
-
-	.chat-toolbar-room {
-		display: none;
 	}
 
 	.chat-message-body > .chat-message-toolbar {

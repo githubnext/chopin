@@ -47,7 +47,6 @@ const EmojiPicker = lazy(() =>
 const TOOLBAR_MARGIN = 8;
 const SHIFT = "--chat-toolbar-shift";
 const SHEET_WIDTH = 600;
-const BUTTONS = "--chat-toolbar-buttons";
 
 type Which = "markdown" | "plain";
 
@@ -344,11 +343,6 @@ export let MessageToolbar = memo(function MessageToolbar(
 
 	let reply = reactable ? QUICK_REACTIONS.length + 1 : 0;
 	let count = reply + (thread ? 1 : 0) + 1;
-	// The room the message's first line leaves for the bar, which stands over its top edge. A passive
-	// effect, as the message's own ref is not yet set when a child's layout effect runs.
-	useEffect(() => {
-		host.current?.style.setProperty(BUTTONS, String(count));
-	}, [host, count]);
 	let tab = (index: number) => Math.min(active, count - 1) === index ? 0 : -1;
 	let toolbarKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		let step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;

@@ -103,6 +103,22 @@ async function darkest(page: Page, target: Locator): Promise<number> {
 	}, png);
 }
 
+/** How wide each line of a message's first paragraph is drawn, from its start to its last word. */
+async function lineWidths(target: Locator): Promise<number[]> {
+	return target.locator("[data-chat-markdown] > :first-child").evaluate(paragraph => {
+		let range = document.createRange();
+		range.selectNodeContents(paragraph);
+		let start = paragraph.getBoundingClientRect().left;
+		let lines = new Map<number, number>();
+		for (let rect of range.getClientRects()) {
+			if (rect.width < 1) continue;
+			let top = Math.round(rect.top);
+			lines.set(top, Math.max(lines.get(top) ?? 0, Math.round(rect.right - start)));
+		}
+		return [...lines].sort(([a], [b]) => a - b).map(([, width]) => width);
+	});
+}
+
 /** How wide a message's Markdown is drawn, then each block in it, to the pixel. */
 async function textWidths(target: Locator): Promise<number[]> {
 	return target.locator("[data-chat-markdown]").evaluate(markdown =>
@@ -199,8 +215,9 @@ test("the row highlight shades a message and leaves its avatar, name and time dr
 	expect(focused.avatar).toBeLessThan(150);
 });
 
-test("the toolbar floats as Slack's does: one box over the row's top edge at its right, 16 px above it, moving and covering nothing", async ({ join, seed }) => {
-	// m5 follows m4 in its group, and its first line runs the whole width of the message.
+test("the toolbar floats as Slack's does: one box over the row's top edge at its right, 16 px above it and inside the pane, moving nothing, with nothing set aside for it", async ({ join, seed }) => {
+	// m5 follows m4 in its group, so the bar reaches down beside its first line, which runs the whole
+	// width of the message as Slack's does: the bar may cover its end while it shows.
 	let long = `${PARAGRAPH} ${PARAGRAPH}`;
 	await seed("# Layout\n", {
 		transcript: transcript().map(item => item.id === "m5" ? { ...item, text: long } : item),
@@ -230,8 +247,24 @@ test("the toolbar floats as Slack's does: one box over the row's top edge at its
 		expect(row.top - box.y, `${id} rises 16 px`).toBeCloseTo(16, 0);
 		expect(row.right - (box.x + box.width), `${id} is inset 12 px`).toBeCloseTo(12, 0);
 		expect(box.height).toBe(36);
-		expect(await coveredText(bar), `${id} covers no text`).toEqual([]);
+		let pane = (await scroller(page).boundingBox())!;
+		expect(box.y, `${id} is inside the pane`).toBeGreaterThanOrEqual(pane.y);
+		// A message that heads its group has its name line under the bar; one that continues it does not.
+		if (id !== "m5") expect(await coveredText(bar), `${id} covers no text`).toEqual([]);
 	}
+	// The first line of a message that continues its group is as wide as its other lines: it wraps at
+	// the text column's end, not where the bar would stand, shown or not.
+	let lines = await lineWidths(message(page, "m5"));
+	expect(lines.length).toBeGreaterThan(3);
+	let column = await message(page, "m5").locator("[data-chat-markdown]").evaluate(element =>
+		element.getBoundingClientRect().width
+	);
+	let full = lines.slice(1, -1);
+	expect(lines[0]!, "the first line reaches as far as the fullest of the others, within a word")
+		.toBeGreaterThan(Math.max(...full) - 80);
+	expect(column - lines[0]!, "no room is left for the bar").toBeLessThan(80);
+	await page.mouse.move(0, 0);
+	expect(await lineWidths(message(page, "m5"))).toEqual(lines);
 });
 
 test("only one row shows its toolbar and shade: the hovered row, else the row with keyboard focus", async ({ join, seed }) => {

@@ -358,7 +358,6 @@ function MessageBody(
 					{(text || toPlanner) && (
 						<div className="flex items-start gap-1">
 							<div className="min-w-0 flex-1" data-chat-message-text>
-								<span aria-hidden="true" className="chat-toolbar-room" />
 								<MessageMarkdown
 									className="break-words text-chat-body [overflow-wrap:anywhere]"
 									mention={toPlanner ? "@chopin" : undefined}
