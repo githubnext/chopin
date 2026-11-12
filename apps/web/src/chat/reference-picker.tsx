@@ -58,8 +58,20 @@ export function referencePickerRequestKey(
 
 export type ReferencePickerKeyAction = "dismiss" | "next" | "previous" | "select";
 
+/**
+ * The keys of the composer's menus (`#`, `@` and `/`). Enter and Tab choose the highlighted row, as
+ * Slack's do; Tab with a modifier, or Shift+Tab, is left to move the focus.
+ */
 export function referencePickerKeyAction(
-	event: { key: string; keyCode?: number; isComposing?: boolean; shiftKey?: boolean },
+	event: {
+		key: string;
+		keyCode?: number;
+		isComposing?: boolean;
+		shiftKey?: boolean;
+		altKey?: boolean;
+		ctrlKey?: boolean;
+		metaKey?: boolean;
+	},
 	selectable: boolean,
 ): ReferencePickerKeyAction | undefined {
 	if (event.isComposing || event.keyCode === 229) return undefined;
@@ -68,6 +80,9 @@ export function referencePickerKeyAction(
 	if (event.key === "ArrowDown") return "next";
 	if (event.key === "ArrowUp") return "previous";
 	if (event.key === "Enter" && !event.shiftKey) return "select";
+	if (
+		event.key === "Tab" && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey
+	) return "select";
 	return undefined;
 }
 

@@ -123,28 +123,10 @@ export function commandText(command: ChatCommand): string {
 	return `/${command.name} `;
 }
 
-/** Tab selects, as it does in the document's `/` menu. */
+/** The `/` menu's keys are every composer menu's: Enter and Tab choose. */
 export function commandKeyAction(
-	event: {
-		key: string;
-		keyCode?: number;
-		isComposing?: boolean;
-		shiftKey?: boolean;
-		altKey?: boolean;
-		ctrlKey?: boolean;
-		metaKey?: boolean;
-	},
+	event: Parameters<typeof referencePickerKeyAction>[0],
 	selectable: boolean,
 ): ReferencePickerKeyAction | undefined {
-	if (
-		event.key === "Tab"
-		&& selectable
-		&& !event.isComposing
-		&& event.keyCode !== 229
-		&& !event.shiftKey
-		&& !event.altKey
-		&& !event.ctrlKey
-		&& !event.metaKey
-	) return "select";
 	return referencePickerKeyAction(event, selectable);
 }

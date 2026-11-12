@@ -185,6 +185,16 @@ describe("reference picker requests", () => {
 		expect(referencePickerKeyAction({ key: "Escape", isComposing: true }, false)).toBeUndefined();
 		expect(referencePickerKeyAction({ key: "Enter" }, true)).toBe("select");
 	});
+
+	test("Tab chooses as Enter does, and Shift+Tab or a modified Tab is left to move the focus", () => {
+		expect(referencePickerKeyAction({ key: "Tab" }, true)).toBe("select");
+		expect(referencePickerKeyAction({ key: "Tab" }, false)).toBeUndefined();
+		expect(referencePickerKeyAction({ key: "Tab", shiftKey: true }, true)).toBeUndefined();
+		expect(referencePickerKeyAction({ key: "Tab", altKey: true }, true)).toBeUndefined();
+		expect(referencePickerKeyAction({ key: "Tab", ctrlKey: true }, true)).toBeUndefined();
+		expect(referencePickerKeyAction({ key: "Tab", metaKey: true }, true)).toBeUndefined();
+		expect(referencePickerKeyAction({ key: "Tab", isComposing: true }, true)).toBeUndefined();
+	});
 });
 
 describe("the # menu with this document's parts", () => {
