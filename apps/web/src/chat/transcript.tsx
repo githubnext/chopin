@@ -969,6 +969,7 @@ export let Transcript = memo(function Transcript(
 				className={`relative flex min-h-full shrink-0 flex-col gap-4 ${
 					lead ? "" : "[&>*:first-child]:mt-auto"
 				}`}
+				data-chat-led={lead ? "" : undefined}
 				data-chat-stack
 				ref={stack}
 			>
