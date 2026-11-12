@@ -395,13 +395,13 @@
 }
 
 .build-task-dot[data-state="completed"] {
-	border-color: var(--color-success-graphic);
-	background: var(--color-success-graphic);
+	border-color: var(--color-success);
+	background: var(--color-success);
 }
 
 .build-task-dot[data-state="blocked"] {
-	border-color: var(--color-warning-graphic);
-	background: var(--color-warning-graphic);
+	border-color: var(--color-warning);
+	background: var(--color-warning);
 }
 
 .build-task-pr {

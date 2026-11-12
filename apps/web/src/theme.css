@@ -349,8 +349,9 @@
 	}
 }
 
+/* A field's edge is how it is found, so it is the control boundary (3:1 on every ground), not a hairline. */
 @utility field {
-	border: var(--edge-width) solid var(--color-control-edge);
+	border: var(--edge-width) solid var(--color-control-boundary);
 	border-radius: var(--radius-md);
 	background-color: var(--color-page);
 	box-shadow: var(--shadow-resting);
@@ -399,7 +400,7 @@
 
 @utility choice-control {
 	appearance: none;
-	border: var(--edge-width) solid var(--color-control-edge);
+	border: var(--edge-width) solid var(--color-control-boundary);
 	background-color: var(--color-page);
 	color: var(--color-text-primary);
 
@@ -445,14 +446,14 @@
 	}
 }
 
-/* Extra contrast is an opt-in accommodation, not the normal control edge. */
+/* Extra contrast is an opt-in accommodation for other control edges; fields and choices meet it. */
 @media (prefers-contrast: more) {
-	:where(.control-edge, .field, .choice-control):not([aria-invalid="true"]) {
+	:where(.control-edge):not([aria-invalid="true"]) {
 		outline: var(--edge-width) solid var(--color-control-boundary);
 		outline-offset: calc(-1 * var(--edge-width));
 	}
 
-	:where(.control-edge, .field, .choice-control):disabled {
+	:where(.control-edge):disabled {
 		outline-color: var(--color-edge);
 	}
 }

@@ -293,9 +293,13 @@
 	background: var(--color-glass);
 	-webkit-backdrop-filter: var(--glass-filter);
 	backdrop-filter: var(--glass-filter);
+	box-shadow: var(--shadow-overlay);
+}
+
+/* Its hairline is an outline, so it gives way to the focus ring. */
+.phone-tab-action:not(:focus-visible) {
 	outline: var(--edge-width) solid var(--color-edge);
 	outline-offset: calc(-1 * var(--edge-width));
-	box-shadow: var(--shadow-overlay);
 }
 
 .phone-tab-bar {

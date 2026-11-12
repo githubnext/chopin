@@ -442,7 +442,7 @@
 	padding: var(--spacing) var(--spacing) var(--spacing) var(--project-sidebar-inset);
 	font-size: var(--text-xs);
 	font-weight: 500;
-	color: color-mix(in srgb, var(--color-text-tertiary) 60%, transparent);
+	color: var(--color-text-tertiary);
 }
 
 .project-sidebar-projects,
@@ -792,6 +792,11 @@
 	padding: 0 var(--project-sidebar-inset) var(--spacing) var(--project-sidebar-label);
 	font-size: var(--text-xs);
 	line-height: 1rem;
+	color: var(--color-text-tertiary);
+}
+
+/* Loading keeps the quiet status role; an error and Load more are read, at 4.5:1 on the ground. */
+.project-sidebar-status[data-loading] {
 	color: var(--color-text-quaternary);
 }
 

@@ -116,4 +116,28 @@
 	--border: var(--color-edge);
 	--input: var(--color-edge);
 	--ring: var(--focus-ring-color);
+	/*
+	 * A copy's `dark:` words name the lighter steps a dark ground needs (a file's reason in
+	 * `red-400/80`, a full context window in `amber-400`); on this light ground they would fall to
+	 * 3.2:1 and 4.1:1, so they read the steps the light variants name.
+	 */
+	--color-red-400: var(--color-danger-text);
+	--color-amber-400: var(--color-warning-ink);
+}
+
+/*
+ * A copy's focus ring keeps its own width and is drawn in Chopin's focus colour at full strength.
+ * The copies fade it (`ring-foreground/20`, `ring-foreground/30`, `ring-ring/50`) to 1.6:1, 2:1 and
+ * 2.1:1 on the ground, under the 3:1 a focus indicator needs to be seen.
+ */
+:is([data-slot], [data-slot] *):focus-visible:not([data-chopin-control]) {
+	--tw-ring-color: var(--focus-ring-color);
+}
+
+/*
+ * The model selector's chevron is lucide's glyph: the trigger's ink faded by the copy's own
+ * `opacity-50` (3.6:1), not the icon role's grey faded again (1.9:1).
+ */
+[data-slot="model-selector-trigger"] > [data-nucleo-icon] {
+	color: currentColor;
 }

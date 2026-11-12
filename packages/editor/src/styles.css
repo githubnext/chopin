@@ -169,11 +169,11 @@
 	max-width: var(--plan-measure, var(--document-prose-measure));
 }
 
-/* One surface: the composer is the field, so focus rings the whole card. */
+/* One surface: the composer is the field, so its edge is the control boundary and focus rings it. */
 .plan-research-composer {
 	position: relative;
 	display: grid;
-	border: var(--edge-width) solid var(--color-edge);
+	border: var(--edge-width) solid var(--color-control-boundary);
 	border-radius: var(--radius-lg);
 	background: var(--color-page);
 	box-shadow: var(--shadow-resting);
@@ -5628,7 +5628,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	width: var(--plan-check-size);
 	height: var(--plan-check-size);
 	box-sizing: border-box;
-	border: 1px solid var(--color-control-edge);
+	border: 1px solid var(--color-control-boundary);
 	border-radius: var(--radius-sm);
 	background-color: var(--color-page);
 	box-shadow: var(--shadow-resting);
