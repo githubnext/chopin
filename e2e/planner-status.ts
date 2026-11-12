@@ -1,11 +1,11 @@
 /**
- * What the page says about the document's remote Planner. A healthy Planner is not mentioned. A
- * person with a machine button reads every state on it and in its menu; everyone also reads it on
- * the one connection banner at the composer's top edge, with the reason for a machine that cannot
- * be connected to drawn beneath (a person with a machine button is not told "no machine" there).
- * A screen reader hears each state once from the page's one polite live region, which is the
- * connection banner's: it speaks the room's connection and the Planner's alike, and the banner
- * and the button never announce anything themselves. These helpers read all of those.
+ * What the page says about the document's remote Planner. A healthy Planner is not mentioned, and
+ * Chat never draws its state: a person with a machine button reads every state in its dot and name
+ * and the steps to fix it in its menu, chopin's avatar carries the same presence, and a message
+ * chopin cannot take is its ephemeral row. A screen reader hears each state once from the page's
+ * one polite live region, which speaks the room's connection and the Planner's alike (a person with
+ * a machine button is not told "no machine" there); the button never announces anything itself.
+ * These helpers read all of those.
  */
 import { expect } from "@playwright/test";
 
@@ -15,9 +15,36 @@ import type { Locator, Page } from "@playwright/test";
 
 export const NONE = "No machine is connected.";
 
-/** The banner on the composer's top edge. */
+/**
+ * Whatever the page draws of a connection: only the offline bar, for the room's own socket. The
+ * Planner's machine is never drawn there, so for it this is always empty.
+ */
 export function strip(page: Page): Locator {
-	return page.locator(".chat-composer [data-connection-banner]");
+	return page.locator("[data-connection-banner]");
+}
+
+/**
+ * The page tells `text` of the Planner's machine: in the machine button's name and tooltip where the
+ * person has a button, and from the page's live region where they have none. Nothing of it is drawn
+ * in Chat either way.
+ */
+export async function expectTold(page: Page, text: string | RegExp): Promise<void> {
+	let button = machineButton(page);
+	if (await button.count() > 0) {
+		let words = typeof text === "string"
+			? new RegExp(`\\. ${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)
+			: new RegExp(`\\. ${text.source.replace(/^\^/, "")}`);
+		await expect(button).toHaveAttribute("data-tooltip", words);
+		await expect(button).toHaveAccessibleName(words);
+	} else {
+		await expect(announced(page)).toContainText(text);
+	}
+	await expect(strip(page)).toHaveCount(0);
+}
+
+/** chopin's ephemeral row: a message it could not take, said to this person alone. */
+export function quietNote(page: Page): Locator {
+	return page.locator("[data-quiet-note]");
 }
 
 /**
@@ -85,7 +112,7 @@ export async function expectNoPlanner(page: Page): Promise<void> {
 
 /**
  * Wait until a Planner is attached after the page knew none was: the live region has fallen
- * silent and the strip has gone, with nothing typed.
+ * silent and nothing is drawn, with nothing typed.
  */
 export async function expectPlannerAttached(page: Page): Promise<void> {
 	await expect(announced(page)).toHaveText("");

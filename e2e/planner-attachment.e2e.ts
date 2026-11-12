@@ -26,6 +26,7 @@ import {
 	expectNoPlanner,
 	expectPlannerAttached,
 	expectSaidOnce,
+	expectTold,
 	heard,
 	listenForAnnouncements,
 	NONE,
@@ -146,7 +147,7 @@ test.afterEach(async () => {
 	}
 });
 
-test("with no machine button, the connection banner at the composer always says what is wrong with the document's remote Planner, a screen reader hears each state once, and nothing is said while it is attached", async ({ browser, page }) => {
+test("with no machine button, nothing of the document's remote Planner is drawn in Chat, a screen reader hears each state once, and nothing is said while it is attached", async ({ browser, page }) => {
 	test.setTimeout(120_000);
 	let database = await freshDatabase();
 	await migrate(database);
@@ -163,20 +164,15 @@ test("with no machine button, the connection banner at the composer always says 
 	let status = strip(page);
 	let composer = page.locator(".chat-composer");
 	let surface = page.locator(".chat-composer .composer-surface");
-	// This person has no machine, so no button: the banner on the composer's top edge is the one
-	// place left to see it, and it is there whatever is being typed, with nothing under the composer.
-	await expect(status).toHaveText(NONE);
-	await expect(status).toHaveAttribute("data-layer", "planner");
-	await expect(allBanners(page)).toHaveCount(1);
-	await expect(status.getByRole("button")).toHaveCount(0);
-	await expect(page.getByRole("button", { name: /^Runs on/ })).toHaveCount(0);
-	// It announces nothing itself: the page's one live region says it, once.
-	await expect(status).not.toHaveAttribute("role");
+	// This person has no machine, so no button: the page's one live region says it, once, and
+	// nothing is drawn in Chat, above the composer or anywhere else.
 	await expect(announced(page)).toHaveText(NONE);
 	await expectSaidOnce(page, NONE);
+	await expect(status).toHaveCount(0);
+	await expect(allBanners(page)).toHaveCount(0);
+	await expect(page.getByRole("button", { name: /^Runs on/ })).toHaveCount(0);
+	await expect(chatPane(page)).not.toContainText(NONE);
 	let field = await surface.boundingBox();
-	// The composer itself is the size it was; the strip is above it, on its top edge.
-	expect(await surface.boundingBox()).toMatchObject({ width: field!.width, height: field!.height });
 	await snap(composer, "planner-none-desktop");
 
 	let phone = await browser.newContext(PHONE);
@@ -189,77 +185,56 @@ test("with no machine button, the connection banner at the composer always says 
 			.getByRole("button", { name: /^Chat/ }).click();
 		// Chat slides in from the side; read it once it has settled.
 		await expect.poll(async () => (await chatPane(handset).boundingBox())?.x).toBe(0);
-		await expect(strip(handset)).toHaveText(NONE);
+		await expect(strip(handset)).toHaveCount(0);
+		await expect(chatPane(handset)).not.toContainText(NONE);
 		await expectNoHorizontalOverflow(handset);
-		await expectInsideViewport(strip(handset));
 		await snap(handset, "planner-none-phone");
 
-		// Attaching closes the banner. It has an entrance and no exit, so it is gone in one frame
-		// rather than easing shut, and the field under it is exactly as big as it was.
+		// Attaching changes nothing drawn: the field is exactly as big as it was, throughout.
 		let client: AgentClient | undefined;
-		let closing = await trace(composer, height, async () => {
+		let attaching = await trace(composer, height, async () => {
 			client = await connectAgent({
 				url: ORIGIN,
 				token: `ghu_e2e_${HANDLE}_1`,
 				document: room,
 				handlers: { turn() {} },
 			});
-			await expect(status).toHaveCount(0);
+			await expect(announced(page)).toHaveText("");
 		});
-		expect(inBetween(closing)).toEqual([]);
+		expect(inBetween(attaching)).toEqual([]);
 		expect(await surface.boundingBox()).toMatchObject({
 			width: field!.width,
 			height: field!.height,
 		});
-		await expect(strip(handset)).toHaveCount(0);
 		await snap(composer, "planner-attached-desktop");
 		await snap(handset, "planner-attached-phone");
 
-		let opening = await trace(composer, height, async () => {
+		let detaching = await trace(composer, height, async () => {
 			await client!.detach();
-			await expect(status).toHaveText(
+			await expect(announced(page)).toHaveText(
 				new RegExp(`^@${HANDLE}'s machine stepped away\\. Your work is kept until \\d{1,2}:\\d{2}`),
 			);
 		});
-		// It comes in once, with its entrance, and does not grow a frame at a time.
-		expect(inBetween(opening)).toEqual([]);
-		let entered = (await bannerEntrances(page)).at(-1)!;
-		expect(entered.animation).toBe("chat-banner-enter");
-		expect(Math.min(...entered.opacity)).toBeLessThan(1);
-		expect(await surface.boundingBox()).toMatchObject({
-			width: field!.width,
-			height: field!.height,
-		});
-		await expectInsideViewport(strip(handset));
-		await expect(strip(handset)).toContainText("Your work is kept until");
+		expect(inBetween(detaching)).toEqual([]);
+		await expect(status).toHaveCount(0);
+		await expect(strip(handset)).toHaveCount(0);
+		expect(await bannerEntrances(page)).toEqual([]);
 		await snap(composer, "planner-held-desktop");
 		await snap(handset, "planner-held-phone");
 
 		// The grace period ends with nobody reattaching, and the room hears it without reloading.
-		await expect(status).toHaveText(NONE, { timeout: GRACE_MS + 5_000 });
+		await expect(announced(page)).toHaveText(NONE, { timeout: GRACE_MS + 5_000 });
 		// A screen reader heard each state once as it began, and nothing as the Planner attached.
 		let said = await heard(page);
 		expect(said).toHaveLength(3);
 		expect(said[0]).toBe(NONE);
 		expect(said[1]).toMatch(/^@mona's machine stepped away\. Your work is kept until /);
 		expect(said[2]).toBe(NONE);
-
-		// With reduced motion the same banner opens and shuts at once, with no frames between.
-		await page.emulateMedia({ reducedMotion: "reduce" });
-		let returning: AgentClient | undefined;
-		let instant = await trace(composer, height, async () => {
-			returning = await connectAgent({
-				url: ORIGIN,
-				token: `ghu_e2e_${HANDLE}_1`,
-				document: room,
-				handlers: { turn() {} },
-			});
-			await expect(status).toHaveCount(0);
+		await expect(status).toHaveCount(0);
+		expect(await surface.boundingBox()).toMatchObject({
+			width: field!.width,
+			height: field!.height,
 		});
-		expect(inBetween(instant)).toEqual([]);
-		await expect(announced(page)).toHaveText("");
-		expect(await heard(page)).toEqual(said);
-		await returning!.detach();
 	} finally {
 		await phone.close();
 	}
@@ -705,11 +680,9 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		let held = await link.resumption;
 		expect(held).toBeDefined();
 
-		// Disconnected, not stopped: the run card and Chat say so, and so does the composer's banner
-		// (this person has no machine button), and the work and the Decision are as they were.
-		await expect(planner).toHaveText(
-			`@${HANDLE}'s machine is offline. Your work is kept.`,
-		);
+		// Disconnected, not stopped: the run card says so, and a screen reader is told (this person
+		// has no machine button), and the work and the Decision are as they were.
+		await expectTold(page, `@${HANDLE}'s machine is offline. Your work is kept.`);
 		let away = runs.getByRole("button", {
 			name: /^plan-review, disconnected, was running, 4m$/,
 		});
@@ -719,7 +692,7 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 			"Last reported running. It carries on when the machine reconnects.",
 		);
 		await expect(runs).not.toContainText("stopped");
-		// The machine's state is told on the run card and the composer's top edge, not again in Chat.
+		// The machine's state is told on the run card, and not again in Chat.
 		await expect(chatPane(page).getByText(/The machine (disconnected|reconnected)/)).toHaveCount(0);
 		await expect(decision.getByRole("button", { name: "Save", exact: true })).toBeVisible();
 		await snap(page, "link-drop-disconnected-desktop");
@@ -737,23 +710,22 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		let handsetRuns = chatPane(handset).getByRole("region", { name: "Workflow runs" });
 		await expect(handsetRuns.getByRole("button", { name: /^plan-review, disconnected/ }))
 			.toBeVisible();
-		await expect(strip(handset)).toContainText("is offline. Your work is kept");
+		await expectTold(handset, /is offline\. Your work is kept/);
 		await expectNoHorizontalOverflow(handset);
-		await expectInsideViewport(strip(handset));
 		await expectInsideViewport(handsetRuns);
 		await snap(handset, "link-drop-disconnected-phone");
 
 		// Well past the grace period, nothing has ended: the Decision is open and the run is shown.
 		await page.waitForTimeout(GRACE_MS + 4_000);
-		await expect(planner).toContainText("is offline. Your work is kept");
+		await expectTold(page, /is offline\. Your work is kept/);
 		await expect(away).toBeVisible();
 		await expect(runs).not.toContainText("stopped");
 
 		// A reload asks the server again and hears the same: disconnected, with its work kept.
 		await page.reload();
 		await ready(page);
-		// The server says the same again, and the composer's top edge with it.
-		await expect(planner).toContainText("is offline. Your work is kept");
+		// The server says the same again, and the live region with it.
+		await expectTold(page, /is offline\. Your work is kept/);
 		await expect(away).toBeVisible();
 		await expect(runs).not.toContainText("stopped");
 		await expect(decision.getByRole("button", { name: "Save", exact: true })).toBeVisible();
@@ -787,22 +759,22 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 			handlers,
 			resume: held!,
 		});
-		// It says the machine is back, for a moment, and then nothing is left of it.
-		await expect(planner).toContainText("The machine is back.");
-		await expect(planner).toHaveCount(0, RESUMED_WAIT);
+		// A screen reader is told the machine is back; nothing is drawn of it.
+		await expect(announced(page)).toContainText("The machine is back.");
+		await expect(planner).toHaveCount(0);
 		// The held Stop reached it, and it reported the run paused; nothing is disconnected now.
 		await expect.poll(() => controls).toEqual(["stop"]);
 		await expect(runs.getByRole("button", { name: /^plan-review, paused, \d+m$/ })).toBeVisible();
 		await expect(runs).not.toContainText("disconnected");
 		await expect(runs.locator("[data-run-disconnected-note]")).toHaveCount(0);
-		// Nothing confirms it: the card's mark and the composer's banner going are all there is.
+		// Nothing confirms it: the card's mark going is all there is to see.
 		await expect(chatPane(page).getByText(/The machine (disconnected|reconnected)/)).toHaveCount(0);
 		await expect(runs.getByRole("button", { name: "Resume plan-review" })).toBeVisible();
 		// The answer given while it was away reached it.
 		expect(await asked).toMatchObject({ status: "answered", value: true });
 		await snap(page, "link-drop-reconnected-desktop");
 		await snap(chatPane(page), "link-drop-reconnected-chat-desktop");
-		await expect(strip(handset)).toHaveCount(0, RESUMED_WAIT);
+		await expect(strip(handset)).toHaveCount(0);
 		await expect(
 			chatPane(handset).getByRole("region", { name: "Workflow runs" })
 				.getByRole("button", { name: /^plan-review, paused/ }),
@@ -816,8 +788,8 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 	}
 });
 
-const OFFLINE = "You're offline. Your changes are kept and will sync when you reconnect.";
-const RECONNECTING = "Reconnecting. Your changes are kept.";
+const OFFLINE = "You're offline. Your changes are kept.";
+const RECONNECTING = "Connecting\u2026 Your changes are kept.";
 
 /**
  * Proxies the page's document socket, so a test is what drops it and keeps it away until `back`.
@@ -930,7 +902,7 @@ for (
 			await expect(runs.getByRole("button", { name: /^plan-review, running, \d+m$/ }))
 				.toBeVisible();
 
-			// Its machine drops: the card says so, as does the composer's top edge.
+			// Its machine drops: the card says so, and a screen reader is told; Chat draws no banner.
 			sockets[0]!.close(3000, "network failed");
 			let held = await link.resumption;
 			expect(held).toBeDefined();
@@ -942,7 +914,7 @@ for (
 			await expect(note).toHaveText(
 				"Last reported running. It carries on when the machine reconnects.",
 			);
-			await expect(strip(page)).toHaveText(`@${HANDLE}'s machine is offline. Your work is kept.`);
+			await expect(strip(page)).toHaveCount(0);
 			// A screen reader was told once, by the page's one live region.
 			await expect(announced(page)).toHaveText(
 				`@${HANDLE}'s machine is offline. Your work is kept.`,
@@ -969,22 +941,19 @@ for (
 			await expectNoMachineWords(page, OFFLINE);
 			let lost = await heard(page);
 			expect(lost.slice(0, said.length)).toEqual(said);
-			expect(lost.slice(said.length)).toEqual([RECONNECTING, OFFLINE]);
+			// By the time the bar shows, its automatic attempts may already have failed.
+			expect([[RECONNECTING, OFFLINE], [OFFLINE]]).toContainEqual(lost.slice(said.length));
 			await expect(chatPane(page)).not.toContainText(/machine/i);
 			await expectNoHorizontalOverflow(page);
 			await snap(page, `run-card-offline-${shape}`);
 
 			// It returns, and the words return with it, as the state dictates: the machine is still away.
 			await wire.back(true);
-			await expect(connectionBanner(page)).toHaveAttribute("data-layer", "sync");
-			await expect(connectionBanner(page)).toContainText("Catching up");
+			// Catching up and the return draw nothing: the bar has gone.
+			await expect(connectionBanner(page)).toHaveCount(0);
+			await expect(announced(page)).toHaveText("Catching up");
 			wire.release();
-			await expect(connectionBanner(page)).toHaveAttribute("data-phase", "resumed");
-			await expect(connectionBanner(page)).toContainText("Back online.");
-			// The machine is still away, so when the connection's own words are over the banner
-			// carries on with the machine's, in its own layer: one banner, one cause at a time.
-			await expect(connectionBanner(page)).toHaveAttribute("data-layer", "planner", RESUMED_WAIT);
-			await expect(allBanners(page)).toHaveCount(1);
+			await expect(allBanners(page)).toHaveCount(0);
 			await expect(
 				runs.getByRole("button", { name: /^plan-review, disconnected, was running, \d+m$/ }),
 			)
@@ -995,11 +964,10 @@ for (
 			await expect(
 				runs.getByRole("button", { name: "Pause plan-review when the machine reconnects" }),
 			).toBeVisible();
-			await expect(strip(page)).toHaveText(`@${HANDLE}'s machine is offline. Your work is kept.`);
+			await expect(strip(page)).toHaveCount(0);
 			// The state carried on through the loss, so it is not said again: the live region only
 			// said the connection's own words in between.
-			await page.waitForTimeout(500);
-			await expect(announced(page)).toHaveText("");
+			await expect(announced(page)).toHaveText("", RESUMED_WAIT);
 			let again = await heard(page);
 			expect(again.slice(0, lost.length)).toEqual(lost);
 			// The socket was open with nothing on it while the test held it, so catching up is said
@@ -1019,8 +987,8 @@ for (
 				handlers,
 				resume: held!,
 			});
-			await expect(strip(page)).toContainText("The machine is back.");
-			await expect(strip(page)).toHaveCount(0, RESUMED_WAIT);
+			await expect(announced(page)).toContainText("The machine is back.");
+			await expect(strip(page)).toHaveCount(0);
 			await expect(runs.getByRole("button", { name: /^plan-review, running, \d+m$/ }))
 				.toBeVisible();
 			await expect(note).toHaveCount(0);

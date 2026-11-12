@@ -55,7 +55,7 @@ test("a server out of reach is told by the connection banner alone, and the page
 	// The socket goes too: the connection banner takes the loss, and the error does not repeat it.
 	wire.state.offline = true;
 	await wire.sockets.at(-1)!.close();
-	await expect(page.locator("[data-connection-banner]")).toBeVisible();
+	await expect(page.locator("[data-connection-banner]")).toBeVisible({ timeout: 20_000 });
 	await expect(navigationNotice(page)).toHaveCount(0);
 	await expect(banners(page)).toHaveCount(1);
 
@@ -84,7 +84,7 @@ test("an error the server answered is another cause and stays through the outage
 
 	wire.state.offline = true;
 	await wire.sockets.at(-1)!.close();
-	await expect(page.locator("[data-connection-banner]")).toBeVisible();
+	await expect(page.locator("[data-connection-banner]")).toBeVisible({ timeout: 20_000 });
 	await expect(navigationNotice(page)).toContainText("Navigation is unavailable.");
 
 	wire.state.offline = false;

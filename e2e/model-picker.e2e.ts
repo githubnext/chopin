@@ -14,7 +14,7 @@ import { finishTurn } from "../apps/server/src/testing/agent-link";
 import { connectionBanner } from "./banner";
 import { chatInput, fillChat } from "./chat-input";
 import { createChannel, registerTestDatabase } from "./database";
-import { NONE, strip } from "./planner-status";
+import { announced, NONE } from "./planner-status";
 import { e2eDatabaseName, e2ePort } from "./ports";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
@@ -402,12 +402,12 @@ test("offers a choice only while the attached client reports models", async ({ b
 	let page = await open(browser, HANDLE, room, DESKTOP);
 	// Nobody is attached: there is no catalog, so nothing is offered that nobody could honor.
 	await expect(chatInput(chat(page))).toBeVisible();
-	await expect(strip(page)).toHaveText(NONE);
+	await expect(announced(page)).toHaveText(NONE);
 	await expect(trigger(page)).toHaveCount(0);
 
 	// A client from before the catalog reports nothing, so the composer hides the control.
 	let older = await attachClient(room);
-	await expect(strip(page)).toHaveCount(0);
+	await expect(announced(page)).toHaveText("");
 	await expect(trigger(page)).toHaveCount(0);
 	await older.client.detach();
 
@@ -1054,7 +1054,7 @@ test("says a saved choice has gone once a turn fell back for a client that offer
 
 	// A client that offers the catalog and has yet to report is the same: nothing is said yet.
 	let silent = await attachClient(room, CATALOG, { silent: true });
-	await expect(strip(page).filter({ hasText: NONE })).toHaveCount(0);
+	await expect(announced(page).filter({ hasText: NONE })).toHaveCount(0);
 	await page.waitForTimeout(500);
 	await expect(trigger(page)).toHaveCount(0);
 	await expect(notice(page).filter({ hasText: gone })).toHaveCount(0);
@@ -1092,7 +1092,7 @@ test("says a saved choice has gone once a turn fell back for a client that offer
 	// of it before a turn has, and nothing is said once it has gone.
 	await silent.client.detach();
 	let later = await attachClient(room, CATALOG, { silent: true });
-	await expect(strip(page).filter({ hasText: NONE })).toHaveCount(0);
+	await expect(announced(page).filter({ hasText: NONE })).toHaveCount(0);
 	await page.waitForTimeout(500);
 	await expect(notice(page).filter({ hasText: gone })).toHaveCount(0);
 	await ask(page, "while the next never reports", 3);
@@ -1269,7 +1269,7 @@ test("gives way to the room's connection banner and comes back with the connecti
 	// for the composer's other notices, and the picker is still there.
 	await cut();
 	await expect(connectionBanner(page)).toHaveAttribute("data-layer", "socket", {
-		timeout: 15_000,
+		timeout: 20_000,
 	});
 	await expect(notice(page)).toHaveCount(0);
 	await expect(trigger(page)).toBeVisible();
@@ -1288,29 +1288,19 @@ test("gives way to the room's connection banner and comes back with the connecti
 		await ask(page, "while it cannot be read", 1);
 		await expect(notice(page).filter({ hasText: unread })).toBeVisible();
 
-		// The machine goes. Its banner is another cause: drawn above the notice, which stays, and
-		// both describe the draft.
+		// The machine goes. That is another cause, said to a screen reader and never drawn: the
+		// notice stays, alone above the composer, and describes the draft.
 		await client.detach();
-		await expect(connectionBanner(page)).toHaveAttribute("data-layer", "planner");
-		await expect(strip(page)).toHaveText(HELD);
+		await expect(announced(page)).toHaveText(HELD);
+		await expect(connectionBanner(page)).toHaveCount(0);
 		await expect(notice(page).filter({ hasText: unread })).toBeVisible();
-		await expect(connectionBanner(page)).toHaveCount(1);
-		let [banner, words] = await Promise.all([
-			strip(page).boundingBox(),
-			notice(page).boundingBox(),
-		]);
-		// Stacked as the composer's strips are: the notice starts below the banner's top and covers
-		// no more of it than the half rem each strip is tucked under the next.
-		expect(words!.y).toBeGreaterThan(banner!.y);
-		expect(banner!.y + banner!.height - words!.y).toBeLessThanOrEqual(9);
 		let described = await chatInput(chat(page)).getAttribute("aria-describedby");
-		expect(described).toContain((await strip(page).getAttribute("id"))!);
 		expect(described).toContain((await notice(page).getAttribute("id"))!);
 	} finally {
 		await choicesReadable(true);
 	}
 
-	// A machine returns: its banner goes and the notice stays until a turn can read the choice.
+	// A machine returns: the notice stays until a turn can read the choice.
 	let again = await attachClient(room, CATALOG);
 	await expect(connectionBanner(page)).toHaveCount(0);
 	await expect(notice(page).filter({ hasText: unread })).toBeVisible();

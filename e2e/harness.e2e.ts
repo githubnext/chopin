@@ -1,14 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 
 import { instruction } from "../packages/protocol/address";
-import {
-	allBanners,
-	connectionBanner,
-	failureBanner,
-	phaseVoice,
-	RESUMED_WAIT,
-	watchBanners,
-} from "./banner";
+import { allBanners, connectionBanner, failureBanner, phaseVoice, watchBanners } from "./banner";
 import { chatInput } from "./chat-input";
 import { expectFocusIndicator } from "./focus";
 /**
@@ -699,13 +692,8 @@ test("a failed reply waits behind the connection banner when the connection drop
 
 	offline = false;
 	await opened.evaluate(() => dispatchEvent(new Event("online")));
-	await expect(connectionBanner(opened)).toHaveAttribute("data-phase", "resumed", {
-		timeout: 30_000,
-	});
-	await expect(allBanners(opened)).toHaveCount(1);
-	await expect(failureBanner(opened)).toHaveCount(0);
-	// The room's connection has told its own end, and then the failure is told again, as it was.
-	await expect(connectionBanner(opened)).toHaveCount(0, RESUMED_WAIT);
+	// The bar goes without a word, and then the failure is told again, as it was.
+	await expect(connectionBanner(opened)).toHaveCount(0, { timeout: 30_000 });
 	await expect(failure).toContainText("Couldn't finish the reply.");
 	await expect(failure.locator(".composer-notice-line")).toHaveText("429 Too Many Requests");
 	await expect(allBanners(opened)).toHaveCount(1);

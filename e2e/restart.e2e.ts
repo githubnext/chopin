@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { SQL } from "bun";
 
 import { RESTART_QUIET_MS } from "../packages/protocol/restart";
+import { OFFLINE_BAR_GRACE } from "../packages/editor/src/connection-notice";
 import { RESTART_JITTER_MS } from "../apps/web/src/wire-loss";
 import { chatInput, expectChatValue } from "./chat-input";
 import {
@@ -388,21 +389,24 @@ test("a restart that outlasts its quiet period is then told as any other lost co
 	let code = await stop(first);
 	expect(code, first.log.text).toBe(0);
 
-	// Nothing is said for the quiet period, and after it the one banner, as for any other loss,
-	// once its own moment of grace has passed.
+	// Nothing is said for the quiet period, and after it the offline bar, as for any other loss,
+	// once its own ten seconds have passed.
 	let notice = page.locator("[data-connection-banner]");
-	await expect(notice).toBeVisible({ timeout: 20_000 });
+	await expect(notice).toBeVisible({ timeout: 30_000 });
 	let seen = await probe(page);
 	expect(seen.closes).toContain(1012);
 	expect(seen.lostAt).toBeDefined();
 	expect(seen.saidAt! - seen.lostAt!, seen.timeline.join("\n")).toBeGreaterThanOrEqual(
 		RESTART_QUIET_MS,
 	);
+	expect(seen.noticeAt! - seen.lostAt!, seen.timeline.join("\n")).toBeGreaterThanOrEqual(
+		RESTART_QUIET_MS + OFFLINE_BAR_GRACE,
+	);
 	expect(seen.noticeAt! - seen.lostAt!, seen.timeline.join("\n")).toBeLessThan(
-		RESTART_QUIET_MS + 4_000,
+		RESTART_QUIET_MS + OFFLINE_BAR_GRACE + 4_000,
 	);
 
-	// It says it is back, once, for the few seconds the banner stays, and then it is gone.
+	// It says it is back, once, and the bar is gone, with nothing drawn in its place.
 	let second = await server(database);
 	await expect(page.locator("[data-connection-status]")).toHaveText(
 		"Back online. Your changes are synced",

@@ -1,8 +1,8 @@
 /**
- * One banner per cause beside the Chat composer, against a real remote Planner: a reply that
- * failed keeps its banner and Retry when the machine drops after it, a message the server refused
- * is told beside a machine that is not connected, and a loss of the room's own connection is the
- * one banner while it lasts. `HARNESS=remote` needs a server of its own, started here against a
+ * One banner per cause in Chat, against a real remote Planner: a reply that failed keeps its banner
+ * and Retry when the machine drops after it, a message the server refused is told while no machine
+ * is connected, the machine itself is never drawn, and a loss of the room's own connection is the
+ * one bar while it lasts. `HARNESS=remote` needs a server of its own, started here against a
  * database of its own.
  */
 import { spawn } from "node:child_process";
@@ -12,7 +12,7 @@ import { SQL } from "bun";
 import { connectAgent } from "../packages/agent-link/src/client";
 import { instruction } from "../packages/protocol/address";
 import { finishTurn } from "../apps/server/src/testing/agent-link";
-import { allBanners, connectionBanner, failureBanner, RESUMED_WAIT, watchBanners } from "./banner";
+import { allBanners, connectionBanner, failureBanner, phaseVoice, watchBanners } from "./banner";
 import { chatInput, fillChat } from "./chat-input";
 import { createChannel, registerTestDatabase, seedChannel } from "./database";
 import { e2eDatabaseName, e2ePort } from "./ports";
@@ -238,7 +238,7 @@ function chat(page: Page) {
 	return page.getByRole("complementary", { name: "Chat", exact: true });
 }
 
-test("a failed reply keeps its banner and Retry when the machine drops after it, a loss of the room's connection is the one banner while it lasts, and Retry asks again once the machine is back", async ({ page }) => {
+test("a failed reply keeps its banner and Retry when the machine drops after it, a loss of the room's connection is the one bar while it lasts, and Retry asks again once the machine is back", async ({ page }) => {
 	test.setTimeout(150_000);
 	let room = await remoteServer();
 	await authenticate(page, HANDLE, ORIGIN);
@@ -271,34 +271,33 @@ test("a failed reply keeps its banner and Retry when the machine drops after it,
 		link.sockets[0]!.close(3000, "network failed");
 		await planner.client.resumption;
 
-		// That is another cause: the machine's banner and the failure's, each once, Retry still there.
-		let machineBanner = connectionBanner(page);
-		await expect(machineBanner).toHaveAttribute("data-layer", "planner");
-		await expect(machineBanner).toHaveAttribute("data-phase", "dropped");
-		await expect(machineBanner).toHaveText(PLANNER_HELD);
+		// That is another cause, said to a screen reader and never drawn: the failure's banner is
+		// still the one banner, Retry still there.
+		let bar = connectionBanner(page);
+		await expect(phaseVoice(page)).toHaveText(PLANNER_HELD);
+		await expect(bar).toHaveCount(0);
 		await expect(failure).toHaveAttribute("data-kind", "error");
 		await expect(failure.locator(".composer-notice-line")).toHaveText(RATE_LIMITED);
 		await expect(failure.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
-		await expect(allBanners(page)).toHaveCount(2);
+		await expect(allBanners(page)).toHaveCount(1);
 
-		// The room's own connection is lost: it is the cause of anything else that cannot be done,
-		// so its banner is the only one while it lasts.
+		// The room's own connection is lost: once it has lasted, it is the cause of anything else
+		// that cannot be done, so its bar is the only banner while it lasts.
 		await socket.lose();
-		await expect(machineBanner).toHaveAttribute("data-layer", "socket", { timeout: 15_000 });
+		await expect(bar).toHaveAttribute("data-layer", "socket", { timeout: 20_000 });
 		await expect(failureBanner(page)).toHaveCount(0);
 		await expect(allBanners(page)).toHaveCount(1);
 
-		// It comes back: the socket's banner goes, and the two causes that remain are told again.
+		// It comes back: the bar goes, and the failure that remains is told again.
 		await socket.back();
-		await expect(machineBanner).toHaveAttribute("data-layer", "planner", RESUMED_WAIT);
-		await expect(machineBanner).toHaveText(PLANNER_HELD);
+		await expect(bar).toHaveCount(0, { timeout: 30_000 });
 		await expect(failure.locator(".composer-notice-line")).toHaveText(RATE_LIMITED);
 		await expect(failure.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
-		await expect(allBanners(page)).toHaveCount(2);
+		await expect(allBanners(page)).toHaveCount(1);
 
-		// The machine's client is back: its banner goes, and Retry asks the same turn again, once.
+		// The machine's client is back, and Retry asks the same turn again, once.
 		let back = await machine(room);
-		await expect(connectionBanner(page)).toHaveCount(0, { timeout: 30_000 });
+		await expect(phaseVoice(page)).not.toHaveText(PLANNER_HELD, { timeout: 30_000 });
 		await expect(allBanners(page)).toHaveCount(1);
 		await failure.getByRole("button", { name: "Retry", exact: true }).click();
 		await expect.poll(() => socket.sent.length).toBe(2);
@@ -316,7 +315,7 @@ test("a failed reply keeps its banner and Retry when the machine drops after it,
 	}
 });
 
-test("a message the server refused is told beside a machine that is not connected, each cause its own banner", async ({ page }) => {
+test("a message the server refused is told while no machine is connected, and the machine is never drawn", async ({ page }) => {
 	test.setTimeout(90_000);
 	let room = await remoteServer();
 	await authenticate(page, HANDLE, ORIGIN);
@@ -325,11 +324,10 @@ test("a message the server refused is told beside a machine that is not connecte
 	await page.goto(`${ORIGIN}${roomPath(room)}`);
 	await ready(page);
 
-	// No machine serves the document: that is the Planner layer's banner.
-	let machineBanner = connectionBanner(page);
-	await expect(machineBanner).toHaveAttribute("data-layer", "planner");
-	await expect(machineBanner).toContainText(NO_MACHINE);
-	await expect(allBanners(page)).toHaveCount(1);
+	// No machine serves the document: a screen reader is told, and nothing is drawn.
+	await expect(phaseVoice(page)).toHaveText(NO_MACHINE);
+	await expect(connectionBanner(page)).toHaveCount(0);
+	await expect(allBanners(page)).toHaveCount(0);
 
 	// A message to the people here, over the server's 64 KiB limit, which the server refuses.
 	let input = chatInput(page);
@@ -343,7 +341,6 @@ test("a message the server refused is told beside a machine that is not connecte
 	await expect(refused).toContainText(
 		"Message not sent: chat message exceeds the 64 KiB limit",
 	);
-	await expect(machineBanner).toHaveAttribute("data-layer", "planner");
-	await expect(machineBanner).toContainText(NO_MACHINE);
-	await expect(allBanners(page)).toHaveCount(2);
+	await expect(connectionBanner(page)).toHaveCount(0);
+	await expect(allBanners(page)).toHaveCount(1);
 });
