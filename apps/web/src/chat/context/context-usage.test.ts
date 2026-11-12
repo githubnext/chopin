@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { toBreakdownSegments, toComposerUsage } from "./context-usage";
+import { toBreakdownSegments } from "./context-usage";
 
 describe("context-usage adapters", () => {
-	test("hides context ring and breakdown when usage or contextWindow is absent or zero", () => {
-		expect(toComposerUsage(undefined)).toBeUndefined();
+	test("hides the breakdown when usage or contextWindow is absent or zero", () => {
+		expect(toBreakdownSegments(undefined)).toBeUndefined();
 		expect(
-			toComposerUsage({
+			toBreakdownSegments({
 				messages: 0,
 				inputTokens: 0,
 				outputTokens: 0,
@@ -14,10 +14,9 @@ describe("context-usage adapters", () => {
 				contextWindow: 128_000,
 			}),
 		).toBeUndefined();
-		expect(toBreakdownSegments(undefined)).toBeUndefined();
 	});
 
-	test("maps raw harness tokens to thousands for ComposerContext and raw segments for ContextBreakdown", () => {
+	test("maps raw harness tokens to raw segments for ContextBreakdown", () => {
 		let usage = {
 			messages: 42_000,
 			inputTokens: 36_000,
@@ -26,12 +25,6 @@ describe("context-usage adapters", () => {
 			totalTokens: 42_000,
 			contextWindow: 128_000,
 		};
-		expect(toComposerUsage(usage)).toEqual({
-			system: 0,
-			tools: 0,
-			messages: 42,
-			total: 128,
-		});
 		expect(toBreakdownSegments(usage)).toEqual({
 			limit: 128_000,
 			segments: [

@@ -16,7 +16,6 @@ import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import { MessageActions } from "@/components/assistant-ui/elements/message-actions";
 import {
 	ComposerCommandItem,
-	ComposerContext,
 	ComposerMenu,
 	ComposerPersonItem,
 	ComposerVoice,
@@ -39,7 +38,7 @@ import {
 	ModelSelectorRoot,
 	ModelSelectorTrigger,
 } from "@/components/assistant-ui/elements/model-selector";
-import { toBreakdownSegments, toComposerUsage } from "../../chat/context/context-usage";
+import { toBreakdownSegments } from "../../chat/context/context-usage";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -291,7 +290,7 @@ const SUMMARY_AGENT: SubagentItem = { name: "Write research report", model: "rep
 
 /**
  * Copied assistant-ui and shadcn elements, drawn as their registries draw them: the model
- * selector, markdown-text, image, image gallery, the context ring and breakdown, message actions,
+ * selector, markdown-text, image, image gallery, the context breakdown, message actions,
  * Chopin's toolbar extension and overflow dropdown menu, the reaction pills, and the agent handoff
  * and subagent list research delegation draws. `e2e/design` measures their geometry and colours.
  */
@@ -299,8 +298,6 @@ export function AssistantUiPlate() {
 	let models = modelOptions(CATALOG);
 	let [model, setModel] = useState("gpt-5");
 	let [effort, setEffort] = useState("medium");
-	let normalComposerUsage = toComposerUsage(NORMAL_USAGE)!;
-	let warnComposerUsage = toComposerUsage(WARN_USAGE)!;
 	let normalBreakdown = toBreakdownSegments(NORMAL_USAGE)!;
 	let warnBreakdown = toBreakdownSegments(WARN_USAGE)!;
 	let [reaction, setReaction] = useState<Reaction>("up");
@@ -393,14 +390,6 @@ export function AssistantUiPlate() {
 					<StateLabel>Files of a sent message</StateLabel>
 					<MessageAttachments attachments={SENT} onOpen={() => {}} />
 					<MessageAttachments attachments={SENT.slice(1, 2)} />
-				</div>
-				<div>
-					<StateLabel>Context ring, normal</StateLabel>
-					<ComposerContext usage={normalComposerUsage} />
-				</div>
-				<div>
-					<StateLabel>Context ring, high usage</StateLabel>
-					<ComposerContext usage={warnComposerUsage} />
 				</div>
 				<div>
 					<StateLabel>Context breakdown, normal</StateLabel>

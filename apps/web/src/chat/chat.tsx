@@ -132,7 +132,6 @@ import { THREAD_MIN } from "./threads/split-layout";
 import { initialThreadsState, threadsReducer } from "./threads/thread-model";
 import { Transcript } from "./transcript";
 
-let LazyContextRing = lazy(() => import("./context/context-ring"));
 let LazyThreadPanel = lazy(() => import("./threads/thread-panel"));
 import {
 	initialTranscript,
@@ -840,9 +839,6 @@ export function Chat(
 					activity.current?.({ type: "message", busy: reportedBusy.current });
 				}
 				dispatchThreads({ kind: "in-thread", frame });
-			}),
-			wire.on<Wire.ContextState>("chat:context", frame => {
-				dispatchThreads({ kind: "top-context", frame });
 			}),
 			wire.on<Wire.CompactionState>("chat:compaction", frame => {
 				dispatchThreads({ kind: "top-compaction", frame });
@@ -1586,13 +1582,6 @@ export function Chat(
 				inputRef={textarea}
 				agent={!!agent}
 				model={modelControl}
-				contextRing={threadsState.topUsage
-					? (
-						<Suspense fallback={null}>
-							<LazyContextRing usage={threadsState.topUsage} />
-						</Suspense>
-					)
-					: undefined}
 				chopin={agent ? { disabled: !draftable || sending, onAsk: askChopin } : undefined}
 				banner={leadNode
 					? { id: bannerId, node: leadNode, invalid: slot.lead === "send" }

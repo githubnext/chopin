@@ -35,7 +35,6 @@ const ROOTS = [
 	'[data-slot="message-attachments"]',
 	'[data-slot="markdown-text"]',
 	'[data-slot="tooltip-content"]',
-	'[data-slot="composer-context"]',
 	'[data-slot="context-breakdown"]',
 	'[data-slot="image-root"]',
 	'[data-slot="image-zoom-overlay"]',
@@ -284,13 +283,6 @@ async function states(page: Page, measure: (state: string) => Promise<void>) {
 	await page.keyboard.press("Shift+Tab");
 	await check("markdown copy focus");
 
-	let rings = plate(page, "assistant-ui").locator('[data-slot="composer-context"] > button');
-	await rings.nth(0).scrollIntoViewIfNeeded();
-	await rings.nth(0).hover();
-	await check("context ring hover");
-	await rings.nth(1).scrollIntoViewIfNeeded();
-	await rings.nth(1).focus();
-	await check("context ring warn focus");
 	let messageAction = plate(page, "assistant-ui").locator('[data-slot="message-actions"]').first()
 		.getByRole("button").first();
 	await messageAction.scrollIntoViewIfNeeded();

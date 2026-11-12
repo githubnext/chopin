@@ -71,7 +71,6 @@ import type { TranscriptDecisions } from "../transcript";
 import type { ModelControl } from "../use-model-choice";
 import type { ThreadViewState } from "./thread-model";
 
-let LazyContextRing = lazy(() => import("../context/context-ring"));
 let MessageFiles = lazy(() => import("../attachments/message-files"));
 
 const LEADING_MENTION = /^\s*@chopin\b[^\S\n]*/i;
@@ -571,13 +570,6 @@ export function ThreadPanel(
 				alsoDisabled={!draftable || submitting}
 				alsoToChat={view.alsoToChat}
 				chopin={agent ? { disabled: !draftable || submitting, onAsk: askChopin } : undefined}
-				contextRing={view.usage
-					? (
-						<Suspense fallback={null}>
-							<LazyContextRing usage={view.usage} />
-						</Suspense>
-					)
-					: undefined}
 				draftable={draftable}
 				format={sheet
 					? undefined

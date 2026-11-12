@@ -161,8 +161,6 @@ export type ChatComposerProps = {
 	};
 	/** Reference, command and mention pickers, open over the field. */
 	pickers?: ReactNode;
-	/** Context-window usage ring in the composer rail, when reported by the harness. */
-	contextRing?: ReactNode;
 	/** What leads the row of controls: a thread's choice to also send the reply to Chat. */
 	rowStart?: ReactNode;
 	input: Omit<
@@ -200,7 +198,6 @@ export function ChatComposer(
 		onSubmit,
 		run,
 		pickers,
-		contextRing,
 		rowStart,
 		input,
 	}: ChatComposerProps,
@@ -630,7 +627,6 @@ export function ChatComposer(
 									{model && <ModelPill control={model} />}
 								</div>
 								<div className="composer-actions">
-									{contextRing}
 									{run?.action === "resume" && (
 										<button
 											aria-label={`Resume ${PLANNER_NAME}`}
