@@ -602,7 +602,7 @@ test("indentation keeps nested lists and code blocks intact", () => {
 	expect(markdown("- parent\n    - child\n    - sibling\n- next")).toMatch(nested);
 	expect(markdown("1. parent\n   - child\n   - sibling\n2. next")).toMatch(nested);
 	expect(markdown("```py\nif ready:\n    run()\n```")).toContain("if ready:\n    run()");
-	expect(markdown("Ask @chopin about it")).toContain("Ask about it");
+	expect(markdown("Ask @chopin about it")).toContain("Ask @chopin about it");
 });
 
 test("a numbered list that continues after a lead-in line still renders as a list", () => {
@@ -646,7 +646,7 @@ test("authoritative ranges render internal chips inside ordinary Markdown", () =
 	let source = "@chopin Read **#Release: v2 (API)** and [the docs](https://example.com).";
 	let markup = markdown(source, [reference(source, "#Release: v2 (API)")]);
 
-	expect(markup).not.toContain("@chopin");
+	expect(markup).toContain("@chopin Read");
 	expect(markup).toContain(
 		`<strong class="${STRONG_CLASS}"><a class="chat-reference" data-chat-reference="document" data-chopin-control="" href="/documents/octo-org/score/reference-one">#Release: v2 (API)</a></strong>`,
 	);
@@ -774,13 +774,13 @@ test("ranges inside code, link labels, and link destinations remain ordinary tex
 	expect(markup).toContain(">#Plan</a>");
 });
 
-test("display projection protects mentions inside authoritative labels", () => {
+test("mentions are drawn as written, in the words and in a reference's label", () => {
 	let source = "@chopin See #Ask @chopin and @sam";
 	let markup = markdown(source, [reference(source, "#Ask @chopin")]);
 
-	expect(markup).not.toMatch(/^.*@chopin See/);
+	expect(markup).toContain("@chopin See ");
 	expect(markup).toContain(">#Ask @chopin</a>");
-	expect(markup).toContain("and Sam");
+	expect(markup).toContain("and @sam");
 });
 
 test("invalid and overlapping ranges remain safe ordinary text", () => {

@@ -240,12 +240,12 @@ function chat(page: Page): Locator {
 }
 
 /**
- * Everything the Chat shows of one message a person sent to Chopin: not the Planner's own lines,
- * which may repeat what it was told.
+ * Everything the Chat shows of one message a person sent to Chopin, which leads with its mention:
+ * not the Planner's own lines, which may repeat what it was told, mentions and all.
  */
 function message(page: Page, text: string): Locator {
 	return chat(page).locator("[data-chat-message-id]")
-		.filter({ has: page.locator(".chat-mention") })
+		.filter({ has: page.locator("[data-chat-mention-lead]") })
 		.filter({ hasText: text });
 }
 

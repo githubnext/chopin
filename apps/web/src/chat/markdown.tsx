@@ -32,6 +32,7 @@ import {
 	imagesOutOfLinksRemarkPlugin,
 } from "./image-markdown";
 import { isDataImage } from "./image-state";
+import { MentionLogins, mentionRemarkPlugin } from "./message-mentions";
 import { orderedRunsRemarkPlugin } from "./ordered-runs";
 import { referenceRemarkPlugin } from "./reference-markdown";
 import { referenceRenderModel } from "./references";
@@ -375,18 +376,20 @@ export const MessageMarkdown = memo(function MessageMarkdown(
 	let deferred = useDeferredValue(source);
 	let held = useSame(references);
 	let model = useMemo(() => referenceRenderModel(deferred, held), [deferred, held]);
+	let logins = useContext(MentionLogins);
 	let remarkPlugins = useMemo(() => {
 		let gfm = messageGfmRemarkPlugin(model.source);
 		return [
 			...(gfm ? [gfm] : []),
 			[referenceRemarkPlugin, model],
+			[mentionRemarkPlugin, logins],
 			orderedRunsRemarkPlugin,
 			imagesOutOfLinksRemarkPlugin,
 			imageGalleriesRemarkPlugin,
 			imageBlocksRemarkPlugin,
 			emojiRemarkPlugin,
 		];
-	}, [model]);
+	}, [model, logins]);
 	let host = useImageHost();
 	let body = (
 		<References.Provider value={model.references}>

@@ -77,6 +77,7 @@ import {
 } from "./commands";
 import { MentionPicker } from "./mention-picker";
 import { useDocumentPeople } from "./document-people";
+import { MentionLogins } from "./message-mentions";
 import { pointerGroups, useMentionSources } from "./mention-sources";
 import type { PointerOption } from "./mention-sources";
 import { modelReadsImages } from "@chopin/protocol/model-choice";
@@ -231,6 +232,9 @@ function navigateTo(href: string) {
 
 /** How long a message the server turned down for a passing trouble is left before it is sent again. */
 const TROUBLE_RETRY_MS = 5_000;
+
+/** A message that names someone other than chopin. */
+const NAMES_SOMEONE = /(^|[^\w@])@(?!chopin\b)[\w-]/i;
 
 function draftKey(room: string, handle: string): string {
 	return chatDraftKey(room, isDemoHandle(handle) ? handle : undefined);
@@ -676,7 +680,24 @@ export function Chat(
 			)
 		? mention
 		: undefined;
-	let readers = useDocumentPeople(room, !!freeMention);
+	// Someone named in a message who is neither here nor has spoken may still read the document, so
+	// its readers are asked for once a message names anyone but chopin, as they are once `@` is typed.
+	let threadEntries = threadsState.openRootId
+		? threadsState.threads[threadsState.openRootId]?.transcript.entries
+		: undefined;
+	let namesSomeone = useMemo(
+		() => [...entries, ...threadEntries ?? []].some(entry => NAMES_SOMEONE.test(entry.text)),
+		[entries, threadEntries],
+	);
+	let readers = useDocumentPeople(room, !!freeMention || namesSomeone);
+	let mentionable = [
+		handle,
+		...mentionCandidates({ authors, people, readers, planner: agent, self: handle }).map(
+			candidate => candidate.login,
+		),
+	];
+	let mentionableKey = mentionable.map(login => login.toLowerCase()).join("\0");
+	let mentionLogins = useMemo(() => new Set(mentionableKey.split("\0")), [mentionableKey]);
 	let mentionOptions = freeMention
 		? filterMentions(
 			mentionCandidates({ authors, people, readers, planner: agent, self: handle }),
@@ -1479,7 +1500,9 @@ export function Chat(
 	);
 	let renderWithThread = (mainColumn: React.ReactNode) => (
 		<PlannerPresenceContext.Provider value={machine?.presence}>
-			{renderSplit(mainColumn)}
+			<MentionLogins.Provider value={mentionLogins}>
+				{renderSplit(mainColumn)}
+			</MentionLogins.Provider>
 		</PlannerPresenceContext.Provider>
 	);
 	let renderSplit = (mainColumn: React.ReactNode) => (
@@ -1702,12 +1725,7 @@ export function Chat(
 					"aria-expanded": commandOpen || pickerOpen || mentionOpen,
 					resetKey: historyKey,
 					references: draft.references,
-					mentions: [
-						handle,
-						...mentionCandidates({ authors, people, planner: agent, self: handle }).map(
-							candidate => candidate.login,
-						),
-					],
+					mentions: mentionable,
 					onChange: event => {
 						let next = event.currentTarget.value;
 						if (next !== draftRef.current.text) typing.current?.change();
