@@ -294,6 +294,23 @@ describe("chat reference requests", () => {
 			.toBe("#Release Notes");
 	});
 
+	it("removes the Planner mention however it is spelled", async () => {
+		let { service, parent, target } = await setup();
+		for (let mention of ["@chopin", "@Chopin"]) {
+			let text = `${mention} inspect #release`;
+			let start = text.indexOf("#release");
+			let result = await service.resolve({
+				channelId: parent.id,
+				repositoryId: parent.repositoryId,
+				text,
+				destination: "planner",
+				requests: [documentRequest(target.id, start, start + "#release".length)],
+			});
+			expect(result.text).toBe("inspect #Release Notes");
+			expect(result.references?.[0]).toMatchObject({ start: 8, end: 22 });
+		}
+	});
+
 	it("replaces custom token prose and preserves @chopin inside the canonical label", async () => {
 		let { service, storage, parent, target } = await setup();
 		await storage.channels.rename({ id: target.id, title: "@chopin Run This", now: NOW });

@@ -56,6 +56,12 @@ describe("the instruction", () => {
 		expect(instruction("ok @chopin go ahead")).toBe("ok go ahead");
 	});
 
+	it("strips the summons however it is spelled, as the old @Chopin and the new @chopin", () => {
+		expect(instruction("@Chopin draft the auth section")).toBe("draft the auth section");
+		expect(instruction("ok @CHOPIN go ahead")).toBe("ok go ahead");
+		expect(instruction("@Chopin")).toBe("");
+	});
+
 	it("is empty for a bare mention", () => {
 		expect(instruction("@chopin")).toBe("");
 		expect(instruction("  @chopin  ")).toBe("");
