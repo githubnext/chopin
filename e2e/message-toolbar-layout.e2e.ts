@@ -363,7 +363,8 @@ test("a heading shows the toolbar and the row highlight over its whole width, an
 	let headBox = (await head.boundingBox())!;
 	let nameBox = (await entry.getByText("chopin", { exact: true }).boundingBox())!;
 	let bodyBox = (await target.boundingBox())!;
-	expect(headBox.y + headBox.height).toBeLessThan(bodyBox.y);
+	// The name line sits right on the text, as Slack's does: above it, with no gap between.
+	expect(headBox.y + headBox.height).toBeLessThanOrEqual(bodyBox.y);
 
 	for (
 		let where of [

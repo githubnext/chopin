@@ -717,6 +717,91 @@ test("the message box is an 8px box with a 1px border, 28px controls with 18px i
 });
 
 /**
+ * Where Chat docks it the box is set as Slack's message box (the maintainer's approved mock-up and
+ * Slack's `p-message_pane_input`): 16px from the pane's sides and foot, a 36px formatting strip and
+ * a 36px row of 28px buttons 4px by 6px in, and one line of draft at rest, 8px above and below it
+ * and 12px in, in the message's own type. A hovered message's shade is the pane's whole width.
+ */
+test("the docked box is 16px from the pane's sides and foot with one line of draft 8px by 12px in, and a hovered row is shaded across the whole pane", async ({ page }) => {
+	let stage = plate(page, "chat").locator(".design-audit-chat-stage");
+	await stage.scrollIntoViewIfNeeded();
+	let pane = (await stage.locator(".workspace-chat-panel").boundingBox())!;
+	let box = (await stage.locator(".composer-surface").boundingBox())!;
+	expect(box.x - pane.x).toBe(16);
+	expect(pane.x + pane.width - (box.x + box.width)).toBe(16);
+	expect(pane.y + pane.height - (box.y + box.height)).toBe(16);
+
+	let draft = stage.locator(".composer-draft-input");
+	let typed = await draft.evaluate(node => {
+		let style = getComputedStyle(node);
+		let probe = document.createElement("span");
+		probe.style.fontSize = "var(--text-base)";
+		node.closest(".design-audit-chat-stage")!.append(probe);
+		let body = getComputedStyle(probe).fontSize;
+		probe.remove();
+		return {
+			padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft]
+				.map(value => Number.parseFloat(value)),
+			line: Number.parseFloat(style.lineHeight),
+			height: node.getBoundingClientRect().height,
+			fontSize: style.fontSize,
+			body,
+		};
+	});
+	expect(typed.padding).toEqual([8, 12, 8, 12]);
+	// One line with its padding, held on a whole pixel by the rounded minimum, or the line itself
+	// where that rounds down (layout snaps a box to sixty-fourths of a pixel).
+	expect(typed.height).toBe(
+		Math.max(Math.round(typed.line + 16), Math.round((typed.line + 16) * 64) / 64),
+	);
+	// The document body's role, which messages are written in.
+	expect(typed.fontSize).toBe(typed.body);
+
+	let row = await measure(stage.locator(".composer-row"));
+	expect(row.padding).toEqual([4, 6, 4, 6]);
+	let strip = stage.locator(".composer-format");
+	if (await strip.isVisible()) {
+		let format = await measure(strip);
+		expect(format.padding).toEqual([4, 6, 4, 6]);
+		expect(format.height).toBe(37);
+	}
+
+	// Scrolled to its end, the transcript's last entry ends 20px above the box.
+	let clearance = await stage.locator("[data-chat-scroll]").evaluate((node, top) => {
+		node.scrollTo({ top: node.scrollHeight });
+		let entries = [...node.querySelectorAll("[data-chat-stack] > *")].filter(entry =>
+			getComputedStyle(entry).position !== "absolute"
+			&& entry.getBoundingClientRect().height > 4
+		);
+		return top - entries.at(-1)!.getBoundingClientRect().bottom;
+	}, box.y);
+	expect(clearance).toBe(20);
+
+	// The hovered row's shade reaches both edges of the scroller, which spans the pane.
+	let scroller = stage.locator("[data-chat-scroll]");
+	let body = stage.locator(".chat-message-body").last();
+	await body.hover();
+	let shade = await body.evaluate(node => {
+		let style = getComputedStyle(node, "::before");
+		let box = node.getBoundingClientRect();
+		return {
+			left: box.left + Number.parseFloat(style.left),
+			width: Number.parseFloat(style.width),
+			radius: style.borderTopLeftRadius,
+		};
+	});
+	let lane = await scroller.evaluate(node => ({
+		left: node.getBoundingClientRect().left + node.clientLeft,
+		width: node.clientWidth,
+		outer: node.getBoundingClientRect().width,
+	}));
+	expect(lane.outer).toBe(pane.width);
+	expect(shade.left).toBe(lane.left);
+	expect(shade.width).toBe(lane.width);
+	expect(shade.radius).toBe("0px");
+});
+
+/**
  * The slots the box fills from the hooks: the `+` is one of its 28px ghost buttons, the files it
  * stages (assistant-ui's chips) and the voice it listens with sit inside the box above the text, and
  * the microphone (assistant-ui's own 32px round button) is in the bottom row with the other controls.
