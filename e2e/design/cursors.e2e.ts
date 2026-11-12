@@ -48,7 +48,7 @@ test("everything a click acts on shows the pointer, the copies included", async 
 		["the send button", plate(page, "chat").getByRole("button", { name: "Send message" }).last()],
 		["a link", plate(page, "links").getByRole("link").first()],
 		["assistant-ui's model pill", assistant.getByRole("combobox", { name: /^Model/ }).first()],
-		["assistant-ui's mention row", assistant.getByRole("button", { name: /Chopin\s*agent/ })],
+		["assistant-ui's mention row", assistant.getByRole("button", { name: /chopin\s*agent/ })],
 		["a staged file's remove", assistant.getByRole("button", { name: "Remove notes.md" })],
 	];
 	for (let [name, control] of controls) {
