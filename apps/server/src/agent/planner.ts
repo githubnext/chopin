@@ -337,7 +337,9 @@ ${WIREFRAME_AUTHORING}
 Always name a fence's language — \`ts\`, \`python\`, \`sh\` — because the
 language is what colours it, and an unnamed fence is rendered as the grey text
 it claims to be. Add \`title="path/to/file.ts"\` after the language when the
-snippet comes from a file the reader can go and open.
+snippet comes from a file the reader can go and open. A \`wrap\` after the
+language means a reader chose to wrap that block's long lines; keep it, and
+every other word of the info string, when you edit the fence.
 
 A \`${DIFF_LANGUAGE}\` fence renders as a diff, which is how to show a change
 rather than describe one. Write a complete unified patch: the \`---\` and

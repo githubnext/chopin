@@ -5,7 +5,7 @@ import { $createLinkNode } from "@lexical/link";
 import { $createParagraphNode, $createTextNode, $getRoot, $isElementNode } from "lexical";
 
 import { $createPlanNodes, exportPlan, importPlan } from "./convert";
-import { $isCodeBlockNode } from "./nodes/content";
+import { $isCodeBlockNode, codeWraps, withCodeWrap } from "./nodes/content";
 import { cardStatus, toElement } from "./nodes/questionnaire";
 import { parse } from "./parse";
 import { registry } from "./registry";
@@ -95,6 +95,47 @@ describe("conversion", () => {
 			"```\nplain\n```\n",
 		];
 		for (let source of cases) expect(through(source)).toBe(source);
+	});
+
+	/** Wrap lines is the word `wrap` in the info string, and it reaches every reader as written. */
+	it("keeps a fence's wrap flag, and turns it on and off without touching other words", () => {
+		let cases = [
+			"```ts wrap\nlet x = 1;\n```\n",
+			'```ts title="a.ts" wrap\nlet x = 1;\n```\n',
+			"```diff wrap\n--- a\n+++ b\n```\n",
+			"```text wrap\nhello\n```\n",
+		];
+		for (let source of cases) expect(through(source)).toBe(source);
+
+		let instance = editor();
+		importPlan(instance, '```ts title="a.ts"\nlet x = 1;\n```\n', { registry: REGISTRY });
+		let set = (wrap: boolean) =>
+			instance.update(() => {
+				let code = $getRoot().getFirstChild();
+				if ($isCodeBlockNode(code)) code.setMeta(withCodeWrap(code.getMeta(), wrap));
+			}, { discrete: true });
+		set(true);
+		expect(exportPlan(instance, { registry: REGISTRY })).toBe(
+			'```ts title="a.ts" wrap\nlet x = 1;\n```\n',
+		);
+		set(false);
+		expect(exportPlan(instance, { registry: REGISTRY })).toBe(
+			'```ts title="a.ts"\nlet x = 1;\n```\n',
+		);
+	});
+
+	it("reads the wrap flag only as a word of its own", () => {
+		expect(codeWraps("wrap")).toBe(true);
+		expect(codeWraps('title="a.ts" wrap')).toBe(true);
+		expect(codeWraps('wrap title="a.ts"')).toBe(true);
+		expect(codeWraps("")).toBe(false);
+		expect(codeWraps("wrapped")).toBe(false);
+		expect(codeWraps('title="how to wrap"')).toBe(false);
+		expect(codeWraps("title='wrap'")).toBe(false);
+		expect(withCodeWrap("", true)).toBe("wrap");
+		expect(withCodeWrap("wrap", false)).toBe("");
+		expect(withCodeWrap('wrap title="how to wrap"', false)).toBe('title="how to wrap"');
+		expect(withCodeWrap('title="a"', false)).toBe('title="a"');
 	});
 
 	it("keeps a block formula's info string, which inline math cannot carry", () => {

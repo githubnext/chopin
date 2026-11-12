@@ -59,7 +59,7 @@ import {
 	mergeRegister,
 } from "lexical";
 import { $isTableCellNode, $isTableRowNode } from "@lexical/table";
-import { $isCodeBlockNode, $isMathNode } from "@chopin/dialect";
+import { $isCodeBlockNode, $isMathNode, codeWraps, withCodeWrap } from "@chopin/dialect";
 
 import { enclosing, remember } from "../collapse";
 import { widgets$ } from "../widget-options";
@@ -73,7 +73,7 @@ import { useNearAtMount, useNearViewport } from "./near-viewport";
 import { registerPreviewSelection } from "./preview-selection";
 import { diffSourceLine, lastLineStart, offsetOfLine } from "./source-offset";
 import { hiddenSides, scrollEdges } from "./tab-edges";
-import { CodeIcon, WarningIcon } from "@chopin/icons";
+import { CodeIcon, WarningIcon, WrapIcon } from "@chopin/icons";
 
 import type { ElementNode, LexicalCommand, LexicalEditor, LexicalNode } from "lexical";
 import type { Wireframe as WireframeTree } from "@chopin/diagrams/wireframe";
@@ -322,6 +322,36 @@ function Language(
 	return <LanguageMenu onChange={set} options={options} value={block.language} />;
 }
 
+/**
+ * Wrap lines, as Notion has it: a setting of the block, written into its fence as `wrap`, so every
+ * reader sees the block wrap. Code that scrolls is offered it; a fence nobody named already wraps
+ * its source, and a phone wraps code anyway.
+ */
+function Wrap({ block, editor }: { block: Block; editor: LexicalEditor }) {
+	let wraps = codeWraps(block.meta);
+	let toggle = useCallback(() => {
+		editor.update(() => {
+			let node = $getNodeByKey(block.key);
+			if (!$isCodeBlockNode(node)) return;
+			node.setMeta(withCodeWrap(node.getMeta(), !codeWraps(node.getMeta())));
+		});
+	}, [editor, block.key]);
+	return (
+		<button
+			type="button"
+			aria-pressed={wraps}
+			onClick={toggle}
+			// As the source toggle: a click must not drop a caret into the source first.
+			onMouseDown={event => event.preventDefault()}
+			aria-label="Wrap lines"
+			className="plan-code-wrap btn btn-icon btn-ghost"
+			data-tooltip="Wrap lines"
+		>
+			<WrapIcon aria-hidden="true" size={16} />
+		</button>
+	);
+}
+
 function Toggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
 	return (
 		<button
@@ -524,6 +554,9 @@ function Preview(
 	}, [block.key, hidable, onHidable]);
 
 	let title = block.kind !== "diff" ? titleOf(block.meta) : undefined;
+	let phone = usePhone();
+	let wrappable = !disabled && !phone
+		&& (block.kind === "code" || block.kind === "diff" || plainText(block.language));
 
 	// These portals are siblings, so their stable keys also need distinct roles.
 	return (
@@ -563,6 +596,7 @@ function Preview(
 							</span>
 						)
 					}
+					{wrappable && <Wrap block={block} editor={editor} />}
 					{hidable && !reading && <Toggle collapsed={collapsed} onToggle={onToggle} />}
 					{title && <span className="plan-code-title">{title}</span>}
 					{named && <Language block={block} editor={editor} disabled={disabled} />}

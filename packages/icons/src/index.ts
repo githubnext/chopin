@@ -107,6 +107,7 @@ export {
 	TableIcon,
 	TabsIcon,
 	UsersIcon,
+	WrapIcon,
 	WrenchIcon,
 } from "./line";
 export { ListIcon } from "./list";

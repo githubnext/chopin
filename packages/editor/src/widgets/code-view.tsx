@@ -21,6 +21,7 @@
  */
 
 import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { codeWraps } from "@chopin/dialect";
 
 import { fileNameOf, repaired, titled } from "./code";
 
@@ -147,7 +148,7 @@ export type CodeViewProps = {
 	/** The fence's contents, as the document holds them. */
 	source: string;
 	language: string;
-	/** The rest of the info string, which is where a title lives. */
+	/** The rest of the info string, which is where a title and the wrap flag live. */
 	meta: string;
 };
 
@@ -164,7 +165,9 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 	let [broken, setBroken] = useState(false);
 	let [resolved, setResolved] = useState<string>();
 	/** Unknown until the view is laid out, so the renderer is never handed a guess. */
-	let [overflow, setOverflow] = useState<Overflow>();
+	let [measured, setOverflow] = useState<Overflow>();
+	// A block whose fence says `wrap` wraps at any width; the others wrap where the stylesheet says.
+	let overflow = measured && (codeWraps(meta) ? "wrap" : measured);
 	let view = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {

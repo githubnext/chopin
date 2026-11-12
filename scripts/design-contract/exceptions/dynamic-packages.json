@@ -392,6 +392,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > WrapIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > ActualSizeIcon > <LineIcon>",
 				1
 			],
@@ -487,7 +494,7 @@
 				1
 			]
 		],
-		"sourceHash": "48f43c6b8f8d2cb052fbc2718f311f0dc6f17b672dd6f0aa27f41b2eb909eaa5"
+		"sourceHash": "c907f4f28609560b2921b81482901fe8bf3dd933c462690dcd7c8e4dcc52c7bc"
 	},
 	{
 		"file": "packages/icons/src/warning.tsx",
@@ -1012,7 +1019,7 @@
 				1
 			]
 		],
-		"sourceHash": "8acd4c0ce30f8405a1db20dd07fe274c453c0ebdb29fdaa3d37a756fec5bbd34"
+		"sourceHash": "2e7ab2d3fc09e76fe45f18caed8efd9b85fc318f37f40dda41d03fb22fc5d584"
 	},
 	{
 		"file": "packages/dialect/src/nodes/containers.ts",

@@ -406,6 +406,18 @@ export function FitWidthIcon(props: IconProps) {
 	);
 }
 
+/** Wrap lines: a long line turning back under itself. */
+export function WrapIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<line x1="2.75" x2="15.25" y1="4.75" y2="4.75" />
+			<path d="M2.75 9h9.75a2.125 2.125 0 0 1 0 4.25H9.25" />
+			<polyline points="10.75 11.75 9.25 13.25 10.75 14.75" />
+			<line x1="2.75" x2="6.25" y1="13.25" y2="13.25" />
+		</LineIcon>
+	);
+}
+
 /** Actual size: a 1:1 ratio. */
 export function ActualSizeIcon(props: IconProps) {
 	return (

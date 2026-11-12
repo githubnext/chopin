@@ -79,11 +79,14 @@ export {
 	$isFootnoteReferenceNode,
 	$isImageNode,
 	$isMathNode,
+	CODE_WRAP,
 	CodeBlockNode,
+	codeWraps,
 	FootnoteDefinitionNode,
 	FootnoteReferenceNode,
 	ImageNode,
 	MathNode,
+	withCodeWrap,
 } from "./nodes/content";
 export { $createExperimentNode, $isExperimentNode, ExperimentNode } from "./nodes/experiment";
 export {

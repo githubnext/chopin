@@ -4064,14 +4064,14 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 }
 
 .plan-content .plan-code-chrome,
-.plan-content .plan-code-chrome .plan-code-toggle,
+.plan-content .plan-code-chrome :is(.plan-code-toggle, .plan-code-wrap),
 .plan-content .plan-code-chrome .plan-code-language [data-nucleo-icon] {
 	transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
 	.plan-content .plan-code-chrome,
-	.plan-content .plan-code-chrome .plan-code-toggle,
+	.plan-content .plan-code-chrome :is(.plan-code-toggle, .plan-code-wrap),
 	.plan-content .plan-code-chrome .plan-code-language [data-nucleo-icon],
 	.plan-content .plan-diagram {
 		transition: none;
@@ -4107,7 +4107,7 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 		[aria-expanded="true"]), :has(.plan-code-chrome[data-editing])) {
 		/* Only a named language says something the rendering does not. */
 		& .plan-code-chrome:not([data-kind="code"]),
-		& .plan-code-toggle,
+		& :is(.plan-code-toggle, .plan-code-wrap),
 		& .plan-code-language [data-nucleo-icon] {
 			opacity: 0;
 		}
@@ -4151,13 +4151,15 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	}
 }
 
-.plan-content .plan-code-toggle[aria-expanded="true"] {
+.plan-content :is(.plan-code-toggle[aria-expanded="true"], .plan-code-wrap[aria-pressed="true"]) {
 	background: var(--color-brand-wash);
 	color: var(--color-brand);
 }
 
 /* A global icon colour rule would otherwise keep the icon grey. */
-.plan-content .plan-code-toggle[aria-expanded="true"] [data-nucleo-icon] {
+.plan-content
+	:is(.plan-code-toggle[aria-expanded="true"], .plan-code-wrap[aria-pressed="true"])
+	[data-nucleo-icon] {
 	color: inherit;
 }
 
@@ -4248,6 +4250,40 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	.planCode[data-plan-text]
 	[data-plan-source]:has(> br[data-lexical-managed-linebreak]:only-child)::before {
 	content: "Text";
+}
+
+/*
+ * Wrap lines, the block's own setting: long lines wrap at any width instead of scrolling, the
+ * coloured copy with the hanging indent it has on a phone, and the source as plain wrapped text.
+ */
+.plan-content .planCode[data-plan-wrap] .plan-code-view > diffs-container {
+	min-inline-size: 0;
+}
+
+.plan-content .planCode[data-plan-wrap] [data-plan-source] {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/*
+ * Wrapped lines reach the block's end, where nothing could scroll them out from under its
+ * controls, so where the controls float over the code they take a row of their own above it, as
+ * they already do on touch.
+ */
+@media (hover: hover) and (pointer: fine) {
+	.plan-content
+		.planCode[data-plan-wrap]:not([data-plan-presentation], [data-plan-language="wireframe"], [data-plan-text]) {
+		/* The controls' 40px row, less the 12px the code already starts below the block's edge. */
+		padding-block-start: calc(var(--spacing) * 7);
+
+		& .plan-code-chrome {
+			background: none;
+		}
+
+		& .plan-diff-chrome-room {
+			display: none;
+		}
+	}
 }
 
 /*
