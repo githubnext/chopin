@@ -1502,17 +1502,18 @@ long to mask is left out, with a note in its place.
 
 Each launch gets the connector's environment, your `--env` values, and these:
 
-| Variable                         | Value                                                                                    |
-| -------------------------------- | ---------------------------------------------------------------------------------------- |
-| `CHOPIN_URL`                     | The server's origin.                                                                     |
-| `CHOPIN_DOCUMENT`                | The document as given to `--planner`, or its URL when Chopin chose this machine.         |
-| `CHOPIN_PLANNER_TOKEN`           | This launch's [credential](#credential).                                                 |
-| `CHOPIN_PLANNER_TOKEN_FILE`      | A file (mode `0600`) that always holds a current credential, replaced before it expires. |
-| `CHOPIN_CHECKOUT`                | The absolute root of the document's repository's checkout or clone.                      |
-| `CHOPIN_WORKTREE`                | The command's own worktree path, `<base dir>/planners/<owner>/<repo>/<document id>`.     |
-| `CHOPIN_GITHUB_TOKEN`            | The machine owner's token from Chopin's GitHub App, for pushing and draft pull requests. |
-| `CHOPIN_GITHUB_TOKEN_EXPIRES_AT` | When that token expires, in ISO 8601.                                                    |
-| `CHOPIN_GITHUB_TOKEN_FILE`       | A file (mode `0600`) that always holds the current token.                                |
+| Variable                         | Value                                                                                              |
+| -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `CHOPIN_URL`                     | The server's origin.                                                                               |
+| `CHOPIN_DOCUMENT`                | The document as given to `--planner`, or its URL when Chopin chose this machine.                   |
+| `CHOPIN_PLANNER_TOKEN`           | This launch's [credential](#credential).                                                           |
+| `CHOPIN_PLANNER_TOKEN_FILE`      | A file (mode `0600`) that always holds a current credential, replaced before it expires.           |
+| `CHOPIN_CHECKOUT`                | The absolute root of the document's repository's checkout or clone.                                |
+| `CHOPIN_WORKTREE`                | The command's own worktree path, `<base dir>/planners/<owner>/<repo>/<document id>`.               |
+| `CHOPIN_GITHUB_TOKEN`            | A token of Chopin's GitHub App for the document's repository, for pushing and draft pull requests. |
+| `CHOPIN_GITHUB_TOKEN_EXPIRES_AT` | When that token expires, in ISO 8601.                                                              |
+| `CHOPIN_GITHUB_TOKEN_FILE`       | A file (mode `0600`) that always holds the current token.                                          |
+| `CHOPIN_MCP_TOKEN_FILE`          | A file (mode `0600`) holding the token for Chopin's tools at `/mcp`, renewed with the credential.  |
 
 `CHOPIN_WORKTREE` stays the same across launches. The connector makes its
 parent folders but never removes the worktree itself. Whether the backend or the
@@ -1550,8 +1551,11 @@ launch's credential, never reaches the connector's output. A backend that outliv
 link, as a `resumable-sessions` one does, reads it again before reattaching.
 
 The connector renews the GitHub token in the file 25 minutes before it expires,
-so read the file before each use. The three `CHOPIN_GITHUB_TOKEN` variables are
-absent when Chopin gives no token; see
+so read the file before each use. It acts as the App's bot, so `gh api user`
+fails with it; who the work is for is in `CHOPIN_STARTER_LOGIN`. Use the GitHub
+token for Git and gh only, and `CHOPIN_MCP_TOKEN_FILE` for Chopin's tools. When
+Chopin refuses a token the command doesn't start. The rest of what the launch
+gets for GitHub, and what it doesn't inherit, is in
 [Which GitHub account pushes](chopin-cli.md#which-github-account-pushes).
 
 ### Credential
