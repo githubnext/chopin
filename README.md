@@ -273,6 +273,7 @@ in a local checkout and publishes captured evidence to Chopin's native views.
 | Deploy and operate an instance             | [Self-hosting](docs/self-hosting.md)                         |
 | Deploy without anyone noticing             | [Deploys nobody can see](docs/zero-downtime-deploys.md)      |
 | Configure identity and access              | [Authentication](docs/authentication.md)                     |
+| Let machines push as Chopin's GitHub App   | [GitHub App identity](docs/github-app-identity.md)           |
 | Connect an external coding agent           | [Local agent MCP](docs/local-agent-mcp.md)                   |
 | Run a document's Planner in your own agent | [Agent connection](docs/agent-connection.md)                 |
 | Run Chopin's work on your own machine      | [chopin CLI](docs/chopin-cli.md)                             |
