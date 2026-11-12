@@ -444,3 +444,173 @@ test(
 		}
 	},
 );
+
+/** Whether `box` lies inside the pane's shown part, with `slack` px allowed past its edges. */
+function inside(box: { y: number; height: number } | null, pane: { top: number; bottom: number }) {
+	return !!box && box.y >= pane.top - 1 && box.y + box.height <= pane.bottom + 1;
+}
+
+async function openOnCutMessage(
+	page: Page,
+	scope: Locator,
+	id: string,
+	cut: number,
+	info: TestInfo,
+	label: string,
+) {
+	let scroller = scrollerOf(scope);
+	let target = messageIn(scope, id);
+	await page.mouse.move(0, 0);
+	await cutTop(scroller, id, cut);
+	let point = await visiblePoint(scroller, target, "middle");
+	await page.mouse.move(point.x, point.y);
+	let bar = toolbar(target);
+	await expect(bar, label).toHaveCSS("opacity", "1");
+	let pane = await shown(scroller);
+	let before = (await bar.boundingBox())!;
+	expect(inside(before, pane), `${label}: the hovered bar is in the pane`).toBe(true);
+
+	// The menu: the bar stays where the pointer found it, and the menu opens on screen beside it.
+	let more = bar.getByRole("button", { name: "Message actions" });
+	let moreBox = (await more.boundingBox())!;
+	await page.mouse.move(moreBox.x + moreBox.width / 2, moreBox.y + moreBox.height / 2, {
+		steps: 4,
+	});
+	await page.mouse.down();
+	await page.mouse.up();
+	let menu = page.getByRole("menu", { name: "Message actions" });
+	await expect(menu, label).toBeVisible();
+	await page.evaluate(() => new Promise(done => requestAnimationFrame(() => done(0))));
+	let open = (await bar.boundingBox())!;
+	let menuBox = await menu.boundingBox();
+	await attach(info, `${label}: menu`, { pane, before, open, menu: menuBox });
+	expect(Math.abs(open.y - before.y), `${label}: the bar stays put while its menu is open`)
+		.toBeLessThanOrEqual(1);
+	expect(inside(menuBox, pane), `${label}: the menu opens inside the pane`).toBe(true);
+	let copy = menu.getByRole("menuitem", { name: "Copy", exact: true });
+	let copyBox = (await copy.boundingBox())!;
+	expect(
+		await page.evaluate(
+			({ x, y }) => !!document.elementFromPoint(x, y)?.closest("[role=menuitem]"),
+			{ x: copyBox.x + copyBox.width / 2, y: copyBox.y + copyBox.height / 2 },
+		),
+		`${label}: the pointer reaches Copy`,
+	).toBe(true);
+	await page.keyboard.press("Escape");
+	await expect(menu).toBeHidden();
+
+	// The emoji picker: the same, and it opens on screen.
+	await page.mouse.move(0, 0);
+	await page.mouse.move(point.x, point.y);
+	await expect(bar, label).toHaveCSS("opacity", "1");
+	let add = bar.getByRole("button", { name: "Add reaction" });
+	let addBox = (await add.boundingBox())!;
+	await page.mouse.move(addBox.x + addBox.width / 2, addBox.y + addBox.height / 2, { steps: 4 });
+	await page.mouse.down();
+	await page.mouse.up();
+	let picker = page.locator(".chat-message-picker");
+	await expect(picker, label).toBeVisible();
+	await expect(picker).toHaveCSS("visibility", "visible");
+	let placed = (await bar.boundingBox())!;
+	let pickerBox = await picker.boundingBox();
+	await attach(info, `${label}: picker`, { pane, before, placed, picker: pickerBox });
+	expect(Math.abs(placed.y - before.y), `${label}: the bar stays put while its picker is open`)
+		.toBeLessThanOrEqual(1);
+	let viewport = page.viewportSize()!;
+	expect(
+		!!pickerBox && pickerBox.y >= 0 && pickerBox.y + pickerBox.height <= viewport.height
+			&& pickerBox.x >= 0 && pickerBox.x + pickerBox.width <= viewport.width,
+		`${label}: the picker opens on screen`,
+	).toBe(true);
+	await page.keyboard.press("Escape");
+	await expect(picker).toBeHidden();
+}
+
+test(
+	"on a desktop the menu and emoji picker of a tall message scrolled partly out of view open on screen, and its toolbar stays where it was",
+	async ({ join, seed }, info) => {
+		await seed("# Toolbar\n", { transcript: transcript() });
+		let page = await join("ana");
+		let chat = chatOf(page);
+		await openOnCutMessage(page, chat, "tall", 300, info, "tall, top 300 px out");
+		await openOnCutMessage(page, chat, "medium", 120, info, "medium, top 120 px out");
+	},
+);
+
+test(
+	"in a thread panel the menu and emoji picker of a tall reply scrolled partly out of view open on screen",
+	async ({ join, seed }, info) => {
+		await seed("# Toolbar\n", { transcript: transcript() });
+		let page = await join("ana", WIDE);
+		let chat = chatOf(page);
+		let root = messageIn(chat, "short");
+		await root.scrollIntoViewIfNeeded();
+		await root.hover();
+		await root.getByRole("button", { name: "Reply in thread" }).click();
+		let panel = page.locator("[data-thread-panel]");
+		await expect(panel).toBeVisible();
+		let input = chatInput(panel);
+		for (let text of [paragraphs(10), "A short reply.", "Another short reply."]) {
+			await fillChat(input, text);
+			await input.press("Enter");
+			await expect(panel.locator(".chat-message-body").last()).toContainText(text.slice(-30));
+		}
+		let ids = await panel.locator(".chat-message-body[data-chat-message-id]").evaluateAll(rows =>
+			rows.map(row => row.getAttribute("data-chat-message-id")!)
+		);
+		await openOnCutMessage(
+			page,
+			panel,
+			ids.at(-3)!,
+			250,
+			info,
+			"thread tall reply, top 250 px out",
+		);
+	},
+);
+
+test(
+	"on a phone the menu and emoji picker of a long-pressed message cut at the top or by the composer open on screen",
+	async ({ join, seed }, info) => {
+		await seed("# Toolbar\n", { transcript: transcript() });
+		let page = await join("ana", PHONE);
+		await page.getByRole("navigation", { name: "Workspace view" })
+			.getByRole("button", { name: /^Chat/ }).click();
+		let chat = chatOf(page);
+		await expect.poll(async () => (await chat.boundingBox())?.x).toBe(0);
+		let scroller = scrollerOf(chat);
+		let viewport = page.viewportSize()!;
+		let onScreen = (box: { x: number; y: number; width: number; height: number } | null) =>
+			!!box && box.y >= 0 && box.y + box.height <= viewport.height && box.x >= 0
+			&& box.x + box.width <= viewport.width;
+		for (let [id, how, amount] of [["tall", "top", 300], ["medium", "bottom", 40]] as const) {
+			let target = messageIn(chat, id);
+			let label = `phone ${id}, ${how} cut (${amount} px)`;
+			if (how === "top") await cutTop(scroller, id, amount);
+			else await cutBottom(scroller, id, amount);
+			let point = await visiblePoint(scroller, target, "middle");
+			await hold(page, point.x, point.y);
+			let bar = toolbar(target);
+			await expect(bar, label).toBeVisible();
+			let more = bar.getByRole("button", { name: "Message actions" });
+			await expect.poll(async () => onScreen(await more.boundingBox()), { message: label }).toBe(
+				true,
+			);
+			let before = (await bar.boundingBox())!;
+			let moreBox = (await more.boundingBox())!;
+			await page.touchscreen.tap(moreBox.x + moreBox.width / 2, moreBox.y + moreBox.height / 2);
+			let menu = page.getByRole("menu", { name: "Message actions" });
+			await expect(menu, label).toBeVisible();
+			await page.evaluate(() => new Promise(done => requestAnimationFrame(() => done(0))));
+			let open = (await bar.boundingBox())!;
+			let menuBox = await menu.boundingBox();
+			await attach(info, `${label}: menu`, { before, open, menu: menuBox });
+			expect(Math.abs(open.y - before.y), `${label}: the bar stays put`).toBeLessThanOrEqual(1);
+			expect(onScreen(menuBox), `${label}: the menu opens on screen`).toBe(true);
+			await page.keyboard.press("Escape");
+			await expect(menu).toBeHidden();
+			await page.mouse.click(1, 1);
+			await expect(bar).toBeHidden();
+		}
+	},
+);
