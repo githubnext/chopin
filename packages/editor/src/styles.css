@@ -1600,14 +1600,16 @@
  * The drawer's progress is read only while a finger drags the sheet: it keeps
  * its last value when the sheet's detents change underneath it. With one detent
  * it runs from 0 open to 1 dismissed; with two, from 0 at the large detent to 1
- * at the medium one.
+ * at the medium one. The backdrop asks of its own siblings, never of `body`: a `:has()` on `body`
+ * made every change in the page that a `:has()` might care about restyle the whole page.
  */
-body:has(.plan-comment-sheet-popup[data-swiping]) .plan-comment-sheet-backdrop {
+.plan-comment-sheet-backdrop:has(~ .plan-comment-sheet-viewport
+	.plan-comment-sheet-popup[data-swiping]) {
 	opacity: calc(var(--backdrop-opacity) * (1 - var(--drawer-swipe-progress, 0)));
 }
 
-body:has(.plan-comment-sheet-popup[data-swiping])
-	.plan-comment-sheet-backdrop[data-plan-comment-sheet-detents] {
+.plan-comment-sheet-backdrop[data-plan-comment-sheet-detents]:has(~ .plan-comment-sheet-viewport
+	.plan-comment-sheet-popup[data-swiping]) {
 	opacity: calc(
 		var(--backdrop-opacity) +
 			(
@@ -2316,15 +2318,15 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	overflow: visible;
 }
 
-/* The draft is content in progress, so the empty-document prompt would only overlap it. */
+/*
+ * The draft is content in progress, so the empty-document prompt would only overlap it. The draft
+ * marks the editor's wrapper (`data-plan-research-draft`) rather than the wrapper asking with
+ * `:has()`, which would restyle the whole document whenever a block was added or removed.
+ */
 .plan
-	.mdxeditor-root-contenteditable:has(.plan-content[contenteditable="true"]
-		> .plan-research-draft-host)
-	> .plan-content:not([contenteditable]) {
-	display: none;
-}
-
-.plan .plan-content:has(.plan-research-draft-host) ~ .plan-body-placeholder {
+	.mdxeditor-root-contenteditable[data-plan-research-draft]
+	> .plan-content:not([contenteditable]),
+.plan .mdxeditor-root-contenteditable[data-plan-research-draft] .plan-body-placeholder {
 	display: none;
 }
 
@@ -5707,8 +5709,11 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	animation: plan-bubble-enter var(--duration-fast) var(--ease-out);
 }
 
-/* An open comment card owns the reader's attention; a lingering selection's toolbar would cover it. */
-:root:has(.plan-comment-card.motion-comment-surface:not(.is-closing)) .plan-formatting-toolbar {
+/*
+ * An open comment card owns the reader's attention; a lingering selection's toolbar would cover it.
+ * The card marks the page (`data-plan-comment-card`) rather than the page asking with `:has()`.
+ */
+:root[data-plan-comment-card] .plan-formatting-toolbar {
 	display: none;
 }
 

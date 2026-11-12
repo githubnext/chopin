@@ -381,8 +381,11 @@
 	}
 }
 
-/* Until a document first arrives, its column shows the same lines in place of the empty editor. */
-[data-plan-scroll]:has(> .plan-preface > .phone-skeleton-page) > .mdxeditor {
+/*
+ * Until a document first arrives, its column shows the same lines in place of the empty editor.
+ * The preface asks, not the scroller: a `:has()` on the scroller restyles the whole document.
+ */
+[data-plan-scroll] > .plan-preface:has(> .phone-skeleton-page) ~ .mdxeditor {
 	visibility: hidden;
 }
 
