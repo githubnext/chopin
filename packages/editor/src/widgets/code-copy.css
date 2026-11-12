@@ -1,0 +1,29 @@
+/*
+ * A code block's Copy code sits among its controls and comes and goes with them: hidden at rest
+ * where a pointer can hover, shown on the block's hover or focus, while a menu of its is open or
+ * someone types in it, and always on touch.
+ */
+.plan-content .plan-code-chrome .plan-code-copy {
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan-content .plan-code-chrome .plan-code-copy {
+		transition: none;
+	}
+}
+
+/* Its :has() asks of the small row of controls, never of the block. */
+@media (hover: hover) and (pointer: fine) {
+	.plan-content
+		.planCode:not(:hover, :focus-within)
+		.plan-code-chrome:not([data-editing], :has([aria-expanded="true"]))
+		.plan-code-copy {
+		opacity: 0;
+	}
+}
+
+/* Between the source toggle and the language menu, its touch target grows up and down, not over them. */
+:root[data-plan-coarse-pointer] .plan-content .plan-code-chrome .plan-code-copy::after {
+	width: 100%;
+}
