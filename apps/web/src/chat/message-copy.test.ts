@@ -20,6 +20,11 @@ test("plain text lists put each item on a line of its own, as the browser copies
 	expect(plainTextOf("Lead\n\n* a\n* b\n\nTail")).toBe("Lead\n\na\nb\n\nTail");
 });
 
+test("plain text keeps every mention as written, as the page draws it", () => {
+	expect(plainTextOf("ask @chopin about it")).toBe("ask @chopin about it");
+	expect(plainTextOf("thanks @mina, @Sam and @bo-li")).toBe("thanks @mina, @Sam and @bo-li");
+});
+
 test("plain text breaks a line where the page does and joins a soft break with a space", () => {
 	expect(plainTextOf("one\ntwo")).toBe("one two");
 	expect(plainTextOf("one  \ntwo")).toBe("one\ntwo");
@@ -28,8 +33,6 @@ test("plain text breaks a line where the page does and joins a soft break with a
 
 test("plain text leaves out what the page does not draw", () => {
 	expect(plainTextOf("keep <b>x</b> ![alt](https://example.com/p.png)")).toBe("keep x");
-	expect(plainTextOf("ask @chopin about it")).toBe("ask about it");
-	expect(plainTextOf("thanks @mina")).toBe("thanks Mina");
 	expect(plainTextOf("")).toBe("");
 });
 

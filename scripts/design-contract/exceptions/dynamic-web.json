@@ -403,7 +403,7 @@
 				1
 			]
 		],
-		"sourceHash": "bc68b2aa1a4f7cfddd51c539c10743c3adba235d8bcdeff745f6e0d464e20ae0"
+		"sourceHash": "ab019513e185e472cbfa9df27354adc48512dcf5e6d07496e74ad9993f756ba8"
 	},
 	{
 		"file": "apps/web/src/chat/assistant-ui/markdown-primitive.tsx",

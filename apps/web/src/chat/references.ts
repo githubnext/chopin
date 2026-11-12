@@ -665,108 +665,23 @@ function acceptedPersistedReferences(
 	return accepted.map(item => item.reference);
 }
 
-type DisplayUnit = { value: string; source: number; protected: boolean };
-
-function word(value: string | undefined): boolean {
-	return value !== undefined && /[A-Za-z0-9_]/.test(value);
-}
-
-function protectedRange(references: Chat.Reference[], start: number, end: number): boolean {
-	return references.some(reference => start < reference.end && end > reference.start);
-}
-
-function projectedDisplayUnits(source: string, references: Chat.Reference[]): DisplayUnit[] {
-	let units: DisplayUnit[] = [];
-	for (let offset = 0; offset < source.length; offset++) {
-		let mention = source.slice(offset, offset + MENTION.length);
-		if (
-			mention.toLowerCase() === MENTION
-			&& !protectedRange(references, offset, offset + MENTION.length)
-			&& (offset === 0 || !word(source[offset - 1]) && source[offset - 1] !== "@")
-			&& !word(source[offset + MENTION.length])
-		) {
-			offset += MENTION.length - 1;
-			// Whitespace is Markdown structure (indentation, code, hard breaks), so
-			// only the space left doubled by the removed mention is dropped.
-			let previous = units.at(-1);
-			if (previous && !previous.protected && /[^\S\n]/.test(previous.value)) {
-				while (
-					/[^\S\n]/.test(source[offset + 1] ?? "")
-					&& !protectedRange(references, offset + 1, offset + 2)
-				) offset++;
-			}
-			continue;
-		}
-		units.push({
-			value: source[offset]!,
-			source: offset,
-			protected: protectedRange(references, offset, offset + 1),
-		});
-	}
-
-	let collapsed = units;
-	while (collapsed.length > 0 && /\s/.test(collapsed[0]!.value)) collapsed.shift();
-	while (collapsed.length > 0 && /\s/.test(collapsed.at(-1)!.value)) collapsed.pop();
-
-	let displayed: DisplayUnit[] = [];
-	for (let index = 0; index < collapsed.length;) {
-		let current = collapsed[index]!;
-		if (
-			current.value === "@"
-			&& !current.protected
-			&& (index === 0 || !word(collapsed[index - 1]!.value)
-					&& collapsed[index - 1]!.value !== "@")
-		) {
-			let end = index + 1;
-			if (
-				end < collapsed.length && !collapsed[end]!.protected && /[A-Za-z0-9]/.test(
-					collapsed[end]!.value,
-				)
-			) {
-				end++;
-				while (
-					end < collapsed.length
-					&& !collapsed[end]!.protected
-					&& /[A-Za-z0-9-]/.test(collapsed[end]!.value)
-				) end++;
-				if (!word(collapsed[end]?.value)) {
-					for (let handle = index + 1; handle < end; handle++) {
-						displayed.push(
-							handle === index + 1
-								? { ...collapsed[handle]!, value: collapsed[handle]!.value.toUpperCase() }
-								: collapsed[handle]!,
-						);
-					}
-					index = end;
-					continue;
-				}
-			}
-		}
-		displayed.push(current);
-		index++;
-	}
-	return displayed;
-}
-
-/** Project display-only mentions while retaining authoritative source ranges for Markdown. */
+/**
+ * The message as it is drawn: its words as written, mentions included (each one a mention where it
+ * names someone, `message-mentions.ts`), without the whitespace around them, and the references that
+ * still cover exactly their words in it.
+ */
 export function referenceRenderModel(
 	source: string,
 	references: Chat.Reference[] = [],
 ): ReferenceRenderModel {
 	let accepted = acceptedPersistedReferences(source, references);
-	let units = projectedDisplayUnits(source, accepted);
-	let displayed = units.map(unit => unit.value).join("");
+	let leading = source.length - source.trimStart().length;
+	let displayed = source.trim();
 	let mapped: Chat.Reference[] = [];
 	for (let reference of accepted) {
-		let start = units.findIndex(unit => unit.source === reference.start);
-		let length = reference.end - reference.start;
-		if (
-			start < 0
-			|| units.slice(start, start + length).some((unit, index) =>
-				unit.source !== reference.start + index
-			)
-		) continue;
-		let end = start + length;
+		let start = reference.start - leading;
+		let end = reference.end - leading;
+		if (start < 0 || end > displayed.length) continue;
 		if (displayed.slice(start, end) !== source.slice(reference.start, reference.end)) continue;
 		mapped.push({ ...reference, start, end });
 	}

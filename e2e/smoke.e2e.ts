@@ -1015,8 +1015,8 @@ test(
 		let chat = chatPane(page);
 
 		await expect(chat.getByText("maggie", { exact: true })).toHaveCount(1);
-		await expect(chat).toContainText("Can you draft the migration?");
-		await expect(chat).not.toContainText("@");
+		// A message is drawn as written, its mention included.
+		await expect(chat).toContainText("@chopin Can you draft the migration?");
 		await expect(chat.getByText("Read file", { exact: true })).toHaveCount(0);
 
 		let run = chat.getByRole("button", {

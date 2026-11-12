@@ -1,4 +1,13 @@
-import { lazy, Suspense, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useContext,
+	useEffect,
+	useId,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 
 import { ChopinMark, displayName, Face, PLANNER_NAME, usePopoverDismissal } from "@chopin/editor";
 import { ArrowLeftIcon, CloseIcon } from "@chopin/icons";
@@ -10,6 +19,7 @@ import { sendFailureView } from "../failure";
 import { keepFormatPreference, readFormatPreference } from "../format-preference";
 import { MessageMarkdown } from "../markdown";
 import { useDocumentPeople } from "../document-people";
+import { MentionLogins } from "../message-mentions";
 import { MentionPicker } from "../mention-picker";
 import { pointerGroups, useMentionSources } from "../mention-sources";
 import {
@@ -274,6 +284,7 @@ export function ThreadPanel(
 		? mention
 		: undefined;
 	let readers = useDocumentPeople(room, !!freeMention);
+	let chatLogins = useContext(MentionLogins);
 	let mentionOptions = freeMention
 		? filterMentions(
 			mentionCandidates({ authors, people, readers, planner: agent, self: handle }),
@@ -588,9 +599,10 @@ export function ThreadPanel(
 					"aria-expanded": pickerOpen || mentionOpen,
 					resetKey: historyKey,
 					references: draft.references,
+					// Chat's logins (the readers among them) and this thread's own speakers.
 					mentions: [
-						handle,
-						...mentionCandidates({ authors, people, planner: agent, self: handle }).map(
+						...chatLogins,
+						...mentionCandidates({ authors, people, readers, planner: agent, self: handle }).map(
 							candidate => candidate.login,
 						),
 					],

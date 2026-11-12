@@ -554,10 +554,13 @@ function replies(page: Page, text: string): Locator {
 	return chat(page).getByText(text, { exact: true });
 }
 
-/** What a person sent to Chopin, as the Chat shows it: not the Planner's own lines, which may repeat it. */
+/**
+ * What a person sent to Chopin, as the Chat shows it, led by its mention: not the Planner's own
+ * lines, which may repeat it, mentions and all.
+ */
 function message(page: Page, text: string): Locator {
 	return chat(page).locator("[data-chat-message-id]")
-		.filter({ has: page.locator(".chat-mention") })
+		.filter({ has: page.locator("[data-chat-mention-lead]") })
 		.filter({ hasText: text });
 }
 
@@ -1162,7 +1165,7 @@ async function lostConnection(page: Page): Promise<void> {
 /** The tags of the messages people sent to Chopin, in the order the Chat shows them. */
 async function sentTags(page: Page): Promise<string[]> {
 	let texts = await chat(page).locator("[data-chat-message-id]")
-		.filter({ has: page.locator(".chat-mention") }).allTextContents();
+		.filter({ has: page.locator("[data-chat-mention-lead]") }).allTextContents();
 	return texts.map(text => /\[([a-z]\d+)\]/.exec(text)?.[1] ?? "?");
 }
 
