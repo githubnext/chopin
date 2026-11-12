@@ -8,8 +8,10 @@
 	display: flex;
 	align-items: center;
 	gap: calc(var(--spacing) * 2);
-	min-height: calc(var(--spacing) * 8);
-	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 3);
+	/* One height in both phases, Reconnect included, so the line never moves as the phase changes. */
+	box-sizing: border-box;
+	height: calc(var(--spacing) * 8);
+	padding: 0 calc(var(--spacing) * 3);
 	border-bottom: var(--edge-width) solid var(--color-edge);
 	background: var(--color-neutral-surface);
 	color: var(--color-text-secondary);
@@ -75,4 +77,10 @@
 /* A phone's panes run under its floating top bar: the bar rests just under it. */
 .workspace-root[data-workspace-phone] .chat-offline-slot {
 	inset-block-start: var(--phone-top-chrome);
+}
+
+/* Beside a desktop's rounded sheet and composer it is rounded too, with no edge of its own. */
+.workspace-root:not([data-workspace-phone]) .chat-offline-slot > .offline-bar {
+	border-bottom: 0;
+	border-radius: var(--radius-lg);
 }

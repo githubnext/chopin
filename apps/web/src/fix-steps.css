@@ -23,7 +23,7 @@
 }
 
 /* Why sits right under the title, as one thought with it. */
-.fix-steps .fix-steps-why {
+.fix-steps .fix-steps-title + .fix-steps-why {
 	margin-top: calc(var(--spacing) * -2.5);
 	font-size: var(--text-xs);
 	line-height: var(--text-xs--line-height);

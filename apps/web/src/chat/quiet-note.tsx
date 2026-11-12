@@ -56,7 +56,12 @@ export function QuietNote(
 					<UnfoldPanel unfold={steps}>
 						<div className="quiet-note-steps">
 							<Suspense fallback={null}>
-								<LazyFixSteps fix={fix} onChoose={onChoose} onNavigate={onNavigate} />
+								<LazyFixSteps
+									fix={fix}
+									onChoose={onChoose}
+									onNavigate={onNavigate}
+									titled={false}
+								/>
 							</Suspense>
 						</div>
 					</UnfoldPanel>

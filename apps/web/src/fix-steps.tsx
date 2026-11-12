@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { CheckIcon, CopyIcon } from "@chopin/icons";
 import { UnfoldPanel, UnfoldToggle, useUnfold } from "@chopin/visuals/unfold";
 
@@ -17,9 +18,11 @@ import "./fix-steps.css";
  * trying. Inside a menu (`menu`) each control is one of its items, so the arrow keys reach them.
  */
 export default function FixSteps(
-	{ fix, menu = false, onNavigate, onChoose }: {
+	{ fix, menu = false, titled = true, onNavigate, onChoose }: {
 		fix: MachineFix;
 		menu?: boolean;
+		/** Without its title where the sentence above it already says it, as chopin's row does. */
+		titled?: boolean;
 		/** Follows a link to a page of Chopin's own, where the host has to close first. */
 		onNavigate?: (href: string) => void;
 		/** Opens the machine button's choice. */
@@ -31,7 +34,7 @@ export default function FixSteps(
 	return (
 		<div aria-label={fix.title} className="fix-steps" data-fix={fix.kind} role="group">
 			{/* Text, not paragraphs or code: a menu may hold nothing with a role but its items. */}
-			<div className="fix-steps-title">{fix.title}</div>
+			{titled && <div className="fix-steps-title">{fix.title}</div>}
 			<div className="fix-steps-why">{fix.why}</div>
 			{/* A menu's items need a menu or group above them, not a list, so in a menu the steps are a group. */}
 			<ol
@@ -156,7 +159,11 @@ export function CommandBlock({ command, menu = false }: { command: string; menu?
 			>
 				{copied === "copied" ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
 			</button>
-			<span aria-live="polite" className="sr-only">{copied === "copied" ? "Copied" : ""}</span>
+			{/* Said from outside the menu, which may hold nothing but its items. */}
+			{typeof document !== "undefined" && createPortal(
+				<span aria-live="polite" className="sr-only">{copied === "copied" ? "Copied" : ""}</span>,
+				document.body,
+			)}
 		</div>
 	);
 }
