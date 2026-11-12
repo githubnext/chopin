@@ -59,9 +59,12 @@ test("a server out of reach is told by the connection banner alone, and the page
 	await expect(navigationNotice(page)).toHaveCount(0);
 	await expect(banners(page)).toHaveCount(1);
 
-	// The server comes back: the banner goes and the navigation it could not fetch is fetched.
+	// The server comes back, as the network does: the banner goes and the navigation it could not
+	// fetch is fetched. The bar waited ten seconds, by which the wire's backoff is long, so the return
+	// is the browser's online event, not the next scheduled attempt.
 	reachable = true;
 	wire.state.offline = false;
+	await page.evaluate(() => dispatchEvent(new Event("online")));
 	await expect(content(page)).toHaveAttribute("contenteditable", "true", { timeout: 30_000 });
 	await expect(banners(page)).toHaveCount(0, { timeout: 30_000 });
 	await expect(navigationNotice(page)).toHaveCount(0);
