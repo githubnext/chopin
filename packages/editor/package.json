@@ -39,6 +39,10 @@
 			"types": "./src/people.ts",
 			"default": "./src/people.ts"
 		},
+		"./drag-cursor": {
+			"types": "./src/drag-cursor.ts",
+			"default": "./src/drag-cursor.ts"
+		},
 		"./pointer": {
 			"types": "./src/pointer.ts",
 			"default": "./src/pointer.ts"

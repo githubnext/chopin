@@ -29,6 +29,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $findTableNode, $isTableCellNode } from "@lexical/table";
 import { $findMatchingParent, $getSelection, $isRangeSelection } from "lexical";
 
+import { holdDragCursor } from "../drag-cursor";
 import { alignmentLabel, nextAlign } from "./alignment";
 import { destination, dropSeam, gripBox, seamAt, seamBox, seams } from "./geometry";
 import {
@@ -263,6 +264,9 @@ export function TableRails(
 	 */
 	let dragging = useRef(false);
 	dragging.current = drag !== undefined;
+	// The closed hand stays while a grip is held, wherever on the page the pointer goes.
+	let held = drag !== undefined;
+	useEffect(() => (held ? holdDragCursor("grabbing") : undefined), [held]);
 	let leaving = useRef(0);
 	let caret = useRef<NodeKey | undefined>(undefined);
 
@@ -605,6 +609,9 @@ function Rail(
 							onDrag(undefined);
 						}}
 						onPointerCancel={() => onDrag(undefined)}
+						// Capture taken away without a release (the window lost focus) ends the drag too,
+						// rather than leaving the page holding the closed hand.
+						onLostPointerCapture={() => onDrag(undefined)}
 						onKeyDown={event => {
 							// The whole gesture from the keyboard too: a
 							// reorder that is only ever a drag is a reorder
