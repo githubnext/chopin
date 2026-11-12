@@ -764,11 +764,18 @@ test("the docked box is 16px from the pane's sides and foot with one line of dra
 	let shade = await body.evaluate(node => {
 		let style = getComputedStyle(node, "::before");
 		let box = node.getBoundingClientRect();
-		return {
-			left: box.left + Number.parseFloat(style.left),
-			width: Number.parseFloat(style.width),
-			radius: style.borderTopLeftRadius,
-		};
+		let left = box.left + Number.parseFloat(style.left);
+		let right = left + Number.parseFloat(style.width);
+		// What is drawn of it: as far as every box around it that clips it lets it reach.
+		for (let at = node.parentElement; at; at = at.parentElement) {
+			if (getComputedStyle(at).overflowX !== "visible") {
+				let clip = at.getBoundingClientRect();
+				left = Math.max(left, clip.left);
+				right = Math.min(right, clip.right);
+			}
+			if (at.matches("[data-chat-scroll]")) break;
+		}
+		return { left, width: right - left, radius: style.borderTopLeftRadius };
 	});
 	let lane = await scroller.evaluate(node => ({
 		left: node.getBoundingClientRect().left + node.clientLeft,
