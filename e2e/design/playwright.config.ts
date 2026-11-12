@@ -5,6 +5,7 @@ let port = Number(process.env.DESIGN_PORT ?? "5422");
 export default defineConfig({
 	testDir: ".",
 	testMatch: "*.e2e.ts",
+	globalSetup: "./warm.ts",
 	fullyParallel: false,
 	workers: 1,
 	forbidOnly: !!process.env.CI,
