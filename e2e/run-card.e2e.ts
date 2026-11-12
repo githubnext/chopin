@@ -248,7 +248,8 @@ test("a hovered run's line is shaded across the whole card, edge to edge, square
 				let frame = node.closest("[data-run-stack]")!.getBoundingClientRect();
 				let left = box.left + Number.parseFloat(shade.left);
 				let right = left + Number.parseFloat(shade.width);
-				let top = box.top + Number.parseFloat(shade.top);
+				// Offsets are from inside the line's border: the hairline above it is its own.
+				let top = box.top + node.clientTop + Number.parseFloat(shade.top);
 				return {
 					start: Math.round(left - frame.left),
 					end: Math.round(frame.right - right),
@@ -264,6 +265,22 @@ test("a hovered run's line is shaded across the whole card, edge to edge, square
 		// The toggle draws no shade of its own inside it.
 		await expect(toggle).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 	}
+	// The second run's line meets the run above it: its shade runs under the hairline between them,
+	// and the pointer on that hairline is on its line, so the pointer moving down the card passes
+	// from one line's shade into the next with no band between.
+	expect(
+		await card.locator("[data-run-toggle]").nth(1).locator("xpath=..").evaluate(node => {
+			let above = node.closest("li")!.previousElementSibling!.getBoundingClientRect();
+			let box = node.getBoundingClientRect();
+			let top = box.top + node.clientTop
+				+ Number.parseFloat(getComputedStyle(node, "::before").top);
+			let hairline = document.elementFromPoint(box.left + box.width / 2, above.bottom + 0.5);
+			return {
+				gap: Math.round((top - above.bottom) * 10) / 10,
+				hit: hairline?.closest(".run-head") === node,
+			};
+		}),
+	).toEqual({ gap: 0, hit: true });
 	await page.mouse.move(0, 0);
 	await expect.poll(() =>
 		card.locator("[data-run-toggle]").first().locator("xpath=..").evaluate(node =>
