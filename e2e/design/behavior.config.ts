@@ -15,6 +15,7 @@ export default defineConfig<DesignOptions>({
 		"connecting-indicator.e2e.ts",
 		"emoji.e2e.ts",
 		"cursors.e2e.ts",
+		"contrast.e2e.ts",
 	],
 	workers: 2,
 	outputDir: "../test-results/design-behavior",
