@@ -94,9 +94,9 @@ test("Full width widens the column for every reader, and stays", async ({ browse
 		await carol.close();
 	}
 
-	// Off again, from the keyboard: the trigger opens the menu, Enter turns the setting off.
+	// Off again, from the keyboard: ArrowUp opens the menu on its last row, the setting.
 	await menuButton(ana).focus();
-	await ana.keyboard.press("ArrowDown");
+	await ana.keyboard.press("ArrowUp");
 	await expect(fullWidth(ana)).toBeFocused();
 	await ana.keyboard.press("Enter");
 	await expect(fullWidth(ana)).toHaveAttribute("aria-checked", "false");
