@@ -1,0 +1,35 @@
+/*
+ * A run's line in the workflow card is shaded across the card's whole width under the pointer,
+ * square, as a Chat row is across Chat; the card's own corners round the first line and the last.
+ * The toggle keeps its own box for its hit area and focus ring.
+ */
+.run-stack {
+	isolation: isolate;
+	overflow: clip;
+}
+
+.run-head {
+	position: relative;
+}
+
+.run-head::before {
+	content: "";
+	position: absolute;
+	z-index: -1;
+	inset-block: 0;
+	inset-inline: calc(var(--spacing) * -3);
+	background: var(--color-hover);
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.run-head:hover::before {
+	opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.run-head::before {
+		transition: none;
+	}
+}

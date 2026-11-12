@@ -8,6 +8,8 @@ import plannerStop from "../assets/icons/planner-stop.svg";
 
 import { settledStages } from "@chopin/protocol/run-stages";
 
+import "./run-row.css";
+
 import type { Chat as Wire } from "@chopin/protocol";
 
 const SHOWN_STAGES = 6;
@@ -324,7 +326,7 @@ function RunRow(
 
 	return (
 		<li className="run-row" data-run-status={run.status}>
-			<div className="flex min-w-0 items-center gap-1">
+			<div className="run-head flex min-w-0 items-center gap-1">
 				<button
 					aria-controls={stagesId}
 					aria-expanded={open}
@@ -489,7 +491,7 @@ export function RunStack(
 	return (
 		<section
 			aria-label="Workflow runs"
-			className="rounded-lg bg-page px-3 text-sm ring-hairline"
+			className="run-stack rounded-lg bg-page px-3 text-sm ring-hairline"
 			data-run-stack=""
 		>
 			<ol className="flex flex-col">
