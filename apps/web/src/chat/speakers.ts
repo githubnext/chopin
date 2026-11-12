@@ -28,8 +28,15 @@ export type Speaker = {
 	handle?: string;
 };
 
+/**
+ * One formatter for every message's time. `toLocaleTimeString` builds a formatter on each call, and
+ * a long Chat asks for hundreds of times on every render.
+ */
+let clockFormat: Intl.DateTimeFormat | undefined;
+
 export function when(ts: number): string {
-	return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	clockFormat ??= new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit" });
+	return clockFormat.format(new Date(ts * 1000));
 }
 
 export function messageSpeaker(input: {
