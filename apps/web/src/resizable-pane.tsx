@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { holdDragCursor } from "@chopin/editor/drag-cursor";
 
 import { holdPaneDrag } from "./pane-drag-skip";
 
@@ -188,7 +189,15 @@ export function usePaneDrag(
 			origin.current = event.clientX;
 			drag.current?.end();
 			drag.current = startPaneDrag({
-				begin: holdPaneDrag,
+				begin: () => {
+					let release = holdPaneDrag();
+					// The divider's cursor stays while it is dragged, wherever the pointer is.
+					let cursor = holdDragCursor("col-resize");
+					return () => {
+						cursor();
+						release();
+					};
+				},
 				bounds: () => latest.current,
 				commit: value => latest.current.commit(value),
 				frames: browserFrames,

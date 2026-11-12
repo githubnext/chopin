@@ -3,6 +3,7 @@ import { $getNodeByKey, HISTORY_PUSH_TAG } from "lexical";
 
 import { $isImageNode } from "@chopin/dialect";
 
+import { holdDragCursor } from "../drag-cursor";
 import { draggedImageWidth, imageWidth } from "./image-size";
 
 import type { KeyboardEvent, PointerEvent, RefObject } from "react";
@@ -60,6 +61,9 @@ export function useImageResize(
 		let y = event.clientY;
 		let next = Math.round(rect.width);
 		let changed = false;
+		let release = holdDragCursor(
+			corner === "top left" || corner === "bottom right" ? "nwse-resize" : "nesw-resize",
+		);
 		let move = (event: globalThis.PointerEvent) => {
 			if (event.pointerId !== pointer) return;
 			next = draggedImageWidth(
@@ -81,6 +85,7 @@ export function useImageResize(
 			handle.removeEventListener("lostpointercapture", abort);
 			unregisterUpdate();
 			unregisterEditable();
+			release();
 			if (handle.hasPointerCapture(pointer)) handle.releasePointerCapture(pointer);
 			cancel.current = undefined;
 			setPreview(undefined);

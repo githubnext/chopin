@@ -1668,6 +1668,10 @@ body:has(.plan-comment-sheet-popup[data-swiping])
 	transition: none;
 }
 
+.plan-comment-sheet-popup[data-swiping] .plan-comment-sheet-head {
+	cursor: grabbing;
+}
+
 .plan-comment-sheet-grabber {
 	display: block;
 	width: var(--sheet-grabber-width);
