@@ -28,6 +28,7 @@ import { laterTimers } from "../testing/decisions";
 import { expectPlainStatusLines } from "../testing/plain-words";
 import * as Chat from "./service";
 import { ReferenceService } from "./references";
+import { sessionContextOf } from "./session-context";
 import { plannerCommands } from "../harness/harnesses";
 import { attachedLink } from "../harness/remote/registry";
 import * as Question from "@chopin/question";
@@ -1371,11 +1372,14 @@ test("each turn's fresh session gets the same instructions, and what the room sa
 	expect(first!.session).not.toBe(second!.session);
 	expect(second!.instructions).toBe(first!.instructions);
 	expect(first!.instructions).not.toContain("Durable conversation context");
-	expect(first!.prompt).toStartWith("A fresh Planner session starts for each turn.");
-	expect(first!.prompt).toContain("@rival: we should write release notes");
-	expect(first!.prompt.endsWith("draft the plan")).toBe(true);
-	expect(second!.prompt).toContain("Planner: Reply 1.");
-	expect(second!.prompt.endsWith("now the risks")).toBe(true);
+	let told = [first, second].map(turn => sessionContextOf(turn!.prompt));
+	expect(told[0]!.context).toStartWith("A fresh Planner session starts for each turn.");
+	expect(told[0]!.context).toContain("@rival: we should write release notes");
+	expect(told[0]!.turn).toEndWith("draft the plan");
+	expect(told[0]!.turn).not.toContain("release notes");
+	expect(told[1]!.context).toContain("Planner: Reply 1.");
+	expect(told[1]!.turn).toEndWith("now the risks");
+	expect(told[1]!.turn).not.toContain("draft the plan");
 });
 
 test("an attached Planner's reply reaches Chat as it is written, before its message or turn ends", async () => {

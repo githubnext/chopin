@@ -14,6 +14,7 @@ import { SQL } from "bun";
 
 import { connectAgent } from "../packages/agent-link/src/client";
 import { finishTurn } from "../apps/server/src/testing/agent-link";
+import { sessionContextOf } from "../apps/server/src/chat/session-context";
 import { chatInput, fillChat } from "./chat-input";
 import { createChannel, registerTestDatabase } from "./database";
 import { e2eDatabaseName, e2ePort } from "./ports";
@@ -174,7 +175,8 @@ async function attachPlanner(room: string, forks: boolean) {
 				}
 				: {}),
 			async turn(context) {
-				let { prompt } = context.message;
+				// The turn answers its own prompt, not what a fresh session is told of the room before it.
+				let { turn: prompt } = sessionContextOf(context.message.prompt);
 				turns.push(context.message);
 				context.emit({ type: "stream-start", modelId: "scripted" });
 				context.emit({ type: "text-start", id: "reply" });
@@ -238,9 +240,10 @@ async function say(scope: Locator, text: string): Promise<void> {
 /** The turn that answered `text`, and the session it ran in. */
 function turnFor(turns: Turn[], text: string): Turn {
 	// A background job's turn for the same document quotes the conversation too.
-	let found = turns.findLast(turn =>
-		turn.prompt.includes(text) && !turn.prompt.startsWith("[Background")
-	);
+	let found = turns.findLast(turn => {
+		let own = sessionContextOf(turn.prompt).turn;
+		return own.includes(text) && !own.startsWith("[Background");
+	});
 	if (!found) throw new Error(`no turn answered ${text}`);
 	return found;
 }
@@ -346,11 +349,13 @@ for (let forks of [true, false]) {
 			let next = turnFor(planner.turns, "Main next");
 			expect(next.session).not.toBe(also.session);
 			expect(planner.opened.find(value => value.session === next.session)?.type).toBe("start");
-			expect(next.instructions).toContain("SLOW also question");
-			expect(next.instructions).toContain("Finished thread answer.");
-			expect(next.instructions).toContain("Recovered answer.");
-			expect(next.instructions).not.toContain("SECRET");
-			expect(next.instructions).not.toContain("Half an answer");
+			// A fresh session is told the conversation before its prompt.
+			let told = sessionContextOf(next.prompt).context;
+			expect(told).toContain("SLOW also question");
+			expect(told).toContain("Finished thread answer.");
+			expect(told).toContain("Recovered answer.");
+			expect(`${told}\n${next.instructions}`).not.toContain("SECRET");
+			expect(`${told}\n${next.instructions}`).not.toContain("Half an answer");
 		} finally {
 			planner.release();
 			await planner.client.detach();

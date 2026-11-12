@@ -24,6 +24,7 @@ import {
 } from "../packages/protocol/connector";
 import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { finishTurn, resumeAfterRestart } from "../apps/server/src/testing/agent-link";
+import { sessionContextOf } from "../apps/server/src/chat/session-context";
 import {
 	BUDGET_MS,
 	GRACE_MS,
@@ -724,7 +725,9 @@ async function backend(
 	let outcomes: Array<{ status: string; value?: unknown; at: number }> = [];
 	let handlers: AgentHandlers = {
 		async turn(context: TurnContext) {
-			let prompt = context.message.prompt;
+			// What a fresh session is told of the room comes before the turn's own prompt; the turn
+			// answers its own prompt.
+			let { turn: prompt } = sessionContextOf(context.message.prompt);
 			// Chopin's own upkeep of the document runs through the same Planner; it is not a message.
 			if (prompt.startsWith("[Background job")) {
 				context.emit({ type: "stream-start", modelId: "scripted" });
