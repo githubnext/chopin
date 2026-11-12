@@ -10,11 +10,20 @@
  * that the drag leaves out of layout (`pane-drag-skip.ts`) was laid out again for the read. Here the
  * sizes are the observer's own, a message's toolbar is measured only when the message is near the
  * pane's height, and every read comes before any write.
+ *
+ * A message in a block a pane drag leaves out of layout is not decided while it is left out: reading
+ * its toolbar's place laid that block out again for the read, once per such message on every step of
+ * the drag, which on a Chat of long replies was most of the drag's cost. Its height does not change
+ * while it is left out, and when the drag ends and it is laid out at its new width the observer gives
+ * its new height, so it is decided then.
  */
 
 export const TALL = "data-chat-tall";
 /** The toolbar's own shift down a tall message, which `message-toolbar.tsx` writes. */
 const SHIFT = "--chat-toolbar-shift";
+
+/** A block a pane drag leaves out of layout (`pane-drag-skip.ts`). */
+const SKIPPED = "[data-drag-skip]";
 
 /** How far above its message a toolbar can hang, at most: its rise and the name line it clears. */
 const MOST_HANG = 96;
@@ -46,7 +55,9 @@ function update(view: HTMLElement, transcript: Transcript, entries: ResizeObserv
 		changed.add(element);
 	}
 	let pane = view.clientHeight;
-	let rows = all ? [...transcript.heights.keys()] : [...changed];
+	let rows = (all ? [...transcript.heights.keys()] : [...changed]).filter(element =>
+		!element.closest(SKIPPED)
+	);
 	// Reads first: the layout is current while nothing has been written.
 	let decided = rows.map(element => {
 		let height = transcript.heights.get(element)!;
