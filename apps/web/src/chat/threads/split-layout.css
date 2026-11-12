@@ -1,5 +1,15 @@
 /* Balanced Chat + Thread split and collapsed document strip. */
 
+/*
+ * Split Chat's width, set on the pane and on its body, which are all that read it (theme.css). Not
+ * inherited, so a change of it restyles those two and not the Chat inside them.
+ */
+@property --chat-width {
+	syntax: "<length>";
+	inherits: false;
+	initial-value: 0px;
+}
+
 .workspace-root[data-workspace-mode="split"][data-thread-open]
 	.workspace-frame
 	> .workspace-document-stack {

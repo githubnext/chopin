@@ -45,6 +45,7 @@ import {
 	restoreOutbox,
 } from "./delivery";
 import type { DraftInputHandle } from "./draft-input";
+import type { CSSProperties } from "react";
 import { keepFormatPreference, readFormatPreference } from "./format-preference";
 import { bannerSlot } from "./banner-slot";
 import { ConnectionBannerView } from "./connection-banner";
@@ -1514,6 +1515,11 @@ export function Chat(
 				<div
 					className="chat-split-thread"
 					data-thread-pane=""
+					// The thread's width while Chat and the thread share the split; on the thread itself, so a
+					// change of it restyles the thread and nothing else.
+					style={workspaceThread?.threadWidth
+						? { "--thread-width": `${workspaceThread.threadWidth}px` } as CSSProperties
+						: undefined}
 				>
 					{workspaceThread && (
 						<ResizeHandle

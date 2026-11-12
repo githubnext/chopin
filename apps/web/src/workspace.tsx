@@ -384,7 +384,10 @@ export function Workspace(
 	let root = useRef<HTMLDivElement>(null);
 	let chatPanel = useRef<HTMLElement>(null);
 	let chatBody = useRef<HTMLDivElement>(null);
-	// Split Chat's width is `--chat-width` on the pane (`.is-open`) and on its body, in theme.css.
+	// Split Chat's width is `--chat-width` on the pane (`.is-open`) and on its body, in theme.css. It is
+	// set on those two and inherited by nothing (split-layout.css): on the workspace's root, each change
+	// of it (a thread opening or closing, a drag ending, Chat shown again) restyled the whole page.
+	let chatWidthStyle = { "--chat-width": `${chatWidth}px` } as CSSProperties;
 	let showChatWidth = (width: number | undefined) => {
 		for (let element of [chatPanel.current, chatBody.current]) {
 			if (width === undefined) element?.style.removeProperty("width");
@@ -590,13 +593,6 @@ export function Workspace(
 			data-workspace-title={topBar.titleHidden ? "hidden" : undefined}
 			data-workspace-travel={travel.back ? "back" : undefined}
 			ref={root}
-			// The thread's width joins Chat's only while a thread is open, so the root is as it was without one.
-			style={mode === "split"
-				? {
-					"--chat-width": `${chatWidth}px`,
-					...(splitActive ? { "--thread-width": `${split.thread}px` } : {}),
-				} as CSSProperties
-				: undefined}
 		>
 			{/* Split has no ground header: the title lives on the sheet, so expanding never hides it. */}
 			{phone
@@ -874,12 +870,16 @@ export function Workspace(
 						}}
 						onTransitionEnd={chatTrack.onTransitionEnd}
 						ref={chatPanel}
-						style={mode === "split" ? undefined : { width: "100%" }}
+						style={mode === "split" ? chatWidthStyle : { width: "100%" }}
 					>
 						<h2 className="sr-only" id={ids.heading.chat} tabIndex={-1}>
 							Chat
 						</h2>
-						<div className="workspace-chat-body relative min-h-0 flex-1" ref={chatBody}>
+						<div
+							className="workspace-chat-body relative min-h-0 flex-1"
+							ref={chatBody}
+							style={mode === "split" ? chatWidthStyle : undefined}
+						>
 							{presentation.separatorVisible && !split.documentCollapsed && (
 								<ResizeHandle
 									label="Resize chat"
