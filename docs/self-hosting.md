@@ -613,6 +613,10 @@ The proxy must:
 - proxy WebSocket upgrades on `/ws`, and on `/api/v1/agent` under `HARNESS=remote`;
 - proxy `/mcp` and the `/api/v1/agent` upgrade without removing their
   `Authorization` header, nor the upgrade's `Sec-WebSocket-Protocol` header;
+- pass the upgrade's `Sec-WebSocket-Extensions` headers both ways, so the browser and
+  Chopin agree on per-message deflate (Caddy's default `reverse_proxy` does). Without
+  it the socket still works, but opening a large document sends about six times the
+  bytes;
 - pass Chopin's response headers through unchanged, so a browser can tell Chopin's
   refusal of a WebSocket handshake (`x-chopin-refusal: 1`) from the proxy's own
   4xx while no upstream answers;
