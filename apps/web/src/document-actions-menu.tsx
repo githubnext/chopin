@@ -119,8 +119,9 @@ export function DocumentActionsMenu(
 		/** This menu is for the document open in this tab, so it can launch collaborator tabs. */
 		openDocument?: boolean;
 		/**
-		 * The document's own settings, as Notion's Full width, above its actions: rows that turn
-		 * something on and off and leave the menu open. Not offered in a phone's sheet.
+		 * The document's own settings, as Notion's Full width, below its actions: rows that turn
+		 * something on and off and leave the menu open. A keyboard opening still lands on the first
+		 * action, Copy link. Not offered in a phone's sheet.
 		 */
 		settings?: ReactNode;
 		trigger: ReactNode;
@@ -371,12 +372,6 @@ export function DocumentActionsMenu(
 					style={presence.value ?? { visibility: "hidden" }}
 				>
 					<div ref={content}>
-						{settings && (
-							<>
-								{settings}
-								<MenuSeparator />
-							</>
-						)}
 						{items.map(item => (
 							<MenuItem
 								key={item.action}
@@ -390,6 +385,12 @@ export function DocumentActionsMenu(
 								{item.label}
 							</MenuItem>
 						))}
+						{settings && (
+							<>
+								<MenuSeparator />
+								{settings}
+							</>
+						)}
 					</div>
 				</div>,
 				document.body,
