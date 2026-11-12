@@ -1102,6 +1102,7 @@ if (url) {
 				"038_plan_image_sizes",
 				"039_plan_image_types",
 				"040_chat_attachment_originals",
+				"041_document_full_width",
 			]);
 			expect([
 				...await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`,

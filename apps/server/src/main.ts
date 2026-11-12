@@ -1878,6 +1878,7 @@ function applyChannelAccess(
 			...(description ? { description } : {}),
 			canManage,
 			...(archivedAt ? { archivedAt } : {}),
+			...(channel.fullWidth ? { fullWidth: true } : {}),
 		});
 	}
 	if ((canEdit !== data.canEdit || canManage !== data.canManage) && !data.closed && publish) {
@@ -1889,6 +1890,8 @@ function applyChannelAccess(
 	data.channelDescription = description;
 	data.channelDescriptionRevision = descriptionRevision;
 	data.channelArchivedAt = archivedAt;
+	if (channel.fullWidth) data.channelFullWidth = true;
+	else delete data.channelFullWidth;
 	data.canEdit = canEdit;
 	data.canManage = canManage;
 }
@@ -1998,6 +2001,7 @@ function openRoomSocket(ws: Socket): void {
 		canEdit: ws.data.canEdit,
 		canManage: ws.data.canManage,
 		...(ws.data.channelArchivedAt ? { archivedAt: ws.data.channelArchivedAt } : {}),
+		...(ws.data.channelFullWidth ? { fullWidth: true } : {}),
 		backgroundJobs: config.backgroundJobs,
 		webResearch: config.webResearch,
 		...CHAT_CAPABILITIES,
@@ -2406,6 +2410,8 @@ function announceChannel(channel: ChannelRecord): void {
 		ws.data.channelDescription = channel.description?.value;
 		ws.data.channelDescriptionRevision = channel.description?.revision ?? 0;
 		ws.data.channelArchivedAt = channel.archivedAt?.toISOString();
+		if (channel.fullWidth) ws.data.channelFullWidth = true;
+		else delete ws.data.channelFullWidth;
 		ws.data.canEdit = ws.data.canManage && !channel.archivedAt;
 		tell(ws, {
 			kind: "session:channel",
@@ -2418,6 +2424,7 @@ function announceChannel(channel: ChannelRecord): void {
 			...(channel.description ? { description: channel.description.value } : {}),
 			canManage: ws.data.canManage,
 			...(channel.archivedAt ? { archivedAt: channel.archivedAt.toISOString() } : {}),
+			...(channel.fullWidth ? { fullWidth: true } : {}),
 		});
 		tell(ws, {
 			kind: "session:access",
@@ -3300,6 +3307,12 @@ registerChannelRoutes(router, hostedAuth, {
 			id,
 			opened => Service.exclusive(opened, () => Service.rename(opened, title)),
 		),
+	// Layout is channel metadata, not document content: no plan lock, and readers hear it at once.
+	setFullWidth: async (id, fullWidth) => {
+		let result = await storage.channels.setFullWidth({ id, fullWidth, now: hostedAuth.clock() });
+		if (result.changed) announceChannel(result.channel);
+		return result;
+	},
 	onChannelRestored: restoreChannel,
 	onVersionRestore: restoreDocumentVersion,
 	onVersionSummaries: config.backgroundJobs && config.agent

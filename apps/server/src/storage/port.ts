@@ -20,6 +20,7 @@ import type {
 	ChannelRecord,
 	ChannelScanCursor,
 	ChannelScanPage,
+	ChannelWidthInput,
 	ChatSessionState,
 	ChatThreadRecord,
 	ClaimBackgroundJobs,
@@ -300,6 +301,8 @@ export interface ChannelStore {
 	/** Slugs a document had before a rename, which still resolve to it, newest first by first use. */
 	earlierSlugs(id: string): Promise<string[]>;
 	rename(channel: RenameChannel): Promise<RenameResult>;
+	/** Sets Full width. Refused for an archived document, as a rename is. */
+	setFullWidth(input: ChannelWidthInput): Promise<RenameResult>;
 	archive(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
 	restore(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
 	delete(id: string): Promise<boolean>;

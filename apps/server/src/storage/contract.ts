@@ -1079,6 +1079,60 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("keeps a document's Full width with the document, readable column by default", async () => {
+			let storage = await opened(factory);
+			try {
+				let { channelId, repositoryId } = await userAndChannel(storage);
+				let before = (await storage.channels.get(channelId))!;
+				expect(before.fullWidth).toBeUndefined();
+
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				let widened = await storage.channels.setFullWidth({ id: channelId, fullWidth: true, now });
+				expect(widened.changed).toBe(true);
+				expect(widened.channel.fullWidth).toBe(true);
+				expect(widened.channel.updatedAt).toEqual(now);
+				expect(widened.channel.revision).toBe(before.revision);
+				expect(widened.channel.slug).toBe(before.slug);
+				expect((await storage.channels.get(channelId))!.fullWidth).toBe(true);
+				expect(
+					(await storage.channels.list(repositoryId, 20)).channels.find(channel =>
+						channel.id === channelId
+					)?.fullWidth,
+				).toBe(true);
+
+				let repeated = await storage.channels.setFullWidth({
+					id: channelId,
+					fullWidth: true,
+					now: new Date("2026-01-04T03:04:05.000Z"),
+				});
+				expect(repeated.changed).toBe(false);
+				expect(repeated.channel.updatedAt).toEqual(now);
+
+				let narrowed = await storage.channels.setFullWidth({
+					id: channelId,
+					fullWidth: false,
+					now: new Date("2026-01-05T03:04:05.000Z"),
+				});
+				expect(narrowed.changed).toBe(true);
+				expect(narrowed.channel.fullWidth).toBeUndefined();
+				expect((await storage.channels.get(channelId))!.fullWidth).toBeUndefined();
+
+				await storage.channels.archive({ id: channelId, now: new Date("2026-01-06T00:00:00Z") });
+				await expect(storage.channels.setFullWidth({
+					id: channelId,
+					fullWidth: true,
+					now: new Date("2026-01-07T00:00:00Z"),
+				})).rejects.toMatchObject({ failure: "conflict" });
+				await expect(storage.channels.setFullWidth({
+					id: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+					fullWidth: true,
+					now,
+				})).rejects.toMatchObject({ failure: "missing" });
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("publishes searchable document descriptions without changing document recency", async () => {
 			let storage = await opened(factory);
 			try {

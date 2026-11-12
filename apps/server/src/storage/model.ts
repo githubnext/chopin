@@ -283,6 +283,8 @@ export type ChannelRecord = {
 	updatedAt: Date;
 	archivedAt?: Date;
 	description?: ChannelDescription;
+	/** Every block uses the sheet's full width, Notion's Full width. Absent: the readable column. */
+	fullWidth?: true;
 	unansweredDecisions: number;
 };
 
@@ -304,6 +306,7 @@ export type CreateChannel =
 		| "updatedAt"
 		| "archivedAt"
 		| "description"
+		| "fullWidth"
 		| "unansweredDecisions"
 	>
 	& {
@@ -315,6 +318,13 @@ export type CreateChannel =
 export type RenameChannel = {
 	id: string;
 	title: string;
+	now: Date;
+};
+
+/** Turns a document's Full width on or off; a change advances `updatedAt`, as a rename does. */
+export type ChannelWidthInput = {
+	id: string;
+	fullWidth: boolean;
 	now: Date;
 };
 

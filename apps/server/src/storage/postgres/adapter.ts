@@ -38,6 +38,7 @@ import type {
 	ChannelScanPage,
 	ChannelSnapshot,
 	ChannelUpdate,
+	ChannelWidthInput,
 	CommitChannel,
 	CommitResult,
 	CreateChannel,
@@ -103,6 +104,7 @@ type ChannelRow = {
 	createdAt: Timestamp;
 	updatedAt: Timestamp;
 	archivedAt: Timestamp | null;
+	fullWidth: boolean;
 	description: string | null;
 	descriptionRevision: Integer;
 	descriptionPlanRevision: Integer | null;
@@ -243,6 +245,7 @@ function channel(row: ChannelRow): ChannelRecord {
 	if (!row.slug) throw corrupt(`channel ${row.id} has no canonical slug`);
 	let {
 		archivedAt,
+		fullWidth,
 		parentChannelId,
 		description,
 		descriptionRevision,
@@ -295,6 +298,7 @@ function channel(row: ChannelRow): ChannelRecord {
 		updatedAt: date(row.updatedAt, "channel update time"),
 		...(archivedAt === null ? {} : { archivedAt: date(archivedAt, "channel archive time") }),
 		...(projected ? { description: projected } : {}),
+		...(fullWidth ? { fullWidth: true as const } : {}),
 		unansweredDecisions: integer(unansweredDecisions, "channel unanswered decisions"),
 	};
 }
@@ -396,6 +400,7 @@ const CHANNEL_COLUMNS = `
 	channels.created_at AS "createdAt",
 	channels.updated_at AS "updatedAt",
 	channels.archived_at AS "archivedAt",
+	channels.full_width AS "fullWidth",
 	channels.generated_description AS description,
 	channels.generated_description_revision AS "descriptionRevision",
 	channels.generated_description_plan_revision AS "descriptionPlanRevision",
@@ -422,6 +427,7 @@ const CHANNEL_RETURNING = `
 	created_at AS "createdAt",
 	updated_at AS "updatedAt",
 	archived_at AS "archivedAt",
+	full_width AS "fullWidth",
 	generated_description AS description,
 	generated_description_revision AS "descriptionRevision",
 	generated_description_plan_revision AS "descriptionPlanRevision",
@@ -814,6 +820,7 @@ export class PostgresStorage implements StorageAdapter {
 				return rows.map(row => row.slug);
 			}),
 		rename: input => this.#renameChannel(input),
+		setFullWidth: input => this.#setChannelWidth(input),
 		archive: input => this.#setChannelArchived(input, true),
 		restore: input => this.#setChannelArchived(input, false),
 		delete: id => this.#deleteChannel(id),
@@ -995,6 +1002,33 @@ export class PostgresStorage implements StorageAdapter {
 					input.now,
 				);
 				return { channel: channel({ ...saved, slug }), changed: true };
+			}));
+	}
+
+	#setChannelWidth(input: ChannelWidthInput): Promise<RenameResult> {
+		return this.#run("set channel width", () =>
+			this.#sql.begin(async transaction => {
+				let [current] = await transaction<ChannelRow[]>`
+					SELECT ${transaction.unsafe(CHANNEL_COLUMNS)}
+					FROM channels
+					WHERE id = ${input.id}
+					FOR UPDATE
+				`;
+				if (!current) throw missing(`channel ${input.id} does not exist`);
+				let existing = channel(current);
+				if (existing.archivedAt) throw conflict(`channel ${input.id} is archived`);
+				if (!!existing.fullWidth === input.fullWidth) return { channel: existing, changed: false };
+				let updatedAt = input.now > existing.updatedAt
+					? input.now
+					: new Date(existing.updatedAt.getTime() + 1);
+				let [saved] = await transaction<ChannelRow[]>`
+					UPDATE channels
+					SET full_width = ${input.fullWidth}, updated_at = ${updatedAt}
+					WHERE id = ${input.id}
+					RETURNING ${transaction.unsafe(CHANNEL_RETURNING)}
+				`;
+				if (!saved) throw corrupt("setting a channel's width returned no record");
+				return { channel: channel({ ...saved, slug: existing.slug }), changed: true };
 			}));
 	}
 

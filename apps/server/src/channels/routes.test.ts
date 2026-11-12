@@ -238,6 +238,7 @@ async function setup(random?: () => number) {
 			archived.push({ id, changed: result.changed });
 			return result;
 		},
+		setFullWidth: (id, fullWidth) => storage.channels.setFullWidth({ id, fullWidth, now }),
 		onChannelDeleted: async id => {
 			deleted.push(id);
 			return storage.channels.delete(id);
@@ -555,6 +556,43 @@ describe("channel routes", () => {
 		}));
 		expect(repeated!.status).toBe(200);
 		expect(renamed).toEqual(["Launch plan"]);
+	});
+
+	it("lets an editor turn the document's Full width on and off for every reader", async () => {
+		let { router, storage, github, cookie, renamed, now } = await setup();
+		let channel = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Release plan",
+			createdBy: "U_octocat",
+			now: new Date(now.getTime() - 1000),
+		});
+		let patch = (body: unknown, origin = "https://chopin.test") =>
+			router.handle(request(`/api/channels/${channel.id}`, cookie, {
+				method: "PATCH",
+				headers: { origin },
+				body: JSON.stringify(body),
+			}));
+
+		let widened = await patch({ fullWidth: true });
+		expect(widened!.status).toBe(200);
+		let body = await widened!.json();
+		expect(body.channel).toMatchObject({ id: channel.id, title: "Release plan", fullWidth: true });
+		expect((await storage.channels.get(channel.id))!.fullWidth).toBe(true);
+		expect(renamed).toEqual(["Release plan"]);
+
+		let narrowed = await patch({ fullWidth: false });
+		expect(narrowed!.status).toBe(200);
+		expect((await narrowed!.json()).channel.fullWidth).toBeUndefined();
+		expect((await storage.channels.get(channel.id))!.fullWidth).toBeUndefined();
+
+		expect((await patch({ fullWidth: "yes" }))!.status).toBe(400);
+		expect((await patch({ fullWidth: true }, "https://evil.test"))!.status).toBe(403);
+		github.repo = { ...github.repo, permissions: { pull: true, push: false, admin: false } };
+		expect((await patch({ fullWidth: true }))!.status).toBe(403);
+		expect((await storage.channels.get(channel.id))!.fullWidth).toBeUndefined();
 	});
 
 	it("normalizes blank and long names and allows duplicate display titles", async () => {
