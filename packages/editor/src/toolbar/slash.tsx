@@ -235,6 +235,16 @@ const COMMANDS: SlashCommand[] = [
 		run: placed(editor => insertList(editor, "number")),
 	},
 	{
+		id: "tasks",
+		label: "Task list",
+		hint: "Items to check off",
+		icon: CheckIcon,
+		group: "Basic blocks",
+		keywords: ["task", "todo", "checklist", "checkbox"],
+		kind: "insert",
+		run: placed(editor => insertList(editor, "check")),
+	},
+	{
 		id: "quote",
 		label: "Quote",
 		hint: "Set a passage apart",
@@ -323,16 +333,6 @@ const COMMANDS: SlashCommand[] = [
 				else $insertNodes([columns]);
 				first.getFirstChild()?.selectStart();
 			}), "Columns"),
-	},
-	{
-		id: "tasks",
-		label: "Task list",
-		hint: "Items to check off",
-		icon: CheckIcon,
-		group: "Blocks",
-		keywords: ["task", "todo", "checklist", "checkbox"],
-		kind: "insert",
-		run: placed(editor => insertList(editor, "check")),
 	},
 	{
 		id: "code",
@@ -779,7 +779,7 @@ export function SlashMenu({ actions = NO_ACTIONS, disabled }: SlashMenuProps) {
 								}`}
 							>
 								<command.icon size={16} className="shrink-0" />
-								<span className="ml-2 w-24 shrink-0">{command.label}</span>
+								<span className="ml-2 w-28 shrink-0">{command.label}</span>
 								<span
 									aria-hidden="true"
 									className="min-w-0 truncate text-xs text-text-tertiary max-[479px]:hidden"
