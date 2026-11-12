@@ -143,6 +143,15 @@
 	}
 }
 
+/*
+ * Above its first row the transcript keeps room for that row's toolbar, which stands 16px over the
+ * row's shade, as Slack's channel keeps its intro above the first message: scrolled to the top, the
+ * first message's bar, its emoji and their shadow are whole. A thread's replies follow its root.
+ */
+[data-chat-stack]:not([data-chat-led]) {
+	padding-block-start: calc(var(--spacing) * 5);
+}
+
 /* A message after the first of its group shows its time in the avatar's gutter on hover, as Slack does. */
 .chat-gutter-time {
 	position: absolute;
