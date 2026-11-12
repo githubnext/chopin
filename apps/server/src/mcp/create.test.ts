@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { limits } from "@chopin/dialect";
 
 import { handler } from "../mcp";
+import { isRepository, REPOSITORY_PATH } from "./create";
 
 import type { CreateDocumentInput, DocumentReader, LinkedDocument } from "../mcp";
 
@@ -329,5 +330,76 @@ describe("the MCP creation protocol", () => {
 			.toEqual(["list_documents", "read_document"]);
 		let creationAttempt = await json(await mcp(call(17, creation)));
 		expect(creationAttempt.error).toEqual({ code: -32601, message: "tool not found" });
+	});
+});
+
+/** Every string over `alphabet` of at most `length` characters. */
+function strings(alphabet: string[], length: number): string[] {
+	return length === 0
+		? [""]
+		: ["", ...strings(alphabet, length - 1).flatMap(rest => alphabet.map(first => first + rest))];
+}
+
+describe("the repository argument", () => {
+	// What the repository argument accepted before its patterns lost their lookaround.
+	let before =
+		/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}\/(?!\.\.?$)[A-Za-z0-9._-]{1,100}$/;
+	let advertised = (value: string) =>
+		value.length <= REPOSITORY_PATH.maxLength && new RegExp(REPOSITORY_PATH.pattern).test(value);
+	let examples = [
+		["githubnext/chopin", true],
+		["a/b", true],
+		["a-b-c/b", true],
+		["-octo/b", false],
+		["octo-/b", false],
+		["oc--to/b", false],
+		["-/b", false],
+		[`${"a".repeat(38)}-b/b`, false],
+		[`${"a".repeat(39)}/b`, true],
+		[`${"a".repeat(19)}-${"b".repeat(19)}/b`, true],
+		["octo/.", false],
+		["octo/..", false],
+		["octo/...", true],
+		["octo/.github", true],
+		["octo/..github", true],
+		["octo/_", true],
+		["octo/a.", true],
+		[`octo/${"a".repeat(100)}`, true],
+		[`octo/.${"a".repeat(99)}`, true],
+		[`octo/..${"a".repeat(98)}`, true],
+		[`octo/${"a".repeat(101)}`, false],
+		[`octo/..${"a".repeat(99)}`, false],
+		["octo/", false],
+		["/chopin", false],
+		["octo/chopin/x", false],
+		["octo/cho pin", false],
+		["octo/chopin\n", false],
+	] as const;
+
+	it("accepts exactly what it accepted with lookaround", () => {
+		for (let [value, accepted] of examples) {
+			expect([value, before.test(value)]).toEqual([value, accepted]);
+			expect([value, isRepository(value)]).toEqual([value, accepted]);
+		}
+		// Every pairing of an owner over "a" and "-" up to 7 characters with a name over "a", "."
+		// and "_" up to 5.
+		for (let owner of strings(["a", "-"], 7)) {
+			for (let name of strings(["a", ".", "_"], 5)) {
+				let value = `${owner}/${name}`;
+				if (isRepository(value) !== before.test(value)) expect(value).toBe("accepted as before");
+			}
+		}
+	});
+
+	it("advertises a schema without lookaround that only an over-long owner gets past", () => {
+		expect(REPOSITORY_PATH.pattern).not.toMatch(/\(\?<?[=!]/);
+		for (let [value, accepted] of examples) {
+			let owner = value.split("/")[0]!;
+			expect([value, advertised(value)]).toEqual([value, accepted || owner.length > 39]);
+		}
+		// A pattern counts at most 39 letters and digits; only hyphens take an owner past 39.
+		expect(advertised(`${"a".repeat(38)}-b/b`)).toBe(true);
+		expect(isRepository(`${"a".repeat(38)}-b/b`)).toBe(false);
+		expect(advertised(`${"a".repeat(40)}/b`)).toBe(false);
 	});
 });

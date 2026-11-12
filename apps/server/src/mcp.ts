@@ -14,7 +14,7 @@ import {
 	MAX_REQUEST_BYTES,
 	MAX_TITLE_LENGTH,
 	prepare,
-	REPOSITORY_PATH_PATTERN,
+	REPOSITORY_PATH,
 } from "./mcp/create";
 import { prepareUpdate } from "./mcp/update";
 import { MAX_IMAGE_DATA_LENGTH, MAX_IMAGE_REQUEST_BYTES, prepareImage } from "./mcp/image";
@@ -295,7 +295,7 @@ const IMPLEMENTATION = {
 		planRevision: { type: "integer", minimum: 0 },
 		graphVersion: { type: "integer", minimum: 1 },
 		graphRevision: { type: "integer", minimum: 1 },
-		repository: { type: "string", pattern: REPOSITORY_PATH_PATTERN },
+		repository: REPOSITORY_PATH,
 		branch: { type: "string", minLength: 1, maxLength: 255 },
 		commit: { type: "string", minLength: 1, maxLength: 64 },
 	},
@@ -319,7 +319,7 @@ export const TOOLS: Tool[] = [
 		inputSchema: {
 			type: "object",
 			properties: {
-				repository: { type: "string", pattern: REPOSITORY_PATH_PATTERN },
+				repository: REPOSITORY_PATH,
 				includeArchived: { type: "boolean", default: false },
 			},
 			required: ["repository"],
@@ -376,7 +376,7 @@ export const TOOLS: Tool[] = [
 			type: "object",
 			properties: {
 				idempotencyKey: { type: "string", minLength: 1, maxLength: 128 },
-				repository: { type: "string", pattern: REPOSITORY_PATH_PATTERN },
+				repository: REPOSITORY_PATH,
 				baseBranch: { type: "string", minLength: 1, maxLength: 255 },
 				baseCommit: { type: "string", minLength: 1, maxLength: 64 },
 				title: { type: "string", maxLength: MAX_TITLE_LENGTH },
