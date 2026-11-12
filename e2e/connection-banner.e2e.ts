@@ -1,7 +1,7 @@
 /**
- * The Chat's one connection banner and the machine's own side of it, against a real remote
- * Planner: a reply that kept going or ended while the page was cut off, a machine whose link
- * dropped under a reply (the connection's to tell, never a failure's), and what asking a machine
+ * The page's offline bar and the machine's own side of it, against a real remote Planner: a reply
+ * that kept going or ended while the page was cut off (said, never drawn, when it is back), a
+ * machine whose link dropped under a reply (never drawn in Chat), and what asking a machine
  * to start the Planner (`chat:wake`) does for a writer, a reader, an archived document and each
  * state the Planner is in. `HARNESS=remote` needs a server of its own, started here against a
  * database of its own.
@@ -20,7 +20,7 @@ import {
 	CONNECTOR_VERSION_HEADER,
 } from "../packages/protocol/connector";
 import { finishTurn } from "../apps/server/src/testing/agent-link";
-import { allBanners, connectionBanner, failureBanner, RESUMED_WAIT, watchBanners } from "./banner";
+import { allBanners, connectionBanner, failureBanner, phaseVoice, watchBanners } from "./banner";
 import { chatInput, fillChat } from "./chat-input";
 import {
 	createChannel,
@@ -285,7 +285,7 @@ function running(page: Page) {
 	return chat(page).getByRole("button", { name: "Stop generating" });
 }
 
-test("a reply that kept going while the connection was away is told so, and one that ended while it was away is told so, with what was caught up", async ({ page }) => {
+test("a reply that kept going while the connection was away is said to have, and one that ended while it was away is said to have, with what was caught up, and nothing is drawn of either", async ({ page }) => {
 	test.setTimeout(150_000);
 	let room = await remoteServer();
 	let first = Promise.withResolvers<void>();
@@ -312,12 +312,8 @@ test("a reply that kept going while the connection was away is told so, and one 
 			timeout: 30_000,
 		});
 		await wire.back();
-		await expect(connectionBanner(page)).toHaveAttribute("data-phase", "resumed", {
-			timeout: 30_000,
-		});
-		await expect(connectionBanner(page)).toContainText(KEPT_GOING);
-		await expect(allBanners(page)).toHaveCount(1);
-		await expect(connectionBanner(page)).toHaveCount(0, RESUMED_WAIT);
+		await expect(phaseVoice(page)).toContainText(KEPT_GOING, { timeout: 30_000 });
+		await expect(allBanners(page)).toHaveCount(0);
 		await expect(running(page)).toBeVisible();
 		first.resolve();
 		await expect(chat(page).getByText("Answer 1", { exact: true })).toBeVisible();
@@ -334,15 +330,11 @@ test("a reply that kept going while the connection was away is told so, and one 
 		await expect.poll(() => planner.prompts.length).toBe(2);
 		await page.waitForTimeout(1_000);
 		await wire.back();
-		await expect(connectionBanner(page)).toHaveAttribute("data-phase", "resumed", {
-			timeout: 30_000,
-		});
-		await expect(connectionBanner(page)).toContainText(FINISHED_AWAY);
+		await expect(phaseVoice(page)).toContainText(FINISHED_AWAY, { timeout: 30_000 });
 		// What it caught up on is the reply that came in meanwhile.
-		await expect(connectionBanner(page)).toContainText(/\d+ new messages?/);
+		await expect(phaseVoice(page)).toContainText(/\d+ new messages?/);
 		await expect(chat(page).getByText("Answer 2", { exact: true })).toBeVisible();
-		await expect(allBanners(page)).toHaveCount(1);
-		await expect(allBanners(page)).toHaveCount(0, RESUMED_WAIT);
+		await expect(allBanners(page)).toHaveCount(0);
 		await expect(failureBanner(page)).toHaveCount(0);
 	} finally {
 		first.resolve();
@@ -371,7 +363,7 @@ const PLANNER_HELD =
 	/^@mona's machine stepped away\. Your work is kept until \d{1,2}:\d{2}[^.]*\.$/;
 const PLANNER_OFFLINE = "@mona's machine is offline. Your work is kept.";
 
-test("a machine whose link dropped under a reply with no work to keep is held for a while: the connection's one banner says it stepped away, the failed reply waits behind it, and Retry asks again as it was once the machine is back", async ({ page }) => {
+test("a machine whose link dropped under a reply with no work to keep is held for a while: a screen reader is told it stepped away, nothing is drawn of it, the failed reply says so with Retry, and Retry asks again as it was once the machine is back", async ({ page }) => {
 	test.setTimeout(150_000);
 	let room = await remoteServer();
 	let hold = Promise.withResolvers<void>();
@@ -408,26 +400,21 @@ test("a machine whose link dropped under a reply with no work to keep is held fo
 		link.sockets[0]!.close(3000, "network failed");
 		await planner.client.resumption;
 
-		// Nothing the machine does was kept for it, so it is held through a grace period: that is
-		// the Planner layer's one banner, with no button, and the reply's failure waits behind it.
-		let banner = connectionBanner(page);
-		await expect(banner).toHaveAttribute("data-layer", "planner");
-		await expect(banner).toHaveAttribute("data-phase", "dropped");
-		await expect(banner).toHaveText(PLANNER_HELD);
-		await expect(banner.getByRole("button")).toHaveCount(0);
-		await expect(failureBanner(page)).toHaveCount(0);
-		await expect(page.getByRole("alert")).toHaveCount(0);
-		await expect(allBanners(page)).toHaveCount(1);
+		// Nothing the machine does was kept for it, so it is held through a grace period: a screen
+		// reader is told, and Chat draws nothing of the machine. The reply's failure is its own banner.
+		await expect(phaseVoice(page)).toHaveText(PLANNER_HELD);
+		await expect(connectionBanner(page)).toHaveCount(0);
 		let failedLine = chat(page).locator("[data-chat-system]").getByText(
 			"The machine disconnected during the turn.",
 			{ exact: true },
 		);
-		await expect(failedLine).toHaveCount(1);
-
-		// The machine's client is back: the connection's banner goes, and the failure is told, as it was.
-		let back = await machine(room);
-		await expect(connectionBanner(page)).toHaveCount(0, { timeout: 30_000 });
 		let failure = failureBanner(page);
+		await expect(failure).toHaveAttribute("data-kind", "error");
+		await expect(failedLine).toHaveCount(0);
+
+		// The machine's client is back, and the failure is told, as it was.
+		let back = await machine(room);
+		await expect(connectionBanner(page)).toHaveCount(0);
 		await expect(failure).toHaveAttribute("data-kind", "error");
 		await expect(failure).toContainText("Couldn't finish the reply.");
 		await expect(failure.locator(".composer-notice-line")).toHaveText(
@@ -469,7 +456,7 @@ test("a machine whose link dropped under a reply with no work to keep is held fo
 	}
 });
 
-test("a machine whose link dropped under a reply with a workflow run is disconnected, not held: the connection's one banner says it is offline, with no failure banner and the notice once", async ({ page }) => {
+test("a machine whose link dropped under a reply with a workflow run is disconnected, not held: a screen reader is told it is offline, nothing is drawn of it, with no failure banner and the notice once", async ({ page }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let hold = Promise.withResolvers<void>();
@@ -487,16 +474,13 @@ test("a machine whose link dropped under a reply with a workflow run is disconne
 		let kept = await planner.client.resumption;
 		expect(kept?.sessions.size).toBe(1);
 
-		// Its run was kept for it, with no deadline: the Planner layer's one banner, with no button,
-		// and the failed reply's own notice says the connection dropped, quietly, once.
-		let banner = connectionBanner(page);
-		await expect(banner).toHaveAttribute("data-layer", "planner");
-		await expect(banner).toHaveAttribute("data-phase", "dropped");
-		await expect(banner).toHaveText(PLANNER_OFFLINE);
-		await expect(banner.getByRole("button")).toHaveCount(0);
+		// Its run was kept for it, with no deadline: a screen reader is told, nothing is drawn of the
+		// machine, and the failed reply's own notice says the connection dropped, quietly, once.
+		await expect(phaseVoice(page)).toHaveText(PLANNER_OFFLINE);
+		await expect(connectionBanner(page)).toHaveCount(0);
 		await expect(failureBanner(page)).toHaveCount(0);
 		await expect(page.getByRole("alert")).toHaveCount(0);
-		await expect(allBanners(page)).toHaveCount(1);
+		await expect(allBanners(page)).toHaveCount(0);
 		await expect(
 			chat(page).getByText(
 				"The machine's connection dropped during this reply. Its workflows and open questions are kept; ask again once it has reconnected.",
@@ -596,10 +580,9 @@ test("asking a machine to start the Planner is for a writer of a live document: 
 			asked: false,
 			why: "held",
 		});
-		// No state offers a button: only the machine's own client can resume it.
-		await expect(connectionBanner(writer)).toHaveAttribute("data-layer", "planner");
-		await expect(connectionBanner(writer)).toHaveText(PLANNER_HELD);
-		await expect(connectionBanner(writer).getByRole("button")).toHaveCount(0);
+		// Nothing is drawn, so nothing offers a button: only the machine's own client can resume it.
+		await expect(phaseVoice(writer)).toHaveText(PLANNER_HELD);
+		await expect(connectionBanner(writer)).toHaveCount(0);
 	} finally {
 		link.restore();
 	}
@@ -637,9 +620,8 @@ test("asking a machine to start the Planner whose link dropped with a workflow r
 			asked: false,
 			why: "disconnected",
 		});
-		await expect(connectionBanner(writer)).toHaveAttribute("data-layer", "planner");
-		await expect(connectionBanner(writer)).toHaveText(PLANNER_OFFLINE);
-		await expect(connectionBanner(writer).getByRole("button")).toHaveCount(0);
+		await expect(phaseVoice(writer)).toHaveText(PLANNER_OFFLINE);
+		await expect(connectionBanner(writer)).toHaveCount(0);
 	} finally {
 		link.restore();
 	}

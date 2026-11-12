@@ -13,7 +13,6 @@ import {
 	connectionBanner,
 	heardWords,
 	phaseVoice,
-	RESUMED_WAIT,
 	watchBanners,
 	wordsOutsideBanner,
 } from "./banner";
@@ -84,8 +83,8 @@ test("losing the connection locks the plan, and getting it back unlocks it", asy
 	// loses it.
 	await expect(content(page)).toHaveAttribute("contenteditable", "false");
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
-	// The loss is said once, by the connection banner, not in the header beside the title.
-	await expect(page.locator("[data-connection-banner]")).toBeVisible();
+	// The loss is said once, by the offline bar once it has lasted, not in the header beside the title.
+	await expect(page.locator("[data-connection-banner]")).toBeVisible({ timeout: 20_000 });
 	await expect(page.locator(".plan-status")).toHaveAttribute("data-level", "hidden");
 
 	// The client retries on its own; nothing here reconnects it. Opening is
@@ -251,10 +250,12 @@ test("a lost connection is said once, at the top of the document, with Retry onl
 	offline = true;
 	await sockets.at(-1)!.close();
 
-	// Past the grace period the banner says it is reconnecting, and a screen reader hears that as
-	// it appears, from the page's one polite live region.
-	await expect(notice).toContainText("Reconnecting. Your changes are kept.");
-	await expect(spoken).toHaveText("Reconnecting. Your changes are kept.");
+	// Past ten seconds the bar says it is offline, and a screen reader hears that as it appears,
+	// from the page's one polite live region. By then automatic attempts have usually failed, so
+	// it may open on either phase.
+	let lost = /^(Connecting\u2026|You're offline\.) Your changes are kept\./;
+	await expect(notice).toContainText(lost, { timeout: 20_000 });
+	await expect(spoken).toHaveText(lost);
 	await expect(page.locator(".plan[data-plan-offline]")).toHaveCount(1);
 	// Nothing else says it: the header stays quiet and Chat keeps its draft editable.
 	await expect(status).toHaveAttribute("data-level", "hidden");
@@ -266,11 +267,8 @@ test("a lost connection is said once, at the top of the document, with Retry onl
 	// Automatic reconnects run on their own; Reconnect joins the banner only once they have failed
 	// repeatedly, and asking restarts the backoff.
 	let retry = notice.getByRole("button", { name: "Reconnect", exact: true });
-	await expect(retry).toHaveCount(0);
 	await expect(retry).toBeVisible({ timeout: 25_000 });
-	await expect(notice).toContainText(
-		"You're offline. Your changes are kept and will sync when you reconnect.",
-	);
+	await expect(notice).toContainText("You're offline. Your changes are kept.");
 	let before = refused;
 	await retry.click();
 	await expect.poll(() => refused).toBeGreaterThan(before);
@@ -279,15 +277,12 @@ test("a lost connection is said once, at the top of the document, with Retry onl
 	// No online event here: the wire's own retry has to bring it back.
 	offline = false;
 	await ready(page);
-	await expect(notice).toHaveAttribute("data-phase", "resumed");
+	// Nothing is drawn of the return; a screen reader hears it.
+	await expect(notice).toHaveCount(0);
 	await expect(spoken).toHaveText("Back online. Your changes are synced");
-	await expect(notice).toHaveCount(0, RESUMED_WAIT);
 	// A screen reader heard each phase as it began, and never the same words twice running.
 	let said = await heardWords(page);
-	expect(said.slice(0, 2)).toEqual([
-		"Reconnecting. Your changes are kept.",
-		"You're offline. Your changes are kept and will sync when you reconnect.",
-	]);
+	expect(said).toContain("You're offline. Your changes are kept.");
 	expect(said.at(-1)).toBe("Back online. Your changes are synced");
 	expect(said.filter((words, index) => words === said[index - 1])).toEqual([]);
 	await expect(status).toHaveAttribute("data-level", "hidden");

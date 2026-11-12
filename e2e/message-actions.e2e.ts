@@ -745,7 +745,9 @@ test("a reaction asked for while the connection is down shows at once, dimmed, a
 
 	wire.state.offline = true;
 	await wire.sockets.at(-1)!.close();
-	await expect(ana.locator('[data-connection-banner][data-layer="socket"]')).toBeVisible();
+	await expect(ana.locator('[data-connection-banner][data-layer="socket"]')).toBeVisible({
+		timeout: 20_000,
+	});
 
 	await target.hover();
 	await toolbar(target).getByRole("button", { name: "Not quite" }).click();
@@ -791,7 +793,9 @@ test("a message only this browser has can be reacted to, and the reaction is kep
 	let ben = await join("ben", {});
 	wire.state.offline = true;
 	await wire.sockets.at(-1)!.close();
-	await expect(ana.locator('[data-connection-banner][data-layer="socket"]')).toBeVisible();
+	await expect(ana.locator('[data-connection-banner][data-layer="socket"]')).toBeVisible({
+		timeout: 20_000,
+	});
 
 	let draft = chatOf(ana).getByRole("combobox", {
 		name: "Message",

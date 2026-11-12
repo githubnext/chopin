@@ -5,22 +5,19 @@ import type { Locator, Page } from "@playwright/test";
 
 /**
  * The one connecting indicator, as the conversation plate draws it with the production components:
- * the connection banner reconnecting the room and connecting to a machine, and the machine button's
- * badge while its Planner starts. Its geometry holds the place of what it replaced and never moves,
- * its colours are Chopin's, and reduced motion holds it still as an ellipsis.
+ * the offline bar reconnecting the room, and the machine button's badge while its Planner starts.
+ * Its geometry holds the place of what it replaced and never moves, its colours are Chopin's, and
+ * reduced motion holds it still as an ellipsis.
  */
-const banner = (page: Page, layer: "socket" | "planner") =>
-	plate(page, "chat").locator(
-		`[data-connection-banner][data-phase="reconnecting"][data-layer="${layer}"]`,
-	);
+const banner = (page: Page) =>
+	plate(page, "chat").locator('[data-connection-banner][data-phase="reconnecting"]');
 const badge = (page: Page) =>
 	plate(page, "chat").locator('.machine-glyph-dot[data-planner="starting"]');
 const dots = (within: Locator) => within.locator("[data-connecting]");
 
 function indicators(page: Page): [string, Locator][] {
 	return [
-		["reconnecting banner", dots(banner(page, "socket"))],
-		["connecting banner", dots(banner(page, "planner"))],
+		["reconnecting bar", dots(banner(page))],
 		["machine button badge", dots(badge(page))],
 	];
 }
@@ -44,13 +41,14 @@ async function resolve(page: Page, expression: string): Promise<string> {
 	}, expression);
 }
 
-test("the banner's dots take the 16px box and place of the icon they replaced", async ({ page }) => {
-	// The resumed banner's check is the icon the reconnecting one had: same classes, same box.
-	let back = plate(page, "chat").locator('[data-connection-banner][data-phase="resumed"]').first();
-	let icon = await box(back.locator("svg.composer-notice-icon"));
-	let strip = await box(back);
-	for (let layer of ["socket", "planner"] as const) {
-		let own = banner(page, layer);
+test("the bar's dots take the 16px box and place of the icon the offline bar has", async ({ page }) => {
+	// The offline bar's warning is the icon the reconnecting one has in its place: same box.
+	let dropped = plate(page, "chat").locator('[data-connection-banner][data-phase="dropped"]')
+		.first();
+	let icon = await box(dropped.locator("svg.offline-bar-icon"));
+	let strip = await box(dropped);
+	for (let layer of ["socket"] as const) {
+		let own = banner(page);
 		let drawn = await box(dots(own));
 		let around = await box(own);
 		expect(drawn.width, layer).toBeCloseTo(16, 2);
@@ -195,11 +193,9 @@ test.describe("with motion allowed", () => {
 		}
 		// Every frame of a whole wave lays the banners, their words and the badge out where the first did.
 		let watched = [
-			banner(page, "socket"),
-			banner(page, "socket").locator("span").first(),
-			dots(banner(page, "socket")),
-			banner(page, "planner"),
-			dots(banner(page, "planner")),
+			banner(page),
+			banner(page).locator(".offline-bar-text"),
+			dots(banner(page)),
 			badge(page),
 		];
 		let handles = await Promise.all(watched.map(target => target.elementHandle()));

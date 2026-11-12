@@ -294,7 +294,7 @@ test("while the Planner runs, a message to people only is posted as usual, and a
 	await fillChat(draft, "Cover the rollback too.");
 	await expect(send).toBeEnabled();
 	await send.click();
-	await expect(chat.locator('[data-error-banner][data-kind="send"]')).toContainText(
+	await expect(chat.locator("[data-quiet-note]")).toContainText(
 		"Chopin can't take messages while it works on this machine. Stop it to ask now.",
 	);
 	await expectChatValue(draft, "Cover the rollback too.");

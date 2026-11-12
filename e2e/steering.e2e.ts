@@ -335,11 +335,12 @@ test("a message to a machine that is away is refused with the draft kept, nothin
 	let room = await open(page);
 	let input = chatInput(page);
 
-	// No machine is connected to take it: refused above the composer, and the typed text stays in
+	// No machine is connected to take it: chopin says so in its quiet row, and the typed text stays in
 	// the draft so nothing is lost.
 	await say(page, "outline the plan");
-	let refusal = chat(page).locator('[data-error-banner][data-kind="send"]');
-	await expect(refusal).toContainText("Connect a machine to get a reply.");
+	let refusal = chat(page).locator("[data-quiet-note]");
+	await expect(refusal).toContainText("No machine is connected, so this message wasn't sent.");
+	await expect(refusal.getByRole("button", { name: "How to fix" })).toBeVisible();
 	await expectChatValue(input, "@chopin outline the plan");
 	await expect(message(page, "outline the plan")).toHaveCount(0);
 	await expect(chat(page).locator('[data-chat-state="queued"]')).toHaveCount(0);
@@ -415,7 +416,7 @@ test("a machine that takes no message mid-run refuses one sent while it works, k
 		await say(page, "outline the plan");
 		await expect(READING(page)).toBeVisible();
 		await say(page, "and cover the rollback too");
-		let refusal = chat(page).locator('[data-error-banner][data-kind="send"]');
+		let refusal = chat(page).locator("[data-quiet-note]");
 		await expect(refusal).toContainText(CANNOT);
 		await expectChatValue(input, "@chopin and cover the rollback too");
 		await expect(message(page, "cover the rollback too")).toHaveCount(0);

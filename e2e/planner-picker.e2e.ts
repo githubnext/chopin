@@ -4,6 +4,7 @@
  * `HARNESS=remote` needs its own server, so this file starts one against a database of its own.
  */
 import { spawn } from "node:child_process";
+import AxeBuilder from "@axe-core/playwright";
 import { mkdir } from "node:fs/promises";
 
 import { SQL } from "bun";
@@ -29,6 +30,7 @@ import {
 	expectPlannerAttached,
 	expectSaidOnce,
 	expectSteadyLayout,
+	expectTold,
 	heard,
 	listenForAnnouncements,
 	machineButton,
@@ -407,32 +409,32 @@ test("a machine that cannot reply leaves its button with no dot and says no mach
 	await menu.getByRole("menuitemradio", { name: /^desk/ }).click();
 	await expect(menu).toBeHidden();
 
-	// The one banner at the composer tells it, in the Planner's layer; the button is named for the
-	// machine alone and carries no state, so the same fact is told in one place.
+	// The button tells it, in its name, and nothing is drawn in Chat. The button already says no
+	// machine is there, so the live region does not say it again.
 	let status = machineButton(page);
-	await expect(strip(page)).toHaveText(NONE);
-	await expect(strip(page)).toHaveAttribute("data-layer", "planner");
-	await expect(status).toHaveAccessibleName("Runs on desk");
-	await expect(status).not.toHaveAttribute("data-planner");
+	await expect(status).toHaveAccessibleName(`Runs on desk. ${NONE}`);
+	await expect(status).toHaveAttribute("data-planner", "none");
+	await expect(strip(page)).toHaveCount(0);
 	// The same bare icon as a button with no machine: no dot, so no green beside the words.
 	await expect(status.locator(".machine-glyph-dot")).toHaveCount(0);
 	await expect(status.locator("[data-state]")).toHaveCount(0);
-	await expect(announced(page)).toHaveText(NONE);
+	await expect(announced(page)).toHaveText("");
 	await shoot(page, "planner-none-button-desktop");
 
-	// Its menu does not say it again, while each machine's own row still tells that machine's state.
+	// Its menu says it in one sentence, with no steps (Add machine is already there), while each
+	// machine's own row still tells that machine's state.
 	menu = await runOn(page);
-	await expect(menu.getByRole("group", { name: "Connection", exact: true })).toHaveCount(0);
+	await expect(menu.getByRole("group", { name: "Connection", exact: true })).toHaveText(NONE);
 	await expect(menu.getByRole("menuitemradio", { name: /^desk/ })).toContainText("Connected");
 	await page.keyboard.press("Escape");
 
-	// On a phone the button in the top bar is the same bare icon, and Chat's banner says it.
+	// On a phone the button in the top bar is the same bare icon, and Chat draws nothing.
 	let handset = await open(browser, "mona", room, PHONE);
 	await handset.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: "Chat", exact: true }).tap();
 	let phoneButton = handset.locator(".phone-top-bar").getByRole("button", { name: /^Runs on/ });
-	await expect(strip(handset)).toHaveText(NONE);
-	await expect(phoneButton).toHaveAccessibleName("Runs on desk");
+	await expect(phoneButton).toHaveAccessibleName(`Runs on desk. ${NONE}`);
+	await expect(strip(handset)).toHaveCount(0);
 	await expect(phoneButton.locator(".machine-glyph-dot")).toHaveCount(0);
 	await shoot(handset, "planner-none-button-phone");
 });
@@ -474,13 +476,11 @@ test("a document on Default machine runs its Planner on its creator's favorite m
 	await page.reload();
 	await ready(page);
 
-	// Nobody chose a machine: the favorite is asked to start the Planner, and its button says so.
-	// The banner at the composer says so, in the Planner's layer; the button is the machine's alone.
+	// Nobody chose a machine: the favorite is asked to start the Planner, and its button says so,
+	// in its name and its connecting dots; Chat draws nothing of it.
 	let status = machineButton(page);
-	await expect(strip(page)).toHaveAttribute("data-layer", "planner");
-	await expect(strip(page)).toContainText("Connecting to studio");
-	await expect(status).toHaveAccessibleName("Runs on studio");
-	await expect(status).not.toHaveAttribute("data-planner");
+	await expectTold(page, "Connecting to studio");
+	await expect(status).toHaveAttribute("data-planner", "starting");
 	await shoot(page, "planner-starting-desktop");
 	expect(await studio.poll([])).toEqual({
 		kind: "planners",
@@ -502,8 +502,8 @@ test("a document on Default machine runs its Planner on its creator's favorite m
 
 	// The favorite disconnects: the Planner moves to the other machine without anyone choosing it.
 	await studio.disconnect();
-	await expect(strip(page)).toContainText("Connecting to desk");
-	await expect(status).toHaveAccessibleName("Runs on desk");
+	await expectTold(page, "Connecting to desk");
+	await expect(status).toHaveAccessibleName("Runs on desk. Connecting to desk");
 	expect(await desk.poll([])).toEqual({
 		kind: "planners",
 		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
@@ -520,7 +520,7 @@ test("a document on Default machine runs its Planner on its creator's favorite m
 	await second.detach();
 });
 
-test("connecting to a machine is the calm dots on the banner and on the machine button, still under reduced motion, and told in words", async ({ browser }) => {
+test("connecting to a machine is the calm dots on the machine button, still under reduced motion, told in words and never drawn in Chat", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, DESKTOP, { listen: true });
@@ -530,35 +530,22 @@ test("connecting to a machine is the calm dots on the banner and on the machine 
 	await ready(page);
 	expect((await studio.poll([])).planners).toHaveLength(1);
 
-	// The banner: the dots in its icon's place, the words its own, said once by the live region.
-	let banner = strip(page);
-	await expect(banner).toHaveText("Connecting to studio");
-	await expect(banner).toHaveAttribute("data-layer", "planner");
-	await expect(announced(page)).toHaveText(/^Connecting to (studio|@mona's machine)$/);
-	let dots = connectingDots(banner);
-	await expect(dots).toHaveCount(1);
-	await expect(dots).toHaveAttribute("aria-hidden", "true");
-	await expectConnectingWave(dots);
-	await expectSteadyLayout([banner, dots, banner.getByText("Connecting to studio")]);
-	await shoot(page, "connecting-banner-desktop", page.locator(".chat-composer"));
-
-	// Reduced motion holds the dots still and says the same.
-	await page.emulateMedia({ reducedMotion: "reduce" });
-	await expectConnectingStill(dots);
-	await expect(banner).toHaveText("Connecting to studio");
-	await page.emulateMedia({ reducedMotion: "no-preference" });
-
-	// With Chat put away the machine button tells it, in its name and in its badge.
-	await page.getByRole("button", { name: "Expand document" }).click();
+	// The button tells it, in its name and in its badge, and the live region says it once; Chat
+	// draws nothing of it.
 	let button = machineButton(page);
 	await expect(button).toHaveAttribute("data-planner", "starting");
 	await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
+	await expect(announced(page)).toHaveText(/^Connecting to (studio|@mona's machine)$/);
+	await expect(strip(page)).toHaveCount(0);
+	await expect(connectingDots(page.locator(".workspace-chat-panel"))).toHaveCount(0);
 	let badge = connectingDots(button.locator('.machine-glyph-dot[data-planner="starting"]'));
 	await expect(badge).toHaveCount(1);
+	await expect(badge).toHaveAttribute("aria-hidden", "true");
 	await expectConnectingWave(badge);
 	await expectSteadyLayout([button, badge]);
 	await shoot(page, "connecting-button-desktop");
 
+	// Reduced motion holds the dots still and says the same.
 	await page.emulateMedia({ reducedMotion: "reduce" });
 	await expectConnectingStill(badge);
 	await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
@@ -572,8 +559,7 @@ test("@chopin in a document on Default machine waits for the Planner its machine
 	let studio = await machine(page, "studio", true);
 	await page.reload();
 	await ready(page);
-	await expect(strip(page)).toContainText("Connecting to studio");
-	await expect(machineButton(page)).toHaveAccessibleName("Runs on studio");
+	await expectTold(page, "Connecting to studio");
 
 	// Sent before the Planner attaches, the message waits for it rather than being refused.
 	let input = chatInput(page);
@@ -654,9 +640,8 @@ for (let [shape, options] of SHAPES) {
 		await ready(page);
 		await chatTab(page, shape === "phone");
 		let button = machineButton(page);
-		await expect(strip(page)).toContainText("Connecting to studio");
-		await expect(strip(page)).toHaveAttribute("data-layer", "planner");
-		await expect(button).toHaveAccessibleName("Runs on studio");
+		await expectTold(page, "Connecting to studio");
+		await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
 		expect((await studio.poll([])).planners).toHaveLength(1);
 
 		// As a reconnect reads the machines before its own is back: the list names a teammate's shared
@@ -682,8 +667,8 @@ for (let [shape, options] of SHAPES) {
 		// The list catches up, and the status is the document's own machine's.
 		reread.active.on = false;
 		await reread.refresh();
-		await expect(strip(page)).toContainText("Connecting to studio");
-		await expect(button).toHaveAccessibleName("Runs on studio");
+		await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
+		await expect(strip(page)).toHaveCount(0);
 		// It was said once, before the gap, and is not said again as the same state returns.
 		await expect(announced(page)).toHaveText("");
 		expect(await heard(page)).toEqual(["Connecting to studio"]);
@@ -809,13 +794,11 @@ for (let [shape, options] of SHAPES) {
 		expect(await heard(page)).toEqual([]);
 		await expectPlannerAttached(page);
 
-		// A machine still being connected to after the moment is said, on the banner and not the
-		// button, and clears when it has done.
+		// A machine still being connected to after the moment is said, on the button and never in
+		// Chat, and clears when it has done.
 		say({ state: "starting", login: "mona" });
 		await page.waitForTimeout(700);
-		await expectHealthy(button);
-		await expect(strip(page)).toContainText("Connecting to");
-		await expect(strip(page)).toHaveAttribute("data-layer", "planner");
+		await expectTold(page, /Connecting to/);
 		await shoot(page, `planner-connecting-after-grace-${shape}`);
 		say({ state: "attached", login: "mona" });
 		await expectHealthy(button);
@@ -936,17 +919,16 @@ for (let [shape, options] of SHAPES) {
 		// The machine's own word comes: a machine being connected to is said once it lasts, then
 		// the Planner is back and the words go.
 		carriage.say({ state: "starting", login: "mona" });
-		await expect(strip(page)).toContainText("Connecting to");
-		await expectHealthy(button);
+		await expectTold(page, /Connecting to/);
 		carriage.say({ state: "attached", login: "mona" });
 		await expectHealthy(button);
 		await expectPlannerAttached(page);
 
-		// A machine removed while the page stays connected is still said, on the banner.
+		// A machine removed while the page stays connected is still said, on the button, which
+		// already says it, so not aloud.
 		carriage.say({ state: "none" });
-		await expect(announced(page)).toHaveText(NONE);
-		await expect(strip(page)).toHaveText(NONE);
-		await expectHealthy(button);
+		await expect(button).toHaveAccessibleName(`Runs on studio. ${NONE}`);
+		await expect(strip(page)).toHaveCount(0);
 		await link.detach();
 	});
 }
@@ -1010,9 +992,8 @@ for (let [shape, options] of SHAPES) {
 		reread.active.on = false;
 		await reread.refresh();
 		carriage.say({ state: "starting", login: "mona" });
-		await expect(strip(page)).toContainText("Connecting to studio");
-		await expect(strip(page)).toHaveAttribute("data-layer", "planner");
-		await expect(button).toHaveAccessibleName("Runs on studio");
+		await expectTold(page, "Connecting to studio");
+		await expect(button).toHaveAccessibleName("Runs on studio. Connecting to studio");
 		await reread.end();
 	});
 }
@@ -1079,11 +1060,9 @@ for (let [shape, options] of SHAPES) {
 		reread.active.on = false;
 		await reread.refresh();
 		carriage.say({ state: "starting", login: "mona" });
-		await expect(strip(page)).toContainText("Connecting to Box B");
-		await expect(button).toHaveAccessibleName("Runs on Box B");
+		await expectTold(page, "Connecting to Box B");
 		carriage.say({ state: "disconnected", login: "mona" });
-		await expect(strip(page)).toContainText("Box B is offline. Your work is kept.");
-		await expect(button).toHaveAccessibleName("Runs on Box B");
+		await expectTold(page, "Box B is offline. Your work is kept.");
 		// The list read for the last word is still on its way: let it be answered before the server goes.
 		await page.unrouteAll({ behavior: "wait" });
 	});
@@ -1123,8 +1102,7 @@ for (let [shape, options] of SHAPES) {
 
 		// A list read after the word says Box B, and Box B is named.
 		carriage.say({ state: "starting", login: "mona" });
-		await expect(strip(page)).toContainText("Connecting to Box B");
-		await expect(button).toHaveAccessibleName("Runs on Box B");
+		await expectTold(page, "Connecting to Box B");
 
 		// The document is then set to run on Box C, and the next read of the list is slow, or never
 		// answers. The list the page holds was read before the next word and still agrees with itself
@@ -1146,8 +1124,7 @@ for (let [shape, options] of SHAPES) {
 
 		// It answers, and the document's own machine is named.
 		release();
-		await expect(strip(page)).toContainText("Box C is offline. Your work is kept.");
-		await expect(button).toHaveAccessibleName("Runs on Box C");
+		await expectTold(page, "Box C is offline. Your work is kept.");
 		expect(await heard(page)).toEqual([
 			"Connecting to Box B",
 			"Box C is offline. Your work is kept.",
@@ -1156,8 +1133,21 @@ for (let [shape, options] of SHAPES) {
 	});
 }
 
-/** What the connection banner says, and the live region with it, while the socket is being retried. */
-const RECONNECTING = "Reconnecting. Your changes are kept.";
+/** What the offline bar says, and the live region with it, while the socket is being retried. */
+const RECONNECTING = "Connecting\u2026 Your changes are kept.";
+/** And once automatic attempts have failed, which by ten seconds they usually have. */
+const OFFLINE = "You're offline. Your changes are kept.";
+/** Either of the bar's two phases, as the live region says it. */
+const LOST_WORDS = /^(Connecting\u2026|You're offline\.) Your changes are kept\.$/;
+const LOST = "(lost)";
+
+/** What was said, with the bar's two phases, however many of each, told as one loss. */
+function phases(said: string[]): string[] {
+	return said.map(text => text === RECONNECTING || text === OFFLINE ? LOST : text)
+		.filter((text, index, all) => text !== LOST || all[index - 1] !== LOST);
+}
+/** The bar shows once the loss has lasted ten seconds, so it is waited for. */
+const BAR = { timeout: 20_000 };
 /** And as it returns with nothing missed on either side. */
 const BACK_ONLINE = "Back online. Your changes are synced";
 const CATCHING_UP = "Catching up";
@@ -1178,7 +1168,7 @@ async function sampling(page: Page): Promise<() => Promise<Sample[]>> {
 				at: Math.round(performance.now() - start),
 				name: button?.getAttribute("aria-label") ?? "",
 				planner: button?.getAttribute("data-planner") ?? "",
-				strip: document.querySelector(".chat-composer [data-connection-banner]")?.textContent ?? "",
+				strip: document.querySelector("[data-connection-banner]")?.textContent ?? "",
 				said: document.querySelector("[data-connection-status]")?.textContent ?? "",
 			});
 		};
@@ -1233,8 +1223,7 @@ for (let [shape, options] of SHAPES) {
 
 		// Box B drops its Planner, and the button says so.
 		carriage.say({ state: "disconnected", login: "mona" });
-		await expect(strip(page)).toContainText("Box B is offline. Your work is kept.");
-		await expect(button).toHaveAccessibleName("Runs on Box B");
+		await expectTold(page, "Box B is offline. Your work is kept.");
 
 		// The document is then set to run on Box C, and its Planner is starting. The read of the list
 		// is slow: until it answers, the status says nothing, not what it said of Box B.
@@ -1252,12 +1241,12 @@ for (let [shape, options] of SHAPES) {
 		// on its dot, in the strip or by a screen reader.
 		let stop = await sampling(page);
 		release();
-		await expect(strip(page)).toContainText("Connecting to Box C");
+		await expectTold(page, "Connecting to Box C");
 		await page.waitForTimeout(1_000);
 		let samples = await stop();
 		expect(samples.at(-1)!.at - samples[0]!.at).toBeGreaterThanOrEqual(2_000);
 		let named = samples.findIndex(sample => sample.name.includes("Box C"));
-		let connecting = samples.findIndex(sample => sample.strip.includes("Connecting"));
+		let connecting = samples.findIndex(sample => sample.name.includes("Connecting"));
 		expect(named).toBeGreaterThanOrEqual(0);
 		expect(connecting).toBeGreaterThan(named);
 		expect(samples.slice(named).filter(sample => JSON.stringify(sample).includes("Box B")))
@@ -1267,11 +1256,10 @@ for (let [shape, options] of SHAPES) {
 		}
 		expect(samples[connecting]!.at - samples[named]!.at).toBeGreaterThanOrEqual(1_200);
 		expect(samples.slice(connecting).map(sample => sample.name)).toEqual(
-			samples.slice(connecting).map(() => "Runs on Box C"),
+			samples.slice(connecting).map(() => "Runs on Box C. Connecting to Box C"),
 		);
-		for (let sample of samples.slice(connecting)) {
-			expect(sample.strip).toContain("Connecting to Box C");
-		}
+		// Chat draws none of it, at any moment.
+		expect(samples.filter(sample => sample.strip)).toEqual([]);
 		expect(await heard(page)).toEqual([
 			"Box B is offline. Your work is kept.",
 			"Connecting to Box C",
@@ -1314,15 +1302,13 @@ for (let [shape, options] of SHAPES) {
 		await chatTab(page, shape === "phone");
 		let button = machineButton(page);
 		let notice = page.locator(
-			'.chat-composer [data-connection-banner]:not([data-layer="planner"])',
+			".chat-offline-slot [data-connection-banner]",
 		);
 		await expect(button).toHaveAccessibleName("Runs on Box B");
 
 		// The machine drops, and a screen reader is told once.
 		carriage.say({ state: "disconnected", login: "mona" });
-		await expect(strip(page)).toContainText("Box B is offline. Your work is kept.");
-		await expect(strip(page)).toHaveAttribute("data-layer", "planner");
-		await expect(button).toHaveAccessibleName("Runs on Box B");
+		await expectTold(page, "Box B is offline. Your work is kept.");
 		await expect(announced(page)).toHaveText("Box B is offline. Your work is kept.");
 		let said = ["Box B is offline. Your work is kept."];
 		expect(await heard(page)).toEqual(said);
@@ -1331,37 +1317,34 @@ for (let [shape, options] of SHAPES) {
 		// words, and the live region carries none of the machine's. The state carried on through the
 		// loss, so it is not said after it.
 		await carriage.lose();
-		await expect(notice).toBeVisible();
+		await expect(notice).toBeVisible(BAR);
 		await expect(strip(page)).toHaveCount(1);
-		await expectNoMachineWords(page, RECONNECTING);
+		await expectNoMachineWords(page, LOST_WORDS);
 		await page.waitForTimeout(500);
-		expect(await heard(page)).toEqual([...said, RECONNECTING]);
+		expect(phases(await heard(page))).toEqual([...said, LOST]);
 		await shoot(page, `planner-silent-offline-${shape}`);
 		await carriage.back(true);
-		// The socket is open and nothing is on it yet: the banner says it is catching up, in its own
-		// layer, for as long as the test looks, and the live region says it once.
-		await expect(notice).toHaveAttribute("data-layer", "sync");
-		await expect(notice).toContainText(CATCHING_UP);
+		// The socket is open and nothing is on it yet: the bar has gone, and the live region says it
+		// is catching up, once, for as long as the test looks.
+		await expect(notice).toHaveCount(0);
 		await expect(announced(page)).toHaveText(CATCHING_UP);
 		carriage.release();
 		await expect(notice).toHaveCount(0);
-		await expect(strip(page)).toContainText("Box B is offline. Your work is kept.");
-		await expect(button).toHaveAccessibleName("Runs on Box B");
+		await expectTold(page, "Box B is offline. Your work is kept.");
 		await page.waitForTimeout(500);
-		expect(await heard(page)).toEqual([...said, RECONNECTING, CATCHING_UP, BACK_ONLINE]);
+		expect(phases(await heard(page))).toEqual([...said, LOST, CATCHING_UP, BACK_ONLINE]);
 		// The back-online words went with their banner, and the Planner state that carried on is not
 		// said in their place.
 		await expect(announced(page)).toHaveText("");
 
 		// A state that is not the one it last said is said once.
 		carriage.say({ state: "starting", login: "mona" });
-		await expect(strip(page)).toContainText("Connecting to Box B");
-		await expect(button).toHaveAccessibleName("Runs on Box B");
+		await expectTold(page, "Connecting to Box B");
 		await expect(announced(page)).toHaveText("Connecting to Box B");
 		await page.waitForTimeout(500);
-		expect(await heard(page)).toEqual([
+		expect(phases(await heard(page))).toEqual([
 			...said,
-			RECONNECTING,
+			LOST,
 			CATCHING_UP,
 			BACK_ONLINE,
 			"Connecting to Box B",
@@ -1403,7 +1386,7 @@ for (let [shape, options] of SHAPES) {
 		await chatTab(page, shape === "phone");
 		let button = machineButton(page);
 		let notice = page.locator(
-			'.chat-composer [data-connection-banner]:not([data-layer="planner"])',
+			".chat-offline-slot [data-connection-banner]",
 		);
 		let reread = await reading(page, room, state => state);
 		await expect(button).toHaveAccessibleName("Runs on Box B");
@@ -1416,29 +1399,27 @@ for (let [shape, options] of SHAPES) {
 		carriage.say({ state: "starting", login: "mona" });
 		await expect(button).toHaveAccessibleName("Runs on Box B");
 		await carriage.lose();
-		await expect(notice).toBeVisible();
+		await expect(notice).toBeVisible(BAR);
 		let stop = await sampling(page);
 		release();
 		await page.waitForTimeout(2_500);
 		let samples = await stop();
 		expect(samples.at(-1)!.at - samples[0]!.at).toBeGreaterThanOrEqual(2_000);
-		expect(samples.filter(sample => sample.said && sample.said !== RECONNECTING)).toEqual([]);
-		await expectNoMachineWords(page, RECONNECTING);
-		expect(await heard(page)).toEqual([RECONNECTING]);
+		expect(samples.filter(sample => sample.said && !LOST_WORDS.test(sample.said))).toEqual([]);
+		await expectNoMachineWords(page, LOST_WORDS);
+		expect(phases(await heard(page))).toEqual([LOST]);
 
 		// The connection returns, and the state is said once, as a state entered then.
 		await carriage.back(true);
-		await expect(notice).toHaveAttribute("data-layer", "sync");
-		await expect(notice).toContainText(CATCHING_UP);
+		await expect(notice).toHaveCount(0);
 		await expect(announced(page)).toHaveText(CATCHING_UP);
 		carriage.release();
 		await expect(notice).toHaveCount(0);
-		await expect(strip(page)).toContainText("Connecting to Box C");
-		await expect(button).toHaveAccessibleName("Runs on Box C");
+		await expectTold(page, "Connecting to Box C");
 		await expect(announced(page)).toHaveText("Connecting to Box C");
 		await page.waitForTimeout(500);
-		expect(await heard(page)).toEqual([
-			RECONNECTING,
+		expect(phases(await heard(page))).toEqual([
+			LOST,
 			CATCHING_UP,
 			BACK_ONLINE,
 			"Connecting to Box C",
@@ -1468,8 +1449,7 @@ for (let [shape, options] of SHAPES) {
 		await ready(page);
 		await chatTab(page, shape === "phone");
 		let button = machineButton(page);
-		await expect(strip(page)).toContainText("Connecting to studio");
-		await expect(button).toHaveAccessibleName("Runs on studio");
+		await expectTold(page, "Connecting to studio");
 		let list = await (await page.request.get(`${ORIGIN}/api/documents/${room}/machine`))
 			.json() as { machines: Array<{ id: string; label: string }> };
 		let id = list.machines.find(value => value.label === "studio")!.id;
@@ -1488,42 +1468,34 @@ for (let [shape, options] of SHAPES) {
 		}));
 		say({ state: "disconnected", login: "mona" });
 		await reread.refresh();
-		await expect(strip(page)).toContainText(
-			/studio is offline\. Last seen \d{1,2}:\d{2}\D?[AP]M\./,
-		);
-		await expect(button).toHaveAccessibleName("Runs on studio");
+		await expectTold(page, /studio is offline\. Last seen \d{1,2}:\d{2}\D?[AP]M\./);
+		await expect(button).toHaveAttribute("data-planner", "away");
 		// The one live word is said as the state is entered, and not again as its detail arrives.
 		await expect(announced(page)).toHaveText(/^studio is offline\./);
-		// Chopin cannot reconnect the machine, so the banner offers no Reconnect; this person may
-		// choose another machine, so it offers that, and it opens the same list the button does.
-		let choose = strip(page).getByRole("button", { name: "Choose machine", exact: true });
-		await expect(strip(page).getByRole("button")).toHaveCount(1);
-		await expect(choose).toBeVisible();
-		await choose.click();
-		let chosen = shape === "phone"
-			? page.getByRole("dialog", { name: "Runs on", exact: true })
-			: page.getByRole("menu", { name: "Runs on", exact: true });
-		await expect(chosen.getByRole("menuitemradio", { name: /^studio/ })).toContainText("Offline");
-		await shoot(page, `machine-offline-choose-${shape}`);
-		// A phone's sheet takes focus once it has risen, as it does when the button opens it.
-		if (shape === "phone") await expect(chosen).toBeFocused();
-		await page.keyboard.press("Escape");
-		await expect(chosen).toBeHidden();
-		// The banner tells it, so the machine's menu does not tell it a second time. A desktop's list
-		// of machines is the menu named "Runs on"; a phone's is a sheet, a dialog of that name, with
-		// the same list, so each is looked at as what it is, and has its machine's own row and no note.
+		// Chat draws nothing of it. The button's menu explains it: when it was last seen, that the work
+		// is kept, how to start it again, and the machines to choose another from.
 		if (shape === "phone") await button.tap();
 		else await button.click();
 		let surface = shape === "phone"
 			? page.getByRole("dialog", { name: "Runs on", exact: true })
 			: page.getByRole("menu", { name: "Runs on", exact: true });
+		let steps = surface.getByRole("group", { name: "studio is offline", exact: true });
+		await expect(steps).toContainText(
+			/It was last seen at \d{1,2}:\d{2}\D?[AP]M\. Your work is kept\./,
+		);
+		await expect(steps.locator(".fix-steps-step")).toHaveText([
+			"Check that studio is awake and online.",
+			/^Start chopin on it again:chopin connect/,
+			"Or choose another machine below.",
+		]);
 		await expect(surface.getByRole("menuitemradio", { name: /^studio/ })).toContainText("Offline");
-		await expect(surface.getByRole("group", { name: "Connection", exact: true })).toHaveCount(0);
 		await shoot(page, `machine-offline-last-seen-${shape}`);
+		// A phone's sheet takes focus once it has risen, as it does when the button opens it.
+		if (shape === "phone") await expect(surface).toBeFocused();
 		await page.keyboard.press("Escape");
 		await expect(surface).toBeHidden();
 
-		// It comes back, and the banner says so, once, and goes.
+		// It comes back, and a screen reader is told so, once; nothing is drawn.
 		reread.active.on = false;
 		say({ state: "attached", login: "mona" });
 		await expect(button).toHaveAccessibleName(/^Runs on studio$/);
@@ -1534,8 +1506,8 @@ for (let [shape, options] of SHAPES) {
 }
 
 for (let [shape, options] of SHAPES) {
-	test(`a person with no machine button reads no machine state above the composer beside the page's offline notice, and reads it again when the connection returns, on a ${shape}`, async ({ browser }) => {
-		test.setTimeout(150_000);
+	test(`a person with no machine button hears the machine's state once and sees it on chopin in the @ menu, never drawn in Chat, offline or not, on a ${shape}`, async ({ browser }) => {
+		test.setTimeout(240_000);
 		let room = await remoteServer();
 		let context = await browser.newContext(options);
 		let page = await context.newPage();
@@ -1549,44 +1521,54 @@ for (let [shape, options] of SHAPES) {
 		await ready(page);
 		await chatTab(page, shape === "phone");
 		await expect(machineButton(page)).toHaveCount(0);
-		let notice = page.locator(
-			'.chat-composer [data-connection-banner]:not([data-layer="planner"])',
-		);
+		let notice = page.locator(".chat-offline-slot [data-connection-banner]");
 		let failure = { attempts: 3, reason: "exit 1", at: new Date().toISOString() };
+		let input = chatInput(page);
+		let chopin = page.getByRole("listbox", { name: "Mentions" })
+			.getByRole("option", { name: /^chopin/i });
 
-		// Each state the banner tells a person with no button, lost and recovered: the page cannot
-		// hear the machine while it is offline, and its one banner speaks for the connection.
+		// Each state, lost and recovered: the page cannot hear the machine while it is offline, and
+		// its one bar speaks for the connection.
 		let states = [
-			["connecting", { state: "starting", login: "mona" }, "Connecting to @mona's machine"],
+			[
+				"connecting",
+				{ state: "starting", login: "mona" },
+				"Connecting to @mona's machine",
+				"Connecting",
+			],
 			[
 				"failing",
 				{ state: "starting", login: "mona", failure },
 				"Can't connect to @mona's machine.",
+				"Can't connect",
 			],
 			[
 				"away",
 				{ state: "disconnected", login: "mona" },
 				"@mona's machine is offline. Your work is kept.",
+				"Away",
 			],
 		] as const;
-		for (let [name, planner, text] of states) {
+		for (let [name, planner, text, presence] of states) {
 			carriage.say(planner);
-			await expect(strip(page)).toContainText(text);
-			// A machine that is away offers this person, who may not choose one, no button at all.
-			if (name === "away") await expect(strip(page).getByRole("button")).toHaveCount(0);
+			await expectTold(page, text);
+			await expect(page.locator(".workspace-chat-panel")).not.toContainText(text);
+			await fillChat(input, "@");
+			await expect(chopin).toHaveAccessibleName(new RegExp(`^chopin, agent, ${presence}$`, "i"));
+			await shoot(page, `no-button-${name}-mentions-${shape}`);
+			await fillChat(input, "");
 
 			await carriage.lose();
-			await expect(notice).toBeVisible();
+			await expect(notice).toBeVisible(BAR);
 			await expect(strip(page)).toHaveCount(1);
-			await expect(strip(page)).not.toHaveAttribute("data-layer", "planner");
-			await expect(page.locator(".chat-composer").getByText(text)).toHaveCount(0);
+			await expect(page.locator(".workspace-chat-panel").getByText(text)).toHaveCount(0);
 			await shoot(page, `no-button-${name}-offline-${shape}`);
 
 			await carriage.back();
 			await expect(notice).toHaveCount(0);
-			await expect(strip(page)).toContainText(text);
-			await expect(strip(page)).toHaveAttribute("data-layer", "planner");
-			await shoot(page, `no-button-${name}-online-${shape}`);
+			await fillChat(input, "@");
+			await expect(chopin).toHaveAccessibleName(new RegExp(`^chopin, agent, ${presence}$`, "i"));
+			await fillChat(input, "");
 		}
 		await expectNoHorizontalOverflow(page);
 	});
@@ -1604,109 +1586,149 @@ function refused(document: string, attempts: number) {
 	};
 }
 
-test("a Planner its machine keeps failing to start says why on the banner at the composer, for the machine's owner and for a person with no button alike, and is announced once, until it attaches", async ({ browser }) => {
-	test.setTimeout(120_000);
+/** No accessibility violation within `selector`. */
+async function expectAccessible(page: Page, selector: string) {
+	let result = await new AxeBuilder({ page }).include(selector).analyze();
+	expect(
+		result.violations.map(violation =>
+			`${violation.id}: ${violation.help} ${
+				violation.nodes.map(node => `${node.target} ${node.failureSummary}`).join(", ")
+			}`
+		),
+	).toEqual([]);
+}
+
+/** Nothing of the machine is drawn in Chat: no bar, no strip, and none of its words. */
+async function expectQuietChat(page: Page) {
+	await expect(strip(page)).toHaveCount(0);
+	await expect(page.locator(".chat-composer .composer-notice")).toHaveCount(0);
+	await expect(page.locator(".workspace-chat-panel")).not.toContainText(
+		/Connecting to|Can't connect|is offline|stepped away|No machine/,
+	);
+}
+
+test("a Planner its machine keeps failing to start is a warning dot on the machine button, its fix-it steps in the button's menu, nothing in Chat, and a quiet row for a refused @chopin, announced once until it attaches", async ({ browser }) => {
+	test.setTimeout(180_000);
 	let room = await remoteServer();
-	let page = await open(browser, "mona", room, DESKTOP, { listen: true });
+	let page = await open(
+		browser,
+		"mona",
+		room,
+		{ ...DESKTOP, permissions: ["clipboard-read", "clipboard-write"] },
+		{ listen: true },
+	);
 	await createdBy(room, "mona");
 	let studio = await machine(page, "studio", true);
 	await page.reload();
 	await ready(page);
-	// A teammate who has the document open has no machine of their own, so no button; the composer's
-	// top edge is the only place they can read the Planner's state, and it says it, not by name
-	// whose machine it is.
+	// A teammate who has the document open has no machine of their own, so no button: they hear the
+	// state once, and read it on chopin's presence and in its row when they ask it.
 	let teammate = await open(browser, "hubot", room, DESKTOP);
 	let button = machineButton(page);
-	await expect(button).toHaveAccessibleName("Runs on studio");
 	await expect(machineButton(teammate)).toHaveCount(0);
 	expect((await studio.poll([])).planners).toHaveLength(1);
-	// Starting: the banner tells it, to the owner and to the person with no button alike, and the
-	// button is left naming only where the document runs. A screen reader is told once, and the
-	// banner says nothing of its own aloud.
-	await expect(strip(page)).toContainText(/^Connecting to (studio|@mona's machine)$/);
-	await expect(button).not.toHaveAttribute("data-planner");
-	// The first sentence may still name the owner's login if the machine list had not loaded yet; it
-	// is not said again once the machine's name arrives.
-	await expect(announced(page)).toHaveText(/^Connecting to (studio|@mona's machine)$/);
-	await expect(strip(teammate)).toHaveText("Connecting to @mona's machine");
-	await expect(strip(teammate)).not.toHaveAttribute("role");
-	await shoot(teammate, "planner-starting-teammate-desktop", teammate.locator(".chat-composer"));
+	// Starting: the button's connecting dots and its name tell it; Chat draws nothing.
+	await expectTold(page, /^Connecting to (studio|@mona's machine)$/);
+	await expect(button).toHaveAttribute("data-planner", "starting");
+	await expectTold(teammate, "Connecting to @mona's machine");
+	await expectQuietChat(page);
+	await expectQuietChat(teammate);
+	await shoot(page, "planner-starting-desktop", page.locator(".workspace-frame"));
 
 	// One launch that exited is a transient failure: still just starting.
 	expect((await studio.reportFailure(refused(room, 1))).status).toBe(200);
-	await expect(button).toHaveAccessibleName("Runs on studio");
-	await expect(strip(page)).toContainText("Connecting to studio");
+	await expectTold(page, "Connecting to studio");
 
-	// The second in a row says why, to the machine's owner and to the teammate.
+	// The second in a row is a warning dot, said once, and described in one plain sentence.
 	expect((await studio.reportFailure(refused(room, 2))).status).toBe(200);
-	await expect(button).toHaveAccessibleName("Runs on studio");
-	await expect(button).not.toHaveAttribute("data-planner");
-	await expect(button.locator(".machine-glyph-dot[data-planner]")).toHaveCount(0);
-	// The banner tells it once, to both, so the button does not tell it again: the reason is
-	// drawn in full and as given, with what has been tried and where to fix it.
-	let owned = strip(page);
-	await expect(owned).toContainText("Can't connect to studio.");
-	await expect(owned.locator(".composer-notice-line")).toHaveText([
-		REASON,
-		/^Tried 2 times, last at .+\. Still trying\.$/,
-	]);
-	await expect(owned.getByRole("link", { name: "How to fix" })).toBeVisible();
-	let seen = strip(teammate);
-	await expect(seen).not.toHaveAttribute("role");
-	await expect(seen).toContainText("Can't connect to @mona's machine.");
-	await expect(seen.locator(".sr-only")).toHaveCount(0);
-	await expect(seen.locator(".composer-notice-line")).toHaveText([
-		REASON,
-		/^Tried 2 times, last at .+\. Still trying\.$/,
-	]);
-	await expect(seen.locator(".composer-notice-line").first()).toBeVisible();
-	await expect(seen.getByRole("link", { name: "How to fix" })).toBeVisible();
-	// Each hears it once, from the one live region, and from no other element.
-	await expect(announced(page)).toHaveText("Can't connect to studio.");
+	await expectTold(page, "Can't connect to studio.");
+	await expect(button).toHaveAttribute("data-planner", "failing");
+	await expect(button.locator('.machine-glyph-dot[data-planner="failing"]')).toBeVisible();
+	await expect(button).toHaveAccessibleDescription("It stops each time before it connects.");
+	await expectTold(teammate, "Can't connect to @mona's machine.");
+	await expectQuietChat(page);
+	await expectQuietChat(teammate);
 	await expectSaidOnce(page, "Can't connect to studio.");
-	await expect(announced(teammate)).toHaveText("Can't connect to @mona's machine.");
-	await expectSaidOnce(teammate, "Can't connect to @mona's machine.");
 	await shoot(page, "planner-failing-desktop");
-	await shoot(teammate, "planner-failing-teammate-desktop", teammate.locator(".chat-composer"));
+	await shoot(teammate, "planner-failing-teammate-desktop");
 
-	// The machine button opens onto the machines alone: the story is the banner's, told once.
+	// The button's menu is where it is explained: the fix-it steps, then the machines.
 	await button.click();
 	let menu = page.getByRole("menu", { name: "Runs on", exact: true });
-	await expect(menu.getByRole("group", { name: "Connection", exact: true })).toHaveCount(0);
+	let steps = menu.getByRole("group", { name: "Can't connect to studio", exact: true });
+	await expect(steps).toContainText("It stops each time before it connects.");
+	await expect(steps.locator(".fix-steps-step")).toHaveText([
+		/^On studio, see why it stops:chopin status/,
+		"Fix what it names, such as a program that isn't installed.",
+		"Wait a moment.It connects again by itself once it's fixed.",
+		"Or choose another machine below.",
+	]);
+	// The machine's own words are folded away; how often it was tried is said quietly.
+	await expect(steps.getByText(REASON)).toBeHidden();
+	await expect(steps.getByText("Tried 2 times", { exact: true })).toBeVisible();
+	await expect(steps.getByRole("menuitem", { name: "Learn more" })).toHaveAttribute(
+		"href",
+		/docs\/chopin-cli\.md#cant-connect-to-a-machine$/,
+	);
+	await expect(menu.getByRole("menuitemradio", { name: /^studio/ })).toBeVisible();
+	await expectNoHorizontalOverflow(page);
+	await expectInsideViewport(menu);
 	await shoot(page, "planner-failing-menu-desktop");
+	// The keyboard reaches the steps' controls as menu items: Copy copies the command whole.
+	let copy = steps.getByRole("menuitem", { name: "Copy chopin status" });
+	await copy.focus();
+	await page.keyboard.press("Enter");
+	await expect(steps.getByRole("menuitem", { name: "Copied" })).toBeVisible();
+	expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("chopin status");
+	await page.keyboard.press("ArrowDown");
+	await expect(steps.getByRole("menuitem", { name: "Show details" })).toBeFocused();
+	await page.keyboard.press("Enter");
+	await expect(steps.getByText(REASON)).toBeVisible();
+	await expect(steps.locator(".fix-steps-output")).toContainText(
+		/Tried 2 times, last at .+\. Still trying\./,
+	);
+	await shoot(page, "planner-failing-menu-details-desktop");
+	await expectAccessible(page, ".machine-menu");
 	await page.keyboard.press("Escape");
 	await expect(menu).toBeHidden();
 	await expect(button).toBeFocused();
 
-	// More failures update the count and say nothing more aloud; @chopin sent meanwhile is not
-	// turned away for a machine that is still starting: the server waits, up to 30 seconds, for it
-	// to attach before it checks, and the message says Sending, never Sent, until it has answered.
+	// More failures update the count and say nothing more aloud.
 	await studio.reportFailure(refused(room, 3));
-	await expect(owned.locator(".composer-notice-line").last()).toContainText("Tried 3 times");
-	await expect(seen.locator(".composer-notice-line").last()).toContainText("Tried 3 times");
+	await button.click();
+	await expect(steps.getByText("Tried 3 times", { exact: true })).toBeVisible();
+	await page.keyboard.press("Escape");
+
+	// @chopin while it can't connect: the server waits for the machine, then turns it away. Nothing
+	// is kept for later, so the words are back in the draft, and chopin says so to this person alone,
+	// in a row at the end of the transcript, with How to fix.
 	let input = chatInput(teammate);
 	await fillChat(input, "@chopin outline the plan");
 	await input.press("Enter");
-	let outline = teammate.locator("[data-chat-message-id]").filter({ hasText: "outline the plan" });
-	await expect(outline).toHaveCount(1);
-	await expect(outline.getByText("Sending", { exact: true })).toBeVisible();
-	await expect(outline.getByRole("img", { name: "Sent" })).toHaveCount(0);
-	await expect(input).toHaveText("");
-	await expect(strip(teammate)).not.toHaveAttribute("data-error", "true");
+	let note = teammate.locator("[data-quiet-note]");
+	await expect(note).toBeVisible({ timeout: 45_000 });
+	await expect(note).toHaveAttribute("role", "status");
+	await expect(note).toContainText("Only visible to you");
+	await expect(note).toContainText(/^Only visible to you.*chopin/i);
+	await expect(note).toContainText("Can't connect to @mona's machine");
+	await expect(teammate.locator(".chat-composer .composer-notice")).toHaveCount(0);
+	await expect(teammate.locator("[data-error-banner]")).toHaveCount(0);
+	await shoot(teammate, "planner-refused-note-desktop");
+	let howTo = note.getByRole("button", { name: "How to fix" });
+	await howTo.click();
+	await expect(howTo).toHaveAttribute("aria-expanded", "true");
+	let theirs = note.getByRole("group", { name: "Can't connect to @mona's machine", exact: true });
+	await expect(theirs.getByRole("listitem").first()).toHaveText(
+		/^Ask @mona to run this on their machine:chopin status/,
+	);
+	await expectNoHorizontalOverflow(teammate);
+	await shoot(teammate, "planner-refused-note-steps-desktop");
+	await expectAccessible(teammate, "[data-quiet-note]");
 
 	// It attaches at last, and nothing about the failure is left, quietly: no word, no mark.
 	let link = await studio.backend(room);
 	await expectHealthy(button);
-	await expect(strip(page)).toHaveCount(0);
 	await expect(announced(page)).toHaveText("");
-	// The warning goes, and the teammate's message is taken by the Planner that is there: the
-	// server answered it, so it says Sending no more, carries no mark at all, and nothing about it
-	// is said on the composer.
-	await expect(teammate.locator(".chat-composer .composer-notice[data-warning]")).toHaveCount(0);
-	await expect(strip(teammate)).toHaveCount(0);
-	await expect(outline.getByText("Sending", { exact: true })).toHaveCount(0);
-	await expect(outline.getByRole("img", { name: "Delivered" })).toHaveCount(0);
-	await expect(outline).toHaveCount(1);
 	await expect(page.getByText("Tried 3 times")).toHaveCount(0);
 	// A screen reader was told each state once, and not again as the count rose or it cleared.
 	let said = await heard(page);
@@ -1715,11 +1737,15 @@ test("a Planner its machine keeps failing to start says why on the banner at the
 	expect(said.filter(text => text === "Can't connect to studio.")).toHaveLength(1);
 	expect(said.indexOf(connecting[0]!)).toBeLessThan(said.indexOf("Can't connect to studio."));
 	expect(said.at(-1)).toBe("Can't connect to studio.");
+	// The teammate's next message is taken, and chopin's note goes with it.
+	await fillChat(input, "@chopin outline the plan");
+	await input.press("Enter");
+	await expect(note).toHaveCount(0);
 	await link.detach();
 });
 
-test("on a phone, a Planner its machine keeps failing to start says why on its machine button alone, and in full at the composer for a person with no button", async ({ browser }) => {
-	test.setTimeout(120_000);
+test("on a phone, a Planner its machine keeps failing to start is the button's dot, with the steps on its sheet, fitting the phone, and nothing in Chat", async ({ browser }) => {
+	test.setTimeout(180_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, PHONE);
 	await createdBy(room, "mona");
@@ -1735,41 +1761,52 @@ test("on a phone, a Planner its machine keeps failing to start says why on its m
 	await expect(machineButton(teammate)).toHaveCount(0);
 	expect((await studio.poll([])).planners).toHaveLength(1);
 	let button = machineButton(page);
-	await expect(button).toHaveAccessibleName("Runs on studio");
+	await expectTold(page, "Connecting to studio");
 	await expect(button).toBeInViewport();
-	await expect(strip(page)).toContainText("Connecting to studio");
-	await expectInsideViewport(strip(page));
+	await expectQuietChat(page);
 	await shoot(page, "planner-starting-phone");
-	await expect(strip(teammate)).toHaveText("Connecting to @mona's machine");
-	await expect(() => expectInsideViewport(strip(teammate))).toPass();
+	await expectTold(teammate, "Connecting to @mona's machine");
+	await expectQuietChat(teammate);
 	await shoot(teammate, "planner-starting-teammate-phone");
 
 	await studio.reportFailure(refused(room, 2));
-	await expect(button).not.toHaveAttribute("data-planner");
-	await expect(strip(page)).toContainText("Can't connect to studio.");
-	await expectInsideViewport(strip(page));
+	await expectTold(page, "Can't connect to studio.");
+	await expect(button).toHaveAttribute("data-planner", "failing");
+	await expectQuietChat(page);
 	await expectNoHorizontalOverflow(page);
 	await shoot(page, "planner-failing-phone");
-
-	// Without the button the reason is drawn, as given, and fits the phone.
-	await expect(strip(teammate)).toContainText("Can't connect to @mona's machine.");
-	await expect(strip(teammate).locator(".composer-notice-line")).toHaveText([
-		REASON,
-		/^Tried 2 times, last at .+\. Still trying\.$/,
-	]);
-	await expectInsideViewport(strip(teammate));
-	await expectNoHorizontalOverflow(teammate);
+	await expectTold(teammate, "Can't connect to @mona's machine.");
+	await expectQuietChat(teammate);
 	await shoot(teammate, "planner-failing-teammate-phone");
 
-	// The owner's banner tells it in full too, and tapping the button opens its sheet onto the
-	// machines alone.
-	await expect(strip(page).locator(".composer-notice-line")).toHaveText([
-		REASON,
-		/^Tried 2 times, last at .+\. Still trying\.$/,
-	]);
+	// Tapping the button opens its sheet onto the steps, then the machines; Copy and Show details
+	// work without closing it.
 	await button.tap();
-	await expect(page.getByRole("group", { name: "Connection", exact: true })).toHaveCount(0);
+	let sheet = page.getByRole("dialog", { name: "Runs on", exact: true });
+	let steps = sheet.getByRole("group", { name: "Can't connect to studio", exact: true });
+	await expect(steps.locator(".fix-steps-step").first()).toHaveText(
+		/^On studio, see why it stops:chopin status/,
+	);
+	await expectInsideViewport(steps.locator(".fix-steps-command").first());
+	await steps.getByRole("menuitem", { name: "Show details" }).tap();
+	await expect(steps.getByText(REASON)).toBeVisible();
+	await expect(sheet).toBeVisible();
+	await expectNoHorizontalOverflow(page);
 	await shoot(page, "planner-failing-sheet-phone");
+
+	// The teammate's @chopin is turned away in chopin's row at the end of the transcript, which fits
+	// the phone with its steps open.
+	let input = chatInput(teammate);
+	await fillChat(input, "@chopin outline the plan");
+	await input.press("Enter");
+	let note = teammate.locator("[data-quiet-note]");
+	await expect(note).toBeVisible({ timeout: 45_000 });
+	await shoot(teammate, "planner-refused-note-phone");
+	await note.getByRole("button", { name: "How to fix" }).tap();
+	await expect(note.locator(".fix-steps-command").first()).toBeVisible();
+	await expectNoHorizontalOverflow(teammate);
+	await expectInsideViewport(note.locator(".fix-steps-command").first());
+	await shoot(teammate, "planner-refused-note-steps-phone");
 });
 
 test("a teammate's document with no machine of its own gets its Planner on a machine shared with teammates", async ({ browser }) => {
@@ -1782,9 +1819,10 @@ test("a teammate's document with no machine of its own gets its Planner on a mac
 	await createdBy(room, "hubot");
 	await page.reload();
 	await ready(page);
-	// hubot has no machine, so no button: the composer's top edge says so, whatever is typed.
+	// hubot has no machine, so no button: the live region says so, once, and Chat draws nothing.
 	let status = strip(page);
-	await expect(status).toHaveText(NONE);
+	await expect(announced(page)).toHaveText(NONE);
+	await expect(status).toHaveCount(0);
 
 	// mona shares studio from the Machines table; hubot's document asks it at once.
 	await owner.goto(`${ORIGIN}/machines`);
@@ -1814,7 +1852,10 @@ test("a teammate's document with no machine of its own gets its Planner on a mac
 	// Sharing off: the Planner stops, and hubot's document has none again.
 	await sharing.click();
 	await expect(sharing).toHaveAttribute("aria-checked", "false");
-	await expect(status).toHaveText(/^(No machine is connected|@mona's machine stepped away)/);
+	await expect(announced(page)).toHaveText(
+		/^(No machine is connected|@mona's machine stepped away)/,
+	);
+	await expect(status).toHaveCount(0);
 	await link.detach().catch(() => {});
 });
 
@@ -1859,7 +1900,8 @@ test("a teammate's Planner finishes its reply after its machine stops being shar
 
 	// The reply ends: the next sweep stops the Planner, and studio no longer says it is finishing.
 	replying.resolve();
-	await expect(status).toHaveText(NONE, { timeout: 30_000 });
+	await expect(announced(page)).toHaveText(NONE, { timeout: 30_000 });
+	await expect(status).toHaveCount(0);
 	await expect(owner.getByText(/^Finishing/)).toHaveCount(0, { timeout: 15_000 });
 	await link.detach().catch(() => {});
 });
@@ -2069,8 +2111,10 @@ test("anyone who can edit a document chooses a teammate's shared machine for its
 		planners: [{ id: room, url: expect.stringContaining(ORIGIN) }],
 	});
 	// The machine is one quinn can see in their own menu, so Chat names it rather than its owner.
-	await expect(machineButton(editor)).toHaveAccessibleName("Runs on Build box");
-	await expect(strip(editor)).toContainText("Connecting to Build box");
+	await expectTold(editor, "Connecting to Build box");
+	await expect(machineButton(editor)).toHaveAccessibleName(
+		"Runs on Build box. Connecting to Build box",
+	);
 	// Quinn's builds run there too: Build plan is ready, not greyed out.
 	let plan = editor.getByRole("button", { name: "Build plan", exact: true });
 	await expect(plan).toBeVisible();
@@ -2390,7 +2434,7 @@ test("with no machine of their own, a person still opens the Machines menu to a 
 /**
  * Choose `row` in the machine menu and read what the page says from then on. The button names
  * `to` at once; from then until the person has read it, nothing says `from` (the machine's name,
- * or whose it is by login), by the strip or by the live region, and "Connecting to" the new one
+ * or whose it is by login), by the button or by the live region, and "Connecting to" the new one
  * comes within a moment, not after the grace a restart's silence is given.
  */
 async function moveTo(
@@ -2400,20 +2444,22 @@ async function moveTo(
 ) {
 	let stop = await sampling(page);
 	await (await runOn(page)).getByRole("menuitemradio", { name: row }).click();
-	await expect(strip(page)).toContainText(`Connecting to ${to}`);
+	await expectTold(page, `Connecting to ${to}`);
 	await page.waitForTimeout(800);
 	let samples = await stop();
-	let named = samples.findIndex(sample => sample.name === `Runs on ${to}`);
-	let connecting = samples.findIndex(sample => sample.strip.includes(`Connecting to ${to}`));
+	let named = samples.findIndex(sample => sample.name.startsWith(`Runs on ${to}`));
+	let connecting = samples.findIndex(sample => sample.name.includes(`Connecting to ${to}`));
 	expect(named, JSON.stringify(samples)).toBeGreaterThanOrEqual(0);
 	expect(connecting).toBeGreaterThanOrEqual(named);
 	// Nothing is said of the machine just left once the button names the new one.
 	for (let sample of samples.slice(named)) {
-		expect(`${sample.strip} | ${sample.said}`, `at ${sample.at} ms`).not.toMatch(from);
+		expect(`${sample.name} | ${sample.strip} | ${sample.said}`, `at ${sample.at} ms`).not.toMatch(
+			from,
+		);
 	}
 	// The new one is said as soon as it is known, well inside the 1.5 s a restart is given.
 	expect(samples[connecting]!.at - samples[named]!.at).toBeLessThan(1_200);
-	expect(samples.at(-1)).toMatchObject({ name: `Runs on ${to}`, strip: `Connecting to ${to}` });
+	expect(samples.at(-1)).toMatchObject({ name: `Runs on ${to}. Connecting to ${to}`, strip: "" });
 }
 
 test("choosing another machine says that machine at once, and never names the one just left, whether it was the person's own or a teammate's", async ({ browser }) => {
@@ -2428,7 +2474,7 @@ test("choosing another machine says that machine at once, and never names the on
 	await machine(page, "Box A", true);
 	await page.reload();
 	await ready(page);
-	await expect(strip(page)).toContainText("Connecting to Box A");
+	await expectTold(page, "Connecting to Box A");
 
 	await moveTo(page, /^Build box/, { from: /Box A/, to: "Build box" });
 	// A teammate's machine is named by its owner's login while the list that names it is not read
@@ -2455,7 +2501,7 @@ test("a person whose choice does not place the document's replies is told whose 
 	await machine(page, "Quinn box", true);
 	await page.reload();
 	await ready(page);
-	await expect(strip(page)).toContainText("Connecting to @drew's machine");
+	await expectTold(page, "Connecting to @drew's machine");
 
 	// The menu says the document's creator decides, before and after they choose theirs.
 	let menu = await runOn(page);
@@ -2466,15 +2512,23 @@ test("a person whose choice does not place the document's replies is told whose 
 	let stop = await sampling(page);
 	await menu.getByRole("menuitemradio", { name: /^Quinn box/ }).click();
 	await expect(menu).toBeHidden();
-	await expect(machineButton(page)).toHaveAccessibleName("Runs on Quinn box");
+	// The button names quinn's choice, and the state still tells where the replies are asked for:
+	// drew's machine, without a gap or another name.
+	await expect(machineButton(page)).toHaveAccessibleName(
+		"Runs on Quinn box. Connecting to @drew's machine",
+	);
 	await page.waitForTimeout(2_500);
 	let samples = await stop();
-	// Where the replies are asked for is still drew's, and said so without a gap or another name.
 	for (let sample of samples) {
-		expect(`${sample.strip} | ${sample.said}`).not.toContain("Quinn box");
+		expect(`${sample.name.replace(/^Runs on [^.]+\. /, "")} | ${sample.said}`)
+			.not.toContain("Quinn box");
 	}
-	expect(samples.at(-1)).toMatchObject({ strip: "Connecting to @drew's machine" });
-	expect(samples.filter(sample => sample.strip === "")).toEqual([]);
+	expect(samples.at(-1)).toMatchObject({
+		name: "Runs on Quinn box. Connecting to @drew's machine",
+		strip: "",
+	});
+	expect(samples.filter(sample => !sample.name.includes("Connecting to @drew's machine")))
+		.toEqual([]);
 	await runOn(page);
 	await expect(note).toBeVisible();
 	await shoot(page, "planner-creator-decides");
@@ -2494,27 +2548,36 @@ test("a machine whose connector cannot say why its backend keeps stopping is sai
 	await page.reload();
 	await ready(page);
 	expect((await studio.poll([])).planners).toHaveLength(1);
-	await expect(strip(page)).toContainText("Connecting to studio");
+	await expectTold(page, "Connecting to studio");
 
 	// Its backend is launched twice and never attaches: Chopin cannot know it exited, so it still
 	// only waits.
 	await studio.launch(room);
 	await studio.launch(room);
 	await page.waitForTimeout(2_000);
-	await expect(strip(page)).toContainText("Connecting to studio");
+	await expectTold(page, "Connecting to studio");
 
-	// The third launch says the first two ended, and the banner says so and what to update.
+	// The third launch says the first two ended: the button says it can't connect, and its menu says
+	// why in a sentence and what to update, with the machine's own words under Show details.
 	await studio.launch(room);
-	let owned = strip(page);
-	await expect(owned).toContainText("Can't connect to studio.");
-	await expect(owned.locator(".composer-notice-line")).toHaveText([
-		"It started and stopped again before it connected. It runs chopin 0.0.22, which can't say why: "
-		+ "run `chopin update` on it",
-		/^Tried 2 times, last at .+\. Still trying\.$/,
-	]);
-	await expect(owned.getByRole("link", { name: "How to fix" })).toBeVisible();
+	await expectTold(page, "Can't connect to studio.");
 	await expect(announced(page)).toHaveText("Can't connect to studio.");
+	await machineButton(page).click();
+	let steps = page.getByRole("menu", { name: "Runs on", exact: true })
+		.getByRole("group", { name: "Can't connect to studio", exact: true });
+	await expect(steps).toContainText("It runs an older chopin that can't say why it stops.");
+	await expect(steps.locator(".fix-steps-step").first()).toHaveText(
+		/^On studio, update chopin:chopin update/,
+	);
+	await steps.getByRole("menuitem", { name: "Show details" }).click();
+	await expect(steps.locator(".fix-steps-output")).toHaveText(
+		new RegExp(
+			"^It started and stopped again before it connected\\. It runs chopin 0\\.0\\.22, which "
+				+ "can't say why: run `chopin update` on it\nTried 2 times, last at .+\\. Still trying\\.$",
+		),
+	);
 	await shoot(page, "planner-silent-connector");
+	await page.keyboard.press("Escape");
 
 	// Once its backend attaches there is nothing left to say.
 	let link = await studio.backend(room);

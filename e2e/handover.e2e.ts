@@ -416,7 +416,7 @@ async function watch(page: Page): Promise<void> {
 			let spoken = document.querySelector("[data-connection-status]")?.textContent?.trim();
 			if (spoken) {
 				say(
-					/^(You're offline|Reconnecting|Back online|Catching up|Back\.)/.test(spoken)
+					/^(You're offline|Connecting\u2026|Back online|Catching up|Back\.)/.test(spoken)
 						? `offline status ${spoken}`
 						: `machine said ${spoken}`,
 				);
@@ -425,6 +425,9 @@ async function watch(page: Page): Promise<void> {
 			if (document.querySelector("[data-chat-failed]")) say("a message says it could not be sent");
 			let notice = document.querySelector(".chat-composer .composer-notice")?.textContent?.trim();
 			if (notice) say(`composer strip ${notice}`);
+			// chopin's row to this person alone, for a message it could not take.
+			let note = document.querySelector("[data-quiet-note] .quiet-note-text")?.textContent?.trim();
+			if (note) say(`chopin note ${note}`);
 			if (document.querySelector("[data-agent-offline]")) say("build says the agent is offline");
 			let button = document.querySelector(".machine-button");
 			if (button && probe.machine) {
@@ -1047,11 +1050,9 @@ async function arrange(
 	await page.reload();
 	await ready(page);
 	let button = machineButton(page);
-	// While the machine is connected to, the one banner at the composer says so, in the Planner's
-	// layer; the button is named for the machine alone.
-	await expect(button).toHaveAccessibleName(`Runs on ${MACHINE}`);
-	await expect(strip(page)).toHaveAttribute("data-layer", "planner");
-	await expect(strip(page)).toContainText(`Connecting to ${MACHINE}`);
+	// While the machine is connected to, the button says so, in its name; Chat draws nothing.
+	await expect(button).toHaveAccessibleName(`Runs on ${MACHINE}. Connecting to ${MACHINE}`);
+	await expect(strip(page)).toHaveCount(0);
 	expect((await machine.poll([])).planners).toEqual([
 		{ id: room, url: expect.stringContaining(ORIGIN) },
 	]);
@@ -1221,7 +1222,7 @@ async function holdRow(database: string, room: string, text: string): Promise<vo
 async function expectOnlyRefusals(page: Page, loads: { count: number }, expectedBanner?: string) {
 	let seen = await probe(page);
 	expect(seen.violations, seen.timeline.join("\n")).toEqual(
-		expectedBanner ? [`composer error ${expectedBanner}`, `composer strip ${expectedBanner}`] : [],
+		expectedBanner ? [`chopin note ${expectedBanner}`] : [],
 	);
 	expect(seen.planner.filter(state => state !== "attached")).toEqual([]);
 	expect(seen.resets).toEqual([]);
@@ -1263,8 +1264,9 @@ test("messages sent before, during and after the machine's hand-over window each
 
 	// The new process has the lease and the machine is shown attached, but its client has not
 	// resumed, inside its window: the browser sent the message again, and it was refused saying
-	// still connecting, with the typed text kept in the draft and nothing kept on the server.
-	let banner = chat(page).locator('[data-error-banner][data-kind="send"]');
+	// still connecting, with the typed text kept in the draft and nothing kept on the server. chopin
+	// says so to this person alone, in its quiet row at the end of the transcript.
+	let banner = chat(page).locator("[data-quiet-note]");
 	let inWindowWords =
 		`Still connecting to @${HANDLE}'s machine, so this message wasn't sent. Send it again in a moment.`;
 	await expect(banner).toContainText(inWindowWords);
@@ -1298,7 +1300,7 @@ test("messages sent before, during and after the machine's hand-over window each
 	expect(tagsOf(planner.prompts)).toEqual(["m1", "m5"]);
 	expect(tagsOf(planner.steered)).toEqual(["m2", "m3"]);
 	expect(planner.errors).toEqual([]);
-	await expectOnlyRefusals(page, loads, `${inWindowWords} Open machines`);
+	await expectOnlyRefusals(page, loads, inWindowWords);
 
 	// The refused message was never kept: a tab opened afterwards has the other four, once, and
 	// the server holds no row for any of them.
@@ -1326,7 +1328,7 @@ for (let steers of [true, false]) {
 		await say(page, keys, "[m2] sent to the turn the old process waits for");
 		let busyWords =
 			"Chopin can't take messages while it works on this machine. Stop it to ask now.";
-		let banner = chat(page).locator('[data-error-banner][data-kind="send"]');
+		let banner = chat(page).locator("[data-quiet-note]");
 		if (steers) {
 			await until("the message to reach the turn", () => planner.steered.length === 1);
 			await expect(message(page, "[m2]")).toHaveCount(1);
@@ -1762,7 +1764,7 @@ test("a hidden tab that was frozen and gets its connection back later than the g
 	await page.bringToFront();
 	await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe("visible");
 	await expect(page.locator('[data-connection-banner][data-layer="socket"]')).toBeVisible({
-		timeout: 10_000,
+		timeout: 20_000,
 	});
 	await own.context.setOffline(false);
 });

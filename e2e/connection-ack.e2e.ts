@@ -39,7 +39,7 @@ test("a return does not say changes are synced before their acknowledgement", as
 	await page.keyboard.type(" and an edit made offline");
 	let banner = connectionBanner(page);
 	let voice = phaseVoice(page);
-	await expect(banner).toContainText("Reconnecting");
+	await expect(banner).toContainText(/^(Connecting\u2026|You're offline\.)/, { timeout: 20_000 });
 
 	// Hold the replay before it can reach the server, then hold the acknowledgement separately.
 	state.holdUpdates = true;
@@ -47,9 +47,10 @@ test("a return does not say changes are synced before their acknowledgement", as
 	state.offline = false;
 	await page.evaluate(() => dispatchEvent(new Event("online")));
 	await ready(page);
-	await expect(banner).toHaveAttribute("data-phase", "resumed");
+	// The return draws nothing, and what a screen reader hears claims nothing of edits the server
+	// has not acknowledged.
+	await expect(banner).toHaveCount(0);
 	await expect.poll(() => updates.length).toBeGreaterThan(0);
-	expect(await banner.innerText()).not.toContain("Your changes are synced");
 	await expect(voice).toHaveText("Back online.");
 	expect(await readSource(port, room)).not.toMatch(/edit made offline/);
 
@@ -57,19 +58,17 @@ test("a return does not say changes are synced before their acknowledgement", as
 	for (let release of updates.splice(0)) release();
 	await expect.poll(() => acks.length).toBeGreaterThan(0);
 	await expect.poll(() => readSource(port, room)).toMatch(/edit made offline/);
-	expect(await banner.innerText()).not.toContain("Your changes are synced");
-	for (let release of acks.splice(0)) release();
-	await expect(banner).toContainText("Your changes are synced");
-
-	// An edit made while the return is still visible cannot leave a stale synced claim behind.
-	await content(page).click();
-	await page.keyboard.type(" more");
-	await expect.poll(() => acks.length).toBeGreaterThan(0);
-	await expect(banner).not.toContainText("Your changes are synced");
+	expect(await voice.innerText()).not.toContain("Your changes are synced");
 	state.holdAcks = false;
 	for (let release of acks.splice(0)) release();
-	await expect(banner).toContainText("Your changes are synced");
-	// The changing caught line does not announce a second return.
+
+	// An edit made after the return cannot leave a stale synced claim behind, and the return is
+	// announced once.
+	await content(page).click();
+	await page.keyboard.type(" more");
+	await expect.poll(() => readSource(port, room)).toMatch(/ more/);
+	expect(await voice.innerText()).not.toContain("Your changes are synced");
+	await expect(banner).toHaveCount(0);
 	expect((await heardWords(page)).filter(words => words.startsWith("Back online."))).toEqual([
 		"Back online.",
 	]);
