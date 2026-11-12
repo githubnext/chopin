@@ -163,6 +163,7 @@ import { WriterLease } from "./storage/writer-lease";
 import {
 	broadcast,
 	broadcastRepository,
+	DEFLATE,
 	fail,
 	PASSING,
 	relay,
@@ -2124,6 +2125,7 @@ function listen(): Server<SocketData> {
 		},
 
 		websocket: {
+			perMessageDeflate: DEFLATE,
 			open(ws: AnySocket) {
 				openSockets.opened(ws);
 				if (isAgentSocket(ws)) {
