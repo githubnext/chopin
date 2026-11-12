@@ -130,10 +130,10 @@ test("a message with the Chopin chip reaches the Planner, which takes a turn, an
 	let opened = await join("ana");
 	let chat = chatPane(opened);
 	let draft = chatInput(chat);
-	let chip = chat.getByRole("group", { name: "Asking Chopin", exact: true });
+	let chip = chat.getByRole("group", { name: "Asking chopin", exact: true });
 
 	// With the chip the message is Chopin's: it goes to the Planner, which takes a turn and answers.
-	await chat.getByRole("button", { name: "Ask Chopin", exact: true }).click();
+	await chat.getByRole("button", { name: "Ask chopin", exact: true }).click();
 	await expect(chip).toBeVisible();
 	await draft.fill("what does the plan say?");
 	await draft.press("Enter");
@@ -145,7 +145,7 @@ test("a message with the Chopin chip reaches the Planner, which takes a turn, an
 
 	// The chip stays on, so the next is Chopin's too, until it is removed.
 	await expect(chip).toBeVisible();
-	await chat.getByRole("button", { name: "Remove Chopin", exact: true }).click();
+	await chat.getByRole("button", { name: "Remove chopin", exact: true }).click();
 	await expect(chip).toHaveCount(0);
 
 	// Without it the message is the team's: it is in the Chat, and the Planner is not asked.
@@ -392,12 +392,12 @@ test("only Build plan asks the Planner for tasks, once, without a Chat message, 
 	let stopped = opened.getByRole("button", { name: "Build stopped", exact: true });
 	await expect(stopped).toBeVisible();
 	await expect(stopped).toHaveAccessibleDescription(
-		"Chopin couldn’t break the plan into tasks.",
+		"chopin couldn’t break the plan into tasks.",
 	);
 	expect(sends).toHaveLength(0);
 	let transcript = chatPane(opened);
 	// The notice renders its @mention as a name.
-	await expect(transcript).toContainText(/asked Chopin to break the plan into tasks\./);
+	await expect(transcript).toContainText(/asked chopin to break the plan into tasks\./);
 	await expect(transcript).not.toContainText("Prepare an implementation graph");
 
 	await stopped.click();

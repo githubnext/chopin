@@ -332,11 +332,11 @@ describe("design audit specimens", () => {
 		expect(plate(markup, "identity")).toContain('class="presence-more"');
 		expect(plate(markup, "identity")).toContain("People here: ");
 		expect(plate(markup, "decisions")).toContain('class="plan-decisions"');
-		expect(markup).toContain("Questions from Chopin will appear here");
+		expect(markup).toContain("Questions from chopin will appear here");
 		expect(markup).toContain('data-relation="orphaned"');
 		expect(markup).toContain('data-relation="empty"');
 		expect(plate(markup, "resolved-comments")).toContain('class="plan-resolved-comment"');
-		expect(plate(markup, "resolved-comments")).toContain("Resolved by Olivia");
+		expect(plate(markup, "resolved-comments")).toContain("Resolved by olivia");
 		expect(plate(markup, "resolved-comments")).toContain(">Reopen</button>");
 		expect(markup).toContain('role="alert"');
 		expect(markup).toMatch(

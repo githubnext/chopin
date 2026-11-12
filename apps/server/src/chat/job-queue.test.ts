@@ -57,7 +57,7 @@ test("a job waits for a human turn, and a person's message while a job runs is r
 	expect(refusals).toEqual([
 		expect.objectContaining({
 			kind: "session:error",
-			message: "Chopin can't take messages while it works on this machine. Stop it to ask now.",
+			message: "chopin can't take messages while it works on this machine. Stop it to ask now.",
 			code: "planner-busy",
 		}),
 	]);

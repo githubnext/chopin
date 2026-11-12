@@ -628,7 +628,7 @@ describe("instructing the agent without a message", () => {
 
 		expect(chat.waiting.length).toBeLessThanOrEqual(20);
 		expect(said(sent)).toContain(
-			"Chopin has too much to do already. Try again when it has caught up.",
+			"chopin has too much to do already. Try again when it has caught up.",
 		);
 	});
 

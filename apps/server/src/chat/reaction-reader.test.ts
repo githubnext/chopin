@@ -394,7 +394,7 @@ test("a reader's answer that asks for input is withheld, not repaired through to
 	expect(entryA1(h as unknown as Room).answeredIntents).toEqual(["confused"]);
 	expect(
 		h.chat.entries.some(entry =>
-			entry.text === "Chopin's answer asked for input, so it was withheld."
+			entry.text === "chopin's answer asked for input, so it was withheld."
 		),
 	)
 		.toBe(true);

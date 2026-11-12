@@ -151,10 +151,10 @@ test("a phone thread sheet quotes its passage once and holds the thread on the s
 		expect(box.width).toBeGreaterThanOrEqual(44);
 		expect(box.height).toBeGreaterThanOrEqual(44);
 	}
-	let address = sheet.locator("label").filter({ hasText: "Send to Chopin" });
+	let address = sheet.locator("label").filter({ hasText: "Send to chopin" });
 	await expect(address).toBeVisible();
 	expect((await size(address)).height).toBeGreaterThanOrEqual(44);
-	await expect(sheet.getByRole("checkbox", { name: "Send to Chopin" })).not.toBeChecked();
+	await expect(sheet.getByRole("checkbox", { name: "Send to chopin" })).not.toBeChecked();
 
 	// Closed by touch, the chip takes focus back without a ring around its 44px hit area.
 	let marker = page.getByRole("button", { name: /^Comment on “review the pilot”/ });
@@ -191,7 +191,7 @@ test("a long phone thread scrolls its notes and keeps the composer pinned", asyn
 	let sheetBox = await size(sheet);
 	expect(sheetBox.height).toBeLessThanOrEqual(844 * 0.92 + 1);
 	await expectInsideViewport(sheet.getByRole("textbox", { name: "Reply", exact: true }));
-	await expectInsideViewport(sheet.getByRole("checkbox", { name: "Send to Chopin" }));
+	await expectInsideViewport(sheet.getByRole("checkbox", { name: "Send to chopin" }));
 });
 
 test("a phone draft sheet stands on the keyboard with Send to Chopin in reach", async ({ baseURL, browser, room, seed }) => {
@@ -206,7 +206,7 @@ test("a phone draft sheet stands on the keyboard with Send to Chopin in reach", 
 			let box = await size(sheet);
 			expect(box.y + box.height).toBeLessThanOrEqual(506 + 1);
 			await expectInsideViewport(sheet.getByPlaceholder("Add a comment"));
-			await expectInsideViewport(sheet.getByRole("checkbox", { name: "Send to Chopin" }));
+			await expectInsideViewport(sheet.getByRole("checkbox", { name: "Send to chopin" }));
 			await expectInsideViewport(sheet.getByRole("button", { name: "Post comment" }));
 		}).toPass();
 	} finally {

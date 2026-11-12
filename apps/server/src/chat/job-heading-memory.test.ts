@@ -53,7 +53,7 @@ test("saved room message runs processor through current Harness and the actual d
 		expect(saved.sidecar.conversationPlanJobs).toMatchObject([{ status: "done", attempts: 1 }]);
 		expect(saved.sidecar.transcript.map(entry => entry.text)).toEqual([
 			"Choose our authentication approach.",
-			"Chopin drafted the title and goal",
+			"chopin drafted the title and goal",
 		]);
 		expect(h.plan.chat.job).toBeUndefined();
 		expect(h.driver.destroyed()).toBe(1);

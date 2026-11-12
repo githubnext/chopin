@@ -651,7 +651,7 @@ test("a touch comment sheet keeps its composer above the visual keyboard", async
 		await expect(async () => {
 			await expectInsideViewport(composer);
 			await expectInsideViewport(sheet.getByRole("button", { name: "Send reply" }));
-			await expectInsideViewport(sheet.getByRole("checkbox", { name: "Send to Chopin" }));
+			await expectInsideViewport(sheet.getByRole("checkbox", { name: "Send to chopin" }));
 		}).toPass();
 	} finally {
 		await emulation.close();

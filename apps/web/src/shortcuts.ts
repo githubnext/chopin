@@ -1,3 +1,4 @@
+import { PLANNER_NAME } from "@chopin/protocol/address";
 /**
  * The one registry of Chopin's keyboard shortcuts. Handlers, tooltip hints, menus,
  * and the shortcuts sheet all read from here so a chord is never described in two places.
@@ -118,7 +119,14 @@ export const SHORTCUTS: readonly Shortcut[] = [
 		display: true,
 	},
 	// The composer owns the key: it puts the @Chopin chip at the start of the draft (`chopin-chip.ts`).
-	{ id: "ask-chopin", label: "Ask Chopin", group: "Editing", key: "j", mod: true, display: true },
+	{
+		id: "ask-chopin",
+		label: `Ask ${PLANNER_NAME}`,
+		group: "Editing",
+		key: "j",
+		mod: true,
+		display: true,
+	},
 	{
 		id: "dictate",
 		label: "Dictate a message",

@@ -1019,7 +1019,7 @@ test("read-only visitors can browse documents and get creation guidance", async 
 	);
 	await expect(headerActions(page)).toHaveCount(0);
 	await expect(page.getByText("You have read-only access to this document.")).toBeVisible();
-	await expect(page.getByPlaceholder("Use @chopin to ask Chopin")).toHaveCount(0);
+	await expect(page.getByPlaceholder("Use @chopin to ask chopin")).toHaveCount(0);
 	await sidebar(page).getByRole("button", { name: "New document", exact: true }).click();
 	let creation = page.getByRole("dialog", { name: "New document", exact: true });
 	await expect(
@@ -1109,7 +1109,7 @@ test("writers can archive, restore, and permanently delete a document", async ({
 	).toBeVisible();
 	await expect(ana.getByText("Archived. Restore it to keep chatting."))
 		.toBeVisible();
-	await expect(ana.getByPlaceholder("Use @chopin to ask Chopin")).toHaveCount(0);
+	await expect(ana.getByPlaceholder("Use @chopin to ask chopin")).toHaveCount(0);
 	await expect(content(ana)).toHaveAttribute("contenteditable", "false");
 	await expect(content(bo)).toHaveAttribute("contenteditable", "false");
 	await expect(projects.getByRole("link", { name: title, exact: true })).toHaveCount(0);

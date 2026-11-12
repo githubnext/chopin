@@ -138,8 +138,8 @@ test("both collaborators wait for a short generated question and retain options 
 			await expect(
 				decision.getByText("A limited pilot lets the team learn before a wider release."),
 			).toBeVisible();
-			await expect(decision.getByText("Chopin is refining…", { exact: true })).toHaveCount(0);
-			await expect(page.getByText(`Chopin refined ${REFINED}`, { exact: true })).toBeVisible();
+			await expect(decision.getByText("chopin is refining…", { exact: true })).toHaveCount(0);
+			await expect(page.getByText(`chopin refined ${REFINED}`, { exact: true })).toBeVisible();
 		}
 		await waitForRefine(ana, messageId, "done");
 		await waitForRefine(bo, messageId, "done");
@@ -226,7 +226,7 @@ test("an archived held job becomes interrupted and retries only after the docume
 		await waitForRefine(page, messageId, "failed");
 		await waitForJob(page, messageId, "failed");
 		await expect(jobs(page)).toContainText("interrupted");
-		await expect(page.getByText(`Chopin refined ${REFINED}`, { exact: true })).toHaveCount(0);
+		await expect(page.getByText(`chopin refined ${REFINED}`, { exact: true })).toHaveCount(0);
 
 		await refineScript();
 		await jobs(page).getByRole("button", { name: "Retry refine job", exact: true }).click();

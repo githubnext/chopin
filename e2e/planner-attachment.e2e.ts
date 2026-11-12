@@ -268,7 +268,7 @@ test("a new comment is sent to Chopin by default only while a Planner is attache
 	await expectNoPlanner(page);
 
 	let card = await draft(page);
-	let box = card.getByRole("checkbox", { name: "Send to Chopin" });
+	let box = card.getByRole("checkbox", { name: "Send to chopin" });
 	await expect(box).not.toBeChecked();
 
 	// Ticked anyway, it is refused for the machine being away, in the connection's own words, and
@@ -290,7 +290,7 @@ test("a new comment is sent to Chopin by default only while a Planner is attache
 	});
 	try {
 		await expectPlannerAttached(page);
-		await expect((await draft(page, 1)).getByRole("checkbox", { name: "Send to Chopin" }))
+		await expect((await draft(page, 1)).getByRole("checkbox", { name: "Send to chopin" }))
 			.toBeChecked();
 	} finally {
 		await client.detach();
@@ -739,7 +739,7 @@ test("a Planner whose connection drops is shown as disconnected for longer than 
 		await page.getByRole("button", { name: "Stop generating", exact: true }).click();
 		await expect(
 			chatPane(page).getByText(
-				"asked Chopin to stop. Its machine is disconnected, so its workflows will pause when it reconnects.",
+				"asked chopin to stop. Its machine is disconnected, so its workflows will pause when it reconnects.",
 			),
 		).toBeVisible();
 		await expect(away).toBeVisible();

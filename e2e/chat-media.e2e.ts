@@ -250,7 +250,7 @@ test("the viewer is Slack's: full screen, who sent it and when along the top, th
 	});
 	await expect(open).toHaveCSS("border-radius", "0px");
 	let header = open.locator("[data-chat-viewer-header]");
-	await expect(header.locator(".chat-viewer-name")).toHaveText("Bo");
+	await expect(header.locator(".chat-viewer-name")).toHaveText("bo");
 	await expect(header.locator(".chat-viewer-file")).toHaveText("Second");
 	// Download and close are along the top, as Slack keeps them.
 	for (let name of ["Download image", "Close"]) {

@@ -23,7 +23,7 @@ function speaking(handle: string, frames: Frame[] = []): Socket {
 	} as unknown as Socket;
 }
 
-const CANNOT = "Chopin can't take messages while it works on this machine. Stop it to ask now.";
+const CANNOT = "chopin can't take messages while it works on this machine. Stop it to ask now.";
 
 test("a message sent while a turn runs is posted at once and given to that turn, not held", async () => {
 	let h = harness();
@@ -264,7 +264,7 @@ test("a message the turn cannot take is said not to have been read, and is neith
 	);
 	expect(h.chat.entries.at(-1)).toMatchObject({
 		author: { kind: "system" },
-		text: "Chopin did not read @bo's message. Send it again to ask.",
+		text: "chopin did not read @bo's message. Send it again to ask.",
 	});
 	expect(h.chat.waiting).toEqual([]);
 	expect(h.prompts).toHaveLength(1);

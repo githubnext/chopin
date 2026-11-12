@@ -335,7 +335,7 @@ that offered `steer-turn`), which reads it at its next step as `@handle: text`, 
 same turn. Steering takes the same write access as starting a turn: `chat:send` is
 checked before `Chat.send`, so a reader cannot steer. A harness that cannot take
 input mid-run (the Copilot SDK), or a running turn that is a background job's, refuses
-the message with `planner-busy`: "Chopin can't take messages while it works on this
+the message with `planner-busy`: "chopin can't take messages while it works on this
 machine. Stop it to ask now." (the server log names the harness). A machine that is away,
 in its hand-over window before the client resumes ("Still connecting to @mona's machine, so
 this message wasn't sent. Send it again in a moment."), or with none attached, refuses it with

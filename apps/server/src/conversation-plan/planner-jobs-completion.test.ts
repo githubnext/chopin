@@ -64,7 +64,7 @@ describe("createPlannerJobs", () => {
 		await h.service.enqueue({ kind: "refine", target: "W1", trigger: "m1" });
 		await h.service.idle();
 		expect(h.service.jobs()[0]?.status).toBe("done");
-		expect(h.lines).toEqual(["Chopin refined What auth system should we use?"]);
+		expect(h.lines).toEqual(["chopin refined What auth system should we use?"]);
 	});
 
 	test("a storage failure at start leaves a pending job and does not spin", async () => {

@@ -237,13 +237,13 @@ test("work announcements promise inspectable details only when the turn has tool
 		}));
 	let tool: Chat.Activity = { id: "tool", name: "read_plan", status: "done" };
 
-	expect(render(undefined, false)).toContain("Chopin turn ended.</span>");
-	expect(render(undefined, true)).toContain("Chopin connection lost.</span>");
+	expect(render(undefined, false)).toContain("chopin turn ended.</span>");
+	expect(render(undefined, true)).toContain("chopin connection lost.</span>");
 	expect(render([tool], false)).toContain(
-		"Chopin turn ended. Work details remain available.</span>",
+		"chopin turn ended. Work details remain available.</span>",
 	);
 	expect(render([tool], true)).toContain(
-		"Chopin connection lost. Work details remain available.</span>",
+		"chopin connection lost. Work details remain available.</span>",
 	);
 });
 

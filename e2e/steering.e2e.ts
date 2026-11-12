@@ -24,7 +24,7 @@ const PORT = e2ePort(8798);
 const ORIGIN = `http://${HOST}:${PORT}`;
 const DATABASE = e2eDatabaseName("chopin_steering");
 const HANDLE = "mona";
-const CANNOT = "Chopin can't take messages while it works on this machine. Stop it to ask now.";
+const CANNOT = "chopin can't take messages while it works on this machine. Stop it to ask now.";
 
 function databaseUrls() {
 	let cluster = new URL(
@@ -454,7 +454,7 @@ test("two people steer one turn: each message is in both Chats at once and the t
 			await expect(message(view, "keep it short").locator("[data-chat-failed]")).toHaveCount(0);
 			await expect(chat(view).locator('[data-chat-state="queued"]')).toHaveCount(0);
 		}
-		await expect(chat(page).getByText("Hubot", { exact: true }).first()).toBeVisible();
+		await expect(chat(page).getByText("hubot", { exact: true }).first()).toBeVisible();
 
 		await expect(nextStep(page, "keep it short")).toHaveCount(1);
 		expect(planner.steered).toEqual(["@hubot: keep it short"]);

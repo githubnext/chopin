@@ -1,5 +1,6 @@
 import { usePendingWork } from "@chopin/editor";
 import { Face } from "@chopin/editor/face";
+import { sentenceCase } from "@chopin/protocol/address";
 import {
 	CheckIcon,
 	LoaderIcon,
@@ -98,10 +99,6 @@ function MachineLabel({ machine }: { machine: BuildMachine }) {
 	);
 }
 
-function sentence(text: string): string {
-	return text.replace(/^[a-z]/, letter => letter.toUpperCase());
-}
-
 /**
  * The build's status and its tasks. Build only reads: the header's Build plan
  * and capsule start and retry builds, so opening this view never starts one.
@@ -189,7 +186,7 @@ export function BuildView(
 			setReturning(false);
 			build.reload();
 		} catch (error) {
-			setActionError(sentence(error instanceof Error ? error.message : "Return failed"));
+			setActionError(sentenceCase(error instanceof Error ? error.message : "Return failed"));
 		} finally {
 			setBusy(false);
 		}
@@ -369,7 +366,9 @@ export function BuildView(
 					cancelBuildRequest(room).then(
 						() => build.reload(),
 						error =>
-							setActionError(sentence(error instanceof Error ? error.message : "Cancel failed")),
+							setActionError(
+								sentenceCase(error instanceof Error ? error.message : "Cancel failed"),
+							),
 					);
 				}}
 				type="button"
@@ -391,7 +390,7 @@ export function BuildView(
 					stopBuild(room, activeBuild.id).then(
 						() => build.reload(),
 						error =>
-							setActionError(sentence(error instanceof Error ? error.message : "Stop failed")),
+							setActionError(sentenceCase(error instanceof Error ? error.message : "Stop failed")),
 					).finally(() => setStopping(false));
 				}}
 				type="button"
@@ -451,7 +450,7 @@ export function BuildView(
 				{phase.kind === "loading" && (
 					<p className="build-status-line">
 						{loadError
-							? <span className="text-destructive-ink">{sentence(loadError)}</span>
+							? <span className="text-destructive-ink">{sentenceCase(loadError)}</span>
 							: <span className="sr-only">Loading tasks</span>}
 					</p>
 				)}

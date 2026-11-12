@@ -1,3 +1,4 @@
+import { sentenceCase } from "@chopin/protocol/address";
 import { useEffect } from "react";
 
 // Every route waits for this chunk before it mounts (main.tsx), so the cursor contract rides with
@@ -55,13 +56,13 @@ function openPopup(element: HTMLElement): boolean {
 }
 
 /**
- * Tooltips use sentence case.
+ * Tooltips use sentence case, except where they begin with chopin's name.
  * Names and handles opt out so they keep their own casing.
  */
 export function tooltipText(label: string, verbatim: boolean): string {
 	return verbatim
 		? label.trim()
-		: label.trim().replace(/^[a-z]/, (letter) => letter.toUpperCase());
+		: sentenceCase(label.trim());
 }
 
 /** Hover tooltips never show on coarse pointers; focus ones only for keyboard focus. */

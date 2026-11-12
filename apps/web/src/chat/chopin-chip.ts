@@ -10,13 +10,14 @@
  */
 
 import { addressedOutsideReferences, reconcileReferenceDrafts } from "./references";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 
 import type { MentionTrigger } from "./mentions";
 import type { ChatSendPayload, ComposerDraft, ReferenceDraft } from "./references";
 
 /** The chip's own accessible name, and its remove button's. */
-export const ASKING_CHOPIN = "Asking Chopin";
-export const REMOVE_CHOPIN = "Remove Chopin";
+export const ASKING_CHOPIN = `Asking ${PLANNER_NAME}`;
+export const REMOVE_CHOPIN = `Remove ${PLANNER_NAME}`;
 
 /** Whether a message is for Chopin, which a document without an agent never is. */
 export function asksChopin(
@@ -157,5 +158,5 @@ export function takeChopinMention(
 /** What the empty draft says: the way to Chopin until the chip says it. */
 export function draftPlaceholder({ agent, chip }: { agent: boolean; chip: boolean }): string {
 	if (!agent) return "Message the team";
-	return chip ? "Ask Chopin…" : "Message the team, or @chopin to ask";
+	return chip ? `Ask ${PLANNER_NAME}…` : `Message the team, or @${PLANNER_NAME} to ask`;
 }

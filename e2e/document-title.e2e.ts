@@ -163,7 +163,7 @@ test(
 	async ({ join, seed }, info) => {
 		await seed("# Solar sail\n");
 		let page = await join("ana", { viewport: { width: 2400, height: 1000 } });
-		let prompt = page.getByText("Start writing, or ask Chopin to plan", { exact: true });
+		let prompt = page.getByText("Start writing, or ask chopin to plan", { exact: true });
 		await expect(prompt).toBeVisible();
 		let aligned = async () => {
 			await expect.poll(async () => {
@@ -337,7 +337,7 @@ test("an empty body's writing prompt follows a wrapping title and window resize"
 	let name = "A deliberately longer title across a narrow canvas";
 	await seed(`# ${name}\n`);
 	let page = await join("ana");
-	let prompt = page.getByText("Start writing, or ask Chopin to plan", { exact: true });
+	let prompt = page.getByText("Start writing, or ask chopin to plan", { exact: true });
 	let body = content(page).locator(":scope > p").first();
 	let aligned = async () => {
 		await expect(prompt).toBeVisible();

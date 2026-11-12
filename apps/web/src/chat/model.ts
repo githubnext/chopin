@@ -1,4 +1,4 @@
-import { instruction } from "@chopin/protocol/address";
+import { instruction, PLANNER_NAME } from "@chopin/protocol/address";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -66,19 +66,19 @@ export type WorkPhase =
 export function workAnnouncement(phase: WorkPhase): string {
 	switch (phase) {
 		case "Getting oriented":
-			return "Chopin has started.";
+			return `${PLANNER_NAME} has started.`;
 		case "Gathering context":
-			return "Chopin is gathering context.";
+			return `${PLANNER_NAME} is gathering context.`;
 		case "Waiting for an answer":
-			return "Chopin needs an answer.";
+			return `${PLANNER_NAME} needs an answer.`;
 		case "Making changes":
-			return "Chopin is making changes.";
+			return `${PLANNER_NAME} is making changes.`;
 		case "Working through the request":
-			return "Chopin is working on the request.";
+			return `${PLANNER_NAME} is working on the request.`;
 		case "Writing a response":
-			return "Chopin is writing a reply.";
+			return `${PLANNER_NAME} is writing a reply.`;
 		case "Reviewing the next step":
-			return "Chopin is preparing to continue.";
+			return `${PLANNER_NAME} is preparing to continue.`;
 	}
 }
 
@@ -195,7 +195,7 @@ export function group(
 			// Filter at presentation time so saved turn offsets and comment references stay intact.
 			if (
 				notice.decision?.kind === "activity"
-				&& /^Chopin (?:drafted|updated|refined|suggested|wrote up)\b/.test(notice.text)
+				&& /^Chopin (?:drafted|updated|refined|suggested|wrote up)\b/i.test(notice.text)
 			) continue;
 			if (
 				!notice.decision && !notice.comment

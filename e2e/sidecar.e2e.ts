@@ -1269,7 +1269,7 @@ test("clicking a comment button pins its document card and preserves the related
 	await page.getByRole("button", { name: "Expand document" }).click();
 	await page.getByRole("button", { name: "Hide sidebar" }).click();
 	let card = await thread(page);
-	await expect(card).toContainText("@dev");
+	await expect(card.getByTitle("@dev").first()).toHaveText("dev");
 	await expect(card.getByPlaceholder("Reply", { exact: true })).toBeVisible();
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toHaveCount(0);
@@ -1426,7 +1426,7 @@ test("the reply field is one line until focused, then grows and reveals Send to 
 	let composer = card.getByRole("textbox", { name: "Reply", exact: true });
 	let frame = composer.locator("xpath=ancestor::*[@data-mode][1]");
 	let send = card.getByRole("button", { name: "Send reply" });
-	let address = card.getByRole("checkbox", { name: "Send to Chopin" });
+	let address = card.getByRole("checkbox", { name: "Send to chopin" });
 	let initial = await composer.evaluate(element => ({
 		height: element.clientHeight,
 		resize: getComputedStyle(element).resize,
@@ -1466,7 +1466,7 @@ test("a reply joins the thread without a duplicate reply count", async ({ join, 
 	await card.getByPlaceholder("Reply", { exact: true }).fill("Still right, but say why.");
 	await card.getByRole("button", { name: "Send reply" }).click();
 	await expect(card).toContainText("Still right, but say why.");
-	await expect(card).toContainText("@ana");
+	await expect(card.getByTitle("@ana").first()).toHaveText("ana");
 	await expect(card.getByText("1 reply")).toHaveCount(0);
 	await expect(commentButton(page)).toHaveAccessibleDescription("1 reply waiting.");
 });
@@ -1496,7 +1496,7 @@ test("resolving hides the thread at once, and Undo brings it back for everyone",
 	await undo.click();
 	await expect(undo).toHaveCount(0);
 	let reopened = page.getByRole("dialog", { name: "Comment thread" });
-	await expect(reopened).toContainText("@dev");
+	await expect(reopened.getByTitle("@dev").first()).toHaveText("dev");
 	await expect(commentButton(other)).toHaveCount(1);
 	await expect.poll(() => washed(other)).toBeGreaterThan(0);
 
@@ -1519,7 +1519,9 @@ test("Mod+Z outside the editor undoes a resolve while its toast shows", async ({
 	// Inside the editor Mod+Z is the document's own undo, so focus something else first.
 	await page.getByRole("button", { name: "Document", exact: true }).focus();
 	await page.keyboard.press("ControlOrMeta+z");
-	await expect(page.getByRole("dialog", { name: "Comment thread" })).toContainText("@dev");
+	await expect(
+		page.getByRole("dialog", { name: "Comment thread" }).getByTitle("@dev").first(),
+	).toHaveText("dev");
 	await expect(page.getByRole("button", { name: "Undo", exact: true })).toHaveCount(0);
 });
 

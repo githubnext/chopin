@@ -174,7 +174,7 @@ describe("research composer", () => {
 		}));
 
 		expect(markup).toContain('aria-label="Research question"');
-		expect(markup).toContain('placeholder="What should Chopin research?"');
+		expect(markup).toContain('placeholder="What should chopin research?"');
 		expect(markup).not.toContain("<label");
 		expect(markup).toContain(QUESTION);
 		expect(markup).toContain("Research could not be started.");

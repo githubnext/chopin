@@ -208,7 +208,7 @@ test("the desktop composer keeps its Ask Chopin button, toolbar and dropdown men
 	let chat = chatPane(page);
 	let draft = chatInput(chat);
 	await expect(draft).toBeVisible();
-	await expect(chat.getByRole("button", { name: "Ask Chopin", exact: true })).toBeVisible();
+	await expect(chat.getByRole("button", { name: "Ask chopin", exact: true })).toBeVisible();
 	await expect(chat.getByRole("button", { name: "Talk to Chopin" })).toHaveCount(0);
 	let [draftBox, sendBox] = await Promise.all([
 		draft.boundingBox(),
@@ -237,9 +237,9 @@ test("a phone composer shows the removable Chopin chip while a message addresses
 	await openPhoneChat(page);
 	let chat = chatPane(page);
 	let draft = chatInput(chat);
-	let chip = chat.getByRole("button", { name: "Remove Chopin", exact: true });
+	let chip = chat.getByRole("button", { name: "Remove chopin", exact: true });
 	// The button that asks is spent while the chip shows.
-	let mode = chat.getByRole("button", { name: "Ask Chopin", exact: true });
+	let mode = chat.getByRole("button", { name: "Ask chopin", exact: true });
 	await expect(chip).toHaveCount(0);
 
 	// A mention addresses Chopin; the chip says so at the start of the draft, inside the pill.

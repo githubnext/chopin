@@ -261,7 +261,7 @@ describe("the draft's placeholder", () => {
 		expect(draftPlaceholder({ agent: true, chip: false })).toBe(
 			"Message the team, or @chopin to ask",
 		);
-		expect(draftPlaceholder({ agent: true, chip: true })).toBe("Ask Chopin…");
+		expect(draftPlaceholder({ agent: true, chip: true })).toBe("Ask chopin…");
 	});
 
 	test("is only for the team where Chopin is off", () => {

@@ -17,6 +17,7 @@ import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { ArrowLeftIcon, ChevronIcon, DocumentIcon, ExpandIcon, MessageIcon } from "@chopin/icons";
 import { usePhone } from "@chopin/editor/pointer";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 
 import {
 	CHAT_CHOICE_STORAGE_KEY,
@@ -237,7 +238,7 @@ export function SurfaceToggle(
 	},
 ) {
 	let status = activity.busy
-		? "Chopin working"
+		? `${PLANNER_NAME} working`
 		: activity.unread > 0
 		? `${activity.unread} unread`
 		: undefined;

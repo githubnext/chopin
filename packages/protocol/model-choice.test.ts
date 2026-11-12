@@ -150,41 +150,41 @@ describe("the words for a level and for a choice that could not be honoured", ()
 		let notices = pairs.flat().map(level => unavailableNotice(catalog, { thinkingLevel: level }));
 		expect(new Set(notices).size).toBe(notices.length);
 		expect(notices).toContain(
-			"SS-fast reasoning is no longer available for this model, so Chopin used its default.",
+			"SS-fast reasoning is no longer available for this model, so chopin used its default.",
 		);
 		expect(notices).toContain(
-			"\u00df-fast reasoning is no longer available for this model, so Chopin used its default.",
+			"\u00df-fast reasoning is no longer available for this model, so chopin used its default.",
 		);
 	});
 
 	it("prefers the saved name, then the catalog name, then the id", () => {
 		expect(unavailableNotice(catalog, { model: "acme/large" }, "Earlier name")).toBe(
-			"Earlier name is no longer available, so Chopin used its default model.",
+			"Earlier name is no longer available, so chopin used its default model.",
 		);
 		expect(unavailableNotice(catalog, { model: "acme/large" })).toBe(
-			"Large is no longer available, so Chopin used its default model.",
+			"Large is no longer available, so chopin used its default model.",
 		);
 		expect(unavailableNotice(undefined, { model: "acme/large" })).toBe(
-			"acme/large is no longer available, so Chopin used its default model.",
+			"acme/large is no longer available, so chopin used its default model.",
 		);
 	});
 
 	it("names a model whose catalog name is empty by its id", () => {
 		let blank = { models: [{ id: "acme/blank", name: "" }] };
 		expect(unavailableNotice(blank, { model: "acme/blank" })).toBe(
-			"acme/blank is no longer available, so Chopin used its default model.",
+			"acme/blank is no longer available, so chopin used its default model.",
 		);
 	});
 
 	it("names the model by its catalog name, or by its id when the catalog no longer lists it", () => {
 		expect(unavailableNotice(catalog, { model: "acme/large" })).toBe(
-			"Large is no longer available, so Chopin used its default model.",
+			"Large is no longer available, so chopin used its default model.",
 		);
 		expect(unavailableNotice(catalog, { model: "acme/old" })).toBe(
-			"acme/old is no longer available, so Chopin used its default model.",
+			"acme/old is no longer available, so chopin used its default model.",
 		);
 		expect(unavailableNotice(catalog, { thinkingLevel: "xhigh" })).toBe(
-			"xhigh reasoning is no longer available for this model, so Chopin used its default.",
+			"xhigh reasoning is no longer available for this model, so chopin used its default.",
 		);
 	});
 });

@@ -152,7 +152,7 @@ test("a failed scripted refine survives reopen and only an explicit corrected-fi
 		expect(donePublication.saved.source).toBe(Plan.source(plan));
 		expect(donePublication.saved.transcript).toMatchObject([
 			{ id: "m1", text: "We need to choose authentication." },
-			{ author: { kind: "system" }, text: `Chopin refined ${TITLE}` },
+			{ author: { kind: "system" }, text: `chopin refined ${TITLE}` },
 		]);
 		expect(donePublication.saved.transcript).toHaveLength(2);
 		expect(retry.driver.tools).toEqual([[...BACKGROUND_TOOL_NAMES.refine]]);

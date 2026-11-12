@@ -35,7 +35,7 @@ import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
 import type { VisualAdmission } from "../agent/visual-admission";
 import type { ChildDocuments } from "./children";
 import * as Service from "../plan/service";
-import { instruction } from "@chopin/protocol/address";
+import { instruction, PLANNER_NAME } from "@chopin/protocol/address";
 import { checkMessageAttachments, refusalText } from "@chopin/protocol/attachment";
 import { COMMAND_KINDS } from "@chopin/protocol/commands";
 import { UNREADABLE_NOTICE } from "@chopin/protocol/model-choice";
@@ -994,7 +994,7 @@ async function give(context: Room, message: Given): Promise<void> {
 	}
 	await postNotice(
 		context,
-		`Chopin did not read @${message.handle}'s message. Send it again to ask.`,
+		`${PLANNER_NAME} did not read @${message.handle}'s message. Send it again to ask.`,
 		undefined,
 		ulid(),
 	).catch(err => console.error("[chat] could not say that a message was not read:", err));
@@ -1384,7 +1384,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 			// the browser sends it again in a moment, to a Planner that is then idle or working. A
 			// background job's session, or a harness that takes no input mid-run, never will.
 			if (!chat.job && !chat.closed && context.steers?.()) {
-				return fail(ws, msg.rid, "Chopin is between replies", PASSING);
+				return fail(ws, msg.rid, `${PLANNER_NAME} is between replies`, PASSING);
 			}
 			refusedWhileRunning(context);
 			return fail(ws, msg.rid, CANNOT_STEER, "planner-busy");
@@ -1546,7 +1546,7 @@ export function instruct(
 				say(chat, server, room, {
 					id: ulid(),
 					author: { kind: "system" },
-					text: "Chopin has too much to do already. Try again when it has caught up.",
+					text: `${PLANNER_NAME} has too much to do already. Try again when it has caught up.`,
 					ts: now(),
 				});
 				return report(about, { status: "failed" });
@@ -1630,7 +1630,7 @@ export async function draftTasks(
 ): Promise<TaskDraftResult> {
 	let { chat } = context;
 	if (chat.pendingSends >= MAX_PENDING_SENDS) {
-		return { ok: false, reason: "Chopin is busy. Try again in a moment." };
+		return { ok: false, reason: `${PLANNER_NAME} is busy. Try again in a moment.` };
 	}
 	chat.pendingSends++;
 	let post = () => postDraft(context, handle, planRevision, text, said);
@@ -1648,7 +1648,7 @@ async function postDraft(
 	said: string,
 ): Promise<TaskDraftResult> {
 	let { chat, config, server, room } = context;
-	if (!config.agent) return { ok: false, reason: "Chopin is not running" };
+	if (!config.agent) return { ok: false, reason: `${PLANNER_NAME} is not running` };
 	if (chat.closed) return { ok: false, reason: "chat is closed" };
 	let unattached = await context.plannerNotAttached?.();
 	if (unattached) return { ok: false, reason: unattached, code: "planner-not-attached" };
@@ -1690,7 +1690,7 @@ async function postDraft(
 	};
 }
 
-const BUSY_DRAFT = "Chopin is working on something else. Try again when it has finished.";
+const BUSY_DRAFT = `${PLANNER_NAME} is working on something else. Try again when it has finished.`;
 
 let jobState = safeProjection(state);
 let { job, cancelQueuedJobs, stopAfterPersistenceFailure } = createJobQueue({
@@ -1745,15 +1745,15 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 			id: ulid(),
 			author: { kind: "system" },
 			text: paused
-				? `@${ws.data.handle} stopped Chopin and paused its workflows.`
+				? `@${ws.data.handle} stopped ${PLANNER_NAME} and paused its workflows.`
 				: outcome === "held"
-				? `@${ws.data.handle} asked Chopin to stop. Its machine is disconnected, `
+				? `@${ws.data.handle} asked ${PLANNER_NAME} to stop. Its machine is disconnected, `
 					+ "so its workflows will pause when it reconnects."
 				: outcome === "unconfirmed"
-				? `@${ws.data.handle} asked Chopin to stop its workflows. It has not confirmed `
+				? `@${ws.data.handle} asked ${PLANNER_NAME} to stop its workflows. It has not confirmed `
 					+ "yet, and if its machine is disconnected they will pause when it reconnects."
 				: outcome === "failed" && !turn
-				? `@${ws.data.handle} asked Chopin to stop, but its workflows could not be paused.`
+				? `@${ws.data.handle} asked ${PLANNER_NAME} to stop, but its workflows could not be paused.`
 				: `@${ws.data.handle} stopped the turn.`,
 			ts: now(),
 		});
@@ -1779,7 +1779,7 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 			say(chat, server, room, {
 				id: ulid(),
 				author: { kind: "system" },
-				text: `@${ws.data.handle} stopped Chopin and withdrew its open question.`,
+				text: `@${ws.data.handle} stopped ${PLANNER_NAME} and withdrew its open question.`,
 				ts: now(),
 			});
 		}
@@ -1835,12 +1835,12 @@ export async function resume(context: Room, ws: Socket): Promise<void> {
 	let { chat, room, server } = context;
 	let session = chat.retained?.session;
 	if (!session?.resumeRuns || !session.runs?.()?.paused.length) return;
-	let text = `@${ws.data.handle} resumed Chopin's workflows.`;
+	let text = `@${ws.data.handle} resumed ${PLANNER_NAME}'s workflows.`;
 	try {
 		await session.resumeRuns();
 	} catch (err) {
 		console.error("[chat] resuming workflow runs failed:", err);
-		text = "Chopin's workflows could not be resumed.";
+		text = `${PLANNER_NAME}'s workflows could not be resumed.`;
 	}
 	say(chat, server, room, { id: ulid(), author: { kind: "system" }, text, ts: now() });
 }
@@ -1871,7 +1871,7 @@ export async function controlRun(
 			text = `@${ws.data.handle} asked to pause ${run.name}. `
 				+ "It will pause when the machine reconnects.";
 		} else if (outcome === "unconfirmed") {
-			text = `@${ws.data.handle} asked to pause ${run.name}. Chopin has not confirmed `
+			text = `@${ws.data.handle} asked to pause ${run.name}. ${PLANNER_NAME} has not confirmed `
 				+ "yet, and if its machine is disconnected it will pause when it reconnects.";
 		}
 	} catch (err) {
@@ -2642,7 +2642,11 @@ async function repositorySession(
 			|| binding.credentialRevision !== owner.access.revision
 			|| binding.repository.id !== repository.id
 			|| chat.lifecycle !== lifecycle || chat.openingOwner !== openingOwner
-		) throw new PlannerOwnerUnavailableError("Chopin's owner changed while opening. Try again.");
+		) {
+			throw new PlannerOwnerUnavailableError(
+				`${PLANNER_NAME}'s owner changed while opening. Try again.`,
+			);
+		}
 		await auth.storage.channels.updateAgentContext({
 			channelId: context.room,
 			ownerSessionId,
@@ -2706,7 +2710,7 @@ async function repositorySession(
 			|| binding.signal.aborted || !await binding.revalidate()
 		) {
 			throw new PlannerOwnerUnavailableError(
-				"Chopin's session changed while opening. Try again.",
+				`${PLANNER_NAME}'s session changed while opening. Try again.`,
 			);
 		}
 		chat.agent = opened;
@@ -2916,7 +2920,7 @@ async function run(
 		opened = await repositorySession(context, claimantSessionId, member?.entryId, references);
 		if (about?.signal && about.spent?.()) turnController.abort();
 		if (chat.agent !== opened.session || turnController.signal.aborted) {
-			throw new Error("Chopin's session changed before the turn started. Try again.");
+			throw new Error(`${PLANNER_NAME}'s session changed before the turn started. Try again.`);
 		}
 		chat.jobToolNames = jobTurn
 			? new Set(opened.session.activeTools ?? PLANNER_TOOL_NAMES)
@@ -3126,7 +3130,7 @@ async function run(
 						say(chat, server, room, {
 							id: ulid(),
 							author: { kind: "system" },
-							text: "Chopin's session could not close cleanly. Try again.",
+							text: `${PLANNER_NAME}'s session could not close cleanly. Try again.`,
 							turnFailure: turnFailureOf({ error: err, suspended: false, ...began }),
 							ts: now(),
 						});
@@ -3655,7 +3659,7 @@ function conclude(
 		: undefined;
 	let detail = name === "read_reference"
 		? success
-			? "Reference content was returned privately to Chopin."
+			? `Reference content was returned privately to ${PLANNER_NAME}.`
 			: "The reference could not be read."
 		: failure
 		? textOutput(failure.message)

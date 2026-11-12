@@ -328,7 +328,7 @@ at Sending:
 - A turn running when the deploy begins is not cut off or run twice, and ends in one reply, with
   no notice of being stopped. A message sent to it while the old process waits for it reaches it
   when its machine takes a message mid-run; when the machine does not, the message is refused
-  (_Chopin can't take messages while it works on this machine. Stop it to ask now._), kept
+  (_chopin can't take messages while it works on this machine. Stop it to ask now._), kept
   nowhere, and starts a turn once the person sends it again.
 - Once the new release has the lease, the transcript, in the tab that lived through the deploy
   and in one opened after it, holds what was said once and nothing waiting, sending or refused; a row an earlier release left open (`waiting`) is closed by the release that took the

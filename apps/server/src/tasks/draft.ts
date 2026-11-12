@@ -1,6 +1,7 @@
 import { implementationLifecycle } from "./lifecycle";
 import { unapprovedDecisions } from "./open-decisions";
 import { implementationReadiness } from "./plan-graphs";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 import type { Plan } from "../plan/service";
 
 /** Why the Planner cannot be asked for tasks now, if it cannot. */
@@ -40,7 +41,7 @@ export function draftInstruction(
 		return {
 			text:
 				`Prepare an implementation graph for this plan. Read the current document and graph, then use edit_implementation_graph to create small reviewable tasks, acceptance criteria and explicit dependencies.${assumed} ${close}`,
-			said: `@${handle} asked Chopin to break the plan into tasks.`,
+			said: `@${handle} asked ${PLANNER_NAME} to break the plan into tasks.`,
 		};
 	}
 	let run = plan.graph
@@ -58,6 +59,6 @@ export function draftInstruction(
 	return {
 		text:
 			`Revise the implementation graph for review. The displayed graph version ${graph.number} is bound to document revision ${graph.planRevision}; the displayed document revision is ${plan.revision}.${returned} Read the latest document and graph, then use edit_implementation_graph to save a draft against the latest document revision. Preserve valid task goals, acceptance criteria and dependencies. If the tasks are still correct, replace an existing task unchanged to refresh the graph's document binding. Do not stop at summarizing an already-approved graph: approval does not make an older document revision current.${assumed} ${close}`,
-		said: `@${handle} asked Chopin to update the tasks.`,
+		said: `@${handle} asked ${PLANNER_NAME} to update the tasks.`,
 	};
 }

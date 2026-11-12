@@ -8,6 +8,8 @@
  * refuses the message, and the message then says so on itself.
  */
 
+import { sentenceCase } from "@chopin/protocol/address";
+
 import type { Chat, Session } from "@chopin/protocol";
 import type { ChatSendPayload, ReferenceDraft } from "./references";
 
@@ -47,7 +49,7 @@ export function refusalText(code: string | undefined, message: string): string {
 	}
 	let detail = message.trim();
 	if (!detail) return "The server turned it down.";
-	detail = detail[0]!.toUpperCase() + detail.slice(1);
+	detail = sentenceCase(detail);
 	let bounded = detail.length > MAX_REASON ? `${detail.slice(0, MAX_REASON - 3)}...` : detail;
 	return /[.!?]$/.test(bounded) ? bounded : `${bounded}.`;
 }

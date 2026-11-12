@@ -150,7 +150,7 @@ test("answered decisions with no prose leave the document blank and writable", a
 	await expect(plan).toHaveAttribute("data-plan-blank", "");
 	await expect(page.locator('[data-document-view="plan"] [data-card-settled]')).toHaveCount(0);
 	await expect(page.getByRole("status").filter({ hasText: "Writing up" })).toHaveCount(0);
-	let prompt = page.getByText("Start writing, or ask Chopin to plan", { exact: true });
+	let prompt = page.getByText("Start writing, or ask chopin to plan", { exact: true });
 	await expect(prompt).toBeVisible();
 	await expect.poll(async () => {
 		let [writing, hint] = await Promise.all([

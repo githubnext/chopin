@@ -214,7 +214,7 @@ describe("sending a new comment to the Planner", () => {
 		let notice = plan.chat.entries.at(-1);
 		expect(notice).toMatchObject({
 			author: { kind: "system" },
-			text: `Comment on “${QUOTE}” sent to Chopin`,
+			text: `Comment on “${QUOTE}” sent to chopin`,
 			comment: { thread: thread.id, excerpt: QUOTE, note: "Rephrase this." },
 		});
 		expect(working(broadcasts)).toEqual([
@@ -244,7 +244,7 @@ describe("sending a new comment to the Planner", () => {
 		expect(answered).toMatchObject({
 			ok: false,
 			reason: "busy",
-			message: "Chopin is working on something else. Try again when it has finished.",
+			message: "chopin is working on something else. Try again when it has finished.",
 		});
 		expect(plan.threads.size).toBe(0);
 		expect(plan.chat.waiting).toHaveLength(0);
@@ -322,7 +322,7 @@ describe("one thread, one turn", () => {
 		expect(answered).toMatchObject({
 			ok: false,
 			reason: "busy",
-			message: "Chopin is working on something else. Try again when it has finished.",
+			message: "chopin is working on something else. Try again when it has finished.",
 		});
 		expect(plan.threads.get(id)?.notes).toHaveLength(1);
 		expect(plan.chat.waiting).toEqual([]);

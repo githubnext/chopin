@@ -235,7 +235,7 @@ test("a message the machine could not take says so as the server did, and points
 	let busy = sendFailureView(
 		sendFailure(
 			new WireRefusal(
-				"Chopin can't take messages while it works on this machine. Stop it to ask now.",
+				"chopin can't take messages while it works on this machine. Stop it to ask now.",
 				"planner-busy",
 			),
 		),
@@ -243,7 +243,7 @@ test("a message the machine could not take says so as the server did, and points
 	);
 	expect(busy).toEqual({
 		kind: "send",
-		title: "Chopin can't take messages while it works on this machine. Stop it to ask now.",
+		title: "chopin can't take messages while it works on this machine. Stop it to ask now.",
 		retry: false,
 	});
 });

@@ -34,6 +34,7 @@ import { useTransitionPresence } from "../transition-presence";
 import { ResearchComposer } from "../widgets/research";
 import { $topLevel } from "./block-target";
 import { $relativePosition } from "./position";
+import { PLANNER_NAME } from "../people";
 
 import type { Binding } from "@lexical/yjs";
 import type { LexicalEditor, LexicalNode } from "lexical";
@@ -70,7 +71,7 @@ const KINDS = {
 		place: "Place research",
 		composer: {
 			label: "Research question",
-			placeholder: "What should Chopin research?",
+			placeholder: `What should ${PLANNER_NAME} research?`,
 			submitLabel: "Start research",
 			discard: "Discard research",
 			discardLabel: "Discard research question",

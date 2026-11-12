@@ -226,7 +226,7 @@ let OFFLINE_BARS: { label: string; node: ReactNode }[] = [
  */
 let NOTES: { label: string; node: ReactNode }[] = [
 	{
-		label: "Chopin couldn't take it: only visible to you, How to fix",
+		label: "chopin couldn't take it: only visible to you, How to fix",
 		node: (
 			<QuietNote
 				fix={machineFix(plannerStatus(FAILING), { mine: false, choose: true, place: "note" })}
@@ -236,10 +236,10 @@ let NOTES: { label: string; node: ReactNode }[] = [
 		),
 	},
 	{
-		label: "Chopin busy: only visible to you",
+		label: "chopin busy: only visible to you",
 		node: (
 			<QuietNote
-				text="Chopin can't take messages while it works on this machine. Stop it to ask now."
+				text="chopin can't take messages while it works on this machine. Stop it to ask now."
 				ts={1_787_913_720}
 			/>
 		),
@@ -322,7 +322,7 @@ export function ConversationPlate() {
 			</div>
 			<div className="workspace-root bg-chat-pane design-audit-composer-states">
 				<div>
-					<StateLabel>Talking to Chopin</StateLabel>
+					<StateLabel>Talking to chopin</StateLabel>
 					<ComposerSpecimen chopin text="Review the spacing" />
 				</div>
 				<div>
@@ -371,7 +371,7 @@ export function ConversationPlate() {
 					<ComposerSpecimen dictation="listening" text="Ship the cap" />
 				</div>
 				<div>
-					<StateLabel>Chopin working</StateLabel>
+					<StateLabel>chopin working</StateLabel>
 					<ComposerSpecimen run={{ action: "stop", disabled: false, onClick: () => {} }} />
 				</div>
 				<div>
@@ -407,7 +407,7 @@ export function ConversationPlate() {
 			<div className="design-audit-planner-presence">
 				{(["active", "connecting", "failing", "away"] as const).map(presence => (
 					<div key={presence}>
-						<StateLabel>{`Chopin in the @ menu: ${PRESENCE_WORDS[presence]}`}</StateLabel>
+						<StateLabel>{`chopin in the @ menu: ${PRESENCE_WORDS[presence]}`}</StateLabel>
 						<div className="design-audit-planner-glyph">
 							<span aria-hidden="true" className="presence-host">
 								<ChopinMark circle />

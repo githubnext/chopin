@@ -28,6 +28,7 @@ import { widgets$ } from "../widget-options";
 import { $isInvestigationNode, $isResearchNode } from "@chopin/dialect";
 import { CloseIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
 import { UnfoldPanel, UnfoldToggle, useUnfold } from "@chopin/visuals/unfold";
+import { PLANNER_NAME } from "../people";
 
 import type { FormEvent, MouseEvent, ReactNode } from "react";
 import type { Research } from "@chopin/protocol";
@@ -155,7 +156,7 @@ export function ResearchComposer(
 		discardLabel = "Discard research question",
 		dismissible = true,
 		label = "Research question",
-		placeholder = "What should Chopin research?",
+		placeholder = `What should ${PLANNER_NAME} research?`,
 		error,
 		notice,
 		onCancel,

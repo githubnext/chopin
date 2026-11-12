@@ -76,7 +76,7 @@ async function openAsReader(page: Page, baseURL: string | undefined, room: strin
 	await authenticate(page, "readonly", baseURL!);
 	await page.goto(roomPath(room));
 	await expect(page.getByText("You have read-only access to this document.")).toBeVisible();
-	await expect(page.getByPlaceholder("Use @chopin to ask Chopin")).toHaveCount(0);
+	await expect(page.getByPlaceholder("Use @chopin to ask chopin")).toHaveCount(0);
 	await expect(message(page, PLANNER.id)).toBeVisible();
 }
 

@@ -1,3 +1,4 @@
+import { PLANNER_NAME } from "@chopin/protocol/address";
 /**
  * Whether the Planner is writing, or has written, document changes the reader
  * has not seen because another view (Decisions or Chat) is in front.
@@ -65,7 +66,7 @@ export function documentActivity(
 }
 
 export function documentActivityLabel(activity: DocumentActivity): string {
-	if (activity === "writing") return "Document, Chopin writing";
+	if (activity === "writing") return `Document, ${PLANNER_NAME} writing`;
 	if (activity === "unseen") return "Document, new changes";
 	return "Document";
 }

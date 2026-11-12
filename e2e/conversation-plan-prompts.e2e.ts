@@ -258,7 +258,7 @@ test("a second member refreshes the scoped choice notice with both exact sources
 	let refreshed = scopedPrompt(ana);
 	await expect(refreshed).toContainText("ana");
 	await expect(refreshed).toContainText("I'd pick Lexical for the spike;");
-	await expect(refreshed).toContainText("Bo");
+	await expect(refreshed).toContainText("bo");
 	await expect(refreshed).toContainText("yep, Lexical for the spike.");
 	await expect(refreshed.getByRole("button", { name: "Save for this spike" })).toBeEnabled();
 	let noticeFrame = (await wireFrames(ana)).find(frame =>

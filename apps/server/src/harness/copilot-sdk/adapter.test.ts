@@ -240,7 +240,7 @@ describe("copilot-sdk adapter", () => {
 				})).rejects.toThrow(
 					message === "Authentication failed"
 						? message
-						: 'Chopin couldn’t start because its model "gpt-6.1-sol" is unavailable. Ask the server administrator to update the model.',
+						: 'chopin couldn’t start because its model "gpt-6.1-sol" is unavailable. Ask the server administrator to update the model.',
 				);
 				expect(created).toBe(attempts);
 			} finally {

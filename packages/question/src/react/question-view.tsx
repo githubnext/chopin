@@ -26,6 +26,7 @@ import { cardRelation, RelationNote } from "./relation-note";
 import { ResolvedActions } from "./resolved-actions";
 import { TextAnswer } from "./text-answer";
 import { usePendingWork } from "./use-pending-work";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 import type { VisibleSuggestion } from "./project-suggestion";
 import type { Relation } from "../relation";
 
@@ -839,7 +840,7 @@ function Callout(
 }
 
 const EXPIRED_NOTE =
-	"Nobody answered this question, so Chopin used its best judgement for this decision.";
+	`Nobody answered this question, so ${PLANNER_NAME} used its best judgement for this decision.`;
 
 /**
  * Host input an earlier Chopin closed unanswered; questions no longer expire.
@@ -1236,7 +1237,9 @@ export function QuestionView(props: QuestionViewProps) {
 											{plainInlineList(previousAnswer.labels)}
 										</p>
 									)}
-									{refining && <p className="question-hint" role="status">Chopin is refining…</p>}
+									{refining && (
+										<p className="question-hint" role="status">{PLANNER_NAME} is refining…</p>
+									)}
 								</div>
 								<span className="question-head-actions">
 									<Presence

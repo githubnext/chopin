@@ -23,7 +23,7 @@ test("typing @chopin addresses Chopin, who replies in the thread while Chat reco
 	let page = await join("ana");
 	let card = await draft(page);
 	let field = card.getByRole("textbox", { name: "Comment" });
-	let box = card.getByRole("checkbox", { name: "Send to Chopin" });
+	let box = card.getByRole("checkbox", { name: "Send to chopin" });
 
 	// With a Planner running, a new comment goes to Chopin unless it is unticked.
 	await expect(box).toBeChecked();
@@ -40,15 +40,15 @@ test("typing @chopin addresses Chopin, who replies in the thread while Chat reco
 	await page.getByRole("button", { name: /^Comment on “.*”\. / }).click();
 	let thread = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(thread.locator(".plan-comment-mention")).toHaveText("@chopin");
-	await expect(thread.getByRole("status")).toHaveText("Chopin is working on it");
+	await expect(thread.getByRole("status")).toHaveText("chopin is working on it");
 
 	await expect(thread.getByText("Done. I tightened the passage you marked.")).toBeVisible({
 		timeout: 20_000,
 	});
-	await expect(thread.getByText("Chopin is working on it")).toHaveCount(0);
+	await expect(thread.getByText("chopin is working on it")).toHaveCount(0);
 
 	let chat = chatPane(page);
-	let notice = chat.getByRole("button", { name: /Comment on “.*” sent to Chopin/ });
+	let notice = chat.getByRole("button", { name: /Comment on “.*” sent to chopin/ });
 	await expect(notice).toContainText("tighten this");
 	await expect(chat.getByText("I replied in the comment thread.")).toBeVisible();
 
@@ -61,7 +61,7 @@ test("typing @chopin addresses Chopin, who replies in the thread while Chat reco
 	// Both survive a reload, and nothing claims Chopin is still working.
 	await page.reload();
 	await ready(page);
-	await expect(chatPane(page).getByRole("button", { name: /sent to Chopin/ })).toBeVisible();
+	await expect(chatPane(page).getByRole("button", { name: /sent to chopin/ })).toBeVisible();
 });
 
 test("a turn that answers only in Chat still answers in the thread", async ({ join, seed }) => {
@@ -77,7 +77,7 @@ test("a turn that answers only in Chat still answers in the thread", async ({ jo
 	await page.getByRole("button", { name: /^Comment on “.*”\. / }).click();
 	let thread = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(thread.getByText("Answered from Chat only.")).toBeVisible({ timeout: 20_000 });
-	await expect(thread.getByText("Chopin is working on it")).toHaveCount(0);
+	await expect(thread.getByText("chopin is working on it")).toHaveCount(0);
 });
 
 test("stopping Chopin's turn says so on the thread", async ({ join, seed }) => {
@@ -87,10 +87,10 @@ test("stopping Chopin's turn says so on the thread", async ({ join, seed }) => {
 
 	await page.getByRole("button", { name: /^Comment on “.*”\. / }).click();
 	let thread = page.getByRole("dialog", { name: "Comment thread" });
-	await expect(thread.getByText("Chopin is working on it")).toBeVisible();
+	await expect(thread.getByText("chopin is working on it")).toBeVisible();
 	await chatPane(page).getByRole("button", { name: "Stop generating" }).click();
 
 	// Stopping from Chat dismisses the card; the thread says why when it opens again.
 	await page.getByRole("button", { name: /^Comment on “.*”\. / }).click();
-	await expect(thread.getByText("Chopin stopped")).toBeVisible({ timeout: 15_000 });
+	await expect(thread.getByText("chopin stopped")).toBeVisible({ timeout: 15_000 });
 });

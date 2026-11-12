@@ -788,7 +788,7 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 
 	await Chat.abort(context, ws);
 	expect(planner.calls.at(-1)).toBe("pause");
-	expect(said()).toBe("@ana stopped Chopin and paused its workflows.");
+	expect(said()).toBe("@ana stopped chopin and paused its workflows.");
 	planner.set({ active: [], paused: ["run-1"], cards: [card("paused")] });
 	await tick();
 	expect(runs()?.map(run => run.status)).toEqual(["paused"]);
@@ -796,7 +796,7 @@ test("a Planner that still owns workflow runs outlives its turn, pauses, resumes
 
 	await Chat.resume(context, ws);
 	expect(planner.calls.at(-1)).toBe("resume");
-	expect(said()).toBe("@ana resumed Chopin's workflows.");
+	expect(said()).toBe("@ana resumed chopin's workflows.");
 	planner.set({ active: ["run-1"], paused: [], cards: [card("waiting")] });
 	await tick();
 	expect(runs()?.[0]).toMatchObject({
@@ -1021,7 +1021,7 @@ test("an explicit Stop, and the document closing, still end a Planner that waits
 		if (ending === "stop") {
 			await Chat.abort(context, { data: { handle: "ana" } } as unknown as Socket);
 			expect(context.chat.entries.at(-1)?.text).toBe(
-				"@ana stopped Chopin and withdrew its open question.",
+				"@ana stopped chopin and withdrew its open question.",
 			);
 		} else await Chat.close(context.chat);
 		expect(withdrawn.signal.aborted).toBe(true);
@@ -1054,7 +1054,7 @@ test("an explicit Stop leaves a Planner whose workflows are paused and whose que
 
 	await Chat.resume(context, ws);
 	expect(planner.calls.at(-1)).toBe("resume");
-	expect(context.chat.entries.at(-1)?.text).toBe("@ana resumed Chopin's workflows.");
+	expect(context.chat.entries.at(-1)?.text).toBe("@ana resumed chopin's workflows.");
 });
 
 test("a turn the Planner's dropped link ended keeps the session whose client may return, and lets it go for good once the link is given up", async () => {
@@ -1161,7 +1161,7 @@ test("an explicit Stop during a reply ends the turn and pauses the workflows, an
 	expect(signal.aborted).toBe(true);
 	expect(planner.calls).toContain("pause");
 	let said = context.chat.entries.map(entry => entry.text);
-	expect(said).toContain("@ana stopped Chopin and paused its workflows.");
+	expect(said).toContain("@ana stopped chopin and paused its workflows.");
 	expect(said.some(text => text.includes("could not"))).toBe(false);
 	expect(said).not.toContain("Which scope should the plan cover?");
 });
@@ -1191,7 +1191,7 @@ test("concurrent Stop requests pause a retained Planner's workflows only once", 
 	expect(callsBeforePauseSettled).toBe(1);
 	expect(
 		context.chat.entries.filter(entry =>
-			entry.text === "@ana stopped Chopin and paused its workflows."
+			entry.text === "@ana stopped chopin and paused its workflows."
 		),
 	).toHaveLength(1);
 });
@@ -1203,7 +1203,7 @@ test("Stop ignores active progress and resets for resumed or new workflow runs",
 	let ws = { data: { handle: "ana" } } as unknown as Socket;
 	let notices = () =>
 		context.chat.entries.filter(entry =>
-			entry.text === "@ana stopped Chopin and paused its workflows."
+			entry.text === "@ana stopped chopin and paused its workflows."
 		);
 
 	expect(await Chat.invoke(context, user, "Run the workflow")).toBeUndefined();
@@ -1258,8 +1258,8 @@ test("Stop can retry when pausing a retained Planner's workflows fails", async (
 	await Chat.abort(context, ws);
 	expect(planner.calls.filter(call => call === "pause")).toHaveLength(2);
 	expect(context.chat.entries.map(entry => entry.text).slice(-2)).toEqual([
-		"@ana asked Chopin to stop, but its workflows could not be paused.",
-		"@ana stopped Chopin and paused its workflows.",
+		"@ana asked chopin to stop, but its workflows could not be paused.",
+		"@ana stopped chopin and paused its workflows.",
 	]);
 });
 
@@ -2310,6 +2310,6 @@ test("a stream that stopped without saying why is a failed reply with no words r
 		expect(failed).toHaveLength(1);
 		expect(failed[0]!.turnFailure?.kind).toBe("error");
 		expect(failed[0]!.turnFailure?.detail).toBeUndefined();
-		expect(failed[0]!.text).toBe("Chopin's reply failed. Try again.");
+		expect(failed[0]!.text).toBe("chopin's reply failed. Try again.");
 	}
 });

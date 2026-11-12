@@ -64,7 +64,7 @@ test("a machine whose connection dropped under the reply is dropped, not a failu
 });
 
 test("a reply the check could not verify says nothing in the server's words", () => {
-	expect(turnFailureOf({ ...BASE, error: new PlannerReplyError("Chopin could not verify") }))
+	expect(turnFailureOf({ ...BASE, error: new PlannerReplyError("chopin could not verify") }))
 		.toEqual({ kind: "error", request: "req-1", focus: "child-1" });
 });
 

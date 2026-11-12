@@ -23,6 +23,7 @@ import type { Question } from "@chopin/protocol";
 import type { ReactNode } from "react";
 import type { CardMetaStore } from "./card-meta";
 import { MarkdownLine, questionHeading } from "@chopin/question/react";
+import { PLANNER_NAME } from "./people";
 import type { Transport } from "@chopin/question/react";
 import type { MotionDisclosureContract } from "./disclosure-motion";
 import type { QuestionnaireEntry, QuestionnaireStore } from "./questionnaires";
@@ -445,7 +446,7 @@ export function Decisions(
 									? "Decisions unavailable"
 									: undefined}
 								description={readiness === "ready"
-									? "Questions from Chopin will appear here, with your answers kept for reference."
+									? `Questions from ${PLANNER_NAME} will appear here, with your answers kept for reference.`
 									: readiness === "unavailable"
 									? "The document couldn’t be opened. Try again to load its decisions."
 									: <span aria-hidden="true">Loading decisions…</span>}

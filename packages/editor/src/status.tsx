@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useId, useRef, useState } from "react";
+import { PLANNER_NAME } from "./people";
 
 import type { Connection } from "./transport";
 
@@ -68,7 +69,7 @@ export function describeStatus(input: StatusInput): StatusDescription {
 		};
 	}
 	if (!input.synced) return { level: "quiet", label: "Loading" };
-	if (input.busy) return { level: "quiet", label: "Chopin is working" };
+	if (input.busy) return { level: "quiet", label: `${PLANNER_NAME} is working` };
 	return { level: "hidden", label: "Ready" };
 }
 

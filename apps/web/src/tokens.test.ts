@@ -761,7 +761,7 @@ describe("migration", () => {
 			}],
 			["apps/web/src/chat/composer.tsx", {
 				action: "Resume Planner",
-				marker: 'aria-label="Resume Chopin"',
+				marker: "aria-label={`Resume ${PLANNER_NAME}`}",
 				size: "btn-icon",
 				tiers: ["btn-ghost"],
 			}],

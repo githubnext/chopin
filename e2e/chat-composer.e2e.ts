@@ -84,8 +84,8 @@ test("Control+J preserves the draft and sends with the chip, which stays on afte
 	});
 	let chat = chatPane(await join("ana"));
 	let input = chatInput(chat);
-	let chip = chat.getByRole("group", { name: "Asking Chopin", exact: true });
-	let remove = chat.getByRole("button", { name: "Remove Chopin", exact: true });
+	let chip = chat.getByRole("group", { name: "Asking chopin", exact: true });
+	let remove = chat.getByRole("button", { name: "Remove chopin", exact: true });
 	await expect(chip).toHaveCount(0);
 	await input.fill("Outline export options");
 	await input.press("ArrowLeft");
@@ -231,8 +231,8 @@ test("removing the chip removes multiple addresses while preserving a document m
 	await page.keyboard.insertText(" @chopin");
 	let reference = input.locator(".draft-reference");
 	await expect(reference).toHaveAttribute("data-document-id", target);
-	await chat.getByRole("button", { name: "Remove Chopin", exact: true }).click();
-	await expect(chat.getByRole("group", { name: "Asking Chopin", exact: true })).toHaveCount(0);
+	await chat.getByRole("button", { name: "Remove chopin", exact: true }).click();
+	await expect(chat.getByRole("group", { name: "Asking chopin", exact: true })).toHaveCount(0);
 	await expect(reference).toHaveAttribute("data-document-id", target);
 	await expect(reference).toHaveText(`#${title}`);
 	expect((await input.textContent())!.match(/@chopin/g)).toHaveLength(1);

@@ -7,7 +7,7 @@ import { hosted } from "./notice.test-fixtures";
 test("an activity can refer to the document heading", async () => {
 	let context = await hosted();
 	let entry = await Chat.notice(context.announcer, {
-		text: "Chopin drafted the title and goal",
+		text: "chopin drafted the title and goal",
 		decision: { questionnaireId: "document", kind: "activity" },
 	});
 	await Service.close(context.plan);

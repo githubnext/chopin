@@ -1,3 +1,4 @@
+import { PLANNER_NAME } from "@chopin/protocol/address";
 import type { BuildRequest, ImplementationSnapshot } from "@chopin/protocol/implementation";
 
 type Snapshot = ImplementationSnapshot;
@@ -399,10 +400,10 @@ export function draftRefusalCopy(message: string, code?: string): string | undef
 	}
 	if (/implementation is already active/.test(message)) return "A build is already running.";
 	if (/queue is full|too many/.test(message)) {
-		return "Chopin is busy with other requests. Try again shortly.";
+		return `${PLANNER_NAME} is busy with other requests. Try again shortly.`;
 	}
-	if (/(?:Planner|Chopin) is not running/.test(message)) {
-		return "Chopin isn’t running for this document.";
+	if (/(?:Planner|Chopin) is not running/i.test(message)) {
+		return `${PLANNER_OFF}.`;
 	}
 	if (/write access|authorization expired/.test(message)) {
 		return "You need write access to this repository to build.";
@@ -507,8 +508,8 @@ export function advanceFirstBuild(state: FirstBuild, event: FirstBuildEvent): Fi
 			return {
 				stage: "failed",
 				message: event.changed
-					? "The document changed while Chopin was breaking it into tasks."
-					: "Chopin couldn’t break the plan into tasks.",
+					? `The document changed while ${PLANNER_NAME} was breaking it into tasks.`
+					: `${PLANNER_NAME} couldn’t break the plan into tasks.`,
 			};
 		case "draft-refused":
 			return state.stage === "drafting" ? { stage: "failed", message: event.message } : state;
@@ -635,6 +636,9 @@ function blockerReason(snapshot: Snapshot): string | undefined {
 	}
 }
 
+/** Why Build plan cannot be pressed while the document has no Planner. */
+export const PLANNER_OFF = `${PLANNER_NAME} isn’t running for this document`;
+
 /** Why Build plan cannot be pressed yet, or nothing when it can. */
 function planBlocker(snapshot: Snapshot | undefined, context: BuildContext): string | undefined {
 	if (!context.hasContent) return "Write the document first";
@@ -644,7 +648,7 @@ function planBlocker(snapshot: Snapshot | undefined, context: BuildContext): str
 	if (reason) return reason;
 	if (phase.kind === "blocked") return "This document can’t be built yet";
 	if (phase.kind === "drafting" && !context.planner) {
-		return "Chopin isn’t running for this document";
+		return PLANNER_OFF;
 	}
 	if (phase.kind === "drafting" && context.plannerDetached) {
 		return context.plannerDisconnected ? RECONNECT_MACHINE_TO_BUILD : CONNECT_MACHINE_TO_BUILD;

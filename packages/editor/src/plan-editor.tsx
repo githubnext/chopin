@@ -34,6 +34,7 @@ import { PLAN_LEXICAL_THEME } from "./plan-theme";
 import { ResearchDraftStore } from "./research-draft";
 import { register } from "./widgets";
 import { widgetsPlugin } from "./widgets-plugin";
+import { PLANNER_NAME } from "./people";
 
 import type { ReactNode } from "react";
 import type { CardMetaStore } from "./card-meta";
@@ -598,7 +599,9 @@ export function PlanEditor(
 		setGeneration(value => value + 1);
 	}
 
-	let placeholder = readOnly ? "This document is empty." : "Start writing, or ask Chopin to plan";
+	let placeholder = readOnly
+		? "This document is empty."
+		: `Start writing, or ask ${PLANNER_NAME} to plan`;
 
 	if (!wire) {
 		return (
