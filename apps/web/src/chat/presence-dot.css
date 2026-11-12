@@ -1,0 +1,71 @@
+/*
+ * chopin's presence on its mark, as Slack draws an app's or a person's: a small dot on the
+ * avatar's lower corner, ringed in the surface behind it. Active is the success green, connecting
+ * the petrol accent breathing slowly by opacity alone (still under reduced motion), can't connect
+ * the warning role, and away the muted grey of an offline machine, as the machine button's is.
+ */
+.presence-host {
+	position: relative;
+	display: inline-flex;
+}
+
+.presence-dot {
+	--presence-ring: var(--color-page);
+	position: absolute;
+	right: calc(var(--spacing) * -0.75);
+	bottom: calc(var(--spacing) * -0.75);
+	box-sizing: content-box;
+	width: calc(var(--spacing) * 2);
+	height: calc(var(--spacing) * 2);
+	border-width: calc(var(--spacing) * 0.5);
+	border-style: solid;
+	border-color: var(--presence-ring);
+	border-radius: var(--radius-full);
+	background: var(--color-success-graphic);
+}
+
+.presence-dot[data-presence="connecting"] {
+	background: var(--color-brand);
+}
+
+.presence-dot[data-presence="failing"] {
+	background: var(--color-warning-graphic);
+}
+
+.presence-dot[data-presence="away"] {
+	background: var(--color-text-tertiary);
+}
+
+/* In Chat the ring is the pane's own ground. */
+.workspace-chat-panel .presence-dot {
+	--presence-ring: var(--color-chat-pane);
+}
+
+/* On a row's 36px avatar the dot is a little larger, as Slack's is. */
+[data-chat-avatar] .presence-dot {
+	width: calc(var(--spacing) * 2.5);
+	height: calc(var(--spacing) * 2.5);
+}
+
+[data-chat-avatar] > .presence-host > .agent-mark[data-circle] {
+	width: calc(var(--spacing) * 9);
+	height: calc(var(--spacing) * 9);
+	border-radius: var(--radius-md);
+}
+
+[data-chat-avatar] > .presence-host > .agent-mark[data-circle] svg {
+	width: calc(var(--spacing) * 5);
+	height: calc(var(--spacing) * 5);
+}
+
+@keyframes presence-breathe {
+	50% {
+		opacity: 0.35;
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.presence-dot[data-presence="connecting"] {
+		animation: presence-breathe calc(var(--duration-linger) * 2) var(--motion-move) infinite;
+	}
+}

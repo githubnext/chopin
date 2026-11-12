@@ -67,7 +67,8 @@ import {
 	showsMachineChoice,
 	useMachineChoice,
 } from "./machine-choice";
-import { plannerPlacement, plannerStatus, plannerWithheld } from "./chat/planner-status";
+import { plannerPresence, plannerStatus, plannerWithheld } from "./chat/planner-status";
+import { machineFix } from "./machine-fix";
 import {
 	ConnectionAnnouncement,
 	NO_TRANSCRIPT,
@@ -762,8 +763,8 @@ export function RoomWorkspace(
 	let machinesEnabled = profile.implementation && !!effectiveCanEdit
 		&& !(archivedAt ?? metadata.archivedAt);
 	let machineChoice = useMachineChoice(room, machinesEnabled);
-	// What is not well with the Planner. Where it is told, the machine button, the composer's top
-	// edge, or both, is decided once for every place that tells it (`plannerPlacement`). Which
+	// What is not well with the Planner, told quietly: presence on the machine button and on chopin,
+	// its story and fix-it steps in the button's menu and in a refused message's How to fix. Which
 	// machine it is on is said only once the person's machines are in, and read after the socket's
 	// last word: null says nothing until then.
 	let attachment = plannerAttachment.wire === wire ? plannerAttachment.planner : undefined;
@@ -1368,30 +1369,37 @@ export function RoomWorkspace(
 			? !(presentation.type === "parent-with-child" && planVisible)
 			: titleBuildShown);
 	let chatShowsBanner = profile.chat && workspacePresentation.chatVisible;
-	// A lost connection and the Planner's own are told once, by one banner: at the Chat composer
-	// while Chat is on screen, else at the top of the document. Decided here, above both, so a
-	// person switching between them neither waits out the grace period again nor hears of it twice.
+	// A lost connection is drawn once, by the offline bar: over Chat's transcript while Chat is on
+	// screen, else at the top of the document; the Planner's state is spoken from the same place and
+	// never drawn there. Decided here, above both, so a person switching between them neither waits
+	// out the grace period again nor hears of it twice.
 	let banner = useConnectionBanner({
 		lost: isOffline(status, !!outage),
 		failures: outage?.failures ?? 0,
 		synced: planState.synced,
 		unsaved: planState.unsaved ?? false,
 		transcript: profile.chat ? transcriptFacts : NO_TRANSCRIPT,
-		planner: profile.chat
-			? plannerForBanner(plannerNote, hasMachineButton && !chatShowsBanner)
-			: undefined,
+		planner: profile.chat ? plannerForBanner(plannerNote, hasMachineButton) : undefined,
 		// Only the machine's own word on this socket is a return; a status that is withheld, hidden
 		// by the machine button or from another socket is not.
 		plannerAttached: profile.chat && attachment?.state === "attached",
 		lostEdits: planState.lost ?? 0,
 		plannerHeld: plannerWithheldNow,
 		reconnect: () => wire?.reconnect(),
-		wake: () => {
-			void wire?.ask("chat:wake", {}).catch(() => {});
-		},
-		chooseMachine: hasMachineButton ? openMachinePicker : undefined,
 	});
-	let plannerWhere = plannerPlacement(plannerNote, hasMachineButton, banner.view, chatShowsBanner);
+	// Only the viewer's own machine is told to run something; another's owner is asked to.
+	let ownMachine = !!attachment && "login" in attachment
+		&& attachment.login.toLowerCase() === handle.toLowerCase();
+	// The menu lists the machines and Add machine already, so no machine at all needs no steps there.
+	let menuFix = plannerNote?.kind === "none"
+		? undefined
+		: machineFix(plannerNote, { mine: ownMachine, choose: hasMachineButton, place: "menu" });
+	let noteFix = machineFix(plannerNote, {
+		mine: ownMachine,
+		choose: hasMachineButton,
+		place: "note",
+	});
+	let presence = agent ? plannerPresence(attachment, plannerNote) : undefined;
 	useTitlingReport({
 		wire: workspaceCanEdit ? wire : undefined,
 		room,
@@ -1988,7 +1996,11 @@ export function RoomWorkspace(
 	let titleBuild = buildSlot && (
 		<>
 			{!phone && machinePicker && (
-				<MachineButton choice={machinePicker} planner={plannerWhere.button} />
+				<MachineButton
+					choice={machinePicker}
+					fix={menuFix}
+					planner={plannerNote}
+				/>
 			)}
 			{buildSlot}
 		</>
@@ -2023,8 +2035,13 @@ export function RoomWorkspace(
 								agent={agent}
 								offline={banner.offline}
 								// Only while Chat is on screen: off screen it is still mounted, and the document draws
-								// the banner at its top, so a second one in the hidden composer would be a second banner.
+								// the offline bar at its top, so a second one in hidden Chat would be a second bar.
 								banner={chatShowsBanner ? banner : undefined}
+								machine={{
+									presence,
+									fix: noteFix,
+									...(hasMachineButton ? { choose: openMachinePicker } : {}),
+								}}
 								onTranscript={setTranscriptFacts}
 								focus={presentation.type === "parent-with-child" ? presentation.childId : undefined}
 								onOpenChild={presentation.onChildOpen}
@@ -2112,7 +2129,8 @@ export function RoomWorkspace(
 										editingDocument={!childOpen && !!barEdit?.editing}
 										label={metadata.title}
 										machine={machinePicker}
-										planner={plannerWhere.button}
+										planner={plannerNote}
+										fix={menuFix}
 										members={members}
 										onAction={action => onDocumentAction(room, action)}
 										onComments={() => {

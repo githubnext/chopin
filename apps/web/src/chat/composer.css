@@ -226,30 +226,13 @@
 	white-space: nowrap;
 }
 /*
- * The connection and failure banners are this strip with a phase: neutral while reconnecting,
- * warning where dropped, success for a moment once it is back, danger for a failure. They have
- * one entrance and no exit: the strip is simply gone when its cause is.
+ * The failure banner is this strip with a phase: danger for a failure, neutral while it retries.
+ * It has one entrance and no exit: the strip is simply gone when its cause is.
  */
-.chat-composer .composer-notice[data-success] {
-	background: var(--color-success-surface);
-	color: var(--color-success-text);
-}
-.chat-composer .composer-notice[data-success] .composer-notice-icon {
-	--color-icon: var(--color-success-icon);
-}
-/* A phase that is only under way, reconnecting or retrying, is neutral, as it is in the document. */
 .chat-composer
-	.composer-notice[data-banner]:not([data-warning], [data-success], [data-error])
+	.composer-notice[data-banner]:not([data-warning], [data-error])
 	.composer-notice-icon {
 	--color-icon: var(--color-neutral-icon);
-}
-.chat-composer .composer-notice > .composer-notice-count {
-	flex: none;
-	color: var(--color-text-tertiary);
-	font-size: var(--text-xs);
-	line-height: var(--text-xs--line-height);
-	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
 }
 .chat-composer .composer-notice[data-banner] > .btn {
 	flex: none;
@@ -474,10 +457,6 @@
 	.chat-composer .composer-notice[data-warning] {
 		margin-bottom: 0.375rem;
 		background: var(--color-warning-surface);
-	}
-	.chat-composer .composer-notice[data-success] {
-		margin-bottom: 0.375rem;
-		background: var(--color-success-surface);
 	}
 	.chat-composer .composer-unavailable {
 		min-height: 0;

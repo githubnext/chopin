@@ -1,5 +1,4 @@
 import type { Session } from "@chopin/protocol";
-import type { ConnectionView } from "./connection-phase";
 
 /** Where a machine that cannot be connected to is explained, and what to do about it. */
 export const PLANNER_HOW_TO_FIX =
@@ -7,8 +6,9 @@ export const PLANNER_HOW_TO_FIX =
 
 /**
  * What the document says about its remote Planner when it is not simply attached and healthy,
- * which says nothing at all. The connection banner and the machine button use the same words
- * (see `connection-phase.ts`).
+ * which says nothing at all. The machine button, its menu, chopin's presence and the page's live
+ * region use the same words (see `connection-phase.ts`), and the fix-it steps start from them
+ * (`machine-fix.ts`).
  *
  * Plain words, with none of Chopin's own terms (no Planner, attach, hold or Decisions, and no
  * mention of Chopin) and a machine, not a Planner, as the subject: `starting` is connecting to it,
@@ -17,12 +17,21 @@ export const PLANNER_HOW_TO_FIX =
  * and a `starting` one says which launch it waits on (`attempt`) once an earlier one exited;
  * `disconnected` and `held` say the work is kept; `none` says a machine is needed. Only the GitHub
  * login is ever named, never someone else's machine, so another person's machine is "@mona's
- * machine"; the viewer's own machine is named plainly. `status-copy.test.tsx` keeps it so.
+ * machine"; the viewer's own machine is named plainly (`where`). `status-copy.test.tsx` keeps it so.
  */
 export type PlannerStatus =
 	| { kind: "starting"; text: string; attempt?: number }
-	| { kind: "cant-start"; title: string; reason: string; detail: string; attempts: number }
-	| { kind: "disconnected"; text: string }
+	| {
+		kind: "cant-start";
+		title: string;
+		reason: string;
+		detail: string;
+		attempts: number;
+		/** The machine, as the words name it, and its owner's login. */
+		where: string;
+		login: string;
+	}
+	| { kind: "disconnected"; text: string; where: string; login: string; seen?: string }
 	| { kind: "held"; text: string }
 	| { kind: "none"; text: string };
 
@@ -73,11 +82,13 @@ export function plannerStatus(
 		};
 	}
 	if (planner.state === "disconnected") {
+		let seen = lastSeen ? seenAt(lastSeen) : undefined;
 		return {
 			kind: "disconnected",
-			text: `${where} is offline. ${
-				lastSeen ? `Last seen ${seenAt(lastSeen)}.` : "Your work is kept."
-			}`,
+			text: `${where} is offline. ${seen ? `Last seen ${seen}.` : "Your work is kept."}`,
+			where,
+			login: planner.login,
+			...(seen ? { seen } : {}),
 		};
 	}
 	let failure = planner.failure;
@@ -91,6 +102,8 @@ export function plannerStatus(
 	return {
 		kind: "cant-start",
 		attempts: failure.attempts,
+		where,
+		login: planner.login,
 		title: `Can't connect to ${where}`,
 		// Exactly as the machine reported it: a path, a command or a code is not ours to tidy.
 		reason: failure.reason,
@@ -132,20 +145,30 @@ export function plannerButtonLabel(label: string, status: PlannerStatus | undefi
 	return status ? `${label}. ${plannerSentence(status)}` : label;
 }
 
-/** Null quiets the button's status, including its machine dot, without inventing a Planner state. */
-export type PlannerPlacement = { button: PlannerStatus | null | undefined };
+/**
+ * chopin's presence where Slack shows an app's, on its row of the `@` menu and on the chip: active
+ * while its machine is attached, connecting while it starts, a warning where it can't, and away
+ * otherwise. Nothing where the document has no remote Planner, or while its status is withheld.
+ */
+export type PlannerPresence = "active" | "connecting" | "failing" | "away";
 
-/** The button yields only to the same Planner status actually shown by Chat's banner. */
-export function plannerPlacement(
+export function plannerPresence(
+	attachment: Session.PlannerAttachment | undefined,
 	status: PlannerStatus | undefined,
-	hasButton: boolean,
-	view?: ConnectionView,
-	chatVisible = false,
-): PlannerPlacement {
-	if (!hasButton) return { button: undefined };
-	if (
-		status && chatVisible && view && (view.phase === "dropped" || view.phase === "reconnecting")
-		&& view.layer === "planner" && view.text === plannerSentence(status)
-	) return { button: null };
-	return { button: status };
+): PlannerPresence | undefined {
+	if (attachment?.state === "attached") return "active";
+	if (!status) return undefined;
+	return status.kind === "starting"
+		? "connecting"
+		: status.kind === "cant-start"
+		? "failing"
+		: "away";
 }
+
+/** The presence in words, as a screen reader hears it beside chopin's name. */
+export const PRESENCE_WORDS: Record<PlannerPresence, string> = {
+	active: "Active",
+	connecting: "Connecting",
+	failing: "Can't connect",
+	away: "Away",
+};

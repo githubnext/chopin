@@ -1,0 +1,73 @@
+/*
+ * The offline bar: one thin line, as Slack's is, in the neutral pair while it reconnects and the
+ * warning pair once Reconnect is offered. The place it sits in decides where it is; it fills that
+ * place's width. It eases in and fades out, by opacity and a quarter rem alone; under reduced
+ * motion it simply appears and goes.
+ */
+.offline-bar {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	min-height: calc(var(--spacing) * 8);
+	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 3);
+	border-bottom: var(--edge-width) solid var(--color-edge);
+	background: var(--color-neutral-surface);
+	color: var(--color-text-secondary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+.offline-bar[data-warning] {
+	background: var(--color-warning-surface);
+	color: var(--color-warning-text);
+}
+.offline-bar-icon {
+	flex: none;
+	--color-icon: var(--color-neutral-icon);
+}
+.offline-bar[data-warning] .offline-bar-icon {
+	--color-icon: var(--color-warning-icon);
+}
+/* One line: the words give way to an ellipsis before the bar would grow a second. */
+.offline-bar-text {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.offline-bar-action {
+	flex: none;
+}
+.offline-bar[data-closing] {
+	opacity: 0;
+	pointer-events: none;
+}
+@keyframes offline-bar-enter {
+	from {
+		opacity: 0;
+		transform: translateY(-0.25rem);
+	}
+}
+@media (prefers-reduced-motion: no-preference) {
+	.offline-bar {
+		animation: offline-bar-enter var(--duration-base) var(--motion-smooth-out) backwards;
+	}
+	.offline-bar[data-closing] {
+		transition: opacity var(--duration-fast) var(--ease-out);
+	}
+}
+
+/*
+ * In Chat the bar rests over the transcript's top edge, as Slack's does over its messages, so the
+ * rows never move as it comes and goes. Only the bar itself takes the pointer.
+ */
+.chat-offline-slot {
+	position: absolute;
+	z-index: 5;
+	inset-inline: 0;
+	inset-block-start: 0;
+	pointer-events: none;
+}
+.chat-offline-slot > .offline-bar {
+	pointer-events: auto;
+}

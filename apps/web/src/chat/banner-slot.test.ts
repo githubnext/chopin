@@ -11,6 +11,8 @@ let lost: ConnectionView = {
 	text: "offline",
 	action: "reconnect",
 };
+let reconnecting: ConnectionView = { phase: "reconnecting", layer: "socket", text: "connecting" };
+let catchingUp: ConnectionView = { phase: "reconnecting", layer: "sync", text: "Catching up" };
 let drawn = (slot: BannerSlot) => slot.lead === "failure";
 let planner = (
 	plannerKind: "none" | "starting" | "cant-start" | "held" | "disconnected",
@@ -20,84 +22,41 @@ let planner = (
 		: { phase: "dropped", layer: "planner", text: "away", plannerKind };
 
 test("with nothing wrong with the connection a refused send, else a failed reply, is the banner", () => {
-	expect(bannerSlot(undefined, false, false)).toEqual({ connection: false, quietsNotices: false });
-	expect(bannerSlot(online, true, true)).toEqual({
-		lead: "send",
-		connection: false,
-		quietsNotices: true,
-	});
-	expect(bannerSlot(online, false, true)).toEqual({
-		lead: "failure",
-		connection: false,
-		quietsNotices: true,
-	});
+	expect(bannerSlot(undefined, false, false)).toEqual({ quietsNotices: false });
+	expect(bannerSlot(online, true, true)).toEqual({ lead: "send", quietsNotices: true });
+	expect(bannerSlot(online, false, true)).toEqual({ lead: "failure", quietsNotices: true });
 });
 
-test("a lost socket is the whole slot: a refused send and a failed reply wait behind it", () => {
-	expect(bannerSlot(lost, true, true)).toEqual({ connection: true, quietsNotices: true });
+test("while the offline bar shows, a refused send and a failed reply wait behind it, and the notices give way", () => {
+	expect(bannerSlot(lost, true, true)).toEqual({ quietsNotices: true });
+	expect(bannerSlot(reconnecting, false, true)).toEqual({ quietsNotices: true });
+	expect(bannerSlot(lost, false, false)).toEqual({ quietsNotices: true });
 });
 
-test("a Planner that is absent or starting shows beside a refused send and a failed reply, and leaves the notices", () => {
-	for (let kind of ["none", "starting", "cant-start"] as const) {
-		expect(bannerSlot(planner(kind), true, true)).toEqual({
-			lead: "send",
-			connection: true,
-			quietsNotices: true,
-		});
+test("catching up draws no bar, so it holds nothing back", () => {
+	expect(bannerSlot(catchingUp, true, false)).toEqual({ lead: "send", quietsNotices: true });
+	expect(bannerSlot(catchingUp, false, false)).toEqual({ quietsNotices: false });
+});
+
+test("the Planner's machine is never in the slot: whatever its state, a refused send or a failed reply shows as it would", () => {
+	for (let kind of ["none", "starting", "cant-start", "held", "disconnected"] as const) {
+		expect(bannerSlot(planner(kind), true, true)).toEqual({ lead: "send", quietsNotices: true });
 		expect(bannerSlot(planner(kind), false, true)).toEqual({
 			lead: "failure",
-			connection: true,
 			quietsNotices: true,
 		});
-		expect(bannerSlot(planner(kind), false, false)).toEqual({
-			connection: true,
-			quietsNotices: false,
-		});
-	}
-});
-
-test("a machine that dropped tells why a reply failed itself, but a refused send still shows", () => {
-	for (let kind of ["held", "disconnected"] as const) {
-		expect(bannerSlot(planner(kind), false, true)).toEqual({
-			connection: true,
-			quietsNotices: false,
-		});
-		expect(bannerSlot(planner(kind), true, true)).toEqual({
-			lead: "send",
-			connection: true,
-			quietsNotices: true,
-		});
+		expect(bannerSlot(planner(kind), false, false)).toEqual({ quietsNotices: false });
 	}
 });
 
 test("a failed reply's line leaves the transcript only when its banner is drawn", () => {
 	expect(drawn(bannerSlot(online, false, true))).toBe(true);
 	expect(drawn(bannerSlot(lost, false, true))).toBe(false);
-	expect(drawn(bannerSlot(planner("held"), false, true))).toBe(false);
+	expect(drawn(bannerSlot(planner("held"), false, true))).toBe(true);
 	expect(drawn(bannerSlot(online, true, true))).toBe(false);
-	expect(drawn(bannerSlot(planner("none"), false, true))).toBe(true);
 });
 
 test("where the composer is not drawn there is no slot, and a failed reply's line stays in the transcript", () => {
-	expect(bannerSlot(planner("none"), true, true, false)).toEqual({
-		connection: false,
-		quietsNotices: false,
-	});
+	expect(bannerSlot(lost, true, true, false)).toEqual({ quietsNotices: false });
 	expect(drawn(bannerSlot(online, false, true, false))).toBe(false);
-});
-
-test("a failed reply already shown stays, with its Retry, beside a machine that drops after it: another cause, its own banner", () => {
-	for (let kind of ["held", "disconnected"] as const) {
-		expect(bannerSlot(planner(kind), false, true, true, true)).toEqual({
-			lead: "failure",
-			connection: true,
-			quietsNotices: true,
-		});
-		expect(drawn(bannerSlot(planner(kind), false, true, true, true))).toBe(true);
-	}
-	// The room's own connection is still the whole slot, whatever was shown before it.
-	expect(bannerSlot(lost, false, true, true, true)).toEqual({
-		connection: true,
-		quietsNotices: true,
-	});
 });

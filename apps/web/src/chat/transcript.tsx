@@ -37,6 +37,7 @@ import { displayText, group, workAnnouncement, workPhase } from "./model";
 import { movedOffers, slideOffset } from "./offer-motion";
 import { WorkProgress } from "./work-progress";
 import { AppRow, ResearchAvatar, SpeakerHead } from "./speaker";
+import { AgentAvatar } from "./presence";
 import { messageSpeaker, researchSpeaker } from "./speakers";
 import type { ToolbarActions } from "./actions/message-toolbar";
 import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
@@ -467,7 +468,7 @@ function MessageGroup(
 				{item.continued
 					? null
 					: item.author.kind === "agent"
-					? <ChopinMark circle />
+					? <AgentAvatar />
 					: <Face decorative handle={item.author.handle} size={36} titled={false} />}
 			</div>
 			<div
@@ -528,6 +529,7 @@ export let Transcript = memo(function Transcript(
 		entries,
 		handle,
 		lead,
+		tail,
 		live,
 		onCardLink,
 		onAddExcerpt,
@@ -553,6 +555,8 @@ export let Transcript = memo(function Transcript(
 		conversationPlan?: ConversationPlan.State;
 		conversationPlanJobs?: ConversationPlan.Job[];
 		lead?: ReactNode;
+		/** The last row, after every entry: chopin's ephemeral note to this person. */
+		tail?: ReactNode;
 		threads?: TranscriptThreads;
 		onCardLink?: (link: CardLink) => void;
 		onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
@@ -1004,12 +1008,13 @@ export let Transcript = memo(function Transcript(
 					);
 				})}
 				{compacting && <CompactingRow />}
+				{tail}
 				<div className="h-4 shrink-0" />
 				{emptyHint && (
 					<div
-						aria-hidden={groups.length > 0 || undefined}
+						aria-hidden={groups.length > 0 || !!tail || undefined}
 						className={`pointer-events-none absolute inset-0 flex items-center justify-center px-6 transition-opacity motion-reduce:transition-none ${
-							groups.length > 0 ? "opacity-0" : "opacity-100"
+							groups.length > 0 || tail ? "opacity-0" : "opacity-100"
 						}`}
 						data-chat-empty=""
 					>
