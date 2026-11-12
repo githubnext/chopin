@@ -9,6 +9,7 @@ import {
 	useCallback,
 	useEffect,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 	useSyncExternalStore,
@@ -36,7 +37,13 @@ import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { CardLink } from "../conversation-plan/links";
 import { displayText, group, workAnnouncement, workPhase } from "./model";
-import { arrivedInBulk, earlierRows, FIRST_MESSAGES, newestRows } from "./newest-first";
+import {
+	arrivedInBulk,
+	earlierRows,
+	FIRST_MESSAGES,
+	IDLE_WAIT_MS,
+	newestRows,
+} from "./newest-first";
 import { movedOffers, slideOffset } from "./offer-motion";
 import { WorkProgress } from "./work-progress";
 import { AppRow, ResearchAvatar, SpeakerHead } from "./speaker";
@@ -425,7 +432,7 @@ function MessageBody(
 	);
 }
 
-function MessageGroup(
+let MessageGroup = memo(function MessageGroup(
 	{
 		enter,
 		entering,
@@ -507,7 +514,7 @@ function MessageGroup(
 			</div>
 		</div>
 	);
-}
+});
 
 let noop = () => {};
 let NO_INTENTS: readonly Intent[] = [];
@@ -622,9 +629,12 @@ export let Transcript = memo(function Transcript(
 	let stamp = useRef(0);
 	let offered = useRef(false);
 	let sourceOwner = useRef({});
-	let groups = researchTranscript(
-		group(entries, working, completedWork, suspendedWork),
-		researchOffers ? conversationPlan?.researchOffers ?? [] : [],
+	let offers = researchOffers ? conversationPlan?.researchOffers : undefined;
+	// The same rows while the transcript does not change, so a row already mounted is not rendered
+	// again when older ones are mounted above it.
+	let groups = useMemo(
+		() => researchTranscript(group(entries, working, completedWork, suspendedWork), offers ?? []),
+		[entries, working, completedWork, suspendedWork, offers],
 	);
 	let messages = groups.flatMap(item => item.kind === "messages" ? item.messages : []);
 	// A turn keeps one row from its placeholder through completion, so it enters once.
@@ -677,17 +687,24 @@ export let Transcript = memo(function Transcript(
 	}
 	useEffect(() => {
 		if (from === 0) return;
+		let idle: number | undefined;
 		let timer: ReturnType<typeof setTimeout> | undefined;
-		// After the frame that paints what is mounted, so the next step never comes before it.
-		let frame = requestAnimationFrame(() => {
-			timer = setTimeout(() => {
-				startTransition(() => {
-					setMounting(current => ({ ...current, from: earlierRows(sizes, current.from) }));
-				});
+		let step = () => {
+			startTransition(() => {
+				setMounting(current => ({ ...current, from: earlierRows(sizes, current.from) }));
 			});
+		};
+		// After the frame that paints what is mounted, and then when the page is idle, so a step
+		// does not hold up what the reader does next. A browser without idle callbacks takes the
+		// next task.
+		let frame = requestAnimationFrame(() => {
+			if (typeof requestIdleCallback === "function") {
+				idle = requestIdleCallback(step, { timeout: IDLE_WAIT_MS });
+			} else timer = setTimeout(step);
 		});
 		return () => {
 			cancelAnimationFrame(frame);
+			if (idle !== undefined) cancelIdleCallback(idle);
 			clearTimeout(timer);
 		};
 		// `sizes` is new with each render and read only for the rows above `from`, which later
