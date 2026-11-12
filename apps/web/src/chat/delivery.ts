@@ -8,7 +8,7 @@
  * refuses the message, and the message then says so on itself.
  */
 
-import { sentenceCase } from "@chopin/protocol/address";
+import { sentenceCase } from "../sentence-case";
 
 import type { Chat, Session } from "@chopin/protocol";
 import type { ChatSendPayload, ReferenceDraft } from "./references";

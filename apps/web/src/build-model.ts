@@ -1,4 +1,4 @@
-import { PLANNER_NAME } from "@chopin/protocol/address";
+import { PLANNER_NAME } from "@chopin/editor/people";
 import type { BuildRequest, ImplementationSnapshot } from "@chopin/protocol/implementation";
 
 type Snapshot = ImplementationSnapshot;

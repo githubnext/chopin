@@ -9,7 +9,7 @@ import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 
 import type { ReactNode, Ref } from "react";
 
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { PLANNER_NAME } from "@chopin/protocol/address";
+import { PLANNER_NAME } from "@chopin/editor/people";
 import {
 	ArchiveIcon,
 	AtSignIcon,

@@ -1051,7 +1051,7 @@ test(
 		await expect(icon).toHaveAttribute("data-state", "open");
 
 		await expect(chat.locator("[data-chat-system]")).toHaveCount(0);
-		await expect(chat).not.toContainText("Sam joined");
+		await expect(chat).not.toContainText("sam joined");
 		await expect(chat).not.toContainText("chopin updated the passage");
 		await expect(chat.locator("[data-chat-scroll]")).toHaveCSS("text-align", "left");
 

@@ -1,6 +1,6 @@
 import { usePendingWork } from "@chopin/editor";
 import { Face } from "@chopin/editor/face";
-import { sentenceCase } from "@chopin/protocol/address";
+import { sentenceCase } from "./sentence-case";
 import {
 	CheckIcon,
 	LoaderIcon,

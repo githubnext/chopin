@@ -1,5 +1,5 @@
 import { CheckIcon } from "@chopin/icons";
-import { PLANNER_NAME } from "@chopin/protocol/address";
+import { PLANNER_NAME } from "@chopin/editor/people";
 import { UnfoldSection } from "@chopin/visuals/unfold";
 
 import { ExcerptCorrection } from "./excerpt-correction";

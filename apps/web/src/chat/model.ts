@@ -1,4 +1,5 @@
-import { instruction, PLANNER_NAME } from "@chopin/protocol/address";
+import { instruction } from "@chopin/protocol/address";
+import { PLANNER_NAME } from "@chopin/editor/people";
 
 import type { Chat } from "@chopin/protocol";
 

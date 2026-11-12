@@ -4,7 +4,7 @@
  * what will run, so the two can never disagree about a model that has gone.
  */
 
-import { PLANNER_NAME } from "./address";
+import { PLANNER_NAME } from "./planner-name";
 
 import type { Chat } from "./chat";
 

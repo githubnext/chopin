@@ -1,5 +1,5 @@
 import { ClockIcon, LoaderIcon, ProgressRingIcon, WarningIcon } from "@chopin/icons";
-import { PLANNER_NAME } from "@chopin/protocol/address";
+import { PLANNER_NAME } from "@chopin/editor/people";
 import {
 	lazy,
 	Suspense,

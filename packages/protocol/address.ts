@@ -14,23 +14,7 @@
 /** How the agent is summoned. */
 export const MENTION = "@chopin";
 
-/**
- * The agent's name wherever it takes part, acts or is addressed (a Chat row, the chip, a note, a
- * status, a refusal, a line the server writes), as the mention that summons it spells it. A
- * sentence that begins with it begins in lower case, as one beginning with a handle does. Only the
- * product, Chopin, keeps its capital: the logo, titles, and prose about the product.
- */
-export const PLANNER_NAME = "chopin";
-
-const LEADING_NAME = new RegExp(`^${PLANNER_NAME}\\b`);
-
-/**
- * A sentence's first letter in capitals, as interface copy wants, unless the sentence begins with
- * the agent's name, which keeps its lower case wherever it stands.
- */
-export function sentenceCase(text: string): string {
-	return LEADING_NAME.test(text) ? text : text.replace(/^[a-z]/, letter => letter.toUpperCase());
-}
+export { PLANNER_NAME } from "./planner-name";
 
 /**
  * Word-boundary match, so an address in prose does not count.

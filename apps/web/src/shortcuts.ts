@@ -1,4 +1,4 @@
-import { PLANNER_NAME } from "@chopin/protocol/address";
+import { PLANNER_NAME } from "@chopin/editor/people";
 /**
  * The one registry of Chopin's keyboard shortcuts. Handlers, tooltip hints, menus,
  * and the shortcuts sheet all read from here so a chord is never described in two places.

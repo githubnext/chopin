@@ -3,7 +3,7 @@
 import { Count } from "@chopin/editor/count";
 
 import { DocumentActivityDot, documentActivityLabel } from "./document-activity";
-import { PLANNER_NAME } from "@chopin/protocol/address";
+import { PLANNER_NAME } from "@chopin/editor/people";
 
 import type { ReactNode } from "react";
 import type { DocumentActivity } from "./document-activity";
