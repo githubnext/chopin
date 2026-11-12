@@ -1230,10 +1230,6 @@ body {
 	transition-duration: var(--page-slide-dur);
 }
 
-.workspace-root[data-workspace-travel="back"] {
-	--swap-direction: -1;
-}
-
 .content-swap-stack {
 	display: grid;
 }

@@ -793,6 +793,7 @@ export function Workspace(
 									className="workspace-document-layer min-h-0"
 									immediately={immediately}
 									motion={contentSwapMotion}
+									retain
 								>
 									<section
 										aria-labelledby={ids.heading.plan}
@@ -810,6 +811,7 @@ export function Workspace(
 									className="workspace-document-layer min-h-0"
 									immediately={immediately}
 									motion={contentSwapMotion}
+									retain
 								>
 									<section
 										aria-labelledby={ids.heading.decisions}
@@ -825,6 +827,7 @@ export function Workspace(
 										className="workspace-document-layer min-h-0"
 										immediately={immediately}
 										motion={contentSwapMotion}
+										retain
 									>
 										<section
 											aria-labelledby={ids.heading.build}
@@ -847,7 +850,14 @@ export function Workspace(
 						</div>
 					)}
 				</div>
-				{/* `hidden` preserves pane state and subscriptions after its closing transition. */}
+				{
+					/*
+					`hidden` preserves pane state and subscriptions after its closing transition. Split Chat
+					instead stays in the page, skipped (`data-chat-closed`, workspace-sizing.css), and is never
+					inert: taking it out and making it inert restyled all of it each time the document was
+					expanded or collapsed. Skipped, nothing in it is drawn, focused or exposed.
+				*/
+				}
 				{chat && (
 					<aside
 						aria-hidden={chatInactive || undefined}
@@ -857,10 +867,11 @@ export function Workspace(
 						} ${chatPresence.className} relative flex min-w-0 flex-col overflow-hidden ${
 							mode === "split" ? "" : "bg-chat-pane"
 						}`}
+						data-chat-closed={(mode === "split" && chatPresence.phase === "closed") || undefined}
 						data-pane-moving={chatTrack.moving || undefined}
-						hidden={chatPresence.phase === "closed"}
+						hidden={mode !== "split" && chatPresence.phase === "closed"}
 						id={ids.pane.chat}
-						inert={chatInactive}
+						inert={mode !== "split" && chatInactive}
 						onKeyDown={event => {
 							if (event.key === "Escape" && mode !== "split") {
 								event.preventDefault();

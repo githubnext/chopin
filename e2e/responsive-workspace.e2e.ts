@@ -246,27 +246,33 @@ test("content swaps retain one interactive destination across pointer and immedi
 	let page = await join("ana", { hasTouch: true, viewport: { width: 390, height: 844 } });
 	let nav = page.getByRole("navigation", { name: "Workspace view" });
 	let stack = page.locator("[data-workspace-document-swap]");
-	let visible = stack.locator(":scope > [data-content-swap-state]:not([hidden])");
-	let outgoing = stack.locator(
-		':scope > [data-content-swap-state="outgoing"]:not([hidden])',
+	// A closed view stays in the page, skipped (`retain`), so it is told by its state, not `hidden`.
+	let visible = stack.locator(
+		':scope > [data-content-swap-state]:not([data-content-swap-state="closed"])',
 	);
+	let outgoing = stack.locator(':scope > [data-content-swap-state="outgoing"]');
 	let decisions = nav.getByRole("button", { name: /^Decisions/ });
 	let document = nav.getByRole("button", { name: "Document", exact: true });
 
 	await decisions.click();
 	await expect(visible).toHaveCount(2);
-	await expect(stack.locator(":scope > [data-content-swap-state]:not([hidden]):not([inert])"))
-		.toHaveCount(1);
+	await expect(
+		stack.locator(
+			':scope > [data-content-swap-state]:not([data-content-swap-state="closed"], [aria-hidden])',
+		),
+	).toHaveCount(1);
 	await expect(outgoing).toHaveCount(1);
 	await expect(outgoing).toHaveAttribute("aria-hidden", "true");
-	await expect(outgoing).toHaveAttribute("inert", "");
+	// No view is made inert: making a large one inert restyled all of it on each switch. The leaving view
+	// takes no pointer and is hidden from assistive technology, and once closed it is skipped.
+	await expect(stack.locator(":scope > [inert]")).toHaveCount(0);
 	let sampledCounts = await stack.evaluate(async element => {
 		let counts: number[] = [];
 		for (let sample = 0; sample < 5; sample += 1) {
 			await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 			counts.push(
 				element.querySelectorAll(
-					":scope > [data-content-swap-state]:not([hidden])",
+					':scope > [data-content-swap-state]:not([data-content-swap-state="closed"])',
 				).length,
 			);
 		}

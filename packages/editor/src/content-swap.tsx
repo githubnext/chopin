@@ -16,12 +16,21 @@ export type ContentSwapLayerProps = {
 	immediately: boolean;
 	motion: ContentSwapMotion;
 	onClosed?: () => void;
+	/**
+	 * Closed, the layer stays in the page, skipped (`content-visibility: hidden`), instead of being
+	 * taken out of it, and no layer is made inert: a large layer shown again then keeps the styles and
+	 * layout it had, where taking it out and making it inert restyled all of it on each switch. Skipped
+	 * content is not drawn, focusable, found or exposed to assistive technology; the outgoing layer
+	 * takes no pointer and is hidden from assistive technology while it leaves.
+	 */
+	retain?: boolean;
 	/** Laid out but unseen and inert, so it can load before it is revealed. */
 	staged?: boolean;
 };
 
 export function ContentSwapLayer(
-	{ active, children, className, immediately, motion, onClosed, staged }: ContentSwapLayerProps,
+	{ active, children, className, immediately, motion, onClosed, retain, staged }:
+		ContentSwapLayerProps,
 ) {
 	let presence = useTransitionPresence(
 		active ? true : undefined,
@@ -46,13 +55,20 @@ export function ContentSwapLayer(
 	}, [active, closable, presence.phase]);
 
 	let inactive = !active;
+	let closed = presence.phase === "closed" && !staged;
 	return (
 		<div
 			aria-hidden={inactive || undefined}
 			className={`${motion.className} ${presence.className}${className ? ` ${className}` : ""}`}
-			data-content-swap-state={staged ? "staged" : active ? presence.phase : "outgoing"}
-			hidden={presence.phase === "closed" && !staged}
-			inert={inactive}
+			data-content-swap-state={staged
+				? "staged"
+				: active
+				? presence.phase
+				: retain && closed
+				? "closed"
+				: "outgoing"}
+			hidden={closed && !retain}
+			inert={inactive && !retain}
 		>
 			{children}
 		</div>
