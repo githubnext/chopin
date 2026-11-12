@@ -809,6 +809,8 @@ export type Room = {
 	rootChannelId?: string;
 	/** Set only when this room is a child: how its comments reach the root's Chat. */
 	root?: RootChat;
+	/** Set only on a thread's room: the thread's root message id. */
+	threadRoot?: string;
 	/** Session-tree and remote fork hooks for top-level Chat and threads. */
 	sessionForks?: {
 		/** `retry`: the turn runs `currentEntryId` again, and nothing of its failed attempt is kept. */
@@ -1502,6 +1504,17 @@ export async function retry(context: Room, ws: Socket, msg: Request<Wire.Retry>)
 	return context.plannerStarting().catch(() => {}).then(enqueue);
 }
 
+/**
+ * The room's transcript as a Retry reads it. The top-level Chat leaves out what a thread's turn
+ * copied into it, which only that thread's Retry runs again.
+ */
+function ownEntries(context: Room): Wire.Entry[] {
+	let entries = context.threadRoot === undefined
+		? context.chat.entries.filter(entry => entry.fromThread === undefined)
+		: context.chat.entries;
+	return entries.map(publicEntry);
+}
+
 async function processRetry(
 	context: Room,
 	ws: Socket,
@@ -1511,7 +1524,7 @@ async function processRetry(
 	let { chat, room, server } = context;
 	if (chat.closed) return refuseClosed(ws, rid);
 	if (!context.config.agent) return fail(ws, rid, `${PLANNER_NAME} is not running here`);
-	let found = retryTarget(chat.entries.map(publicEntry), message, ws.data.handle);
+	let found = retryTarget(ownEntries(context), message, ws.data.handle);
 	if ("refusal" in found) return fail(ws, rid, found.refusal);
 	let unattached = await context.plannerNotAttached?.();
 	if (unattached) return fail(ws, rid, unattached, "planner-not-attached");
@@ -1532,7 +1545,7 @@ async function processRetry(
 	// A process that is stopping starts no turn, and says nothing: the browser may ask the next one.
 	if (startsHeld) return refuseClosed(ws, rid);
 	// Read again: the transcript may have moved on while the machine and the child were checked.
-	let target = retryTarget(chat.entries.map(publicEntry), message, ws.data.handle);
+	let target = retryTarget(ownEntries(context), message, ws.data.handle);
 	if ("refusal" in target) return fail(ws, rid, target.refusal);
 	let { request, removed } = target;
 	let gone = new Set(removed);
@@ -2549,46 +2562,22 @@ export function retainReferences(chat: Chat, references: Wire.Reference[]): void
 }
 
 /**
- * Post a thread reply into top-level Chat when "Also send to Chat" was selected.
- * Persists before broadcasting and enters top-level backscroll so the next top-level
- * Planner turn sees it in context.
+ * What a reply sent from a thread with Also send to Chat does in the top-level Chat once it is
+ * there, as a message said in Chat does: the room hears of it, and one to the room may draw the
+ * Planner's initiative. One to the Planner is answered in its thread, and copied here as it is.
  */
-export async function postAlsoToChat(
-	context: Room,
-	ws: Socket,
-	input: { handle: string; text: string; references?: Wire.Reference[]; focus?: string },
-): Promise<Wire.Entry | undefined> {
-	let { chat, server, room } = context;
-	if (chat.closed || context.rootChannelId) return undefined;
-	let entry: Wire.Entry = {
-		id: ulid(),
-		author: { kind: "member", handle: input.handle },
-		text: input.text,
-		ts: now(),
-		...(input.references?.length ? { references: input.references } : {}),
-	};
-	if (!context.commitRoomMessage) chat.entries.push(entry);
-	try {
-		if (context.commitRoomMessage) await context.commitRoomMessage(entry);
-		else await context.persist();
-	} catch (err) {
-		if (!context.commitRoomMessage) {
-			chat.entries = chat.entries.filter(value => value.id !== entry.id);
-		}
-		console.error("[chat] could not cross-post thread reply to Chat:", err);
-		return undefined;
-	}
-	announce(server, room, entry);
+export function copiedToChat(context: Room, ws: Socket, entry: Wire.Entry, focus?: string): void {
+	let { chat } = context;
 	context.roomMessagePublished?.();
 	context.memberMessagePersisted?.(entry, context.claimantSessionId);
+	if (entry.author.kind !== "member") return;
 	chat.backscroll = remember(chat.backscroll, {
 		entryId: entry.id,
-		handle: input.handle,
-		text: input.text,
-		...(input.references?.length ? { references: input.references } : {}),
+		handle: entry.author.handle,
+		text: entry.text,
+		...(entry.references?.length ? { references: entry.references } : {}),
 	});
-	contributed(context, ws, entry, input.focus);
-	return entry;
+	if (publicEntry(entry).to !== "planner") contributed(context, ws, entry, focus);
 }
 
 export function sessionBootstrap(
@@ -2617,6 +2606,8 @@ export function sessionBootstrap(
 			: entry.author.kind === "agent"
 			? "Planner"
 			: "System";
+		// A thread's reply also sent to Chat, and the Planner's answer to it: said in the thread.
+		if (entry.fromThread !== undefined) speaker = `${speaker} (in a thread, also sent to Chat)`;
 		return `${speaker}: ${annotatedText(entry.text, entry.references, readable)}`;
 	};
 	let selected: Wire.Entry[] = [];

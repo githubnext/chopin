@@ -69,4 +69,45 @@ describe("threadsReducer", () => {
 		state = threadsReducer(state, { kind: "close" });
 		expect(state.openRootId).toBeUndefined();
 	});
+
+	test("takes a retried reply's failed attempt out of the thread", () => {
+		let root = { id: "m1", author: { kind: "member" as const, handle: "ana" }, text: "Hi", ts: 10 };
+		let asked = {
+			id: "r1",
+			author: { kind: "member" as const, handle: "ana" },
+			text: "Go",
+			ts: 11,
+			to: "planner" as const,
+		};
+		let partial = { id: "a1", author: { kind: "agent" as const }, text: "Half", ts: 12 };
+		let notice = {
+			id: "f1",
+			author: { kind: "system" as const },
+			text: "Failed",
+			ts: 13,
+			turnFailure: { kind: "error" as const, request: "r1" },
+		};
+		let state = threadsReducer(initialThreadsState, {
+			kind: "opened",
+			frame: {
+				kind: "chat:thread",
+				ts: 12,
+				rootId: "m1",
+				root,
+				forkedAt: 12,
+				entries: [asked, partial, notice],
+				busy: false,
+			},
+		});
+		state = threadsReducer(state, {
+			kind: "in-thread",
+			frame: {
+				kind: "chat:in-thread",
+				ts: 14,
+				rootId: "m1",
+				frame: { kind: "chat:removed", ts: 14, ids: ["a1", "f1"] },
+			},
+		});
+		expect(state.threads.m1?.transcript.entries.map(entry => entry.id)).toEqual(["r1"]);
+	});
 });
