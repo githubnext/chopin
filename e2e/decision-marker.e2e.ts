@@ -222,8 +222,9 @@ test("the marker answers within 12px of its edge but never over the prose", asyn
 	);
 	expect(hit).toBe(false);
 
-	// Between the marker and the prose, where neither is drawn.
-	await page.mouse.click(box.x + box.width + 4, centre);
+	// Between the marker and the block handle beside the prose, where neither is drawn: the marker's
+	// reach ends where the handle's column begins.
+	await page.mouse.click(box.x + box.width + 2, centre);
 	let dialog = page.getByRole("dialog", { name: "Decision" });
 	await expect(dialog).toBeVisible();
 	await expect(dialog.getByText("All at once")).toBeVisible();

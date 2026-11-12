@@ -494,7 +494,7 @@
 				1
 			]
 		],
-		"sourceHash": "639328bcf823b0e5e486ddb44d9324a7ad02ea371cd65603fd16698e247b5462"
+		"sourceHash": "8dabb07ca2028725b6b4b8d52b8392492c0ac6d4cc15bc31111b8c903056c368"
 	},
 	{
 		"file": "packages/editor/src/resolved-layer.tsx",
@@ -508,7 +508,7 @@
 				1
 			]
 		],
-		"sourceHash": "639328bcf823b0e5e486ddb44d9324a7ad02ea371cd65603fd16698e247b5462"
+		"sourceHash": "8dabb07ca2028725b6b4b8d52b8392492c0ac6d4cc15bc31111b8c903056c368"
 	},
 	{
 		"file": "packages/editor/src/blank-behind-decisions.tsx",

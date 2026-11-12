@@ -130,6 +130,31 @@ describe("marker and popover placement", () => {
 			top: 54,
 			left: 68,
 			compact: false,
+			lane: 0,
+		});
+	});
+
+	it("stands left of the block handle's column on the same line, never in it", () => {
+		// A 56px gutter: the disc, 4px, the handle's 20px and its 4px, then the prose.
+		expect(markerPoint(box(56, 50, 600, 80), 32, host, 24, 24)).toEqual({
+			top: 54,
+			left: 4,
+			compact: false,
+			lane: 24,
+		});
+		// Room for the slim bar only: its 12px lane ends where the handle's column begins.
+		expect(markerPoint(box(36, 50, 600, 80), 32, host, 24, 24)).toEqual({
+			top: 50,
+			left: 0,
+			compact: true,
+			lane: 24,
+		});
+		// No room left of the handle at all: the bar hugs the prose as it does for a reader.
+		expect(markerPoint(box(16, 50, 300, 80), 32, box(0, 0, 360, 600), 24, 24)).toEqual({
+			top: 50,
+			left: 4,
+			compact: true,
+			lane: 0,
 		});
 	});
 
@@ -138,17 +163,19 @@ describe("marker and popover placement", () => {
 			top: 54,
 			left: 60,
 			compact: false,
+			lane: 0,
 		});
 		expect(markerPoint(box(42, 50, 600, 80), 40, host, 40)).toEqual({
 			top: 50,
 			left: 30,
 			compact: true,
+			lane: 0,
 		});
 	});
 
 	it("becomes a slim bar on the first line when the gutter is too narrow", () => {
 		let narrow = markerPoint(box(16, 50, 300, 80), 32, box(0, 0, 360, 600), 24);
-		expect(narrow).toEqual({ top: 50, left: 4, compact: true });
+		expect(narrow).toEqual({ top: 50, left: 4, compact: true, lane: 0 });
 		expect(markerPoint(box(8, 50, 300, 80), 32, box(0, 0, 360, 600), 24).left).toBe(0);
 	});
 

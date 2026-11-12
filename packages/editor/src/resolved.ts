@@ -144,11 +144,18 @@ export const COMPACT_GUTTER = 12;
 export type MarkerPlace = Point & {
 	/** True when the gutter is too narrow for a disc, so the marker is a slim bar. */
 	compact: boolean;
+	/** How much of the gutter beside the prose the marker leaves to the block handle. */
+	lane: number;
 };
 
 /**
  * Where the marker sits: in the gutter left of the first anchored block,
  * centred on its first line.
+ *
+ * A writer's gutter keeps `lane` beside the prose for the block handle, and
+ * the marker stands just outside that column, on the same line: the disc when
+ * what is left holds it, else the slim bar. The page widens a narrow gutter
+ * for it (`data-plan-decision-lane`), so the handle never moves.
  *
  * When the gutter cannot hold the disc and its gap — a phone, or a split
  * pane — the marker becomes a slim bar the height of the first line, hugging
@@ -159,16 +166,30 @@ export function markerPoint(
 	lineHeight: number,
 	host: Rect,
 	size: number,
+	lane = 0,
 ): MarkerPlace {
 	let gutter = block.left - host.left;
 	let top = block.top - host.top;
+	let room = gutter - lane;
+	if (lane > 0 && room >= size + GAP / 2) {
+		return {
+			top: top + Math.max(0, (lineHeight - size) / 2),
+			left: Math.min(room - GAP / 2 - size, Math.max(0, host.width - size)),
+			compact: false,
+			lane,
+		};
+	}
+	if (lane > 0 && room >= COMPACT_GUTTER) {
+		return { top, left: room - COMPACT_GUTTER, compact: true, lane };
+	}
 	if (gutter < size + GAP / 2) {
-		return { top, left: Math.max(0, gutter - COMPACT_GUTTER), compact: true };
+		return { top, left: Math.max(0, gutter - COMPACT_GUTTER), compact: true, lane: 0 };
 	}
 	return {
 		top: top + Math.max(0, (lineHeight - size) / 2),
 		left: Math.min(Math.max(0, gutter - size - GAP), Math.max(0, host.width - size)),
 		compact: false,
+		lane: 0,
 	};
 }
 
