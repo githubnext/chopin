@@ -296,8 +296,8 @@
 	box-shadow: var(--shadow-overlay);
 }
 
-/* Its hairline is an outline, so it gives way to the focus ring. */
-.phone-tab-action:not(:focus-visible) {
+/* Its hairline is an outline at no specificity, so the theme's focus ring replaces it. */
+:where(.phone-tab-action) {
 	outline: var(--edge-width) solid var(--color-edge);
 	outline-offset: calc(-1 * var(--edge-width));
 }
