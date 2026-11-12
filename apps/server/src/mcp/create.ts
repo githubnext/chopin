@@ -42,9 +42,21 @@ export type CreateDocumentInput = CreationOrigin & {
 
 type CreateArguments = Omit<CreateDocumentInput, "fingerprint">;
 
-let OWNER_PATTERN = "[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}";
-let REPOSITORY_PATTERN = "(?!\\.\\.?$)[A-Za-z0-9._-]{1,100}";
-export let REPOSITORY_PATH_PATTERN = `^${OWNER_PATTERN}/${REPOSITORY_PATTERN}$`;
+// Tool schemas carry these patterns to models, and providers refuse a whole request whose schema
+// has regex lookaround, so neither uses any. An owner has no leading, trailing or doubled hyphen;
+// a pattern without lookahead can't also hold it to 39 characters, so `isRepository` does.
+let MAX_OWNER_LENGTH = 39;
+let MAX_REPOSITORY_LENGTH = 100;
+let OWNER_PATTERN = "[A-Za-z0-9](?:-?[A-Za-z0-9]){0,38}";
+// Any 1 to 100 of these characters except "." and "..".
+let REPOSITORY_PATTERN = "(?:[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}"
+	+ "|\\.[A-Za-z0-9_-][A-Za-z0-9._-]{0,98}|\\.\\.[A-Za-z0-9._-]{1,98})";
+/** An `owner/name` repository argument, as advertised to agents; `isRepository` decides. */
+export let REPOSITORY_PATH = {
+	type: "string",
+	maxLength: MAX_OWNER_LENGTH + 1 + MAX_REPOSITORY_LENGTH,
+	pattern: `^${OWNER_PATTERN}/${REPOSITORY_PATTERN}$`,
+};
 /** Allows a maximally sized MDX plan plus JSON escaping and its structured brief. */
 export let MAX_REQUEST_BYTES = limits.MAX_SOURCE_BYTES * 3;
 
@@ -85,7 +97,8 @@ function nonblank(value: unknown, maximum: number): string | undefined {
 export function isRepository(value: unknown): value is string {
 	if (typeof value !== "string") return false;
 	let parts = value.split("/");
-	return parts.length === 2 && OWNER.test(parts[0]!) && REPOSITORY.test(parts[1]!);
+	return parts.length === 2 && parts[0]!.length <= MAX_OWNER_LENGTH && OWNER.test(parts[0]!)
+		&& REPOSITORY.test(parts[1]!);
 }
 
 function parseCreationArguments(value: Record<string, unknown>): CreateArguments | undefined {
