@@ -540,14 +540,20 @@ and storage revision. See [Experimental implementation lifecycle](docs/implement
 
 ### Code and diff blocks
 
-- Syntax and diff previews are derived React views beside Lexical's canonical
-  code node. Do not mount a second editor or write highlighted DOM into Lexical.
+- Code in a named language is coloured on Lexical's canonical code node itself,
+  with CSS Custom Highlights (`widgets/code-paint-plugin.tsx`): ranges over its
+  own text, never DOM written into Lexical. Diff previews are derived React views
+  beside the canonical node. Do not mount a second editor or write highlighted
+  DOM into Lexical.
 - An unnamed fence is plain text. Never guess a language from content.
 - Invalid `patch` content temporarily falls back to plain code rendering without
   changing the stored language. Repairing the text restores the diff view.
-- The preview is non-editable derived UI. The current Enter handler requires a
+- A diff preview is non-editable derived UI. The current Enter handler requires a
   Lexical range selection inside the canonical code block; do not assume a key
   event focused only on the preview will return to the source.
+- Enter in a code block is always a line break. Escape, Mod+Enter and the arrows
+  at its end leave it (`widgets/code-keys.tsx`); a paste into it is inserted as
+  raw text, because Lexical's own paste makes each line a paragraph.
 - Wrap lines is the word `wrap` in the fence's info string (`` ```ts wrap ``), outside any
   quoted value; `codeWraps` and `withCodeWrap` in the dialect read and write it. A fence
   without it is never rewritten. Full width is channel metadata (`channels.full_width`),
