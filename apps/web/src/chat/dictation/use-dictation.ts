@@ -42,7 +42,6 @@ export function dictationSource(
 export type DictationPhase = "idle" | "starting" | "listening" | "transcribing";
 
 export type DictationControl = {
-	source: "browser" | "server";
 	phase: DictationPhase;
 	/** Seconds of speech so far, while listening. */
 	seconds: number;
@@ -260,7 +259,6 @@ export function useDictation(options: {
 	if (!source) return undefined;
 	let text = latest.current.read().text;
 	return {
-		source: source.kind,
 		phase,
 		seconds,
 		interim: shown(text, state),

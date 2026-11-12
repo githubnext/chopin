@@ -139,7 +139,7 @@ export function ComposerSpecimen(
 					active: dictation === "listening",
 					phase: dictation === "listening" ? "listening" : "idle",
 					seconds: 65,
-					tooltip: "Dictate (Alt+Shift+M). Speech is turned into words on this device.",
+					tooltip: "Dictate (Alt+Shift+M)",
 					announcement: "",
 					disabled: !draftable || sending,
 					onToggle: () => {},

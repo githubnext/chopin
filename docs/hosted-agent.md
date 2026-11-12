@@ -909,10 +909,10 @@ provider writes the words: `{ "delta" }` for words added, then `{ "text" }` with
 `{ "error" }` if the provider stopped part way. The words added are shown beside the caret as they
 come, and the whole text is written there. The route answers 404 where no model is set. The
 `session:hello` frame names the provider and the longest recording it takes
-(`transcription.provider`, `transcription.maxBytes`) only where it is set, and the button's tooltip
-then says the recording goes to it. A recording stops by itself before it is longer than that, is
-transcribed, and the person is told why it stopped. The button waits for that frame, so a browser
-never starts its own recognition on a deployment that has transcription.
+(`transcription.provider`, `transcription.maxBytes`) only where it is set. A recording stops by
+itself before it is longer than that, is transcribed, and the person is told why it stopped. The
+button waits for that frame, so a browser never starts its own recognition on a deployment that has
+transcription.
 
 Where `TRANSCRIPTION_MODEL` is off, only the browser's own speech recognition (`SpeechRecognition`,
 prefixed or not), and only if the browser says it runs on the device (`processLocally`): a browser

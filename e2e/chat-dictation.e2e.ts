@@ -192,7 +192,7 @@ test("asks nothing of the microphone until the button is pressed, then listens, 
 	await expect(button).toHaveAttribute("aria-pressed", "false");
 	await expect(button).toHaveAttribute(
 		"title",
-		/^Dictate \(Alt\+Shift\+M\)\. Speech is turned into words on this device\.$/,
+		"Dictate (Alt+Shift+M)",
 	);
 	expect(await heard(page)).toMatchObject({ started: 0, microphone: 0 });
 
@@ -585,7 +585,7 @@ test("dictates through the deployment's transcription even where the browser rec
 	let button = dictate(page);
 	await expect(button).toHaveAttribute(
 		"title",
-		/^Dictate \(Alt\+Shift\+M\)\. Your recording is sent to OpenAI to be turned into words\.$/,
+		"Dictate (Alt+Shift+M)",
 	);
 	expect(await recorded(page)).toEqual({ microphone: 0, released: 0, recorders: 0 });
 	await fillChat(input, "Plan:  today");
