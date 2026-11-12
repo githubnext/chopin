@@ -603,9 +603,9 @@ test("@ keeps Chopin and the people, and # offers no part of a document that has
 	await page.keyboard.type("@ch");
 	await expect(mentions.getByRole("option", { name: /^chopin/ })).toBeVisible();
 	await page.keyboard.press("Enter");
-	// Chopin is the chip, not words in the draft.
-	await expectChatValue(input, "");
-	await expect(chat(page).getByRole("group", { name: "Asking chopin", exact: true })).toBeVisible();
+	// Choosing Chopin writes its mention, as choosing a person does.
+	await expectChatValue(input, "@chopin ");
+	await expect(chat(page).getByRole("group", { name: "Asking chopin" })).toHaveCount(0);
 	await fillChat(input, "#");
 	// A document with only its title lists that and its files, and no Decision or card.
 	let parts = menu(page, "Document references");

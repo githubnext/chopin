@@ -443,10 +443,6 @@ test("chat routes one Send action by @chopin without blocking room messages, and
 	);
 
 	await expectChatValue(draft, "");
-	// The chip is on only if it was asked for: a typed @chopin leaves none behind.
-	if (await chat.getByRole("group", { name: "Asking chopin", exact: true }).count()) {
-		await draft.press("Backspace");
-	}
 	await draft.fill("Keep the release notes brief.");
 	await expect(send).toBeEnabled();
 	await send.click();

@@ -59,14 +59,7 @@ import { PlannerPresenceContext } from "./presence";
 import { failureBanner, retryPayload, sendFailureView, withoutFailure } from "./failure";
 import { TypingReporter } from "./typing";
 import { useSteadyCallback, useSteadyFields } from "./steady";
-import {
-	asksChopin,
-	chipKeyAction,
-	chipShown,
-	restoredChip,
-	takeChopinMention,
-	withoutChopinMentions,
-} from "./chopin-chip";
+import { asksChopin, asksChopinKey, withChopinMention } from "./ask-chopin";
 import { ChatComposer } from "./composer";
 import type { ComposerNotice } from "./composer";
 
@@ -277,7 +270,14 @@ function restoreDraft(room: string, handle: string): ComposerDraft {
 			: [];
 		let draft = { text: saved.text, references };
 		let submission = restoreDraftSubmission(draft, saved.submission);
-		return submission ? { ...draft, submission } : draft;
+		if (!submission) return draft;
+		// A send prepared for chopin by an earlier composer's chip did not name it in the words; it
+		// comes back with the mention it went with, which is now what says who it is for.
+		if (submission.to === "planner") {
+			let named = withChopinMention(draft.text, draft.references);
+			draft = { text: named.text, references: named.references };
+		}
+		return { ...draft, submission };
 	} catch {
 		return empty;
 	}
@@ -478,9 +478,6 @@ export function Chat(
 	let [commandCursor, setCommandCursor] = useState<{ key?: string; index: number }>({ index: 0 });
 	let textarea = useRef<DraftInputHandle>(null);
 	let composerRoot = useRef<HTMLDivElement>(null);
-	// The chip at the start of the draft, which is who the message is for. It stays on after Chopin
-	// is asked, until it is removed.
-	let [chipOn, setChipOn] = useState(() => restoredChip(draft, draft.submission?.to));
 	let [historyKey, setHistoryKey] = useState(0);
 	let pendingCaret = useRef<number | { start: number; end: number } | undefined>(undefined);
 	let submission = useRef<object | undefined>(undefined);
@@ -556,17 +553,9 @@ export function Chat(
 	let outboxed = agent && sendAcknowledgements;
 	// A draft never waits on the connection; only sending does.
 	let draftable = !readonly && !archived;
-	let chip = chipShown({
-		agent: !!agent,
-		chip: chipOn,
-		text: draft.text,
-		references: draft.references,
-		submitted: draft.submission?.to,
-	});
 	let commandDraft = runsCommand(draft.references);
 	let askingChopin = asksChopin({
 		agent: !!agent,
-		chip: chipOn,
 		text: draft.text,
 		references: draft.references,
 		submitted: draft.submission?.to,
@@ -945,7 +934,6 @@ export function Chat(
 		if (outboxed) {
 			let outgoing = prepareDraftSubmission(current, undefined, {
 				planner: agent,
-				asking: chip,
 				referencesEnabled,
 				focus,
 				files: hasFiles,
@@ -964,7 +952,6 @@ export function Chat(
 						draft: {
 							text: outgoing.text,
 							references: outgoing.references,
-							chip: chipOn,
 						},
 						...(sentFiles.length ? { attachments: sentFiles } : {}),
 					},
@@ -983,7 +970,6 @@ export function Chat(
 		}
 		let submitted = prepareDraftSubmission(current, undefined, {
 			planner: agent,
-			asking: chip,
 			referencesEnabled,
 			focus,
 			files: hasFiles,
@@ -1080,15 +1066,17 @@ export function Chat(
 					let dropped = outboxReducer(outbox, { kind: "drop", id });
 					dispatchOutbox({ kind: "drop", id });
 					keepOutbox(room, handle, dropped);
+					// Every message in the outbox asks chopin. One an earlier composer's chip sent did not
+					// name it in its words, and comes back with the mention it went with.
+					let named = withChopinMention(next.draft.text, next.draft.references);
 					let restored: ComposerDraft = {
-						text: next.draft.text,
-						references: next.draft.references,
+						text: named.text,
+						references: named.references,
 						submission: next.payload,
 					};
 					draftRef.current = restored;
 					setDraft(restored);
 					keepDraft(room, handle, restored);
-					setChipOn(next.draft.chip);
 					setSelection({ start: restored.text.length, end: restored.text.length });
 					setDismissedPicker(undefined);
 					setHistoryKey(current => current + 1);
@@ -1220,21 +1208,23 @@ export function Chat(
 		pendingCaret.current = caret;
 	};
 
-	// Puts the chip on or takes it off. Taking it off also takes out any @chopin typed in the words,
-	// or the message would still ask Chopin and the chip would come straight back. A send prepared
-	// for the other audience is not the one to make now, so the draft is made again when it goes.
-	let setChip = (on: boolean) => {
-		if (!draftable || sending || !agent || chip === on) return;
+	// The sparkle button and Command+J write `@chopin` into the words, at the caret when the field
+	// has one, as if it were typed; a draft that already asks chopin only gets the caret after it.
+	let askChopin = (atCaret: boolean) => {
+		if (!draftable || sending || !agent) return;
 		let current = draftRef.current;
-		setChipOn(on);
-		let next = on
-			? { text: current.text, references: current.references, ...selection }
-			: withoutChopinMentions(current.text, current.references, selection);
-		setDraft({ text: next.text, references: next.references });
-		setSelection({ start: next.start, end: next.end });
+		let next = withChopinMention(
+			current.text,
+			current.references,
+			atCaret ? selection.start : undefined,
+		);
+		setDraft(reviseComposerDraft(current, next.text, next.references));
+		setSelection({ start: next.caret, end: next.caret });
 		setSendError(undefined);
-		setDismissedPicker(triggerKey ?? mentionKey);
-		pendingCaret.current = { start: next.start, end: next.end };
+		// The mention is written whole, so the `@` menu has nothing to offer for it.
+		let written = mentionTrigger(next.text, next.caret);
+		setDismissedPicker(written ? mentionTriggerKey(written) : undefined);
+		pendingCaret.current = next.caret;
 	};
 
 	let chooseReference = (target: ReferenceTarget) => {
@@ -1249,17 +1239,6 @@ export function Chat(
 
 	let chooseMention = (candidate: MentionCandidate) => {
 		if (!freeMention) return;
-		if (candidate.kind === "planner") {
-			// Chopin is the chip, not words in the draft.
-			let taken = takeChopinMention(draft.text, draft.references, freeMention);
-			setChipOn(true);
-			setDraft({ text: taken.text, references: taken.references });
-			setSelection({ start: taken.caret, end: taken.caret });
-			setSendError(undefined);
-			setDismissedPicker(undefined);
-			pendingCaret.current = taken.caret;
-			return;
-		}
 		let next = insertMention(draft.text, freeMention, candidate);
 		setDraft(current =>
 			reviseComposerDraft(
@@ -1577,14 +1556,7 @@ export function Chat(
 						</Suspense>
 					)
 					: undefined}
-				chopin={agent
-					? {
-						chip,
-						disabled: !draftable || sending,
-						onAdd: () => setChip(true),
-						onRemove: () => setChip(false),
-					}
-					: undefined}
+				chopin={agent ? { disabled: !draftable || sending, onAsk: askChopin } : undefined}
 				banner={leadNode
 					? { id: bannerId, node: leadNode, invalid: slot.lead === "send" }
 					: undefined}
@@ -1764,8 +1736,8 @@ export function Chat(
 					interim: dictation?.interim,
 					onKeyDown: event => {
 						let composing = event.nativeEvent.isComposing || event.keyCode === 229;
-						let chipAction = agent && draftable && !sending
-							? chipKeyAction({
+						if (
+							agent && draftable && !sending && asksChopinKey({
 								key: event.key,
 								keyCode: event.keyCode,
 								isComposing: event.nativeEvent.isComposing,
@@ -1773,15 +1745,10 @@ export function Chat(
 								altKey: event.altKey,
 								ctrlKey: event.ctrlKey,
 								metaKey: event.metaKey,
-							}, {
-								chip,
-								selectionStart: textarea.current?.selectionStart ?? 0,
-								selectionEnd: textarea.current?.selectionEnd ?? 0,
 							})
-							: undefined;
-						if (chipAction) {
+						) {
 							event.preventDefault();
-							if (!event.repeat) setChip(chipAction === "insert");
+							if (!event.repeat) askChopin(true);
 							return;
 						}
 						let commandAction = commandOpen

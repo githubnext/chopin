@@ -198,17 +198,16 @@ async function newRoom() {
 	return room;
 }
 
-/** The sparkle button that puts the @Chopin chip on, the chip that says so, and its cross. */
+/**
+ * The sparkle button, which writes @chopin into the draft, and that mention. A draft filled after
+ * it keeps the mention by writing it again, since filling replaces what the draft held.
+ */
 function ask(page: Page) {
 	return chat(page).getByRole("button", { name: "Ask chopin", exact: true });
 }
 
 function asking(page: Page) {
-	return chat(page).getByRole("group", { name: "Asking chopin", exact: true });
-}
-
-function remove(page: Page) {
-	return chat(page).getByRole("button", { name: "Remove chopin", exact: true });
+	return chatInput(chat(page)).locator('.draft-mention[data-mention="chopin"]');
 }
 
 const REASON = "This model can't read images, so only text files can be sent to it.";
@@ -248,7 +247,8 @@ test("a model that cannot read images is not sent one: the + says why, and an im
 	await expect(composer(page).getByRole("button", { name: "Send message" })).toBeDisabled();
 
 	// For the room it is fine again: the file was never touched, only the message's address changed.
-	await remove(page).click();
+	await chatInput(chat(page)).fill("");
+	await expect(asking(page)).toHaveCount(0);
 	await expect(refused).toHaveAttribute("data-state", "done");
 	await expect(plus(page)).toHaveAttribute("title", "Add files");
 	await ask(page).click();
@@ -259,7 +259,7 @@ test("a model that cannot read images is not sent one: the + says why, and an im
 	await choose(page, NOTES);
 	await expect(chip(page, "notes.md")).toHaveAttribute("data-state", "done");
 	let input = chatInput(chat(page));
-	await fillChat(input, "Read the notes");
+	await fillChat(input, "@chopin Read the notes");
 	await input.press("Enter");
 	await expect.poll(() => turnFor(asked, "Read the notes"), { timeout: 20_000 }).toBeDefined();
 	let notesTurn = turnFor(asked, "Read the notes")!;
@@ -293,7 +293,7 @@ test("a model that reads images is sent the image as its bytes, with the text fi
 	await expect(chip(page, "shot.png")).toHaveAttribute("data-state", "done");
 	await expect(chip(page, "notes.md")).toHaveAttribute("data-state", "done");
 	let input = chatInput(chat(page));
-	await fillChat(input, "What is this?");
+	await fillChat(input, "@chopin What is this?");
 	await input.press("Enter");
 
 	// It shows at once, as the person's own with its files, and the turn runs.
@@ -314,7 +314,10 @@ test("a model that reads images is sent the image as its bytes, with the text fi
 	expect(notes).toMatchObject({ name: "notes.md", kind: "file", mediaType: "text/plain" });
 	await expect(strip(page)).toHaveCount(0);
 
-	// The catalog changing under the composer changes what it offers, live.
+	// The catalog changing under the composer changes what it offers, live, for a draft that asks
+	// Chopin: nothing stays on after a message is sent, so the next draft asks it again.
+	await expect(plus(page)).toHaveAttribute("title", "Add files");
+	await ask(page).click();
 	client.report(TEXT_ONLY);
 	await expect(plus(page)).toHaveAttribute("title", `Add files. ${REASON}`);
 	client.report(SEEING);
@@ -332,7 +335,7 @@ test("a client that did not ask for files is told of them in words, never sent a
 	await expect(chip(page, "shot.png")).toHaveAttribute("data-state", "done");
 	await expect(chip(page, "notes.md")).toHaveAttribute("data-state", "done");
 	let input = chatInput(chat(page));
-	await fillChat(input, "What is this?");
+	await fillChat(input, "@chopin What is this?");
 	await input.press("Enter");
 	await expect.poll(() => turnFor(asked, "What is this?"), { timeout: 20_000 }).toBeDefined();
 	let told = turnFor(asked, "What is this?")!;
@@ -367,7 +370,7 @@ test("a message to the Planner shows its files at once for a second person too",
 	await ask(page).click();
 	await choose(page, SHOT);
 	await expect(chip(page, "shot.png")).toHaveAttribute("data-state", "done");
-	await fillChat(chatInput(chat(page)), "Look");
+	await fillChat(chatInput(chat(page)), "@chopin Look");
 	await chatInput(chat(page)).press("Enter");
 	for (let viewer of [page, other]) {
 		let message = chat(viewer).locator("[data-chat-message-id]").filter({ hasText: "Look" });

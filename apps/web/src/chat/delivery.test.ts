@@ -324,17 +324,25 @@ describe("the outbox across a reload", () => {
 		// 1 was put on the wire and its answer never came; 2 never left the page.
 		let outbox = outboxReducer(
 			build(
-				{ ...item(1), draft: { text: "outline the plan", references: [], chip: true } },
+				{ ...item(1), draft: { text: "@chopin outline the plan", references: [] } },
 				item(2),
 			),
 			{ kind: "attempt", id: uuid(1) },
 		);
 		keepOutbox("room", "ana", outbox);
 		let restored = restoreOutbox("room", "ana");
-		expect(restored[0]?.draft).toEqual({ text: "outline the plan", references: [], chip: true });
+		expect(restored[0]?.draft).toEqual({ text: "@chopin outline the plan", references: [] });
 		expect(restored.map(entry => entry.attempted)).toEqual([true, undefined]);
 		// Whatever the flag says, a reload keeps no refusal and no trouble: those are not saved.
 		expect(restored.every(entry => !entry.failure && !entry.trouble)).toBe(true);
+	});
+
+	test("keeps the draft of a message an earlier composer's chip sent, which comes back without the chip", () => {
+		store.set(
+			"chopin:outbox:room:ana",
+			JSON.stringify([{ ...item(1), draft: { text: "outline it", references: [], chip: true } }]),
+		);
+		expect(restoreOutbox("room", "ana")[0]?.draft).toEqual({ text: "outline it", references: [] });
 	});
 
 	test("leaves out anything malformed", () => {
