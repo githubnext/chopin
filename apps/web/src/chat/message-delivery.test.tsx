@@ -78,13 +78,13 @@ test("a message the server refused says Couldn't send on itself and why, and off
 		payload: { requestId: crypto.randomUUID(), text: "@chopin outline it", to: "planner" },
 		handle: "ana",
 		ts: 1_700_000_000,
-		failure: "Chopin can't take messages while it works on this machine. Stop it to ask now.",
+		failure: "chopin can't take messages while it works on this machine. Stop it to ask now.",
 	}]) as LocalEntry[];
 	let markup = render([echo!]);
 	expect(markup).toContain("data-chat-failed");
 	expect(markup).toContain("Couldn&#x27;t send.");
 	expect(markup).toContain(
-		"Chopin can&#x27;t take messages while it works on this machine. Stop it to ask now.",
+		"chopin can&#x27;t take messages while it works on this machine. Stop it to ask now.",
 	);
 	expect(markup).not.toMatch(/>Try again<\/button>/);
 	expect(markup).not.toMatch(/>Delete<\/button>/);

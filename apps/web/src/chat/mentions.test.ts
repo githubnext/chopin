@@ -302,7 +302,7 @@ describe("mention picker markup", () => {
 			}),
 		);
 		expect(away).toContain('<span class="presence-dot" data-presence="away"></span>');
-		expect(away).toContain('aria-label="Chopin, agent, Away"');
+		expect(away).toContain('aria-label="chopin, agent, Away"');
 		// Only Chopin's row: a person's presence is not Chopin's to say.
 		expect(away.match(/presence-dot/g)).toHaveLength(1);
 	});

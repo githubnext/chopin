@@ -982,7 +982,7 @@ test("falls back to the default with a notice when the chosen model has gone, an
 	// The client no longer offers Large: what will run is the default, and the composer says so.
 	client.report(WITHOUT_LARGE);
 	// The chosen model keeps the display name the catalog reported.
-	let gone = "Large is no longer available, so Chopin used its default model.";
+	let gone = "Large is no longer available, so chopin used its default model.";
 	await expect(trigger(page)).toHaveAccessibleName(`Model: Small, ${gone}`);
 	// The tooltip stays short: the composer's notice already says why.
 	await expect(trigger(page)).toHaveAttribute("title", "Model: Small");
@@ -1019,7 +1019,7 @@ test("falls back to the default with a notice when the chosen model has gone, an
 		},
 	});
 	let reasoning =
-		"high reasoning is no longer available for this model, so Chopin used its default.";
+		"high reasoning is no longer available for this model, so chopin used its default.";
 	await expect(trigger(page)).toHaveAccessibleName(`Model: Large, ${reasoning}`);
 	await ask(page, "level gone", 4);
 	expect(turnFor(asked, "level gone")).toMatchObject({ model: "acme/large" });
@@ -1045,7 +1045,7 @@ test("says a saved choice has gone once a turn fell back for a client that offer
 	await level(page, "high").click();
 	await page.keyboard.press("Escape");
 	await expect(trigger(teammate)).toHaveAccessibleName("Model: Large, reasoning high");
-	let gone = "Large is no longer available, so Chopin used its default model.";
+	let gone = "Large is no longer available, so chopin used its default model.";
 
 	// Nobody is attached: the choice is neither gone nor honored, and nothing says it has gone.
 	await first.client.detach();
@@ -1121,7 +1121,7 @@ test("keeps a saved choice's notice until Chat records the fallback when the cli
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
 	await expect(trigger(teammate)).toHaveAccessibleName("Model: Large, reasoning high");
 	await expect(notice(page).filter({ hasText: "no longer available" })).toHaveCount(0);
-	let gone = "Large is no longer available, so Chopin used its default model.";
+	let gone = "Large is no longer available, so chopin used its default model.";
 
 	// The client withdraws every model: the picker goes, and the saved choice's words stay, to
 	// everyone who can write, before any turn. Somebody who can only read sees neither.
@@ -1218,7 +1218,7 @@ test("says the default ran when a turn cannot read the document's model choice, 
 	await expect(trigger(teammate)).toHaveAccessibleName("Model: Large, reasoning high");
 
 	// The server cannot read the stored choice: the turn runs the client's default, never silently.
-	let unread = "This document's model choice couldn't be read, so Chopin used its default model.";
+	let unread = "This document's model choice couldn't be read, so chopin used its default model.";
 	await choicesReadable(false);
 	try {
 		await ask(page, "while it cannot be read", 1);
@@ -1257,8 +1257,8 @@ test("gives way to the room's connection banner and comes back with the connecti
 	await openPicker(page);
 	await level(page, "high").click();
 	await page.keyboard.press("Escape");
-	let gone = "Large is no longer available, so Chopin used its default model.";
-	let unread = "This document's model choice couldn't be read, so Chopin used its default model.";
+	let gone = "Large is no longer available, so chopin used its default model.";
+	let unread = "This document's model choice couldn't be read, so chopin used its default model.";
 
 	// The model has gone: its notice is drawn, and no banner is above it.
 	client.report(WITHOUT_LARGE);
@@ -1408,7 +1408,7 @@ test("keeps the model's name on a touch phone's trigger at every phone width, cu
 		// apart from the others, with the longest name given way to an ellipsis.
 		let row = async () => {
 			let mention = chat(page).getByRole("button", { name: "Mention docs" });
-			let mode = chat(page).getByRole("button", { name: "Ask Chopin", exact: true });
+			let mode = chat(page).getByRole("button", { name: "Ask chopin", exact: true });
 			let send = chat(page).getByRole("button", { name: "Send message" });
 			let controls = [mention, mode, model, send];
 			let boxes = await Promise.all(controls.map(async control => (await control.boundingBox())!));

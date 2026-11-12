@@ -1151,7 +1151,7 @@ Nothing a person sends to the Planner is held for later. A message is never "wai
   carries them, and one sent from a child carries the child as focus.
 - **It cannot be taken:** it is refused, saves nothing and says so. With a harness that takes
   no input mid-run (the Copilot SDK), or a running turn that is a background job's, the code is
-  `planner-busy` and the words are "Chopin can't take messages while it works on this machine. Stop
+  `planner-busy` and the words are "chopin can't take messages while it works on this machine. Stop
   it to ask now."; the server log names the harness. With no machine attached, or one that is away,
   the code is `planner-not-attached` with the connection's own words, mid-turn or not. For a
   machine that is away they say what happened and what to do: "@mona's machine is offline, so this

@@ -473,7 +473,7 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   with a `message` when it has not, because the turn has ended or the client has no way to hand
   it on. A refusal is final: Chat then says the message was not read, and it is not sent again.
   A client that did not offer the feature never receives one, and a message sent while it works
-  is refused in Chat ("Chopin can't take messages while it works on this machine. Stop it to ask
+  is refused in Chat ("chopin can't take messages while it works on this machine. Stop it to ask
   now.") rather than kept for later.
 - `host-tool-result` answers a `host-tool-call`. `output` is the tool's result
   as JSON. A failed call has `"isError": true` and `output`

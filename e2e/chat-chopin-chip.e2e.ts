@@ -21,9 +21,9 @@ function chatPane(page: Page) {
 /** The chip, its remove button and the button that asks, by the names a screen reader hears. */
 function parts(chat: Locator) {
 	return {
-		chip: chat.getByRole("group", { name: "Asking Chopin", exact: true }),
-		remove: chat.getByRole("button", { name: "Remove Chopin", exact: true }),
-		ask: chat.getByRole("button", { name: "Ask Chopin", exact: true }),
+		chip: chat.getByRole("group", { name: "Asking chopin", exact: true }),
+		remove: chat.getByRole("button", { name: "Remove chopin", exact: true }),
+		ask: chat.getByRole("button", { name: "Ask chopin", exact: true }),
 	};
 }
 
@@ -142,7 +142,7 @@ test("the sparkle button puts the chip at the start without touching the words o
 	expect(box.y + box.height).toBeGreaterThanOrEqual(after.y);
 	// Asking again is a no-op: the button is spent while the chip is on.
 	await expect(ask).toBeDisabled();
-	await expect(draft).toHaveAttribute("data-placeholder", "Ask Chopin…");
+	await expect(draft).toHaveAttribute("data-placeholder", "Ask chopin…");
 	await expect(remove).toBeVisible();
 });
 
@@ -153,7 +153,7 @@ test("the placeholder begins after the chip, not under it", async ({ join, page 
 	let { chip, ask } = parts(chat);
 	await ask.click();
 	await expect(chip).toBeVisible();
-	await expect(draft).toHaveAttribute("data-placeholder", "Ask Chopin…");
+	await expect(draft).toHaveAttribute("data-placeholder", "Ask chopin…");
 	let box = (await chip.boundingBox())!;
 	expect(await placeholderStart(draft)).toBeGreaterThanOrEqual(box.x + box.width - 1);
 });
@@ -370,7 +370,7 @@ test("on a phone the chip is the same chip, with a full touch target on its cros
 	await ask.tap();
 	await expect(chip).toBeVisible();
 	await expect(remove).toBeVisible();
-	await expect(draft).toHaveAttribute("data-placeholder", "Ask Chopin…");
+	await expect(draft).toHaveAttribute("data-placeholder", "Ask chopin…");
 	// The placeholder begins after the chip, not under it.
 	expect(await placeholderStart(draft)).toBeGreaterThanOrEqual(
 		(await chip.boundingBox())!.x + (await chip.boundingBox())!.width - 1,

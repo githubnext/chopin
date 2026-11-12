@@ -52,7 +52,7 @@ const VIEW_SPECIMENS: {
 	{ label: "Decisions selected", props: { unanswered: 3, view: "decisions" } },
 	{ label: "No unanswered decisions", props: {} },
 	{
-		label: "Chopin writing the document",
+		label: "chopin writing the document",
 		props: { documentActivity: "writing", view: "decisions" },
 	},
 	{ label: "New document changes", props: { documentActivity: "unseen", view: "decisions" } },

@@ -341,10 +341,10 @@ test("an attached Planner receives @chopin and invoke_planner turns as their own
 	await Chat.resume(context, room.ws);
 	expect(controls).toEqual([{ type: "stop", run: undefined }, { type: "resume", run: undefined }]);
 	expect(context.chat.entries.map(entry => entry.text)).toContain(
-		"@rival stopped Chopin and paused its workflows.",
+		"@rival stopped chopin and paused its workflows.",
 	);
 	expect(context.chat.entries.map(entry => entry.text)).toContain(
-		"@rival resumed Chopin's workflows.",
+		"@rival resumed chopin's workflows.",
 	);
 });
 
@@ -800,7 +800,7 @@ test("a dropped link's grace period only leases ownership: a Stop that ends a qu
 	// left to keep, the account's ownership is leased for the grace period as a detach's is.
 	await Chat.abort(context, down.ws);
 	await until(() => context.plan.records.get(id)?.status === "cancelled");
-	expect(down.said().at(-1)).toBe("@rival stopped Chopin and withdrew its open question.");
+	expect(down.said().at(-1)).toBe("@rival stopped chopin and withdrew its open question.");
 	await until(() => server.attachments.status(down.channel.id).state === "held");
 	// The machine stepped away: a message to it is refused as one to a machine that is offline.
 	expect(await context.plannerNotAttached!()).toBe(
@@ -868,7 +868,7 @@ test("a Stop pressed while the attached Planner's link is down says it is pendin
 	// Nothing has stopped: the run card stays as last reported, and the notice does not say otherwise.
 	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
 	expect(said().at(-1)).toBe(
-		"@rival asked Chopin to stop. Its machine is disconnected, so its workflows will pause when it reconnects.",
+		"@rival asked chopin to stop. Its machine is disconnected, so its workflows will pause when it reconnects.",
 	);
 
 	let client = await down.reconnect();
@@ -904,7 +904,7 @@ test("a Stop pressed while the attached Planner's link is down withdraws a quest
 	let id = [...context.plan.records.keys()][0]!;
 	expect(context.plan.records.get(id)?.status).toBe("open");
 	await Chat.abort(context, down.ws);
-	expect(said().at(-1)).toBe("@rival stopped Chopin and withdrew its open question.");
+	expect(said().at(-1)).toBe("@rival stopped chopin and withdrew its open question.");
 	expect(context.plan.records.get(id)?.status).toBe("cancelled");
 	expect(context.chat.retained).toBeUndefined();
 
@@ -926,7 +926,7 @@ test("a Stop the client had not answered when its link dropped is held, says it 
 	// Nothing has stopped, and the notice does not say so.
 	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
 	expect(said().at(-1)).toBe(
-		"@rival asked Chopin to stop. Its machine is disconnected, so its workflows will pause when it reconnects.",
+		"@rival asked chopin to stop. Its machine is disconnected, so its workflows will pause when it reconnects.",
 	);
 
 	down.answering();
@@ -1091,7 +1091,7 @@ test("a Stop pressed before the server notices the link died says it was not con
 	let { context, server } = down;
 	down.proxy!.hold();
 	await Chat.abort(context, down.ws);
-	let stop = "@rival asked Chopin to stop its workflows. It has not confirmed yet, and if its "
+	let stop = "@rival asked chopin to stop its workflows. It has not confirmed yet, and if its "
 		+ "machine is disconnected they will pause when it reconnects.";
 	expect(down.said().at(-1)).toBe(stop);
 	expect(context.chat.runs?.map(run => run.status)).toEqual(["running"]);
@@ -1112,7 +1112,7 @@ test("a pause of one run the client did not confirm in time is reported as not c
 	down.proxy!.hold();
 	await Chat.controlRun(context, down.ws, { kind: "chat:pause-run", runId: "run-1" });
 	expect(down.said().at(-1)).toBe(
-		"@rival asked to pause plan-review. Chopin has not confirmed yet, and if its "
+		"@rival asked to pause plan-review. chopin has not confirmed yet, and if its "
 			+ "machine is disconnected it will pause when it reconnects.",
 	);
 });
@@ -1138,7 +1138,7 @@ test("a Stop of every run that a Resume of another run partly undid is still rep
 	await down.drop();
 	await stopping;
 	expect(down.said().some(text => text === "@rival stopped the turn.")).toBe(false);
-	expect(down.said().some(text => text.startsWith("@rival asked Chopin to stop."))).toBe(true);
+	expect(down.said().some(text => text.startsWith("@rival asked chopin to stop."))).toBe(true);
 	await down.reconnect();
 	await until(() => down.controls.includes("stop run-1"));
 });
@@ -1368,7 +1368,7 @@ test("a command goes only to the Planner, and not to the people in the room", as
 	expect(await room.send("/review the diff", "room", [command("review", "prompt", 0)]))
 		.toMatchObject({
 			kind: "session:error",
-			message: "A command runs in the Planner's turn, so it goes to Chopin.",
+			message: "A command runs in the Planner's turn, so it goes to chopin.",
 		});
 	expect(room.context.chat.entries).toHaveLength(0);
 });

@@ -302,7 +302,7 @@ describe("AI SDK stream projection", () => {
 			}),
 		);
 		expect(chat.entries[0]?.tools?.[0]?.result).toBe(
-			"Reference content was returned privately to Chopin.",
+			"Reference content was returned privately to chopin.",
 		);
 		expect(JSON.stringify(chat.entries)).not.toContain("PRIVATE SOURCE");
 	});

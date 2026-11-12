@@ -180,7 +180,7 @@ test("a task draft asked while another turn runs is refused, not held, and runs 
 	let refused = await Chat.draftTasks(context, "ana", 4, "Revise the tasks.", "@ana asked.");
 	expect(refused).toEqual({
 		ok: false,
-		reason: "Chopin is working on something else. Try again when it has finished.",
+		reason: "chopin is working on something else. Try again when it has finished.",
 	});
 	expectPlain(refused.ok ? "" : refused.reason, "a task draft's refusal");
 	expect(drafting(events)).toEqual([]);
@@ -207,7 +207,7 @@ test("a task draft is refused without a Planner or when the notice cannot be sav
 	let { context, prompts } = await setup();
 	context.config.agent = false;
 	let off = await Chat.draftTasks(context, "ana", 1, "Prepare.", "@ana asked.");
-	expect(off).toEqual({ ok: false, reason: "Chopin is not running" });
+	expect(off).toEqual({ ok: false, reason: "chopin is not running" });
 	expectPlain(off.ok ? "" : off.reason, "a task draft's refusal");
 	context.config.agent = true;
 	context.persist = async () => {
@@ -250,7 +250,7 @@ test("a task draft takes the same limit on sends being processed as a Chat messa
 	let { context, prompts } = await setup();
 	context.chat.pendingSends = 20;
 	let full = await Chat.draftTasks(context, "ana", 1, "Prepare.", "@ana asked.");
-	expect(full).toEqual({ ok: false, reason: "Chopin is busy. Try again in a moment." });
+	expect(full).toEqual({ ok: false, reason: "chopin is busy. Try again in a moment." });
 	expectPlain(full.ok ? "" : full.reason, "a task draft's refusal");
 	expect(context.chat.draft).toBeUndefined();
 	expect(context.chat.entries).toEqual([]);
@@ -296,7 +296,7 @@ test("the draft instruction comes from the plan and refuses an unsettled one", a
 	let prepare = draftInstruction(plan, "ana");
 	expect(prepare.text).toContain("Prepare an implementation graph");
 	expect(prepare.text).toContain("Do not approve or start implementation.");
-	expect(prepare.said).toBe("@ana asked Chopin to break the plan into tasks.");
+	expect(prepare.said).toBe("@ana asked chopin to break the plan into tasks.");
 	let built = draftInstruction(plan, "ana", true);
 	expect(built.text).toContain("Chopin approves and starts these tasks automatically");
 	expect(built.text).toContain("do not describe them as unapproved or unstarted");
@@ -327,7 +327,7 @@ test("the draft instruction comes from the plan and refuses an unsettled one", a
 	expect(plan.graph).toBeDefined();
 	let revise = draftInstruction(plan, "ana");
 	expect(revise.text).toContain("Revise the implementation graph");
-	expect(revise.said).toBe("@ana asked Chopin to update the tasks.");
+	expect(revise.said).toBe("@ana asked chopin to update the tasks.");
 	expect(revise.text).toContain("Do not approve or start implementation.");
 	expect(draftInstruction(plan, "ana", true).text)
 		.toContain("Chopin approves and starts these tasks automatically");

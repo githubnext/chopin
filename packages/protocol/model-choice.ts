@@ -4,6 +4,8 @@
  * what will run, so the two can never disagree about a model that has gone.
  */
 
+import { PLANNER_NAME } from "./address";
+
 import type { Chat } from "./chat";
 
 type Catalog = Chat.ModelCatalog;
@@ -117,7 +119,7 @@ export function levelLabel(level: string): string {
  * the composer shows them, so a choice is never dropped without a word.
  */
 export const UNREADABLE_NOTICE =
-	"This document's model choice couldn't be read, so Chopin used its default model.";
+	`This document's model choice couldn't be read, so ${PLANNER_NAME} used its default model.`;
 
 /** The words a person reads for what could not be honoured, without Chopin's own terms. */
 export function unavailableNotice(
@@ -128,10 +130,12 @@ export function unavailableNotice(
 	// A catalog may give a model an empty name: it is then called by its id.
 	let name = (id: string) => modelName || catalogModel(catalog, id)?.name || id;
 	if (unavailable.model !== undefined) {
-		return `${name(unavailable.model)} is no longer available, so Chopin used its default model.`;
+		return `${
+			name(unavailable.model)
+		} is no longer available, so ${PLANNER_NAME} used its default model.`;
 	}
 	return `${
 		levelLabel(unavailable.thinkingLevel ?? "")
 	} reasoning is no longer available for this model, `
-		+ "so Chopin used its default.";
+		+ `so ${PLANNER_NAME} used its default.`;
 }

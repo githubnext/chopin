@@ -186,7 +186,7 @@ describe("Sending to Chopin", () => {
 	it("offers Send to Chopin, ticked, beside the send of a new comment", () => {
 		let markup = renderToStaticMarkup(<DraftCard onCancel={() => {}} onSend={() => {}} />);
 
-		expect(markup).toContain("Send to Chopin");
+		expect(markup).toContain("Send to chopin");
 		expect(markup).toMatch(/<input[^>]*\bchecked\b/);
 		expect(markup).toContain('class="plan-comment-address-chip"');
 	});
@@ -210,7 +210,7 @@ describe("Sending to Chopin", () => {
 	it("keeps the reply's Send to Chopin folded away until the field is used", () => {
 		let markup = render(view(), true);
 
-		expect(markup).toContain("Send to Chopin");
+		expect(markup).toContain("Send to chopin");
 		expect(markup).toMatch(/plan-comment-composer-footer"[^>]*inert/);
 	});
 
@@ -238,14 +238,14 @@ describe("Sending to Chopin", () => {
 
 	it("says Chopin is working, and why it stopped when it did", () => {
 		let working = render({ ...view(), planner: "working" }, true);
-		expect(working).toContain("Chopin is working on it");
+		expect(working).toContain("chopin is working on it");
 		expect(working).toContain('role="status"');
 		expect(working).toContain("plan-comment-dots");
 
-		expect(render({ ...view(), planner: "stopped" }, true)).toContain("Chopin stopped");
-		expect(render({ ...view(), planner: "failed" }, true)).toContain("Chopin couldn&#x27;t reply");
-		expect(render({ ...view(), planner: "off" }, true)).toContain("Chopin isn&#x27;t running");
-		expect(render(view(), true)).not.toContain("Chopin is working");
+		expect(render({ ...view(), planner: "stopped" }, true)).toContain("chopin stopped");
+		expect(render({ ...view(), planner: "failed" }, true)).toContain("chopin couldn&#x27;t reply");
+		expect(render({ ...view(), planner: "off" }, true)).toContain("chopin isn&#x27;t running");
+		expect(render(view(), true)).not.toContain("chopin is working");
 	});
 });
 

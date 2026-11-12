@@ -1,3 +1,4 @@
+import { PLANNER_NAME } from "@chopin/protocol/address";
 import type { TextStreamPart, ToolSet } from "ai";
 import type { Decide } from "../conversation-plan/decisions";
 import type { JevQuestion } from "../conversation-plan/jev";
@@ -19,12 +20,12 @@ let inputQuestion: JevQuestion = {
 	},
 };
 
-const UNVERIFIED = "Chopin could not verify its Chat response. Try again.";
+const UNVERIFIED = `${PLANNER_NAME} could not verify its Chat response. Try again.`;
 
 /** A failure of the Chat reply check alone; the Planner session that produced the reply is sound. */
 export class PlannerReplyError extends Error {}
 
-const REPLY_FAILED = "Chopin's reply failed. Try again.";
+const REPLY_FAILED = `${PLANNER_NAME}'s reply failed. Try again.`;
 
 /**
  * A reply that ended with nothing from the model or harness to say why. The words are Chopin's
@@ -209,7 +210,7 @@ export async function publishPlannerReplies(options: {
 		}
 		if (!rejected) return;
 		if (options.repair === false) {
-			throw new PlannerReplyError("Chopin's answer asked for input, so it was withheld.");
+			throw new PlannerReplyError(`${PLANNER_NAME}'s answer asked for input, so it was withheld.`);
 		}
 	}
 	let count = options.capturedDecisions?.() ?? 0;
@@ -228,6 +229,6 @@ export async function publishPlannerReplies(options: {
 		return;
 	}
 	throw new PlannerReplyError(
-		"Chopin could not move its questions into inline decisions. Try again.",
+		`${PLANNER_NAME} could not move its questions into inline decisions. Try again.`,
 	);
 }

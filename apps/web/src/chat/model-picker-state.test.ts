@@ -124,7 +124,7 @@ describe("what the trigger says", () => {
 	test("gives the model, its level and what went missing as the name of the control", () => {
 		expect(triggerLabel(catalog, undefined)).toBe("Model: Small");
 		expect(triggerLabel(catalog, { model: "acme/large", thinkingLevel: "xhigh" })).toBe(
-			"Model: Large, xhigh reasoning is no longer available for this model, so Chopin used its default.",
+			"Model: Large, xhigh reasoning is no longer available for this model, so chopin used its default.",
 		);
 	});
 
@@ -171,10 +171,10 @@ describe("what the trigger says", () => {
 
 	test("says what a gone model fell back to, and nothing when the choice stands", () => {
 		expect(fallbackNotice(catalog, { model: "acme/gone" })).toBe(
-			"acme/gone is no longer available, so Chopin used its default model.",
+			"acme/gone is no longer available, so chopin used its default model.",
 		);
 		expect(triggerLabel(catalog, { model: "acme/gone" })).toBe(
-			"Model: Small, acme/gone is no longer available, so Chopin used its default model.",
+			"Model: Small, acme/gone is no longer available, so chopin used its default model.",
 		);
 		expect(fallbackNotice(catalog, { model: "acme/large", thinkingLevel: "low" })).toBeUndefined();
 		expect(fallbackNotice(catalog, undefined)).toBeUndefined();
@@ -183,7 +183,7 @@ describe("what the trigger says", () => {
 
 describe("what the composer's strip says about the document's model", () => {
 	let held = { catalog, choice: { model: "acme/large" } as Chat.ModelChoice, refusal: undefined };
-	let unread = "This document's model choice couldn't be read, so Chopin used its default model.";
+	let unread = "This document's model choice couldn't be read, so chopin used its default model.";
 
 	test("says nothing while the choice stands, and nothing where no model can be chosen", () => {
 		expect(composerModelNotice(held, false)).toBeUndefined();
@@ -198,7 +198,7 @@ describe("what the composer's strip says about the document's model", () => {
 
 	test("keeps what a saved choice fell back from where the harness offers no models at all", () => {
 		// The picker is gone (no control, no catalog), and the choice the document holds is still said.
-		let gone = "acme/large is no longer available, so Chopin used its default model.";
+		let gone = "acme/large is no longer available, so chopin used its default model.";
 		expect(composerModelNotice(undefined, false, { model: "acme/large" })).toEqual({
 			tone: "info",
 			text: gone,
@@ -207,7 +207,7 @@ describe("what the composer's strip says about the document's model", () => {
 			.toEqual({ tone: "info", text: gone });
 		expect(composerModelNotice(undefined, false, { thinkingLevel: "xhigh" })).toEqual({
 			tone: "info",
-			text: "xhigh reasoning is no longer available for this model, so Chopin used its default.",
+			text: "xhigh reasoning is no longer available for this model, so chopin used its default.",
 		});
 		// What could not be read still comes before it, as it does with a catalog.
 		expect(composerModelNotice(undefined, true, { model: "acme/large" })).toEqual({
@@ -226,7 +226,7 @@ describe("what the composer's strip says about the document's model", () => {
 	});
 
 	test("names a saved choice before and after the picker goes away", () => {
-		let text = "Large is no longer available, so Chopin used its default model.";
+		let text = "Large is no longer available, so chopin used its default model.";
 		let gone = { ...held, choice: { model: "acme/gone" }, modelName: "Large" };
 		expect(composerModelNotice(gone, false)).toEqual({ tone: "info", text });
 		expect(composerModelNotice(undefined, false, { model: "acme/gone" }, [], "Large"))
@@ -236,7 +236,7 @@ describe("what the composer's strip says about the document's model", () => {
 
 	test("does not repeat a fallback already recorded in Chat, but keeps other notices", () => {
 		let gone = { ...held, choice: { model: "acme/gone" } };
-		let text = "acme/gone is no longer available, so Chopin used its default model.";
+		let text = "acme/gone is no longer available, so chopin used its default model.";
 		let entries = [{ id: "1", author: { kind: "system" as const }, text, ts: 1 }];
 		expect(composerModelNotice(gone, false, undefined, entries)).toBeUndefined();
 		expect(composerModelNotice(gone, true, undefined, entries)).toEqual({
@@ -268,7 +268,7 @@ describe("what the composer's strip says about the document's model", () => {
 		let gone = { ...held, choice: { model: "acme/gone" } };
 		expect(composerModelNotice(gone, false)).toEqual({
 			tone: "info",
-			text: "acme/gone is no longer available, so Chopin used its default model.",
+			text: "acme/gone is no longer available, so chopin used its default model.",
 		});
 		expect(composerModelNotice(gone, true)).toEqual({ tone: "info", text: unread });
 	});

@@ -469,7 +469,7 @@ test("a message may be only a picture", async ({ join }) => {
 	let message = messages(page).filter({ has: page.locator('[data-chat-image="single"]') });
 	await expect(message).toHaveCount(1);
 	await expect(message.locator("[data-slot='message-attachments']")).toHaveCount(0);
-	await expect(message).not.toContainText("Ask Chopin");
+	await expect(message).not.toContainText("Ask chopin");
 });
 
 test("keeps the composer's files usable at a phone's width, and accessible", async ({ join }) => {

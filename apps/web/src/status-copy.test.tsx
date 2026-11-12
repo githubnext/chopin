@@ -371,7 +371,7 @@ test("the busy labels, the agent's face and the composer's picker hints are plai
 		["writing", "unseen", undefined].map(state => documentActivityLabel(state as never)),
 	);
 	let working = render(createElement(PlanStatus, { busy: true, synced: true }));
-	expect(working).toContain("Chopin is working");
+	expect(working).toContain("chopin is working");
 	expectPlainWords("the document's status", words(working));
 	expectPlainWords("the agent's face", words(render(createElement(AgentFace, {}))));
 	for (let text of ["", "should we ask about auth first?", "@chopin draft the auth section"]) {
@@ -379,14 +379,14 @@ test("the busy labels, the agent's face and the composer's picker hints are plai
 		if (cue) expectPlainWords("a picker hint", [cue.text]);
 	}
 	expect(destinationCue("should we ask about auth first?", [], true)?.text)
-		.toBe("Sent to people here. Type @ to ask Chopin");
+		.toBe("Sent to people here. Type @ to ask chopin");
 	let empty = render(createElement(Transcript, {
 		active: true,
 		emptyHint: { planner: true, references: true },
 		entries: [],
 		handle: "ana",
 	}));
-	expect(empty).toContain("to ask Chopin");
+	expect(empty).toContain("to ask chopin");
 	expectPlainWords("the empty Chat", words(empty));
 });
 
@@ -460,7 +460,7 @@ test("what a message's analysis, its evidence and a failed background job say is
 		},
 	}];
 	let evidence = render(createElement(EvidencePopover, { rows, onSource: () => {} } as never));
-	expect(evidence).toContain("Chopin suggested");
+	expect(evidence).toContain("chopin suggested");
 	expectPlainWords("the evidence", words(evidence));
 	let jobs = render(createElement(PlannerJobDiagnostics, {
 		canEdit: true,
@@ -552,7 +552,7 @@ test("every reason Build plan waits and every refusal Build shows is plain, mach
 		["the queue is full", undefined],
 		["the reply queue is full", undefined],
 		["Planner is not running", undefined],
-		["Chopin is not running", undefined],
+		["chopin is not running", undefined],
 		["write access is needed", undefined],
 		["this cannot be built", undefined],
 	] as const;

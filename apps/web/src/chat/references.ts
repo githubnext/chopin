@@ -1,4 +1,5 @@
 import { addressed, MENTION } from "@chopin/protocol/address";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 
 import type { Chat } from "@chopin/protocol";
 
@@ -538,8 +539,8 @@ export function destinationCue(
 	let to = chatSendPayload(text, references, plannerEnabled, "", referencesEnabled)?.to;
 	if (!to) return undefined;
 	return to === "planner"
-		? { to, text: "Sends to Chopin, which will reply" }
-		: { to, text: "Sent to people here. Type @ to ask Chopin" };
+		? { to, text: `Sends to ${PLANNER_NAME}, which will reply` }
+		: { to, text: `Sent to people here. Type @ to ask ${PLANNER_NAME}` };
 }
 
 export function acknowledgeDraft(current: ComposerDraft, submitted: ComposerDraft): ComposerDraft {

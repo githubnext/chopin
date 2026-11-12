@@ -275,12 +275,12 @@ test("Planner option evidence navigates to its exact saved chat source", async (
 		name: "Evidence for Should we run a limited pilot?",
 		exact: true,
 	});
-	await expect(panel).toContainText("Chopin suggested");
+	await expect(panel).toContainText("chopin suggested");
 	await expect(panel).toContainText(
-		"Why Chopin suggested this: It keeps the pilot small and concrete.",
+		"Why chopin suggested this: It keeps the pilot small and concrete.",
 	);
 	await expect(panel).toContainText(
-		"Why Chopin suggested this: It compares two different settings.",
+		"Why chopin suggested this: It compares two different settings.",
 	);
 	let showSource = panel.getByRole("button", {
 		name: `Show “${sourceQuote}” in chat`,

@@ -8,7 +8,7 @@ test("a comment sent to Chopin with no Planner running is saved and says Chopin 
 	await page.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let card = page.getByRole("dialog", { name: "New comment" });
 	// No Planner runs here, so a new comment is not sent to Chopin unless asked.
-	let address = card.getByRole("checkbox", { name: "Send to Chopin" });
+	let address = card.getByRole("checkbox", { name: "Send to chopin" });
 	await expect(address).not.toBeChecked();
 	await address.check();
 	await card.getByRole("textbox", { name: "Comment" }).fill("Can you shorten this?");
@@ -18,12 +18,12 @@ test("a comment sent to Chopin with no Planner running is saved and says Chopin 
 	let thread = page.getByRole("dialog", { name: "Comment thread" });
 	await expect(thread.getByText("Can you shorten this?")).toBeVisible();
 	await expect(thread.locator(".plan-comment-mention")).toHaveText("@chopin");
-	await expect(thread.getByText("Chopin isn't running")).toBeVisible();
+	await expect(thread.getByText("chopin isn't running")).toBeVisible();
 
 	// Backspace at the start of a reply drops the address it was given.
 	let reply = thread.getByRole("textbox", { name: "Reply" });
 	await reply.click();
-	let box = thread.getByRole("checkbox", { name: "Send to Chopin" });
+	let box = thread.getByRole("checkbox", { name: "Send to chopin" });
 	await expect(box).toBeVisible();
 	await reply.pressSequentially("@CHOPIN ");
 	await expect(box).toBeChecked();

@@ -182,8 +182,9 @@ function CommentSystemEntry(
 			<span className="chat-comment-notice-head">
 				<MessageForwardIcon aria-hidden="true" className="icon-first-line" size={16} />
 				<span>
-					Comment on <span className="chat-comment-notice-title">“{comment.excerpt}”</span>{" "}
-					sent to Chopin
+					Comment on <span className="chat-comment-notice-title">“{comment.excerpt}”</span> sent to
+					{" "}
+					{PLANNER_NAME}
 				</span>
 			</span>
 			<span className="chat-comment-notice-body">
@@ -286,7 +287,7 @@ function MessageBody(
 	if (
 		!toPlanner && !displayText(text) && message.author.kind === "member"
 		&& !message.attachments?.length
-	) text = "Ask Chopin";
+	) text = `Ask ${PLANNER_NAME}`;
 	// Only the sender sees that a message is still only in their browser, or that the server refused it.
 	let own = message.author.kind === "member" && message.author.handle === handle;
 	let delivery = own ? deliveryOf(message) : undefined;
@@ -690,14 +691,14 @@ export let Transcript = memo(function Transcript(
 		let hasDetails = !!messages.find(message => message.id === suspendedWork.anchorId)?.tools
 			?.length;
 		announcement = hasDetails
-			? "Chopin connection lost. Work details remain available."
-			: "Chopin connection lost.";
+			? `${PLANNER_NAME} connection lost. Work details remain available.`
+			: `${PLANNER_NAME} connection lost.`;
 	} else if (completedWork?.length) {
 		let anchorId = completedWork.at(-1)?.anchorId;
 		let hasDetails = !!messages.find(message => message.id === anchorId)?.tools?.length;
 		announcement = hasDetails
-			? "Chopin turn ended. Work details remain available."
-			: "Chopin turn ended.";
+			? `${PLANNER_NAME} turn ended. Work details remain available.`
+			: `${PLANNER_NAME} turn ended.`;
 	}
 	let latestPrompt = new Map<string, string>();
 	let latestScoped = new Map<string, string>();
@@ -1024,12 +1025,13 @@ export let Transcript = memo(function Transcript(
 							description={
 								<>
 									{emptyHint.automatic
-										? "Talk it through with your collaborators and Chopin."
+										? `Talk it through with your collaborators and ${PLANNER_NAME}.`
 										: "Talk it through with your collaborators."}
 									{emptyHint.planner && !emptyHint.automatic && (
 										<>
-											{" "}Use <strong className="font-medium text-text-secondary">@</strong>{" "}
-											to ask Chopin
+											{" "}Use <strong className="font-medium text-text-secondary">@</strong> to ask
+											{" "}
+											{PLANNER_NAME}
 											{emptyHint.references ? ", or " : "."}
 										</>
 									)}

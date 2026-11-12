@@ -95,7 +95,7 @@ async function scriptPlanner(target: Page | BrowserContext) {
 						rid: frame.rid,
 						code: "planner-busy",
 						message:
-							"Chopin can't take messages while it works on this machine. Stop it to ask now.",
+							"chopin can't take messages while it works on this machine. Stop it to ask now.",
 					});
 				}
 				let id = `accepted-${sends.length}`;
@@ -274,7 +274,7 @@ test("while the Planner runs, a message to people only is posted as usual, and a
 
 	// Taking the @Chopin chip off addresses the team: Send posts to the room without steering, and
 	// the empty draft returns to Stop.
-	let removeChip = chat.getByRole("button", { name: "Remove Chopin", exact: true });
+	let removeChip = chat.getByRole("button", { name: "Remove chopin", exact: true });
 	if (await removeChip.count()) await removeChip.click();
 	await fillChat(draft, "Keep the release notes brief.");
 	let send = chat.getByRole("button", { name: "Send message" });
@@ -290,12 +290,12 @@ test("while the Planner runs, a message to people only is posted as usual, and a
 	// Addressed to Chopin when the running turn cannot take a steer: refused with words, the draft
 	// is kept, and Stop is offered so the person can stop Chopin and send it.
 	planner.refuseSteer();
-	await chat.getByRole("button", { name: "Ask Chopin", exact: true }).click();
+	await chat.getByRole("button", { name: "Ask chopin", exact: true }).click();
 	await fillChat(draft, "Cover the rollback too.");
 	await expect(send).toBeEnabled();
 	await send.click();
 	await expect(chat.locator("[data-quiet-note]")).toContainText(
-		"Chopin can't take messages while it works on this machine. Stop it to ask now.",
+		"chopin can't take messages while it works on this machine. Stop it to ask now.",
 	);
 	await expectChatValue(draft, "Cover the rollback too.");
 	let stop = chat.getByRole("button", { name: "Stop generating" });

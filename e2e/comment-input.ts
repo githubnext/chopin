@@ -21,7 +21,7 @@ export async function startCommentToChopin(
 		.selectText();
 	await scope.getByRole("button", { name: "Comment on this passage", exact: true }).click();
 	let card = scope.getByRole("dialog", { name: "New comment" });
-	await card.getByRole("checkbox", { name: "Send to Chopin" }).check();
+	await card.getByRole("checkbox", { name: "Send to chopin" }).check();
 	await card.getByRole("textbox", { name: "Comment" }).fill(text);
 	await card.getByRole("button", { name: "Post comment", exact: true }).click();
 	await expect(card).toHaveCount(0);

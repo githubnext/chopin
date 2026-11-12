@@ -7,7 +7,7 @@ import {
 	parseChildDocumentPath,
 	parseDocumentPath,
 } from "@chopin/protocol/document-url";
-import { instruction, MENTION } from "@chopin/protocol/address";
+import { instruction, MENTION, PLANNER_NAME } from "@chopin/protocol/address";
 import { offeredCommand } from "@chopin/protocol/commands";
 
 import { isChannelId } from "../channels/id";
@@ -799,7 +799,9 @@ export class ReferenceService {
 		let resolved = await Promise.all(requested.map(async item => {
 			if (item.kind === "command") {
 				if (input.destination !== "planner") {
-					throw new ChatCommandError("A command runs in the Planner's turn, so it goes to Chopin.");
+					throw new ChatCommandError(
+						`A command runs in the Planner's turn, so it goes to ${PLANNER_NAME}.`,
+					);
 				}
 				if (!input.commands?.length) {
 					throw new ChatCommandError(

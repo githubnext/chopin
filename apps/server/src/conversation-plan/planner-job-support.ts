@@ -3,6 +3,7 @@ import type { Job, JobOutcome } from "./jobs";
 import type { PlannerJobDeps } from "./planner-job-types";
 import { isWhyTrigger, settleIntent } from "./prose-job";
 import { followupIntent } from "../questions/decision-followup";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 
 export function reason(value: unknown, fallback: string): string {
 	let text = value instanceof Error ? value.message : String(value ?? "");
@@ -103,22 +104,22 @@ export function line(
 		if (summary.changed === false) return undefined;
 		return [
 			summary.titleKept === true
-				? "Chopin drafted the goal"
+				? `${PLANNER_NAME} drafted the goal`
 				: summary.goal
-				? "Chopin drafted the title and goal"
-				: "Chopin updated the title",
+				? `${PLANNER_NAME} drafted the title and goal`
+				: `${PLANNER_NAME} updated the title`,
 			"document",
 		];
 	}
-	if (job.kind === "refine") return [`Chopin refined ${named}`, job.target, named];
+	if (job.kind === "refine") return [`${PLANNER_NAME} refined ${named}`, job.target, named];
 	if (job.kind === "suggest" && added > 0) {
-		return [`Chopin suggested ${added} options for ${named}`, job.target, named];
+		return [`${PLANNER_NAME} suggested ${added} options for ${named}`, job.target, named];
 	}
 	// A why-only draft is quiet: it appears on the decision's page, not as a Chat notice.
 	if (job.kind === "prose" && isWhyTrigger(job.trigger)) return undefined;
-	if (job.kind === "prose") return [`Chopin wrote up ${named}`, job.target, named];
+	if (job.kind === "prose") return [`${PLANNER_NAME} wrote up ${named}`, job.target, named];
 	if (job.kind === "decision-followup") {
-		return [`Chopin updated the passage for ${named}`, job.target, named];
+		return [`${PLANNER_NAME} updated the passage for ${named}`, job.target, named];
 	}
 	return undefined;
 }

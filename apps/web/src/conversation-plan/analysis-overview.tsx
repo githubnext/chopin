@@ -1,4 +1,5 @@
 import { CheckIcon } from "@chopin/icons";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 import { UnfoldSection } from "@chopin/visuals/unfold";
 
 import { ExcerptCorrection } from "./excerpt-correction";
@@ -114,7 +115,7 @@ export function AnalysisOverview({
 				{status === "applied"
 					? (
 						<>
-							Chopin linked this message{target
+							{PLANNER_NAME} linked this message{target
 								? (
 									<>
 										to <b>{target}</b>
@@ -124,7 +125,7 @@ export function AnalysisOverview({
 						</>
 					)
 					: status === "unlinked"
-					? "Chopin did not apply a card change from this message."
+					? `${PLANNER_NAME} did not apply a card change from this message.`
 					: status === "failed"
 					? analysis?.error || "Jev could not complete this analysis."
 					: "The message has not finished processing yet."}

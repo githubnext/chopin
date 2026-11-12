@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { locate } from "../../agent/cli";
 import { Runtime } from "./runtime";
 import { DEFAULT_COPILOT_MODEL } from "./model";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 
 import type {
 	HarnessV1,
@@ -330,7 +331,7 @@ export function createCopilotSdk(
 				) throw error;
 				if (model === DEFAULT_COPILOT_MODEL) {
 					throw new Error(
-						`Chopin couldn’t start because its model "${model}" is unavailable. `
+						`${PLANNER_NAME} couldn’t start because its model "${model}" is unavailable. `
 							+ "Ask the server administrator to update the model.",
 						{ cause: error },
 					);

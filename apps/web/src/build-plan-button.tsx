@@ -1,4 +1,5 @@
 import { ClockIcon, LoaderIcon, ProgressRingIcon, WarningIcon } from "@chopin/icons";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 import {
 	lazy,
 	Suspense,
@@ -21,6 +22,7 @@ import {
 	draftRefusalCopy,
 	firstBuildStep,
 	hasBuilt,
+	PLANNER_OFF,
 } from "./build-model";
 import { ApiError } from "./api";
 import { cancelBuildRequest, rebuildChanges, startBuild } from "./build-start";
@@ -494,8 +496,8 @@ export function BuildPlanButton(
 					className={`${
 						phone ? "build-status-link" : "btn btn-md btn-primary build-plan shrink-0"
 					}${offline ? " machine-offline" : ""}`}
-					data-tooltip={blocked === "Chopin isn’t running for this document"
-						? "Chopin is off"
+					data-tooltip={blocked === PLANNER_OFF
+						? `${PLANNER_NAME} is off`
 						: blocked}
 					data-tooltip-detail={blocked ? "" : undefined}
 					data-tooltip-verbatim={blocked ? "" : undefined}

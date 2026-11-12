@@ -200,15 +200,15 @@ async function newRoom() {
 
 /** The sparkle button that puts the @Chopin chip on, the chip that says so, and its cross. */
 function ask(page: Page) {
-	return chat(page).getByRole("button", { name: "Ask Chopin", exact: true });
+	return chat(page).getByRole("button", { name: "Ask chopin", exact: true });
 }
 
 function asking(page: Page) {
-	return chat(page).getByRole("group", { name: "Asking Chopin", exact: true });
+	return chat(page).getByRole("group", { name: "Asking chopin", exact: true });
 }
 
 function remove(page: Page) {
-	return chat(page).getByRole("button", { name: "Remove Chopin", exact: true });
+	return chat(page).getByRole("button", { name: "Remove chopin", exact: true });
 }
 
 const REASON = "This model can't read images, so only text files can be sent to it.";

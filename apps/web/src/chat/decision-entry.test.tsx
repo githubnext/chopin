@@ -213,7 +213,7 @@ test("activity labels remain text for the document sentinel and link card activi
 		entry: {
 			id: "heading-activity",
 			author: { kind: "system" },
-			text: "Chopin refined the document heading",
+			text: "chopin refined the document heading",
 			ts: 10,
 			decision: { questionnaireId: "document", kind: "activity", label: "the document heading" },
 		},
@@ -229,7 +229,7 @@ test("activity labels remain text for the document sentinel and link card activi
 		entry: {
 			id: "card-activity",
 			author: { kind: "system" },
-			text: "Chopin refined What auth system should we use?",
+			text: "chopin refined What auth system should we use?",
 			ts: 10,
 			decision: {
 				questionnaireId: "Q",
@@ -250,7 +250,7 @@ test("activity text stays exact when its label is interior or absent", () => {
 		entry: {
 			id: "card-activity",
 			author: { kind: "system" },
-			text: "Chopin linked the architecture note to the auth card",
+			text: "chopin linked the architecture note to the auth card",
 			ts: 10,
 			decision: { questionnaireId: "Q", kind: "activity", label: "architecture note" },
 		},
@@ -260,7 +260,7 @@ test("activity text stays exact when its label is interior or absent", () => {
 		onOpenCard() {},
 	}));
 	expect(interior).toMatch(
-		/Chopin linked the <button[^>]*>architecture note<\/button> to the auth card/,
+		/chopin linked the <button[^>]*>architecture note<\/button> to the auth card/,
 	);
 	expect(interior.match(/architecture note/g)).toHaveLength(1);
 
@@ -268,7 +268,7 @@ test("activity text stays exact when its label is interior or absent", () => {
 		entry: {
 			id: "heading-activity",
 			author: { kind: "system" },
-			text: "Chopin drafted the title and goal",
+			text: "chopin drafted the title and goal",
 			ts: 10,
 			decision: { questionnaireId: "document", kind: "activity", label: "the document" },
 		},
@@ -277,7 +277,7 @@ test("activity text stays exact when its label is interior or absent", () => {
 		canEdit: true,
 		onOpenCard() {},
 	}));
-	expect(absent).toContain("Chopin drafted the title and goal");
+	expect(absent).toContain("chopin drafted the title and goal");
 	expect(absent).not.toContain("the document");
 });
 

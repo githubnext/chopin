@@ -21,7 +21,7 @@ describe("createPlannerJobs", () => {
 		} as never);
 		await h.service.enqueue({ kind: "prose", target: "W1", trigger: "decided:W1:1" });
 		await h.service.idle();
-		expect(h.lines).toEqual(["Chopin wrote up Which authentication approach?"]);
+		expect(h.lines).toEqual(["chopin wrote up Which authentication approach?"]);
 		expect(h.commits.at(-1)?.lines).toEqual(h.lines);
 	});
 
@@ -101,7 +101,7 @@ describe("createPlannerJobs", () => {
 			"done",
 		]);
 		expect(h.commits.at(-1)?.lines).toEqual([
-			"Chopin refined What auth system should we use?",
+			"chopin refined What auth system should we use?",
 		]);
 		expect(h.published.at(-1)).toEqual(["refine:W1:m1:done"]);
 		expect(h.publishedAfter).toEqual([1, 2, 3]);
@@ -119,7 +119,7 @@ describe("createPlannerJobs", () => {
 		await h.service.idle();
 		await h.service.enqueue({ kind: "suggest", target: "W1", trigger: "m2" });
 		await h.service.idle();
-		expect(h.lines).toEqual(["Chopin suggested 2 options for Authentication?"]);
+		expect(h.lines).toEqual(["chopin suggested 2 options for Authentication?"]);
 		expect(h.commits).toHaveLength(6);
 	});
 });

@@ -49,27 +49,27 @@ test("there is no Chat/Chopin switch: Chopin is asked by a button and a chip, ne
 	expect(off).not.toContain("Talk to Chopin");
 	expect(off).not.toContain("data-mode");
 	expect(off).not.toContain("composer-chopin-row");
-	expect(off).toContain('aria-label="Ask Chopin"');
-	expect(off).not.toContain('aria-label="Asking Chopin"');
-	expect(off).not.toContain('aria-label="Remove Chopin"');
+	expect(off).toContain('aria-label="Ask chopin"');
+	expect(off).not.toContain('aria-label="Asking chopin"');
+	expect(off).not.toContain('aria-label="Remove chopin"');
 });
 
 test("the chip starts the field, named for a screen reader, with a button that removes it", () => {
 	let on = render({ chopin: { ...CHOPIN, chip: true } });
-	expect(on).toMatch(/<span aria-label="Asking Chopin" class="composer-chip" role="group">/);
-	expect(on).toContain('aria-label="Remove Chopin"');
+	expect(on).toMatch(/<span aria-label="Asking chopin" class="composer-chip" role="group">/);
+	expect(on).toContain('aria-label="Remove chopin"');
 	// It comes before the draft in the field, which is what lets the first line begin after it.
 	expect(on.indexOf("composer-chip")).toBeLessThan(on.indexOf('role="combobox"'));
 	// It is assistant-ui's mention chip: its icon, its label and the cross it draws.
 	expect(on).toContain('data-slot="directive-text-chip"');
-	expect(on).toContain("Ask Chopin…");
+	expect(on).toContain("Ask chopin…");
 	// Chopin is already being asked, so the button that asks is spent.
-	expect(on.match(/<button[^>]*aria-label="Ask Chopin"[^>]*>/)![0]).toContain('disabled=""');
+	expect(on.match(/<button[^>]*aria-label="Ask chopin"[^>]*>/)![0]).toContain('disabled=""');
 });
 
 test("without an agent there is nobody to ask: no button, no chip, and the team's placeholder", () => {
 	let markup = render({ agent: false });
-	expect(markup).not.toContain('aria-label="Ask Chopin"');
+	expect(markup).not.toContain('aria-label="Ask chopin"');
 	expect(markup).not.toContain("composer-chip");
 	expect(markup).toContain("Message the team");
 	expect(markup).not.toContain("@Chopin");
@@ -113,7 +113,7 @@ test("read-only and archived documents replace the draft and hide notices", () =
 test("shows one run control, and no connection state of its own", () => {
 	let markup = render({ run: { action: "stop", disabled: false, onClick: () => {} } });
 	expect(markup).toContain('aria-label="Stop generating"');
-	expect(markup).not.toContain('aria-label="Resume Chopin"');
+	expect(markup).not.toContain('aria-label="Resume chopin"');
 	// The document says when the connection is lost, once, at the top of its content.
 	expect(markup).not.toContain("composer-connection");
 	expect(markup).not.toContain("Reconnect");
@@ -178,7 +178,7 @@ test("Resume is a button of its own beside the round one", () => {
 		run: { action: "resume", disabled: false, onClick: () => {} },
 		sendDisabled: true,
 	});
-	expect(markup).toContain('aria-label="Resume Chopin"');
+	expect(markup).toContain('aria-label="Resume chopin"');
 	expect(roundButton(markup)).toContain('aria-label="Send message"');
 });
 
@@ -314,7 +314,7 @@ test("a banner alone describes the draft by its ids, with no notice strip of its
 
 test("a saved model's fallback notice is drawn beneath a banner as a status, and both describe the draft", () => {
 	let words = composerModelNotice(undefined, false, { model: "acme/large" })!;
-	expect(words.text).toBe("acme/large is no longer available, so Chopin used its default model.");
+	expect(words.text).toBe("acme/large is no longer available, so chopin used its default model.");
 	let banner = {
 		id: "lead",
 		node: createElement("div", { id: "lead", "data-banner": "" }, "No machine is connected."),

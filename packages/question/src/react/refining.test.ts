@@ -11,6 +11,6 @@ test("a refining card says so under its header", () => {
 		drafts: {},
 		refining: true,
 	}));
-	expect(markup).toContain("Chopin is refining…");
+	expect(markup).toContain("chopin is refining…");
 	expect(markup).toContain('data-refining="true"');
 });

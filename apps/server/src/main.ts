@@ -174,6 +174,7 @@ import {
 
 import { AGENT_PATH, LINK_CLOSE } from "@chopin/agent-link";
 import { SERVICE_RESTART } from "@chopin/protocol/restart";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 
 import type { Server, ServerWebSocket } from "bun";
 import type { AgentSocketData } from "./harness/remote/endpoint";
@@ -2917,7 +2918,7 @@ async function credentialsWillRotate(sessionId: string, revision: number): Promi
 			() => true,
 			sessionId,
 			revision,
-			"GitHub credentials refreshed, so Chopin's session was restarted. Ask it to continue.",
+			`GitHub credentials refreshed, so ${PLANNER_NAME}'s session was restarted. Ask it to continue.`,
 		),
 		jobs,
 	]);

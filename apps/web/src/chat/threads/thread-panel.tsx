@@ -87,7 +87,7 @@ function RootMessageCard({ entry, room }: { entry: Wire.Entry; room: string }) {
 	if (
 		!toPlanner && !displayText(text) && entry.author.kind === "member" && !entry.attachments?.length
 	) {
-		text = "Ask Chopin";
+		text = `Ask ${PLANNER_NAME}`;
 	}
 	let name = entry.author.kind === "agent"
 		? PLANNER_NAME

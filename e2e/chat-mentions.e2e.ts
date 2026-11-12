@@ -145,7 +145,7 @@ test("the @ picker lists the Planner and the people, those here first, and sends
 	await draft.press("Enter");
 	// Chopin is the chip at the start of the draft, not an @chopin in its words.
 	await expectChatValue(draft, "Ask ");
-	await expect(chat.getByRole("group", { name: "Asking Chopin", exact: true })).toBeVisible();
+	await expect(chat.getByRole("group", { name: "Asking chopin", exact: true })).toBeVisible();
 	await expect(list).toHaveCount(0);
 	await expect(draft).toBeFocused();
 	await draft.pressSequentially("what is open?");
@@ -155,9 +155,9 @@ test("the @ picker lists the Planner and the people, those here first, and sends
 
 	await expectChatValue(draft, "");
 	// The chip stays on after Chopin is asked; Backspace at the start takes it off.
-	await expect(chat.getByRole("group", { name: "Asking Chopin", exact: true })).toBeVisible();
+	await expect(chat.getByRole("group", { name: "Asking chopin", exact: true })).toBeVisible();
 	await draft.press("Backspace");
-	await expect(chat.getByRole("group", { name: "Asking Chopin", exact: true })).toHaveCount(0);
+	await expect(chat.getByRole("group", { name: "Asking chopin", exact: true })).toHaveCount(0);
 	await draft.fill("Thanks @cy");
 	await draft.press("Enter");
 	await expectChatValue(draft, "Thanks @cy ");

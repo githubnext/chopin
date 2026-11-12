@@ -13,11 +13,8 @@ export function isDemoHandle(handle: string): boolean {
 	return handle.startsWith(DEMO_PREFIX);
 }
 
-/**
- * The Planner's name wherever it takes part (a Chat row, a note, a source, a reaction), written as
- * the `@chopin` that addresses it. The product is still Chopin in prose.
- */
-export const PLANNER_NAME = "chopin";
+/** The Planner's name wherever it takes part, acts or is addressed; see `@chopin/protocol/address`. */
+export { PLANNER_NAME } from "@chopin/protocol/address";
 
 /** What a person is called: a roster name for a demo actor, otherwise the handle as written. */
 export function personName(handle: string): string {

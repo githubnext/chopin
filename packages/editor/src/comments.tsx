@@ -146,10 +146,10 @@ function Dots() {
 
 /** What the reader is told about Chopin's turn on this thread, while it runs or once it stopped. */
 const OUTCOME: Record<NonNullable<ThreadView["planner"]>, string> = {
-	working: "Chopin is working on it",
-	stopped: "Chopin stopped",
-	failed: "Chopin couldn't reply",
-	off: "Chopin isn't running",
+	working: `${PLANNER_NAME} is working on it`,
+	stopped: `${PLANNER_NAME} stopped`,
+	failed: `${PLANNER_NAME} couldn't reply`,
+	off: `${PLANNER_NAME} isn't running`,
 };
 
 function PlannerStatus({ state }: { state: NonNullable<ThreadView["planner"]> }) {
@@ -487,7 +487,7 @@ function Composer({
 							}}
 							type="checkbox"
 						/>
-						Send to Chopin
+						Send to {PLANNER_NAME}
 					</label>
 					<button
 						aria-label={label}

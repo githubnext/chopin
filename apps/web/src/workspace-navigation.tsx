@@ -3,6 +3,7 @@
 import { Count } from "@chopin/editor/count";
 
 import { DocumentActivityDot, documentActivityLabel } from "./document-activity";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 
 import type { ReactNode } from "react";
 import type { DocumentActivity } from "./document-activity";
@@ -22,9 +23,9 @@ export function destinationLabel(
 		return `Decisions, ${unanswered} unanswered`;
 	}
 	if (destination === "chat" && activity.busy && activity.unread > 0) {
-		return `Chat, Chopin working, ${activity.unread} unread`;
+		return `Chat, ${PLANNER_NAME} working, ${activity.unread} unread`;
 	}
-	if (destination === "chat" && activity.busy) return "Chat, Chopin working";
+	if (destination === "chat" && activity.busy) return `Chat, ${PLANNER_NAME} working`;
 	if (destination === "chat" && activity.unread > 0) {
 		return `Chat, ${activity.unread} unread`;
 	}

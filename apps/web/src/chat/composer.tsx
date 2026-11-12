@@ -9,6 +9,7 @@ import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from 
 import type { ReactNode, Ref } from "react";
 
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 import {
 	ArchiveIcon,
 	AtSignIcon,
@@ -602,9 +603,9 @@ export function ChatComposer(
 											type="button"
 											className="btn btn-icon btn-ghost"
 											aria-keyshortcuts="Control+J Meta+J"
-											aria-label="Ask Chopin"
-											title="Ask Chopin"
-											data-tooltip="Ask Chopin"
+											aria-label={`Ask ${PLANNER_NAME}`}
+											title={`Ask ${PLANNER_NAME}`}
+											data-tooltip={`Ask ${PLANNER_NAME}`}
 											data-tooltip-shortcut={shortcutLabel("ask-chopin", currentShortcutPlatform())}
 											data-tooltip-verbatim=""
 											disabled={chopin.disabled || chip}
@@ -633,11 +634,11 @@ export function ChatComposer(
 									{contextRing}
 									{run?.action === "resume" && (
 										<button
-											aria-label="Resume Chopin"
+											aria-label={`Resume ${PLANNER_NAME}`}
 											disabled={run.disabled}
 											className="btn btn-icon btn-ghost"
 											onClick={run.onClick}
-											title="Resume Chopin"
+											title={`Resume ${PLANNER_NAME}`}
 											type="button"
 										>
 											<img alt="" className="size-4" src={plannerResume} />

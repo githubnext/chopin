@@ -100,7 +100,7 @@ describe("transcript groups", () => {
 
 	it("omits routine decision activity without splitting a speaker's messages", () => {
 		let activity: Chat.Entry = {
-			...entry("activity", { kind: "system" }, "Chopin updated the passage for Auth"),
+			...entry("activity", { kind: "system" }, "chopin updated the passage for Auth"),
 			decision: { kind: "activity", questionnaireId: "Q", label: "Auth" },
 		};
 		let result = group([

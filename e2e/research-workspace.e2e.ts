@@ -318,7 +318,7 @@ async function draftFlow(page: Page) {
 test("the research draft takes its line in document flow without overlapping anything", async ({ join }) => {
 	let page = await join("ana");
 	let editor = content(page);
-	let prompt = page.getByText("Start writing, or ask Chopin to plan", { exact: true });
+	let prompt = page.getByText("Start writing, or ask chopin to plan", { exact: true });
 	await expect(prompt).toBeVisible();
 	let composer = page.getByRole("region", { name: "Research question", exact: true });
 

@@ -21,6 +21,7 @@
  */
 
 import { limits, ulid } from "@chopin/dialect";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 
 import * as room from "../plan/room";
 import * as Chat from "../chat/service";
@@ -338,14 +339,16 @@ async function admit(
 	context: Addressed | undefined,
 ): Promise<Admitted> {
 	if (msg.to === undefined) return {};
-	if (msg.to !== "planner" || !context) return { refused: "A comment can only be sent to Chopin." };
+	if (msg.to !== "planner" || !context) {
+		return { refused: `A comment can only be sent to ${PLANNER_NAME}.` };
+	}
 	let admitted: Wire.Planner | "busy";
 	if (context.root) {
 		try {
 			admitted = await context.root.admission();
 		} catch (err) {
 			console.error("[comments] could not reach the root document's Chat:", err);
-			return { refused: "Chopin can't be reached from this document right now." };
+			return { refused: `${PLANNER_NAME} can't be reached from this document right now.` };
 		}
 	} else {
 		// Under HARNESS=remote a turn with no Planner attached, or whose machine is away, would
@@ -355,7 +358,9 @@ async function admit(
 		admitted = Chat.admission(context);
 	}
 	if (admitted === "busy") {
-		return { refused: "Chopin is working on something else. Try again when it has finished." };
+		return {
+			refused: `${PLANNER_NAME} is working on something else. Try again when it has finished.`,
+		};
 	}
 	return { planner: admitted };
 }
@@ -538,7 +543,7 @@ function turn(
 	// How many notes the turn could read when it began; set again if a folded turn starts.
 	let seen = { notes: record.notes.length };
 	let text = address(plan.threads.get(id) ?? record, quote, root ? context.room : undefined);
-	let said = `Comment on “${excerpt(quote)}” sent to Chopin`;
+	let said = `Comment on “${excerpt(quote)}” sent to ${PLANNER_NAME}`;
 	let about: Chat.Instruction = {
 		thread: id,
 		// Resolved before its turn came round: nobody is waiting for it now.

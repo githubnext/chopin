@@ -616,7 +616,7 @@ async function expectOneNotice(
 	await expect.poll(() =>
 		wordsOutsideBanner(
 			chat,
-			/unavailable|Chopin is off|off on this server|offline|Reconnecting|Connecting|Connection lost/i,
+			/unavailable|chopin is off|off on this server|offline|Reconnecting|Connecting|Connection lost/i,
 		)
 	).toEqual([]);
 	// Only the bar offers Reconnect: nothing else in Chat retries anything.

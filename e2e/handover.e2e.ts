@@ -290,7 +290,7 @@ async function watch(page: Page): Promise<void> {
 			let field = composer?.querySelector("[aria-label='Message']");
 			// Who the message is for is the person's own state: the @Chopin chip comes on when they ask
 			// Chopin and stays, and the sparkle that puts it on is spent while it is. A deploy changes neither.
-			let asking = !!composer?.querySelector("[aria-label='Asking Chopin']");
+			let asking = !!composer?.querySelector("[aria-label='Asking chopin']");
 			return {
 				"Build plan": [
 					...document.querySelectorAll(".build-plan, .build-capsule, .build-status-link"),
@@ -303,13 +303,13 @@ async function watch(page: Page): Promise<void> {
 						[...composer.querySelectorAll("button")]
 							// Send follows what is typed, and Stop and Resume follow whether a turn is running.
 							.filter(button =>
-								!/^(Send message|Stop generating|Resume Chopin|Remove Chopin)$/.test(
+								!/^(Send message|Stop generating|Resume chopin|Remove chopin)$/.test(
 									button.getAttribute("aria-label") ?? "",
 								)
 							)
 							.map(button => {
 								let said = state(button);
-								return asking && said === "Ask Chopin (not available)" ? "Ask Chopin" : said;
+								return asking && said === "Ask chopin (not available)" ? "Ask chopin" : said;
 							}).join(" | ")
 					}`
 					: "absent",
@@ -319,8 +319,8 @@ async function watch(page: Page): Promise<void> {
 					[...document.querySelectorAll(".plan-comment-composer")].map(card =>
 						`${
 							(card.querySelector(".plan-comment-address-box") as HTMLInputElement | null)?.checked
-								? "sent to Chopin"
-								: "not sent to Chopin"
+								? "sent to chopin"
+								: "not sent to chopin"
 						}: ${(card.querySelector("textarea") as HTMLTextAreaElement | null)?.value ?? ""}`
 					).join(" | ") || "none",
 			};
@@ -1327,7 +1327,7 @@ for (let steers of [true, false]) {
 		await deploy.told;
 		await say(page, keys, "[m2] sent to the turn the old process waits for");
 		let busyWords =
-			"Chopin can't take messages while it works on this machine. Stop it to ask now.";
+			"chopin can't take messages while it works on this machine. Stop it to ask now.";
 		let banner = chat(page).locator("[data-quiet-note]");
 		if (steers) {
 			await until("the message to reach the turn", () => planner.steered.length === 1);
@@ -1515,7 +1515,7 @@ test("a comment being written across a deploy keeps its words and its offer to s
 		return page.getByRole("dialog", { name: "New comment" });
 	};
 	let card = await draft(1);
-	await expect(card.getByRole("checkbox", { name: "Send to Chopin" })).toBeChecked();
+	await expect(card.getByRole("checkbox", { name: "Send to chopin" })).toBeChecked();
 	await card.getByRole("textbox", { name: "Comment" }).fill("half a thought");
 	let loads = { count: 0 };
 	page.on("load", () => loads.count++);
@@ -1528,7 +1528,7 @@ test("a comment being written across a deploy keeps its words and its offer to s
 	await expectGap(done, page);
 
 	await expect(card.getByRole("textbox", { name: "Comment" })).toHaveValue("half a thought");
-	await expect(card.getByRole("checkbox", { name: "Send to Chopin" })).toBeChecked();
+	await expect(card.getByRole("checkbox", { name: "Send to chopin" })).toBeChecked();
 	let seen = await probe(page);
 	expect(seen.violations, seen.timeline.join("\n")).toEqual([]);
 	expect(seen.planner.filter(state => state !== "attached")).toEqual([]);
@@ -1536,7 +1536,7 @@ test("a comment being written across a deploy keeps its words and its offer to s
 	// The offer itself: a comment started after the deploy is addressed to Chopin by default.
 	await card.getByRole("textbox", { name: "Comment" }).press("Escape");
 	await expect(card).toHaveCount(0);
-	await expect((await draft(2)).getByRole("checkbox", { name: "Send to Chopin" })).toBeChecked();
+	await expect((await draft(2)).getByRole("checkbox", { name: "Send to chopin" })).toBeChecked();
 	expect(loads.count).toBe(0);
 	expect(planner.errors).toEqual([]);
 });
@@ -1816,7 +1816,7 @@ test("a Decision answered after a deploy, for a Planner whose client does not co
 	expect(later.prompts[0]!.prompt).toContain("saved answer");
 	expect(later.prompts[0]!.prompt).toContain('Chosen option (data): "Yes"');
 	await expect(replies(page, "Reply ?")).toHaveCount(1);
-	await expect(chat(page).getByText('Mona answered "Ship it?"', { exact: true })).toHaveCount(1);
+	await expect(chat(page).getByText('mona answered "Ship it?"', { exact: true })).toHaveCount(1);
 	await expect(chat(page).getByText("couldn't", { exact: false })).toHaveCount(0);
 	let seen = await probe(page);
 	expect(seen.violations, seen.timeline.join("\n")).toEqual([]);

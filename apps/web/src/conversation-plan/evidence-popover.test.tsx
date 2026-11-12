@@ -50,8 +50,8 @@ test("each row shows its label, stances, sourced evidence and Planner rationale"
 	expect(markup).toContain("ring-2 ring-destructive");
 	expect(markup).toContain("People already have GitHub accounts.");
 	expect(markup).toContain('aria-label="Show “People already have GitHub accounts.” in chat"');
-	expect(markup).toContain("Chopin suggested");
-	expect(markup).toContain("Why Chopin suggested this: Enterprise customers expect SAML.");
+	expect(markup).toContain("chopin suggested");
+	expect(markup).toContain("Why chopin suggested this: Enterprise customers expect SAML.");
 	expect(markup).not.toMatch(/<(input|select|textarea)\b/);
 });
 
@@ -99,7 +99,7 @@ test("omits source controls without sources and hides non-Planner rationale", ()
 	expect(markup).toContain("Constraint");
 	expect(markup).toContain("Must work offline.");
 	expect(markup).not.toContain("Show “Must work offline.” in chat");
-	expect(markup).not.toContain("Why Chopin suggested this:");
+	expect(markup).not.toContain("Why chopin suggested this:");
 });
 
 test("shows an exact attributed quote for a sourced Planner option", () => {
@@ -145,7 +145,7 @@ test("does not present a rationale-only Planner option as a chat quote", () => {
 		createElement(EvidencePopover, { rows: [row], onSource: () => {} }),
 	);
 
-	expect(markup).toContain("Why Chopin suggested this: Repository permissions require it.");
+	expect(markup).toContain("Why chopin suggested this: Repository permissions require it.");
 	expect(markup).not.toContain("<q class=");
 	expect(markup).not.toContain("in chat");
 });

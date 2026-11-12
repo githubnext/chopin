@@ -219,12 +219,12 @@ describe("what a message shows", () => {
 		let outbox = outboxReducer(build(item(1)), {
 			kind: "refuse",
 			id: uuid(1),
-			reason: "Chopin can't take messages while it works on this machine. Stop it to ask now.",
+			reason: "chopin can't take messages while it works on this machine. Stop it to ask now.",
 		});
 		let [echo] = echoes(outbox);
 		expect(deliveryOf(echo!)).toBe("failed");
 		expect(failureOf(echo!)).toBe(
-			"Chopin can't take messages while it works on this machine. Stop it to ask now.",
+			"chopin can't take messages while it works on this machine. Stop it to ask now.",
 		);
 		expect(failureOf({})).toBe("It could not be sent.");
 	});
@@ -281,9 +281,9 @@ describe("the words", () => {
 		expect(
 			refusalText(
 				"planner-busy",
-				"Chopin can't take messages while it works on this machine. Stop it to ask now.",
+				"chopin can't take messages while it works on this machine. Stop it to ask now.",
 			),
-		).toBe("Chopin can't take messages while it works on this machine. Stop it to ask now.");
+		).toBe("chopin can't take messages while it works on this machine. Stop it to ask now.");
 	});
 });
 

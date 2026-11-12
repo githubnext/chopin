@@ -76,6 +76,7 @@ import {
 } from "./surface";
 
 import { aboveDock } from "./dock-clearance";
+import { PLANNER_NAME } from "../people";
 import type { ReactElement } from "react";
 import type { IconProps } from "@chopin/icons";
 import type { ElementNode, LexicalCommand, LexicalEditor, LexicalNode } from "lexical";
@@ -319,7 +320,7 @@ const COMMANDS: SlashCommand[] = [
 	{
 		id: "research",
 		label: "Research",
-		hint: "Ask Chopin to research the web",
+		hint: `Ask ${PLANNER_NAME} to research the web`,
 		icon: MagnifierIcon,
 		group: "Research",
 		keywords: ["research", "web search"],
