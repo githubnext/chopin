@@ -498,7 +498,7 @@ export function ThreadPanel(
 	let lead = (
 		<div className="thread-lead">
 			<p className="thread-provenance" data-thread-provenance="">
-				Forked from Chat at {clocked}. Chopin remembers everything up to here.
+				Forked from Chat at {clocked}. {PLANNER_NAME} remembers everything up to here.
 			</p>
 			{view.root && <RootMessageCard entry={view.root} room={room} />}
 			{(replyCount > 0 || !!workingTurn) && (

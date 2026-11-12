@@ -27,19 +27,19 @@ test("typing @chopin addresses Chopin, who replies in the thread while Chat reco
 
 	// With a Planner running, a new comment goes to Chopin unless it is unticked.
 	await expect(box).toBeChecked();
-	await expect(card.locator(".plan-comment-address-chip")).toHaveText("@Chopin");
+	await expect(card.locator(".plan-comment-address-chip")).toHaveText("@chopin");
 	await box.uncheck();
 	await expect(card.locator(".plan-comment-address-chip")).toHaveCount(0);
 	await field.pressSequentially("@chopin tighten this");
 	await expect(box).toBeChecked();
-	await expect(card.locator(".plan-comment-address-chip")).toHaveText("@Chopin");
+	await expect(card.locator(".plan-comment-address-chip")).toHaveText("@chopin");
 	await expect(field).toHaveValue("tighten this");
 
 	await card.getByRole("button", { name: "Post comment", exact: true }).click();
 
 	await page.getByRole("button", { name: /^Comment on “.*”\. / }).click();
 	let thread = page.getByRole("dialog", { name: "Comment thread" });
-	await expect(thread.locator(".plan-comment-mention")).toHaveText("@Chopin");
+	await expect(thread.locator(".plan-comment-mention")).toHaveText("@chopin");
 	await expect(thread.getByRole("status")).toHaveText("Chopin is working on it");
 
 	await expect(thread.getByText("Done. I tightened the passage you marked.")).toBeVisible({
