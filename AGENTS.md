@@ -361,11 +361,13 @@ then it carries no mark. The outbox holds a message only for the browser's own c
 it sends one message at a time, oldest first, once the current connection's transcript has
 arrived, and only to a server that acknowledges sends. When `planner-not-attached` or
 `planner-busy` refuses a send and the composer holds no newer draft, the typed text (with its
-chip, references and staged files) returns to the composer draft under the refusal banner,
-and while Chopin works the one button offers Stop so the person can stop Chopin and send it;
+chip, references and staged files) returns to the composer draft and chopin says why in a row
+at the end of the transcript only that person sees (`chat/quiet-note.tsx`, with How to fix where
+the machine has something to fix), and while Chopin works the one button offers Stop so the
+person can stop Chopin and send it;
 when a newer draft was already typed, or another refusal rejected the message, it says
 "Couldn't send" on the message with Try again and Delete (which act on the outbox alone, since
-the server kept nothing), and not while the page's connection banner
+the server kept nothing), and not while the page's offline bar
 shows. A refusal with a passing reason is not a refusal of the message: a storage, room or
 authorization trouble that will pass, or a turn that is only beginning or finishing
 (`temporarily-unavailable`). The browser keeps the message sending and sends it again, in order
@@ -589,7 +591,8 @@ so merge ranges from all mounted editors before replacing a registry entry.
   the 1012 arrives rejects as `WireLost` with `restarting` set; only a caller whose
   request carries its own identity, as `chat:send` does, may send it again quietly.
   For `RESTART_QUIET_MS` after a 1012 `Wire` raises no `onOutage`, so the page's one
-  connection banner stays away, and every other surface that speaks of a lost connection
+  offline bar stays away (it waits ten seconds more, `OFFLINE_BAR_GRACE`, as Slack's does,
+  and the Planner's machine is never drawn in Chat), and every other surface that speaks of a lost connection
   waits `useConnectionNotice(lost, wire.restarting)`; a new one must honour both. What the
   page draws holds through that quiet too (`readsConnected` for Build plan and the editors'
   controls, `quietRestart` for Chat's hint and composer): a control that comes and goes with the
