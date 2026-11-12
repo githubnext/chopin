@@ -6,10 +6,36 @@ the deployment's decisions model (`DECISIONS_MODEL`, chosen from `OPENAI_API_KEY
 `JEV_API_KEY` when unset), which is required at startup. Participation is independent of
 conversation-derived decision and research cards (`CONVERSATION_PLAN`).
 
+## Alone with Chopin
+
+A person alone in a document is talking to Chopin, as in a direct message with a Slack app:
+every message they send goes to the Planner as if it named `@chopin`. It starts a turn at once,
+with no silence window and no judgment, or is given to the turn that is running, and it is
+refused in the same words when no machine can take it. The model reads it as a message
+addressed to it. A reply in a thread follows the same rule. The composer's empty draft says
+_Message chopin_ while they are alone.
+
+"Alone" is defined once (`people` and `alone` in `apps/server/src/chat/initiative.ts`): the
+people in the conversation are the writers who have the document open, whoever spoke in the
+last two minutes (until Chopin's next reply) and whoever is typing, each person once however
+many tabs they have. A reader is not counted: Chat takes neither a message nor typing from
+someone who can only read. The server decides as each message arrives, and tells every open
+Chat when the conversation comes to hold one person, or more (`alone` in `chat:participation`),
+so the hint switches the moment a second person opens the document or leaves it. The message
+is sent to the room, as typed; the server keeps it as a message to Chopin, so a resend after a
+lost acknowledgement is still the same message.
+
+Once a second person is present or active, the rules below apply unchanged. A turn that started
+while someone was alone runs to its end when another person arrives. Where automatic
+participation is off (`AGENT=off`, or a child document), being alone changes nothing.
+
+## With other people
+
 One human's saved message normally hands the turn to Chopin. After a short 1.5-second
 window that combines rapid messages, Chopin replies without needing the decisions model to approve the
 topic's usefulness. Typing postpones the turn. A brief reply or acknowledgment gets the
-same opportunity as a detailed question.
+same opportunity as a detailed question. This applies when someone else has the document
+open but has not spoken; when the sender is the only person there, see above.
 
 When multiple humans contribute between Chopin's replies, a bounded decisions judgment first
 decides whether they have invited Chopin to answer or are exchanging turns with each

@@ -702,6 +702,19 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 	}
 }
 
+/** Who is in a document's conversation now; readers are not (see `Initiative.people`). */
+function conversationPeople(room: Rooms.Room, opened: Service.Plan): Set<string> {
+	if (Rooms.get(room.id) !== room || room.plan !== opened) return new Set();
+	return Initiative.people(opened.chat, room.members.values());
+}
+
+/** Tells a document's Chat when one person is left in its conversation, or a second arrives. */
+function announceAlone(room: Rooms.Room): void {
+	let opened = room.plan;
+	if (!opened || opened.parentChannelId || room.closing) return;
+	Initiative.announceAlone(opened.chat, server, room.id, conversationPeople(room, opened));
+}
+
 function chat(room: Rooms.Room, ws: Socket): Chat.Room {
 	return conversation(room, ws.data.sessionId, {
 		id: ws.data.repositoryId,
@@ -737,6 +750,8 @@ function conversation(
 					&& Initiative.actor(member) === actor
 				);
 		},
+		people: () => conversationPeople(room, opened),
+		peopleChanged: () => announceAlone(room),
 		initiativeAuthorize: async (sessionId, actor) => {
 			let member = [...room.members.values()].find(member =>
 				!member.data.closed && member.data.sessionId === sessionId
@@ -1287,6 +1302,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				let opened = await plan(room, server);
 				let currentChannel = await storage.channels.get(room.id);
 				if (currentChannel) applyChannelAccess(ws, currentChannel, ws.data.canManage);
+				announceAlone(room);
 				implementations?.track(room.id);
 				let parent = room.parentChannelId;
 				// Who the document names but the room does not hold, ahead of the frames that name them.
@@ -2045,6 +2061,7 @@ function openRoomSocket(ws: Socket): void {
 		})().catch(err => console.error("chopin: could not start a document's Planner -", err));
 	}
 	relay(ws, { kind: "session:presence", ts: 0, members: Rooms.members(room) });
+	announceAlone(room);
 	scheduleAuthorization(ws);
 	void validateOpenedSocket(ws).catch(err => {
 		console.error("chopin: WebSocket open failed -", err);
@@ -2061,6 +2078,7 @@ function closeRoomSocket(ws: Socket): void {
 	if (room.plan) {
 		room.plan.chat.initiative?.depart(ws.data.client);
 		if (!room.members.size) room.plan.chat.initiative?.cancel();
+		announceAlone(room);
 		Service.departed(room.plan, ws);
 		Questions.away(room.plan, ws);
 		conversationRuntime.processor(room.plan)?.leaveResearch(ws.data.client);

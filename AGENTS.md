@@ -328,7 +328,11 @@ The web composer uses `packages/protocol/address.ts` to translate `@chopin` into
 `Chat.Send.to = "planner"`; ordinary messages use `to = "room"`. A person addresses Chopin with
 an `@chopin` mention in the draft's words, typed, chosen in the `@` menu, or written at the caret
 by the composer's sparkle button or Command+J (`apps/web/src/chat/ask-chopin.ts` holds its rules);
-the composer draws no other state for it, and the message on the wire is its words. The wire
+the composer draws no other state for it, and the message on the wire is its words. A person
+alone in the document (`alone` in `apps/server/src/chat/initiative.ts`: no other writer has it
+open, spoke in the last two minutes or is typing) is talking to Chopin: the server takes their
+room message as one to the Planner, with no silence window or judgment, and their draft says
+_Message chopin_. The wire
 destination is authoritative on the server. Do not describe `@chopin` as a server
 authorization boundary: a custom write-authorized client can send an explicit
 Planner destination without a mention.

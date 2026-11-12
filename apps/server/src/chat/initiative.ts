@@ -1,10 +1,11 @@
 import { PLANNER_NAME } from "@chopin/protocol/planner-name";
 import type { Chat as Wire, Request } from "@chopin/protocol";
-import type { Socket } from "../wire";
-import { fail } from "../wire";
+import type { Server } from "bun";
+import type { Socket, SocketData } from "../wire";
+import { broadcast, fail } from "../wire";
 import * as Service from "../plan/service";
 import { project } from "../plan/room";
-import { instruct, jobReady, type Room } from "./service";
+import { type Chat, instruct, jobReady, type Room } from "./service";
 import { initiativeInstruction, judgeInitiative } from "./initiative-judge";
 import { createInitiativeSchedule } from "./initiative-schedule";
 
@@ -27,6 +28,46 @@ export function participation(context: Room): Wire.Participation {
 		// Automatic participation is always on; a pause saved by the retired toggle is ignored.
 		paused: false,
 	};
+}
+
+/**
+ * Who is in a document's conversation now: the writers who have it open, and whoever its schedule
+ * counts (spoke in the last two minutes, or is typing). One person in several tabs is one person. A
+ * reader is not counted: Chat takes neither a message nor typing from one.
+ */
+export function people(chat: Chat, members: Iterable<Socket>): Set<string> {
+	let writers = [...members].filter(member => !member.data.closed && member.data.canEdit);
+	return new Set([...writers.map(actor), ...(chat.initiative?.people() ?? [])]);
+}
+
+/**
+ * Whether someone is alone in the conversation, so that what they send is for the Planner, as if it
+ * named it: no wait for silence and no judgment. Never where automatic participation is off.
+ */
+export function alone(context: Room, actor: string): boolean {
+	if (!context.people || !participation(context).enabled) return false;
+	let present = context.people();
+	return present.size === 1 && present.has(actor);
+}
+
+/** Tells Chat when its conversation comes to hold one person, or more than one. */
+export function announceAlone(
+	chat: Chat,
+	server: Server<SocketData>,
+	room: string,
+	present: Set<string>,
+): void {
+	if (!chat.initiativeEnabled || chat.closed) return;
+	let solo = present.size <= 1;
+	if (chat.alone === solo) return;
+	chat.alone = solo;
+	broadcast(server, room, {
+		kind: "chat:participation",
+		ts: 0,
+		enabled: true,
+		paused: false,
+		...(solo ? { alone: true } : {}),
+	});
 }
 
 function available(source: Source): "ready" | "wait" | "drop" {
@@ -54,6 +95,7 @@ export function initiative(context: Room) {
 		groupMs: context.config.conversationInitiativeSilenceMs,
 		admit: available,
 		settled: () => context.initiativeSettled?.(),
+		changed: () => context.peopleChanged?.(),
 		async judge(source, signal, turn) {
 			let { context } = source;
 			if (

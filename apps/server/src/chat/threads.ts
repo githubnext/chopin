@@ -493,6 +493,8 @@ function buildThreadRoom(
 		repository: topContext.repository,
 		plannerNotAttached: topContext.plannerNotAttached,
 		plannerStarting: topContext.plannerStarting,
+		// A reply in a thread is the document's conversation too: alone, it goes to the Planner.
+		people: topContext.people,
 		steers: topContext.steers,
 		activeOwner: topContext.activeOwner,
 		openPlannerSession: topContext.openPlannerSession,

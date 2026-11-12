@@ -68,7 +68,7 @@ import { holdsQuestion } from "../questions/records";
 import { broadcast, fail, PASSING, reply, tell } from "../wire";
 import { introduce } from "../people";
 import { MAX_MESSAGE_BYTES } from "./limits";
-import { contributed } from "./initiative";
+import { actor, alone, contributed } from "./initiative";
 import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./reply-policy";
 import { withSessionContext } from "./session-context";
 import { TOOL_UNAVAILABLE, turnFailureOf } from "./turn-failure";
@@ -340,6 +340,8 @@ export type Chat = {
 	initiative?: InitiativeSchedule<import("./initiative").Source>;
 	initiativePaused?: boolean;
 	initiativeEnabled?: boolean;
+	/** Whether at most one person is in the conversation, as Chat was last told. */
+	alone?: boolean;
 	readiness?: boolean;
 	job?: ConversationPlan.Job;
 	jobOutput?: string;
@@ -662,7 +664,11 @@ function replay(
 		return true;
 	}
 	let saved = (entry as MemberEntry).delivery;
-	if (!saved || saved.destination !== msg.to || saved.requestFingerprint !== fingerprint) {
+	// A message to the room that went to the Planner, its sender being alone, is the same message:
+	// the fingerprint holds the destination it was sent to.
+	let sameDestination = saved?.destination === msg.to
+		|| (msg.to === "room" && saved?.destination === "planner");
+	if (!saved || !sameDestination || saved.requestFingerprint !== fingerprint) {
 		fail(ws, msg.rid, "chat request id was reused with different content");
 		return true;
 	}
@@ -711,7 +717,11 @@ export function greet(chat: Chat, ws: Socket): void {
 		busy: chat.busy,
 		...(chat.turn ? { turn: chat.turn } : {}),
 		...(chat.runs ? { runs: chat.runs } : {}),
-		participation: { enabled: !!chat.initiativeEnabled, paused: false },
+		participation: {
+			enabled: !!chat.initiativeEnabled,
+			paused: false,
+			...(chat.initiativeEnabled && chat.alone ? { alone: true } : {}),
+		},
 	});
 	// After the history, which ends whatever an earlier connection was told of it.
 	if (chat.modelUnreadable) tell(ws, { kind: "chat:model-unreadable", ts: 0, unreadable: true });
@@ -770,6 +780,13 @@ export type Room = {
 	memberMessagePersisted?: (entry: Wire.Entry, claimantSessionId: string | undefined) => void;
 	/** Called when automatic participation stops holding a message it might reply to. */
 	initiativeSettled?: () => void;
+	/**
+	 * Who is in the document's conversation now (`people` in `./initiative`), a thread's included.
+	 * Absent where nobody is known, which is never alone.
+	 */
+	people?: () => Set<string>;
+	/** Called when who is in the conversation may have changed. */
+	peopleChanged?: () => void;
 	openPlannerSession?: typeof import("../harness/session")["openPlannerSession"];
 	/**
 	 * What the document's chosen model and thinking level come to for the next turn, checked against
@@ -879,7 +896,9 @@ async function rebindRetained(context: Room, retained: Retained): Promise<boolea
  * A room message appears immediately. A message to the Planner is never held: it starts a turn
  * when none is running, is posted and given to the turn that is running when its harness can take
  * input mid-run, and is refused, saying why, when it cannot. The destination, rather than its
- * prose, decides which lifecycle it takes.
+ * prose, decides which lifecycle it takes. A person alone in the conversation is talking to the
+ * Planner, so their message to the room goes to it, as if it named it, with no wait for silence
+ * and no judgment; once a second person is there, it goes to the room again.
  */
 export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): Promise<void> {
 	if (context.chat.pendingSends >= MAX_PENDING_SENDS) {
@@ -887,11 +906,13 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		return;
 	}
 	context.chat.pendingSends++;
+	// Decided as it arrives, as automatic participation would have counted the room then.
+	let to = msg.to === "room" && alone(context, actor(ws)) ? "planner" as const : msg.to;
 	let enqueue = () => {
 		// Nothing a send throws says its message is at fault: it is answered as a passing trouble, and
 		// the browser sends it again with the same request id.
 		let process = () =>
-			processSend(context, ws, msg).catch(err => {
+			processSend(context, ws, msg, to).catch(err => {
 				console.error("[chat] a send failed before it was kept:", err);
 				fail(ws, msg.rid, "could not send message", PASSING);
 			});
@@ -902,7 +923,7 @@ export async function send(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	};
 	// A message to the Planner waits, a bounded time, for one a machine is starting before it is
 	// checked for one, so the room's messages never wait with it.
-	if (msg.to !== "planner" || !context.plannerStarting) return enqueue();
+	if (to !== "planner" || !context.plannerStarting) return enqueue();
 	return context.plannerStarting().catch(() => {}).then(enqueue);
 }
 
@@ -1201,7 +1222,12 @@ async function acceptAttachments(
 	}
 }
 
-async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): Promise<void> {
+async function processSend(
+	context: Room,
+	ws: Socket,
+	msg: Request<Wire.Send>,
+	to: Wire.Destination = msg.to,
+): Promise<void> {
 	let { chat, room, server } = context;
 	let suppliedRequestId = (msg as Request<Wire.Send> & { requestId?: unknown }).requestId;
 	if (
@@ -1214,7 +1240,7 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 	// Pre-deploy browser tabs did not send request IDs. They keep legacy at-most-once behavior.
 	let requestId = suppliedRequestId ?? crypto.randomUUID();
 	let handle = ws.data.handle;
-	let destination = msg.to;
+	let destination = to;
 	if (destination !== "room" && destination !== "planner") {
 		return fail(ws, msg.rid, "invalid message destination");
 	}
