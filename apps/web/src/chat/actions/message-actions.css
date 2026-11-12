@@ -7,8 +7,9 @@
  * copied row Slack's box: one rounded square with a hairline ring and a soft shadow, 2px inside,
  * holding 32px square buttons with 4px corners. It floats at the row's top right, 16px above the row,
  * and never moves the text: like Slack's, it may cover the end of the first line while it shows, its
- * own fill, ring and shadow setting it apart. It shows for one row at a time. On a touch screen a long
- * press brings it up in its own lane above the message instead.
+ * own fill, ring and shadow setting it apart, and a row whose top is scrolled away keeps it at the top
+ * of what shows of it. It shows for one row at a time. On a touch screen a long press brings it up in
+ * its own lane above the message instead.
  */
 
 .chat-message-body {
@@ -35,6 +36,12 @@
 	 */
 	--chat-fade: calc(var(--duration-fast) * 2 / 3);
 	isolation: isolate;
+	/*
+	 * The shown row is drawn over the other rows, so its toolbar, kept in view over the row below, is
+	 * whole and is what the pointer meets there. Names and avatars (2), the pane's top fade (3) and
+	 * its scrollbar (4) stay over it.
+	 */
+	z-index: var(--chat-shown);
 }
 
 /* Slack's message text: 15px on about 22px. */
@@ -46,7 +53,7 @@
 [data-chat-head],
 [data-chat-avatar] {
 	position: relative;
-	z-index: 1;
+	z-index: 2;
 }
 
 /* Slack's name line sits right on the text under it: the column's 4px gap is between messages. */
@@ -205,16 +212,46 @@
 	height: calc(var(--spacing) * 5);
 }
 
-/* The bar stands 12px inside the row's end, as Slack's does, past the text's own edge. */
-.chat-message-body > .chat-message-toolbar {
+/*
+ * The bar stands 12px inside the row's end, as Slack's does, past the text's own edge, on a rail that
+ * runs from there, 16px above the row, down to the row's end. The shown row's bar is sticky on the
+ * rail: once the row's top is scrolled out of the pane, the browser keeps the bar at the top of what
+ * shows of the row as the pane scrolls, and it leaves with the row's last line, as Slack's does.
+ * Nothing is measured for it. Only the shown row's bar is sticky: with every row's, each step of a
+ * scroll laid the transcript out again.
+ */
+.chat-message-body > .chat-toolbar-rail {
 	position: absolute;
 	z-index: 2;
+	inset-block: calc(-1 * (var(--chat-highlight-top) + var(--chat-toolbar-rise))) 0;
 	inset-inline-end: calc(var(--chat-bleed-end) - var(--chat-shade-end));
-	top: calc(-1 * (var(--chat-highlight-top) + var(--chat-toolbar-rise)));
-	translate: 0 var(--chat-toolbar-shift, 0px);
+	pointer-events: none;
+}
+
+.chat-toolbar-rail > .chat-message-toolbar {
+	/* How far below the pane's edge the bar is kept. */
+	--chat-toolbar-pin: calc(var(--spacing) * 2);
+	/* Sticky offsets start inside the transcript's padding. */
+	top: calc(var(--chat-toolbar-pin) - var(--scroll-edge-inset, 0px));
+	/*
+	 * It may stand half its height past the rail's end, over the row below, so a row with only its
+	 * last line showing keeps its bar on screen beside that line, where the pointer reaches it.
+	 */
+	margin-block-end: calc(-1 * var(--chat-toolbar-size) / 2);
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity var(--chat-fade) var(--ease-out);
+}
+
+/*
+ * Scrolled, the pane's top edge fades the rows under it (`theme.css`), so the bar keeps clear of the
+ * fade, where it is drawn at full strength. At the top of the Chat there is no fade, and the first
+ * row's bar stands where it always does.
+ */
+@container scroll-state(scrollable: top) {
+	.chat-toolbar-rail > .chat-message-toolbar {
+		--chat-toolbar-pin: var(--scroll-edge-fade-size);
+	}
 }
 
 /*
@@ -254,22 +291,20 @@
 
 .chat-message-body::before,
 .chat-message-body > .chat-gutter-time,
-.chat-message-body > .chat-message-toolbar {
+.chat-toolbar-rail > .chat-message-toolbar {
 	opacity: var(--chat-shown, 0);
 }
 
-.chat-message-body > .chat-message-toolbar {
-	pointer-events: none;
-}
-
-.chat-message-body:has(:focus-visible) > .chat-message-toolbar,
-.chat-message-body[data-chat-engaged] > .chat-message-toolbar {
+.chat-message-body:has(:focus-visible) > .chat-toolbar-rail > .chat-message-toolbar,
+.chat-message-body[data-chat-engaged] > .chat-toolbar-rail > .chat-message-toolbar {
+	position: sticky;
 	pointer-events: auto;
 }
 
 @media (hover: hover) {
-	.chat-message-body:hover > .chat-message-toolbar,
-	[data-chat-head]:hover + .chat-message-body > .chat-message-toolbar {
+	.chat-message-body:hover > .chat-toolbar-rail > .chat-message-toolbar,
+	[data-chat-head]:hover + .chat-message-body > .chat-toolbar-rail > .chat-message-toolbar {
+		position: sticky;
 		pointer-events: auto;
 	}
 }
@@ -284,11 +319,20 @@
 		flex-direction: column;
 	}
 
-	.chat-message-body > .chat-message-toolbar {
+	.chat-message-body > .chat-toolbar-rail {
+		display: contents;
+	}
+
+	.chat-toolbar-rail > .chat-message-toolbar {
+		position: absolute;
+		z-index: 2;
+		inset-inline-end: calc(var(--chat-bleed-end) - var(--chat-shade-end));
+		top: calc(-1 * (var(--chat-highlight-top) + var(--chat-toolbar-rise)));
 		width: 0;
 		height: 0;
 		overflow: hidden;
 		padding: 0;
+		margin: 0;
 	}
 
 	.chat-message-body[data-chat-engaged],
@@ -310,8 +354,8 @@
 		);
 	}
 
-	.chat-message-body[data-chat-engaged] > .chat-message-toolbar,
-	.chat-message-body:has(:focus-visible) > .chat-message-toolbar {
+	.chat-message-body[data-chat-engaged] > .chat-toolbar-rail > .chat-message-toolbar,
+	.chat-message-body:has(:focus-visible) > .chat-toolbar-rail > .chat-message-toolbar {
 		position: relative;
 		top: auto;
 		inset-inline-end: auto;
@@ -323,7 +367,6 @@
 		overflow: visible;
 		padding: calc(var(--spacing) / 2);
 		margin-block: calc(-1 * var(--chat-toolbar-lane)) 0;
-		translate: none;
 		pointer-events: auto;
 	}
 }
@@ -539,7 +582,7 @@
 @media (prefers-reduced-motion: reduce) {
 	.chat-message-body::before,
 	.chat-message-body > .chat-gutter-time,
-	.chat-message-body > .chat-message-toolbar {
+	.chat-toolbar-rail > .chat-message-toolbar {
 		transition: none;
 	}
 

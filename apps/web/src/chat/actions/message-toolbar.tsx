@@ -29,7 +29,6 @@ import {
 import { useMenuDismissal } from "../../menu-dismissal";
 import { LongPress } from "../long-press";
 import { QUICK_REACTIONS } from "../reactions";
-import { TALL, watchTall } from "./tall-rows";
 import { useCopyToClipboard } from "./use-copy-to-clipboard";
 
 import "./message-actions.css";
@@ -45,7 +44,6 @@ const EmojiPicker = lazy(() =>
 );
 
 const TOOLBAR_MARGIN = 8;
-const SHIFT = "--chat-toolbar-shift";
 const SHEET_WIDTH = 600;
 
 type Which = "markdown" | "plain";
@@ -217,62 +215,6 @@ export let MessageToolbar = memo(function MessageToolbar(
 			openPicker.current = undefined;
 		};
 	}, [openPicker]);
-
-	// A message taller than the pane has its top, and so its toolbar, above what is shown: while the
-	// pointer or focus is on it, the bar is moved down the message to the top of the visible part.
-	useEffect(() => {
-		let element = host.current;
-		let view = element?.closest<HTMLElement>("[data-chat-scroll]");
-		if (!element || !view || !window.matchMedia("(hover: hover)").matches) return;
-		let place = () => {
-			// Any other message is scrolled to whole, so its bar stays where it stands; measuring it would
-			// lay the page out for the pointer's every new row.
-			if (!element.hasAttribute(TALL)) {
-				element.style.removeProperty(SHIFT);
-				return;
-			}
-			let bar = element.querySelector<HTMLElement>(".chat-message-toolbar");
-			if (!bar) return;
-			let shift = Number.parseFloat(element.style.getPropertyValue(SHIFT)) || 0;
-			let natural = bar.getBoundingClientRect().top - shift;
-			let room = element.getBoundingClientRect().bottom - bar.offsetHeight - natural;
-			let seen = view.getBoundingClientRect().top;
-			// Only a message taller than the pane, whose top has scrolled away; any other is scrolled to.
-			let tall = element.hasAttribute(TALL) && element.getBoundingClientRect().top < seen;
-			let wanted = tall ? seen + TOOLBAR_MARGIN - natural : 0;
-			element.style.setProperty(SHIFT, `${Math.max(0, Math.min(wanted, room))}px`);
-		};
-		let enter = () => {
-			place();
-			view.addEventListener("scroll", place, { passive: true });
-		};
-		let leave = () => {
-			view.removeEventListener("scroll", place);
-			if (!element.matches(":focus-within")) element.style.removeProperty(SHIFT);
-		};
-		element.addEventListener("pointerenter", enter);
-		element.addEventListener("pointerleave", leave);
-		element.addEventListener("focusin", enter);
-		element.addEventListener("focusout", leave);
-		return () => {
-			element.removeEventListener("pointerenter", enter);
-			element.removeEventListener("pointerleave", leave);
-			element.removeEventListener("focusin", enter);
-			element.removeEventListener("focusout", leave);
-			view.removeEventListener("scroll", place);
-			element.style.removeProperty(SHIFT);
-		};
-	}, [host]);
-
-	// Whether a message is taller than the pane, which is what keeps its bar in view. The bar then floats
-	// over the text, as Slack's does, and nothing is set aside for it: the text keeps the message's whole
-	// width and does not move when the bar appears.
-	useEffect(() => {
-		let element = host.current;
-		let view = element?.closest<HTMLElement>("[data-chat-scroll]");
-		if (!element || !view || !window.matchMedia("(hover: hover)").matches) return;
-		return watchTall(element, view);
-	}, [host]);
 
 	useEffect(() => {
 		if (!pinned) return;
@@ -447,27 +389,29 @@ export let MessageToolbar = memo(function MessageToolbar(
 				}}
 				open={menuOpen}
 			>
-				<MessageActions
-					aria-label="Reactions and actions"
-					aria-orientation="horizontal"
-					className="chat-message-toolbar"
-					items={items}
-					moreProps={{
-						"aria-label": "Message actions",
-						"data-tooltip": "Message actions",
-						onFocus: () => setActive(count - 1),
-						ref: moreButton,
-						tabIndex: tab(count - 1),
-					} as Record<string, unknown>}
-					onKeyDown={toolbarKeyDown}
-					renderMore={button => (
-						<DropdownMenuTrigger
-							render={cloneElement(button, {}, <EllipsisVerticalIcon aria-hidden="true" />)}
-							tabIndex={tab(count - 1)}
-						/>
-					)}
-					role="toolbar"
-				/>
+				<div className="chat-toolbar-rail">
+					<MessageActions
+						aria-label="Reactions and actions"
+						aria-orientation="horizontal"
+						className="chat-message-toolbar"
+						items={items}
+						moreProps={{
+							"aria-label": "Message actions",
+							"data-tooltip": "Message actions",
+							onFocus: () => setActive(count - 1),
+							ref: moreButton,
+							tabIndex: tab(count - 1),
+						} as Record<string, unknown>}
+						onKeyDown={toolbarKeyDown}
+						renderMore={button => (
+							<DropdownMenuTrigger
+								render={cloneElement(button, {}, <EllipsisVerticalIcon aria-hidden="true" />)}
+								tabIndex={tab(count - 1)}
+							/>
+						)}
+						role="toolbar"
+					/>
+				</div>
 				{menuOpen && (
 					<DropdownMenuContent
 						align="end"
