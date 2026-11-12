@@ -15,8 +15,7 @@ several authors, a transcript the server keeps), say so in the pull request and 
 instead of adding the runtime. The model selector, `elements-model-selector`, was the first one
 copied, and the composer, `elements-composer`, with the `surfaces` recipes and `range` helper it
 stands on, is Chat's composer shell. Its menu and rows (`ComposerMenu`, `ComposerPersonItem`,
-`ComposerCommandItem`) are Chat's `@` and `/` menus, and `elements-directive-text` and the Badge it
-stands on are the Chopin chip. The same Composer holds the standalone elements for what a message
+`ComposerCommandItem`) are Chat's `@` and `/` menus. The same Composer holds the standalone elements for what a message
 carries: its staged-file chips (`ComposerAttachments`, `ComposerAttachmentChip`) and the dictation's
 voice and button (`ComposerVoice`, `ComposerVoiceButton`) fill the box's slots, and
 `elements-message-attachment` draws a sent message's non-image files. Every image in Chat — from a

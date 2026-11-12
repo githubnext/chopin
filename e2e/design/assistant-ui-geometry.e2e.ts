@@ -94,7 +94,6 @@ const ROOTS = {
 		"model-selector-trigger",
 		"composer-menu",
 		"composer-menu-item",
-		"directive-text-chip",
 		"composer-attachments",
 		"composer-attachment",
 		"composer-voice",
@@ -316,7 +315,7 @@ test("a copied element is as many pixels as its Tailwind classes say, not as Cho
 			checked++;
 		}
 	}
-	expect(checked).toBe(135);
+	expect(checked).toBe(133);
 });
 
 test("handoff and subagent list keep assistant-ui's exact proportions", async ({ page }) => {

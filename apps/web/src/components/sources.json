@@ -25,15 +25,6 @@
 			"sha256": "f52f206457afc4be9071f7d0604136c054c84fc56a48251d445ecc92b8af5cd3"
 		},
 		{
-			"file": "apps/web/src/components/assistant-ui/elements/directive-text.tsx",
-			"registry": "@assistant-ui",
-			"item": "elements-directive-text",
-			"version": "assistant-ui/assistant-ui@2c298dfa8392",
-			"sha256": "7865b18353476c4963a1f59cd6c0d72a994899ee2acf27eeb849e7942bf0b3d4",
-			"patch": "apps/web/src/components/assistant-ui/elements/directive-text.tsx.patch",
-			"patchSha256": "ddf4a3b22762db4c6d1bba03b26009f138ee1cea8a253b6151e545ad5a0e61b7"
-		},
-		{
 			"file": "apps/web/src/components/assistant-ui/elements/image-gallery.tsx",
 			"registry": "@assistant-ui",
 			"item": "elements-image-gallery",
@@ -139,7 +130,7 @@
 			"registry": "tailwindcss",
 			"item": "theme.css",
 			"version": "tailwindcss@4.3.0",
-			"sha256": "18a7d632f58741d80fbabf82879c77f0cf74ec172e51d11e2b2010a418649b91"
+			"sha256": "979565ce21f4f23a99d66da4431256691653b72ccd893f0b0cebd286c0b0c09e"
 		},
 		{
 			"file": "apps/web/src/components/hooks/use-copy-to-clipboard.ts",
@@ -147,13 +138,6 @@
 			"item": "use-copy-to-clipboard",
 			"version": "assistant-ui/assistant-ui@437b410726e2",
 			"sha256": "1f3b8a1bab79cef961f62eb25d6b58a0d16c957d63ba1faf086ad09c99712c0a"
-		},
-		{
-			"file": "apps/web/src/components/ui/badge.tsx",
-			"registry": "@assistant-ui",
-			"item": "badge",
-			"version": "assistant-ui/assistant-ui@2c298dfa8392",
-			"sha256": "610c24620259c690cacbb8a79fe3278aad6eaacb66e78e365de6337cdd73920c"
 		},
 		{
 			"file": "apps/web/src/components/ui/button.tsx",
