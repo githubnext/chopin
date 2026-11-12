@@ -550,7 +550,7 @@ export function ThreadPanel(
 			</ImagePlace.Provider>
 
 			{agent && !!view.runs?.length && (
-				<div className="flex shrink-0 flex-col px-2.5 pb-2" data-thread-runs="">
+				<div className="chat-runs flex shrink-0 flex-col px-2.5 pb-2" data-thread-runs="">
 					<RunStack
 						loadStages={loadStages}
 						offline={offline}

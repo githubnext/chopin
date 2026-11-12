@@ -97,3 +97,14 @@
 		transition: none;
 	}
 }
+
+/*
+ * The runs card under Chat's transcript, however many runs are unfolded, takes at most half of
+ * Chat's height and scrolls in its own lane beyond that, so it never pushes the transcript off the
+ * top or the composer off the bottom.
+ */
+.chat-runs {
+	max-block-size: 50%;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}

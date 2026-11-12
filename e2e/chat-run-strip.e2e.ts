@@ -110,3 +110,52 @@ test("a transcript that scrolls ends above the run strip, and stays on its newes
 		await clearOfStrip(page);
 	}
 });
+
+test("however many runs are unfolded, the strip takes at most half of Chat and scrolls, keeping the transcript and composer in view", async ({ join, seed }) => {
+	test.setTimeout(90_000);
+	await seed("# Many runs\n\nA long conversation.\n", {
+		transcript: messages(20),
+		workflowRuns: ["a", "b", "c", "d", "e"].map(id => workflow(id, "finished", 6)),
+	});
+	for (
+		let [options, phone] of [
+			[{ viewport: { width: 1280, height: 600 } }, false],
+			[{ hasTouch: true, isMobile: true, viewport: { width: 390, height: 664 } }, true],
+		] as const
+	) {
+		let page = await join(phone ? "bo" : "ana", options);
+		await openChat(page, phone);
+		let strip = chatPane(page).getByRole("region", { name: "Workflow runs" });
+		await strip.getByRole("button", { name: "+2 more" }).click();
+		for (let id of ["a", "b", "c", "d", "e"]) {
+			await strip.getByRole("button", { name: new RegExp(`^workflow-${id},`) }).click();
+		}
+		let shape = await page.evaluate(() => {
+			let main = document.querySelector<HTMLElement>("[data-chat-runs]")!.parentElement!;
+			let runs = document.querySelector<HTMLElement>("[data-chat-runs]")!;
+			let scroll = document.querySelector<HTMLElement>("[data-chat-scroll]")!;
+			let composer = main.querySelector<HTMLElement>(".chat-composer")!;
+			let box = (element: HTMLElement) => element.getBoundingClientRect();
+			return {
+				main: box(main).toJSON(),
+				runs: box(runs).toJSON(),
+				scroll: box(scroll).toJSON(),
+				composer: box(composer).toJSON(),
+				runsScrolls: runs.scrollHeight > runs.clientHeight,
+				window: innerHeight,
+			};
+		});
+		expect(shape.runs.height).toBeLessThanOrEqual(shape.main.height / 2 + 1);
+		expect(shape.runsScrolls).toBe(true);
+		expect(shape.scroll.top).toBeGreaterThanOrEqual(shape.main.top - 1);
+		expect(shape.scroll.height).toBeGreaterThan(48);
+		expect(shape.runs.bottom).toBeLessThanOrEqual(shape.composer.top + 0.5);
+		expect(shape.composer.bottom).toBeLessThanOrEqual(shape.main.bottom + 0.5);
+		expect(shape.composer.bottom).toBeLessThanOrEqual(shape.window + 0.5);
+		// The last run's stages are reached by scrolling the strip itself.
+		let last = strip.getByText("stage-6").last();
+		await last.scrollIntoViewIfNeeded();
+		await expect(last).toBeInViewport();
+		await clearOfStrip(page);
+	}
+});
