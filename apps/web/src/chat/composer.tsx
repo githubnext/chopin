@@ -163,6 +163,8 @@ export type ChatComposerProps = {
 	pickers?: ReactNode;
 	/** Context-window usage ring in the composer rail, when reported by the harness. */
 	contextRing?: ReactNode;
+	/** What leads the row of controls: a thread's choice to also send the reply to Chat. */
+	rowStart?: ReactNode;
 	input: Omit<
 		DraftInputProps,
 		| "role"
@@ -199,6 +201,7 @@ export function ChatComposer(
 		run,
 		pickers,
 		contextRing,
+		rowStart,
 		input,
 	}: ChatComposerProps,
 ) {
@@ -325,7 +328,7 @@ export function ChatComposer(
 	return (
 		<div
 			ref={rootRef}
-			className="chat-composer relative shrink-0 px-2.5 pb-2.5"
+			className="chat-composer relative shrink-0"
 			data-planner={agent ? undefined : "off"}
 			onKeyDown={dictation
 				? event => {
@@ -508,6 +511,7 @@ export function ChatComposer(
 
 							<div className="composer-row">
 								<div className="composer-left">
+									{rowStart}
 									{files && (
 										<>
 											<input

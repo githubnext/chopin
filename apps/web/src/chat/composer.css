@@ -11,22 +11,26 @@
 	position: relative;
 	max-height: 12rem;
 	overflow-y: auto;
-	/* The draft's own type, so the cap is measured in its lines. */
-	font-size: var(--text-sm);
-	line-height: var(--text-sm--line-height);
+	/*
+	 * The draft's own type, so the cap is measured in its lines. It is the message's
+	 * type, as Slack's box writes in its messages' 15px on 22px.
+	 */
+	font-size: var(--text-base);
+	line-height: var(--text-base--line-height);
 }
+/* Slack's text area: one line at rest, 8px above and below it and 12px in from the box's edges. */
 .chat-composer .composer-draft-input {
 	position: relative;
 	display: block;
 	width: 100%;
-	/* Two fluid lines end on a fraction of a pixel; rounded, the message box sits on whole pixels. */
-	min-height: round(calc(1.5rem + 2lh), 1px);
-	padding: 0.75rem;
+	/* One fluid line ends on a fraction of a pixel; rounded, the message box sits on whole pixels. */
+	min-height: round(calc(1lh + var(--spacing) * 4), 1px);
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
 	border: 0;
 	background: transparent;
 	font: inherit;
-	font-size: var(--text-sm);
-	line-height: var(--text-sm--line-height);
+	font-size: var(--text-base);
+	line-height: var(--text-base--line-height);
 	color: var(--color-text-primary);
 	white-space: pre-wrap;
 	overflow-wrap: break-word;
@@ -477,6 +481,14 @@
 	pointer-events: none;
 	will-change: transform;
 }
+/*
+ * Where Chat docks it, the box is inset 16px from the pane's sides and foot, as Slack's message box
+ * floats inside its pane (`p-message_pane_input`), a hairline box with no shadow on the ground.
+ */
+.workspace-chat-panel .chat-composer {
+	padding-inline: calc(var(--spacing) * 4);
+	padding-bottom: calc(var(--spacing) * 4 + env(safe-area-inset-bottom));
+}
 .chat-composer .composer-surface:focus-within {
 	--composer-edge: var(--color-text-tertiary);
 }
@@ -506,13 +518,14 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 0.25rem;
-	padding: 0.25rem 0.375rem 0.375rem;
+	gap: var(--spacing);
+	padding: var(--spacing) calc(var(--spacing) * 1.5);
 }
 .chat-composer :is(.composer-left, .composer-actions) {
 	display: flex;
 	align-items: center;
 	gap: 0.125rem;
+/* Slack's footer: 28px buttons 4px from its top and foot and 6px from its sides. */
 	min-width: 0;
 }
 .chat-composer .composer-left {
@@ -596,7 +609,7 @@
 
 /* What is staged for the message sits above its text: the chips of its files, and the voice while it is listened to. */
 .chat-composer .composer-staging {
-	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2) 0;
+	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3) 0;
 }
 /* The picture of an image fills the box of its chip's icon. */
 .chat-composer .composer-file-thumb {

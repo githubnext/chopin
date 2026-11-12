@@ -101,17 +101,18 @@ function RootMessageCard({ entry, room }: { entry: Wire.Entry; room: string }) {
 
 	return (
 		<div className="thread-root-entry" data-thread-root-message={entry.id}>
-			<div className="w-6 shrink-0">
+			{/* The root is a message like the replies under it: their 36px avatar and their name line. */}
+			<div className="w-9 shrink-0" data-chat-avatar="">
 				{entry.author.kind === "agent"
 					? <ChopinMark circle />
 					: entry.author.kind === "member"
-					? <Face decorative handle={entry.author.handle} size={24} titled={false} />
+					? <Face decorative handle={entry.author.handle} size={36} titled={false} />
 					: null}
 			</div>
 			<div className="flex min-w-0 flex-1 flex-col gap-1 -mt-0.5">
-				<div className="flex items-baseline gap-1.5 text-sm">
-					<span className="min-w-0 break-all font-semibold">{name}</span>
-					<span className="text-2xs text-text-tertiary tabular-nums">
+				<div className="flex items-baseline gap-2 text-base">
+					<span className="min-w-0 break-all font-bold">{name}</span>
+					<span className="text-xs text-text-tertiary tabular-nums">
 						{rootTime(entry.ts)}
 					</span>
 				</div>

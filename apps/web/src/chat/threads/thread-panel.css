@@ -24,7 +24,8 @@
 	flex-shrink: 0;
 	align-items: center;
 	gap: calc(var(--spacing) * 2);
-	padding-inline: calc(var(--spacing) * 3.5);
+	/* The title on the pane's 20px gutter, over the avatars; Close 12px from the edge, as Slack's. */
+	padding-inline: calc(var(--spacing) * 5) calc(var(--spacing) * 3);
 	border-bottom: 1px solid var(--color-divider);
 }
 
@@ -68,7 +69,7 @@
 
 .thread-root-entry {
 	display: flex;
-	gap: calc(var(--spacing) * 3);
+	gap: calc(var(--spacing) * 2);
 }
 
 .thread-replies-rule {
@@ -88,27 +89,24 @@
 	background: var(--color-divider);
 }
 
-.thread-composer-boundary .chat-composer {
-	padding-bottom: calc(var(--spacing) * 1.5);
-}
-
+/*
+ * A thread's box is Chat's at the panel's width. Its choice to also send the reply to Chat leads
+ * the box's row of controls: a 28px row item, as tall as the buttons beside it, its words in the
+ * compact role, kept whole while the buttons after it give way.
+ */
 .thread-also-send {
 	display: inline-flex;
+	flex: none;
 	align-items: center;
-	gap: calc(var(--spacing) * 2);
-	padding: calc(var(--spacing) * 0.5) calc(var(--spacing) * 3.5) calc(var(--spacing) * 3);
+	gap: calc(var(--spacing) * 1.5);
+	height: var(--icon-button-size);
+	padding-inline: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2);
 	color: var(--color-text-secondary);
 	font-size: var(--text-xs);
-	line-height: 1.35;
+	line-height: var(--text-xs--line-height);
+	white-space: nowrap;
 	cursor: pointer;
 	user-select: none;
-}
-
-.workspace-root[data-workspace-mode="split"]
-	.workspace-chat-panel
-	.thread-composer-boundary
-	.thread-also-send {
-	padding-inline: calc(var(--spacing) * 3);
 }
 
 .thread-also-checkbox {

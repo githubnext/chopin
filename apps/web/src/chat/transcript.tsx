@@ -919,7 +919,7 @@ export let Transcript = memo(function Transcript(
 
 	return (
 		<div
-			className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-5 py-3 text-left"
+			className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-5 pt-3 text-left"
 			data-chat-scroll=""
 			data-focus-boundary=""
 			ref={scroller}
@@ -1059,7 +1059,8 @@ export let Transcript = memo(function Transcript(
 				})}
 				{compacting && <CompactingRow />}
 				{tail}
-				<div className="h-4 shrink-0" />
+				{/* With the stack's own gap, the last message ends 20px above the box, as Slack's clears its. */}
+				<div className="h-1 shrink-0" />
 				{emptyHint && (
 					<div
 						aria-hidden={groups.length > 0 || !!tail || undefined}
