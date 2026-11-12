@@ -17,14 +17,15 @@ export function listenForShortcuts(actions: () => ShortcutActions): () => void {
 	let keyDown = (event: KeyboardEvent) => {
 		if (event.defaultPrevented || event.repeat) return;
 		let target = event.target instanceof Element ? event.target : null;
-		let id = matchShortcut(event, platform, {
-			typing: !!target?.closest(TYPING),
-			modal: [...document.querySelectorAll("[aria-modal='true']")].some(modal =>
-				!modal.closest("[inert]")
-			),
-		});
+		let id = matchShortcut(event, platform, { typing: !!target?.closest(TYPING), modal: false });
 		let action = id && actions()[id];
 		if (!action) return;
+		// Asked only of a key that is a shortcut: the search reads the whole page, and every key
+		// typed into a long document would pay for it.
+		let modal = [...document.querySelectorAll("[aria-modal='true']")].some(modal =>
+			!modal.closest("[inert]")
+		);
+		if (modal) return;
 		event.preventDefault();
 		action();
 	};
