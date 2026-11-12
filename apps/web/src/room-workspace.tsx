@@ -20,6 +20,7 @@ import {
 	CloseIcon,
 	DocumentIcon,
 	EllipsisIcon,
+	FitWidthIcon,
 	MagnifierIcon,
 	PencilIcon,
 } from "@chopin/icons";
@@ -115,6 +116,9 @@ import {
 } from "./document-activity";
 import { newestDocumentMetadata } from "./document-actions";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { useDocumentWidth } from "./document-width";
+import { setDocumentFullWidth } from "./api";
+import { MenuSwitchItem } from "./menu-switch";
 import { DocumentContents } from "./document-contents";
 import {
 	DocumentHistoryPanel,
@@ -246,6 +250,8 @@ type TitleProps = {
 	onRenamed: (channel: DocumentMetadata) => void;
 	project?: { id: string; name: string };
 	room: string;
+	/** Full width, the document's own layout, offered where it changes what the reader sees. */
+	width?: { full: boolean; onChange: (full: boolean) => void };
 };
 
 /** An open Zoom child: this title becomes a crumb back, and the child's title follows it. */
@@ -278,6 +284,7 @@ export function DocumentTitle(
 		path,
 		project,
 		room,
+		width,
 	}: TitleProps & { decision?: boolean; icon?: boolean; path?: TitlePath },
 ) {
 	let group = useRef<HTMLDivElement>(null);
@@ -394,6 +401,12 @@ export function DocumentTitle(
 						className="title-control-action"
 						decision={decision}
 						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
+						settings={width && !decision && !archivedAt && (
+							<MenuSwitchItem checked={width.full} onChange={width.onChange}>
+								<FitWidthIcon aria-hidden="true" size={16} />
+								Full width
+							</MenuSwitchItem>
+						)}
 						trigger={decision
 							? <EllipsisIcon aria-hidden="true" size={14} />
 							: (
@@ -465,6 +478,7 @@ export function Header(
 				onRenamed={props.onRenamed}
 				project={props.project}
 				room={props.room}
+				width={props.width}
 			/>
 			{(props.build || members) && (
 				<div className="ml-auto flex shrink-0 items-center gap-3 pl-2">
@@ -484,6 +498,7 @@ export function RoomWorkspace(
 		canManage,
 		description,
 		descriptionRevision,
+		fullWidth,
 		handle,
 		label,
 		onMetadataChanged,
@@ -616,6 +631,7 @@ export function RoomWorkspace(
 		archivedAt,
 		description,
 		descriptionRevision,
+		...(fullWidth ? { fullWidth } : {}),
 		title: label,
 		slug,
 		updatedAt,
@@ -1187,6 +1203,7 @@ export function RoomWorkspace(
 			archivedAt,
 			description,
 			descriptionRevision,
+			...(fullWidth ? { fullWidth } : {}),
 			title: label,
 			slug,
 			updatedAt,
@@ -1194,7 +1211,22 @@ export function RoomWorkspace(
 		next = newestDocumentMetadata(metadataRef.current, next);
 		metadataRef.current = next;
 		setMetadata(next);
-	}, [archivedAt, description, descriptionRevision, label, room, slug, updatedAt]);
+	}, [archivedAt, description, descriptionRevision, fullWidth, label, room, slug, updatedAt]);
+	// The switch moves when pressed; the server's answer, and every reader's, follow its broadcast.
+	let [widthChoice, setWidthChoice] = useState<{ room: string; full: boolean; request: number }>();
+	let widthRequests = useRef(0);
+	let chooseWidth = useCallback((full: boolean) => {
+		let request = ++widthRequests.current;
+		setWidthChoice({ room, full, request });
+		// A refusal puts the switch back: the document keeps the width the server holds.
+		void setDocumentFullWidth(room, full).then(detail => updateMetadata(detail.channel), () => {})
+			.finally(() => {
+				setWidthChoice(current => current?.request === request ? undefined : current);
+			});
+	}, [room, updateMetadata]);
+	let documentFull = widthChoice?.room === room ? widthChoice.full : !!metadata.fullWidth;
+	// A phone's column is already the screen's.
+	let shownFull = useDocumentWidth(documentArea, documentFull && !phone);
 
 	useEffect(() => () => research.reset(), [research]);
 	useEffect(() => {
@@ -1740,7 +1772,11 @@ export function RoomWorkspace(
 	);
 	let planArea = (
 		<div className="history-layout">
-			<div className="history-layout-main" ref={documentArea}>
+			<div
+				className="history-layout-main"
+				data-document-width={shownFull ? "full" : undefined}
+				ref={documentArea}
+			>
 				<div className="h-full" data-live-document hidden={!!viewedVersion}>{plan}</div>
 				{viewedVersion && (
 					<DocumentVersionView
@@ -1785,6 +1821,7 @@ export function RoomWorkspace(
 		onRenamed: updateMetadata,
 		project: { id: repository.id, name: repository.name },
 		room,
+		...(phone ? {} : { width: { full: documentFull, onChange: chooseWidth } }),
 	};
 
 	if (presentation.type === "child") {

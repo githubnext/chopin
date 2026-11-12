@@ -45,6 +45,7 @@ type Metadata = Pick<
 	| "archivedAt"
 	| "description"
 	| "descriptionRevision"
+	| "fullWidth"
 	| "slug"
 	| "title"
 	| "updatedAt"
@@ -70,6 +71,7 @@ function workspaceProps(
 		canManage: detail.canManage,
 		description: channel.description,
 		descriptionRevision: channel.descriptionRevision,
+		...(channel.fullWidth ? { fullWidth: true } : {}),
 		handle: activeActor()?.id ?? user.login,
 		label: channel.title,
 		onMetadataChanged,

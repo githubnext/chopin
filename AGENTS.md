@@ -536,6 +536,11 @@ and storage revision. See [Experimental implementation lifecycle](docs/implement
 - The preview is non-editable derived UI. The current Enter handler requires a
   Lexical range selection inside the canonical code block; do not assume a key
   event focused only on the preview will return to the source.
+- Wrap lines is the word `wrap` in the fence's info string (`` ```ts wrap ``), outside any
+  quoted value; `codeWraps` and `withCodeWrap` in the dialect read and write it. A fence
+  without it is never rewritten. Full width is channel metadata (`channels.full_width`),
+  set through `PATCH /api/channels/:id` and announced with `session:channel`, not
+  document content: it has no Yjs history and is not undone by the editor.
 
 ### Change marks and presence
 

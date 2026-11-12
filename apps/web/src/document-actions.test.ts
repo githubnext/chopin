@@ -261,6 +261,21 @@ describe("document actions", () => {
 		).toBe(current);
 	});
 
+	it("takes Full width from the newest core metadata, on and off", () => {
+		let current = {
+			...channel("doc-one", "Brief", "R_one"),
+			updatedAt: "2026-08-22T00:00:00.000Z",
+		};
+		let widened = { ...current, fullWidth: true, updatedAt: "2026-08-23T00:00:00.000Z" };
+		let staleNarrow = { ...current, updatedAt: "2026-08-21T00:00:00.000Z" };
+		let narrowed = { ...current, updatedAt: "2026-08-24T00:00:00.000Z" };
+
+		let wide = newestDocument(current, widened);
+		expect(wide.fullWidth).toBe(true);
+		expect(newestDocument(wide, staleNarrow)).toBe(wide);
+		expect(newestDocument(wide, narrowed).fullWidth).toBeUndefined();
+	});
+
 	it("merges generated descriptions independently from core metadata", () => {
 		let current = {
 			...channel("doc-one", "Current title", "R_one"),
