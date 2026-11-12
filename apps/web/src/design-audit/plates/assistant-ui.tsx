@@ -23,7 +23,6 @@ import {
 	ComposerVoiceButton,
 } from "@/components/assistant-ui/elements/composer";
 import { ContextBreakdown } from "@/components/assistant-ui/elements/context-breakdown";
-import { createDirectiveText } from "@/components/assistant-ui/elements/directive-text";
 import {
 	Image,
 	ImageActions,
@@ -79,16 +78,6 @@ const CATALOG: Chat.ModelCatalog = {
 		{ id: "gpt-5-mini", name: "GPT-5 mini", description: "Quick drafts" },
 	],
 };
-
-const MENTION = {
-	parse: () => [{ kind: "mention" as const, type: "agent", label: "chopin", id: "chopin" }],
-};
-/** The chip as Directive text draws it for a mention, and with the control the patch lets it hold. */
-const MentionChip = createDirectiveText(MENTION, { iconMap: { agent: SparkleIcon } });
-const RemovableChip = createDirectiveText(MENTION, {
-	iconMap: { agent: SparkleIcon },
-	trailing: () => <CloseIcon />,
-});
 
 /** The files of a message being written, as Chat draws them in each state `useFiles` gives. */
 const FILES: FileView[] = [
@@ -404,13 +393,6 @@ export function AssistantUiPlate() {
 					<StateLabel>Files of a sent message</StateLabel>
 					<MessageAttachments attachments={SENT} onOpen={() => {}} />
 					<MessageAttachments attachments={SENT.slice(1, 2)} />
-				</div>
-				<div>
-					<StateLabel>Mention chip, and with a trailing control</StateLabel>
-					<div className="design-audit-aui-chips">
-						<MentionChip text=":agent[chopin]" />
-						<RemovableChip text=":agent[chopin]" />
-					</div>
 				</div>
 				<div>
 					<StateLabel>Context ring, normal</StateLabel>

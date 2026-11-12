@@ -29,7 +29,6 @@ const ROOTS = [
 	'[data-slot="model-selector-trigger"]',
 	'[data-slot="model-selector-content"]',
 	'[data-slot="composer-menu"]',
-	'[data-slot="directive-text-chip"]',
 	'[data-slot="composer-attachments"]',
 	'[data-slot="composer-voice"]',
 	'[data-slot="composer-voice-button"]',

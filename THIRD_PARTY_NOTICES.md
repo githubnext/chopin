@@ -50,10 +50,10 @@ its runtime is used and no `@assistant-ui/*` package is a dependency. Each file 
 [`apps/web/src/components/sources.json`](apps/web/src/components/sources.json) with its registry,
 item, upstream revision (the registry's repository at its main commit when it was fetched) and the
 sha256 of its bytes, and the design contract fails if one is edited
-([how](docs/assistant-ui.md)). Three carry a recorded patch beside them (`composer.tsx.patch`,
-`directive-text.tsx.patch` and `markdown-text.tsx.patch`): props that draw a person's own picture and a
+([how](docs/assistant-ui.md)). Some carry a recorded patch beside them, among them `composer.tsx.patch` and
+`markdown-text.tsx.patch`: props that draw a person's own picture and a
 tag in a row, give a staged file's chip the id of the file, a picture in place of its icon and what a
-surface offers beside its status, let the dictation's clock say a minute, draw a control inside a chip,
+surface offers beside its status, let the dictation's clock say a minute,
 and forward props, a `data-slot` root and `CodeHeader`'s button slot on `MarkdownText`, which add
 extension points and change no class or size. Those on
 2026-11-10:
@@ -62,7 +62,6 @@ extension points and change no class or size. Those on
 | ------------------------------------------------------------ | ------------- | ----------------------------- | ---------------------------------------- |
 | `components/assistant-ui/elements/agent-handoff.tsx`         | @assistant-ui | `elements-agent-handoff`      | `assistant-ui/assistant-ui@8f47f532b663` |
 | `components/assistant-ui/elements/composer.tsx`              | @assistant-ui | `elements-composer`           | `assistant-ui/assistant-ui@d25a97a22f00` |
-| `components/assistant-ui/elements/directive-text.tsx`        | @assistant-ui | `elements-directive-text`     | `assistant-ui/assistant-ui@2c298dfa8392` |
 | `components/assistant-ui/elements/image-gallery.tsx`         | @assistant-ui | `elements-image-gallery`      | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/assistant-ui/elements/image.tsx`                 | @assistant-ui | `image`                       | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/assistant-ui/elements/markdown-text.tsx`         | @assistant-ui | `markdown-text`               | `assistant-ui/assistant-ui@437b410726e2` |
@@ -78,7 +77,6 @@ extension points and change no class or size. Those on
 | `components/assistant-ui/utils/useIsomorphicLayoutEffect.ts` | @assistant-ui | `elements-surfaces`           | `assistant-ui/assistant-ui@437b410726e2` |
 | `components/geometry.css`                                    | tailwindcss   | `theme.css`                   | `tailwindcss@4.3.0`                      |
 | `components/hooks/use-copy-to-clipboard.ts`                  | @assistant-ui | `use-copy-to-clipboard`       | `assistant-ui/assistant-ui@437b410726e2` |
-| `components/ui/badge.tsx`                                    | @assistant-ui | `badge`                       | `assistant-ui/assistant-ui@2c298dfa8392` |
 | `components/ui/button.tsx`                                   | @shadcn       | `button`                      | `shadcn-ui/ui@dd41d19e2f80`              |
 | `components/ui/command.tsx`                                  | @shadcn       | `command`                     | `shadcn-ui/ui@8ab27715521c`              |
 | `components/ui/dialog.tsx`                                   | @shadcn       | `dialog`                      | `shadcn-ui/ui@dd41d19e2f80`              |
