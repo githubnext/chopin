@@ -1,0 +1,88 @@
+/*
+ * Chat's transcript scrolls under a scrollbar drawn over it, as Slack's message pane does
+ * (`c-scrollbar`): the native bar is hidden, on every engine and whether the system shows classic or
+ * overlay scrollbars, so no lane is set aside and a row's shade runs to the pane's edge. The thumb
+ * (`OverlayScrollbar`) is Chopin's classic one: 6px, round, inset 2px in a 10px lane that stops 6px
+ * short of each end, in the strongest scrollbar ink, 4:1 or more on the ground and on every row shade
+ * and wash it crosses. It shows while the pane is scrolled or pointed at, darkens to the tertiary ink
+ * under the pointer and while dragged, and sits over the rows' end, clear of the toolbar 12px in.
+ * Forced colours keep the system's own scrollbar.
+ */
+@media not (forced-colors: active) {
+	.chat-scroll {
+		scrollbar-width: none;
+	}
+
+	.chat-scroll::-webkit-scrollbar {
+		display: none;
+	}
+}
+
+.chat-scroll-host {
+	position: relative;
+	isolation: isolate;
+}
+
+.chat-scroll-track {
+	position: absolute;
+	z-index: 4;
+	inset-block: var(--scrollbar-end-margin);
+	inset-inline-end: 0;
+	width: var(--scrollbar-size);
+	contain: strict;
+	pointer-events: none;
+}
+
+/* On a phone the transcript runs under the top bar; its thumb starts below it. */
+.workspace-root[data-workspace-phone] .chat-scroll-track {
+	inset-block-start: calc(var(--phone-pane-top) + var(--scrollbar-end-margin));
+}
+
+.chat-scroll-thumb {
+	min-height: var(--scrollbar-thumb-min);
+	border: solid transparent;
+	border-width: var(--scrollbar-inset);
+	border-radius: var(--radius-full);
+	background: var(--color-scrollbar-thumb-active) padding-box;
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		opacity calc(var(--duration-fast) * 2 / 3) var(--ease-out),
+		background-color var(--duration-fast) var(--ease-out);
+}
+
+.chat-scroll-track[data-idle] {
+	display: none;
+}
+
+.chat-scroll-track:is([data-scrolling], [data-dragging]) > .chat-scroll-thumb {
+	opacity: 1;
+	transition-duration: var(--duration-fast);
+}
+
+/* A pointer that hovers finds it and can take it; a finger scrolls the rows under it instead. */
+@media (hover: hover) and (pointer: fine) {
+	.chat-scroll-host:hover > .chat-scroll-track > .chat-scroll-thumb,
+	.chat-scroll-track:is([data-scrolling], [data-dragging]) > .chat-scroll-thumb {
+		opacity: 1;
+		pointer-events: auto;
+		transition-duration: var(--duration-fast);
+	}
+
+	.chat-scroll-thumb:hover,
+	.chat-scroll-track[data-dragging] > .chat-scroll-thumb {
+		background-color: var(--color-text-tertiary);
+	}
+}
+
+@media (forced-colors: active) {
+	.chat-scroll-track {
+		display: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.chat-scroll-thumb {
+		transition: none;
+	}
+}

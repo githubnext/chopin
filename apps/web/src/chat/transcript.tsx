@@ -52,6 +52,7 @@ import { AgentAvatar } from "./presence";
 import { messageSpeaker, researchSpeaker } from "./speakers";
 import type { ToolbarActions } from "./actions/message-toolbar";
 import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
+import { OverlayScrollbar } from "./overlay-scrollbar";
 import type { ChatDestination } from "../conversation-plan/source";
 
 /** The files of a message are drawn by code that loads when a message first has some. */
@@ -926,9 +927,9 @@ export let Transcript = memo(function Transcript(
 		// Again once every row is mounted, for a message older than the first ones mounted.
 	}, [active, sourceDestination, from === 0]);
 
-	return (
+	let view = (
 		<div
-			className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-5 pt-3 text-left"
+			className="chat-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-5 pt-3 text-left"
 			data-chat-scroll=""
 			data-focus-boundary=""
 			ref={scroller}
@@ -1108,6 +1109,13 @@ export let Transcript = memo(function Transcript(
 					</div>
 				)}
 			</div>
+		</div>
+	);
+
+	return (
+		<div className="chat-scroll-host flex min-h-0 min-w-0 flex-1 flex-col">
+			{view}
+			<OverlayScrollbar content={stack} scroller={scroller} />
 		</div>
 	);
 });
