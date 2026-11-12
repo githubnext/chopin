@@ -1623,11 +1623,7 @@ export function Chat(
 						onToggle: dictation.toggle,
 						tooltip: `${dictation.active ? "Stop dictating" : "Dictate"} (${
 							shortcutLabel("dictate", currentShortcutPlatform())
-						}). ${
-							dictation.source === "browser"
-								? "Speech is turned into words on this device."
-								: `Your recording is sent to ${transcription?.provider} to be turned into words.`
-						}`,
+						})`,
 					}
 					: undefined}
 				draftable={draftable}

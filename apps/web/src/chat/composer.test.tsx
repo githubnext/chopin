@@ -408,7 +408,7 @@ const DICTATION = {
 	active: false,
 	phase: "idle" as const,
 	seconds: 0,
-	tooltip: "Dictate (Alt+Shift+M). Speech is turned into words on this device.",
+	tooltip: "Dictate (Alt+Shift+M)",
 	announcement: "",
 	onToggle: () => {},
 	disabled: false,
@@ -420,9 +420,7 @@ test("offers the microphone only where speech can be turned into words, named as
 	let idle = render({ dictation: DICTATION });
 	expect(idle).toMatch(/<button[^>]*aria-label="Dictate"[^>]*aria-pressed="false"/);
 	expect(idle).toContain('data-slot="composer-voice-button"');
-	expect(idle).toContain(
-		'title="Dictate (Alt+Shift+M). Speech is turned into words on this device."',
-	);
+	expect(idle).toContain('title="Dictate (Alt+Shift+M)"');
 	expect(idle).toMatch(
 		/<p[^>]*aria-live="polite"[^>]*data-chat-dictation-announcement=""[^>]*role="status"/,
 	);

@@ -1,9 +1,9 @@
 /**
  * Dictation where the deployment set up server transcription, in every browser: the microphone is
  * opened when the person presses the button, a recording is made on this device, and only when they
- * stop does it go to this deployment's own server, which sends it to the provider named in the
- * tooltip and sends the words back as the provider writes them. Nothing leaves the browser before
- * that, and the recording stops by itself before it is longer than the server takes.
+ * stop does it go to this deployment's own server, which sends it to its transcription provider
+ * and sends the words back as the provider writes them. Nothing leaves the browser before that,
+ * and the recording stops by itself before it is longer than the server takes.
  */
 
 import type { DictationFailure } from "./recognizer";
