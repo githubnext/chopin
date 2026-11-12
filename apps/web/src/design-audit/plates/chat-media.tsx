@@ -37,6 +37,9 @@ const KINDS: FileKind[] = [
 	"code",
 	"text",
 	"archive",
+	"image",
+	"video",
+	"audio",
 	"generic",
 ];
 
