@@ -302,7 +302,7 @@ test("the fix-it steps: a title, why in a sentence, numbered steps, each command
 	expect(markup).toContain(
 		'<span class="fix-steps-tried">Tried 3 times</span><a class="fix-steps-link"',
 	);
-	expect(markup).not.toContain("\u00b7");
+	expect(markup).not.toContain(String.fromCodePoint(0xb7));
 	expect(markup).toContain(`href="${PLANNER_HOW_TO_FIX}"`);
 	expect(markup).toContain(">Learn more</a>");
 	expect(markup).toContain('rel="noreferrer"');
