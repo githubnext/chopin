@@ -1,0 +1,58 @@
+/*
+ * chopin's ephemeral row, as Slack draws one: a quiet "Only visible to you" over the text column,
+ * then chopin's ordinary row, its sentence in the message role, and How to fix as its link.
+ * No surface or alarm colour of its own: it is said, not raised. How to fix unfolds the fix-it
+ * steps under the sentence.
+ */
+.quiet-note {
+	display: grid;
+	gap: calc(var(--spacing) * 1);
+}
+
+.quiet-note p {
+	margin: 0;
+}
+
+/* Over the text column: the avatar's 36px gutter and the row's 8px gap. */
+.quiet-note-label {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 1.5);
+	padding-inline-start: calc(var(--spacing) * 11);
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+.quiet-note-text {
+	color: var(--color-text-primary);
+	font-size: var(--text-base);
+	line-height: var(--text-base--line-height);
+	overflow-wrap: anywhere;
+	text-wrap: pretty;
+}
+
+.quiet-note-fix {
+	display: inline;
+	color: var(--color-brand-ink);
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.quiet-note-fix:hover {
+	color: var(--color-brand-hover);
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+}
+
+/* The toggle's chevron is the disclosure's own; inline after a sentence it stays small and quiet. */
+.quiet-note-fix .cv-unfold-chevron {
+	display: inline-block;
+	margin-inline-start: calc(var(--spacing) * 0.5);
+	vertical-align: -0.0625em;
+}
+
+.quiet-note-steps {
+	max-width: 34rem;
+	padding-top: calc(var(--spacing) * 3);
+}

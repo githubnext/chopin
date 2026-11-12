@@ -1,12 +1,15 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Drawer } from "@base-ui/react/drawer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { CloudIcon, MachineIcon, PlusIcon, WarningIcon } from "@chopin/icons";
+import { CloudIcon, MachineIcon, PlusIcon } from "@chopin/icons";
 
-import { PLANNER_HOW_TO_FIX, plannerButtonLabel, plannerGlyph } from "./chat/planner-status";
+import { plannerButtonLabel, plannerGlyph, plannerSentence } from "./chat/planner-status";
 import { ConnectingIndicator } from "./connecting-indicator";
+import { LazyFixSteps, loadFixSteps } from "./fix-steps-lazy";
+import { ADD_MACHINE_PATH } from "./machine-fix";
 import type { PlannerGlyph, PlannerStatus } from "./chat/planner-status";
+import type { MachineFix } from "./machine-fix";
 import { documentMenuKeyAction } from "./document-actions-menu";
 import {
 	chosenMachine,
@@ -25,8 +28,7 @@ import "./phone-sheets.css";
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import type { ChoosableMachine, MachineChoice, MachineRow, MachineState } from "./machine-choice";
 
-/** Where the Machines page's Add machine flow starts: Add your computer, opened at once. */
-export const ADD_MACHINE_PATH = "/machines?add";
+export { ADD_MACHINE_PATH };
 
 /**
  * Opens the machine menu from elsewhere on the page, as a click on the button does: the one
@@ -80,34 +82,26 @@ export function MachineGlyph(
 
 /**
  * What the Planner is doing, at the top of the machine menu, where the person is already looking
- * for where it runs. A Planner that cannot start says why in full and where to fix it; every
- * other state is the one sentence that tells it.
+ * for where it runs. Where there is something to fix (it can't be connected to, it is offline, or
+ * there is none), the fix-it steps; every other state is the one sentence that tells it.
  */
-export function PlannerNote({ status }: { status: PlannerStatus }) {
+export function PlannerNote(
+	{ status, fix, onNavigate }: {
+		status: PlannerStatus;
+		fix?: MachineFix;
+		onNavigate?: (href: string) => void;
+	},
+) {
 	return (
 		<>
 			<div aria-label="Connection" className="machine-planner" data-kind={status.kind} role="group">
-				{status.kind === "cant-start"
+				{fix
 					? (
-						<>
-							<p className="machine-planner-title">
-								<WarningIcon aria-hidden="true" className="icon-first-line" size={16} />
-								{status.title}
-							</p>
-							<p>{status.reason}</p>
-							<p className="machine-planner-detail">{status.detail}</p>
-							<a
-								className="machine-planner-link"
-								href={PLANNER_HOW_TO_FIX}
-								rel="noreferrer"
-								role="menuitem"
-								target="_blank"
-							>
-								How to fix
-							</a>
-						</>
+						<Suspense fallback={<p>{fix.title}</p>}>
+							<LazyFixSteps fix={fix} menu onNavigate={onNavigate} />
+						</Suspense>
 					)
-					: <p>{status.text}</p>}
+					: <p>{plannerSentence(status)}</p>}
 			</div>
 			<div className="app-menu-separator" role="separator" />
 		</>
@@ -163,11 +157,13 @@ function RowContent({ row }: { row: MachineRow }) {
  * the same rows as a sheet from the bottom edge.
  */
 export function MachineButton(
-	{ choice, phone = false, planner }: {
+	{ choice, phone = false, planner, fix }: {
 		choice: MachineChoice;
 		phone?: boolean;
-		/** Null means the visible connection banner tells this status instead. */
-		planner?: PlannerStatus | null;
+		/** What is not well with the document's Planner; nothing while it is attached. */
+		planner?: PlannerStatus;
+		/** The fix-it steps for it, drawn at the top of the menu. */
+		fix?: MachineFix;
 	},
 ) {
 	let id = useId();
@@ -201,6 +197,14 @@ export function MachineButton(
 		close(false);
 		go(ADD_MACHINE_PATH);
 	};
+	let navigate = (href: string) => {
+		if (!phone) close(false);
+		go(href);
+	};
+	// The steps load before the menu opens, so it opens onto them whole.
+	useEffect(() => {
+		if (fix) void loadFixSteps();
+	}, [!!fix]);
 	useMenuDismissal(open && !phone, [trigger, menu], close);
 	useLayoutEffect(() => {
 		if (!mounted) return;
@@ -277,10 +281,8 @@ export function MachineButton(
 		// A row scrolled out of the panel comes into view as it takes focus.
 		items[next]?.scrollIntoView({ block: "nearest" });
 	};
-	let label = planner === null && !shown && !state?.automatic?.label
-		? "Choose machine"
-		: plannerButtonLabel(machineButtonLabel(state), planner ?? undefined);
-	let glyph = planner === null ? "none" : plannerGlyph(planner);
+	let label = plannerButtonLabel(machineButtonLabel(state), planner);
+	let glyph = plannerGlyph(planner);
 	// An offline machine dims the button, as its menu row is dimmed; it stays a button, so another
 	// machine can be chosen. The menu row says why.
 	let offline = !!shown && !shown.connected;
@@ -307,7 +309,7 @@ export function MachineButton(
 		);
 	let body = (sheet: boolean) => (
 		<>
-			{planner && <PlannerNote status={planner} />}
+			{planner && <PlannerNote fix={fix} onNavigate={navigate} status={planner} />}
 			{state?.creatorDecides && <CreatorNote />}
 			{group("Local", rows.filter(row => !row.cloud), sheet)}
 			{group("Cloud", rows.filter(row => row.cloud), sheet)}
@@ -334,13 +336,13 @@ export function MachineButton(
 			<button
 				aria-busy={choice.saving || undefined}
 				aria-controls={open && !phone ? id : undefined}
-				aria-describedby={planner?.kind === "cant-start" ? detailId : undefined}
+				aria-describedby={fix ? detailId : undefined}
 				aria-expanded={open}
 				aria-haspopup="menu"
 				aria-label={label}
 				className={offline ? "machine-button machine-offline" : "machine-button"}
 				data-phone={phone || undefined}
-				data-planner={planner === null ? undefined : glyph ?? (planner ? planner.kind : undefined)}
+				data-planner={glyph}
 				data-tooltip={label}
 				data-tooltip-verbatim=""
 				onClick={() => open ? close(false) : openAt("first")}
@@ -354,18 +356,14 @@ export function MachineButton(
 			>
 				<MachineGlyph machine={shown} planner={glyph} />
 			</button>
-			{planner?.kind === "cant-start" && (
-				<div className="sr-only" id={detailId}>
-					<p>{planner.reason}</p>
-					<p>{planner.detail}</p>
-				</div>
-			)}
+			{fix && <span className="sr-only" id={detailId}>{fix.why}</span>}
 			{choice.error && <span className="sr-only" role="alert">{choice.error}</span>}
 			{!phone && mounted && createPortal(
 				<div
 					aria-hidden={presence.phase === "closing" ? "true" : undefined}
 					aria-label="Runs on"
 					className={`machine-menu motion-dropdown ${presence.className}`}
+					data-fix={fix ? "" : undefined}
 					id={id}
 					inert={presence.phase === "closing"}
 					onKeyDown={menuKeyDown}
@@ -405,7 +403,10 @@ function MachineSheet({ children, onClose }: { children: ReactNode; onClose: () 
 						<div
 							className="machine-sheet-group"
 							onClick={event => {
-								let target = (event.target as HTMLElement).closest("button");
+								// A machine or Add machine closes the sheet; the fix-it steps' own controls do not.
+								let target = (event.target as HTMLElement).closest(
+									"button[role=menuitemradio], button[data-add]",
+								);
 								if (target && target.getAttribute("aria-disabled") !== "true") setOpen(false);
 							}}
 							role="menu"

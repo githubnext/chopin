@@ -1,23 +1,19 @@
+import { offlineBar } from "./connection-phase";
 import type { ConnectionView } from "./connection-phase";
 
 /**
- * What the composer's banner slot holds: one banner for each cause, never two for one.
+ * What the composer's banner slot holds: a refused send or a failed reply, one at a time.
  *
- * The room's socket and the document's sync are the cause of anything the connection cut off, so
- * their banner is the whole slot and a refused send or a failed reply waits behind it. A Planner
- * that is away or absent is another fact: it shows beside a message the server refused or a reply
- * that failed, which it did not cause. The one exception is a reply that failed as its machine
- * dropped (held or disconnected): the machine's banner tells why, and a retry cannot reach it, so
- * that reply's own line stays in the transcript until its banner is drawn. A reply whose failure
- * was already shown (`shown`) before the machine dropped failed for another cause, and keeps its
- * banner and Retry beside the machine's. Where the composer is not
- * drawn (an archived or read-only document) there is no slot, and nothing leaves the transcript.
+ * The connection is never drawn here: the room's socket lost for a while is the offline bar over
+ * the transcript, and the Planner's machine is presence on the machine button and on chopin. While
+ * the offline bar shows, the connection is the cause of anything it cut off, so a refused send or a
+ * failed reply waits behind it and the composer's other notices give way. Otherwise a refused send
+ * comes first, then a failed reply. Where the composer is not drawn (an archived or read-only
+ * document) there is no slot, and nothing leaves the transcript.
  */
 export type BannerSlot = {
-	/** The refused send or the failed reply, shown above the connection banner. */
+	/** The refused send or the failed reply, shown above the composer. */
 	lead?: "send" | "failure";
-	/** The connection banner is drawn. */
-	connection: boolean;
 	/** The composer's other notices (research, replies off) give way to the slot. */
 	quietsNotices: boolean;
 };
@@ -27,13 +23,9 @@ export function bannerSlot(
 	send: boolean,
 	failure: boolean,
 	composer = true,
-	shown = false,
 ): BannerSlot {
-	if (!composer) return { connection: false, quietsNotices: false };
-	let told = view && view.phase !== "online" ? view : undefined;
-	if (told && told.layer !== "planner") return { connection: true, quietsNotices: true };
-	let kind = told && "plannerKind" in told ? told.plannerKind : undefined;
-	let droppedWithIt = (kind === "held" || kind === "disconnected") && !shown;
-	let lead: BannerSlot["lead"] = send ? "send" : failure && !droppedWithIt ? "failure" : undefined;
-	return { ...(lead ? { lead } : {}), connection: !!told, quietsNotices: !!lead };
+	if (!composer) return { quietsNotices: false };
+	if (view && offlineBar(view)) return { quietsNotices: true };
+	let lead: BannerSlot["lead"] = send ? "send" : failure ? "failure" : undefined;
+	return { ...(lead ? { lead } : {}), quietsNotices: !!lead };
 }

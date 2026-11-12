@@ -283,6 +283,27 @@ describe("mention picker markup", () => {
 		expect(html).toContain("https://github.com/octocat.png?size=40");
 		expect(html).not.toContain("github.com/chopin.png");
 		// The badge is hidden from a screen reader, which reads the row's own words.
-		expect(html).toContain('<span aria-hidden="true"><span aria-hidden="true"');
+		expect(html).toContain(
+			'<span aria-hidden="true" class="presence-host"><span aria-hidden="true"',
+		);
+		// Without a machine to speak of, Chopin shows no presence.
+		expect(html).not.toContain("presence-dot");
+	});
+
+	test("Chopin's mark carries its presence, and its name says it", () => {
+		let away = renderToStaticMarkup(
+			createElement(MentionPicker, {
+				active: 0,
+				id: "mentions",
+				onActive: () => {},
+				onSelect: () => {},
+				options,
+				presence: "away",
+			}),
+		);
+		expect(away).toContain('<span class="presence-dot" data-presence="away"></span>');
+		expect(away).toContain('aria-label="Chopin, agent, Away"');
+		// Only Chopin's row: a person's presence is not Chopin's to say.
+		expect(away.match(/presence-dot/g)).toHaveLength(1);
 	});
 });

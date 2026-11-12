@@ -14,6 +14,9 @@ import { BuildPlanButton } from "./build-plan-button";
 import { SETUP } from "./build-connection-popover";
 import { SHARE_DETAIL, YourMachines } from "./experiments/machine-list";
 import { ChatComposer } from "./chat/composer";
+import { QuietNote } from "./chat/quiet-note";
+import FixSteps from "./fix-steps";
+import { machineFix } from "./machine-fix";
 import { plannerForBanner } from "./chat/connection-phase";
 import {
 	destinationCue,
@@ -233,44 +236,37 @@ test("every glyph the button's dot takes says nothing, and none of it is an inte
 	}
 });
 
-test("the banner at the composer says every state in plain words, with the button or without", () => {
+test("the machine's state is never drawn in Chat; its fix-it steps and quiet note say every state in plain words", () => {
 	for (let status of statuses()) {
 		for (let hasButton of [true, false]) {
 			let view = connectionStep(INITIAL_MEMORY, {
 				...WELL,
 				planner: plannerForBanner(status, hasButton),
 			}).view;
-			if (view.phase === "online") continue;
-			let markup = render(createElement(ConnectionBannerView, { onRetry: () => {}, view }));
-			expect(markup.length).toBeGreaterThan(0);
-			expectPlain(`banner ${status.kind} ${hasButton}`, words(markup));
-			// And as the composer draws it, above the field.
-			let drawn = render(
-				createElement(ChatComposer, {
-					...COMPOSER,
-					banner: {
-						id: "b",
-						node: createElement(ConnectionBannerView, { onRetry: () => {}, view }),
-					},
-				}),
-			);
-			expectPlain(
-				`drawn ${status.kind} ${hasButton}`,
-				words(
-					drawn.slice(
-						drawn.indexOf('<div class="composer-notice"'),
-						drawn.indexOf("composer-surface"),
-					),
-				),
-			);
+			// Presence and the menu tell it; nothing is drawn by the offline bar or the composer.
+			expect(render(createElement(ConnectionBannerView, { onRetry: () => {}, view }))).toBe("");
+			for (let place of ["menu", "note"] as const) {
+				for (let mine of [true, false]) {
+					let fix = machineFix(status, { mine, choose: hasButton, place });
+					if (!fix) continue;
+					expectPlain(
+						`steps ${status.kind} ${place} ${mine}`,
+						words(render(createElement(FixSteps, { fix, menu: place === "menu" })))
+							// The machine's own words are its own, shown as reported.
+							.filter(text => !fix.details?.join("\n").includes(text)),
+					);
+					expectPlain(
+						`note ${status.kind} ${place} ${mine}`,
+						words(render(createElement(QuietNote, { fix, text: "Message not sent." }))),
+					);
+				}
+			}
 		}
 	}
 });
 
 test("a lost connection, its action, its return and its one polite word are plain", () => {
-	expect(OFFLINE_MESSAGE).toBe(
-		"You're offline. Your changes are kept and will sync when you reconnect.",
-	);
+	expect(OFFLINE_MESSAGE).toBe("You're offline. Your changes are kept.");
 	let phases = [
 		connectionStep(INITIAL_MEMORY, { ...WELL, socket: "lost", failures: 1 }),
 		connectionStep(INITIAL_MEMORY, { ...WELL, socket: "lost", failures: 4 }),

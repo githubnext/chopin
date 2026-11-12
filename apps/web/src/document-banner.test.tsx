@@ -22,29 +22,21 @@ const DROPPED: ConnectionView = {
 	action: "reconnect",
 };
 
-test("the connection banner shows nothing while online, and says each phase once it is not", () => {
+test("the offline bar shows nothing while online or back, and one line once the connection is lost", () => {
 	expect(renderToStaticMarkup(createElement(ConnectionState, { phase: "online" }))).toBe("");
+	expect(renderToStaticMarkup(createElement(ConnectionState, { phase: "resumed" }))).toBe("");
 	let dropped = renderToStaticMarkup(createElement(ConnectionState, { phase: "dropped" }));
 	// The user's words, character for character, with plain apostrophes.
-	expect(OFFLINE_MESSAGE).toBe(
-		"You're offline. Your changes are kept and will sync when you reconnect.",
-	);
+	expect(OFFLINE_MESSAGE).toBe("You're offline. Your changes are kept.");
 	expect(dropped).toContain(OFFLINE_MESSAGE);
 	expect(dropped).toContain('data-phase="dropped"');
+	expect(dropped).toContain("data-offline-bar");
 	let reconnecting = renderToStaticMarkup(
-		createElement(ConnectionState, { attempt: 3, phase: "reconnecting" }),
+		createElement(ConnectionState, { phase: "reconnecting" }),
 	);
 	expect(reconnecting).toContain('data-phase="reconnecting"');
-	expect(reconnecting).toContain(">attempt 3</span>");
-	let resumed = renderToStaticMarkup(
-		createElement(ConnectionState, {
-			caught: "2 new messages",
-			message: "Back. The reply kept going.",
-			phase: "resumed",
-		}),
-	);
-	expect(resumed).toContain("Back. The reply kept going.");
-	expect(resumed).toContain(">2 new messages</span>");
+	// No attempt is counted on it: a thin bar says only that it is connecting.
+	expect(reconnecting).not.toContain("attempt");
 });
 
 test("Reconnect is drawn only where there is something to retry, as a secondary outline action", () => {
@@ -53,7 +45,7 @@ test("Reconnect is drawn only where there is something to retry, as a secondary 
 	let withRetry = renderToStaticMarkup(
 		createElement(ConnectionState, { onRetry: () => {}, phase: "dropped" }),
 	);
-	expect(withRetry).toContain('class="btn btn-xs btn-outline"');
+	expect(withRetry).toContain('class="btn btn-xs btn-outline offline-bar-action"');
 	expect(withRetry).toContain(">Reconnect</button>");
 	expect(withRetry).not.toContain("btn-primary");
 	// A phase that is not dropped has no button, whatever it was given.
@@ -97,10 +89,11 @@ test("the failure banner alerts with a Retry, or is one quiet status line while 
 	expect(renderToStaticMarkup(createElement(ErrorState, { title: "x" }))).not.toContain("<button");
 });
 
-test("the document draws the room's connection, and leaves the machine's to Chat's composer", () => {
+test("the document draws only the room's lost connection, never its return or the machine's", () => {
 	expect(documentTells(DROPPED)).toBe(true);
 	expect(documentTells({ phase: "online" })).toBe(false);
-	expect(documentTells({ phase: "resumed", text: "Back online.", caught: "x" })).toBe(true);
+	expect(documentTells({ phase: "resumed", text: "Back online.", caught: "x" })).toBe(false);
+	expect(documentTells({ phase: "reconnecting", layer: "sync", text: "Catching up" })).toBe(false);
 	expect(
 		documentTells({ phase: "dropped", layer: "planner", text: "Build box is offline." }),
 	).toBe(false);

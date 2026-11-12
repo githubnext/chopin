@@ -1,25 +1,26 @@
 import { useLayoutEffect, useRef } from "react";
 
 import { ConnectionBannerView } from "./chat/connection-banner";
+import { offlineBar } from "./chat/connection-phase";
 import type { ConnectionView } from "./chat/connection-phase";
 
 import "./document-banner.css";
 
 /**
- * Whether the document tells this view: the room's own connection (cut off, catching up, back).
- * The Planner's connection is Chat's to tell, at its composer, and is never drawn over a document.
+ * Whether the document draws this view: only the offline bar, the room's own socket lost for a
+ * while. Catching up and coming back are quiet, and the Planner's machine is never drawn here.
  */
 export function documentTells(view: ConnectionView): boolean {
-	return view.phase !== "online" && !("layer" in view && view.layer === "planner");
+	return offlineBar(view) !== undefined;
 }
 
 /**
- * The connection banner where Chat is not on screen: at the top of the document's content, or of
- * the page above its panes (see `pageNoticePlace`). It is the same banner as the one at the Chat
- * composer, and the page draws one or the other, so a lost connection is never told twice. It keeps
- * no timing and says nothing aloud: the page holds the phase machine above both places and speaks
- * from one polite region (`ConnectionAnnouncement`), so a banner mounted again somewhere else
- * during one outage is simply there.
+ * The offline bar where Chat is not on screen: at the top of the document's content, or of the page
+ * above its panes (see `pageNoticePlace`). It is the same bar as the one over Chat's transcript,
+ * and the page draws one or the other, so a lost connection is never told twice. It keeps no timing
+ * and says nothing aloud: the page holds the phase machine above both places and speaks from one
+ * polite region (`ConnectionAnnouncement`), so a bar mounted again somewhere else during one outage
+ * is simply there.
  *
  * A phone's panes run under its floating top bar, so the banner floats just under that bar as
  * well, and its height is added to the panes' top inset: it never covers the first of their

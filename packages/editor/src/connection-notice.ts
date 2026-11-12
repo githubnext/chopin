@@ -14,6 +14,11 @@ export const CONNECTION_GRACE = 1500;
  * why it cannot here.
  */
 export const RESTART_GRACE = RESTART_QUIET_MS + CONNECTION_GRACE;
+/**
+ * How long a lost connection stays silent before the page's offline bar shows, as Slack's does: a
+ * drop that recovers within it is never drawn, only the messages it held back say Sending.
+ */
+export const OFFLINE_BAR_GRACE = 10_000;
 /** How much longer it reads as reconnecting before it is called offline. */
 export const CONNECTION_STALL = 5000;
 /** Failed reconnect attempts in one outage before a person is offered a Retry of their own. */
@@ -25,17 +30,21 @@ export const RETRY_AFTER_FAILURES = 4;
  */
 export type ConnectionNotice = "none" | "reconnecting" | "offline";
 
-/** How long a lost connection stays silent, `restarting` when the server said it is restarting. */
-export function connectionGrace(restarting = false): number {
-	return restarting ? RESTART_GRACE : CONNECTION_GRACE;
+/**
+ * How long a lost connection stays silent, `restarting` when the server said it is restarting, for
+ * a surface whose own silence is `base`.
+ */
+export function connectionGrace(restarting = false, base = CONNECTION_GRACE): number {
+	return restarting ? RESTART_QUIET_MS + base : base;
 }
 
 /** The notice for a connection that has been lost for `elapsed` milliseconds. */
 export function connectionNotice(
 	elapsed: number | undefined,
 	restarting = false,
+	base = CONNECTION_GRACE,
 ): ConnectionNotice {
-	let grace = connectionGrace(restarting);
+	let grace = connectionGrace(restarting, base);
 	if (elapsed === undefined || elapsed < grace) return "none";
 	return elapsed < grace + CONNECTION_STALL ? "reconnecting" : "offline";
 }
@@ -75,8 +84,9 @@ export function countGrace(
 	clock: GraceClock,
 	restarting: boolean,
 	say: (notice: ConnectionNotice) => void,
+	base = CONNECTION_GRACE,
 ): { look(): void; stop(): void } {
-	let grace = connectionGrace(restarting);
+	let grace = connectionGrace(restarting, base);
 	let timers: unknown[] = [];
 	let shown = false;
 	let stop = () => {
@@ -88,7 +98,7 @@ export function countGrace(
 		timers = [grace, grace + CONNECTION_STALL].map(delay =>
 			clock.later(() => {
 				shown = true;
-				say(connectionNotice(delay, restarting));
+				say(connectionNotice(delay, restarting, base));
 			}, delay)
 		);
 	};
@@ -106,9 +116,14 @@ export function countGrace(
  *
  * Only what is shown waits. Whatever has to act on the real connection, such
  * as reopening the document or sending, must keep reading it directly: a
- * reconnect inside the grace period never changes this value.
+ * reconnect inside the grace period never changes this value. `base` is the surface's own
+ * silence: the page's offline bar waits `OFFLINE_BAR_GRACE`.
  */
-export function useConnectionNotice(lost: boolean, restarting = false): ConnectionNotice {
+export function useConnectionNotice(
+	lost: boolean,
+	restarting = false,
+	base = CONNECTION_GRACE,
+): ConnectionNotice {
 	let [notice, setNotice] = useState<ConnectionNotice>("none");
 	useEffect(() => {
 		setNotice("none");
@@ -121,6 +136,7 @@ export function useConnectionNotice(lost: boolean, restarting = false): Connecti
 			},
 			restarting,
 			setNotice,
+			base,
 		);
 		// The page's own words for being shown, frozen, thawed and brought back from the cache.
 		let looks: Array<[EventTarget, string]> = [
@@ -134,6 +150,6 @@ export function useConnectionNotice(lost: boolean, restarting = false): Connecti
 			counting.stop();
 			for (let [target, event] of looks) target.removeEventListener(event, counting.look);
 		};
-	}, [lost, restarting]);
+	}, [lost, restarting, base]);
 	return lost ? notice : "none";
 }

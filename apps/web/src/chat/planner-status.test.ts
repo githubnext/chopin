@@ -5,7 +5,7 @@ import {
 	NO_MACHINE,
 	plannerButtonLabel,
 	plannerGlyph,
-	plannerPlacement,
+	plannerPresence,
 	plannerSentence,
 	plannerStatus,
 	plannerWithheld,
@@ -70,6 +70,8 @@ test("says why a Planner that keeps failing cannot start, and what has been trie
 		title: "Can't connect to Build box",
 		reason: "The checkout's git config sets a credential helper",
 		detail: `Tried 3 times, last at ${clockTime(AT)}. Still trying.`,
+		where: "Build box",
+		login: "mona",
 	});
 	expect(plannerStatus(failing(1))).toMatchObject({
 		title: "Can't connect to @mona's machine",
@@ -84,6 +86,8 @@ test("says a machine that has not answered has not, instead of counting launches
 		title: "Can't connect to Build box",
 		reason: "It hasn't answered yet",
 		detail: `Waiting since ${clockTime(AT)}. Still trying.`,
+		where: "Build box",
+		login: "mona",
 	});
 });
 
@@ -107,6 +111,9 @@ test("says when an offline machine was last seen, as a contact's last seen is sa
 	expect(plannerStatus({ state: "disconnected", login: "mona" }, "Build box", seen)).toEqual({
 		kind: "disconnected",
 		text: `Build box is offline. Last seen ${clockTime(seen)}.`,
+		where: "Build box",
+		login: "mona",
+		seen: clockTime(seen),
 	});
 	// Another day is said with its date, so a machine away since last week is not read as this morning.
 	let before = new Date(Date.now() - 3 * 86_400_000).toISOString();
@@ -122,6 +129,8 @@ test("says when an offline machine was last seen, as a contact's last seen is sa
 	expect(plannerStatus({ state: "disconnected", login: "mona" }, "Build box")).toEqual({
 		kind: "disconnected",
 		text: "Build box is offline. Your work is kept.",
+		where: "Build box",
+		login: "mona",
 	});
 });
 
@@ -129,10 +138,14 @@ test("says a disconnected machine is offline and the work is kept, naming it whe
 	expect(plannerStatus({ state: "disconnected", login: "mona" }, "Build box")).toEqual({
 		kind: "disconnected",
 		text: "Build box is offline. Your work is kept.",
+		where: "Build box",
+		login: "mona",
 	});
 	expect(plannerStatus({ state: "disconnected", login: "mona" })).toEqual({
 		kind: "disconnected",
 		text: "@mona's machine is offline. Your work is kept.",
+		where: "@mona's machine",
+		login: "mona",
 	});
 });
 
@@ -196,11 +209,15 @@ const PROBLEMS = [
 	{ state: "none" },
 ] as const satisfies readonly Session.PlannerAttachment[];
 
-test("with the machine button, the button carries every state, a machine that cannot be connected to included", () => {
-	for (let planner of PROBLEMS) {
-		let status = plannerStatus(planner, "Build box")!;
-		expect(plannerPlacement(status, true).button).toBe(status);
-	}
+test("chopin's presence follows its machine: active while attached, connecting, can't connect, else away", () => {
+	let expected = ["connecting", "failing", "away", "away", "away"] as const;
+	PROBLEMS.forEach((planner, index) => {
+		expect(plannerPresence(planner, plannerStatus(planner, "Build box"))).toBe(expected[index]);
+	});
+	expect(plannerPresence({ state: "attached", login: "mona" }, undefined)).toBe("active");
+	// No remote Planner at all, or a status still withheld, shows no presence rather than a guess.
+	expect(plannerPresence(undefined, undefined)).toBeUndefined();
+	expect(plannerPresence({ state: "starting", login: "mona" }, undefined)).toBeUndefined();
 });
 
 test("a word whose machine is not known yet is withheld, not over: only a starting or dropped Planner waits for a name", () => {
@@ -224,11 +241,5 @@ test("a word whose machine is not known yet is withheld, not over: only a starti
 		] as const
 	) {
 		expect(plannerWithheld(planner, null)).toBe(false);
-	}
-});
-
-test("a healthy Planner has nothing to place, with or without the button", () => {
-	for (let hasButton of [true, false]) {
-		expect(plannerPlacement(undefined, hasButton)).toEqual({ button: undefined });
 	}
 });

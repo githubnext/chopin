@@ -21,6 +21,7 @@ import type { Session } from "@chopin/protocol";
 import type { DocumentMetadata } from "./document-actions";
 import type { DocumentAction } from "./document-actions-menu";
 import type { PlannerStatus } from "./chat/planner-status";
+import type { MachineFix } from "./machine-fix";
 import type { MachineChoice } from "./machine-choice";
 import type { TitleEdit } from "./title-edit";
 import type { WorkspacePresentation } from "./workspace-model";
@@ -42,8 +43,9 @@ type PhoneHeaderDocument = {
 	archivedAt?: string;
 	/** The person's machine choice for this document: its button opens a sheet from the bar. */
 	machine?: MachineChoice;
-	/** What is not well with the document's Planner; null quiets it for the connection banner. */
-	planner?: PlannerStatus | null;
+	/** What is not well with the document's Planner, and its fix-it steps. */
+	planner?: PlannerStatus;
+	fix?: MachineFix;
 	canManage: boolean;
 	/** The room is a decision's page: its menu is Copy link and Discard decision only. */
 	decision?: boolean;
@@ -142,6 +144,7 @@ export function PhoneHeaderContent(
 		onEditingChange,
 		onRenamed,
 		planner,
+		fix,
 		lead,
 		room,
 	}: PhoneHeaderDocument,
@@ -243,7 +246,7 @@ export function PhoneHeaderContent(
 						)}
 					</div>
 				)}
-				{machine && <MachineButton choice={machine} phone planner={planner} />}
+				{machine && <MachineButton choice={machine} fix={fix} phone planner={planner} />}
 				{comments > 0 && onComments && (
 					<button
 						aria-haspopup="dialog"

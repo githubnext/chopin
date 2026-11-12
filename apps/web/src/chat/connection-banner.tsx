@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { useConnectionNotice } from "@chopin/editor";
+import { OFFLINE_BAR_GRACE, useConnectionNotice } from "@chopin/editor";
+import { useTransitionPresence } from "@chopin/editor/transition-presence";
 
 import {
 	connectionSpeech,
@@ -8,11 +9,18 @@ import {
 	expireResumed,
 	INITIAL_MEMORY,
 	NOTHING_SPOKEN,
+	offlineBar,
 	RESUMED_MS,
 } from "./connection-phase";
 import { useConnectionSpeaking } from "../connection-speaking";
 import { ConnectionState } from "./connection-state";
-import type { ConnectionFacts, ConnectionMemory, ConnectionView, Spoken } from "./connection-phase";
+import type {
+	ConnectionFacts,
+	ConnectionMemory,
+	ConnectionView,
+	OfflineBar,
+	Spoken,
+} from "./connection-phase";
 import type { PlannerStatus } from "./planner-status";
 
 /** What the transcript, which Chat owns, tells the banner. */
@@ -26,17 +34,18 @@ export type ConnectionBanner = {
 	offline: boolean;
 	/** The one thing a screen reader is told as the phase changes. */
 	spoken: string;
-	/** Retries the layer the banner speaks of, or nothing where the banner has no button. */
+	/** Reconnects the room's socket, or nothing where the offline bar has no button. */
 	onRetry: (() => void) | undefined;
 };
 
 /**
- * The one connection banner's state for a document: the phase machine (`connection-phase.ts`)
- * fed by the room's socket, the document and transcript catching up on it, and the Planner's
- * connection, with the timing it needs (the grace a loss stays silent for, how long the return is
- * said, which attempt a person's Reconnect started). Held above wherever the banner is drawn, so a
- * person moving between Chat and the document during one outage neither waits out the grace again
- * nor hears of it twice.
+ * The page's connection state for a document: the phase machine (`connection-phase.ts`) fed by the
+ * room's socket, the document and transcript catching up on it, and the Planner's connection, with
+ * the timing it needs (the ten seconds a loss stays silent for, as Slack's does, how long the return
+ * is remembered, which attempt a person's Reconnect started). Only the offline bar is ever drawn
+ * from it; every phase is spoken once. Held above wherever the bar is drawn, so a person moving
+ * between Chat and the document during one outage neither waits out the grace again nor hears of
+ * it twice.
  */
 export function useConnectionBanner(
 	{
@@ -50,8 +59,6 @@ export function useConnectionBanner(
 		plannerHeld,
 		lostEdits,
 		reconnect,
-		wake,
-		chooseMachine,
 	}: {
 		/** The room's connection is lost: it reports an outage (`isOffline`). */
 		lost: boolean;
@@ -59,7 +66,7 @@ export function useConnectionBanner(
 		synced: boolean;
 		unsaved: boolean;
 		transcript: TranscriptFacts;
-		/** The Planner's status where the banner tells it (`plannerForBanner`). */
+		/** The Planner's status where the page speaks of it (`plannerForBanner`). */
 		planner: PlannerStatus | undefined;
 		/**
 		 * The room's own word, on the current socket, is that the Planner is attached. Not the same
@@ -71,16 +78,9 @@ export function useConnectionBanner(
 		/** The Planner's status is only withheld for a moment, not over. */
 		plannerHeld: boolean;
 		reconnect: () => void;
-		/** Asks the machine to try now, where something can; without it no such button is drawn. */
-		wake?: () => void;
-		/**
-		 * Opens the machine choice, for a viewer who may choose; without it a Planner that is away
-		 * is told with no button, since Chopin cannot reconnect another's machine.
-		 */
-		chooseMachine?: () => void;
 	},
 ): ConnectionBanner {
-	let shown = useConnectionNotice(lost) !== "none";
+	let shown = useConnectionNotice(lost, false, OFFLINE_BAR_GRACE) !== "none";
 	// Where the failures stood when Reconnect was pressed, until that attempt fails or ends.
 	let [pressed, setPressed] = useState<number>();
 	useEffect(() => {
@@ -103,7 +103,6 @@ export function useConnectionBanner(
 		lostEdits,
 		plannerAttached,
 		reopened: attempt.current,
-		chooseMachine: chooseMachine !== undefined,
 	};
 	let step = connectionStep(memory, facts);
 	useEffect(() => {
@@ -138,10 +137,6 @@ export function useConnectionBanner(
 			setPressed(failures);
 			reconnect();
 		}
-		: view.phase === "dropped" && view.action === "wake"
-		? wake
-		: view.phase === "dropped" && view.action === "choose"
-		? chooseMachine
 		: undefined;
 	let offline = (view.phase === "reconnecting" || view.phase === "dropped")
 		&& view.layer !== "planner";
@@ -150,27 +145,30 @@ export function useConnectionBanner(
 	return { view, offline, spoken, onRetry };
 }
 
-/** The banner for a view: nothing while online. */
+/** How long the offline bar takes to fade once the connection is back. */
+const BAR_EXIT_MS = 120;
+
+/**
+ * The offline bar for a view: nothing while online, catching up or just back, and for the
+ * Planner's machine, which is presence on the machine button and on chopin. It fades out when the
+ * connection returns, and says nothing as it goes.
+ */
 export function ConnectionBannerView(
 	{ view, onRetry, id }: { view: ConnectionView; onRetry: (() => void) | undefined; id?: string },
 ) {
-	if (view.phase === "online") return null;
+	let next = offlineBar(view);
+	// One value for as long as the bar says the same, so its presence is not restarted each render.
+	let bar = useMemo(() => next, [next?.phase, next?.text, next?.action]);
+	let presence = useTransitionPresence<OfflineBar>(bar, BAR_EXIT_MS, false);
+	if (presence.phase === "closed") return null;
+	let shown = presence.value;
 	return (
 		<ConnectionState
-			attempt={view.phase === "reconnecting" ? view.attempt : undefined}
-			caught={view.phase === "resumed" ? view.caught : undefined}
-			detail={view.phase === "resumed" ? undefined : view.detail}
 			id={id}
-			layer={"layer" in view ? view.layer : undefined}
-			link={view.phase === "resumed" ? undefined : view.link}
-			message={view.text}
-			onRetry={onRetry}
-			phase={view.phase}
-			retryLabel={view.phase === "dropped" && view.action === "wake"
-				? "Try again"
-				: view.phase === "dropped" && view.action === "choose"
-				? "Choose machine"
-				: undefined}
+			message={shown.text}
+			onRetry={bar && shown.action === "reconnect" ? onRetry : undefined}
+			phase={shown.phase}
+			closing={presence.phase === "closing"}
 		/>
 	);
 }

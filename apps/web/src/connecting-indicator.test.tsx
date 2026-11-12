@@ -28,31 +28,21 @@ test("the connecting indicator is three dots drawn by CSS, hidden from assistive
 		.toContain('class="connecting-indicator x"');
 });
 
-test("the banner draws the indicator only while it reconnects or connects, beside its words", () => {
+test("the offline bar draws the indicator only while it reconnects, beside its words", () => {
 	let reconnecting = renderToStaticMarkup(
-		createElement(ConnectionState, { attempt: 2, phase: "reconnecting" }),
+		createElement(ConnectionState, { phase: "reconnecting" }),
 	);
 	expect(indicators(reconnecting)).toBe(1);
-	// It sits in the icon's place, with the icon's classes, and the words are still text.
-	expect(reconnecting).toContain(
-		'class="connecting-indicator composer-notice-icon icon-first-line"',
-	);
-	expect(reconnecting).toContain("Reconnecting. Your changes are kept.");
-	expect(reconnecting).not.toContain("composer-notice-spin");
-	let connecting = renderToStaticMarkup(
-		createElement(ConnectionState, {
-			layer: "planner",
-			message: "Connecting to build-box",
-			phase: "reconnecting",
-		}),
-	);
-	expect(indicators(connecting)).toBe(1);
-	expect(connecting).toContain("Connecting to build-box");
-	// Every other phase keeps its own icon.
-	for (let phase of ["dropped", "resumed"] as const) {
-		expect(indicators(renderToStaticMarkup(createElement(ConnectionState, { phase })))).toBe(0);
+	// It sits in the icon's place, and the words are still text.
+	expect(reconnecting).toContain('class="connecting-indicator offline-bar-icon"');
+	expect(reconnecting).toContain("Connecting\u2026 Your changes are kept.");
+	// Offline keeps its warning icon, and coming back and being online draw nothing.
+	expect(
+		indicators(renderToStaticMarkup(createElement(ConnectionState, { phase: "dropped" }))),
+	).toBe(0);
+	for (let phase of ["online", "resumed"] as const) {
+		expect(renderToStaticMarkup(createElement(ConnectionState, { phase }))).toBe("");
 	}
-	expect(renderToStaticMarkup(createElement(ConnectionState, { phase: "online" }))).toBe("");
 });
 
 test("the machine button's badge draws the indicator only while its Planner starts", () => {

@@ -9,6 +9,7 @@ import {
 	connectionNotice,
 	countGrace,
 	isOffline,
+	OFFLINE_BAR_GRACE,
 	RESTART_GRACE,
 } from "./connection-notice";
 
@@ -34,6 +35,15 @@ describe("connectionNotice", () => {
 		expect(connectionNotice(RESTART_GRACE, true)).toBe("reconnecting");
 		expect(connectionNotice(RESTART_GRACE + CONNECTION_STALL - 1, true)).toBe("reconnecting");
 		expect(connectionNotice(RESTART_GRACE + CONNECTION_STALL, true)).toBe("offline");
+	});
+
+	test("the offline bar keeps a drop silent for ten seconds, as Slack does, and longer through a restart", () => {
+		expect(OFFLINE_BAR_GRACE).toBe(10_000);
+		expect(connectionNotice(CONNECTION_GRACE, false, OFFLINE_BAR_GRACE)).toBe("none");
+		expect(connectionNotice(OFFLINE_BAR_GRACE - 1, false, OFFLINE_BAR_GRACE)).toBe("none");
+		expect(connectionNotice(OFFLINE_BAR_GRACE, false, OFFLINE_BAR_GRACE)).toBe("reconnecting");
+		expect(connectionGrace(true, OFFLINE_BAR_GRACE)).toBe(RESTART_QUIET_MS + OFFLINE_BAR_GRACE);
+		expect(connectionNotice(OFFLINE_BAR_GRACE, true, OFFLINE_BAR_GRACE)).toBe("none");
 	});
 
 	test("names the grace a send held through a blip may wait, the same as the silence", () => {
@@ -95,8 +105,8 @@ function page(visible = true) {
 		clock,
 		said,
 		/** The loss begins, and the page counts its grace if it can be looked at. */
-		lose(restarting = false) {
-			return countGrace(clock, restarting, notice => said.push({ at: now, notice }));
+		lose(restarting = false, base?: number) {
+			return countGrace(clock, restarting, notice => said.push({ at: now, notice }), base);
 		},
 		show: (seen: boolean) => void (state.visible = seen),
 		/**
@@ -130,6 +140,18 @@ describe("countGrace", () => {
 		expect(p.said).toEqual([{ at: CONNECTION_GRACE, notice: "reconnecting" }]);
 		p.pass(CONNECTION_STALL);
 		expect(p.said.map(said => said.notice)).toEqual(["reconnecting", "offline"]);
+	});
+
+	test("with the offline bar's grace a short drop says nothing, and one that lasts ten seconds says it once", () => {
+		let p = page();
+		let short = p.lose(false, OFFLINE_BAR_GRACE);
+		p.pass(OFFLINE_BAR_GRACE - 1);
+		short.stop();
+		p.pass(OFFLINE_BAR_GRACE * 2);
+		expect(p.said).toEqual([]);
+		p.lose(false, OFFLINE_BAR_GRACE);
+		p.pass(OFFLINE_BAR_GRACE);
+		expect(p.said).toEqual([{ at: OFFLINE_BAR_GRACE * 4 - 1, notice: "reconnecting" }]);
 	});
 
 	test("does not count the grace of a loss that begins while the page is hidden, however long it lasts", () => {

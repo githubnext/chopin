@@ -3,13 +3,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup as renderToStaticMarkupRaw } from "react-dom/server";
 
 import { BuildPlanButton } from "./build-plan-button";
-import {
-	PLANNER_HOW_TO_FIX,
-	plannerPlacement,
-	plannerSentence,
-	plannerStatus,
-} from "./chat/planner-status";
-import { connectionStep, INITIAL_MEMORY, plannerForBanner } from "./chat/connection-phase";
+import { PLANNER_HOW_TO_FIX, plannerSentence, plannerStatus } from "./chat/planner-status";
+import FixSteps from "./fix-steps";
 import {
 	CREATOR_DECIDES,
 	CreatorNote,
@@ -19,6 +14,7 @@ import {
 } from "./machine-button";
 import { INTERNAL_IN_STATUS } from "@chopin/protocol/plain-words";
 
+import { machineFix } from "./machine-fix";
 import type { MachineChoice } from "./machine-choice";
 
 /** Markup with the apostrophe React escapes in text written back, so copy reads as typed. */
@@ -154,93 +150,15 @@ function button(
 	);
 }
 
-test("a Planner's connection is told by the visible Chat banner, not repeated on the machine button", () => {
+test("the machine button always carries its Planner's state, in its dot and its name: Chat never draws it", () => {
 	let status = plannerStatus({ state: "disconnected", login: "mona" }, "build-box")!;
-	let { view } = connectionStep(INITIAL_MEMORY, {
-		socket: "up",
-		failures: 0,
-		retrying: undefined,
-		synced: true,
-		current: true,
-		turn: undefined,
-		messages: 0,
-		planner: status,
-	});
-	expect(view).toMatchObject({ phase: "dropped", layer: "planner", text: plannerSentence(status) });
-	let placement = plannerPlacement(status, true, view, true);
 	let markup = renderToStaticMarkup(createElement(MachineButton, {
 		choice: choice(true, true),
-		planner: placement.button,
-	}));
-	expect(markup).toContain('aria-label="Runs on build-box"');
-	expect(markup).toContain('aria-haspopup="menu"');
-	expect(markup).not.toContain("status-dot");
-	expect(markup).not.toContain(plannerSentence(status));
-});
-
-test("no machine is reported by the Chat banner without inventing a connected machine", () => {
-	let status = plannerStatus({ state: "none" })!;
-	let { view } = connectionStep(INITIAL_MEMORY, {
-		socket: "up",
-		failures: 0,
-		retrying: undefined,
-		synced: true,
-		current: true,
-		turn: undefined,
-		messages: 0,
-		planner: plannerForBanner(status, false),
-	});
-	expect(view).toMatchObject({
-		phase: "dropped",
-		layer: "planner",
-		text: "No machine is connected.",
-	});
-	let noMachine = choice(false, false);
-	noMachine.state!.choice = null;
-	noMachine.state!.machines = [];
-	let markup = renderToStaticMarkup(createElement(MachineButton, {
-		choice: noMachine,
-		planner: plannerPlacement(status, true, view, true).button,
-	}));
-	expect(markup).toContain('aria-label="Choose machine"');
-	expect(markup).toContain('aria-haspopup="menu"');
-	expect(markup).not.toContain("status-dot");
-	expect(markup).not.toContain("no machine connected");
-});
-
-test("the machine button retains its status when Chat is hidden or the banner tells another cause", () => {
-	let status = plannerStatus({ state: "disconnected", login: "mona" }, "build-box")!;
-	let plannerView = connectionStep(INITIAL_MEMORY, {
-		socket: "up",
-		failures: 0,
-		retrying: undefined,
-		synced: true,
-		current: true,
-		turn: undefined,
-		messages: 0,
 		planner: status,
-	}).view;
-	let socketView = connectionStep(INITIAL_MEMORY, {
-		socket: "lost",
-		failures: 0,
-		retrying: undefined,
-		synced: false,
-		current: false,
-		turn: undefined,
-		messages: 0,
-		planner: status,
-	}).view;
-	expect(plannerPlacement(status, true, plannerView, false).button).toBe(status);
-	expect(plannerPlacement(status, true, socketView, true).button).toBe(status);
-	expect(plannerPlacement(status, true, { phase: "online" }, true).button).toBe(status);
-	expect(
-		plannerPlacement(
-			status,
-			true,
-			{ phase: "resumed", layer: "planner", text: "Back", caught: "" },
-			true,
-		).button,
-	).toBe(status);
+	}));
+	expect(markup).toContain(`aria-label="Runs on build-box. ${plannerSentence(status)}"`);
+	expect(markup).toContain('data-planner="away"');
+	expect(markup).toContain("status-dot");
 });
 
 test("a healthy Planner leaves the button and its machine's dot exactly as they were", () => {
@@ -269,12 +187,25 @@ test("a Planner that cannot start is a warning dot, its reason the button's desc
 		'aria-label="Runs on build-box. Can\'t connect to build-box."',
 	);
 	expect(markup).toContain('data-planner="failing"');
+	// No fix-it steps given, nothing to describe it with.
+	expect(markup).not.toContain("aria-describedby");
+});
+
+test("a Planner with fix-it steps is described by why, in one plain sentence", () => {
+	let status = plannerStatus({
+		state: "starting",
+		login: "mona",
+		failure: { attempts: 3, reason: "exit 127: node: No such file or directory", at: AT },
+	}, "build-box")!;
+	let fix = machineFix(status, { mine: true, choose: true, place: "menu" });
+	let markup = renderToStaticMarkup(createElement(MachineButton, {
+		choice: choice(true, true),
+		fix,
+		planner: status,
+	}));
 	let described = /aria-describedby="([^"]+)"/.exec(markup)![1];
-	// The reason as given, and what has been tried, each a block of its own for a screen reader.
-	expect(markup).toMatch(
-		new RegExp(
-			`<div class="sr-only" id="${described}"><p>The checkout's git config sets a credential helper</p><p>Tried 3 times, last at [^<]+. Still trying.</p></div>`,
-		),
+	expect(markup).toContain(
+		`<span class="sr-only" id="${described}">A program it needs can't be found on it.</span>`,
 	);
 });
 
@@ -335,58 +266,85 @@ test("a glyph with a Planner state but no machine still shows the state", () => 
 	expect(markup).toContain('data-planner="starting"');
 });
 
-test("the top of the menu says why a Planner cannot start, in full, with where to fix it", () => {
-	let status = plannerStatus({
-		state: "starting",
-		login: "mona",
-		failure: { attempts: 3, reason: "The checkout's git config sets a credential helper", at: AT },
-	}, "Build box")!;
-	let markup = renderToStaticMarkup(createElement(PlannerNote, { status }));
+const FAILING = {
+	state: "starting",
+	login: "mona",
+	failure: { attempts: 3, reason: "The checkout's git config sets a credential helper", at: AT },
+} as const;
+
+function steps(fix: ReturnType<typeof machineFix>, menu = false) {
+	return renderToStaticMarkup(createElement(FixSteps, { fix: fix!, menu }));
+}
+
+test("the fix-it steps: a title, why in a sentence, numbered steps, each command alone with Copy", () => {
+	let status = plannerStatus(FAILING, "Build box")!;
+	let markup = steps(machineFix(status, { mine: true, choose: true, place: "menu" }));
 	expect(markup).toContain('role="group"');
-	expect(markup).toContain('aria-label="Connection"');
-	expect(markup).toContain("Can't connect to Build box</p>");
-	expect(markup).toContain("<p>The checkout's git config sets a credential helper</p>");
-	expect(markup).toMatch(
-		/<p class="machine-planner-detail">Tried 3 times, last at [^<]+\. Still trying\.<\/p>/,
+	expect(markup).toContain('aria-label="Can\'t connect to Build box"');
+	expect(markup).toContain('<p class="fix-steps-title">Can\'t connect to Build box</p>');
+	expect(markup).toContain('<p class="fix-steps-why">It stops each time before it connects.</p>');
+	expect(markup).toContain('<ol class="fix-steps-list">');
+	expect(markup.match(/<li class="fix-steps-step">/g)).toHaveLength(4);
+	expect(markup).toContain(
+		'<span>Wait a moment.</span><span class="fix-steps-hint">It connects again by itself once it\'s fixed.</span>',
 	);
+	// A command is never inline in a sentence: it stands in its own block, with its own Copy.
+	expect(markup).toContain(
+		'<span>On Build box, see why it stops:</span><div class="fix-steps-command"><code>chopin status</code>',
+	);
+	expect(markup).toContain('aria-label="Copy chopin status"');
+	// The machine's words, folded away, and how often it was tried, quietly at the foot, set apart
+	// by space alone.
+	expect(markup).toContain(">Show details");
+	expect(markup).toContain('aria-expanded="false"');
+	expect(markup).toContain(
+		'<span class="fix-steps-tried">Tried 3 times</span><a class="fix-steps-link"',
+	);
+	expect(markup).not.toContain("\u00b7");
 	expect(markup).toContain(`href="${PLANNER_HOW_TO_FIX}"`);
-	// A link in a menu is one of its items, so the arrow keys reach it.
-	expect(markup).toContain('role="menuitem"');
+	expect(markup).toContain(">Learn more</a>");
 	expect(markup).toContain('rel="noreferrer"');
 	expect(markup).toContain('target="_blank"');
-	expect(markup).toContain('role="separator"');
+	// Calm: no alarm colour, no alert.
+	expect(markup).not.toContain('role="alert"');
+	expect(markup).not.toContain("danger");
 });
 
-test("the top of the menu tells every other state as one sentence, with no link", () => {
+test("inside the machine menu each of the steps' controls is one of its items, so the arrow keys reach them", () => {
+	let status = plannerStatus(FAILING, "Build box")!;
+	let fix = machineFix(status, { mine: true, choose: true, place: "menu" });
+	let inMenu = steps(fix, true);
+	// Copy, Show details and Learn more.
+	expect(inMenu.match(/role="menuitem"/g)).toHaveLength(3);
+	expect(steps(fix)).not.toContain('role="menuitem"');
+});
+
+test("the steps keep a reason exactly as the machine gave it, under Show details", () => {
+	let reason = "  path ends in a slash /  ";
+	let planner = { ...FAILING, failure: { ...FAILING.failure, attempts: 2, reason } } as const;
+	let fix = machineFix(plannerStatus(planner, "Build box"), {
+		mine: true,
+		choose: false,
+		place: "menu",
+	});
+	// Not trimmed, and no stop added to a path that ends in a slash; when it was tried under it.
+	expect(steps(fix)).toMatch(
+		new RegExp(`<pre class="fix-steps-output">${reason}\nTried 2 times, last at [^<]+</pre>`),
+	);
+});
+
+test("the top of the menu tells a state with nothing to fix as one sentence", () => {
 	let say = (planner: Parameters<typeof plannerStatus>[0]) =>
 		renderToStaticMarkup(
 			createElement(PlannerNote, { status: plannerStatus(planner, "Build box")! }),
 		);
-	expect(say({ state: "starting", login: "mona" })).toContain(
-		"<p>Connecting to Build box</p>",
+	expect(say({ state: "starting", login: "mona" })).toContain("<p>Connecting to Build box</p>");
+	expect(say({ state: "held", login: "mona", until: AT })).toContain(
+		"<p>Build box stepped away.",
 	);
-	expect(say({ state: "disconnected", login: "mona" })).toContain(
-		"<p>Build box is offline. Your work is kept.</p>",
-	);
-	expect(say({ state: "none" })).toContain(
-		"<p>No machine is connected.</p>",
-	);
+	expect(say({ state: "none" })).toContain("<p>No machine is connected.</p>");
 	expect(say({ state: "none" })).not.toContain("<a");
-});
-
-test("the menu and the button's description keep a reason exactly as the machine gave it", () => {
-	let reason = "  path ends in a slash /  ";
-	let planner = {
-		state: "starting",
-		login: "mona",
-		failure: { attempts: 2, reason, at: AT },
-	} as const;
-	let note = renderToStaticMarkup(
-		createElement(PlannerNote, { status: plannerStatus(planner, "Build box")! }),
-	);
-	// Not trimmed, and no stop added to a path that ends in a slash.
-	expect(note).toContain(`<p>${reason}</p>`);
-	expect(button(planner)).toContain(`<p>${reason}</p>`);
+	expect(say({ state: "none" })).toContain('role="separator"');
 });
 
 test("a person whose choice does not place the document's replies is told whose does, in plain words", () => {

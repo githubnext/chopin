@@ -49,8 +49,12 @@ import { keepFormatPreference, readFormatPreference } from "./format-preference"
 import { bannerSlot } from "./banner-slot";
 import { ConnectionBannerView } from "./connection-banner";
 import type { ConnectionBanner, TranscriptFacts } from "./connection-banner";
+import type { PlannerPresence } from "./planner-status";
+import type { MachineFix } from "../machine-fix";
 import { silencesFailedSends } from "./connection-phase";
 import { ErrorState } from "./error-state";
+import { QuietNote } from "./quiet-note";
+import { PlannerPresenceContext } from "./presence";
 import { failureBanner, retryPayload, sendFailureView, withoutFailure } from "./failure";
 import { TypingReporter } from "./typing";
 import { useSteadyCallback, useSteadyFields } from "./steady";
@@ -180,7 +184,7 @@ export type ChatProps = {
 	people?: readonly string[];
 	/** Hosted mode keeps the shared chat while repository-scoped agent work is disabled. */
 	agent?: boolean;
-	/** The page is showing its connection banner, which is the one thing said about the connection. */
+	/** The room's connection is lost, catching up or just back: the offline bar's to tell. */
 	offline?: boolean;
 	active?: boolean;
 	/** `history` marks the transcript arriving, after which `busy` is known rather than assumed. */
@@ -212,13 +216,24 @@ export type ChatProps = {
 	/** One calm line shown while the transcript has loaded and is still empty. */
 	emptyNotice?: string;
 	/**
-	 * The page's one connection banner: its phase, and what Reconnect asks for. Chat draws it above
-	 * the composer when it is on screen; the page draws it at the document otherwise.
+	 * The page's connection state: its phase, and what Reconnect asks for. Chat draws the offline bar
+	 * over its transcript when it is on screen; the page draws it at the document otherwise.
 	 */
 	banner?: ConnectionBanner;
+	/**
+	 * The document's machine as chopin's presence shows it, with the fix-it steps a refused message's
+	 * How to fix unfolds, and the machine button's choice to open from them.
+	 */
+	machine?: { presence?: PlannerPresence; fix?: MachineFix; choose?: () => void };
 	/** What the transcript tells the banner: a reply running, its size, and whether it is current. */
 	onTranscript?: (facts: TranscriptFacts) => void;
 };
+
+/** Follows a link to a page of Chopin's own, as the navigation does. */
+function navigateTo(href: string) {
+	history.pushState(null, "", href);
+	window.dispatchEvent(new PopStateEvent("popstate"));
+}
 
 /** How long a message the server turned down for a passing trouble is left before it is sent again. */
 const TROUBLE_RETRY_MS = 5_000;
@@ -292,6 +307,7 @@ export function Chat(
 		notice,
 		emptyNotice,
 		banner,
+		machine,
 		onTranscript,
 		onShowDecisions,
 		onResearch,
@@ -440,6 +456,12 @@ export function Chat(
 	let awaitingFiles = useRef(false);
 	let sending = submitting || held || awaiting;
 	let [sendError, setSendError] = useState<SendFailure & { code?: string }>();
+	// chopin's ephemeral row: a message to it it could not take, said to this person alone.
+	let [note, setNote] = useState<{ text: string; code: string; ts: number }>();
+	let noteRefusal = (failure: SendFailure & { code?: string }) => {
+		if (failure.code !== "planner-not-attached" && failure.code !== "planner-busy") return;
+		setNote({ text: failure.text, code: failure.code, ts: Math.floor(Date.now() / 1000) });
+	};
 	let [researchBlock, setResearchBlock] = useState<ResearchLaunchBlock>();
 	let researching = useRef(false);
 	// Neither a research request the connection could not take nor a send it cut off outlives it.
@@ -515,8 +537,6 @@ export function Chat(
 	useEffect(() => {
 		if (retried && !retrying) setRetried(undefined);
 	}, [retried, retrying]);
-	// The failed reply whose banner has been drawn: a machine that drops after it did not cause it.
-	let [shownFailure, setShownFailure] = useState<string>();
 	// Only a banner that says why a send could not go gives a refused message's line its quiet;
 	// a Planner's absence is another fact, and the message still says it was not sent.
 	let quietFailures = !!banner && silencesFailedSends(banner.view);
@@ -1000,15 +1020,18 @@ export function Chat(
 		void wire.ask<Wire.Sent>("chat:send", payload).then(() => {
 			clearSubmittedDraft(submitted);
 			files.clear();
+			if (payload.to === "planner") setNote(undefined);
 		}, error => {
 			// A restart cut the send off. The draft keeps its request id, so it is made again once
 			// the server is back, and the server answers one it already holds with that message.
 			if (error instanceof WireLost && error.restarting) setHeld(true);
 			else {
-				setSendError({
+				let failure = {
 					...sendFailure(error),
 					...(error instanceof WireRefusal && error.code ? { code: error.code } : {}),
-				});
+				};
+				setSendError(failure);
+				noteRefusal(failure);
 			}
 		}).finally(() => {
 			if (submission.current !== token) return;
@@ -1033,7 +1056,11 @@ export function Chat(
 		// that the server may hold it.
 		keepOutbox(room, handle, outboxReducer(outbox, { kind: "attempt", id }));
 		void wire.ask<Wire.Sent>("chat:send", next.payload).then(
-			sent => dispatchOutbox({ kind: "acknowledge", id, entryId: sent?.id }),
+			sent => {
+				dispatchOutbox({ kind: "acknowledge", id, entryId: sent?.id });
+				// chopin took a message, so what it said it could not take is over.
+				if (next.payload.to === "planner") setNote(undefined);
+			},
 			error => {
 				// A lost connection leaves it for the next one; only a final refusal is final. A passing
 				// trouble is not a refusal of the message: it goes out again in a moment.
@@ -1066,10 +1093,9 @@ export function Chat(
 					setHistoryKey(current => current + 1);
 					pendingCaret.current = restored.text.length;
 					if (next.attachments?.length) filesRef.current.restore(next.attachments);
-					setSendError({
-						...sendFailure(error),
-						...(error.code ? { code: error.code } : {}),
-					});
+					let failure = { ...sendFailure(error), ...(error.code ? { code: error.code } : {}) };
+					setSendError(failure);
+					noteRefusal(failure);
 				} else {
 					dispatchOutbox({ kind: "refuse", id, reason: refusalText(error.code, error.message) });
 				}
@@ -1296,12 +1322,14 @@ export function Chat(
 	};
 
 	let bannerId = useId();
+	// A message chopin could not take is its ephemeral row in the transcript, not a banner.
+	let refusedByChopin = shownSend?.code === "planner-not-attached"
+		|| shownSend?.code === "planner-busy";
 	let slot = bannerSlot(
 		banner?.view,
-		!!sendBanner,
+		!!sendBanner && !refusedByChopin,
 		!!failed,
 		!readonly && !archived,
-		!!failed && shownFailure === failed.entry,
 	);
 	let leadNode = slot.lead === "send" && sendBanner
 		? (
@@ -1327,24 +1355,10 @@ export function Chat(
 			/>
 		)
 		: undefined;
-	let drawnFailure = slot.lead === "failure" ? failed?.entry : undefined;
-	useEffect(() => {
-		if (drawnFailure) setShownFailure(drawnFailure);
-	}, [drawnFailure]);
-	let connectionId = `${bannerId}-connection`;
-	let connectionNode = slot.connection && banner
-		? <ConnectionBannerView id={connectionId} onRetry={banner.onRetry} view={banner.view} />
+	// The offline bar rests over the transcript's top edge, so nothing in it moves as it comes and goes.
+	let offlineBarNode = banner
+		? <ConnectionBannerView onRetry={banner.onRetry} view={banner.view} />
 		: undefined;
-	let bannerNode = leadNode || connectionNode
-		? (
-			<>
-				{leadNode}
-				{connectionNode}
-			</>
-		)
-		: undefined;
-	let bannerIds = [leadNode ? bannerId : undefined, connectionNode ? connectionId : undefined]
-		.filter(Boolean).join(" ");
 
 	let openThreadView = threadsState.openRootId
 		? threadsState.threads[threadsState.openRootId]
@@ -1426,6 +1440,16 @@ export function Chat(
 	let steadyRetryJob = useSteadyCallback(onRetryJob);
 	let transcriptView = (
 		<Transcript
+			tail={note && (
+				<QuietNote
+					fix={note.code === "planner-not-attached" ? machine?.fix : undefined}
+					key={note.ts}
+					onChoose={machine?.choose}
+					onNavigate={navigateTo}
+					text={note.text}
+					ts={note.ts}
+				/>
+			)}
 			active={active}
 			canEdit={composerShown}
 			compacting={threadsState.topCompacting}
@@ -1461,6 +1485,11 @@ export function Chat(
 		/>
 	);
 	let renderWithThread = (mainColumn: React.ReactNode) => (
+		<PlannerPresenceContext.Provider value={machine?.presence}>
+			{renderSplit(mainColumn)}
+		</PlannerPresenceContext.Provider>
+	);
+	let renderSplit = (mainColumn: React.ReactNode) => (
 		<div className="chat-split-shell">
 			<div className="chat-split-main">
 				{mainColumn}
@@ -1492,7 +1521,8 @@ export function Chat(
 	);
 	if (notice) {
 		return renderWithThread(
-			<div className="flex h-full min-h-0 flex-col">
+			<div className="chat-main relative flex h-full min-h-0 flex-col">
+				{offlineBarNode && <div className="chat-offline-slot">{offlineBarNode}</div>}
 				{transcriptView}
 				<div className="chat-composer shrink-0 px-2.5 pb-2.5">
 					<p className="px-4 py-3 text-sm text-text-tertiary">{notice}</p>
@@ -1502,7 +1532,8 @@ export function Chat(
 	}
 
 	return renderWithThread(
-		<div className="flex h-full min-h-0 flex-col">
+		<div className="chat-main relative flex h-full min-h-0 flex-col">
+			{offlineBarNode && <div className="chat-offline-slot">{offlineBarNode}</div>}
 			{transcriptView}
 
 			{agent && !!runs?.length && (
@@ -1540,8 +1571,8 @@ export function Chat(
 						onRemove: () => setChip(false),
 					}
 					: undefined}
-				banner={bannerNode
-					? { id: bannerIds, node: bannerNode, invalid: slot.lead === "send" }
+				banner={leadNode
+					? { id: bannerId, node: leadNode, invalid: slot.lead === "send" }
 					: undefined}
 				notice={slot.quietsNotices
 					? undefined
@@ -1666,6 +1697,7 @@ export function Chat(
 								onActive={index => setMentionCursor({ key: mentionKey, index })}
 								onSelect={chooseMention}
 								options={mentionOptions}
+								presence={machine?.presence}
 							/>
 						)}
 					</>

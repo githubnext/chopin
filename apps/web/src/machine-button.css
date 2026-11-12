@@ -210,13 +210,12 @@
 }
 
 /*
- * What the Planner is doing, at the top of the menu: a title where it cannot start, then the
- * reason, what has been tried in quiet ink, and where to fix it. Inset as the menu's rows are, and
- * set apart from them by the menu's own divider.
+ * What the Planner is doing, at the top of the menu: one sentence, or the fix-it steps
+ * (`fix-steps.css`) where there is something to fix. Inset as the menu's rows are, and set apart
+ * from them by the menu's own divider. A menu that holds the steps is a little wider, so a command
+ * fits on its line.
  */
 .machine-planner {
-	display: grid;
-	gap: calc(var(--spacing) * 1.5);
 	padding: calc(var(--spacing) * 2) var(--menu-item-padding-inline-normal);
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
@@ -224,50 +223,16 @@
 	text-wrap: pretty;
 }
 
-.machine-planner p {
+.machine-planner > p {
 	margin: 0;
 	overflow-wrap: anywhere;
 }
 
-.machine-planner-title {
-	display: flex;
-	align-items: flex-start;
-	gap: calc(var(--spacing) * 1.5);
-	color: var(--color-text-primary);
-	font-weight: 600;
+.machine-menu[data-fix] {
+	width: min(23rem, calc(100vw - var(--spacing) * 4));
 }
 
-.machine-planner-title svg {
-	--color-icon: var(--color-warning-icon);
-}
-
-.machine-planner-detail {
-	color: var(--color-text-tertiary);
-	font-size: var(--text-xs);
-	line-height: var(--text-xs--line-height);
-}
-
-.machine-planner-link {
-	justify-self: start;
-	color: var(--color-brand-ink);
-	text-decoration: underline;
-	text-underline-offset: 0.2em;
-}
-
-/* On a phone's sheet, the rows' own inset and size. */
+/* On a phone's sheet, the rows' own inset. */
 .machine-sheet-group .machine-planner {
 	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 4);
-	font-size: var(--text-base);
-	line-height: var(--text-base--line-height);
-}
-
-.machine-sheet-group .machine-planner-detail {
-	font-size: var(--text-sm);
-	line-height: var(--text-sm--line-height);
-}
-
-.machine-sheet-group .machine-planner-link {
-	min-height: var(--control-target-coarse);
-	display: inline-flex;
-	align-items: center;
 }

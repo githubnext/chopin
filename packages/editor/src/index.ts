@@ -9,6 +9,7 @@ export {
 	CONNECTION_STALL,
 	connectionGrace,
 	isOffline,
+	OFFLINE_BAR_GRACE,
 	RETRY_AFTER_FAILURES,
 	useConnectionNotice,
 } from "./connection-notice";
