@@ -1,9 +1,11 @@
 /**
- * Moving a pane's edge stays quick beside a Chat of long replies. Each test counts what the page
- * does, not how long it takes, so that a busy machine cannot fail it and a regression cannot pass:
+ * Moving a pane's edge and opening a thread stay quick beside a Chat of long replies. Each test
+ * counts what the page does, not how long it takes, so that a busy machine cannot fail it and a
+ * regression cannot pass:
  *
  * - a step of a Chat resize lays the page out a few times, not once for each reply taller than the
- *   pane that the drag left out of layout.
+ *   pane that the drag left out of layout;
+ * - opening and closing a thread, which changes Chat's width, restyles a part of the page, not all of it.
  */
 
 import { expect, test } from "./room";
@@ -59,6 +61,21 @@ async function layouts(cdp: CDPSession): Promise<number> {
 	return metrics.find(metric => metric.name === "LayoutCount")!.value;
 }
 
+/** The most elements any one style recalculation touched while `action` ran. */
+async function mostRestyled(page: Page, action: () => Promise<void>): Promise<number> {
+	let browser = page.context().browser()!;
+	await browser.startTracing(page, { categories: ["devtools.timeline"] });
+	await action();
+	let trace = JSON.parse((await browser.stopTracing()).toString()) as {
+		traceEvents: { name: string; args?: { elementCount?: number } }[];
+	};
+	let restyled = trace.traceEvents
+		.filter(event => event.name === "UpdateLayoutTree")
+		.map(event => event.args?.elementCount ?? 0);
+	expect(restyled.length).toBeGreaterThan(0);
+	return Math.max(...restyled);
+}
+
 async function open(
 	page: Page,
 	seed: (source: string, state?: { transcript: Chat.Entry[] }) => Promise<void>,
@@ -95,4 +112,30 @@ test("a step of a Chat resize beside replies taller than the pane lays the page 
 	// again the block the drag had left out of layout: about thirty layouts a step here.
 	expect(await layouts(cdp) - before).toBeLessThan(steps * 4);
 	await page.mouse.up();
+});
+
+test("opening and closing a thread restyles part of the page, not all of it", async ({ join, page, seed }) => {
+	let chat = await open(page, seed, join);
+	let elements = await page.evaluate(() => window.document.querySelectorAll("*").length);
+	let message = chat.locator(`[data-chat-message-id="message-${MESSAGES - 2}"]`);
+	await message.hover();
+	// A first press marks the page as used with a pointer, which restyles it once; that is not this test's.
+	await message.getByText(`Message ${MESSAGES - 2}:`).click();
+	await settle(page);
+	let reply = message.getByRole("button", { name: "Reply in thread" });
+	await expect(reply).toBeVisible();
+	let opening = await mostRestyled(page, async () => {
+		await reply.click();
+		await expect(page.getByRole("button", { name: "Close thread" })).toBeVisible();
+		await settle(page);
+	});
+	let closing = await mostRestyled(page, async () => {
+		await page.getByRole("button", { name: "Close thread" }).click();
+		await expect(page.getByRole("button", { name: "Close thread" })).toHaveCount(0);
+		await settle(page);
+	});
+	// Chat's width and the thread's were custom properties of the workspace's root, so each change of
+	// them restyled every element under it.
+	expect(opening).toBeLessThan(elements / 2);
+	expect(closing).toBeLessThan(elements / 2);
 });

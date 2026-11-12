@@ -453,7 +453,8 @@ describe("anchored child lifecycle", () => {
 		expect(markup).toContain('aria-label="Resize chat"');
 		expect(markup).not.toContain("Room header");
 		expect(markup).not.toContain("data-document-expanded");
-		expect(markup).toMatch(/class="workspace-root[^"]*"[^>]*style="--chat-width:\d+px"/);
+		expect(markup).toMatch(/class="workspace-chat-panel[^"]*"[^>]*style="--chat-width:\d+px"/);
+		expect(markup).toMatch(/class="workspace-chat-body[^"]*"[^>]*style="--chat-width:\d+px"/);
 	});
 
 	it("trades Chat for a Chat button when expanded and keeps the title", () => {
