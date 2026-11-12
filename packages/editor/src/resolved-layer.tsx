@@ -728,10 +728,12 @@ export function ResolvedLayer(
 
 	if (!host) return null;
 
-	let page = rect(host.getBoundingClientRect());
-	let width = Math.min(POPOVER_WIDTH, host.clientWidth - 16);
 	let value: PopoverValue | undefined;
+	// Measured only for an open popover: a read here, in render, lays the page out for every render
+	// of the layer, and the layer renders with each change to the document's questions.
 	if (open && view && !sheet) {
+		let page = rect(host.getBoundingClientRect());
+		let width = Math.min(POPOVER_WIDTH, host.clientWidth - 16);
 		let at = popoverBelow(open.anchor, page, width, height);
 		let maxHeight = Math.max(0, page.height - 16);
 		if (open.item.kind === "comment" || open.item.decision.meta) {

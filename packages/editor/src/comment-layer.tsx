@@ -1097,11 +1097,23 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		if (!height) return;
 		setCardHeights(current => current[id] === height ? current : { ...current, [id]: height });
 	};
-	let page = rect(host.getBoundingClientRect());
-	let editorRoot = editor.getRootElement();
-	let column = editorRoot ? proseColumn(editorRoot) : page;
-	let cardWidth = Math.min(320, host.clientWidth - 24);
+	// The layer's geometry is read only when something it draws needs it: a read in render lays the
+	// page out for each render, and the layer renders with every change to the document's comments.
+	let measured: { page: Rect; column: Rect; cardWidth: number; previewWidth: number } | undefined;
+	let geometry = () => {
+		if (measured) return measured;
+		let page = rect(host.getBoundingClientRect());
+		let editorRoot = editor.getRootElement();
+		measured = {
+			page,
+			column: editorRoot ? proseColumn(editorRoot) : page,
+			cardWidth: Math.min(320, host.clientWidth - 24),
+			previewWidth: Math.min(288, host.clientWidth * 0.8),
+		};
+		return measured;
+	};
 	let cardPlacement = (passage: Rect, id: string, align?: "passage") => {
+		let { cardWidth, column, page } = geometry();
 		let { side, ...style } = commentCardPoint(
 			passage,
 			column,
@@ -1112,7 +1124,6 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		);
 		return { side, style };
 	};
-	let previewWidth = Math.min(288, host.clientWidth * 0.8);
 	let compactKey: string | undefined;
 	let compactId: string | undefined;
 	let compactLabel: string | undefined;
@@ -1130,10 +1141,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 		? {
 			button: previewMarker.button,
 			id: `plan-comment-preview-${previewView.thread.id}`,
-			page,
+			page: geometry().page,
 			size: CHIP,
 			view: previewView,
-			width: previewWidth,
+			width: geometry().previewWidth,
 		}
 		: undefined;
 	let previewValue = placedPreview(previewRequest, previewMeasurement);
@@ -1295,6 +1306,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 				// Never taller than the first line, so a tap at the end of the second line reaches the text.
 				let height = coarse ? Math.min(TOUCH_TARGET, Math.max(CHIP, marker.line)) : CHIP;
 				// The touch area stays inside the document, so a chip in the padding keeps a full target.
+				let { column, page } = geometry();
 				let left = Math.max(
 					0,
 					Math.min(button.left - (width - button.width) / 2, page.width - width),
@@ -1339,7 +1351,7 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 							if (single) unhover(single.thread.id);
 							else lightMarker(undefined, []);
 							// A focused marker whose passage scrolled away hides once focus leaves it.
-							measure();
+							geometry();
 						}}
 						onClick={event => {
 							origin.current = event.currentTarget;
@@ -1455,7 +1467,10 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	// Only the reader who resolved sees the toast, beneath the document they resolved it in.
 	// It is mounted only while it shows: the live region that announces it stays in the layer.
 	let toast = notice && createPortal(
-		<div className="plan-comment-toast-region" style={{ left: page.left + page.width / 2 }}>
+		<div
+			className="plan-comment-toast-region"
+			style={{ left: geometry().page.left + geometry().page.width / 2 }}
+		>
 			<div
 				className="plan-comment-toast"
 				key={notice.id}
