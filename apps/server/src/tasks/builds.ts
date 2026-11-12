@@ -18,7 +18,7 @@ import { broadcast } from "../wire";
 import type { Plan } from "../plan/service";
 import { checkoutOf, serves } from "../experiments/connections";
 import type { Connection } from "../experiments/connections";
-import type { Lifecycle, ProgressEvent } from "./lifecycle";
+import type { Lifecycle, LifecycleState, ProgressEvent } from "./lifecycle";
 import type { Graph, Run } from "./graphs";
 import type {
 	BuildRequest,
@@ -80,6 +80,29 @@ export function runner(build: Pick<BuildRequest, "user" | "machineOwner">): stri
 /** Whether a build closes document editing. A rebuild works from a sealed delta instead. */
 export function locksEditing(build: { state: string; kind?: string }): boolean {
 	return build.kind !== "rebuild" && ["queued", "starting", "running"].includes(build.state);
+}
+
+/**
+ * The run a build's agent claimed ends with that build. Once the build has failed or stopped, its
+ * agent can no longer report on the run, so a run left claimed would keep the graph locked and the
+ * document read-only with nothing left to release them. It is returned for changes instead.
+ */
+export function releaseEndedRun(
+	state: LifecycleState,
+	builds: readonly BuildRequest[],
+): LifecycleState {
+	let run = state.execution;
+	let build = run && builds.find(item => item.id === run.id);
+	if (!run || !build || build.kind === "rebuild" || !["failed", "stopped"].includes(build.state)) {
+		return state;
+	}
+	let result = transition(state, {
+		kind: "request_revision",
+		runId: run.id,
+		reason: build.error ?? "The build stopped before it finished.",
+		idempotencyKey: `${run.id}:ended`,
+	});
+	return result.kind === "accepted" ? result.state : state;
 }
 
 export function restoreBuilds(value: unknown, repositoryId?: string): BuildRequest[] {
@@ -622,6 +645,16 @@ export function reportBuild(
 		// Only the agent's own stop goes live. A failure (a sweep, an expiry, a lost connection or the
 		// agent's error) may have cut a task short mid-change, so it waits for a person's Retry.
 		if (current.state !== next.state && next.state === "stopped") liveFromStopped(plan, next);
+		if (plan.graph && plan.execution?.id === next.id) {
+			let released = releaseEndedRun({
+				graph: plan.graph,
+				execution: plan.execution,
+				lifecycle: plan.lifecycle,
+			}, plan.builds);
+			plan.graph = released.graph;
+			plan.execution = released.execution;
+			plan.lifecycle = released.lifecycle;
+		}
 		try {
 			await persistExclusive(plan, true);
 		} catch (error) {

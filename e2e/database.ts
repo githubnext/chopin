@@ -268,6 +268,7 @@ async function seed(
 		transcript: state.transcript ?? [],
 		...(state.graph ? { graph: state.graph } : {}),
 		...(state.builds ? { builds: state.builds } : {}),
+		...(state.execution ? { execution: state.execution } : {}),
 		...(state.lifecycle ? { lifecycle: state.lifecycle } : {}),
 		...(state.workflowRuns ? { workflowRuns: state.workflowRuns } : {}),
 	};

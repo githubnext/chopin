@@ -17,6 +17,8 @@ export type SeedState = {
 	graph?: import("../tasks/graphs").Graph;
 	builds?: import("@chopin/protocol/implementation").BuildRequest[];
 	lifecycle?: import("../tasks/lifecycle").Lifecycle;
+	/** The run an agent claimed for the latest build. */
+	execution?: import("../tasks/graphs").Run;
 	revision?: number;
 	questions?: unknown[];
 	openQuestions?: unknown[];

@@ -22,6 +22,52 @@ export function failedBuild(graph: Graph): BuildRequest {
 }
 
 /**
+ * A first build whose agent claimed the graph and started a task, then was stopped in Chopin before
+ * it finished: the build ended, and the run it claimed was left as it was.
+ */
+export function stoppedClaimedBuild(
+	draft: Graph,
+): { graph: Graph; builds: BuildRequest[]; execution: Run; lifecycle: Lifecycle } {
+	let build = failedBuild(draft);
+	let version = draft.versions.at(-1)!;
+	let run: Run = {
+		id: build.id,
+		user: build.user,
+		client: { name: "Fake implementer", version: "1.0.0" },
+		session: "seeded",
+		planRevision: version.planRevision,
+		graphVersion: version.number,
+		graphRevision: version.revision,
+		repository: build.checkout.repository,
+		branch: "main",
+		commit: build.checkout.commit,
+		startedAt: build.createdAt,
+	};
+	let started = transition({
+		graph: { versions: [...draft.versions.slice(0, -1), { ...version, state: "locked" }] },
+		execution: run,
+		lifecycle: { history: [] },
+	}, {
+		kind: "start",
+		runId: run.id,
+		taskId: version.definition.tasks[0]!.id,
+		idempotencyKey: "start",
+	});
+	if (started.kind === "refused") throw new Error(`The seeded run was refused: ${started.reason}`);
+	return {
+		graph: started.state.graph,
+		builds: [{
+			...build,
+			error: "Stopped in Chopin.",
+			stoppedAtRevision: version.planRevision,
+			finishedAt: new Date().toISOString(),
+		}],
+		execution: started.state.execution!,
+		lifecycle: started.state.lifecycle,
+	};
+}
+
+/**
  * A first build of the graph's latest tasks that delivered a pull request for each and passed
  * review, asked for at `asked` and finished at `finished`: the document reads as built. A task
  * named in `noChange` instead completes as needing no code change, with no pull request.

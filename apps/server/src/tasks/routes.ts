@@ -523,10 +523,11 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 				if (!build || build.id !== input.buildId || !["stopped", "failed"].includes(build.state)) {
 					throw new GitHubError("stop the local agent before returning the plan for changes", 409);
 				}
-				if (
-					plan.execution?.id !== build.id
-					&& !plan.lifecycle.history.some(item => item.run.id === build.id)
-				) {
+				// A run ends with its build (see releaseEndedRun), so it is usually returned already.
+				if (plan.execution?.id !== build.id) {
+					if (plan.lifecycle.history.some(item => item.run.id === build.id)) {
+						return json({ accepted: true });
+					}
 					throw new GitHubError("implementation is not awaiting changes", 409);
 				}
 				let result = await reportImplementationLifecycle(plan, {
