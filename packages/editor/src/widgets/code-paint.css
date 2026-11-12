@@ -1,0 +1,63 @@
+/*
+ * A code block's colours, painted over its own editable text (`code-paint-plugin.tsx`). The roles
+ * and inks are Chat's (`apps/web/src/chat/markdown.css`), so code reads the same in a message and
+ * in the document: keywords in petrol, names of functions and types in plum, strings in green,
+ * numbers and constants in amber, comments and punctuation in the tertiary ink, each at 4.5:1 or
+ * more on the page.
+ */
+::highlight(plan-code-keyword) {
+	color: var(--color-brand-ink);
+}
+
+::highlight(plan-code-function) {
+	color: var(--color-merged-icon);
+}
+
+::highlight(plan-code-string),
+::highlight(plan-code-string-expression),
+::highlight(plan-code-inserted) {
+	color: var(--color-success-ink);
+}
+
+::highlight(plan-code-constant),
+::highlight(plan-code-changed) {
+	color: var(--color-warning-ink);
+}
+
+::highlight(plan-code-comment),
+::highlight(plan-code-punctuation) {
+	color: var(--color-text-tertiary);
+}
+
+::highlight(plan-code-parameter) {
+	color: var(--color-text-secondary);
+}
+
+::highlight(plan-code-link) {
+	color: var(--color-brand);
+}
+
+::highlight(plan-code-deleted) {
+	color: var(--color-destructive-ink);
+}
+
+/*
+ * Code keeps its lines and scrolls sideways in its own lane, as Notion's does, until the block's
+ * Wrap lines is on (`[data-plan-wrap]`, a more particular rule). On a phone, in a narrow
+ * document, it wraps instead, as the drawn copy did. Diagrams and patches keep their own rules.
+ */
+.plan-content
+	.planCode:where([data-plan-language]:not([data-plan-language="mermaid"], [data-plan-language="seecode"], [data-plan-language="wireframe"], [data-plan-language="diff"]))
+	[data-plan-source] {
+	white-space: pre;
+	overflow-x: auto;
+}
+
+@container (max-width: 40rem) {
+	:root[data-phone]
+		.plan-content
+		.planCode:where([data-plan-language]:not([data-plan-text]))
+		[data-plan-source] {
+		white-space: pre-wrap;
+	}
+}

@@ -7,11 +7,13 @@
  * common keystroke there is when writing code, and a block at the end of the
  * document with no way past it is a corner a reader can be typed into.
  *
- * So Enter is a line break in a fence, and Enter on a line that is already
- * empty leaves instead. A callout already contains ordinary blocks, so its
- * first Enter makes an empty paragraph normally and its second removes that
- * paragraph and leaves the container. In either case, pressing Enter twice is
- * the only exit that has to be discovered rather than explained.
+ * So Enter is a line break in a fence, always, as in Notion: code has blank
+ * lines of its own, and the ways out are a document's (the arrows at its end,
+ * Escape and Mod+Enter, in `code-keys.tsx`). A formula's source has none of
+ * those, so there Enter on a line that is already empty leaves instead. A
+ * callout already contains ordinary blocks, so its first Enter makes an empty
+ * paragraph normally and its second removes that paragraph and leaves the
+ * container.
  *
  * Registered on `INSERT_PARAGRAPH_COMMAND` rather than on the keystroke: that
  * is what rich text turns an unshifted Enter into, and it is also what
@@ -162,7 +164,7 @@ export function handleEnter(): boolean {
 	let block = lines(selection.anchor.getNode());
 	if (!block) return false;
 
-	if (done(block)) {
+	if (!$isCodeBlockNode(block) && done(block)) {
 		// The blank line was the request to leave, not content, so
 		// it goes with it — otherwise every fence anybody escaped
 		// from would keep a trailing empty line nobody typed.

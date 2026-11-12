@@ -10,19 +10,18 @@
  * Registered above that handler and below `@lexical/table`'s, which already
  * moves between cells. A list item nests and un-nests from anywhere in its
  * text, but only where that is a real change; a code block indents and
- * outdents its lines; everywhere else the browser keeps the key and moves
- * focus.
+ * outdents its lines, every line a selection touches; everywhere else the
+ * browser keeps the key and moves focus.
  *
- * Inside a code block Tab belongs to the code, so the way out is Escape then
- * Tab, as in CodeMirror. Escape there arms the next Tab rather than blurring:
- * Chrome forgets where focus was when an element blurs, and Tab from nowhere
- * starts again at the top of the page.
+ * Inside a code block Tab belongs to the code, so the way out is Escape, which
+ * puts the caret in the block after it (`code-keys.tsx`), and Tab from there.
  */
 
 import { useEffect } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getListDepth, $isListItemNode, $isListNode } from "@lexical/list";
 import {
+	$createTabNode,
 	$getSelection,
 	$isRangeSelection,
 	$isTabNode,
@@ -30,8 +29,6 @@ import {
 	COMMAND_PRIORITY_LOW,
 	INDENT_CONTENT_COMMAND,
 	INSERT_TAB_COMMAND,
-	KEY_DOWN_COMMAND,
-	KEY_ESCAPE_COMMAND,
 	KEY_TAB_COMMAND,
 	mergeRegister,
 	OUTDENT_CONTENT_COMMAND,
@@ -51,12 +48,8 @@ export type TabContext =
 /** What a Tab keystroke should do. `leave` hands the key back to the browser. */
 export type TabAction = "indent" | "outdent" | "tab" | "untab" | "leave";
 
-/** `escaped` is whether Escape was the key pressed just before this one. */
-export function tabAction(context: TabContext, shift: boolean, escaped = false): TabAction {
-	if (context.place === "code") {
-		if (escaped) return "leave";
-		return shift ? "untab" : "tab";
-	}
+export function tabAction(context: TabContext, shift: boolean): TabAction {
+	if (context.place === "code") return shift ? "untab" : "tab";
 	if (context.place === "list") {
 		// Lexical would still "indent" an item with nothing to nest under, by
 		// wrapping it in an empty item everyone else sees. A key that cannot
@@ -162,33 +155,93 @@ function $setPoint(code: ElementNode, point: PointType, offset: number): void {
 	point.set(code.getKey(), children.length, "element");
 }
 
-/** Remove one level of indent from the line holding the caret. */
+/**
+ * Where the lines between two offsets start, first to last. A selection that ends at the start of
+ * a line leaves that line alone, as a code editor does: it selected the line before, whole.
+ */
+export function lineStarts(text: string, from: number, to: number): number[] {
+	let [low, high] = from <= to ? [from, to] : [to, from];
+	let starts = [text.lastIndexOf("\n", low - 1) + 1];
+	for (
+		let at = text.indexOf("\n", low);
+		at !== -1 && at + 1 < high;
+		at = text.indexOf("\n", at + 1)
+	) {
+		starts.push(at + 1);
+	}
+	return starts;
+}
+
+/** Remove up to `length` characters of indent at `start`; returns how many went. */
+function $removeIndent(code: CodeBlockNode, start: number, length: number): number {
+	let at = 0;
+	for (let child of code.getChildren()) {
+		let size = child.getTextContentSize();
+		if (start >= at && start < at + size) {
+			if ($isTabNode(child)) {
+				child.remove();
+				return 1;
+			}
+			if (!$isTextNode(child)) return 0;
+			let removed = Math.min(length, at + size - start);
+			child.spliceText(start - at, removed, "");
+			return removed;
+		}
+		at += size;
+	}
+	return 0;
+}
+
+/** Put a tab at `offset`, as the Tab key does at a caret: a tab node of its own. */
+function $insertTab(code: CodeBlockNode, offset: number): void {
+	let at = 0;
+	for (let child of code.getChildren()) {
+		let size = child.getTextContentSize();
+		if (offset <= at) {
+			child.insertBefore($createTabNode());
+			return;
+		}
+		if ($isTextNode(child) && !$isTabNode(child) && offset < at + size) {
+			let [, after] = child.splitText(offset - at);
+			after!.insertBefore($createTabNode());
+			return;
+		}
+		at += size;
+	}
+	code.append($createTabNode());
+}
+
+/** Indent every line the selection touches by one tab, keeping those lines selected. */
+export function $indentLines(code: CodeBlockNode, selection: RangeSelection): void {
+	let anchor = $offsetOf(code, selection.anchor);
+	let focus = $offsetOf(code, selection.focus);
+	let starts = lineStarts(code.getTextContent(), anchor, focus);
+	for (let start of starts.toReversed()) $insertTab(code, start);
+	// A point at a line's start stays before the new tab, so the line is still selected whole.
+	let shift = (offset: number) => offset + starts.filter(start => start < offset).length;
+	$setPoint(code, selection.anchor, shift(anchor));
+	$setPoint(code, selection.focus, shift(focus));
+}
+
+/** Remove one level of indent from every line the selection touches, or the caret's line. */
 export function $untab(code: CodeBlockNode, selection: RangeSelection): void {
 	let anchor = $offsetOf(code, selection.anchor);
 	let focus = $offsetOf(code, selection.focus);
-	let indent = leadingIndent(code.getTextContent(), anchor);
-	if (!indent) return;
-
-	let start = 0;
-	let removed = 0;
-	for (let child of code.getChildren()) {
-		let size = child.getTextContentSize();
-		if (indent.start >= start && indent.start < start + size) {
-			if ($isTabNode(child)) {
-				child.remove();
-				removed = 1;
-			} else if ($isTextNode(child)) {
-				removed = Math.min(indent.length, start + size - indent.start);
-				child.spliceText(indent.start - start, removed, "");
-			}
-			break;
-		}
-		start += size;
+	let text = code.getTextContent();
+	let removed: { start: number; length: number }[] = [];
+	for (let start of lineStarts(text, anchor, focus).toReversed()) {
+		let indent = leadingIndent(text, start);
+		if (!indent) continue;
+		let length = $removeIndent(code, indent.start, indent.length);
+		if (length) removed.push({ start: indent.start, length });
 	}
-	if (!removed) return;
+	if (!removed.length) return;
 
 	let shift = (offset: number) =>
-		offset <= indent.start ? offset : Math.max(indent.start, offset - removed);
+		offset - removed.reduce(
+			(sum, { start, length }) => sum + Math.max(0, Math.min(length, offset - start)),
+			0,
+		);
 	$setPoint(code, selection.anchor, shift(anchor));
 	$setPoint(code, selection.focus, shift(focus));
 }
@@ -204,40 +257,27 @@ export function TabKeyPlugin() {
 	let [editor] = useLexicalComposerContext();
 
 	useEffect(() => {
-		let escaped = false;
 		return mergeRegister(
-			editor.registerCommand(
-				KEY_DOWN_COMMAND,
-				event => {
-					if (event.key !== "Escape" && event.key !== "Tab") escaped = false;
-					return false;
-				},
-				COMMAND_PRIORITY_LOW,
-			),
-			editor.registerCommand(
-				KEY_ESCAPE_COMMAND,
-				() => {
-					if ($tabContext()?.place !== "code") return false;
-					escaped = true;
-					return true;
-				},
-				COMMAND_PRIORITY_LOW,
-			),
 			editor.registerCommand(
 				KEY_TAB_COMMAND,
 				event => {
 					let context = $tabContext();
 					if (context === null) return false;
-					let action = tabAction(context, event.shiftKey, escaped);
-					escaped = false;
+					let action = tabAction(context, event.shiftKey);
 					// Handled without preventing the default, so Lexical's own
 					// indentation never runs and the browser moves focus.
 					if (action === "leave") return true;
 					event.preventDefault();
+					let selection = $getSelection();
+					let code = $isRangeSelection(selection) ? $enclosingCode(selection) : null;
 					if (action === "untab") {
-						let selection = $getSelection();
-						let code = $isRangeSelection(selection) ? $enclosingCode(selection) : null;
 						if ($isRangeSelection(selection) && code) $untab(code, selection);
+						return true;
+					}
+					if (
+						action === "tab" && $isRangeSelection(selection) && code && !selection.isCollapsed()
+					) {
+						$indentLines(code, selection);
 						return true;
 					}
 					let command = action === "indent"

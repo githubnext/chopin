@@ -412,6 +412,18 @@ function walk({ root, focus }: { root: string; focus: boolean }): Measured[] {
 		}
 	}
 
+	// Code coloured in place: each range of a role's highlight, in that highlight's colour.
+	let walked = new Set(elements);
+	for (let [name, highlight] of CSS.highlights) {
+		if (!name.startsWith("plan-code-")) continue;
+		for (let range of highlight) {
+			let element = range.startContainer.parentElement;
+			if (!element || !walked.has(element) || !visible(element)) continue;
+			let fg = parse(getComputedStyle(element, `::highlight(${name})`).color);
+			if (fg) record(element, range.toString(), "text", fg, 4.5);
+		}
+	}
+
 	// Non-text: icons in controls and status icons.
 	let control =
 		'button, a[href], [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="tab"], [role="option"], [role="switch"], [role="checkbox"], summary, label';

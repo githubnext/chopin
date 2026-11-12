@@ -10,7 +10,8 @@
  * Playwright's selectors cross an open shadow root, so the renderer's own
  * attributes are the address for what it drew: `data-file` is a file, and
  * `data-diff` is a change. Which of the two turned up is most of what these
- * tests are about.
+ * tests are about. Code in a named language is not drawn at all: it is coloured
+ * where it is edited, which `code-editing.e2e.ts` covers.
  */
 
 import { content, expect, test, written } from "./room";
@@ -45,11 +46,27 @@ const WIDE_MERMAID = `flowchart LR
 	C --> D[Durable agent change chips and collaborator cursor labels]`;
 const TALL_MERMAID = WIDE_MERMAID.replace("flowchart LR", "flowchart TD");
 
-/** How many colours the highlighter ended up using. */
-async function colours(page: Page): Promise<number> {
-	return await page
-		.locator("[data-line] span[style*='color']")
-		.evaluateAll(nodes => new Set(nodes.map(node => (node as HTMLElement).style.color)).size);
+/** How many roles the highlighter painted over the document's code, where code is edited. */
+async function painted(page: Page): Promise<number> {
+	return await page.evaluate(() =>
+		[...CSS.highlights].filter(([name, highlight]) =>
+			name.startsWith("plan-code-") && highlight.size
+		)
+			.length
+	);
+}
+
+/** The text each range of a role covers, in the order they were painted. */
+async function paintedText(page: Page, role: string): Promise<string[]> {
+	return await page.evaluate(
+		name => [...CSS.highlights.get(name) ?? []].map(range => range.toString()),
+		`plan-code-${role}`,
+	);
+}
+
+/** The words of a role, leaving out the operators the grammar colours with them. */
+async function words(page: Page, role: string): Promise<string[]> {
+	return (await paintedText(page, role)).filter(text => /\w/.test(text));
 }
 
 async function diagramGeometry(page: Page) {
@@ -74,32 +91,29 @@ async function diagramGeometry(page: Page) {
 	});
 }
 
-test("a named fence is coloured with its source hidden by default", async ({ join, seed }) => {
+test("a named fence is coloured where it is written, with nothing drawn beside it", async ({ join, seed }) => {
 	await seed("```ts\nexport function open(room: string) {\n\treturn 1;\n}\n```\n");
 	let page = await join("ana");
 
-	await expect(content(page).locator("[data-file]")).toBeVisible();
-
-	// More than one colour is the whole claim: one would mean the grammar
+	// More than one role is the whole claim: one would mean the grammar
 	// never loaded and every token was painted as plain text.
-	await expect.poll(() => colours(page)).toBeGreaterThan(1);
+	await expect.poll(() => painted(page)).toBeGreaterThan(1);
 
-	// A preview replaces the source until this reader asks to edit it. The
-	// document still carries the source, but it does not compete with the view.
-	await expect(content(page).locator("[data-plan-source]")).toBeHidden();
-	await expect(content(page).getByRole("button", { name: "Show source" })).toBeVisible();
+	// One surface, as Notion has it: the source is what is read and edited.
+	await expect(content(page).locator("[data-plan-source]")).toBeVisible();
+	await expect(content(page).locator("[data-file]")).toHaveCount(0);
+	await expect(content(page).getByRole("button", { name: "Show source" })).toHaveCount(0);
 });
 
-test("a wide preview scrolls inside its code widget", async ({ join, seed }) => {
+test("a wide line scrolls inside its code widget", async ({ join, seed }) => {
 	await seed(
 		'```ts\nexport const unbrokenPreviewLine = "ThisPreviewLineIsDeliberatelyLongEnoughToRequireTheCodeWidgetToOwnHorizontalScrollingWithoutWideningTheCollaborativeDocument";\n```\n',
 	);
 	let page = await join("ana", { viewport: { width: 390, height: 844 } });
-	let preview = content(page).locator("[data-plan-preview]");
-	let rendered = preview.locator(":scope > div");
+	let source = content(page).locator("[data-plan-source]");
 
-	await expect(preview).toBeVisible();
-	expect(await rendered.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+	await expect(source).toBeVisible();
+	await expect.poll(() => source.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
 	await expectNoHorizontalOverflow(page);
 });
 
@@ -211,14 +225,14 @@ test("naming a fence colours it, and the name reaches the file", async ({ join, 
 	await seed("```\nlet total = 1;\n```\n");
 	let page = await join("ana");
 
-	// Nothing is drawn for a fence with no language: an uncoloured copy beside
-	// an uncoloured original is two of the same thing.
-	await expect(content(page).locator("[data-file]")).toHaveCount(0);
+	// Nothing is coloured for a fence with no language.
+	await expect(content(page).locator("[data-plan-source]")).toBeVisible();
+	expect(await painted(page)).toBe(0);
 
 	await chooseLanguage(content(page), "Plain text", "TypeScript");
 
-	await expect(content(page).locator("[data-file]")).toBeVisible();
-	await expect.poll(() => colours(page)).toBeGreaterThan(1);
+	await expect.poll(() => painted(page)).toBeGreaterThan(1);
+	await expect(content(page).locator("[data-file]")).toHaveCount(0);
 
 	// The language is a property of the fence, so choosing one is an edit —
 	// and an edit that does not reach the file is a colour nobody else sees.
@@ -231,11 +245,10 @@ test("a fence named as text is bare text until a writer is in it", async ({ join
 	let drawing = content(page).getByText("| Header |");
 	let menus = content(page).getByRole("button", { name: /^Code language:/ });
 
-	// The drawing is its own source: no coloured copy and no toggle to swap
-	// between them. Only the TypeScript fence has either.
+	// The drawing is its own source, uncoloured; only the TypeScript fence is painted.
 	await expect(drawing).toBeVisible();
-	await expect(content(page).locator("[data-file]")).toHaveCount(1);
-	await expect(content(page).getByRole("button", { name: "Show source" })).toHaveCount(1);
+	await expect.poll(() => words(page, "keyword")).toEqual(["let"]);
+	await expect(content(page).getByRole("button", { name: "Show source" })).toHaveCount(0);
 
 	// Its name already answers the menu's question, even under the pointer.
 	await drawing.hover();
@@ -247,7 +260,13 @@ test("a fence named as text is bare text until a writer is in it", async ({ join
 	await drawing.click();
 	await chooseLanguage(content(page), "text", "TypeScript");
 	await written(page, room, /^```typescript$/m);
-	await expect(content(page).locator("[data-file]")).toHaveCount(2);
+	await expect.poll(() =>
+		content(page).locator(".planCode [data-plan-source]").first().evaluate(source =>
+			[...CSS.highlights.values()].some(highlight =>
+				[...highlight].some(range => source.contains(range.startContainer))
+			)
+		)
+	).toBe(true);
 });
 
 test("a patch is drawn as the change it describes", async ({ join, seed }) => {
@@ -292,38 +311,17 @@ test("an invalid diff keeps its authored filename", async ({ join, seed }) => {
 	await expect(content(page).locator("[data-diff]")).toHaveCount(0);
 });
 
-test("enter is a newline in a fence, and twice over is the way out", async ({ join, room }) => {
+test("hiding a patch's source leaves what was drawn from it", async ({ join, seed }) => {
+	await seed(PATCH);
 	let page = await join("ana");
 
-	await content(page).click();
-	await page.keyboard.type("/code");
-	await page.getByRole("listbox", MENU).getByRole("option", { name: "Code block" }).click();
-
-	await page.keyboard.type("let a = 1;");
-	await page.keyboard.press("Enter");
-	await page.keyboard.type("let b = 2;");
-
-	// Lexical asks a block to make its own successor and a code block cannot,
-	// so without this Enter does nothing at all — and a fence at the end of a
-	// plan is a corner somebody can be typed into.
-	await page.keyboard.press("Enter");
-	await page.keyboard.press("Enter");
-	await page.keyboard.type("And then ship it.");
-
-	await written(page, room, /```\nlet a = 1;\nlet b = 2;\n```\n\nAnd then ship it\./);
-});
-
-test("hiding the source leaves what was drawn from it", async ({ join, seed }) => {
-	await seed("```ts\nexport function open(room: string) {\n\treturn 1;\n}\n```\n");
-	let page = await join("ana");
-
-	await expect(content(page).locator("[data-file]")).toBeVisible();
+	await expect(content(page).locator("[data-diff]")).toBeVisible();
 	await content(page).getByRole("button", { name: "Show source" }).click();
 	await expect(content(page).locator("[data-plan-source]")).toBeVisible();
 	await content(page).getByRole("button", { name: "Hide source" }).click();
 
 	await expect(content(page).locator("[data-plan-source]")).toBeHidden();
-	await expect(content(page).locator("[data-file]")).toBeVisible();
+	await expect(content(page).locator("[data-diff]")).toBeVisible();
 	await expect(content(page).getByRole("button", { name: "Show source" })).toBeVisible();
 });
 
@@ -337,23 +335,30 @@ test("hiding the source leaves what was drawn from it", async ({ join, seed }) =
  * fooled by a caret drawn somewhere it is not.
  */
 
-test("clicking drawn code opens its source at the clicked line", async ({ join, room, seed }) => {
+test("a click in code puts the caret where it landed, and Escape leaves", async ({ join, room, seed }) => {
 	await seed("```ts\nlet a = 1;\nlet b = 2;\n```\n");
 	let page = await join("ana");
 	let block = content(page).locator(".planCode");
+	await expect.poll(() => painted(page)).toBeGreaterThan(1);
 
-	await block.locator("[data-line='2']").click();
-
-	// One copy: the source replaces the coloured lines rather than joining them.
-	await expect(block.locator("[data-plan-source]")).toBeVisible();
-	await expect(block.locator("[data-file]")).toBeHidden();
+	// The end of the second line, where it is drawn.
+	let point = await block.locator("[data-plan-source]").evaluate(source => {
+		let text = source.querySelector("[data-lexical-text]")!.firstChild!;
+		let range = document.createRange();
+		let at = text.textContent!.indexOf("2;") + 2;
+		range.setStart(text, at - 1);
+		range.setEnd(text, at);
+		let box = range.getBoundingClientRect();
+		return { x: box.right - 1, y: box.top + box.height / 2 };
+	});
+	await page.mouse.click(point.x, point.y);
 	await expect(content(page)).toBeFocused();
 	await page.keyboard.type("X");
-	await written(page, room, /^let a = 1;\n[^\n]*X[^\n]*\n```/m);
+	await written(page, room, /^let a = 1;\nlet b = 2;X$/m);
 
 	await page.keyboard.press("Escape");
-	await expect(block.locator("[data-plan-source]")).toBeHidden();
-	await expect(block.getByRole("group", { name: "Code preview" })).toBeFocused();
+	await page.keyboard.type("After.");
+	await written(page, room, /^```\n\nAfter\.$/m);
 });
 
 test("clicking a drawn diff line opens the patch at that line", async ({ join, room, seed }) => {
@@ -367,10 +372,10 @@ test("clicking a drawn diff line opens the patch at that line", async ({ join, r
 });
 
 test("a focused preview opens on Enter, Space or typing, and never scrolls", async ({ join, room, seed }) => {
-	await seed("```ts\nlet a = 1;\n```\n");
+	await seed(PATCH);
 	let page = await join("ana");
 	let block = content(page).locator(".planCode");
-	let preview = block.getByRole("group", { name: "Code preview" });
+	let preview = block.getByRole("group", { name: "Diff preview" });
 	let scroller = page.locator("[data-plan-scroll]");
 
 	await preview.focus();
@@ -387,7 +392,7 @@ test("a focused preview opens on Enter, Space or typing, and never scrolls", asy
 	await page.keyboard.press("Escape");
 	await expect(preview).toBeFocused();
 	await page.keyboard.type("Z");
-	await written(page, room, /^let a = 1;Z$/m);
+	await written(page, room, /^ }Z$/m);
 });
 
 test("arrows step into code, onto a diagram, and out again", async ({ join, room, seed }) => {
@@ -399,19 +404,19 @@ test("arrows step into code, onto a diagram, and out again", async ({ join, room
 	];
 	let region = diagram.getByRole("region", { name: "Diagram preview" });
 	await expect(region).toBeVisible();
-	await expect(code.locator("[data-file]")).toBeVisible();
 
-	// A hidden source has no layout, so the browser alone would skip both.
+	// Code is text like any other; a diagram's hidden source has no layout, so the browser alone
+	// would skip it.
 	await content(page).getByText("Before").click();
 	await page.keyboard.press("ArrowDown");
-	await expect(code.locator("[data-plan-source]")).toBeVisible();
+	await page.keyboard.press("Home");
 	await page.keyboard.type("Q");
 	await written(page, room, /^Qlet a = 1;$/m);
 
 	// A drawing is held as a block, not opened: arrowing past it is reading.
 	await page.keyboard.press("ArrowDown");
 	await expect(region).toBeFocused();
-	await expect(code.locator("[data-plan-source]")).toBeHidden();
+	await expect(code.locator("[data-plan-source]")).toBeVisible();
 	await expect(diagram.locator("[data-plan-source]")).toBeHidden();
 
 	// Enter edits it, with the drawing kept above; Escape comes back.
@@ -430,14 +435,14 @@ test("arrows step into code, onto a diagram, and out again", async ({ join, room
 	await expect(region).toBeFocused();
 	await page.keyboard.press("ArrowUp");
 	await page.keyboard.type("R");
-	await written(page, room, /^RQlet a = 1;$/m);
+	await written(page, room, /^Qlet a = 1;R$/m);
 });
 
-test("dragging across drawn code selects it to copy, without opening", async ({ join, seed }) => {
-	await seed("```ts\nlet a = 1;\nexport function open(room: string) {}\n```\n");
+test("dragging across a drawn patch selects it to copy, without opening", async ({ join, seed }) => {
+	await seed(PATCH);
 	let page = await join("ana");
 	let block = content(page).locator(".planCode");
-	let line = block.locator("[data-line='2']");
+	let line = block.locator("[data-line][data-line-type='change-addition']").first();
 	await expect(line).toBeVisible();
 	await page.evaluate(() =>
 		window.addEventListener("copy", event => {
@@ -461,11 +466,11 @@ test("dragging across drawn code selects it to copy, without opening", async ({ 
 	await page.keyboard.up("Shift");
 
 	await expect(block.locator("[data-plan-source]")).toBeHidden();
-	await expect(block.locator("[data-file]")).toBeVisible();
+	await expect(block.locator("[data-diff]")).toBeVisible();
 	let selected = await page.evaluate(() => document.getSelection()?.toString() ?? "");
 	expect(selected.length).toBeGreaterThan(dragged.length);
 	expect(selected.startsWith(dragged)).toBe(true);
-	expect("export function open(room: string) {}").toContain(selected);
+	expect("let epoch = rotate(room);").toContain(selected.trim());
 
 	// The browser copies what is selected; Lexical must not swap in its own.
 	await page.keyboard.press("ControlOrMeta+c");
@@ -479,15 +484,17 @@ test("arrows reach code inside a callout and a list item", async ({ join, room, 
 		'<Callout id="01K0N4Y9VG9DHBFZB6HC89E2AC" type="note" title="Nested">\n\nInside.\n\n```ts\nlet a = 1;\n```\n\n</Callout>\n\n- Item\n\n  ```ts\n  let b = 2;\n  ```\n\n- Next\n',
 	);
 	let page = await join("ana");
-	await expect(content(page).locator("[data-file]")).toHaveCount(2);
+	await expect.poll(() => words(page, "keyword")).toEqual(["let", "let"]);
 
 	await content(page).getByText("Inside.").click();
 	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("Home");
 	await page.keyboard.type("Q");
 	await written(page, room, /^\s*Qlet a = 1;$/m);
 
 	await content(page).getByText("Next").click();
 	await page.keyboard.press("ArrowUp");
+	await page.keyboard.press("Home");
 	await page.keyboard.type("R");
 	await written(page, room, /^\s*Rlet b = 2;$/m);
 });
@@ -495,10 +502,10 @@ test("arrows reach code inside a callout and a list item", async ({ join, room, 
 /*
  * Two people in one fence.
  *
- * What is drawn is a projection of the shared source, so the thing worth
- * asserting is which of these facts travels: the text does, the language does,
- * and hiding the source does not. Everything drawn follows from the first two
- * and belongs to nobody.
+ * What is coloured or drawn is a projection of the shared source, so the thing
+ * worth asserting is which of these facts travels: the text does, the language
+ * does, and hiding a patch's source does not. Everything coloured follows from
+ * the first two and belongs to nobody.
  *
  * Playwright drives one page at a time, so these are edits that interleave
  * rather than collide — the same as everything in `collab.e2e.ts`, and enough
@@ -514,7 +521,6 @@ test("two people typing in one fence both end up in it", async ({ join, room, se
 
 	// Select inside the canonical fence; the permanent title precedes it.
 	for (let [page, atEnd] of [[ana, false], [bo, true]] as const) {
-		await content(page).getByRole("button", { name: "Show source" }).click();
 		await content(page).locator("[data-plan-source]").evaluate((element, atEnd) => {
 			let range = document.createRange();
 			range.selectNodeContents(element);
@@ -534,9 +540,8 @@ test("two people typing in one fence both end up in it", async ({ join, room, se
 		await expect(content(page).locator("[data-plan-source]")).toContainText("// ana let a = 1;");
 		await expect(content(page).locator("[data-plan-source]")).toContainText("let b = 2; // bo");
 
-		// And what is drawn is drawn from that, on each page separately.
-		await expect(content(page).locator("[data-file]")).toContainText("// ana let a = 1;");
-		await expect(content(page).locator("[data-file]")).toContainText("let b = 2; // bo");
+		// And what is coloured is coloured from that, on each page separately.
+		await expect.poll(() => paintedText(page, "comment")).toEqual(["// ana let a = 1;", "// bo"]);
 	}
 
 	await written(ana, room, /^\/\/ ana let a = 1;\nlet b = 2; \/\/ bo$/m);
@@ -547,7 +552,8 @@ test("a language chosen by one is a change for everyone", async ({ join, room, s
 	let ana = await join("ana");
 	let bo = await join("bo");
 
-	await expect(content(bo).locator("[data-file]")).toHaveCount(0);
+	await expect(content(bo).locator("[data-plan-source]")).toBeVisible();
+	expect(await painted(bo)).toBe(0);
 
 	await chooseLanguage(content(ana), "Plain text", "TypeScript");
 
@@ -556,18 +562,17 @@ test("a language chosen by one is a change for everyone", async ({ join, room, s
 	// control says what it now is.
 	await expect(content(bo).getByRole("button", { name: "Code language: TypeScript" }))
 		.toBeVisible();
-	await expect(content(bo).locator("[data-file]")).toBeVisible();
-	await expect.poll(() => colours(bo)).toBeGreaterThan(1);
+	await expect.poll(() => painted(bo)).toBeGreaterThan(1);
 
 	await written(ana, room, /^```typescript$/m);
 });
 
-test("showing the source leaves everybody else's hidden", async ({ join, seed }) => {
-	await seed("```ts\nlet a = 1;\n```\n");
+test("showing a patch's source leaves everybody else's hidden", async ({ join, seed }) => {
+	await seed(PATCH);
 	let ana = await join("ana");
 	let bo = await join("bo");
 
-	await expect(content(bo).locator("[data-file]")).toBeVisible();
+	await expect(content(bo).locator("[data-diff]")).toBeVisible();
 	await content(ana).getByRole("button", { name: "Show source" }).click();
 	await expect(content(ana).locator("[data-plan-source]")).toBeVisible();
 
@@ -654,6 +659,6 @@ test("the language menu closes on Escape from its trigger and when focus leaves"
 
 	await trigger.click();
 	await expect(list).toBeVisible();
-	await content(page).getByRole("button", { name: "Show source" }).focus();
+	await content(page).getByRole("button", { name: "Wrap lines" }).focus();
 	await expect(list).toBeHidden();
 });

@@ -8,6 +8,9 @@
  * forty blocks, about twenty layouts, most of a second in all. A ResizeObserver's callback runs
  * after the frame's own layout, so a read there costs nothing, and until it has answered a block
  * draws nothing, so a phone never paints scrolling lines and then wraps them.
+ *
+ * Code in a named language is coloured in place and has no drawn copy; a diff fence still has one,
+ * so these blocks are diffs (half of them not patches, drawn as the text they are).
  */
 
 import { content, expect, test } from "./room";
@@ -19,10 +22,10 @@ const BLOCKS = 40;
 const FENCES = Array.from(
 	{ length: BLOCKS },
 	(_, index) =>
-		`Block ${index}.\n\n\`\`\`${index % 2 ? "rust" : "gherkin"}\n${
+		`Block ${index}.\n\n\`\`\`diff\n${
 			index % 2
-				? `fn block_${index}() -> usize {\n    ${index}\n}`
-				: `Feature: block ${index}\n  Scenario: it reads\n    Given a line of ${index}`
+				? `--- a/block_${index}.rs\n+++ b/block_${index}.rs\n@@ -1 +1 @@\n-fn block_${index}() {}\n+fn block_${index}() -> usize { ${index} }`
+				: `- Feature: block ${index}\n+ Feature: block ${index}, read`
 		}\n\`\`\`\n\n`,
 ).join("");
 
@@ -55,7 +58,7 @@ test("a fenced block reads the stylesheet's wrap switch only where layout is cur
 		}) as typeof window.getComputedStyle;
 	});
 	await join("ana");
-	let views = content(page).getByRole("group", { name: "Code preview", exact: true });
+	let views = content(page).getByRole("group", { name: "Diff preview", exact: true });
 	await expect(views).toHaveCount(BLOCKS);
 	// Every block has been answered and drawn: the renderer's own box carries the answer.
 	await expect(content(page).locator("pre[data-overflow='scroll']")).toHaveCount(BLOCKS, {

@@ -159,7 +159,7 @@ test("Tab on a first list item leaves without a phantom indent", async ({ join, 
 
 test("Tab indents code, Shift+Tab outdents, and Escape then Tab leaves", async ({ join, room }) => {
 	let page = await join("ana");
-	let hint = content(page).getByText("Esc then Tab to leave");
+	let hint = content(page).getByText("Esc to leave");
 
 	await content(page).click();
 	await page.keyboard.type("/code");

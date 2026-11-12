@@ -40,9 +40,8 @@ test("wide table retains its own scroll lane", async ({ page }) => {
 	expect(metrics.scroll).toBeGreaterThan(metrics.client);
 });
 
-test("code preview keeps a keyboard-reachable scroll lane", async ({ page }, info) => {
-	let preview = plate(page, "code").getByRole("group", { name: "Code preview", exact: true })
-		.first();
+test("code keeps a keyboard-reachable scroll lane", async ({ page }, info) => {
+	let preview = plate(page, "code").getByRole("group", { name: "Code", exact: true }).first();
 	await expect(preview).toHaveAttribute("tabindex", "0");
 	await preview.focus();
 	await expect(preview).toBeFocused();

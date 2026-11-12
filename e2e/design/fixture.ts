@@ -33,7 +33,15 @@ export let test = base.extend<DesignOptions>({
 			await expect(page.locator('[data-audit-item="diagram"] .plan-diagram svg')).toBeVisible();
 			await expect(page.locator('[data-audit-item="diagram"] [data-plan-error]')).toBeVisible();
 			await expect(page.locator('[data-audit-item="formula"] .katex')).toHaveCount(2);
-			await expect(page.locator('[data-audit-item="code"] diffs-container pre')).toHaveCount(2);
+			// Code is coloured in place once the highlighter loads; only a patch draws a preview.
+			await expect.poll(() =>
+				plate(page, "code").evaluate(element =>
+					[...CSS.highlights].some(([name, highlight]) =>
+						name.startsWith("plan-code-")
+						&& [...highlight].some(range => element.contains(range.startContainer))
+					)
+				)
+			).toBe(true);
 			// The catalogue's later image plate uses native lazy loading. Load its fixed fixtures
 			// now so scrolling to the table does not replace placeholders underneath capture.
 			await page.locator("img[loading=lazy]").evaluateAll(images => {
