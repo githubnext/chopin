@@ -41,10 +41,6 @@
 	background: transparent;
 }
 
-.image-viewer:focus {
-	outline: none;
-}
-
 .image-viewer-backdrop {
 	position: absolute;
 	inset: 0;
@@ -165,13 +161,6 @@
 
 .image-viewer-control:hover:not(:disabled) {
 	background: var(--image-viewer-control-hover);
-}
-
-.image-viewer-control:focus-visible,
-.image-viewer-slider:focus-visible,
-.image-viewer-text:focus-visible {
-	outline: var(--focus-ring-width) solid var(--image-viewer-ink);
-	outline-offset: 1px;
 }
 
 .image-viewer-control:disabled {

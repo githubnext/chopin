@@ -210,6 +210,7 @@ export function ImageLightbox(
 ) {
 	let dialog = useRef<HTMLDialogElement>(null);
 	let stage = useRef<HTMLDivElement>(null);
+	let closer = useRef<HTMLButtonElement>(null);
 	let previous = useRef<HTMLButtonElement>(null);
 	let next = useRef<HTMLButtonElement>(null);
 	let [index, setIndex] = useState(() => stepImage(start, 0, images.length));
@@ -255,7 +256,7 @@ export function ImageLightbox(
 		let element = dialog.current;
 		let opener = document.activeElement;
 		element?.showModal();
-		element?.focus();
+		closer.current?.focus();
 		return () => {
 			if (element?.open) element.close();
 			if (opener instanceof HTMLElement && opener.isConnected) {
@@ -425,7 +426,6 @@ export function ImageLightbox(
 			data-closing={closing ? "" : undefined}
 			data-focus-boundary=""
 			data-image-viewer=""
-			tabIndex={-1}
 			onCancel={event => {
 				event.preventDefault();
 				close();
@@ -468,6 +468,7 @@ export function ImageLightbox(
 					{picture?.note && <p className="image-viewer-note">{picture.note}</p>}
 				</div>
 				<button
+					ref={closer}
 					aria-label="Close"
 					className="image-viewer-control"
 					data-image-viewer-close=""
