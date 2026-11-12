@@ -4,11 +4,13 @@ import {
 	Fragment,
 	lazy,
 	memo,
+	startTransition,
 	Suspense,
 	useCallback,
 	useEffect,
 	useLayoutEffect,
 	useRef,
+	useState,
 	useSyncExternalStore,
 } from "react";
 import type { ReactNode } from "react";
@@ -34,6 +36,7 @@ import { MessageMarkers } from "../conversation-plan/markers";
 import type { ExcerptCorrectionAction } from "../conversation-plan/analysis-overview";
 import type { CardLink } from "../conversation-plan/links";
 import { displayText, group, workAnnouncement, workPhase } from "./model";
+import { arrivedInBulk, earlierRows, FIRST_MESSAGES, newestRows } from "./newest-first";
 import { movedOffers, slideOffset } from "./offer-motion";
 import { WorkProgress } from "./work-progress";
 import { AppRow, ResearchAvatar, SpeakerHead } from "./speaker";
@@ -662,6 +665,35 @@ export let Transcript = memo(function Transcript(
 		}
 	}
 	let enters = (key: string) => entered.current.has(`row:${key}`);
+	// The oldest rows not mounted yet (`newest-first.ts`). A transcript that arrives in bulk mounts
+	// its newest screenful with the document, and the rest in the steps below, once it has painted.
+	let sizes = keyed.map(({ item }) => item.kind === "messages" ? item.messages.length : 1);
+	let [mounting, setMounting] = useState<{ bulk?: Chat.Entry[]; from: number }>({ from: 0 });
+	let from = Math.min(mounting.from, keyed.length);
+	// Set once for each arrival, from the render that finds it; a live message changes nothing.
+	if (mounting.bulk !== entries && arrivedInBulk(before ? entering.size : atoms.size)) {
+		from = newestRows(sizes, FIRST_MESSAGES);
+		setMounting({ bulk: entries, from });
+	}
+	useEffect(() => {
+		if (from === 0) return;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		// After the frame that paints what is mounted, so the next step never comes before it.
+		let frame = requestAnimationFrame(() => {
+			timer = setTimeout(() => {
+				startTransition(() => {
+					setMounting(current => ({ ...current, from: earlierRows(sizes, current.from) }));
+				});
+			});
+		});
+		return () => {
+			cancelAnimationFrame(frame);
+			clearTimeout(timer);
+		};
+		// `sizes` is new with each render and read only for the rows above `from`, which later
+		// messages do not change.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [from]);
 	let readySubscribe = useCallback(
 		(listener: () => void) => researchOffers?.store.subscribe(listener) ?? (() => {}),
 		[researchOffers?.store],
@@ -865,7 +897,8 @@ export let Transcript = memo(function Transcript(
 			clearSourceHighlight(sourceOwner.current);
 			delete message.dataset.sourceExact;
 		};
-	}, [active, sourceDestination]);
+		// Again once every row is mounted, for a message older than the first ones mounted.
+	}, [active, sourceDestination, from === 0]);
 
 	return (
 		<div
@@ -924,7 +957,7 @@ export let Transcript = memo(function Transcript(
 						{empty}
 					</p>
 				)}
-				{keyed.map(({ item, key }) => {
+				{keyed.slice(from).map(({ item, key }) => {
 					let groupIds = item.kind === "messages"
 						? new Set(item.messages.map(message => message.id))
 						: new Set([item.kind === "system" ? item.id : ""]);
