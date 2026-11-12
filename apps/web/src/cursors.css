@@ -1,0 +1,53 @@
+/*
+ * What the pointer says a thing does (DESIGN.md, Cursors). Loaded with the tooltips, which every
+ * route waits for before it draws anything, so it costs the entry stylesheet nothing.
+ *
+ * Tailwind v4's preflight leaves a button the arrow. Chopin follows Slack instead: whatever a click
+ * acts on, and that is not text entry, shows the pointer. In the base layer, so a component's own
+ * cursor still wins (zoom-in on a picture, grab on a grip, col-resize on a divider, text on the
+ * title), and a disabled control keeps the arrow.
+ */
+@layer base {
+	button,
+	select,
+	summary,
+	input[type="checkbox"],
+	input[type="radio"],
+	input[type="file"],
+	label:has(> input[type="checkbox"], > input[type="radio"]),
+	[role="button"],
+	[role="checkbox"],
+	[role="menuitem"],
+	[role="menuitemcheckbox"],
+	[role="menuitemradio"],
+	[role="option"],
+	[role="radio"],
+	[role="switch"],
+	[role="tab"] {
+		cursor: pointer;
+	}
+
+	button:disabled,
+	select:disabled,
+	input:disabled,
+	label:has(> input:disabled),
+	[aria-disabled="true"],
+	[data-disabled] {
+		cursor: default;
+	}
+}
+
+/*
+ * shadcn's menu and command rows, the model selector's among them, ask for the arrow
+ * (`cursor-default`), a desktop menu's habit; in Chopin they take the pointer, as Slack's do. Keyed
+ * on the copies' own slots and unlayered, so it outranks the copied utility without editing a copy.
+ * A disabled row takes no pointer events.
+ */
+[data-slot="command-item"],
+[data-slot="dropdown-menu-checkbox-item"],
+[data-slot="dropdown-menu-item"],
+[data-slot="dropdown-menu-radio-item"],
+[data-slot="dropdown-menu-sub-trigger"],
+[data-slot="model-selector-item"] {
+	cursor: pointer;
+}
