@@ -157,7 +157,7 @@ type Seen = {
 	tools: readonly string[];
 };
 
-test("withholds a fragmented Chat question and repairs within the same Planner session", async () => {
+test("streams a fragmented Chat question, then repairs it within the same Planner session", async () => {
 	let { context, events } = await setup();
 	let prompts: string[] = [];
 	let checked: string[] = [];
@@ -192,7 +192,8 @@ test("withholds a fragmented Chat question and repairs within the same Planner s
 	};
 	context.openPlannerSession = async () => ({ ok: true, value: session });
 	await browserTurn(context, "Help me draft a new plan.");
-	expect(events.some(event => JSON.stringify(event).includes("trying to accomplish"))).toBe(false);
+	// The question was shown as it streamed; the check found it after it ended.
+	expect(events.some(event => JSON.stringify(event).includes("trying to accomplish"))).toBe(true);
 	expect(
 		context.chat.entries.filter(entry => entry.author.kind === "agent").map(entry => entry.text),
 	)
@@ -899,7 +900,8 @@ test("a reply that cannot move its questions into decisions fails the turn but k
 		await tick();
 		let said = () => context.chat.entries.map(entry => entry.text);
 		expect(said().some(text => text.includes("could not move its questions"))).toBe(true);
-		expect(said()).not.toContain("Which scope should the plan cover?");
+		// Both replies were shown as they streamed; the turn says it could not move the question.
+		expect(said().filter(text => text === "Which scope should the plan cover?")).toHaveLength(2);
 		expect(planner.calls).not.toContain("destroy");
 		expect(context.chat.retained).toBeDefined();
 		expect(context.chat.runs?.map(run => run.status)).toEqual(["waiting"]);
@@ -980,7 +982,8 @@ test("a refused reply keeps a Planner that only waits on a question it asked, ho
 		await tick();
 		let said = () => context.chat.entries.map(entry => entry.text);
 		expect(said().some(text => text.includes("could not move its questions"))).toBe(true);
-		expect(said()).not.toContain("Which scope should the plan cover?");
+		// Both replies were shown as they streamed; the turn says it could not move the question.
+		expect(said().filter(text => text === "Which scope should the plan cover?")).toHaveLength(2);
 		expect(planner.calls).not.toContain("destroy");
 		expect(withdrawn.signal.aborted).toBe(false);
 		expect(context.chat.retained).toBeDefined();

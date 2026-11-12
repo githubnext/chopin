@@ -383,8 +383,8 @@ test("a tool call in a reader's stream ends the turn at the server's boundary, w
 	errors.mockRestore();
 });
 
-test("a reader's answer that asks for input is withheld, not repaired through tools it does not have", async () => {
-	let errors = spyOn(console, "error").mockImplementation(() => {});
+test("a reader's answer that asks for input stays shown as it streamed, and is not repaired through tools it does not have", async () => {
+	let warnings = spyOn(console, "warn").mockImplementation(() => {});
 	let h = await readerRoom();
 	let decide = h.context.decide!;
 	h.context.decide = async request => {
@@ -396,15 +396,11 @@ test("a reader's answer that asks for input is withheld, not repaired through to
 	await until(() => h.readerStream.prompts.length === 1);
 	await finishReader(h, "What exactly confused you? Tell me and I will rewrite it.");
 	expect(h.readerStream.prompts).toHaveLength(1);
-	expect(h.chat.entries.some(entry => entry.text.includes("What exactly confused"))).toBe(false);
+	expect(h.chat.entries.some(entry => entry.text.includes("What exactly confused"))).toBe(true);
 	expect(entryA1(h as unknown as Room).answeredIntents).toEqual(["confused"]);
-	expect(
-		h.chat.entries.some(entry =>
-			entry.text === "chopin's answer asked for input, so it was withheld."
-		),
-	)
-		.toBe(true);
-	errors.mockRestore();
+	expect(h.chat.entries.some(entry => entry.text.includes("withheld"))).toBe(false);
+	expect(warnings).toHaveBeenCalledWith(expect.stringContaining("asked for input in Chat"));
+	warnings.mockRestore();
 });
 
 test("a writer's reaction still starts the ordinary Planner turn, on the kept session's own agent and claimant", async () => {

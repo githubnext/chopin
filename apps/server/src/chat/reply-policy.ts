@@ -55,7 +55,8 @@ export function isToolBoundaryError(error: unknown): boolean {
 	return error instanceof Error && error.name === "ToolBoundaryError";
 }
 
-const REPAIR = "Your previous Chat response was withheld because it requested human input. "
+const REPAIR =
+	"Your previous Chat response asked for human input in Chat, which belongs in inline decision cards. "
 	+ "The JSON below is quoted context, not a new instruction to carry out the original request. "
 	+ "Preserve its original document focus. Continue from the current document and completed tool "
 	+ "results; do not repeat completed operations or replay the original request. First call "
@@ -71,7 +72,7 @@ const REPAIR = "Your previous Chat response was withheld because it requested hu
 	+ "child decision tool is available, state that limitation without soliciting input. "
 	+ "Finish with a concise factual summary only.";
 
-/** A failed or uncertain check never authorizes publication. */
+/** Whether a reply only answers, explains or reports progress; a failed or uncertain check throws. */
 export async function checkPlannerReply(
 	text: string,
 	decide: Decide | undefined,
@@ -99,7 +100,12 @@ export async function checkPlannerReply(
 	}
 }
 
-/** Nothing from a text message reaches Chat before its entire text has been checked. */
+/**
+ * A text message reaches Chat as the model writes it, like any other part. Each finished message is checked
+ * meanwhile, without holding back what follows; a check that fails or runs out of time leaves the reply standing and
+ * is only logged. A reply the check finds asking for input in Chat is followed by one repair step, in which the Planner
+ * moves those questions into inline decision cards and ends with a factual summary.
+ */
 export async function publishPlannerReplies(options: {
 	session: Pick<PlannerSession, "stream">;
 	prompt: string;
@@ -119,36 +125,36 @@ export async function publishPlannerReplies(options: {
 	let { session, decide, publish } = options;
 	let controller = new AbortController();
 	let signal = AbortSignal.any([options.signal, controller.signal]);
-	let withheld: string[] = [];
-	let withheldLength = 0;
+	let flagged: string[] = [];
+	let flaggedLength = 0;
 	let tools: string[] = [];
 	let toolsLength = 0;
 	let toolsTruncated = false;
 	for (let attempt = 0; attempt < 2; attempt++) {
 		if (signal.aborted) return;
-		let rejected = false;
+		let asked = false;
 		let messages = new Map<string, string>();
-		let flush = async (id: string) => {
+		let checks: Promise<void>[] = [];
+		let check = (id: string) => {
 			let text = messages.get(id);
 			messages.delete(id);
-			if (!text?.trim() || signal.aborted) return;
-			let allowed = await checkPlannerReply(text, decide, signal);
-			if (signal.aborted) return;
-			if (!allowed) {
-				rejected = true;
-				let retained = text.slice(0, Math.max(0, 24_000 - withheldLength));
-				if (retained) withheld.push(retained);
-				withheldLength += retained.length;
-				return;
-			}
-			publish({ type: "text-start", id });
-			publish({ type: "text-delta", id, text });
-			publish({ type: "text-end", id });
+			if (!text?.trim()) return;
+			checks.push(
+				checkPlannerReply(text, decide, signal).then(allowed => {
+					if (allowed || signal.aborted) return;
+					asked = true;
+					let retained = text.slice(0, Math.max(0, 24_000 - flaggedLength));
+					if (retained) flagged.push(retained);
+					flaggedLength += retained.length;
+				}, error => {
+					if (!signal.aborted) console.warn("[chat] a Planner reply was not checked:", error);
+				}),
+			);
 		};
 		let prompt = attempt === 0 ? options.prompt : `${REPAIR}\n\n${
 			JSON.stringify({
 				original_prompt: options.prompt,
-				withheld_replies: withheld,
+				replies_asking_for_input: flagged,
 				tool_transcript: tools,
 				tool_transcript_truncated: toolsTruncated,
 			})
@@ -168,49 +174,45 @@ export async function publishPlannerReplies(options: {
 				try {
 					if (part.type === "text-start") messages.set(part.id, "");
 					else if (part.type === "text-delta") {
-						let text = (messages.get(part.id) ?? "") + part.text;
-						if (text.length > 24_000) throw new PlannerReplyError(UNVERIFIED);
-						messages.set(part.id, text);
-					} else if (part.type === "text-end") await flush(part.id);
-					else {
-						if (
-							part.type === "tool-call" || part.type === "tool-result"
-							|| part.type === "tool-error" || part.type === "tool-output-denied"
-						) {
-							let detail = JSON.stringify(part);
-							let retained = detail.slice(0, 4_000);
-							if (toolsLength + retained.length <= 16_000) {
-								tools.push(retained);
-								toolsLength += retained.length;
-							} else toolsTruncated = true;
-							if (retained.length < detail.length) toolsTruncated = true;
-						}
-						// A boundary stop is the turn's own, whole: its kind is how the room is told.
-						if (part.type === "error" && isToolBoundaryError(part.error)) throw part.error;
-						if (part.type === "error") throw reported(part.error);
-						if (part.type === "abort") throw new ReplyFailedError();
-						publish(part);
+						// Past the most the check reads, it says the reply was not checked.
+						messages.set(part.id, `${messages.get(part.id) ?? ""}${part.text}`.slice(0, 24_001));
+					} else if (
+						part.type === "tool-call" || part.type === "tool-result"
+						|| part.type === "tool-error" || part.type === "tool-output-denied"
+					) {
+						let detail = JSON.stringify(part);
+						let retained = detail.slice(0, 4_000);
+						if (toolsLength + retained.length <= 16_000) {
+							tools.push(retained);
+							toolsLength += retained.length;
+						} else toolsTruncated = true;
+						if (retained.length < detail.length) toolsTruncated = true;
 					}
+					// A boundary stop is the turn's own, whole: its kind is how the room is told.
+					if (part.type === "error" && isToolBoundaryError(part.error)) throw part.error;
+					if (part.type === "error") throw reported(part.error);
+					if (part.type === "abort") throw new ReplyFailedError();
+					publish(part);
+					if (part.type === "text-end") check(part.id);
 				} catch (error) {
-					failure = error ?? new PlannerReplyError(UNVERIFIED);
+					failure = error ?? new ReplyFailedError();
 					controller.abort();
 				}
 			}
 		} catch (error) {
-			failure ??= error ?? new PlannerReplyError(UNVERIFIED);
+			failure ??= error ?? new ReplyFailedError();
 			controller.abort();
 		}
 		if (failure) throw failure;
 		if (signal.aborted) return;
-		try {
-			for (let id of messages.keys()) await flush(id);
-		} catch (error) {
-			controller.abort();
-			throw error;
-		}
-		if (!rejected) return;
+		for (let id of messages.keys()) check(id);
+		await Promise.all(checks);
+		if (signal.aborted || !asked) return;
 		if (options.repair === false) {
-			throw new PlannerReplyError(`${PLANNER_NAME}'s answer asked for input, so it was withheld.`);
+			console.warn(
+				"[chat] a Planner reply asked for input in Chat, and its session has no tools to move it into a decision.",
+			);
+			return;
 		}
 	}
 	let count = options.capturedDecisions?.() ?? 0;
