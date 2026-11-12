@@ -64,6 +64,32 @@ export const identifierState = createState("plan-identifier", { parse: text });
 
 // -- code ------------------------------------------------------------------
 
+/**
+ * The word in a fence's info string that wraps its long lines instead of scrolling them:
+ * ```` ```ts wrap ````. It is a word of its own, outside any quoted value, so a title that
+ * happens to contain it does not turn it on.
+ */
+export const CODE_WRAP = "wrap";
+
+/** The info string's words, a quoted value kept whole with its key. */
+function metaWords(meta: string): string[] {
+	return meta.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
+}
+
+export function codeWraps(meta: string): boolean {
+	return metaWords(meta).includes(CODE_WRAP);
+}
+
+/**
+ * The info string with wrapping turned on or off. Turning it on adds the word at the end; turning
+ * it off takes it out and keeps every other word in order.
+ */
+export function withCodeWrap(meta: string, wrap: boolean): string {
+	if (codeWraps(meta) === wrap) return meta;
+	if (wrap) return meta.trim() ? `${meta.trim()} ${CODE_WRAP}` : CODE_WRAP;
+	return metaWords(meta).filter(word => word !== CODE_WRAP).join(" ");
+}
+
 type SerializedCode = Spread<{ planLanguage: string; planMeta: string }, SerializedElementNode>;
 
 /**
@@ -115,6 +141,7 @@ export class CodeBlockNode extends ElementNode {
 		let dom = document.createElement("div");
 		dom.className = config.theme.planCode ?? "planCode";
 		if (this.getLanguage()) dom.dataset.planLanguage = this.getLanguage();
+		if (codeWraps(this.getMeta())) dom.dataset.planWrap = "";
 
 		// Rendered output (a diagram, say) lives beside the source rather than
 		// replacing it, so the text Yjs synchronises stays editable.
@@ -148,6 +175,8 @@ export class CodeBlockNode extends ElementNode {
 		if (prev.getLanguage() !== this.getLanguage()) {
 			dom.dataset.planLanguage = this.getLanguage();
 		}
+		if (codeWraps(this.getMeta())) dom.dataset.planWrap = "";
+		else delete dom.dataset.planWrap;
 		return false;
 	}
 
