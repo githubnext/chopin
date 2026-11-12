@@ -1,6 +1,7 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
 
 import { messageGfmExtensions } from "./gfm";
+import { NO_HTML } from "./no-html";
 import { orderedRunsRemarkPlugin } from "./ordered-runs";
 import { referenceRemarkPlugin } from "./reference-markdown";
 import { referenceRenderModel } from "./references";
@@ -20,7 +21,6 @@ function inline(node: Node): string {
 			return node.value ?? "";
 		case "break":
 			return "\n";
-		case "html":
 		case "image":
 		case "imageReference":
 		case "definition":
@@ -58,7 +58,14 @@ export function plainTextOf(
 	lead?: string,
 ): string {
 	let model = referenceRenderModel(source, references);
-	let tree = fromMarkdown(model.source, messageGfmExtensions(model.source)) as unknown as Node;
+	let gfm = messageGfmExtensions(model.source);
+	let tree = fromMarkdown(
+		model.source,
+		{
+			extensions: [NO_HTML, ...(gfm?.extensions ?? [])],
+			mdastExtensions: gfm?.mdastExtensions ?? [],
+		} as Parameters<typeof fromMarkdown>[1],
+	) as unknown as Node;
 	referenceRemarkPlugin(model)(tree);
 	orderedRunsRemarkPlugin()(tree, { value: model.source });
 	let body = (tree.children ?? []).filter(child => BLOCKS.has(child.type))
