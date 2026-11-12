@@ -70,3 +70,45 @@
 	flex-direction: column;
 	border-left: 1px solid var(--color-divider);
 }
+
+/*
+ * A thread opens as Slack's does: its panel slides in a short way from the end while it fades in,
+ * and the document's bar settles in above it as the document gives up its width. Both arrive once
+ * and leave at once; reduced motion shows them in place.
+ */
+@media (prefers-reduced-motion: no-preference) {
+	.chat-split-thread {
+		transition:
+			opacity var(--panel-open-dur) var(--motion-smooth-out),
+			translate var(--panel-open-dur) var(--motion-smooth-out);
+	}
+
+	.workspace-collapsed-document-bar {
+		transition:
+			opacity var(--duration-base) var(--motion-smooth-out),
+			translate var(--duration-base) var(--motion-smooth-out);
+	}
+
+	.thread-panel[data-thread-sheet] {
+		transition:
+			opacity var(--page-slide-dur) var(--motion-smooth-out),
+			translate var(--page-slide-dur) var(--motion-smooth-out);
+	}
+}
+
+@starting-style {
+	.chat-split-thread {
+		opacity: 0;
+		translate: var(--panel-distance) 0;
+	}
+
+	.workspace-collapsed-document-bar {
+		opacity: 0;
+		translate: 0 calc(-1 * var(--spacing));
+	}
+
+	.thread-panel[data-thread-sheet] {
+		opacity: 0;
+		translate: var(--page-slide-distance) 0;
+	}
+}

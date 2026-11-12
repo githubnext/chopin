@@ -116,10 +116,13 @@ function useAnchored(
 				: Math.max(margin, Math.min(below, window.innerHeight - margin - height));
 			let wanted = box.right - width;
 			let left = Math.max(margin, Math.min(wanted, window.innerWidth - width - margin));
+			// It grows from the corner at its button: the top end below it, the bottom end above it.
+			let transformOrigin = top === below ? "right top" : "right bottom";
 			setPosition(current =>
 				current?.left === left && current.top === top
+					&& current.transformOrigin === transformOrigin
 					? current
-					: { left, top, visibility: "visible" }
+					: { left, top, transformOrigin, visibility: "visible" }
 			);
 		};
 		place();

@@ -30,7 +30,8 @@ import { messageMenuActions } from "./message-menu-actions";
 import { MessageMarkdown } from "./markdown";
 import { plainTextOf } from "./message-copy";
 import { withIntents } from "./pending-reactions";
-import { ownEmoji } from "./reactions";
+import { ownEmoji, reactionChanges, reactionCounts } from "./reactions";
+import type { ReactionCounts } from "./reactions";
 import { TurnImages } from "./turn-images";
 import type { Intent } from "./pending-reactions";
 import { MessageMarkers } from "../conversation-plan/markers";
@@ -318,6 +319,12 @@ function MessageBody(
 	};
 	let shown = withIntents(message.reactions, intents, message.id, handle);
 	let openPicker = useRef<() => void>(undefined);
+	// What the pills last showed, so a pill that appears or a count that changes, and only that, moves.
+	let drawnReactions = useRef<ReactionCounts | undefined>(undefined);
+	let reactionMotion = reactionChanges(drawnReactions.current, shown.reactions);
+	useEffect(() => {
+		drawnReactions.current = reactionCounts(shown.reactions);
+	});
 
 	return (
 		<ChatImageDocument value={room}>
@@ -391,6 +398,8 @@ function MessageBody(
 					{menu.retry && <FailedLine reason={failureOf(message)} />}
 					{shown.reactions.length > 0 && (
 						<ReactionPills
+							counted={reactionMotion.counted}
+							entered={reactionMotion.entered}
 							handle={handle}
 							onAdd={onReact ? () => openPicker.current?.() : undefined}
 							onToggle={(emoji, on) => onReact?.(message.id, emoji, on)}
