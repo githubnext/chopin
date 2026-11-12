@@ -4,7 +4,9 @@
  *
  * - the pointer crossing messages restyles a message or two, not the whole transcript;
  * - a key typed in the composer renders none of the transcript's messages again;
- * - a step of a Chat resize lays the page out a few times, not once for each message.
+ * - a step of a Chat resize lays the page out a few times, not once for each message;
+ * - opening it mounts the newest messages first, so the document and the newest line are not held
+ *   back by the whole history, and the older ones follow.
  */
 
 import { chatInput } from "./chat-input";
@@ -54,6 +56,11 @@ function settle(page: Page) {
 	);
 }
 
+/** The older messages are mounted after the newest; the whole transcript is there. */
+function complete(chat: Locator) {
+	return expect(chat.locator("[data-chat-message-id]")).toHaveCount(MESSAGES);
+}
+
 async function layouts(cdp: CDPSession): Promise<number> {
 	let { metrics } = await cdp.send("Performance.getMetrics");
 	return metrics.find(metric => metric.name === "LayoutCount")!.value;
@@ -64,6 +71,7 @@ test("the pointer crossing a long Chat's messages restyles them, not the whole t
 	await join("ana");
 	let chat = chatOf(page);
 	await expect(chat.locator(`[data-chat-message-id="message-${MESSAGES - 1}"]`)).toBeVisible();
+	await complete(chat);
 	await settle(page);
 	let elements = await chat.evaluate(element => element.querySelectorAll("*").length);
 	let box = (await chat.locator("[data-chat-scroll]").boundingBox())!;
@@ -112,6 +120,7 @@ test("a key typed in the composer of a long Chat renders none of its messages ag
 	await join("ana");
 	let chat = chatOf(page);
 	await expect(chat.locator(`[data-chat-message-id="message-${MESSAGES - 1}"]`)).toBeVisible();
+	await complete(chat);
 	let input = chatInput(chat);
 	await input.click();
 	await settle(page);
@@ -131,6 +140,7 @@ test("a step of a Chat resize lays the page out a few times, not once for each m
 	let chat = chatOf(page);
 	let handle = page.getByRole("separator", { name: "Resize chat" });
 	await expect(chat.locator(`[data-chat-message-id="message-${MESSAGES - 1}"]`)).toBeVisible();
+	await complete(chat);
 	await settle(page);
 	let cdp = await page.context().newCDPSession(page);
 	await cdp.send("Performance.enable");
@@ -152,4 +162,35 @@ test("a step of a Chat resize lays the page out a few times, not once for each m
 	// laid the page out once for every message: over a thousand layouts for these ten steps.
 	expect(await layouts(cdp) - before).toBeLessThan(steps * 4);
 	await page.mouse.up();
+});
+
+test("opening a long Chat mounts its newest messages first and the older ones after", async ({ join, page, seed }) => {
+	await opened(seed);
+	// The messages mounted by the first commit that mounts any, counted as it lands.
+	await page.addInitScript(() => {
+		let w = window as unknown as { __firstMounted?: string[] };
+		new MutationObserver(() => {
+			if (w.__firstMounted) return;
+			let mounted = [...document.querySelectorAll<HTMLElement>("[data-chat-message-id]")];
+			if (mounted.length > 0) w.__firstMounted = mounted.map(item => item.dataset.chatMessageId!);
+		}).observe(document, { childList: true, subtree: true });
+	});
+	await join("ana");
+	let chat = chatOf(page);
+	await expect(chat.locator(`[data-chat-message-id="message-${MESSAGES - 1}"]`)).toBeVisible();
+
+	let first = await page.evaluate(() =>
+		(window as unknown as { __firstMounted: string[] }).__firstMounted
+	);
+	// A tall pane shows about a dozen of these; rendering all of them with the document kept both
+	// off the screen for seconds on a long Chat.
+	expect(first.length).toBeLessThanOrEqual(40);
+	expect(first).toContain(`message-${MESSAGES - 1}`);
+	await complete(chat);
+	// In order, oldest first, with the newest line still in view.
+	let ids = await chat.locator("[data-chat-message-id]").evaluateAll(items =>
+		items.map(item => (item as HTMLElement).dataset.chatMessageId)
+	);
+	expect(ids).toEqual(transcript().map(entry => entry.id));
+	await expect(chat.locator(`[data-chat-message-id="message-${MESSAGES - 1}"]`)).toBeInViewport();
 });
