@@ -4,7 +4,9 @@
  *
  * - a collaborator starting paragraphs and typing in a table cell restyles what they changed, not
  *   every element on the reader's page;
- * - a key typed into a document with no comments or decisions in its margin measures no margin.
+ * - a key typed into a document with no comments or decisions in its margin measures no margin;
+ * - clicking after typing, and typing after a click, restyles the controls that changed, not every
+ *   button on the page.
  */
 
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
@@ -129,4 +131,27 @@ test("a key typed with nothing in the margin measures no margin", async ({ join,
 	// The comment margin and the resolved-decision margin each read it on every edit, with nothing
 	// to place, and each read made the browser lay the page out there and then.
 	expect(after - before).toBe(0);
+});
+
+test("clicking after typing, and typing after a click, restyles what changed", async ({ join, seed }) => {
+	await seed("# Input\n\nA paragraph to type into.\n\nAnother paragraph to click.\n", {
+		transcript: transcript(),
+	});
+	let ana = await join("ana");
+	await content(ana).getByText("A paragraph to type into.").click();
+	await ana.keyboard.press("End");
+	await settle(ana);
+	let elements = await ana.evaluate(() => document.querySelectorAll("*").length);
+
+	let largest = await largestRestyle(ana, async () => {
+		for (let round = 0; round < 2; round++) {
+			await ana.keyboard.type(" Typed.", { delay: 20 });
+			await settle(ana);
+			await content(ana).locator("p").nth(round === 0 ? 1 : 0).click();
+			await settle(ana);
+		}
+	});
+	// The rule that hides a pressed control's ring was keyed on the root, so each switch between
+	// keyboard and pointer restyled every button and tabbable element on the page.
+	expect(largest).toBeLessThan(elements / 4);
 });
