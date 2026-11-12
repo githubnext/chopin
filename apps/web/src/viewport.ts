@@ -1,12 +1,18 @@
 import { currentViewport, listenToViewportChanges } from "@chopin/viewport";
 import { useEffect } from "react";
 
+/**
+ * The page's height and the keyboard's inset, which elements across the page read, as custom
+ * properties of the page; and `#root`'s own `left`, `top` and `width`, which only it follows. As
+ * custom properties of the page those three were inherited by every element, so each step of a window
+ * resize changed one and restyled the whole page.
+ */
 export type ViewportVariables = {
-	"--app-left": string;
 	"--app-height": string;
-	"--app-top": string;
-	"--app-width": string;
 	"--keyboard-inset": string;
+	left: string;
+	top: string;
+	width: string;
 };
 
 export function viewportVars(
@@ -25,11 +31,11 @@ export function viewportVars(
 	let height = viewport?.height ?? layoutHeight;
 	let covered = viewport ? layoutHeight - viewport.height - viewport.top : 0;
 	return {
-		"--app-left": `${Math.max(0, viewport?.left ?? 0)}px`,
 		"--app-height": `${Math.max(0, height)}px`,
-		"--app-top": `${Math.max(0, viewport?.top ?? 0)}px`,
-		"--app-width": viewport?.width === undefined ? "100%" : `${Math.max(0, viewport.width)}px`,
 		"--keyboard-inset": `${Math.max(0, covered)}px`,
+		left: `${Math.max(0, viewport?.left ?? 0)}px`,
+		top: `${Math.max(0, viewport?.top ?? 0)}px`,
+		width: viewport?.width === undefined ? "100%" : `${Math.max(0, viewport.width)}px`,
 	};
 }
 
@@ -40,8 +46,8 @@ export function keyboardOpen(variables: ViewportVariables): boolean {
 	return parseFloat(variables["--keyboard-inset"]) >= KEYBOARD_OPEN_MIN;
 }
 
-/** Keeps the mounted workspace sized to the pixels the browser currently exposes. */
-export function useVisualViewport(): void {
+/** Keeps the mounted workspace, `root`, sized to the pixels the browser currently exposes. */
+export function useVisualViewport(root: HTMLElement): void {
 	useEffect(() => {
 		let update = () => {
 			let variables = viewportVars(
@@ -49,13 +55,14 @@ export function useVisualViewport(): void {
 				currentViewport(),
 				window.visualViewport?.scale,
 			);
+			// A value written again unchanged invalidates nothing.
 			for (let [name, value] of Object.entries(variables)) {
-				document.documentElement.style.setProperty(name, value);
+				(name[0] === "-" ? document.documentElement : root).style.setProperty(name, value);
 			}
 			document.documentElement.toggleAttribute("data-keyboard-open", keyboardOpen(variables));
 		};
 
 		update();
 		return listenToViewportChanges(update);
-	}, []);
+	}, [root]);
 }

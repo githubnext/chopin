@@ -35,7 +35,7 @@ watchPreloadErrors();
 function Root() {
 	useFocusInput();
 	useMotionInput();
-	useVisualViewport();
+	useVisualViewport(root!);
 	return <App />;
 }
 

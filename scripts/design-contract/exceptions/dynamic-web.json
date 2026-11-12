@@ -204,17 +204,17 @@
 	},
 	{
 		"file": "apps/web/src/viewport.ts",
-		"reason": "Viewport adapter writes browser-measured --app-* geometry and keyboard insets; dynamic custom-property names are intentionally restricted by that adapter.",
+		"reason": "Viewport adapter writes browser-measured geometry: --app-height and the keyboard inset on the page, and #root's own left, top and width; the names are the five keys viewportVars returns.",
 		"cases": [
 			[
 				"dynamic",
 				"*",
 				"value",
-				"DOM setProperty > document.documentElement.style.setProperty > useVisualViewport > update",
+				"DOM setProperty > (name[0] === \"-\" ? document.documentElement : root).style.setProperty > useVisualViewport > update",
 				1
 			]
 		],
-		"sourceHash": "118bf3770755db660ca06af9f24cb03dabe49a901f453b5bdfcbccb12c90a1db"
+		"sourceHash": "622b935f9a3a602511c2ce3ba11156391a7e4ffa42b86847bd3edd543e44c283"
 	},
 	{
 		"file": "apps/web/src/workspace.tsx",
