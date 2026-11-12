@@ -20,7 +20,11 @@ export function DialogsPlate() {
 					>
 						<h4 id="audit-rename-title">Rename document</h4>
 						<label>
-							Document name<input defaultValue="Design system audit" />
+							Document name
+							<input
+								className="field h-8 min-w-0 w-full px-2 text-sm"
+								defaultValue="Design system audit"
+							/>
 						</label>
 						<div className="design-audit-dialog-actions">
 							<button className="btn btn-md btn-secondary" type="button">Cancel</button>
@@ -59,7 +63,12 @@ export function DialogsPlate() {
 					>
 						<h4 id="audit-busy-title">Rename document</h4>
 						<label>
-							Document name<input defaultValue="Design system audit" disabled />
+							Document name
+							<input
+								className="field h-8 min-w-0 w-full px-2 text-sm"
+								defaultValue="Design system audit"
+								disabled
+							/>
 						</label>
 						<div className="design-audit-dialog-actions">
 							<button className="btn btn-md btn-secondary" disabled type="button">Cancel</button>

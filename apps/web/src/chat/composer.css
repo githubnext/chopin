@@ -4,7 +4,7 @@
  * where an extension point was needed), so they have no rule here.
  */
 .chat-composer .composer-surface[data-error] {
-	border-color: var(--color-danger-edge);
+	border-color: var(--color-destructive);
 }
 /* The field scrolls, not the draft in it, once the draft is taller than the cap. */
 .chat-composer .composer-field {
@@ -439,7 +439,7 @@
 }
 
 /*
- * The message box. A rounded rectangle with a hairline, white as the page, over a toolbar of
+ * The message box. A rounded rectangle with the control boundary, white as the page, over a toolbar of
  * formatting marks that sits on the inset ground and a row of controls under the draft; every size
  * is a Chopin control size (28px buttons, the large radius) with Slack's 18px glyphs, which draw
  * Chopin's 1.5 stroke at its own grid, and every colour a token.
@@ -455,7 +455,7 @@
 	position: relative;
 	display: flex;
 	flex-direction: column;
-	border: var(--edge-width) solid var(--color-control-edge);
+	border: var(--edge-width) solid var(--color-control-boundary);
 	border-radius: var(--radius-lg);
 	background: var(--color-page);
 }

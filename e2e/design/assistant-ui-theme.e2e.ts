@@ -395,10 +395,10 @@ for (let name of ["light", "dark"] as const) {
 		await composer.scrollIntoViewIfNeeded();
 		let token = (value: string) => computed(page, `var(--color-${value})`);
 
-		// The box is the page's surface with Chopin's control edge, and its edge darkens on focus.
+		// The box is the page's surface with the control boundary, and its edge darkens on focus.
 		let box = composer.locator(".composer-surface");
 		expect(await paint(box, "backgroundColor")).toBe(await token("page"));
-		expect(await paint(box, "borderTopColor")).toBe(await token("control-edge"));
+		expect(await paint(box, "borderTopColor")).toBe(await token("control-boundary"));
 		await composer.getByRole("combobox", { name: "Message" }).focus();
 		expect(await paint(box, "borderTopColor")).toBe(await token("text-tertiary"));
 

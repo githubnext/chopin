@@ -205,19 +205,20 @@
 	animation: build-fade var(--duration-base) var(--ease-out);
 }
 
+/* A state dot, so it takes the status dot's roles: each is 3:1 on the page, the ground and a selection. */
 .build-glyph-dot {
 	width: calc(var(--spacing) * 2.25);
 	height: calc(var(--spacing) * 2.25);
 	border-radius: var(--radius-full);
-	background: var(--color-neutral-graphic);
+	background: var(--color-neutral-icon);
 }
 
 .build-glyph-dot[data-tone="success"] {
-	background: var(--color-success-graphic);
+	background: var(--color-success);
 }
 
 .build-glyph-dot[data-tone="warning"] {
-	background: var(--color-warning-graphic);
+	background: var(--color-warning);
 }
 
 .build-glyph > svg {

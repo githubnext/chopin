@@ -365,6 +365,12 @@
 	font-weight: 700;
 }
 
+/* The pill draws its hairline as an outline, which would hide the focus ring; give it back. */
+:root:not([data-focus-input="pointer"]) .chat-reaction:focus-visible {
+	outline: var(--focus-ring-width) solid var(--focus-ring-color);
+	outline-offset: var(--focus-ring-offset);
+}
+
 /* Where the coarse pointer's target grows, the pill keeps its look. */
 :root[data-plan-coarse-pointer] .chat-reaction {
 	position: relative;

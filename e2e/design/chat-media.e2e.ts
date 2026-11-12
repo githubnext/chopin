@@ -199,6 +199,10 @@ for (let mode of ["light", "dark"] as const) {
 				await token(page, expected[kind], "background-color"),
 			]);
 			expect(await css(icon, "color"), kind).toEqual([await token(page, "--color-page")]);
+			// The glyph draws in that ink, not the icon role's grey.
+			expect(await css(icon.locator("[data-nucleo-icon]"), "color"), kind).toEqual([
+				await token(page, "--color-page"),
+			]);
 		}
 		let card = media(page).locator('[data-chat-files] [data-slot="message-attachment"] > button')
 			.first();

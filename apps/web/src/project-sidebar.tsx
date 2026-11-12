@@ -268,7 +268,7 @@ export function ProjectSidebarProject(
 				<p className="project-sidebar-status" role="status">{documents.message}</p>
 			)}
 			{documents.status === "loading" && groups.length === 0 && (
-				<p className="project-sidebar-status" role="status">Loading documents…</p>
+				<p className="project-sidebar-status" data-loading="" role="status">Loading documents…</p>
 			)}
 			{(groups.length > 0 || presence.rows.length > 0) && (
 				<ul
@@ -340,7 +340,7 @@ export function ProjectSidebarProject(
 				</ul>
 			)}
 			{documents.status === "loading" && groups.length > 0 && (
-				<p className="project-sidebar-status" role="status">Loading more…</p>
+				<p className="project-sidebar-status" data-loading="" role="status">Loading more…</p>
 			)}
 			{documents.status === "ready" && documents.nextCursor && (
 				<button
@@ -406,7 +406,11 @@ export function ProjectSidebarProject(
 				)}
 				<UnansweredCount unanswered={projectUnanswered} />
 			</div>
-			<div className={phase ? "project-sidebar-status" : undefined} role="status">
+			<div
+				className={phase ? "project-sidebar-status" : undefined}
+				data-loading=""
+				role="status"
+			>
 				{phase === "creating" ? "Creating document…" : phase ? "Opening document…" : ""}
 			</div>
 			<MotionDisclosure

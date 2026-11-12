@@ -381,7 +381,7 @@
 			"refersTo": "field",
 			"description": "White field with a control edge and restrained depth.",
 			"html": "<input class=\"ds-field\" aria-label=\"Document name\" value=\"Release plan\">",
-			"css": ".ds-field{height:2rem;padding:0 .75rem;border:1px solid var(--color-control-edge);border-radius:var(--radius-md);background:var(--color-page);box-shadow:var(--shadow-resting);color:var(--color-text-primary);font:var(--text-sm)/var(--text-sm--line-height) var(--font-sans)}.ds-field:focus-visible{outline:2px solid var(--color-brand);outline-offset:2px}.ds-field[aria-invalid=true]{border-color:var(--color-destructive);outline:2px solid var(--color-destructive)}"
+			"css": ".ds-field{height:2rem;padding:0 .75rem;border:1px solid var(--color-control-boundary);border-radius:var(--radius-md);background:var(--color-page);box-shadow:var(--shadow-resting);color:var(--color-text-primary);font:var(--text-sm)/var(--text-sm--line-height) var(--font-sans)}.ds-field:focus-visible{outline:2px solid var(--color-brand);outline-offset:2px}.ds-field[aria-invalid=true]{border-color:var(--color-destructive);outline:2px solid var(--color-destructive)}"
 		},
 		{
 			"name": "Current navigation item",

@@ -20,6 +20,11 @@
 	color: var(--color-page);
 }
 
+/* The glyph is the tile's ink; the icon role's grey would sink into every type's colour. */
+.chat-file-icon [data-nucleo-icon] {
+	color: inherit;
+}
+
 .chat-file-icon[data-file-kind="pdf"] {
 	background: var(--color-danger-graphic);
 }
