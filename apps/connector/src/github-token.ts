@@ -1,15 +1,56 @@
-import { rename, rm, writeFile } from "node:fs/promises";
-import { errorCode, machineGitHubToken } from "./machine";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import {
+	errorCode,
+	GITHUB_REFUSALS,
+	type GitHubAccount,
+	type GitHubGrantRequest,
+	machineGitHubToken,
+} from "./machine";
 
 /** Chopin hands out a token with at least 30 minutes left; this one is replaced 25 before. */
 export const RENEW_BEFORE_MS = 25 * 60_000;
 /** How soon a renewal that failed is tried again, until the token expires. */
 const RETRY_MS = 60_000;
 
-/** What the connector says, once for each, when the GitHub App can't push to a repository. */
-export function appCannotPush(repository: string) {
-	return `The GitHub App can't push to ${repository} (it needs Contents and Pull requests write), `
-		+ "so this machine uses its own GitHub login for it.";
+/**
+ * Why a launch got no GitHub token from Chopin, said so the person knows which repository and what
+ * fixes it. Nothing starts after one: the machine never falls back to its own GitHub login.
+ */
+export class GitHubRefused extends Error {
+	constructor(readonly code: string, readonly repository: string) {
+		super(githubRefusal(code, repository));
+		this.name = "GitHubRefused";
+	}
+}
+
+/** What the connector says when Chopin refuses a launch a GitHub token for `repository`. */
+export function githubRefusal(code: string, repository: string) {
+	switch (code) {
+		case "repository-forbidden":
+			return `Chopin gave this machine no GitHub token for ${repository}: its owner can't push `
+				+ `there, so nothing ran. Ask for write access to ${repository}, or choose another machine.`;
+		case "app-cannot-push":
+			return `Chopin's GitHub App can't write to ${repository}; it needs Contents and Pull requests `
+				+ "write, which an admin of the repository must grant. This machine won't use its own GitHub "
+				+ "login, so nothing ran.";
+		case "starter-cannot-push":
+			return `Whoever started this can't push to ${repository}, so Chopin gave it no GitHub token `
+				+ `and nothing ran. Ask for write access to ${repository}, then start it again.`;
+		case "run-unknown":
+			return `Chopin no longer knows this work, so it gave no GitHub token for ${repository} and `
+				+ "nothing ran.";
+		case "no-grant":
+			return `This Chopin has no GitHub App to give this machine a token for ${repository}, so `
+				+ "nothing ran. This machine won't use its own GitHub login.";
+		default:
+			return `Chopin refused this machine a GitHub token for ${repository} (${code}), so nothing ran.`;
+	}
+}
+
+/** Said when a token lapsed because Chopin couldn't renew it, and what used it was stopped. */
+export function githubExpired(repository: string) {
+	return `The GitHub token for ${repository} expired and Chopin couldn't renew it, so this stopped.`;
 }
 
 export type GitHubToken = {
@@ -18,51 +59,97 @@ export type GitHubToken = {
 	expiresAt: number;
 	/** The 0600 file that always holds the current token and a newline. */
 	file: string;
+	/** gh's configuration folder for the launch, whose `hosts.yml` holds the current token. */
+	config: string;
+	/** The account commits are made as: Chopin's GitHub App. */
+	identity: GitHubAccount;
+	/** The person the work is for, when Chopin names one. */
+	starter?: GitHubAccount;
+	/** Aborted, with `githubExpired`, once the token lapsed without a renewal. */
+	expired: AbortSignal;
 	/** Every token handed out so far, to mask wherever they might be printed. */
 	secrets(): string[];
-	/** Stops renewing and deletes the file. */
+	/** Stops renewing and deletes the file and gh's configuration. */
 	stop(): Promise<void>;
 };
 
+/** A YAML double-quoted scalar, as JSON writes a string. */
+let yaml = (text: string) => JSON.stringify(text);
+
 /**
- * The machine's GitHub token for `repository`, for one Planner command or run: written to `file`
- * (mode 0600), and replaced there `renewBeforeMs` before it expires for as long as it lasts. Any
- * refusal or failure gives undefined, so nothing gets a token Chopin didn't check; `refused` hears
- * the line to say when the reason is that the GitHub App can't push there.
+ * gh's configuration for one account: `hosts.yml` in the layout gh 2.40 and later reads (its
+ * `users` map, and the active user's token beside it), and `config.yml` saying that layout is
+ * already in use, so gh never migrates it or looks in a keyring.
  */
-export async function githubToken(options: {
-	url: string;
-	machine: string;
-	repository: string;
-	file: string;
-	refused?: (message: string, repository: string) => void;
-	renewBeforeMs?: number;
-}): Promise<GitHubToken | undefined> {
-	let { file } = options;
-	let ask = () => machineGitHubToken(options.url, options.machine, options.repository);
-	let first;
-	try {
-		first = await ask();
-	} catch (error) {
-		if (errorCode(error) === "app-cannot-push") {
-			options.refused?.(appCannotPush(options.repository), options.repository);
-		}
-		return undefined;
-	}
-	let seen = [first.token];
-	let save = async (token: string) => {
-		let temporary = `${file}.${process.pid}.tmp`;
-		await writeFile(temporary, `${token}\n`, { mode: 0o600 });
-		await rename(temporary, file);
+function ghHosts(token: string, login: string) {
+	return [
+		"github.com:",
+		"    users:",
+		`        ${yaml(login)}:`,
+		`            oauth_token: ${yaml(token)}`,
+		"    git_protocol: https",
+		`    oauth_token: ${yaml(token)}`,
+		`    user: ${yaml(login)}`,
+		"",
+	].join("\n");
+}
+const GH_CONFIG = ['version: "1"', "git_protocol: https", "prompt: disabled", ""].join("\n");
+
+/**
+ * Chopin's GitHub token for one Planner command or run, asked for with what it is for: written to
+ * `github` in `folder` (mode 0600) and to gh's configuration in `gh/`, and replaced in both
+ * `renewBeforeMs` before it expires for as long as it lasts. A refusal rejects with
+ * `GitHubRefused`; any other failure rejects as it came. Once a token expires without a renewal,
+ * both are removed and `expired` aborts, so what used it stops instead of failing on its own.
+ */
+export async function githubToken(
+	options: GitHubGrantRequest & {
+		url: string;
+		machine: string;
+		folder: string;
+		renewBeforeMs?: number;
+	},
+): Promise<GitHubToken> {
+	let { folder, repository } = options;
+	let request: GitHubGrantRequest = {
+		repository,
+		purpose: options.purpose,
+		...(options.run ? { run: options.run } : {}),
+		...(options.document ? { document: options.document } : {}),
 	};
-	try {
-		await save(first.token);
-	} catch {
-		return undefined;
-	}
+	let ask = async () => {
+		try {
+			return await machineGitHubToken(options.url, options.machine, request);
+		} catch (error) {
+			let code = errorCode(error);
+			if (code && GITHUB_REFUSALS.has(code)) throw new GitHubRefused(code, repository);
+			throw error;
+		}
+	};
+	let first = await ask();
+	let file = join(folder, "github");
+	let config = join(folder, "gh");
+	let seen = [first.token];
+	let put = async (path: string, text: string) => {
+		let temporary = `${path}.${process.pid}.tmp`;
+		await writeFile(temporary, text, { mode: 0o600 });
+		await rename(temporary, path);
+	};
+	let save = async (token: string) => {
+		await put(file, `${token}\n`);
+		await put(join(config, "hosts.yml"), ghHosts(token, first.identity.login));
+	};
+	await mkdir(config, { recursive: true, mode: 0o700 });
+	await put(join(config, "config.yml"), GH_CONFIG);
+	await save(first.token);
+	let lapsed = new AbortController();
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let renewing: Promise<void> | undefined;
 	let stopped = false;
+	let remove = async () => {
+		await rm(file, { force: true });
+		await rm(config, { recursive: true, force: true });
+	};
 	let schedule = (expiresAt: number, delay?: number) => {
 		if (stopped) return;
 		let wait = delay ?? expiresAt - Date.now() - (options.renewBeforeMs ?? RENEW_BEFORE_MS);
@@ -79,11 +166,14 @@ export async function githubToken(options: {
 			seen.push(next.token);
 			await save(next.token);
 			schedule(next.expiresAt);
-		} catch {
+		} catch (error) {
 			if (stopped) return;
-			// Once it has expired, a stale token in the file would only fail; better none.
-			if (Date.now() >= expiresAt) await rm(file, { force: true });
-			else schedule(expiresAt, Math.min(RETRY_MS, expiresAt - Date.now()));
+			// A refusal is final, and once the token has expired a stale one would only fail: what
+			// used it is stopped rather than left to fail on its own.
+			if (error instanceof GitHubRefused || Date.now() >= expiresAt) {
+				await remove();
+				lapsed.abort(new Error(githubExpired(repository)));
+			} else schedule(expiresAt, Math.min(RETRY_MS, expiresAt - Date.now()));
 		}
 	};
 	schedule(first.expiresAt);
@@ -91,33 +181,96 @@ export async function githubToken(options: {
 		token: first.token,
 		expiresAt: first.expiresAt,
 		file,
+		config,
+		identity: first.identity,
+		...(first.starter ? { starter: first.starter } : {}),
+		expired: lapsed.signal,
 		secrets: () => [...seen],
 		async stop() {
 			stopped = true;
 			clearTimeout(timer);
 			// A renewal still writing the file finishes before it goes.
 			await renewing;
-			await rm(file, { force: true });
+			await remove();
 		},
 	};
 }
 
 /**
- * What a run's agent gets to push and open pull requests with the machine's token: `GH_TOKEN` and
- * `GITHUB_TOKEN` for gh and other tools, and Git configuration, through the environment, whose
- * credential helper for github.com reads the token file, so a renewed token is used as soon as it
- * is written. Earlier helpers for github.com are cleared, so the agent's own login doesn't win;
- * nothing goes into the repository's own configuration. With `repository`, the person's
- * `url.<base>.insteadOf` rules don't send it to SSH either (see `gitCredentials`).
+ * What a launch inherits that would reach GitHub or an SSH key as someone other than Chopin's App:
+ * gh's own variables and tokens, git's askpass, SSH agent and command, and any Git configuration
+ * through the environment. Removed from the connector's environment and the `--env` values before
+ * a launch is given its own (see `githubEnvironment`).
+ */
+export function inheritsGitHub(name: string) {
+	let key = name.toUpperCase();
+	return key.startsWith("GH_") || key.startsWith("GIT_SSH") || key.startsWith("GIT_CONFIG_")
+		|| [
+			"GITHUB_TOKEN",
+			"GITHUB_ENTERPRISE_TOKEN",
+			"GIT_ASKPASS",
+			"SSH_ASKPASS",
+			"SSH_AUTH_SOCK",
+			"GIT_CONFIG",
+			"GIT_AUTHOR_NAME",
+			"GIT_AUTHOR_EMAIL",
+			"GIT_COMMITTER_NAME",
+			"GIT_COMMITTER_EMAIL",
+		].includes(key);
+}
+
+/** `env` without what `inheritsGitHub` names. */
+export function withoutGitHub<T extends string | undefined>(
+	env: Record<string, T>,
+): Record<string, T> {
+	return Object.fromEntries(Object.entries(env).filter(([name]) => !inheritsGitHub(name)));
+}
+
+/**
+ * Everything a launch gets to reach GitHub with Chopin's token, and nothing of the machine's:
+ *
+ * - **gh** reads `GH_CONFIG_DIR`, the launch's own configuration, rewritten with each renewed
+ *   token, never the person's `~/.config/gh`. No `GH_TOKEN` or `GITHUB_TOKEN` is set: either would
+ *   win over the configuration and go stale at the first renewal.
+ * - **git** has one credential helper for github.com, which reads the token file, and the
+ *   repository's SSH URLs map to https (`gitCredentials`); `GIT_SSH_COMMAND` is `false`, so no SSH
+ *   key or agent is ever used.
+ * - **Commits** are made as Chopin's App (`GIT_AUTHOR_*`, `GIT_COMMITTER_*`), never as whoever the
+ *   machine's Git configuration names (`user.useConfigOnly`), and are not signed with the machine's
+ *   keys (`commit.gpgsign`, `tag.gpgsign`).
+ * - **The person it is for**, when Chopin names one, in `CHOPIN_STARTER_LOGIN`, `_NAME` and
+ *   `_EMAIL`, for a pull request's "Requested by" and a commit's `Co-authored-by`.
+ * - `CHOPIN_GITHUB_TOKEN_FILE` names the token file, for a backend's own use of the token.
+ *
+ * It goes on top of an environment `withoutGitHub` cleared.
  */
 export function githubEnvironment(
 	github: GitHubToken,
 	repository?: string,
 ): Record<string, string> {
+	let { identity, starter } = github;
 	return {
-		GH_TOKEN: github.token,
-		GITHUB_TOKEN: github.token,
-		...gitCredentials(github.file, repository),
+		GH_CONFIG_DIR: github.config,
+		GH_PROMPT_DISABLED: "1",
+		GIT_TERMINAL_PROMPT: "0",
+		GIT_SSH_COMMAND: "false",
+		CHOPIN_GITHUB_TOKEN_FILE: github.file,
+		GIT_AUTHOR_NAME: identity.name,
+		GIT_AUTHOR_EMAIL: identity.email,
+		GIT_COMMITTER_NAME: identity.name,
+		GIT_COMMITTER_EMAIL: identity.email,
+		...(starter
+			? {
+				CHOPIN_STARTER_LOGIN: starter.login,
+				CHOPIN_STARTER_NAME: starter.name,
+				CHOPIN_STARTER_EMAIL: starter.email,
+			}
+			: {}),
+		...gitCredentials(github.file, repository, [
+			["user.useConfigOnly", "true"],
+			["commit.gpgsign", "false"],
+			["tag.gpgsign", "false"],
+		]),
 	};
 }
 
@@ -154,7 +307,11 @@ export function githubUrlRules(repository: string): Array<[string, string]> {
  * stay on https whatever `url.<base>.insteadOf` the person has (see `githubUrlRules`). The rest of
  * the person's Git configuration applies as it is.
  */
-export function gitCredentials(file: string, repository?: string): Record<string, string> {
+export function gitCredentials(
+	file: string,
+	repository?: string,
+	more: Array<[string, string]> = [],
+): Record<string, string> {
 	let quoted = `'${file.replaceAll("'", "'\\''")}'`;
 	let entries: Array<[string, string]> = [
 		["credential.https://github.com.helper", ""],
@@ -163,6 +320,7 @@ export function gitCredentials(file: string, repository?: string): Record<string
 			`!f() { test "$1" = get || exit 0; echo username=x-access-token; printf password=; cat ${quoted}; }; f`,
 		],
 		...repository ? githubUrlRules(repository) : [],
+		...more,
 	];
 	let env: Record<string, string> = { GIT_CONFIG_COUNT: String(entries.length) };
 	entries.forEach(([key, value], index) => {

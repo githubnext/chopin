@@ -21,12 +21,13 @@ import { promisify } from "node:util";
  *   own: `GIT_CONFIG_NOSYSTEM` and `GIT_CONFIG_GLOBAL` set aside the system's and the person's.
  * - **What a repository's configuration may set** for the programs git runs is replaced in the
  *   environment (`GIT_CONFIG_COUNT`, after any entries the caller gave, where they win over every
- *   configuration file as `-c` does): the hooks, the file-system monitor, the ssh command (also
- *   pinned in `GIT_SSH_COMMAND` to the person's own, which wins over any configuration), the
+ *   configuration file as `-c` does): the hooks, the file-system monitor, the ssh command, the
  *   global attributes file, remotes that are commands (`protocol.ext.allow`) and the local
  *   transport (`protocol.file.allow`), which is never allowed. Every credential helper any
  *   configuration named is reset and none is named again: what a command needs to authenticate,
  *   its caller gives in the environment (`GIT_CONFIG_*`, as `gitCredentials` does).
+ * - **No SSH.** `GIT_SSH_COMMAND` is `false`, which wins over any configuration: the connector
+ *   reaches GitHub only over https with Chopin's token, never with the person's SSH keys or agent.
  *
  * What this does not do: a repository's configuration is still read, so a filter, a proxy or
  * another setting a repository carries applies to the connector's commands as it would to anyone's.
@@ -112,13 +113,11 @@ export function repositoryAt(path: string): Repository | undefined {
 type Person = {
 	/** A file in the connector's own temporary directory: what a fetch and a checkout need. */
 	file: string;
-	/** The ssh command git would use without a repository's say. */
-	ssh: string;
 };
 
 /**
  * What a checkout and a fetch need of a person's configuration: where to fetch from and how to
- * reach it (`url.*`, `http.*`, `ssh.*`, `transfer.*`, `fetch.*`, `safe.*`), how files are written (line endings, symlinks and names,
+ * reach it (`url.*`, `http.*`, `transfer.*`, `fetch.*`, `safe.*`), how files are written (line endings, symlinks and names,
  * `core.*` of those kinds) and their own filters (`filter.*`, `lfs.*`), which is what a Git LFS
  * checkout needs. The rest, a person's aliases, editor, pager, hooks and monitor among it, is not.
  */
@@ -126,7 +125,6 @@ const SECTIONS = new Set([
 	"url",
 	"http",
 	"https",
-	"ssh",
 	"safe",
 	"transfer",
 	"fetch",
@@ -196,7 +194,6 @@ function personConfig(env: NodeJS.ProcessEnv, repository?: Repository): Person {
 		env.XDG_CONFIG_HOME,
 		env.GIT_CONFIG_GLOBAL,
 		env.GIT_CONFIG_SYSTEM,
-		env.GIT_SSH,
 		repository?.gitDir,
 	].join("\0");
 	let known = people.get(key);
@@ -208,12 +205,10 @@ function personConfig(env: NodeJS.ProcessEnv, repository?: Repository): Person {
 	let entries = [...entriesOf("--system", reading), ...entriesOf("--global", reading)];
 	let file = join(privateDirectory(), `gitconfig-${people.size}`);
 	let kept: string[] = [];
-	let ssh = "";
 	for (let [name, value] of entries) {
 		let first = name.indexOf(".");
 		let last = name.lastIndexOf(".");
 		let section = name.slice(0, Math.max(first, 0));
-		if (name === "core.sshcommand") ssh = value;
 		if (first > 0 && (SECTIONS.has(section) || CORE.has(name))) {
 			// A section with its subsection, as git writes them, and the value quoted.
 			let subsection = first === last ? "" : ` "${quote(name.slice(first + 1, last))}"`;
@@ -221,7 +216,7 @@ function personConfig(env: NodeJS.ProcessEnv, repository?: Repository): Person {
 		}
 	}
 	writeFileSync(file, kept.join(""), { mode: 0o600 });
-	let person = { file, ssh: ssh || env.GIT_SSH || "ssh" };
+	let person = { file };
 	people.set(key, person);
 	return person;
 }
@@ -257,7 +252,12 @@ export function hostGitEnvironment(
 	hardened.GIT_CONFIG_NOSYSTEM = "1";
 	hardened.GIT_CONFIG_GLOBAL = person.file;
 	hardened.GIT_ATTR_NOSYSTEM = "1";
-	if (!env.GIT_SSH_COMMAND) hardened.GIT_SSH_COMMAND = person.ssh;
+	// Never the person's SSH keys or agent: GitHub is reached over https with Chopin's token.
+	hardened.GIT_SSH_COMMAND = "false";
+	delete hardened.GIT_SSH;
+	delete hardened.SSH_AUTH_SOCK;
+	delete hardened.GIT_ASKPASS;
+	delete hardened.SSH_ASKPASS;
 	if (repository) {
 		hardened.GIT_DIR = repository.gitDir;
 		hardened.GIT_COMMON_DIR = repository.commonDir;

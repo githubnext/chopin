@@ -43,7 +43,7 @@ async function checkout() {
 	return root;
 }
 
-const MESSAGE = "chopin 0.0.1 speaks connector protocol 6, but this server needs protocol 2 to 5. "
+const MESSAGE = "chopin 0.0.1 speaks connector protocol 7, but this server needs protocol 2 to 6. "
 	+ "Run `chopin update 0.1.3`, then connect again.";
 
 /**
@@ -154,12 +154,12 @@ async function connect(
 	}
 }
 
-test("connect sends protocol 6 and stops when a protocol 5 server refuses it", async () => {
+test("connect sends its protocol and stops when an older server refuses it", async () => {
 	let result = await connect("pairing");
 	expect(result.code).toBe(1);
 	expect(result.stderr).toBe(`${MESSAGE}\n`);
 	expect(result.requests).toEqual([
-		["/api/connector/pairings", VERSION, "6"],
+		["/api/connector/pairings", VERSION, String(CONNECTOR_PROTOCOL)],
 	]);
 	// A connect that never connected saves nothing for service install.
 	expect(await Bun.file(join(result.directory, "config.json")).exists()).toBe(false);
@@ -398,6 +398,8 @@ test("connect saves the sandbox options for service install, says what the sandb
 		"--sandbox-host=*.corp.test",
 		"--sandbox-write",
 		write,
+		"--sandbox-hide",
+		join(write, "sign-in"),
 		"--",
 		"agent",
 	]);
@@ -411,6 +413,7 @@ test("connect saves the sandbox options for service install, says what the sandb
 			require: true,
 			hosts: ["store.example.com:8443", "*.corp.test"],
 			writable: [write],
+			hidden: [join(write, "sign-in")],
 		});
 	let off = await connect("nothing", [root, "--no-sandbox", "--", "agent"]);
 	expect(off.code).toBe(0);

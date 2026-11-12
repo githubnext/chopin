@@ -697,6 +697,40 @@ test("a launch whose working directory holds the connector's state directory, as
 	}
 });
 
+test("what the owner hides with --sandbox-hide is in no grant, read or write, even inside a folder they let agents write, and is denied besides", () => {
+	let root = join(readableScratch, "hidden");
+	let home = join(root, "home");
+	let base = join(home, ".local", "state", "chopin", "connector");
+	let tool = join(home, ".tool");
+	mkdirSync(base, { recursive: true });
+	mkdirSync(join(tool, "cache"), { recursive: true });
+	writeFileSync(join(tool, "github-token"), "a sign-in of the tool's own");
+	writeFileSync(join(tool, "settings.json"), "{}");
+	mkdirSync(join(root, "work"), { recursive: true });
+	for (let platform of ["linux", "darwin"] as const) {
+		let policy = launchPolicy(
+			platform === "darwin" ? "seatbelt" : "bubblewrap",
+			{ ...systemHost(), platform },
+			{ command: ["agent", "planner"], cwd: join(root, "work"), env: {}, stdin: "ignore" },
+			{
+				directory: base,
+				home,
+				settings: { writable: [tool], hidden: [join(tool, "github-token")] },
+			},
+			"http://127.0.0.1:4000",
+			join(root, "tmp"),
+		);
+		let secret = join(tool, "github-token");
+		for (let path of [...policy.readable, ...policy.writable]) {
+			expect(secret === path || secret.startsWith(`${path}/`), `${platform}: ${path}`).toBe(false);
+		}
+		// What is beside it in the folder is still written, and it is denied as a secret is.
+		expect(policy.writable, platform).toContain(join(tool, "cache"));
+		expect(policy.writable, platform).toContain(join(tool, "settings.json"));
+		expect(policy.denied, platform).toContain(secret);
+	}
+});
+
 test("a working directory inside the state directory is read by name only where it is a clone the connector made, and not at all elsewhere in it", () => {
 	let root = join(readableScratch, "inside");
 	let base = join(root, "state");

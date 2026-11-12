@@ -718,18 +718,20 @@ test("a running build heads Chat's run strip with its task, and Chat says when i
 	}
 });
 
-test("a build's agent opens draft pull requests with the machine's own GitHub token", async ({ seed, join: enter, room, baseURL }) => {
+test("a build's agent opens draft pull requests with a token of Chopin's GitHub App, commits as its bot and credits whoever started the build", async ({ seed, join: enter, room, baseURL }) => {
 	test.setTimeout(60_000);
-	await seed("# Draft pull requests\n\nOpen them as the machine's owner.\n", {
+	await seed("# Draft pull requests\n\nOpen them with Chopin's GitHub App.\n", {
 		graph: preparedGraph(),
 	});
 	let scratch = await mkdtemp(join(tmpdir(), "chopin-implementation-github-"));
 	let bin = join(scratch, "bin");
 	await mkdir(bin);
-	// gh, as the agent finds it: it records the token it was given and its arguments.
+	// gh, as the agent finds it: it records the token its configuration holds and its arguments.
 	await writeFile(
 		join(bin, "gh"),
-		`#!/bin/sh\nprintf '%s\\n' "$GH_TOKEN" "$@" > "${join(scratch, "gh")}"\n`,
+		`#!/bin/sh\nprintf '%s\\n' "$(sed -n 's/^    oauth_token: "\\(.*\\)"$/\\1/p' "$GH_CONFIG_DIR/hosts.yml")" "$@" > "${
+			join(scratch, "gh")
+		}"\n`,
 	);
 	await chmod(join(bin, "gh"), 0o755);
 	let handle = person();
@@ -755,15 +757,26 @@ test("a build's agent opens draft pull requests with the machine's own GitHub to
 			{ timeout: 30_000 },
 		).not.toBe("");
 		let [token, ...args] = (await readFile(join(scratch, "gh"), "utf8")).split("\n");
-		// The machine's own GitHub authorization, which its owner approved when it paired.
-		expect(token).toMatch(new RegExp(`^ghu_e2e_${handle}_\\d+$`));
+		// A token Chopin's GitHub App minted for the one repository, never the machine's own login.
+		expect(token).toMatch(/^ghs_e2e_app_\d+$/);
 		expect(args).toEqual(["pr", "create", "--draft", "--title", "Task one", ""]);
 		await expect.poll(
 			() => readFile(join(scratch, "github.json"), "utf8").catch(() => ""),
 			{ timeout: 30_000 },
 		).not.toBe("");
 		let seen = JSON.parse(await readFile(join(scratch, "github.json"), "utf8"));
-		expect(seen).toMatchObject({ GH_TOKEN: token, GITHUB_TOKEN: token });
+		let bot = "chopin-e2e[bot] <4242000+chopin-e2e[bot]@users.noreply.github.com>";
+		expect(seen).toMatchObject({
+			GH_TOKEN: null,
+			GITHUB_TOKEN: null,
+			githubFile: token,
+			commit: `${bot}|${bot}|N`,
+			starter: [
+				handle,
+				handle,
+				expect.stringMatching(new RegExp(`\\+${handle}@users\\.noreply\\.github\\.com$`)),
+			],
+		});
 		expect(seen.credential).toContain(`password=${token}\n`);
 		expect(local.output()).not.toContain(token);
 	} finally {

@@ -7,6 +7,7 @@ import type {
 } from "@agentclientprotocol/sdk";
 import { PROCESSES, stopBackend } from "./planner";
 import { type Sandbox, spawnIn } from "./sandbox";
+import { withoutGitHub } from "./github-token";
 import { VERSION } from "./version";
 
 /** How long a stopped agent's process group has to exit before it is killed. */
@@ -240,7 +241,8 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 		app,
 		options.command,
 		options.cwd,
-		options.env ? { ...process.env, ...options.env } : undefined,
+		// Nothing of the machine's GitHub setup reaches a run's agent; its own comes in `env`.
+		{ ...withoutGitHub(process.env), ...options.env },
 		options.stderr,
 		{
 			...(options.sandbox ? { sandbox: options.sandbox } : {}),

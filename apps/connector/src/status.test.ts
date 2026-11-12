@@ -134,6 +134,7 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 		plannerWorktrees: [],
 		checkouts: {},
 		clones: [],
+		github: {},
 	});
 	expect(JSON.stringify(report)).not.toContain(TOKEN);
 	let text = formatStatus(report);
@@ -265,27 +266,71 @@ test("status shows an agent that failed to start under its connector", async () 
 	);
 });
 
-test("status says once a connector's machine uses its own GitHub login because the App can't push", async () => {
-	let { directory, host } = await machine();
-	let lock = "f".repeat(64);
-	await writeFile(
-		join(directory, `${lock}.lock`),
-		JSON.stringify({
-			pid: process.pid,
-			processStart: (await processStart()(process.pid))!.id,
-			root: "/work/score",
-		}),
-	);
-	await writeFile(
-		join(directory, `${lock}.github.json`),
-		JSON.stringify({ repository: "octo-org/score" }),
-	);
-	let report = await collectStatus({ directory, server: "https://x", source: "config", host });
-	expect(report.connectors[0]?.githubCannotPush).toEqual(["octo-org/score"]);
-	expect(formatStatus(report)).toContain(
-		"              The GitHub App can't push to octo-org/score (it needs Contents and Pull requests "
-			+ "write), so this machine uses its own GitHub login for it.",
-	);
+test("status asks Chopin, without a token being made, whether each registered checkout's repository can have one, and says why not", async () => {
+	let asked: unknown[] = [];
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		async fetch(request) {
+			let { pathname } = new URL(request.url);
+			if (pathname === "/api/connector/machine") return Response.json({ login: "ada" });
+			if (pathname !== "/api/connector/github-token") return new Response(null, { status: 404 });
+			let body = await request.json() as { repository: string };
+			asked.push(body);
+			if (body.repository === "octo-org/score") return Response.json({ ok: true });
+			if (body.repository === "octo-org/old") {
+				// A Chopin from before the check refuses what it doesn't know.
+				return Response.json({ error: "invalid-request" }, { status: 400 });
+			}
+			return Response.json({ error: "app-cannot-push" }, { status: 403 });
+		},
+	});
+	try {
+		let url = `http://127.0.0.1:${server.port}`;
+		let { directory, host } = await machine(url);
+		await writeFile(
+			join(directory, "config.json"),
+			JSON.stringify({
+				connect: {
+					server: url,
+					command: ["agent"],
+					planners: [],
+					plannerCommand: [],
+					checkouts: {
+						"octo-org/score": "/work/score",
+						"octo-org/site": "/work/site",
+						"octo-org/old": "/work/old",
+					},
+				},
+			}),
+		);
+		let report = await collectStatus({ directory, server: url, source: "config", host });
+		expect(asked).toEqual(expect.arrayContaining([
+			{ repository: "octo-org/score", purpose: "check" },
+			{ repository: "octo-org/site", purpose: "check" },
+		]));
+		expect(report.github).toEqual({
+			"octo-org/score": "ok",
+			"octo-org/site": "app-cannot-push",
+			"octo-org/old": "unknown",
+		});
+		let text = formatStatus(report).join("\n");
+		expect(text).toContain(
+			"octo-org/site at /work/site; Chopin's GitHub App can't write to octo-org/site",
+		);
+		expect(text).not.toContain("own GitHub login for it");
+		// Unpaired, nothing is asked.
+		let unpaired = await machine();
+		let none = await collectStatus({
+			directory: unpaired.directory,
+			server: url,
+			source: "config",
+			host: unpaired.host,
+		});
+		expect(none.github).toEqual({});
+	} finally {
+		server.stop(true);
+	}
 });
 
 test("status names a built-in agent by its --agent id, with the command it runs", async () => {

@@ -13,6 +13,7 @@ import { SQL } from "bun";
 import { createChannel, registerTestDatabase, seedChannel, testChannelPath } from "./database";
 import { authenticate, expect, test } from "./room";
 import { e2eDatabaseName, e2ePort } from "./ports";
+import { GITHUB_APP_ENV } from "./github-app";
 import { HOST, ROOT } from "./servers";
 
 import type { Graph } from "../apps/server/src/tasks/graphs";
@@ -52,6 +53,7 @@ const ENV = {
 	GITHUB_APP_SLUG: "chopin-e2e",
 	GITHUB_APP_CLIENT_ID: "e2e",
 	GITHUB_APP_CLIENT_SECRET: "e2e",
+	...GITHUB_APP_ENV,
 	GITHUB_ALLOWED_USERS: "",
 	GITHUB_ALLOWED_ORGANIZATIONS: "githubnext",
 	SESSION_ENCRYPTION_KEY: process.env.SESSION_ENCRYPTION_KEY!,

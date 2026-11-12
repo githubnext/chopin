@@ -2,6 +2,9 @@ import { afterAll, expect, mock, test } from "bun:test";
 import { mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { answerTokens, BOT, STARTER } from "./testing/github-grant";
+import { githubRefusal } from "./github-token";
+import { existsSync } from "node:fs";
 import { machineFile } from "./machine";
 import { createOutput } from "./output";
 import {
@@ -17,6 +20,26 @@ import { collectStatus, formatStatus } from "./status";
 import { git, lockWorkspace, startFailures } from "./workspace";
 import { checkouts } from "./checkouts";
 import { CONNECTOR_PROTOCOL } from "./version";
+
+/**
+ * A fake Chopin, as `Bun.serve` makes one, that also answers a launch's asking for its GitHub token
+ * and its token for Chopin's tools, as a Chopin with its GitHub App does.
+ */
+function serve(options: {
+	hostname: string;
+	port: number;
+	fetch: (request: Request) => Response | Promise<Response>;
+	/** The GitHub token refusal each named repository gets. */
+	refusing?: Record<string, string>;
+}) {
+	let { refusing, ...rest } = options;
+	return Bun.serve({
+		...rest,
+		async fetch(request) {
+			return await answerTokens(request, refusing) ?? await options.fetch(request);
+		},
+	});
+}
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-planner-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
@@ -73,7 +96,7 @@ test(
 	async () => {
 		let issued: string[] = [];
 		let asked: Array<{ authorization: string | null; body: unknown }> = [];
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			async fetch(request): Promise<Response> {
@@ -228,7 +251,7 @@ test(
 		let log = join(directory, "launches.jsonl");
 		await writeFile(script, STAYING_BACKEND);
 		let issued: Array<{ machine: string; token: string }> = [];
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			async fetch(request): Promise<Response> {
@@ -351,7 +374,7 @@ function alive(pid: number) {
 test.skipIf(process.platform === "win32")(
 	"a backend that starts in the sandbox finds its own worktree of the checkout made, as a linked worktree, and one that starts without a sandbox finds none made",
 	async () => {
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch: () =>
@@ -424,7 +447,7 @@ test.skipIf(process.platform === "win32")(
 test.skipIf(process.platform === "win32")(
 	"a backend's own children are killed with it, whether it exits by itself or is stopped",
 	async () => {
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch: () =>
@@ -492,7 +515,7 @@ setInterval(() => {}, 1000);
 test.skipIf(process.platform === "win32")(
 	"chopin status shows a Planner backend that exits early until one stays up",
 	async () => {
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch: () =>
@@ -565,7 +588,7 @@ test.skipIf(process.platform === "win32")(
 	async () => {
 		let token = `chopin_p_${"P".repeat(43)}`;
 		let secret = "review-opaque-api-secret";
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch: () =>
@@ -658,7 +681,7 @@ test.skipIf(process.platform === "win32")(
 	async () => {
 		let token = `chopin_p_${"Kq4Zt9Wm".repeat(6).slice(0, 43)}`;
 		let marker = "[chopin: dropped a stderr line longer than 65536 characters]";
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch: () =>
@@ -781,7 +804,7 @@ test.skipIf(process.platform === "win32")(
 	"a Planner backend that keeps exiting early reports to Chopin why, without credentials or the home directory, and clears it once one stays up",
 	async () => {
 		let reports: Array<{ authorization: string | null; body: any }> = [];
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			async fetch(request): Promise<Response> {
@@ -861,7 +884,7 @@ test.skipIf(process.platform === "win32")(
 	async () => {
 		let reports = 0;
 		let credentials = 0;
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch(request): Response {
@@ -912,7 +935,7 @@ test.skipIf(process.platform === "win32")(
 	"chopin status shows a Planner stopped for good, not retrying, once Chopin refuses its credential",
 	async () => {
 		let asked = 0;
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch: () =>
@@ -1009,7 +1032,7 @@ test.skipIf(process.platform === "win32")(
 		let polls: string[][] = [];
 		let release = Promise.withResolvers<void>();
 		let document = "";
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			async fetch(request): Promise<Response> {
@@ -1211,7 +1234,7 @@ test.skipIf(process.platform === "win32")(
 		let script = join(directory, "backend.ts");
 		let log = join(directory, "launches.jsonl");
 		await writeFile(script, LEAVING_BACKEND);
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			async fetch(request): Promise<Response> {
@@ -1327,7 +1350,7 @@ test.skipIf(process.platform === "win32")(
 		let script = join(directory, "backend.ts");
 		let log = join(directory, "launches.jsonl");
 		await writeFile(script, LEAVING_BACKEND);
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			async fetch(request): Promise<Response> {
@@ -1425,7 +1448,7 @@ test.skipIf(process.platform === "win32")(
 test.skipIf(process.platform === "win32")(
 	"a dispatched Planner that exits by itself starts again only once Chopin's Planner poll still asks for it",
 	async () => {
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch: request =>
@@ -1496,7 +1519,7 @@ test.skipIf(process.platform === "win32")(
 test.skipIf(process.platform === "win32")(
 	"a dispatched Planner that exited starts again at once when Chopin says a person asked, and a running one is left as it is",
 	async () => {
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch: request =>
@@ -1607,7 +1630,7 @@ test.skipIf(process.platform === "win32")(
 test.skipIf(process.platform === "win32")(
 	"a dispatched Planner whose document was renamed goes by its new address, in status, output and its next start",
 	async () => {
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch: async request =>
@@ -1693,9 +1716,11 @@ test.skipIf(process.platform === "win32")(
 			D_notes: "octo-org/notes",
 			D_site: "octo-org/site",
 		};
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
+			// Chopin gives no token to push to the repository with no checkout here.
+			refusing: { "octo-org/site": "repository-forbidden" },
 			async fetch(request) {
 				let path = new URL(request.url).pathname;
 				if (path !== "/api/connector/planner") return new Response(null, { status: 404 });
@@ -1762,15 +1787,13 @@ test.skipIf(process.platform === "win32")(
 					CHOPIN_WORKTREE: join(directory, "planners", "octo-org", "notes", "D_notes"),
 				},
 			});
-			// A repository with no checkout here, and no GitHub token from Chopin to clone it with,
-			// never starts; it says how to give it one.
+			// A repository Chopin gives no GitHub token for never starts; it says why.
 			expect(launched.has("D_site")).toBe(false);
 			await until(async () => said.includes("D_site"), 5_000);
 			expect(said).toContain(
-				`Can't start the Planner for ${origin}/documents/D_site: This machine has no checkout of `
-					+ "octo-org/site",
+				`Stopped the Planner for ${origin}/documents/D_site: `
+					+ githubRefusal("repository-forbidden", "octo-org/site"),
 			);
-			expect(said).toContain("chopin connect --checkout <path>");
 		} finally {
 			abort.abort();
 			await planners.stop();
@@ -1811,7 +1834,7 @@ test.skipIf(process.platform === "win32")(
 		let own = "";
 		let assigned = "";
 		let polls = 0;
-		let chopin = Bun.serve({
+		let chopin = serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			async fetch(request): Promise<Response> {
@@ -1959,11 +1982,17 @@ let log = process.argv[2];
 let url = spawnSync("git", ["ls-remote", "--get-url", "https://github.com/octo-org/score.git"], { encoding: "utf8" }).stdout.trim();
 let file = process.env.CHOPIN_GITHUB_TOKEN_FILE;
 let seen = () => file ? { content: readFileSync(file, "utf8"), mode: (statSync(file).mode & 0o777).toString(8) } : null;
+let hosts = process.env.GH_CONFIG_DIR ? readFileSync(process.env.GH_CONFIG_DIR + "/hosts.yml", "utf8") : "";
 appendFileSync(log, JSON.stringify({
 	token: process.env.CHOPIN_GITHUB_TOKEN ?? null,
 	expiresAt: process.env.CHOPIN_GITHUB_TOKEN_EXPIRES_AT ?? null,
 	file: file ?? null,
 	url,
+	ghToken: process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? null,
+	gh: hosts.match(/^    oauth_token: "(.*)"$/m)?.[1] ?? null,
+	author: [process.env.GIT_AUTHOR_NAME, process.env.GIT_AUTHOR_EMAIL],
+	starter: process.env.CHOPIN_STARTER_LOGIN ?? null,
+	mcp: process.env.CHOPIN_MCP_TOKEN_FILE ? readFileSync(process.env.CHOPIN_MCP_TOKEN_FILE, "utf8").trim() : null,
 	argv: process.argv,
 	seen: seen(),
 }) + "\\n");
@@ -1980,9 +2009,17 @@ function githubChopin(github: (asked: number) => Response) {
 		async fetch(request) {
 			let path = new URL(request.url).pathname;
 			if (path === "/api/connector/github-token") {
-				expect(await request.json()).toEqual({ repository: "octo-org/score" });
+				expect(await request.json()).toEqual({
+					repository: "octo-org/score",
+					purpose: "planner",
+					document: "D_1",
+				});
 				expect(request.headers.get("authorization")).toBe(`Bearer ${MACHINE}`);
 				return github(asked++);
+			}
+			if (path === "/api/connector/mcp-token") {
+				expect(await request.json()).toEqual({ planner: `chopin_p_${"P".repeat(43)}` });
+				return Response.json({ token: "chopin_mcp_planner", expiresAt: Date.now() + 900_000 });
 			}
 			return Response.json({
 				token: `chopin_p_${"P".repeat(43)}`,
@@ -1999,14 +2036,19 @@ function githubChopin(github: (asked: number) => Response) {
 }
 
 test.skipIf(process.platform === "win32")(
-	"a Planner command gets the machine's GitHub token and a private file kept fresh, removed when it stops",
+	"a Planner command gets Chopin's GitHub token for its document, in a private file and gh's own configuration kept fresh, commits as Chopin's App, and the files go when it stops",
 	async () => {
-		let tokens = [`ghu_${"A".repeat(36)}`, `ghu_${"B".repeat(36)}`];
+		let tokens = [`ghs_${"A".repeat(36)}`, `ghs_${"B".repeat(36)}`];
 		let expiries: number[] = [];
 		let chopin = githubChopin(asked => {
 			// Short-lived, so the connector replaces it before it expires.
 			expiries.push(Date.now() + 1_500);
-			return Response.json({ token: tokens[Math.min(asked, 1)], expiresAt: expiries.at(-1) });
+			return Response.json({
+				token: tokens[Math.min(asked, 1)],
+				expiresAt: expiries.at(-1),
+				identity: BOT,
+				starter: STARTER,
+			});
 		});
 		let directory = await mkdtemp(join(scratch, "github-"));
 		let script = join(directory, "backend.ts");
@@ -2047,9 +2089,16 @@ test.skipIf(process.platform === "win32")(
 				seen: { content: `${tokens[0]}\n`, mode: "600" },
 				// Its own git and its agent's keep to https for this repository, rewrite or not.
 				url: "https://github.com/octo-org/score.git",
+				// gh finds the same token in the launch's own configuration, and nothing overrides it.
+				ghToken: null,
+				gh: tokens[0],
+				author: [BOT.name, BOT.email],
+				starter: STARTER.login,
+				// Chopin's own tools take a Chopin token, minted from the Planner's credential.
+				mcp: "chopin_mcp_planner",
 			});
 			// Never in its arguments.
-			expect(JSON.stringify(first.argv)).not.toContain("ghu_");
+			expect(JSON.stringify(first.argv)).not.toContain("ghs_");
 			// Replaced before it expires, without restarting the command.
 			await until(
 				async () => (await entries(log)).some(entry => entry.later?.content === `${tokens[1]}\n`),
@@ -2072,19 +2121,30 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
-	"without a token from Chopin a Planner command gets none, and an App that can't push is said once",
+	"a Planner Chopin refuses a GitHub token never starts, says why naming the repository, and one Chopin can't answer is tried again",
 	async () => {
-		for (let answer of ["app-cannot-push", "not-found", "unavailable"]) {
+		for (
+			let answer of [
+				"app-cannot-push",
+				"repository-forbidden",
+				"starter-cannot-push",
+				"unavailable",
+			]
+		) {
 			let chopin = githubChopin(() =>
-				Response.json({ error: answer }, {
-					status: answer === "not-found" ? 404 : answer === "unavailable" ? 503 : 409,
-				})
+				Response.json({ error: answer }, { status: answer === "unavailable" ? 503 : 403 })
 			);
 			let directory = await mkdtemp(join(scratch, "github-refused-"));
 			let script = join(directory, "backend.ts");
 			let log = join(directory, "launches.jsonl");
 			await writeFile(script, GITHUB_BACKEND);
-			let said: string[] = [];
+			let said = "";
+			let capture = {
+				write: (chunk: string | Uint8Array) => {
+					said += String(chunk);
+					return true;
+				},
+			};
 			let abort = new AbortController();
 			let serving = servePlanners({
 				url: chopin.url,
@@ -2093,21 +2153,22 @@ test.skipIf(process.platform === "win32")(
 				command: [process.execPath, script, log],
 				checkouts: checkouts({ directory, registered: { "octo-org/score": directory } }),
 				directory,
-				output: createOutput({ write: () => true }, { write: () => true }, {}),
+				output: createOutput(capture, capture, {}),
 				signal: abort.signal,
-				githubRefused: message => said.push(message),
 			});
 			try {
-				await until(async () => (await entries(log)).length > 0, 10_000);
-				expect((await entries(log))[0]).toMatchObject({ token: null, expiresAt: null, file: null });
-				expect(said).toEqual(
-					answer === "app-cannot-push"
-						? [
-							"The GitHub App can't push to octo-org/score (it needs Contents and Pull requests "
-							+ "write), so this machine uses its own GitHub login for it.",
-						]
-						: [],
-				);
+				if (answer === "unavailable") {
+					await until(async () => chopin.asked() >= 1, 10_000);
+					expect(said).toContain("Couldn't get a GitHub token for octo-org/score from Chopin");
+				} else {
+					await serving;
+					expect(said).toContain(
+						`Stopped the Planner for D_1: ${githubRefusal(answer, "octo-org/score")}`,
+					);
+					expect(chopin.asked()).toBe(1);
+				}
+				// Never started without one, and never with the machine's own login.
+				expect(existsSync(log)).toBe(false);
 			} finally {
 				abort.abort();
 				await serving;

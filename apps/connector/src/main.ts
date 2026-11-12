@@ -13,6 +13,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { acpCommand, AGENTS, nodeMajor, nodeOlder } from "@chopin/protocol/agents";
 import type { CodingAgent } from "@chopin/protocol/agents";
 import { checkAgent } from "./acp";
+import { withoutGitHub } from "./github-token";
 import type { AgentInfo } from "./acp";
 import { ConnectorStopped, redacted, serveWork } from "./connection";
 import { remote } from "./mcp";
@@ -59,7 +60,6 @@ import { sandboxLabel } from "@chopin/protocol/connector";
 import {
 	chosenPlanners,
 	connectors,
-	githubFallback,
 	lockWorkspace,
 	pruneRuns,
 	startFailures,
@@ -379,13 +379,15 @@ function runsToKeep(value: string | undefined) {
 /**
  * What the sandbox flags choose: `--require-sandbox` and `--no-sandbox` are opposites, each
  * `--sandbox-host` is a host (`host`, `*.host` or `host:port`) agents may reach beyond the
- * built-in list, and each `--sandbox-write` an absolute directory they may write.
+ * built-in list, each `--sandbox-write` an absolute directory they may write, and each
+ * `--sandbox-hide` a file or folder they may neither read nor write, wherever it is.
  */
 function sandboxChoice(
 	require: boolean,
 	off: boolean,
 	hosts: string[],
 	writable: string[],
+	hidden: string[] = [],
 ): SandboxSettings {
 	if (require && off) throw new Error("--require-sandbox and --no-sandbox can't be used together.");
 	for (let host of hosts) {
@@ -396,11 +398,13 @@ function sandboxChoice(
 		}
 	}
 	let directories = writable.map(path => resolve(path));
+	let concealed = hidden.map(path => resolve(path));
 	return {
 		...(require ? { require } : {}),
 		...(off ? { off } : {}),
 		...(hosts.length ? { hosts } : {}),
 		...(directories.length ? { writable: directories } : {}),
+		...(concealed.length ? { hidden: concealed } : {}),
 	};
 }
 
@@ -416,7 +420,7 @@ export async function connect(
 	let parsed = parseArgs(args, {
 		flags: ["service", "install-service", "skip-check", "require-sandbox", "no-sandbox"],
 		options: ["planner-command", "key", "name", "keep-runs", "agent"],
-		lists: ["planner", "env", "checkout", "sandbox-host", "sandbox-write"],
+		lists: ["planner", "env", "checkout", "sandbox-host", "sandbox-write", "sandbox-hide"],
 	});
 	let service = parsed.flags.has("service");
 	let directory = stateDirectory();
@@ -480,6 +484,7 @@ export async function connect(
 			parsed.flags.has("no-sandbox"),
 			parsed.lists.get("sandbox-host") ?? [],
 			parsed.lists.get("sandbox-write") ?? [],
+			parsed.lists.get("sandbox-hide") ?? [],
 		);
 	if (!service) {
 		requireProgram(command, process.cwd());
@@ -574,7 +579,8 @@ export async function connect(
 		started[at] = which(started[at]!) ?? started[at]!;
 		void checkAgent(started, {
 			cwd: checkDirectory(),
-			env: { ...process.env, ...env },
+			// Through the seam, as a run's agent starts: with nothing of the machine's GitHub setup.
+			env: withoutGitHub({ ...process.env, ...env }),
 			timeoutMs: 10_000,
 			signal,
 			...(sandbox ? { sandbox } : {}),
@@ -633,7 +639,6 @@ export async function connect(
 	let prune = () => pruneRuns(directory, keep).then(() => {}, () => {});
 	await prune();
 	let chosen = chosenPlanners(directory, directory);
-	let fallback = githubFallback(directory, directory);
 	let checkouts = machineCheckouts({ directory, registered });
 	let abort = new AbortController();
 	// The first Ctrl-C reports running work as stopped, then disconnects; a second forces exit.
@@ -679,10 +684,6 @@ export async function connect(
 		},
 	});
 	let report = sandbox.report;
-	// Said once for each repository, and kept for chopin status, when the GitHub App can't push there.
-	let githubRefused = (message: string, repository: string) => {
-		if (fallback.record(repository)) output.say(output.style.dim(message));
-	};
 	try {
 		for (;;) {
 			// A machine paired once reconnects with its stored token; an unpaired one pairs first.
@@ -734,7 +735,6 @@ export async function connect(
 				signal: AbortSignal.any([abort.signal, planners.signal]),
 				failures,
 				env,
-				githubRefused,
 				sandbox,
 			};
 			let planning = servePlanners(backends);
@@ -807,7 +807,6 @@ export async function connect(
 							failures,
 							env,
 							machine,
-							githubRefused,
 							sandbox,
 						}).finally(prune),
 				});
