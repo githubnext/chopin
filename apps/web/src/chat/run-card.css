@@ -50,11 +50,6 @@
 	padding: calc(var(--spacing) * 1.5);
 	border-radius: var(--radius-md);
 	text-align: left;
-	transition: background-color var(--duration-fast) var(--ease-out);
-
-	&:hover {
-		background-color: var(--color-hover);
-	}
 }
 
 .run-chevron {
@@ -97,7 +92,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.run-toggle,
 	.run-chevron {
 		transition: none;
 	}

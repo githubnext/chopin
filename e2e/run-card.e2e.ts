@@ -211,3 +211,63 @@ test("a run's +N earlier loads all 500 stored stages a page at a time into its l
 		}
 	}
 });
+
+/** A second, short run, so the card has a line at its top and one at its foot. */
+function shortRun(): Chat.Run {
+	let started = Math.floor(Date.now() / 1000) - 600;
+	return {
+		id: "run-short",
+		name: "short-workflow",
+		status: "finished",
+		started,
+		updated: started + 60,
+		ended: started + 60,
+		stages: [{
+			id: "run-short:s0",
+			name: "only",
+			status: "completed",
+			started,
+			ended: started + 60,
+		}],
+		waiting: 0,
+	};
+}
+
+test("a hovered run's line is shaded across the whole card, edge to edge, square inside its corners", async ({ join, seed }) => {
+	await seed("# Runs\n", { workflowRuns: [longRun(), shortRun()] });
+	let page = await join("ana", DESKTOP);
+	let card = chatPane(page).getByRole("region", { name: "Workflow runs" });
+	for (let name of [/^long-workflow, finished/, /^short-workflow, finished/]) {
+		let toggle = card.getByRole("button", { name });
+		await toggle.hover();
+		let line = toggle.locator("xpath=..");
+		await expect.poll(() =>
+			line.evaluate(node => {
+				let shade = getComputedStyle(node, "::before");
+				let box = node.getBoundingClientRect();
+				let frame = node.closest("[data-run-stack]")!.getBoundingClientRect();
+				let left = box.left + Number.parseFloat(shade.left);
+				let right = left + Number.parseFloat(shade.width);
+				let top = box.top + Number.parseFloat(shade.top);
+				return {
+					start: Math.round(left - frame.left),
+					end: Math.round(frame.right - right),
+					// The whole line, from its top to its foot.
+					covers: top <= box.top + 0.5 && top + Number.parseFloat(shade.height) >= box.bottom - 0.5,
+					radius: shade.borderTopLeftRadius,
+					opacity: shade.opacity,
+					// The card's corners round it.
+					clipped: getComputedStyle(node.closest("[data-run-stack]")!).overflowX,
+				};
+			})
+		).toEqual({ start: 0, end: 0, covers: true, radius: "0px", opacity: "1", clipped: "clip" });
+		// The toggle draws no shade of its own inside it.
+		await expect(toggle).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+	}
+	await page.mouse.move(0, 0);
+	await expect.poll(() =>
+		card.locator("[data-run-toggle]").first().locator("xpath=..").evaluate(node =>
+			getComputedStyle(node, "::before").opacity
+		)
+	).toBe("0");
+});
