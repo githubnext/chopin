@@ -20,7 +20,8 @@
 	--chat-bleed-end: 0.75rem;
 	/*
 	 * How far the shade reaches past the text: the pane's 20px gutter, the avatar and the 8px beside
-	 * it at the start, the gutter at the end. Slack's hovered row is the pane's whole width.
+	 * it at the start, the gutter at the end. Slack's hovered row is the pane's whole width: the shade
+	 * runs on past both and the transcript's stack clips it at the container's edges.
 	 */
 	--chat-shade-start: calc(var(--spacing) * 16);
 	--chat-shade-end: calc(var(--spacing) * 5);
@@ -113,7 +114,7 @@
 	position: absolute;
 	z-index: -1;
 	inset-block: calc(-1 * var(--chat-highlight-top)) calc(-1 * var(--spacing));
-	inset-inline: calc(-1 * var(--chat-shade-start)) calc(-1 * var(--chat-shade-end));
+	inset-inline: calc(-1 * var(--chat-shade-start) - 100vw) calc(-1 * var(--chat-shade-end) - 100vw);
 	background: var(--color-chat-row-hover);
 	opacity: 0;
 	pointer-events: none;
@@ -133,7 +134,7 @@
 	position: absolute;
 	z-index: -1;
 	inset-block: calc(-1 * var(--chat-highlight-top)) calc(-1 * var(--spacing));
-	inset-inline: calc(-1 * var(--chat-shade-start)) calc(-1 * var(--chat-shade-end));
+	inset-inline: calc(-1 * var(--chat-shade-start) - 100vw) calc(-1 * var(--chat-shade-end) - 100vw);
 	background: var(--color-brand-wash);
 	pointer-events: none;
 	animation: chat-source-tint calc(var(--duration-linger) * 2) var(--ease-out) forwards;

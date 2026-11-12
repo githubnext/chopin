@@ -2,6 +2,11 @@
  * Every row state Slack shades spans the Chat container from edge to edge, as Slack's message pane
  * does, and nothing of the first message is cut off at the top of the transcript.
  *
+ * The container is what a person sees Chat lie on. Beside the document, Chat has no frame of its
+ * own: it lies on the ground from the sidebar's edge (or the window's) to the document's sheet, or
+ * to the thread's divider, and the thread from that divider to the sheet (or the window's edge when
+ * the document folds to its bar). Alone, on a phone or in a narrow window, it is the pane it fills.
+ *
  * The browser here keeps the system's classic scrollbars (Playwright hides them in headless
  * Chromium), which is where a native bar set a lane aside and the shade stopped short of the edge.
  * The transcript draws its own thumb over the rows instead, so the container has no lane.
@@ -68,12 +73,29 @@ async function holdOn(page: Page, target: Locator): Promise<void> {
 }
 
 /**
- * Where a row's shade, or its source wash, is drawn against the container it scrolls in: both edges,
- * its corner and whether it shows.
+ * Where a row's shade, or its source wash, is drawn against the container a person sees it in: both
+ * edges, its corner and whether it shows.
  */
 async function shade(row: Locator, part: "::before" | ".chat-source-tint" = "::before") {
 	return row.evaluate((node, which) => {
-		let view = node.closest<HTMLElement>("[data-chat-scroll]")!.getBoundingClientRect();
+		// A thread that opens as a sheet is drawn over the whole window, outside the workspace.
+		let root = node.closest<HTMLElement>(".workspace-root");
+		let pane = node.closest<HTMLElement>("[data-thread-pane]");
+		let view: { left: number; right: number };
+		if (!root || root.dataset.workspaceMode !== "split" || "workspacePhone" in root.dataset) {
+			view = node.closest(".thread-panel, aside")!.getBoundingClientRect();
+		} else {
+			let ground = root.getBoundingClientRect();
+			let sheet = root.querySelector(".workspace-document-stack:not([hidden]) > main");
+			let end = sheet ? sheet.getBoundingClientRect().left : ground.right;
+			let thread = root.querySelector<HTMLElement>("[data-thread-pane]");
+			if (pane) {
+				let divider = Number.parseFloat(getComputedStyle(pane).borderLeftWidth);
+				view = { left: pane.getBoundingClientRect().left + divider, right: end };
+			} else {
+				view = { left: ground.left, right: thread ? thread.getBoundingClientRect().left : end };
+			}
+		}
 		let box = node.getBoundingClientRect();
 		let style: CSSStyleDeclaration;
 		let left: number;
@@ -88,6 +110,14 @@ async function shade(row: Locator, part: "::before" | ".chat-source-tint" = "::b
 			let drawn = tint.getBoundingClientRect();
 			left = drawn.left;
 			right = drawn.right;
+		}
+		// What is drawn of it: as far as every box around it that clips it lets it reach.
+		for (let at = node.parentElement; at; at = at.parentElement) {
+			if (getComputedStyle(at).overflowX === "visible") continue;
+			let clip = at.getBoundingClientRect();
+			left = Math.max(left, clip.left);
+			right = Math.min(right, clip.right);
+			if (at.matches("[data-chat-scroll]")) break;
 		}
 		return {
 			start: Math.round(left - view.left),
@@ -176,13 +206,22 @@ test("on a desktop every shaded row spans the Chat container edge to edge, under
 	await row.evaluate(node => node.querySelector(".chat-source-tint")!.remove());
 
 	// The scrollbar is drawn over the rows' end: shown while the pane is scrolled or pointed at,
-	// within the container, and it scrolls the transcript when dragged.
+	// within the container, and it scrolls the transcript when dragged. The rows' shade runs on over
+	// the 8px before the document's sheet, where Resize chat is taken; the thumb ends where that
+	// grip begins, so a drag takes the thumb and not the pane's edge.
 	let thumb = chatOf(page).locator(".chat-split-main .chat-scroll-thumb");
 	let view = (await scroller.boundingBox())!;
 	await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
 	await expect(thumb).toHaveCSS("opacity", "1");
 	let bar = (await thumb.boundingBox())!;
-	expect(Math.round(view.x + view.width - (bar.x + bar.width))).toBe(0);
+	let sheet = (await page.locator(".workspace-document-panel").boundingBox())!;
+	let grip = await page.getByRole("separator", { name: "Resize chat" }).evaluate(handle =>
+		handle.getBoundingClientRect().left
+		+ Number.parseFloat(getComputedStyle(handle, "::before").left)
+	);
+	expect(Math.round(view.x + view.width)).toBe(Math.round(sheet.x));
+	expect(Math.round(sheet.x - grip)).toBe(8);
+	expect(Math.round(grip - (bar.x + bar.width))).toBe(0);
 	expect(bar.width).toBe(10);
 	expect(bar.y).toBeGreaterThanOrEqual(view.y);
 	expect(bar.y + bar.height).toBeLessThanOrEqual(view.y + view.height);
@@ -221,6 +260,90 @@ test("on a desktop every shaded row spans the Chat container edge to edge, under
 	expect(await overhang(reply.locator(".chat-emoji"))).toEqual([0]);
 	expect(await overhang(panel.locator("[data-thread-root-message] .chat-emoji"))).toEqual([0, 0]);
 });
+
+/** A person's message and one grouped under it, the agent's two, and a last pair. */
+function kinds() {
+	return [
+		{
+			id: "ben-1",
+			author: { kind: "member" as const, handle: "ben" },
+			text: "Staging is green.",
+			ts: 1_700_000_000,
+		},
+		{
+			id: "ben-2",
+			author: { kind: "member" as const, handle: "ben" },
+			text: "The canary held.",
+			ts: 1_700_000_030,
+		},
+		{
+			id: "agent-1",
+			author: { kind: "agent" as const },
+			text: "I moved the key into `router.ts`.",
+			ts: 1_700_000_090,
+		},
+		{
+			id: "agent-2",
+			author: { kind: "agent" as const },
+			text: "And left the drill on the plan.",
+			ts: 1_700_000_100,
+		},
+		{
+			id: "ana-1",
+			author: { kind: "member" as const, handle: "ana" },
+			text: "Booked it.",
+			ts: 1_700_000_200,
+		},
+		{
+			id: "ana-2",
+			author: { kind: "member" as const, handle: "ana" },
+			text: "For Thursday.",
+			ts: 1_700_000_230,
+		},
+	];
+}
+
+for (
+	let [label, width, split] of [
+		["a 1920 window, where the thread opens beside the document", 1920, true],
+		["a 1100 window, without the sidebar", 1100, true],
+		["a 640 window, where Chat fills the frame", 640, false],
+	] as const
+) {
+	test(`in ${label} every kind of row is shaded edge to edge, in Chat and in its thread`, async ({ join, seed }) => {
+		await seed("# Rows\n", { transcript: kinds() });
+		let page = await join("ana", { viewport: { width, height: 900 } });
+		if (!split) {
+			await page.getByRole("navigation", { name: "Workspace view" })
+				.getByRole("button", { name: /^Chat/ }).click();
+			// Chat slides in to fill the frame; the rows are pointed at once it is there.
+			let frame = (await page.locator(".workspace-frame").boundingBox())!;
+			await expect.poll(async () => (await chatOf(page).boundingBox())?.x).toBe(frame.x);
+		}
+		await expect(message(page, "ana-2")).toBeVisible();
+		for (let id of ["ben-1", "ben-2", "agent-1", "agent-2", "ana-1", "ana-2"]) {
+			let row = message(page, id);
+			await row.locator("[data-chat-message-text]").hover({ position: { x: 4, y: 4 } });
+			await expect.poll(() => shade(row), id).toEqual(EDGE_TO_EDGE);
+		}
+
+		let root = message(page, "ben-2");
+		await root.locator("[data-chat-message-text]").hover({ position: { x: 4, y: 4 } });
+		await root.getByRole("button", { name: "Reply in thread" }).click();
+		let panel = page.locator("[data-thread-panel]");
+		await expect(panel).toBeVisible();
+		await chatInput(panel).fill("Booked for three");
+		await panel.getByRole("button", { name: "Send message" }).click();
+		let reply = panel.locator(".chat-message-body", { hasText: "Booked for three" });
+		await expect(reply).toBeVisible();
+		await reply.locator("[data-chat-message-text]").hover({ position: { x: 4, y: 4 } });
+		await expect.poll(() => shade(reply)).toEqual(EDGE_TO_EDGE);
+		if (split) {
+			await page.mouse.move(0, 0);
+			await expect.poll(() => shade(root)).toEqual(EDGE_TO_EDGE);
+		}
+	});
+}
 
 test("on a desktop the first message's toolbar, its jumbomoji and its reactions are whole at the top of the transcript", async ({ join, seed }) => {
 	await seed("# Rows\n", { transcript: transcript() });

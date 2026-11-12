@@ -237,15 +237,26 @@ test("the toolbar floats as Slack's does: one box over the row's top edge at its
 		let row = await target.evaluate(element => {
 			let style = getComputedStyle(element, "::before");
 			let box = element.getBoundingClientRect();
-			return {
-				top: box.top + Number.parseFloat(style.top),
-				right: box.right - Number.parseFloat(style.right),
-			};
+			let right = box.right - Number.parseFloat(style.right);
+			// The row's shade is drawn as far as the boxes around it that clip it let it reach.
+			for (let at = element.parentElement; at; at = at.parentElement) {
+				if (getComputedStyle(at).overflowX !== "visible") {
+					right = Math.min(right, at.getBoundingClientRect().right);
+				}
+				if (at.matches("[data-chat-scroll]")) break;
+			}
+			return { top: box.top + Number.parseFloat(style.top), right };
 		});
 		let box = (await bar.boundingBox())!;
 		// Slack's `c-message_actions__container` stands 16px above the message's top edge, inside its right.
-		expect(row.top - box.y, `${id} rises 16 px`).toBeCloseTo(16, 0);
-		expect(row.right - (box.x + box.width), `${id} is inset 12 px`).toBeCloseTo(12, 0);
+		// The row is shaded on over the 8px before the document's sheet, where Resize chat is taken;
+		// the bar stands clear of that grip, 12px in from where it begins.
+		let grip = await page.getByRole("separator", { name: "Resize chat" }).evaluate(handle =>
+			handle.getBoundingClientRect().left
+			+ Number.parseFloat(getComputedStyle(handle, "::before").left)
+		);
+		expect(row.right - grip, `${id} is shaded over the grip`).toBeCloseTo(8, 0);
+		expect(grip - (box.x + box.width), `${id} is inset 12 px`).toBeCloseTo(12, 0);
 		expect(box.height).toBe(36);
 		let pane = (await scroller(page).boundingBox())!;
 		expect(box.y, `${id} is inside the pane`).toBeGreaterThanOrEqual(pane.y);

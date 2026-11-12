@@ -929,7 +929,7 @@ export let Transcript = memo(function Transcript(
 
 	let view = (
 		<div
-			className="chat-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-5 pt-3 text-left"
+			className="chat-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-auto pt-3 text-left"
 			data-chat-scroll=""
 			data-focus-boundary=""
 			ref={scroller}

@@ -23,6 +23,16 @@
 	isolation: isolate;
 }
 
+/*
+ * The rows' 20px gutters are the stack's own, so the stack runs the transcript's whole width and
+ * its clip, which leaves the rows' height free, is where a row's shade ends: the container's edges,
+ * wherever split Chat reaches past its column (workspace-sizing.css).
+ */
+[data-chat-stack] {
+	padding-inline: calc(var(--spacing) * 5);
+	overflow-x: clip;
+}
+
 .chat-scroll-track {
 	position: absolute;
 	z-index: 4;

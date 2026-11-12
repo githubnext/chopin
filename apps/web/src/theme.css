@@ -1186,10 +1186,12 @@ body {
 
 /*
  * Split Chat is a track: its width moves the document, and Chat slides under its clip.
- * Only the width clips, so the composer's focus ring can pass the panel's bottom edge.
+ * Only the width clips, so the composer's focus ring can pass the panel's bottom edge, and only
+ * beyond the frame's gutters, which Chat's rows are shaded across (workspace-sizing.css).
  */
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
-	overflow: clip visible;
+	overflow: visible;
+	clip-path: inset(-100vh 0 -100vh calc(-1 * (var(--spacing) * 3 + env(safe-area-inset-left))));
 	width: 0;
 	order: -1;
 	--panel-direction: -1;
@@ -1200,6 +1202,13 @@ body {
 
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel > .workspace-chat-body {
 	width: var(--chat-width, 0px);
+}
+
+.workspace-root[data-workspace-mode="split"][data-document-collapsed] .workspace-chat-panel {
+	clip-path: inset(
+		-100vh calc(-1 * (var(--spacing) * 3 + env(safe-area-inset-right)))
+		-100vh calc(-1 * (var(--spacing) * 3 + env(safe-area-inset-left)))
+	);
 }
 
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel.is-open {
