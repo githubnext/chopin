@@ -29,6 +29,7 @@ import {
 import { useMenuDismissal } from "../../menu-dismissal";
 import { LongPress } from "../long-press";
 import { QUICK_REACTIONS } from "../reactions";
+import { TALL, watchTall } from "./tall-rows";
 import { useCopyToClipboard } from "./use-copy-to-clipboard";
 
 import "./message-actions.css";
@@ -44,10 +45,8 @@ const EmojiPicker = lazy(() =>
 );
 
 const TOOLBAR_MARGIN = 8;
-const SHEET_WIDTH = 600;
 const SHIFT = "--chat-toolbar-shift";
-const RESERVE = "--chat-toolbar-reserve";
-const TALL = "data-chat-tall";
+const SHEET_WIDTH = 600;
 const BUTTONS = "--chat-toolbar-buttons";
 
 type Which = "markdown" | "plain";
@@ -214,6 +213,12 @@ export let MessageToolbar = memo(function MessageToolbar(
 		let view = element?.closest<HTMLElement>("[data-chat-scroll]");
 		if (!element || !view || !window.matchMedia("(hover: hover)").matches) return;
 		let place = () => {
+			// Any other message is scrolled to whole, so its bar stays where it stands; measuring it would
+			// lay the page out for the pointer's every new row.
+			if (!element.hasAttribute(TALL)) {
+				element.style.removeProperty(SHIFT);
+				return;
+			}
 			let bar = element.querySelector<HTMLElement>(".chat-message-toolbar");
 			if (!bar) return;
 			let shift = Number.parseFloat(element.style.getPropertyValue(SHIFT)) || 0;
@@ -248,34 +253,12 @@ export let MessageToolbar = memo(function MessageToolbar(
 	}, [host]);
 
 	// A message taller than the pane gets a column beside its text for the bar, which is kept in view
-	// over it, so the bar covers none of that message's text. It is set from the message's size and the
-	// pane's, never from the pointer, so the text does not move when the bar appears.
+	// over it, so the bar covers none of that message's text.
 	useEffect(() => {
 		let element = host.current;
 		let view = element?.closest<HTMLElement>("[data-chat-scroll]");
 		if (!element || !view || !window.matchMedia("(hover: hover)").matches) return;
-		let measure = () => {
-			let bar = element.querySelector<HTMLElement>(".chat-message-toolbar");
-			// Tall is not only taller than the pane: a message that cannot be shown whole with its bar,
-			// which hangs above its top, can be scrolled until its top is out and its bar with it.
-			let shift = Number.parseFloat(element.style.getPropertyValue(SHIFT)) || 0;
-			let hang = bar
-				? element.getBoundingClientRect().top - (bar.getBoundingClientRect().top - shift)
-				: 0;
-			let tall = element.offsetHeight + Math.max(0, hang) > view.clientHeight;
-			element.toggleAttribute(TALL, tall);
-			if (bar && tall) element.style.setProperty(RESERVE, `${bar.offsetWidth}px`);
-			else element.style.removeProperty(RESERVE);
-		};
-		measure();
-		let observer = new ResizeObserver(measure);
-		observer.observe(element);
-		observer.observe(view);
-		return () => {
-			observer.disconnect();
-			element.removeAttribute(TALL);
-			element.style.removeProperty(RESERVE);
-		};
+		return watchTall(element, view);
 	}, [host]);
 
 	useEffect(() => {
