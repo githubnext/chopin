@@ -19,7 +19,7 @@ import type { ServerMessageOf } from "@chopin/agent-link";
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Server } from "bun";
 import type { HostedAuth } from "../auth/routes";
-import type { PlannerSession } from "../harness/session";
+import type { PlannerForkHooks, PlannerSession } from "../harness/session";
 import type { Socket, SocketData } from "../wire";
 
 let cleanups: Array<() => unknown> = [];
@@ -49,11 +49,13 @@ async function buildWorld() {
 	);
 	let owners = new ActiveOwnerBindings(auth as unknown as HostedAuth);
 	let prompts: Array<{ instructions: string; prompt: string }> = [];
+	let forks: Array<PlannerForkHooks | undefined> = [];
 	let emitExtra:
 		| ((emit: (part: Record<string, unknown>) => void) => Promise<void> | void)
 		| undefined;
 
 	let fakeOpen: typeof openPlannerSession = async (_binding, options) => {
+		forks.push(options.fork);
 		let instructions = typeof options.instructions === "function"
 			? options.instructions(undefined)
 			: options.instructions;
@@ -135,6 +137,7 @@ async function buildWorld() {
 		context,
 		broadcasts,
 		prompts,
+		forks,
 		setEmitExtra: (fn: typeof emitExtra) => {
 			emitExtra = fn;
 		},
@@ -363,6 +366,58 @@ describe("Chat threads server", () => {
 		expect(compactionFrames.map(f => (f as Wire.CompactionState).status)).toEqual([
 			"compacting",
 			"compacted",
+		]);
+	});
+
+	test("a Retry branches the Atomic session back to before the failed attempt, and gives it no word of the attempt", async () => {
+		let w = await buildWorld();
+		let alice = w.makeSocket("alice", "U_alice");
+		let ask = async (requestId: string, text: string) => {
+			await Threads.sendMessage(w.context, alice.ws, {
+				kind: "chat:send",
+				rid: crypto.randomUUID(),
+				requestId,
+				to: "planner",
+				text,
+				ts: 0,
+			});
+			await w.plan.chat.running;
+		};
+		let header = { type: "session", id: "s" };
+		w.setEmitExtra(() => w.forks.at(-1)!.onAtomicEntries!([header, { id: "A" }], "leaf-A"));
+		await ask(crypto.randomUUID(), "@chopin first question");
+		let failing = crypto.randomUUID();
+		w.setEmitExtra(() => {
+			w.forks.at(-1)!.onAtomicEntries!([header, { id: "A" }, { id: "B" }], "leaf-B");
+			throw new Error("503 Service Unavailable");
+		});
+		await ask(failing, "@chopin second question");
+		expect(w.forks.at(-1)!.atomicLeafId).toBe("leaf-A");
+		expect(w.plan.chat.entries.at(-1)!.turnFailure).toMatchObject({ request: failing });
+
+		w.setEmitExtra(undefined);
+		let frames = alice.frames.length;
+		await Threads.retryMessage(w.context, alice.ws, {
+			kind: "chat:retry",
+			rid: "retry",
+			message: failing,
+			ts: 0,
+		});
+		expect(alice.frames.slice(frames)).toEqual([
+			expect.objectContaining({ kind: "chat:retry", message: failing }),
+		]);
+		await w.plan.chat.running;
+		// The session branches where the failed attempt began, not after it.
+		expect(w.forks.at(-1)!.atomicLeafId).toBe("leaf-A");
+		let retried = w.prompts.at(-1)!;
+		expect(retried.prompt).toContain("second question");
+		expect(retried.instructions).not.toContain("second question");
+		expect(retried.instructions).not.toContain("503 Service Unavailable");
+		expect(w.plan.chat.entries.map(entry => entry.author.kind)).toEqual([
+			"member",
+			"agent",
+			"member",
+			"agent",
 		]);
 	});
 

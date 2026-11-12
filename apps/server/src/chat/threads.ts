@@ -290,6 +290,28 @@ function wrapThreadServer(
 	});
 }
 
+/**
+ * Before a Retry runs a message's turn again: the Atomic session tree goes back to the leaf it had
+ * before the failed attempt, and the fork points recorded for the message and what followed it are
+ * forgotten, so neither the next turn's session nor a later thread fork holds the attempt. What
+ * members said after the message is then untracked, and the turn is given it as transcript.
+ */
+function rewind(state: ChannelThreads, entries: readonly Wire.Entry[], entryId: string): void {
+	let at = entries.findIndex(entry => entry.id === entryId);
+	if (at < 0) return;
+	for (let entry of entries.slice(at)) delete state.entryForks[entry.id];
+	if (!state.atomicEntries?.length) return;
+	let leaf: string | null = null;
+	for (let index = at - 1; index >= 0; index--) {
+		let point = state.entryForks[entries[index]!.id];
+		if (point?.atomicLeafId !== undefined) {
+			leaf = point.atomicLeafId;
+			break;
+		}
+	}
+	state.atomicLeafId = leaf;
+}
+
 /** Attach top-level session fork, context-usage and compaction hooks to a top-level `Chat.Room`. */
 export function bindTopLevel(
 	context: Chat.Room,
@@ -300,7 +322,8 @@ export function bindTopLevel(
 	return {
 		...context,
 		sessionForks: {
-			prepareTurn(currentEntryId) {
+			prepareTurn(currentEntryId, retry) {
+				if (retry && currentEntryId) rewind(state, context.chat.entries, currentEntryId);
 				let hasAtomic = !!state.atomicEntries?.length;
 				let untrackedEntries = hasAtomic
 					? context.chat.entries.filter(
@@ -572,6 +595,18 @@ export async function openThread(
 }
 
 /** Route `chat:send` to either top-level Chat or a forked thread, handling `alsoToChat`. */
+/** Run a failed top-level turn again for its message; threads have no Retry. */
+export async function retryMessage(
+	topContext: Chat.Room,
+	ws: Socket,
+	msg: Request<Wire.Retry>,
+	override?: ThreadPersistence,
+): Promise<void> {
+	let boundTop = bindTopLevel(topContext, override);
+	await ensureLoaded(boundTop, override);
+	await Chat.retry(boundTop, ws, msg);
+}
+
 export async function sendMessage(
 	topContext: Chat.Room,
 	ws: Socket,
