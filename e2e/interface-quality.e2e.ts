@@ -131,7 +131,7 @@ for (let width of [1280, 390]) {
 	});
 }
 
-test("destructive confirmation retains its reviewed color states", async ({ join, page }) => {
+test("destructive confirmation keeps AA contrast in every state", async ({ join, page }) => {
 	await join("ana");
 	let actions = page.getByRole("group", { name: /^Document: / }).getByRole("button", {
 		name: /^Actions for /,
@@ -143,10 +143,12 @@ test("destructive confirmation retains its reviewed color states", async ({ join
 	let button = page.getByRole("dialog", { name: "Delete document permanently?" })
 		.getByRole("button", { name: "Delete permanently", exact: true });
 	await expect(button).toBeVisible();
-	// The original red is an intentional contrast exception documented in DESIGN.md.
-	await expect(button).toHaveCSS("background-color", "oklch(0.60513 0.17178 24.175)");
+	// The destructive red meets AA under white text from rest, through focus, hover and press.
+	await expect(button).toHaveCSS("background-color", "oklch(0.588 0.17178 24.175)");
+	// Read once the dialog has finished fading in.
+	await expect.poll(() => textContrast(button), { message: "rest" }).toBeGreaterThanOrEqual(4.5);
 	await button.focus();
-	await expect(button).toHaveCSS("background-color", "oklch(0.60513 0.17178 24.175)");
+	await expect(button).toHaveCSS("background-color", "oklch(0.588 0.17178 24.175)");
 	await button.hover();
 	expect(await textContrast(button), "hover").toBeGreaterThanOrEqual(4.5);
 	await page.mouse.down();

@@ -268,8 +268,7 @@ test(
 		// Axe on the live transcript.
 		let axe = await new AxeBuilder({ page })
 			.include("[data-chat-stack]")
-			// Chat's secondary timestamps use Chopin's --color-text-tertiary on ground (see approved-contrast/chat.json);
-			// full WCAG AA colour contrast for every copied element is checked on the audit plate.
+			// Colour contrast for Chat and its copied elements is checked by e2e/design/contrast.e2e.ts.
 			.disableRules(["color-contrast"])
 			.analyze();
 		expect(axe.violations.map(v => `${v.id}: ${v.help}`)).toEqual([]);

@@ -55,24 +55,23 @@ checks for both `check-design-contract.ts` and `check-design.mjs`:
 
 [Adding an assistant-ui element](assistant-ui.md) says how to copy and record one.
 
-## Contrast and visual hierarchy
+## Contrast
 
-AA contrast is preferred for primary content and controls, not required for every
-text role. Maggie has approved the original lighter timestamps and secondary chat
-metadata, muted loading and tool-status text, original pierre-light code
-and diff colours, supplementary audit-page labels in their quaternary role, and
-original destructive red. Preserve those choices; do not
-promote them to darker roles just to make a contrast audit pass.
+Chopin meets WCAG 2.2 AA everywhere, in light and dark: 4.5:1 for text and 3:1 for
+large text and for the controls, edges, dots and focus rings people need to see.
+Disabled controls are exempt. On 11 November 2026 the maintainer brought the former
+exceptions (quiet timestamps and metadata, loading and tool status, the pierre-light
+code and diff colours, the quaternary audit-page labels and the original destructive
+red) to AA; see the Contrast Rule in [DESIGN.md](../apps/web/DESIGN.md).
 
-Browser screenshot and contrast-report comparisons are optional review tools;
-run `bun run design:browser` when reviewing appearance. Required CI retains token
-checks and `bun run design:behavior` for keyboard, focus, motion and layout behaviour.
-See [rendered design checks](../e2e/design/README.md).
+Required CI holds it: `bun run design:behavior` runs `e2e/design/contrast.e2e.ts`, which
+walks every audit plate in both themes, composites each colour over what is really behind
+it and fails any pair below its threshold. Browser screenshot comparisons and the axe scans
+of `bun run design:browser` remain optional review tools; their scans now expect no
+contrast findings. See [rendered design checks](../e2e/design/README.md).
 
-Keep browser contrast findings visible. Optional visual tests may acknowledge only the approved
-roles and states, with a reason and measured evidence. Unexpected findings and
-changes outside that scope must still fail. Do not disable contrast checking for
-an entire page or hide accepted findings behind a claim of universal AA compliance.
+A role that cannot reach AA is a design decision recorded in DESIGN.md, never an exception
+added to the walk or a check disabled for a page.
 New exceptions need an explicit design decision. This policy does not relax token,
 fluid typography, keyboard, focus, or layout enforcement.
 

@@ -65,12 +65,12 @@ Optional visual runs write their expected/actual/diff PNGs and axe JSON locally 
 The route's development guard is also checked against production JS/CSS output by
 `scripts/check-design-production.ts` after the system suite builds the client.
 
-The optional visual suite runs 38 interface checks across the two viewport sizes. Each accessibility scan compares the complete set of findings with the exact reviewed record, so additional or changed findings fail that optional command and removed findings require review.
+The optional visual suite runs 38 interface checks across the two viewport sizes. Each accessibility scan must find nothing.
 
-## Approved colour decisions
+## Contrast
 
-On 29 September 2026, Maggie chose the original Delete red, quiet timestamps/tool metadata, muted queued/loading messages, original pierre-light code palette and supplementary audit-page labels. AA remains a preference, not a universal mandate. See `apps/web/DESIGN.md`.
+Chopin meets WCAG 2.2 AA everywhere, in light and dark (the Contrast Rule in `apps/web/DESIGN.md`, decided on 11 November 2026; until then the Delete red, quiet timestamps and metadata, loading and tool status, the pierre-light code palette and the audit-page labels were recorded exceptions).
 
-`approved-contrast/` records each accepted node's named role and exact rule, selector, HTML and measured evidence at each width. There are 61 accepted nodes at each width; 47 at each width are audit-page source/state/type-scale labels. Linux detects seven approved syntax tokens at each width. A controlled three-scan comparison showed the macOS browser detects one fewer narrow token regardless of vertical positioning; use Linux for authoritative contrast verification. These counts describe findings in the tested states, not complete palette or application coverage.
+[`contrast.e2e.ts`](contrast.e2e.ts), part of `bun run design:behavior`, holds it. [`contrast.ts`](contrast.ts) walks every visible text node, generated text and placeholder, and every icon in a control, status icon, field, composer and checkbox edge, status dot and focus ring (each control focused as a keyboard would), and measures each against the colour actually composited behind it: the ancestors' backgrounds and every group's opacity, through shadow roots. It fails any pair below 4.5:1 for text, 3:1 for large text and non-text parts, except disabled controls. Dark is the system's dark preference with the `.dark` class the copies read; Chopin draws it as light.
 
-Full axe reports retain the findings. Equality against the reviewed records rejects new nodes, other rules, changed markup/colour/size/ratio and stale entries. Menus, dialogs and Select still require zero violations. Do not broaden this decision or refresh these records automatically to make a failure pass. Screenshot update flags do not update contrast approvals.
+The optional visual suite's axe scans expect no findings: there are no approved contrast records any more.

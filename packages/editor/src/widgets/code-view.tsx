@@ -24,6 +24,7 @@ import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState } from
 import { codeWraps } from "@chopin/dialect";
 
 import { fileNameOf, repaired, titled } from "./code";
+import { accessibleTheme, CODE_THEME, CODE_THEME_BASE } from "./code-theme";
 import { grammar, PLAIN } from "./code-tokens";
 
 import type { ErrorInfo, ReactNode } from "react";
@@ -60,13 +61,13 @@ function readOverflow(element: HTMLElement): Overflow {
 }
 
 /**
- * One theme, named once.
+ * One theme, named once: pierre-light at AA (`code-theme.ts`).
  *
  * The page is light only — `theme.css` says so and carries no second palette —
  * so a `{ dark, light }` pair would load a second set of colours nothing can
  * ever ask for.
  */
-const THEME = "pierre-light";
+const THEME = CODE_THEME;
 
 /**
  * Keeps the first file's change counts clear of the block's own controls,
@@ -80,12 +81,18 @@ let loading: Promise<Renderer> | undefined;
 
 function load(): Promise<Renderer> {
 	loading ??= Promise.all([import("@pierre/diffs/react"), import("@pierre/diffs")]).then(
-		([react, diffs]) => ({
-			File: react.File,
-			FileDiff: react.FileDiff,
-			parsePatchFiles: diffs.parsePatchFiles,
-			resolveLanguage: diffs.resolveLanguage,
-		}),
+		([react, diffs]) => {
+			diffs.registerCustomTheme(
+				CODE_THEME,
+				async () => accessibleTheme(await diffs.resolveTheme(CODE_THEME_BASE)),
+			);
+			return {
+				File: react.File,
+				FileDiff: react.FileDiff,
+				parsePatchFiles: diffs.parsePatchFiles,
+				resolveLanguage: diffs.resolveLanguage,
+			};
+		},
 	);
 	return loading;
 }
