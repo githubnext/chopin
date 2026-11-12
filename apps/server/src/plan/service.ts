@@ -7,7 +7,7 @@ import {
 	validDocumentTitleText,
 	withDocumentTitle,
 } from "@chopin/dialect";
-import { locksEditing, restoreBuilds, restoreLive } from "../tasks/builds";
+import { locksEditing, releaseEndedRun, restoreBuilds, restoreLive } from "../tasks/builds";
 import {
 	announceImplementation,
 	implementationStatus,
@@ -643,6 +643,15 @@ function restoredState(
 		throw new Error("hosted channel has an invalid implementation lifecycle");
 	}
 	let lifecycle = hasLifecycle ? restoredLifecycle : undefined;
+	// A run whose build ended before a release that returns it then is returned as it opens.
+	if (graph && execution && restoredLifecycle) {
+		let released = releaseEndedRun({ graph, execution, lifecycle: restoredLifecycle }, builds);
+		if (!released.execution) {
+			graph = released.graph;
+			execution = undefined;
+			lifecycle = released.lifecycle;
+		}
+	}
 	let live = Object.hasOwn(item, "live")
 		? restoreLive(item.live, builds, lifecycle, graph, item.revision)
 		: undefined;

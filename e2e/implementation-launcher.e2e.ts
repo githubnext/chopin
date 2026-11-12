@@ -370,8 +370,11 @@ for (let width of [1280, 390]) {
 				contentType: "image/png",
 			});
 			await page.keyboard.press("Enter");
-			await expect(view).toContainText("Build stopped");
+			// Stopping ends the run the build claimed: it is returned for changes, and the document opens.
+			await expect(view).toContainText("Returned for changes");
 			await expect(stop).toHaveCount(0);
+			await expect(page.getByRole("textbox", { name: "editable markdown", includeHidden: true }))
+				.toHaveAttribute("contenteditable", "true");
 			await expect.poll(() => local.output(), { timeout: 20_000 })
 				.toMatch(/Chopin ended this run \(build-(?:inactive|forbidden)\)/);
 			let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
@@ -452,7 +455,9 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 			expect(snapshot.build.state, local.output()).toBe("stopped");
 			expect(snapshot.build.session).toBeTruthy();
 			await expect(
-				page.getByRole("button", { name: mode === "complete" ? /^Built/ : /^Build stopped/ }),
+				mode === "complete"
+					? page.getByRole("button", { name: /^Built/ })
+					: page.getByRole("button", { name: "Build plan", exact: true }),
 			)
 				.toBeVisible();
 			await openBuild();
@@ -472,12 +477,14 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 				await expect(chat).toBeVisible();
 				await expect(chat.getByRole("region", { name: "Workflow runs" })).toHaveCount(0);
 			} else {
-				await expect(view).toContainText("Build stopped");
+				// The run ended with its build, so it was returned for changes and keeps its blocker.
+				await expect(view.getByText("Returned for changes", { exact: true })).toBeVisible();
+				await expect(view.getByText("Build plan builds it again.", { exact: true })).toBeVisible();
 				await expect(blocked).toHaveAttribute("aria-expanded", "true");
 				await expect(view.getByText(/^Blocked: Choose the next tracer/)).toBeVisible();
-				// Build replaces the document area, so the locked editor is hidden here.
+				// Build replaces the document area, so the open editor is hidden here.
 				await expect(page.getByRole("textbox", { name: "editable markdown", includeHidden: true }))
-					.toHaveAttribute("contenteditable", "false");
+					.toHaveAttribute("contenteditable", "true");
 			}
 			await dependent.click();
 			await expect(dependent).toHaveAttribute("aria-expanded", "true");
@@ -485,10 +492,7 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 			expect(await local.localEdit()).toBe("uncommitted local edit");
 			await page.reload();
 			await expect(view).toBeHidden();
-			await expect(content(page)).toHaveAttribute(
-				"contenteditable",
-				mode === "complete" ? "true" : "false",
-			);
+			await expect(content(page)).toHaveAttribute("contenteditable", "true");
 			await openBuild();
 			await expect(view).toContainText(
 				mode === "complete" ? "2 pull requests" : "Blocked: Choose the next tracer",
@@ -500,13 +504,9 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 				await view.screenshot({ path: process.env.CHOPIN_LAUNCHER_SCREENSHOT });
 			}
 			if (mode === "block") {
-				await view.getByRole("button", { name: "Return to planning", exact: true }).click();
-				await view.getByRole("textbox", { name: "What needs to change?" }).fill(
-					"Choose the next tracer before continuing.",
-				);
-				await view.getByRole("button", { name: "Return to planning", exact: true }).click();
-				await expect(view.getByText("Returned for changes", { exact: true })).toBeVisible();
-				await expect(view.getByText("Build plan builds it again.", { exact: true })).toBeVisible();
+				// Nothing is left to return: Build offers no Return to planning.
+				await expect(view.getByRole("button", { name: "Return to planning", exact: true }))
+					.toHaveCount(0);
 				await page.getByRole("group", { name: "Document view" })
 					.getByRole("button", { name: "Document", exact: true }).click();
 				await expect(content(page)).toHaveAttribute("contenteditable", "true");

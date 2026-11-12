@@ -101,12 +101,14 @@ failed before the graph was claimed, **Retry** in the header creates a
 new attempt. Repeating that retry request returns
 the same attempt; it does not start duplicate work.
 
-If a claimed run stops or fails, its graph remains locked. After inspecting the
-retained checkout, choose **Return to planning**, enter a reason and confirm to
-record a revision request and release the editing lock. **Build plan** then asks
-the Planner to revise the tasks and builds the replacement.
-This action is unavailable while the agent is still running; select **Stop build**
-in Build first. Stop preserves existing commits and pull requests and rejects further
+If a claimed run stops or fails, it ends with its build: Chopin records a revision
+request with the build's error as the reason, releases the graph and opens the
+document for editing again. Its agent can no longer report on the run, so keeping
+the lock would only leave the document read-only. Build keeps the run's tasks,
+blocker and pull requests and reads **Returned for changes**; the retained checkout
+is there to inspect. **Build plan** then asks the Planner to revise the tasks and
+builds the replacement. While the agent is still running the document stays locked;
+select **Stop build** in Build to end the run. Stop preserves existing commits and pull requests and rejects further
 reports from that run. The connector stops the agent on its next heartbeat (normally
 within 10 seconds) and stays connected. Ctrl-C in its terminal also stops the work
 and disconnects the connector. Reconnect with the updated connector to receive

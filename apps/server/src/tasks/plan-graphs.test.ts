@@ -273,6 +273,73 @@ describe("the plan graph adapter", () => {
 			.rejects.toThrow("invalid implementation run");
 	});
 
+	it("opens a document whose build ended while the run it claimed was left unreturned", async () => {
+		let context = await hosted();
+		let plan = await open(context.channel.id, context.backend, context.server);
+		expect(
+			(await implementationGraphs().revise(plan, {
+				planRevision: plan.revision,
+				graphRevision: 0,
+				operations: definition.tasks.map(task => ({ op: "add", task })),
+			})).ok,
+		).toBe(true);
+		expect((await implementationGraphs().approve(plan)).ok).toBe(true);
+		let id = crypto.randomUUID();
+		let claimed = run(plan.revision, 1, id);
+		expect(
+			await claimImplementation(plan, {
+				planRevision: plan.revision,
+				graphRevision: 1,
+				run: claimed,
+			}),
+		).toMatchObject({ kind: "started" });
+		await close(plan);
+
+		// As an earlier release left it: the build was stopped, and its run still holds the graph.
+		let stored = await context.storage.collaboration.load(context.channel.id, now);
+		if (!stored?.snapshot || !stored.sidecar || typeof stored.sidecar !== "object") {
+			throw new Error("claimed plan was not stored");
+		}
+		await context.storage.collaboration.commit({
+			channelId: context.channel.id,
+			lease: context.lease,
+			expectedRevision: stored.channel.revision,
+			operationId: "stopped-build",
+			epoch: stored.snapshot.epoch,
+			sidecar: {
+				...stored.sidecar,
+				builds: [{
+					id,
+					user: "octocat",
+					connectionId: "laptop",
+					repositoryId: "R_score",
+					checkout: { repository: "octo-org/score", branch: "tq/017", commit: "a".repeat(40) },
+					planRevision: claimed.planRevision,
+					graphVersion: 1,
+					graphRevision: 1,
+					createdAt: now.toISOString(),
+					finishedAt: now.toISOString(),
+					expiresAt: 0,
+					state: "failed",
+					error: "Stopped in Chopin.",
+					stoppedAtRevision: claimed.planRevision,
+				}],
+			} as JsonValue,
+			events: [],
+			now,
+		});
+
+		let restored = await open(context.channel.id, context.backend, context.server);
+		expect(restored.execution).toBeUndefined();
+		expect(implementationActive(restored)).toBe(false);
+		expect(restored.graph?.versions.at(-1)?.state).toBe("approved");
+		expect(historyFor(restored.graph!, restored.lifecycle).at(-1)).toMatchObject({
+			run: { id },
+			outcome: { kind: "revision_requested", reason: "Stopped in Chopin." },
+		});
+		await close(restored);
+	});
+
 	it("rejects a locked graph without its execution while reopening", async () => {
 		let context = await hosted();
 		let plan = await open(context.channel.id, context.backend, context.server);

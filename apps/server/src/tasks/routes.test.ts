@@ -392,7 +392,10 @@ test("the build owner can stop from the browser without losing reported pull req
 	expect(snapshot.build).toMatchObject({ state: "failed", error: "Stopped in Chopin." });
 	expect(context.experiments.connections.assigned(connection.id)).toBeUndefined();
 	expect(context.plan.live).toBeUndefined();
-	expect(snapshot.lifecycle.activity.tasks[0].pullRequest.url)
+	// The stop ends the run the build claimed, which keeps what it reported and opens the document.
+	expect(Plan.implementationActive(context.plan)).toBe(false);
+	expect(snapshot.lifecycle.execution.state).toBe("idle");
+	expect(snapshot.lifecycle.history.at(-1).progress.tasks[0].pullRequest.url)
 		.toBe("https://github.com/owner/repository/pull/7");
 	expect(
 		(await tool(context, connection.token, "renew_implementation_build", { id: built.id })).isError,
@@ -539,7 +542,9 @@ test("a paired workspace claims a browser build once and reports through run-sco
 	});
 	snapshot = await (await context.call(context.path)).json();
 	expect(snapshot.build.session).toBe("acp-session");
-	expect(snapshot.lifecycle.activity.tasks[0].blocker).toBe("Choose the next tracer");
+	expect(snapshot.lifecycle.history.at(-1).progress.tasks[0].blocker).toBe(
+		"Choose the next tracer",
+	);
 	expect((await tool(context, claim.runToken, "read_implementation")).isError).toBe(true);
 	await Plan.close(context.plan);
 });
@@ -1563,7 +1568,7 @@ test("a committed build wakes the waiting connector and a failed pickup can be r
 	}
 });
 
-test("returning a stopped implementation for changes durably unlocks it once", async () => {
+test("a stopped implementation is returned for changes as it stops, durably and once", async () => {
 	let context = await setup();
 	let connection = await paired(context);
 	try {
@@ -1578,29 +1583,33 @@ test("returning a stopped implementation for changes durably unlocks it once", a
 			state: "running",
 			session: "session",
 		});
+		expect(context.plan.execution?.id).toBe(built.id);
 		let input = { buildId: built.id, reason: "Resolve the missing design decision" };
 		expect((await context.call(`${context.path}/revise`, input)).status).toBe(409);
-		await tool(context, connection.token, "report_implementation_build", {
-			id: built.id,
-			state: "stopped",
-		});
-		expect(
-			(await context.call(`${context.path}/revise`, input, undefined, "https://other.test")).status,
-		)
-			.toBe(403);
 		let commit = context.storage.collaboration.commit;
 		context.storage.collaboration.commit = async () => {
 			throw new Error("offline");
 		};
-		expect((await context.call(`${context.path}/revise`, input)).status).toBe(409);
+		let stop = { id: built.id, state: "stopped" };
+		expect((await tool(context, connection.token, "report_implementation_build", stop)).isError)
+			.toBe(true);
 		expect(Plan.implementationActive(context.plan)).toBe(true);
+		expect(context.plan.execution?.id).toBe(built.id);
 		context.storage.collaboration.commit = commit;
-		expect((await context.call(`${context.path}/revise`, input)).status).toBe(200);
-		expect((await context.call(`${context.path}/revise`, input)).status).toBe(200);
+		await tool(context, connection.token, "report_implementation_build", stop);
 		expect(Plan.implementationActive(context.plan)).toBe(false);
+		expect(implementationStatus(context.plan).locked).toBe(false);
 		expect(context.plan.execution).toBeUndefined();
+		expect(context.plan.graph?.versions.at(-1)?.state).toBe("approved");
 		expect(context.plan.lifecycle.history).toHaveLength(1);
 		expect(context.plan.lifecycle.history[0].events.at(-1)?.kind).toBe("request_revision");
+		// Return to planning from a page that still shows the build as stopped changes nothing more.
+		expect(
+			(await context.call(`${context.path}/revise`, input, undefined, "https://other.test")).status,
+		)
+			.toBe(403);
+		expect((await context.call(`${context.path}/revise`, input)).status).toBe(200);
+		expect(context.plan.lifecycle.history).toHaveLength(1);
 	} finally {
 		await Plan.close(context.plan);
 	}

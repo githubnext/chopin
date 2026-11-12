@@ -175,9 +175,12 @@ graph counter.
 The Planner may then draft a replacement graph, but a revision request does not
 itself supersede the old version and does not prevent that version from being
 claimed again through MCP. The connector deliberately does not replay a picked-up
-request. A failed pre-claim attempt can be explicitly retried from Build. A stopped
-claimed attempt can be returned for changes through a durable revision request;
-the next reviewed build is a new attempt, not an automatic session replay.
+request. A failed pre-claim attempt can be explicitly retried from Build. A claimed
+run ends with its build: once the build has failed or stopped, its agent can no
+longer report on the run, so the server returns the run for changes in the same
+commit, with the build's error as the reason, and the document opens for editing.
+A document stored with such a run still claimed is returned the same way when it
+opens. The next reviewed build is a new attempt, not an automatic session replay.
 
 ## MCP lifecycle tools
 
@@ -258,8 +261,8 @@ checks.
 A queued or launching build freezes plan and decision edits before the MCP
 claim. An active implementation locks the graph and prevents plan changes that would
 invalidate the claimed work. Planner edits, new questions, and decision changes
-that mutate the plan are refused until the implementation finishes or requests
-revision. Progress and archived runs remain durable sidecar state.
+that mutate the plan are refused until the implementation finishes, requests
+revision, or its build ends. Progress and archived runs remain durable sidecar state.
 
 The protocol defines a `plan:lifecycle` projection for active progress and run
 history. `plan:implementation` invalidates the Build view's authenticated
