@@ -482,6 +482,7 @@ function walk({ root, focus }: { root: string; focus: boolean }): Measured[] {
 	// or a ring drawn as a shadow. A single rule (a divider under a row) is no box.
 	function edge(element: Element, pseudo?: "::before"): RGBA | null {
 		let style = getComputedStyle(element, pseudo);
+		if (pseudo && (style.content === "none" || style.content === "normal")) return null;
 		let sides = ["top", "bottom", "left", "right"].map(side => ({
 			width: parseFloat(style.getPropertyValue(`border-${side}-width`)),
 			kind: style.getPropertyValue(`border-${side}-style`),
@@ -520,11 +521,12 @@ function walk({ root, focus }: { root: string; focus: boolean }): Measured[] {
 			element.matches('input:is([type="checkbox"], [type="radio"])')
 			&& getComputedStyle(element).appearance !== "none"
 		) return;
-		// The edge is drawn by the field itself or the first of its three nearest ancestors that draws one.
+		// The edge is drawn by the field itself or the first of its three nearest ancestors that draws
+		// one, on the box or on a `::before` laid over its border (the composer's own edge layer).
 		let owner: Element | null = element;
 		let colour: RGBA | null = null;
 		for (let depth = 0; owner && depth < 4; depth++, owner = parentOf(owner)) {
-			colour = edge(owner);
+			colour = edge(owner) ?? edge(owner, "::before");
 			if (colour) break;
 			let fill = parse(getComputedStyle(owner).backgroundColor);
 			if (fill && fill[3] > 0.5) break;

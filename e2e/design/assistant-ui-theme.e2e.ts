@@ -381,8 +381,11 @@ async function computed(page: Page, expression: string): Promise<string> {
 
 type Property = "backgroundColor" | "color" | "borderTopColor";
 
-async function paint(element: Locator, property: Property): Promise<string> {
-	return element.evaluate((node, name) => getComputedStyle(node)[name], property);
+async function paint(element: Locator, property: Property, pseudo?: "::before"): Promise<string> {
+	return element.evaluate(
+		(node, [name, at]) => getComputedStyle(node, at)[name as Property],
+		[property, pseudo] as const,
+	);
 }
 
 for (let name of ["light", "dark"] as const) {
@@ -395,12 +398,13 @@ for (let name of ["light", "dark"] as const) {
 		await composer.scrollIntoViewIfNeeded();
 		let token = (value: string) => computed(page, `var(--color-${value})`);
 
-		// The box is the page's surface with the control boundary, and its edge darkens on focus.
+		// The box is the page's surface with the control boundary, and its edge darkens on focus. The
+		// edge is drawn over the box's border by its own layer, so it is read there.
 		let box = composer.locator(".composer-surface");
 		expect(await paint(box, "backgroundColor")).toBe(await token("page"));
-		expect(await paint(box, "borderTopColor")).toBe(await token("control-boundary"));
+		expect(await paint(box, "borderTopColor", "::before")).toBe(await token("control-boundary"));
 		await composer.getByRole("combobox", { name: "Message" }).focus();
-		expect(await paint(box, "borderTopColor")).toBe(await token("text-tertiary"));
+		expect(await paint(box, "borderTopColor", "::before")).toBe(await token("text-tertiary"));
 
 		// The toolbar is the inset ground with Chopin's edge for its divider, and its marks quiet ink.
 		let toolbar = composer.getByRole("toolbar", { name: "Formatting" });

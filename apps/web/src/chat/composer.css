@@ -4,7 +4,7 @@
  * where an extension point was needed), so they have no rule here.
  */
 .chat-composer .composer-surface[data-error] {
-	border-color: var(--color-destructive);
+	--composer-edge: var(--color-destructive);
 }
 /* The field scrolls, not the draft in it, once the draft is taller than the cap. */
 .chat-composer .composer-field {
@@ -19,7 +19,8 @@
 	position: relative;
 	display: block;
 	width: 100%;
-	min-height: calc(1.5rem + 2lh);
+	/* Two fluid lines end on a fraction of a pixel; rounded, the message box sits on whole pixels. */
+	min-height: round(calc(1.5rem + 2lh), 1px);
 	padding: 0.75rem;
 	border: 0;
 	background: transparent;
@@ -452,15 +453,32 @@
 	--btn-icon-size: calc(var(--spacing) * 4.5);
 }
 .chat-composer .composer-surface {
+	--composer-edge: var(--color-control-boundary);
 	position: relative;
 	display: flex;
 	flex-direction: column;
-	border: var(--edge-width) solid var(--color-control-boundary);
+	border: var(--edge-width) solid transparent;
 	border-radius: var(--radius-lg);
 	background: var(--color-page);
 }
+/*
+ * The box's edge, drawn over its border on a layer that holds nothing else, so it is only ever drawn
+ * whole. Drawn with the box, its rounded corners came out a shade apart whenever a button near a
+ * corner was painted again (the send button turning on as the connection comes), which the 3:1 edge
+ * shows where a faint hairline hid it, and a drag, a keyboard resize and a fresh load could end
+ * a shade apart.
+ */
+.chat-composer .composer-surface::before {
+	content: "";
+	position: absolute;
+	inset: calc(-1 * var(--edge-width));
+	border: var(--edge-width) solid var(--composer-edge);
+	border-radius: inherit;
+	pointer-events: none;
+	will-change: transform;
+}
 .chat-composer .composer-surface:focus-within {
-	border-color: var(--color-text-tertiary);
+	--composer-edge: var(--color-text-tertiary);
 }
 .chat-composer .composer-format {
 	/* Drawn above the draft but after it in the page, so Tab reaches the draft first. */
