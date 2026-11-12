@@ -8,7 +8,9 @@
  */
 
 import {
+	ArrowRightIcon as ArrowRight,
 	ArrowUpIcon as ArrowUp,
+	BotIcon as Bot,
 	CheckIcon as Check,
 	ChevronDownIcon as ChevronDown,
 	ChevronIcon,
@@ -51,7 +53,9 @@ function lucide(Glyph: (props: IconProps) => ReactElement): (props: LucideProps)
 	};
 }
 
+export const ArrowRightIcon = lucide(ArrowRight);
 export const ArrowUpIcon = lucide(ArrowUp);
+export const BotIcon = lucide(Bot);
 export const CheckIcon = lucide(Check);
 export const ChevronDownIcon = lucide(ChevronDown);
 export const ChevronLeftIcon = lucide(ChevronLeft);
