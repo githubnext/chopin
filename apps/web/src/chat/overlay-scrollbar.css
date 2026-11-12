@@ -62,8 +62,7 @@
 
 /* A pointer that hovers finds it and can take it; a finger scrolls the rows under it instead. */
 @media (hover: hover) and (pointer: fine) {
-	.chat-scroll-host:hover > .chat-scroll-track > .chat-scroll-thumb,
-	.chat-scroll-track:is([data-scrolling], [data-dragging]) > .chat-scroll-thumb {
+	.chat-scroll-track:is([data-pointed], [data-scrolling], [data-dragging]) > .chat-scroll-thumb {
 		opacity: 1;
 		pointer-events: auto;
 		transition-duration: var(--duration-fast);
