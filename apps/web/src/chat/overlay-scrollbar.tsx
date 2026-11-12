@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useRef } from "react";
+import { type RefObject, useLayoutEffect, useRef } from "react";
 
 import "./overlay-scrollbar.css";
 
@@ -25,58 +25,97 @@ export function OverlayScrollbar(
 	let track = useRef<HTMLDivElement>(null);
 	let thumb = useRef<HTMLDivElement>(null);
 
-	useEffect(() => {
+	// Set up as the transcript mounts, before it first scrolls to its newest line, so every scroll is
+	// heard and the thumb never has to ask the scroller where it is.
+	useLayoutEffect(() => {
 		let view = scroller.current;
-		let stack = content.current;
 		let lane = track.current;
 		let bar = thumb.current;
+		let stack = content.current;
 		if (!view || !stack || !lane || !bar) return;
-		let floor = Number.parseFloat(getComputedStyle(bar).minHeight) || 0;
-		let padding = 0;
 		let shown = 0;
+		let padding = 0;
 		let inner = 0;
 		let height = 0;
+		let drawn = 0;
 		let size = 0;
 		let travel = 0;
 		let range = 0;
+		let offset = 0;
 		let linger = 0;
-		let place = (offset: number) => {
+		let idle = true;
+		let scrolling = false;
+		let pointed = false;
+		let frame = 0;
+		// Every write is the thumb's and waits for the next frame, where the page is styled anyway.
+		let draw = () => {
+			frame = 0;
+			if (bar.style.height !== `${size}px`) bar.style.height = `${size}px`;
 			bar.style.translate = range > 0
 				? `0 ${Math.round(Math.min(1, offset / range) * travel * 100) / 100}px`
 				: "";
+			if (lane.hasAttribute("data-idle") !== idle) lane.toggleAttribute("data-idle", idle);
+			if (lane.hasAttribute("data-scrolling") !== scrolling) {
+				lane.toggleAttribute("data-scrolling", scrolling);
+			}
+			if (lane.hasAttribute("data-pointed") !== pointed) {
+				lane.toggleAttribute("data-pointed", pointed);
+			}
 		};
+		let schedule = () => {
+			if (!frame) frame = requestAnimationFrame(draw);
+		};
+		let measure = () => {
+			range = Math.max(0, Math.round(padding + inner - shown));
+			let next = range > 0 ? height * shown / (shown + range) : 0;
+			travel = height - (next !== size ? next : Math.max(size, drawn));
+			size = next;
+			idle = range <= 0;
+			schedule();
+		};
+		// Every size comes from the resize observer's entries, the thumb's own (its floor included)
+		// among them, and the offset from the scroll event, so nothing here asks the page to lay out.
 		let observer = new ResizeObserver(entries => {
 			for (let entry of entries) {
 				let block = entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height;
 				if (entry.target === view) {
 					shown = block;
-					let style = getComputedStyle(view);
-					padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+					padding = block - (entry.contentBoxSize[0]?.blockSize ?? entry.contentRect.height);
 				} else if (entry.target === stack) inner = block;
+				else if (entry.target === bar) drawn = block;
 				else height = block;
 			}
-			let offset = view.scrollTop;
-			range = Math.max(0, Math.round(padding + inner - shown));
-			let next = range > 0 ? Math.max(floor, height * shown / (shown + range)) : 0;
-			if (next !== size) {
-				size = next;
-				bar.style.height = `${size}px`;
-			}
-			travel = height - size;
-			if (lane.hasAttribute("data-idle") !== range <= 0) lane.toggleAttribute("data-idle");
-			place(offset);
+			measure();
 		});
 		observer.observe(view, { box: "border-box" });
 		observer.observe(stack, { box: "border-box" });
 		observer.observe(lane, { box: "border-box" });
+		observer.observe(bar, { box: "border-box" });
 
 		let scrolled = () => {
-			place(view.scrollTop);
-			if (!lane.hasAttribute("data-scrolling")) lane.toggleAttribute("data-scrolling", true);
+			offset = view.scrollTop;
+			scrolling = true;
+			schedule();
 			clearTimeout(linger);
-			linger = window.setTimeout(() => lane.removeAttribute("data-scrolling"), LINGER_MS);
+			linger = window.setTimeout(() => {
+				scrolling = false;
+				schedule();
+			}, LINGER_MS);
 		};
 		view.addEventListener("scroll", scrolled, { passive: true });
+		// The pane says the pointer is on it by a mark on the thumb's lane. A `:hover` of the pane in the
+		// stylesheet restyled the whole transcript each time the pointer came or went.
+		let host = lane.parentElement!;
+		let enter = () => {
+			pointed = true;
+			schedule();
+		};
+		let leave = () => {
+			pointed = false;
+			schedule();
+		};
+		host.addEventListener("pointerenter", enter);
+		host.addEventListener("pointerleave", leave);
 
 		// Dragging the thumb scrolls the transcript by as much as the thumb travels, scaled.
 		let from = 0;
@@ -86,7 +125,7 @@ export function OverlayScrollbar(
 			event.preventDefault();
 			bar.setPointerCapture(event.pointerId);
 			from = event.clientY;
-			start = view.scrollTop;
+			start = offset;
 			lane.toggleAttribute("data-dragging", true);
 		};
 		let move = (event: PointerEvent) => {
@@ -104,7 +143,10 @@ export function OverlayScrollbar(
 		return () => {
 			observer.disconnect();
 			clearTimeout(linger);
+			cancelAnimationFrame(frame);
 			view.removeEventListener("scroll", scrolled);
+			host.removeEventListener("pointerenter", enter);
+			host.removeEventListener("pointerleave", leave);
 			bar.removeEventListener("pointerdown", down);
 			bar.removeEventListener("pointermove", move);
 			bar.removeEventListener("pointerup", up);
