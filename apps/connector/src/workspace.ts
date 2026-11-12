@@ -392,29 +392,6 @@ export function chosenPlanners(directory: string, root: string) {
 
 export type ChosenPlanners = ReturnType<typeof chosenPlanners>;
 
-/**
- * The repositories Chopin said its GitHub App can't push to, so the machine's processes use its
- * own GitHub login for them, kept for `chopin status` in a file beside the connector's lock.
- * `record` is true only the first time for each, so the connector says it once.
- */
-export function githubFallback(directory: string, root: string) {
-	let path = join(directory, `${lockId(root)}.github.json`);
-	// A connector that crashed may have left its note behind.
-	let writing = rm(path, { force: true }).catch(() => {});
-	let recorded: string[] = [];
-	return {
-		record(repository: string) {
-			if (recorded.some(value => value.toLowerCase() === repository.toLowerCase())) return false;
-			recorded.push(repository);
-			let repositories = [...recorded];
-			writing = writing.then(() =>
-				writeFile(path, JSON.stringify({ repositories }), { mode: 0o600 })
-			).catch(() => {});
-			return true;
-		},
-	};
-}
-
 /** Whether no process `pid` exists; EPERM means it exists but belongs to someone else. */
 function gone(pid: number) {
 	try {
@@ -479,8 +456,6 @@ export type RunningConnector = {
 	started?: number;
 	/** How its agent or Planner backends last failed to start, while it runs. */
 	failures?: StartFailure[];
-	/** The repositories its GitHub App can't push to, so its machine uses its own login there. */
-	githubCannotPush?: string[];
 };
 
 /**
@@ -520,17 +495,6 @@ export async function connectors(
 				.then(text => JSON.parse(text))
 				.catch(() => undefined)
 			: undefined;
-		let github: unknown = running
-			? await readFile(join(directory, name.replace(/\.lock$/, ".github.json")), "utf8")
-				.then(text => {
-					let value = JSON.parse(text) as { repository?: unknown; repositories?: unknown };
-					return Array.isArray(value.repositories) ? value.repositories : [value.repository];
-				})
-				.catch(() => undefined)
-			: undefined;
-		let refused = Array.isArray(github)
-			? github.filter((value): value is string => typeof value === "string")
-			: [];
 		found.push({
 			pid: pid as number,
 			...(typeof root === "string" ? { root } : {}),
@@ -550,7 +514,6 @@ export async function connectors(
 			...(typeof protocol === "number" ? { protocol } : {}),
 			...(typeof started === "number" ? { started } : {}),
 			...(Array.isArray(failures) && failures.length ? { failures } : {}),
-			...(refused.length ? { githubCannotPush: refused } : {}),
 		});
 	}
 	return found;
@@ -561,12 +524,18 @@ export async function connectors(
  * tree fails: each remote URL is rewritten to a scheme Git cannot push to. A spike runs under it,
  * so its throwaway branch never leaves the laptop even if the agent tries.
  */
-export function noPushEnvironment(): Record<string, string> {
+export function noPushEnvironment(more: Array<[string, string]> = []): Record<string, string> {
 	let prefixes = ["https://", "http://", "ssh://", "git@", "git://", "file://", "/", "."];
-	let env: Record<string, string> = { GIT_CONFIG_COUNT: String(prefixes.length) };
-	prefixes.forEach((prefix, index) => {
-		env[`GIT_CONFIG_KEY_${index}`] = "url.chopin-spike-never-pushes://.pushInsteadOf";
-		env[`GIT_CONFIG_VALUE_${index}`] = prefix;
+	let entries: Array<[string, string]> = [
+		...prefixes.map(prefix =>
+			["url.chopin-spike-never-pushes://.pushInsteadOf", prefix] as [string, string]
+		),
+		...more,
+	];
+	let env: Record<string, string> = { GIT_CONFIG_COUNT: String(entries.length) };
+	entries.forEach(([key, value], index) => {
+		env[`GIT_CONFIG_KEY_${index}`] = key;
+		env[`GIT_CONFIG_VALUE_${index}`] = value;
 	});
 	return env;
 }

@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
+import { answerTokens } from "./testing/github-grant";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -250,7 +251,10 @@ async function plannerBackend(linked: boolean) {
 	let chopin = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
-		fetch(request) {
+		async fetch(request) {
+			// The GitHub token the backend needs before it starts.
+			let issued = await answerTokens(request);
+			if (issued) return issued;
 			if (new URL(request.url).pathname === "/api/connector/planner") {
 				return Response.json({
 					token: `chopin_p_${"P".repeat(43)}`,

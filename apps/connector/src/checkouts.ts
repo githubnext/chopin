@@ -114,12 +114,12 @@ export function checkouts(options: { directory: string; registered: Registered }
 	return {
 		registered: options.registered,
 		/**
-		 * The checkout for work in `repository`; `token` gives the machine's GitHub token for it,
-		 * asked for only when there is no registered checkout.
+		 * The checkout for work in `repository`; `token` gives Chopin's GitHub token for it, asked
+		 * for here only when there is no registered checkout, and rejecting when Chopin gave none.
 		 */
 		async resolve(
 			repository: string,
-			token?: () => Promise<GitHubToken | undefined>,
+			token?: () => Promise<GitHubToken>,
 		): Promise<Resolved> {
 			let key = Object.keys(options.registered).find(name =>
 				name.toLowerCase() === repository.toLowerCase()

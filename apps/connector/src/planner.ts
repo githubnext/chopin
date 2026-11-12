@@ -15,8 +15,15 @@ import {
 import { ConnectorError } from "./mcp";
 import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
-import { gitCredentials, type GitHubToken, githubToken } from "./github-token";
+import {
+	githubEnvironment,
+	GitHubRefused,
+	type GitHubToken,
+	githubToken,
+	withoutGitHub,
+} from "./github-token";
 import { type PlannerTokenFile, plannerTokenFile } from "./planner-token";
+import { type McpTokenFile, mcpTokenFile } from "./mcp-token";
 import {
 	type ChosenPlanners,
 	plannerWorktree,
@@ -96,8 +103,6 @@ export async function servePlanners(options: {
 	/** The `--env` variables connect saved, added to each backend's environment. */
 	env?: Record<string, string>;
 	healthyMs?: number;
-	/** Hears, once each time, why Chopin gave no GitHub token when its App can't push. */
-	githubRefused?: (message: string, repository: string) => void;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
 	/** Where each backend starts: the machine's process sandbox, else plainly. */
@@ -134,8 +139,6 @@ export function dispatchedPlanners(options: {
 	chosen?: ChosenPlanners;
 	env?: Record<string, string>;
 	healthyMs?: number;
-	/** Hears, once each time, why Chopin gave no GitHub token when its App can't push. */
-	githubRefused?: (message: string, repository: string) => void;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
 	sandbox?: Sandbox;
@@ -281,8 +284,6 @@ async function servePlanner(options: {
 	failures?: StartFailures;
 	env?: Record<string, string>;
 	healthyMs?: number;
-	/** Hears, once each time, why Chopin gave no GitHub token when its App can't push. */
-	githubRefused?: (message: string, repository: string) => void;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
 	sandbox?: Sandbox;
@@ -361,28 +362,57 @@ async function servePlanner(options: {
 		// Its tokens are kept in a folder of their own, which is all of them a sandbox is shown.
 		let tokenDirectory = tokenFolder(worktree);
 		await mkdir(tokenDirectory, { recursive: true, mode: 0o700 }).catch(() => {});
-		// The machine's own GitHub token, where Chopin gives one; without one the backend still starts
-		// in a registered checkout.
-		let github = await githubToken({
-			url: options.url,
-			machine: options.machine,
-			repository,
-			file: join(tokenDirectory, "github"),
-			...(options.githubRefused ? { refused: options.githubRefused } : {}),
-			...(options.renewGitHubBeforeMs === undefined
-				? {}
-				: { renewBeforeMs: options.renewGitHubBeforeMs }),
-		});
+		// Chopin's GitHub token for the document's repository, which the backend needs before it
+		// starts: a refusal stops this Planner with the reason, and the machine never falls back to its
+		// own GitHub login. Chopin out of reach is retried, as a failed start is.
 		let launched = Date.now();
 		let tokens: PlannerTokenFile | undefined;
-		let outcome: { how: string; stderr?: string; reason?: string };
-		let checkout = await options.checkouts.resolve(repository, async () => github).then(
-			value => value.root,
-			(error: unknown) => {
-				outcome = { how: error instanceof Error ? error.message : String(error) };
-				return undefined;
-			},
-		);
+		let mcp: McpTokenFile | undefined;
+		let outcome: { how: string; stderr?: string; reason?: string } | undefined;
+		let github: GitHubToken | undefined;
+		try {
+			github = await githubToken({
+				url: options.url,
+				machine: options.machine,
+				repository,
+				purpose: "planner",
+				...(credential.document ?? options.id
+					? { document: credential.document ?? options.id }
+					: {}),
+				folder: tokenDirectory,
+				...(options.renewGitHubBeforeMs === undefined
+					? {}
+					: { renewBeforeMs: options.renewGitHubBeforeMs }),
+			});
+		} catch (error) {
+			if (signal.aborted) return;
+			if (error instanceof GitHubRefused) {
+				output.error(`Stopped the Planner for ${document}: ${error.message}`);
+				await options.failures?.failed({
+					kind: "planner",
+					document,
+					how: error.message,
+					stopped: true,
+					at: Date.now(),
+				});
+				report(reportedAs, { attempts: 1, how: plain(error.message), at: Date.now() });
+				return;
+			}
+			outcome = {
+				how: `Couldn't get a GitHub token for ${repository} from Chopin (${
+					redacted(error instanceof Error ? error.message : String(error)).split("\n")[0]
+				})`,
+			};
+		}
+		let checkout = github
+			? await options.checkouts.resolve(repository, async () => github!).then(
+				value => value.root,
+				(error: unknown) => {
+					outcome = { how: error instanceof Error ? error.message : String(error) };
+					return undefined;
+				},
+			)
+			: undefined;
 		if (checkout) {
 			output.say(`› Planner for ${document} started.`);
 			let healthy = setTimeout(() => {
@@ -394,12 +424,21 @@ async function servePlanner(options: {
 				}
 			}, healthyMs);
 			// The backend may outlive its credential when its link drops, so it can read a new one.
+			// Chopin's own tools take a token minted from it, renewed with it, never a GitHub token.
+			mcp = await mcpTokenFile({
+				url: options.url,
+				machine: options.machine,
+				file: join(tokenDirectory, "mcp"),
+				credential: { planner: credential.token },
+				scheduled: false,
+			});
 			tokens = await plannerTokenFile({
 				url: options.url,
 				machine: options.machine,
 				document,
 				file: join(tokenDirectory, "planner"),
 				first: credential,
+				renewed: token => mcp!.renew({ planner: token }),
 			});
 			// A backend in the sandbox can't make its own worktree of the checkout (see
 			// `preparePlannerWorktree`), so it is made here. Never fatal: a backend that has no use
@@ -415,15 +454,22 @@ async function servePlanner(options: {
 					)
 				);
 			}
+			// A token that lapsed without a renewal stops the backend, which starts again with a new one.
+			let lapsed = github!.expired;
 			outcome = await launch(
-				{ ...options, document, cwd: checkout },
+				{ ...options, document, cwd: checkout, signal: AbortSignal.any([signal, lapsed]) },
 				credential.token,
 				worktree,
-				github,
+				github!,
 				repository,
 				tokens,
+				mcp,
 			);
+			if (lapsed.aborted && !signal.aborted) {
+				outcome = { how: (lapsed.reason as Error).message };
+			}
 			await tokens?.stop();
+			await mcp?.stop();
 			clearTimeout(healthy);
 		} else {
 			output.error(`Can't start the Planner for ${document}: ${outcome!.how}`);
@@ -437,6 +483,7 @@ async function servePlanner(options: {
 		let secrets = [
 			credential.token,
 			...tokens?.secrets() ?? [],
+			...mcp?.secrets() ?? [],
 			...github?.secrets() ?? [],
 			...values,
 		];
@@ -580,9 +627,10 @@ async function launch(
 	},
 	token: string,
 	worktree: string,
-	github?: GitHubToken,
-	repository?: string,
+	github: GitHubToken,
+	repository: string,
 	tokens?: PlannerTokenFile,
+	mcp?: McpTokenFile,
 ): Promise<{ how: string; stderr?: string; reason?: string }> {
 	let child;
 	try {
@@ -590,24 +638,19 @@ async function launch(
 			command: options.command,
 			cwd: options.cwd,
 			env: {
-				...process.env,
-				...options.env,
-				// Its own git, and its agent's, reach GitHub with this token over https, whatever
-				// the person's Git configuration says about GitHub URLs or SSH.
-				...(github && repository ? gitCredentials(github.file, repository) : {}),
+				// Nothing of the machine's GitHub setup: its own git, gh and agent reach GitHub with
+				// Chopin's token over https, and commit as Chopin's App (see `githubEnvironment`).
+				...withoutGitHub({ ...process.env, ...options.env }),
+				...githubEnvironment(github, repository),
 				CHOPIN_URL: options.url,
 				CHOPIN_DOCUMENT: options.document,
 				CHOPIN_PLANNER_TOKEN: token,
 				...(tokens ? { CHOPIN_PLANNER_TOKEN_FILE: tokens.file } : {}),
+				...(mcp ? { CHOPIN_MCP_TOKEN_FILE: mcp.file } : {}),
 				CHOPIN_CHECKOUT: options.cwd,
 				CHOPIN_WORKTREE: worktree,
-				...(github
-					? {
-						CHOPIN_GITHUB_TOKEN: github.token,
-						CHOPIN_GITHUB_TOKEN_EXPIRES_AT: new Date(github.expiresAt).toISOString(),
-						CHOPIN_GITHUB_TOKEN_FILE: github.file,
-					}
-					: {}),
+				CHOPIN_GITHUB_TOKEN: github.token,
+				CHOPIN_GITHUB_TOKEN_EXPIRES_AT: new Date(github.expiresAt).toISOString(),
 			},
 			stdin: "ignore",
 			// It writes its own worktree, which the connector made for it, and nothing of the checkout
@@ -623,7 +666,8 @@ async function launch(
 	let secrets = () => [
 		token,
 		...tokens?.secrets() ?? [],
-		...github?.secrets() ?? [],
+		...mcp?.secrets() ?? [],
+		...github.secrets(),
 		...Object.values(options.env ?? {}),
 	];
 	let first: string | undefined;

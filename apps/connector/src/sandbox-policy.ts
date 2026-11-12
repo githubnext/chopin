@@ -14,6 +14,11 @@ export type SandboxSettings = {
 	hosts?: string[];
 	/** Directories agents may write beyond their worktree and own state. */
 	writable?: string[];
+	/**
+	 * Files and folders no agent may read or write, beyond `secretPaths`, even inside a `writable`
+	 * folder: a backend's own sign-in or tokens, say.
+	 */
+	hidden?: string[];
 };
 
 /**

@@ -39,6 +39,8 @@ export async function plannerTokenFile(options: {
 	document: string;
 	file: string;
 	first: { token: string; expiresAt: number };
+	/** Hears each renewed credential once it is in the file, as what is minted from it is renewed. */
+	renewed?: (token: string) => Promise<void>;
 	/** How long before it expires a credential is replaced, and how soon a failed renewal is retried; for tests. */
 	renewBeforeMs?: number;
 	retryMs?: number;
@@ -87,6 +89,7 @@ export async function plannerTokenFile(options: {
 			if (seen.length > REMEMBERED) seen.shift();
 			await save(next.token);
 			schedule(next.expiresAt);
+			await options.renewed?.(next.token).catch(() => {});
 		} catch (error) {
 			if (stopped) return;
 			if (transient(classifyConnectorError(error))) {

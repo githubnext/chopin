@@ -509,8 +509,16 @@ export function launchPolicy(
 		...repository ? [repository.commonDir] : [],
 		...checkout ? [checkout] : [],
 	];
+	// What the owner hides is in no grant, read or write, whatever holds it: the grants that hold
+	// one are listed around it, as for the state directory, and it is denied as well.
+	let concealed = (options.settings?.hidden ?? []).map(real);
+	let around = (paths: readonly string[]) =>
+		concealed.reduce(
+			(grants, path) => readGrantsAround(grants, path, disk, platform),
+			readGrantsAround(paths, hidden, disk, platform),
+		);
 	// What the owner adds is written around the state directory as well, never in it.
-	let added = readGrantsAround(options.settings?.writable ?? [], hidden, disk, platform).filter(
+	let added = around(options.settings?.writable ?? []).filter(
 		path => !theirs.some(kept => inside(real(path), kept, platform)),
 	);
 	let reopened = theirs.filter(kept =>
@@ -547,14 +555,14 @@ export function launchPolicy(
 	// MXC takes a path granted both ways as read-only, so a grant that is also writable is dropped.
 	let written = new Set(writable.map(real));
 	let readable = [
-		...readGrantsAround(roots, hidden, disk, platform),
+		...around(roots),
 		...(launch.own ?? []).filter(exists),
 		...person ? named(person) : [],
 		// The repository's git directory is read, whole, where only some roots are read (Windows).
 		...repository ? named(repository.commonDir) : [],
 	].filter(path => !written.has(real(path)));
 	let readonlyInside = [...git?.readonlyInside ?? [], ...reopened];
-	let denied = secretPaths(platform, home).filter(path => exists(path));
+	let denied = [...secretPaths(platform, home), ...concealed].filter(path => exists(path));
 	let env: Record<string, string | undefined> = { ...launch.env };
 	let pathKey = Object.keys(env).find(key => key.toUpperCase() === "PATH") ?? "PATH";
 	env[pathKey] = sandboxPath(env[pathKey], platform, real);

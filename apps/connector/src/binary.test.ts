@@ -7,6 +7,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { compiledChopin } from "./testing/binary";
+import { answerTokens } from "./testing/github-grant";
 import { git } from "./workspace";
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-binary-"));
@@ -181,6 +182,9 @@ test.skipIf(!binary)(
 				if (path === "/api/connector/connections") {
 					return Response.json({ token: "connection-token" });
 				}
+				// The run's GitHub token, which the binary asks for before anything starts.
+				let issued = await answerTokens(request);
+				if (issued) return issued;
 				let token = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
 				if (path !== "/connector/mcp" || !["connection-token", "run-token"].includes(token)) {
 					return new Response(null, { status: 401 });

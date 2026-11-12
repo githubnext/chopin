@@ -5,7 +5,14 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { checkouts, clonePath, clones, noCheckout, registerCheckouts, sshCause } from "./checkouts";
-import { gitCredentials, githubEnvironment, type GitHubToken } from "./github-token";
+import {
+	gitCredentials,
+	githubEnvironment,
+	githubRefusal,
+	GitHubRefused,
+	type GitHubToken,
+} from "./github-token";
+import { BOT } from "./testing/github-grant";
 import { git } from "./workspace";
 
 const TOKEN = "ghu_MachineToken0123456789";
@@ -78,6 +85,9 @@ async function localGitHub(global = "") {
 		token: TOKEN,
 		expiresAt: Date.now() + 3_600_000,
 		file,
+		config: join(scratch, "gh"),
+		identity: BOT,
+		expired: new AbortController().signal,
 		secrets: () => [TOKEN],
 		stop: async () => {},
 	};
@@ -195,13 +205,14 @@ test.skipIf(process.platform === "win32")(
 	},
 );
 
-test("work for a repository with no checkout and no GitHub token fails naming --checkout", async () => {
+test("work for a repository with no checkout fails as Chopin refused its GitHub token, or naming --checkout without a way to ask", async () => {
 	let base = await mkdtemp(join(tmpdir(), "chopin-checkouts-"));
 	try {
 		let machine = checkouts({ directory: base, registered: {} });
-		await expect(machine.resolve("org/repo", async () => undefined)).rejects.toThrow(
-			noCheckout("org/repo"),
-		);
+		await expect(machine.resolve("org/repo", async () => {
+			throw new GitHubRefused("repository-forbidden", "org/repo");
+		})).rejects.toThrow(githubRefusal("repository-forbidden", "org/repo"));
+		await expect(machine.resolve("org/repo")).rejects.toThrow(noCheckout("org/repo"));
 		expect(noCheckout("org/repo")).toContain("chopin connect --checkout <path>");
 		await expect(machine.resolve("../repo")).rejects.toThrow("invalid repository");
 	} finally {
@@ -295,10 +306,21 @@ test.skipIf(process.platform === "win32")(
 			git(root, "init", "--quiet");
 			git(root, "remote", "add", "origin", "https://github.com/Org/Repo.git");
 			let env = githubEnvironment(
-				{ token: TOKEN, expiresAt: 0, file: "/nowhere", secrets: () => [], stop: async () => {} },
+				{
+					token: TOKEN,
+					expiresAt: 0,
+					file: "/nowhere",
+					config: "/nowhere-gh",
+					identity: BOT,
+					expired: new AbortController().signal,
+					secrets: () => [],
+					stop: async () => {},
+				},
 				"Org/Repo",
 			);
-			expect(env.GH_TOKEN).toBe(TOKEN);
+			// gh reads the launch's own configuration; no token variable would win over it.
+			expect(env.GH_CONFIG_DIR).toBe("/nowhere-gh");
+			expect(env.GH_TOKEN).toBeUndefined();
 			let url = (environment: Record<string, string>, ...args: string[]) =>
 				effective(SSH_REWRITE, environment, "-C", root, "remote", "get-url", ...args);
 			expect(url({}, "--push", "origin")).toBe("git@github.com:Org/Repo.git");

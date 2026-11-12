@@ -229,6 +229,8 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 	if (url.origin === "https://api.github.com") {
 		let requestHeaders = new Headers(init?.headers);
 		let authorization = requestHeaders.get("authorization") ?? "";
+		let app = await asTheApp(url, authorization, init);
+		if (app) return app;
 		let authorized = /^Bearer ghu_e2e_(.+)_\d+$/.exec(authorization);
 		if (!authorized) return json({ message: "Bad credentials" }, { status: 401 });
 		let handle = authorized[1]!;
@@ -360,3 +362,66 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 	return network(input, init);
 };
 globalThis.fetch = Object.assign(fake, { preconnect: network.preconnect });
+
+/** The e2e App's id, with the key playwright.config.ts gives the servers. */
+const APP_ID = 4242;
+const BOT = { login: "chopin-e2e[bot]", id: 4_242_000, node_id: "BOT_chopin_e2e" };
+let mintedTokens = 0;
+
+/**
+ * GitHub as Chopin's GitHub App sees it: the App (by its JWT) finds its installation on an
+ * octo-org repository and mints a token for it, and that token reads who may push there and who
+ * a login is. Every octo-org repository has the App installed with Contents and Pull requests
+ * write, and a person may push wherever the list above says they may.
+ */
+async function asTheApp(url: URL, authorization: string, init?: RequestInit) {
+	let jwt = /^Bearer (ey[\w-]+\.[\w-]+\.[\w-]+)$/.exec(authorization)?.[1];
+	if (jwt) {
+		let claims = JSON.parse(Buffer.from(jwt.split(".")[1]!, "base64url").toString()) as {
+			iss?: unknown;
+		};
+		if (String(claims.iss) !== String(APP_ID)) {
+			return json({ message: "Bad credentials" }, { status: 401 });
+		}
+		let installed = /^\/repos\/octo-org\/[\w.-]+\/installation$/.test(url.pathname);
+		if (installed) {
+			return json({
+				id: 101,
+				suspended_at: null,
+				permissions: { contents: "write", pull_requests: "write", metadata: "read" },
+			});
+		}
+		if (url.pathname === "/app/installations/101/access_tokens" && init?.method === "POST") {
+			let asked = JSON.parse(String(init.body ?? "{}")) as { permissions?: unknown };
+			return json({
+				token: `ghs_e2e_app_${++mintedTokens}`,
+				expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+				permissions: asked.permissions ?? {},
+			}, { status: 201 });
+		}
+		return json({ message: "Not Found" }, { status: 404 });
+	}
+	if (!/^Bearer ghs_e2e_app_\d+$/.test(authorization)) return undefined;
+	if (url.pathname === "/installation/token") return new Response(null, { status: 204 });
+	let user = /^\/users\/([^/]+)$/.exec(url.pathname)?.[1];
+	if (user) {
+		let login = decodeURIComponent(user);
+		if (login === BOT.login) return json({ ...BOT, name: null });
+		return json({
+			login,
+			id: [...login].reduce((sum, character) => sum * 31 + character.charCodeAt(0) | 0, 7) >>> 0,
+			node_id: `U_${login}`,
+			name: null,
+		});
+	}
+	let permission = /^\/repos\/octo-org\/([\w.-]+)\/collaborators\/([^/]+)\/permission$/.exec(
+		url.pathname,
+	);
+	if (permission) {
+		let login = decodeURIComponent(permission[2]!);
+		let push = !login.startsWith(SCORE_READER) && !login.startsWith(SCORE_OUTSIDER)
+			&& login !== "readonly";
+		return json({ permission: push ? "write" : "read", user: { login, permissions: { push } } });
+	}
+	return json({ message: "Not Found" }, { status: 404 });
+}

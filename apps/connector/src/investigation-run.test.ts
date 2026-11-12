@@ -6,6 +6,7 @@ import { ConnectorError } from "./mcp";
 import { createOutput } from "./output";
 import { checkouts } from "./checkouts";
 import { runWork } from "./run";
+import { testGitHubToken } from "./testing/github-grant";
 import { git, prepareWorkspace } from "./workspace";
 
 test("an authorized retry starts despite an older receipt and reports why its agent submitted no result", async () => {
@@ -68,6 +69,7 @@ test("an authorized retry starts despite an older receipt and reports why its ag
 				url: "http://127.0.0.1:1",
 				signal: new AbortController().signal,
 				output,
+				github: request => testGitHubToken(request.folder),
 			},
 		);
 		let reported = calls.find(([name]) => name === "fail_experiment")?.[1];

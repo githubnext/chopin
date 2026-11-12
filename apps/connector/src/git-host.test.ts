@@ -375,7 +375,7 @@ test("a commondir made after the connector first saw the checkout sends its git 
 	expect(made.fired()).toEqual([]);
 });
 
-test("the ssh command a person chose is kept over the one a repository names, and a person's GIT_SSH_COMMAND over both", async () => {
+test("the connector's git never runs an ssh command: not the person's, not one in its environment, not ssh on PATH, and not the one a repository names", async () => {
 	let made = repository("ssh");
 	let home = join(made.root, "home");
 	mkdirSync(home);
@@ -384,22 +384,30 @@ test("the ssh command a person chose is kept over the one a repository names, an
 		join(home, ".gitconfig"),
 		`[core]\n\tsshCommand = ${join(made.root, "person-ssh")}\n`,
 	);
+	let bin = join(made.root, "bin");
+	mkdirSync(bin);
+	program(join(bin, "ssh"), `touch '${made.ran}/path'; exit 1`);
+	plain(made.repo, "config", "core.sshCommand", join(made.evil, "ssh"));
+	plain(made.repo, "config", "remote.origin.url", "git@github.com:org/repo.git");
 	let env: NodeJS.ProcessEnv = {
 		...process.env,
 		HOME: home,
 		XDG_CONFIG_HOME: join(home, ".config"),
+		PATH: `${bin}:${process.env.PATH}`,
+		SSH_AUTH_SOCK: join(made.root, "agent.sock"),
 	};
 	delete env.GIT_SSH_COMMAND;
 	// The fixture home is the person's whole configuration, whatever the runner has set.
 	delete env.GIT_CONFIG_GLOBAL;
 	delete env.GIT_CONFIG_SYSTEM;
 	await gitAsync(["-C", made.repo, "fetch", "origin"], { env }).catch(() => undefined);
-	expect(made.fired()).toEqual(["person"]);
 	program(join(made.root, "environment-ssh"), `touch '${made.ran}/environment'; exit 1`);
 	await gitAsync(["-C", made.repo, "fetch", "origin"], {
-		env: { ...env, GIT_SSH_COMMAND: join(made.root, "environment-ssh") },
+		env: { ...env, GIT_SSH_COMMAND: join(made.root, "environment-ssh"), GIT_SSH: "ssh" },
 	}).catch(() => undefined);
-	expect(made.fired()).toEqual(["environment", "person"]);
+	expect(made.fired()).toEqual([]);
+	expect(hostGitEnvironment(env)).toMatchObject({ GIT_SSH_COMMAND: "false" });
+	expect(hostGitEnvironment(env).SSH_AUTH_SOCK).toBeUndefined();
 });
 
 /** The `GIT_CONFIG_*` entries an environment holds, in order. */
@@ -437,7 +445,8 @@ test("every setting the connector's git is given: helpers reset and none of the 
 	expect(hardened).toMatchObject({
 		GIT_CONFIG_NOSYSTEM: "1",
 		GIT_ATTR_NOSYSTEM: "1",
-		GIT_SSH_COMMAND: "ssh -i key",
+		// Never the person's SSH, whatever they set: GitHub is reached over https with Chopin's token.
+		GIT_SSH_COMMAND: "false",
 		GIT_DIR: join(made.repo, ".git"),
 		GIT_COMMON_DIR: join(made.repo, ".git"),
 		GIT_WORK_TREE: made.repo,

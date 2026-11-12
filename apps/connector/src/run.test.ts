@@ -24,6 +24,8 @@ import { timedOut } from "./acp";
 import { git } from "./workspace";
 import { ConnectorError, remote } from "./mcp";
 import { register } from "./machine";
+import { BOT, STARTER, testGitHubToken } from "./testing/github-grant";
+import { githubRefusal } from "./github-token";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -85,6 +87,7 @@ async function run(
 			url: "http://127.0.0.1:1",
 			signal,
 			heartbeatMs: 20,
+			github: request => testGitHubToken(request.folder),
 			...options,
 		});
 		await inspect?.({ root, state, id });
@@ -272,6 +275,7 @@ test.each([true, false])(
 				url: `http://127.0.0.1:${chopin.port}`,
 				signal: new AbortController().signal,
 				output: terminal.output,
+				github: request => testGitHubToken(request.folder),
 			});
 			expect(terminal.out()).toContain(
 				spike
@@ -810,6 +814,7 @@ async function connected(options: {
 					output: terminal.output,
 					heartbeatMs: 20,
 					random: () => 0.01,
+					github: request => testGitHubToken(request.folder),
 					...options.runOptions,
 				}),
 		});
@@ -1200,6 +1205,7 @@ test("a run whose connection a restarted server forgot stops its agent and the c
 					url: server.url,
 					signal,
 					output,
+					github: request => testGitHubToken(request.folder),
 					heartbeatMs: 20,
 					random: () => 0.01,
 					forgetMs: 300,
@@ -1214,41 +1220,124 @@ test("a run whose connection a restarted server forgot stops its agent and the c
 	}
 });
 
+/**
+ * A machine whose own GitHub setup is all decoys, as design calls for: a HOME with gh logged in as
+ * two other accounts, a credential helper, SSH rewrites, an identity and signing of its own, an SSH
+ * key; GH_TOKEN, GITHUB_TOKEN and an SSH agent in the environment; and a `gh` and `ssh` first on
+ * PATH that note it when anything reaches them other than through the launch's own gh
+ * configuration. Restores everything on `restore`.
+ */
+async function decoyMachine(scratch: string) {
+	let home = join(scratch, "home");
+	let tripwire = join(scratch, "tripwire");
+	await mkdir(join(home, ".config", "gh"), { recursive: true });
+	await writeFile(
+		join(home, ".config", "gh", "hosts.yml"),
+		"github.com:\n    users:\n        decoy-active:\n            oauth_token: decoy-active-token\n"
+			+ "        decoy-other:\n            oauth_token: decoy-other-token\n"
+			+ "    oauth_token: decoy-active-token\n    user: decoy-active\n",
+	);
+	await mkdir(join(home, ".ssh"));
+	await writeFile(join(home, ".ssh", "id_ed25519"), "decoy key\n", { mode: 0o600 });
+	await writeFile(
+		join(home, ".gitconfig"),
+		[
+			"[user]",
+			"\tname = Decoy Person",
+			"\temail = decoy@example.test",
+			"[commit]",
+			"\tgpgsign = true",
+			"[gpg]",
+			"\tprogram = /bin/false",
+			"[credential]",
+			`\thelper = "!f() { echo helper >> '${tripwire}'; echo password=decoy-helper; }; f"`,
+			'[url "git@github.com:"]',
+			"\tinsteadOf = https://github.com/",
+			"\tpushInsteadOf = https://github.com/",
+			"",
+		].join("\n"),
+	);
+	let bin = join(scratch, "bin");
+	await mkdir(bin);
+	// gh as an agent runs it: a call through the launch's configuration records the token it holds
+	// and its arguments; anything else is a call that reached the machine's own gh.
+	await writeFile(
+		join(bin, "gh"),
+		`#!/bin/sh
+if [ -n "$GH_TOKEN$GITHUB_TOKEN" ] || [ -z "$GH_CONFIG_DIR" ] || [ "$GH_CONFIG_DIR" = "${home}/.config/gh" ]; then
+	echo "gh $*" >> '${tripwire}'; exit 1
+fi
+token=$(sed -n 's/^    oauth_token: "\\(.*\\)"$/\\1/p' "$GH_CONFIG_DIR/hosts.yml")
+printf '%s\\n' "$token" "$@" > '${join(scratch, "gh")}'
+`,
+		{ mode: 0o755 },
+	);
+	await writeFile(join(bin, "ssh"), `#!/bin/sh\necho "ssh $*" >> '${tripwire}'\nexit 255\n`, {
+		mode: 0o755,
+	});
+	let names = [
+		"HOME",
+		"PATH",
+		"GH_TOKEN",
+		"GITHUB_TOKEN",
+		"SSH_AUTH_SOCK",
+		"GIT_CONFIG_GLOBAL",
+		"GIT_ASKPASS",
+	] as const;
+	let saved = Object.fromEntries(names.map(name => [name, process.env[name]]));
+	process.env.HOME = home;
+	process.env.PATH = `${bin}:${process.env.PATH}`;
+	process.env.GH_TOKEN = "decoy-env";
+	process.env.GITHUB_TOKEN = "decoy-env";
+	process.env.SSH_AUTH_SOCK = join(scratch, "agent.sock");
+	process.env.GIT_CONFIG_GLOBAL = join(home, ".gitconfig");
+	process.env.GIT_ASKPASS = join(bin, "ssh");
+	return {
+		home,
+		/** What reached the machine's own gh, credential helper or SSH, one line each. */
+		tripped: async () => existsSync(tripwire) ? (await readFile(tripwire, "utf8")).trim() : "",
+		restore() {
+			for (let [name, value] of Object.entries(saved)) {
+				if (value === undefined) delete process.env[name];
+				else process.env[name] = value;
+			}
+		},
+	};
+}
+
+/** A Chopin that issues a GitHub App installation token for runs, and a token for its tools. */
+function issuingChopin(token: string, answer?: () => Response) {
+	let asked: unknown[] = [];
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		async fetch(request) {
+			let { pathname } = new URL(request.url);
+			if (pathname === "/api/connector/mcp-token") {
+				return Response.json({ token: "chopin_mcp_run", expiresAt: Date.now() + 3_600_000 });
+			}
+			if (pathname !== "/api/connector/github-token") return new Response(null, { status: 404 });
+			asked.push(await request.json());
+			return answer?.() ?? Response.json({
+				token,
+				expiresAt: Date.now() + 3_600_000,
+				kind: "installation",
+				identity: BOT,
+				starter: STARTER,
+			});
+		},
+	});
+	return { url: `http://127.0.0.1:${server.port}`, asked, stop: () => server.stop(true) };
+}
+
 test.skipIf(process.platform === "win32")(
-	"a build's agent pushes and opens draft pull requests with the machine's GitHub token, gone when the run ends",
+	"a build's agent reaches GitHub only with the token Chopin issued for it, commits as Chopin's App for the person who started it, and nothing of the machine's own GitHub setup is used",
 	async () => {
-		let token = `ghu_${"R".repeat(36)}`;
-		let chopin = Bun.serve({
-			hostname: "127.0.0.1",
-			port: 0,
-			async fetch(request) {
-				if (new URL(request.url).pathname !== "/api/connector/github-token") {
-					return new Response(null, { status: 404 });
-				}
-				expect(await request.json()).toEqual({ repository: "org/repo" });
-				return Response.json({ token, expiresAt: Date.now() + 8 * 3_600_000 });
-			},
-		});
+		let token = `ghs_${"R".repeat(36)}`;
+		let chopin = issuingChopin(token);
 		let scratch = await mkdtemp(join(tmpdir(), "chopin-github-run-"));
-		let bin = join(scratch, "bin");
-		await mkdir(bin);
-		// gh as the agent runs it: it records the token it was given and its arguments.
-		await writeFile(
-			join(bin, "gh"),
-			`#!/bin/sh\nprintf '%s\\n' "$GH_TOKEN" "$@" > "${join(scratch, "gh")}"\n`,
-		);
-		await chmod(join(bin, "gh"), 0o755);
+		let machine = await decoyMachine(scratch);
 		let seen = join(scratch, "github.json");
-		// The person's own Git configuration sends GitHub over SSH, which a service can't use.
-		let global = join(scratch, "gitconfig");
-		await writeFile(
-			global,
-			'[url "git@github.com:"]\n\tinsteadOf = https://github.com/\n\tpushInsteadOf = https://github.com/\n',
-		);
-		let { GIT_CONFIG_GLOBAL } = process.env;
-		process.env.GIT_CONFIG_GLOBAL = global;
-		let path = process.env.PATH;
-		process.env.PATH = `${bin}:${path}`;
 		process.env.CHOPIN_TEST_GITHUB = seen;
 		let written = "";
 		let capture = {
@@ -1258,23 +1347,40 @@ test.skipIf(process.platform === "win32")(
 			},
 		};
 		try {
-			await run({}, ["--github"], undefined, undefined, {
-				url: `http://127.0.0.1:${chopin.port}`,
+			let { id, documentId } = await run({}, ["--github"], undefined, undefined, {
+				url: chopin.url,
 				machine: `chopin_m_${"M".repeat(43)}`,
+				github: undefined,
 				output: createOutput(capture, capture, {}),
-			}, async ({ state, id }) => {
-				// The token file was the run's alone, and goes with it.
+			}, async ({ state }) => {
+				// The tokens were the run's alone, and go with it.
 				let runs = join(state, "runs");
-				expect((await readdir(runs)).filter(name => name.includes("github"))).toEqual([]);
-				expect(id).toBeTruthy();
+				let left = await readdir(runs);
+				for (let name of left.filter(name => name.endsWith(".tokens"))) {
+					expect(await readdir(join(runs, name))).toEqual([]);
+				}
 			});
+			expect(chopin.asked).toEqual([{
+				repository: "org/repo",
+				purpose: "run",
+				run: id,
+				document: documentId,
+			}]);
 			let github = JSON.parse(await readFile(seen, "utf8"));
+			let bot = `${BOT.name} <${BOT.email}>`;
 			expect(github).toEqual({
-				GH_TOKEN: token,
-				GITHUB_TOKEN: token,
+				GH_TOKEN: null,
+				GITHUB_TOKEN: null,
+				SSH_AUTH_SOCK: null,
+				GIT_SSH_COMMAND: "false",
+				starter: [STARTER.login, STARTER.name, STARTER.email],
+				githubFile: token,
+				mcpFile: "chopin_mcp_run",
+				// Made as the App, and not signed, whatever the machine's Git configuration says.
+				commit: `${bot}|${bot}|N`,
 				credential: `protocol=https\nhost=github.com\nusername=x-access-token\npassword=${token}\n`,
 				gh: 0,
-				// The checkout's origin is an SSH address, and the rewrite sends https to SSH too:
+				// The checkout's origin is an SSH address, and the machine rewrites https to SSH too:
 				// the agent's fetches and pushes still go over https, where the token is used.
 				fetch: "https://github.com/org/repo.git",
 				push: "https://github.com/org/repo.git",
@@ -1288,47 +1394,54 @@ test.skipIf(process.platform === "win32")(
 				"Task one",
 				"",
 			]);
+			expect(await machine.tripped()).toBe("");
 			expect(written).not.toContain(token);
 		} finally {
-			process.env.PATH = path;
-			if (GIT_CONFIG_GLOBAL === undefined) delete process.env.GIT_CONFIG_GLOBAL;
-			else process.env.GIT_CONFIG_GLOBAL = GIT_CONFIG_GLOBAL;
+			machine.restore();
 			delete process.env.CHOPIN_TEST_GITHUB;
-			await chopin.stop(true);
+			chopin.stop();
 			await rm(scratch, { recursive: true, force: true });
 		}
 	},
 );
 
 test.skipIf(process.platform === "win32")(
-	"without a GitHub token from Chopin, a build's agent keeps its own login",
+	"a run Chopin refuses a GitHub token never starts its agent, says why naming the repository, and never falls back to the machine's own login",
 	async () => {
-		let chopin = Bun.serve({
-			hostname: "127.0.0.1",
-			port: 0,
-			fetch: () => Response.json({ error: "not-found" }, { status: 404 }),
-		});
-		let scratch = await mkdtemp(join(tmpdir(), "chopin-github-none-"));
-		let seen = join(scratch, "github.json");
-		process.env.CHOPIN_TEST_GITHUB = seen;
-		let { GH_TOKEN, GITHUB_TOKEN } = process.env;
-		delete process.env.GH_TOKEN;
-		delete process.env.GITHUB_TOKEN;
-		try {
-			await run({}, ["--github"], undefined, undefined, {
-				url: `http://127.0.0.1:${chopin.port}`,
-				machine: `chopin_m_${"M".repeat(43)}`,
-			});
-			expect(JSON.parse(await readFile(seen, "utf8"))).toMatchObject({
-				GH_TOKEN: null,
-				GITHUB_TOKEN: null,
-			});
-		} finally {
-			if (GH_TOKEN !== undefined) process.env.GH_TOKEN = GH_TOKEN;
-			if (GITHUB_TOKEN !== undefined) process.env.GITHUB_TOKEN = GITHUB_TOKEN;
-			delete process.env.CHOPIN_TEST_GITHUB;
-			await chopin.stop(true);
-			await rm(scratch, { recursive: true, force: true });
+		for (let code of ["repository-forbidden", "app-cannot-push", "starter-cannot-push"]) {
+			let chopin = issuingChopin(
+				"unused",
+				() => Response.json({ error: code, message: "refused" }, { status: 403 }),
+			);
+			let scratch = await mkdtemp(join(tmpdir(), "chopin-github-refused-"));
+			let machine = await decoyMachine(scratch);
+			let started = join(scratch, "started");
+			let terminal = captured();
+			try {
+				let { id, calls } = await run({}, [], undefined, undefined, {
+					url: chopin.url,
+					machine: `chopin_m_${"M".repeat(43)}`,
+					github: undefined,
+					output: terminal.output,
+					command: ["/bin/sh", "-c", `touch '${started}'`],
+				});
+				expect(existsSync(started)).toBe(false);
+				let failed = calls.find(([name, args]) =>
+					name === "report_implementation_build" && args.state === "failed"
+				);
+				expect(failed).toEqual(["report_implementation_build", {
+					id,
+					state: "failed",
+					error: githubRefusal(code, "org/repo"),
+				}]);
+				expect(githubRefusal(code, "org/repo")).toContain("org/repo");
+				expect(terminal.err()).toContain(githubRefusal(code, "org/repo"));
+				expect(await machine.tripped()).toBe("");
+			} finally {
+				machine.restore();
+				chopin.stop();
+				await rm(scratch, { recursive: true, force: true });
+			}
 		}
 	},
 );
@@ -1344,8 +1457,8 @@ test.skipIf(process.platform === "win32")(
 				if (new URL(request.url).pathname !== "/api/connector/github-token") {
 					return new Response(null, { status: 404 });
 				}
-				expect(await request.json()).toEqual({ repository: "org/repo" });
-				return Response.json({ token, expiresAt: Date.now() + 8 * 3_600_000 });
+				expect(await request.json()).toMatchObject({ repository: "org/repo", purpose: "run" });
+				return Response.json({ token, expiresAt: Date.now() + 8 * 3_600_000, identity: BOT });
 			},
 		});
 		let scratch = await mkdtemp(join(tmpdir(), "chopin-spike-token-"));

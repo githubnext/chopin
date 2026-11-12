@@ -1,10 +1,10 @@
 import type { SandboxReport } from "@chopin/protocol/connector";
 import { sandboxLabel } from "@chopin/protocol/connector";
 import { type ConnectSettings, readConfig } from "./config";
-import { machineLabel, machineToken, SELF } from "./machine";
+import { machineGitHubCheck, machineLabel, machineToken, SELF } from "./machine";
 import { CONNECTOR_HEADERS, jsonObject, refusal } from "./mcp";
 import { logPath, type ServiceHost, type ServiceStatus, serviceStatus } from "./service";
-import { appCannotPush } from "./github-token";
+import { githubRefusal } from "./github-token";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 import { join } from "node:path";
 import { clones } from "./checkouts";
@@ -83,11 +83,6 @@ export type StatusReport = {
 		failures?: Array<
 			Omit<StartFailure, "at" | "retryAt"> & { at: string; retryAt?: string }
 		>;
-		/**
-		 * The repositories Chopin's GitHub App can't push to, so the machine's Planner commands and
-		 * runs use its own GitHub login there.
-		 */
-		githubCannotPush?: string[];
 	}>;
 	service: ServiceStatus | { state: "unknown"; detail: string };
 	/** Whether agents run in the system's process sandbox, and if not, why and the one fix. */
@@ -112,6 +107,13 @@ export type StatusReport = {
 	checkouts: Record<string, string>;
 	/** The clones made on demand in `<base>/repos/<owner>/<repo>` for every other repository. */
 	clones: Array<{ repository: string; path: string }>;
+	/**
+	 * Whether Chopin would give this machine a GitHub token for each registered checkout's
+	 * repository, asked without one being made: `ok`, why not (`repository-forbidden`,
+	 * `app-cannot-push`, `no-grant`, …), or `unknown` when Chopin couldn't be asked. Nothing that
+	 * Chopin refuses runs there: the machine never uses its own GitHub login.
+	 */
+	github: Record<string, string>;
 };
 
 const CHECK_MS = 3000;
@@ -188,6 +190,8 @@ export async function collectStatus(options: {
 	let found = await runs(directory, processStart(host.platform, host.run));
 	let kept = found.filter(run => !run.active && run.worktree);
 	let bytes = await diskUsage(kept.map(run => join(directory, "runs", run.attempt)));
+	let checkouts = held.find(item => item.running && item.checkouts)?.checkouts
+		?? registered(config.service?.settings ?? config.connect);
 	return {
 		version: VERSION,
 		protocol: CONNECTOR_PROTOCOL,
@@ -204,7 +208,6 @@ export async function collectStatus(options: {
 			...(item.planners ? { planners: item.planners } : {}),
 			...(item.plannerCommand ? { canRunPlanners: true as const } : {}),
 			...(item.chosen ? { chosenPlanners: item.chosen } : {}),
-			...(item.githubCannotPush ? { githubCannotPush: item.githubCannotPush } : {}),
 			...(item.failures
 				? {
 					failures: item.failures.map(({ at, retryAt, ...failure }) => ({
@@ -227,9 +230,25 @@ export async function collectStatus(options: {
 			...(bytes === undefined ? {} : { bytes }),
 		},
 		plannerWorktrees: await plannerWorktrees(directory),
-		checkouts: held.find(item => item.running && item.checkouts)?.checkouts
-			?? registered(config.service?.settings ?? config.connect),
+		checkouts,
 		clones: await clones(directory),
+		github: Object.fromEntries(
+			await Promise.all(
+				Object.keys(checkouts).filter(Boolean).map(async repository =>
+					[
+						repository,
+						token && machine.accepted
+							? await machineGitHubCheck(
+								server,
+								token,
+								repository,
+								AbortSignal.timeout(options.timeoutMs ?? CHECK_MS),
+							)
+							: "unknown",
+					] as const
+				),
+			),
+		),
 	};
 }
 
@@ -321,7 +340,6 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 					item.version ? `, chopin ${item.version}` : ""
 				}${item.service ? ", the service" : ""})`,
 				...(agent ? [`  Agent${failing(agent, now)}`] : []),
-				...(item.githubCannotPush ?? []).map(repository => `  ${appCannotPush(repository)}`),
 				...(item.canRunPlanners
 					? ["  Can run Planners for documents that choose this machine"]
 					: []),
@@ -351,9 +369,15 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 	let worktrees = report.plannerWorktrees.map(item =>
 		`${item.path} (${item.repository}, document ${item.document})`
 	);
-	let checkouts = Object.entries(report.checkouts).map(([repository, path]) =>
-		repository ? `${repository} at ${path}` : path
-	);
+	let checkouts = Object.entries(report.checkouts).map(([repository, path]) => {
+		let github = report.github?.[repository];
+		let refused = github && github !== "ok" && github !== "unknown"
+			? `; ${
+				githubRefusal(github, repository).replace(", so nothing ran", ", so nothing runs there")
+			}`
+			: "";
+		return `${repository ? `${repository} at ${path}` : path}${refused}`;
+	});
 	let cloned = report.clones.map(item => `${item.repository} at ${item.path}`);
 	return [
 		`chopin ${report.version} (connector protocol ${report.protocol})`,
