@@ -186,8 +186,9 @@ async function saveThreadRecord(
 	context: Chat.Room,
 	managed: ManagedThread,
 	override?: ThreadPersistence,
+	entries: readonly Wire.Entry[] = managed.chat.entries,
 ): Promise<void> {
-	managed.record.entries = managed.chat.entries.map(Chat.publicEntry);
+	managed.record.entries = entries.map(Chat.publicEntry);
 	managed.record.compactions = structuredClone(managed.chat.compactions ?? []);
 	if (managed.chat.usage) managed.record.usage = structuredClone(managed.chat.usage);
 	else delete managed.record.usage;
@@ -258,6 +259,7 @@ const THREAD_FRAME_KINDS = new Set<string>([
 	"chat:removed",
 	"chat:context",
 	"chat:compaction",
+	"chat:reactions",
 ]);
 
 /**
@@ -317,6 +319,14 @@ function copyToChat(top: Chat.Room, managed: ManagedThread, frame: Frame): Outgo
 		case "chat:state":
 			if (!(frame as Wire.State).busy) managed.answering = undefined;
 			return undefined;
+		case "chat:reactions": {
+			// The message is one object in both transcripts: Chat saves and shows its reactions too.
+			if (!managed.copied.has((frame as Wire.Reactions).id)) return undefined;
+			void top.persist().catch(err =>
+				console.error("[chat] could not save a thread's reaction in Chat:", err)
+			);
+			return frame as Wire.Reactions;
+		}
 	}
 	return undefined;
 }
@@ -494,8 +504,9 @@ function buildThreadRoom(
 		references: topContext.references,
 		hold: topContext.hold,
 		children: topContext.children,
-		persist: async () => {
-			await saveThreadRecord(topContext, managed, override);
+		// A reaction saves the transcript it is about to make, before it changes the live one.
+		persist: async next => {
+			await saveThreadRecord(topContext, managed, override, next?.().entries);
 		},
 		threadRoot: managed.record.rootId,
 		sessionForks: {
@@ -828,4 +839,23 @@ export async function controlMessage(
 	if (frame.kind === "chat:abort") await Chat.abort(tRoom, ws);
 	else if (frame.kind === "chat:resume") await Chat.resume(tRoom, ws);
 	else await Chat.controlRun(tRoom, ws, frame);
+}
+
+/**
+ * A thread's room, for what is done to a thread outside `chat:send`: its replies' reactions, and the
+ * turn that answers a reaction made in it. With `create`, a thread nobody has opened to write in yet
+ * is started at its root, as a first reply would start it.
+ */
+export async function threadRoomFor(
+	topContext: Chat.Room,
+	rootId: string,
+	handle: string,
+	create: boolean,
+	override?: ThreadPersistence,
+): Promise<Chat.Room | undefined> {
+	if (topContext.rootChannelId) return undefined;
+	let boundTop = bindTopLevel(topContext, override);
+	let state = await ensureLoaded(boundTop, override);
+	let { managed } = await ensureThreadForRoot(boundTop, state, rootId, handle, create, override);
+	return managed && buildThreadRoom(boundTop, managed, override);
 }

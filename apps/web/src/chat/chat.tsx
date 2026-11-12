@@ -1396,6 +1396,7 @@ export function Chat(
 					onShowDecisions={onShowDecisions}
 					people={people}
 					readonly={readonly}
+					root={entries.find(entry => entry.id === openThreadView.rootId)}
 					referencesEnabled={referencesEnabled}
 					repository={repository}
 					room={room}
