@@ -1,0 +1,338 @@
+/**
+ * Every row state Slack shades spans the Chat container from edge to edge, as Slack's message pane
+ * does, and nothing of the first message is cut off at the top of the transcript.
+ *
+ * The browser here keeps the system's classic scrollbars (Playwright hides them in headless
+ * Chromium), which is where a native bar set a lane aside and the shade stopped short of the edge.
+ * The transcript draws its own thumb over the rows instead, so the container has no lane.
+ */
+import { chatInput } from "./chat-input";
+import { expect, test } from "./room";
+
+import type { Locator, Page } from "@playwright/test";
+
+test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
+
+const PHONE = { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } };
+
+function transcript() {
+	let rows = [
+		{
+			id: "first",
+			author: { kind: "member" as const, handle: "ben" },
+			text: "🎉🚀",
+			ts: 1_700_000_000,
+			reactions: [{ emoji: "🎉", handles: ["ana", "ben"] }, { emoji: "👀", handles: ["ben"] }],
+		},
+		{
+			id: "second",
+			author: { kind: "member" as const, handle: "ben" },
+			text: "Staging is green ✅ and the canary held 🚀",
+			ts: 1_700_000_030,
+		},
+	];
+	for (let index = 0; index < 24; index++) {
+		rows.push({
+			id: `note-${index}`,
+			author: { kind: "member" as const, handle: ["ana", "ben", "cy"][index % 3]! },
+			text: `Note ${index} on the rollout: the dashboards stay green and the drill is booked.`,
+			ts: 1_700_000_100 + index * 600,
+			...(index % 4 === 0 ? { reactions: [{ emoji: "👍", handles: ["ben"] }] } : {}),
+		});
+	}
+	return rows;
+}
+
+function chatOf(page: Page): Locator {
+	return page.getByRole("complementary", { name: "Chat", exact: true });
+}
+
+function message(page: Page, id: string): Locator {
+	return chatOf(page).locator(`.chat-split-main [data-chat-message-id="${id}"]`);
+}
+
+async function openChatOnPhone(page: Page): Promise<void> {
+	await page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: /^Chat/ }).click();
+	await expect.poll(async () => (await chatOf(page).boundingBox())?.x).toBe(0);
+}
+
+async function holdOn(page: Page, target: Locator): Promise<void> {
+	let box = (await target.boundingBox())!;
+	let session = await page.context().newCDPSession(page);
+	let point = { x: box.x + 24, y: box.y + Math.min(8, box.height / 2) };
+	await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+	await page.waitForTimeout(700);
+	await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+	await session.detach();
+}
+
+/**
+ * Where a row's shade, or its source wash, is drawn against the container it scrolls in: both edges,
+ * its corner and whether it shows.
+ */
+async function shade(row: Locator, part: "::before" | ".chat-source-tint" = "::before") {
+	return row.evaluate((node, which) => {
+		let view = node.closest<HTMLElement>("[data-chat-scroll]")!.getBoundingClientRect();
+		let box = node.getBoundingClientRect();
+		let style: CSSStyleDeclaration;
+		let left: number;
+		let right: number;
+		if (which === "::before") {
+			style = getComputedStyle(node, "::before");
+			left = box.left + Number.parseFloat(style.left);
+			right = left + Number.parseFloat(style.width);
+		} else {
+			let tint = node.querySelector(which)!;
+			style = getComputedStyle(tint);
+			let drawn = tint.getBoundingClientRect();
+			left = drawn.left;
+			right = drawn.right;
+		}
+		return {
+			start: Math.round(left - view.left),
+			end: Math.round(view.right - right),
+			radius: style.borderTopLeftRadius,
+			opacity: style.opacity,
+		};
+	}, part);
+}
+
+const EDGE_TO_EDGE = { start: 0, end: 0, radius: "0px", opacity: "1" };
+
+/** Whether the container sets a lane aside for a scrollbar: its client width short of its width. */
+function lane(scroller: Locator): Promise<number> {
+	return scroller.evaluate(node => (node as HTMLElement).offsetWidth - node.clientWidth);
+}
+
+/**
+ * How far each part sticks out above what the container shows (on a phone, below the top bar the
+ * transcript runs under); 0 when it is whole.
+ */
+function overhang(parts: Locator): Promise<number[]> {
+	return parts.evaluateAll(nodes =>
+		nodes.map(node => {
+			let view = node.closest<HTMLElement>("[data-chat-scroll]")!;
+			let top = view.getBoundingClientRect().top
+				+ (Number.parseFloat(getComputedStyle(view).scrollPaddingTop) || 0);
+			return Math.max(0, Math.ceil(top - node.getBoundingClientRect().top));
+		})
+	);
+}
+
+test("on a desktop every shaded row spans the Chat container edge to edge, under classic scrollbars, with the thumb drawn over the rows", async ({ join, seed }) => {
+	await seed("# Rows\n", { transcript: transcript() });
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
+	expect(await page.evaluate(() => document.documentElement.dataset.scrollbars)).toBe("classic");
+	let scroller = chatOf(page).locator(".chat-split-main [data-chat-scroll]");
+	await expect(message(page, "note-23")).toBeVisible();
+	expect(await scroller.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+	expect(await lane(scroller)).toBe(0);
+
+	let row = message(page, "note-20");
+	await row.scrollIntoViewIfNeeded();
+
+	// Hovered.
+	await row.locator("[data-chat-message-text]").hover();
+	await expect.poll(() => shade(row)).toEqual(EDGE_TO_EDGE);
+
+	// Keyboard focus within the row.
+	await page.mouse.move(0, 0);
+	await expect.poll(() => shade(row).then(drawn => drawn.opacity)).toBe("0");
+	await row.getByRole("button", { name: "Message actions" }).focus();
+	await page.keyboard.press("Shift+Tab");
+	await expect.poll(() => shade(row)).toEqual(EDGE_TO_EDGE);
+	await page.keyboard.press("Escape");
+	await page.locator("body").evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+	// Its menu open, with the pointer gone.
+	await row.locator("[data-chat-message-text]").hover();
+	await row.getByRole("button", { name: "Message actions" }).click();
+	await expect(page.getByRole("menu")).toBeVisible();
+	await page.mouse.move(0, 0);
+	await expect.poll(() => shade(row)).toEqual(EDGE_TO_EDGE);
+	await page.keyboard.press("Escape");
+	await expect(page.getByRole("menu")).toHaveCount(0);
+
+	// Its emoji picker open.
+	await row.locator("[data-chat-message-text]").hover();
+	await row.getByRole("toolbar").getByRole("button", { name: "Add reaction" }).click();
+	await expect(page.getByRole("dialog", { name: "Add reaction" })).toBeVisible();
+	await page.mouse.move(0, 0);
+	await expect.poll(() => shade(row)).toEqual(EDGE_TO_EDGE);
+	await page.keyboard.press("Escape");
+	await expect(page.getByRole("dialog", { name: "Add reaction" })).toHaveCount(0);
+
+	// A message jumped to: the transcript draws this wash in the row it scrolls to, then fades it.
+	await page.mouse.move(0, 0);
+	await row.evaluate(node => {
+		let tint = document.createElement("span");
+		tint.className = "chat-source-tint";
+		tint.style.animationPlayState = "paused";
+		node.setAttribute("data-chat-source", "");
+		node.prepend(tint);
+	});
+	expect(await shade(row, ".chat-source-tint")).toEqual(EDGE_TO_EDGE);
+	await row.evaluate(node => node.querySelector(".chat-source-tint")!.remove());
+
+	// The scrollbar is drawn over the rows' end: shown while the pane is scrolled or pointed at,
+	// within the container, and it scrolls the transcript when dragged.
+	let thumb = chatOf(page).locator(".chat-split-main .chat-scroll-thumb");
+	let view = (await scroller.boundingBox())!;
+	await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
+	await expect(thumb).toHaveCSS("opacity", "1");
+	let bar = (await thumb.boundingBox())!;
+	expect(Math.round(view.x + view.width - (bar.x + bar.width))).toBe(0);
+	expect(bar.width).toBe(10);
+	expect(bar.y).toBeGreaterThanOrEqual(view.y);
+	expect(bar.y + bar.height).toBeLessThanOrEqual(view.y + view.height);
+	let before = await scroller.evaluate(node => node.scrollTop);
+	await page.mouse.move(bar.x + bar.width / 2, bar.y + bar.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(bar.x + bar.width / 2, bar.y + bar.height / 2 - 120, { steps: 4 });
+	await page.mouse.up();
+	expect(await scroller.evaluate(node => node.scrollTop)).toBeLessThan(before - 120);
+	await page.mouse.move(0, 0);
+	await expect(thumb).toHaveCSS("opacity", "0");
+	// It is not in the accessibility tree, and keyboard scrolling is the transcript's own.
+	await expect(thumb.locator("xpath=..")).toHaveAttribute("aria-hidden", "true");
+
+	// The message whose thread is open keeps its row selected, edge to edge, and the thread's
+	// first reply is shaded across the thread panel.
+	let second = message(page, "second");
+	await second.scrollIntoViewIfNeeded();
+	await second.locator("[data-chat-message-text]").hover();
+	await second.getByRole("button", { name: "Reply in thread" }).click();
+	let panel = page.locator("[data-thread-panel]");
+	await expect(panel).toBeVisible();
+	await chatInput(panel).fill("Booked for three 🎉");
+	await panel.getByRole("button", { name: "Send message" }).click();
+	let reply = panel.locator(".chat-message-body", { hasText: "Booked for three" });
+	await expect(reply).toBeVisible();
+	await page.mouse.move(0, 0);
+	await expect.poll(() => shade(second)).toEqual(EDGE_TO_EDGE);
+	await reply.locator("[data-chat-message-text]").hover();
+	await expect.poll(() => shade(reply)).toEqual(EDGE_TO_EDGE);
+	expect(await lane(panel.locator("[data-chat-scroll]"))).toBe(0);
+	// The first reply's toolbar and emoji, and the root's, are whole at the top of the thread.
+	let replyBar = reply.getByRole("toolbar", { name: "Reactions and actions" });
+	await expect(replyBar).toHaveCSS("opacity", "1");
+	expect(await overhang(replyBar)).toEqual([0]);
+	expect(await overhang(reply.locator(".chat-emoji"))).toEqual([0]);
+	expect(await overhang(panel.locator("[data-thread-root-message] .chat-emoji"))).toEqual([0, 0]);
+});
+
+test("on a desktop the first message's toolbar, its jumbomoji and its reactions are whole at the top of the transcript", async ({ join, seed }) => {
+	await seed("# Rows\n", { transcript: transcript() });
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
+	let scroller = chatOf(page).locator(".chat-split-main [data-chat-scroll]");
+	let first = message(page, "first");
+	await expect(message(page, "note-23")).toBeVisible();
+	await scroller.evaluate(node => node.scrollTo({ top: 0 }));
+	await expect(first).toBeInViewport();
+
+	await first.locator("[data-chat-message-text]").hover();
+	let bar = first.getByRole("toolbar", { name: "Reactions and actions" });
+	await expect(bar).toHaveCSS("opacity", "1");
+	expect(await overhang(bar)).toEqual([0]);
+	expect(await overhang(bar.getByRole("button"))).toEqual([0, 0, 0, 0, 0, 0]);
+	// The bar's shadow too: it clears the container's top by more than its own 1px spread.
+	expect(
+		await bar.evaluate(node =>
+			node.getBoundingClientRect().top
+			- node.closest("[data-chat-scroll]")!.getBoundingClientRect().top
+		),
+	).toBeGreaterThanOrEqual(4);
+	expect(await overhang(first.locator(".chat-emoji"))).toEqual([0, 0]);
+	expect(await overhang(first.locator(".chat-reaction"))).toEqual([0, 0, 0]);
+	// The quick reactions are hit where they are drawn, not under the container's edge.
+	let check = (await bar.getByRole("button").first().boundingBox())!;
+	expect(
+		await page.evaluate(
+			({ x, y }) => !!document.elementFromPoint(x, y)?.closest(".chat-message-toolbar"),
+			{ x: check.x + check.width / 2, y: check.y + 2 },
+		),
+	).toBe(true);
+});
+
+test("on a phone an engaged row spans the Chat container edge to edge, and the first message's toolbar is whole", async ({ join, seed }) => {
+	await seed("# Rows\n", { transcript: transcript() });
+	let page = await join("ana", PHONE);
+	await openChatOnPhone(page);
+	let scroller = chatOf(page).locator(".chat-split-main [data-chat-scroll]");
+	await expect(message(page, "note-23")).toBeVisible();
+	expect(await lane(scroller)).toBe(0);
+
+	let row = message(page, "note-20");
+	await row.scrollIntoViewIfNeeded();
+	await holdOn(page, row.locator("[data-chat-message-text]"));
+	await expect.poll(() => shade(row)).toEqual(EDGE_TO_EDGE);
+
+	await page.locator("body").evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+	await page.mouse.click(1, 1).catch(() => {});
+	await scroller.evaluate(node => node.scrollTo({ top: 0 }));
+	let first = message(page, "first");
+	await expect(first).toBeInViewport();
+	await holdOn(page, first.locator("[data-chat-message-text]"));
+	let bar = first.getByRole("toolbar", { name: "Reactions and actions" });
+	await expect(bar).toBeVisible();
+	await expect.poll(() => shade(first)).toEqual(EDGE_TO_EDGE);
+	expect(await overhang(bar)).toEqual([0]);
+	expect(await overhang(first.locator(".chat-emoji"))).toEqual([0, 0]);
+});
+
+test("scrolling a long Chat moves only its thumb: it forces no layout and restyles none of the transcript", async ({ join, seed }) => {
+	let rows = Array.from({ length: 160 }, (_, index) => ({
+		id: `long-${index}`,
+		author: { kind: "member" as const, handle: ["ana", "ben", "cy"][index % 3]! },
+		text: `Message ${index} about the rollout plan, and what it still needs from each team.`,
+		ts: 1_700_000_000 + index * 120,
+		...(index % 3 === 0 ? { reactions: [{ emoji: "👍", handles: ["ben"] }] } : {}),
+	}));
+	await seed("# Long Chat\n", { transcript: rows });
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
+	let scroller = chatOf(page).locator(".chat-split-main [data-chat-scroll]");
+	await expect(message(page, "long-159")).toBeVisible();
+	// Older messages are added in small steps while the page is idle; what grows is not the thumb.
+	await expect(message(page, "long-0")).toBeAttached();
+	await page.mouse.move(0, 0);
+	let settle = () =>
+		page.evaluate(() =>
+			new Promise<void>(resolve =>
+				requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 50)))
+			)
+		);
+	// The last step's own effects, and the frames after them, lay the page out once more.
+	for (let frame = 0; frame < 5; frame++) await settle();
+	let browser = page.context().browser()!;
+	await browser.startTracing(page, {
+		categories: ["devtools.timeline", "disabled-by-default-devtools.timeline.stack"],
+	});
+	for (let step = 0; step < 20; step++) {
+		await scroller.evaluate(node => node.scrollBy({ top: -90 }));
+		await settle();
+	}
+	let trace = JSON.parse((await browser.stopTracing()).toString()) as {
+		traceEvents: {
+			name: string;
+			args?: { elementCount?: number; beginData?: { dirtyObjects?: number; stackTrace?: unknown } };
+		}[];
+	};
+	let laid = trace.traceEvents.filter(event => event.name === "Layout")
+		.map(event => event.args?.beginData ?? {});
+	let restyled = trace.traceEvents
+		.filter(event => event.name === "UpdateLayoutTree")
+		.map(event => event.args?.elementCount ?? 0);
+	// The thumb showed and followed the scroll.
+	let thumb = chatOf(page).locator(".chat-split-main .chat-scroll-thumb");
+	await expect(thumb).toHaveCSS("opacity", "1");
+	expect(await thumb.evaluate(node => node.style.translate)).not.toBe("");
+	// Its moves are a transform. No script forced the page's layout (a read after a write would carry
+	// its stack), a layout in the frame touched a few objects of the thousands the transcript has, and
+	// a style pass touched the thumb and the pane's scroll edge, where anything the transcript's
+	// messages answered to would restyle thousands.
+	expect(laid.filter(layout => layout.stackTrace).length, "layouts a script forced").toBe(0);
+	expect(Math.max(0, ...laid.map(layout => layout.dirtyObjects ?? 0))).toBeLessThan(40);
+	expect(restyled.length).toBeGreaterThan(0);
+	expect(Math.max(...restyled)).toBeLessThan(40);
+});
