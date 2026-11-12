@@ -876,3 +876,64 @@ export function retryAction(look: BuildLook): "Retry" | undefined {
 export function buildTabReady(snapshot: Snapshot | undefined, look: BuildLook): boolean {
 	return look.kind !== "plan" || !!snapshot && hasBuilt(snapshot);
 }
+
+/** A running build as Chat's run strip shows it, beside the workflow runs. */
+export type BuildRun = {
+	id: string;
+	/** A first build works through its tasks; a rebuild carries edits onto its pull requests. */
+	kind: "build" | "rebuild";
+	state: "queued" | "building";
+	done: number;
+	total: number;
+	/** The task being built now, by title. */
+	task?: string;
+	/** The coding agent's latest activity. */
+	activity?: string;
+	/** When it was asked for, as an ISO time. */
+	started: string;
+	/** Pull requests it has opened or is updating, newest last. */
+	pullRequests: string[];
+};
+
+/**
+ * The build Chat's run strip shows while one runs, or nothing. It is read from the same snapshot
+ * as Build, so the strip and Build never disagree; once the build ends the strip lets it go and
+ * Chat's line about how it ended stays.
+ */
+export function buildRun(snapshot: Snapshot | undefined): BuildRun | undefined {
+	if (!snapshot) return;
+	let rebuild = snapshot.live?.rebuild;
+	if (rebuild && RUNNING.has(rebuild.state)) {
+		return {
+			id: rebuild.id,
+			kind: "rebuild",
+			state: rebuild.state === "queued" ? "queued" : "building",
+			done: 0,
+			total: 0,
+			...(rebuild.activity ? { activity: rebuild.activity.text } : {}),
+			started: rebuild.createdAt,
+			pullRequests: [...snapshot.live!.pullRequests],
+		};
+	}
+	let build = snapshot.build;
+	if (!build || !RUNNING.has(build.state)) return;
+	let progress = snapshot.lifecycle.activity?.tasks ?? [];
+	let tasks = snapshot.graph?.definition.tasks ?? [];
+	let state = (id: string) => progress.find(task => task.id === id)?.state ?? "queued";
+	let current = tasks.find(task => state(task.id) === "in_progress")
+		?? tasks.find(task => state(task.id) === "queued");
+	let { done, total } = progressCount(snapshot);
+	return {
+		id: build.id,
+		kind: "build",
+		state: build.state === "queued" ? "queued" : "building",
+		done,
+		total,
+		...(current && build.state !== "queued" ? { task: current.title } : {}),
+		...(build.activity ? { activity: build.activity.text } : {}),
+		started: build.createdAt,
+		pullRequests: [
+			...new Set(progress.flatMap(task => task.pullRequest ? [task.pullRequest.url] : [])),
+		],
+	};
+}

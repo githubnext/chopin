@@ -11,6 +11,7 @@ import { settledStages } from "@chopin/protocol/run-stages";
 import "./run-row.css";
 
 import type { Chat as Wire } from "@chopin/protocol";
+import type { BuildRun } from "../build-model";
 
 const SHOWN_STAGES = 6;
 const SHOWN_RUNS = 3;
@@ -474,11 +475,114 @@ function RunRow(
 	);
 }
 
-export function RunStack(
-	{ runs, loadStages, onShowDecisions, onPause, onResume, offline }: RunControls & {
-		runs: readonly Wire.Run[];
+/** `#12` for a pull request link, else nothing. */
+function pullNumber(url: string): string | undefined {
+	return url.match(/\/pull\/(\d+)(?:[/?#]|$)/)?.[1];
+}
+
+/**
+ * The document's running build, at the head of the strip: what it is on, what its agent is doing,
+ * and the pull requests it has opened, with the way into Build. It goes when the build ends; Chat's
+ * line about how it ended stays.
+ */
+function BuildRunRow(
+	{ build, open, onToggle, onShowBuild }: {
+		build: BuildRun;
+		open: boolean;
+		onToggle: () => void;
+		onShowBuild?: () => void;
 	},
 ) {
+	let now = useNow(true);
+	let started = Date.parse(build.started) / 1000;
+	let since = elapsed(now - (Number.isFinite(started) ? started : now));
+	let title = build.kind === "rebuild" ? "Building changes" : "Build";
+	let status = build.state === "queued"
+		? "queued"
+		: build.kind === "rebuild" || !build.total
+		? "running"
+		: `${build.done} of ${build.total} tasks`;
+	let detailId = `build-run-${build.id}`;
+	let links = build.pullRequests.flatMap(url => {
+		let number = pullNumber(url);
+		return number ? [{ url, number }] : [];
+	});
+	return (
+		<li className="run-row" data-build-run={build.state} data-run-status="running">
+			<div className="run-head flex min-w-0 items-center gap-1">
+				<button
+					aria-controls={detailId}
+					aria-expanded={open}
+					aria-label={`${title}, ${status}, ${since}`}
+					className="run-toggle"
+					data-run-toggle=""
+					onClick={onToggle}
+					type="button"
+				>
+					{build.state === "queued" ? <RunRing /> : <RunPulse />}
+					<span className="min-w-0 truncate text-text-secondary">{title}</span>
+					<span aria-live="polite" className="shrink-0 text-text-tertiary tabular-nums">
+						{status}
+					</span>
+					<span className="ml-auto shrink-0 text-text-quaternary tabular-nums">{since}</span>
+					<ChevronIcon
+						aria-hidden="true"
+						className="run-chevron shrink-0 text-text-quaternary"
+						size={16}
+					/>
+				</button>
+			</div>
+			{open && (
+				<div className="flex min-w-0 flex-col pb-1 pl-[22px]" id={detailId}>
+					{build.task && (
+						<p className="truncate text-text-secondary" data-build-run-task="">{build.task}</p>
+					)}
+					{build.activity && (
+						<p className="truncate text-text-tertiary" data-build-run-activity="">
+							{build.activity}
+						</p>
+					)}
+					<div className="flex min-w-0 flex-wrap items-center gap-x-2">
+						{links.map(link => (
+							<a
+								aria-label={`Pull request #${link.number}`}
+								className="link tabular-nums"
+								href={link.url}
+								key={link.url}
+								rel="noreferrer"
+								target="_blank"
+							>
+								#{link.number}
+							</a>
+						))}
+						{onShowBuild && (
+							<button
+								className="btn btn-sm btn-ghost -ml-2 text-text-tertiary"
+								data-build-run-open=""
+								onClick={onShowBuild}
+								type="button"
+							>
+								Open Build
+							</button>
+						)}
+					</div>
+				</div>
+			)}
+		</li>
+	);
+}
+
+export function RunStack(
+	{ runs, build, onShowBuild, loadStages, onShowDecisions, onPause, onResume, offline }:
+		& RunControls
+		& {
+			runs: readonly Wire.Run[];
+			/** The document's running build, shown first; absent when none runs. */
+			build?: BuildRun;
+			onShowBuild?: () => void;
+		},
+) {
+	let [buildOpen, setBuildOpen] = useState(true);
 	let [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
 	let [showAll, setShowAll] = useState(false);
 	let ordered = orderRuns(runs);
@@ -495,8 +599,18 @@ export function RunStack(
 			data-run-stack=""
 		>
 			<ol className="flex flex-col">
+				{build && (
+					<BuildRunRow
+						build={build}
+						onShowBuild={onShowBuild}
+						onToggle={() => setBuildOpen(open => !open)}
+						open={buildOpen}
+					/>
+				)}
 				{shown.map(run => {
-					let open = chosen.get(run.id) ?? run.id === fallback;
+					// Beside a build, whose details are unfolded, only a run waiting on people unfolds itself.
+					let first = run.id === fallback && (!build || run.status === "waiting");
+					let open = chosen.get(run.id) ?? first;
 					return (
 						<RunRow
 							key={run.id}
