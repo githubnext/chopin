@@ -11,8 +11,9 @@
  * own visual, which also reads tables.
  */
 
-import { lazy, Suspense, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useContext, useMemo, useRef, useState } from "react";
 import { HOSTED_IMAGE_PATH } from "@chopin/dialect";
+import { ImagePlace } from "@chopin/editor/image-place";
 import { QuestionMarkdownContext } from "@chopin/question/react";
 import { gfmTableFromMarkdown } from "mdast-util-gfm-table";
 import { gfmTable } from "micromark-extension-gfm-table";
@@ -55,6 +56,7 @@ export function documentImageUrl(src: string | undefined, document: string): str
 function CardImage({ alt, document, src }: { alt: string; document: string; src?: string }) {
 	let [failed, setFailed] = useState(false);
 	let [viewing, setViewing] = useState(false);
+	let place = useContext(ImagePlace);
 	let view = useRef<HTMLButtonElement>(null);
 	let url = documentImageUrl(src, document);
 	if (!alt.trim()) return null;
@@ -89,6 +91,7 @@ function CardImage({ alt, document, src }: { alt: string; document: string; src?
 							setViewing(false);
 							requestAnimationFrame(() => view.current?.focus());
 						}}
+						place={place}
 					/>
 				</Suspense>
 			)}

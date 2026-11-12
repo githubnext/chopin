@@ -101,6 +101,7 @@ export {
 	ProgressHalfIcon,
 	ReactionAddIcon,
 	RestartIcon,
+	RotateIcon,
 	SignInIcon,
 	SirenIcon,
 	SparkleIcon,

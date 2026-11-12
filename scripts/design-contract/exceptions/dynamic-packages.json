@@ -378,6 +378,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > RotateIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > MinusIcon > <LineIcon>",
 				1
 			],
@@ -501,7 +508,7 @@
 				1
 			]
 		],
-		"sourceHash": "03bac4455624293f63cbe1b6aa26c28919399780493de7ce59ddc489364faf6b"
+		"sourceHash": "7ede216ca263e151d26b03ceb7b9e50ee71b09003e6e39c58e68d3538b1b7ed4"
 	},
 	{
 		"file": "packages/icons/src/warning.tsx",

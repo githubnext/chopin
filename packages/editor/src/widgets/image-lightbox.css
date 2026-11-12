@@ -1,0 +1,536 @@
+/*
+ * The image viewer, laid out as Slack's: the whole window over a dimmed, heavily blurred copy of
+ * the picture, who and where along the top with Close at its end, the picture in the middle with a
+ * margin, rotate and zoom at the bottom start and Download alone at the bottom end. Its ground is
+ * dark whatever the picture is, so its words and controls are the page's colour on it: the blur is
+ * dimmed to at most the luminance where white text still reads at 7:1 over a white picture.
+ */
+
+.image-viewer {
+	--image-viewer-ink: var(--color-page);
+	--image-viewer-muted: var(--color-gray-300);
+	--image-viewer-control: color-mix(in oklch, var(--color-page) 12%, transparent);
+	--image-viewer-control-hover: color-mix(in oklch, var(--color-page) 22%, transparent);
+	/* Previous and Next can sit over the picture itself, so they carry a dark ground of their own. */
+	--image-viewer-step: color-mix(in oklch, var(--color-gray-900) 62%, transparent);
+	--image-viewer-step-hover: color-mix(in oklch, var(--color-gray-900) 78%, transparent);
+	--image-viewer-track: color-mix(in oklch, var(--color-page) 45%, transparent);
+	position: fixed;
+	inset: 0;
+	inline-size: 100%;
+	block-size: 100dvh;
+	max-inline-size: none;
+	max-block-size: none;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	background: var(--color-gray-900);
+	color: var(--image-viewer-ink);
+	font-family: var(--font-sans);
+	overscroll-behavior: contain;
+}
+
+/* A closed dialog stays hidden: only an open one is a grid. */
+.image-viewer[open] {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.image-viewer::backdrop {
+	background: transparent;
+}
+
+.image-viewer:focus {
+	outline: none;
+}
+
+.image-viewer-backdrop {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+/* Larger than the window, so the blur's soft edge is never inside it. */
+.image-viewer-backdrop img {
+	position: absolute;
+	inset: -10%;
+	inline-size: 120%;
+	block-size: 120%;
+	max-inline-size: none;
+	object-fit: cover;
+	filter: blur(64px) brightness(0.55) saturate(1.2);
+}
+
+.image-viewer-backdrop::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: color-mix(in oklch, var(--color-gray-900) 40%, transparent);
+}
+
+.image-viewer-header,
+.image-viewer-stage,
+.image-viewer-footer {
+	position: relative;
+	z-index: 1;
+	min-inline-size: 0;
+}
+
+.image-viewer-header {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 3);
+	min-block-size: calc(var(--spacing) * 16);
+	padding: calc(env(safe-area-inset-top, 0px) + var(--spacing) * 3)
+		calc(env(safe-area-inset-right, 0px) + var(--spacing) * 3) calc(var(--spacing) * 3)
+		calc(env(safe-area-inset-left, 0px) + var(--spacing) * 4);
+}
+
+.image-viewer-face {
+	display: flex;
+	flex: none;
+}
+
+.image-viewer-who {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+.image-viewer-who p {
+	margin: 0;
+}
+
+.image-viewer-name {
+	overflow: hidden;
+	font-size: var(--text-sm);
+	font-weight: 700;
+	line-height: var(--text-sm--line-height);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.image-viewer-detail {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	min-inline-size: 0;
+}
+
+.image-viewer-detail,
+.image-viewer-note {
+	color: var(--image-viewer-muted);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+.image-viewer-detail-text {
+	min-inline-size: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.image-viewer-generated {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	gap: var(--spacing);
+}
+
+.image-viewer-control {
+	display: inline-grid;
+	flex: none;
+	place-items: center;
+	inline-size: calc(var(--spacing) * 9);
+	block-size: calc(var(--spacing) * 9);
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-md);
+	background: transparent;
+	color: var(--image-viewer-ink);
+	cursor: pointer;
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		opacity var(--duration-fast) var(--ease-out);
+}
+
+/* Icons here take the viewer's ink, not the page's quiet icon grey. */
+.image-viewer
+	:is(.image-viewer-control, .image-viewer-generated, .image-viewer-broken)
+	[data-nucleo-icon] {
+	color: inherit;
+}
+
+.image-viewer-control:hover:not(:disabled) {
+	background: var(--image-viewer-control-hover);
+}
+
+.image-viewer-control:focus-visible,
+.image-viewer-slider:focus-visible,
+.image-viewer-text:focus-visible {
+	outline: var(--focus-ring-width) solid var(--image-viewer-ink);
+	outline-offset: 1px;
+}
+
+.image-viewer-control:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.image-viewer-stage {
+	display: grid;
+	place-items: center;
+	padding: calc(var(--spacing) * 4) calc(var(--spacing) * 8);
+	overflow: hidden;
+	touch-action: none;
+}
+
+.image-viewer-stage[data-many] {
+	padding-inline: calc(var(--spacing) * 18);
+}
+
+.image-viewer-stage[data-zoomed] {
+	cursor: grab;
+}
+
+.image-viewer-stage[data-zoomed][data-gesture] {
+	cursor: grabbing;
+}
+
+/* Placed by the script: its size is the zoom, its transform the pan and the turn. */
+.image-viewer-image {
+	position: absolute;
+	inset-block-start: 50%;
+	inset-inline-start: 50%;
+	max-inline-size: none;
+	visibility: hidden;
+	box-shadow: var(--shadow-overlay);
+	user-select: none;
+	-webkit-user-drag: none;
+	transition:
+		transform var(--duration-base) var(--ease-out),
+		width var(--duration-base) var(--ease-out),
+		height var(--duration-base) var(--ease-out);
+}
+
+.image-viewer-image[data-shown] {
+	visibility: visible;
+}
+
+.image-viewer-stage[data-gesture] .image-viewer-image {
+	transition: none;
+}
+
+.image-viewer-broken {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	color: var(--image-viewer-muted);
+	font-size: var(--text-sm);
+	line-height: var(--text-sm--line-height);
+}
+
+/* A text file is a page of its words; it scrolls, and is read by touch, unlike a picture. */
+.image-viewer-sheet {
+	display: flex;
+	flex-direction: column;
+	inline-size: min(100%, 52rem);
+	min-block-size: 0;
+	max-block-size: 100%;
+	overflow: hidden;
+	border-radius: var(--radius-lg);
+	background: var(--color-page);
+	box-shadow: var(--shadow-overlay);
+	color: var(--color-text-primary);
+	touch-action: auto;
+}
+
+.image-viewer-text {
+	flex: 1;
+	margin: 0;
+	padding: calc(var(--spacing) * 4) calc(var(--spacing) * 5);
+	overflow: auto;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	tab-size: 4;
+	overscroll-behavior: contain;
+}
+
+.image-viewer-sheet-quiet {
+	margin: 0;
+	padding: calc(var(--spacing) * 3) calc(var(--spacing) * 5);
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+/* Any other file: Slack's card, its type's icon, its name and its type and size. */
+.image-viewer-card {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 3);
+	inline-size: min(100%, 24rem);
+	padding: calc(var(--spacing) * 3);
+	border-radius: var(--radius-xl);
+	background: var(--color-page);
+	box-shadow: var(--shadow-overlay);
+	color: var(--color-text-primary);
+}
+
+.image-viewer-card-icon {
+	display: flex;
+	flex: none;
+}
+
+.image-viewer-card-text {
+	display: flex;
+	flex-direction: column;
+	min-inline-size: 0;
+}
+
+.image-viewer-card-name {
+	overflow: hidden;
+	font-size: var(--text-sm);
+	font-weight: 700;
+	line-height: var(--text-sm--line-height);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.image-viewer-card-detail {
+	display: flex;
+	gap: calc(var(--spacing) * 2);
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+/* Previous and Next at the window's sides, halfway down; one with nowhere to go is not drawn. */
+.image-viewer-step {
+	position: absolute;
+	inset-block-start: 50%;
+	z-index: 2;
+	inline-size: calc(var(--spacing) * 10);
+	block-size: calc(var(--spacing) * 10);
+	translate: 0 -50%;
+	border-radius: var(--radius-full);
+	background: var(--image-viewer-step);
+}
+
+.image-viewer-step:hover:not(:disabled) {
+	background: var(--image-viewer-step-hover);
+}
+
+.image-viewer-step[data-image-viewer-step="previous"] {
+	inset-inline-start: calc(env(safe-area-inset-left, 0px) + var(--spacing) * 4);
+}
+
+.image-viewer-step[data-image-viewer-step="next"] {
+	inset-inline-end: calc(env(safe-area-inset-right, 0px) + var(--spacing) * 4);
+}
+
+.image-viewer-step:disabled {
+	opacity: 0;
+}
+
+.image-viewer-footer {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	align-items: center;
+	gap: calc(var(--spacing) * 3);
+	padding: calc(var(--spacing) * 3) calc(env(safe-area-inset-right, 0px) + var(--spacing) * 4)
+		calc(env(safe-area-inset-bottom, 0px) + var(--spacing) * 3)
+		calc(env(safe-area-inset-left, 0px) + var(--spacing) * 4);
+}
+
+.image-viewer-tools {
+	display: flex;
+	align-items: center;
+	gap: calc(var(--spacing) * 2);
+	justify-self: start;
+}
+
+.image-viewer-group {
+	display: inline-flex;
+	align-items: center;
+	padding: calc(var(--spacing) * 0.5);
+	border-radius: var(--radius-lg);
+	background: var(--image-viewer-control);
+}
+
+.image-viewer-slider {
+	inline-size: calc(var(--spacing) * 24);
+	block-size: calc(var(--spacing) * 6);
+	margin: 0 var(--spacing);
+	background: transparent;
+	cursor: pointer;
+	appearance: none;
+}
+
+.image-viewer-slider:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.image-viewer-slider::-webkit-slider-runnable-track {
+	block-size: calc(var(--spacing) * 1);
+	border-radius: var(--radius-full);
+	background: var(--image-viewer-track);
+}
+
+.image-viewer-slider::-moz-range-track {
+	block-size: calc(var(--spacing) * 1);
+	border-radius: var(--radius-full);
+	background: var(--image-viewer-track);
+}
+
+.image-viewer-slider::-webkit-slider-thumb {
+	inline-size: calc(var(--spacing) * 3.5);
+	block-size: calc(var(--spacing) * 3.5);
+	margin-block-start: calc(var(--spacing) * -1.25);
+	border: 0;
+	border-radius: var(--radius-full);
+	background: var(--image-viewer-ink);
+	box-shadow: var(--shadow-resting-strong);
+	appearance: none;
+}
+
+.image-viewer-slider::-moz-range-thumb {
+	inline-size: calc(var(--spacing) * 3.5);
+	block-size: calc(var(--spacing) * 3.5);
+	border: 0;
+	border-radius: var(--radius-full);
+	background: var(--image-viewer-ink);
+	box-shadow: var(--shadow-resting-strong);
+}
+
+.image-viewer-caption {
+	display: flex;
+	justify-content: center;
+	gap: calc(var(--spacing) * 3);
+	min-inline-size: 0;
+	max-inline-size: 40rem;
+	margin: 0;
+	color: var(--image-viewer-muted);
+	font-size: var(--text-xs);
+	line-height: var(--text-xs--line-height);
+}
+
+.image-viewer-caption-text {
+	min-inline-size: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.image-viewer-count {
+	flex: none;
+	font-variant-numeric: tabular-nums;
+}
+
+.image-viewer-end {
+	display: flex;
+	justify-self: end;
+}
+
+@media (pointer: coarse) {
+	.image-viewer-control {
+		inline-size: calc(var(--spacing) * 11);
+		block-size: calc(var(--spacing) * 11);
+	}
+}
+
+/* A phone: the picture takes the width, and the controls keep to its thumbs' reach at the foot. */
+@media (max-width: 600px) {
+	.image-viewer-header {
+		padding-inline-start: calc(env(safe-area-inset-left, 0px) + var(--spacing) * 3);
+	}
+
+	.image-viewer-stage,
+	.image-viewer-stage[data-many] {
+		padding: var(--spacing) 0;
+	}
+
+	.image-viewer-footer {
+		grid-template-columns: minmax(0, 1fr) auto auto;
+		gap: calc(var(--spacing) * 2);
+		padding-inline: calc(env(safe-area-inset-left, 0px) + var(--spacing) * 2)
+			calc(env(safe-area-inset-right, 0px) + var(--spacing) * 2);
+	}
+
+	.image-viewer-tools {
+		gap: var(--spacing);
+	}
+
+	.image-viewer-slider {
+		inline-size: calc(var(--spacing) * 16);
+	}
+
+	.image-viewer-caption-text {
+		display: none;
+	}
+
+	.image-viewer-step[data-image-viewer-step="previous"] {
+		inset-inline-start: calc(env(safe-area-inset-left, 0px) + var(--spacing) * 2);
+	}
+
+	.image-viewer-step[data-image-viewer-step="next"] {
+		inset-inline-end: calc(env(safe-area-inset-right, 0px) + var(--spacing) * 2);
+	}
+}
+
+/* A calm fade with the picture settling from slightly smaller; it leaves the same way, quicker. */
+@media (prefers-reduced-motion: no-preference) {
+	.image-viewer[open] {
+		animation: image-viewer-in var(--duration-base) var(--ease-out);
+	}
+
+	.image-viewer[open] .image-viewer-stage > * {
+		animation: image-viewer-settle var(--duration-base) var(--ease-out);
+	}
+
+	.image-viewer[data-closing] {
+		animation: image-viewer-out var(--duration-fast) var(--ease-out) forwards;
+	}
+
+	.image-viewer[data-closing] .image-viewer-stage > * {
+		animation: image-viewer-leave var(--duration-fast) var(--ease-out) forwards;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.image-viewer-control,
+	.image-viewer-image {
+		transition: none;
+	}
+}
+
+@keyframes image-viewer-in {
+	from {
+		opacity: 0;
+	}
+}
+
+@keyframes image-viewer-out {
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes image-viewer-settle {
+	from {
+		scale: 0.96;
+	}
+}
+
+@keyframes image-viewer-leave {
+	to {
+		scale: 0.98;
+	}
+}

@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { FollowLinkProvider } from "@chopin/editor/follow-link";
+import { ImagePlace } from "@chopin/editor/image-place";
 import { rememberAvatars } from "@chopin/editor/people";
 import { documentPath } from "@chopin/protocol/document-url";
 import {
@@ -2054,7 +2055,7 @@ export function RoomWorkspace(
 		: editMode && { docked, editing: editMode === "editing", toggle: toggleEditing };
 
 	return linked(
-		<DecisionContexts document={room} page={questionPageRoot}>
+		<DecisionContexts document={room} page={questionPageRoot} title={metadata.title}>
 			<ChildPhoneChromeContext.Provider value={childChromeValue}>
 				<ChildTitleContext.Provider value={childTitleValue}>
 					<p aria-live="polite" className="sr-only" role="status">
@@ -2334,17 +2335,23 @@ export function RoomWorkspace(
 	);
 }
 
-/** A decision's own page, and card text read as Markdown with this document's images. */
+/**
+ * A decision's own page, card text read as Markdown with this document's images, and the
+ * document's title, which the image viewer names as where its pictures are.
+ */
 function DecisionContexts(
-	{ children, document, page }: {
+	{ children, document, page, title }: {
 		children: ReactNode;
 		document: string;
 		page: QuestionPageRoot | undefined;
+		title: string;
 	},
 ) {
 	return (
 		<QuestionPageContext.Provider value={page}>
-			<QuestionMarkdownProvider document={document}>{children}</QuestionMarkdownProvider>
+			<ImagePlace.Provider value={title}>
+				<QuestionMarkdownProvider document={document}>{children}</QuestionMarkdownProvider>
+			</ImagePlace.Provider>
 		</QuestionPageContext.Provider>
 	);
 }

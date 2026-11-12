@@ -1,6 +1,6 @@
 /** Images load with the browser session, without sending document referrers. */
 
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useContext, useEffect, useRef, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { readOnly$ } from "@mdxeditor/editor";
 import { useCellValue } from "@mdxeditor/gurx";
@@ -8,16 +8,21 @@ import { useCellValue } from "@mdxeditor/gurx";
 import { ImageIcon, PencilIcon, RestartIcon } from "@chopin/icons";
 
 import { ImageEditor } from "./image-editor";
-import { ImageLightbox } from "./image-lightbox";
+import { ImagePlace } from "./image-place";
 import { useImageResize } from "./image-resize";
 
 import type { ImageNode } from "@chopin/dialect";
+
+const ImageLightbox = lazy(() =>
+	import("./image-lightbox").then(({ ImageLightbox }) => ({ default: ImageLightbox }))
+);
 
 function Image(
 	{ alt, src, width, nodeKey }: { alt: string; src: string; width: number; nodeKey: string },
 ) {
 	let [editor] = useLexicalComposerContext();
 	let disabled = useCellValue(readOnly$);
+	let place = useContext(ImagePlace);
 	let [failed, setFailed] = useState(false);
 	let [editing, setEditing] = useState(false);
 	let [viewing, setViewing] = useState(false);
@@ -127,13 +132,16 @@ function Image(
 				/>
 			)}
 			{viewing && (
-				<ImageLightbox
-					images={[{ src, alt }]}
-					onClose={() => {
-						setViewing(false);
-						requestAnimationFrame(() => viewButton.current?.focus());
-					}}
-				/>
+				<Suspense fallback={null}>
+					<ImageLightbox
+						images={[{ src, alt }]}
+						onClose={() => {
+							setViewing(false);
+							requestAnimationFrame(() => viewButton.current?.focus());
+						}}
+						place={place}
+					/>
+				</Suspense>
 			)}
 		</>
 	);

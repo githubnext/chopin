@@ -8,11 +8,13 @@
  * runtime: measured aspect ratios hold each single image's box while pixels arrive, alt text and
  * captions stay on the page and available to assistive technology, external addresses are probed
  * without credentials or referrer before offering byte-level copy/download, and all showable images
- * of one message share `ImageGallery`'s `<Dialog>` lightbox in document order.
+ * of one message, and the files sent with it, share the editor's image viewer in document order.
  */
 
 import {
 	createContext,
+	lazy,
+	Suspense,
 	useContext,
 	useEffect,
 	useId,
@@ -33,9 +35,8 @@ import {
 } from "@chopin/icons";
 
 import { formatBytes } from "@chopin/protocol/attachment";
+import { ImagePlace } from "@chopin/editor/image-place";
 import { ImageActions, ImagePreview, ImageRoot } from "@/components/assistant-ui/elements/image";
-import { ImageGallery as GalleryElement } from "@/components/assistant-ui/elements/image-gallery";
-import { hostOf } from "@/components/assistant-ui/utils/href";
 
 import {
 	adoptedSize,
@@ -58,6 +59,7 @@ import { copyWidth, fittedBox, placeholderOf, thumbnailUrl, VIEWER_WIDTH } from 
 import "./image.css";
 
 import type { ComponentProps, CSSProperties, ReactNode, SyntheticEvent } from "react";
+import type { LightboxFile, LightboxItem } from "@chopin/editor/image-lightbox";
 import type { ImageActionItem } from "@/components/assistant-ui/elements/image";
 import type { Copied, ImageSource, Load, Settled } from "./image-state";
 
@@ -88,16 +90,25 @@ export type RegisteredImage = {
 	shown: Shown;
 };
 
+/** A file sent with a message, which the viewer shows as its text or as a card. */
+export type RegisteredFile = { element: HTMLElement; order?: number; file: LightboxFile };
+
+export type RegisteredEntry = RegisteredImage | RegisteredFile;
+
 export type ImageHost = {
-	register(id: string, entry: RegisteredImage): () => void;
+	register(id: string, entry: RegisteredEntry): () => void;
 	open(id: string, opener?: HTMLElement | null): void;
 };
+
+const ImageLightbox = lazy(() =>
+	import("@chopin/editor/image-lightbox").then(({ ImageLightbox }) => ({ default: ImageLightbox }))
+);
 
 const HostContext = createContext<ImageHost | undefined>(undefined);
 
 function compareEntries(
-	[, left]: [string, RegisteredImage],
-	[, right]: [string, RegisteredImage],
+	[, left]: [string, RegisteredEntry],
+	[, right]: [string, RegisteredEntry],
 ): number {
 	if (left.element === right.element) return (left.order ?? 0) - (right.order ?? 0);
 	return left.element.compareDocumentPosition(right.element) & Node.DOCUMENT_POSITION_FOLLOWING
@@ -105,34 +116,42 @@ function compareEntries(
 		: 1;
 }
 
-/** Who sent a message's images and when, for the top of the viewer, as Slack's viewer shows. */
-export type ImageSender = { name: string; face: ReactNode; time?: string };
+/** Who sent a message's images and when (in seconds), for the top of the viewer, as Slack's shows. */
+export type ImageSender = { name: string; face: ReactNode; ts?: number };
+
+/** What the viewer shows for one of a message's images or files. */
+function viewed(entry: RegisteredEntry): LightboxItem {
+	if ("file" in entry) return entry.file;
+	let { data, label, shown } = entry;
+	return {
+		src: shown.source.kind === "hosted" ? thumbnailUrl(shown.url, VIEWER_WIDTH) : shown.url,
+		// Download saves the stored file, never the copy drawn.
+		original: shown.url,
+		alt: label,
+		name: label,
+		download: downloadName(data.alt, data.src, shown.type ?? data.mimeType),
+		...(data.caption ? { caption: data.caption } : {}),
+		...(data.generated ? { generated: true } : {}),
+		...(data.original
+			? {
+				note: `Shown smaller. The original was ${
+					formatBytes(data.original.size)
+				}, ${data.original.width} × ${data.original.height}.`,
+			}
+			: {}),
+	};
+}
 
 export function MessageImages(
 	{ children, sender }: { children: ReactNode; sender?: ImageSender },
 ) {
-	let entries = useRef(new Map<string, RegisteredImage>());
+	let entries = useRef(new Map<string, RegisteredEntry>());
 	let lastOpener = useRef<HTMLElement | null>(null);
+	let place = useContext(ImagePlace);
 	let [view, setView] = useState<{
-		activeId: string;
-		entries: Array<[string, RegisteredImage]>;
+		start: number;
+		entries: Array<[string, RegisteredEntry]>;
 	}>();
-
-	// Pressing the dark ground around the image closes the viewer, as Slack's does.
-	let viewing = view !== undefined;
-	useEffect(() => {
-		if (!viewing) return;
-		let onClick = (event: MouseEvent) => {
-			// Found from Chopin's own header, never by the copy's slot names, which are the copy's to set:
-			// the ground is the viewer itself (the header's parent) or the picture's row (two after it).
-			let target = event.target as Element | null;
-			let header = target?.querySelector(":scope > [data-chat-viewer-header]")
-				?? target?.previousElementSibling?.previousElementSibling;
-			if (header?.hasAttribute("data-chat-viewer-header")) setView(undefined);
-		};
-		document.addEventListener("click", onClick);
-		return () => document.removeEventListener("click", onClick);
-	}, [viewing]);
 
 	useEffect(() => {
 		if (view !== undefined) return;
@@ -149,9 +168,9 @@ export function MessageImages(
 		open(id, opener) {
 			let ordered = [...entries.current].sort(compareEntries);
 			if (ordered.length === 0) return;
-			let found = ordered.find(([key]) => key === id)?.[0] ?? ordered[0]![0];
+			let start = Math.max(ordered.findIndex(([key]) => key === id), 0);
 			lastOpener.current = opener ?? (document.activeElement as HTMLElement | null);
-			setView({ activeId: found, entries: ordered });
+			setView({ start, entries: ordered });
 		},
 	}), []);
 
@@ -159,65 +178,19 @@ export function MessageImages(
 		<HostContext.Provider value={host}>
 			{children}
 			{view && (
-				<GalleryElement
-					activeId={view.activeId}
-					dialogActions={(_, index) => {
-						let [, entry] = view.entries[index]!;
-						return (
-							<>
-								{view.entries.length > 1 && (
-									<span className="sr-only" role="status">
-										Image {index + 1} of {view.entries.length}
-									</span>
-								)}
-								<ChatImageActions data={entry.data} engaged shown={entry.shown} />
-							</>
-						);
-					}}
-					dialogHeader={(_, index) => {
-						let [, entry] = view.entries[index]!;
-						return (
-							<div className="chat-viewer-header" data-chat-viewer-header="">
-								{sender && (
-									<span aria-hidden="true" className="chat-viewer-face">{sender.face}</span>
-								)}
-								<span className="chat-viewer-who">
-									{sender && <span className="chat-viewer-name">{sender.name}</span>}
-									<span className="chat-viewer-detail">
-										{sender?.time && <span>{sender.time}</span>}
-										<span className="chat-viewer-file">{entry.label}</span>
-										{entry.data.original && (
-											<span className="chat-viewer-note">
-												Shown smaller. The original was {formatBytes(entry.data.original.size)},
-												{" "}
-												{entry.data.original.width} × {entry.data.original.height}.
-											</span>
-										)}
-									</span>
-								</span>
-							</div>
-						);
-					}}
-					hideGrid
-					images={view.entries.map(([key, entry]) => ({
-						id: key,
-						src: entry.shown.source.kind === "hosted"
-							? thumbnailUrl(entry.shown.url, VIEWER_WIDTH)
-							: entry.shown.url,
-						alt: entry.label,
-						caption: entry.data.caption || entry.label,
-						imgProps: { referrerPolicy: "no-referrer" },
-						source: entry.data.generated
-							? { label: "Generated" }
-							: entry.shown.source.kind === "external"
-							? { label: hostOf(entry.shown.url) }
-							: undefined,
-					}))}
-					onActiveIdChange={nextId => {
-						if (nextId === null) setView(undefined);
-						else setView(current => current ? { ...current, activeId: nextId } : undefined);
-					}}
-				/>
+				<Suspense fallback={null}>
+					<ImageLightbox
+						images={view.entries.map(([, entry]) => viewed(entry))}
+						onClose={() => setView(undefined)}
+						place={place}
+						sender={sender && {
+							name: sender.name,
+							face: sender.face,
+							...(sender.ts === undefined ? {} : { at: sender.ts * 1000 }),
+						}}
+						start={view.start}
+					/>
+				</Suspense>
 			)}
 		</HostContext.Provider>
 	);

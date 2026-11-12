@@ -75,7 +75,7 @@ function message(page: Page, id: string): Locator {
 }
 
 function viewer(page: Page): Locator {
-	return page.locator('[data-slot="dialog-content"]');
+	return page.locator("[data-image-viewer]");
 }
 
 async function openChat(page: Page): Promise<void> {
@@ -221,16 +221,16 @@ test("several images are Slack's grid: two side by side, three as one tall besid
 	await expect(six.first()).toHaveCSS("border-radius", "8px");
 });
 
-test("the viewer is Slack's: full screen, who sent it and when along the top, the arrows and the keys, and focus back where it was", async ({ baseURL, join, room, seed }) => {
+test("the viewer is Slack's: the picture blurred behind it, who sent it, how long ago, where and its name along the top, rotate and zoom at the bottom start, Download alone at the bottom end", async ({ baseURL, join, room, seed }) => {
 	let stored = await pictures(baseURL, room, 3);
-	await seed("# Viewer\n", {
+	await seed("# Weekly review\n", {
 		transcript: [{
 			id: "sent",
-			author: { kind: "member", handle: "bo" },
+			author: { kind: "member", handle: "Bo_Dev-42" },
 			text: `Three of them ![First](${stored[0]!.src}) ![Second](${stored[1]!.src}) ![Third](${
 				stored[2]!.src
 			})`,
-			ts: 1_700_000_000_000,
+			ts: Math.floor(Date.now() / 1000) - 3 * 3600,
 		}],
 	});
 	let page = await join("ana");
@@ -241,40 +241,82 @@ test("the viewer is Slack's: full screen, who sent it and when along the top, th
 	await expect(tiles).toHaveCount(3);
 	await tiles.nth(1).click();
 	let open = viewer(page);
-	await expect(open.getByRole("status")).toHaveText("Image 2 of 3");
+	await expect(open.getByRole("status")).toHaveText("2 of 3");
 	await expect.poll(async () => await open.boundingBox()).toEqual({
 		x: 0,
 		y: 0,
 		width: 1440,
 		height: 900,
 	});
-	await expect(open).toHaveCSS("border-radius", "0px");
-	let header = open.locator("[data-chat-viewer-header]");
-	await expect(header.locator(".chat-viewer-name")).toHaveText("bo");
-	await expect(header.locator(".chat-viewer-file")).toHaveText("Second");
-	// Download and close are along the top, as Slack keeps them.
-	for (let name of ["Download image", "Close"]) {
-		let control = (await open.getByRole("button", { name, exact: true }).boundingBox())!;
-		expect(control.y).toBeLessThan(40);
-		expect(control.x).toBeGreaterThan(1200);
+	// Behind it, the picture itself, blurred and dimmed, fills the window.
+	let backdrop = open.locator(".image-viewer-backdrop img");
+	await expect(backdrop).toHaveAttribute("src", /&w=1024$/);
+	await expect(backdrop).toHaveCSS("filter", /blur\(64px\) brightness\(0\.55\)/);
+	// The sender as written, then when, where and which file.
+	await expect(open.locator(".image-viewer-name")).toHaveText("Bo_Dev-42");
+	await expect(open.locator(".image-viewer-detail-text")).toHaveText(
+		"3 hours ago in Weekly review – Second",
+	);
+	await expect(open.locator(".image-viewer-face")).toBeVisible();
+	let close = (await open.getByRole("button", { name: "Close", exact: true }).boundingBox())!;
+	expect(close.y).toBeLessThan(40);
+	expect(close.x + close.width).toBeGreaterThan(1400);
+
+	// Along the foot: rotate, then zoom out, the slider and zoom in at the start, Download at the end,
+	// and nothing to the right of Download.
+	let rotate = (await open.getByRole("button", { name: "Rotate" }).boundingBox())!;
+	let out = (await open.getByRole("button", { name: "Zoom out" }).boundingBox())!;
+	let slider = (await open.getByRole("slider", { name: "Zoom" }).boundingBox())!;
+	let zoomIn = (await open.getByRole("button", { name: "Zoom in" }).boundingBox())!;
+	let download = (await open.getByRole("button", { name: "Download image" }).boundingBox())!;
+	expect(rotate.x).toBeLessThan(40);
+	expect(rotate.x < out.x && out.x < slider.x && slider.x < zoomIn.x).toBe(true);
+	expect(zoomIn.x + zoomIn.width).toBeLessThan(400);
+	for (let control of [rotate, out, slider, zoomIn, download]) {
+		expect(control.y).toBeGreaterThan(820);
 	}
+	expect(download.x + download.width).toBeGreaterThan(1400);
+	// Nothing the viewer draws in Download's row lies to its right.
+	let beside = await open.evaluate(
+		(element, top) =>
+			[...element.querySelectorAll("button, input, a")].filter(control => {
+				let box = control.getBoundingClientRect();
+				return box.bottom > top && control.getAttribute("aria-label") !== "Download image";
+			}).map(control => control.getBoundingClientRect().right),
+		download.y,
+	);
+	expect(Math.max(...beside)).toBeLessThan(download.x);
+	let footer = await open.locator("footer").evaluate(element =>
+		[...element.querySelectorAll("button, input, a")].map(control =>
+			control.getAttribute("aria-label")
+		)
+	);
+	expect(footer).toEqual(["Rotate", "Zoom out", "Zoom", "Zoom in", "Download image"]);
+
 	// The arrows are at the window's edges, halfway down.
-	let previous = (await open.getByRole("button", { name: "Previous image" }).boundingBox())!;
-	let next = (await open.getByRole("button", { name: "Next image" }).boundingBox())!;
+	let previous = (await open.getByRole("button", { name: "Previous", exact: true }).boundingBox())!;
+	let next = (await open.getByRole("button", { name: "Next", exact: true }).boundingBox())!;
 	expect(previous.x).toBeLessThan(40);
 	expect(next.x + next.width).toBeGreaterThan(1400);
 	expect(previous.y + previous.height / 2).toBeCloseTo(450, -1);
-	// It draws a larger copy than the message did.
-	await expect(open.getByRole("img", { name: "Second" })).toHaveAttribute("src", /&w=1024$/);
+	// It draws a larger copy than the message did, fitted inside the window with a margin.
+	let picture = open.getByRole("img", { name: "Second" });
+	await expect(picture).toHaveAttribute("src", /&w=1024$/);
+	await expect.poll(async () => (await picture.boundingBox())?.width ?? 0).toBeGreaterThan(500);
+	let shown = (await picture.boundingBox())!;
+	expect(shown.x).toBeGreaterThan(previous.x + previous.width);
+	expect(shown.x + shown.width).toBeLessThan(next.x);
 
 	await page.keyboard.press("ArrowRight");
-	await expect(open.getByRole("status")).toHaveText("Image 3 of 3");
-	await expect(header.locator(".chat-viewer-file")).toHaveText("Third");
-	await open.getByRole("button", { name: "Previous image" }).click();
-	await expect(open.getByRole("status")).toHaveText("Image 2 of 3");
-	// Tab stays inside it.
-	// Tab stays inside it, wrapping through its focus guards back to its first control.
-	for (let step = 0; step < 8; step++) {
+	await expect(open.getByRole("status")).toHaveText("3 of 3");
+	await expect(open.locator(".image-viewer-detail-text")).toHaveText(
+		"3 hours ago in Weekly review – Third",
+	);
+	await expect(open.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
+	await open.getByRole("button", { name: "Previous", exact: true }).click();
+	await expect(open.getByRole("status")).toHaveText("2 of 3");
+	// Tab stays inside it, wrapping back to its first control.
+	for (let step = 0; step < 10; step++) {
 		await page.keyboard.press("Tab");
 		await expect.poll(() => open.evaluate(element => element.contains(document.activeElement)))
 			.toBe(true);
@@ -282,6 +324,232 @@ test("the viewer is Slack's: full screen, who sent it and when along the top, th
 	await page.keyboard.press("Escape");
 	await expect(open).toHaveCount(0);
 	await expect(tiles.nth(1)).toBeFocused();
+});
+
+test("every control of the viewer is named and says its name on hover", async ({ baseURL, join, room, seed }) => {
+	let stored = await pictures(baseURL, room, 2);
+	await seed("# Named\n", { transcript: [agent("two", stored)] });
+	let page = await join("ana");
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await openChat(page);
+	await message(page, "two").locator('[data-chat-image="tile"]').first().click();
+	let open = viewer(page);
+	await expect(open.getByRole("img", { name: "Picture 1" })).toBeVisible();
+	// A Planner's picture is chopin's.
+	await expect(open.locator(".image-viewer-name")).toHaveText("chopin");
+	let tooltip = page.locator("[data-icon-tooltip]");
+	for (
+		let [name, said] of [
+			["Close", "Close"],
+			["Next", "Next"],
+			["Rotate", "Rotate"],
+			["Zoom in", "Zoom in"],
+			["Download image", "Download image"],
+		]
+	) {
+		await open.getByRole("button", { name: name!, exact: true }).hover();
+		await expect(tooltip, name).toHaveText(said!);
+		await expect(tooltip, name).toBeVisible();
+		// Drawn inside the viewer, above it, not under it on the page.
+		expect(await tooltip.evaluate(element => !!element.closest("[data-image-viewer]"))).toBe(true);
+	}
+	await open.getByRole("slider", { name: "Zoom" }).hover();
+	await expect(tooltip).toHaveText("Zoom");
+	await expect(tooltip).toBeVisible();
+});
+
+test("a picture turns a quarter at a time, and zooms by the slider, −, +, the keys, the wheel and a double-click, then pans under a drag", async ({ baseURL, join, room, seed }) => {
+	let stored = await pictures(baseURL, room, 1);
+	await seed("# Zoom\n", { transcript: [agent("one", stored)] });
+	let page = await join("ana");
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await openChat(page);
+	await message(page, "one").locator("[data-chat-image-frame]").click();
+	let open = viewer(page);
+	let picture = open.getByRole("img", { name: "Picture 1" });
+	await expect(picture).toHaveAttribute("data-shown", "");
+	// Its box while zoom and turn ease to where they go, so each is read once it is there.
+	let size = async () => {
+		let box = (await picture.boundingBox())!;
+		return { width: Math.round(box.width), height: Math.round(box.height) };
+	};
+	let settle = async () => {
+		let last = "";
+		await expect.poll(async () => {
+			let now = JSON.stringify(await size());
+			let same = now === last;
+			last = now;
+			return same;
+		}).toBe(true);
+	};
+	// 600 by 400 fits whole: it is not enlarged, and the slider is at its start.
+	await expect.poll(size).toEqual({ width: 600, height: 400 });
+	let slider = open.getByRole("slider", { name: "Zoom" });
+	await expect(slider).toHaveValue("0");
+	await expect(slider).toHaveAttribute("aria-valuetext", "100%");
+	await expect(open.getByRole("button", { name: "Zoom out" })).toBeDisabled();
+
+	// Rotate turns it a quarter clockwise: it stands 400 wide and 600 tall.
+	await open.getByRole("button", { name: "Rotate" }).click();
+	await expect(picture).toHaveAttribute("data-rotation", "90");
+	await expect.poll(size).toEqual({ width: 400, height: 600 });
+	for (let turn of ["180", "270", "0"]) {
+		await open.getByRole("button", { name: "Rotate" }).click();
+		await expect(picture).toHaveAttribute("data-rotation", turn);
+	}
+	await expect.poll(size).toEqual({ width: 600, height: 400 });
+
+	// + zooms in an eighth of the slider; − back.
+	await open.getByRole("button", { name: "Zoom in" }).click();
+	await expect(slider).toHaveValue("13");
+	await expect.poll(async () => (await size()).width).toBeGreaterThan(600);
+	await open.getByRole("button", { name: "Zoom out" }).click();
+	await expect(slider).toHaveValue("0");
+	// The keys: + and =, then 0 back to fitted.
+	await page.keyboard.press("+");
+	await page.keyboard.press("=");
+	await expect(slider).toHaveValue("25");
+	await page.keyboard.press("0");
+	await expect(slider).toHaveValue("0");
+	// The slider itself.
+	await slider.fill("100");
+	await expect(slider).toHaveAttribute("aria-valuetext", "800%");
+	await expect.poll(size).toEqual({ width: 4800, height: 3200 });
+	await slider.fill("0");
+	await expect.poll(size).toEqual({ width: 600, height: 400 });
+	// The wheel zooms where the pointer is.
+	let box = (await open.locator(".image-viewer-stage").boundingBox())!;
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await page.mouse.wheel(0, -400);
+	await expect.poll(async () => Number(await slider.inputValue())).toBeGreaterThan(0);
+	await page.keyboard.press("0");
+	// A double-click on the picture toggles fitted and twice its own size.
+	await picture.dblclick();
+	await expect(slider).toHaveValue("33");
+	await expect.poll(size).toEqual({ width: 1200, height: 800 });
+	// Twice its size it still fits across, so a drag cannot move it sideways.
+	let centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+	let drag = async (dx: number, dy: number) => {
+		await page.mouse.move(centre.x, centre.y);
+		await page.mouse.down();
+		await page.mouse.move(centre.x + dx, centre.y + dy, { steps: 6 });
+		await page.mouse.up();
+	};
+	let before = (await picture.boundingBox())!;
+	await drag(120, 0);
+	expect(Math.round((await picture.boundingBox())!.x)).toBe(Math.round(before.x));
+	// At its most, a drag moves it as far as the pointer went, and does not close the viewer.
+	await slider.fill("100");
+	await expect.poll(size).toEqual({ width: 4800, height: 3200 });
+	await settle();
+	before = (await picture.boundingBox())!;
+	await drag(120, 60);
+	await expect(open).toBeVisible();
+	let after = (await picture.boundingBox())!;
+	expect(Math.round(after.x - before.x)).toBe(120);
+	expect(Math.round(after.y - before.y)).toBe(60);
+	await page.keyboard.press("0");
+	await expect.poll(size).toEqual({ width: 600, height: 400 });
+	await picture.dblclick();
+	await expect(slider).toHaveValue("33");
+	await picture.dblclick();
+	await expect(slider).toHaveValue("0");
+});
+
+test("Download saves the stored original under its name, and for a file too", async ({ baseURL, join, room, seed }) => {
+	let stored = await pictures(baseURL, room, 1);
+	await seed("# Save\n", { transcript: [agent("one", stored)] });
+	let page = await join("ana");
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await openChat(page);
+	await message(page, "one").locator("[data-chat-image-frame]").click();
+	let open = viewer(page);
+	let [saved] = await Promise.all([
+		page.waitForEvent("download"),
+		open.getByRole("button", { name: "Download image" }).click(),
+	]);
+	expect(saved.suggestedFilename()).toBe("picture-1.png");
+	let original = await page.request.get(stored[0]!.src);
+	expect(Buffer.compare(
+		await original.body(),
+		await (await saved.createReadStream()).toArray().then(parts => Buffer.concat(parts)),
+	)).toBe(0);
+});
+
+test("a message's images and files are one viewer: Previous and Next and the arrow keys step through all of them, a text file is shown as its text, and Download saves it", async ({ join }) => {
+	let page = await join("ana");
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await openChat(page);
+	let csv = {
+		name: "latency-by-day.csv",
+		mimeType: "text/csv",
+		buffer: Buffer.from("day,p95\nmon,40\n"),
+	};
+	let second = {
+		name: "second.png",
+		mimeType: "image/png",
+		buffer: png(40, 30, (x, y) => [x * 6, y * 8, 200]),
+	};
+	await choose(
+		page,
+		{ name: "first.png", mimeType: "image/png", buffer: png(60, 40) },
+		second,
+		NOTES,
+		csv,
+	);
+	for (let name of ["first.png", "second.png", "notes.md", "latency-by-day.csv"]) {
+		await expect(chip(page, name)).toHaveAttribute("data-state", "done");
+	}
+	let input = chatInput(chat(page));
+	await fillChat(input, "Pictures and the numbers");
+	await input.press("Enter");
+	let sent = chat(page).locator("[data-chat-message-id]").filter({
+		hasText: "Pictures and the numbers",
+	});
+	let tiles = sent.locator('[data-chat-image="tile"]');
+	await expect(tiles).toHaveCount(2);
+	await expect(tiles.nth(1)).toHaveAttribute("data-load", "shown");
+	let files = sent.getByRole("group", { name: "Files sent with this message" });
+	let notes = files.getByRole("button", { name: /^notes\.md/ });
+
+	// Pressing a file opens it where it is among the message's four, as its text.
+	await notes.click();
+	let open = viewer(page);
+	await expect(open.getByRole("status")).toHaveText("3 of 4");
+	await expect(open.locator(".image-viewer-detail-text")).toHaveText(/ – notes\.md$/);
+	await expect(open.locator("[data-image-viewer-file='text']")).toContainText("# Notes");
+	// Rotate and zoom are a picture's: a file has none, and Download stays alone at the end.
+	for (let name of ["Rotate", "Zoom in", "Zoom out"]) {
+		await expect(open.getByRole("button", { name })).toHaveCount(0);
+	}
+	await expect(open.getByRole("slider")).toHaveCount(0);
+	let [saved] = await Promise.all([
+		page.waitForEvent("download"),
+		open.getByRole("button", { name: "Download file" }).click(),
+	]);
+	expect(saved.suggestedFilename()).toBe("notes.md");
+	expect(
+		await (await saved.createReadStream()).toArray().then(parts => Buffer.concat(parts).toString()),
+	).toBe(NOTES.buffer.toString());
+
+	// The keys and the arrows step through all of them, images first as they are drawn, and stop at the ends.
+	await page.keyboard.press("ArrowRight");
+	await expect(open.getByRole("status")).toHaveText("4 of 4");
+	await expect(open.locator("[data-image-viewer-file='text']")).toContainText("mon,40");
+	await expect(open.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
+	await page.keyboard.press("ArrowRight");
+	await expect(open.getByRole("status")).toHaveText("4 of 4");
+	await open.getByRole("button", { name: "Previous", exact: true }).click();
+	await open.getByRole("button", { name: "Previous", exact: true }).click();
+	await expect(open.getByRole("status")).toHaveText("2 of 4");
+	await expect(open.getByRole("img", { name: "second.png" })).toBeVisible();
+	await expect(open.getByRole("button", { name: "Rotate" })).toBeVisible();
+	await page.keyboard.press("ArrowLeft");
+	await expect(open.getByRole("status")).toHaveText("1 of 4");
+	await expect(open.getByRole("button", { name: "Previous", exact: true })).toBeDisabled();
+	await page.keyboard.press("Escape");
+	await expect(open).toHaveCount(0);
+	await expect(notes).toBeFocused();
 });
 
 test("an image that cannot load is Slack's placeholder in the box the image would have taken, with what happened and its name", async ({ baseURL, join, page, room, seed }) => {
@@ -488,7 +756,7 @@ test("a 20 MB photo 12000 pixels wide is sent and shown from its thumbnails, nev
 	await expect(large).toBeVisible();
 	await expect.poll(() => large.evaluate(element => (element as HTMLImageElement).naturalWidth))
 		.toBeGreaterThan(shown.width);
-	await expect(open.locator(".chat-viewer-note")).toHaveText(
+	await expect(open.locator(".image-viewer-note")).toHaveText(
 		/^Shown smaller\. The original was \d+(\.\d)? MB, 12000 × 8000\.$/,
 	);
 	let [saved] = await Promise.all([
@@ -527,16 +795,59 @@ test("on a phone the images, the grid, the files and the viewer fit the screen",
 
 	await message(page, "grid").locator('[data-chat-image="tile"]').first().tap();
 	let open = viewer(page);
-	await expect(open.getByRole("status")).toHaveText("Image 1 of 3");
+	await expect(open.getByRole("status")).toHaveText("1 of 3");
 	await expect.poll(async () => {
 		let box = (await open.boundingBox())!;
 		return [box.width, box.height];
 	}).toEqual([390, 844]);
-	let next = (await open.getByRole("button", { name: "Next image" }).boundingBox())!;
-	expect(next.x + next.width).toBeLessThanOrEqual(390);
-	expect(next.y + next.height).toBeLessThanOrEqual(844);
-	await open.getByRole("button", { name: "Next image" }).tap();
-	await expect(open.getByRole("status")).toHaveText("Image 2 of 3");
+	// Every control is on the screen and a finger's size, Download still alone at the bottom end.
+	for (
+		let name of ["Close", "Previous", "Next", "Rotate", "Zoom out", "Zoom in", "Download image"]
+	) {
+		let control = (await open.getByRole("button", { name, exact: true }).boundingBox())!;
+		expect(control.x, name).toBeGreaterThanOrEqual(0);
+		expect(control.x + control.width, name).toBeLessThanOrEqual(390);
+		expect(control.y + control.height, name).toBeLessThanOrEqual(844);
+		expect(control.width, name).toBeGreaterThanOrEqual(44);
+	}
+	let slider = (await open.getByRole("slider", { name: "Zoom" }).boundingBox())!;
+	expect(slider.x + slider.width).toBeLessThanOrEqual(390);
+	let download = (await open.getByRole("button", { name: "Download image" }).boundingBox())!;
+	expect(download.x + download.width).toBeGreaterThan(340);
+	// The picture takes the screen's width.
+	let picture = open.getByRole("img", { name: "Picture 1" });
+	await expect(picture).toHaveAttribute("data-shown", "");
+	await expect.poll(async () => Math.round((await picture.boundingBox())!.width)).toBe(390);
+
+	// Two fingers spread apart zoom it in.
+	let centre = await picture.evaluate(element => {
+		let box = element.getBoundingClientRect();
+		return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+	});
+	await open.locator(".image-viewer-stage").evaluate((stage, { x, y }) => {
+		let fire = (type: string, id: number, dx: number) =>
+			stage.dispatchEvent(
+				new PointerEvent(type, {
+					bubbles: true,
+					button: 0,
+					clientX: x + dx,
+					clientY: y,
+					isPrimary: id === 1,
+					pointerId: id,
+					pointerType: "touch",
+				}),
+			);
+		fire("pointerdown", 1, -40);
+		fire("pointerdown", 2, 40);
+		for (let step = 1; step <= 5; step++) fire("pointermove", 2, 40 + step * 16);
+		fire("pointerup", 1, -40);
+		fire("pointerup", 2, 120);
+	}, centre);
+	await expect.poll(async () => Number(await open.getByRole("slider").inputValue()))
+		.toBeGreaterThan(0);
+
+	await open.getByRole("button", { name: "Next", exact: true }).tap();
+	await expect(open.getByRole("status")).toHaveText("2 of 3");
 });
 
 test("the composer's files keep their place on a phone", async ({ join }) => {

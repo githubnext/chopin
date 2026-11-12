@@ -215,17 +215,27 @@ for (let mode of ["light", "dark"] as const) {
 			await token(page, "--color-inset", "background-color"),
 		]);
 
-		// The viewer is Slack's dark ground in Chopin's ink, with the page's colour for its words.
+		// The viewer is Slack's dark ground under the blurred picture, its words in the page's colour
+		// and its secondary line in the light grey that keeps AA over a white picture's blur.
 		await frame.click();
-		let viewer = page.locator('[data-slot="dialog-content"]');
-		await expect(viewer.locator("[data-chat-viewer-header]")).toBeVisible();
+		let viewer = page.locator("[data-image-viewer]");
+		await expect(viewer.locator(".image-viewer-name")).toBeVisible();
 		expect(await css(viewer, "background-color", "color")).toEqual([
-			await token(page, "--color-text-primary", "background-color"),
+			await token(page, "--color-gray-900", "background-color"),
 			await token(page, "--color-page"),
 		]);
-		expect(await css(viewer.locator(".chat-viewer-name"), "color")).toEqual([
+		expect(await css(viewer.locator(".image-viewer-name"), "color")).toEqual([
 			await token(page, "--color-page"),
 		]);
+		expect(await css(viewer.locator(".image-viewer-detail"), "color")).toEqual([
+			await token(page, "--color-gray-300"),
+		]);
+		expect(
+			await css(
+				viewer.getByRole("button", { name: "Download image" }).locator("[data-nucleo-icon]"),
+				"color",
+			),
+		).toEqual([await token(page, "--color-page")]);
 		await page.keyboard.press("Escape");
 		await expect(viewer).toHaveCount(0);
 	});

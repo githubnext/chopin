@@ -136,7 +136,7 @@ function settled(figure: Locator): Promise<void> {
 }
 
 function lightbox(page: Page): Locator {
-	return page.locator('[data-slot="dialog-content"]');
+	return page.locator("[data-image-viewer]");
 }
 
 async function openChat(page: Page): Promise<void> {
@@ -418,10 +418,10 @@ test("more than four images show four tiles, as Slack does, and the lightbox rea
 	let box = lightbox(page);
 	await expect(box).toBeVisible();
 	await expect(box.getByRole("img", { name: "Variant 4" })).toBeVisible();
-	await expect(box.getByRole("status")).toHaveText("Image 4 of 8");
+	await expect(box.getByRole("status")).toHaveText("4 of 8");
 	for (let step = 0; step < 4; step++) await page.keyboard.press("ArrowRight");
 	await expect(box.getByRole("img", { name: "Variant 8" })).toBeVisible();
-	await expect(box.getByRole("button", { name: "Next image" })).toBeDisabled();
+	await expect(box.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
 });
 
 test("the lightbox opens, steps and closes by mouse", async ({ baseURL, join, page, room, seed }) => {
@@ -439,16 +439,16 @@ test("the lightbox opens, steps and closes by mouse", async ({ baseURL, join, pa
 		.toBeVisible();
 	await expect(box.getByText("Faster, and a crash can lose the last writes.")).toBeVisible();
 	await expect(box.getByText("Generated", { exact: true })).toBeVisible();
-	await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
+	await expect(box.getByRole("status")).toHaveText("2 of 3");
 
-	await box.getByRole("button", { name: "Previous image" }).click();
+	await box.getByRole("button", { name: "Previous", exact: true }).click();
 	await expect(box.getByRole("img", { name: "The cap is a balance of 100." })).toBeVisible();
-	await expect(box.getByRole("button", { name: "Previous image" })).toBeDisabled();
-	await box.getByRole("button", { name: "Next image" }).click();
-	await box.getByRole("button", { name: "Next image" }).click();
+	await expect(box.getByRole("button", { name: "Previous", exact: true })).toBeDisabled();
+	await box.getByRole("button", { name: "Next", exact: true }).click();
+	await box.getByRole("button", { name: "Next", exact: true }).click();
 	await expect(box.getByRole("img", { name: "Write-through: write, cache, database" }))
 		.toBeVisible();
-	await expect(box.getByRole("button", { name: "Next image" })).toBeDisabled();
+	await expect(box.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
 
 	await box.getByRole("button", { name: "Close", exact: true }).click();
 	await expect(box).toHaveCount(0);
@@ -473,20 +473,19 @@ test("the lightbox opens, steps, traps focus and gives it back by keyboard", asy
 	await page.keyboard.press("Enter");
 	let box = lightbox(page);
 	await expect(box).toBeVisible();
-	await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
+	await expect(box.getByRole("status")).toHaveText("2 of 3");
 
 	await page.keyboard.press("ArrowRight");
-	await expect(box.getByRole("status")).toHaveText("Image 3 of 3");
+	await expect(box.getByRole("status")).toHaveText("3 of 3");
 	await page.keyboard.press("ArrowRight");
-	await expect(box.getByRole("status")).toHaveText("Image 3 of 3");
+	await expect(box.getByRole("status")).toHaveText("3 of 3");
 	await page.keyboard.press("ArrowLeft");
 	await page.keyboard.press("ArrowLeft");
-	await expect(box.getByRole("status")).toHaveText("Image 1 of 3");
+	await expect(box.getByRole("status")).toHaveText("1 of 3");
 	await page.keyboard.press("ArrowLeft");
-	await expect(box.getByRole("status")).toHaveText("Image 1 of 3");
+	await expect(box.getByRole("status")).toHaveText("1 of 3");
 
-	let inside = () =>
-		page.evaluate(() => !!document.activeElement?.closest('[data-slot="dialog-content"]'));
+	let inside = () => page.evaluate(() => !!document.activeElement?.closest("[data-image-viewer]"));
 	for (let step = 0; step < 7; step++) {
 		await page.keyboard.press("Tab");
 		await expect.poll(inside).toBe(true);
@@ -535,7 +534,7 @@ test("an image can be downloaded under the name of what it shows, and copied", a
 	await expect(lightbox(page)).toHaveCount(0);
 });
 
-test("the lightbox carries open, copy and download for what it shows", async ({ baseURL, join, page, room, seed }) => {
+test("the lightbox downloads what it shows, from Download alone at its bottom end", async ({ baseURL, join, page, room, seed }) => {
 	await page.setViewportSize({ width: 1280, height: 900 });
 	let stored = await store(baseURL, room);
 	await seed("# Out\n", { transcript: turn(three(stored)) });
@@ -550,8 +549,10 @@ test("the lightbox carries open, copy and download for what it shows", async ({ 
 		box.getByRole("button", { name: "Download image" }).click(),
 	]);
 	expect(download.suggestedFilename()).toBe("the-cap-is-a-balance-of-100.webp");
-	await box.getByRole("button", { name: "Next image" }).click();
-	await expect(box.getByRole("button", { name: "Copy image" })).toBeVisible();
+	await box.getByRole("button", { name: "Next", exact: true }).click();
+	await expect(box.getByRole("button", { name: "Download image" })).toBeVisible();
+	// Copy stays on the image in the message; the viewer keeps Slack's single Download.
+	await expect(box.getByRole("button", { name: "Copy image" })).toHaveCount(0);
 	await page.keyboard.press("Escape");
 	await expect(box).toHaveCount(0);
 });
@@ -669,27 +670,26 @@ test("an image from another site can be opened, copied and saved where its host 
 
 	await closed.getByRole("button", { name: "Open image", exact: true }).click();
 	let box = lightbox(page);
-	await expect(box.getByRole("status")).toHaveText("Image 2 of 2");
-	await expect(box.getByRole("button", { name: "Copy link" })).toBeVisible();
-	await expect(box.getByRole("link", { name: "Open image", exact: true })).toHaveAttribute(
-		"href",
-		near,
-	);
-	await expect(box.getByRole("link", { name: "Open image in a new tab" })).toHaveAttribute(
-		"href",
-		near,
+	await expect(box.getByRole("status")).toHaveText("2 of 2");
+	// Its host refuses the read, so Download opens it in a new tab, without opener or referrer.
+	await expect(box.getByRole("link")).toHaveCount(0);
+	let [opened] = await Promise.all([
+		page.waitForEvent("popup"),
+		box.getByRole("button", { name: "Download image" }).click(),
+	]);
+	await opened.waitForLoadState();
+	expect(opened.url()).toBe(near);
+	expect(await opened.evaluate(() => window.opener)).toBeNull();
+	await opened.close();
+	await expect(box.locator("[data-image-viewer-said]")).toHaveText(
+		"Opened the image in a new tab.",
 	);
 	await page.keyboard.press("Escape");
 	await expect(box).toHaveCount(0);
 
 	await flaky.getByRole("button", { name: "Open image", exact: true }).click();
-	for (let name of ["Copy image", "Download image"]) {
-		await expect(box.getByRole("button", { name })).toBeVisible();
-	}
-	await expect(box.getByRole("link", { name: "Open image in a new tab" })).toHaveAttribute(
-		"href",
-		"https://example.invalid/flaky/reach.png",
-	);
+	await expect(box.getByRole("button", { name: "Download image" })).toBeVisible();
+	await expect(box.getByRole("link")).toHaveCount(0);
 });
 
 test("an image from another site offers its link while the page learns whether it can read it, and copy and download once it can", async ({ baseURL, join, page, seed }) => {
@@ -854,12 +854,9 @@ test("every image a person writes in Markdown is drawn where they wrote it", asy
 
 	await all.nth(1).getByRole("button", { name: "Open image", exact: true }).click();
 	let box = lightbox(page);
-	await expect(box.getByRole("status")).toHaveText("Image 2 of 4");
+	await expect(box.getByRole("status")).toHaveText("2 of 4");
 	await expect(box.getByRole("img", { name: "a remote one" })).toBeVisible();
-	for (let name of ["Copy image", "Download image"]) {
-		await expect(box.getByRole("button", { name })).toHaveCount(1);
-	}
-	await expect(box.getByRole("link", { name: "Open image in a new tab" })).toHaveCount(1);
+	await expect(box.getByRole("button", { name: "Download image" })).toHaveCount(1);
 	await page.keyboard.press("Escape");
 	await expect(box).toHaveCount(0);
 	for (let name of ["Copy image", "Download image"]) {
@@ -974,26 +971,26 @@ test("images in paragraphs of their own are one gallery, and the message's light
 	let box = lightbox(page);
 	await expect(box).toBeVisible();
 	await expect(box.getByRole("img", { name: "Write-back" })).toBeVisible();
-	await expect(box.getByRole("status")).toHaveText("Image 2 of 4");
-	await box.getByRole("button", { name: "Next image" }).click();
+	await expect(box.getByRole("status")).toHaveText("2 of 4");
+	await box.getByRole("button", { name: "Next", exact: true }).click();
 	await expect(box.getByRole("img", { name: "A dot" })).toBeVisible();
-	await box.getByRole("button", { name: "Next image" }).click();
+	await box.getByRole("button", { name: "Next", exact: true }).click();
 	await expect(box.getByRole("img", { name: "Apart" })).toBeVisible();
-	await expect(box.getByRole("status")).toHaveText("Image 4 of 4");
-	await expect(box.getByRole("button", { name: "Next image" })).toBeDisabled();
-	await box.getByRole("button", { name: "Previous image" }).click();
-	await box.getByRole("button", { name: "Previous image" }).click();
-	await box.getByRole("button", { name: "Previous image" }).click();
+	await expect(box.getByRole("status")).toHaveText("4 of 4");
+	await expect(box.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
+	await box.getByRole("button", { name: "Previous", exact: true }).click();
+	await box.getByRole("button", { name: "Previous", exact: true }).click();
+	await box.getByRole("button", { name: "Previous", exact: true }).click();
 	await expect(box.getByRole("img", { name: "The cap" })).toBeVisible();
-	await expect(box.getByRole("button", { name: "Previous image" })).toBeDisabled();
+	await expect(box.getByRole("button", { name: "Previous", exact: true })).toBeDisabled();
 	await box.getByRole("button", { name: "Close", exact: true }).click();
 	await expect(box).toHaveCount(0);
 
 	let apart = chat(page).locator('[data-chat-image="single"]').nth(0);
 	// It is drawn at its own 20 by 30, never larger, so it is pressed in its middle.
 	await apart.locator("[data-chat-image-frame]").click();
-	await expect(box.getByRole("status")).toHaveText("Image 4 of 4");
-	await box.getByRole("button", { name: "Previous image" }).click();
+	await expect(box.getByRole("status")).toHaveText("4 of 4");
+	await box.getByRole("button", { name: "Previous", exact: true }).click();
 	await expect(box.getByRole("img", { name: "A dot" })).toBeVisible();
 	// Pressing the dark ground around the image closes it, as Slack's viewer does.
 	await lightbox(page).click({ position: { x: 6, y: 300 } });
@@ -1039,23 +1036,23 @@ test("the lightbox of a Markdown gallery opens, steps, traps focus and gives it 
 		await page.keyboard.press("Enter");
 		let box = lightbox(page);
 		await expect(box).toBeVisible();
-		await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
+		await expect(box.getByRole("status")).toHaveText("2 of 3");
 		await expect(box.getByRole("img", { name: names[1]! })).toBeVisible();
 
 		await page.keyboard.press("ArrowRight");
-		await expect(box.getByRole("status")).toHaveText("Image 3 of 3");
+		await expect(box.getByRole("status")).toHaveText("3 of 3");
 		await expect(box.getByRole("img", { name: names[2]! })).toBeVisible();
 		await page.keyboard.press("ArrowRight");
-		await expect(box.getByRole("status")).toHaveText("Image 3 of 3");
+		await expect(box.getByRole("status")).toHaveText("3 of 3");
 		await page.keyboard.press("ArrowLeft");
 		await page.keyboard.press("ArrowLeft");
-		await expect(box.getByRole("status")).toHaveText("Image 1 of 3");
+		await expect(box.getByRole("status")).toHaveText("1 of 3");
 		await expect(box.getByRole("img", { name: names[0]! })).toBeVisible();
 		await page.keyboard.press("ArrowLeft");
-		await expect(box.getByRole("status")).toHaveText("Image 1 of 3");
+		await expect(box.getByRole("status")).toHaveText("1 of 3");
 
 		let inside = () =>
-			page.evaluate(() => !!document.activeElement?.closest('[data-slot="dialog-content"]'));
+			page.evaluate(() => !!document.activeElement?.closest("[data-image-viewer]"));
 		for (let step = 0; step < 7; step++) {
 			await page.keyboard.press("Tab");
 			await expect.poll(inside, { message: `${names[0]} Tab ${step}` }).toBe(true);
@@ -1100,8 +1097,8 @@ test("on a phone a Markdown gallery stays inside the chat, and a tap opens the m
 	await tiles.nth(1).tap({ position: { x: 20, y: 40 } });
 	let box = lightbox(phone);
 	await expect(box).toBeVisible();
-	await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
-	await box.getByRole("button", { name: "Next image" }).tap();
+	await expect(box.getByRole("status")).toHaveText("2 of 3");
+	await box.getByRole("button", { name: "Next", exact: true }).tap();
 	await expect(box.getByRole("img", { name: "A dot" })).toBeVisible();
 	await box.getByRole("button", { name: "Close", exact: true }).tap();
 	await expect(box).toHaveCount(0);
@@ -1194,11 +1191,9 @@ test("an image on this site that is not an upload is drawn, read without the rea
 
 	await all.nth(2).getByRole("button", { name: "Open image", exact: true }).click();
 	let box = lightbox(page);
-	await expect(box.getByRole("status")).toHaveText("Image 3 of 4");
+	await expect(box.getByRole("status")).toHaveText("3 of 4");
 	await expect(box.getByRole("img", { name: "a dot path" })).toBeVisible();
-	for (let name of ["Copy image", "Download image"]) {
-		await expect(box.getByRole("button", { name })).toBeVisible();
-	}
+	await expect(box.getByRole("button", { name: "Download image" })).toBeVisible();
 	await page.keyboard.press("ArrowRight");
 	await expect(box.getByRole("img", { name: "absolute" })).toBeVisible();
 	await page.keyboard.press("Escape");
@@ -2315,22 +2310,18 @@ test("on a phone the actions are always there, nothing overflows, and the lightb
 	let box = lightbox(phone);
 	await expect(box).toBeVisible();
 	await settled(box);
-	await expect(box.getByRole("button", { name: "Copy image" })).toBeVisible();
 	await expect(box.getByRole("button", { name: "Download image" })).toBeVisible();
 	let dialogBox = (await box.boundingBox())!;
 	expect(dialogBox.x).toBeGreaterThanOrEqual(0);
 	expect(dialogBox.x + dialogBox.width).toBeLessThanOrEqual(390);
 	expect(dialogBox.y + dialogBox.height).toBeLessThanOrEqual(844);
-	for (let name of ["Previous image", "Next image", "Close"]) {
-		let button = box.getByRole("button", { name, exact: true });
-		let target = (await button.boundingBox())!;
-		expect(target.width).toBeGreaterThanOrEqual(28);
-		expect(
-			await button.evaluate(node => parseFloat(getComputedStyle(node, "::after").width)),
-		).toBeGreaterThanOrEqual(44);
+	for (let name of ["Previous", "Next", "Close"]) {
+		let target = (await box.getByRole("button", { name, exact: true }).boundingBox())!;
+		expect(target.width).toBeGreaterThanOrEqual(44);
+		expect(target.height).toBeGreaterThanOrEqual(44);
 	}
-	await box.getByRole("button", { name: "Next image" }).tap();
-	await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
+	await box.getByRole("button", { name: "Next", exact: true }).tap();
+	await expect(box.getByRole("status")).toHaveText("2 of 3");
 	await box.getByRole("button", { name: "Close", exact: true }).tap();
 	await expect(box).toHaveCount(0);
 
@@ -2397,7 +2388,7 @@ test("the images in Chat, and the open lightbox, pass an accessibility check", a
 
 	await figures(page).nth(1).click();
 	await expect(lightbox(page)).toBeVisible();
-	let open = await new AxeBuilder({ page }).include('[data-slot="dialog-content"]').analyze();
+	let open = await new AxeBuilder({ page }).include("[data-image-viewer]").analyze();
 	expect(
 		open.violations.map(item => `${item.id}: ${item.nodes.map(node => node.target).join(" ")}`),
 	)
@@ -2467,7 +2458,7 @@ test("an image of a turn that was not shown is said so in the message, where it 
 	await expect(message).toContainText("Here is what I drew.");
 
 	await message.locator('[data-chat-image="tile"]').first().click();
-	await expect(lightbox(page).getByRole("status")).toHaveText("Image 1 of 3");
+	await expect(lightbox(page).getByRole("status")).toHaveText("1 of 3");
 });
 
 test("two images with a refusal between them are still one gallery in the order they came, and one lightbox", async ({ baseURL, join, page, room, seed }) => {
@@ -2501,9 +2492,9 @@ test("two images with a refusal between them are still one gallery in the order 
 
 	await tiles.first().click();
 	let box = lightbox(page);
-	await expect(box.getByRole("status")).toHaveText("Image 1 of 2");
+	await expect(box.getByRole("status")).toHaveText("1 of 2");
 	await page.keyboard.press("ArrowRight");
-	await expect(box.getByRole("status")).toHaveText("Image 2 of 2");
+	await expect(box.getByRole("status")).toHaveText("2 of 2");
 	await page.keyboard.press("Escape");
 	await expect(box).toHaveCount(0);
 });
@@ -2819,11 +2810,11 @@ test("images written as references and in line are one compact gallery in the or
 
 	await tiles.nth(1).click();
 	let box = lightbox(page);
-	await expect(box.getByRole("status")).toHaveText("Image 2 of 3");
+	await expect(box.getByRole("status")).toHaveText("2 of 3");
 	await expect(box.getByRole("img", { name: "Two", exact: true })).toBeVisible();
 	await expect(box.getByText("Second title", { exact: true })).toBeVisible();
 	await page.keyboard.press("ArrowRight");
-	await expect(box.getByRole("status")).toHaveText("Image 3 of 3");
+	await expect(box.getByRole("status")).toHaveText("3 of 3");
 	await expect(box.getByText("Third title", { exact: true })).toBeVisible();
 	await page.keyboard.press("Escape");
 	await expect(box).toHaveCount(0);

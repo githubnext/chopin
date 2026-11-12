@@ -88,7 +88,7 @@ export function ChatMediaPlate() {
 			<ChatImageDocument value="audit">
 				<div className="design-audit-chat-media chat-message-body">
 					<StateLabel>Image with its toolbar</StateLabel>
-					<MessageImages sender={{ name: "Ana", face: null, time: "9:14 AM" }}>
+					<MessageImages sender={{ name: "Ana", face: null }}>
 						<ChatImage image={PICTURE} />
 					</MessageImages>
 					<StateLabel>Three images, and four with the rest behind +N</StateLabel>

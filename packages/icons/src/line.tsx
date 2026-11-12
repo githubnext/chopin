@@ -385,6 +385,16 @@ export function RestartIcon(props: IconProps) {
 	);
 }
 
+/** Turn a quarter: a clockwise arc, as a viewer's rotate button draws it. */
+export function RotateIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<path d="M15.25 9a6.25 6.25 0 1 1-1.83-4.42l1.83 1.82" />
+			<polyline points="15.25 2.75 15.25 6.4 11.6 6.4" />
+		</LineIcon>
+	);
+}
+
 export function MinusIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>

@@ -315,17 +315,22 @@ test("sends the message with its files, and a second person reads them", async (
 	let figure = message.locator('[data-chat-image="single"]');
 	let files = message.getByRole("group", { name: "Files sent with this message" });
 	let image = (await figure.locator("img").getAttribute("src"))!;
-	// Pressing the image opens the lightbox; pressing a text file downloads it under its name.
+	// Pressing the image opens the viewer, and so does pressing the text file, which shows its text;
+	// the file's own toolbar downloads it under its name.
 	await figure.locator("[data-chat-image-frame]").click();
-	let dialog = reader.locator('[data-slot="dialog-content"]');
+	let dialog = reader.locator("[data-image-viewer]");
 	await expect(dialog.getByRole("img", { name: "shot.png" })).toBeVisible();
-	await expect(dialog.getByRole("button", { name: "Copy image" })).toBeVisible();
 	await expect(dialog.getByRole("button", { name: "Download image" })).toBeVisible();
+	await reader.keyboard.press("ArrowRight");
+	await expect(dialog.locator("[data-image-viewer-file='text']")).toHaveText(
+		NOTES.buffer.toString(),
+	);
 	await reader.keyboard.press("Escape");
 	await expect(dialog).toHaveCount(0);
+	await files.getByRole("button", { name: /^notes\.md/ }).hover();
 	let [saved] = await Promise.all([
 		reader.waitForEvent("download"),
-		files.getByRole("button", { name: /^notes\.md/ }).click(),
+		files.getByRole("button", { name: "Download notes.md" }).click(),
 	]);
 	expect(saved.suggestedFilename()).toBe("notes.md");
 	let notes = saved.url();
@@ -629,19 +634,23 @@ test("sent image attachments draw as a gallery, share the message's lightbox wit
 	await expect(fileTiles.nth(1)).toHaveAccessibleName("Download notes.md");
 	await expect(fileTiles.nth(2)).toHaveAccessibleName("Copy link to notes.md");
 
-	// Clicking the first gallery tile opens the shared message lightbox at Image 2 of 3 (after the Markdown image).
+	// Clicking the first gallery tile opens the shared message viewer at 2 of 4: after the Markdown
+	// image, and before the text file, which the viewer steps to as well.
 	await tiles.nth(0).focus();
 	await page.keyboard.press("Enter");
-	let dialog = page.locator('[data-slot="dialog-content"]');
-	await expect(dialog.getByRole("status")).toHaveText("Image 2 of 3");
+	let dialog = page.locator("[data-image-viewer]");
+	await expect(dialog.getByRole("status")).toHaveText("2 of 4");
 	await expect(dialog.getByRole("img", { name: "shot.png" })).toBeVisible();
 	await page.keyboard.press("ArrowLeft");
-	await expect(dialog.getByRole("status")).toHaveText("Image 1 of 3");
+	await expect(dialog.getByRole("status")).toHaveText("1 of 4");
 	await expect(dialog.getByRole("img", { name: "inline" })).toBeVisible();
 	await page.keyboard.press("ArrowRight");
 	await page.keyboard.press("ArrowRight");
-	await expect(dialog.getByRole("status")).toHaveText("Image 3 of 3");
+	await expect(dialog.getByRole("status")).toHaveText("3 of 4");
 	await expect(dialog.getByRole("img", { name: "second.png" })).toBeVisible();
+	await page.keyboard.press("ArrowRight");
+	await expect(dialog.getByRole("status")).toHaveText("4 of 4");
+	await expect(dialog.locator("[data-image-viewer-file='text']")).toContainText("# Notes");
 	await page.keyboard.press("Escape");
 	await expect(dialog).toHaveCount(0);
 	await expect(tiles.nth(0)).toBeFocused();
