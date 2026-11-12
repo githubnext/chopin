@@ -14,6 +14,7 @@ export default defineConfig<DesignOptions>({
 		"touch-targets.e2e.ts",
 		"connecting-indicator.e2e.ts",
 		"emoji.e2e.ts",
+		"cursors.e2e.ts",
 	],
 	workers: 2,
 	outputDir: "../test-results/design-behavior",

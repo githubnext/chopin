@@ -1,5 +1,9 @@
 import { useEffect } from "react";
 
+// Every route waits for this chunk before it mounts (main.tsx), so the cursor contract rides with
+// it: in place from the first frame React draws, and none of the entry stylesheet's bytes.
+import "./cursors.css";
+
 const DELAY = 400;
 // After a tooltip was visible, the next one opens at once for this long.
 const WARM = 300;
