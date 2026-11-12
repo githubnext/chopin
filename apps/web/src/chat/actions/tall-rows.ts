@@ -1,8 +1,8 @@
 /**
  * Which messages of a transcript are too tall to show whole with their toolbar, which hangs above
- * a message's top: such a message keeps a column beside its text for the bar, which is kept in view
- * over it (`message-toolbar.tsx`). It is decided from the message's size and the pane's, never from
- * the pointer, so the text does not move when the bar appears.
+ * a message's top: such a message has its bar kept in view as it scrolls (`message-toolbar.tsx`),
+ * floating over its text as Slack's does, with nothing set aside for it. It is decided from the
+ * message's size and the pane's, never from the pointer.
  *
  * One ResizeObserver serves a transcript and all its messages. With one per message, each message
  * read its own geometry and then wrote its attributes, so the next message's read laid the page out
@@ -13,7 +13,6 @@
  */
 
 export const TALL = "data-chat-tall";
-const RESERVE = "--chat-toolbar-reserve";
 /** The toolbar's own shift down a tall message, which `message-toolbar.tsx` writes. */
 const SHIFT = "--chat-toolbar-shift";
 
@@ -51,23 +50,20 @@ function update(view: HTMLElement, transcript: Transcript, entries: ResizeObserv
 	// Reads first: the layout is current while nothing has been written.
 	let decided = rows.map(element => {
 		let height = transcript.heights.get(element)!;
-		if (height + MOST_HANG <= pane) return { element, tall: false, reserve: 0 };
+		if (height + MOST_HANG <= pane) return { element, tall: false };
 		let bar = element.querySelector<HTMLElement>(".chat-message-toolbar");
 		let shift = Number.parseFloat(element.style.getPropertyValue(SHIFT)) || 0;
 		let hang = bar
 			? element.getBoundingClientRect().top - (bar.getBoundingClientRect().top - shift)
 			: 0;
-		let tall = isTall(height, hang, pane);
-		return { element, tall, reserve: bar && tall ? bar.offsetWidth : 0 };
+		return { element, tall: isTall(height, hang, pane) };
 	});
-	for (let { element, reserve, tall } of decided) {
+	for (let { element, tall } of decided) {
 		if (element.hasAttribute(TALL) !== tall) element.toggleAttribute(TALL, tall);
-		if (reserve) element.style.setProperty(RESERVE, `${reserve}px`);
-		else element.style.removeProperty(RESERVE);
 	}
 }
 
-/** Keep `element`'s `data-chat-tall` and toolbar column current while it is in `view`. */
+/** Keep `element`'s `data-chat-tall` current while it is in `view`. */
 export function watchTall(element: HTMLElement, view: HTMLElement): () => void {
 	let transcript = transcripts.get(view);
 	if (!transcript) {
@@ -86,7 +82,6 @@ export function watchTall(element: HTMLElement, view: HTMLElement): () => void {
 		own.observer.unobserve(element);
 		own.heights.delete(element);
 		element.removeAttribute(TALL);
-		element.style.removeProperty(RESERVE);
 		if (own.heights.size === 0) {
 			own.observer.disconnect();
 			transcripts.delete(view);

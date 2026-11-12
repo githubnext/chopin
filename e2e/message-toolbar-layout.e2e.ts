@@ -103,6 +103,15 @@ async function darkest(page: Page, target: Locator): Promise<number> {
 	}, png);
 }
 
+/** How wide a message's Markdown is drawn, then each block in it, to the pixel. */
+async function textWidths(target: Locator): Promise<number[]> {
+	return target.locator("[data-chat-markdown]").evaluate(markdown =>
+		[markdown, ...markdown.children].map(element =>
+			Math.round(element.getBoundingClientRect().width)
+		)
+	);
+}
+
 async function coveredText(bar: Locator, within?: string): Promise<string[]> {
 	return bar.evaluate((element, scope) => {
 		let box = element.getBoundingClientRect();
@@ -498,13 +507,17 @@ test("on a desktop the toolbar of a message taller than the viewport stays in th
 	await expect(bar).toHaveCSS("opacity", "1");
 });
 
-test("on a desktop the toolbar kept in view on a message taller than the viewport covers none of that message's text, at the middle, near the top and near the end", async ({ join, seed }) => {
+test("on a desktop the toolbar kept in view on a message taller than the viewport floats over its text, which keeps the message's whole width, at the middle, near the top and near the end", async ({ join, seed }) => {
 	await seed("# Layout\n", { transcript: transcript() });
 	let page = await join("ana");
 	let target = message(page, "m6");
 	let bar = toolbar(target);
 	let view = (await scroller(page).boundingBox())!;
 	expect((await target.boundingBox())!.height).toBeGreaterThan(view.height);
+	// As Slack's: nothing is set aside beside the text for the bar, so a tall message's paragraphs are
+	// as wide as a short one's, before the pointer arrives and while the bar is shown.
+	let short = await textWidths(message(page, "m2"));
+	expect(await textWidths(target)).toEqual(Array(10).fill(short[0]));
 	for (let hidden of [80, 300, 520]) {
 		await scroller(page).evaluate((element, wanted) => {
 			let top = element.querySelector('[data-chat-message-id="m6"]')!.getBoundingClientRect().top
@@ -516,12 +529,12 @@ test("on a desktop the toolbar kept in view on a message taller than the viewpor
 		await expect(bar, String(hidden)).toHaveCSS("opacity", "1");
 		await expect.poll(async () => (await bar.boundingBox())!.y, { message: String(hidden) })
 			.toBeGreaterThanOrEqual(view.y);
-		await expect.poll(() => coveredText(bar, "[data-chat-message-id]"), { message: String(hidden) })
-			.toEqual([]);
+		await expect.poll(() => textWidths(target), { message: String(hidden) })
+			.toEqual(Array(10).fill(short[0]));
 	}
 });
 
-test("on a desktop a message that is 13 px shorter than the pane, scrolled until its top is 78 px above it, still has its toolbar in the pane and clear of its text", async ({ join, seed }) => {
+test("on a desktop a message that is 13 px shorter than the pane, scrolled until its top is 78 px above it, still has its toolbar in the pane, over text that keeps its whole width", async ({ join, seed }) => {
 	let almost = [
 		{ id: "n1", author: { kind: "member", handle: "ben" }, text: "Before it.", ts: 1_700_000_001 },
 		{
@@ -549,7 +562,7 @@ test("on a desktop a message that is 13 px shorter than the pane, scrolled until
 		width: size.width,
 		height: Math.round(size.height + box!.height + 13 - view!.height),
 	});
-	// The pane is 13 px taller than the message is before any toolbar column is set aside for it.
+	// The pane is 13 px taller than the message, whose bar hangs above its top.
 	await expect.poll(async () => Math.round((await scroller(page).boundingBox())!.height))
 		.toBe(Math.round(box!.height + 13));
 	let pane = (await scroller(page).boundingBox())!;
@@ -565,7 +578,8 @@ test("on a desktop a message that is 13 px shorter than the pane, scrolled until
 	await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
 	await expect(bar).toHaveCSS("opacity", "1");
 	await expect.poll(async () => (await bar.boundingBox())!.y).toBeGreaterThanOrEqual(pane.y);
-	await expect.poll(() => coveredText(bar, "[data-chat-message-id]")).toEqual([]);
+	let whole = (await textWidths(message(page, "n1")))[0];
+	expect(await textWidths(target)).toEqual(Array(5).fill(whole));
 	let first = (await bar.getByRole("button").first().boundingBox())!;
 	await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2, { steps: 12 });
 	await expect(bar).toHaveCSS("opacity", "1");

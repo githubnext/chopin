@@ -262,8 +262,9 @@ export let MessageToolbar = memo(function MessageToolbar(
 		};
 	}, [host]);
 
-	// A message taller than the pane gets a column beside its text for the bar, which is kept in view
-	// over it, so the bar covers none of that message's text.
+	// Whether a message is taller than the pane, which is what keeps its bar in view. The bar then floats
+	// over the text, as Slack's does, and nothing is set aside for it: the text keeps the message's whole
+	// width and does not move when the bar appears.
 	useEffect(() => {
 		let element = host.current;
 		let view = element?.closest<HTMLElement>("[data-chat-scroll]");
