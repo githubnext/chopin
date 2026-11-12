@@ -119,6 +119,7 @@ client must then use none of them.
 | `attachments`              | The images and text files a person sent with a message, in the `turn`'s [`attachments`](#images-and-files-in-a-turn)                                                          |
 | `session-forks`            | A [`fork`](#server-to-client) message to branch a thread's Planner session from an earlier session and turn, multiplexed over the same connection                             |
 | `steer-turn`               | A [`steer`](#server-to-client) message: a person's message for the turn the client is running, read at its next step                                                          |
+| `retry-turn`               | A `turn`'s `message`, the Chat message it answers, and `retry` when it [runs a failed message again](#retrying-a-failed-turn)                                                 |
 
 ### Pings
 
@@ -422,7 +423,7 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 ```text
 { "type": "start", "session": "", "mode": "planner" }
 { "type": "fork", "session": "", "mode": "planner", "from": { "session": "", "turn?": "" } }
-{ "type": "turn", "session": "", "turn": "", "prompt": "", "instructions?": "", "model?": "", "thinkingLevel?": "", "attachments?": [{ "id": "", "name": "", "kind": "image", "mediaType": "", "size": 0, "data": "" }], "tools": [], "responseFormat?": {} }
+{ "type": "turn", "session": "", "turn": "", "prompt": "", "instructions?": "", "model?": "", "thinkingLevel?": "", "attachments?": [{ "id": "", "name": "", "kind": "image", "mediaType": "", "size": 0, "data": "" }], "message?": "", "retry?": true, "tools": [], "responseFormat?": {} }
 { "type": "abort", "session": "", "turn": "" }
 { "type": "steer", "request": "", "session": "", "turn": "", "prompt": "" }
 { "type": "host-tool-result", "session": "", "turn": "", "toolCallId": "", "output": json, "isError?": true }
@@ -458,6 +459,8 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   `thinkingLevel` is sent only with `capability-catalog`, and only when a person chose one.
   `attachments` is sent only with `attachments`, and only when the message that began the turn
   carried images or files (see [Images and files in a turn](#images-and-files-in-a-turn)).
+  `message` and `retry` are sent only with `retry-turn` (see
+  [Retrying a failed turn](#retrying-a-failed-turn)).
   `responseFormat` is `{ "type": "text" }` or
   `{ "type": "json", "schema?": {}, "name?": "", "description?": "" }`; for
   `json`, the turn's text must be that JSON.
@@ -722,6 +725,45 @@ A person can send images and text files with a message to the Planner (see [File
 
 The field is optional and additive: nothing here changes an existing message for a client that
 did not offer the feature, so the subprotocol stays `chopin.agent.v1`.
+
+### Retrying a failed turn
+
+A reply can fail part way: the model's provider is down, a request times out, the client loses
+its model. Chat then shows the failure under the message, and the person who sent it can press
+**Retry**. Retry is not a new message. Chat keeps the one message, takes the failed attempt out
+of the transcript (its partial reply, its tool rows and the failure line) for everyone, and runs
+the same message's turn again. The model must read that message once and nothing of the attempt
+that failed.
+
+With `retry-turn`, every `turn` that a person's Chat message began names it:
+
+```text
+{ "type": "turn", "session": "s2", "turn": "t2", "prompt": "@ana: Hey there!", "message": "0f8c…", "tools": [] }
+{ "type": "turn", "session": "s3", "turn": "t3", "prompt": "@ana: Hey there!", "message": "0f8c…", "retry": true, "tools": [] }
+```
+
+- **`message`** is the id of the Chat message the turn answers, the same id the room sees. It is
+  absent from a turn no person's message began (a background job, a decision follow-up, an
+  instruction Chopin wrote). When Chopin asks the same session to repair a reply it withheld, that
+  second `turn` carries the same `message`, without `retry`.
+- **`retry: true`** says this turn runs `message` again after an earlier turn for it failed. Its
+  `prompt` is the message as it was first given, and its `attachments` the same files. Before
+  running it, the client drops from whatever it keeps across sessions or turns everything the
+  earlier turns for `message` added: their prompt, the model's partial reply and reasoning, their
+  tool calls and results, and the error. It then runs the prompt as that message's only turn. A
+  client that keeps nothing beyond its session has nothing to drop.
+- **What Chopin already does.** A failed turn's session is destroyed, so a retry normally runs in
+  a fresh `start` session. Its `instructions` carry the conversation so far without the message
+  (which is the prompt) and without anything of the failed attempt, which is no longer in the
+  transcript. A client that does not offer the feature therefore still gets a clean context for an
+  ordinary retry; only a client that keeps its own memory beyond Chopin's sessions, or a session
+  Chopin kept because it owns a workflow run or an open question, needs `message` and `retry` to
+  drop the attempt itself.
+- A thread forked later from the retried message branches from the retried turn, never the failed
+  one: Chopin forgets the fork point the failed attempt recorded.
+
+Nothing here changes an existing message for a client that did not offer the feature, so the
+subprotocol stays `chopin.agent.v1`.
 
 ### Stream parts
 
