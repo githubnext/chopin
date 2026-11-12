@@ -60,6 +60,7 @@ import {
 import { BuildGlyph, BuildPlanButton, useBuildPlan } from "./build-plan-button";
 import { DocumentBanner } from "./document-banner";
 import { buildBlockers } from "./build-blockers";
+import { buildRun } from "./build-model";
 import type { BuildBlocker } from "./build-blockers";
 import {
 	nextReading,
@@ -845,6 +846,7 @@ export function RoomWorkspace(
 		wire,
 	});
 	let namedBuildBlockers = useMemo(() => buildBlockers(build.snapshot), [build.snapshot]);
+	let runningBuild = useMemo(() => buildRun(build.snapshot), [build.snapshot]);
 	// Touch has no tooltips, so a phone tap on Build, or on the build slot, says why it can't open.
 	let buildUnavailable = build.look.kind === "plan" && build.look.blocked
 		? build.look.blocked
@@ -2101,6 +2103,8 @@ export function RoomWorkspace(
 									? "You have read-only access to this document."
 									: undefined}
 								onShowDecisions={() => selectDestination("decisions")}
+								build={runningBuild}
+								onShowBuild={() => selectDestination("build")}
 								onResearch={researchEnabled ? startResearch : undefined}
 								onShowResearch={showResearchDraft}
 								people={peopleHere(members)}

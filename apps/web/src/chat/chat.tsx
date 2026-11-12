@@ -125,6 +125,7 @@ import {
 	withNoticesAfter,
 } from "./references";
 import { runCounts, RunStack } from "./run-card";
+import type { BuildRun } from "../build-model";
 import { runStages } from "../api";
 import { ResizeHandle } from "../resizable-pane";
 import { WorkspaceThreadContext } from "../workspace";
@@ -199,6 +200,10 @@ export type ChatProps = {
 	sourceDestination?: ChatDestination;
 	/** Opens Decisions, where a waiting workflow's questions are. */
 	onShowDecisions?: () => void;
+	/** The document's running build, which the run strip shows first. */
+	build?: BuildRun;
+	/** Opens Build, where the running build's tasks are. */
+	onShowBuild?: () => void;
 	/**
 	 * Opens the document's research composer with this brief, when this
 	 * document offers research, and says why when it cannot.
@@ -315,6 +320,8 @@ export function Chat(
 		machine,
 		onTranscript,
 		onShowDecisions,
+		build,
+		onShowBuild,
 		onResearch,
 		onShowResearch,
 		referencesEnabled,
@@ -1575,9 +1582,11 @@ export function Chat(
 			{offlineBarNode && <div className="chat-offline-slot">{offlineBarNode}</div>}
 			{transcriptView}
 
-			{agent && !!runs?.length && (
+			{(agent && !!runs?.length || build) && (
 				<div className="flex shrink-0 flex-col px-2.5 pb-2" data-chat-runs="">
 					<RunStack
+						build={build}
+						onShowBuild={onShowBuild}
 						loadStages={loadStages}
 						offline={offline}
 						onPause={runId =>
@@ -1585,7 +1594,7 @@ export function Chat(
 						onResume={runId =>
 							wire?.send("chat:resume-run", { runId })}
 						onShowDecisions={onShowDecisions}
-						runs={runs}
+						runs={agent ? runs ?? [] : []}
 					/>
 				</div>
 			)}

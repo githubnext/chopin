@@ -456,3 +456,40 @@ test("the composer offers Resume only for paused runs whose Planner can hear it"
 	expect(runCounts([away(run("c", "paused", 3)), run("d", "paused", 4)]))
 		.toEqual({ active: 0, paused: 1 });
 });
+
+test("a running build heads the strip, unfolded with its task, activity and pull requests, and folds a running workflow beneath it", () => {
+	let build = {
+		id: "b1",
+		kind: "build" as const,
+		state: "building" as const,
+		done: 1,
+		total: 2,
+		task: "Prove the contract",
+		activity: "Running a command",
+		started: new Date(Date.now() - 90_000).toISOString(),
+		pullRequests: ["https://github.com/o/r/pull/12"],
+	};
+	let markup = renderToStaticMarkup(createElement(RunStack, {
+		build,
+		onShowBuild: () => {},
+		runs: [run("drafting", "running", 100)],
+	}));
+	let toggles = [...markup.matchAll(/aria-label="([^"]+)"[^>]*data-run-toggle/g)].map(match =>
+		match[1]
+	);
+	expect(toggles[0]).toMatch(/^Build, 1 of 2 tasks, 1m$/);
+	expect(toggles[1]).toMatch(/^drafting, running/);
+	expect(markup).toContain("Prove the contract");
+	expect(markup).toContain("Running a command");
+	expect(markup).toContain('aria-label="Pull request #12"');
+	expect(markup).toContain(">Open Build</button>");
+	// Beside the build, the running workflow does not unfold itself.
+	expect(markup.match(/aria-expanded="true"/g)).toHaveLength(1);
+
+	let queued = renderToStaticMarkup(createElement(RunStack, {
+		build: { ...build, kind: "rebuild" as const, state: "queued" as const, task: undefined },
+		runs: [],
+	}));
+	expect(queued).toMatch(/aria-label="Building changes, queued, 1m"/);
+	expect(queued).not.toContain("Open Build");
+});

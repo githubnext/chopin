@@ -11,6 +11,7 @@ import {
 	buildLook,
 	buildPhase,
 	buildRefusalCopy,
+	buildRun,
 	buildTabReady,
 	builtCount,
 	builtDetail,
@@ -1062,5 +1063,85 @@ describe("a pull request a person closed", () => {
 		expect(builtDetail(closed)).toBe(
 			"1 commit since first build. #7 closed on GitHub, so builds open new pull requests instead",
 		);
+	});
+});
+
+describe("the running build in Chat's run strip", () => {
+	let two = (state: "in_progress" | "queued") =>
+		snapshot({
+			graph: {
+				...snapshot().graph!,
+				definition: {
+					tasks: ["First", "Second"].map((title, index) => ({
+						id: String(index),
+						title,
+						context: "",
+						goal: "",
+						acceptance: [],
+						dependsOn: [],
+					})),
+				},
+			},
+			build: { ...build("running"), activity: { text: "Running a command", at: "x" } },
+			lifecycle: {
+				execution: { state: "active" },
+				history: [],
+				activity: {
+					tasks: [{
+						id: "0",
+						state: "completed",
+						pullRequest: { url: "https://github.com/o/r/pull/7", state: "open" },
+					}, { id: "1", state }],
+					events: [],
+				},
+			},
+		});
+
+	it("names the task being built, the agent's activity and the pull requests so far", () => {
+		expect(buildRun(two("in_progress"))).toEqual({
+			id: "b",
+			kind: "build",
+			state: "building",
+			done: 1,
+			total: 2,
+			task: "Second",
+			activity: "Running a command",
+			started: "2026-10-10T10:00:00.000Z",
+			pullRequests: ["https://github.com/o/r/pull/7"],
+		});
+		// Between tasks it names the next one.
+		expect(buildRun(two("queued"))?.task).toBe("Second");
+	});
+
+	it("shows a queued build without a task, a rebuild by its pull requests, and nothing once it ends", () => {
+		expect(buildRun(snapshot({ build: build("queued") }))).toMatchObject({
+			state: "queued",
+			done: 0,
+			total: 1,
+		});
+		expect(buildRun(snapshot({ build: build("queued") }))?.task).toBeUndefined();
+		let live = {
+			buildId: "b",
+			user: "u",
+			repositoryId: "r",
+			baseRevision: 1,
+			pullRequests: ["https://github.com/o/r/pull/7"],
+			commits: [],
+			tasks: [],
+			outOfSync: false,
+			rebuild: { ...build("running"), id: "r2", kind: "rebuild" as const },
+		};
+		expect(buildRun(snapshot({ live }))).toMatchObject({
+			id: "r2",
+			kind: "rebuild",
+			state: "building",
+			pullRequests: ["https://github.com/o/r/pull/7"],
+		});
+		for (let state of ["stopped", "failed"] as const) {
+			expect(buildRun(snapshot({ build: build(state) }))).toBeUndefined();
+			expect(buildRun(snapshot({ live: { ...live, rebuild: { ...live.rebuild, state } } })))
+				.toBeUndefined();
+		}
+		expect(buildRun(snapshot())).toBeUndefined();
 	});
 });

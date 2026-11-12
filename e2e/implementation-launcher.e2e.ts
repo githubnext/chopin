@@ -1,6 +1,6 @@
 import { content, expect, roomPath, test } from "./room";
 import { execFileSync, spawn } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { builtBuild, failedBuild } from "./build-seed";
@@ -470,7 +470,7 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 				await expect(view.getByRole("link", { name: /^Pull request #\d+/ })).toHaveCount(2);
 				await expect(blocked).toHaveAttribute("aria-expanded", "false");
 				// The tasks the connector started, completed and opened pull requests for show under
-				// Build, as the Planner says; Chat has no card for a Build or its tasks.
+				// Build; once it has ended, Chat's run strip lets the build go.
 				await expect(view.getByRole("list", { name: "Tasks" }).locator(":scope > li"))
 					.toHaveCount(2);
 				let chat = page.getByRole("complementary", { name: "Chat", exact: true });
@@ -516,6 +516,76 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 		}
 	});
 }
+
+test("a running build heads Chat's run strip with its task, and Chat says when it opens each pull request and when it finishes", async ({ seed, join: enter, room, baseURL }) => {
+	test.setTimeout(90_000);
+	await seed("# Chat sees the build\n\nValidate the local agent connection.\n", {
+		graph: preparedGraph(),
+	});
+	let signals = await mkdtemp(join(tmpdir(), "chopin-strip-signals-"));
+	let paused = join(signals, "paused");
+	let resume = join(signals, "resume");
+	let local = await connector(
+		baseURL!,
+		["bun", join(ROOT, "apps/connector/src/testing/fake-implementer.ts"), "--complete", "--http"],
+		{ CHOPIN_TEST_PAUSED: paused, CHOPIN_TEST_RESUME: resume },
+	);
+	try {
+		let page = await enter(person());
+		await page.goto(await local.pairing);
+		await page.getByRole("button", { name: "Add machine", exact: true }).click();
+		await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText("Connected");
+		await page.goto(testChannelPath(room));
+		let chat = page.getByRole("complementary", { name: "Chat", exact: true });
+		await expect(chat.getByRole("region", { name: "Workflow runs" })).toHaveCount(0);
+		await page.getByRole("button", { name: "Build plan", exact: true }).click();
+
+		// The agent is on its first task: the build heads the strip, unfolded, with that task.
+		await expect.poll(() => access(paused).then(() => true, () => false), { timeout: 30_000 })
+			.toBe(true);
+		let strip = chat.getByRole("region", { name: "Workflow runs" });
+		let row = strip.getByRole("button", { name: /^Build, 0 of 2 tasks, \d+s$/ });
+		await expect(row).toBeVisible();
+		await expect(row).toHaveAttribute("aria-expanded", "true");
+		await expect(strip.getByText("Connect the local agent", { exact: true })).toBeVisible();
+		await page.screenshot({ path: "/tmp/zd/build-visibility/shots/after-strip-desktop.png" });
+		// The same build at a phone's width, in Chat's own pane.
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.getByRole("navigation", { name: "Workspace view" })
+			.getByRole("button", { name: /^Chat/ }).click();
+		await expect(strip.getByRole("button", { name: /^Build, 0 of 2 tasks/ })).toBeInViewport();
+		await expect(strip.getByText("Connect the local agent", { exact: true })).toBeInViewport();
+		await page.screenshot({ path: "/tmp/zd/build-visibility/shots/after-strip-phone.png" });
+		await page.setViewportSize({ width: 1280, height: 720 });
+		// Open Build shows the build's tasks.
+		await strip.getByRole("button", { name: "Open Build", exact: true }).click();
+		await expect(buildView(page)).toBeVisible();
+		await expect(buildView(page).getByText("0 of 2 tasks", { exact: true })).toBeVisible();
+
+		await writeFile(resume, "");
+		// One line for each pull request it opens, then one when it finishes, with their links.
+		let opened = chat.getByText(/^Build opened #10[12] for “/);
+		await expect(opened).toHaveCount(2, { timeout: 30_000 });
+		await expect(
+			chat.getByText("Build opened #101 for “Connect the local agent”.", { exact: true }),
+		)
+			.toBeVisible();
+		let finished = chat.getByText("Build finished: 2 tasks, #101 and #102.", { exact: true });
+		await expect(finished).toBeVisible({ timeout: 30_000 });
+		await expect(finished.getByRole("link", { name: "#102" })).toHaveAttribute(
+			"href",
+			"https://github.com/octo-org/score/pull/102",
+		);
+		await page.screenshot({ path: "/tmp/zd/build-visibility/shots/after-notices-desktop.png" });
+		// The ended build leaves the strip; the lines stay, once each, after a reload.
+		await expect(strip).toHaveCount(0);
+		await page.reload();
+		await expect(chat.getByText(/^Build (opened|finished)/)).toHaveCount(3);
+	} finally {
+		await local.close();
+		await rm(signals, { recursive: true, force: true });
+	}
+});
 
 test("a build's agent opens draft pull requests with the machine's own GitHub token", async ({ seed, join: enter, room, baseURL }) => {
 	test.setTimeout(60_000);
