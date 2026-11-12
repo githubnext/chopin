@@ -37,6 +37,7 @@ export type { Issue, Options as ValidateOptions, Result as ValidateResult } from
 
 export {
 	$createPlanNodes,
+	$exportBlocks,
 	$exportPlan,
 	$exportPlanTree,
 	$importPlan,
