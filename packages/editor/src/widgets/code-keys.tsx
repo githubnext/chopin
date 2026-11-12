@@ -10,6 +10,11 @@
  * Lexical's own paste makes each line a paragraph, which a code block cannot hold, and so lost
  * every line break.
  *
+ * Typing into code that holds a tab is inserted by the editor rather than left to the browser:
+ * Chrome declines to insert anything into a text node with a tab in it where lines do not wrap
+ * (measured: `beforeinput` arrives, is not cancelled, and no `input` follows), which is how a
+ * named code block lays out its lines.
+ *
  * Registered low, beneath every handler that already claims these keys for something more
  * particular: a diagram's preview, a table's cells, a comment's card. Backspace in an empty block
  * is the exception, as nothing else has a claim on it.
@@ -19,11 +24,13 @@ import { useEffect } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
 	$createParagraphNode,
+	$createRangeSelectionFromDom,
 	$getSelection,
 	$isElementNode,
 	$isParagraphNode,
 	$isRangeSelection,
 	$isRootNode,
+	$setSelection,
 	COMMAND_PRIORITY_CRITICAL,
 	COMMAND_PRIORITY_LOW,
 	KEY_ARROW_DOWN_COMMAND,
@@ -141,7 +148,31 @@ export function CodeKeysPlugin() {
 			return true;
 		};
 
+		/** Text typed into code with a tab in it, inserted at the browser's own selection. */
+		let typed = (event: InputEvent) => {
+			if (event.inputType !== "insertText" || !event.data || event.isComposing) return;
+			let tabbed = editor.getEditorState().read(() =>
+				!!$selectedCode()?.getTextContent().includes("\t")
+			);
+			if (!tabbed) return;
+			event.preventDefault();
+			// Ahead of the editor's own handler on the same element, which would leave it to the browser.
+			event.stopImmediatePropagation();
+			let data = event.data;
+			editor.update(() => {
+				let dom = editor.getRootElement()?.ownerDocument.getSelection();
+				let selection = dom && $createRangeSelectionFromDom(dom, editor);
+				if (selection) $setSelection(selection);
+				let current = $getSelection();
+				if ($isRangeSelection(current)) current.insertText(data);
+			});
+		};
+
 		return mergeRegister(
+			editor.registerRootListener((root, previous) => {
+				previous?.removeEventListener("beforeinput", typed, true);
+				root?.addEventListener("beforeinput", typed, true);
+			}),
 			editor.registerCommand(KEY_ESCAPE_COMMAND, leave, COMMAND_PRIORITY_LOW),
 			editor.registerCommand(
 				KEY_ENTER_COMMAND,

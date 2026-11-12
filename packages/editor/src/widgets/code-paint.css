@@ -51,6 +51,8 @@
 	[data-plan-source] {
 	white-space: pre;
 	overflow-x: auto;
+	/* A tab is two columns, as the drawn copy had it. */
+	tab-size: 2;
 }
 
 @container (max-width: 40rem) {
