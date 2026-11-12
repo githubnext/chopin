@@ -1,6 +1,6 @@
 /* A message whose thread is open keeps its row in the selected wash, as Slack marks a thread's root. */
 .chat-message-body[data-thread-root-open]::before {
-	background: var(--color-selected);
+	background: var(--color-chat-row-selected);
 	opacity: 1;
 }
 

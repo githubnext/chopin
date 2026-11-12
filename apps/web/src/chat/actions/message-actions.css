@@ -97,14 +97,17 @@
 	inset-inline: 0;
 }
 
-/* The whole message as one row as wide as the pane, square, in the hover surface, as Slack shades a hovered message. */
+/*
+ * The whole message as one row as wide as the pane, square, as Slack shades a hovered message: a
+ * darker step of whatever the transcript lies on, never a lighter one.
+ */
 .chat-message-body::before {
 	content: "";
 	position: absolute;
 	z-index: -1;
 	inset-block: calc(-1 * var(--chat-highlight-top)) calc(-1 * var(--spacing));
 	inset-inline: calc(-1 * var(--chat-shade-start)) calc(-1 * var(--chat-shade-end));
-	background: var(--color-hover);
+	background: var(--color-chat-row-hover);
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity var(--chat-fade) var(--ease-out);
@@ -185,7 +188,8 @@
 	border-radius: var(--radius-lg);
 	background: var(--color-page);
 	box-shadow: var(--shadow-resting-strong);
-	outline: var(--edge-width) solid var(--color-edge);
+	/* Slack's ring is ink at 13%: the button outline's edge, so the bar stands off the shade. */
+	outline: var(--edge-width) solid var(--color-button-outline-edge);
 	outline-offset: calc(-1 * var(--edge-width));
 }
 
