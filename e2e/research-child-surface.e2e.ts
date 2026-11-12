@@ -1079,7 +1079,14 @@ test("Escape in a child editor dismisses the innermost thing before the sheet", 
 	await expect(menu).toHaveCount(0);
 	await expect(surface).toBeVisible();
 
+	// Then the caret's block is selected as a block, still in the editor.
 	await page.keyboard.press("Escape");
+	await expect(editor.locator("[data-block-selected]")).toHaveCount(1);
+	await expect(editor).toBeFocused();
+	await expect(surface).toBeVisible();
+
+	await page.keyboard.press("Escape");
+	await expect(editor.locator("[data-block-selected]")).toHaveCount(0);
 	await expect(surface).toBeVisible();
 	await expect(editor).not.toBeFocused();
 	await expect(surface).toBeFocused();

@@ -94,11 +94,15 @@ test("a second Escape lets go, Enter edits at the block's end, and a click leave
 
 	await page.keyboard.press("Escape");
 	await expect(selected(page)).toHaveCount(1);
+	// The next Escape lets go of the blocks, and focus leaves the editor.
 	await page.keyboard.press("Escape");
 	await expect(selected(page)).toHaveCount(0);
+	await expect(content(page)).not.toBeFocused();
 
+	await content(page).getByText("One.").click();
+	await settle(page);
 	await page.keyboard.press("Escape");
-	await page.keyboard.press("Escape");
+	await expect(selected(page)).toHaveCount(1);
 	await content(page).getByText("Two.").click();
 	await settle(page);
 	await expect(selected(page)).toHaveCount(0);
