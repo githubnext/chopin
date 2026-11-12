@@ -1583,7 +1583,7 @@ export function Chat(
 			{transcriptView}
 
 			{(agent && !!runs?.length || build) && (
-				<div className="flex shrink-0 flex-col px-2.5 pb-2" data-chat-runs="">
+				<div className="chat-runs flex shrink-0 flex-col px-2.5 pb-2" data-chat-runs="">
 					<RunStack
 						build={build}
 						onShowBuild={onShowBuild}
