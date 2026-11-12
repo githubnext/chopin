@@ -1163,11 +1163,6 @@ body {
 	--activity-badge-ring: var(--color-gray-300);
 }
 
-.workspace-root[data-workspace-mode="split"] .workspace-chat-panel .chat-composer {
-	padding-inline: var(--spacing);
-	padding-bottom: env(safe-area-inset-bottom);
-}
-
 .motion-panel {
 	opacity: 0;
 	transform: translateX(calc(var(--panel-distance) * var(--panel-direction, 1)));
@@ -1494,14 +1489,6 @@ body {
 	.hosted-header {
 		padding-right: calc(1.5rem + env(safe-area-inset-right));
 		padding-left: calc(1.5rem + env(safe-area-inset-left));
-	}
-}
-
-@media (min-width: 1200px) {
-	/* The desktop composer keeps the same clearance on each exposed edge. */
-	.chat-composer {
-		padding-inline: 1rem;
-		padding-bottom: calc(1rem + env(safe-area-inset-bottom));
 	}
 }
 

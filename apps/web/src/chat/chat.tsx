@@ -1546,7 +1546,7 @@ export function Chat(
 			<div className="chat-main relative flex h-full min-h-0 flex-col">
 				{offlineBarNode && <div className="chat-offline-slot">{offlineBarNode}</div>}
 				{transcriptView}
-				<div className="chat-composer shrink-0 px-2.5 pb-2.5">
+				<div className="chat-composer shrink-0">
 					<p className="px-4 py-3 text-sm text-text-tertiary">{notice}</p>
 				</div>
 			</div>,

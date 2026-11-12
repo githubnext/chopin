@@ -4,8 +4,8 @@ import type { ChatComposerProps } from "../composer";
 
 /**
  * Single component boundary between the Thread panel and Chopin's main composer.
- * Reuses `ChatComposer` directly and places "Also send to Chat" underneath it,
- * so composer changes on `main` flow into threads through one seam.
+ * Reuses `ChatComposer` directly and puts "Also send to Chat" at the start of its row of
+ * controls, inside the box, so composer changes on `main` flow into threads through one seam.
  */
 export function ThreadComposerBoundary(
 	props: ChatComposerProps & {
@@ -34,23 +34,23 @@ export function ThreadComposerBoundary(
 				pickers={props.pickers}
 				references={props.references}
 				rootRef={props.rootRef}
+				rowStart={
+					<label className="thread-also-send">
+						<input
+							checked={props.alsoToChat}
+							className="thread-also-checkbox"
+							disabled={props.alsoDisabled}
+							onChange={event => props.onAlsoToChatChange(event.currentTarget.checked)}
+							type="checkbox"
+						/>
+						<span>Also send to Chat</span>
+					</label>
+				}
 				run={props.run}
 				sendDisabled={props.sendDisabled}
 				sending={props.sending}
 				unavailable={props.unavailable}
 			/>
-			{!props.unavailable && (
-				<label className="thread-also-send">
-					<input
-						checked={props.alsoToChat}
-						className="thread-also-checkbox"
-						disabled={props.alsoDisabled}
-						onChange={event => props.onAlsoToChatChange(event.currentTarget.checked)}
-						type="checkbox"
-					/>
-					<span>Also send to Chat</span>
-				</label>
-			)}
 		</div>
 	);
 }
