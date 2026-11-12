@@ -310,14 +310,18 @@ export function LinkSurface(
 				let found = node && ($isLinkNode(node) ? node : $findMatchingParent(node, $isLinkNode));
 				return found ? { key: found.getKey(), url: found.getURL() } : undefined;
 			});
-			if (event.button === 1 || event.metaKey || event.ctrlKey || !link || following) {
+			let href = link ? followHref(editor, link.key, link.url, repository) : anchor.href;
+			// A modified or middle click asks for a tab; any other click on a link the host follows
+			// in place (a section of this page) goes there, as it would on any page.
+			let tab = event.button === 1 || event.metaKey || event.ctrlKey;
+			if (!tab && href !== undefined && inPlace?.owns(href)) {
 				event.stopPropagation();
-				let href = link ? followHref(editor, link.key, link.url, repository) : anchor.href;
-				if (href === undefined) return;
-				// A reader's tap goes where the link goes; a modified or middle click asks for a tab.
-				let tab = event.button === 1 || event.metaKey || event.ctrlKey;
-				if (!tab && inPlace?.owns(href)) inPlace.follow(href);
-				else window.open(href, "_blank", "noopener,noreferrer");
+				inPlace.follow(href);
+				return;
+			}
+			if (tab || !link || following) {
+				event.stopPropagation();
+				if (href !== undefined) window.open(href, "_blank", "noopener,noreferrer");
 				return;
 			}
 			dismissed.current = undefined;

@@ -159,9 +159,28 @@ export function useSectionLinks(
 			deadline = window.setTimeout(stopWaiting, ARRIVAL_MS);
 		}
 
+		// A plain click on a link to a section of this page anywhere on it (Chat, a decision card)
+		// that nothing else took: the shell leaves these to the page, which loads this with it.
+		let clicked = (event: MouseEvent) => {
+			if (
+				event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey
+				|| event.shiftKey || event.altKey || !(event.target instanceof Element)
+			) return;
+			let link = event.target.closest<HTMLAnchorElement>("a[href]");
+			if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self")) {
+				return;
+			}
+			let destination = appLink(link.href, location);
+			if (destination?.kind !== "section") return;
+			event.preventDefault();
+			goToSection(destination.hash);
+		};
+
 		addEventListener(LEAVING_PLACE, leaving);
 		addEventListener("hashchange", changed);
+		document.addEventListener("click", clicked);
 		return () => {
+			document.removeEventListener("click", clicked);
 			stopWaiting();
 			cancelAnimationFrame(frame);
 			unmark();

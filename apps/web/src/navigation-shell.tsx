@@ -19,7 +19,6 @@ import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { documentPath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
-import { appLink, goToSection } from "./app-links";
 import { newestDocument, updateDocumentMetadata } from "./document-actions";
 import { WorkspaceNotice } from "./workspace-notice";
 import { documentRouteIdentity } from "./document-route-swap";
@@ -893,15 +892,25 @@ export function NavigationShell(
 		if (!(target instanceof Element)) return;
 		let link = target.closest<HTMLAnchorElement>("a[href]");
 		if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self")) return;
-		let destination = appLink(link.href, location);
-		if (!destination) return;
+		let destination = new URL(link.href, location.href);
+		if (destination.origin !== location.origin) return;
+		// A section of this page is the page's own to follow (`section-links.ts`), loaded with it.
+		if (
+			destination.hash && destination.pathname === location.pathname
+			&& destination.search === location.search
+		) return;
+		if (
+			destination.pathname !== "/"
+			&& !/^\/(?:channels|connect|documents|machines|repositories)(?:\/|$)/.test(
+				destination.pathname,
+			)
+		) return;
 		event.preventDefault();
 		// Menu links must receive their click so the owning menu can close. Stop editor links
 		// before Lexical's clickable-link listener handles the route we have already claimed.
 		if (!link.closest('[role="menu"]')) event.stopPropagation();
 		setDrawerOpen(false);
-		if (destination.kind === "section") goToSection(destination.hash);
-		else navigate(destination.path);
+		navigate(`${destination.pathname}${destination.search}${destination.hash}`);
 	};
 	let sidebarLoading = <ProjectSidebarLoading onCollapse={collapseSidebar} user={user} />;
 	// What the Projects sidebar and the phone documents sheet both read and do.
