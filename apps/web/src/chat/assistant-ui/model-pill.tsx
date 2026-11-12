@@ -1,8 +1,8 @@
 /**
  * The composer's model pill: a small ghost button that names the model that will run and, in
- * lighter ink, its level, and opens assistant-ui's Model selector, copied unmodified and driven by
- * Chopin's catalog and choice through props (`modelSelection`). `useModelChoice` owns the choice and
- * the wire.
+ * lighter ink, the level it runs at, and opens assistant-ui's Model selector, copied unmodified and
+ * driven by Chopin's catalog and choice through props (`modelSelection`). `useModelChoice` owns the
+ * choice and the wire.
  */
 
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -53,7 +53,10 @@ export function ModelPill({ control }: { control: ModelControl }) {
 		<ModelSelectorRoot
 			effort={effort ?? ""}
 			models={groups.flatMap(group => group.options)}
-			onEffortChange={step => choose(chooseLevel(catalog, choice, levelOf(step)))}
+			onEffortChange={step => {
+				let level = levelOf(step);
+				if (level !== undefined) choose(chooseLevel(catalog, choice, level));
+			}}
 			onOpenChange={setOpen}
 			onValueChange={option => choose(chooseModel(catalog, choice, modelOf(option)))}
 			open={open}

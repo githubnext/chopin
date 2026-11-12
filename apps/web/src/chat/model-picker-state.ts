@@ -21,8 +21,6 @@ type Choice = Chat.ModelChoice;
 export type PickerModel = Chat.ModelOption & {
 	/** Tells this entry from the others, even one with the same `id`; it holds while a search runs. */
 	key: string;
-	/** The harness runs it when nobody has chosen. */
-	isDefault: boolean;
 	/** It is the model that will run: of entries sharing its `id`, the first, as the server finds it. */
 	selected: boolean;
 };
@@ -95,7 +93,6 @@ export function pickerGroups(
 			...model,
 			name: modelName(model),
 			key: `${occurrence}:${model.id}`,
-			isDefault: model.id === catalog.default?.model,
 			selected: occurrence === 0 && model.id === shown,
 		});
 	}
@@ -107,15 +104,34 @@ export function pickerOptions(groups: readonly PickerGroup[]): PickerModel[] {
 	return groups.flatMap(group => group.models);
 }
 
-/** What the trigger says: the model that will run, and the level somebody chose for it. */
+/**
+ * The level that will run: the chosen one where the model that runs offers it, else the agent's
+ * own level where the model that runs is its default and the catalog names that level. None where
+ * neither is known, as for a model somebody chose before a level was kept with it.
+ */
+export function shownLevel(catalog: Catalog, choice: Choice | undefined): string | undefined {
+	let resolved = resolveChoice(catalog, choice);
+	if (resolved.thinkingLevel !== undefined) return resolved.thinkingLevel;
+	let fallback = catalog.default;
+	if (fallback?.thinkingLevel === undefined) return undefined;
+	if ((resolved.model ?? fallback.model) !== fallback.model) return undefined;
+	return modelLevels(catalog, fallback.model).includes(fallback.thinkingLevel)
+		? fallback.thinkingLevel
+		: undefined;
+}
+
+/**
+ * What the trigger says: the model that will run and its level, the agent's own where nobody chose.
+ * A catalog that names no default, with nothing chosen, leaves nothing to name but the choice.
+ */
 export function triggerText(
 	catalog: Catalog,
 	choice: Choice | undefined,
 ): { name: string; level?: string } {
-	let resolved = resolveChoice(catalog, choice);
 	let shown = shownModel(catalog, choice);
-	let name = shown ? modelName(shown) : "Default";
-	return { name, ...(resolved.thinkingLevel ? { level: levelLabel(resolved.thinkingLevel) } : {}) };
+	let level = shownLevel(catalog, choice);
+	let name = shown ? modelName(shown) : "Choose a model";
+	return { name, ...(level ? { level: levelLabel(level) } : {}) };
 }
 
 /** The words a person who cannot see the trigger hears: the model, its level, and what went missing. */
@@ -190,46 +206,29 @@ export function composerModelNotice(
 }
 
 /**
- * The reasoning levels offered for the model that will run, and the one chosen. None for a model
- * with no levels, and then the control is not drawn.
+ * The reasoning levels offered for the model that will run, and the one that will run (`shownLevel`).
+ * None for a model with no levels, and then the control is not drawn.
  */
 export function reasoningLevels(
 	catalog: Catalog,
 	choice: Choice | undefined,
 ): { levels: string[]; current: string | undefined } {
-	let resolved = resolveChoice(catalog, choice);
 	return {
-		levels: modelLevels(catalog, resolved.model),
-		current: resolved.thinkingLevel,
+		levels: modelLevels(catalog, resolveChoice(catalog, choice).model),
+		current: shownLevel(catalog, choice),
 	};
 }
 
-export type LevelStep = { key: string; level: string | undefined; checked: boolean };
+export type LevelStep = { key: string; level: string; checked: boolean };
 
 /**
- * What the reasoning control calls its first step, the model's own level. It is Default, unless a
- * level the model lists would be taken for it (`Default`, `default`, any case or padding): a client
- * may list a level of that name, and its label is the string the client reported, so the step
- * that resets is the one that is called something else (Model default, and further if the model
- * lists that too). No level of the model has the same label as the step.
- */
-export function defaultStepLabel(levels: readonly string[]): string {
-	let taken = new Set(levels.map(level => level.trim().toLowerCase()));
-	let label = "Default";
-	if (taken.has(label.toLowerCase())) label = "Model default";
-	while (taken.has(label.toLowerCase())) label += " (reset)";
-	return label;
-}
-
-/**
- * What the reasoning control draws: Default (the model's own, `level` absent) and then each level
- * as the catalog lists it. A catalog may list a level twice, or one named `default`, so a step is
- * told apart by its place, and the first step that is the choice is the one checked.
+ * What the reasoning control draws: each level as the catalog lists it. A catalog may list a level
+ * twice, so a step is told apart by its place, and the first step that is the current level is the
+ * one checked; none is where the level that will run is not known.
  */
 export function levelSteps(levels: readonly string[], current: string | undefined): LevelStep[] {
-	let steps: Array<string | undefined> = [undefined, ...levels];
-	let chosen = steps.indexOf(current);
-	return steps.map((level, position) => ({
+	let chosen = current === undefined ? -1 : levels.indexOf(current);
+	return levels.map((level, position) => ({
 		key: `${position}`,
 		level,
 		checked: position === chosen,
@@ -237,31 +236,26 @@ export function levelSteps(levels: readonly string[], current: string | undefine
 }
 
 /**
- * The choice a pick of `id` asks for. The model is recorded as picked, the harness's own default
- * included: the document keeps the model somebody chose even when the client's default later
- * changes. The level carries over only when the new model offers it.
+ * The choice a pick of `id` asks for: the model, and a level with it, so the document keeps both
+ * whatever the agent's own default becomes. The model is recorded as picked, the agent's default
+ * included. The level is the one that runs now where the new model offers it, else the agent's
+ * default level where it does; a model offering neither is recorded alone.
  */
 export function chooseModel(catalog: Catalog, choice: Choice | undefined, id: string): Choice {
-	let level = resolveChoice(catalog, choice).thinkingLevel;
-	return {
-		model: id,
-		...(level !== undefined && modelLevels(catalog, id).includes(level)
-			? { thinkingLevel: level }
-			: {}),
-	};
+	let offered = modelLevels(catalog, id);
+	let level = [shownLevel(catalog, choice), catalog.default?.thinkingLevel].find(
+		candidate => candidate !== undefined && offered.includes(candidate),
+	);
+	return { model: id, ...(level !== undefined ? { thinkingLevel: level } : {}) };
 }
 
-/** The choice a pick of a level asks for; no level goes back to the model's own. */
-export function chooseLevel(
-	catalog: Catalog,
-	choice: Choice | undefined,
-	level: string | undefined,
-): Choice {
-	let { model } = resolveChoice(catalog, choice);
-	return {
-		...(model !== undefined ? { model } : {}),
-		...(level !== undefined ? { thinkingLevel: level } : {}),
-	};
+/**
+ * The choice a pick of a level asks for: the level, with the model that runs now (the agent's
+ * default where nobody chose one), so a later change of the agent's default leaves both standing.
+ */
+export function chooseLevel(catalog: Catalog, choice: Choice | undefined, level: string): Choice {
+	let model = resolveChoice(catalog, choice).model ?? catalog.default?.model;
+	return { ...(model !== undefined ? { model } : {}), thinkingLevel: level };
 }
 
 /** Whether two choices ask for the same thing. */
