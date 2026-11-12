@@ -272,10 +272,8 @@ test("while the Planner runs, a message to people only is posted as usual, and a
 	let draft = chatInput(chat);
 	await startPlanner(chat);
 
-	// Taking the @Chopin chip off addresses the team: Send posts to the room without steering, and
-	// the empty draft returns to Stop.
-	let removeChip = chat.getByRole("button", { name: "Remove chopin", exact: true });
-	if (await removeChip.count()) await removeChip.click();
+	// A message without the mention is the team's: Send posts to the room without steering, and the
+	// empty draft returns to Stop.
 	await fillChat(draft, "Keep the release notes brief.");
 	let send = chat.getByRole("button", { name: "Send message" });
 	await expect(send).toBeEnabled();
@@ -291,13 +289,14 @@ test("while the Planner runs, a message to people only is posted as usual, and a
 	// is kept, and Stop is offered so the person can stop Chopin and send it.
 	planner.refuseSteer();
 	await chat.getByRole("button", { name: "Ask chopin", exact: true }).click();
-	await fillChat(draft, "Cover the rollback too.");
+	await expectChatValue(draft, "@chopin ");
+	await page.keyboard.type("Cover the rollback too.");
 	await expect(send).toBeEnabled();
 	await send.click();
 	await expect(chat.locator("[data-quiet-note]")).toContainText(
 		"chopin can't take messages while it works on this machine. Stop it to ask now.",
 	);
-	await expectChatValue(draft, "Cover the rollback too.");
+	await expectChatValue(draft, "@chopin Cover the rollback too.");
 	let stop = chat.getByRole("button", { name: "Stop generating" });
 	await expect(stop).toBeEnabled();
 	await stop.click();

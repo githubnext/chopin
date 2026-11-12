@@ -118,7 +118,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
 		shift: true,
 		display: true,
 	},
-	// The composer owns the key: it puts the @Chopin chip at the start of the draft (`chopin-chip.ts`).
+	// The composer owns the key: it writes an @chopin mention into the draft (`chat/ask-chopin.ts`).
 	{
 		id: "ask-chopin",
 		label: `Ask ${PLANNER_NAME}`,

@@ -5,13 +5,7 @@ import { ArrowLeftIcon, CloseIcon } from "@chopin/icons";
 import { formatForkedClock, isReplyEntry, replyCountLabel } from "@chopin/protocol/threads";
 
 import { WireLost, WireRefusal } from "../../wire";
-import {
-	asksChopin,
-	chipKeyAction,
-	chipShown,
-	takeChopinMention,
-	withoutChopinMentions,
-} from "../chopin-chip";
+import { asksChopinKey, withChopinMention } from "../ask-chopin";
 import { sendFailureView } from "../failure";
 import { keepFormatPreference, readFormatPreference } from "../format-preference";
 import { MessageMarkdown } from "../markdown";
@@ -194,7 +188,6 @@ export function ThreadPanel(
 	let [draft, setDraft] = useState<ComposerDraft>({ text: "", references: [] });
 	let draftRef = useRef(draft);
 	draftRef.current = draft;
-	let [chipOn, setChipOn] = useState(false);
 	let [selection, setSelection] = useState({ start: 0, end: 0 });
 	let [dismissedPicker, setDismissedPicker] = useState<string>();
 	let [mentionCursor, setMentionCursor] = useState<{ key?: string; index: number }>({ index: 0 });
@@ -227,21 +220,6 @@ export function ThreadPanel(
 
 	let draftable = !readonly && !archived;
 	let composerReady = connected && !readonly && !archived;
-	let chip = chipShown({
-		agent: !!agent,
-		chip: chipOn,
-		text: draft.text,
-		references: draft.references,
-		submitted: draft.submission?.to,
-	});
-	let askingChopin = asksChopin({
-		agent: !!agent,
-		chip: chipOn,
-		text: draft.text,
-		references: draft.references,
-		submitted: draft.submission?.to,
-	});
-
 	// `#` and `@` both open at the caret; the one typed nearer to it is the one being written.
 	let hashed = referencesEnabled && composerReady && !submitting
 		? referenceTrigger(draft.text, selection.start, selection.end)
@@ -344,18 +322,21 @@ export function ThreadPanel(
 		pendingCaret.current = caret;
 	};
 
-	let setChip = (on: boolean) => {
-		if (!draftable || submitting || !agent || chip === on) return;
+	// The sparkle button and Command+J write `@chopin` into the words, as Chat's composer does.
+	let askChopin = (atCaret: boolean) => {
+		if (!draftable || submitting || !agent) return;
 		let current = draftRef.current;
-		setChipOn(on);
-		let next = on
-			? { text: current.text, references: current.references, ...selection }
-			: withoutChopinMentions(current.text, current.references, selection);
-		setDraft({ text: next.text, references: next.references });
-		setSelection({ start: next.start, end: next.end });
+		let next = withChopinMention(
+			current.text,
+			current.references,
+			atCaret ? selection.start : undefined,
+		);
+		setDraft(reviseComposerDraft(current, next.text, next.references));
+		setSelection({ start: next.caret, end: next.caret });
 		setSendError(undefined);
-		setDismissedPicker(triggerKey ?? mentionKey);
-		pendingCaret.current = { start: next.start, end: next.end };
+		let written = mentionTrigger(next.text, next.caret);
+		setDismissedPicker(written ? mentionTriggerKey(written) : undefined);
+		pendingCaret.current = next.caret;
 	};
 
 	let chooseReference = (target: ReferenceTarget) => {
@@ -370,16 +351,6 @@ export function ThreadPanel(
 
 	let chooseMention = (candidate: MentionCandidate) => {
 		if (!freeMention) return;
-		if (candidate.kind === "planner") {
-			let taken = takeChopinMention(draft.text, draft.references, freeMention);
-			setChipOn(true);
-			setDraft({ text: taken.text, references: taken.references });
-			setSelection({ start: taken.caret, end: taken.caret });
-			setSendError(undefined);
-			setDismissedPicker(undefined);
-			pendingCaret.current = taken.caret;
-			return;
-		}
 		let next = insertMention(draft.text, freeMention, candidate);
 		setDraft(current =>
 			reviseComposerDraft(
@@ -429,7 +400,6 @@ export function ThreadPanel(
 		if (!current.text.trim()) return;
 		let submitted = prepareDraftSubmission(current, undefined, {
 			planner: agent,
-			asking: askingChopin,
 			referencesEnabled,
 			focus,
 		});
@@ -588,14 +558,7 @@ export function ThreadPanel(
 				agent={agent}
 				alsoDisabled={!draftable || submitting}
 				alsoToChat={view.alsoToChat}
-				chopin={agent
-					? {
-						chip,
-						disabled: !draftable || submitting,
-						onAdd: () => setChip(true),
-						onRemove: () => setChip(false),
-					}
-					: undefined}
+				chopin={agent ? { disabled: !draftable || submitting, onAsk: askChopin } : undefined}
 				contextRing={view.usage
 					? (
 						<Suspense fallback={null}>
@@ -650,8 +613,8 @@ export function ThreadPanel(
 					},
 					onKeyDown: event => {
 						let composing = event.nativeEvent.isComposing || event.keyCode === 229;
-						let chipAction = agent && draftable && !submitting
-							? chipKeyAction({
+						if (
+							agent && draftable && !submitting && asksChopinKey({
 								key: event.key,
 								keyCode: event.keyCode,
 								isComposing: event.nativeEvent.isComposing,
@@ -659,15 +622,10 @@ export function ThreadPanel(
 								altKey: event.altKey,
 								ctrlKey: event.ctrlKey,
 								metaKey: event.metaKey,
-							}, {
-								chip,
-								selectionStart: textarea.current?.selectionStart ?? 0,
-								selectionEnd: textarea.current?.selectionEnd ?? 0,
 							})
-							: undefined;
-						if (chipAction) {
+						) {
 							event.preventDefault();
-							if (!event.repeat) setChip(chipAction === "insert");
+							if (!event.repeat) askChopin(true);
 							return;
 						}
 						if (!composing && event.key === "Tab" && !event.shiftKey) {

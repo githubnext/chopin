@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
+import { withChopinMention } from "../../chat/ask-chopin";
 import { ChatComposer } from "../../chat/composer";
 import { ConnectionBannerView } from "../../chat/connection-banner";
 import { connectionStep, INITIAL_MEMORY } from "../../chat/connection-phase";
@@ -69,7 +70,6 @@ type Specimen =
 	& {
 		sending?: boolean;
 		text?: string;
-		chopin?: boolean;
 		/** Images and files are taken: the + attaches, and these are staged above the text. */
 		files?: FileView[];
 		/** Speech can be turned into words: the microphone, and the voice while it listens. */
@@ -114,7 +114,6 @@ const STAGED: FileView[] = [
 /** The live composer, holding its own draft so the specimen can be typed into. */
 export function ComposerSpecimen(
 	{
-		chopin = false,
 		banner,
 		dictation,
 		files,
@@ -126,16 +125,13 @@ export function ComposerSpecimen(
 	}: Specimen,
 ) {
 	let [draft, setDraft] = useState(text);
-	let [chip, setChip] = useState(chopin);
 	let draftable = !unavailable;
 	return (
 		<ChatComposer
 			agent
 			chopin={{
-				chip,
 				disabled: !draftable || sending,
-				onAdd: () => setChip(true),
-				onRemove: () => setChip(false),
+				onAsk: () => setDraft(value => withChopinMention(value, []).text),
 			}}
 			banner={banner}
 			dictation={dictation
@@ -323,7 +319,7 @@ export function ConversationPlate() {
 			<div className="workspace-root bg-chat-pane design-audit-composer-states">
 				<div>
 					<StateLabel>Talking to chopin</StateLabel>
-					<ComposerSpecimen chopin text="Review the spacing" />
+					<ComposerSpecimen text="@chopin Review the spacing" />
 				</div>
 				<div>
 					<StateLabel>Sending</StateLabel>

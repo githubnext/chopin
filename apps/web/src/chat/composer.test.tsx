@@ -42,37 +42,33 @@ test("renders the draft as a combobox in the field", () => {
 	expect(markup).not.toContain('data-planner="off"');
 });
 
-const CHOPIN = { chip: false, disabled: false, onAdd: () => {}, onRemove: () => {} };
+const CHOPIN = { disabled: false, onAsk: () => {} };
 
-test("there is no Chat/Chopin switch: Chopin is asked by a button and a chip, never a mode", () => {
-	let off = render({ chopin: CHOPIN });
-	expect(off).not.toContain("Talk to Chopin");
-	expect(off).not.toContain("data-mode");
-	expect(off).not.toContain("composer-chopin-row");
-	expect(off).toContain('aria-label="Ask chopin"');
-	expect(off).not.toContain('aria-label="Asking chopin"');
-	expect(off).not.toContain('aria-label="Remove chopin"');
+test("chopin is asked by a button that writes the mention, with no chip and no mode", () => {
+	let markup = render({ chopin: CHOPIN });
+	let button = markup.match(/<button[^>]*aria-label="Ask chopin"[^>]*>/)![0];
+	expect(button).toContain('aria-keyshortcuts="Control+J Meta+J"');
+	expect(button).not.toContain("disabled");
+	expect(button).not.toContain("aria-pressed");
+	// Nothing is drawn in the field but the draft: no chip, no group, no button to remove one.
+	expect(markup).not.toContain("composer-chip");
+	expect(markup).not.toContain("Asking chopin");
+	expect(markup).not.toContain("Remove chopin");
+	expect(markup).not.toContain("directive-text");
+	expect(markup).not.toContain("Ask chopin…");
+	expect(markup).toMatch(/<div class="composer-field">(<div|<p)[^>]*role="combobox"/);
+	expect(markup.toLowerCase()).not.toContain("talk to chopin");
+	expect(markup).not.toContain("data-mode");
+	expect(render({ chopin: { ...CHOPIN, disabled: true } })).toMatch(
+		/<button[^>]*aria-label="Ask chopin"[^>]*disabled=""/,
+	);
 });
 
-test("the chip starts the field, named for a screen reader, with a button that removes it", () => {
-	let on = render({ chopin: { ...CHOPIN, chip: true } });
-	expect(on).toMatch(/<span aria-label="Asking chopin" class="composer-chip" role="group">/);
-	expect(on).toContain('aria-label="Remove chopin"');
-	// It comes before the draft in the field, which is what lets the first line begin after it.
-	expect(on.indexOf("composer-chip")).toBeLessThan(on.indexOf('role="combobox"'));
-	// It is assistant-ui's mention chip: its icon, its label and the cross it draws.
-	expect(on).toContain('data-slot="directive-text-chip"');
-	expect(on).toContain("Ask chopin…");
-	// Chopin is already being asked, so the button that asks is spent.
-	expect(on.match(/<button[^>]*aria-label="Ask chopin"[^>]*>/)![0]).toContain('disabled=""');
-});
-
-test("without an agent there is nobody to ask: no button, no chip, and the team's placeholder", () => {
+test("without an agent there is nobody to ask: no button, and the team's placeholder", () => {
 	let markup = render({ agent: false });
 	expect(markup).not.toContain('aria-label="Ask chopin"');
-	expect(markup).not.toContain("composer-chip");
 	expect(markup).toContain("Message the team");
-	expect(markup).not.toContain("@Chopin");
+	expect(markup.toLowerCase()).not.toContain("@chopin");
 });
 
 test("a failed send alerts above the field and describes the draft", () => {

@@ -226,7 +226,7 @@ test("the desktop composer keeps its Ask Chopin button, toolbar and dropdown men
 	expect((await mentions.boundingBox())!.width).toBeLessThan(pill!.width);
 });
 
-test("a phone composer shows the removable Chopin chip while a message addresses Chopin", async ({ join }) => {
+test("a phone composer draws a typed @chopin as a mention in the words, with nothing beside them", async ({ join }) => {
 	let page = await join("ana", PHONE);
 	// The Planner is off in this suite; the session says it is on, as the composer reads it.
 	await page.context().route("**/api/session", async route => {
@@ -237,47 +237,23 @@ test("a phone composer shows the removable Chopin chip while a message addresses
 	await openPhoneChat(page);
 	let chat = chatPane(page);
 	let draft = chatInput(chat);
-	let chip = chat.getByRole("button", { name: "Remove chopin", exact: true });
-	// The button that asks is spent while the chip shows.
-	let mode = chat.getByRole("button", { name: "Ask chopin", exact: true });
-	await expect(chip).toHaveCount(0);
+	let ask = chat.getByRole("button", { name: "Ask chopin", exact: true });
 
-	// A mention addresses Chopin; the chip says so at the start of the draft, inside the pill.
 	await draft.click();
 	await page.keyboard.type("@chopin what is left? ");
-	await expect(chip).toBeVisible();
-	await expect(mode).toBeDisabled();
-	let [chipBox, draftBox, pill] = await Promise.all([
-		chip.boundingBox(),
-		draft.boundingBox(),
+	let mention = draft.locator('.draft-mention[data-mention="chopin"]');
+	await expect(mention).toHaveText("@chopin");
+	await expect(chat.getByRole("group", { name: "Asking chopin" })).toHaveCount(0);
+	await expect(chat.getByRole("button", { name: "Remove chopin" })).toHaveCount(0);
+	// The button stays as it was, and asking again adds no second mention.
+	await expect(ask).toBeEnabled();
+	await ask.tap();
+	await expect.poll(() => draft.getAttribute("data-chat-raw")).toBe("@chopin what is left? ");
+	let [mentionBox, pill] = await Promise.all([
+		mention.boundingBox(),
 		chat.locator(".composer-surface").boundingBox(),
 	]);
-	expect(chipBox!.y).toBeGreaterThanOrEqual(draftBox!.y);
-	expect(chipBox!.y).toBeGreaterThanOrEqual(pill!.y);
-	expect(chipBox!.x + chipBox!.width).toBeLessThanOrEqual(pill!.x + pill!.width);
-	// Drawn small, but a full touch target.
-	let reach = await chip.evaluate(element => {
-		let box = element.getBoundingClientRect();
-		let x = box.left + box.width / 2;
-		let y = box.top + box.height / 2;
-		return [y - 21, y + 21].every(at =>
-			document.elementFromPoint(x, at)?.closest("button") === element
-		);
-	});
-	expect(reach).toBe(true);
-
-	// Removing the chip removes the address, as switching to Chat does.
-	await chip.tap();
-	await expect(chip).toHaveCount(0);
-	await expect(mode).toBeEnabled();
-	// No leading space is left where the mention was.
-	expect(await draft.textContent()).toBe("what is left? ");
-
-	// The button turns it back on without a mention.
-	await expect(mode).toBeVisible();
-	await mode.tap();
-	await expect(chip).toBeVisible();
-	await chip.tap();
-	await expect(mode).toBeEnabled();
+	expect(mentionBox!.x).toBeGreaterThanOrEqual(pill!.x);
+	expect(mentionBox!.x + mentionBox!.width).toBeLessThanOrEqual(pill!.x + pill!.width);
 	await expectNoHorizontalOverflow(page);
 });

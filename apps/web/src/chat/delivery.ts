@@ -64,7 +64,6 @@ export type LocalEntry = Chat.Entry & {
 export type OutgoingDraft = {
 	text: string;
 	references: ReferenceDraft[];
-	chip: boolean;
 };
 
 export type Outgoing = {
@@ -246,8 +245,7 @@ export function restoreOutbox(room: string, handle: string): readonly Outgoing[]
 						: {}),
 					...(item.draft && typeof item.draft.text === "string"
 							&& Array.isArray(item.draft.references)
-							&& typeof item.draft.chip === "boolean"
-						? { draft: item.draft }
+						? { draft: { text: item.draft.text, references: item.draft.references } }
 						: {}),
 				}]
 				: [];

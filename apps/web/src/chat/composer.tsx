@@ -28,8 +28,7 @@ import { sendStop } from "./assistant-ui/send-stop";
 import { SendStopButton } from "./assistant-ui/send-stop-button";
 import { motionContract } from "../motion-contract";
 import { currentShortcutPlatform, shortcutLabel } from "../shortcuts";
-import { ChopinChip } from "./assistant-ui/chopin-chip";
-import { draftPlaceholder } from "./chopin-chip";
+import { draftPlaceholder } from "./ask-chopin";
 import { ModelPill } from "./assistant-ui/model-pill";
 import type { Format } from "./format";
 import type { FileView } from "./attachments/files";
@@ -118,10 +117,10 @@ export type ChatComposerProps = {
 	/** Whether this document's Planner is on; without it the composer is marked off. */
 	agent: boolean;
 	/**
-	 * Present where Chopin can be asked: whether the chip at the start of the draft is on, and the
-	 * ways to put it on (the sparkle button) and take it off (the chip's own cross).
+	 * Present where Chopin can be asked: the sparkle button, which writes `@chopin` into the draft,
+	 * at the caret when the field has the focus (`atCaret`) and at its start when it has not.
 	 */
-	chopin?: { chip: boolean; disabled: boolean; onAdd: () => void; onRemove: () => void };
+	chopin?: { disabled: boolean; onAsk: (atCaret: boolean) => void };
 	/** Why the draft can't be sent, above the field. */
 	notice?: ComposerNotice;
 	/**
@@ -247,7 +246,7 @@ export function ChatComposer(
 		banner?.id,
 		notice ? cueId : undefined,
 	].filter(Boolean).join(" ") || undefined;
-	let chip = !!chopin?.chip;
+	let field = useRef<HTMLDivElement>(null);
 	let hasDraft = input.value.trim() !== "" || !!files?.files.length;
 	let button = sendStop({
 		running: run?.action === "stop",
@@ -456,14 +455,7 @@ export function ChatComposer(
 									Sending once your files have uploaded
 								</p>
 							)}
-							{/* The chip floats at the start of the field, so the first line begins after it and the rest run under it. */}
-							<div className="composer-field">
-								{chip && chopin && (
-									<ChopinChip
-										disabled={chopin.disabled || !draftable || sending}
-										onRemove={chopin.onRemove}
-									/>
-								)}
+							<div className="composer-field" ref={field}>
 								<Suspense
 									fallback={
 										<div
@@ -474,7 +466,7 @@ export function ChatComposer(
 											aria-label="Message"
 											className="composer-draft-input"
 											data-empty=""
-											data-placeholder={draftPlaceholder({ agent, chip })}
+											data-placeholder={draftPlaceholder(agent)}
 											role="combobox"
 										/>
 									}
@@ -503,7 +495,7 @@ export function ChatComposer(
 										readOnly={!draftable || sending}
 										role="combobox"
 										onSubmit={onSubmit}
-										placeholder={draftPlaceholder({ agent, chip })}
+										placeholder={draftPlaceholder(agent)}
 										ref={setInput}
 									/>
 								</Suspense>
@@ -608,8 +600,11 @@ export function ChatComposer(
 											data-tooltip={`Ask ${PLANNER_NAME}`}
 											data-tooltip-shortcut={shortcutLabel("ask-chopin", currentShortcutPlatform())}
 											data-tooltip-verbatim=""
-											disabled={chopin.disabled || chip}
-											onClick={chopin.onAdd}
+											disabled={chopin.disabled}
+											// The field keeps its focus and its caret, which is where the mention goes.
+											onMouseDown={event => event.preventDefault()}
+											onClick={() =>
+												chopin.onAsk(!!field.current?.contains(document.activeElement))}
 										>
 											<SparkleIcon size={16} />
 										</button>

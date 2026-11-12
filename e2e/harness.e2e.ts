@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 
 import { instruction } from "../packages/protocol/address";
 import { allBanners, connectionBanner, failureBanner, phaseVoice, watchBanners } from "./banner";
-import { chatInput } from "./chat-input";
+import { chatInput, expectChatValue } from "./chat-input";
 import { expectFocusIndicator } from "./focus";
 /**
  * Slice 5: a scripted Planner turn through the real host tools, chat
@@ -102,7 +102,7 @@ test("a scripted Planner turn reaches read_plan and list_pull_requests through r
 	await expect(reloadedChat.getByText(PULL_REQUESTS[0]!.title, { exact: false })).toBeVisible();
 });
 
-test("a message with the Chopin chip reaches the Planner, which takes a turn, and one without it goes to the team alone", async ({ join, page, seed }) => {
+test("a message the sparkle button addressed reaches the Planner, which takes a turn, and one without the mention goes to the team alone", async ({ join, page, seed }) => {
 	await seed("# Chip routing\nThe harp needs new strings.\n");
 	let sent: Chat.Send[] = [];
 	let entries = new Map<string, Chat.Entry>();
@@ -130,12 +130,12 @@ test("a message with the Chopin chip reaches the Planner, which takes a turn, an
 	let opened = await join("ana");
 	let chat = chatPane(opened);
 	let draft = chatInput(chat);
-	let chip = chat.getByRole("group", { name: "Asking chopin", exact: true });
 
-	// With the chip the message is Chopin's: it goes to the Planner, which takes a turn and answers.
+	// The button writes @chopin into the words, so the message is Chopin's: it goes to the Planner,
+	// which takes a turn and answers.
 	await chat.getByRole("button", { name: "Ask chopin", exact: true }).click();
-	await expect(chip).toBeVisible();
-	await draft.fill("what does the plan say?");
+	await expectChatValue(draft, "@chopin ");
+	await opened.keyboard.type("what does the plan say?");
 	await draft.press("Enter");
 	await expect.poll(() => states.some(frame => frame.busy)).toBe(true);
 	await expect(chat.getByText("Chip routing", { exact: false })).toBeVisible();
@@ -143,12 +143,8 @@ test("a message with the Chopin chip reaches the Planner, which takes a turn, an
 	expect(sent.at(-1)).toMatchObject({ to: "planner", text: "@chopin what does the plan say?" });
 	await expect.poll(() => entries.get(sent[0]!.requestId)?.to).toBe("planner");
 
-	// The chip stays on, so the next is Chopin's too, until it is removed.
-	await expect(chip).toBeVisible();
-	await chat.getByRole("button", { name: "Remove chopin", exact: true }).click();
-	await expect(chip).toHaveCount(0);
-
-	// Without it the message is the team's: it is in the Chat, and the Planner is not asked.
+	// Nothing stays on: without the mention the message is the team's. It is in the Chat, and the
+	// Planner is not asked.
 	await draft.fill("thanks, both of you");
 	await draft.press("Enter");
 	await expect(chat.getByText("thanks, both of you", { exact: true })).toBeVisible();

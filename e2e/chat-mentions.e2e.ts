@@ -143,21 +143,19 @@ test("the @ picker lists the Planner and the people, those here first, and sends
 	await draft.pressSequentially("ch");
 	await expect.poll(() => names(ana)).toEqual(["chopin"]);
 	await draft.press("Enter");
-	// Chopin is the chip at the start of the draft, not an @chopin in its words.
-	await expectChatValue(draft, "Ask ");
-	await expect(chat.getByRole("group", { name: "Asking chopin", exact: true })).toBeVisible();
+	// Choosing Chopin writes its mention, as choosing a person does.
+	await expectChatValue(draft, "Ask @chopin ");
+	expect(await chatCaret(draft)).toBe("Ask @chopin ".length);
+	await expect(draft.locator('.draft-mention[data-mention="chopin"]')).toHaveText("@chopin");
+	await expect(chat.getByRole("group", { name: "Asking chopin" })).toHaveCount(0);
 	await expect(list).toHaveCount(0);
 	await expect(draft).toBeFocused();
 	await draft.pressSequentially("what is open?");
 	await chat.getByRole("button", { name: "Send message" }).click();
-	await expect.poll(() => sent.at(-1)?.text).toBe("@chopin Ask what is open?");
+	await expect.poll(() => sent.at(-1)?.text).toBe("Ask @chopin what is open?");
 	expect(sent.at(-1)?.to).toBe("planner");
 
 	await expectChatValue(draft, "");
-	// The chip stays on after Chopin is asked; Backspace at the start takes it off.
-	await expect(chat.getByRole("group", { name: "Asking chopin", exact: true })).toBeVisible();
-	await draft.press("Backspace");
-	await expect(chat.getByRole("group", { name: "Asking chopin", exact: true })).toHaveCount(0);
 	await draft.fill("Thanks @cy");
 	await draft.press("Enter");
 	await expectChatValue(draft, "Thanks @cy ");

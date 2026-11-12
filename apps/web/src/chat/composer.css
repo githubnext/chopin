@@ -1,22 +1,17 @@
 /*
  * The field inside the message box, the strips above it and the colour of a failed send's edge. The
- * menus that open over the box (`@` and `/`) and the Chopin chip are assistant-ui's elements, copied
- * (and patched only where an extension point was needed), so they have no rule here but where the
- * chip sits in the draft.
+ * menus that open over the box (`@` and `/`) are assistant-ui's elements, copied (and patched only
+ * where an extension point was needed), so they have no rule here.
  */
 .chat-composer .composer-surface[data-error] {
 	border-color: var(--color-danger-edge);
 }
-/*
- * The field scrolls, not the draft in it, so the chip that floats at the start of the draft scrolls
- * with the first line it sits on. A floated chip leaves the draft's first line shorter and the rest
- * their whole width, and needs no measuring of the chip.
- */
+/* The field scrolls, not the draft in it, once the draft is taller than the cap. */
 .chat-composer .composer-field {
 	position: relative;
 	max-height: 12rem;
 	overflow-y: auto;
-	/* The draft's own type, so the chip and the cap are measured in its lines. */
+	/* The draft's own type, so the cap is measured in its lines. */
 	font-size: var(--text-sm);
 	line-height: var(--text-sm--line-height);
 }
@@ -142,36 +137,6 @@
 	font-weight: 500;
 	text-decoration: none;
 	box-decoration-break: clone;
-}
-/*
- * The Chopin chip, assistant-ui's mention chip, sits where the draft's first line begins: the draft's
- * own padding on top and at the start, one line tall, so the badge in it is centred on that line.
- * The remove button is drawn over the cross the badge shows, outside the badge, which clips.
- */
-.chat-composer .composer-chip {
-	position: relative;
-	/* Over the draft, which is a positioned block under it, so the chip is what a press reaches. */
-	z-index: 1;
-	float: left;
-	display: flex;
-	align-items: center;
-	height: 1lh;
-	margin: 0.75rem 0.375rem 0 0.75rem;
-	font-size: var(--text-sm);
-	line-height: var(--text-sm--line-height);
-}
-/* The cross is the last 12px of the badge, past 1px of edge and 6px of padding. */
-.chat-composer .composer-chip-remove {
-	position: absolute;
-	inset-inline-end: 0.3125rem;
-	top: 50%;
-	width: 1rem;
-	height: 1rem;
-	translate: 0 -50%;
-	border-radius: var(--radius-full);
-}
-.chat-composer .composer-chip-remove:hover:not(:disabled) {
-	background: var(--color-selected-strong);
 }
 /*
  * The rows of assistant-ui's menu are its own; this is only the list that holds them, which keeps
@@ -413,23 +378,15 @@
 		/* theme.css keeps touch text at 16px or more, so focus never zooms. */
 		line-height: 1.5;
 	}
-	/*
-	 * A line of draft is a full touch target tall, so the chip's cross can reach its own 44px inside
-	 * the field, which clips what it holds, without the draft's top and bottom taking any of it.
-	 */
+	/* The draft at rest is a full touch target tall, one line with its padding. */
 	.chat-composer .composer-draft-input {
 		min-height: var(--control-target-coarse);
 		padding: 0.625rem 0.5rem;
 		line-height: 1.5;
 	}
-	/* The chip begins on the first line, as the draft's own padding does here. */
-	.chat-composer .composer-chip {
-		margin: 0.625rem 0.375rem 0 0.5rem;
-		line-height: 1.5;
-	}
 	/*
 	 * A narrow box shortens the hint rather than wrapping it out of view. It is left where the first
-	 * line would begin, which is after the chip when there is one, so it has no inset of its own.
+	 * line begins, so it has no inset of its own.
 	 */
 	.chat-composer .composer-draft-input[data-empty]::before {
 		overflow: hidden;
