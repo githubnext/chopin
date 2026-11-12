@@ -680,14 +680,22 @@ function extraWorktrees(path: string) {
 	return `${path}-worktrees`;
 }
 
+/** How a run ended, as its journal records it: its agent finished, failed and why, or was stopped. */
+export type RunOutcome =
+	| { state: "finished" }
+	| { state: "stopped" }
+	| { state: "failed"; error: string };
+
 /**
  * End a run's workspace: remove the extra worktrees its agent added (see `removeWorktreesIn`) and
- * mark its journal finished, which retention orders kept runs by. The run's own worktree stays
- * for inspection.
+ * mark its journal ended, which retention orders kept runs by, with `outcome` when known. Its
+ * `state` stays "finished" for every end, as retention reads it; `outcome` says which end. The
+ * run's own worktree stays for inspection.
  */
 export async function endWorkspace(
 	root: string,
 	prepared: { extras: string; journalPath: string },
+	outcome?: RunOutcome,
 ) {
 	removePlantedRedirects(root);
 	await removeWorktreesIn({ cwd: root }, prepared.extras);
@@ -695,7 +703,12 @@ export async function endWorkspace(
 		let journal = JSON.parse(await readFile(prepared.journalPath, "utf8"));
 		await writeFile(
 			prepared.journalPath,
-			JSON.stringify({ ...journal, state: "finished", finished: Date.now() }),
+			JSON.stringify({
+				...journal,
+				state: "finished",
+				finished: Date.now(),
+				...(outcome ? { outcome } : {}),
+			}),
 			{ mode: 0o600 },
 		);
 	} catch { /* A journal retention already removed has nothing left to mark. */ }

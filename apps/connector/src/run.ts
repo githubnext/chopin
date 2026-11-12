@@ -7,7 +7,7 @@ import { errorCode } from "./machine";
 import { backoff, delay, forgottenMessage, RUN_GRACE_MS, runReports } from "./reconnect";
 import { bridgeCommand } from "./bridge";
 import { gitCredentials, githubEnvironment, type GitHubToken, githubToken } from "./github-token";
-import { runAgent } from "./acp";
+import { AgentTimedOut, runAgent, timedOut } from "./acp";
 import type { AgentInfo } from "./acp";
 import { serveLocalBridge } from "./local-bridge";
 import { createOutput } from "./output";
@@ -28,6 +28,7 @@ import {
 import type { Checkouts } from "./checkouts";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { RunOutcome } from "./workspace";
 import {
 	implementationPrompt,
 	liveImplementationPrompt,
@@ -71,7 +72,16 @@ type Options = {
 	githubRefused?: (message: string, repository: string) => void;
 	/** Where the agent starts: the machine's process sandbox, else plainly. */
 	sandbox?: Sandbox;
+	/** How long a build's or rebuild's agent may work, for tests; `BUILD_LIMIT_MS` by default. */
+	buildLimitMs?: number;
 };
+/** How long an investigation's or prototype's agent may work before it is stopped. */
+export const INVESTIGATION_LIMIT_MS = 60 * 60 * 1000;
+/**
+ * How long a build's agent may work through all of its tasks in one turn before it is stopped.
+ * A build of a few tasks that each verify the whole workspace can take most of an hour per task.
+ */
+export const BUILD_LIMIT_MS = 4 * 60 * 60 * 1000;
 export const STOPPED = "Stopped from the connector terminal.";
 /** A run out of reach says it is still trying at most this often. */
 const RETRY_SAID_MS = 10_000;
@@ -240,6 +250,10 @@ export async function runWork(
 			: Promise.resolve(undefined);
 	let secrets = () => [...Object.values(options.env ?? {}), ...github?.secrets() ?? []];
 	let agentStop: string | undefined;
+	/** How the run ended, for its journal; a run cut short before it ends says nothing. */
+	let outcome: RunOutcome | undefined;
+	// A build's agent works through every task in one turn, so it gets longer than an investigation.
+	let limit = implementation ? options.buildLimitMs ?? BUILD_LIMIT_MS : INVESTIGATION_LIMIT_MS;
 	try {
 		let checkout = await options.checkouts.resolve(input.source.repository, token);
 		root = checkout.root;
@@ -288,6 +302,7 @@ export async function runWork(
 		// it must use to reach Chopin, so it gets the stdio bridge, which does.
 		let stop = await runAgent({
 			...(options.onAgent ? { onInfo: options.onAgent } : {}),
+			limitMs: limit,
 			...(options.sandbox
 				? { sandbox: options.sandbox, writable: [prepared.extras], own: [path, tokenFolder(path)] }
 				: {}),
@@ -434,11 +449,16 @@ export async function runWork(
 			...(implementation ? { state: "stopped", idempotencyKey: crypto.randomUUID() } : {}),
 		});
 		output.finished();
+		outcome = { state: "finished" };
 	} catch (error) {
 		// Ctrl-C reports why before the connector disconnects, so Chopin knows at once. An agent
 		// that cancelled its own turn was interrupted too, unless the connector cancelled it.
 		let stopped = options.signal.aborted || agentStop === "cancelled" && !ended;
 		let missing = !implementation && errorCode(error) === "missing-result";
+		// An agent stopped at its time limit says so wherever the run's end shows: here, in its
+		// journal and in Chopin, never as an unexplained failure.
+		let late = error instanceof AgentTimedOut
+			|| error instanceof Error && error.message === timedOut(limit);
 		let message = stopped
 			? STOPPED
 			: ended
@@ -449,6 +469,9 @@ export async function runWork(
 			: error instanceof Error
 			? error.message
 			: "Local work failed";
+		outcome = stopped
+			? { state: "stopped" }
+			: { state: "failed", error: redacted(message, secrets()).slice(0, 2000) };
 		if (stopped) output.stopped();
 		else {
 			output.failed(
@@ -461,7 +484,7 @@ export async function runWork(
 		await send(implementation ? "report_implementation_build" : "fail_experiment", {
 			...identity,
 			...(implementation ? { state: "failed", idempotencyKey: crypto.randomUUID() } : {}),
-			error: stopped || ended || !implementation
+			error: stopped || ended || late || !implementation
 				? message.slice(0, 2000)
 				: "Local implementation failed. Inspect the connector terminal.",
 		}).catch(() => {});
@@ -481,7 +504,7 @@ export async function runWork(
 		await issued?.then(value => value?.stop()).catch(() => {});
 		// Extra worktrees end with the run; the run's own stays for inspection.
 		if (prepared && root) {
-			await endWorkspace(root, prepared).catch(() => {});
+			await endWorkspace(root, prepared, outcome).catch(() => {});
 		}
 		beating.abort();
 		await heartbeat;

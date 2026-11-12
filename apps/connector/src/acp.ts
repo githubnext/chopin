@@ -36,7 +36,28 @@ export type AgentOptions = {
 	/** What it may write beside its worktree, and its own files in the connector's state directory. */
 	writable?: string[];
 	own?: string[];
+	/** How long the agent's turn may run before it is stopped; one hour unless said. */
+	limitMs?: number;
 };
+
+/** An agent stopped because its turn ran past its limit (`AgentOptions.limitMs`). */
+export class AgentTimedOut extends Error {
+	constructor(readonly limitMs: number) {
+		super(timedOut(limitMs));
+	}
+}
+
+/** The words for an agent stopped after `ms`, which Chopin shows as they are. */
+export function timedOut(ms: number): string {
+	let minutes = Math.round(ms / 60_000);
+	let hours = minutes / 60;
+	let span = minutes < 1
+		? "less than a minute"
+		: Number.isInteger(hours)
+		? `${hours} ${hours === 1 ? "hour" : "hours"}`
+		: `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+	return `Its agent ran for ${span}, so chopin stopped it.`;
+}
 
 /** A coding agent as it names itself in its ACP initialize answer. */
 export type AgentInfo = { name: string; version?: string };
@@ -265,10 +286,8 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 		options.onStart?.();
 		await options.onSession?.(sessionId);
 		clearTimeout(deadline);
-		deadline = setTimeout(
-			() => connection.close(new Error("Investigation timed out.")),
-			60 * 60 * 1000,
-		);
+		let limit = options.limitMs ?? 60 * 60 * 1000;
+		deadline = setTimeout(() => connection.close(new AgentTimedOut(limit)), limit);
 		if (options.signal.aborted) {
 			cancel();
 			throw new Error("Investigation cancelled.");

@@ -19,7 +19,8 @@ import { serveWork } from "./connection";
 import { createOutput } from "./output";
 import { processesIn } from "./processes";
 import { checkouts } from "./checkouts";
-import { runWork, STOPPED } from "./run";
+import { BUILD_LIMIT_MS, INVESTIGATION_LIMIT_MS, runWork, STOPPED } from "./run";
+import { timedOut } from "./acp";
 import { git } from "./workspace";
 import { ConnectorError, remote } from "./mcp";
 import { register } from "./machine";
@@ -121,6 +122,40 @@ test("the controller keeps the claimed document on every rebuild renewal and sta
 	let { documentId, sent } = await run({ kind: "rebuild" }, ["--rebuild", "--slow"]);
 	expect(sent.some(([name]) => name === "renew_implementation_build")).toBe(true);
 	for (let [, args] of sent) expect(args.documentId).toBe(documentId);
+});
+
+test("a build whose agent runs past its limit says so in Chopin, the terminal and its journal", async () => {
+	let err = "";
+	let journal: Record<string, unknown> | undefined;
+	let output = createOutput(
+		{ write: () => true } as never,
+		{ write: (text: string) => (err += text, true) } as never,
+		{ NO_COLOR: "1" },
+	);
+	let { id, calls } = await run(
+		{},
+		["--hang"],
+		() => ({}),
+		undefined,
+		{ buildLimitMs: 300, output },
+		async ({ state, id }) => {
+			journal = JSON.parse(await readFile(join(state, "runs", `${id}.json`), "utf8"));
+		},
+	);
+	let said = "Its agent ran for less than a minute, so chopin stopped it.";
+	expect(calls.filter(([name]) => name !== "renew_implementation_build").at(-1)).toEqual([
+		"report_implementation_build",
+		{ id, state: "failed", error: said },
+	]);
+	expect(err).toContain(`Failed: ${said}`);
+	expect(err).not.toContain("Investigation");
+	expect(journal).toMatchObject({ state: "finished", outcome: { state: "failed", error: said } });
+});
+
+test("a build gets hours to work, an investigation one", async () => {
+	expect(BUILD_LIMIT_MS).toBeGreaterThan(INVESTIGATION_LIMIT_MS);
+	expect(timedOut(BUILD_LIMIT_MS)).toBe("Its agent ran for 4 hours, so chopin stopped it.");
+	expect(timedOut(INVESTIGATION_LIMIT_MS)).toBe("Its agent ran for 1 hour, so chopin stopped it.");
 });
 
 test("a living document's first build gets a prompt without verification or revision", async () => {
