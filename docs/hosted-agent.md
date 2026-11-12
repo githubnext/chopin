@@ -32,9 +32,11 @@ A person with write access can choose the model and the level of reasoning (thin
 document's Planner from the Chat composer. The choice belongs to the document: everyone who opens
 it sees it, it survives a reload and a restart (`planner_model_choices`, see
 [Storage](storage.md)), and it applies from the next turn. Until somebody chooses, the harness
-runs what it always did, so nothing changes. Choosing a model records that model, the one marked
-_Default_ included, so the document keeps it if the harness's or the client's default later
-changes; the reasoning control's _Default_ returns the level to the model's own.
+runs what it always did, so nothing changes, and the composer names that model and level. A pick
+records both halves: choosing a model records it, the agent's own included, with the level that
+runs now where the model offers it (else the agent's own level where it does), and choosing a level
+records it with the model that runs now. So the document keeps its model and level if the
+harness's or the client's default later changes, and each document keeps its own.
 
 The server owns what can be chosen, never the browser. It builds a catalog from the harness and
 sends it to the room in `chat:model` (with the stored choice) when somebody joins and when either

@@ -1,6 +1,6 @@
 import { levelLabel, modelLevels } from "@chopin/protocol/model-choice";
 
-import { defaultStepLabel, levelSteps, pickerGroups, reasoningLevels } from "../model-picker-state";
+import { levelSteps, pickerGroups, reasoningLevels } from "../model-picker-state";
 
 import type { Chat } from "@chopin/protocol";
 import type { ModelOption } from "@/components/assistant-ui/utils/model-selection";
@@ -27,19 +27,19 @@ export type ModelSelection = {
 	groups: { id: string; name: string | undefined; options: ModelOption[] }[];
 	/** The option that will run, or none while nothing is chosen and the harness names no default. */
 	value: string;
-	/** The chosen level of that model: its own (`levelOf` gives none) or one of the levels it lists. */
+	/** The level of that model that will run, where it is known: one of the levels it lists. */
 	effort: string | undefined;
 	/** The id a turn carries for an option, which a catalog that lists a model twice shares. */
 	modelOf: (option: string) => string;
-	/** The level an effort step stands for, or none for the model's own. */
+	/** The level an effort step stands for; none for a step the model does not list. */
 	levelOf: (effort: string) => string | undefined;
 };
 
 /**
  * What the composer's model pill gives the copied selector for a document's catalogue and choice.
  * An option is told apart by its place (a catalogue may list an id twice) and an effort step by its
- * position among the model's levels, which begin with its own, so a level named like another, or
- * like the model's own, is still the one chosen and is sent exactly as the harness spelled it.
+ * position among the model's levels, so a level named like another is still the one chosen and is
+ * sent exactly as the harness spelled it.
  */
 export function modelSelection(
 	catalog: Chat.ModelCatalog,
@@ -54,14 +54,10 @@ export function modelSelection(
 			let levels = modelLevels(catalog, model.id);
 			ids.set(model.key, model.id);
 			if (model.selected) shown = model.key;
-			let own = defaultStepLabel(levels);
-			let description = model.isDefault
-				? ["Default.", model.description].filter(Boolean).join(" ")
-				: model.description;
 			return {
 				id: model.key,
 				name: model.name,
-				...(description ? { description } : {}),
+				...(model.description ? { description: model.description } : {}),
 				keywords: [model.id, model.provider?.name, model.provider?.id, model.description].filter(
 					(term): term is string => !!term,
 				),
@@ -69,7 +65,7 @@ export function modelSelection(
 					? {
 						efforts: levelSteps(levels, undefined).map(step => ({
 							id: step.key,
-							name: step.level === undefined ? own : levelLabel(step.level),
+							name: levelLabel(step.level),
 						})),
 					}
 					: {}),

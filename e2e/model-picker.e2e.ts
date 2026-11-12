@@ -132,6 +132,13 @@ test.beforeAll(async () => {
 			`migration failed: ${(await new Response(migrated.stderr).text()).slice(-800)}`,
 		);
 	}
+	await startServer();
+	registerTestDatabase(PORT, own);
+});
+
+/** Starts this file's server on its database and waits until it answers. */
+async function startServer() {
+	let { own } = databaseUrls();
 	// The reply check of the real server asks a model; the fake one answers it, as in the other servers.
 	let child = spawn(process.execPath, [
 		"--preload",
@@ -171,17 +178,19 @@ test.beforeAll(async () => {
 		} catch { /* Not bound yet. */ }
 		await new Promise(resolve => setTimeout(resolve, 100));
 	}
-	registerTestDatabase(PORT, own);
-});
+}
 
-test.afterAll(async () => {
+test.afterAll(stopServer);
+
+/** Stops this file's server as a deploy does, with SIGTERM, and waits until it has exited. */
+async function stopServer() {
 	let child = server;
 	server = undefined;
 	if (!child || child.exitCode !== null || child.pid === undefined) return;
 	let exit = new Promise<void>(resolve => child.once("close", () => resolve()));
 	process.kill(-child.pid, "SIGTERM");
 	await exit;
-});
+}
 
 /** What the attached scripted client was asked to run, turn by turn. */
 type Asked = { model?: string; thinkingLevel?: string; prompt: string };
@@ -452,7 +461,7 @@ test("lists models by provider, filters them, and chooses with the mouse, reason
 	await expect(list.getByRole("group", { name: "Beta" }).getByRole("option")).toHaveCount(1);
 	await expect(list.getByRole("option")).toHaveText([
 		/^Large\s*Slower and more careful\.$/,
-		/^Small\s*Default\. Fast for short questions\.$/,
+		/^Small\s*Fast for short questions\.$/,
 		/^Deep\s*Reads the whole repository first\.$/,
 	]);
 	// The model that will run has the element's check; no other does.
@@ -479,16 +488,11 @@ test("lists models by provider, filters them, and chooses with the mouse, reason
 	await expect(trigger(page)).toHaveAccessibleName("Model: Large");
 	await expect(trigger(page)).toBeFocused();
 
-	// A model with levels offers them, after the model's own. A level is a setting: it stays open.
+	// A model with levels offers them, and only them. The client names no level its default runs
+	// at, so none is checked until one is chosen. A level is a setting: it stays open.
 	await openPicker(page);
-	await expect(levels(page).getByRole("radio")).toHaveText([
-		"Default",
-		"off",
-		"low",
-		"high",
-		"xhigh",
-	]);
-	await expect(level(page, "Default")).toHaveAttribute("aria-checked", "true");
+	await expect(levels(page).getByRole("radio")).toHaveText(["off", "low", "high", "xhigh"]);
+	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(0);
 	await level(page, "high").click();
 	await expect(level(page, "high")).toHaveAttribute("aria-checked", "true");
 	await expect(popover(page)).toBeVisible();
@@ -506,7 +510,7 @@ test("lists models by provider, filters them, and chooses with the mouse, reason
 	await option(page, "Deep").click();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Deep, reasoning high");
 	await openPicker(page);
-	await expect(levels(page).getByRole("radio")).toHaveText(["Default", "low", "medium", "high"]);
+	await expect(levels(page).getByRole("radio")).toHaveText(["low", "medium", "high"]);
 	await option(page, "Small").click();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Small");
 	await openPicker(page);
@@ -569,23 +573,23 @@ test("opens, searches, moves and chooses from the keyboard", async ({ browser })
 	await expect(trigger(page)).toBeFocused();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Deep");
 
-	// Tab from the search field reaches the checked level, the arrow keys choose the next, and
-	// Tab out of the popover closes it.
+	// Tab from the search field reaches the levels, the arrow keys choose the next, and Tab out of
+	// the popover closes it.
 	await trigger(page).press("Enter");
-	await expect(level(page, "Default")).toHaveAttribute("aria-checked", "true");
+	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(0);
 	await search(page).press("Tab");
-	await expect(level(page, "Default")).toBeFocused();
-	await page.keyboard.press("ArrowRight");
-	await expect(level(page, "low")).toHaveAttribute("aria-checked", "true");
 	await expect(level(page, "low")).toBeFocused();
 	await page.keyboard.press("ArrowRight");
 	await expect(level(page, "medium")).toHaveAttribute("aria-checked", "true");
-	await page.keyboard.press("ArrowLeft");
-	await page.keyboard.press("ArrowLeft");
-	await expect(level(page, "Default")).toHaveAttribute("aria-checked", "true");
-	await expect(trigger(page)).toHaveAccessibleName("Model: Deep");
+	await expect(level(page, "medium")).toBeFocused();
 	await page.keyboard.press("ArrowRight");
+	await expect(level(page, "high")).toHaveAttribute("aria-checked", "true");
+	await page.keyboard.press("ArrowLeft");
+	await page.keyboard.press("ArrowLeft");
+	await expect(level(page, "low")).toHaveAttribute("aria-checked", "true");
 	await expect(trigger(page)).toHaveAccessibleName("Model: Deep, reasoning low");
+	await page.keyboard.press("ArrowRight");
+	await expect(trigger(page)).toHaveAccessibleName("Model: Deep, reasoning medium");
 	await page.keyboard.press("Tab");
 	await expect(popover(page)).toHaveCount(0);
 
@@ -626,9 +630,9 @@ test("leaves the popover from the level an arrow key chose, even when Tab follow
 	await trigger(page).press("Enter");
 	await expect(search(page)).toBeFocused();
 	await search(page).press("Tab");
-	await expect(level(page, "Default")).toBeFocused();
+	await expect(level(page, "low")).toBeFocused();
 	await page.keyboard.press("ArrowRight");
-	await expect(trigger(page)).toHaveAccessibleName("Model: Deep, reasoning low");
+	await expect(trigger(page)).toHaveAccessibleName("Model: Deep, reasoning medium");
 	await page.keyboard.press("Tab");
 	await expect(popover(page)).toHaveCount(0);
 	await client.detach();
@@ -662,12 +666,7 @@ test("lists a catalog that repeats a model or a level as the client reported it"
 	// Every entry is listed in the order given, and only the first of an id is the model that runs.
 	let rows = popover(page).getByRole("option");
 	await expect(rows).toHaveCount(4);
-	await expect(rows).toHaveText([
-		/^Echo one\s*Default\.$/,
-		/^Echo again\s*Default\.$/,
-		/^Two$/,
-		/^Echo third\s*Default\.$/,
-	]);
+	await expect(rows).toHaveText([/^Echo one$/, /^Echo again$/, /^Two$/, /^Echo third$/]);
 	await expect(popover(page).getByRole("option").locator("span.absolute")).toHaveCount(1);
 	await expect(rows.first().locator("span.absolute")).toHaveCount(1);
 	// Each group is named by its own heading, whatever its provider's id is made of.
@@ -675,25 +674,26 @@ test("lists a catalog that repeats a model or a level as the client reported it"
 	await expect(popover(page).getByRole("group", { name: "None" })).toHaveCount(1);
 	await expect(popover(page).getByRole("group", { name: "Other" })).toHaveCount(1);
 
-	// The model's own level, then every level as listed; only the first of a repeated level is the
-	// one chosen. A level named `default` would be taken for the first step, which is called Model
-	// default instead.
+	// Every level as listed; only the first of a repeated level is the one chosen, and a level named
+	// `default` is a level like the others.
 	let radios = levels(page).getByRole("radio");
-	await expect(radios).toHaveText(["Model default", "high", "off", "high", "default"]);
-	await expect(levels(page).locator('[aria-checked="true"]')).toHaveText(["Model default"]);
-	await radios.nth(3).click();
+	await expect(radios).toHaveText(["high", "off", "high", "default"]);
+	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(0);
+	await radios.nth(2).click();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Echo one, reasoning high");
 	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
-	await expect(radios.nth(1)).toHaveAttribute("aria-checked", "true");
-	// A level named `default` is a level the client asked for, not the model's own.
-	await radios.nth(4).click();
+	await expect(radios.nth(0)).toHaveAttribute("aria-checked", "true");
+	await radios.nth(3).click();
 	await expect(trigger(page)).toHaveAccessibleName("Model: Echo one, reasoning default");
 	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
-	await expect(radios.nth(4)).toHaveAttribute("aria-checked", "true");
+	await expect(radios.nth(3)).toHaveAttribute("aria-checked", "true");
 	await expectAccessible(page);
 	await page.keyboard.press("Escape");
 	await ask(page, "default level", 1);
-	expect(turnFor(asked, "default level")).toMatchObject({ thinkingLevel: "default" });
+	expect(turnFor(asked, "default level")).toMatchObject({
+		model: "echo/one",
+		thinkingLevel: "default",
+	});
 	await client.detach();
 });
 
@@ -715,9 +715,9 @@ test("shows each level exactly as reported, so levels that read alike stay two, 
 
 	// Every level is offered as written, in the order given, and no two are read or named alike.
 	let radios = levels(page).getByRole("radio");
-	await expect(radios).toHaveText(["Default", ...reported]);
+	await expect(radios).toHaveText(reported);
 	for (let [position, label] of reported.entries()) {
-		await expect(radios.nth(position + 1)).toHaveAccessibleName(label);
+		await expect(radios.nth(position)).toHaveAccessibleName(label);
 	}
 	expect(new Set(reported).size).toBe(reported.length);
 	await expectAccessible(page);
@@ -728,16 +728,16 @@ test("shows each level exactly as reported, so levels that read alike stay two, 
 	// next turn carries it.
 	for (let [position, level] of reported.entries()) {
 		await openPicker(page);
-		await radios.nth(position + 1).click();
+		await radios.nth(position).click();
 		await expect(trigger(page)).toHaveAccessibleName(`Model: Odd, reasoning ${level}`);
 		await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
-		await expect(radios.nth(position + 1)).toHaveAttribute("aria-checked", "true");
+		await expect(radios.nth(position)).toHaveAttribute("aria-checked", "true");
 		await page.keyboard.press("Escape");
 		let word = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"][position]!;
 		await ask(page, `level ${word}`, position + 1);
-		// No model was chosen, so the client's own runs, at exactly the level that was.
+		// The client's own model, kept with the level, runs at exactly the level that was chosen.
 		expect(turnFor(asked, `level ${word}`).thinkingLevel).toBe(level);
-		expect(turnFor(asked, `level ${word}`).model).toBeUndefined();
+		expect(turnFor(asked, `level ${word}`).model).toBe("acme/odd");
 	}
 
 	// The last of them, `SS-fast`, is the one still chosen after a reload; `ß-fast` is not.
@@ -745,12 +745,12 @@ test("shows each level exactly as reported, so levels that read alike stay two, 
 	await ready(page);
 	await expect(trigger(page)).toHaveAccessibleName("Model: Odd, reasoning SS-fast");
 	await openPicker(page);
-	await expect(radios.nth(6)).toHaveAttribute("aria-checked", "true");
-	await expect(radios.nth(5)).toHaveAttribute("aria-checked", "false");
+	await expect(radios.nth(5)).toHaveAttribute("aria-checked", "true");
+	await expect(radios.nth(4)).toHaveAttribute("aria-checked", "false");
 	await client.detach();
 });
 
-test("tells a level named Default from the model's own default, by sight and by name, and sends each exactly", async ({ browser }) => {
+test("lists a level named Default as the level it is, by sight and by name, and sends it exactly", async ({ browser }) => {
 	test.setTimeout(180_000);
 	let room = await newRoom();
 	let page = await open(browser, HANDLE, room, DESKTOP);
@@ -764,49 +764,45 @@ test("tells a level named Default from the model's own default, by sight and by 
 					thinkingLevels: ["Default", "default", "high", "High"],
 				},
 			],
-			default: { id: "acme/plain" },
+			default: { id: "acme/plain", thinkingLevel: "low" },
 		},
 	});
-	await expect(trigger(page)).toHaveAccessibleName("Model: Plain");
+	// The client's own model and level, named as they are, with nothing called Default.
+	await expect(trigger(page)).toHaveAccessibleName("Model: Plain, reasoning low");
 	await openPicker(page);
-	// A model with no level that reads like it keeps the name the first step always had.
-	await expect(levels(page).getByRole("radio")).toHaveText(["Default", "low", "high"]);
+	await expect(levels(page).getByRole("radio")).toHaveText(["low", "high"]);
+	await expect(level(page, "low")).toHaveAttribute("aria-checked", "true");
+	await expect(popover(page).getByText("Default")).toHaveCount(0);
+	// Odd lists no level called low, so it is chosen alone and no level is checked.
 	await option(page, "Odd").click();
+	await expect(trigger(page)).toHaveAccessibleName("Model: Odd");
 	await openPicker(page);
 
-	// Odd lists levels named Default and default, and high beside High. The reset is called Model
-	// default so that no radio shares its name; every level is the string the client reported.
+	// Odd lists levels named Default and default, and high beside High: each is the string the
+	// client reported, and no two share a name.
 	let radios = levels(page).getByRole("radio");
-	await expect(radios).toHaveText(["Model default", "Default", "default", "high", "High"]);
-	for (let name of ["Model default", "Default", "default", "high", "High"]) {
+	await expect(radios).toHaveText(["Default", "default", "high", "High"]);
+	for (let name of ["Default", "default", "high", "High"]) {
 		await expect(level(page, name)).toHaveCount(1);
 	}
-	await expect(level(page, "Model default")).toHaveAttribute("aria-checked", "true");
+	await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(0);
 	await expectAccessible(page);
 	await shoot(page, "model-picker-level-named-default-desktop");
 	await page.keyboard.press("Escape");
 
-	// Each choice asks for exactly what its radio says: the reset for no level, each other for its string.
-	let picks: Array<[string, string | undefined, string]> = [
-		["Default", "Default", "Model: Odd, reasoning Default"],
-		["Model default", undefined, "Model: Odd"],
-		["default", "default", "Model: Odd, reasoning default"],
-		["High", "High", "Model: Odd, reasoning High"],
-		["high", "high", "Model: Odd, reasoning high"],
-		["Model default", undefined, "Model: Odd"],
-	];
-	for (let [position, [radio, sent, named]] of picks.entries()) {
+	// Each choice asks for exactly what its radio says.
+	for (let [position, radio] of ["Default", "default", "High", "high"].entries()) {
 		await openPicker(page);
 		await level(page, radio).click();
-		await expect(trigger(page)).toHaveAccessibleName(named);
+		await expect(trigger(page)).toHaveAccessibleName(`Model: Odd, reasoning ${radio}`);
 		await expect(levels(page).locator('[aria-checked="true"]')).toHaveCount(1);
 		await expect(level(page, radio)).toHaveAttribute("aria-checked", "true");
 		await page.keyboard.press("Escape");
-		let word = ["one", "two", "three", "four", "five", "six"][position]!;
+		let word = ["one", "two", "three", "four"][position]!;
 		await ask(page, `pick ${word}`, position + 1);
 		let turn = turnFor(asked, `pick ${word}`);
 		expect(turn.model).toBe("acme/odd");
-		expect(turn.thinkingLevel).toBe(sent);
+		expect(turn.thinkingLevel).toBe(radio);
 	}
 	await client.detach();
 });
@@ -839,16 +835,14 @@ test("lists and runs a catalog of any spelling as the client wrote it, skipping 
 	await openPicker(page);
 	await expect(popover(page).getByRole("option")).toHaveText([
 		/^Long\s*d+$/,
-		/^lab\/plain\s*Default\.$/,
+		/^lab\/plain$/,
 	]);
 	await expect(popover(page).getByRole("option", { name: /Blank/ })).toHaveCount(0);
 	await expect(levels(page)).toHaveCount(0);
 	await option(page, "Long").click();
 	await openPicker(page);
-	// An empty level is not one: it is not listed between Default and the others.
-	// Each level is as the client wrote it.
+	// An empty level is not one: it is not listed. Each level is as the client wrote it.
 	await expect(levels(page).getByRole("radio")).toHaveText([
-		"Default",
 		"extra high",
 		"\u4f4e",
 		"constructor",
@@ -900,10 +894,10 @@ const WIDE: CapabilityCatalog = {
 			id: `gateway/model-${index}`,
 			name: `Model ${index}`,
 			provider: { id: `p${index % 4}`, name: `Provider ${index % 4}` },
-			description: "Reasons at six levels.",
-			thinkingLevels: ["off", "low", "medium", "high", "xhigh", "max"],
+			description: "Reasons at seven levels.",
+			thinkingLevels: ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
 		})),
-		default: { id: "gateway/model-0" },
+		default: { id: "gateway/model-0", thinkingLevel: "minimal" },
 	},
 };
 
@@ -960,7 +954,7 @@ for (
 				.getByRole("button", { name: /^Chat/ }).tap();
 			await expect.poll(async () => (await chat(page).boundingBox())?.x).toBe(0);
 		}
-		await expect(trigger(page)).toHaveAccessibleName("Model: Model 0");
+		await expect(trigger(page)).toHaveAccessibleName("Model: Model 0, reasoning minimal");
 		await (touch ? trigger(page).tap() : trigger(page).click());
 		let menu = popover(page);
 		await expect(menu).toBeVisible();
@@ -968,14 +962,16 @@ for (
 		let list = menu.getByRole("listbox");
 		let lane = levels(page);
 		await expect(lane.getByRole("radio")).toHaveText([
-			"Default",
 			"off",
+			"minimal",
 			"low",
 			"medium",
 			"high",
 			"xhigh",
 			"max",
 		]);
+		// The client's own level is the one checked while nobody chose.
+		await expect(level(page, "minimal")).toHaveAttribute("aria-checked", "true");
 		// The popover, its search field and the Thinking row are on screen, however short it is.
 		await expectInsideViewport(menu);
 		await expectInsideViewport(search(page));
@@ -984,7 +980,7 @@ for (
 		await shoot(page, `model-picker-levels-${screen.replaceAll(" ", "-")}`);
 
 		// The levels are wider than the popover: the last is out of sight until the lane is moved.
-		expect(await inSight(level(page, "Default"))).toBe(true);
+		expect(await inSight(level(page, "off"))).toBe(true);
 		expect(await inSight(level(page, "max"))).toBe(false);
 		let scrolled = (target: Locator, axis: "scrollLeft" | "scrollTop") =>
 			target.evaluate((element, axis) => element[axis], axis);
@@ -1008,10 +1004,10 @@ for (
 
 		// From the keyboard (a tablet's too, whose tap does not focus): the arrows choose a level and
 		// bring it into sight, and the list's End reaches its last model.
-		await (touch ? level(page, "Default").focus() : level(page, "Default").click());
-		await expect(level(page, "Default")).toBeFocused();
+		await (touch ? level(page, "off").focus() : level(page, "off").click());
+		await expect(level(page, "off")).toBeFocused();
 		await expect.poll(() => scrolled(lane, "scrollLeft")).toBe(0);
-		for (let name of ["off", "low", "medium", "high", "xhigh", "max"]) {
+		for (let name of ["minimal", "low", "medium", "high", "xhigh", "max"]) {
 			await page.keyboard.press("ArrowRight");
 			await expect(level(page, name)).toHaveAttribute("aria-checked", "true");
 			await expect.poll(() => inSight(level(page, name))).toBe(true);
@@ -1105,7 +1101,7 @@ test("keeps a model chosen while it was the default when the client's default mo
 	// The client now runs Large when a turn names none, and still offers Small.
 	client.report({ models: { available: [LARGE, SMALL, DEEP], default: { id: "acme/large" } } });
 	await openPicker(page);
-	await expect(option(page, "Large")).toContainText("Default");
+	await expect(option(page, "Large")).not.toContainText("Default");
 	await expect(option(page, "Small")).toHaveAttribute("aria-selected", "true");
 	await page.keyboard.press("Escape");
 	// The document's choice stands, for a person who opens it now too, with nothing said as lost.
@@ -1116,6 +1112,144 @@ test("keeps a model chosen while it was the default when the client's default mo
 	await ask(page, "after the default moved", 1);
 	expect(turnFor(asked, "after the default moved").model).toBe("acme/small");
 	await client.detach();
+});
+
+/** A catalog whose default model has levels, at a level of its own, as Atomic's clients report it. */
+const LEVELLED: CapabilityCatalog = {
+	models: { available: [LARGE, SMALL, DEEP], default: { id: "acme/large", thinkingLevel: "low" } },
+};
+/** The same models, the client's default moved to another model and level. */
+const MOVED: CapabilityCatalog = {
+	models: {
+		available: [LARGE, SMALL, DEEP],
+		default: { id: "beta/deep", thinkingLevel: "medium" },
+	},
+};
+
+test("names the model and level that will run, and keeps both when a person changes only one of them and the client's default moves", async ({ browser }) => {
+	test.setTimeout(180_000);
+	let room = await newRoom();
+	let page = await open(browser, HANDLE, room, DESKTOP);
+	let { client, asked } = await attachClient(room, LEVELLED);
+	// Nobody has chosen: the pill names what the client runs, its model and its level.
+	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning low");
+	await expect(trigger(page)).toHaveText(/^Large\s*low$/);
+	await openPicker(page);
+	await expect(popover(page).getByText("Default")).toHaveCount(0);
+	await expect(levels(page).getByRole("radio")).toHaveText(["off", "low", "high", "xhigh"]);
+	await expect(level(page, "low")).toHaveAttribute("aria-checked", "true");
+
+	// A level alone is chosen: the model it was chosen for is kept with it.
+	await level(page, "high").click();
+	await page.keyboard.press("Escape");
+	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
+	client.report(MOVED);
+	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning high");
+	await ask(page, "level alone", 1);
+	expect(turnFor(asked, "level alone")).toMatchObject({
+		model: "acme/large",
+		thinkingLevel: "high",
+	});
+	await client.detach();
+
+	// A model alone is chosen in another document: the level the pill named is kept with it.
+	let other = await newRoom();
+	let second = await open(browser, HANDLE, other, DESKTOP);
+	let attached = await attachClient(other, LEVELLED);
+	await expect(trigger(second)).toHaveAccessibleName("Model: Large, reasoning low");
+	await openPicker(second);
+	await option(second, "Deep").click();
+	await expect(trigger(second)).toHaveAccessibleName("Model: Deep, reasoning low");
+	attached.client.report(MOVED);
+	await expect(trigger(second)).toHaveAccessibleName("Model: Deep, reasoning low");
+	await ask(second, "model alone", 1);
+	expect(turnFor(attached.asked, "model alone")).toMatchObject({
+		model: "beta/deep",
+		thinkingLevel: "low",
+	});
+	await attached.client.detach();
+});
+
+test("keeps each document's own model and level across switching documents, the client coming back, a new catalog, a restart and a reload", async ({ browser }) => {
+	test.setTimeout(300_000);
+	let first = await newRoom();
+	let second = await newRoom();
+	let page = await open(browser, HANDLE, first, DESKTOP);
+	let clients = [await attachClient(first, LEVELLED), await attachClient(second, LEVELLED)];
+	let titled = (room: string) =>
+		page.getByRole("complementary", { name: "Projects", exact: true })
+			.getByRole("link", { name: `Test ${room.slice(0, 8)}`, exact: true });
+	let pick = async (model: string, effort: string) => {
+		await openPicker(page);
+		await option(page, model).click();
+		await openPicker(page);
+		await level(page, effort).click();
+		await page.keyboard.press("Escape");
+	};
+	let FIRST = "Model: Large, reasoning high";
+	let SECOND = "Model: Deep, reasoning medium";
+	await pick("Large", "high");
+	await expect(trigger(page)).toHaveAccessibleName(FIRST);
+
+	// The other document, opened from the sidebar, has a choice of its own.
+	await titled(second).click();
+	await ready(page);
+	await expect(page).toHaveURL(new RegExp(second.slice(0, 8)));
+	await expect(trigger(page)).toHaveAccessibleName("Model: Large, reasoning low");
+	await pick("Deep", "medium");
+	await expect(trigger(page)).toHaveAccessibleName(SECOND);
+	await titled(first).click();
+	await ready(page);
+	await expect(trigger(page)).toHaveAccessibleName(FIRST);
+	await titled(second).click();
+	await ready(page);
+	await expect(trigger(page)).toHaveAccessibleName(SECOND);
+	await titled(first).click();
+	await ready(page);
+	await expect(trigger(page)).toHaveAccessibleName(FIRST);
+
+	// The client goes and comes back, then reports a catalog whose default has moved.
+	await clients[0]!.client.detach();
+	await expect(trigger(page)).toHaveCount(0);
+	clients[0] = await attachClient(first, LEVELLED);
+	await expect(trigger(page)).toHaveAccessibleName(FIRST);
+	clients[0].client.report(MOVED);
+	await expect(trigger(page)).toHaveAccessibleName(FIRST);
+	await ask(page, "after the client came back", 1);
+	expect(turnFor(clients[0].asked, "after the client came back")).toMatchObject({
+		model: "acme/large",
+		thinkingLevel: "high",
+	});
+
+	// The server restarts, as a deploy does; the page stays open and the clients attach again.
+	for (let { client } of clients) await client.detach();
+	await stopServer();
+	await startServer();
+	await ready(page);
+	// The machine attaches once the open page has brought its sign-in back to the new process.
+	let reattach = async (room: string) => {
+		for (let attempt = 0;; attempt++) {
+			try {
+				return await attachClient(room, MOVED);
+			} catch (error) {
+				if (attempt === 50) throw error;
+				await new Promise(resolve => setTimeout(resolve, 200));
+			}
+		}
+	};
+	clients = [await reattach(first), await reattach(second)];
+	await expect(trigger(page)).toHaveAccessibleName(FIRST, { timeout: 30_000 });
+	await page.reload();
+	await ready(page);
+	await expect(trigger(page)).toHaveAccessibleName(FIRST);
+	let teammate = await open(browser, "ana", second, DESKTOP);
+	await expect(trigger(teammate)).toHaveAccessibleName(SECOND);
+	await ask(teammate, "after the restart", 1);
+	expect(turnFor(clients[1]!.asked, "after the restart")).toMatchObject({
+		model: "beta/deep",
+		thinkingLevel: "medium",
+	});
+	for (let { client } of clients) await client.detach();
 });
 
 test("falls back to the default with a notice when the chosen model has gone, and restores it when it returns", async ({ browser }) => {
@@ -1505,7 +1639,7 @@ test("names the model on a phone trigger, opens a list as wide as the composer a
 	await expect(name(model)).toBeVisible();
 
 	await model.tap();
-	await expect(levels(page).getByRole("radio")).toHaveCount(5);
+	await expect(levels(page).getByRole("radio")).toHaveCount(4);
 	await settled(popover(page));
 	await expectInsideViewport(levels(page));
 	for (let radio of await levels(page).getByRole("radio").all()) {

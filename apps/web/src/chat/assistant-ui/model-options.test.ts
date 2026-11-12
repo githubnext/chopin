@@ -59,12 +59,12 @@ describe("what the composer's model pill gives the copied selector", () => {
 		default: { model: "mini" },
 	};
 
-	it("groups the models by provider and marks the one the harness runs when nobody has chosen", () => {
+	it("groups the models by provider and selects the one the agent runs when nobody has chosen, its description as reported", () => {
 		let { groups, value } = modelSelection(catalog, undefined);
 		expect(groups.map(group => group.name)).toEqual(["OpenAI", "Anthropic"]);
 		expect(groups[0]!.options.map(option => option.name)).toEqual(["GPT-5", "Mini"]);
 		expect(value).toBe(groups[0]!.options[1]!.id);
-		expect(groups[0]!.options[1]!.description).toBe("Default. Quick");
+		expect(groups[0]!.options[1]!.description).toBe("Quick");
 	});
 
 	it("lets a search find a model by its id, provider or description, beside its name", () => {
@@ -82,32 +82,40 @@ describe("what the composer's model pill gives the copied selector", () => {
 		expect([modelOf(first!.id), modelOf(second!.id)]).toEqual(["m", "m"]);
 	});
 
-	it("offers the model's own level first, then each level as the harness spelled it", () => {
+	it("offers each level as the harness spelled it, and nothing else", () => {
 		let { groups, effort, levelOf } = modelSelection(catalog, {
 			model: "gpt-5",
 			thinkingLevel: "high",
 		});
 		let efforts = groups[0]!.options[0]!.efforts as { id: string; name: string }[];
-		expect(efforts.map(step => step.name)).toEqual(["Default", "low", "high"]);
+		expect(efforts.map(step => step.name)).toEqual(["low", "high"]);
 		expect(levelOf(effort!)).toBe("high");
-		expect(levelOf(efforts[0]!.id)).toBeUndefined();
+		expect(levelOf(efforts[0]!.id)).toBe("low");
+		expect(levelOf("9")).toBeUndefined();
 	});
 
-	it("calls the model's own level Model default where a level of the model is called Default", () => {
+	it("lists a level called Default as the level it is", () => {
 		let { groups } = modelSelection(
 			{ models: [{ id: "m", name: "M", thinkingLevels: ["Default", "high"] }] },
 			undefined,
 		);
 		let efforts = groups[0]!.options[0]!.efforts as { id: string; name: string }[];
-		expect(efforts.map(step => step.name)).toEqual(["Model default", "Default", "high"]);
+		expect(efforts.map(step => step.name)).toEqual(["Default", "high"]);
 	});
 
-	it("selects the first of two levels that read alike only when it is the one chosen, and no level means the model's own", () => {
+	it("selects the agent's own level while nobody chose one, and none where it is not known", () => {
+		let levelled = { ...catalog, default: { model: "gpt-5", thinkingLevel: "high" } };
+		let own = modelSelection(levelled, undefined);
+		expect(own.levelOf(own.effort!)).toBe("high");
+		expect(modelSelection(catalog, { model: "gpt-5" }).effort).toBeUndefined();
+	});
+
+	it("selects the first of two levels that read alike only when it is the one chosen", () => {
 		let catalog = { models: [{ id: "m", name: "M", thinkingLevels: ["high", "High"] }] };
 		let high = modelSelection(catalog, { model: "m", thinkingLevel: "High" });
 		expect(high.levelOf(high.effort!)).toBe("High");
-		let own = modelSelection(catalog, { model: "m" });
-		expect(own.levelOf(own.effort!)).toBeUndefined();
+		let first = modelSelection(catalog, { model: "m", thinkingLevel: "high" });
+		expect(first.levelOf(first.effort!)).toBe("high");
 	});
 
 	it("selects nothing where no model is chosen and the harness names no default, and offers no levels", () => {
