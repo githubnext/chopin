@@ -418,6 +418,20 @@ export function WrapIcon(props: IconProps) {
 	);
 }
 
+/** Two columns of three dots: a block's handle, which drags it and opens its menu. */
+export function GripIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<circle cx="6.5" cy="3.75" fill="currentColor" r="1.25" stroke="none" />
+			<circle cx="6.5" cy="9" fill="currentColor" r="1.25" stroke="none" />
+			<circle cx="6.5" cy="14.25" fill="currentColor" r="1.25" stroke="none" />
+			<circle cx="11.5" cy="3.75" fill="currentColor" r="1.25" stroke="none" />
+			<circle cx="11.5" cy="9" fill="currentColor" r="1.25" stroke="none" />
+			<circle cx="11.5" cy="14.25" fill="currentColor" r="1.25" stroke="none" />
+		</LineIcon>
+	);
+}
+
 /** Actual size: a 1:1 ratio. */
 export function ActualSizeIcon(props: IconProps) {
 	return (

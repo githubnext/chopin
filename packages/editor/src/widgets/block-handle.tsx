@@ -32,6 +32,7 @@ import {
 	COMMAND_PRIORITY_CRITICAL,
 	KEY_DOWN_COMMAND,
 } from "lexical";
+import { GripIcon } from "@chopin/icons";
 import { $isCalloutNode, $isColumnNode, $isTabNode } from "@chopin/dialect";
 
 import { usePopoverDismissal } from "../popover-dismissal";
@@ -53,20 +54,6 @@ import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ListNode } from "@lexical/list";
 import type { LexicalEditor, LexicalNode } from "lexical";
 import type { Block } from "../toolbar/bubble";
-
-/** Two columns of three dots, on the line icons' 18-unit grid: a block's handle. */
-function GripIcon() {
-	return (
-		<svg aria-hidden="true" data-nucleo-icon="" height={16} viewBox="0 0 18 18" width={16}>
-			<circle cx="6.5" cy="3.75" fill="currentColor" r="1.25" stroke="none" />
-			<circle cx="6.5" cy="9" fill="currentColor" r="1.25" stroke="none" />
-			<circle cx="6.5" cy="14.25" fill="currentColor" r="1.25" stroke="none" />
-			<circle cx="11.5" cy="3.75" fill="currentColor" r="1.25" stroke="none" />
-			<circle cx="11.5" cy="9" fill="currentColor" r="1.25" stroke="none" />
-			<circle cx="11.5" cy="14.25" fill="currentColor" r="1.25" stroke="none" />
-		</svg>
-	);
-}
 
 /** Where a drop lands: before or after a block. */
 export type Place = "before" | "after";
@@ -517,7 +504,7 @@ export function BlockHandlePlugin() {
 					title="Drag to move, click for options"
 					type="button"
 				>
-					<GripIcon />
+					<GripIcon size={16} />
 				</button>
 			)}
 			{drop && (
