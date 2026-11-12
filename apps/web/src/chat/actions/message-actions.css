@@ -295,13 +295,17 @@
 	height: calc(var(--spacing) * 6);
 	border-radius: var(--radius-full);
 	background: var(--color-inset);
-	outline: var(--edge-width) solid var(--color-edge);
-	outline-offset: calc(-1 * var(--edge-width));
 	padding-inline: calc(var(--spacing) * 1.5);
 	font-size: var(--text-2xs);
 	line-height: 1;
 	color: var(--color-text-secondary);
 	transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+/* The hairline is an outline at no specificity, so the theme's focus ring replaces it. */
+:where(.chat-reaction) {
+	outline: var(--edge-width) solid var(--color-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 }
 
 /* Slack's add-reaction pill, after the reactions, for a pointer on the row. */
@@ -363,12 +367,6 @@
 
 .chat-reaction[aria-pressed="true"] .chat-reaction-count {
 	font-weight: 700;
-}
-
-/* The pill draws its hairline as an outline, which would hide the focus ring; give it back. */
-:root:not([data-focus-input="pointer"]) .chat-reaction:focus-visible {
-	outline: var(--focus-ring-width) solid var(--focus-ring-color);
-	outline-offset: var(--focus-ring-offset);
 }
 
 /* Where the coarse pointer's target grows, the pill keeps its look. */
