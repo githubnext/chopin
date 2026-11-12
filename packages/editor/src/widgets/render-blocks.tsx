@@ -65,6 +65,7 @@ import { enclosing, remember } from "../collapse";
 import { widgets$ } from "../widget-options";
 import { describeDiagramError, kindOf, languageOptions, plainText, titleOf } from "./code";
 import { CodeView } from "./code-view";
+import { CopyCode } from "./code-copy";
 import { fitsLegibly } from "./diagram-fit";
 import { DiagramSheet, ExpandDiagram, FitDiagram } from "./diagram-sheet";
 import { usePhone } from "../pointer";
@@ -598,6 +599,7 @@ function Preview(
 					}
 					{wrappable && <Wrap block={block} editor={editor} />}
 					{hidable && !reading && <Toggle collapsed={collapsed} onToggle={onToggle} />}
+					{named && <CopyCode source={block.source} />}
 					{title && <span className="plan-code-title">{title}</span>}
 					{named && <Language block={block} editor={editor} disabled={disabled} />}
 				</div>,

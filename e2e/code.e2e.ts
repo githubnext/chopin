@@ -598,13 +598,13 @@ test("the language menu is a keyboard-operable listbox", async ({ join, room, se
 	await expect(list).toBeHidden();
 
 	// Tab from the open menu continues from the trigger, not from the end of the page.
-	// The source toggle sits just before the trigger, so Shift+Tab lands on it.
+	// Copy code sits just before the trigger, so Shift+Tab lands on it.
 	await trigger.focus();
 	await page.keyboard.press("ArrowDown");
 	await expect(list).toBeVisible();
 	await page.keyboard.press("Shift+Tab");
 	await expect(list).toBeHidden();
-	await expect(content(page).getByRole("button", { name: "Show source" })).toBeFocused();
+	await expect(content(page).getByRole("button", { name: "Copy code" })).toBeFocused();
 
 	await trigger.focus();
 	await page.keyboard.press("ArrowDown");
