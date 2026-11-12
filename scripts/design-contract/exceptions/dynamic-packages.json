@@ -1325,9 +1325,16 @@
 				"props",
 				"unresolved JSX props > SlidesIcon > <LineIcon>",
 				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > BotIcon > <LineIcon>",
+				1
 			]
 		],
-		"sourceHash": "1cfd1c1d0a0af4a934887e3d91657d67b983780bb5d15a07b18f7b78ff62df5c"
+		"sourceHash": "849f2df62af9c71dbef7c7bdcd359a747899273b1631673395f66322cfd735af"
 	},
 	{
 		"file": "packages/icons/src/copy.tsx",

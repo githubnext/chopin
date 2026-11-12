@@ -1,6 +1,7 @@
 export { GitHubIcon } from "./brand";
 export {
 	BallIcon,
+	BotIcon,
 	CarIcon,
 	ChevronDownIcon,
 	ChevronLeftIcon,

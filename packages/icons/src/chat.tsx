@@ -33,6 +33,19 @@ export function GlobeIcon(props: IconProps) {
 	);
 }
 
+/** A robot's head: an agent handing work to another. */
+export function BotIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect height="9" rx="2.5" width="12.5" x="2.75" y="6.25" />
+			<path d="M9 6.25v-3M.75 10.75h2M15.25 10.75h2" />
+			<circle cx="9" cy="2.5" fill="currentColor" r=".75" stroke="none" />
+			<circle cx="6.5" cy="10.5" fill="currentColor" r="1" stroke="none" />
+			<circle cx="11.5" cy="10.5" fill="currentColor" r="1" stroke="none" />
+		</LineIcon>
+	);
+}
+
 /** An open arc that turns while something loads. */
 export function SpinnerIcon(props: IconProps) {
 	return (
