@@ -21,7 +21,7 @@ test("touch chat input stays at least 16px to avoid focus zoom", async ({ join }
 });
 
 for (let touch of [false, true]) {
-	test(`chat input rests at ${touch ? "one line" : "two lines"} and grows to its cap on ${touch ? "a touch phone" : "desktop"}`, async ({ join }) => {
+	test(`chat input rests at one line and grows to its cap on ${touch ? "a touch phone" : "desktop"}`, async ({ join }) => {
 		let page = await join("ana", {
 			hasTouch: touch,
 			viewport: touch ? { width: 390, height: 844 } : { width: 1440, height: 900 },
@@ -43,8 +43,8 @@ for (let touch of [false, true]) {
 				maximum: parseFloat(getComputedStyle(element.parentElement!).maxHeight),
 			};
 		});
-		// A phone's pill composer rests at one line; desktop keeps room for two.
-		expect(initial.height).toBeCloseTo(initial.padding + (touch ? 1 : 2) * initial.line, 0);
+		// Slack's message box rests at one line, on a phone and on a desktop alike.
+		expect(initial.height).toBeCloseTo(initial.padding + initial.line, 0);
 		await fillChat(input, "One\nTwo\nThree\nFour");
 		await expect.poll(() => input.evaluate(element => element.getBoundingClientRect().height))
 			.toBeGreaterThan(initial.height);
