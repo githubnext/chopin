@@ -14,6 +14,7 @@ type KIND<K extends string> = Frame & { kind: K };
 export declare namespace Chat {
 	export type Incoming =
 		| Request<Send>
+		| Request<Retry>
 		| Request<OpenThread>
 		| Request<Abort>
 		| Request<Resume>
@@ -32,6 +33,8 @@ export declare namespace Chat {
 		| Tool
 		| State
 		| Sent
+		| Retried
+		| Removed
 		| ThreadOpened
 		| ThreadSummaries
 		| ThreadSummaryUpdated
@@ -534,6 +537,31 @@ export declare namespace Chat {
 		 */
 		alsoToChat?: boolean;
 	};
+
+	/**
+	 * Run the Planner turn of a message again, after it failed: the same message, never a new one.
+	 *
+	 * `message` is the member message to the Planner whose turn failed. Only its sender may ask, on
+	 * the top-level Chat, while no turn is running and that failure is the latest Planner turn: no
+	 * agent entry, Planner message or other failure after its notice. A failure that sending again
+	 * cannot help (`refused`, `dropped`) is refused. The server takes the failed attempt out of the
+	 * transcript (its failure notice and every agent entry the attempt wrote), saves that, answers
+	 * with `Retried`, tells the room with `Removed`, and runs the turn for `message` as it began the
+	 * first time. The agent is given the message once and nothing of the failed attempt (see
+	 * `retry-turn` in the agent connection). It takes the same write access as `Send`, and is
+	 * refused like it (`planner-not-attached`, `planner-busy`, or a passing trouble); nothing is held.
+	 */
+	export type Retry = KIND<"chat:retry"> & { message: string };
+
+	/** The retry is accepted: the turn of `message` is running again. */
+	export type Retried = KIND<"chat:retry"> & { message: string };
+
+	/**
+	 * Entries that are no longer in the transcript, saved before this is sent: a failed attempt a
+	 * Retry replaced. A client drops them. One that does not know the frame keeps showing them
+	 * until its next `History`.
+	 */
+	export type Removed = KIND<"chat:removed"> & { ids: string[] };
 
 	/** Summary of replies under a root Chat message, shown in the main transcript. */
 	export type ThreadSummary = {

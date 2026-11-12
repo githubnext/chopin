@@ -34,6 +34,7 @@ export const WIRE = {
 	attachments: "attachments",
 	sessionForks: "session-forks",
 	steerTurn: "steer-turn",
+	retryTurn: "retry-turn",
 	/** How often a client retries a `resume` refused with `retry`, after a `restarting` notice. */
 	restartResumeRetryMs: 250,
 } as const;
@@ -128,6 +129,12 @@ export type AgentOptions = {
 	 * Asks for `session-forks` when `handlers.fork` is supplied, unless `false`.
 	 */
 	sessionForks?: boolean;
+	/**
+	 * Asks for `retry-turn`: a turn then names the Chat message it answers
+	 * (`TurnContext.message.message`), and one that runs a failed message again carries `retry`, so
+	 * the client can drop what the earlier turns for that message left in what it keeps.
+	 */
+	retryTurns?: boolean;
 };
 
 /** A question this client asked and still waits on, which a later link may carry on. */
@@ -251,6 +258,7 @@ export function linkSocket(
 	attachments = false,
 	sessionForks = false,
 	steering = false,
+	retryTurns = false,
 ): WebSocket {
 	return new (WebSocket as unknown as HeaderWebSocket)(url, {
 		headers: {
@@ -263,6 +271,7 @@ export function linkSocket(
 				...(attachments ? [WIRE.attachments] : []),
 				...(sessionForks ? [WIRE.sessionForks] : []),
 				...(steering ? [WIRE.steerTurn] : []),
+				...(retryTurns ? [WIRE.retryTurn] : []),
 			].join(", "),
 		},
 		protocols: [WIRE.subprotocol],
@@ -468,6 +477,7 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 		options.attachments === true,
 		sessionForks,
 		options.handlers.steer !== undefined,
+		options.retryTurns === true,
 	);
 	let turns = new Map<string, TurnState>();
 	let asks = new Map<string, PendingAsk>();

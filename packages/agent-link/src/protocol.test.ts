@@ -19,6 +19,8 @@ import {
 	usableCatalog,
 } from "./protocol";
 
+import type { ServerMessage, ServerMessageOf } from "./protocol";
+
 describe("Agent connection messages", () => {
 	it("accepts each client message the protocol declares", () => {
 		let messages = [
@@ -328,6 +330,7 @@ describe("Agent connection messages", () => {
 			attachments: AGENT_FEATURES.attachments,
 			sessionForks: AGENT_FEATURES.sessionForks,
 			steerTurn: AGENT_FEATURES.steerTurn,
+			retryTurn: AGENT_FEATURES.retryTurn,
 			restartResumeRetryMs: RESTART_RESUME_RETRY_MS,
 		});
 		expect(AGENT_FEATURES.restartNotice).toBe("restart-notice");
@@ -354,6 +357,28 @@ describe("Agent connection messages", () => {
 		expect(parseServerMessage(JSON.stringify({ ...steer, extra: 1 }))).toMatchObject({ ok: false });
 		// Only the server steers: a client that sends one is malformed.
 		expect(parseClientMessage(JSON.stringify(steer))).toMatchObject({ ok: false });
+	});
+
+	it("names the Chat message a turn answers, and a retry of it as `true` or nothing", () => {
+		expect(AGENT_FEATURES.retryTurn).toBe("retry-turn");
+		let turn: ServerMessage = {
+			type: "turn",
+			session: "s",
+			turn: "t",
+			prompt: "@ana: Hey there!",
+			message: "m",
+			retry: true,
+			tools: [],
+		};
+		expect(parseServerMessage(encodeMessage(turn))).toEqual({ ok: true, message: turn });
+		let { message: _, retry: __, ...plain } = turn as ServerMessageOf<"turn">;
+		expect(parseServerMessage(encodeMessage(plain))).toEqual({ ok: true, message: plain });
+		expect(parseServerMessage(JSON.stringify({ ...turn, retry: false }))).toMatchObject({
+			ok: false,
+		});
+		expect(parseServerMessage(JSON.stringify({ ...turn, message: "" }))).toMatchObject({
+			ok: false,
+		});
 	});
 
 	it("marks a refusal as worth retrying only when the server says so", () => {

@@ -76,6 +76,16 @@ export const AGENT_FEATURES = {
 	 * message sent while this client works is refused rather than held.
 	 */
 	steerTurn: "steer-turn",
+	/**
+	 * A turn a person's Chat message began names that message in `message`. When a turn failed and
+	 * its sender pressed Retry, the turn that runs it again carries the same `message` and
+	 * `retry: true`, and its prompt is the message as first given: the client drops from what it
+	 * keeps everything the earlier turns for that message added (their prompt, the model's partial
+	 * reply, tool calls and results, and the error) and runs this one as the message's only turn.
+	 * Without the feature a turn carries neither field; the server still gives a retried turn a
+	 * fresh session whose `instructions` hold neither the message nor the failed attempt.
+	 */
+	retryTurn: "retry-turn",
 } as const;
 
 /** How often a client that offered `restart-notice` retries a `resume` refused with `retry`. */
@@ -630,6 +640,18 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 		 * order they were sent. Absent when it had none, and always for a client that did not ask.
 		 */
 		attachments: z.array(turnAttachment).max(MAX_TURN_ATTACHMENTS).optional(),
+		/**
+		 * With `retry-turn`: the Chat message this turn answers, by its id. Absent for a turn no
+		 * person's message began (a background job, an instruction the server wrote), and always for
+		 * a client that did not ask.
+		 */
+		message: id.optional(),
+		/**
+		 * With `retry-turn`, and only with `message`: this turn runs `message` again after an
+		 * earlier turn for it failed. Drop everything the earlier turns for `message` added before
+		 * running it.
+		 */
+		retry: z.literal(true).optional(),
 		tools: z.array(toolSpec).max(MAX_TOOLS),
 		responseFormat: responseFormat.optional(),
 	}),
