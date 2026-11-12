@@ -183,10 +183,11 @@ async function open(
 	browser: import("@playwright/test").Browser,
 	room: string,
 	options: object = {},
+	handle = HANDLE,
 ) {
 	let context = await browser.newContext(options);
 	let page = await context.newPage();
-	await authenticate(page, HANDLE, ORIGIN);
+	await authenticate(page, handle, ORIGIN);
 	await page.goto(`${ORIGIN}${roomPath(room)}`);
 	await ready(page);
 	return page;
@@ -220,7 +221,17 @@ test("a model that cannot read images is not sent one: the + says why, and an im
 	await expect(chat(page)).toBeVisible();
 	await expect(ask(page)).toBeVisible();
 
-	// To the room, anyone reads an image: nothing is said.
+	// Alone in the document, every message is chopin's, so the + says why without a mention.
+	await expect(chatInput(chat(page))).toHaveAttribute("data-placeholder", "Message chopin");
+	await expect(plus(page)).toHaveAttribute("title", `Add files. ${REASON}`);
+
+	// With a teammate here, a message without the mention is the room's, and anyone reads an image
+	// there: nothing is said.
+	let teammate = await open(browser, room, {}, "bo");
+	await expect(chatInput(chat(page))).toHaveAttribute(
+		"data-placeholder",
+		"Message the team, or @chopin to ask",
+	);
 	await expect(plus(page)).toHaveAttribute("title", "Add files");
 	await ask(page).click();
 	await expect(asking(page)).toBeVisible();
@@ -275,6 +286,7 @@ test("a model that cannot read images is not sent one: the + says why, and an im
 	]);
 	await expect(chat(page).getByText("Done.")).toBeVisible();
 	await client.detach();
+	await teammate.context().close();
 });
 
 test("a model that reads images is sent the image as its bytes, with the text file, in the turn", async ({ browser }) => {
