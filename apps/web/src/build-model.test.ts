@@ -13,6 +13,7 @@ import {
 	buildRefusalCopy,
 	buildTabReady,
 	builtCount,
+	builtDetail,
 	draftRefusalCopy,
 	elapsed,
 	endedReason,
@@ -1022,5 +1023,44 @@ describe("endedReason", () => {
 		expect(endedReason({ error: "Local implementation failed. Inspect the connector terminal." }))
 			.toBeUndefined();
 		expect(endedReason(undefined)).toBeUndefined();
+	});
+});
+
+describe("an agent stopped at its time limit", () => {
+	const SAID = "Its agent ran for 4 hours, so chopin stopped it.";
+
+	it("is named when it ends a build short of its tasks", () => {
+		expect(endedReason({ error: SAID })).toBe("Build stopped — its agent ran for 4 hours.");
+	});
+
+	it("stays Built when every task finished first, and the card says how its agent ended", () => {
+		let ended = { ...live(), build: { ...build("failed"), error: SAID } };
+		expect(
+			buildLook(ended, {
+				state: { stage: "idle" },
+				userId: "u",
+				live: false,
+				canEdit: true,
+				connected: true,
+				planner: true,
+				hasContent: true,
+			}).kind,
+		).toBe("built");
+		expect(builtDetail(ended)).toBe(
+			"Every task finished, then its agent ran for 4 hours and chopin stopped it",
+		);
+		expect(builtDetail(live())).toBeUndefined();
+	});
+});
+
+describe("a pull request a person closed", () => {
+	it("is named on the built card, and builds open new pull requests instead", () => {
+		let closed = live({
+			commits: [{ pullRequest: PR, sha: "a".repeat(40), message: "m", revision: 5, at: "x" }],
+			closedPullRequests: [{ url: PR, state: "closed", at: "2026-10-10T10:00:00.000Z" }],
+		});
+		expect(builtDetail(closed)).toBe(
+			"1 commit since first build. #7 closed on GitHub, so builds open new pull requests instead",
+		);
 	});
 });

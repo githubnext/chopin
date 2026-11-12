@@ -142,6 +142,42 @@ function quote(raw: string): string {
  * disconnecting, its agent going quiet while the machine stayed connected, or Chopin restarting.
  * Other failures keep the phase's own words.
  */
+/** How a connector says it stopped an agent that ran past its time limit; see the connector's `timedOut`. */
+const AGENT_TIMED_OUT = /^Its agent ran for (.{1,40}), so chopin stopped it\.$/;
+
+/**
+ * What a built document's card says besides its pull requests: rebuilds' commits since, pull
+ * requests a person closed or merged, and an agent that was stopped after its last task. A build
+ * that delivered every task is built, but its agent's end is not hidden.
+ */
+export function builtDetail(snapshot: Snapshot | undefined): string | undefined {
+	if (!snapshot) return;
+	let notes: string[] = [];
+	let commits = snapshot.live?.commits.length ?? 0;
+	if (commits > 0) notes.push(`${plural(commits, "commit", "commits")} since first build`);
+	let closed = snapshot.live?.closedPullRequests ?? [];
+	if (closed.length) {
+		let numbers = closed.map(item => {
+			let number = pullRequestNumber(item.url);
+			return number === undefined ? "A pull request" : `#${number}`;
+		});
+		let merged = closed.every(item => item.state === "merged");
+		notes.push(
+			`${numbers.join(", ")} ${
+				merged ? "merged" : "closed"
+			} on GitHub, so builds open new pull requests instead`,
+		);
+	}
+	let build = snapshot.build;
+	let ran = build?.state === "failed" && build.error
+		? AGENT_TIMED_OUT.exec(build.error)
+		: undefined;
+	if (ran) {
+		notes.push(`Every task finished, then its agent ran for ${ran[1]} and chopin stopped it`);
+	}
+	return notes.length ? notes.join(". ") : undefined;
+}
+
 export function endedReason(build: { error?: string } | undefined): string | undefined {
 	let error = build?.error;
 	if (error === "Stopped from the connector terminal.") {
@@ -156,6 +192,8 @@ export function endedReason(build: { error?: string } | undefined): string | und
 	if (error === "Chopin restarted, so this build ended.") {
 		return "Build stopped — Chopin restarted.";
 	}
+	let ran = error && AGENT_TIMED_OUT.exec(error);
+	if (ran) return `Build stopped — its agent ran for ${ran[1]}.`;
 	// Builds that ended before Chopin told these apart.
 	if (error?.startsWith("Workspace disconnected")) {
 		return "Build stopped — your local agent disconnected or stopped responding.";

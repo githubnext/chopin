@@ -22,6 +22,7 @@ import {
 	buildPhase,
 	buildProgress,
 	builtCount,
+	builtDetail,
 	linkParts,
 	liveTaskGroups,
 	liveTaskState,
@@ -283,15 +284,12 @@ export function BuildView(
 			};
 		}
 		if (look.kind === "built") {
-			let commits = snapshot?.live?.commits.length ?? 0;
 			return {
 				...base,
 				title: "Built",
 				count: builtCount(look),
 				glyph: <CheckIcon aria-hidden="true" className="build-card-check" />,
-				detail: commits > 0
-					? `${plural(commits, "commit", "commits")} since first build`
-					: undefined,
+				detail: builtDetail(snapshot),
 			};
 		}
 		if (look.kind === "stopped" || look.kind === "failed" || look.kind === "agent") {
