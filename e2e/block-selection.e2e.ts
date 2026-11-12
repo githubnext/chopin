@@ -308,3 +308,41 @@ test("a collaborator's block moves and deletes while another person types in it"
 	await bo.keyboard.type(" Typed.");
 	await written(ana, room, /Alpha\. Typed\.\s*$/);
 });
+
+test("after the handle menu's Duplicate the editor keeps the keyboard on the copy, so Mod+Z undoes it at once", async ({ join, room, seed }) => {
+	await seed("One.\n\nTwo.\n\nThree.\n");
+	let page = await join("ana");
+	let handle = page.getByRole("button", { name: "Block options" });
+	let menu = page.getByRole("menu", { name: "Block" });
+	let editing = () =>
+		page.evaluate(() => !!document.activeElement?.closest(".plan-content[contenteditable=true]"));
+
+	await content(page).getByText("Two.").hover();
+	await handle.click();
+	await expect(menu).toBeVisible();
+	await menu.getByRole("menuitem", { name: "Duplicate" }).click();
+	await expect(menu).toBeHidden();
+	await written(page, room, /^One\.\n\nTwo\.\n\nTwo\.\n\nThree\.$/m);
+	await expect.poll(editing, { message: "the editor has the keyboard after Duplicate" }).toBe(true);
+	// The copy is the block selected, as Mod+D leaves it.
+	await expect(selected(page)).toHaveText("Two.");
+	await page.keyboard.press("ControlOrMeta+z");
+	await written(page, room, /^(?![\s\S]*Two\.\n\nTwo\.)[\s\S]*^One\.\n\nTwo\.\n\nThree\.$/m);
+
+	// Turn into and Delete leave the keyboard in the editor too.
+	await content(page).getByText("Three.").hover();
+	await handle.click();
+	await menu.getByRole("menuitem", { name: "Heading 2" }).click();
+	await written(page, room, /^## Three\.$/m);
+	await expect.poll(editing, { message: "the editor has the keyboard after Turn into" }).toBe(true);
+	await page.keyboard.press("ControlOrMeta+z");
+	await written(page, room, /^(?![\s\S]*## Three)[\s\S]*^Three\.$/m);
+
+	await content(page).getByText("One.").hover();
+	await handle.click();
+	await menu.getByRole("menuitem", { name: "Delete" }).click();
+	await written(page, room, /^(?![\s\S]*One\.)[\s\S]*^Two\.\n\nThree\.$/m);
+	await expect.poll(editing, { message: "the editor has the keyboard after Delete" }).toBe(true);
+	await page.keyboard.press("ControlOrMeta+z");
+	await written(page, room, /^(?![\s\S]*Two\.\n\nTwo\.)[\s\S]*^One\.\n\nTwo\.\n\nThree\.$/m);
+});
