@@ -283,12 +283,12 @@ describe("design audit specimens", () => {
 		// The connection is the offline bar alone, and announces nothing itself: the page's one live
 		// region does. The machine's state is never drawn in Chat: chopin's quiet note says a message
 		// couldn't be taken, and the machine button's dot and menu tell the rest.
-		expect(chat).toMatch(/class="offline-bar" data-offline-bar=""[^>]*data-warning="true"/);
+		expect(chat).toMatch(/class="offline-bar"[^>]*data-offline-bar=""[^>]*data-warning="true"/);
 		expect(chat).not.toMatch(/data-offline-bar=""[^>]*role="(alert|status)"/);
 		expect(chat).toContain('data-phase="reconnecting"');
 		expect(chat).toContain('data-phase="dropped"');
 		expect(chat).not.toContain('data-phase="resumed"');
-		expect(chat).not.toContain("data-connection-banner");
+		expect(chat).not.toContain('data-layer="planner"');
 		expect(chat).not.toContain("Back. The reply kept going.");
 		expect(chat).toContain(">Reconnect</button>");
 		expect(chat).toContain("Couldn't finish the reply.");

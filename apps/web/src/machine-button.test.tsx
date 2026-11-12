@@ -281,8 +281,10 @@ test("the fix-it steps: a title, why in a sentence, numbered steps, each command
 	let markup = steps(machineFix(status, { mine: true, choose: true, place: "menu" }));
 	expect(markup).toContain('role="group"');
 	expect(markup).toContain('aria-label="Can\'t connect to Build box"');
-	expect(markup).toContain('<p class="fix-steps-title">Can\'t connect to Build box</p>');
-	expect(markup).toContain('<p class="fix-steps-why">It stops each time before it connects.</p>');
+	expect(markup).toContain('<div class="fix-steps-title">Can\'t connect to Build box</div>');
+	expect(markup).toContain(
+		'<div class="fix-steps-why">It stops each time before it connects.</div>',
+	);
 	expect(markup).toContain('<ol class="fix-steps-list">');
 	expect(markup.match(/<li class="fix-steps-step">/g)).toHaveLength(4);
 	expect(markup).toContain(
@@ -290,7 +292,7 @@ test("the fix-it steps: a title, why in a sentence, numbered steps, each command
 	);
 	// A command is never inline in a sentence: it stands in its own block, with its own Copy.
 	expect(markup).toContain(
-		'<span>On Build box, see why it stops:</span><div class="fix-steps-command"><code>chopin status</code>',
+		'<span>On Build box, see why it stops:</span><div class="fix-steps-command"><span class="fix-steps-code">chopin status</span>',
 	);
 	expect(markup).toContain('aria-label="Copy chopin status"');
 	// The machine's words, folded away, and how often it was tried, quietly at the foot, set apart
@@ -338,11 +340,11 @@ test("the top of the menu tells a state with nothing to fix as one sentence", ()
 		renderToStaticMarkup(
 			createElement(PlannerNote, { status: plannerStatus(planner, "Build box")! }),
 		);
-	expect(say({ state: "starting", login: "mona" })).toContain("<p>Connecting to Build box</p>");
+	expect(say({ state: "starting", login: "mona" })).toContain("<div>Connecting to Build box</div>");
 	expect(say({ state: "held", login: "mona", until: AT })).toContain(
-		"<p>Build box stepped away.",
+		"<div>Build box stepped away.",
 	);
-	expect(say({ state: "none" })).toContain("<p>No machine is connected.</p>");
+	expect(say({ state: "none" })).toContain("<div>No machine is connected.</div>");
 	expect(say({ state: "none" })).not.toContain("<a");
 	expect(say({ state: "none" })).toContain('role="separator"');
 });
