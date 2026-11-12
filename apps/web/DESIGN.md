@@ -149,6 +149,10 @@ Keep labels and tooltips concise and in sentence case. Capitalize the first word
 and proper names; preserve handles and keyboard shortcuts as written. Use helper
 text only when people need it to act or recover.
 
+A control is named by one hover text: the shared tooltip, or a copied element's own (the
+`TooltipIconButton` on a Chat code block), never both, and never the browser's native title
+beside or after it, a pressed control's included.
+
 A person is named by their GitHub handle exactly as GitHub has it, the way Slack
 shows a username: never capitalized, with its digits, underscores and hyphens
 (`lavaman131`, `mona_acme`, `Hubot-Bot`), in Chat rows, reactions, threads,
