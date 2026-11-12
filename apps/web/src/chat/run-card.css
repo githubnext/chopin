@@ -36,7 +36,8 @@
 	}
 }
 
-.run-row + .run-row {
+/* The hairline between runs is the line's own, so the pointer on it is on the line (run-row.css). */
+.run-row + .run-row > .run-head {
 	border-top: var(--edge-width) solid var(--color-edge);
 }
 

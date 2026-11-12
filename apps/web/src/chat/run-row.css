@@ -1,7 +1,9 @@
 /*
  * A run's line in the workflow card is shaded across the card's whole width under the pointer,
  * square, as a Chat row is across Chat; the card's own corners round the first line and the last.
- * The toggle keeps its own box for its hit area and focus ring.
+ * The hairline above a line is its own and the shade runs under it, so lines meet with no band
+ * between them and a pointer moving down the card shades one line after the next. The toggle keeps
+ * its own box for its hit area and focus ring.
  */
 .run-stack {
 	isolation: isolate;
@@ -22,6 +24,10 @@
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.run-row + .run-row > .run-head::before {
+	inset-block-start: calc(-1 * var(--edge-width));
 }
 
 .run-head:hover::before {
