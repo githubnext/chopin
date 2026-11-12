@@ -35,6 +35,7 @@ import {
 import { $isCalloutNode, $isColumnNode, $isTabNode } from "@chopin/dialect";
 
 import { usePopoverDismissal } from "../popover-dismissal";
+import { useTransitionPresence } from "../transition-presence";
 import { $block, convertBlock } from "../toolbar/bubble";
 import { isApplePlatform, shortcut } from "../toolbar/shortcut";
 import { $plainBlock } from "./block-keys";
@@ -178,6 +179,9 @@ export function BlockHandlePlugin() {
 	let [drop, setDrop] = useState<Drop>();
 	let [menu, setMenu] = useState<{ top: number; left: number; groups: Group[] }>();
 	let [active, setActive] = useState(0);
+	// Kept while the menu fades out, as every dropdown here does.
+	let presence = useTransitionPresence(menu, 150, false);
+	let shown = presence.value;
 	let handle = useRef<HTMLButtonElement>(null);
 	let panel = useRef<HTMLDivElement>(null);
 	let hovered = useRef<string>(undefined);
@@ -463,7 +467,7 @@ export function BlockHandlePlugin() {
 		button.addEventListener("pointercancel", onCancel);
 	};
 
-	let items = menu?.groups.flatMap(group => group.items) ?? [];
+	let items = shown?.groups.flatMap(group => group.items) ?? [];
 	let onMenuKey = (event: ReactKeyboardEvent) => {
 		let step = (from: number, by: number) => {
 			for (let at = from + by; at >= 0 && at < items.length; at += by) {
@@ -524,17 +528,21 @@ export function BlockHandlePlugin() {
 					style={{ top: drop.top, left: drop.left, width: drop.width }}
 				/>
 			)}
-			{menu && (
+			{shown && (
 				<div
 					aria-label="Block"
-					className="plan-block-menu motion-dropdown fixed z-50 min-w-52 menu-surface"
+					className={presence.className === "is-open"
+						? "plan-block-menu motion-dropdown is-open fixed z-50 min-w-52 menu-surface"
+						: presence.className === "is-closing"
+						? "plan-block-menu motion-dropdown is-closing fixed z-50 min-w-52 menu-surface"
+						: "plan-block-menu motion-dropdown fixed z-50 min-w-52 menu-surface"}
 					onKeyDown={onMenuKey}
 					ref={panel}
 					role="menu"
-					style={{ top: menu.top, left: Math.max(8, menu.left) }}
+					style={{ top: shown.top, left: Math.max(8, shown.left), transformOrigin: "top left" }}
 					tabIndex={-1}
 				>
-					{menu.groups.map((group, at) => (
+					{shown.groups.map((group, at) => (
 						<div
 							aria-label={group.label}
 							className="plan-block-menu-group"

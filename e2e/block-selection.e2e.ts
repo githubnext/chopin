@@ -177,6 +177,7 @@ test("the handle drags a block to where the line shows, and its menu turns, dupl
 	await handle.click();
 	let menu = page.getByRole("menu", { name: "Block" });
 	await expect(menu).toBeVisible();
+	await expect(menu).toHaveCSS("opacity", "1");
 	await expect(selected(page)).toHaveText("Two.");
 	await menu.getByRole("menuitem", { name: "Heading 2" }).click();
 	await written(page, room, /^## Two\.$/m);
