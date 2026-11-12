@@ -9,6 +9,7 @@ import {
 	realpathSync,
 	renameSync,
 	rmSync,
+	statSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -16,13 +17,16 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { sandboxLabel } from "@chopin/protocol/connector";
 import type { Host } from "./sandbox-probe";
+import { mxcRequest } from "./sandbox-policy";
 import {
 	createSandbox,
 	inspectSandbox,
+	LAUNCHER,
 	launchPolicy,
 	locateExecutor,
 	SandboxRefused,
 	sdkRoot,
+	sealedEnvironment,
 	spawnIn,
 	systemHost,
 } from "./sandbox";
@@ -870,4 +874,46 @@ test("the SDK package is found by walking up node_modules, never by a resolver t
 	writeFileSync(join(nested, "package.json"), "{}");
 	mkdirSync(join(scratch, "app", "src", "deep"), { recursive: true });
 	expect(sdkRoot(join(scratch, "app", "src", "deep"))).toBe(nested);
+});
+
+test("on Linux and macOS a launch's environment goes to the sandbox in a 0600 file its shell reads, never on a command line; Windows passes it as it did", () => {
+	let folder = mkdtempSync(join(scratch, "sealed-"));
+	let policy = {
+		platform: "linux" as NodeJS.Platform,
+		engine: "bubblewrap" as const,
+		command: ["agent", "--acp"],
+		cwd: folder,
+		env: {
+			PATH: "/usr/bin",
+			CHOPIN_PLANNER_TOKEN: "chopin_p_secret",
+			QUOTED: "it's",
+			HTTPS_PROXY: "http://person:password@proxy:8080",
+			"ODD.NAME": "x",
+			GONE: undefined,
+		},
+		readable: [],
+		writable: [],
+		denied: [],
+		proxy: "http://127.0.0.1:1",
+	};
+	let sealed = sealedEnvironment(policy, folder);
+	let file = join(folder, ".chopin-launch-environment");
+	expect(sealed.command).toEqual(["/bin/sh", "-c", LAUNCHER, "chopin-launch", "agent", "--acp"]);
+	// The only values left for MXC's command line: the search path, the file, and a name no shell
+	// can export.
+	expect(sealed.env).toEqual({
+		PATH: "/usr/bin",
+		CHOPIN_LAUNCH_ENVIRONMENT: file,
+		"ODD.NAME": "x",
+	});
+	expect(JSON.stringify(mxcRequest(sealed))).not.toContain("chopin_p_secret");
+	// The person's proxy neither reaches the command line nor replaces the one MXC sets.
+	expect(readFileSync(file, "utf8")).toBe(
+		"PATH='/usr/bin'\nCHOPIN_PLANNER_TOKEN='chopin_p_secret'\nQUOTED='it'\\''s'\n",
+	);
+	expect(statSync(file).mode & 0o777).toBe(0o600);
+	expect(sealedEnvironment({ ...policy, platform: "win32" }, folder)).toEqual({
+		...policy,
+		platform: "win32",
+	});
 });

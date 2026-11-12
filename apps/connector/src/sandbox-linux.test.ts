@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { answerTokens } from "./testing/github-grant";
+import { answerTokens, testGitHubToken } from "./testing/github-grant";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -13,6 +13,7 @@ import {
 	realpathSync,
 	renameSync,
 	rmSync,
+	statSync,
 	symlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -22,6 +23,7 @@ import { runAgent } from "./acp";
 import { checkouts } from "./checkouts";
 import { createOutput } from "./output";
 import { servePlanners } from "./planner";
+import { runWork } from "./run";
 import { discardWorkspace, preparePlannerWorktree, prepareWorkspace } from "./workspace";
 import { gitAsync, gitSync, repositoryAt } from "./git-host";
 import { createSandbox, inspectSandbox } from "./sandbox";
@@ -1642,3 +1644,245 @@ curl -sS -m 10 -o /dev/null ${chopin.url} > /dev/null 2>&1 && echo chopin=ok || 
 	},
 	180_000,
 );
+
+/** The processes, other than this test's own, whose command line holds any of `values`. */
+function onCommandLines(values: string[]) {
+	let found: string[] = [];
+	for (let pid of readdirSync("/proc").filter(name => /^\d+$/.test(name))) {
+		let line: string;
+		try {
+			line = readFileSync(`/proc/${pid}/cmdline`, "utf8").replaceAll("\0", " ");
+		} catch {
+			continue;
+		}
+		if (Number(pid) === process.pid) continue;
+		for (let value of values) if (line.includes(value)) found.push(`${pid}: ${line.slice(0, 200)}`);
+	}
+	return found;
+}
+
+/** Waits for `path` to be written, as a launch says it started. */
+async function written(path: string, ms = 60_000) {
+	for (let deadline = Date.now() + ms; !existsSync(path); await Bun.sleep(50)) {
+		if (Date.now() > deadline) throw new Error(`${path} was never written.`);
+	}
+	await Bun.sleep(50);
+	return JSON.parse(readFileSync(path, "utf8")) as Record<string, string | null>;
+}
+
+/** The mode of `path`, as octal digits. */
+function mode(path: string) {
+	return (statSync(path).mode & 0o777).toString(8);
+}
+
+sandboxTest(
+	"a sandboxed launch has every variable it was given, with none of their values on any process's command line",
+	async () => {
+		let made = world("sealed");
+		let sandbox = await createSandbox({
+			directory: made.state,
+			home,
+			server: "http://127.0.0.1:1",
+		});
+		let secret = `secret-${crypto.randomUUID()}`;
+		let tricky = `it's "${secret}" $HOME \`x\`\nnext line`;
+		let report = join(made.root, "work");
+		mkdirSync(report);
+		try {
+			let child = sandbox.spawn({
+				command: [
+					"/bin/sh",
+					"-c",
+					'printf "%s" "$CHOPIN_TEST_TRICKY" > "$PWD/env.txt"; '
+					+ 'printf "%s" "${CHOPIN_LAUNCH_ENVIRONMENT-unset}" > "$PWD/file.txt"; '
+					+ 'ls -A "$TMPDIR" > "$PWD/tmp.txt"; '
+					+ 'while [ ! -e "$PWD/release" ]; do sleep 0.05; done',
+				],
+				cwd: report,
+				env: { PATH: process.env.PATH, HOME: home, CHOPIN_TEST_TRICKY: tricky },
+				stdin: "ignore",
+				own: [report],
+			});
+			let closed = new Promise(resolve => child.once("close", resolve));
+			for (let deadline = Date.now() + 30_000; !existsSync(join(report, "tmp.txt"));) {
+				if (Date.now() > deadline) throw new Error("The launch never started.");
+				await Bun.sleep(50);
+			}
+			await Bun.sleep(100);
+			expect(onCommandLines([secret])).toEqual([]);
+			writeFileSync(join(report, "release"), "");
+			await closed;
+			// The value as given, quotes, a newline and a `$` included, and the file it came in gone.
+			expect(readFileSync(join(report, "env.txt"), "utf8")).toBe(tricky);
+			expect(readFileSync(join(report, "file.txt"), "utf8")).toBe("unset");
+			expect(readFileSync(join(report, "tmp.txt"), "utf8")).toBe("");
+		} finally {
+			await sandbox.close();
+		}
+	},
+	60_000,
+);
+
+sandboxTest(
+	"a sandboxed Planner has its credential and GitHub token as before, from files of mode 0600, and neither is on any process's command line",
+	async () => {
+		let made = world("planner-credentials");
+		let credential = `chopin_p_${crypto.randomUUID().replaceAll("-", "")}`;
+		let secret = `opaque-${crypto.randomUUID()}`;
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request) {
+				let issued = await answerTokens(request);
+				if (issued) return issued;
+				return Response.json({
+					token: credential,
+					expiresAt: Date.now() + 15 * 60_000,
+					document: { id: "D_1", repository: "octo-org/score" },
+				});
+			},
+		});
+		let origin = chopin.url.origin;
+		let sandbox = await createSandbox({ directory: made.state, home, server: origin });
+		let abort = new AbortController();
+		let quiet = { write: () => true };
+		let worktree = join(made.state, "planners", "octo-org", "score", "D_1");
+		let tokens = `${worktree}.tokens`;
+		let serving = servePlanners({
+			url: origin,
+			machine: MACHINE,
+			documents: ["D_1"],
+			command: [process.execPath, join(import.meta.dir, "testing/credential-planner.ts")],
+			checkouts: checkouts({
+				directory: made.state,
+				registered: { "octo-org/score": made.checkout },
+			}),
+			directory: made.state,
+			output: createOutput(quiet, quiet, {}),
+			signal: abort.signal,
+			env: {
+				OPAQUE_API_KEY: secret,
+				CHOPIN_TEST_HELD_NAMES: "CHOPIN_PLANNER_TOKEN,CHOPIN_GITHUB_TOKEN,OPAQUE_API_KEY",
+			},
+			sandbox,
+		});
+		try {
+			let held = await written(join(worktree, "held.json"));
+			let github = readFileSync(join(tokens, "github"), "utf8").trim();
+			let mcp = readFileSync(join(tokens, "mcp"), "utf8").trim();
+			// A backend that reads the variables still has them.
+			expect(held).toEqual({
+				CHOPIN_PLANNER_TOKEN: credential,
+				CHOPIN_GITHUB_TOKEN: github,
+				OPAQUE_API_KEY: secret,
+			});
+			expect(onCommandLines([credential, github, mcp, secret])).toEqual([]);
+			for (let name of ["github", "planner", "mcp", join("gh", "hosts.yml")]) {
+				expect(mode(join(tokens, name)), name).toBe("600");
+			}
+			expect(mode(tokens)).toBe("700");
+		} finally {
+			abort.abort();
+			await serving;
+			await sandbox.close();
+			await chopin.stop(true);
+		}
+	},
+	90_000,
+);
+
+for (let kind of ["build", "investigation", "spike"] as const) {
+	sandboxTest(
+		`a sandboxed ${kind}'s agent has its run's variables as before, and no token of the run is on any process's command line`,
+		async () => {
+			let made = world(`run-credentials-${kind}`);
+			let secret = `opaque-${crypto.randomUUID()}`;
+			let runToken = `chopin_r_${crypto.randomUUID().replaceAll("-", "")}`;
+			let github = `ghs_${crypto.randomUUID().replaceAll("-", "")}`;
+			let sandbox = await createSandbox({
+				directory: made.state,
+				home,
+				server: "http://127.0.0.1:1",
+			});
+			let implementation = kind === "build";
+			let id = crypto.randomUUID();
+			let source = {
+				repositoryId: "R_score",
+				repository: "octo-org/score",
+				commit: git(made.checkout, "rev-parse", "HEAD"),
+			};
+			let api = { call: async () => ({}) } as unknown as Parameters<typeof runWork>[0];
+			let done = runWork(
+				api,
+				implementation ? "implementation" : "experiment",
+				implementation
+					? { documentId: "D_1", build: { id, ...source, checkout: source }, runToken }
+					: {
+						spike: kind === "spike",
+						generation: 1,
+						runToken,
+						input: {
+							id,
+							documentId: crypto.randomUUID(),
+							brief: "Look",
+							source,
+							context: "",
+							requester: "a",
+							authorizer: "a",
+						},
+					},
+				{
+					checkouts: checkouts({
+						directory: made.state,
+						registered: { "octo-org/score": made.checkout },
+					}),
+					directory: made.state,
+					command: [
+						process.execPath,
+						join(import.meta.dir, "testing/fake-implementer.ts"),
+						"--hold",
+					],
+					url: "http://127.0.0.1:1",
+					signal: new AbortController().signal,
+					output: createOutput({ write: () => true }, { write: () => true }, {}),
+					heartbeatMs: 60_000,
+					env: {
+						OPAQUE_API_KEY: secret,
+						CHOPIN_TEST_HELD_NAMES: "OPAQUE_API_KEY,CHOPIN_GITHUB_TOKEN_FILE,GH_CONFIG_DIR",
+					},
+					github: request => testGitHubToken(request.folder, github),
+					sandbox,
+				},
+			);
+			let runs = join(made.state, "runs");
+			try {
+				let worktree = "";
+				for (let deadline = Date.now() + 60_000; !worktree; await Bun.sleep(50)) {
+					if (Date.now() > deadline) throw new Error("The agent never started.");
+					let found = existsSync(runs)
+						? readdirSync(runs).find(name =>
+							!name.endsWith(".tokens") && existsSync(join(runs, name, "held.json"))
+						)
+						: undefined;
+					if (found) worktree = join(runs, found);
+				}
+				let held = await written(join(worktree, "held.json"));
+				expect(held.OPAQUE_API_KEY).toBe(secret);
+				expect(onCommandLines([secret, runToken, github])).toEqual([]);
+				if (kind === "spike") {
+					// A prototype is given no token at all.
+					expect(held.CHOPIN_GITHUB_TOKEN_FILE).toBeNull();
+				} else {
+					expect(mode(held.CHOPIN_GITHUB_TOKEN_FILE!)).toBe("600");
+					expect(mode(join(held.GH_CONFIG_DIR!, "hosts.yml"))).toBe("600");
+					expect(mode(dirname(held.CHOPIN_GITHUB_TOKEN_FILE!))).toBe("700");
+				}
+				writeFileSync(join(worktree, "release"), "");
+				await done;
+			} finally {
+				await sandbox.close();
+			}
+		},
+		90_000,
+	);
+}
