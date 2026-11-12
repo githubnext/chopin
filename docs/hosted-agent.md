@@ -83,9 +83,8 @@ document's model choice couldn't be read, and the server tells the room with `ch
 (`true`, and `false` when a later turn can read it again; a person who joins meanwhile is sent
 `true` after the Chat history), so every open composer shows the same words in its notice until a
 turn can read the choice again. Nothing stored is changed. These words are the composer's own
-notice, a cause of their own beside the page's connection banner: drawn beneath the machine's
-banner when that is drawn, and giving way, as the composer's other notices do, to the room's
-own connection banner, a refused send and a failed reply, then returning with the connection
+notice, a cause of their own: giving way, as the composer's other notices do, to the page's
+offline bar, a refused send and a failed reply, then returning with the connection
 ([design guide](../apps/web/DESIGN.md)).
 
 ### Commands the Planner offers
@@ -678,16 +677,16 @@ nothing. Otherwise the document's machine button carries it (the connecting dots
 the machine is connecting, a warning dot where it cannot connect, a muted grey dot
 while the Planner is away, and no dot at all where no machine is connected, the same
 bare icon as a button with no machine, never the machine's own green) with its words in
-the button's name and at the top of its menu, and as the connection banner at the Chat
-composer's top edge, once, as it changes: _reconnecting_ while a machine is being connected to,
-_dropped_ for a machine that cannot be connected to (with the reason exactly as the machine
-reported it, the attempts and _How to fix_, and a button that asks the machine to try again
-through `chat:wake`), that is offline or that has stepped away (no button: only that machine
-can come back), and, for a person with no machine button, _No machine is connected._ The
-page cannot hear the machine while the room's own connection is lost, so the banner then
-tells that connection alone and tells the machine again, with the state then known, once
-the connection is back. `plannerForBanner` and `connectionStep` decide this, so the button
-and the banner cannot disagree. A screen reader hears each phase once as it begins, from
+the button's name and tooltip, with the fix-it steps for a machine that cannot be connected
+to or is offline at the top of its menu (the reason exactly as the machine reported it under
+_Show details_). chopin's avatar carries the same presence. Chat draws none of it, as Slack
+draws a bot's state only as presence: a message to chopin it cannot take is a row only its
+sender sees, with _How to fix_. The web client no longer sends `chat:wake`, since the
+connector retries on its own within seconds; the server still answers it. The page cannot
+hear the machine while the room's own connection is lost, so the live region then tells that
+connection alone and tells the machine again, with the state then known, once the connection
+is back. `plannerForBanner` and `connectionStep` decide this, so the button and the live region
+cannot disagree. A screen reader hears each phase once as it begins, from
 one live region of the page, and nothing when it clears; the region remembers the machine
 state it last said, so one that carried on through a loss is not said again when the
 connection returns, and a different one is said once. Other harnesses never send it, and
@@ -709,7 +708,7 @@ run cards carry `disconnected` beside the status they last reported: each reads
 its clock held at the last report; an open card says what it last reported and what
 happens when the Planner returns. A card offers Pause, named as waiting for the Planner
 to reconnect, because Chopin holds it, and no Resume, which it cannot hold. While the
-page's connection banner shows, the cards say nothing of the machine: no **disconnected**, no
+page's offline bar shows, the cards say nothing of the machine: no **disconnected**, no
 note, and a plain Pause, with the status as last reported, a still neutral ring and the
 clock held; the words come back with the connection, as the state then is. Decisions
 stay where they were and stay answerable. **Build plan** says to reconnect the machine
@@ -742,8 +741,8 @@ third in a row `starting` carries a `failure` whose `attempts` are the launches 
 machine runs and that `chopin update` there shows why, where it is older than 0.0.23. A machine asked
 to run a document's Planner that has not attached one after `PLANNER_PATIENCE_MS` (2 minutes: enough for
 a first start that clones and builds) is told the same way, whichever connector it runs: _It hasn't
-answered yet_ or _It started but hasn't connected yet_, with `attempts` 0, which the banner words as
-_Waiting since 7:26 PM. Still trying._ The 15-second sweep announces it once. What a connector reports,
+answered yet_ or _It started but hasn't connected yet_, with `attempts` 0, which the menu words as
+_Not answered yet_, with _Waiting since 7:26 PM. Still trying._ under _Show details_. The 15-second sweep announces it once. What a connector reports,
 when it does, is told instead. All of it is forgotten as a report is, and when the document's machine
 is another, so a machine that was waited on is never waited on again from where it left off.
 
@@ -1190,11 +1189,12 @@ browser has it, in an outbox that sends it by itself, in order and once, when th
 is back, it says **Sending**; never waiting, queued or a clock. When the server refuses it because
 no machine took it or the running turn cannot take input mid-run, and the composer holds no newer
 draft, the message's words (with its chip, references and staged files) return to the composer
-draft under the refusal banner, so nothing typed is lost, and while Chopin works the composer's
+draft, chopin says why in a row at the end of the transcript only that person sees (with _How
+to fix_ where the machine has something to fix), so nothing typed is lost, and while Chopin works the composer's
 one button offers Stop so the person can stop Chopin and send it. When a newer draft was already
 typed, or another refusal turned the message down, it says **Couldn't send** on itself, with the
 reason, **Try again** and **Delete**, which act on the outbox alone since the server kept nothing.
-While the page's connection banner shows, both give way to it and return with the connection. The
+While the page's offline bar shows, both give way to it and return with the connection. The
 outbox is used only with a server that acknowledges sends (`chatSendAcks`), and only for messages
 to the machine. A teammate sees the steering message as an ordinary one where it was sent in the
 transcript, between the Planner's own lines. Stop is how to ask now: with an empty draft (or a
