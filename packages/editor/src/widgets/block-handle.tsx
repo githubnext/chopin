@@ -147,6 +147,16 @@ const GAP = 4;
  */
 export const HANDLE_LANE = HANDLE + GAP;
 
+/**
+ * Give the editor the keyboard back after the handle or its menu had it. Lexical's own focus only
+ * puts a caret back, and blocks selected as blocks have no caret, so it left the keyboard on the
+ * page's body and the next key, Mod+Z included, reached nothing.
+ */
+function refocus(editor: LexicalEditor): void {
+	editor.getRootElement()?.focus({ preventScroll: true });
+	editor.focus();
+}
+
 /** Where the handle sits for a block: to the left of its first line, past a list's marker. */
 function handleAt(editor: LexicalEditor, key: string, list: boolean): Hover | undefined {
 	let element = editor.getElementByKey(key);
@@ -260,7 +270,7 @@ export function BlockHandlePlugin() {
 				: undefined;
 			let back = () => {
 				setMenu(undefined);
-				editor.focus();
+				refocus(editor);
 			};
 			let turn = (next: Block) => () => {
 				back();
@@ -356,7 +366,7 @@ export function BlockHandlePlugin() {
 		target => panel.current?.contains(target) || handle.current?.contains(target),
 		() => {
 			setMenu(undefined);
-			editor.focus();
+			refocus(editor);
 		},
 	);
 
@@ -447,7 +457,7 @@ export function BlockHandlePlugin() {
 					if (first && last) $hold(editor, first, last);
 				}
 			});
-			editor.focus();
+			refocus(editor);
 		};
 		let onCancel = () => {
 			moving = undefined;
@@ -479,7 +489,7 @@ export function BlockHandlePlugin() {
 		if (event.key === "Tab") {
 			event.preventDefault();
 			setMenu(undefined);
-			editor.focus();
+			refocus(editor);
 			return;
 		}
 		if (!action) return;
