@@ -41,6 +41,8 @@ export type HostedWorkspaceProps = {
 	canEdit: boolean;
 	canManage: boolean;
 	archivedAt?: string;
+	/** Full width, the document's own layout setting. */
+	fullWidth?: boolean;
 	agent?: boolean;
 	userId: string;
 	onMetadataChanged?: (
@@ -49,6 +51,7 @@ export type HostedWorkspaceProps = {
 			| "archivedAt"
 			| "description"
 			| "descriptionRevision"
+			| "fullWidth"
 			| "slug"
 			| "title"
 			| "updatedAt"

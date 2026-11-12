@@ -1,0 +1,77 @@
+/*
+ * Full width, the document's own setting (as Notion's page setting): every block, prose included,
+ * uses the sheet's width inside its gutters. `100cqi` is read where the measure is used, inside the
+ * document's container, so the column follows the sheet as it resizes. Tables may grow to the same
+ * edges, and wide blocks stay aligned because they already span the gutters. Decisions and Build
+ * keep their own measure, and a phone never sets it: its column is already the screen's.
+ */
+.history-layout-main[data-document-width="full"] .plan {
+	--plan-measure: calc(100cqi - var(--plan-gutter) * 2);
+	--plan-table-measure: 100cqi;
+}
+
+/*
+ * The one moment of motion when the setting changes (`document-width.ts`): the page is laid out
+ * once, and the document's scroller, named for the view transition, shows its column's edges
+ * gliding from the old width to the new. The old lines fade out before the new ones fade in, so
+ * two wrappings of the same text are never drawn over each other. Only clip and opacity move;
+ * nothing is laid out again on each frame.
+ */
+::view-transition-group(document-column) {
+	animation-duration: var(--panel-open-dur);
+	animation-timing-function: var(--motion-move);
+}
+
+::view-transition-image-pair(document-column) {
+	isolation: auto;
+}
+
+::view-transition-old(document-column),
+::view-transition-new(document-column) {
+	animation-duration: var(--panel-open-dur);
+	animation-timing-function:
+		var(--motion-move),
+		var(--ease-out);
+	animation-fill-mode: both;
+	mix-blend-mode: normal;
+}
+
+::view-transition-old(document-column) {
+	animation-name: document-column-edges, document-column-out;
+}
+
+::view-transition-new(document-column) {
+	animation-name: document-column-edges, document-column-in;
+}
+
+@keyframes document-column-edges {
+	from {
+		clip-path: var(--document-column-from, none);
+	}
+
+	to {
+		clip-path: var(--document-column-to, none);
+	}
+}
+
+@keyframes document-column-out {
+	from {
+		opacity: 1;
+	}
+
+	40%,
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes document-column-in {
+	from,
+	40% {
+		opacity: 0;
+	}
+
+	to {
+		opacity: 1;
+	}
+}

@@ -46,6 +46,8 @@ export type Channel = {
 	descriptionRevision: number;
 	description?: string;
 	archivedAt?: string;
+	/** Full width, the document's own layout setting. Absent: the readable column. */
+	fullWidth?: boolean;
 	unansweredDecisions?: number;
 };
 
@@ -268,6 +270,15 @@ export function renameChannel(id: string, title: string): Promise<ChannelDetail>
 		method: "PATCH",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({ title }),
+	});
+}
+
+/** Turns the document's Full width on or off for everyone who reads it. */
+export function setDocumentFullWidth(id: string, fullWidth: boolean): Promise<ChannelDetail> {
+	return response(`/api/channels/${encodeURIComponent(id)}`, {
+		method: "PATCH",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ fullWidth }),
 	});
 }
 

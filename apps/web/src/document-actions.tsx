@@ -32,7 +32,13 @@ export type ProjectDocuments = {
 
 export type DocumentMetadata = Pick<
 	Api.Channel,
-	"title" | "slug" | "updatedAt" | "descriptionRevision" | "description" | "archivedAt"
+	| "title"
+	| "slug"
+	| "updatedAt"
+	| "descriptionRevision"
+	| "description"
+	| "archivedAt"
+	| "fullWidth"
 >;
 
 export function projectDocuments(
@@ -105,6 +111,7 @@ function sameMetadata(current: DocumentMetadata, replacement: DocumentMetadata):
 		&& current.slug === replacement.slug
 		&& current.updatedAt === replacement.updatedAt
 		&& current.archivedAt === replacement.archivedAt
+		&& !!current.fullWidth === !!replacement.fullWidth
 		&& current.descriptionRevision === replacement.descriptionRevision
 		&& current.description === replacement.description;
 }
@@ -123,6 +130,7 @@ export function newestDocumentMetadata(
 		updatedAt: core.updatedAt,
 		descriptionRevision: generated.descriptionRevision,
 		...(core.archivedAt ? { archivedAt: core.archivedAt } : {}),
+		...(core.fullWidth ? { fullWidth: true } : {}),
 		...(generated.description !== undefined ? { description: generated.description } : {}),
 	};
 	if (sameMetadata(current, merged)) return current;
@@ -144,6 +152,8 @@ export function updateDocumentMetadata(
 	};
 	if (metadata.archivedAt === undefined) delete next.archivedAt;
 	else next.archivedAt = metadata.archivedAt;
+	if (metadata.fullWidth) next.fullWidth = true;
+	else delete next.fullWidth;
 	if (metadata.description === undefined) delete next.description;
 	else next.description = metadata.description;
 	return next;

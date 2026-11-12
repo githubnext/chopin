@@ -1,0 +1,48 @@
+/*
+ * A setting in a menu that turns on and off, as Notion's Full width: the row names it and a small
+ * switch at its end shows its state. Not a chosen row of a choice, so it is not tinted; the switch
+ * says it, and never a check. Loaded with the workspace, the one place a menu holds a setting.
+ */
+.app-menu-switch-item[aria-checked="true"]:not(:hover, :focus-visible) {
+	background: none;
+	color: var(--color-text-secondary);
+}
+
+.app-menu-switch {
+	position: relative;
+	flex: none;
+	margin-inline-start: auto;
+	inline-size: calc(var(--spacing) * 7);
+	block-size: calc(var(--spacing) * 4);
+	border-radius: var(--radius-full);
+	background: var(--color-control-boundary);
+	transition: background-color var(--duration-fast) var(--ease-out);
+
+	&::after {
+		content: "";
+		position: absolute;
+		inset-block-start: calc(var(--spacing) * 0.5);
+		inset-inline-start: calc(var(--spacing) * 0.5);
+		inline-size: calc(var(--spacing) * 3);
+		block-size: calc(var(--spacing) * 3);
+		border-radius: var(--radius-full);
+		background: var(--color-page);
+		box-shadow: var(--shadow-resting);
+		transition: translate var(--duration-fast) var(--ease-out);
+	}
+
+	[aria-checked="true"] > & {
+		background: var(--color-brand);
+
+		&::after {
+			translate: calc(var(--spacing) * 3) 0;
+		}
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.app-menu-switch,
+	.app-menu-switch::after {
+		transition: none;
+	}
+}

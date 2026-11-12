@@ -33,7 +33,7 @@
 .plan-research-draft-host,
 .plan-research-draft {
 	width: 100%;
-	max-width: var(--document-prose-measure);
+	max-width: var(--plan-measure, var(--document-prose-measure));
 }
 
 .motion-research-draft {
@@ -166,7 +166,7 @@
 .plan-research-composer,
 .plan-research-tracked {
 	width: 100%;
-	max-width: var(--document-prose-measure);
+	max-width: var(--plan-measure, var(--document-prose-measure));
 }
 
 /* One surface: the composer is the field, so focus rings the whole card. */
