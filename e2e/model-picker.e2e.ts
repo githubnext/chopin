@@ -609,6 +609,111 @@ test("opens, searches, moves and chooses from the keyboard", async ({ browser })
 	await client.detach();
 });
 
+/**
+ * How an element is drawn on the popover: its background laid over the popover's (white where it
+ * has none), its text, and their contrast with each other and with the popover, as WCAG measures.
+ */
+async function drawn(target: Locator, text: Locator = target) {
+	return await target.evaluate(async (element, words) => {
+		// A shade eases in: it is read once it has.
+		await Promise.all(element.getAnimations().map(animation => animation.finished));
+		let canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
+		let rgba = (colour: string, under?: number[]) => {
+			canvas.clearRect(0, 0, 1, 1);
+			if (under) {
+				canvas.fillStyle = `rgb(${under.join(" ")})`;
+				canvas.fillRect(0, 0, 1, 1);
+			}
+			canvas.fillStyle = colour;
+			canvas.fillRect(0, 0, 1, 1);
+			let [red, green, blue] = canvas.getImageData(0, 0, 1, 1).data;
+			return [red!, green!, blue!];
+		};
+		let linear = (value: number) => {
+			let channel = value / 255;
+			return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+		};
+		let luminance = (rgb: number[]) =>
+			0.2126 * linear(rgb[0]!) + 0.7152 * linear(rgb[1]!) + 0.0722 * linear(rgb[2]!);
+		let ratio = (one: number[], two: number[]) => {
+			let a = luminance(one);
+			let b = luminance(two);
+			return Math.round((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) * 100) / 100;
+		};
+		let popup = element.closest("[data-slot='model-selector-content']")!;
+		let page = rgba(getComputedStyle(popup).backgroundColor, [255, 255, 255]);
+		let ground = rgba(getComputedStyle(element).backgroundColor, page);
+		let ink = rgba(getComputedStyle(words as Element).color, ground);
+		return {
+			shaded: ground.join() !== page.join(),
+			ground: ground.join(),
+			step: ratio(ground, page),
+			text: ratio(ink, ground),
+			cursor: getComputedStyle(element).cursor,
+		};
+	}, await text.elementHandle());
+}
+
+test("shades the model or level under the pointer, and the keyboard's active model, apart from the chosen one", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await newRoom();
+	let page = await open(browser, HANDLE, room, DESKTOP);
+	let { client } = await attachClient(room, CATALOG);
+	await openPicker(page);
+	await settled(popover(page));
+	let row = (name: string) => option(page, name);
+	let words = (name: string) => row(name).locator("span.text-muted-foreground");
+
+	// The keyboard's active row, Small as the popover opens, is shaded; the others lie on the popover.
+	await expect.poll(async () => (await drawn(row("Small"))).shaded).toBe(true);
+	expect((await drawn(row("Large"))).shaded).toBe(false);
+	expect((await drawn(row("Deep"))).shaded).toBe(false);
+
+	// The pointer moves the shade to the row under it: a step the eye sees, the words on it at AA,
+	// the pointer cursor. The chosen model keeps its check, and it alone.
+	await row("Deep").hover();
+	await expect.poll(async () => (await drawn(row("Deep"))).shaded).toBe(true);
+	await expect.poll(async () => (await drawn(row("Small"))).shaded).toBe(false);
+	let hovered = await drawn(row("Deep"));
+	expect(hovered.step).toBeGreaterThanOrEqual(1.15);
+	expect(hovered.cursor).toBe("pointer");
+	expect((await drawn(row("Deep"), name(row("Deep")))).text).toBeGreaterThanOrEqual(4.5);
+	expect((await drawn(row("Deep"), words("Deep"))).text).toBeGreaterThanOrEqual(4.5);
+	await expect(checked(page, "Small")).toHaveCount(1);
+	await expect(checked(page, "Deep")).toHaveCount(0);
+	await shoot(page, "model-picker-row-hover-desktop");
+
+	// The arrow keys move the same shade, and a search's results take it too.
+	await page.mouse.move(0, 0);
+	await search(page).press("ArrowUp");
+	await expect.poll(async () => (await drawn(row("Small"))).shaded).toBe(true);
+	await expect.poll(async () => (await drawn(row("Deep"))).shaded).toBe(false);
+	expect((await drawn(row("Small"))).ground).toBe(hovered.ground);
+	await search(page).fill("acme");
+	await row("Large").hover();
+	await expect.poll(async () => (await drawn(row("Large"))).shaded).toBe(true);
+	await search(page).fill("");
+
+	// A level under the pointer is shaded, and the chosen level a step past it in its own ink.
+	await row("Large").click();
+	await openPicker(page);
+	await level(page, "high").click();
+	await level(page, "low").hover();
+	await expect.poll(async () => (await drawn(level(page, "low"))).shaded).toBe(true);
+	let pointed = await drawn(level(page, "low"));
+	let chosen = await drawn(level(page, "high"));
+	let resting = await drawn(level(page, "off"));
+	expect(resting.shaded).toBe(false);
+	expect(pointed.step).toBeGreaterThanOrEqual(1.15);
+	expect(chosen.ground).not.toBe(pointed.ground);
+	expect(chosen.step).toBeGreaterThan(pointed.step);
+	for (let state of [pointed, chosen, resting]) expect(state.text).toBeGreaterThanOrEqual(4.5);
+	expect(pointed.cursor).toBe("pointer");
+	await shoot(page, "model-picker-level-hover-desktop");
+	await page.keyboard.press("Escape");
+	await client.detach();
+});
+
 test("leaves the popover from the level an arrow key chose, even when Tab follows at once", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await newRoom();
