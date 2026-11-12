@@ -240,9 +240,15 @@ export function BuildView(
 			if (phase.kind === "drafting" && phase.draft === "returned") {
 				return { title: "Returned for changes", detail: "Build plan builds it again." };
 			}
+			// Build plan is the approval: pressing it approves these tasks and starts them.
 			return {
 				title: "Not built yet",
-				...(phase.kind === "review" ? { count: plural(tasks.length, "task", "tasks") } : {}),
+				...(phase.kind === "review"
+					? {
+						count: plural(tasks.length, "task", "tasks"),
+						detail: "Build plan approves these tasks and builds them.",
+					}
+					: {}),
 			};
 		}
 		if (look.kind === "tasks") {
