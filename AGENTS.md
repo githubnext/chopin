@@ -321,8 +321,9 @@ durable.
 
 The web composer uses `packages/protocol/address.ts` to translate `@chopin` into
 `Chat.Send.to = "planner"`; ordinary messages use `to = "room"`. A person addresses Chopin with
-the @Chopin chip at the start of the draft (`apps/web/src/chat/chopin-chip.ts` holds its rules);
-the message on the wire is the same `@chopin`-prefixed one a typed mention makes. The wire
+an `@chopin` mention in the draft's words, typed, chosen in the `@` menu, or written at the caret
+by the composer's sparkle button or Command+J (`apps/web/src/chat/ask-chopin.ts` holds its rules);
+the composer draws no other state for it, and the message on the wire is its words. The wire
 destination is authoritative on the server. Do not describe `@chopin` as a server
 authorization boundary: a custom write-authorized client can send an explicit
 Planner destination without a mention.
@@ -361,7 +362,7 @@ then it carries no mark. The outbox holds a message only for the browser's own c
 it sends one message at a time, oldest first, once the current connection's transcript has
 arrived, and only to a server that acknowledges sends. When `planner-not-attached` or
 `planner-busy` refuses a send and the composer holds no newer draft, the typed text (with its
-chip, references and staged files) returns to the composer draft and chopin says why in a row
+mention, references and staged files) returns to the composer draft and chopin says why in a row
 at the end of the transcript only that person sees (`chat/quiet-note.tsx`, with How to fix where
 the machine has something to fix), and while Chopin works the one button offers Stop so the
 person can stop Chopin and send it;
