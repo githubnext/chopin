@@ -718,9 +718,10 @@ test("the message box is an 8px box with a 1px border, 28px controls with 18px i
 
 /**
  * Where Chat docks it the box is set as Slack's message box (the maintainer's approved mock-up and
- * Slack's `p-message_pane_input`): 16px from the pane's sides and foot, a 36px formatting strip and
- * a 36px row of 28px buttons 4px by 6px in, and one line of draft at rest, 8px above and below it
- * and 12px in, in the message's own type. A hovered message's shade is the pane's whole width.
+ * Slack's `p-message_pane_input`): 16px from the pane's sides and foot, a 36px formatting strip, a
+ * row of 28px buttons 4px under the draft and 6px from the box's sides and foot, and one line of
+ * draft at rest, 8px above and below it and 12px in, in the message's own type. A hovered
+ * message's shade is the pane's whole width.
  */
 test("the docked box is 16px from the pane's sides and foot with one line of draft 8px by 12px in, and a hovered row is shaded across the whole pane", async ({ page }) => {
 	let stage = plate(page, "chat").locator(".design-audit-chat-stage");
@@ -757,8 +758,9 @@ test("the docked box is 16px from the pane's sides and foot with one line of dra
 	// The document body's role, which messages are written in.
 	expect(typed.fontSize).toBe(typed.body);
 
+	// The row is 4px under the draft and 6px from the box's sides and foot.
 	let row = await measure(stage.locator(".composer-row"));
-	expect(row.padding).toEqual([4, 6, 4, 6]);
+	expect(row.padding).toEqual([4, 6, 6, 6]);
 	let strip = stage.locator(".composer-format");
 	if (await strip.isVisible()) {
 		let format = await measure(strip);

@@ -525,13 +525,16 @@
 	margin-inline: 0.25rem;
 	background: var(--color-edge);
 }
-/* Slack's footer: 28px buttons 4px from its top and foot and 6px from its sides. */
+/*
+ * Slack's footer: 28px buttons 4px under the draft and 6px from the box's sides and foot, so the
+ * send button sits as far from both edges of its corner and its shadow stays clear of the curve.
+ */
 .chat-composer .composer-row {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: var(--spacing);
-	padding: var(--spacing) calc(var(--spacing) * 1.5);
+	padding: var(--spacing) calc(var(--spacing) * 1.5) calc(var(--spacing) * 1.5);
 }
 .chat-composer :is(.composer-left, .composer-actions) {
 	display: flex;
