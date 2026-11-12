@@ -867,6 +867,10 @@ class RemoteSession {
 		let hostNames = offered.map(tool => tool.name);
 		let hostTools = this.planner.hostTools;
 		this.planner.hostTools = undefined;
+		let answers = this.#port.features?.includes(AGENT_FEATURES.retryTurn)
+			? this.planner.turnMessage
+			: undefined;
+		this.planner.turnMessage = undefined;
 		// The level is only ever one the client's own catalog listed for the model.
 		let thinkingLevel = this.#port.features?.includes(AGENT_FEATURES.capabilityCatalog)
 			? options.thinkingLevel
@@ -894,6 +898,9 @@ class RemoteSession {
 			...(options.instructions === undefined ? {} : { instructions: options.instructions }),
 			...(options.model ? { model: options.model } : {}),
 			...(thinkingLevel ? { thinkingLevel } : {}),
+			...(answers
+				? { message: answers.id, ...(answers.retry ? { retry: true as const } : {}) }
+				: {}),
 			tools: offered.map(tool => ({
 				name: tool.name,
 				...(tool.description === undefined ? {} : { description: tool.description }),

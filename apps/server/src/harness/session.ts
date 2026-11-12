@@ -96,6 +96,12 @@ export type PlannerFiles = {
 	readsImages: boolean;
 };
 
+/**
+ * The Chat message a turn answers, and `retry` when the turn runs it again after an earlier turn
+ * for it failed. A remote client that offered `retry-turn` is told both.
+ */
+export type PlannerTurnMessage = { id: string; retry?: true };
+
 export type PlannerSession = {
 	/** The tools this session offers; a full Atomic session reports the set of its running turn. */
 	activeTools?: readonly string[];
@@ -109,6 +115,7 @@ export type PlannerSession = {
 		abortSignal: AbortSignal,
 		choice?: PlannerChoice,
 		files?: PlannerFiles,
+		message?: PlannerTurnMessage,
 	) => ReturnType<PlannerAgent["stream"]>;
 	destroy: () => Promise<void>;
 	/**
@@ -403,10 +410,13 @@ export async function openPlannerSession(
 						},
 					}
 					: {}),
-				stream: (prompt, abortSignal, choice, files) => {
+				stream: (prompt, abortSignal, choice, files, message) => {
 					// The remote turn aborts it when the turn ends or the link drops mid-tool.
 					let hostTools = remote ? new AbortController() : undefined;
-					if (remote) remote.hostTools = hostTools;
+					if (remote) {
+						remote.hostTools = hostTools;
+						remote.turnMessage = message;
+					}
 					// The level is on this turn alone, as the model is: nothing is left for the next one.
 					return startingTurn(choice?.thinkingLevel, () =>
 						agent.stream({

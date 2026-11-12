@@ -71,6 +71,7 @@ import { MAX_MESSAGE_BYTES } from "./limits";
 import { contributed } from "./initiative";
 import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./reply-policy";
 import { TOOL_UNAVAILABLE, turnFailureOf } from "./turn-failure";
+import { retryTarget } from "./retry";
 import { runDuration } from "./run-duration";
 import { READER_INSTRUCTIONS } from "./reaction-instructions";
 import type { InitiativeSchedule } from "./initiative-schedule";
@@ -175,7 +176,8 @@ export type ActiveMemberRequest = {
 	focus?: Focus;
 };
 
-type MemberRequest = Pick<ActiveMemberRequest, "entryId" | "userId" | "focus">;
+/** `retry` runs the message's turn again after it failed: the same message, once in context. */
+type MemberRequest = Pick<ActiveMemberRequest, "entryId" | "userId" | "focus"> & { retry?: true };
 
 /** How a turn started by an instruction finished, for whoever started it. */
 export type Ended = {
@@ -809,7 +811,8 @@ export type Room = {
 	root?: RootChat;
 	/** Session-tree and remote fork hooks for top-level Chat and threads. */
 	sessionForks?: {
-		prepareTurn: (currentEntryId?: string) => {
+		/** `retry`: the turn runs `currentEntryId` again, and nothing of its failed attempt is kept. */
+		prepareTurn: (currentEntryId?: string, retry?: boolean) => {
 			fork?: PlannerForkHooks;
 			skipBootstrap?: boolean;
 			untrackedEntries?: Wire.Entry[];
@@ -1463,6 +1466,109 @@ async function processSend(context: Room, ws: Socket, msg: Request<Wire.Send>): 
 		references,
 	);
 	context.memberMessagePersisted?.(entry, context.claimantSessionId);
+}
+
+/**
+ * Run a failed Planner turn again for the message that began it: the same message, never a new
+ * one. The failed attempt (its failure notice and what the agent wrote during it) leaves the
+ * transcript and is saved gone before the room is told, so everyone reads one message and, in
+ * time, one reply, and the turn's agent is given the message once and nothing of the attempt.
+ * Serialized with sends, so a message and a retry never start two turns.
+ */
+export async function retry(context: Room, ws: Socket, msg: Request<Wire.Retry>): Promise<void> {
+	let { chat } = context;
+	let message = (msg as { message?: unknown }).message;
+	if (typeof message !== "string" || !message || message.length > 128) {
+		return fail(ws, msg.rid, "invalid message id");
+	}
+	if (context.rootChannelId) {
+		return fail(ws, msg.rid, "this document's Chat is on its root document");
+	}
+	if (chat.pendingSends >= MAX_PENDING_SENDS) {
+		return fail(ws, msg.rid, "too many chat messages are waiting to be processed", PASSING);
+	}
+	chat.pendingSends++;
+	let process = () =>
+		processRetry(context, ws, msg.rid, message).catch(err => {
+			console.error("[chat] a retry failed before its turn started:", err);
+			fail(ws, msg.rid, "could not retry the reply", PASSING);
+		});
+	let enqueue = () => {
+		let completed = chat.sending.then(process, process).finally(() => chat.pendingSends--);
+		chat.sending = completed.then(() => {}, () => {});
+		return completed;
+	};
+	if (!context.plannerStarting) return enqueue();
+	return context.plannerStarting().catch(() => {}).then(enqueue);
+}
+
+async function processRetry(
+	context: Room,
+	ws: Socket,
+	rid: string,
+	message: string,
+): Promise<void> {
+	let { chat, room, server } = context;
+	if (chat.closed) return refuseClosed(ws, rid);
+	if (!context.config.agent) return fail(ws, rid, `${PLANNER_NAME} is not running here`);
+	let found = retryTarget(chat.entries.map(publicEntry), message, ws.data.handle);
+	if ("refusal" in found) return fail(ws, rid, found.refusal);
+	let unattached = await context.plannerNotAttached?.();
+	if (unattached) return fail(ws, rid, unattached, "planner-not-attached");
+	let focus: Focus | undefined;
+	if (found.failure.focus) {
+		let child: Awaited<ReturnType<ChildDocuments["resolve"]>>;
+		try {
+			child = await context.children?.resolve(found.failure.focus);
+		} catch (err) {
+			console.error("[chat] could not resolve the focused child document:", err);
+			return fail(ws, rid, "the open child document is unavailable", PASSING);
+		}
+		if (!child) return fail(ws, rid, "the open child document is unavailable");
+		focus = { channelId: child.id, title: child.title };
+	}
+	if (chat.closed) return refuseClosed(ws, rid);
+	if (chat.busy || chat.starting) return fail(ws, rid, `${PLANNER_NAME} is already replying`);
+	// A process that is stopping starts no turn, and says nothing: the browser may ask the next one.
+	if (startsHeld) return refuseClosed(ws, rid);
+	// Read again: the transcript may have moved on while the machine and the child were checked.
+	let target = retryTarget(chat.entries.map(publicEntry), message, ws.data.handle);
+	if ("refusal" in target) return fail(ws, rid, target.refusal);
+	let { request, removed } = target;
+	let gone = new Set(removed);
+	let before = chat.entries;
+	chat.entries = before.filter(entry => !gone.has(entry.id));
+	chat.busy = true;
+	chat.turn = begin(request.author.handle, chat.entries.length);
+	try {
+		await context.persist();
+	} catch {
+		let added = chat.entries.filter(entry => !before.includes(entry));
+		chat.entries = [...before, ...added];
+		chat.busy = false;
+		chat.turn = undefined;
+		state(chat, server, room);
+		return fail(ws, rid, "could not retry the reply", PASSING);
+	}
+	reply(ws, rid, { kind: "chat:retry", ts: 0, message });
+	if (chat.closed) return;
+	broadcast(server, room, { kind: "chat:removed", ts: 0, ids: removed });
+	chat.initiative?.cancel();
+	startRun(
+		context,
+		request.author.handle,
+		request.text,
+		undefined,
+		context.claimantSessionId,
+		true,
+		{
+			entryId: request.id,
+			userId: ws.data.principalId,
+			...(focus ? { focus } : {}),
+			retry: true,
+		},
+		request.references,
+	);
 }
 
 /** Say something in the transcript without asking the agent for anything. */
@@ -2598,6 +2704,7 @@ async function repositorySession(
 	claimantSessionId: string | undefined,
 	currentEntryId?: string,
 	currentReferences: Wire.Reference[] = [],
+	retry = false,
 ): Promise<{ session: PlannerSession; binding: ActiveOwnerBinding }> {
 	let retained = context.chat.retained;
 	let reader = !!context.chat.reader;
@@ -2659,7 +2766,9 @@ async function repositorySession(
 		chat.referenceCache.clear();
 		// A reader's session has no tools and no history of its own, so it neither forks nor moves the
 		// Planner's session tree: its reply stays untracked, for the next Planner turn to be told.
-		let forkSetup = !isolated ? context.sessionForks?.prepareTurn(currentEntryId) : undefined;
+		let forkSetup = !isolated
+			? context.sessionForks?.prepareTurn(currentEntryId, retry)
+			: undefined;
 		let fullBootstrap = sessionBootstrap(
 			chat,
 			ownership.transcriptCursor,
@@ -2917,7 +3026,13 @@ async function run(
 			turnController.abort();
 			throw new Error("The turn is no longer authorized.");
 		}
-		opened = await repositorySession(context, claimantSessionId, member?.entryId, references);
+		opened = await repositorySession(
+			context,
+			claimantSessionId,
+			member?.entryId,
+			references,
+			!!member?.retry,
+		);
 		if (about?.signal && about.spent?.()) turnController.abort();
 		if (chat.agent !== opened.session || turnController.signal.aborted) {
 			throw new Error(`${PLANNER_NAME}'s session changed before the turn started. Try again.`);
@@ -3002,10 +3117,16 @@ async function run(
 			}
 			let { notice: _, ...choice } = picked ?? {};
 			let session = opened.session;
+			// Only the first attempt runs the message again; a repair continues it.
+			let retrying = !!member?.retry;
 			await publishPlannerReplies({
 				session: {
 					stream: async (text, abort, _choice, sent) => {
-						let result = await session.stream(text, abort, choice, sent);
+						let answers = member
+							? { id: member.entryId, ...(retrying ? { retry: true as const } : {}) }
+							: undefined;
+						retrying = false;
+						let result = await session.stream(text, abort, choice, sent, answers);
 						// Its first call is made: a message given to the turn now reaches it, and
 						// people are told the turn is running, as the machine has its prompt.
 						steered?.open(session);

@@ -1008,6 +1008,48 @@ describe("Agent connection protocol", () => {
 		}
 	});
 
+	it("names a turn's message, and a retry of it, only to a client that asked for retry-turn", async () => {
+		let { server, channel } = await setup();
+		for (
+			let [header, answers, sent] of [
+				[undefined, { id: "msg-1", retry: true }, {}],
+				["steer-turn", { id: "msg-1", retry: true }, {}],
+				["retry-turn", { id: "msg-1" }, { message: "msg-1" }],
+				["retry-turn", { id: "msg-1", retry: true }, { message: "msg-1", retry: true }],
+				["retry-turn", undefined, {}],
+			] as const
+		) {
+			let planner: RemotePlanner = { channelId: channel.id, isolated: false };
+			let agent = agentFor(adapterFor(server, planner));
+			let raw = await rawLink(server.url, undefined, header);
+			raw.send({ type: "attach", version: 1, document: channel.id });
+			await raw.next("attached");
+			let started = raw.next("start").then(start => {
+				raw.send({ type: "started", session: start.session });
+				return raw.next("turn");
+			});
+			let session = await agent.createSession({ sandboxSession });
+			cleanups.push(() => session.destroy());
+			planner.turnMessage = answers ? { ...answers } : undefined;
+			let outcome = (async () => {
+				let result = await agent.stream({ session, prompt: "@ana: hello" });
+				for await (let _part of result.fullStream);
+			})();
+			let turn = await started;
+			expect({ message: turn.message, retry: turn.retry }).toEqual({
+				message: undefined,
+				retry: undefined,
+				...sent,
+			});
+			// Taken by its turn: the next one names nothing unless it is told again.
+			expect(planner.turnMessage).toBeUndefined();
+			raw.send({ type: "turn-end", session: turn.session, turn: turn.turn, status: "finished" });
+			await outcome;
+			raw.send({ type: "detach" });
+			await raw.closed;
+		}
+	});
+
 	it("merges stage deltas into a run's stages, and a full card replaces them", async () => {
 		let { server, channel, client } = await setup({});
 		expect(client.features).toEqual(["run-stage-deltas", "decision-option-previews"]);

@@ -1435,6 +1435,20 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			}
 			return;
 
+		case "chat:retry":
+			try {
+				if (!await plannerWritable(room, ws, frame.rid)) return;
+				await Threads.retryMessage(chat(room, ws), ws, frame);
+			} catch (error) {
+				fail(
+					ws,
+					frame.rid,
+					error instanceof Error ? error.message : "cannot retry the reply",
+					PASSING,
+				);
+			}
+			return;
+
 		case "chat:wake":
 			await answerWake(
 				ws,
