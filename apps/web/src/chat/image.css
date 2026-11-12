@@ -475,3 +475,20 @@
 		translate: none;
 	}
 }
+
+/*
+ * A message taller than the pane keeps the row toolbar's width free beside its words
+ * (message-actions.css). A picture is no line of words to keep clear, and a grid's square tiles
+ * shrink with that room: the shorter message is then no longer taller than the pane, the room
+ * goes, and the grid grows back, frame after frame. So an image or a grid keeps the message's
+ * whole width, and the bar stands over its corner, as Slack's stands over an image.
+ */
+.chat-message-body[data-chat-tall]
+	[data-chat-message-text]
+	:is(.chat-image, [data-chat-image-gallery]) {
+	inline-size: auto;
+	max-inline-size: 480px;
+	margin-inline-end: calc(
+		-1 * (var(--chat-toolbar-reserve, 0px) - var(--chat-bleed-end, 0px) + 0.5rem)
+	);
+}

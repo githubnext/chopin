@@ -2,12 +2,14 @@ import { ChatImage, ChatImageDocument, MessageImages } from "../../chat/image";
 import { ImageGallery } from "../../chat/image-gallery";
 import MessageFiles from "../../chat/attachments/message-files";
 import StagedFiles from "../../chat/attachments/staged-files";
+import { FileKindIcon } from "../../chat/media/file-icon";
 import { AuditPlate, StateLabel } from "../frame";
 import { SAMPLE_PNG } from "./assistant-ui";
 
 import type { Chat } from "@chopin/protocol";
 import type { ChatImageData } from "../../chat/image";
 import type { FileView } from "../../chat/attachments/files";
+import type { FileKind } from "../../chat/media/layout";
 
 const PICTURE: ChatImageData = {
 	src: SAMPLE_PNG,
@@ -21,15 +23,21 @@ const PICTURES: ChatImageData[] = Array.from({ length: 6 }, (_, index) => ({
 	alt: `Picture ${index + 1}`,
 }));
 
+/** Two cards: the page-wide geometry and theme scans measure every copied element on the page. */
 const FILES: Chat.Attachment[] = [
-	{ id: "brief", name: "brief.pdf", kind: "file", mimeType: "text/plain", size: 482_000 },
-	{ id: "notes", name: "rollout-notes.md", kind: "file", mimeType: "text/plain", size: 38 },
 	{ id: "days", name: "latency-by-day.csv", kind: "file", mimeType: "text/plain", size: 22 },
-	{ id: "deck", name: "review.pptx", kind: "file", mimeType: "text/plain", size: 1_200_000 },
-	{ id: "policy", name: "cache-policy.ts", kind: "file", mimeType: "text/plain", size: 24 },
-	{ id: "bundle", name: "logs.tar.gz", kind: "file", mimeType: "text/plain", size: 9_000 },
-	{ id: "doc", name: "decision.docx", kind: "file", mimeType: "text/plain", size: 18_000 },
 	{ id: "other", name: "data.bin", kind: "file", mimeType: "text/plain", size: 64 },
+];
+
+const KINDS: FileKind[] = [
+	"pdf",
+	"document",
+	"spreadsheet",
+	"slides",
+	"code",
+	"text",
+	"archive",
+	"generic",
 ];
 
 const STAGED: FileView[] = [
@@ -80,14 +88,16 @@ export function ChatMediaPlate() {
 					<MessageImages sender={{ name: "Ana", face: null, time: "9:14 AM" }}>
 						<ChatImage image={PICTURE} />
 					</MessageImages>
-					<StateLabel>Two, three and four images, the rest behind +N</StateLabel>
-					<ImageGallery images={PICTURES.slice(0, 2)} />
+					<StateLabel>Three images, and four with the rest behind +N</StateLabel>
 					<ImageGallery images={PICTURES.slice(0, 3)} />
 					<ImageGallery images={PICTURES} />
 					<StateLabel>Image that cannot be shown</StateLabel>
 					<ChatImage image={{ src: "/auth/logout", alt: "floor-plan.png" }} />
-					<StateLabel>Files</StateLabel>
+					<StateLabel>Files, and the icon of every type</StateLabel>
 					<MessageFiles channelId="audit" files={FILES} />
+					<div className="design-audit-chat-media-kinds">
+						{KINDS.map(kind => <FileKindIcon key={kind} kind={kind} />)}
+					</div>
 				</div>
 				<div className="design-audit-chat-media chat-composer">
 					<StateLabel>Staged: an image uploading, a file, a refused file</StateLabel>

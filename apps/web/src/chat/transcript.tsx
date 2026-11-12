@@ -307,11 +307,11 @@ function MessageBody(
 		<ChatImageDocument value={room}>
 			<MessageImages
 				sender={{
-					name: message.author.kind === "agent" ? "Chopin" : capitalize(message.author.handle),
+					// The viewer names who sent it and when, as the row's own head does.
+					...messageSpeaker({ author: message.author, ts: message.ts }),
 					face: message.author.kind === "agent"
 						? <ChopinMark circle />
 						: <Face decorative handle={message.author.handle} size={36} titled={false} />,
-					...(message.ts ? { time: when(message.ts) } : {}),
 				}}
 			>
 				<div
