@@ -91,6 +91,14 @@
 	--border: var(--color-edge);
 	--input: var(--color-edge);
 	--ring: var(--focus-ring-color);
+	/*
+	 * A copy's `dark:` words name the lighter steps a dark ground needs (a file's reason in
+	 * `red-400/80`, a full context window in `amber-400`); on this light ground they would fall to
+	 * 3.2:1 and 4.1:1, so they read the steps the light variants name. The same here as under
+	 * `.dark`, which reads this scope's tokens while Chopin has one theme.
+	 */
+	--color-red-400: var(--color-danger-text);
+	--color-amber-400: var(--color-warning-ink);
 }
 
 /*
