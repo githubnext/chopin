@@ -1344,6 +1344,40 @@ test("a command the attached client reports runs on that client as its own /name
 	expect(turns).toHaveLength(ran);
 });
 
+test("each turn's fresh session gets the same instructions, and what the room said comes before its prompt, so the model's cache of the instructions holds", async () => {
+	let room = await remoteRoom();
+	let { context } = room;
+	let script = scriptedPlanner();
+	let client = await attach(room.server.url, room.channel.id, {
+		...script.handlers,
+		async turn(turn) {
+			script.turns.push(turn.message);
+			turn.emit({ type: "text-start", id: "reply" });
+			turn.emit({ type: "text-delta", id: "reply", delta: `Reply ${script.turns.length}.` });
+			turn.emit({ type: "text-end", id: "reply" });
+			finishTurn(turn);
+		},
+	});
+	cleanups.push(() => client.detach());
+
+	await room.send("we should write release notes", "room");
+	await room.send("@chopin draft the plan");
+	await context.chat.running;
+	await room.send("@chopin now the risks");
+	await context.chat.running;
+
+	let [first, second] = script.turns;
+	expect(script.turns).toHaveLength(2);
+	expect(first!.session).not.toBe(second!.session);
+	expect(second!.instructions).toBe(first!.instructions);
+	expect(first!.instructions).not.toContain("Durable conversation context");
+	expect(first!.prompt).toStartWith("A fresh Planner session starts for each turn.");
+	expect(first!.prompt).toContain("@rival: we should write release notes");
+	expect(first!.prompt.endsWith("draft the plan")).toBe(true);
+	expect(second!.prompt).toContain("Planner: Reply 1.");
+	expect(second!.prompt.endsWith("now the risks")).toBe(true);
+});
+
 test("a command is refused while the attached client reports none, and again once it has left", async () => {
 	let room = await commandRoom();
 	let { client } = await reportingClient(room, undefined);

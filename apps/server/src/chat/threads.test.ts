@@ -186,8 +186,8 @@ describe("Chat threads server", () => {
 
 		// 1. Thread turn 1 sees the root message and NOT "Later main message after root."
 		expect(w.prompts).toHaveLength(1);
-		expect(w.prompts[0]!.instructions).toContain("Root: let us use PostgreSQL.");
-		expect(w.prompts[0]!.instructions).not.toContain("Later main message after root.");
+		expect(w.prompts[0]!.prompt).toContain("Root: let us use PostgreSQL.");
+		expect(w.prompts[0]!.prompt).not.toContain("Later main message after root.");
 
 		// 2. Thread turn 2 accumulates the earlier thread question & Planner reply.
 		await Threads.sendMessage(w.context, bob.ws, {
@@ -201,10 +201,10 @@ describe("Chat threads server", () => {
 		});
 		await threadChat!.running;
 		expect(w.prompts).toHaveLength(2);
-		expect(w.prompts[1]!.instructions).toContain("Root: let us use PostgreSQL.");
-		expect(w.prompts[1]!.instructions).toContain("what index do we need?");
-		expect(w.prompts[1]!.instructions).toContain("Answer to:");
-		expect(w.prompts[1]!.instructions).not.toContain("Later main message after root.");
+		expect(w.prompts[1]!.prompt).toContain("Root: let us use PostgreSQL.");
+		expect(w.prompts[1]!.prompt).toContain("what index do we need?");
+		expect(w.prompts[1]!.prompt).toContain("Answer to:");
+		expect(w.prompts[1]!.prompt).not.toContain("Later main message after root.");
 
 		// 3. Top-level Chat turn sees main messages and NONE of the thread's replies.
 		await Threads.sendMessage(w.context, alice.ws, {
@@ -217,10 +217,10 @@ describe("Chat threads server", () => {
 		});
 		await w.plan.chat.running;
 		expect(w.prompts).toHaveLength(3);
-		expect(w.prompts[2]!.instructions).toContain("Root: let us use PostgreSQL.");
-		expect(w.prompts[2]!.instructions).toContain("Later main message after root.");
-		expect(w.prompts[2]!.instructions).not.toContain("what index do we need?");
-		expect(w.prompts[2]!.instructions).not.toContain("composite keys?");
+		expect(w.prompts[2]!.prompt).toContain("Root: let us use PostgreSQL.");
+		expect(w.prompts[2]!.prompt).toContain("Later main message after root.");
+		expect(w.prompts[2]!.prompt).not.toContain("what index do we need?");
+		expect(w.prompts[2]!.prompt).not.toContain("composite keys?");
 
 		// 4. "Also send to Chat" posts into both the thread and top-level Chat (idempotent on retry).
 		let sharedReq = crypto.randomUUID();
@@ -681,7 +681,7 @@ describe("Chat threads server", () => {
 		// 4. An older client without `session-forks` never receives `fork`, only `start` with transcript context.
 		await client.detach();
 		let legacyStarts: Array<ServerMessageOf<"start">> = [];
-		let legacyInstructions: string[] = [];
+		let legacyPrompts: string[] = [];
 		let legacyClient = await connectAgent({
 			url: server.url,
 			token: MEMBER_TOKEN,
@@ -692,7 +692,7 @@ describe("Chat threads server", () => {
 					legacyStarts.push(msg);
 				},
 				turn(turn) {
-					legacyInstructions.push(turn.message.instructions ?? "");
+					legacyPrompts.push(turn.message.prompt);
 					let id = crypto.randomUUID();
 					turn.emit({ type: "text-start", id });
 					turn.emit({ type: "text-delta", id, delta: "Legacy remote thread reply" });
@@ -715,6 +715,6 @@ describe("Chat threads server", () => {
 		await threadChat.running;
 		expect(legacyStarts).toHaveLength(1);
 		expect(forksReceived).toHaveLength(2);
-		expect(legacyInstructions[0]).toContain("initial remote turn");
+		expect(legacyPrompts[0]).toContain("initial remote turn");
 	});
 });

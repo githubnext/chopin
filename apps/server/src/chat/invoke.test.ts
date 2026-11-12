@@ -589,7 +589,11 @@ test("an invocation runs under the channel's existing owner and is attributed to
 	}
 	expect(seen.map(turn => ({ owner: turn.owner, prompt: turn.prompt }))).toEqual([
 		{ owner: owner.id, prompt: "@ana: Review" },
-		{ owner: owner.id, prompt: "@ana: Review" },
+		// The second turn's fresh session is told the first message before its own prompt.
+		{
+			owner: owner.id,
+			prompt: expect.stringMatching(/^A fresh Planner session[\s\S]*@ana: Review\n\n@ana: Review$/),
+		},
 	]);
 	expect(context.chat.entries.filter(entry => entry.author.kind === "member")).toMatchObject([
 		{ author: { kind: "member", handle: "ana" }, text: "Review" },

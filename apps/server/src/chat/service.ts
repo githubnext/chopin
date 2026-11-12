@@ -2696,7 +2696,8 @@ async function repositorySession(
 	currentEntryId?: string,
 	currentReferences: Wire.Reference[] = [],
 	retry = false,
-): Promise<{ session: PlannerSession; binding: ActiveOwnerBinding }> {
+	bootstrapInPrompt = false,
+): Promise<{ session: PlannerSession; binding: ActiveOwnerBinding; bootstrap?: string }> {
 	let retained = context.chat.retained;
 	let reader = !!context.chat.reader;
 	let isolated = reader || !!context.chat.job;
@@ -2779,6 +2780,10 @@ async function repositorySession(
 			: fullBootstrap;
 		let open = context.openPlannerSession
 			?? (await import("../harness/session")).openPlannerSession;
+		// What the room said changes every turn, and a fresh session starts for each one, so it goes
+		// before the turn's prompt: the instructions stay the same from turn to turn, and the model
+		// provider can reuse its cache of them instead of reading them all again.
+		let bootstrap: string | undefined;
 		let result = await open(binding, {
 			room: documentRoom(context),
 			repository,
@@ -2787,9 +2792,11 @@ async function repositorySession(
 			instructions: reader ? READER_INSTRUCTIONS : workspace => {
 				let usedNative = !!forkSetup?.skipBootstrap
 					&& !(workspace && "remote" in workspace && workspace.forkedNatively === false);
+				let chosen = usedNative ? nativeBootstrap : fullBootstrap;
+				if (bootstrapInPrompt) bootstrap = chosen;
 				return plannerInstructions(
 					`${repository.owner}/${repository.name}`,
-					usedNative ? nativeBootstrap : fullBootstrap,
+					bootstrapInPrompt ? undefined : chosen,
 					workspace,
 					visualRouting(context),
 				);
@@ -2817,7 +2824,7 @@ async function repositorySession(
 		chat.owner = openingOwner;
 		if (!isolated) consumeBootstrapBackscroll(chat);
 		else chat.bootstrapEntries = undefined;
-		return { session: opened, binding };
+		return { session: opened, binding, ...(bootstrap ? { bootstrap } : {}) };
 	} catch (err) {
 		await opened?.destroy();
 		binding?.release();
@@ -3017,13 +3024,24 @@ async function run(
 			turnController.abort();
 			throw new Error("The turn is no longer authorized.");
 		}
-		opened = await repositorySession(
+		// A skill or a prompt template has to open the prompt, as a background job's header does, so
+		// their fresh sessions are told what the room said in their instructions instead.
+		let command = jobTurn || reader ? undefined : commandReference(references);
+		let { bootstrap, ...repositoryOpened } = await repositorySession(
 			context,
 			claimantSessionId,
 			member?.entryId,
 			references,
 			!!member?.retry,
+			!jobTurn && (command === undefined || command.commandKind === COMMAND_KINDS.workflow),
 		);
+		opened = repositoryOpened;
+		// Given once, with the session's first prompt.
+		let withBootstrap = (text: string) => {
+			let told = bootstrap;
+			bootstrap = undefined;
+			return told ? `${told}\n\n${text}` : text;
+		};
 		if (about?.signal && about.spent?.()) turnController.abort();
 		if (chat.agent !== opened.session || turnController.signal.aborted) {
 			throw new Error(`${PLANNER_NAME}'s session changed before the turn started. Try again.`);
@@ -3042,7 +3060,6 @@ async function run(
 		} else {
 			// A skill or a prompt template is Atomic's own `/name args`, which has to open the prompt:
 			// what the room said and the focus line wait for the next turn instead of standing before it.
-			let command = commandReference(references);
 			let opening = command !== undefined && command.commandKind !== COMMAND_KINDS.workflow;
 			// Drained rather than copied: what the agent has been told once should
 			// not arrive again on the next turn.
@@ -3117,7 +3134,7 @@ async function run(
 							? { id: member.entryId, ...(retrying ? { retry: true as const } : {}) }
 							: undefined;
 						retrying = false;
-						let result = await session.stream(text, abort, choice, sent, answers);
+						let result = await session.stream(withBootstrap(text), abort, choice, sent, answers);
 						// Its first call is made: a message given to the turn now reaches it, and
 						// people are told the turn is running, as the machine has its prompt.
 						steered?.open(session);
