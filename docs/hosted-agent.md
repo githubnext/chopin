@@ -945,7 +945,8 @@ prefers reduced motion.
 ## Chat context
 
 [Automatic participation](conversation-initiative.md) is enabled with the Planner and lets
-Chopin reply promptly in solo conversation and yield during human exchanges.
+Chopin reply promptly in solo conversation and yield during human exchanges. A person alone in
+a document is talking to Chopin: their every message is taken as if it named `@chopin`.
 Group turns use a bounded turn-taking judgment and a quiet window. Natural-language
 requests can invite Chopin without `@`. It uses this same Planner lifecycle, with
 a shared durable pause control; explicit `@chopin` requests remain immediate.

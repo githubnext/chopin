@@ -78,6 +78,7 @@ function setup(overrides: {
 		lifecycle: DispatchLifecycle,
 	) => Promise<boolean>;
 	settled?: () => void;
+	changed?: () => void;
 } = {}) {
 	let clock = new ManualClock();
 	let admissions: string[] = [];
@@ -91,6 +92,7 @@ function setup(overrides: {
 		soloMs: overrides.soloMs,
 		groupMs: overrides.groupMs,
 		...(overrides.settled ? { settled: overrides.settled } : {}),
+		...(overrides.changed ? { changed: overrides.changed } : {}),
 		admit(value) {
 			admissions.push(value);
 			return overrides.admit?.(value) ?? "ready";
@@ -496,4 +498,44 @@ test("holds a message from when it arrives until its reply ends, or until the ju
 	expect(declined.dispatches).toEqual([]);
 	expect(declined.schedule.holds()).toBe(false);
 	expect(settled).toBe(2);
+});
+
+test("the people in the conversation are who spoke in the last two minutes and who is typing, each once", async () => {
+	let changes = 0;
+	let h = setup({ soloMs: 10, judge: async () => undefined, changed: () => changes++ });
+	expect(h.schedule.people()).toEqual(new Set());
+	receive(h, "first", "ana");
+	// Two tabs of one person are one person.
+	h.schedule.typing("ana-tab", "ana", true);
+	h.schedule.typing("ana-other-tab", "ana", true);
+	expect(h.schedule.people()).toEqual(new Set(["ana"]));
+	h.schedule.typing("bo-tab", "bo", true);
+	expect(h.schedule.people()).toEqual(new Set(["ana", "bo"]));
+	expect(changes).toBeGreaterThan(0);
+
+	// A typing lease runs out by itself, and the schedule says so when it does.
+	changes = 0;
+	await h.clock.advance(TYPING_LEASE_MS);
+	expect(h.schedule.people()).toEqual(new Set(["ana"]));
+	expect(changes).toBeGreaterThan(0);
+
+	// Someone who spoke stays in the conversation for two minutes, even after they leave.
+	receive(h, "second", "bo");
+	h.schedule.depart("bo-tab");
+	expect(h.schedule.people()).toEqual(new Set(["ana", "bo"]));
+	changes = 0;
+	await h.clock.advance(120_000);
+	expect(h.schedule.people()).toEqual(new Set());
+	expect(changes).toBeGreaterThan(0);
+
+	// chopin's reply ends the conversation's earlier speakers, as it ends their group.
+	receive(h, "third", "ana");
+	receive(h, "fourth", "bo");
+	changes = 0;
+	h.schedule.replied();
+	expect(h.schedule.people()).toEqual(new Set());
+	expect(changes).toBe(1);
+
+	h.schedule.close();
+	expect(h.clock.pendingTimers).toBe(0);
 });

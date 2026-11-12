@@ -390,8 +390,13 @@ export declare namespace Chat {
 
 	export type Runs = Run[];
 
-	/** Shared automatic participation; direct Planner messages still work while paused. */
-	export type Participation = { enabled: boolean; paused: boolean };
+	/**
+	 * Shared automatic participation; direct Planner messages still work while paused. `alone` says
+	 * that at most one person is in the conversation (writers with the document open, whoever spoke
+	 * in the last two minutes, whoever is typing): that person's every message goes to the Planner,
+	 * as if it named it. Absent means false.
+	 */
+	export type Participation = { enabled: boolean; paused: boolean; alone?: boolean };
 	export type ParticipationState = KIND<"chat:participation"> & Participation;
 	export type SetParticipation = KIND<"chat:participation"> & { paused: boolean };
 

@@ -369,6 +369,48 @@ describe("Chat threads server", () => {
 		]);
 	});
 
+	test("alone in the document, a reply in a thread goes to chopin's turn in that thread; with a second person it stays the thread's", async () => {
+		let w = await buildWorld();
+		let alice = w.makeSocket("alice", "U_alice");
+		let present = new Set(["U_alice", "U_bob"]);
+		w.context.people = () => present;
+		let rootId = crypto.randomUUID();
+		await Threads.sendMessage(w.context, alice.ws, {
+			kind: "chat:send",
+			rid: "root",
+			requestId: rootId,
+			to: "room",
+			text: "Root: let us use PostgreSQL.",
+			ts: 0,
+		});
+		let reply = (text: string) =>
+			Threads.sendMessage(w.context, alice.ws, {
+				kind: "chat:send",
+				rid: crypto.randomUUID(),
+				requestId: crypto.randomUUID(),
+				to: "room",
+				thread: rootId,
+				text,
+				ts: 0,
+			});
+		await reply("Bob, which index do we need?");
+		let threadChat = w.plan.chat.childChats?.get(rootId);
+		await threadChat!.running;
+		expect(w.prompts).toEqual([]);
+		expect(threadChat!.entries.at(-1)!.to).toBeUndefined();
+
+		present = new Set(["U_alice"]);
+		await reply("Which index do we need?");
+		await threadChat!.running;
+		expect(w.prompts).toHaveLength(1);
+		expect(w.prompts[0]!.prompt).toContain("Which index do we need?");
+		let asked = threadChat!.entries.find(entry => entry.text === "Which index do we need?");
+		expect(Chat.publicEntry(asked!).to).toBe("planner");
+		expect(threadChat!.entries.at(-1)!.author.kind).toBe("agent");
+		// The thread's turn answers there, not in the document's Chat.
+		expect(w.plan.chat.entries.map(entry => entry.author.kind)).toEqual(["member"]);
+	});
+
 	test("a Retry branches the Atomic session back to before the failed attempt, and gives it no word of the attempt", async () => {
 		let w = await buildWorld();
 		let alice = w.makeSocket("alice", "U_alice");
