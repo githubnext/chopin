@@ -40,6 +40,8 @@ import type { MachinePlanners } from "../harness/remote/machine-planners";
 import { ANY_REPOSITORY_PROTOCOL, checkoutOf, Connections, serves } from "./connections";
 import { launchGitHubToken, machineGitHubToken } from "./machine-github";
 import type { GitHubIdentity, LaunchRun } from "./machine-github";
+import { liveMcpLaunch, McpTokens, mintMcpToken } from "./mcp-token";
+import type { HostedCaller } from "../mcp/hosted";
 import type { GitHubApp } from "../github/app";
 import type { About, Connection } from "./connections";
 import type { Source } from "@chopin/experiment";
@@ -1749,11 +1751,98 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				repository,
 				starter: investigation.input?.authorizer ?? investigation.requester,
 				...(held ? { machineId: held.machineId } : {}),
+				documentId: investigation.documentId,
 			};
 		}
 		if (!document) return undefined;
 		let build = await options.implementations?.()?.build(document, id);
-		return build && { kind: "build", ...build };
+		return build && { kind: "build", ...build, documentId: document };
+	}
+	/** Signs launches' MCP tokens; see `mcp-token.ts`. Every deployment has the key it needs. */
+	let mcpTokens: McpTokens | undefined;
+	let mcpSources = {
+		get tokens() {
+			return mcpTokens ??= new McpTokens(auth.config.encryptionKey);
+		},
+		now: () => auth.clock().getTime(),
+		plannerCredential: (digest: Uint8Array) =>
+			auth.storage.plannerCredentials.find(digest, auth.clock()),
+		runCredential(token: string) {
+			try {
+				let { grant, connection } = connections.lookup(token);
+				return grant.run
+					? {
+						runId: grant.run.id,
+						documentId: grant.run.documentId,
+						machineId: connection.machineId,
+					}
+					: undefined;
+			} catch {
+				// A build's credential still names its run after a restart, before its machine is back.
+				let durable = connections.durableRun(token);
+				return durable && { runId: durable.id, documentId: durable.documentId };
+			}
+		},
+		run: (id: string, documentId: string) => launchRun(id, documentId),
+	};
+	/**
+	 * An MCP token for one launch on this machine, minted from the credential the launch holds: a
+	 * Planner credential or a run credential. The connector gives it, in a file it renews, to the
+	 * launch and every process it starts; it reaches only Chopin's tools at `/mcp`, only for that
+	 * launch's documents, and only while the launch lasts (see `mcp-token.ts`).
+	 */
+	route("POST", "/api/connector/mcp-token", async request => {
+		if (!auth.machines.durable) fail("not-found");
+		compatible(request, auth.config.origin, options.connectorVersion);
+		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
+		let credential = z.string().min(1).max(1024);
+		let from = z.union([
+			z.object({ planner: credential }).strict(),
+			z.object({ run: credential }).strict(),
+		]).parse(await body(request));
+		let minted = await mintMcpToken(mcpSources, machine, from);
+		await auth.machines.seen(machine);
+		return json(minted);
+	});
+	/** The `/mcp` caller an MCP token names, while its launch and its machine are live. */
+	async function mcpCaller(token: string): Promise<HostedCaller | undefined> {
+		if (!auth.machines.durable) return undefined;
+		let launch = await liveMcpLaunch(mcpSources, token);
+		if (!launch) return undefined;
+		let machine: StoredMachine;
+		try {
+			machine = await auth.machines.current(launch.machineId);
+		} catch (error) {
+			if (error instanceof MachineError) return undefined;
+			throw error;
+		}
+		let channel = await auth.storage.channels.get(launch.documentId);
+		let user = await auth.storage.users.get(launch.userId);
+		if (!channel || !user) return undefined;
+		let documentId = launch.documentId;
+		return {
+			oauthToken: "",
+			user: { id: user.id, login: user.login, avatarUrl: user.avatarUrl },
+			launch: {
+				// The repository is read with the machine's own grant, as its work is.
+				repository: async (owner, name) => {
+					try {
+						return await auth.machines.use(
+							machine,
+							token => auth.github.repository(token, owner, name),
+						);
+					} catch (error) {
+						if (error instanceof MachineError) return undefined;
+						throw error;
+					}
+				},
+				// A Planner serves its document and the document's children; a run, its document.
+				allows: value =>
+					value.repositoryId === channel.repositoryId
+					&& (value.id === documentId
+						|| (launch.kind === "planner" && value.parentChannelId === documentId)),
+			},
+		};
 	}
 	/**
 	 * A GitHub token for a paired machine's Planner or run. A connector that says what it is for
@@ -3068,6 +3157,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		/** Whether this server runs Planners on people's machines: HARNESS=remote, machines' own GitHub. */
 		plannerMachines: !!options.planners && auth.machines.durable,
 		sourceFor,
+		/** The caller a launch's MCP token names at `/mcp`, while the launch lasts. */
+		mcpCaller,
 		/** The GitHub identity of a person a launch token was last issued for, to credit them. */
 		identity: (userId: string) => identities.get(userId),
 	};

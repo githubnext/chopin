@@ -318,6 +318,18 @@ lookup. An MCP-created document for a repository outside the App installation is
 not available through browser routes, WebSockets, or the hosted agent until
 the installation includes that repository. See [Local agent MCP](local-agent-mcp.md).
 
+Work on a paired machine uses `/mcp` with a Chopin credential instead: an MCP
+token (`chopin_mcp_…`) the connector mints from the launch's own credential at
+`POST /api/connector/mcp-token` and gives the launch and every process it starts
+in `CHOPIN_MCP_TOKEN_FILE`. A Planner's token acts as the machine's owner for its
+document and that document's children, and lasts as long as the Planner
+credential it was minted from. A run's token acts as the person who started the
+run, for the run's document, for an hour. Either ends at once when its Planner
+stops on the machine or its run ends. It reads the repository with the machine's
+own grant, lists only its documents, and cannot create one. `/mcp` refuses the
+launch's own Planner and run credentials, which can open the agent link or report
+the run, and GitHub App installation tokens, which reach only GitHub.
+
 `upload_image` follows the MCP rule for writing: the bearer needs push or
 administration access to the document's repository. Serving the uploaded image
 at `/images/<sha256>.<ext>` follows the browser rule instead: it needs a browser

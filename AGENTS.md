@@ -138,7 +138,10 @@ durable.
   App installation and repository role.
 - **MCP has a different credential boundary.** `/mcp` checks its caller-supplied
   GitHub bearer directly, does not require the App installation, and can mutate
-  data for callers with push or administration access.
+  data for callers with push or administration access. Work on a paired machine
+  instead presents an MCP token minted from its launch's credential, limited to
+  that launch's documents and life (`experiments/mcp-token.ts`); `/mcp` never
+  takes a GitHub App installation token or a launch's own Planner or run credential.
 - **Planner ownership is process-bound.** The first eligible Planner or
   model-backed research request supplies its GitHub App token and Copilot
   entitlement. Server-authored turns nobody typed (re-linking decisions after a
