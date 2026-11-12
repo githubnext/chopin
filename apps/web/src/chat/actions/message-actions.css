@@ -17,12 +17,23 @@
 	/* Slack's gutter: a 36px avatar and 8px beside it, and the row's 12px beyond that. */
 	--chat-bleed-start: 3.5rem;
 	--chat-bleed-end: 0.75rem;
+	/*
+	 * How far the shade reaches past the text: the pane's 20px gutter, the avatar and the 8px beside
+	 * it at the start, the gutter at the end. Slack's hovered row is the pane's whole width.
+	 */
+	--chat-shade-start: calc(var(--spacing) * 16);
+	--chat-shade-end: calc(var(--spacing) * 5);
 	/* Slack's actions group: 32px buttons inside 2px, standing 16px above the row it belongs to. */
 	--chat-toolbar-size: calc(var(--spacing) * 9);
 	--chat-toolbar-rise: calc(var(--spacing) * 4);
 	--chat-toolbar-lane: calc(var(--chat-toolbar-size) + var(--spacing));
 	/* Shown is 1 on one message at most. Set here, so a rule that hides the rest changes nothing they inherit. */
 	--chat-shown: 0;
+	/*
+	 * The row's shade, gutter time and toolbar fade in over the pointer feedback time and out in
+	 * two thirds of it, so a pointer crossing rows leaves one as the next arrives.
+	 */
+	--chat-fade: calc(var(--duration-fast) * 2 / 3);
 	isolation: isolate;
 }
 
@@ -36,6 +47,11 @@
 [data-chat-avatar] {
 	position: relative;
 	z-index: 1;
+}
+
+/* Slack's name line sits right on the text under it: the column's 4px gap is between messages. */
+[data-chat-head] {
+	margin-block-end: calc(-1 * var(--spacing));
 }
 
 [data-chat-head] {
@@ -58,8 +74,12 @@
 	height: calc(var(--spacing) * 5);
 }
 
+/*
+ * Slack's row is shaded 8px above its name line and 8px below its last line
+ * (`c-message_kit__gutter`); a message after the first of its group, 4px above it.
+ */
 .chat-message-body[data-chat-headed] {
-	--chat-highlight-top: calc(var(--text-base) * var(--text-base--line-height) + 0.5rem);
+	--chat-highlight-top: calc(var(--text-base) * var(--text-base--line-height) + var(--spacing) * 2);
 }
 
 /*
@@ -72,22 +92,27 @@
 	content: "";
 	position: absolute;
 	z-index: 1;
-	inset-block-start: calc(-1 * (var(--text-base) * var(--text-base--line-height) + 0.25rem));
+	inset-block-start: calc(-1 * var(--text-base) * var(--text-base--line-height));
 	inset-block-end: 100%;
 	inset-inline: 0;
 }
 
-/* The whole message as one full-width row, in the hover surface, as Slack shades a hovered message. */
+/* The whole message as one row as wide as the pane, square, in the hover surface, as Slack shades a hovered message. */
 .chat-message-body::before {
 	content: "";
 	position: absolute;
 	z-index: -1;
-	inset-block: calc(-1 * var(--chat-highlight-top)) -0.25rem;
-	inset-inline: calc(-1 * var(--chat-bleed-start)) calc(-1 * var(--chat-bleed-end));
+	inset-block: calc(-1 * var(--chat-highlight-top)) calc(-1 * var(--spacing));
+	inset-inline: calc(-1 * var(--chat-shade-start)) calc(-1 * var(--chat-shade-end));
 	background: var(--color-hover);
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity var(--duration-fast) var(--ease-out);
+	transition: opacity var(--chat-fade) var(--ease-out);
+}
+
+/* The last message of a group is shaded 8px below, to the gap before the next. */
+.chat-message-body:last-child::before {
+	inset-block-end: calc(-1 * var(--spacing) * 2);
 }
 
 /* A message after the first of its group shows its time in the avatar's gutter on hover, as Slack does. */
@@ -103,6 +128,7 @@
 	color: var(--color-text-tertiary);
 	opacity: 0;
 	pointer-events: none;
+	transition: opacity var(--chat-fade) var(--ease-out);
 }
 
 .message-actions-emoji {
@@ -138,15 +164,16 @@
 	height: calc(var(--spacing) * 5);
 }
 
+/* The bar stands 12px inside the row's end, as Slack's does, past the text's own edge. */
 .chat-message-body > .chat-message-toolbar {
 	position: absolute;
 	z-index: 2;
-	inset-inline-end: 0;
+	inset-inline-end: calc(var(--chat-bleed-end) - var(--chat-shade-end));
 	top: calc(-1 * (var(--chat-highlight-top) + var(--chat-toolbar-rise)));
 	translate: 0 var(--chat-toolbar-shift, 0px);
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity var(--duration-fast) var(--ease-out);
+	transition: opacity var(--chat-fade) var(--ease-out);
 }
 
 /*
@@ -157,12 +184,14 @@
 	.chat-message-body:hover,
 	[data-chat-head]:hover + .chat-message-body {
 		--chat-shown: 1;
+		--chat-fade: var(--duration-fast);
 	}
 }
 
 .chat-message-body:has(:focus-visible),
 .chat-message-body[data-chat-engaged] {
 	--chat-shown: 1;
+	--chat-fade: var(--duration-fast);
 }
 
 /*
@@ -227,10 +256,16 @@
 		--chat-highlight-top: calc(var(--chat-toolbar-lane) + 0.25rem);
 	}
 
+	/*
+	 * Under a name line the lane keeps 4px clear of it, so the line's time, which takes the pointer,
+	 * stays off the bar's touch targets that reach above it.
+	 */
 	.chat-message-body[data-chat-headed][data-chat-engaged],
 	.chat-message-body[data-chat-headed]:has(:focus-visible) {
+		margin-block-start: calc(var(--chat-toolbar-lane) + var(--spacing));
 		--chat-highlight-top: calc(
-			var(--chat-toolbar-lane) + var(--text-base) * var(--text-base--line-height) + 0.5rem
+			var(--chat-toolbar-lane) + var(--text-base) * var(--text-base--line-height) +
+				var(--spacing) * 3
 		);
 	}
 
@@ -270,13 +305,6 @@
 	}
 }
 
-@media (prefers-reduced-motion: reduce) {
-	.chat-message-body::before,
-	.chat-message-body > .chat-message-toolbar {
-		transition: none;
-	}
-}
-
 /*
  * Reactions under a message, as Slack draws them (`c-reaction`): 24px pills with round ends, 6px
  * inside, on a faint fill with a hairline; your own in the accent's wash and ring, its count bold.
@@ -299,7 +327,28 @@
 	font-size: var(--text-2xs);
 	line-height: 1;
 	color: var(--color-text-secondary);
-	transition: background-color var(--duration-fast) var(--ease-out);
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		opacity var(--badge-pop-dur) var(--motion-smooth-out),
+		scale var(--badge-pop-dur) var(--motion-smooth-out);
+}
+
+/*
+ * A reaction that arrives pops in from its centre, as Slack's does, and a count that changes rolls
+ * up into place. Only what changed while the message was on screen moves: a message drawn with its
+ * reactions, history or not, shows them at once (`reactionChanges`).
+ */
+@starting-style {
+	.chat-reaction[data-reaction-enter],
+	.chat-reaction[data-reaction-enter][data-pending] {
+		opacity: 0;
+		scale: 0.6;
+	}
+
+	.chat-reaction-count[data-reaction-counted] {
+		opacity: 0;
+		translate: 0 0.5em;
+	}
 }
 
 /* The hairline is an outline at no specificity, so the theme's focus ring replaces it. */
@@ -314,6 +363,9 @@
 	width: calc(var(--spacing) * 8.5);
 	color: var(--color-text-tertiary);
 	opacity: var(--chat-shown, 0);
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		opacity var(--chat-fade) var(--ease-out);
 }
 
 .chat-reaction-add svg {
@@ -347,8 +399,12 @@
 }
 
 .chat-reaction-count {
+	display: inline-block;
 	padding-inline-start: calc(var(--spacing) / 2);
 	font-variant-numeric: tabular-nums;
+	transition:
+		opacity var(--badge-pop-dur) var(--motion-smooth-out),
+		translate var(--badge-pop-dur) var(--motion-smooth-out);
 }
 
 @media (hover: hover) {
@@ -409,4 +465,49 @@
 
 .chat-reaction[data-pending] {
 	opacity: 0.6;
+}
+
+/*
+ * It opens from its button's corner, as a menu does: a fade and a small growth, settling quickly. The
+ * entrance is here, with the page, not with the picker's own styles, which arrive after the panel.
+ */
+@media (prefers-reduced-motion: no-preference) {
+	.chat-message-picker {
+		animation: emoji-picker-in var(--duration-base) var(--motion-smooth-out);
+	}
+
+	.chat-message-picker[data-sheet] {
+		animation-name: emoji-picker-rise;
+	}
+}
+
+@keyframes emoji-picker-in {
+	from {
+		opacity: 0;
+		scale: var(--dropdown-pre-scale);
+	}
+}
+
+@keyframes emoji-picker-rise {
+	from {
+		translate: 0 1rem;
+	}
+}
+
+/* Reduced motion: rows, toolbars and reactions change at once; a pill's hover colour still eases. */
+@media (prefers-reduced-motion: reduce) {
+	.chat-message-body::before,
+	.chat-message-body > .chat-gutter-time,
+	.chat-message-body > .chat-message-toolbar {
+		transition: none;
+	}
+
+	.chat-reaction,
+	.chat-reaction-count {
+		transition-property: background-color;
+	}
+
+	.chat-reaction-add {
+		transition-property: background-color;
+	}
 }

@@ -4,14 +4,18 @@
 	opacity: 1;
 }
 
+/*
+ * Slack's reply bar (`c-message__reply_bar`): 34px, 24px faces 4px inside its edge, and drawn out
+ * past the text's edge by that inset and its hairline, so its first face lines up with the text.
+ */
 .chat-thread-summary-row {
 	display: inline-flex;
 	max-width: 100%;
 	align-items: center;
 	gap: calc(var(--spacing) * 2);
-	margin-top: calc(var(--spacing) * 1.5);
-	padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2) calc(var(--spacing) * 1)
-		calc(var(--spacing) * 1.5);
+	margin-top: var(--spacing);
+	margin-inline-start: calc(-1 * (var(--spacing) + var(--edge-width)));
+	padding: var(--spacing) calc(var(--spacing) * 2) var(--spacing) var(--spacing);
 	border-radius: var(--radius-md);
 	border: var(--edge-width) solid transparent;
 	background: transparent;
@@ -37,7 +41,7 @@
 .chat-thread-summary-avatars {
 	display: inline-flex;
 	align-items: center;
-	gap: calc(var(--spacing) * 0.75);
+	gap: var(--spacing);
 	flex-shrink: 0;
 }
 

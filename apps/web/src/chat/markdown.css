@@ -17,6 +17,14 @@
 	text-wrap: pretty;
 }
 
+/*
+ * A message's lines keep the body role's own leading, as Slack's keep theirs (15px on 22px there,
+ * 16px on 24px here), rather than the copy's looser `leading-relaxed`.
+ */
+.chat-markdown :is(.aui-md-p, .aui-md-li) {
+	line-height: var(--text-base--line-height);
+}
+
 /* A task item shows its checkbox in place of a bullet; a table cell scrolls whole in its lane. */
 .chat-markdown li.task-list-item {
 	list-style: none;

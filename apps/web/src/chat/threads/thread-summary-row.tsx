@@ -41,7 +41,7 @@ export function ThreadSummaryRow(
 									decorative
 									handle={participant.handle}
 									key={`member-${participant.handle}`}
-									size={20}
+									size={24}
 									textSize="2xs"
 									titled={false}
 								/>
