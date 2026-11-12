@@ -27,9 +27,16 @@ for (let mode of ["light", "dark"] as const) {
 			await page.emulateMedia({ colorScheme: "dark" });
 			await page.evaluate(() => document.documentElement.classList.add("dark"));
 		}
-		// The code and diff previews draw their palette once they load.
+		// Code is coloured in place, and a diff's preview drawn, once the highlighter loads.
 		for (let id of ["code", "diff"]) await plate(page, id).scrollIntoViewIfNeeded();
-		await expect(plate(page, "code").locator("diffs-container pre")).toHaveCount(2);
+		await expect.poll(() =>
+			plate(page, "code").evaluate(element =>
+				[...CSS.highlights].filter(([name, highlight]) =>
+					name.startsWith("plan-code-")
+					&& [...highlight].some(range => element.contains(range.startContainer))
+				).length
+			)
+		).toBeGreaterThan(3);
 		await expect(plate(page, "diff").locator("diffs-container pre").first()).toBeVisible();
 		let rows = await contrastWalk(page, "body");
 		expect(rows.filter(row => row.role === "text").length).toBeGreaterThan(1000);

@@ -139,8 +139,9 @@ test("Wrap lines wraps one block for every reader, and stays", async ({ join, ro
 	let bo = await join("bo");
 	let blocks = content(ana).locator(".planCode");
 	let wraps = (page: Page, index: number) =>
-		content(page).locator(".planCode").nth(index).locator("pre[data-overflow]").first()
-			.getAttribute("data-overflow");
+		content(page).locator(".planCode").nth(index).locator("[data-plan-source]").evaluate(source =>
+			getComputedStyle(source).whiteSpace.startsWith("pre-wrap") ? "wrap" : "scroll"
+		);
 	await expect.poll(() => wraps(ana, 0)).toBe("scroll");
 
 	await blocks.first().hover();
@@ -156,7 +157,9 @@ test("Wrap lines wraps one block for every reader, and stays", async ({ join, ro
 	await expect.poll(() => wraps(bo, 1)).toBe("scroll");
 	// A wrapped block scrolls nothing sideways.
 	await expect.poll(() =>
-		blocks.first().locator(".plan-code-view").evaluate(view => view.scrollWidth - view.clientWidth)
+		blocks.first().locator("[data-plan-source]").evaluate(view =>
+			view.scrollWidth - view.clientWidth
+		)
 	).toBeLessThanOrEqual(1);
 	await written(ana, room, /^```ts wrap\n/m);
 

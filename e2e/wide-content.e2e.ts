@@ -100,31 +100,22 @@ test("a wide table fades only the sides that still hide columns", async ({ join,
 	await expect(table).toHaveAttribute("data-more", "end");
 });
 
-test("code wraps on a phone and keeps one preview when it stops", async ({ join, seed }) => {
+test("code wraps on a phone, read or edited, and scrolls when it stops being one", async ({ join, seed }) => {
 	await seed(CODE);
 	let page = await join("ana", PHONE);
-	let view = content(page).getByRole("group", { name: "Code preview" });
-	await expect(view.locator("pre[data-overflow='wrap']")).toBeAttached();
-	expect(await view.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
-
-	// The source wraps too while someone is editing it; phones edit from the pencil.
-	await page.getByRole("button", { name: "Edit document" }).tap();
-	// Editing puts the caret in the first block in view, which may already open this source.
-	let show = content(page).getByRole("button", { name: "Show source" });
 	let source = content(page).locator("[data-plan-source]");
-	await expect(show.or(source).first()).toBeVisible();
-	if (await show.isVisible()) await show.click();
+	await expect(source).toBeVisible();
+	expect(await source.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+
+	// The code is what is edited too; phones edit from the pencil.
+	await page.getByRole("button", { name: "Edit document" }).tap();
 	await expect(source).toBeVisible();
 	expect(await source.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 	await expectNoHorizontalOverflow(page);
-	await content(page).getByRole("button", { name: "Hide source" }).click();
 
-	// Leaving the phone class switches the same preview back to scrolling;
-	// it is never remounted, so one owner keeps the node.
-	await view.evaluate(node => node.setAttribute("data-test-identity", ""));
+	// Leaving the phone class switches the same lines back to scrolling.
 	await page.setViewportSize({ width: 1024, height: 768 });
-	await expect(view.locator("pre[data-overflow='scroll']")).toBeAttached();
-	await expect(view).toHaveAttribute("data-test-identity", "");
+	await expect.poll(() => source.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
 });
 
 test("a narrow desktop window keeps wide blocks as they were", async ({ join, seed }) => {
@@ -136,9 +127,8 @@ test("a narrow desktop window keeps wide blocks as they were", async ({ join, se
 		await document.evaluate(node => node.closest(".plan-document")!.clientWidth),
 	).toBeLessThan(640);
 
-	let view = document.getByRole("group", { name: "Code preview" });
-	await expect(view.locator("pre[data-overflow='scroll']")).toBeAttached();
-	await expect.poll(() => view.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+	let source = document.locator("[data-plan-source]").first();
+	await expect.poll(() => source.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
 	await expect.poll(() => mask(document.locator("table"))).toBe("none");
 	await expect(document.getByRole("region", { name: "Diagram preview" })).toBeVisible();
 	await expect(document.getByRole("button", { name: "Expand diagram" })).toHaveCount(0);

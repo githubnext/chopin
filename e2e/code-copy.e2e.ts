@@ -100,7 +100,7 @@ test("a document's code block has a Copy code button that copies its source as w
 	await seed(`\`\`\`ts\n${SOURCE}\n\`\`\`\n\nAfter the block.\n`);
 	let page = await join("ana", CLIPBOARD);
 	let block = codeBlock(page);
-	await expect(block.locator("[data-file]")).toBeVisible();
+	await expect(block.locator("[data-plan-source]")).toBeVisible();
 	await block.hover();
 	let copy = block.getByRole("button", { name: "Copy code" });
 	await expect(copy).toBeVisible();
@@ -110,8 +110,12 @@ test("a document's code block has a Copy code button that copies its source as w
 	await copy.click();
 	await expect(block.getByRole("button", { name: "Copied" })).toBeVisible();
 	expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(SOURCE);
-	// Pressing it leaves the caret where it was: the source stays hidden behind its preview.
-	await expect(block.locator("[data-plan-source]")).toBeHidden();
+	// Pressing it leaves the caret where it was: none is dropped into the code.
+	expect(
+		await block.locator("[data-plan-source]").evaluate(source =>
+			source.contains(getSelection()?.anchorNode ?? null)
+		),
+	).toBe(false);
 	await expect(block.getByRole("button", { name: "Copy code" })).toBeVisible({ timeout: 6_000 });
 });
 

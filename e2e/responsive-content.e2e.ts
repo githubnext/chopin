@@ -414,7 +414,7 @@ for (let viewport of RESPONSIVE_VIEWPORTS) {
 					"CompactDocumentMeasureMustRemainReadableWithoutForcingTheViewportWiderThanTheDocument",
 			}),
 		);
-		let code = document.locator("[data-plan-language='typescript'] [data-plan-preview] > div");
+		let code = document.locator("[data-plan-language='typescript'] [data-plan-source]");
 		let table = document.locator("table");
 		if (viewport.name === "compact") {
 			await expectOwnScroller("long code line", code);

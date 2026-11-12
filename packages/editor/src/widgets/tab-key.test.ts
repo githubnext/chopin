@@ -14,7 +14,7 @@ import {
 
 import { $createCodeBlockNode, registry } from "@chopin/dialect";
 
-import { $tabContext, $untab, leadingIndent, tabAction } from "./tab-key";
+import { $indentLines, $tabContext, $untab, leadingIndent, lineStarts, tabAction } from "./tab-key";
 
 import type { LexicalEditor, TextNode } from "lexical";
 import type { CodeBlockNode } from "@chopin/dialect";
@@ -49,11 +49,6 @@ describe("tabAction", () => {
 		expect(tabAction({ place: "code" }, true)).toBe("untab");
 	});
 
-	test("leaves code when Escape came first", () => {
-		expect(tabAction({ place: "code" }, false, true)).toBe("leave");
-		expect(tabAction({ place: "code" }, true, true)).toBe("leave");
-	});
-
 	test("hands the key to the browser everywhere else", () => {
 		expect(tabAction({ place: "prose" }, false)).toBe("leave");
 		expect(tabAction({ place: "prose" }, true)).toBe("leave");
@@ -70,6 +65,21 @@ describe("leadingIndent", () => {
 	test("finds nothing on a line that is not indented", () => {
 		expect(leadingIndent("\tA\nb", 4)).toBeNull();
 		expect(leadingIndent("", 0)).toBeNull();
+	});
+});
+
+describe("lineStarts", () => {
+	test("is the caret's line alone for a caret", () => {
+		expect(lineStarts("a\nbc\nd", 4, 4)).toEqual([2]);
+	});
+
+	test("is every line a selection touches, in either direction", () => {
+		expect(lineStarts("a\nbc\nd", 0, 6)).toEqual([0, 2, 5]);
+		expect(lineStarts("a\nbc\nd", 6, 1)).toEqual([0, 2, 5]);
+	});
+
+	test("leaves out the line a selection ends at the start of", () => {
+		expect(lineStarts("a\nbc\nd", 0, 5)).toEqual([0, 2]);
 	});
 });
 
@@ -205,5 +215,44 @@ describe("$untab", () => {
 		});
 		expect(result.text).toBe("\ta();\nb();");
 		expect(result.offset).toBe(8);
+	});
+});
+
+describe("lines of a selection", () => {
+	function run(
+		text: string,
+		[from, to]: [number, number],
+		act: (code: CodeBlockNode, selection: ReturnType<typeof $getSelection>) => void,
+	) {
+		let lexical = editor();
+		let out = { text: "", selected: "" };
+		lexical.update(() => {
+			let code = $createCodeBlockNode("ts", text);
+			$getRoot().append(code);
+			let node = code.getFirstChild() as TextNode;
+			node.select(from, to);
+			act(code, $getSelection());
+			out.text = code.getTextContent();
+		}, { discrete: true });
+		lexical.getEditorState().read(() => {
+			out.selected = $getSelection()?.getTextContent() ?? "";
+		});
+		return out;
+	}
+
+	test("Tab indents each selected line and keeps them selected", () => {
+		let result = run("one\ntwo\nthree", [0, 7], (code, selection) => {
+			if ($isRangeSelection(selection)) $indentLines(code, selection);
+		});
+		expect(result.text).toBe("\tone\n\ttwo\nthree");
+		expect(result.selected).toBe("\tone\n\ttwo");
+	});
+
+	test("Shift+Tab outdents each selected line that has an indent", () => {
+		let result = run("\tone\n    two\nthree", [1, 15], (code, selection) => {
+			if ($isRangeSelection(selection)) $untab(code, selection);
+		});
+		expect(result.text).toBe("one\ntwo\nthree");
+		expect(result.selected).toBe("one\ntwo\nth");
 	});
 });

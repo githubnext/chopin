@@ -4,6 +4,7 @@ import { $createParagraphNode, $createTextNode, $getRoot, $isElementNode } from 
 
 import {
 	$createCalloutNode,
+	$createCodeBlockNode,
 	$createColumnNode,
 	$createColumnsNode,
 	$isColumnNode,
@@ -119,4 +120,22 @@ test("enter leaves the final empty paragraph in the second column", () => {
 		expect($isColumnNode(first) && first.getChildrenSize()).toBe(2);
 		expect($isColumnNode(second) && second.getChildrenSize()).toBe(1);
 	});
+});
+
+test("enter in code is always a new line, blank lines included", () => {
+	let editor = createHeadlessEditor({
+		nodes: REGISTRY.nodes,
+		onError(error) {
+			throw error;
+		},
+	});
+	editor.update(() => {
+		let code = $createCodeBlockNode("ts", "a();");
+		$getRoot().append(code);
+		code.selectEnd();
+	}, { discrete: true });
+
+	for (let press = 0; press < 3; press++) expect(enter(editor)).toBe(true);
+	expect(editor.getEditorState().read(() => $getRoot().getTextContent())).toBe("a();\n\n\n");
+	expect(tree(editor)).toHaveLength(1);
 });

@@ -184,7 +184,8 @@ function renders(
 	if (block.kind === "seecode") return spec !== undefined;
 	if (block.kind === "wireframe") return drawing?.source === block.source;
 	if (block.kind === "math" || block.kind === "mermaid") return !!html;
-	return block.kind === "code" || block.kind === "diff";
+	// Code is coloured in place (`code-paint-plugin.tsx`), so only a patch has a second reading.
+	return block.kind === "diff";
 }
 
 function collect(editor: LexicalEditor): Block[] {
@@ -500,7 +501,7 @@ function Preview(
 	 * A layout effect, because opening a block and putting the caret in its
 	 * source happen in one gesture, and a caret cannot land in a hidden box.
 	 *
-	 * Code and diffs swap: their preview is the same text, coloured, so
+	 * Diffs swap: their preview is the same patch, drawn, so
 	 * showing both would put every line on screen twice. A drawing is a
 	 * different reading of its source, and stays above it while it is edited.
 	 */
@@ -535,6 +536,21 @@ function Preview(
 		else delete element.dataset.planText;
 		if (wireframe && editing) element.dataset.planEditing = "";
 		else delete element.dataset.planEditing;
+		/*
+		 * Code is read where it is written, so for someone who cannot put a caret in it the lines
+		 * themselves are the scroll lane a keyboard has to reach, as the drawn copy was. Only then:
+		 * inside an editable root a focusable box would take focus from the caret.
+		 */
+		let source = element.querySelector<HTMLElement>("[data-plan-source]");
+		if (source && block.kind === "code" && (disabled || reading)) {
+			source.tabIndex = 0;
+			source.setAttribute("role", "group");
+			source.setAttribute("aria-label", "Code");
+		} else if (source?.hasAttribute("tabindex")) {
+			source.removeAttribute("tabindex");
+			source.removeAttribute("role");
+			source.removeAttribute("aria-label");
+		}
 	});
 
 	let host = element?.querySelector<HTMLElement>("[data-plan-preview]");
@@ -590,10 +606,11 @@ function Preview(
 					{
 						// Tab indents code, so the way out has to be said
 						// where someone is typing it. A block with a preview
-						// returns to it on Escape, and Tab leaves from there.
+						// returns to it on Escape, and Tab leaves from there;
+						// any other leaves for the block after it.
 						editing && !disabled && block.kind !== "math" && (
 							<span className="text-xs text-text-tertiary">
-								{hidable ? "Esc to preview" : "Esc then Tab to leave"}
+								{hidable ? "Esc to preview" : "Esc to leave"}
 							</span>
 						)
 					}
@@ -812,7 +829,7 @@ function Rendered(
 	if (error) return <div data-plan-error="">{error}</div>;
 	if (!block.source.trim()) return null;
 
-	if (block.kind === "code" || block.kind === "diff") {
+	if (block.kind === "diff") {
 		return (
 			<CodeView
 				kind={block.kind}
