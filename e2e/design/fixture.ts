@@ -1,6 +1,5 @@
 import { expect, test as base } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { approvedContrast } from "./approved-contrast";
 
 import type { Locator, Page, TestInfo } from "@playwright/test";
 
@@ -62,14 +61,6 @@ export function plate(page: Page, id: string) {
 
 export async function scan(page: Page, info: TestInfo, name: string, selector: string) {
 	let result = await new AxeBuilder({ page }).include(selector).analyze();
-	let approved = approvedContrast(name, info.project.name);
-	if (approved.length) {
-		await info.attach("approved-colour-decision", {
-			body:
-				"Maggie retained the original Delete red, named supplementary chat/audit text and original code palette. Each accepted node is annotated with its approved role in approved-contrast/. Other findings still fail; see apps/web/DESIGN.md.",
-			contentType: "text/plain",
-		});
-	}
 	await info.attach(`axe-${name}`, {
 		body: JSON.stringify(result, null, 2),
 		contentType: "application/json",
@@ -93,7 +84,7 @@ export async function scan(page: Page, info: TestInfo, name: string, selector: s
 			evidence: node.failureSummary,
 		}))
 	);
-	expect(failures, `Axe findings for ${name}; see attached JSON and summary`).toEqual(approved);
+	expect(failures, `Axe findings for ${name}; see attached JSON and summary`).toEqual([]);
 }
 
 export async function capture(page: Page, target: Locator, name: string, padding = 6) {

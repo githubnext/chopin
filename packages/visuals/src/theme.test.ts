@@ -162,9 +162,9 @@ describe("semantic colour foundations", () => {
 			"--color-warning": "oklch(0.59898 0.12586 74.986)",
 			"--color-warning-wash": "oklch(0.95 0.032 75)",
 			"--color-warning-ink": "oklch(0.4409 0.0921 74.93)",
-			"--color-destructive": "oklch(0.60513 0.17178 24.175)",
-			"--color-destructive-hover": "oklch(0.56972 0.16045 24.136)",
-			"--color-destructive-active": "oklch(0.53376 0.1489 24.091)",
+			"--color-destructive": "oklch(0.588 0.17178 24.175)",
+			"--color-destructive-hover": "oklch(0.5532 0.16045 24.136)",
+			"--color-destructive-active": "oklch(0.5172 0.1489 24.091)",
 			"--color-destructive-wash":
 				"color-mix(in srgb, var(--color-destructive) 20%, var(--color-page))",
 			"--color-destructive-ink": "oklch(0.4941 0.19046 25.161)",

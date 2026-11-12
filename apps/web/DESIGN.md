@@ -12,7 +12,7 @@ colors:
   ink: "oklch(0.15908 0.00637 95)"
   secondary-ink: "oklch(0.39036 0.01026 95)"
   tertiary-ink: "oklch(0.48124 0.01278 95)"
-  destructive: "oklch(0.60513 0.17178 24.175)"
+  destructive: "oklch(0.588 0.17178 24.175)"
   success: "oklch(0.51958 0.10966 145.072)"
   warning: "oklch(0.59898 0.12586 74.986)"
   merged: "oklch(0.47500 0.17500 301)"
@@ -129,9 +129,9 @@ The implementation is the authority for values: `../../packages/visuals/theme.cs
 
 Success, warning, and destructive colors communicate state. Their full surface, graphic, icon, and text pairs remain defined in the shared theme.
 
-The original destructive button red is an intentional visual exception: white text on its default state measures about 4.20:1, below the usual 4.5:1 AA target. Keep this red for its aesthetic character. The hover and pressed colors remain distinct and above 4.5:1.
+The destructive button red carries white text at 4.5:1 at rest; its hover and pressed colors are each one step deeper, distinct from it and from each other, at 5.2:1 and 6.0:1.
 
-**The Contrast Hierarchy Rule.** Prefer AA contrast for primary content and controls, but do not treat it as a universal requirement for every text role. Preserve the approved visual hierarchy: timestamps and secondary conversation metadata use their original quiet roles; supplementary audit-page labels (source paths, specimen state, usage notes, type-scale metadata, icon names and section summaries) keep their original quaternary role; loading/tool status keeps its original muted role and opacity; code and diff previews retain the original pierre-light palette and selection treatment. These are deliberate visual exceptions, alongside the original destructive button red. Do not darken these roles automatically to satisfy a contrast audit. Record measured findings honestly and keep exceptions scoped to the approved roles and states; new exceptions require a deliberate design decision. Token use, the fluid type scale, keyboard access, focus, and layout checks remain enforced.
+**The Contrast Rule.** Chopin meets WCAG 2.2 AA everywhere, in light and dark: 4.5:1 for text (placeholders, links, labels, timestamps, conversation metadata, loading and tool status, audit-page labels and code tokens included) and 3:1 for large text and for the non-text parts people need to see (icons in controls, the edges of fields, the composer, checkboxes and radios, status dots and focus rings). Disabled controls are exempt, as WCAG exempts them; nothing else is. Hierarchy comes from the order of the ink roles, size and weight, never from falling below AA. On 11 November 2026 the maintainer brought the former deliberate exceptions to AA, each by the smallest step that reaches it: quaternary ink (gray-500) to #727068, a settled research handoff's fade from 45% to 94%, the code and diff palette darkened in pierre-light's own hues (`packages/editor/src/widgets/code-theme.ts`), and the destructive red to #cf4747 with its hover and pressed colors one step deeper each. `e2e/design/contrast.e2e.ts` walks every audit plate in both themes and fails any pair below its threshold; a new role that cannot reach AA is a design decision recorded here, not an exception added to the walk.
 
 **The One Accent Rule.** New action and focus treatments use the established petrol roles. New raw color values require a change to the shared theme, not a local copy.
 

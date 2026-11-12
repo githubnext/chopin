@@ -141,3 +141,12 @@
 [data-slot="model-selector-trigger"] > [data-nucleo-icon] {
 	color: currentColor;
 }
+
+/*
+ * A settled research handoff fades the agent that handed off. assistant-ui fades it to 45%, which
+ * leaves its name at 1.9:1; at 94% it keeps 4.5:1 on the field's fill (and its icon 3.5:1), with
+ * the arrow's colour still saying the handoff settled.
+ */
+[data-slot="agent-handoff"] .opacity-45 {
+	opacity: 0.94;
+}

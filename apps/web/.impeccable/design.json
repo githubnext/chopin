@@ -157,7 +157,7 @@
 			"destructive": {
 				"role": "semantic",
 				"displayName": "Destructive",
-				"canonical": "oklch(0.60513 0.17178 24.175)",
+				"canonical": "oklch(0.588 0.17178 24.175)",
 				"tonalRamp": [
 					"oklch(0.15 0.17178 24.175)",
 					"oklch(0.25 0.17178 24.175)",
@@ -417,8 +417,8 @@
 		],
 		"rules": [
 			{
-				"name": "The Contrast Hierarchy Rule",
-				"body": "Prefer AA contrast for primary content and controls, but do not treat it as a universal requirement for every text role. Preserve the approved visual hierarchy: timestamps and secondary conversation metadata use their original quiet roles; supplementary audit-page labels (source paths, specimen state, usage notes, type-scale metadata, icon names and section summaries) keep their original quaternary role; queued messages and loading/tool status keep their original muted roles and opacity; code and diff previews retain the original pierre-light palette and selection treatment. These are deliberate visual exceptions, alongside the original destructive button red. Do not darken these roles automatically to satisfy a contrast audit. Record measured findings honestly and keep exceptions scoped to the approved roles and states; new exceptions require a deliberate design decision. Token use, the fluid type scale, keyboard access, focus, and layout checks remain enforced.",
+				"name": "The Contrast Rule",
+				"body": "Chopin meets WCAG 2.2 AA everywhere, in light and dark: 4.5:1 for text (placeholders, links, labels, timestamps, conversation metadata, loading and tool status, audit-page labels and code tokens included) and 3:1 for large text and for the non-text parts people need to see (icons in controls, the edges of fields, the composer, checkboxes and radios, status dots and focus rings). Disabled controls are exempt, as WCAG exempts them; nothing else is. Hierarchy comes from the order of the ink roles, size and weight, never from falling below AA. On 11 November 2026 the maintainer brought the former deliberate exceptions to AA, each by the smallest step that reaches it: quaternary ink (gray-500) to #727068, a settled research handoff's fade from 45% to 94%, the code and diff palette darkened in pierre-light's own hues (`packages/editor/src/widgets/code-theme.ts`), and the destructive red to #cf4747 with its hover and pressed colors one step deeper each. `e2e/design/contrast.e2e.ts` walks every audit plate in both themes and fails any pair below its threshold; a new role that cannot reach AA is a design decision recorded here, not an exception added to the walk.",
 				"section": "colors"
 			},
 			{
