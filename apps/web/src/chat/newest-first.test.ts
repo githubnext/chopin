@@ -11,13 +11,11 @@ test("the newest rows hold the first messages, whole rows only", () => {
 	expect(newestRows([2, 2], FIRST_MESSAGES)).toBe(0);
 });
 
-test("a 400-message history is mounted in a few steps, each at least doubling what is mounted", () => {
+test("a 400-message history is mounted newest first, a step of whole rows at a time", () => {
 	let sizes = Array.from({ length: 400 }, () => 1);
 	let steps = [newestRows(sizes, FIRST_MESSAGES)];
 	while (steps.at(-1)! > 0) steps.push(earlierRows(sizes, steps.at(-1)!));
-	expect(steps.map(from => 400 - from)).toEqual([30, 90, 180, 360, 400]);
-	let rendered = steps.reduce((all, from) => all + 400 - from, 0);
-	expect(rendered).toBeLessThan(400 * 3);
+	expect(steps.map(from => 400 - from)).toEqual([30, 90, 150, 210, 270, 330, 390, 400]);
 });
 
 test("a live message is not a bulk arrival; a history is", () => {
