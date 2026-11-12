@@ -14,13 +14,14 @@ test("the slash menu offers the basic blocks first, as Notion's does", async ({ 
 	let options = page.getByRole("listbox", MENU).getByRole("option");
 	await expect(options.first()).toHaveAccessibleName("Text");
 	expect((await options.evaluateAll(nodes => nodes.map(node => node.getAttribute("aria-label"))))
-		.slice(0, 8)).toEqual([
+		.slice(0, 9)).toEqual([
 			"Text",
 			"Heading 1",
 			"Heading 2",
 			"Heading 3",
 			"Bulleted list",
 			"Numbered list",
+			"Task list",
 			"Quote",
 			"Divider",
 		]);
