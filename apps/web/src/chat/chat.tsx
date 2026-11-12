@@ -53,6 +53,7 @@ import { silencesFailedSends } from "./connection-phase";
 import { ErrorState } from "./error-state";
 import { failureBanner, retryPayload, sendFailureView, withoutFailure } from "./failure";
 import { TypingReporter } from "./typing";
+import { useSteadyCallback, useSteadyFields } from "./steady";
 import {
 	asksChopin,
 	chipKeyAction,
@@ -1414,6 +1415,15 @@ export function Chat(
 		() => hinted ? { planner: !!agent, references: referencesEnabled, automatic } : undefined,
 		[hinted, agent, referencesEnabled, automatic],
 	);
+	// What the room gives Chat is new with each of the room's renders; the transcript is given it
+	// steady, so that it renders when what it shows changes and not with the room.
+	let steadyDecisions = useSteadyFields(decisions);
+	let steadyResearchOffers = useSteadyFields(researchOffers);
+	let steadyCardLink = useSteadyCallback(onCardLink);
+	let steadyAddExcerpt = useSteadyCallback(onAddExcerpt);
+	let steadyOpenChild = useSteadyCallback(onOpenChild);
+	let steadyRetryAnalysis = useSteadyCallback(onRetryAnalysis);
+	let steadyRetryJob = useSteadyCallback(onRetryJob);
 	let transcriptView = (
 		<Transcript
 			active={active}
@@ -1422,19 +1432,19 @@ export function Chat(
 			compactions={threadsState.topCompactions}
 			emptyHint={emptyHint}
 			conversationPlanJobs={conversationPlanJobs}
-			onCardLink={onCardLink}
-			onAddExcerpt={onAddExcerpt}
-			onOpenChild={onOpenChild}
+			onCardLink={steadyCardLink}
+			onAddExcerpt={steadyAddExcerpt}
+			onOpenChild={steadyOpenChild}
 			room={room}
-			onRetryAnalysis={onRetryAnalysis}
-			onRetryJob={onRetryJob}
+			onRetryAnalysis={steadyRetryAnalysis}
+			onRetryJob={steadyRetryJob}
 			conversationPlan={conversationPlan}
-			decisions={decisions}
+			decisions={steadyDecisions}
 			empty={transcriptReady && entries.length === 0 && outbox.length === 0
 					&& !turn
 				? emptyNotice
 				: undefined}
-			researchOffers={researchOffers}
+			researchOffers={steadyResearchOffers}
 			sourceDestination={sourceDestination}
 			threads={transcriptThreads}
 			entries={shownEntries}
