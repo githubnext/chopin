@@ -8,9 +8,9 @@ This is an optional visual review command. Screenshot differences and exact
 contrast-report baselines do not block PRs while Chopin's interface is evolving.
 
 The required **e2e** CI job instead runs `bun run design:behavior` with its already
-installed Chromium, without building a design container. This runs 36 checks across
+installed Chromium, without building a design container. This runs 104 checks across
 both widths for keyboard navigation, focus, form errors, reduced motion, text
-reflow, usable scrolling and the geometry of copied assistant-ui elements (their
+reflow, usable scrolling, WCAG AA contrast and the geometry of copied assistant-ui elements (their
 pixels against their own Tailwind classes, under a fine and a forced coarse pointer;
 see [Adding an assistant-ui element](../../docs/assistant-ui.md)). It performs no
 screenshot comparisons or axe scans.
