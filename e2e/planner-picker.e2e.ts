@@ -1554,7 +1554,7 @@ for (let [shape, options] of SHAPES) {
 			await expectTold(page, text);
 			await expect(page.locator(".workspace-chat-panel")).not.toContainText(text);
 			await fillChat(input, "@");
-			await expect(chopin).toHaveAccessibleName(new RegExp(`^chopin, agent, ${presence}$`, "i"));
+			await expect(chopin).toHaveAccessibleName(`chopin, agent, ${presence}`);
 			await shoot(page, `no-button-${name}-mentions-${shape}`);
 			await fillChat(input, "");
 
@@ -1567,7 +1567,7 @@ for (let [shape, options] of SHAPES) {
 			await carriage.back();
 			await expect(notice).toHaveCount(0);
 			await fillChat(input, "@");
-			await expect(chopin).toHaveAccessibleName(new RegExp(`^chopin, agent, ${presence}$`, "i"));
+			await expect(chopin).toHaveAccessibleName(`chopin, agent, ${presence}`);
 			await fillChat(input, "");
 		}
 		await expectNoHorizontalOverflow(page);
@@ -1709,7 +1709,7 @@ test("a Planner its machine keeps failing to start is a warning dot on the machi
 	await expect(note).toBeVisible({ timeout: 45_000 });
 	await expect(note).toHaveAttribute("role", "status");
 	await expect(note).toContainText("Only visible to you");
-	await expect(note).toContainText(/^Only visible to you.*chopin/i);
+	await expect(note).toContainText(/^Only visible to you.*chopin/);
 	await expect(note).toContainText("Can't connect to @mona's machine");
 	await expect(teammate.locator(".chat-composer .composer-notice")).toHaveCount(0);
 	await expect(teammate.locator("[data-error-banner]")).toHaveCount(0);
