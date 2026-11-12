@@ -151,7 +151,7 @@
 				1
 			]
 		],
-		"sourceHash": "c3acc23fbff0276bae79b0ad5cae44b697d022ce15afdef3c6cd885a5c978fb3"
+		"sourceHash": "25ab1e94890ea6bdf8359775c9b3861bbde545c2e8f3cb363f08fce6b1e08ff5"
 	},
 	{
 		"file": "apps/web/src/terminal-alert.tsx",
@@ -403,7 +403,7 @@
 				1
 			]
 		],
-		"sourceHash": "cdc844a8f9aa2b9896522630df391b8a6e34c96b83f2c7649440673917db0f6e"
+		"sourceHash": "8a10a164853bd2c03aabde73507a2ae3401f2b95417515c68718c7ce9240d861"
 	},
 	{
 		"file": "apps/web/src/chat/assistant-ui/markdown-primitive.tsx",
@@ -537,5 +537,19 @@
 			]
 		],
 		"sourceHash": "17854ba1f1e12e412b0b653635d84ac5e995d43a8ea61c01b29f29456da49371"
+	},
+	{
+		"file": "apps/web/src/chat/assistant-ui/lucide.tsx",
+		"reason": "Maps a copied element's lucide-react icon to Chopin's own, forwarding the copy's SVG accessibility and class props unchanged. The copies' literal classes are scanned; nothing is styled here.",
+		"cases": [
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > lucide > Icon > <Glyph>",
+				1
+			]
+		],
+		"sourceHash": "95aefcb947eab31ec32ceb8f26897fec7bb4d3e77cd78ba47f52bd33fa600919"
 	}
 ]
