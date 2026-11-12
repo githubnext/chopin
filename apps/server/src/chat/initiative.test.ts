@@ -112,6 +112,9 @@ test("a committed move starts an ordinary Planner turn and never repeats without
 	await until(() => h.prompts.length === 1);
 	expect(h.prompts[0]).toContain(source.requestId);
 	expect(h.prompts[0]).toContain("one concise final conversational reply");
+	// Answering of its own accord, the agent is named as Chat shows it, never "Chopin".
+	expect(h.prompts[0]).toContain("@chopin: ");
+	expect(h.prompts[0]).not.toContain("@Chopin");
 	expect(h.chat.entries.some(entry => entry.author.kind === "system")).toBe(false);
 	expect(h.chat.job).toBeUndefined();
 	h.emit("session.idle");
@@ -260,7 +263,7 @@ test("a stale queued initiative instruction leaves the active explicit turn inta
 	await until(() => h.prompts.length === 1);
 	let controller = new AbortController();
 	let outcomes: Chat.Ended[] = [];
-	await Chat.instruct(h.context, "Chopin", "Stale initiative", "Joining", {
+	await Chat.instruct(h.context, "chopin", "Stale initiative", "Joining", {
 		signal: controller.signal,
 		ended: outcome => {
 			outcomes.push(outcome);

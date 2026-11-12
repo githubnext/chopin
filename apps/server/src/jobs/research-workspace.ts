@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import * as limits from "@chopin/dialect/limits";
 
+import { NAMES_AS_WRITTEN } from "../agent/identity";
 import { WEB_SEARCH_MAX_CALLS, WebSearchTimeoutError, webSearchTool } from "../harness/web-search";
 import { JobExecutionError } from "./registry";
 import { openWorkerSession, workerModel, type WorkerSession } from "./worker-session";
@@ -993,7 +994,8 @@ async function stage(
 				abortSignal,
 				options: {
 					model: config.model,
-					instructions,
+					// A stage whose words a person reads (a report, an answer) names people as Chat does.
+					instructions: publicWeb ? instructions : `${instructions} ${NAMES_AS_WRITTEN}`,
 					...(web?.ok ? { webSearch: web.value.tool, webContext: { credential } } : {}),
 				},
 			}),

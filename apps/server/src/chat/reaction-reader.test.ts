@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 
 import type { Chat as Wire } from "@chopin/protocol";
 
+import { NAMES_AS_WRITTEN } from "../agent/identity";
 import type { PlannerChannel } from "../harness/session";
 import { flush } from "./initiative.test-fixtures";
 import { until } from "./job.test-fixtures";
@@ -95,11 +96,16 @@ test("a reader's reaction runs as a real Planner turn: busy, chat:state, a publi
 	await react(h);
 	await until(() => h.readerStream.prompts.length === 1);
 	expect(h.chat.busy).toBe(true);
-	expect(h.chat.turn).toMatchObject({ handle: "Chopin", responded: false });
+	expect(h.chat.turn).toMatchObject({ handle: "chopin", responded: false });
 	expect(states(h).slice(before)).toEqual([true]);
 	expect(h.opens.filter(open => open.reader)).toHaveLength(1);
-	expect(String(h.opens.find(open => open.reader)!.instructions)).toContain("You have no tools");
+	let instructions = String(h.opens.find(open => open.reader)!.instructions);
+	expect(instructions).toContain("You have no tools");
+	// The reader is told its own name and how to write a handle, as every writer is.
+	expect(instructions).toContain(NAMES_AS_WRITTEN);
+	expect(instructions).not.toContain("You are Chopin");
 	let prompt = h.readerStream.prompts[0]!;
+	expect(prompt).not.toContain("Chopin");
 	expect(prompt).toContain(JSON.stringify("a1"));
 	expect(prompt).toContain(JSON.stringify("ben"));
 	expect(prompt).toContain(JSON.stringify("confused"));
@@ -332,7 +338,7 @@ test("a reader's instruction claims no owner even when it is given a context tha
 	await planner(h);
 	let afterWriter = h.claims.mock.calls.length;
 	expect(afterWriter).toBeGreaterThan(before);
-	await Chat.instruct(h.context, "Chopin", "Answer the reaction.", "", { reader: true });
+	await Chat.instruct(h.context, "chopin", "Answer the reaction.", "", { reader: true });
 	let queued = h.chat.waiting[0] as unknown as { reader?: true; sessionId?: string };
 	expect(queued.reader).toBe(true);
 	expect(queued.sessionId).toBeUndefined();
@@ -342,7 +348,7 @@ test("a reader's instruction claims no owner even when it is given a context tha
 	expect(h.claims.mock.calls.length).toBe(afterWriter);
 	let idle = await readerRoom();
 	let started = idle.claims.mock.calls.length;
-	await Chat.instruct(idle.context, "Chopin", "Answer the reaction.", "", { reader: true });
+	await Chat.instruct(idle.context, "chopin", "Answer the reaction.", "", { reader: true });
 	await until(() => idle.readerStream.prompts.length === 1);
 	await finishReader(idle);
 	expect(idle.claims.mock.calls.length).toBe(started);

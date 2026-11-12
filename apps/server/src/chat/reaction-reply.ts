@@ -1,4 +1,5 @@
 /** A reader's turn is an ordinary turn in the Chat with no tools, under the existing owner. */
+import { PLANNER_NAME } from "@chopin/protocol/planner-name";
 import type { Chat as Wire } from "@chopin/protocol";
 
 import { actor as actorOf } from "./initiative";
@@ -311,7 +312,7 @@ export function createResponder(
 				try {
 					await instruct(
 						reader ?? context,
-						"Chopin",
+						PLANNER_NAME,
 						reader
 							? readerReactionInstruction(
 								current,

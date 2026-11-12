@@ -6,6 +6,7 @@ import {
 	sourceId,
 } from "./research-brief";
 import type { JobExecution } from "./registry";
+import { NAMES_AS_WRITTEN } from "../agent/identity";
 import { researchBriefAgent } from "../harness/agents";
 import * as Worker from "./worker-session";
 
@@ -101,11 +102,13 @@ test("the default brief engine opens a worker within Copilot's session credit co
 		if (creditLimit < 30) throw new Error("Minimum session limit is 30 AI credits.");
 		return session as never;
 	});
-	let generate = spyOn(researchBriefAgent, "generate").mockImplementation(async () =>
-		({
+	let instructions: unknown;
+	let generate = spyOn(researchBriefAgent, "generate").mockImplementation(async call => {
+		instructions = call.options?.instructions;
+		return {
 			output: { brief: "Compare Jev alternatives.", sourceIds: [sourceId(material.sources[0]!)] },
-		}) as never
-	);
+		} as never;
+	});
 	try {
 		let definition = researchBriefDefinition({ config: { agent: true, model: "fixture" } });
 		let result = await definition.execute({
@@ -119,6 +122,8 @@ test("the default brief engine opens a worker within Copilot's session credit co
 		expect(creditLimit).toBe(definition.limits.maxAiCredits);
 		expect(create).toHaveBeenCalledTimes(1);
 		expect(generate).toHaveBeenCalledTimes(1);
+		// The brief quotes the discussion, so it is told to keep handles and the agent's name as written.
+		expect(instructions).toContain(NAMES_AS_WRITTEN);
 		expect(closed).toEqual(["session", "sandbox"]);
 	} finally {
 		opener.mockRestore();

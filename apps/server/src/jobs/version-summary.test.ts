@@ -1,4 +1,8 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
+
+import { NAMES_AS_WRITTEN } from "../agent/identity";
+import { historySummaryAgent } from "../harness/agents";
+import * as Worker from "./worker-session";
 
 import {
 	summaryLine,
@@ -115,5 +119,36 @@ describe("history summaries", () => {
 		});
 		expect(committed).toBe(true);
 		expect(saved).toEqual([{ id: "b", sourceHash: "hb", summary: "Rewrote the opening" }]);
+	});
+
+	it("tells the summary writer to keep a handle as written and the agent as chopin", async () => {
+		let opening = spyOn(Worker, "openWorkerSession").mockResolvedValue({
+			session: {} as never,
+			close: async () => {},
+		});
+		let instructions: unknown;
+		let generating = spyOn(historySummaryAgent, "generate").mockImplementation(async call => {
+			instructions = call.options?.instructions;
+			return { output: { summaries: [{ id: "b", summary: "Rewrote the opening" }] } } as never;
+		});
+		try {
+			let versions = new Map([["b", stored("b", "# Plan\n\nNew text.\n", "hb")]]);
+			let definition = versionSummaryDefinition({
+				config: { agent: true, historyModel: "small" },
+				versions: {
+					get: async (_channel, id) => versions.get(id),
+					previous: async () => undefined,
+					summarize: async () => true,
+				},
+			});
+			await definition.execute({
+				...execution({ generatorVersion: 1, versions: [{ id: "b", sourceHash: "hb" }] }),
+				credential: { kind: "active-planner", token: "fixture-only", authorize: async () => true },
+			} as JobExecution<VersionSummaryInput>);
+			expect(instructions).toContain(NAMES_AS_WRITTEN);
+		} finally {
+			generating.mockRestore();
+			opening.mockRestore();
+		}
 	});
 });

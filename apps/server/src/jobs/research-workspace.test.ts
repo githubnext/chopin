@@ -4,6 +4,7 @@ import { MCPClientError } from "@ai-sdk/mcp";
 import { tool } from "ai";
 import { z } from "zod";
 
+import { NAMES_AS_WRITTEN } from "../agent/identity";
 import * as webSearch from "../harness/web-search";
 import * as workerSession from "./worker-session";
 import { executionDiagnostic, JobExecutionError } from "./registry";
@@ -824,6 +825,41 @@ describe("research workspace execution", () => {
 				documentRevision: 7,
 				documentSourceHash: SOURCE_HASH,
 			});
+		}
+	});
+
+	it("tells the research stages a person reads to keep handles as written", async () => {
+		let agents = await import("../harness/agents");
+		let told = new Map<string, unknown>();
+		let opening = spyOn(workerSession, "openWorkerSession").mockResolvedValue({
+			session: {} as never,
+			close: async () => {},
+		});
+		let spies = [
+			spyOn(agents.researchPrivateAgent, "generate").mockImplementation(async call => {
+				told.set("private", call.options?.instructions);
+				return { output: { findings: [] } } as never;
+			}),
+			spyOn(agents.researchReportAgent, "generate").mockImplementation(async call => {
+				told.set("report", call.options?.instructions);
+				return { output: REPORT } as never;
+			}),
+			spyOn(agents.researchAnswerAgent, "generate").mockImplementation(async call => {
+				told.set("answer", call.options?.instructions);
+				return { output: { text: "It was.", sourceUrls: [PUBLIC_SOURCE.url] } } as never;
+			}),
+		];
+		try {
+			let definition = researchAnswerDefinition({
+				config: { agent: true, model: "research-model" },
+			});
+			await definition.execute(execution("research-answer", initialInput()));
+			await definition.execute(execution("research-answer", followUpInput()));
+			expect([...told.keys()].sort()).toEqual(["answer", "private", "report"]);
+			for (let instructions of told.values()) expect(instructions).toContain(NAMES_AS_WRITTEN);
+		} finally {
+			for (let spy of spies) spy.mockRestore();
+			opening.mockRestore();
 		}
 	});
 

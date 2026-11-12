@@ -56,16 +56,19 @@ async function record(
 		sent,
 		loseNextAcknowledgement: () => loseFirstAcknowledgement = true,
 		starts: () => {
-			// Title jobs share state frames; response updates repeat a conversational turn's ID.
+			// Title jobs share state frames and chopin's name, but never answer in Chat: a turn of
+			// chopin's own counts once it has, from its first frame. Response updates repeat its ID.
 			let turns = new Map<string, { at: number; turn: Chat.Turn }>();
+			let answered = new Set<string>();
 			for (let item of seen) {
 				if (item.frame.kind !== "chat:state" || !item.frame.busy || !item.frame.turn) continue;
 				let turn = item.frame.turn;
-				if (turn.handle !== "chopin" && !turns.has(turn.id)) {
-					turns.set(turn.id, { at: item.at, turn });
-				}
+				if (turn.responded) answered.add(turn.id);
+				if (!turns.has(turn.id)) turns.set(turn.id, { at: item.at, turn });
 			}
-			return [...turns.values()];
+			return [...turns.values()].filter(({ turn }) =>
+				turn.handle !== "chopin" || answered.has(turn.id)
+			);
 		},
 		histories: () => seen.flatMap(item => item.frame.kind === "chat:history" ? [item.frame] : []),
 		sends: () => sent.flatMap(item => item.frame.kind === "chat:send" ? [item.frame] : []),
@@ -102,7 +105,7 @@ test(
 		await send(page, "Can you compare the export approaches for this small pilot?");
 		await reply(page);
 		await expect.poll(() => frames.starts().length).toBe(2);
-		expect(frames.starts()[0]!.turn.handle).toBe("Chopin");
+		expect(frames.starts()[0]!.turn.handle).toBe("chopin");
 		await page.screenshot({ path: info.outputPath("initiative-contribution.png"), fullPage: true });
 		await page.waitForTimeout(1800);
 		expect(frames.starts()).toHaveLength(2);
@@ -414,7 +417,7 @@ test("ordinary child discussion stays quiet while natural direct requests preser
 	expect(frames.sends().at(-1)?.focus).toBeUndefined();
 	await reply(page);
 	expect(frames.starts()).toHaveLength(2);
-	expect(frames.starts().at(-1)!.turn.handle).toBe("Chopin");
+	expect(frames.starts().at(-1)!.turn.handle).toBe("chopin");
 });
 
 test("plain-language direct requests get a prompt reply", async ({ baseURL, browser, join, page, room, seed }) => {

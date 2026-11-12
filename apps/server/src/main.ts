@@ -318,7 +318,7 @@ let readinessReviews = new ReadinessReviews({
 			current => {
 				if (Service.implementationActive(current) || current.chat?.busy) return;
 				return {
-					handle: "Chopin",
+					handle: PLANNER_NAME,
 					said: "Checking decisions and investigations needed before building",
 					text: READINESS_INSTRUCTION,
 					about,
@@ -449,7 +449,7 @@ async function relinkDecisions(channelId: string): Promise<void> {
 		let pending = pendingLinks(current);
 		if (pending.length === 0) return;
 		return {
-			handle: "Chopin",
+			handle: PLANNER_NAME,
 			text: relinkInstruction(pending),
 			said: "Linking decisions to the document after the build",
 		};
