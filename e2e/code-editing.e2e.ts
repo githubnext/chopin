@@ -242,3 +242,22 @@ test("two people typing in one coloured block both see each other's text", async
 	}
 	await written(ana, room, /^const z = 0; let a = 1; \/\/ ana$/m);
 });
+
+test("typing goes into code that is indented with tabs, coloured or plain text", async ({ join, room, seed }) => {
+	await seed(
+		"```typescript\nfunction run() {\n\treturn 1;\n}\n```\n\n```text\n+--+\n\t| a |\n```\n",
+	);
+	let page = await join("ana");
+	await expect.poll(() => paintedText(page, "keyword")).toContain("return");
+
+	for (let [block, line] of [[0, 0], [1, 0]] as const) {
+		let source = content(page).locator(".planCode").nth(block).locator("[data-plan-source]");
+		// Where a person clicks, into the first line of each.
+		let box = (await source.boundingBox())!;
+		await page.mouse.click(box.x + 40, box.y + 12 + line * 20);
+		await page.keyboard.press("End");
+		await page.keyboard.type(" // typed");
+	}
+	await written(page, room, /^function run\(\) \{ \/\/ typed\n\treturn 1;$/m);
+	await written(page, room, /^\+--\+ \/\/ typed\n\t\| a \|$/m);
+});
