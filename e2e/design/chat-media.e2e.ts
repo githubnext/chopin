@@ -112,7 +112,19 @@ test("a file is Slack's card: 12px corners, a 1px edge, 12px padding, a 40px ico
 		await media(page).locator(".design-audit-chat-media-kinds .chat-file-icon").evaluateAll(
 			icons => icons.map(icon => icon.getAttribute("data-file-kind")),
 		),
-	).toEqual(["pdf", "document", "spreadsheet", "slides", "code", "text", "archive", "generic"]);
+	).toEqual([
+		"pdf",
+		"document",
+		"spreadsheet",
+		"slides",
+		"code",
+		"text",
+		"archive",
+		"image",
+		"video",
+		"audio",
+		"generic",
+	]);
 	let card = cards.nth(0).locator("button").first();
 	expect(await css(card, "border-top-width", "border-top-left-radius", "padding-top", "min-height"))
 		.toEqual(["1px", "12px", "12px", "64px"]);
@@ -176,6 +188,9 @@ for (let mode of ["light", "dark"] as const) {
 			code: "--color-text-secondary",
 			text: "--color-icon",
 			archive: "--color-warning-ink",
+			image: "--color-plum-9",
+			video: "--color-plum-11",
+			audio: "--color-lime-11",
 			generic: "--color-text-tertiary",
 		};
 		for (let icon of await icons.all()) {
