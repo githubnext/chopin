@@ -1827,6 +1827,7 @@ test("a running rebuild leaves editing open and reads its sealed delta", async (
 			targetRevision: 1,
 			pullRequests: [{ url: pullRequest, title: "First" }],
 			tasks: [{ title: "First", goal: "Launch", pullRequest, summary: "Launched" }],
+			requestedBy: expect.objectContaining({ login: "test" }),
 		});
 		expect(read.after).not.toContain("An edit during the rebuild.");
 	} finally {
@@ -2710,9 +2711,11 @@ async function shared(
 	own = false,
 	/** Its owner also let Chopin start work on it by itself. */
 	autoRun = false,
+	/** The connector protocol the shared machine speaks. */
+	protocol?: number,
 ) {
 	let mine = own ? await paired(context) : undefined;
-	let theirs = await paired(context, context.otherCookie, autoRun);
+	let theirs = await paired(context, context.otherCookie, autoRun, protocol);
 	let owner = (url: string, value: unknown) =>
 		context.call(url, value, undefined, undefined, context.otherCookie);
 	await owner(`/api/connector/machines/${theirs.machine}/label`, { label: "desk" });
@@ -2729,6 +2732,25 @@ async function shared(
 	return { mine, theirs, choose, owner };
 }
 let review = { planRevision: 0, graphVersion: 1, graphRevision: 1 };
+
+test("an older connector's build on a shared machine says it pushes with the owner's account", async () => {
+	let context = await setup();
+	try {
+		let { theirs } = await shared(context, false, false, 6);
+		let built = await (await context.call(context.path, review)).json();
+		let claim = await tool(context, theirs.token, "claim_implementation_build", { id: built.id });
+		await tool(context, theirs.token, "report_implementation_build", {
+			id: built.id,
+			state: "running",
+			session: "acp-session",
+		});
+		let read = await tool(context, claim.runToken, "read_implementation");
+		expect(read.requestedBy.pullRequestNote).toContain("Requested by test in https://chopin.test/");
+		expect(read.requestedBy.pullRequestNote).toContain("other's shared machine");
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
 
 test("Build goes to the teammate's shared machine the person chose, and runs there on their behalf", async () => {
 	let context = await setup();
@@ -2765,12 +2787,15 @@ test("Build goes to the teammate's shared machine the person chose, and runs the
 		).toBeUndefined();
 		// The run is recorded as the person's who asked, never the machine owner's.
 		expect(context.plan.execution?.user).toBe("U_test");
-		// The agent is told whose request it is, to say so in each pull request it opens.
+		// The agent is told whose request it is, to credit them in each pull request it opens: the
+		// machine's connector pushes as the GitHub App's bot, not as the machine's owner.
 		let read = await tool(context, claim.runToken, "read_implementation");
 		expect(read.requestedBy.login).toBe("test");
-		expect(read.requestedBy.pullRequestNote).toContain("Requested by test in https://chopin.test/");
-		expect(read.requestedBy.pullRequestNote).toContain("other's shared machine");
+		expect(read.requestedBy.pullRequestNote).toMatch(
+			/^Requested by @test in https:\/\/chopin\.test\/\S+\. Built by a coding agent with Chopin's GitHub App\.$/,
+		);
 		expect(read.requestedBy.instructions).toContain("pullRequestNote");
+		expect(read.requestedBy.instructions).toContain("request a review from test");
 		// Everyone who sees the build is told whose machine it ran on.
 		let snapshot = await (await context.call(context.path)).json();
 		expect(snapshot.startedBy).toBe("test");

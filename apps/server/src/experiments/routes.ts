@@ -38,7 +38,9 @@ import { documentUrl } from "../channels/document-url";
 import type { PlannerAttachments } from "../harness/remote/attachments";
 import type { MachinePlanners } from "../harness/remote/machine-planners";
 import { ANY_REPOSITORY_PROTOCOL, checkoutOf, Connections, serves } from "./connections";
-import { machineGitHubToken } from "./machine-github";
+import { launchGitHubToken, machineGitHubToken } from "./machine-github";
+import type { GitHubIdentity, LaunchRun } from "./machine-github";
+import type { GitHubApp } from "../github/app";
 import type { About, Connection } from "./connections";
 import type { Source } from "@chopin/experiment";
 import { PairingKeys } from "./pairing-keys";
@@ -78,6 +80,8 @@ type Options = {
 	connectorVersion?: string;
 	/** Planner credentials for paired machines; set only under HARNESS=remote with AGENT on. */
 	planners?: MachinePlanners;
+	/** The GitHub App acting as itself, when the server has its key: it mints machines' tokens. */
+	app?: GitHubApp;
 	/** Who holds each document's Planner under HARNESS=remote, which a chosen machine's backend joins. */
 	attachments?: () => PlannerAttachments | undefined;
 	/** A person chose a machine for a document, or went back to automatic. */
@@ -231,8 +235,10 @@ function stoppedSharing(login: string) {
  * Protocol 5 connects the machine rather than one checkout: it takes work in any repository its
  * owner can push to. An older connector still connects, for its one checkout's repository.
  * Protocol 6 keeps the claimed document ID on build renewals and reports after assignment cleanup.
+ * Protocol 7 says what each GitHub token is for, takes the App's installation token for one
+ * repository and the bot and starter it names, and stops a launch Chopin gives no token.
  */
-export const CONNECTOR_PROTOCOLS: { min: number; max: number } = { min: 2, max: 6 };
+export const CONNECTOR_PROTOCOLS: { min: number; max: number } = { min: 2, max: 7 };
 
 /** A document's people read why a Planner backend keeps failing from this launch in a row on. */
 export const PLANNER_FAILURE_SHOWN_AT = 2;
@@ -1721,19 +1727,89 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return json({ recorded: true });
 	});
 	/**
-	 * A paired machine's own GitHub token, for its Planner commands and runs to push to
-	 * `repository` and open draft pull requests as its owner (see `machineGitHubToken`). Under
-	 * AUTH_MODE=local machines hold no GitHub token, so there is none to give.
+	 * A run or Planner on a paired machine, as the GitHub token for it needs it: a build of
+	 * `document`, or an investigation or prototype, which are known by their ID alone.
+	 */
+	/** Who launch tokens were issued for, by user ID, so a build can credit them by name. */
+	let identities = new Map<string, GitHubIdentity>();
+	async function launchRun(
+		id: string,
+		document: string | undefined,
+	): Promise<LaunchRun | undefined> {
+		let investigation = await auth.storage.experiments.get(id);
+		if (investigation) {
+			if (!["queued", "running", "publishing"].includes(investigation.state)) return undefined;
+			let repository = investigation.input?.source.repository;
+			if (!repository) return undefined;
+			let held = investigation.connectionId
+				? connections.get(investigation.connectionId)
+				: undefined;
+			return {
+				kind: investigation.spike ? "spike" : "investigation",
+				repository,
+				starter: investigation.input?.authorizer ?? investigation.requester,
+				...(held ? { machineId: held.machineId } : {}),
+			};
+		}
+		if (!document) return undefined;
+		let build = await options.implementations?.()?.build(document, id);
+		return build && { kind: "build", ...build };
+	}
+	/**
+	 * A GitHub token for a paired machine's Planner or run. A connector that says what it is for
+	 * gets one of the App's installation tokens for the one repository, acting as the App's bot and
+	 * naming who it is for (see `launchGitHubToken`); `check` only says whether it would. One that
+	 * names only the repository is an older release's, and still gets its owner's own token for one
+	 * more release (see `machineGitHubToken`). Under AUTH_MODE=local machines hold no GitHub token,
+	 * so there is none to give.
 	 */
 	route("POST", "/api/connector/github-token", async request => {
 		if (!auth.machines.durable) fail("not-found");
 		compatible(request, auth.config.origin, options.connectorVersion);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
-		let { repository } = z.object({ repository: z.string().min(3).max(256) }).strict().parse(
-			await body(request),
-		);
+		let id = z.string().min(1).max(2048);
+		let asked = z.object({
+			repository: z.string().min(3).max(256),
+			purpose: z.enum(["run", "planner", "check"]).optional(),
+			run: id.optional(),
+			document: id.optional(),
+		}).strict().parse(await body(request));
+		if (!asked.purpose) {
+			if (asked.run || asked.document) fail("invalid-request");
+			let issued = await machineRefusal(() =>
+				machineGitHubToken(
+					{ machines: auth.machines, github: auth.github },
+					machine,
+					asked.repository,
+				)
+			);
+			console.warn(
+				`chopin: legacy GitHub token for machine ${machine.id} in ${asked.repository}: its `
+					+ "connector predates App installation tokens",
+			);
+			await auth.machines.seen(machine);
+			return json({ ...issued, legacy: true });
+		}
+		let purpose = asked.purpose;
 		let issued = await machineRefusal(() =>
-			machineGitHubToken({ machines: auth.machines, github: auth.github }, machine, repository)
+			launchGitHubToken(
+				{
+					machines: auth.machines,
+					github: auth.github,
+					...(options.app ? { app: options.app } : {}),
+					slug: auth.config.appSlug,
+					run: launchRun,
+					user: id => auth.storage.users.get(id),
+					remember: (userId, identity) => identities.set(userId, identity),
+				},
+				machine,
+				{
+					repository: asked.repository,
+					purpose,
+					...(asked.run ? { run: asked.run } : {}),
+					...(asked.document ? { document: asked.document } : {}),
+				},
+			)
 		);
 		await auth.machines.seen(machine);
 		return json(issued);
@@ -2992,5 +3068,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		/** Whether this server runs Planners on people's machines: HARNESS=remote, machines' own GitHub. */
 		plannerMachines: !!options.planners && auth.machines.durable,
 		sourceFor,
+		/** The GitHub identity of a person a launch token was last issued for, to credit them. */
+		identity: (userId: string) => identities.get(userId),
 	};
 }

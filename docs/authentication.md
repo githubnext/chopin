@@ -49,7 +49,13 @@ Metadata:        Read-only (automatic)
 
 ### Who writes to repositories
 
-The server never writes to a repository. Machines push as their owner; see
+The server never writes to a repository. A machine's builds, investigations and
+Planner push and open pull requests with a short-lived installation token the
+server mints for the one repository (`GITHUB_APP_ID` and the App's private key,
+see [Self-hosting](self-hosting.md)), so they act as the App's bot and credit the
+person who started the work. The server checks each time that this person, or the
+machine's owner for its Planner, can push there. A prototype's token only reads.
+An older connector still pushes as the machine's owner; see
 [Which GitHub account pushes](chopin-cli.md#which-github-account-pushes).
 
 ### Organization admission

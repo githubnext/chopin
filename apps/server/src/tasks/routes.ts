@@ -47,6 +47,8 @@ type Options = {
 	takers?: (owner: string, repositoryId: string, documentId: string) => Promise<Connection[]>;
 	/** Whether a connection may take `person`'s work on a document now, as `takers` decides. */
 	mayTake?: (connection: Connection, person: string, documentId: string) => Promise<boolean>;
+	/** The GitHub name and noreply email of a person a launch token was issued for, when known. */
+	identity?: (userId: string) => { name: string; email: string } | undefined;
 	/** Reads the stored machine choices, or throws `machine-choice-unavailable`. */
 	machineChoices?: () => Promise<void>;
 	/**
@@ -128,6 +130,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 		{
 			...options.resumeMs === undefined ? {} : { resumeMs: options.resumeMs },
 			...options.mayTake ? { mayTake: options.mayTake } : {},
+			...options.identity ? { identity: options.identity } : {},
 			login: async id => (await auth.storage.users.get(id))?.login,
 		},
 	);
