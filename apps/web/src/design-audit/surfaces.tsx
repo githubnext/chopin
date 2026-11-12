@@ -1,5 +1,6 @@
 import { AssistantUiPlate } from "./plates/assistant-ui";
 import { ChatMediaPlate } from "./plates/chat-media";
+import { EmojiPlate } from "./plates/emoji";
 import { ConversationPlate } from "./plates/conversation";
 import { DecisionsPlate } from "./plates/decisions";
 import { DialogsPlate } from "./plates/dialogs";
@@ -29,6 +30,7 @@ export function Surfaces() {
 			<ErrorsPlate />
 			<AssistantUiPlate />
 			<ChatMediaPlate />
+			<EmojiPlate />
 		</>
 	);
 }

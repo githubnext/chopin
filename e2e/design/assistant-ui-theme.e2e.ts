@@ -48,6 +48,11 @@ const ROOTS = [
 	"[data-audit-reactions]",
 	'[data-slot="agent-handoff"]',
 	'[data-slot="subagent-list"]',
+	// The emoji picker's chrome and its first section; its other sections are drawn the same way.
+	"[data-audit-picker] .emoji-picker-search",
+	"[data-audit-picker] .emoji-picker-tabs",
+	'[data-audit-picker] [data-emoji-section="frequent"]',
+	"[data-audit-picker] .emoji-picker-footer",
 ] as const;
 
 // The voice's dot pulses for as long as it listens, and subagent cards spin and shimmer: a colour
@@ -88,6 +93,9 @@ async function drawn(
 		// not restore a family, so the copy's is Chopin's, and the two are the same string).
 		probe.style.fontFamily = "var(--font-mono)";
 		let mono = getComputedStyle(probe).fontFamily;
+		// Where only emoji are drawn (a reaction, the picker): the platform's emoji fonts, then Inter.
+		probe.style.fontFamily = "var(--font-emoji)";
+		let emoji = getComputedStyle(probe).fontFamily;
 		probe.style.fontFamily = "";
 		let describe = (element: Element) =>
 			`${element.tagName.toLowerCase()}${
@@ -144,6 +152,8 @@ async function drawn(
 								? "Chopin"
 								: style.fontFamily === mono
 								? "Chopin mono"
+								: style.fontFamily === emoji
+								? "Chopin emoji"
 								: style.fontFamily
 						}`,
 					);
@@ -315,6 +325,18 @@ async function states(page: Page, measure: (state: string) => Promise<void>) {
 	await check("dropdown item hover");
 	await page.locator('[data-slot="dropdown-menu-item"][data-variant="destructive"]').hover();
 	await check("dropdown destructive hover");
+	await page.keyboard.press("Escape");
+
+	await plate(page, "emoji").getByRole("button", { name: "Show the emoji picker" }).click();
+	let picker = plate(page, "emoji").locator("[data-audit-picker]");
+	await picker.scrollIntoViewIfNeeded();
+	await picker.locator("[data-emoji]").nth(3).hover();
+	await check("emoji picker cell hover");
+	await picker.getByRole("tab", { name: "Animals and nature" }).hover();
+	await check("emoji picker tab hover");
+	await picker.getByRole("button", { name: /^Skin tone:/ }).click();
+	await check("emoji picker skin tones open");
+	await picker.getByRole("button", { name: "Default skin tone" }).click();
 }
 
 for (let mode of ["light", "dark"] as const) {
@@ -329,7 +351,7 @@ for (let mode of ["light", "dark"] as const) {
 			expect(unthemed(result), `${state}, ${mode}: colours that are no Chopin token`).toEqual([]);
 			expect(result.leaks, `${state}, ${mode}: borders drawn in the text colour`).toEqual([]);
 			expect(
-				result.fonts.filter(font => !/: Chopin( mono)?$/.test(font)),
+				result.fonts.filter(font => !/: Chopin( mono| emoji)?$/.test(font)),
 				`${state}, ${mode}: type outside Chopin's typeface`,
 			).toEqual([]);
 			checked += result.drawn.length;

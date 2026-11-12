@@ -13,6 +13,7 @@ export default defineConfig<DesignOptions>({
 		"chat-media.e2e.ts",
 		"touch-targets.e2e.ts",
 		"connecting-indicator.e2e.ts",
+		"emoji.e2e.ts",
 	],
 	workers: 2,
 	outputDir: "../test-results/design-behavior",
