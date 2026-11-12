@@ -19,6 +19,10 @@
 			"types": "./src/content-swap.tsx",
 			"default": "./src/content-swap.tsx"
 		},
+		"./code-tokens": {
+			"types": "./src/widgets/code-tokens.ts",
+			"default": "./src/widgets/code-tokens.ts"
+		},
 		"./count": {
 			"types": "./src/count.tsx",
 			"default": "./src/count.tsx"

@@ -24,6 +24,7 @@ import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState } from
 import { codeWraps } from "@chopin/dialect";
 
 import { fileNameOf, repaired, titled } from "./code";
+import { grammar, PLAIN } from "./code-tokens";
 
 import type { ErrorInfo, ReactNode } from "react";
 import type { Kind } from "./code";
@@ -58,9 +59,6 @@ function readOverflow(element: HTMLElement): Overflow {
 		: "scroll";
 }
 
-/** What the highlighter calls text it has no grammar for. */
-const PLAIN = "text";
-
 /**
  * One theme, named once.
  *
@@ -90,31 +88,6 @@ function load(): Promise<Renderer> {
 		}),
 	);
 	return loading;
-}
-
-/**
- * Languages the highlighter turned out to have, and the ones it did not.
- *
- * Asked rather than assumed, because a fence may say anything and the answer
- * is not a list this package can hold: `resolveLanguage` rejects what it
- * cannot load, and the renderer's own attempt at an unknown grammar rejects a
- * promise nothing is watching — which leaves the block blank rather than
- * uncoloured. Asking first turns that into plain text.
- */
-const known = new Map<string, string>();
-
-async function grammar(language: string, resolve: Core["resolveLanguage"]): Promise<string> {
-	let seen = known.get(language);
-	if (seen !== undefined) return seen;
-
-	try {
-		await resolve(language);
-		known.set(language, language);
-		return language;
-	} catch {
-		known.set(language, PLAIN);
-		return PLAIN;
-	}
 }
 
 /**

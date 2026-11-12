@@ -21,6 +21,7 @@ import {
 } from "@/components/assistant-ui/elements/markdown-text";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { sameJson } from "../same-json";
+import { ChatCodeColour } from "./code-colour";
 import { emojiRemarkPlugin, jumbo } from "./emoji";
 import { messageGfmRemarkPlugin } from "./gfm";
 import { ChatImage, MessageImages, useImageHost } from "./image";
@@ -317,8 +318,8 @@ let markdownGallery = ({ children }: ComponentProps<"figure">) => {
 let DefaultPre = defaultComponents.pre!;
 
 /**
- * Upstream's code block, reachable by the keyboard: its lines scroll sideways once the message is
- * narrower than they are, as it is beside the toolbar kept in view on a tall message.
+ * Upstream's code block, reachable by the keyboard: its lines scroll sideways inside it once they are
+ * longer than the message is wide.
  */
 function CodeBlock(props: ComponentProps<typeof DefaultPre>) {
 	return <DefaultPre {...props} tabIndex={0} />;
@@ -341,6 +342,7 @@ function keyboardLane(table: HTMLTableElement | null) {
 let MESSAGE_COMPONENTS: MarkdownComponents = {
 	...CHAT_COMPONENTS,
 	CodeHeader: ChatCodeHeader,
+	SyntaxHighlighter: ChatCodeColour,
 	a: MessageLink,
 	figure: markdownGallery,
 	h1: imageParagraph,
