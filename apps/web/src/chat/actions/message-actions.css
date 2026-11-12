@@ -119,18 +119,13 @@
 }
 
 /*
- * A message that opens with a picture keeps it whole: the picture is no line of words to keep
- * clear, and a room beside it would only narrow it, so the bar stands over its corner, as Slack's
- * stands over an image.
+ * A message that opens with a picture, a code block or a table keeps it whole: none is a line of
+ * words to keep clear, and a room beside it would only narrow it, so the bar stands over its corner,
+ * as Slack's stands over an image.
  */
 .chat-toolbar-room:has(+ [data-chat-markdown]
-	> :first-child:is(figure, .chat-image, [data-slot="image-gallery"], .chat-markdown-paragraph)) {
+	> :first-child:is(figure, .chat-image, [data-slot="image-gallery"], .chat-markdown-paragraph, .aui-code-header-root, .aui-md-table-wrapper)) {
 	display: none;
-}
-
-/* A message taller than the pane leaves the bar's width beside its text, as the bar is kept in view over it. */
-.chat-message-body[data-chat-tall] [data-chat-message-text] {
-	padding-inline-end: calc(var(--chat-toolbar-reserve, 0px) - var(--chat-bleed-end) + 0.5rem);
 }
 
 .message-actions-emoji {
