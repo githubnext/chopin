@@ -19,6 +19,10 @@
 			"types": "./src/chunk.ts",
 			"default": "./src/chunk.ts"
 		},
+		"./heading-anchor": {
+			"types": "./src/heading-anchor.ts",
+			"default": "./src/heading-anchor.ts"
+		},
 		"./limits": {
 			"types": "./src/limits.ts",
 			"default": "./src/limits.ts"

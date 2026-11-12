@@ -1,0 +1,32 @@
+/*
+ * A heading a link went to.
+ *
+ * Room above it, so a heading scrolled to is not pressed against the top edge or under a phone's
+ * top bar. Marked with the change marks' wash, which says "here" in the document's own colour,
+ * held for a moment and then faded on the shared ease, so the reader's eye finds where it landed
+ * and the mark is gone before they read on. Reduced motion holds it still until it is taken off.
+ */
+.plan .plan-content > :is(h1, h2, h3, h4, h5, h6) {
+	scroll-margin-top: 1.5rem;
+}
+
+.plan .plan-content > :is(h1, h2, h3, h4, h5, h6)[data-heading-linked] {
+	background-color: color-mix(in oklab, var(--color-brand-wash) 65%, var(--color-page));
+	border-radius: var(--radius-sm);
+	outline: 0.375rem solid color-mix(in oklab, var(--color-brand-wash) 65%, var(--color-page));
+	animation: heading-linked-out var(--duration-linger) var(--ease-out)
+		calc(2 * var(--duration-linger)) both;
+}
+
+@keyframes heading-linked-out {
+	to {
+		background-color: var(--color-page);
+		outline-color: var(--color-page);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.plan .plan-content > :is(h1, h2, h3, h4, h5, h6)[data-heading-linked] {
+		animation: none;
+	}
+}

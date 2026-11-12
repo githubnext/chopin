@@ -20,6 +20,7 @@ import {
 	MarkdownText,
 } from "@/components/assistant-ui/elements/markdown-text";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
+import { appLink } from "../app-links";
 import { sameJson } from "../same-json";
 import { ChatCodeColour } from "./code-colour";
 import { emojiRemarkPlugin, jumbo } from "./emoji";
@@ -91,20 +92,29 @@ let paragraph = ({ children }: ComponentProps<"p">) => (
 	<UpstreamParagraph>{children}</UpstreamParagraph>
 );
 
-/** A link someone wrote: a path in the repository opens the file on GitHub, as in the document. */
+/**
+ * A link someone wrote: a path in the repository opens the file on GitHub, as in the document. A
+ * link to the document's own sections or to another document is the app's, followed in this tab as
+ * the document's own links are; only another site opens a new one.
+ */
 export const ChatLink = (
 	{ "aria-label": label, children, className, href }: ComponentProps<"a">,
-) => (
-	<UpstreamLink
-		aria-label={label}
-		className={className}
-		href={useLinkHref(href)}
-		rel="noopener noreferrer"
-		target="_blank"
-	>
-		{children}
-	</UpstreamLink>
-);
+) => {
+	let target = useLinkHref(href);
+	let own = target !== undefined && typeof location !== "undefined"
+		&& appLink(target, location) !== undefined;
+	return (
+		<UpstreamLink
+			aria-label={label}
+			className={className}
+			href={target}
+			rel={own ? undefined : "noopener noreferrer"}
+			target={own ? undefined : "_blank"}
+		>
+			{children}
+		</UpstreamLink>
+	);
+};
 
 export const CHAT_COMPONENTS: MarkdownComponents = {
 	a: ChatLink,

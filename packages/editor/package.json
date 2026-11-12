@@ -35,6 +35,10 @@
 			"types": "./src/face.tsx",
 			"default": "./src/face.tsx"
 		},
+		"./follow-link": {
+			"types": "./src/follow-link.ts",
+			"default": "./src/follow-link.ts"
+		},
 		"./image-lightbox": {
 			"types": "./src/widgets/image-lightbox.tsx",
 			"default": "./src/widgets/image-lightbox.tsx"

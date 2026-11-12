@@ -34,6 +34,7 @@ import { parseGitHubReference } from "@chopin/protocol/github-reference";
 
 import { GitHubCard } from "../github-card";
 import { useGitHubEntry } from "../github-hover";
+import { useFollowLink } from "../follow-link";
 import { useGitHubReferences } from "../github-references";
 import { useRepositoryLinks } from "../repository-links";
 import { registerLinkGuard } from "./link-guard";
@@ -43,6 +44,7 @@ import { editorSurfaceViewport, listenToEditorGeometry } from "./surface";
 import { checkUrl } from "./url";
 
 import type { LinkNode } from "@lexical/link";
+import type { FollowLink } from "../follow-link";
 import type { GitHubReference } from "@chopin/protocol/github-reference";
 import type { GitHubReferenceStore } from "../widget-options";
 import type { LinkRepository } from "@chopin/dialect";
@@ -152,14 +154,21 @@ export function followHref(
 	return file ?? editor.getElementByKey(key)?.closest("a")?.href ?? url;
 }
 
+/**
+ * Follow a link: one to a page of the host's own (a section of this document, another document)
+ * in place, as the host's own links are, and any other in a new tab.
+ */
 function follow(
 	editor: LexicalEditor,
 	key: NodeKey,
 	url: string,
 	repository: LinkRepository | undefined,
+	inPlace: FollowLink | undefined,
 ): void {
 	let href = followHref(editor, key, url, repository);
-	if (href !== undefined) window.open(href, "_blank", "noopener,noreferrer");
+	if (href === undefined) return;
+	if (inPlace?.owns(href)) inPlace.follow(href);
+	else window.open(href, "_blank", "noopener,noreferrer");
 }
 
 export function LinkSurface(
@@ -173,9 +182,12 @@ export function LinkSurface(
 ) {
 	let [editor] = useLexicalComposerContext();
 	let repository = useRepositoryLinks();
+	let inPlace = useFollowLink();
 	let [open, setOpen] = useState<Open>();
 	/** A link whose preview was dismissed stays quiet until the caret leaves it. */
 	let dismissed = useRef<NodeKey>(undefined);
+	/** A link pressed to follow it in place, whose caret is still on its way. */
+	let pressed = useRef<NodeKey>(undefined);
 	let editing = open?.mode === "edit";
 
 	useEffect(() => onEditing?.(editing), [editing, onEditing]);
@@ -197,6 +209,11 @@ export function LinkSurface(
 			let node = $linkAt(selection);
 			return node && { key: node.getKey(), url: node.getURL() };
 		});
+		// The caret a press left in a link followed in place, once it arrives there.
+		if (link && link.key === pressed.current) {
+			dismissed.current = link.key;
+			pressed.current = undefined;
+		}
 		if (link?.key !== dismissed.current) dismissed.current = undefined;
 		setOpen(current => {
 			if (current?.mode === "edit") return current;
@@ -216,6 +233,7 @@ export function LinkSurface(
 			editor.registerCommand(
 				KEY_DOWN_COMMAND,
 				(event: KeyboardEvent) => {
+					pressed.current = undefined;
 					if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return false;
 					if (event.key.toLowerCase() === "k") {
 						// A keyboard selection reaches the editor in a later selectionchange task, which
@@ -240,7 +258,7 @@ export function LinkSurface(
 					});
 					if (!link) return false;
 					event.preventDefault();
-					follow(editor, link.key, link.url, repository);
+					follow(editor, link.key, link.url, repository, inPlace);
 					return true;
 				},
 				COMMAND_PRIORITY_LOW,
@@ -264,7 +282,7 @@ export function LinkSurface(
 			editor.registerUpdateListener(sync),
 		];
 		return () => stops.forEach(stop => stop());
-	}, [editor, disabled, edit, sync, repository]);
+	}, [editor, disabled, edit, sync, repository, inPlace]);
 
 	/*
 	 * Clicks on links.
@@ -295,7 +313,11 @@ export function LinkSurface(
 			if (event.button === 1 || event.metaKey || event.ctrlKey || !link || following) {
 				event.stopPropagation();
 				let href = link ? followHref(editor, link.key, link.url, repository) : anchor.href;
-				if (href !== undefined) window.open(href, "_blank", "noopener,noreferrer");
+				if (href === undefined) return;
+				// A reader's tap goes where the link goes; a modified or middle click asks for a tab.
+				let tab = event.button === 1 || event.metaKey || event.ctrlKey;
+				if (!tab && inPlace?.owns(href)) inPlace.follow(href);
+				else window.open(href, "_blank", "noopener,noreferrer");
 				return;
 			}
 			dismissed.current = undefined;
@@ -305,13 +327,44 @@ export function LinkSurface(
 		let middle = (event: MouseEvent) => {
 			if (event.button === 1) click(event);
 		};
+		// A plain press on a link the host follows in place goes there, so the caret it leaves in
+		// the link must not bring up its preview.
+		let press = (event: PointerEvent) => {
+			pressed.current = undefined;
+			if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+				return;
+			}
+			if (!(event.target instanceof Element)) return;
+			let anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+			if (!anchor || !inPlace?.owns(anchor.href)) return;
+			pressed.current = editor.read(() => {
+				let node = $getNearestNodeFromDOMNode(anchor);
+				return (node && ($isLinkNode(node) ? node : $findMatchingParent(node, $isLinkNode)))
+					?.getKey();
+			});
+		};
 		return editor.registerRootListener((current, previous) => {
 			previous?.removeEventListener("click", click);
 			previous?.removeEventListener("mouseup", middle);
+			previous?.removeEventListener("pointerdown", press);
 			current?.addEventListener("click", click);
 			current?.addEventListener("mouseup", middle);
+			current?.addEventListener("pointerdown", press);
 		});
-	}, [editor, following, repository, sync]);
+	}, [editor, following, inPlace, repository, sync]);
+
+	// A link followed to a section of this page leaves its preview behind, as the page moves on.
+	useEffect(() => {
+		let leave = () => {
+			setOpen(current => {
+				if (current?.mode !== "preview") return current;
+				dismissed.current = current.key;
+				return undefined;
+			});
+		};
+		addEventListener("hashchange", leave);
+		return () => removeEventListener("hashchange", leave);
+	}, []);
 
 	// A reader never sees the preview, including one left open from editing.
 	useEffect(() => {
@@ -578,7 +631,10 @@ function LinkPreview(
 	let position = usePlacement(editor, ref, locate);
 	let store = useGitHubReferences();
 	let repository = useRepositoryLinks();
+	let inPlace = useFollowLink();
 	let reference = store ? parseGitHubReference(preview.url) : undefined;
+	let href = followHref(editor, preview.key, preview.url, repository);
+	let here = href !== undefined && !!inPlace?.owns(href);
 
 	// Without a caret to move away, a read-only preview needs its own ways out.
 	useEffect(() => {
@@ -624,8 +680,12 @@ function LinkPreview(
 				</span>
 				<button
 					className="btn btn-sm btn-ghost shrink-0"
-					onClick={() => follow(editor, preview.key, preview.url, repository)}
-					title={readOnly ? "Open in a new tab" : "Open in a new tab (⌘↵)"}
+					onClick={() => {
+						follow(editor, preview.key, preview.url, repository, inPlace);
+						// Followed in place, the link is left behind; a new tab leaves it in view.
+						if (here) onClose();
+					}}
+					title={`${here ? "Open" : "Open in a new tab"}${readOnly ? "" : " (⌘↵)"}`}
 					type="button"
 				>
 					Open

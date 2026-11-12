@@ -10,6 +10,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { createPortal, flushSync } from "react-dom";
+import { FollowLinkProvider } from "@chopin/editor/follow-link";
 import { rememberAvatars } from "@chopin/editor/people";
 import { documentPath } from "@chopin/protocol/document-url";
 import {
@@ -127,6 +128,7 @@ import { useDocumentWidth } from "./document-width";
 import { setDocumentFullWidth } from "./api";
 import { MenuSwitchItem } from "./menu-switch";
 import { DocumentContents } from "./document-contents";
+import { APP_LINKS, useSectionLinks } from "./section-links";
 import {
 	DocumentHistoryPanel,
 	DocumentVersionBar,
@@ -714,7 +716,9 @@ export function RoomWorkspace(
 	// Wherever this room draws a link (the document, an earlier version, Chat, a decision card), a
 	// path in the repository means a file there.
 	let linked = (children: ReactNode) => (
-		<RepositoryLinksProvider value={links}>{children}</RepositoryLinksProvider>
+		<RepositoryLinksProvider value={links}>
+			<FollowLinkProvider value={APP_LINKS}>{children}</FollowLinkProvider>
+		</RepositoryLinksProvider>
 	);
 	let researchLinks = useResearchOfferLinks(
 		wire,
@@ -1026,6 +1030,13 @@ export function RoomWorkspace(
 		latestSelectDestination.current("decisions");
 		setReveal({ widget: questionnaireId, token: Date.now() });
 	}, []);
+	// A link to a section brings the document forward from Decisions, Build or a phone's Chat.
+	let showDocument = useCallback(() => {
+		if (latestPlanVisible.current) return false;
+		latestSelectDestination.current("plan");
+		return true;
+	}, []);
+	useSectionLinks({ area: documentArea, reveal: showDocument, room, root: contentsRoot });
 
 	useEffect(() => {
 		setSourceDestination(undefined);
