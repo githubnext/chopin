@@ -396,7 +396,7 @@
 				1
 			]
 		],
-		"sourceHash": "abe90d6bc426ffea321f1c207d1e394e51101de33dd1b23f12ee78c681b58cea"
+		"sourceHash": "635203d361addc3e9ea6e95bede2716942ed048eb7ccfb843a694790b2fb2ec1"
 	},
 	{
 		"file": "packages/editor/src/widgets/questionnaire.tsx",
