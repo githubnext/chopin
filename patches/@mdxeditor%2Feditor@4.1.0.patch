@@ -1,5 +1,5 @@
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index f52cc58f1bf1d8c2a2ab108ac079318d6ced0a0d..fb360300dd92ddd49d9b9478435e4a46bce84fd8 100644
+index f52cc58f1bf1d8c2a2ab108ac079318d6ced0a0d..3394362fd6d3dfd066267e44517a8e5eb88c2ccb 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
 @@ -734,7 +734,43 @@ export declare const convertSelectionToNode$: NodeRef<() => ElementNode>;
@@ -47,3 +47,80 @@ index f52cc58f1bf1d8c2a2ab108ac079318d6ced0a0d..fb360300dd92ddd49d9b9478435e4a46
  
  /**
   * An input signal that lets you register a new {@link EditorSubscription} for the active editor.
+@@ -2092,6 +2128,15 @@ export declare const ListsToggle: default_2.FC<{
+  */
+ export declare const markdown$: NodeRef<string>;
+ 
++/**
++ * Whether each change to the document is exported to Markdown and published to `markdown$`.
++ *
++ * True by default. Chopin turns it off: a collaborative document's Markdown is the server's, and
++ * the export walks the whole document on every keystroke.
++ * @group Core
++ */
++export declare const markdownExport$: NodeRef<boolean>;
++
+ /* Excluded from this release type: markdownErrorSignal$ */
+ 
+ /**
+diff --git a/dist/index.js b/dist/index.js
+index e0c9642d3b59f06d49ad4c17466e64f594351c64..be7002a23401fb5e1b46292ebcf29497f544507b 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -4,7 +4,7 @@ import { MDXEditor } from "./MDXEditor.js";
+ import { defaultSvgIcons } from "./defaultSvgIcons.js";
+ import { MarkdownParseError, UnrecognizedMarkdownConstructError, importMarkdownToLexical, importMdastTreeToLexical } from "./importMarkdownToLexical.js";
+ import { exportLexicalTreeToMdast, exportMarkdownFromLexical } from "./exportMarkdownFromLexical.js";
+-import { Appender, NESTED_EDITOR_UPDATED_COMMAND, activeEditor$, activeEditorSubscriptions$, activePlugins$, addActivePlugin$, addBottomAreaChild$, addComposerChild$, addEditorWrapper$, addExportVisitor$, addImportVisitor$, addLexicalNode$, addMdastExtension$, addNestedEditorChild$, addSyntaxExtension$, addTableCellEditorChild$, addToMarkdownExtension$, addTopAreaChild$, applyBlockType$, applyFormat$, autoFocus$, bottomAreaChildren$, codeBlockEditorDescriptors$, composerChildren$, contentEditableClassName$, contentEditableRef$, contentEditableWrapperElement$, convertSelectionToNode$, corePlugin, createActiveEditorSubscription$, createRootEditorSubscription$, currentBlockType$, currentFormat$, currentSelection$, defaultCodeBlockLanguage$, directiveDescriptors$, editorInFocus$, editorInTable$, editorRootElementRef$, editorWrapperElementRef$, editorWrappers$, exportVisitors$, historyState$, iconComponentFor$, importVisitors$, inFocus$, initialMarkdown$, initialMarkdownNormalize$, insertDecoratorNode$, insertMarkdown$, jsxComponentDescriptors$, jsxIsAvailable$, lexicalTheme$, markdown$, markdownErrorSignal$, markdownProcessingError$, markdownSourceEditorValue$, mdastExtensions$, muteChange$, nestedEditorChildren$, onBlur$, placeholder$, readOnly$, rootEditor$, rootEditorSubscriptions$, setMarkdown$, spellCheck$, syntaxExtensions$, tableCellEditorChildren$, toMarkdownExtensions$, toMarkdownOptions$, topAreaChildren$, translation$, useTranslation, usedLexicalNodes$, viewMode$ } from "./plugins/core/index.js";
++import { Appender, NESTED_EDITOR_UPDATED_COMMAND, activeEditor$, activeEditorSubscriptions$, activePlugins$, addActivePlugin$, addBottomAreaChild$, addComposerChild$, addEditorWrapper$, addExportVisitor$, addImportVisitor$, addLexicalNode$, addMdastExtension$, addNestedEditorChild$, addSyntaxExtension$, addTableCellEditorChild$, addToMarkdownExtension$, addTopAreaChild$, applyBlockType$, applyFormat$, autoFocus$, bottomAreaChildren$, codeBlockEditorDescriptors$, composerChildren$, contentEditableClassName$, contentEditableRef$, contentEditableWrapperElement$, convertSelectionToNode$, corePlugin, createActiveEditorSubscription$, createRootEditorSubscription$, currentBlockType$, currentFormat$, currentSelection$, defaultCodeBlockLanguage$, directiveDescriptors$, editorInFocus$, editorInTable$, editorRootElementRef$, editorWrapperElementRef$, editorWrappers$, exportVisitors$, historyState$, iconComponentFor$, importVisitors$, inFocus$, initialMarkdown$, initialMarkdownNormalize$, insertDecoratorNode$, insertMarkdown$, jsxComponentDescriptors$, jsxIsAvailable$, lexicalTheme$, markdown$, markdownErrorSignal$, markdownExport$, markdownProcessingError$, markdownSourceEditorValue$, mdastExtensions$, muteChange$, nestedEditorChildren$, onBlur$, placeholder$, readOnly$, rootEditor$, rootEditorSubscriptions$, setMarkdown$, spellCheck$, syntaxExtensions$, tableCellEditorChildren$, toMarkdownExtensions$, toMarkdownOptions$, topAreaChildren$, translation$, useTranslation, usedLexicalNodes$, viewMode$ } from "./plugins/core/index.js";
+ import { ALL_HEADING_LEVELS, allowedHeadingLevels$, headingsPlugin } from "./plugins/headings/index.js";
+ import { insertThematicBreak$, thematicBreakPlugin } from "./plugins/thematic-break/index.js";
+ import { applyListType$, currentListType$, listsPlugin } from "./plugins/lists/index.js";
+@@ -291,6 +291,7 @@ export {
+   makeHslTransparent,
+   markdown$,
+   markdownErrorSignal$,
++  markdownExport$,
+   markdownProcessingError$,
+   markdownShortcutPlugin,
+   markdownSourceEditorValue$,
+diff --git a/dist/plugins/core/index.js b/dist/plugins/core/index.js
+index e580719872728faf8c4efc7ae50f822408cc4a11..226e0b5b31e63a44780fb2c8650753b0a03cb5fc 100644
+--- a/dist/plugins/core/index.js
++++ b/dist/plugins/core/index.js
+@@ -82,6 +82,7 @@ const currentSelection$ = Cell(null, (r) => {
+ });
+ const initialMarkdown$ = Cell("");
+ const markdown$ = Cell("");
++const markdownExport$ = Cell(true);
+ const initialMarkdownNormalize$ = Cell(false);
+ const markdownSignal$ = Signal((r) => {
+   r.link(markdown$, markdownSignal$);
+@@ -277,6 +278,9 @@ const createRootEditorSubscription$ = Appender(rootEditorSubscriptions$, (r, sig
+               { discrete: true }
+             );
+           }
++          if (!r.getValue(markdownExport$)) {
++            return;
++          }
+           theNewMarkdownValue = exportMarkdownFromLexical({
+             root: $getRoot(),
+             visitors: r.getValue(exportVisitors$),
+@@ -286,6 +290,9 @@ const createRootEditorSubscription$ = Appender(rootEditorSubscriptions$, (r, sig
+             jsxIsAvailable: r.getValue(jsxIsAvailable$)
+           });
+         });
++        if (theNewMarkdownValue === void 0) {
++          return;
++        }
+         r.pub(markdown$, theNewMarkdownValue.trim());
+         r.pub(initialMarkdownNormalize$, false);
+       });
+@@ -666,6 +673,7 @@ export {
+   lexicalTheme$,
+   markdown$,
+   markdownErrorSignal$,
++  markdownExport$,
+   markdownProcessingError$,
+   markdownSourceEditorValue$,
+   mdastExtensions$,
