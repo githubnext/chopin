@@ -420,7 +420,7 @@ test("message-actions and dropdown-menu keep their registry geometry; Chopin's t
 	}
 	for (let index = 3; index < 6; index++) {
 		let icon = await measure(tools.nth(index).locator("svg").first());
-		expect([icon.width, icon.height], `toolbar icon ${index}`).toEqual([18, 18]);
+		expect([icon.width, icon.height], `toolbar icon ${index}`).toEqual([20, 20]);
 	}
 
 	// Slack's `c-reaction`: a 24px pill, 6px each side, an emoji and its count 2px apart, with a ring.
@@ -653,10 +653,10 @@ test("Chopin's global button behaviour does not reach a copy: its press, transit
 
 /**
  * The message box is Chopin's own, in Slack's proportions as built: an 8px box with a hairline, a
- * toolbar and a row of 28px ghost buttons with 16px icons, and a 28px rounded-square send. It is
+ * toolbar and a row of 28px ghost buttons with Slack's 18px icons, and a 28px rounded-square send. It is
  * measured where Chat draws it, on the chat plate of the audit.
  */
-test("the message box is an 8px box with a 1px border, 28px controls with 16px icons and a 28px rounded-square send, under both pointers", async ({ page }) => {
+test("the message box is an 8px box with a 1px border, 28px controls with 18px icons and a 28px rounded-square send, under both pointers", async ({ page }) => {
 	let composer = plate(page, "chat").locator(".chat-composer").first();
 	await composer.scrollIntoViewIfNeeded();
 	let box = composer.locator(".composer-surface");
@@ -687,7 +687,7 @@ test("the message box is an 8px box with a 1px border, 28px controls with 16px i
 				node => [node.getBoundingClientRect().width, node.getBoundingClientRect().height],
 			),
 			`icon ${index}`,
-		).toEqual([16, 16]);
+		).toEqual([18, 18]);
 	}
 	let send = composer.locator("[data-send-stop]");
 	let rounded = await measure(send);
@@ -738,7 +738,7 @@ test("the + is a 28px ghost button in the row; the staged files and the voice ar
 	expect(sized.radius).toBe(6);
 	expect(
 		await plus.locator("svg").evaluate(node => [node.clientWidth, node.clientHeight]),
-	).toEqual([16, 16]);
+	).toEqual([18, 18]);
 	let at = (await plus.boundingBox())!;
 	expect(at.y).toBeGreaterThanOrEqual(row.y);
 	expect(at.y + at.height).toBeLessThanOrEqual(row.y + row.height);

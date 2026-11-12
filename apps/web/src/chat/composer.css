@@ -505,11 +505,15 @@
 /*
  * The message box. A rounded rectangle with a hairline, white as the page, over a toolbar of
  * formatting marks that sits on the inset ground and a row of controls under the draft; every size
- * is a Chopin control size (28px buttons, 16px icons, the large radius) and every colour a token.
+ * is a Chopin control size (28px buttons, the large radius) with Slack's 18px glyphs, which draw
+ * Chopin's 1.5 stroke at its own grid, and every colour a token.
  * The menus (references, mentions, commands, models) open over it.
  */
 .chat-composer {
 	container: composer / inline-size;
+}
+.chat-composer .btn-icon {
+	--btn-icon-size: calc(var(--spacing) * 4.5);
 }
 .chat-composer .composer-surface {
 	position: relative;
