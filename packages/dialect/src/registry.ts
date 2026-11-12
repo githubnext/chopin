@@ -237,6 +237,9 @@ export const underlinePlugin = realmPlugin({
  * The serialiser's own list, whole. The core's copies of `mdxJsx` and
  * `gfmStrikethrough` are harmlessly overridden by identical ones, and sharing
  * the list is what stops the two drifting apart again.
+ *
+ * The collaborative editor turns that export off (`markdownExport$`, patched
+ * into MDXEditor); a static one still runs it.
  */
 export const markdownPlugin = realmPlugin({
 	init(realm) {

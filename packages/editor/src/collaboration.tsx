@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import {
 	addComposerChild$,
 	contentEditableWrapperElement$,
+	markdownExport$,
 	realmPlugin,
 	rootEditor$,
 } from "@mdxeditor/editor";
@@ -316,6 +317,10 @@ function Collaboration(options: CollaborationOptions) {
 export function collaborationPlugin(options: CollaborationOptions) {
 	return realmPlugin<CollaborationOptions>({
 		init(realm, params) {
+			// The shared document is the source of truth and the server writes its Markdown. MDXEditor
+			// otherwise exports the whole document to Markdown on every keystroke, for nobody, and a
+			// node it cannot write throws ahead of collaboration's own listener.
+			realm.pub(markdownExport$, false);
 			realm.pub(addComposerChild$, () => <Collaboration {...(params ?? options)} />);
 		},
 	})(options);
