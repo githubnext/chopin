@@ -49,3 +49,19 @@ test.each([
 		expect(confined).not.toContain("CHOPIN_RUN_WORKTREES");
 	},
 );
+
+test("a rebuild never pushes to, reopens or recreates a pull request a person closed", () => {
+	let text = rebuildPrompt(worktrees);
+	expect(text).toContain("`gh pr view <url> --json state` says OPEN");
+	expect(text).toContain(
+		"Never push to, reopen or recreate the branch of a pull request a person closed or merged",
+	);
+	expect(text).toContain("closedPullRequests");
+	expect(text).toContain("Never reopen a pull request.");
+});
+
+test("a rebuild links the document where it is now in every pull request body it touches", () => {
+	let text = rebuildPrompt(worktrees);
+	expect(text).toContain("link the document at document.url");
+	expect(text).toContain("replace any of its document.earlierUrls there");
+});

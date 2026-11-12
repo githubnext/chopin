@@ -18,6 +18,7 @@ import {
 	reportRebuild,
 	runner,
 } from "./builds";
+import type { PullRequestState } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
 import { unapprovedContext } from "./open-decisions";
 
@@ -135,6 +136,12 @@ const REFUSALS: Record<string, Record<string, { retry?: true; advice: string }>>
 				"The task was completed as needing no code change, so it takes no pull request. Move on to the next task.",
 		},
 	},
+	report_rebuild: {
+		"pull-request-closed": {
+			advice:
+				"A pull request read_rebuild lists under closedPullRequests was closed or merged by a person. Never push to it, reopen it or recreate its branch. Put that work on one new draft pull request on a new branch, name the new pull request in the report instead, and call report_rebuild again.",
+		},
+	},
 	complete_task: {
 		"already-complete": {
 			advice:
@@ -181,6 +188,16 @@ export function implementationConnector(
 		login?: (userId: string) => Promise<string | undefined>;
 		/** Their GitHub name and noreply email, once a launch token was issued for them. */
 		identity?: (userId: string) => { name: string; email: string } | undefined;
+		/**
+		 * The state on GitHub of each of a build's live pull requests that can be read, with the
+		 * access of the machine running it. One left out is unknown.
+		 */
+		pullRequestStates?: (
+			build: BuildRequest,
+			urls: readonly string[],
+		) => Promise<ReadonlyMap<string, PullRequestState>>;
+		/** Where a document was before it was renamed, as full URLs; its old addresses still resolve. */
+		earlierUrls?: (id: string) => Promise<string[]>;
 	} = {},
 ) {
 	let mayTake = options.mayTake
@@ -507,14 +524,27 @@ export function implementationConnector(
 					) refuse("build-inactive", build);
 					if (rebuild) {
 						if (name === "read_rebuild") {
-							let read = await readRebuild(plan, build.id) ?? fail("build-inactive");
+							let states = options.pullRequestStates && plan.live?.target
+								? await options.pullRequestStates(build, plan.live.pullRequests).catch(() =>
+									undefined
+								)
+								: undefined;
+							let read = await readRebuild(plan, build.id, {
+								...(states ? { states } : {}),
+								document: {
+									url: await documentUrl(plan.id),
+									earlierUrls: await options.earlierUrls?.(plan.id).catch(() => []) ?? [],
+								},
+							}) ?? fail("build-inactive");
 							return { ...read, ...await requestedBy(plan, build, connection) };
 						}
 						if (name !== "report_rebuild") fail("tool-forbidden");
 						let report = rebuildReportSchema.safeParse(args);
 						if (!report.success) fail("invalid-request");
 						let result = await reportRebuild(plan, build.id, report.data);
-						if (result.kind === "refused") fail(result.reason);
+						if (result.kind === "refused") {
+							fail(result.reason, REFUSALS.report_rebuild?.[result.reason]?.advice);
+						}
 						return { state: "stopped" };
 					}
 					if (name === "read_implementation") {

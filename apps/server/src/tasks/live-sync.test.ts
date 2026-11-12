@@ -1,7 +1,7 @@
 import { describe, expect, it, spyOn } from "bun:test";
 
 import { LiveSyncCoordinator } from "./live-sync";
-import { liveSnapshot, reportBuild, reportRebuild } from "./builds";
+import { liveSnapshot, readRebuild, reportBuild, reportRebuild } from "./builds";
 import { implementationStatus } from "./notifications";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { Experiments } from "../experiments/service";
@@ -387,6 +387,52 @@ describe("living-document sync", () => {
 		expect(source(plan)).toContain("Written during the rebuild.");
 		expect(deltas.at(-1)).toMatchObject({ baseSource: target, source: source(plan) });
 		expect(plan.live!.target).toMatchObject({ buildId: queued[1], source: source(plan) });
+		await close(plan);
+	});
+
+	it("never builds onto a pull request a person closed: a new one takes its work", async () => {
+		let { plan, queued, edit, advance } = await harness();
+		edit();
+		await advance(45_000);
+		expect(queued).toHaveLength(1);
+		plan.builds = [...plan.builds.slice(0, -1), { ...plan.builds.at(-1)!, state: "running" }];
+		let closed = "https://github.com/octo-org/score/pull/49";
+		let read = await readRebuild(plan, queued[0]!, {
+			states: new Map([[closed, "closed" as const]]),
+			document: {
+				url: "https://chopin.test/documents/octo-org/score/now",
+				earlierUrls: ["https://chopin.test/documents/octo-org/score/before"],
+			},
+		});
+		expect(read?.pullRequests).toEqual([]);
+		expect(read?.closedPullRequests).toEqual([{ url: closed, title: "", state: "closed" }]);
+		expect(read?.document).toEqual({
+			url: "https://chopin.test/documents/octo-org/score/now",
+			earlierUrls: ["https://chopin.test/documents/octo-org/score/before"],
+		});
+		// A later read that can't reach GitHub still knows it is closed.
+		expect((await readRebuild(plan, queued[0]!))?.closedPullRequests).toHaveLength(1);
+		expect(
+			await reportRebuild(plan, queued[0]!, {
+				summary: "Done",
+				commits: [{ pullRequest: closed, sha: "c".repeat(40), message: "Reopened it" }],
+				tasks: [],
+			}),
+		).toEqual({ kind: "refused", reason: "pull-request-closed" });
+		let replacement = "https://github.com/octo-org/score/pull/50";
+		expect(
+			await reportRebuild(plan, queued[0]!, {
+				summary: "Done",
+				commits: [{ pullRequest: replacement, sha: "d".repeat(40), message: "Render it" }],
+				tasks: [{ title: "Render the paragraph", goal: "Render it", pullRequest: replacement }],
+			}),
+		).toEqual({ kind: "accepted" });
+		await settle(plan);
+		expect(plan.live!.pullRequests).toEqual([replacement]);
+		expect(plan.live!.closedPullRequests).toEqual([
+			{ url: closed, state: "closed", at: expect.any(String) },
+		]);
+		expect(liveSnapshot(plan, [], "octocat")?.closedPullRequests).toHaveLength(1);
 		await close(plan);
 	});
 

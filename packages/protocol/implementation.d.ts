@@ -55,7 +55,13 @@ export type LiveSnapshot = {
 	/** The builder's checkout; sent only to the builder. */
 	checkout?: CheckoutContext;
 	baseRevision: number;
+	/** The pull requests builds keep up to date: open ones, as far as Chopin knows. */
 	pullRequests: string[];
+	/**
+	 * Pull requests a person closed or merged on GitHub. Builds never push to them again; their
+	 * work goes on new pull requests.
+	 */
+	closedPullRequests?: Array<{ url: string; state: "closed" | "merged"; at: string }>;
 	/** Tasks the first build stopped short of; the next rebuild finishes them. */
 	outstanding?: string[];
 	/**
