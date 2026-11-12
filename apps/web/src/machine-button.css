@@ -50,8 +50,9 @@
 	background: var(--color-text-tertiary);
 }
 
+/* The warning icon role, not the paler graphic, so the dot keeps 3:1 against its ring. */
 .machine-glyph .machine-glyph-dot[data-planner="failing"] {
-	background: var(--color-warning-graphic);
+	background: var(--color-warning-icon);
 }
 
 /* Wider than a dot and as tall, so three dots fit where one sat; its name says it is starting. */
@@ -223,8 +224,7 @@
 	text-wrap: pretty;
 }
 
-.machine-planner > p {
-	margin: 0;
+.machine-planner > div {
 	overflow-wrap: anywhere;
 }
 

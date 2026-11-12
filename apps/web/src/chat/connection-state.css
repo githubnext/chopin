@@ -71,3 +71,8 @@
 .chat-offline-slot > .offline-bar {
 	pointer-events: auto;
 }
+
+/* A phone's panes run under its floating top bar: the bar rests just under it. */
+.workspace-root[data-workspace-phone] .chat-offline-slot {
+	inset-block-start: var(--phone-top-chrome);
+}

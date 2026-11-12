@@ -1,6 +1,7 @@
 /*
  * chopin's presence on its mark, as Slack draws an app's or a person's: a small dot on the
- * avatar's lower corner, ringed in the surface behind it. Active is the success green, connecting
+ * avatar's lower corner, ringed in the surface behind it, each at least 3:1 against that ring.
+ * Active is the success green, connecting
  * the petrol accent breathing slowly by opacity alone (still under reduced motion), can't connect
  * the warning role, and away the muted grey of an offline machine, as the machine button's is.
  */
@@ -21,7 +22,7 @@
 	border-style: solid;
 	border-color: var(--presence-ring);
 	border-radius: var(--radius-full);
-	background: var(--color-success-graphic);
+	background: var(--color-success-icon);
 }
 
 .presence-dot[data-presence="connecting"] {
@@ -29,7 +30,7 @@
 }
 
 .presence-dot[data-presence="failing"] {
-	background: var(--color-warning-graphic);
+	background: var(--color-warning-icon);
 }
 
 .presence-dot[data-presence="away"] {

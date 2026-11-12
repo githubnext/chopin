@@ -41,7 +41,11 @@ export function ConnectionState({ phase, message, onRetry, closing, id }: Connec
 		<div
 			aria-hidden={closing || undefined}
 			className="offline-bar"
+			// Fading out, it is no longer one of the page's banners: the one that takes its place is.
+			data-banner={closing ? undefined : ""}
 			data-closing={closing || undefined}
+			data-connection-banner=""
+			data-layer="socket"
 			data-offline-bar=""
 			data-phase={phase}
 			data-slot="connection-state"
@@ -49,7 +53,7 @@ export function ConnectionState({ phase, message, onRetry, closing, id }: Connec
 			id={id}
 		>
 			{dropped
-				? <WarningIcon aria-hidden="true" className="offline-bar-icon" size={14} />
+				? <WarningIcon aria-hidden="true" className="offline-bar-icon" size={16} />
 				: <ConnectingIndicator className="offline-bar-icon" />}
 			<span className="offline-bar-text">
 				{message ?? (dropped ? OFFLINE_MESSAGE : RECONNECTING_MESSAGE)}

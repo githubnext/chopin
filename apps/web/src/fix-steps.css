@@ -14,10 +14,6 @@
 	text-wrap: pretty;
 }
 
-.fix-steps p {
-	margin: 0;
-}
-
 .fix-steps-title {
 	color: var(--color-text-primary);
 	font-size: var(--text-base);
@@ -85,7 +81,7 @@
 	background: var(--color-inset);
 }
 
-.fix-steps-command code {
+.fix-steps-code {
 	flex: 1;
 	min-width: 0;
 	padding-block: calc(var(--spacing) * 1);
@@ -139,9 +135,9 @@
 	color: var(--color-brand-ink);
 }
 
-/* The machine's own words, exactly as reported, as quiet monospace that wraps. */
+/* The machine's own words, exactly as reported, as quiet monospace that wraps, under the foot. */
 .fix-steps-output {
-	margin: 0;
+	margin: calc(var(--spacing) * 2) 0 0;
 	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
 	border-radius: var(--radius-lg);
 	background: var(--color-inset);

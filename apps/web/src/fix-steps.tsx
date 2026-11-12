@@ -30,9 +30,15 @@ export default function FixSteps(
 	let item = menu ? "menuitem" : undefined;
 	return (
 		<div aria-label={fix.title} className="fix-steps" data-fix={fix.kind} role="group">
-			<p className="fix-steps-title">{fix.title}</p>
-			<p className="fix-steps-why">{fix.why}</p>
-			<ol className="fix-steps-list">
+			{/* Text, not paragraphs or code: a menu may hold nothing with a role but its items. */}
+			<div className="fix-steps-title">{fix.title}</div>
+			<div className="fix-steps-why">{fix.why}</div>
+			{/* A menu's items need a menu or group above them, not a list, so in a menu the steps are a group. */}
+			<ol
+				aria-label={menu ? "Steps" : undefined}
+				className="fix-steps-list"
+				role={menu ? "group" : undefined}
+			>
 				{fix.steps.map((step, index) => (
 					<Step
 						key={index}
@@ -43,30 +49,32 @@ export default function FixSteps(
 					/>
 				))}
 			</ol>
-			<div className="fix-steps-foot">
+			<div>
+				<div className="fix-steps-foot">
+					{fix.details && (
+						<UnfoldToggle className="fix-steps-toggle" role={item} unfold={details}>
+							{details.open ? "Hide details" : "Show details"}
+						</UnfoldToggle>
+					)}
+					<span className="fix-steps-end">
+						{fix.tried && <span className="fix-steps-tried">{fix.tried}</span>}
+						<a
+							className="fix-steps-link"
+							href={fix.learnMore}
+							rel="noreferrer"
+							role={item}
+							target="_blank"
+						>
+							Learn more
+						</a>
+					</span>
+				</div>
 				{fix.details && (
-					<UnfoldToggle className="fix-steps-toggle" role={item} unfold={details}>
-						{details.open ? "Hide details" : "Show details"}
-					</UnfoldToggle>
+					<UnfoldPanel unfold={details}>
+						<pre className="fix-steps-output">{fix.details.join("\n")}</pre>
+					</UnfoldPanel>
 				)}
-				<span className="fix-steps-end">
-					{fix.tried && <span className="fix-steps-tried">{fix.tried}</span>}
-					<a
-						className="fix-steps-link"
-						href={fix.learnMore}
-						rel="noreferrer"
-						role={item}
-						target="_blank"
-					>
-						Learn more
-					</a>
-				</span>
 			</div>
-			{fix.details && (
-				<UnfoldPanel unfold={details}>
-					<pre className="fix-steps-output">{fix.details.join("\n")}</pre>
-				</UnfoldPanel>
-			)}
 		</div>
 	);
 }
@@ -81,7 +89,7 @@ function Step(
 ) {
 	let item = menu ? "menuitem" : undefined;
 	return (
-		<li className="fix-steps-step">
+		<li className="fix-steps-step" role={menu ? "none" : undefined}>
 			<span>
 				{step.text}
 				{step.link && (
@@ -132,7 +140,7 @@ export function CommandBlock({ command, menu = false }: { command: string; menu?
 		: `Copy ${command}`;
 	return (
 		<div className="fix-steps-command">
-			<code>{command}</code>
+			<span className="fix-steps-code">{command}</span>
 			<button
 				aria-label={label}
 				className="btn btn-icon-xs btn-ghost fix-steps-copy"

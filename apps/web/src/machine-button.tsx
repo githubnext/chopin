@@ -101,7 +101,7 @@ export function PlannerNote(
 							<LazyFixSteps fix={fix} menu onNavigate={onNavigate} />
 						</Suspense>
 					)
-					: <p>{plannerSentence(status)}</p>}
+					: <div>{plannerSentence(status)}</div>}
 			</div>
 			<div className="app-menu-separator" role="separator" />
 		</>
