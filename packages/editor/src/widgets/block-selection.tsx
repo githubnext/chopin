@@ -6,8 +6,10 @@
  * `data-block-selected`. ArrowUp and ArrowDown move it to the block before or after, Shift with
  * them extends it, Delete and Backspace remove the blocks, Mod+C and Mod+X copy or cut them as
  * Markdown, Mod+D duplicates them, Mod+Shift+ArrowUp and ArrowDown move them, Enter goes back to
- * editing at the end of the block, and Escape lets go. Clicking in text leaves it, as Lexical
- * turns a click into a text selection. A mouse drag that starts in one block's text and crosses
+ * editing at the end of the block, and Escape lets go and gives up focus, so a sheet around the
+ * editor takes the Escape after that. Each Escape dismisses the innermost thing first: an open
+ * menu, popover or card closes before the blocks are selected. Clicking in text leaves block
+ * selection, as Lexical turns a click into a text selection. A mouse drag that starts in one block's text and crosses
  * into another selects the blocks it crosses rather than the text.
  *
  * A block is a node whose parent holds blocks side by side: the document, a callout, a column, a
@@ -339,6 +341,19 @@ function atBlockStartOf(node: LexicalNode, block: LexicalNode): boolean {
 		if (at.getPreviousSibling()) return false;
 	}
 	return true;
+}
+
+/** A menu, listbox, popover, card or tooltip is open on the page, outside the editor. */
+function layerOpen(editor: LexicalEditor): boolean {
+	let root = editor.getRootElement();
+	if (!root) return false;
+	let layers = root.ownerDocument.querySelectorAll(
+		'[role="dialog"], [role="menu"], [role="listbox"], [role="tooltip"]',
+	);
+	for (let layer of layers) {
+		if (!layer.contains(root) && layer.getClientRects().length > 0) return true;
+	}
+	return false;
 }
 
 /** Write to the clipboard from a key press: the browser's copy, with this payload. */
@@ -675,12 +690,19 @@ export function registerBlockSelection(editor: LexicalEditor): () => void {
 		editor.registerCommand(
 			KEY_ESCAPE_COMMAND,
 			event => {
-				if (!editor.isEditable()) return false;
+				// Escape dismisses the innermost thing first: an open menu, popover or card closes
+				// before the blocks are selected.
+				if (!editor.isEditable() || layerOpen(editor)) return false;
 				let found = held();
 				if (found) {
-					event.preventDefault();
+					// The next layer out: the blocks are let go and focus leaves the editor. The key is
+					// not spent, so a sheet around the editor takes it as its own next step.
 					$setSelection(null);
 					holding.delete(editor);
+					let root = editor.getRootElement();
+					queueMicrotask(() => {
+						if (root && root.ownerDocument.activeElement === root) root.blur();
+					});
 					return true;
 				}
 				let selection = $getSelection();
