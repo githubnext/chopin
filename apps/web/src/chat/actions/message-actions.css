@@ -115,6 +115,34 @@
 	inset-block-end: calc(-1 * var(--spacing) * 2);
 }
 
+/*
+ * A message jumped to or linked to is washed across its whole row, square, where its shade would be,
+ * as Slack highlights a linked message, and the wash fades; the message itself never moves.
+ */
+.chat-source-tint {
+	position: absolute;
+	z-index: -1;
+	inset-block: calc(-1 * var(--chat-highlight-top)) calc(-1 * var(--spacing));
+	inset-inline: calc(-1 * var(--chat-shade-start)) calc(-1 * var(--chat-shade-end));
+	background: var(--color-brand-wash);
+	pointer-events: none;
+	animation: chat-source-tint calc(var(--duration-linger) * 2) var(--ease-out) forwards;
+}
+
+.chat-message-body:last-child > .chat-source-tint {
+	inset-block-end: calc(-1 * var(--spacing) * 2);
+}
+
+@keyframes chat-source-tint {
+	0%,
+	40% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
 /* A message after the first of its group shows its time in the avatar's gutter on hover, as Slack does. */
 .chat-gutter-time {
 	position: absolute;
@@ -500,6 +528,10 @@
 	.chat-message-body > .chat-gutter-time,
 	.chat-message-body > .chat-message-toolbar {
 		transition: none;
+	}
+
+	.chat-source-tint {
+		animation: none;
 	}
 
 	.chat-reaction,

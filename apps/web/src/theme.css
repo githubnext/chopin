@@ -1324,31 +1324,6 @@ body {
 	}
 }
 
-/* Jump-to-source: a tint behind the message that fades; the message itself never moves. */
-.chat-message-body[data-chat-source] {
-	isolation: isolate;
-}
-
-.chat-source-tint {
-	position: absolute;
-	inset: -2px -6px;
-	z-index: -1;
-	border-radius: var(--radius-md);
-	background: var(--color-brand-wash);
-	pointer-events: none;
-	animation: chat-source-tint calc(var(--duration-linger) * 2) var(--ease-out) forwards;
-}
-
-@keyframes chat-source-tint {
-	0%,
-	40% {
-		opacity: 1;
-	}
-	100% {
-		opacity: 0;
-	}
-}
-
 /* A comment sent to Chopin: a compact card in the message column that opens its thread. */
 .chat-comment-notice {
 	display: grid;
@@ -2541,10 +2516,6 @@ textarea.question-written-field {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.chat-source-tint {
-		animation: none;
-	}
-
 	.btn[aria-busy="true"] [data-button-loader] {
 		animation: none;
 	}
