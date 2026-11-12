@@ -141,14 +141,16 @@ test.afterEach(async () => {
 async function wire(page: Page) {
 	let away = false;
 	let sent: Chat.Send[] = [];
+	let retries: Chat.Retry[] = [];
 	let sockets: WebSocketRoute[] = [];
 	await page.routeWebSocket("**/ws?**", socket => {
 		if (away) return void socket.close();
 		let server = socket.connectToServer();
 		socket.onMessage(message => {
 			if (typeof message === "string") {
-				let frame = JSON.parse(message) as Chat.Send;
+				let frame = JSON.parse(message) as Chat.Send | Chat.Retry;
 				if (frame.kind === "chat:send") sent.push(frame);
+				if (frame.kind === "chat:retry") retries.push(frame);
 			}
 			server.send(message);
 		});
@@ -157,6 +159,7 @@ async function wire(page: Page) {
 	});
 	return {
 		sent,
+		retries,
 		lose: async () => {
 			away = true;
 			await sockets.at(-1)!.close();
@@ -295,19 +298,19 @@ test("a failed reply keeps its banner and Retry when the machine drops after it,
 		await expect(failure.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
 		await expect(allBanners(page)).toHaveCount(1);
 
-		// The machine's client is back, and Retry asks the same turn again, once.
+		// The machine's client is back, and Retry runs the same message's turn again, once: nothing
+		// new is sent, and the machine is given the message as it was first asked.
 		let back = await machine(room);
 		await expect(phaseVoice(page)).not.toHaveText(PLANNER_HELD, { timeout: 30_000 });
 		await expect(allBanners(page)).toHaveCount(1);
 		await failure.getByRole("button", { name: "Retry", exact: true }).click();
-		await expect.poll(() => socket.sent.length).toBe(2);
-		expect(socket.sent[1]).toMatchObject({
-			text: instruction(socket.sent[0]!.text),
-			to: socket.sent[0]!.to,
-		});
-		expect(socket.sent[1]!.requestId).not.toBe(socket.sent[0]!.requestId);
+		await expect.poll(() => socket.retries.length).toBe(1);
+		expect(socket.retries[0]!.message).toBe(socket.sent[0]!.requestId);
+		expect(socket.sent).toHaveLength(1);
 		await expect(chat(page).getByText("Answer 1", { exact: true })).toBeVisible();
-		expect(back.prompts).toHaveLength(1);
+		expect(back.prompts).toEqual(planner.prompts);
+		expect(back.prompts[0]).toContain(instruction(socket.sent[0]!.text));
+		expect((await chat(page).innerText()).split("Compare the two drafts").length - 1).toBe(1);
 		await expect(allBanners(page)).toHaveCount(0);
 		await back.client.detach();
 	} finally {

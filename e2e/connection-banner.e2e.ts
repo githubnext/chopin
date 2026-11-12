@@ -12,7 +12,6 @@ import { SQL } from "bun";
 
 import { connectAgent } from "../packages/agent-link/src/client";
 import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
-import { instruction } from "../packages/protocol/address";
 import {
 	CONNECTOR_PLANNER_COMMAND_HEADER,
 	CONNECTOR_PLATFORM_HEADER,
@@ -373,12 +372,14 @@ test("a machine whose link dropped under a reply with no work to keep is held fo
 	await authenticate(page, HANDLE, ORIGIN);
 	await watchBanners(page);
 	let sent: Chat.Send[] = [];
+	let retries: Chat.Retry[] = [];
 	await page.routeWebSocket("**/ws?**", route => {
 		let server = route.connectToServer();
 		route.onMessage(message => {
 			if (typeof message === "string") {
-				let frame = JSON.parse(message) as Chat.Send;
+				let frame = JSON.parse(message) as Chat.Send | Chat.Retry;
 				if (frame.kind === "chat:send") sent.push(frame);
+				if (frame.kind === "chat:retry") retries.push(frame);
 			}
 			server.send(message);
 		});
@@ -423,31 +424,23 @@ test("a machine whose link dropped under a reply with no work to keep is held fo
 		await expect(failedLine).toHaveCount(0);
 		await expect(allBanners(page)).toHaveCount(1);
 
-		// Retry asks the same turn again, once, with its references, and the machine answers it.
-		await failure.getByRole("button", { name: "Retry", exact: true }).click();
-		await expect.poll(() => sent.length).toBe(2);
-		expect(sent[1]).toMatchObject({ text: instruction(sent[0]!.text), to: sent[0]!.to });
-		expect(sent[1]!.requestId).not.toBe(sent[0]!.requestId);
-		// The room keeps the words without the summons, so the reference moves with them: it still
-		// names the same document, over the same `#title`.
-		let summons = sent[0]!.text.length - sent[1]!.text.length;
+		// Retry runs the same message's turn again, once: nothing new is sent, and the machine is
+		// given the message as it was, with its reference, and answers it.
 		expect(sent[0]!.references).toEqual([{
 			kind: "document",
 			channelId: referred,
 			start: sent[0]!.text.indexOf(`#${title}`),
 			end: sent[0]!.text.indexOf(`#${title}`) + title.length + 1,
 		}]);
-		expect(sent[1]!.references).toEqual([{
-			kind: "document",
-			channelId: referred,
-			start: sent[0]!.references![0]!.start - summons,
-			end: sent[0]!.references![0]!.end - summons,
-		}]);
-		expect(sent[1]!.text.slice(sent[1]!.references![0]!.start, sent[1]!.references![0]!.end))
-			.toBe(`#${title}`);
-		expect(sent[1]!.focus).toBe(sent[0]!.focus);
+		await failure.getByRole("button", { name: "Retry", exact: true }).click();
+		await expect.poll(() => retries.length).toBe(1);
+		expect(retries[0]!.message).toBe(sent[0]!.requestId);
+		expect(sent).toHaveLength(1);
 		await expect(chat(page).getByText("Answer 1", { exact: true })).toBeVisible();
-		expect(back.prompts).toHaveLength(1);
+		expect(back.prompts).toEqual(planner.prompts);
+		expect(back.prompts[0]).toContain(title);
+		// One message in Chat, and the reply in place of the failure.
+		expect((await chat(page).innerText()).split("Compare").length - 1).toBe(1);
 		await expect(allBanners(page)).toHaveCount(0);
 		await back.client.detach();
 	} finally {
@@ -739,7 +732,7 @@ test("asking a machine to start the Planner reaches the paired machine that serv
 	await studio.disconnect();
 });
 
-test("Retry sends the same turn again from the child document it was asked in, with its focus and its references, once the machine is back", async ({ page }) => {
+test("Retry runs the same message's turn again about the child document it was asked in, with its focus and its references, once the machine is back", async ({ page }) => {
 	test.setTimeout(150_000);
 	let room = await remoteServer();
 	let hold = Promise.withResolvers<void>();
@@ -752,12 +745,14 @@ test("Retry sends the same turn again from the child document it was asked in, w
 	await authenticate(page, HANDLE, ORIGIN);
 	await watchBanners(page);
 	let sent: Chat.Send[] = [];
+	let retries: Chat.Retry[] = [];
 	await page.routeWebSocket("**/ws?**", route => {
 		let server = route.connectToServer();
 		route.onMessage(message => {
 			if (typeof message === "string") {
-				let frame = JSON.parse(message) as Chat.Send;
+				let frame = JSON.parse(message) as Chat.Send | Chat.Retry;
 				if (frame.kind === "chat:send") sent.push(frame);
+				if (frame.kind === "chat:retry") retries.push(frame);
 			}
 			server.send(message);
 		});
@@ -795,12 +790,6 @@ test("Retry sends the same turn again from the child document it was asked in, w
 		await ready(page);
 		await expect(surface).toHaveCount(0);
 		await expect(failure).toHaveAttribute("data-kind", "error");
-		await failure.getByRole("button", { name: "Retry", exact: true }).click();
-		await expect.poll(() => sent.length).toBe(2);
-		expect(sent[1]).toMatchObject({ text: instruction(sent[0]!.text), to: sent[0]!.to });
-		expect(sent[1]!.requestId).not.toBe(sent[0]!.requestId);
-		expect(sent[1]!.focus).toBe(child);
-		let summons = sent[0]!.text.length - sent[1]!.text.length;
 		let first = sent[0]!.references![0]!;
 		expect(first).toEqual({
 			kind: "document",
@@ -808,17 +797,17 @@ test("Retry sends the same turn again from the child document it was asked in, w
 			start: sent[0]!.text.indexOf(`#${referredTitle}`),
 			end: sent[0]!.text.indexOf(`#${referredTitle}`) + referredTitle.length + 1,
 		});
-		expect(sent[1]!.references).toEqual([{
-			kind: "document",
-			channelId: referred,
-			start: first.start - summons,
-			end: first.end - summons,
-		}]);
-		expect(sent[1]!.text.slice(first.start - summons, first.end - summons))
-			.toBe(`#${referredTitle}`);
+		await failure.getByRole("button", { name: "Retry", exact: true }).click();
+		await expect.poll(() => retries.length).toBe(1);
+		expect(retries[0]!.message).toBe(sent[0]!.requestId);
 		await expect(chat(page).getByText("Answer 1", { exact: true })).toBeVisible();
-		expect(back.prompts).toHaveLength(1);
-		expect(sent).toHaveLength(2);
+		// The machine is given the message as it was asked, about the child that was open then,
+		// with its reference; no second message is sent.
+		expect(back.prompts).toEqual(planner.prompts);
+		expect(back.prompts[0]).toContain(child);
+		expect(back.prompts[0]).toContain(referredTitle);
+		expect(sent).toHaveLength(1);
+		expect((await chat(page).innerText()).split("Compare").length - 1).toBe(1);
 		await expect(allBanners(page)).toHaveCount(0);
 		await back.client.detach();
 	} finally {
