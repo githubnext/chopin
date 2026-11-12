@@ -30,7 +30,8 @@ function iconButton(target: EventTarget | null): HTMLElement | null {
 	if (marked && !marked.closest("[inert]")) return marked;
 	let button = target.closest<HTMLButtonElement>("button");
 	if (
-		!button || button.disabled || button.closest("[inert]")
+		// A copied element's trigger (`TooltipIconButton`) opens its own tooltip; a second would say it again.
+		!button || button.disabled || button.closest("[inert], [data-slot='tooltip-trigger']")
 		|| button.matches(
 			".sr-only, .navigation-drawer-backdrop, .navigation-modal-backdrop, .plan-comment-button:not([data-tooltip]), .plan-decision-marker",
 		)
@@ -102,12 +103,37 @@ export function IconTooltip() {
 		// Escape dismisses the focused control's tooltip until focus moves.
 		let dismissed: HTMLElement | null = null;
 		let timer: ReturnType<typeof setTimeout> | undefined;
-		let originalTitle: string | null = null;
+		// The trigger whose native title is held back, so the browser never draws it beside this
+		// tooltip: while its tooltip is pending or shown, and while it is pressed.
+		let held: HTMLElement | null = null;
+		let heldTitle: string | null = null;
 		// A pressed trigger stays quiet until the pointer leaves it.
 		let pressed: HTMLElement | null = null;
 		let warmUntil = 0;
 		// Shows the active trigger's tooltip; called again when its label changes while visible.
 		let shown: ((instant: boolean) => void) | null = null;
+
+		// A title set again while held (a label React rewrites) is taken back at once.
+		function take() {
+			let title = held?.getAttribute("title") ?? null;
+			if (title === null) return;
+			heldTitle = title;
+			held!.removeAttribute("title");
+		}
+
+		function hold(element: HTMLElement) {
+			if (held !== element) release();
+			held = element;
+			take();
+		}
+
+		function release() {
+			if (held && heldTitle !== null && !held.hasAttribute("title")) {
+				held.setAttribute("title", heldTitle);
+			}
+			held = null;
+			heldTitle = null;
+		}
 
 		function hide(instant = false) {
 			clearTimeout(timer);
@@ -116,11 +142,8 @@ export function IconTooltip() {
 			if (instant) tooltip.setAttribute("data-instant", "");
 			else tooltip.removeAttribute("data-instant");
 			tooltip.removeAttribute("data-visible");
-			if (active && originalTitle !== null && !active.hasAttribute("title")) {
-				active.setAttribute("title", originalTitle);
-			}
+			if (held !== pressed) release();
 			active = null;
-			originalTitle = null;
 			shown = null;
 		}
 
@@ -129,15 +152,14 @@ export function IconTooltip() {
 			hide();
 			if (!button || button === pressed) return;
 			active = button;
-			originalTitle = button.getAttribute("title");
-			if (originalTitle !== null) button.removeAttribute("title");
+			hold(button);
 			let show = (instant: boolean) => {
 				timer = undefined;
 				if (!button.isConnected || openPopup(button)) return hide();
 				if (instant) tooltip.setAttribute("data-instant", "");
 				else tooltip.removeAttribute("data-instant");
 				let label = button.getAttribute("data-tooltip") ?? button.getAttribute("aria-label")
-					?? originalTitle ?? button.querySelector(".sr-only")?.textContent;
+					?? heldTitle ?? button.querySelector(".sr-only")?.textContent;
 				if (!label) return hide();
 				tooltip.textContent = tooltipText(label, button.hasAttribute("data-tooltip-verbatim"));
 				tooltip.setAttribute("data-shortcut", button.dataset.tooltipShortcut ?? "");
@@ -205,11 +227,18 @@ export function IconTooltip() {
 		function pointerDown(event: PointerEvent) {
 			pressed = iconButton(event.target);
 			hide(true);
+			if (pressed) hold(pressed);
 		}
 
 		function attributeChange(records: MutationRecord[]) {
 			for (let record of records) {
 				let target = record.target as HTMLElement;
+				if (record.attributeName === "title") {
+					if (target !== held || !target.hasAttribute("title")) continue;
+					take();
+					if (target === active && tooltip.hasAttribute("data-visible")) shown?.(true);
+					continue;
+				}
 				if (target !== active) continue;
 				if (record.attributeName === "aria-expanded" && openPopup(target)) {
 					if (target === hovered) pressed = target;
@@ -227,6 +256,7 @@ export function IconTooltip() {
 			if (
 				pressed?.contains(event.target as Node) && !pressed.contains(event.relatedTarget as Node)
 			) {
+				if (held === pressed && held !== active) release();
 				pressed = null;
 			}
 			if (
@@ -276,7 +306,7 @@ export function IconTooltip() {
 		let observer = new MutationObserver(attributeChange);
 		observer.observe(document.body, {
 			attributes: true,
-			attributeFilter: ["aria-expanded", "data-tooltip"],
+			attributeFilter: ["aria-expanded", "data-tooltip", "title"],
 			subtree: true,
 		});
 		document.addEventListener("scroll", scroll, true);
@@ -291,6 +321,7 @@ export function IconTooltip() {
 		document.addEventListener("keydown", keyDown, true);
 		return () => {
 			hide();
+			release();
 			tooltip.remove();
 			document.removeEventListener("pointerover", pointerOver, true);
 			document.removeEventListener("pointerout", pointerOut, true);
