@@ -13,6 +13,7 @@ import * as Plan from "../plan/service";
 import { finishTurn, linkAuth, linkServer, MEMBER_TOKEN } from "../testing/agent-link";
 import { configured } from "../testing/config";
 import * as Chat from "./service";
+import { sessionContextOf } from "./session-context";
 import * as Threads from "./threads";
 
 import type { ServerMessageOf } from "@chopin/agent-link";
@@ -403,12 +404,49 @@ describe("Chat threads server", () => {
 		await reply("Which index do we need?");
 		await threadChat!.running;
 		expect(w.prompts).toHaveLength(1);
-		expect(w.prompts[0]!.prompt).toContain("Which index do we need?");
+		expect(sessionContextOf(w.prompts[0]!.prompt).turn).toContain("Which index do we need?");
 		let asked = threadChat!.entries.find(entry => entry.text === "Which index do we need?");
 		expect(Chat.publicEntry(asked!).to).toBe("planner");
 		expect(threadChat!.entries.at(-1)!.author.kind).toBe("agent");
 		// The thread's turn answers there, not in the document's Chat.
 		expect(w.plan.chat.entries.map(entry => entry.author.kind)).toEqual(["member"]);
+	});
+
+	test("alone, a thread reply also sent to Chat is chopin's, answered in the thread and shown in Chat", async () => {
+		let w = await buildWorld();
+		let alice = w.makeSocket("alice", "U_alice");
+		w.context.people = () => new Set(["U_alice"]);
+		let rootId = crypto.randomUUID();
+		await Threads.sendMessage(w.context, alice.ws, {
+			kind: "chat:send",
+			rid: "root",
+			requestId: rootId,
+			to: "room",
+			text: "Root: let us use PostgreSQL.",
+			ts: 0,
+		});
+		await w.plan.chat.running;
+		let prompts = w.prompts.length;
+		let replyId = crypto.randomUUID();
+		await Threads.sendMessage(w.context, alice.ws, {
+			kind: "chat:send",
+			rid: "reply",
+			requestId: replyId,
+			to: "room",
+			thread: rootId,
+			alsoToChat: true,
+			text: "Which index do we need?",
+			ts: 0,
+		});
+		let threadChat = w.plan.chat.childChats?.get(rootId);
+		await threadChat!.running;
+		expect(w.prompts).toHaveLength(prompts + 1);
+		expect(sessionContextOf(w.prompts.at(-1)!.prompt).turn).toContain("Which index do we need?");
+		// The reply and chopin's answer are in the thread and, as one entry each, in Chat.
+		let inChat = w.plan.chat.entries.filter(entry => entry.fromThread === rootId);
+		expect(inChat.map(entry => entry.author.kind)).toEqual(["member", "agent"]);
+		expect(Chat.publicEntry(inChat[0]!).to).toBe("planner");
+		expect(threadChat!.entries.at(-1)!.id).toBe(inChat[1]!.id);
 	});
 
 	test("a Retry branches the Atomic session back to before the failed attempt, and gives it no word of the attempt", async () => {

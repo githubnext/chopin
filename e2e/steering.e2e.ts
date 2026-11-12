@@ -11,6 +11,7 @@ import { SQL } from "bun";
 
 import { connectAgent } from "../packages/agent-link/src/client";
 import { finishTurn } from "../apps/server/src/testing/agent-link";
+import { sessionContextOf } from "../apps/server/src/chat/session-context";
 import { chatInput, expectChatValue, fillChat } from "./chat-input";
 import { createChannel, registerTestDatabase, seedChannel } from "./database";
 import { authenticate, expect, ready, roomPath, test } from "./room";
@@ -390,7 +391,7 @@ test("alone, a message without the mention is Chopin's: refused while no machine
 		await expect(refusal).toHaveCount(0);
 		await expectChatValue(input, "");
 		expect(planner.prompts).toHaveLength(1);
-		expect(planner.prompts[0]).toContain("outline the plan");
+		expect(sessionContextOf(planner.prompts[0]!).turn).toContain("outline the plan");
 
 		// While its turn runs, the next one is given to that turn, as a mention's would be.
 		await fillChat(input, "and cover the rollback too");
