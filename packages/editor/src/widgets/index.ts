@@ -33,6 +33,7 @@ export function register(): void {
 	setRenderer<InvestigationNode>("plan-investigation", renderInvestigation);
 }
 
+export { BlockKeysPlugin } from "./block-keys";
 export { CalloutPlugin } from "./callout";
 export { CardGapPlugin } from "./card-gap";
 export { CodeKeysPlugin } from "./code-keys";
