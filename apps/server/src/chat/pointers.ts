@@ -4,6 +4,7 @@
  * accepts are one list. A part is told by its identity (an anchor, an id), never by its words.
  */
 
+import { headingAnchors } from "@chopin/dialect/heading-anchor";
 import { parse } from "@chopin/dialect/parse";
 
 import type { Heading, Root, RootContent } from "mdast";
@@ -25,15 +26,7 @@ export type DocumentPointers = {
 	research: string[];
 };
 
-/**
- * A heading's text as an anchor, as GitHub makes one: lowercase, with whatever is not a letter, a
- * digit, a space, a hyphen or an underscore removed and each space a hyphen. Nothing left is
- * `section`.
- */
-export function headingAnchor(text: string): string {
-	let slug = text.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/\s/g, "-");
-	return slug || "section";
-}
+export { headingAnchor } from "@chopin/dialect/heading-anchor";
 
 function plain(node: RootContent | Heading): string {
 	if ("value" in node && typeof node.value === "string") return node.value;
@@ -70,21 +63,15 @@ export function documentPointers(source: string): DocumentPointers {
 	} catch {
 		return { headings: [], decisions: [], research: [] };
 	}
-	let seen = new Map<string, number>();
-	let headings: HeadingPointer[] = [];
-	for (let node of root.children) {
-		if (node.type !== "heading") continue;
-		let text = plain(node).replace(/\s+/g, " ").trim();
-		let base = headingAnchor(text);
-		let repeats = seen.get(base) ?? 0;
-		seen.set(base, repeats + 1);
-		headings.push({
-			anchor: repeats === 0 ? base : `${base}-${repeats}`,
-			text: shortened(text),
-			level: node.depth,
-			line: node.position?.start.line ?? 1,
-		});
-	}
+	let nodes = root.children.filter((node): node is Heading => node.type === "heading");
+	let texts = nodes.map(node => plain(node).replace(/\s+/g, " ").trim());
+	let anchors = headingAnchors(texts);
+	let headings: HeadingPointer[] = nodes.map((node, index) => ({
+		anchor: anchors[index]!,
+		text: shortened(texts[index]!),
+		level: node.depth,
+		line: node.position?.start.line ?? 1,
+	}));
 	let decisions: DecisionPointer[] = [];
 	let research: string[] = [];
 	for (let node of root.children) {

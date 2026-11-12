@@ -186,7 +186,7 @@
 				1
 			]
 		],
-		"sourceHash": "fc9cfa9c5d8ca9222b9cfc507af3b2ce94f4e580f6d17cfd251f38409a4835a9"
+		"sourceHash": "88735c150f5bd419da3318c7dd66441d314b92c714830ad2ecbf5ed5f928578c"
 	},
 	{
 		"file": "apps/web/src/navigation-drawer.tsx",
@@ -403,7 +403,7 @@
 				1
 			]
 		],
-		"sourceHash": "ab019513e185e472cbfa9df27354adc48512dcf5e6d07496e74ad9993f756ba8"
+		"sourceHash": "adeff4c9019bc5d7e571f8b9fa056135119e1f69bf04d0abe0bd44dd9e53880e"
 	},
 	{
 		"file": "apps/web/src/chat/assistant-ui/markdown-primitive.tsx",
