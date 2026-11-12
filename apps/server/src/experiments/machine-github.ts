@@ -77,6 +77,8 @@ export type LaunchRun = {
 	starter: string;
 	/** The paired machine it went to, when Chopin knows. */
 	machineId?: string;
+	/** The document it works on. */
+	documentId?: string;
 };
 
 /** A GitHub account as a commit and a pull request name it. */

@@ -25,6 +25,8 @@ import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { CONNECTOR_PROTOCOLS, registerExperimentRoutes } from "./routes";
 import type { GitHubApp } from "../github/app";
+import { hosted, locateDocument } from "../mcp/hosted";
+import { credentialDigest } from "./mcp-token";
 import { Connections } from "./connections";
 import type { ImplementationConnector } from "../tasks/connector";
 
@@ -88,6 +90,14 @@ async function setup(
 			let id = owners.get(token) ?? "alice";
 			return { id, login: id, avatarUrl: "" };
 		},
+		repository: async (_token: string, owner: string, name: string) => ({
+			id: name,
+			owner,
+			name,
+			fullName: `${owner}/${name}`,
+			defaultBranch: "main",
+			permissions: { pull: true, push: name !== "readonly", admin: false },
+		}),
 		repositoryAccess: async (token: string, owner: string, name: string) => {
 			checked.push(token);
 			let push = name !== "readonly";
@@ -283,6 +293,7 @@ async function setup(
 		clock,
 		lock,
 		runtime,
+		auth,
 	};
 }
 
@@ -2113,4 +2124,120 @@ test("an older connector still gets its owner's token, marked legacy; without th
 		error: "no-grant",
 		message: "This Chopin has no GitHub App key, so it gives no machine a token for org/repo.",
 	});
+});
+
+test("a launch's MCP token reaches Chopin's tools only for its own documents, while it lasts", async () => {
+	let { alice, documentId, document, request, tool, pair, runtime, storage, auth } = await setup();
+	let connection = await pair(alice.cookie);
+	let other = await document();
+	let child = crypto.randomUUID();
+	await storage.channels.create({
+		id: child,
+		repositoryId: "repo",
+		repositoryOwner: "org",
+		repositoryName: "repo",
+		title: "A child",
+		createdBy: "alice",
+		parentChannelId: documentId,
+		now: new Date(),
+	} as never);
+	let adapter = hosted(auth as never, undefined, { launchCaller: runtime.mcpCaller });
+	let caller = (bearer: string) =>
+		adapter.caller(
+			new Request("https://chopin.test/mcp", { headers: { authorization: `Bearer ${bearer}` } }),
+		);
+	let mint = (from: unknown) =>
+		request("/api/connector/mcp-token", from, undefined, connection.machineToken)
+			.then(response => response.json());
+	let reaches = async (bearer: string, id: string) =>
+		typeof await locateDocument(auth as never, (await caller(bearer))!, id) === "object";
+
+	// A Planner's: the machine's owner, for its document and that document's children.
+	let credential = "chopin_p_" + "a".repeat(43);
+	await storage.plannerCredentials.put({
+		digest: credentialDigest(credential),
+		machineId: connection.machine,
+		channelId: documentId,
+		expiresAt: new Date(Date.now() + 900_000),
+	});
+	let planner = await mint({ planner: credential });
+	expect(planner.token).toStartWith("chopin_mcp_");
+	expect((await caller(planner.token))?.user).toMatchObject({ id: "alice", login: "alice" });
+	expect(await reaches(planner.token, documentId)).toBe(true);
+	expect(await reaches(planner.token, child)).toBe(true);
+	expect(await reaches(planner.token, other)).toBe(false);
+	let listed = await adapter.documents.list((await caller(planner.token))!, "org/repo");
+	expect((listed as { id: string }[]).map(value => value.id).sort()).toEqual(
+		[documentId, child].sort(),
+	);
+	expect(
+		await adapter.create!.create(
+			(await caller(planner.token))!,
+			{ repository: "org/repo" } as never,
+		),
+	).toEqual({ kind: "forbidden" });
+	// The Planner stopped on the machine: its credential is gone, and so is the token's reach.
+	await storage.plannerCredentials.deleteForMachine(connection.machine, documentId);
+	expect(await caller(planner.token)).toBeUndefined();
+	expect(await mint({ planner: credential })).toMatchObject({ error: "credential-invalid" });
+
+	// A run's: who started it, for the run's document only, until the run ends.
+	let id = crypto.randomUUID();
+	await request(`/api/documents/${documentId}/experiments`, { id, brief: "Measure" }, alice.cookie);
+	await request(`/api/documents/${documentId}/experiments/${id}/run`, {}, alice.cookie);
+	let claim = text(await tool(connection.token, "claim_experiment", { id }));
+	let run = await mint({ run: claim.runToken });
+	expect(run.expiresAt).toBeGreaterThan(Date.now() + 59 * 60_000);
+	expect((await caller(run.token))?.user).toMatchObject({ id: "alice" });
+	expect(await reaches(run.token, documentId)).toBe(true);
+	expect(await reaches(run.token, child)).toBe(false);
+	expect(await reaches(run.token, other)).toBe(false);
+	await tool(connection.token, "fail_experiment", {
+		id,
+		generation: claim.generation,
+		error: "Stopped.",
+	});
+	expect(await caller(run.token)).toBeUndefined();
+	expect(await mint({ run: claim.runToken })).toMatchObject({ error: "run-unknown" });
+
+	// Neither the launch's own credentials nor a GitHub App token reach Chopin's tools; a person's
+	// GitHub token still does.
+	expect(await caller(credential)).toBeUndefined();
+	expect(await caller(`chopin_r_${"b".repeat(60)}`)).toBeUndefined();
+	expect(await caller("ghs_installationtoken")).toBeUndefined();
+	expect((await caller("token"))?.user).toMatchObject({ login: "alice" });
+});
+
+test("a build's MCP token acts as whoever asked for it, on the build's machine, until it ends", async () => {
+	let builds = new Map<string, { repository: string; starter: string; machineId?: string }>();
+	let { alice, documentId, request, pair, runtime, auth } = await setup(undefined, {
+		implementations: () =>
+			({
+				build: async (document: string, id: string) => builds.get(`${document} ${id}`),
+			}) as unknown as ImplementationConnector,
+	});
+	let connection = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	builds.set(`${documentId} ${id}`, {
+		repository: "org/repo",
+		starter: "bob",
+		machineId: connection.machine,
+	});
+	let runToken = runtime.connections.runToken(connection.id, documentId, id, 1, "implementation");
+	let minted = await (await request(
+		"/api/connector/mcp-token",
+		{ run: runToken },
+		undefined,
+		connection.machineToken,
+	)).json();
+	let adapter = hosted(auth as never, undefined, { launchCaller: runtime.mcpCaller });
+	let caller = () =>
+		adapter.caller(
+			new Request("https://chopin.test/mcp", {
+				headers: { authorization: `Bearer ${minted.token}` },
+			}),
+		);
+	expect((await caller())?.user).toMatchObject({ id: "bob", login: "bob" });
+	builds.delete(`${documentId} ${id}`);
+	expect(await caller()).toBeUndefined();
 });

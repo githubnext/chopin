@@ -3249,6 +3249,7 @@ registerMcpRoutes(router, hostedAuth, {
 			systemTurns,
 		}, input),
 	plannerNotAttached,
+	...(experiments ? { launchCaller: experiments.mcpCaller } : {}),
 	archiveChannel,
 	isChannelDeleting: channelId => deletingChannels.has(channelId),
 	onChannelRenamed: announceChannel,
