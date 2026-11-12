@@ -95,9 +95,12 @@ export type TranscriptDecisions = {
 	onOpenCard: (questionnaireId: string) => void;
 };
 
+let gutterFormat: Intl.DateTimeFormat | undefined;
+
 /** The time a grouped message shows in the avatar's gutter: the hour and minute alone, as Slack's. */
 function clock(ts: number): string {
-	return new Date(ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+	gutterFormat ??= new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" });
+	return gutterFormat.format(new Date(ts * 1000))
 		.replace(/\s*[^\d:.\s]+\.?\s*$/u, "").replace(/^\s*[^\d\s]+\.?\s*/u, "");
 }
 
