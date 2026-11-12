@@ -52,3 +52,23 @@ test("a staged layer stays laid out but inert and hidden from assistive technolo
 	expect(markup).toContain(' inert=""');
 	expect(markup).not.toContain(' hidden=""');
 });
+
+test("a retained layer that closed stays in the page, skipped, and none of its layers is inert", () => {
+	let markup = (active: boolean) =>
+		renderToStaticMarkup(
+			createElement(ContentSwapLayer, {
+				active,
+				children: createElement("button", { type: "button" }, "Kept"),
+				immediately: true,
+				motion,
+				retain: true,
+			}),
+		);
+
+	expect(markup(false)).toContain('data-content-swap-state="closed"');
+	expect(markup(false)).toContain('aria-hidden="true"');
+	expect(markup(false)).not.toContain(" hidden");
+	expect(markup(false)).not.toContain("inert");
+	expect(markup(true)).not.toContain("aria-hidden");
+	expect(markup(true)).not.toContain("inert");
+});

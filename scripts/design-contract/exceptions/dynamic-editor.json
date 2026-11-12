@@ -46,7 +46,7 @@
 				1
 			]
 		],
-		"sourceHash": "099ee516920e9e9f999b28cc1f8dd0b3b2a853697aa1b07429d0ffadb229cc64"
+		"sourceHash": "8d2723a8a500e9e64abe5ab124351882491d4ccb66ce61cc2ecf14d2bd573954"
 	},
 	{
 		"file": "packages/editor/src/content-swap.tsx",
@@ -60,7 +60,7 @@
 				1
 			]
 		],
-		"sourceHash": "099ee516920e9e9f999b28cc1f8dd0b3b2a853697aa1b07429d0ffadb229cc64"
+		"sourceHash": "8d2723a8a500e9e64abe5ab124351882491d4ccb66ce61cc2ecf14d2bd573954"
 	},
 	{
 		"file": "packages/editor/src/static-plan-editor.tsx",

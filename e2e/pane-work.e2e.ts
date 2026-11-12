@@ -5,13 +5,18 @@
  *
  * - a step of a Chat resize lays the page out a few times, not once for each reply taller than the
  *   pane that the drag left out of layout;
- * - opening and closing a thread, which changes Chat's width, restyles a part of the page, not all of it.
+ * - opening and closing a thread, which changes Chat's width, restyles a part of the page, not all of it;
+ * - switching the document's view, or expanding the document over Chat, and back restyles a part of
+ *   the page, and what is closed stays out of reach: not focused by Tab, not in the accessibility
+ *   tree, not found by find in page.
  */
+
+import AxeBuilder from "@axe-core/playwright";
 
 import { expect, test } from "./room";
 
 import type { Chat } from "../packages/protocol/index";
-import type { CDPSession, Page } from "@playwright/test";
+import type { CDPSession, Locator, Page } from "@playwright/test";
 
 const MESSAGES = 60;
 
@@ -138,4 +143,131 @@ test("opening and closing a thread restyles part of the page, not all of it", as
 	// them restyled every element under it.
 	expect(opening).toBeLessThan(elements / 2);
 	expect(closing).toBeLessThan(elements / 2);
+});
+
+/** What axe finds wrong in `selector`. */
+async function axeViolations(page: Page, selector: string): Promise<string[]> {
+	let result = await new AxeBuilder({ page }).include(selector).analyze();
+	return result.violations.map(violation =>
+		`${violation.id}: ${violation.help} ${
+			violation.nodes.map(node => node.html.slice(0, 120)).join(" ")
+		}`
+	);
+}
+
+/** Every name in the page's accessibility tree, as Chromium exposes it. */
+async function exposedNames(page: Page): Promise<string> {
+	let cdp = await page.context().newCDPSession(page);
+	let { nodes } = await cdp.send("Accessibility.getFullAXTree");
+	await cdp.detach();
+	return nodes
+		.filter(node => !node.ignored)
+		.map(node => String(node.name?.value ?? ""))
+		.join("\n");
+}
+
+/** Whether Tab, forwards or back, ever puts focus inside `closed`, over `presses` presses each way. */
+async function tabReaches(page: Page, closed: Locator, presses = 40): Promise<boolean> {
+	for (let key of ["Tab", "Shift+Tab"]) {
+		for (let press = 0; press < presses; press++) {
+			await page.keyboard.press(key);
+			if (await closed.evaluate(element => element.contains(window.document.activeElement))) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+/** What find in page would find: Chromium's `window.find` searches the rendered text. */
+function findable(page: Page, text: string): Promise<boolean> {
+	return page.evaluate(text => {
+		window.getSelection()?.removeAllRanges();
+		return (window as unknown as { find: (text: string) => boolean }).find(text);
+	}, text);
+}
+
+test("switching to Decisions and back restyles part of the page, and the closed view is out of reach", async ({ join, page, seed }) => {
+	let chat = await open(page, seed, join);
+	let elements = await page.evaluate(() => window.document.querySelectorAll("*").length);
+	await chat.locator(`[data-chat-message-id="message-${MESSAGES - 2}"]`)
+		.getByText(`Message ${MESSAGES - 2}:`).click();
+	await settle(page);
+	let documentView = page.locator('[data-document-view="plan"]');
+	let decisions = page.getByRole("button", { name: "Decisions", exact: true });
+	let documentButton = page.getByRole("button", { name: "Document", exact: true });
+
+	await decisions.click();
+	await expect(page.getByRole("heading", { name: "Decisions", exact: true })).toBeFocused();
+	await settle(page);
+	await expect(page.getByRole("heading", { name: "Section 3" })).toHaveCount(0);
+	await expect(documentView.getByText("The gateway renews the lease").first()).toBeHidden();
+	expect(await exposedNames(page)).not.toContain("Section 3");
+	expect(await axeViolations(page, "[data-workspace-document-swap]")).toEqual([]);
+	expect(await findable(page, "Section 3")).toBe(false);
+	expect(await tabReaches(page, documentView)).toBe(false);
+	// Tab made the page keyboard-driven; a pointer press makes it pointer-driven again before counting.
+	await page.getByRole("heading", { name: "Decisions", exact: true }).click({ force: true });
+	await settle(page);
+
+	await documentButton.hover();
+	await settle(page);
+	let showing = await mostRestyled(page, async () => {
+		await documentButton.click();
+		await expect(page.getByRole("heading", { name: "Section 3" })).toBeVisible();
+		await settle(page);
+	});
+	// Focus stays where the press left it, as it did: not lost to the page, not in the view now closed.
+	expect(
+		await page.evaluate(() => {
+			let active = window.document.activeElement;
+			return active !== window.document.body
+				&& !active?.closest('[data-document-view="decisions"]');
+		}),
+	).toBe(true);
+	expect(await findable(page, "Section 3")).toBe(true);
+	// The closed view was taken out of the page and made inert, and the workspace's travel was a custom
+	// property of its root: showing the document again restyled every element in it and the page.
+	expect(showing).toBeLessThan(elements / 2);
+});
+
+test("expanding the document over Chat and back restyles part of the page, and the closed Chat is out of reach", async ({ join, page, seed }) => {
+	let chat = await open(page, seed, join);
+	let elements = await page.evaluate(() => window.document.querySelectorAll("*").length);
+	let message = chat.locator(`[data-chat-message-id="message-${MESSAGES - 2}"]`);
+	await message.getByText(`Message ${MESSAGES - 2}:`).click();
+	await settle(page);
+	let pane = page.locator("aside.workspace-chat-panel");
+
+	let expand = page.getByRole("button", { name: "Expand document" });
+	await expand.hover();
+	await settle(page);
+	let expanding = await mostRestyled(page, async () => {
+		await expand.click();
+		await expect(chat).toHaveCount(0);
+		await settle(page);
+	});
+	await expect(message).toBeHidden();
+	expect(await exposedNames(page)).not.toContain(`Message ${MESSAGES - 2}:`);
+	expect(await axeViolations(page, "aside.workspace-chat-panel")).toEqual([]);
+	expect(await findable(page, `Message ${MESSAGES - 2}:`)).toBe(false);
+	expect(await tabReaches(page, pane)).toBe(false);
+	// Tab made the page keyboard-driven; a pointer press makes it pointer-driven again before counting.
+	await page.getByRole("heading", { name: "Section 3" }).click();
+	await settle(page);
+
+	// Found before counting: finding a control by its role reads the styles of every element, the
+	// skipped Chat's too, which a person's press does not.
+	let show = page.getByRole("button", { name: /^Show chat/ });
+	await show.hover();
+	await settle(page);
+	let showing = await mostRestyled(page, async () => {
+		await show.click();
+		await expect(message).toBeVisible();
+		await settle(page);
+	});
+	expect(await findable(page, `Message ${MESSAGES - 2}:`)).toBe(true);
+	// Chat was made inert as it left and taken out of the page once it had: each restyled all of it.
+	expect(expanding).toBeLessThan(elements / 2);
+	expect(showing).toBeLessThan(elements / 2);
 });

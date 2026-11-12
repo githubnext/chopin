@@ -10,3 +10,54 @@
 .workspace-root[data-workspace-mode="split"] .workspace-chat-panel {
 	flex-shrink: 0;
 }
+
+/* Split Chat, closed, stays in the page with no width, skipped: see `data-chat-closed` in workspace.tsx. */
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel[data-chat-closed] {
+	content-visibility: hidden;
+}
+
+/*
+ * Leaving, split Chat takes no pointer through a cover over it rather than `pointer-events: none`,
+ * an inherited property whose change restyled every element of the Chat as the document expanded.
+ */
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel.is-closing {
+	pointer-events: auto;
+}
+
+.workspace-root[data-workspace-mode="split"] .workspace-chat-panel.is-closing::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: 100;
+}
+
+/*
+ * The document's views keep a closed view in the page (`ContentSwapLayer`'s `retain`): skipped, so
+ * nothing in it is drawn, focused, found or exposed. A leaving or closed view lies under the open
+ * one, so it takes no pointer without `pointer-events: none`, an inherited property whose change
+ * reaches every element of the view.
+ */
+.workspace-document-layer.motion-content-swap:is(.is-closing, [data-content-swap-state="closed"]) {
+	z-index: -1;
+	pointer-events: auto;
+}
+
+.workspace-document-layer[data-content-swap-state="closed"] {
+	content-visibility: hidden;
+}
+
+/*
+ * The direction a view slides when the workspace travels back, read only by the sliding views
+ * (`.motion-content-swap` in theme.css, `.motion-tab-slide` in phone-workspace.css) and set on them
+ * alone. Inherited from the workspace's root, as it was, each change of travel restyled every
+ * element in the workspace, and every element of a closed view when it was shown again.
+ */
+@property --swap-direction {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 1;
+}
+
+.workspace-root[data-workspace-travel="back"] :is(.motion-content-swap, .motion-tab-slide) {
+	--swap-direction: -1;
+}
