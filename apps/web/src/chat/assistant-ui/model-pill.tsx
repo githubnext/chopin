@@ -28,6 +28,7 @@ import {
 	triggerTitle,
 } from "../model-picker-state";
 import { modelSelection } from "./model-options";
+import { ScrollThumb } from "./scroll-thumb";
 
 import type { ModelControl } from "../use-model-choice";
 
@@ -87,19 +88,35 @@ export function ModelPill({ control }: { control: ModelControl }) {
 			>
 				<ModelSelectorSearch aria-label="Search models" placeholder="Search models…" />
 				{notice && <p className="px-3 py-2 text-xs text-text-tertiary" role="status">{notice}</p>}
-				<ModelSelectorList>
-					<ModelSelectorEmpty>No matching models.</ModelSelectorEmpty>
-					{groups.map(group => (
-						<ModelSelectorGroup heading={group.name} key={group.id}>
-							{group.options.map(option => <ModelSelectorItem key={option.id} model={option} />)}
-						</ModelSelectorGroup>
-					))}
-				</ModelSelectorList>
+				<div className="composer-model-list">
+					<ModelSelectorList>
+						<ModelSelectorEmpty>No matching models.</ModelSelectorEmpty>
+						{groups.map(group => (
+							<ModelSelectorGroup heading={group.name} key={group.id}>
+								{group.options.map(option => <ModelSelectorItem key={option.id} model={option} />)}
+							</ModelSelectorGroup>
+						))}
+					</ModelSelectorList>
+					<ScrollThumb axis="y" find={listOf} />
+				</div>
 				<div className="composer-model-levels" ref={levels.ref}>
 					<ModelSelectorEffort className="composer-model-effort" data-more={levels.more} />
+					<ScrollThumb axis="x" find={laneOf} />
 				</div>
 			</ModelSelectorContent>
 		</ModelSelectorRoot>
+	);
+}
+
+/** The copied list, which scrolls the models. */
+function listOf(host: HTMLElement) {
+	return host.querySelector<HTMLElement>("[data-slot='model-selector-list']");
+}
+
+/** The Thinking row's levels, one lane that scrolls sideways. */
+function laneOf(host: HTMLElement) {
+	return host.querySelector<HTMLElement>(
+		"[data-slot='model-selector-effort'] > [role='radiogroup']",
 	);
 }
 
@@ -110,8 +127,9 @@ type More = "start" | "end" | "both";
  * (an agent can report six levels besides the model's own): a wheel turned over the row moves it,
  * touch pans it, the focus the arrow keys move brings a level into view, and the chosen level is
  * in view whenever the popover opens or the choice changes. `more` names the side that still
- * hides levels, which `composer.css` fades as a wide table's is. The lane is the element's own
- * radio group, reached from a wrapper that draws no box, so the copy keeps its bytes.
+ * hides levels, which `composer.css` fades as a wide table's is, and `ScrollThumb` draws its
+ * scrollbar. The lane is the element's own radio group, reached from a wrapper that draws no box,
+ * so the copy keeps its bytes.
  */
 function useLevelLane(model: string, effort: string | undefined) {
 	let [node, setNode] = useState<HTMLDivElement | null>(null);

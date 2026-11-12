@@ -467,8 +467,9 @@ test("lists models by provider, filters them, and chooses with the mouse, reason
 	// The model that will run has the element's check; no other does.
 	await expect(checked(page, "Small")).toHaveCount(1);
 	await expect(checked(page, "Large")).toHaveCount(0);
-	// Small has no reasoning levels, so the control is not drawn.
+	// Small has no reasoning levels, so the control is not drawn; three models fit, so no scrollbar is.
 	await expect(levels(page)).toHaveCount(0);
+	await expect(popover(page).locator(".model-scroll-track:not([data-idle])")).toHaveCount(0);
 	await shoot(page, "model-picker-open-desktop");
 	await expectAccessible(page);
 
@@ -1023,6 +1024,40 @@ function inSight(radio: Locator) {
 	});
 }
 
+/**
+ * The selector's own scrollbar along `axis`, drawn only while what it scrolls overflows: the model
+ * list's down its side, the Thinking levels' under them.
+ */
+function scrollThumb(page: Page, axis: "x" | "y") {
+	return popover(page).locator(
+		`.model-scroll-track[data-axis="${axis}"]:not([data-idle]) > .model-scroll-thumb`,
+	);
+}
+
+/**
+ * Whether a scrollbar's thumb says what its scroller shows: its length is the share of the content
+ * in view (or the thumb's floor), and its place along the lane is how far the scroller has moved.
+ */
+async function thumbFollows(thumb: Locator, scroller: Locator, axis: "x" | "y") {
+	return await scroller.evaluate((view, [bar, axis]) => {
+		let across = axis === "x";
+		let thumb = bar as HTMLElement;
+		let lane = thumb.parentElement!.getBoundingClientRect();
+		let box = thumb.getBoundingClientRect();
+		let length = across ? lane.width : lane.height;
+		let size = across ? box.width : box.height;
+		let at = across ? box.left - lane.left : box.top - lane.top;
+		let shown = across ? view.clientWidth : view.clientHeight;
+		let whole = across ? view.scrollWidth : view.scrollHeight;
+		let offset = across ? view.scrollLeft : view.scrollTop;
+		let floor = parseFloat(getComputedStyle(thumb)[across ? "minWidth" : "minHeight"]);
+		let expected = Math.max(floor, length * shown / whole);
+		let place = (length - size) * offset / (whole - shown);
+		return whole > shown + 1 && size < length && Math.abs(size - expected) <= 1.5
+			&& Math.abs(at - place) <= 1.5;
+	}, [await thumb.elementHandle(), axis] as const);
+}
+
 /** A finger drawn across `target` from its centre by `dx` and `dy`, as the touch screen sends it. */
 async function swipe(page: Page, target: Locator, dx: number, dy: number) {
 	let box = (await target.boundingBox())!;
@@ -1077,6 +1112,18 @@ for (
 		]);
 		// The client's own level is the one checked while nobody chose.
 		await expect(level(page, "minimal")).toHaveAttribute("aria-checked", "true");
+		// Both overflow, so each draws its scrollbar with no pointer over it, its thumb as long as the
+		// share in view and at the start.
+		await expect(scrollThumb(page, "y")).toBeVisible();
+		await expect(scrollThumb(page, "x")).toBeVisible();
+		await expect.poll(() => thumbFollows(scrollThumb(page, "y"), list, "y")).toBe(true);
+		await expect.poll(() => thumbFollows(scrollThumb(page, "x"), lane, "x")).toBe(true);
+		await expectInsideViewport(scrollThumb(page, "x"));
+		await expectInsideViewport(scrollThumb(page, "y"));
+		// Each thumb stands out from the popover at 3:1 or more, as a control people need to see does.
+		for (let axis of ["x", "y"] as const) {
+			expect((await drawn(scrollThumb(page, axis))).step).toBeGreaterThanOrEqual(3);
+		}
 		// The popover, its search field and the Thinking row are on screen, however short it is.
 		await expectInsideViewport(menu);
 		await expectInsideViewport(search(page));
@@ -1106,6 +1153,28 @@ for (
 			await expect.poll(() => scrolled(list, "scrollTop")).toBeGreaterThan(0);
 		}
 		await expectInsideViewport(menu);
+		// Each thumb has moved with what it scrolls.
+		await expect.poll(() => thumbFollows(scrollThumb(page, "y"), list, "y")).toBe(true);
+		await expect.poll(() => thumbFollows(scrollThumb(page, "x"), lane, "x")).toBe(true);
+		if (!touch) {
+			// A mouse drags either thumb, and what it scrolls follows.
+			for (
+				let [axis, target, edge] of [["y", list, "scrollTop"], ["x", lane, "scrollLeft"]] as const
+			) {
+				let before = await scrolled(target, edge);
+				let box = (await scrollThumb(page, axis).boundingBox())!;
+				await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+				await page.mouse.down();
+				await page.mouse.move(
+					box.x + box.width / 2 + (axis === "x" ? -40 : 0),
+					box.y + box.height / 2 + (axis === "y" ? 60 : 0),
+					{ steps: 4 },
+				);
+				await page.mouse.up();
+				await expect.poll(() => scrolled(target, edge)).not.toBe(before);
+				await expect.poll(() => thumbFollows(scrollThumb(page, axis), target, axis)).toBe(true);
+			}
+		}
 
 		// From the keyboard (a tablet's too, whose tap does not focus): the arrows choose a level and
 		// bring it into sight, and the list's End reaches its last model.
