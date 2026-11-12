@@ -70,6 +70,7 @@ import { introduce } from "../people";
 import { MAX_MESSAGE_BYTES } from "./limits";
 import { contributed } from "./initiative";
 import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./reply-policy";
+import { withSessionContext } from "./session-context";
 import { TOOL_UNAVAILABLE, turnFailureOf } from "./turn-failure";
 import { retryTarget } from "./retry";
 import { runDuration } from "./run-duration";
@@ -3042,7 +3043,7 @@ async function run(
 		let withBootstrap = (text: string) => {
 			let told = bootstrap;
 			bootstrap = undefined;
-			return told ? `${told}\n\n${text}` : text;
+			return withSessionContext(told, text);
 		};
 		if (about?.signal && about.spent?.()) turnController.abort();
 		if (chat.agent !== opened.session || turnController.signal.aborted) {

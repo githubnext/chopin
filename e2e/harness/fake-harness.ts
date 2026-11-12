@@ -11,6 +11,7 @@ import type {
 	HarnessV1StartOptions,
 } from "../../apps/server/src/harness/harness-v1";
 import { HEADING_TOOL_NAMES } from "../../apps/server/src/harness/tool-names";
+import { sessionContextOf } from "../../apps/server/src/chat/session-context";
 import { nameDocument } from "./fake-heading";
 import { READER_REPLY } from "./fixtures";
 import type { scopeSnapshot } from "../../apps/server/src/questions/decision-followup";
@@ -98,22 +99,7 @@ function promptText(prompt: HarnessV1PromptTurnOptions["prompt"]): string {
 	return prompt.content.map(part => part.type === "text" ? part.text : "").join("");
 }
 
-const BOOTSTRAP = "A fresh Planner session starts for each turn.";
 const CONTEXT_MARKER = "Durable conversation context follows:\n";
-
-/**
- * A fresh session is told what the room said before its first prompt. The turn's own prompt follows the
- * conversation context and any reference catalog after it.
- */
-function ownPrompt(prompt: string): { told: string; asked: string } {
-	if (!prompt.startsWith(BOOTSTRAP)) return { told: "", asked: prompt };
-	let start = prompt.indexOf(CONTEXT_MARKER);
-	let end = prompt.indexOf("\n\n", start >= 0 ? start : BOOTSTRAP.length);
-	if (prompt.startsWith("Reference catalog", end + 2)) end = prompt.indexOf("\n\n", end + 2);
-	return end < 0
-		? { told: prompt, asked: "" }
-		: { told: prompt.slice(0, end), asked: prompt.slice(end + 2) };
-}
 
 function unsupported(capability: string): () => Promise<never> {
 	return async () => {
@@ -159,7 +145,7 @@ export function createFakeHarness(
 
 				async doPromptTurn(turn: HarnessV1PromptTurnOptions): Promise<HarnessV1PromptControl> {
 					let available = new Set(turn.tools.map(spec => spec.name));
-					let { told, asked: prompt } = ownPrompt(promptText(turn.prompt));
+					let { context: told, turn: prompt } = sessionContextOf(promptText(turn.prompt));
 					// What the room said: before the prompt of a fresh session, or in a command's instructions.
 					let context = told || turn.instructions || "";
 					// Automatic turns carry the latest human message in the session bootstrap.
