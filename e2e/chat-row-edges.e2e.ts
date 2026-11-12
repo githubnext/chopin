@@ -111,13 +111,20 @@ async function shade(row: Locator, part: "::before" | ".chat-source-tint" = "::b
 			left = drawn.left;
 			right = drawn.right;
 		}
-		// What is drawn of it: as far as every box around it that clips it lets it reach.
+		// What is drawn of it: as far as every box around it that clips it lets it reach, by its
+		// overflow at its sides, or by an `inset()` clip path at its own insets.
 		for (let at = node.parentElement; at; at = at.parentElement) {
-			if (getComputedStyle(at).overflowX === "visible") continue;
 			let clip = at.getBoundingClientRect();
-			left = Math.max(left, clip.left);
-			right = Math.min(right, clip.right);
-			if (at.matches("[data-chat-scroll]")) break;
+			if (getComputedStyle(at).overflowX !== "visible") {
+				left = Math.max(left, clip.left);
+				right = Math.min(right, clip.right);
+			}
+			let path = /^inset\(([^)]*)\)$/.exec(getComputedStyle(at).clipPath);
+			if (path) {
+				let sides = path[1]!.trim().split(/\s+/).map(Number.parseFloat);
+				left = Math.max(left, clip.left + (sides[3] ?? sides[1] ?? sides[0]!));
+				right = Math.min(right, clip.right - (sides[1] ?? sides[0]!));
+			}
 		}
 		return {
 			start: Math.round(left - view.left),
