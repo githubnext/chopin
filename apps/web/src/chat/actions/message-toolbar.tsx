@@ -192,8 +192,18 @@ export let MessageToolbar = memo(function MessageToolbar(
 
 	useEffect(() => {
 		let element = host.current;
-		element?.toggleAttribute("data-chat-engaged", engaged);
-		return () => element?.removeAttribute("data-chat-engaged");
+		if (!element) return;
+		// The transcript says that one of its messages is engaged, so the others give way to it without
+		// the stylesheet asking every message of the transcript which one it is.
+		let view = element.closest<HTMLElement>("[data-chat-scroll]");
+		let mark = () =>
+			view?.toggleAttribute("data-chat-engaging", !!view.querySelector("[data-chat-engaged]"));
+		element.toggleAttribute("data-chat-engaged", engaged);
+		if (engaged || view?.hasAttribute("data-chat-engaging")) mark();
+		return () => {
+			element.removeAttribute("data-chat-engaged");
+			if (view?.hasAttribute("data-chat-engaging")) mark();
+		};
 	}, [host, engaged]);
 
 	useEffect(() => {

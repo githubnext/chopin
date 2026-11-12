@@ -20,6 +20,8 @@
 	--chat-toolbar-size: calc(var(--spacing) * 9);
 	--chat-toolbar-rise: calc(var(--spacing) * 4);
 	--chat-toolbar-lane: calc(var(--chat-toolbar-size) + var(--spacing));
+	/* Shown is 1 on one message at most. Set here, so a rule that hides the rest changes nothing they inherit. */
+	--chat-shown: 0;
 	isolation: isolate;
 }
 
@@ -191,14 +193,20 @@
 	--chat-shown: 1;
 }
 
+/*
+ * The transcript itself says that the pointer is on a message while another has the keyboard's
+ * focus (`data-chat-pointing`), and that a message is engaged (`data-chat-engaging`). Asked with
+ * `:has()` of the whole transcript, every move of the pointer from one element to the next restyled
+ * every message, a long Chat's thousands of elements.
+ */
 @media (hover: hover) {
-	[data-chat-scroll]:has(.chat-message-body:hover, [data-chat-head]:hover)
+	[data-chat-pointing]
 		.chat-message-body:not(:hover):not([data-chat-head]:hover + *):not([data-chat-engaged]) {
 		--chat-shown: 0;
 	}
 }
 
-[data-chat-scroll]:has([data-chat-engaged]) .chat-message-body:not([data-chat-engaged]) {
+[data-chat-engaging] .chat-message-body:not([data-chat-engaged]) {
 	--chat-shown: 0;
 }
 

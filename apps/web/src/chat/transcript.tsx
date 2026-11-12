@@ -587,6 +587,18 @@ export function Transcript(
 	// distance without their having moved.
 	let follow = useRef(true);
 	let scrolledTo = useRef(0);
+	// Whether the pointer is on a message. The message it is on shows its toolbar, and a message with
+	// the keyboard's focus gives way to it; the transcript says so to the stylesheet only while a
+	// message has that focus, the one time it changes anything, since saying it restyles every message.
+	let pointing = useRef(false);
+	let markPointing = (element: HTMLElement) => {
+		let focused = document.activeElement;
+		let on = pointing.current && !!focused && element.contains(focused)
+			&& !!focused.closest(".chat-message-body") && focused.matches(":focus-visible");
+		if (element.hasAttribute("data-chat-pointing") !== on) {
+			element.toggleAttribute("data-chat-pointing", on);
+		}
+	};
 	// The animation frame in which the transcript next moves to its newest line.
 	let pin = useRef(0);
 	let previous = useRef<{ groups: Set<string>; atoms: Set<string>; planned: boolean }>(undefined);
@@ -849,6 +861,18 @@ export function Transcript(
 			data-chat-scroll=""
 			data-focus-boundary=""
 			ref={scroller}
+			onPointerOver={event => {
+				pointing.current = !!(event.target as Element).closest(
+					".chat-message-body, [data-chat-head]",
+				);
+				markPointing(event.currentTarget);
+			}}
+			onPointerLeave={event => {
+				pointing.current = false;
+				markPointing(event.currentTarget);
+			}}
+			onFocus={event => markPointing(event.currentTarget)}
+			onBlur={event => markPointing(event.currentTarget)}
 			onScroll={event => {
 				let element = event.currentTarget;
 				let distance = element.scrollHeight - element.scrollTop - element.clientHeight;
