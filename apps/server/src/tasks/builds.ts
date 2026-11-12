@@ -117,6 +117,15 @@ export function restoreBuilds(value: unknown, repositoryId?: string): BuildReque
 	return builds;
 }
 
+let closedPullRequestSchema = z.object({
+	url: z.string().url(),
+	state: z.enum(["closed", "merged"]),
+	at: z.string().datetime(),
+}).strict();
+
+/** A live pull request's state on GitHub, when Chopin could read it. */
+export type PullRequestState = "open" | "closed" | "merged";
+
 let liveSchema = z.object({
 	buildId: z.string().uuid(),
 	user: z.string().min(1).max(128),
@@ -153,11 +162,18 @@ let liveSchema = z.object({
 			at: z.string().datetime(),
 		}).strict(),
 	).max(50).optional(),
+	/**
+	 * Pull requests a person closed or merged on GitHub, which builds never push to again. Each left
+	 * `pullRequests` when the rebuild that found it closed landed; its commits keep their place.
+	 */
+	closedPullRequests: z.array(closedPullRequestSchema).max(100).optional(),
 	/** The source a queued rebuild targets, sealed so later edits join the next delta. */
 	target: z.object({
 		buildId: z.string().uuid(),
 		revision: z.number().int().nonnegative(),
 		source: z.string(),
+		/** The live pull requests this rebuild found closed or merged when its agent read it. */
+		closed: z.array(closedPullRequestSchema).max(100).optional(),
 	}).strict().optional(),
 }).strict();
 
@@ -191,7 +207,10 @@ export function restoreLive(
 		|| !history.some(item => item.run.id === live.buildId && item.live) && !delivered()
 		|| live.baseRevision > revision
 		|| new Set(live.pullRequests).size !== live.pullRequests.length
-		|| live.commits?.some(commit => !live.pullRequests.includes(commit.pullRequest))
+		|| live.commits?.some(commit =>
+			!live.pullRequests.includes(commit.pullRequest)
+			&& !live.closedPullRequests?.some(item => item.url === commit.pullRequest)
+		)
 		|| live.target && (
 				live.target.revision > revision || live.target.revision < live.baseRevision
 				|| !builds.some(item => item.id === live.target!.buildId && item.kind === "rebuild")
@@ -889,23 +908,65 @@ function liveTasks(plan: Plan) {
 	});
 }
 
-/** The sealed delta a running rebuild implements. */
-export function readRebuild(plan: Plan, buildId: string) {
+/**
+ * The sealed delta a running rebuild implements. `states` are the live pull requests' states on
+ * GitHub, as Chopin read them for this call: one a person closed or merged is recorded on the
+ * target, so its report may replace it, and listed apart, never as one to push to. A pull request
+ * whose state could not be read stays listed; the agent checks it before pushing. `document` is
+ * where the document is now and where it was before a rename, so pull request bodies follow it.
+ */
+export function readRebuild(
+	plan: Plan,
+	buildId: string,
+	context: {
+		states?: ReadonlyMap<string, PullRequestState>;
+		document?: { url: string; earlierUrls: string[] };
+	} = {},
+) {
 	return exclusive(plan, async () => {
 		let live = plan.live;
 		let build = plan.builds.at(-1);
 		if (!live?.target || live.target.buildId !== buildId || build?.id !== buildId) return;
+		let at = new Date().toISOString();
+		let known = live.target.closed ?? [];
+		let found = live.pullRequests.flatMap(url => {
+			let state = [...context.states ?? []].find(([key]) => sameUrl(key, url))?.[1];
+			if (state !== "closed" && state !== "merged") return [];
+			return [known.find(item => item.url === url) ?? { url, state, at }];
+		});
+		// Once found closed, a pull request stays closed for this rebuild, even if a later read fails.
+		let closed = [...known, ...found.filter(item => !known.some(old => old.url === item.url))];
+		if (closed.length !== known.length) {
+			let previous = plan.live;
+			plan.live = { ...live, target: { ...live.target, closed } };
+			try {
+				await persistExclusive(plan, true);
+			} catch (error) {
+				plan.live = previous;
+				throw error;
+			}
+		}
 		let tasks = liveTasks(plan);
 		let outstanding = outstandingTasks(plan);
+		let title = (url: string) =>
+			tasks.find(task => "pullRequest" in task && task.pullRequest === url)?.title ?? "";
+		let open = live.pullRequests.filter(url => !closed.some(item => item.url === url));
 		return {
+			...(context.document ? { document: context.document } : {}),
 			before: live.baseSource,
 			after: live.target.source,
 			baseRevision: live.baseRevision,
 			targetRevision: live.target.revision,
-			pullRequests: live.pullRequests.map(url => ({
-				url,
-				title: tasks.find(task => "pullRequest" in task && task.pullRequest === url)?.title ?? "",
-			})),
+			pullRequests: open.map(url => ({ url, title: title(url) })),
+			...(closed.length
+				? {
+					closedPullRequests: closed.map(item => ({
+						url: item.url,
+						title: title(item.url),
+						state: item.state,
+					})),
+				}
+				: {}),
 			tasks,
 			...(outstanding.length ? { outstanding } : {}),
 			...unapprovedContext(plan.records.values()),
@@ -930,8 +991,17 @@ export function reportRebuild(
 			!live || !target || !build || build.id !== buildId
 			|| build.kind !== "rebuild" || build.state !== "running" || target.buildId !== buildId
 		) return { kind: "refused", reason: "build-inactive" };
-		// Only an outstanding task that had no pull request may bring a new one, in the same repository.
-		let openings = outstandingTasks(plan).filter(task => !task.pullRequest).length;
+		// A pull request a person closed or merged takes no commit; a new one may replace it.
+		let closed = target.closed ?? [];
+		let isClosed = (url: string) => closed.some(item => sameUrl(item.url, url));
+		if (
+			[...report.commits, ...report.tasks, ...report.outstanding ?? []].some(item =>
+				"pullRequest" in item && item.pullRequest && isClosed(item.pullRequest)
+			)
+		) return { kind: "refused", reason: "pull-request-closed" };
+		// Only an outstanding task that had no pull request, or the work of a closed one, may bring a
+		// new one, in the same repository.
+		let openings = outstandingTasks(plan).filter(task => !task.pullRequest).length + closed.length;
 		let opened = [
 			...new Set(
 				[...report.commits, ...report.tasks, ...report.outstanding ?? []].flatMap(item =>
@@ -1039,7 +1109,10 @@ export function reportRebuild(
 			...base,
 			baseRevision: target.revision,
 			baseSource: target.source,
-			pullRequests: [...live.pullRequests, ...opened],
+			pullRequests: [...live.pullRequests.filter(url => !isClosed(url)), ...opened],
+			...(closed.length || live.closedPullRequests
+				? { closedPullRequests: [...live.closedPullRequests ?? [], ...closed].slice(-100) }
+				: {}),
 			...(outstanding.length ? { outstanding } : {}),
 			commits: [
 				...(live.commits ?? []),

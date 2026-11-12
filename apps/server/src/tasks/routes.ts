@@ -12,6 +12,8 @@ import { implementationLifecycle } from "./lifecycle";
 import { planningReadiness, reportImplementationLifecycle } from "./plan-graphs";
 import { exclusive } from "../plan/service";
 import { GitHubError } from "../github/client";
+import type { GitHubReferenceSource } from "../github/client";
+import type { PullRequestState } from "./builds";
 import { AdmissionDenied } from "../auth/admission";
 import { ownOrigin } from "../auth/config";
 import { implementationConnector } from "./connector";
@@ -21,7 +23,11 @@ import type { Source } from "@chopin/experiment";
 import type { HostedAuth } from "../auth/routes";
 import type { Plan } from "../plan/service";
 import type { RouteHandler, Router } from "../http/router";
-import type { BuildMachine, ImplementationSnapshot } from "@chopin/protocol/implementation";
+import type {
+	BuildMachine,
+	BuildRequest,
+	ImplementationSnapshot,
+} from "@chopin/protocol/implementation";
 
 type Options = {
 	withPlan<T>(id: string, action: (plan: Plan) => Promise<T>): Promise<T>;
@@ -107,6 +113,37 @@ class MachineRefused extends Error {
 }
 
 /**
+ * The state on GitHub of each of `urls` in the build's repository, read with the access of the
+ * machine that runs the build. A pull request whose state can't be read is left out: unknown.
+ */
+async function pullRequestStates(
+	auth: HostedAuth,
+	build: BuildRequest,
+	urls: readonly string[],
+): Promise<ReadonlyMap<string, PullRequestState>> {
+	let states = new Map<string, PullRequestState>();
+	let github = auth.github as Partial<GitHubReferenceSource>;
+	let machine = build.machineId ? await auth.storage.machines.get(build.machineId) : undefined;
+	if (!github.pullRequest || !machine) return states;
+	let [owner, name] = build.checkout.repository.split("/");
+	let prefix = `https://github.com/${build.checkout.repository}/pull/`.toLowerCase();
+	await Promise.all(urls.map(async url => {
+		let number = Number(url.toLowerCase().startsWith(prefix) ? url.slice(prefix.length) : NaN);
+		if (!owner || !name || !Number.isSafeInteger(number) || number <= 0) return;
+		try {
+			let found = await auth.machines.use(
+				machine!,
+				token => github.pullRequest!(token, owner!, name!, number),
+			);
+			if ("state" in found) states.set(url, found.state);
+		} catch {
+			// Unknown: the agent checks the pull request itself before it pushes.
+		}
+	}));
+	return states;
+}
+
+/**
  * A browser build runs on the machine the clicker chose for the document: their own connection for
  * its repository, or a teammate's shared machine whose owner can push there.
  */
@@ -132,6 +169,17 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 			...options.mayTake ? { mayTake: options.mayTake } : {},
 			...options.identity ? { identity: options.identity } : {},
 			login: async id => (await auth.storage.users.get(id))?.login,
+			earlierUrls: async id => {
+				let channel = await auth.storage.channels.get(id);
+				if (!channel || channel.parentChannelId) return [];
+				return (await auth.storage.channels.earlierSlugs(id)).map(slug =>
+					new URL(
+						documentPath(channel.repositoryOwner, channel.repositoryName, slug),
+						auth.config.origin,
+					).href
+				);
+			},
+			pullRequestStates: (build, urls) => pullRequestStates(auth, build, urls),
 		},
 	);
 	let safe = (handler: RouteHandler): RouteHandler => async (request, url, params) => {

@@ -1821,6 +1821,7 @@ test("a running rebuild leaves editing open and reads its sealed delta", async (
 		expect((await edit(context.plan, "An edit during the rebuild.")).ok).toBe(true);
 		let read = await tool(context, rebuild.runToken, "read_rebuild");
 		expect(read).toEqual({
+			document: { url: expect.stringContaining("/documents/"), earlierUrls: [] },
 			before: builtSource,
 			after: target,
 			baseRevision: 0,
@@ -1830,6 +1831,59 @@ test("a running rebuild leaves editing open and reads its sealed delta", async (
 			requestedBy: expect.objectContaining({ login: "test" }),
 		});
 		expect(read.after).not.toContain("An edit during the rebuild.");
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a rebuild never pushes to a pull request a person closed, and names the document's address now", async () => {
+	let { context, rebuild } = await rebuilding();
+	try {
+		let asked: number[] = [];
+		(context.auth.github as unknown as Record<string, unknown>).pullRequest = async (
+			_token: string,
+			_owner: string,
+			_name: string,
+			number: number,
+		) => {
+			asked.push(number);
+			return { kind: "pull", number, state: "closed" };
+		};
+		// The machine's own GitHub sign-in reads it; this test's machines hold none.
+		context.auth.machines.use = async (_machine, read) => read("test") as never;
+		let read = await tool(context, rebuild.runToken, "read_rebuild");
+		expect(asked).toEqual([7]);
+		expect(read.pullRequests).toEqual([]);
+		expect(read.closedPullRequests).toEqual([{
+			url: pullRequest,
+			title: "First",
+			state: "closed",
+		}]);
+		let channel = (await context.storage.channels.get(context.plan.id))!;
+		expect(read.document).toEqual({
+			url: `https://chopin.test/documents/owner/repository/${channel.slug}`,
+			earlierUrls: [],
+		});
+		let pushed = await tool(context, rebuild.runToken, "report_rebuild", {
+			summary: "Pushed to the closed one.",
+			commits: [{ pullRequest, sha: "c".repeat(40), message: "Reopen it" }],
+			tasks: [],
+		});
+		expect(pushed.isError).toBe(true);
+		expect(JSON.stringify(pushed)).toContain("closedPullRequests");
+		let replacement = "https://github.com/owner/repository/pull/8";
+		expect(
+			await tool(context, rebuild.runToken, "report_rebuild", {
+				summary: "Moved to a new pull request.",
+				commits: [{ pullRequest: replacement, sha: "d".repeat(40), message: "Rebuild it" }],
+				tasks: [{ title: "Rebuilt paragraph", goal: "Render it", pullRequest: replacement }],
+			}),
+		).toEqual({ state: "stopped" });
+		expect(context.plan.live!.pullRequests).toEqual([replacement]);
+		expect(context.plan.live!.closedPullRequests).toMatchObject([{
+			url: pullRequest,
+			state: "closed",
+		}]);
 	} finally {
 		await Plan.close(context.plan);
 	}
