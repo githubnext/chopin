@@ -176,6 +176,9 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 				if (job.kind !== "heading") return true;
 				if (!active() || !deps.config.agent || Plan.implementationActive(opened)) return false;
 				let claim = contexts.claim(opened, job);
+				// A reply to what someone just said comes before the title: the heading waits until
+				// the Planner has answered, or has decided not to.
+				if (claim?.context.chat.initiative?.holds()) return false;
 				return !!claim && await Chat.jobReady(claim.context, claim.claimantSessionId);
 			},
 			publishJobs: current =>
@@ -285,6 +288,7 @@ export function createConversationRuntime(deps: RuntimeDeps) {
 				admissions.set(opened, { id: entry.id, context: { ...context, claimantSessionId } });
 				admit(opened);
 			};
+			context.initiativeSettled = () => wake(opened);
 			wake(opened);
 		}
 		if (processor) {

@@ -53,6 +53,7 @@ export function initiative(context: Room) {
 		paused: false,
 		groupMs: context.config.conversationInitiativeSilenceMs,
 		admit: available,
+		settled: () => context.initiativeSettled?.(),
 		async judge(source, signal, turn) {
 			let { context } = source;
 			if (

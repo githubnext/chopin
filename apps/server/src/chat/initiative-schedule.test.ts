@@ -77,6 +77,7 @@ function setup(overrides: {
 		signal: AbortSignal,
 		lifecycle: DispatchLifecycle,
 	) => Promise<boolean>;
+	settled?: () => void;
 } = {}) {
 	let clock = new ManualClock();
 	let admissions: string[] = [];
@@ -89,6 +90,7 @@ function setup(overrides: {
 		clock,
 		soloMs: overrides.soloMs,
 		groupMs: overrides.groupMs,
+		...(overrides.settled ? { settled: overrides.settled } : {}),
 		admit(value) {
 			admissions.push(value);
 			return overrides.admit?.(value) ?? "ready";
@@ -462,4 +464,36 @@ test("duplicate source IDs do not replace or restart an opportunity", async () =
 	await h.clock.advance(60_000);
 	expect(h.judgments).toEqual(["original"]);
 	expect(h.dispatches).toEqual(["original:respond"]);
+});
+
+test("holds a message from when it arrives until its reply ends, or until the judge declines it, and says once when it lets go", async () => {
+	let reply = deferred<boolean>();
+	let settled = 0;
+	let h = setup({
+		soloMs: 10,
+		settled: () => settled++,
+		dispatch: (_value, _move, _signal, lifecycle) => {
+			lifecycle.started();
+			return reply.promise;
+		},
+	});
+	expect(h.schedule.holds()).toBe(false);
+	receive(h, "first", "ana");
+	expect(h.schedule.holds()).toBe(true);
+	await h.clock.advance(10);
+	expect(h.dispatches).toEqual(["first:respond"]);
+	expect(h.schedule.holds()).toBe(true);
+	expect(settled).toBe(0);
+	reply.resolve(true);
+	await h.clock.advance(1);
+	expect(h.schedule.holds()).toBe(false);
+	expect(settled).toBe(1);
+
+	let declined = setup({ soloMs: 10, settled: () => settled++, judge: async () => undefined });
+	receive(declined, "second", "ana");
+	expect(declined.schedule.holds()).toBe(true);
+	await declined.clock.advance(10);
+	expect(declined.dispatches).toEqual([]);
+	expect(declined.schedule.holds()).toBe(false);
+	expect(settled).toBe(2);
 });

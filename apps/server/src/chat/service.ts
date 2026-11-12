@@ -767,6 +767,8 @@ export type Room = {
 	roomMessagePublished?: () => void;
 	/** Runs only after a new member entry is durably saved and its human turn reserved, or given to the one running. */
 	memberMessagePersisted?: (entry: Wire.Entry, claimantSessionId: string | undefined) => void;
+	/** Called when automatic participation stops holding a message it might reply to. */
+	initiativeSettled?: () => void;
 	openPlannerSession?: typeof import("../harness/session")["openPlannerSession"];
 	/**
 	 * What the document's chosen model and thinking level come to for the next turn, checked against
