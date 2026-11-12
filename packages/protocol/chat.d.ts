@@ -292,6 +292,13 @@ export declare namespace Chat {
 		/** Present as `planner` on a member message sent to the Planner; the mention is stripped from `text`. */
 		to?: "planner";
 		/**
+		 * On a thread's message that is also in the top-level Chat: the thread's root message id. It
+		 * is a reply sent with Also send to Chat, the Planner's reply to such a message, or the notice
+		 * that its turn failed. Both transcripts hold it under the same id, and it changes in both as
+		 * it streams, so the top-level Chat can say where it was said and open that thread.
+		 */
+		fromThread?: string;
+		/**
 		 * On a system notice that says a Planner turn ended without finishing its reply: why, so a
 		 * client can offer the way back. Absent on any other entry and on one saved before this
 		 * existed, which is only its `text`.
@@ -533,7 +540,9 @@ export declare namespace Chat {
 		thread?: string;
 		/**
 		 * With `thread`: also post this reply into the top-level Chat so collaborators
-		 * and the top-level Planner see it there.
+		 * and the top-level Planner see it there. A reply to the Planner sent this way has the
+		 * Planner's answer in both places too, streamed live, while the turn runs in the
+		 * thread's session; the top-level Planner reads both later as two lines of Chat.
 		 */
 		alsoToChat?: boolean;
 	};
@@ -541,8 +550,9 @@ export declare namespace Chat {
 	/**
 	 * Run the Planner turn of a message again, after it failed: the same message, never a new one.
 	 *
-	 * `message` is the member message to the Planner whose turn failed. Only its sender may ask, on
-	 * the top-level Chat, while no turn is running and that failure is the latest Planner turn: no
+	 * `message` is the member message to the Planner whose turn failed. Only its sender may ask, in
+	 * the top-level Chat or in the message's thread (`thread`; a reply also sent to Chat may be
+	 * retried from either), while no turn is running and that failure is the latest Planner turn: no
 	 * agent entry, Planner message or other failure after its notice. A failure that sending again
 	 * cannot help (`refused`, `dropped`) is refused. The server takes the failed attempt out of the
 	 * transcript (its failure notice and every agent entry the attempt wrote), saves that, answers
@@ -551,7 +561,11 @@ export declare namespace Chat {
 	 * `retry-turn` in the agent connection). It takes the same write access as `Send`, and is
 	 * refused like it (`planner-not-attached`, `planner-busy`, or a passing trouble); nothing is held.
 	 */
-	export type Retry = KIND<"chat:retry"> & { message: string };
+	export type Retry = KIND<"chat:retry"> & {
+		message: string;
+		/** The root message id of the thread `message` was sent in. Absent for top-level Chat. */
+		thread?: string;
+	};
 
 	/** The retry is accepted: the turn of `message` is running again. */
 	export type Retried = KIND<"chat:retry"> & { message: string };
@@ -651,6 +665,7 @@ export declare namespace Chat {
 		| Delta
 		| Tool
 		| State
+		| Removed
 		| ContextState
 		| CompactionState;
 

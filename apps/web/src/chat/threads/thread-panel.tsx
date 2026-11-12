@@ -15,7 +15,8 @@ import { formatForkedClock, isReplyEntry, replyCountLabel } from "@chopin/protoc
 
 import { WireLost, WireRefusal } from "../../wire";
 import { asksChopinKey, withChopinMention } from "../ask-chopin";
-import { sendFailureView } from "../failure";
+import { ErrorState } from "../error-state";
+import { failureBanner, sendFailureView, withoutFailure } from "../failure";
 import { keepFormatPreference, readFormatPreference } from "../format-preference";
 import { MessageMarkdown } from "../markdown";
 import { useDocumentPeople } from "../document-people";
@@ -204,6 +205,9 @@ export function ThreadPanel(
 	let [historyKey, setHistoryKey] = useState(0);
 	let [submitting, setSubmitting] = useState(false);
 	let [sendError, setSendError] = useState<SendFailure & { code?: string }>();
+	// The failure notice a Retry was pressed for, and the server's words when it refused one.
+	let [retried, setRetried] = useState<{ entry: string; refusal?: string }>();
+	let bannerId = useId();
 	let [formatting, setFormatting] = useState(() => readFormatPreference(handle));
 	let pendingCaret = useRef<number | { start: number; end: number } | undefined>(undefined);
 	let submission = useRef<object | undefined>(undefined);
@@ -467,6 +471,38 @@ export function ThreadPanel(
 		view.transcript.entries.filter(isReplyEntry).length,
 	);
 	let clocked = formatForkedClock(view.forkedAt);
+	// A failed reply in the thread is told, and run again, as in Chat: by its sender's Retry.
+	let failed = failureBanner(view.transcript.entries, view.transcript.turn, handle);
+	let retryTurn = failed?.retry && failed.request && wire
+		? () => {
+			let entry = failed.entry;
+			setRetried({ entry });
+			wire.ask<Wire.Retried>("chat:retry", { message: failed.request, thread: view.rootId })
+				.catch((error: Error) =>
+					setRetried(current =>
+						current?.entry !== entry
+							? current
+							: error instanceof WireRefusal
+							? { entry, refusal: error.message }
+							: undefined
+					)
+				);
+		}
+		: undefined;
+	let failureNode = failed && !sendError
+		? (
+			<ErrorState
+				detail={(retried?.entry === failed.entry ? retried.refusal : undefined) ?? failed.detail}
+				id={bannerId}
+				kind={failed.kind}
+				link={failed.link}
+				onRetry={retryTurn}
+				retryDisabled={!composerReady}
+				retrying={retried?.entry === failed.entry && retried.refusal === undefined}
+				title={failed.title}
+			/>
+		)
+		: undefined;
 	let sendErrView = sendError && !offline
 		? sendFailureView(sendError, sendError.code)
 		: undefined;
@@ -541,7 +577,7 @@ export function ThreadPanel(
 				compactions={view.compactions}
 				completedWork={view.transcript.completedWork}
 				decisions={decisions}
-				entries={view.transcript.entries}
+				entries={withoutFailure(view.transcript.entries, failureNode ? failed?.entry : undefined)}
 				handle={handle}
 				lead={lead}
 				live={connected && view.loaded}
@@ -569,6 +605,7 @@ export function ThreadPanel(
 				agent={agent}
 				alsoDisabled={!draftable || submitting}
 				alsoToChat={view.alsoToChat}
+				banner={failureNode ? { id: bannerId, node: failureNode } : undefined}
 				chopin={agent ? { disabled: !draftable || submitting, onAsk: askChopin } : undefined}
 				draftable={draftable}
 				format={sheet
