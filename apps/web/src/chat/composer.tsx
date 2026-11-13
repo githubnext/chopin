@@ -29,10 +29,10 @@ import { SendStopButton } from "./assistant-ui/send-stop-button";
 import { motionContract } from "../motion-contract";
 import { currentShortcutPlatform, shortcutLabel } from "../shortcuts";
 import { draftPlaceholder } from "./ask-chopin";
-import { ModelPill } from "./assistant-ui/model-pill";
+import { ModelPill, ModelPillPending } from "./assistant-ui/model-pill";
 import type { Format } from "./format";
 import type { FileView } from "./attachments/files";
-import type { ModelControl } from "./use-model-choice";
+import type { ComposerModel } from "./use-model-choice";
 import type { DraftInputHandle, DraftInputProps } from "./draft-input";
 import type { RichDraftHandle } from "./rich/rich-draft-input";
 import plannerResume from "../assets/icons/planner-resume.svg";
@@ -134,8 +134,11 @@ export type ChatComposerProps = {
 	banner?: { id: string; node: ReactNode; invalid?: boolean };
 	/** Archived and read-only documents show why in place of the draft. */
 	unavailable?: "archived" | "readonly";
-	/** Present where the document's agent offers a choice of model: the trigger and its popover. */
-	model?: ModelControl;
+	/**
+	 * Present where the document's agent offers a choice of model: the trigger and its popover, or,
+	 * while its machine has yet to say which models it runs, the pill waiting for them.
+	 */
+	model?: ComposerModel;
 	/** Present when `#` references are on: the instructions and the Mention docs button. */
 	references?: { disabled: boolean; onMentionDocs: () => void };
 	/** The formatting toolbar above the draft, which `shown` says is on, and the Aa button that turns it off. */
@@ -627,7 +630,9 @@ export function ChatComposer(
 											title={dictation.tooltip}
 										/>
 									)}
-									{model && <ModelPill control={model} />}
+									{model && ("pending" in model
+										? <ModelPillPending model={model} />
+										: <ModelPill control={model} />)}
 								</div>
 								<div className="composer-actions">
 									{run?.action === "resume" && (

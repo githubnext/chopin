@@ -1453,6 +1453,18 @@ export function RoomWorkspace(
 		choose: hasMachineButton,
 		place: "note",
 	});
+	// Whether the Planner is on its way, for the composer's model pill to wait for its models: read
+	// from the room's word alone, so it holds before the machine is named, and over once the machine
+	// can't start it, went away, or none was chosen.
+	let plannerComing: "starting" | "attached" | undefined = !agent
+		? undefined
+		: midSwitch
+		? "starting"
+		: attachment?.state === "attached"
+		? "attached"
+		: attachment?.state === "starting" && !attachment.failure
+		? "starting"
+		: undefined;
 	// Mid-switch the old machine's attachment is not chopin's state: it is connecting to the new one.
 	let presence = agent
 		? plannerPresence(midSwitch ? undefined : attachment, plannerNote)
@@ -2099,6 +2111,7 @@ export function RoomWorkspace(
 									fix: noteFix,
 									...(hasMachineButton ? { choose: openMachinePicker } : {}),
 								}}
+								plannerComing={plannerComing}
 								onTranscript={setTranscriptFacts}
 								focus={presentation.type === "parent-with-child" ? presentation.childId : undefined}
 								onOpenChild={presentation.onChildOpen}

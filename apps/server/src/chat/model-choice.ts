@@ -35,6 +35,12 @@ export type ModelChoiceDeps = {
 	 */
 	known?: (channelId: string) => boolean;
 	/**
+	 * Whether, while the offer is not `known`, the models are on their way (a remote client that has
+	 * yet to report them, or a Planner a machine may be starting), so the room is told it waits for
+	 * them. Absent means they are.
+	 */
+	incoming?: (channelId: string) => boolean;
+	/**
 	 * A turn fell back on a saved choice with no catalog to check it against while `known` was
 	 * false: the harness is to treat what it offers as known (nothing), and the room is to be told
 	 * the choice, since what the turn did is now a fact. Called once per such turn.
@@ -66,7 +72,8 @@ async function stored(
 /**
  * The room's model state: the catalog and the stored choice, whether or not the catalog honours it.
  * Where the harness offers nothing, the choice is still told, so the composer can say it fell back
- * to the default, but not while what the harness offers is unknown (`known`).
+ * to the default, but not while what the harness offers is unknown (`known`): it is then told as
+ * `waiting`, which a composer shows while the models are on their way (`incoming`).
  */
 export async function modelState(
 	deps: ModelChoiceDeps,
@@ -81,7 +88,8 @@ export async function modelState(
 			return undefined;
 		}),
 	]);
-	let told = saved.choice && (catalog || (deps.known?.(channelId) ?? true));
+	let known = !!catalog || (deps.known?.(channelId) ?? true);
+	let told = saved.choice && known;
 	return {
 		kind: "chat:model",
 		ts: 0,
@@ -89,6 +97,14 @@ export async function modelState(
 		...(told
 			? { choice: saved.choice, ...(saved.modelName ? { modelName: saved.modelName } : {}) }
 			: {}),
+		...(known || deps.incoming?.(channelId) === false
+			? {}
+			: {
+				waiting: {
+					...(saved.choice ? { choice: saved.choice } : {}),
+					...(saved.modelName ? { modelName: saved.modelName } : {}),
+				},
+			}),
 		...(commands?.length ? { commands } : {}),
 	};
 }

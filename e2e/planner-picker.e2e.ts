@@ -46,6 +46,7 @@ import { HOST, ROOT } from "./servers";
 import { expectInsideViewport, expectNoHorizontalOverflow } from "./responsive";
 
 import type { Browser, Page } from "@playwright/test";
+import type { CapabilityCatalog } from "../packages/agent-link/src/protocol";
 
 const PORT = e2ePort(8794);
 const ORIGIN = `http://${HOST}:${PORT}`;
@@ -165,6 +166,28 @@ test.afterEach(async () => {
 });
 
 /**
+ * Makes the next link this process opens drop the first `capabilities` frame it sends, so the
+ * client offers its models and reports none until its own `report`. The link is made synchronously
+ * by `connectAgent`, so the global is put back before anything else can open a socket.
+ */
+function dropFirstReport(): () => void {
+	let Original = globalThis.WebSocket;
+	let dropped = false;
+	globalThis.WebSocket = class extends Original {
+		override send(data: Parameters<WebSocket["send"]>[0]) {
+			if (!dropped && typeof data === "string" && JSON.parse(data).type === "capabilities") {
+				dropped = true;
+				return;
+			}
+			super.send(data);
+		}
+	} as typeof WebSocket;
+	return () => {
+		globalThis.WebSocket = Original;
+	};
+}
+
+/**
  * Pair a machine for the person signed in on `page` with a pairing key and connect a checkout of
  * octo-org/score, as `chopin connect` does; with `planner`, as `--planner-command` does, with
  * `service`, as the background service on a server does, and with `bare`, with no checkout, as a
@@ -219,18 +242,31 @@ async function machine(
 	await page.goto(back);
 	return {
 		/** The Planner backend Chopin asked the connector to start: a credential, then the link. */
-		backend: async (document: string, handlers: AgentHandlers = { turn() {} }) => {
+		/**
+		 * The Planner backend Chopin asked the connector to start: a credential, then the link. With
+		 * `offer`, it offers the models in `capabilities`, and with `silent` it holds them back until
+		 * its own `report`, as a backend that attaches before it has read them.
+		 */
+		backend: async (
+			document: string,
+			handlers: AgentHandlers = { turn() {} },
+			offer?: { capabilities: CapabilityCatalog; silent?: boolean },
+		) => {
 			let issued = await post("/api/connector/planner", { document }, {
 				authorization: `Bearer ${paired.token}`,
 			});
 			expect(issued.status, await issued.clone().text()).toBe(200);
 			let { token: credential } = await issued.json() as { token: string };
-			return connectAgent({
+			let restore = offer?.silent ? dropFirstReport() : undefined;
+			let connecting = connectAgent({
 				url: ORIGIN,
 				token: credential,
 				document,
 				handlers,
+				...(offer ? { capabilities: offer.capabilities } : {}),
 			});
+			restore?.();
+			return connecting;
 		},
 		/**
 		 * One launch of the Planner backend as a connector that cannot say why a backend exited
@@ -2910,3 +2946,225 @@ for (
 		await linkB?.detach().catch(() => {});
 	});
 }
+
+const MODELS: CapabilityCatalog = {
+	models: {
+		available: [
+			{
+				id: "acme/large",
+				name: "Large",
+				provider: { id: "acme", name: "Acme" },
+				thinkingLevels: ["low", "high"],
+			},
+			{ id: "acme/small", name: "Small", provider: { id: "acme", name: "Acme" } },
+		],
+		default: { id: "acme/small" },
+	},
+};
+
+/** The document's model choice, stored as a person's pick in the composer stores it. */
+async function savedChoice(
+	room: string,
+	handle: string,
+	model: string,
+	level: string,
+	name: string,
+) {
+	let database = new SQL(serverDatabase);
+	try {
+		await database`
+			INSERT INTO planner_model_choices
+				(channel_id, model, thinking_level, model_name, user_id, updated_at, fencing)
+			VALUES (${room}, ${model}, ${level}, ${name},
+				(SELECT id FROM users WHERE login = ${handle}), now(), 1)
+		`;
+	} finally {
+		await database.close();
+	}
+}
+
+/** The composer's pill while it waits for the machine's models: named for what it waits for. */
+function waitingPill(page: Page) {
+	return page.locator(".chat-composer").getByRole("button", {
+		name: /^Loading the machine's models/,
+	});
+}
+
+/** The real pill, named for the model that will run. */
+function modelPill(page: Page) {
+	return page.locator(".chat-composer").getByRole("button", { name: /^Model: / });
+}
+
+/** Any pill at all in the composer, waiting or real. */
+function anyPill(page: Page) {
+	return page.locator(".chat-composer .composer-model-pill");
+}
+
+/**
+ * Records, from the page's first load, when its composer and its model pill were first drawn, in
+ * the page's own clock.
+ */
+async function watchPill(page: Page) {
+	await page.addInitScript(() => {
+		let seen: Record<string, number> = {};
+		(globalThis as unknown as { pillSeen: Record<string, number> }).pillSeen = seen;
+		let look = () => {
+			if (seen.composer === undefined && document.querySelector(".chat-composer")) {
+				seen.composer = performance.now();
+			}
+			if (
+				seen.pill === undefined && document.querySelector(".chat-composer .composer-model-pill")
+			) {
+				seen.pill = performance.now();
+			}
+		};
+		new MutationObserver(look).observe(document, { childList: true, subtree: true });
+	});
+}
+
+async function pillLag(page: Page) {
+	return await page.evaluate(() => {
+		let seen = (globalThis as unknown as { pillSeen: Record<string, number> }).pillSeen;
+		return seen.pill! - seen.composer!;
+	});
+}
+
+/** The pill's box, and the send button's, to compare before and after the models arrive. */
+async function boxes(page: Page) {
+	return {
+		pill: (await anyPill(page).boundingBox())!,
+		send: (await page.locator(".chat-composer .composer-actions").boundingBox())!,
+	};
+}
+
+test("the composer's model pill waits in place while the machine starts the Planner, and becomes the real pill there when its models arrive", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	let page = await open(browser, "mona", room, DESKTOP);
+	await createdBy(room, "mona");
+	let studio = await machine(page, "studio", true);
+	await savedChoice(room, "mona", "acme/large", "high", "Large");
+	await watchPill(page);
+	await page.reload();
+	await ready(page);
+	expect((await studio.poll([])).planners).toHaveLength(1);
+
+	// Starting: the pill is there with the composer, with the document's saved model and level,
+	// quieter, and nothing opens from it. The machine's connecting words stay off Chat.
+	let waiting = waitingPill(page);
+	await expect(waiting).toBeVisible();
+	expect(await pillLag(page)).toBeLessThan(300);
+	await expect(waiting).toHaveAccessibleName(
+		"Loading the machine's models (Large, reasoning high)",
+	);
+	await expect(waiting).toHaveAttribute("aria-disabled", "true");
+	await expect(waiting).toHaveAttribute("aria-busy", "true");
+	await expect(waiting).toHaveText("Largehigh");
+	await shoot(page, "model-pill-waiting-desktop", page.locator(".chat-composer"));
+	// Its words are in the level's quieter ink, still under reduced motion, where nothing breathes.
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	let ink = await waiting.evaluate(element =>
+		[...element.children].map(child => getComputedStyle(child).color)
+	);
+	expect(new Set(ink).size).toBe(1);
+	await page.emulateMedia({ reducedMotion: "no-preference" });
+	// Forced, as a pointer is: a button marked disabled for assistive technology is still clicked.
+	await waiting.click({ force: true });
+	await expect(page.getByRole("dialog", { name: "Model and reasoning" })).toHaveCount(0);
+	await expectQuietChat(page);
+	let before = await boxes(page);
+
+	// Attached, its models not read yet: it still waits.
+	let client = await studio.backend(room, undefined, { capabilities: MODELS, silent: true });
+	await expectHealthy(machineButton(page));
+	await expect(waiting).toBeVisible();
+
+	// The models arrive: the real pill takes its place, the same box, and opens.
+	client.report(MODELS);
+	let real = modelPill(page);
+	await expect(real).toHaveAccessibleName("Model: Large, reasoning high");
+	await expect(waiting).toHaveCount(0);
+	await expect(real).not.toHaveAttribute("aria-disabled");
+	let after = await boxes(page);
+	for (let key of ["x", "y", "width", "height"] as const) {
+		expect(after.pill[key]).toBeCloseTo(before.pill[key], 0);
+		expect(after.send[key]).toBeCloseTo(before.send[key], 0);
+	}
+	await page.mouse.move(0, 0);
+	await shoot(page, "model-pill-ready-desktop", page.locator(".chat-composer"));
+	await real.click();
+	await expect(page.getByRole("dialog", { name: "Model and reasoning" })).toBeVisible();
+	await page.keyboard.press("Escape");
+	await client.detach();
+});
+
+test("the waiting pill shows only while a machine is starting the Planner: none with no machine, and it ends when the machine goes or can't start it", async ({ browser }) => {
+	test.setTimeout(150_000);
+	let room = await remoteServer();
+	let page = await open(browser, "mona", room, DESKTOP);
+	await createdBy(room, "mona");
+
+	// No machine: nothing is coming, so the composer has no pill, as before.
+	await expect(announced(page)).toHaveText(NONE);
+	await expect(chatInput(page)).toBeVisible();
+	await expect(anyPill(page)).toHaveCount(0);
+
+	// A machine starts it, then goes before it attaches: the wait ends with it.
+	let studio = await machine(page, "studio", true);
+	await page.reload();
+	await ready(page);
+	expect((await studio.poll([])).planners).toHaveLength(1);
+	await expect(waitingPill(page)).toBeVisible();
+	await expect(waitingPill(page)).toHaveText("Model");
+	await studio.disconnect();
+	await expect(anyPill(page)).toHaveCount(0);
+	await expect(page.locator('[data-planner="starting"]')).toHaveCount(0);
+
+	// Another machine starts it and keeps failing: the wait ends where the machine says it can't.
+	let desk = await machine(page, "desk", true);
+	await page.reload();
+	await ready(page);
+	expect((await desk.poll([])).planners).toHaveLength(1);
+	await expect(waitingPill(page)).toBeVisible();
+	expect((await desk.reportFailure(refused(room, 1))).status).toBe(200);
+	expect((await desk.reportFailure(refused(room, 2))).status).toBe(200);
+	await expect(machineButton(page)).toHaveAttribute("data-planner", "failing");
+	await expect(anyPill(page)).toHaveCount(0);
+
+	// It attaches after all, with a client that reports no models: no pill, waiting or real.
+	let client = await desk.backend(room);
+	await expectHealthy(machineButton(page));
+	await expect(anyPill(page)).toHaveCount(0);
+	await client.detach();
+});
+
+test("on a phone, the model pill waits in place while the machine starts the Planner, and becomes the real pill there", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	let page = await open(browser, "mona", room, PHONE);
+	await createdBy(room, "mona");
+	let studio = await machine(page, "studio", true);
+	await page.reload();
+	await ready(page);
+	expect((await studio.poll([])).planners).toHaveLength(1);
+	await page.getByRole("navigation", { name: "Workspace view" })
+		.getByRole("button", { name: /^Chat/ }).tap();
+	let chat = page.getByRole("complementary", { name: "Chat", exact: true });
+	await expect.poll(async () => (await chat.boundingBox())?.x).toBe(0);
+	let waiting = waitingPill(page);
+	await expect(waiting).toBeVisible();
+	await expectInsideViewport(waiting);
+	await expectNoHorizontalOverflow(page);
+	await shoot(page, "model-pill-waiting-phone");
+	let before = await boxes(page);
+	let client = await studio.backend(room, undefined, { capabilities: MODELS, silent: true });
+	client.report(MODELS);
+	await expect(modelPill(page)).toHaveAccessibleName("Model: Small");
+	let after = await boxes(page);
+	expect(after.pill.x).toBeCloseTo(before.pill.x, 0);
+	expect(after.pill.y).toBeCloseTo(before.pill.y, 0);
+	expect(after.pill.height).toBeCloseTo(before.pill.height, 0);
+	expect(after.send.x).toBeCloseTo(before.send.x, 0);
+	await shoot(page, "model-pill-ready-phone");
+	await client.detach();
+});

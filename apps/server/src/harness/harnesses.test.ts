@@ -8,6 +8,7 @@ import {
 	harnessFor,
 	plannerCatalog,
 	plannerCommands,
+	plannerOfferIncoming,
 	plannerOfferKnown,
 	plannerRanWithoutOffer,
 	plannerSteers,
@@ -252,6 +253,29 @@ it("knows what a remote Planner offers only from an attached client that has rep
 	// Every other harness knows what it offers, which may be nothing.
 	for (let harness of ["copilot-sdk", "atomic", "not-installed"]) {
 		expect(plannerOfferKnown(harness, "doc-a")).toBe(true);
+	}
+});
+
+it("says a remote Planner's models are on their way only while a machine may be starting it or its client has yet to report them, never while it is held away", () => {
+	let pending = true;
+	let link = {
+		get catalogPending() {
+			return pending;
+		},
+	} as unknown as AgentLink;
+	// Nobody holds it and nobody is attached: a machine may be starting it.
+	expect(plannerOfferIncoming("remote", "doc-a", false)).toBe(true);
+	// Held while its client is away (a deploy's hand-over window): what it offered was already told.
+	expect(plannerOfferIncoming("remote", "doc-a", true)).toBe(false);
+	let detach = attachLink("doc-a", link);
+	// Attached, it is the client's word: on their way until it reports, then not.
+	expect(plannerOfferIncoming("remote", "doc-a", true)).toBe(true);
+	pending = false;
+	expect(plannerOfferIncoming("remote", "doc-a", true)).toBe(false);
+	expect(plannerOfferIncoming("remote", "doc-a", false)).toBe(false);
+	detach();
+	for (let harness of ["copilot-sdk", "atomic"]) {
+		expect(plannerOfferIncoming(harness, "doc-a", false)).toBe(false);
 	}
 });
 

@@ -578,6 +578,26 @@
 	color: var(--color-text-tertiary);
 	transform: rotate(90deg);
 }
+/*
+ * While the machine's models load, the pill waits in its own place, its name in the level's
+ * tertiary ink, breathing to quaternary and back at chopin's connecting pace; still under reduced
+ * motion. Only colour moves: opacity would lay its text out on a layer of its own, a pixel off the
+ * real pill's. Nothing opens, so nothing shades under the pointer.
+ */
+.chat-composer .composer-model-pill[aria-busy="true"] {
+	background-color: transparent;
+	color: var(--color-text-tertiary);
+}
+@keyframes composer-model-waiting {
+	50% {
+		color: var(--color-text-quaternary);
+	}
+}
+@media (prefers-reduced-motion: no-preference) {
+	.chat-composer .composer-model-pill[aria-busy="true"] > * {
+		animation: composer-model-waiting calc(var(--duration-linger) * 2) var(--motion-move) infinite;
+	}
+}
 
 /*
  * The pill's Model selector, portalled out of the composer. It is never taller than the screen has

@@ -7,6 +7,8 @@ import {
 	fallbackNotice,
 	levelSteps,
 	matchesQuery,
+	pendingLabel,
+	pendingTrigger,
 	pickerGroups,
 	pickerOptions,
 	reasoningLevels,
@@ -518,5 +520,34 @@ describe("a catalog that repeats an id or a level", () => {
 		expect(levelSteps(levels, "default").map(step => step.key)).toEqual(
 			levelSteps(levels, undefined).map(step => step.key),
 		);
+	});
+});
+
+describe("the pill that waits for the machine's models", () => {
+	test("says the saved model by its catalog name and the saved level, else just Model", () => {
+		expect(pendingTrigger({ model: "acme/large", thinkingLevel: "high" }, "Large")).toEqual({
+			pending: true,
+			name: "Large",
+			level: "high",
+		});
+		// A model saved without the name a catalog gave it is not named by its id.
+		expect(pendingTrigger({ model: "acme/large" })).toEqual({ pending: true, name: "Model" });
+		expect(pendingTrigger({ thinkingLevel: "xhigh" })).toEqual({
+			pending: true,
+			name: "Model",
+			level: "xhigh",
+		});
+		expect(pendingTrigger(undefined)).toEqual({ pending: true, name: "Model" });
+	});
+
+	test("is named for what it waits for, never as the real pill is", () => {
+		expect(pendingLabel({ name: "Model" })).toBe("Loading the machine's models");
+		expect(pendingLabel({ name: "Large", level: "high" })).toBe(
+			"Loading the machine's models (Large, reasoning high)",
+		);
+		expect(pendingLabel({ name: "Model", level: "xhigh" })).toBe(
+			"Loading the machine's models (reasoning xhigh)",
+		);
+		expect(pendingLabel({ name: "Large" })).not.toMatch(/^Model: /);
 	});
 });
