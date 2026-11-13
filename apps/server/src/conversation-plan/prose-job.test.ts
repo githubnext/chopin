@@ -172,6 +172,37 @@ test("writeup projects only the current saved generation's unfinished prose job"
 	expect(writeup(plan([job("failed")]), record({ origin: "planner" }))).toBeUndefined();
 });
 
+test("a failed write-up says why in plain words, never naming a tool", () => {
+	let id = `prose:${CARD}:decided:${CARD}:1`;
+	let failed = (reason: string) => ({
+		conversationPlanJobs: [{
+			id,
+			kind: "prose" as const,
+			target: CARD,
+			trigger: `decided:${CARD}:1`,
+			status: "failed" as const,
+			attempts: 1,
+			reason,
+			at: "2026-10-07T00:00:00.000Z",
+		}],
+		conversationPlanPendingEffects: [],
+	});
+	expect(writeup(
+		failed(
+			"The Planner's write_decision_prose failed twice: the document changed while it was being written.",
+		),
+		record(),
+	)).toEqual({
+		status: "failed",
+		job: id,
+		reason: "Writing it failed twice: the document changed while it was being written.",
+	});
+	expect(writeup(failed("The Planner ended without calling write_decision_prose."), record()))
+		.toEqual({ status: "failed", job: id, reason: "chopin finished without writing it." });
+	expect(writeup(failed("The machine disconnected during the turn."), record()))
+		.toEqual({ status: "failed", job: id, reason: "The machine disconnected during the turn." });
+});
+
 test("a conversation decision's write-up is unchanged and keeps its thread", () => {
 	let effects = appendProseEffect([], [], record());
 	expect(effects).toHaveLength(1);

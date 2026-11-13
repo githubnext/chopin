@@ -113,6 +113,27 @@ test("a failed write-up offers Retry from the Decisions card", () => {
 	);
 });
 
+test("a failed write-up says why beside its Retry", () => {
+	let markup = renderToStaticMarkup(createElement(QuestionnaireCard, {
+		canEdit: true,
+		connected: true,
+		meta: {
+			...PLANNER,
+			writeup: {
+				status: "failed",
+				job: "decision-followup:w:decided:w:1",
+				reason: "Writing it failed twice: the document changed while it was being written.",
+			},
+		},
+		presentation: "list",
+		value: DECIDED,
+		wire: { ask: async () => ({}), send() {}, on: () => () => {} } as never,
+	}));
+	expect(markup).toContain(
+		"Couldn&#x27;t write this up. Writing it failed twice: the document changed while it was being written.",
+	);
+});
+
 test("decided cards a deck still draws are not counted as written up out of sight", () => {
 	let open = {
 		...DECIDED,

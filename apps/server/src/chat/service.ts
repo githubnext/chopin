@@ -349,6 +349,16 @@ export type Chat = {
 	jobFailureCode?: "source-shape";
 	jobCalls?: Map<string, string>;
 	jobToolNames?: ReadonlySet<string>;
+	/** What a decision-followup job's turn last read of its scope (see `readScope`). */
+	jobScopeRead?: {
+		job: ConversationPlan.Job;
+		turn: Wire.Turn | undefined;
+		revision: number;
+		scope: string;
+		answersHash: string;
+		source: string;
+		context: string;
+	};
 	/** The job taken from the waiting turns while its handoff save is pending. */
 	handoffJob?: JobTurn;
 	/** The background job whose turn holds the Chat, until the next turn starts or the Chat is idle. */

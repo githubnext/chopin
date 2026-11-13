@@ -1,7 +1,7 @@
 import { jsonSchema, tool } from "ai";
 import { answer, cardToolSchema } from "./scoped-tool-result";
 import { runJobTool } from "./job-scope";
-import { followupIntent, scopeSnapshot } from "../questions/decision-followup";
+import { followupIntent, readScope } from "../questions/decision-followup";
 import { type ScopeWrite, writeScope } from "../questions/decision-followup-write";
 import type { DocumentRoom } from "./tools";
 
@@ -27,7 +27,7 @@ export function createFollowupTools() {
 				answer("read_decision_scope", () =>
 					room.exclusive(async () => {
 						let job = current(room);
-						let { indices: _indices, ...snapshot } = scopeSnapshot(room.plan, job.target);
+						let { indices: _indices, ...snapshot } = readScope(room.plan, job);
 						return snapshot;
 					})),
 		}),

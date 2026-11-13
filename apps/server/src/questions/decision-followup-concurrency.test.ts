@@ -3,7 +3,7 @@ import * as Edit from "../plan/edit";
 import * as Room from "../plan/room";
 import * as Service from "../plan/service";
 import { fixture, restart, running, scopeRoom } from "./decision-followup.test-fixtures";
-import { scopeSnapshot } from "./decision-followup";
+import { readScope, scopeSnapshot } from "./decision-followup";
 import { writeScope } from "./decision-followup-write";
 import * as Questions from "./service";
 
@@ -109,3 +109,52 @@ test.each(["passage", "answer", "section"])(
 		expect(context.plan.records.get(id)!.followUp!.appliedGeneration).toBeUndefined();
 	},
 );
+
+test("a write-up lands though the document moved on elsewhere after its scope was read", async () => {
+	// While a run publishes its plan and other decisions are written up, the document's revision
+	// moves between the job's read and its write, but its passage and answers stay the same.
+	let context = await fixture();
+	let id = context.ids[0]!;
+	await context.save(id, "Keep offline support.");
+	let job = running(context);
+	let room = scopeRoom(context);
+	let read = readScope(context.plan, job);
+	await room.exclusive(async () => {
+		let before = Room.project(context.plan.document);
+		let outcome = Edit.apply(context.plan, context.plan.revision, [
+			{ op: "insert_root", source: "A section the run published meanwhile." },
+		]);
+		if (!outcome.ok || !outcome.mutation) throw new Error("expected the unrelated edit");
+		Questions.rebase(context.plan, before);
+		await Service.publish(context.plan, context.server, context.plan.id, outcome.mutation);
+	});
+	expect(context.plan.revision).toBeGreaterThan(read.revision);
+	await expect(writeScope(room, job, context.plan.chat.turn, {
+		id,
+		revision: read.revision,
+		answersHash: read.answersHash,
+		source: "Offline support is required.",
+	})).resolves.toMatchObject({ output: { id, replayed: false } });
+	expect(Room.project(context.plan.document)).toContain("Offline support is required.");
+	expect(Room.project(context.plan.document)).toContain("A section the run published meanwhile.");
+	// Its passage changing after the read still refuses, as does a revision it never read.
+	let fresh = await fixture();
+	await fresh.save(fresh.ids[0]!, "Keep offline support.");
+	let next = running(fresh);
+	let seen = readScope(fresh.plan, next);
+	await scopeRoom(fresh).exclusive(async () => {
+		let outcome = Edit.apply(fresh.plan, fresh.plan.revision, [{
+			op: "replace",
+			index: 0,
+			source: "A person rewrote the passage after it was read.",
+		}]);
+		if (!outcome.ok || !outcome.mutation) throw new Error("expected the human edit");
+		await Service.publish(fresh.plan, fresh.server, fresh.plan.id, outcome.mutation);
+	});
+	await expect(writeScope(scopeRoom(fresh), next, fresh.plan.chat.turn, {
+		id: fresh.ids[0]!,
+		revision: seen.revision,
+		answersHash: seen.answersHash,
+		source: "An outdated scoped write.",
+	})).rejects.toThrow(/stale|orphaned/);
+});

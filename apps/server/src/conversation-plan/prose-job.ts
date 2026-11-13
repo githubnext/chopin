@@ -9,6 +9,7 @@ import { markKey } from "@chopin/question";
 import type { Plan } from "../plan/service";
 import type { Record as CardRecord } from "../questions/records";
 import { followupIntent } from "../questions/decision-followup";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 
 export function proseIntent(record: CardRecord): JobIntent | undefined {
 	if (
@@ -52,7 +53,7 @@ export function settleIntent(record: CardRecord): JobIntent | undefined {
 export function writeup(
 	plan: Pick<Plan, "conversationPlanJobs" | "conversationPlanPendingEffects">,
 	record: CardRecord,
-): { status: "writing" | "failed"; job: string } | undefined {
+): { status: "writing" | "failed"; job: string; reason?: string } | undefined {
 	let intent = proseIntent(record) ?? followupIntent(record);
 	if (!intent) return;
 	if (
@@ -61,7 +62,10 @@ export function writeup(
 	) return;
 	let id = jobId(intent);
 	let job = plan.conversationPlanJobs.find(item => item.id === id);
-	if (job?.status === "failed") return { status: "failed", job: id };
+	if (job?.status === "failed") {
+		let reason = job.reason && failedBecause(job.reason);
+		return { status: "failed", job: id, ...(reason ? { reason } : {}) };
+	}
 	if (job?.status === "pending" || job?.status === "running") return { status: "writing", job: id };
 	if (job) return;
 	// Save commits the job effect before the queue accepts it.
@@ -70,6 +74,16 @@ export function writeup(
 		&& effect.intent.target === intent.target && effect.intent.trigger === intent.trigger
 	);
 	return queued ? { status: "writing", job: id } : undefined;
+}
+
+/** A failed write-up's reason as its card says it: in plain words, naming no tool. */
+function failedBecause(reason: string): string {
+	let twice = /^The Planner's \w+ failed twice(?:: (.+?))?\.$/.exec(reason);
+	if (twice) return `Writing it failed twice${twice[1] ? `: ${twice[1]}` : ""}.`;
+	if (/^The Planner ended without calling \w+\.$/.test(reason)) {
+		return `${PLANNER_NAME} finished without writing it.`;
+	}
+	return reason;
 }
 
 /** Save adds this to the same candidate as its answered record and mirror action. */

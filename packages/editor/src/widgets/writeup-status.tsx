@@ -42,8 +42,10 @@ export function WriteupStatus(
 		setRetrying(false);
 	};
 	return (
-		<span className="flex items-center gap-1 whitespace-nowrap">
-			<span className="text-text-tertiary" role="status">Couldn't write this up</span>
+		<span className="flex min-w-0 flex-wrap items-center gap-x-1">
+			<span className="text-text-tertiary" role="status">
+				{writeup.reason ? `Couldn't write this up. ${writeup.reason}` : "Couldn't write this up"}
+			</span>
 			<button
 				aria-label="Retry write-up"
 				className="btn btn-sm btn-ghost"

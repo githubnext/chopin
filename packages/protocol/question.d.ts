@@ -179,7 +179,8 @@ export declare namespace Question {
 		hasProse: boolean;
 		proseOrphaned: boolean;
 		/** The saved conversation decision's write-up job while it is queued, running, or failed. */
-		writeup?: { status: "writing" | "failed"; job: string };
+		/** `reason` says in plain words why a failed write-up failed, when Chopin knows. */
+		writeup?: { status: "writing" | "failed"; job: string; reason?: string };
 		/** Oldest first. */
 		findings?: Finding[];
 		/** The decision's own page, once someone has opened it. */

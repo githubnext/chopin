@@ -8,6 +8,7 @@ import * as Room from "../plan/room";
 import type { Plan } from "../plan/service";
 import type { Record } from "./records";
 import type { Heading } from "mdast";
+import type { ConversationPlan } from "@chopin/protocol";
 
 export function followupIntent(record: Record): JobIntent | undefined {
 	if (
@@ -97,6 +98,25 @@ export function scopeSnapshot(plan: Plan, id: string) {
 	}
 	let context = serialize({ type: "root", children: headings });
 	return { id, scope, revision: plan.revision, answersHash, source, context, decisions, indices };
+}
+
+/**
+ * A decision-followup job reads its scope: the snapshot it is given, which its turn keeps (on the
+ * Chat, with the job and turn it was read for) so a write made after the document moved on
+ * elsewhere still lands when its own passage, section and answers are the ones it read.
+ */
+export function readScope(plan: Plan, job: ConversationPlan.Job) {
+	let snapshot = scopeSnapshot(plan, job.target);
+	plan.chat.jobScopeRead = {
+		job,
+		turn: plan.chat.turn,
+		revision: snapshot.revision,
+		scope: snapshot.scope,
+		answersHash: snapshot.answersHash,
+		source: snapshot.source,
+		context: snapshot.context,
+	};
+	return snapshot;
 }
 
 export function followupPrompt(id: string): string {
