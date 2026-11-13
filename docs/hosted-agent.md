@@ -1402,6 +1402,12 @@ supported MCP handoff can read only graphs on MCP-created documents, and no
 current production interface lets a person approve the draft. See
 [Experimental implementation lifecycle](implementation-lifecycle.md).
 
+A remote Planner's backend that writes files for a revision in its own worktree
+pushes them and records where with `record_plan_source` at `/mcp`; a build of that
+revision starts from the recorded commit rather than the builder's checkout, and
+`read_implementation_graph` returns it as `plan_source`. See
+[Plan sources](agent-connection.md#plan-sources).
+
 ## Main implementation points
 
 - Harness selection, adapter factory map, and startup checks:

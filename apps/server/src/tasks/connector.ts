@@ -565,6 +565,7 @@ export function implementationConnector(
 							}),
 							...unapprovedContext(plan.records.values()),
 							...await requestedBy(plan, build, connection),
+							...(build.planSource ? { planSource: structuredClone(build.planSource) } : {}),
 						}));
 					}
 					let parsed = lifecycleCall(name, { ...args, id: plan.id, runId: build.id });

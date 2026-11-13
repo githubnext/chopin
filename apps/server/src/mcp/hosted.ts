@@ -21,6 +21,7 @@ import { claimImplementation, reportImplementationLifecycle } from "../tasks/pla
 import { StorageError } from "../storage/errors";
 import { implementationLifecycle } from "../tasks/lifecycle";
 import { unapprovedContext } from "../tasks/open-decisions";
+import { planSourceFor, withPlanSource } from "../tasks/plan-source";
 import { imagePath } from "../images/format";
 
 import type { Server } from "bun";
@@ -34,6 +35,7 @@ import type {
 	ImplementationInput,
 	InvokePlannerError,
 	McpOptions,
+	RecordPlanSourceInput,
 	RenameDocumentInput,
 } from "../mcp";
 import type { UpdateClient, UpdateDocumentInput } from "./update";
@@ -42,6 +44,7 @@ import type { ChannelArchiveResult, ChannelRecord, Lease, StoredChannel } from "
 import type { ClaimResult, Run } from "../tasks/graphs";
 import type { SocketData } from "../wire";
 import type { VisualAdmission } from "../agent/visual-admission";
+import type { PlanSource } from "../tasks/plan-source";
 
 export type HostedCaller = {
 	oauthToken: string;
@@ -53,6 +56,8 @@ export type HostedCaller = {
 	 */
 	launch?: {
 		repository(owner: string, name: string): Promise<GitHubRepository | undefined>;
+		/** Whether the repository on GitHub has the commit, read with the machine's own grant. */
+		hasCommit(owner: string, name: string, sha: string): Promise<boolean>;
 		allows(channel: ChannelRecord): boolean;
 	};
 };
@@ -172,7 +177,12 @@ function exposed(
 		activity: lifecycle?.activity,
 		history: lifecycle?.history ?? [],
 		...unapprovedContext(state.records ?? []),
+		...withSource(planSourceFor(state.planSources ?? [], version.planRevision)),
 	};
+}
+
+function withSource(planSource: PlanSource | undefined) {
+	return planSource ? { planSource } : {};
 }
 
 function claimResult(value: ClaimResult) {
@@ -876,6 +886,40 @@ export function hosted(
 		},
 		...(persistence
 			? {
+				planSources: {
+					async record(caller: HostedCaller, input: RecordPlanSourceInput) {
+						let access = await writableChannel(caller, input.id);
+						if (access.kind !== "allowed") return access;
+						let { channel } = access;
+						if (channel.archivedAt) return { kind: "archived" as const };
+						let { revision, branch, commit } = input;
+						let owner = channel.repositoryOwner;
+						let name = channel.repositoryName;
+						let present = caller.launch
+							? await caller.launch.hasCommit(owner, name, commit)
+							: await auth.github.hasCommit?.(caller.oauthToken, owner, name, commit);
+						if (!present) return { kind: "unavailable-commit" as const };
+						return serializeDocument(channel.id, () =>
+							withPlan(channel.id, async plan => {
+								if (revision > plan.revision) {
+									return { kind: "revision-conflict" as const, revision: plan.revision };
+								}
+								let source = { revision, branch, commit };
+								let next = withPlanSource(plan.planSources, source);
+								if (next.changed) {
+									let previous = plan.planSources;
+									plan.planSources = next.sources;
+									try {
+										await Plan.persistExclusive(plan);
+									} catch (err) {
+										plan.planSources = previous;
+										throw err;
+									}
+								}
+								return { kind: "recorded" as const, source };
+							}));
+					},
+				},
 				implementations: {
 					async readImplementation(caller: HostedCaller, id: string) {
 						let located = await locatedChannel(caller, id);
@@ -893,6 +937,7 @@ export function hosted(
 									...(live.graph ? { graph: live.graph } : {}),
 									...(live.execution ? { execution: live.execution } : {}),
 									lifecycle: live.lifecycle,
+									planSources: live.planSources,
 								}));
 						}
 						let stored = await auth.storage.collaboration.load(channel.id, auth.clock());

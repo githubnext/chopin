@@ -123,6 +123,8 @@ async function setup(
 		unreadable?: { locked: boolean };
 		/** How long after a restart a build's machine may come back and carry it on. */
 		resumeMs?: number;
+		/** Builds start from what the server reads on GitHub, where these commits are. */
+		github?: { commits: Set<string> };
 	} = {},
 ) {
 	let context = await openPlan("# Launcher plan\n");
@@ -154,6 +156,16 @@ async function setup(
 		async repositoryAccess(token: string) {
 			return github.repository(token, "owner", "repository");
 		},
+		...(options.github
+			? {
+				async branchHead() {
+					return "b".repeat(40);
+				},
+				async hasCommit(_token: string, _owner: string, _name: string, sha: string) {
+					return options.github!.commits.has(sha);
+				},
+			}
+			: {}),
 	} as unknown as GitHub;
 	let config = {
 		origin: "https://chopin.test",
@@ -218,6 +230,7 @@ async function setup(
 			takers: current.takers,
 			mayTake: current.mayTake,
 			machineChoices: current.machineChoices,
+			...(options.github ? { sourceFor: current.sourceFor } : {}),
 			busy: async connectionId =>
 				(await current.service.store.active()).some(item =>
 					item.connectionId === connectionId && ["running", "publishing"].includes(item.state)
@@ -1720,8 +1733,8 @@ function edit(plan: Plan.Plan, text: string) {
 	}));
 }
 
-/** Deliver a live build, edit the document, then queue and start a rebuild of that edit. */
-async function rebuilding(autoRun = false) {
+/** Deliver a live build of the document's first revision. */
+async function deliveredLive(autoRun = false) {
 	let context = await setup();
 	context.plan.persistence.liveBuild = true;
 	let stopped: string[] = [];
@@ -1751,6 +1764,12 @@ async function rebuilding(autoRun = false) {
 		id: built.id,
 		state: "stopped",
 	});
+	return { context, connection, built, claim, stopped };
+}
+
+/** Deliver a live build, edit the document, then queue and start a rebuild of that edit. */
+async function rebuilding(autoRun = false) {
+	let { context, connection, built, claim, stopped } = await deliveredLive(autoRun);
 	let builtSource = context.plan.live!.baseSource;
 	expect((await edit(context.plan, "A rebuilt paragraph.")).ok).toBe(true);
 	let target = Plan.source(context.plan);
@@ -3580,6 +3599,110 @@ test("Build is refused while the person's machine choice cannot be read, then us
 		expect(offline.status).toBe(409);
 		expect((await offline.json()).error).toBe("machine-offline");
 		expect(context.plan.builds).toEqual([]);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a build of a revision whose plan files were pushed starts from their commit, and its builder reads where", async () => {
+	let planned = { revision: 0, branch: "plans/launcher", commit: "c".repeat(40) };
+	let context = await setup({ github: { commits: new Set([planned.commit]) } });
+	try {
+		context.plan.planSources = [planned];
+		let connection = await paired(context);
+		let built = await (await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		})).json();
+		expect(built.checkout).toEqual({
+			repository: "owner/repository",
+			branch: planned.branch,
+			commit: planned.commit,
+		});
+		expect(built.planSource).toEqual(planned);
+		expect((await (await context.call(context.path)).json()).build.planSource).toEqual(planned);
+		let claim = await tool(context, connection.token, "claim_implementation_build", {
+			id: built.id,
+		});
+		expect(claim.source).toMatchObject({ commit: planned.commit, branch: planned.branch });
+		await tool(context, connection.token, "report_implementation_build", {
+			id: built.id,
+			state: "running",
+			session: "acp-session",
+		});
+		expect((await tool(context, claim.runToken, "read_implementation")).planSource).toEqual(
+			planned,
+		);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a build with no plan source starts from the machine's checkout, as before", async () => {
+	let context = await setup({ github: { commits: new Set() } });
+	try {
+		await paired(context);
+		let built = await (await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		})).json();
+		expect(built.checkout).toEqual(checkout);
+		expect(built.planSource).toBeUndefined();
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a plan source GitHub doesn't have refuses the build, saying so, and queues nothing", async () => {
+	let context = await setup({ github: { commits: new Set() } });
+	try {
+		context.plan.planSources = [{ revision: 0, branch: "plans/launcher", commit: "d".repeat(40) }];
+		await paired(context);
+		let response = await context.call(context.path, {
+			planRevision: 0,
+			graphVersion: 1,
+			graphRevision: 1,
+		});
+		expect(response.status).toBe(409);
+		expect((await response.json()).error).toBe("plan-source-unavailable");
+		expect(context.plan.builds).toEqual([]);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a rebuild keeps its base unless the plan's files were pushed for a revision since the last build", async () => {
+	let { context, connection } = await deliveredLive();
+	try {
+		let first = context.plan.builds[0]!;
+		let base = context.plan.live!.baseRevision;
+		// A source recorded for the revision already built is not newer: today's base stands.
+		context.plan.planSources = [{ revision: base, branch: "plans/one", commit: "c".repeat(40) }];
+		expect((await edit(context.plan, "A rebuilt paragraph.")).ok).toBe(true);
+		let kept = await queueRebuild(context.plan, context.experiments.connections);
+		if (kept.kind !== "queued") throw new Error(`rebuild was ${kept.kind}`);
+		expect(kept.build.checkout).toEqual(first.checkout);
+		expect(kept.build.planSource).toBeUndefined();
+		await tool(context, connection.token, "claim_implementation_build", { id: kept.build.id });
+		await tool(context, connection.token, "report_implementation_build", {
+			id: kept.build.id,
+			state: "stopped",
+		});
+		// The Planner pushed the edited revision's files: the next rebuild starts from them.
+		let newer = { revision: context.plan.revision, branch: "plans/two", commit: "e".repeat(40) };
+		context.plan.planSources = [...context.plan.planSources, newer];
+		let moved = await queueRebuild(context.plan, context.experiments.connections, {
+			by: "U_test",
+		});
+		if (moved.kind !== "queued") throw new Error(`rebuild was ${moved.kind}`);
+		expect(moved.build.checkout).toEqual({
+			repository: first.checkout.repository,
+			branch: newer.branch,
+			commit: newer.commit,
+		});
+		expect(moved.build.planSource).toEqual(newer);
 	} finally {
 		await Plan.close(context.plan);
 	}

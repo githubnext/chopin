@@ -327,6 +327,13 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		}
 		// The head a machine with no checkout of octo-org/score clones.
 		if (url.pathname === "/repos/octo-org/score/commits/main") return json({ sha: "b".repeat(40) });
+		// A commit a Planner pushed for its plan's files: GitHub has every one but the zero SHA.
+		let commit = /^\/repos\/octo-org\/score\/commits\/([0-9a-f]{40})$/.exec(url.pathname)?.[1];
+		if (commit) {
+			return commit === "0".repeat(40)
+				? json({ message: `No commit found for SHA: ${commit}` }, { status: 422 })
+				: json({ sha: commit });
+		}
 		// The files of octo-org/score, which a message can mention.
 		if (url.pathname === "/repos/octo-org/score/git/trees/main") {
 			return json({

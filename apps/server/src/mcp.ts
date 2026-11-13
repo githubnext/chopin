@@ -22,6 +22,7 @@ import { IMAGE_TYPES } from "./images/format";
 import { isLifecycleTool, LIFECYCLE_TOOLS, lifecycleCall } from "./mcp/lifecycle";
 import { normalizedTitle } from "./channels/title";
 import { documentText, NOTE_BYTES, READING_IN_PARTS, ReadRangeError } from "./document-reading";
+import { planSourceSchema } from "./tasks/plan-source";
 
 import type { Brief, CreateDocumentInput } from "./mcp/create";
 import type { UpdateDocument } from "./mcp/update";
@@ -69,6 +70,8 @@ export type Implementation = {
 	history: ImplementationLifecycle["history"];
 	/** Decisions still open, for the agent to build on its best judgment; absent when none is. */
 	unapprovedDecisions?: NonNullable<ReturnType<typeof unapprovedContext>>["unapprovedDecisions"];
+	/** Where the graph's plan revision's files were pushed, which a build of it starts from. */
+	planSource?: { revision: number; branch: string; commit: string };
 };
 
 export type ImplementationInput = {
@@ -182,6 +185,21 @@ export type InvokePlanner<Caller> = {
 	>;
 };
 
+export type RecordPlanSourceInput = {
+	id: string;
+	revision: number;
+	branch: string;
+	commit: string;
+};
+
+export type RecordPlanSource<Caller> = {
+	record(caller: Caller, input: RecordPlanSourceInput): Promise<
+		| { kind: "recorded"; source: { revision: number; branch: string; commit: string } }
+		| { kind: "revision-conflict"; revision: number }
+		| { kind: "unavailable-commit" | "archived" | "forbidden" | "unavailable" }
+	>;
+};
+
 export type UploadImage<Caller> = {
 	upload(
 		caller: Caller,
@@ -213,6 +231,7 @@ export type McpOptions<Caller> = {
 	restore?: RestoreDocument<Caller>;
 	invoke?: InvokePlanner<Caller>;
 	upload?: UploadImage<Caller>;
+	planSources?: RecordPlanSource<Caller>;
 	implementations?: Implementations<Caller>;
 	sessions?: McpSessions<Caller>;
 };
@@ -681,6 +700,71 @@ export const TOOLS: Tool[] = [
 		},
 	},
 	{
+		name: "record_plan_source",
+		description: "Record where a document revision's files are on GitHub: a branch you pushed "
+			+ "to the document's repository and the commit on it that holds them. A build of that "
+			+ "revision, or a later one with no newer record, starts from this commit instead of the "
+			+ "builder's checkout. Push the commit first: Chopin checks GitHub has it. Recording "
+			+ "another commit for the same revision replaces it.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				id: {
+					type: "string",
+					minLength: 1,
+					maxLength: MAX_DOCUMENT_LOCATOR_LENGTH,
+					pattern: "\\S",
+				},
+				revision: {
+					type: "integer",
+					minimum: 0,
+					description: "The document revision the files belong to; at most its current one.",
+				},
+				branch: {
+					type: "string",
+					minLength: 1,
+					maxLength: 255,
+					description: "A branch name, without refs/heads/.",
+				},
+				commit: { type: "string", pattern: "^[0-9a-f]{40}$" },
+			},
+			required: ["id", "revision", "branch", "commit"],
+			additionalProperties: false,
+		},
+		outputSchema: {
+			type: "object",
+			oneOf: [
+				{
+					type: "object",
+					properties: {
+						recorded: { type: "boolean", const: true },
+						revision: { type: "integer", minimum: 0 },
+						branch: { type: "string" },
+						commit: { type: "string" },
+					},
+					required: ["recorded", "revision", "branch", "commit"],
+					additionalProperties: false,
+				},
+				{
+					type: "object",
+					properties: {
+						code: { type: "string", const: "revision-conflict" },
+						revision: { type: "integer", minimum: 0 },
+					},
+					required: ["code", "revision"],
+					additionalProperties: false,
+				},
+				outcome([
+					"invalid-plan-source",
+					"plan-source-unavailable",
+					"document-archived",
+					"document-unavailable",
+					"repository-forbidden",
+				]),
+			],
+		},
+	},
+	{
 		name: "read_implementation",
 		description:
 			"Read the approved implementation graph, plan and repository context by document ID or canonical URL.",
@@ -927,6 +1011,7 @@ function serviceInstructions(tools: Tool[]): string | undefined {
 		|| tool.name === "restore_document"
 		|| tool.name === "invoke_planner"
 		|| tool.name === "upload_image"
+		|| tool.name === "record_plan_source"
 	);
 	let implementation = tools
 		.filter(tool =>
@@ -999,6 +1084,7 @@ export function handler<Caller>(
 		&& (tool.name !== "restore_document" || restoring)
 		&& (tool.name !== "invoke_planner" || options.invoke)
 		&& (tool.name !== "upload_image" || options.upload)
+		&& (tool.name !== "record_plan_source" || options.planSources)
 		&& (!["read_implementation", "start_implementation"].includes(tool.name)
 			|| options.implementations)
 		&& (!isLifecycleTool(tool.name) || options.implementations?.reportLifecycle)
@@ -1262,6 +1348,40 @@ export function handler<Caller>(
 					}
 					return respond(text({
 						code: outcome.kind === "archived"
+							? "document-archived"
+							: outcome.kind === "forbidden"
+							? "repository-forbidden"
+							: "document-unavailable",
+					}, true));
+				}
+				if (tool.name === "record_plan_source" && options.planSources) {
+					let { id, revision, branch, commit, ...extra } = tool.arguments;
+					if (
+						Object.keys(extra).length || !isLocator(id) || !Number.isSafeInteger(revision)
+						|| (revision as number) < 0 || typeof branch !== "string"
+						|| typeof commit !== "string"
+					) {
+						return notification
+							? undefined
+							: error(
+								call.id,
+								-32602,
+								"record_plan_source requires an id, revision, branch and commit",
+							);
+					}
+					let source = planSourceSchema.safeParse({ revision, branch, commit });
+					if (!source.success) return respond(text({ code: "invalid-plan-source" }, true));
+					let outcome = await options.planSources.record(caller, { id, ...source.data });
+					if (outcome.kind === "recorded") {
+						return respond(text({ recorded: true, ...outcome.source }));
+					}
+					if (outcome.kind === "revision-conflict") {
+						return respond(text({ code: outcome.kind, revision: outcome.revision }, true));
+					}
+					return respond(text({
+						code: outcome.kind === "unavailable-commit"
+							? "plan-source-unavailable"
+							: outcome.kind === "archived"
 							? "document-archived"
 							: outcome.kind === "forbidden"
 							? "repository-forbidden"

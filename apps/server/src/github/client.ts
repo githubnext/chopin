@@ -165,6 +165,8 @@ export interface GitHub {
 	): Promise<InstalledRepository | undefined>;
 	/** The commit a repository's branch points at; optional for GitHubs that never start work. */
 	branchHead?(token: string, owner: string, name: string, branch: string): Promise<string>;
+	/** Whether a repository on GitHub has a commit; optional for GitHubs that never start work. */
+	hasCommit?(token: string, owner: string, name: string, sha: string): Promise<boolean>;
 	/** The human collaborators who can read a repository; optional where collaborators are not listed. */
 	repositoryCollaborators?(
 		token: string,
@@ -709,6 +711,19 @@ export class GitHubClient implements GitHub, GitHubReferenceSource {
 		return sha;
 	}
 
+	async hasCommit(token: string, owner: string, name: string, sha: string): Promise<boolean> {
+		let url = new URL(
+			`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits/${
+				encodeURIComponent(sha)
+			}`,
+			this.#endpoints.api,
+		);
+		// GitHub answers 422 for a SHA it has no commit for, and 404 for a repository it hides.
+		let response = await this.#request(url, token, undefined, [404, 422]);
+		if (!response.ok) return false;
+		return record(await body(response))?.sha === sha;
+	}
+
 	/**
 	 * The files of a branch: the blobs of its tree, as GitHub lists them, and whether it cut the
 	 * list short. A branch name is encoded as one path segment.
@@ -943,7 +958,13 @@ export class GitHubClient implements GitHub, GitHubReferenceSource {
 		return body(await this.#request(new URL(path, this.#endpoints.api), token));
 	}
 
-	async #request(url: URL, token: string, ifNoneMatch?: string): Promise<Response> {
+	async #request(
+		url: URL,
+		token: string,
+		ifNoneMatch?: string,
+		/** Statuses returned to the caller rather than thrown. */
+		answered: number[] = [],
+	): Promise<Response> {
 		let response: Response;
 		try {
 			let headers = new Headers({
@@ -961,7 +982,9 @@ export class GitHubClient implements GitHub, GitHubReferenceSource {
 		} catch {
 			throw new GitHubError("GitHub API is unavailable");
 		}
-		if (response.status === 304 && ifNoneMatch) return response;
+		if (response.status === 304 && ifNoneMatch || answered.includes(response.status)) {
+			return response;
+		}
 		if (!response.ok) {
 			let rateLimited = await isRateLimited(response);
 			let status = rateLimited

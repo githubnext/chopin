@@ -45,6 +45,7 @@ import type { HostedCaller } from "../mcp/hosted";
 import type { GitHubApp } from "../github/app";
 import type { About, Connection } from "./connections";
 import type { Source } from "@chopin/experiment";
+import type { PlanSource } from "@chopin/protocol/implementation";
 import { PairingKeys } from "./pairing-keys";
 import { Experiments, fail } from "./service";
 import { datasetCsv } from "./export";
@@ -1836,6 +1837,19 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 						throw error;
 					}
 				},
+				hasCommit: async (owner, name, sha) => {
+					let github = auth.github;
+					if (!github.hasCommit) return false;
+					try {
+						return await auth.machines.use(
+							machine,
+							token => github.hasCommit!(token, owner, name, sha),
+						);
+					} catch (error) {
+						if (error instanceof MachineError) return false;
+						throw error;
+					}
+				},
 				// A Planner serves its document and the document's children; a run, its document.
 				allows: value =>
 					value.repositoryId === channel.repositoryId
@@ -2639,11 +2653,17 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return channel;
 	}
 	/**
-	 * The checkout a connection's work on a document starts from: the one it said it has of the
-	 * document's repository, else the head of the repository's default branch on GitHub, read with
-	 * the machine's own authorization, which its connector clones or fetches.
+	 * The checkout a connection's work on a document starts from: the plan source's commit when the
+	 * Planner pushed the plan's files (`plan`), else the one the connection said it has of the
+	 * document's repository, else the head of the repository's default branch on GitHub. GitHub is
+	 * read with the machine's own authorization, as its connector clones or fetches; a plan source
+	 * it can't find there refuses the work with `plan-source-unavailable`.
 	 */
-	async function sourceFor(connection: Connection, documentId: string): Promise<Source> {
+	async function sourceFor(
+		connection: Connection,
+		documentId: string,
+		plan?: PlanSource,
+	): Promise<Source> {
 		let channel = await auth.storage.channels.get(documentId);
 		if (!channel) fail("not-found");
 		let repository = {
@@ -2652,8 +2672,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			name: channel.repositoryName,
 		};
 		let checkout = checkoutOf(connection, repository.id);
-		if (checkout) return checkout;
-		if (!connection.anyRepository) fail("repository-forbidden");
+		if (checkout && !plan) return checkout;
+		if (!checkout && !connection.anyRepository) fail("repository-forbidden");
 		let caller = await machineCaller(
 			await machineRefusal(() => auth.machines.current(connection.machineId)),
 		);
@@ -2662,6 +2682,25 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		);
 		if (!found || found.id !== repository.id) fail("repository-forbidden");
 		let github = auth.github;
+		if (plan) {
+			let present = github.hasCommit
+				&& await caller.use(token =>
+					github.hasCommit!(token, repository.owner, repository.name, plan.commit)
+				);
+			if (!present) {
+				fail(
+					"plan-source-unavailable",
+					`The plan's commit ${plan.commit.slice(0, 7)} on ${plan.branch} isn't in `
+						+ `${found.fullName} on GitHub.`,
+				);
+			}
+			return {
+				repositoryId: repository.id,
+				repository: found.fullName,
+				commit: plan.commit,
+				branch: plan.branch,
+			};
+		}
 		if (!github.branchHead) fail("no-workspace");
 		let commit = await caller.use(token =>
 			github.branchHead!(token, repository.owner, repository.name, found.defaultBranch)

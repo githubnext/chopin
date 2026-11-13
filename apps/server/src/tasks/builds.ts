@@ -13,6 +13,7 @@ import {
 	transition,
 } from "./lifecycle";
 import { announceImplementation } from "./notifications";
+import { planSourceFor, planSourceSchema } from "./plan-source";
 import { drain, exclusive, persistExclusive, source } from "../plan/service";
 import { broadcast } from "../wire";
 import type { Plan } from "../plan/service";
@@ -25,6 +26,7 @@ import type {
 	CheckoutContext,
 	LiveRebuild,
 	LiveSnapshot,
+	PlanSource,
 } from "@chopin/protocol/implementation";
 
 export let checkoutSchema = z.object({
@@ -44,6 +46,7 @@ let buildSchema = z.object({
 	machineService: z.literal(true).optional(),
 	repositoryId: z.string().min(1).max(128),
 	checkout: checkoutSchema,
+	planSource: planSourceSchema.optional(),
 	planRevision: z.number().int().nonnegative(),
 	graphVersion: z.number().int().positive(),
 	graphRevision: z.number().int().positive(),
@@ -233,6 +236,8 @@ type BuildInput = {
 	machineService?: true;
 	repositoryId: string;
 	checkout: CheckoutContext;
+	/** The plan source `checkout` starts from, as it was when the build was asked for. */
+	planSource?: PlanSource;
 };
 
 export async function queueBuild(plan: Plan, input: BuildInput): Promise<BuildRequest> {
@@ -247,6 +252,13 @@ export async function queueBuild(plan: Plan, input: BuildInput): Promise<BuildRe
 				|| version.planRevision !== input.planRevision || version.number !== input.graphVersion
 				|| version.revision !== input.graphRevision
 			) throw new Error("reviewed graph has changed");
+			// A source recorded for the revision while the press was checked comes in a new press.
+			let recorded = planSourceFor(plan.planSources, input.planRevision);
+			if (
+				recorded?.revision !== input.planSource?.revision
+				|| recorded?.commit !== input.planSource?.commit
+				|| recorded?.branch !== input.planSource?.branch
+			) throw new Error("plan source has changed");
 			let existing = plan.builds.at(-1);
 			if (
 				existing && existing.graphVersion === input.graphVersion
@@ -429,6 +441,10 @@ export async function queueRebuild(
 			console.warn(`chopin: living document ${plan.id} cannot rebuild - build history is full`);
 			return { kind: "unavailable" };
 		}
+		// A rebuild keeps its machine's base unless the Planner pushed the plan's files for a
+		// revision since the one last built, which this rebuild's press approves.
+		let newer = planSourceFor(plan.planSources, plan.revision);
+		if (newer && newer.revision <= live.baseRevision) newer = undefined;
 		let build: BuildRequest = buildSchema.parse({
 			id: crypto.randomUUID(),
 			kind: "rebuild",
@@ -439,7 +455,10 @@ export async function queueRebuild(
 			...(connection.about?.service ? { machineService: true } : {}),
 			repositoryId: live.repositoryId,
 			// A machine without a checkout of the repository rebuilds from the first build's.
-			checkout: checkoutFor(connection, live.repositoryId, original.checkout),
+			checkout: newer
+				? { repository: original.checkout.repository, branch: newer.branch, commit: newer.commit }
+				: checkoutFor(connection, live.repositoryId, original.checkout),
+			...(newer ? { planSource: newer } : {}),
 			planRevision: plan.revision,
 			baseRevision: live.baseRevision,
 			targetRevision: plan.revision,

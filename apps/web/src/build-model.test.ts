@@ -22,6 +22,7 @@ import {
 	linkParts,
 	liveTaskGroups,
 	liveTaskState,
+	planSourceLine,
 	pullRequestCommits,
 	pullRequestNumber,
 	retryAction,
@@ -242,6 +243,17 @@ describe("attribution", () => {
 	});
 });
 
+describe("plan source", () => {
+	it("names the plan revision and the branch at its short commit a build started from", () => {
+		let planSource = { revision: 4, branch: "plans/launch", commit: "0123456789".repeat(4) };
+		expect(planSourceLine({ ...build("running"), planSource }))
+			.toBe("Building from plan revision 4 · plans/launch@0123456");
+		expect(planSourceLine({ ...build("stopped"), planSource }))
+			.toBe("Built from plan revision 4 · plans/launch@0123456");
+		expect(planSourceLine(build("stopped"))).toBeUndefined();
+	});
+});
+
 describe("refusals", () => {
 	it("explains the refusals the server names and leaves the rest to the failure line", () => {
 		expect(draftRefusalCopy("resolve accepted comments awaiting plan changes first"))
@@ -357,6 +369,9 @@ describe("first build", () => {
 	it("maps refused starts and rebuilds to plain copy", () => {
 		expect(buildRefusalCopy("no-workspace")).toBe("Start your local agent, then retry");
 		expect(buildRefusalCopy("reviewed graph has changed")).toBe("The tasks changed. Try again");
+		expect(buildRefusalCopy("plan-source-unavailable"))
+			.toBe("The plan’s commit isn’t on GitHub. Ask chopin to push it again");
+		expect(buildRefusalCopy("plan source has changed")).toBe("The plan’s files changed. Try again");
 		expect(buildRefusalCopy("accepted comments awaiting plan changes"))
 			.toBe("Update the document for accepted comments first");
 		expect(buildRefusalCopy("something internal")).toBe("The build couldn’t start. Try again");

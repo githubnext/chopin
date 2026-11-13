@@ -310,6 +310,21 @@ export function buildAgo(
 	return at ? ago(at, now) : undefined;
 }
 
+/**
+ * Where a build's code started when the Planner pushed the plan's files for it: the plan revision
+ * and the branch at the commit's short SHA.
+ */
+export function planSourceLine(
+	build: Pick<BuildRequest, "state" | "planSource"> | undefined,
+): string | undefined {
+	if (!build?.planSource) return;
+	let source = build.planSource;
+	let active = ["queued", "starting", "running"].includes(build.state);
+	return `${
+		active ? "Building" : "Built"
+	} from plan revision ${source.revision} · ${source.branch}@${source.commit.slice(0, 7)}`;
+}
+
 function latestRun(snapshot: Snapshot) {
 	let graph = snapshot.graph;
 	return snapshot.lifecycle.history.findLast(item =>
@@ -464,6 +479,10 @@ export function buildRefusalCopy(message: string): string {
 	if (/offline or busy/.test(message)) return "Your local agent is offline or busy with other work";
 	if (/nothing to build/.test(message)) return "There are no changes to build";
 	if (/busy/i.test(message)) return "Your local agent is busy with another document";
+	if (message === "plan-source-unavailable") {
+		return "The plan’s commit isn’t on GitHub. Ask chopin to push it again";
+	}
+	if (/plan source has changed/.test(message)) return "The plan’s files changed. Try again";
 	if (/reviewed graph has changed|reviewed build has changed|stale/.test(message)) {
 		return "The tasks changed. Try again";
 	}

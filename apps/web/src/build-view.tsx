@@ -26,6 +26,7 @@ import {
 	linkParts,
 	liveTaskGroups,
 	liveTaskState,
+	planSourceLine,
 	plural,
 	pullRequestCommits,
 	pullRequestNumber,
@@ -44,6 +45,7 @@ import { inlineText } from "./chat/inline-text";
 import { InlineMarkdown, MessageMarkdown } from "./chat/markdown";
 import { LocalAgentNote } from "./local-agent-note";
 import { MachineGlyph } from "./machine-button";
+import "./build-source.css";
 
 import type { ReactNode } from "react";
 import type { BuildPlan } from "./build-plan-button";
@@ -330,7 +332,10 @@ export function BuildView(
 
 	// The build the card's footer names: the one running, else the last that ran.
 	let shown:
-		| Pick<BuildRequest, "id" | "user" | "state"> & { createdAt?: string; finishedAt?: string }
+		| Pick<BuildRequest, "id" | "user" | "state" | "planSource"> & {
+			createdAt?: string;
+			finishedAt?: string;
+		}
 		| undefined = look.kind === "plan" || look.kind === "tasks"
 			? undefined
 			: activeBuild ?? (phase.kind === "live" && snapshot?.live
@@ -348,6 +353,7 @@ export function BuildView(
 	);
 	let machine = shown && snapshot?.buildMachines?.[shown.id];
 	let when = buildAgo(shown, now);
+	let from = planSourceLine(shown);
 
 	if (phase.kind === "stopped" && canEdit && !returning) {
 		action = (
@@ -486,7 +492,7 @@ export function BuildView(
 								{card.segments.map((state, index) => <span data-state={state} key={index} />)}
 							</div>
 						)}
-						{(login || machine || action) && (
+						{(login || machine || from || action) && (
 							<footer className="build-card-foot">
 								{login && shown && (
 									<span className="build-card-person">
@@ -503,6 +509,11 @@ export function BuildView(
 									</span>
 								)}
 								{machine && <MachineLabel machine={machine} />}
+								{from && (
+									<span className="build-card-source" title={shown?.planSource?.commit}>
+										{from}
+									</span>
+								)}
 								<span className="flex-1" />
 								{action}
 							</footer>
