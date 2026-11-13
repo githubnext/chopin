@@ -500,7 +500,8 @@ A document left on **Default machine** gets its Planner too, on a machine of
 the person who created it, picked as for builds: their default machine when it
 is connected and can run Planners, else the machine that last worked on the
 document, else any of theirs that can. Chopin asks for it while someone has the
-document open, and stops it once nobody has used the document for 30 minutes.
+document open, and from the moment its creator makes it with **New document**, before
+their page has loaded it, and stops it once nobody has used the document for 30 minutes.
 A Planner that is replying, or waiting on a question or on a live or paused
 workflow run, counts as use, so its work and its questions are never cut short
 however long nobody views the document.

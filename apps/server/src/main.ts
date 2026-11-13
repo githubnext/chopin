@@ -2469,6 +2469,18 @@ function announceCatalogue(channel: Pick<ChannelRecord, "id" | "repositoryId">):
 	});
 }
 
+/**
+ * Someone made a document with New document and opens it next: it is in use now, so on Default
+ * machine its creator's machine is asked to start its Planner at once, while the page is still
+ * loading, rather than once the page has joined the document.
+ */
+function documentCreated(channel: ChannelRecord): void {
+	announceCatalogue(channel);
+	void experiments?.plannerUsed(channel.id).catch(err =>
+		console.error("chopin: could not start a new document's Planner -", err)
+	);
+}
+
 function announceChannel(channel: ChannelRecord): void {
 	// A machine running its Planner hears a new address on its next Planner poll; wake that poll.
 	experiments?.connections.wake(channel.repositoryId);
@@ -3429,7 +3441,7 @@ registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelOwnerReset,
 	onChannelArchived: archiveChannel,
 	onChannelDeleted: deleteChannel,
-	onChannelCreated: announceCatalogue,
+	onChannelCreated: documentCreated,
 	renameChannel: (id, title) =>
 		withImplementationPlan(
 			id,
