@@ -46,7 +46,7 @@ import {
 } from "../references";
 import { runCounts, RunStack } from "../run-card";
 import { ThreadRoot, Transcript } from "../transcript";
-import { progressOf } from "../transcript-state";
+import { offersStop, progressOf, shownWork } from "../transcript-state";
 import { ThreadComposerBoundary } from "./composer-boundary";
 import { useThreadReactions } from "./thread-reactions";
 import "./thread-panel.css";
@@ -405,10 +405,14 @@ export function ThreadPanel(
 	);
 
 	let counts = runCounts(view.runs);
-	let { working: workingTurn, suspended: suspendedWork } = progressOf(
-		view.transcript,
-		connected && view.loaded,
-		false,
+	let live = connected && view.loaded;
+	let { working: workingTurn, suspended: suspendedWork, settled: settledWork } = useMemo(
+		() => progressOf(view.transcript, live, false),
+		[view.transcript, live],
+	);
+	let completedWork = useMemo(
+		() => shownWork(view.transcript.completedWork, settledWork),
+		[view.transcript.completedWork, settledWork],
 	);
 	let replyCount = Math.max(
 		summaryCount ?? 0,
@@ -535,7 +539,7 @@ export function ThreadPanel(
 					canEdit={composerReady}
 					compacting={view.compacting}
 					compactions={view.compactions}
-					completedWork={view.transcript.completedWork}
+					completedWork={completedWork}
 					decisions={decisions}
 					entries={withoutFailure(view.transcript.entries, failureNode ? failed?.entry : undefined)}
 					handle={handle}
@@ -750,7 +754,7 @@ export function ThreadPanel(
 					}
 					: undefined}
 				rootRef={composerRoot}
-				run={agent && (view.busy || counts.active > 0)
+				run={agent && (offersStop(view.busy, view.transcript.turn, false) || counts.active > 0)
 					? {
 						action: "stop",
 						disabled: !composerReady,

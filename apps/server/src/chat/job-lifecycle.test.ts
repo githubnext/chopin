@@ -74,3 +74,22 @@ test("a final persist failure settles the job and releases the queue", async () 
 	expect(state.chat.busy).toBe(false);
 	expect(state.chat.waiting).toEqual([]);
 });
+
+test("a background job's turn is quiet, so Chat draws nothing for it and offers no Stop", async () => {
+	let h = harness();
+	let running = Chat.job(h.context, JOB, "prompt", "session");
+	await until(() => h.prompts.length === 1);
+	let states = h.frames.filter(frame => frame.kind === "chat:state") as Array<
+		{ busy: boolean; turn?: { quiet?: boolean } }
+	>;
+	expect(states.at(-1)?.busy).toBe(true);
+	expect(states.at(-1)?.turn?.quiet).toBe(true);
+	await runJobTool(h.chat, "refine_decision", async () => ({ output: {} }));
+	h.emit("session.idle");
+	expect(await running).toEqual({ status: "done", output: "{}" });
+	let ended = h.frames.filter(frame => frame.kind === "chat:state").at(-1) as
+		| { busy: boolean; turn?: unknown }
+		| undefined;
+	expect(ended).toMatchObject({ busy: false });
+	expect(ended?.turn).toBeUndefined();
+});

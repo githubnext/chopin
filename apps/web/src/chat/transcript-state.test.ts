@@ -3,7 +3,9 @@ import { describe, expect, it } from "bun:test";
 import { group } from "./model";
 import {
 	initialTranscript,
+	offersStop,
 	progressOf,
+	shownWork,
 	silentRestart,
 	transcriptReducer,
 } from "./transcript-state";
@@ -173,6 +175,69 @@ describe("how a turn in progress is shown while its connection is lost", () => {
 		});
 		expect(progressOf(state, false, false)).toEqual({});
 		expect(progressOf(initialTranscript, false, false)).toEqual({});
+	});
+});
+
+describe("a quiet turn: nothing left of it is for people to watch", () => {
+	let prompt = entry("prompt", { kind: "member", handle: "ana" });
+	let answer = entry("answer", { kind: "agent" }, "An iterator yields one item at a time.");
+
+	function rows(
+		entries: Chat.Entry[],
+		quiet: Chat.Turn,
+		completed = initialTranscript.completedWork,
+	) {
+		let state = transcriptReducer(initialTranscript, { kind: "history", entries, turn: quiet });
+		let shown = progressOf(state, true, false);
+		return {
+			shown,
+			messages: group(state.entries, shown.working, shownWork(completed, shown.settled)).flatMap(
+				item => item.kind === "messages" ? item.messages : [],
+			),
+		};
+	}
+
+	it("draws a background job's turn as nothing: no row, no working message", () => {
+		// The answer belongs to the turn that ended; the job's turn begins after it.
+		let { shown, messages } = rows([prompt, answer], { ...turn, entryOffset: 2, quiet: true });
+		expect(shown.working).toBeUndefined();
+		expect(shown.settled).toBeUndefined();
+		expect(messages.map(message => message.id)).toEqual(["prompt", "answer"]);
+		expect(messages.some(message => message.working)).toBe(false);
+	});
+
+	it("draws an answer whose check is still running as an ended turn, its tools kept", () => {
+		let tooled = {
+			...answer,
+			tools: [{ id: "read", name: "read_plan", status: "done" as const, result: "Read it." }],
+		};
+		let { shown, messages } = rows([prompt, tooled], { ...turn, quiet: true });
+		expect(shown.working).toBeUndefined();
+		expect(shown.settled).toEqual({
+			turnId: "turn-1",
+			entryOffset: 1,
+			endOffset: 2,
+			anchorId: "answer",
+		});
+		let shownAnswer = messages.find(message => message.id === "answer");
+		expect(shownAnswer?.working).toBeUndefined();
+		expect(shownAnswer?.tools).toMatchObject([{ id: "read", status: "done" }]);
+	});
+
+	it("goes on showing work once a repair step makes the turn work again", () => {
+		let { shown } = rows([prompt, answer], turn);
+		expect(shown.working?.id).toBe("turn-1");
+		expect(shown.settled).toBeUndefined();
+	});
+
+	it("offers Stop for a quiet turn only when a message was refused because of it", () => {
+		let quiet = { ...turn, quiet: true };
+		expect(offersStop(true, turn, false)).toBe(true);
+		expect(offersStop(true, quiet, false)).toBe(false);
+		expect(offersStop(true, quiet, true)).toBe(true);
+		expect(offersStop(false, undefined, false)).toBe(false);
+		// A server that does not say which turn runs keeps its Stop.
+		expect(offersStop(true, undefined, false)).toBe(true);
 	});
 });
 

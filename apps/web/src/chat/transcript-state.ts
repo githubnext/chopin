@@ -32,8 +32,20 @@ export function progressOf(
 	state: TranscriptState,
 	current: boolean,
 	quiet: boolean,
-): { working?: Chat.Turn; suspended?: CompletedWork } {
-	if (current || quiet) return { working: state.turn };
+): { working?: Chat.Turn; suspended?: CompletedWork; settled?: CompletedWork } {
+	if (current || quiet) {
+		if (!state.turn?.quiet) return { working: state.turn };
+		// Nothing left of a quiet turn is for people to watch: it is drawn as the turn that ended.
+		if (!state.activeAnchorId) return {};
+		return {
+			settled: {
+				turnId: state.turn.id,
+				entryOffset: state.turn.entryOffset,
+				endOffset: state.entries.length,
+				anchorId: state.activeAnchorId,
+			},
+		};
+	}
 	if (!state.turn || !state.activeAnchorId) return {};
 	return {
 		suspended: {
@@ -59,6 +71,19 @@ export function silentRestart(
 	spoken: boolean,
 ): boolean {
 	return !current && !spoken && (was || restarting);
+}
+
+/**
+ * Whether Chat offers Stop: while a turn people can watch runs, or while a quiet one runs and a
+ * message was just refused because of it, so the person can stop it to ask now.
+ */
+export function offersStop(busy: boolean, turn: Chat.Turn | undefined, refused: boolean): boolean {
+	return busy && (!turn?.quiet || refused);
+}
+
+/** The ended turns to draw, the quiet one still running among them. */
+export function shownWork(completed: CompletedWork[], settled?: CompletedWork): CompletedWork[] {
+	return settled ? [...completed, settled] : completed;
 }
 
 export let initialTranscript: TranscriptState = { entries: [], completedWork: [] };

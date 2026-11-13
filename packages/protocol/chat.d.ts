@@ -341,6 +341,13 @@ export declare namespace Chat {
 		startedAt?: number;
 		/** True after the Planner has sent non-empty prose. */
 		responded: boolean;
+		/**
+		 * Nothing more of this turn is for people to watch: a background job's (keeping a title), or
+		 * a reply whose words are all out while its after-answer check runs. Chat draws it as ended and
+		 * offers no Stop for it unless a message was refused because of it. A repair step that the
+		 * check starts is work again, and clears it. Absent on earlier servers.
+		 */
+		quiet?: boolean;
 	};
 
 	/** One stage of a workflow run, in the order the run reached it. */

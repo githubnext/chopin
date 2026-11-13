@@ -525,7 +525,7 @@ function now(): number {
 	return Math.floor(Date.now() / 1000);
 }
 
-function begin(handle: string, entryOffset: number): Wire.Turn {
+function begin(handle: string, entryOffset: number, quiet = false): Wire.Turn {
 	let startedAt = Date.now();
 	return {
 		id: ulid(),
@@ -534,7 +534,19 @@ function begin(handle: string, entryOffset: number): Wire.Turn {
 		entryOffset,
 		startedAt,
 		responded: false,
+		...(quiet ? { quiet: true } : {}),
 	};
+}
+
+/**
+ * Says whether what is left of the running turn is for people to watch. A reply's words are all
+ * out while its after-answer check runs; a repair step the check starts is work again.
+ */
+function quieten(chat: Chat, server: Server<SocketData>, room: string, quiet: boolean): void {
+	if (!chat.turn || !!chat.turn.quiet === quiet) return;
+	if (quiet) chat.turn.quiet = true;
+	else delete chat.turn.quiet;
+	state(chat, server, room);
 }
 
 function digest(value: string): string {
@@ -2980,7 +2992,8 @@ async function run(
 
 	if (!reserved) {
 		chat.busy = true;
-		chat.turn = begin(handle, chat.entries.length);
+		// A background job's turn is neither saved nor shown: Chat draws nothing for it.
+		chat.turn = begin(handle, chat.entries.length, !!jobTurn);
 		chat.acting = thread;
 		chat.actingChannel = about?.threadChannel;
 		(jobTurn ? jobState : state)(chat, server, room);
@@ -3189,6 +3202,7 @@ async function run(
 						&& record.origin === "planner" && !!record.followUp && holdsQuestion(record.status)
 					).length,
 				publish: part => translate(context, part),
+				quiet: quiet => quieten(chat, server, room, quiet),
 				beginAttempt: () => {
 					chat.toolEntries = new Map();
 					if (chat.turnImages) chat.turnImages.calls = new Set();
