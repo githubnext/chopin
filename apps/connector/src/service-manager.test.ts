@@ -56,6 +56,7 @@ async function machine(
 		home,
 		user: "ada",
 		uid: 501,
+		lingerDirectory: join(home, "linger"),
 		env: { PATH: `${bin}:/usr/bin:/bin` },
 		async run(command, args) {
 			let line = [command, ...args].join(" ");
@@ -321,6 +322,91 @@ test("on Linux, install stops with the one sudo command when linger needs an adm
 	expect(existsSync(unitPath(home))).toBe(false);
 	expect((await readConfig(directory)).service).toBeUndefined();
 	expect(calls.some(line => line.includes("enable --now"))).toBe(false);
+});
+
+/** loginctl failing as it does while systemd-logind's D-Bus is jammed. */
+function jammed(line: string): Partial<Outcome> | undefined {
+	if (line.startsWith("loginctl")) {
+		return { code: 1, stderr: "Failed to get user: No buffer space available" };
+	}
+	return systemd(line);
+}
+
+test("on Linux, install trusts systemd-logind's linger record when loginctl can't answer, and says so", async () => {
+	let { home, calls, host, program } = await machine("linux", jammed);
+	await mkdir(join(home, "linger"), { recursive: true });
+	await writeFile(join(home, "linger", "ada"), "");
+	let installed = await installService(host, program);
+	expect(calls).toEqual([
+		"systemctl --user show --property=Version",
+		"loginctl show-user ada --property=Linger --value",
+		"systemctl --user is-active chopin.service",
+		"systemctl --user daemon-reload",
+		"systemctl --user enable --now chopin.service",
+	]);
+	expect(existsSync(unitPath(home))).toBe(true);
+	expect(installed.notes).toContain(
+		"loginctl isn't answering (Failed to get user: No buffer space available), so chopin read "
+			+ `systemd-logind's record instead: ${join(home, "linger", "ada")} says linger is on.`,
+	);
+});
+
+test("on Linux, install with no linger record refuses as before when loginctl can't answer", async () => {
+	let { home, directory, calls, host, program } = await machine("linux", jammed);
+	let error = await installService(host, program).catch(error => error);
+	expect(error.message).toContain("Nothing was installed.");
+	expect(error.message).toContain('\n  sudo loginctl enable-linger "$(id -un)"\n');
+	expect(calls).toContain("loginctl --no-ask-password enable-linger ada");
+	expect(existsSync(unitPath(home))).toBe(false);
+	expect((await readConfig(directory)).service).toBeUndefined();
+});
+
+test("on Linux, install where loginctl says linger is on adds no note and enables nothing", async () => {
+	let { calls, host, program } = await machine(
+		"linux",
+		line => line.startsWith("loginctl show-user") ? { stdout: "yes\n" } : systemd(line),
+	);
+	let installed = await installService(host, program);
+	expect(calls).not.toContain("loginctl --no-ask-password enable-linger ada");
+	expect(installed.notes.join(" ")).not.toContain("loginctl");
+});
+
+test("status says loginctl couldn't be asked, and what systemd-logind's linger record says", async () => {
+	let running = (line: string): Partial<Outcome> | undefined => {
+		if (line.startsWith("systemctl --user show chopin.service")) {
+			return {
+				stdout: "LoadState=loaded\nActiveState=active\nSubState=running\n"
+					+ "UnitFileState=enabled\nMainPID=4242\n",
+			};
+		}
+		return undefined;
+	};
+	let status = async (loginctl: Partial<Outcome>, record: boolean) => {
+		let linux = await machine(
+			"linux",
+			line => line.startsWith("loginctl") ? loginctl : running(line),
+		);
+		await mkdir(join(linux.home, ".config", "systemd", "user"), { recursive: true });
+		await writeFile(unitPath(linux.home), "[Unit]\n");
+		if (record) {
+			await mkdir(join(linux.home, "linger"), { recursive: true });
+			await writeFile(join(linux.home, "linger", "ada"), "");
+		}
+		return { notes: (await serviceStatus(linux.host, linux.directory)).notes, home: linux.home };
+	};
+	let failing = { code: 1, stderr: "Failed to get user: No buffer space available" };
+	expect((await status({ stdout: "yes\n" }, false)).notes).toEqual([]);
+	expect((await status({ stdout: "no\n" }, true)).notes.join(" ")).toContain("Linger is off");
+	let recorded = await status(failing, true);
+	expect(recorded.notes).toEqual([
+		"loginctl couldn't be asked whether linger is on (Failed to get user: No buffer space "
+		+ `available); systemd-logind's record ${join(recorded.home, "linger", "ada")} says it is, `
+		+ "so it starts at boot.",
+	]);
+	let unrecorded = await status(failing, false);
+	expect(unrecorded.notes.join(" ")).toContain("loginctl couldn't be asked whether linger is on");
+	expect(unrecorded.notes.join(" ")).toContain("has no record of it");
+	expect(unrecorded.notes.join(" ")).not.toContain("Linger is off");
 });
 
 test("install checks the saved Planner command under the service PATH; one it can't find is refused", async () => {

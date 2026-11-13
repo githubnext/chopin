@@ -368,7 +368,8 @@ Each operating system has its own catch:
 - **Linux.** A systemd user service. Install turns on linger so it keeps
   running after you log out. If that needs an administrator, install prints
   the `sudo loginctl enable-linger` command for them. Never run `chopin` itself
-  with `sudo`.
+  with `sudo`. When `loginctl` can't answer, install and status read
+  systemd-logind's own record, `/var/lib/systemd/linger/<user>`, and say so.
 - **macOS.** A LaunchAgent, which runs only while you are logged in.
 - **Windows.** A Task Scheduler task, which runs only while you are logged on.
 
