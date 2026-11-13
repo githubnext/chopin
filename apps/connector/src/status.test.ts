@@ -7,7 +7,7 @@ import { SELF } from "./machine";
 import type { ServiceHost } from "./service";
 import { collectStatus, formatStatus } from "./status";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
-import { processStart } from "./workspace";
+import { processStart, tokenFolder } from "./workspace";
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-status-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
@@ -391,6 +391,8 @@ test("status lists the Planners' worktrees and the finished runs kept, with thei
 	await writeFile(join(runs, "spike.json"), JSON.stringify({ id: "spike", state: "finished" }));
 	let planner = join(directory, "planners", "octo-org", "score", "D_1");
 	await mkdir(planner, { recursive: true });
+	// Its token folder, beside it, is no Planner of its own.
+	await mkdir(tokenFolder(planner), { recursive: true });
 	// The folder for a Planner that has yet to make its worktree.
 	await mkdir(join(directory, "planners", "octo-org", "other"), { recursive: true });
 
