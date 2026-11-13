@@ -5,7 +5,7 @@
  * Mod+Enter leave it, Backspace in an empty one makes it a paragraph again).
  */
 
-import { content, expect, test, written } from "./room";
+import { content, edit, expect, test, written } from "./room";
 
 import type { Page } from "@playwright/test";
 
@@ -260,4 +260,132 @@ test("typing goes into code that is indented with tabs, coloured or plain text",
 	}
 	await written(page, room, /^function run\(\) \{ \/\/ typed\n\treturn 1;$/m);
 	await written(page, room, /^\+--\+ \/\/ typed\n\t\| a \|$/m);
+});
+
+test("keys in code or an open rendered source right after a press act on the block pressed, on a desktop and a phone", async ({ join, room, seed }) => {
+	await seed(
+		[
+			"# Title",
+			"",
+			"Before.",
+			"",
+			"```ts",
+			"let a = 1;",
+			"```",
+			"",
+			"After.",
+			"",
+			"```diff",
+			"--- a/x.ts",
+			"+++ b/x.ts",
+			"@@ -1,3 +1,3 @@",
+			" export function open() {",
+			"-	return 1;",
+			"+	return 2;",
+			" }",
+			"```",
+			"",
+			"```",
+			"```",
+			"",
+		].join("\n"),
+	);
+	let page = await join("ana");
+	let tsCode = content(page).locator(".planCode").nth(0);
+	let diffCode = content(page).locator(".planCode").nth(1);
+	let emptyCode = content(page).locator(".planCode").nth(2);
+	let diffPreview = diffCode.getByRole("group", { name: "Diff preview" });
+	await expect(diffPreview).toBeVisible();
+
+	let parkInBefore = async (target: Page) => {
+		let box = (await content(target).getByText("Before.", { exact: true }).boundingBox())!;
+		await target.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
+		await target.waitForTimeout(50);
+	};
+
+	// Press into code, then Escape at once: leaves the code block rather than block-selecting it.
+	await parkInBefore(page);
+	let tsBox = (await tsCode.locator("[data-plan-source]").boundingBox())!;
+	await page.mouse.click(tsBox.x + 24, tsBox.y + 12);
+	await page.keyboard.press("Escape");
+	await expect(page.locator("[data-block-selected]")).toHaveCount(0);
+	await page.keyboard.type("Mid. ");
+	await written(page, room, /^let a = 1;\n```\n\nMid\. After\.$/m);
+
+	// Press into code, then Mod+Enter and Mod+A at once act on the code block, not the whole document.
+	await parkInBefore(page);
+	await page.mouse.click(tsBox.x + 24, tsBox.y + 12);
+	await page.keyboard.press("ControlOrMeta+Enter");
+	await page.keyboard.type("Next. ");
+	await written(page, room, /^let a = 1;\n```\n\nNext\. Mid\. After\.$/m);
+
+	await parkInBefore(page);
+	await page.mouse.click(tsBox.x + 24, tsBox.y + 12);
+	await page.keyboard.press("ControlOrMeta+a");
+	await expect.poll(() => page.evaluate(() => getSelection()?.toString())).toBe("let a = 1;");
+
+	// Pinned diff source open: press into it, then Escape at once folds it and focuses its preview.
+	await diffCode.getByRole("button", { name: "Show source" }).click();
+	await expect(diffCode.locator("[data-plan-source]")).toBeVisible();
+	await diffCode.locator("[data-plan-source]").scrollIntoViewIfNeeded();
+	await parkInBefore(page);
+	let diffSourceBox = (await diffCode.locator("[data-plan-source]").boundingBox())!;
+	await page.mouse.click(diffSourceBox.x + 24, diffSourceBox.y + 12);
+	await page.keyboard.press("Escape");
+	await expect(diffCode.locator("[data-plan-source]")).toBeHidden();
+	await expect(diffPreview).toBeFocused();
+
+	// Source open with caret inside: press into prose, then Escape at once selects the prose block.
+	await page.keyboard.press("Enter");
+	await expect(diffCode.locator("[data-plan-source]")).toBeVisible();
+	await page.waitForTimeout(50);
+	let beforeBox = (await content(page).getByText("Before.", { exact: true }).boundingBox())!;
+	await page.mouse.click(beforeBox.x + 16, beforeBox.y + 8);
+	await page.keyboard.press("Escape");
+	await expect(page.locator("[data-block-selected]")).toHaveText("Before.");
+	await page.keyboard.press("Escape");
+
+	// Empty code block: press into it, then Backspace at once turns it into a paragraph without touching Before.
+	await emptyCode.locator("[data-plan-source]").scrollIntoViewIfNeeded();
+	await parkInBefore(page);
+	let emptyBox = (await emptyCode.locator("[data-plan-source]").boundingBox())!;
+	await page.mouse.click(emptyBox.x + 24, emptyBox.y + 12);
+	await page.keyboard.press("Backspace");
+	await expect(content(page).locator(".planCode")).toHaveCount(2);
+	await expect(content(page).getByText("Before.", { exact: true })).toBeVisible();
+
+	// Phone (390x844 touch): Edit document parks Lexical on the title; tap + Escape/Enter/Tab act on the tapped block.
+	let phone = await join("bo", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	await edit(phone);
+	let phoneTs = content(phone).locator(".planCode").nth(0);
+	let phoneDiff = content(phone).locator(".planCode").nth(1);
+	let phoneTsBox = (await phoneTs.locator("[data-plan-source]").boundingBox())!;
+	await phone.touchscreen.tap(phoneTsBox.x + 24, phoneTsBox.y + 12);
+	await phone.keyboard.press("Escape");
+	await expect(phone.locator("[data-block-selected]")).toHaveCount(0);
+	await expect(content(phone)).toBeFocused();
+
+	await phoneDiff.getByRole("button", { name: "Show source" }).tap();
+	await expect(phoneDiff.locator("[data-plan-source]")).toBeVisible();
+	let titleBox = (await content(phone).locator("h1").first().boundingBox())!;
+	await phone.touchscreen.tap(titleBox.x + 20, titleBox.y + 12);
+	await phone.waitForTimeout(50);
+	let phoneDiffBox = (await phoneDiff.locator("[data-plan-source]").boundingBox())!;
+	await phone.touchscreen.tap(phoneDiffBox.x + 24, phoneDiffBox.y + 12);
+	await phone.keyboard.press("Escape");
+	await expect(phoneDiff.locator("[data-plan-source]")).toBeHidden();
+	await expect(phoneDiff.getByRole("group", { name: "Diff preview" })).toBeFocused();
+
+	await phone.touchscreen.tap(titleBox.x + 20, titleBox.y + 12);
+	await phone.waitForTimeout(50);
+	phoneTsBox = (await phoneTs.locator("[data-plan-source]").boundingBox())!;
+	await phone.touchscreen.tap(phoneTsBox.x + 6, phoneTsBox.y + 12);
+	await phone.keyboard.press("Tab");
+	await phone.keyboard.press("Enter");
+	await expect(content(phone)).toBeFocused();
+	await written(phone, room, /^\t\nlet a = 1;$/m);
 });

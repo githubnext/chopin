@@ -186,7 +186,7 @@
 				4
 			]
 		],
-		"sourceHash": "0c6320c0c396562d88ceb7661b868fe53435a0a576f7fb66dce36f3ee607aef7"
+		"sourceHash": "12e7f09fb6178d07df7b543160d3d003a7ea9cebac46e3cde741d966d3d8436d"
 	},
 	{
 		"file": "packages/editor/src/widgets/research-motion.tsx",
@@ -522,6 +522,6 @@
 				1
 			]
 		],
-		"sourceHash": "ce7f083aa724fe35556fd776d794c9abe28b56c402e7859ba65dcc9f0298efd6"
+		"sourceHash": "ca3079df45b0542042c236184992204ea52b4c7f508e706ad6f60e44812c19c4"
 	}
 ]

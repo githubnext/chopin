@@ -21,6 +21,7 @@ import {
 	SELECTION_CHANGE_COMMAND,
 } from "lexical";
 
+import { $syncLiveRangeSelection } from "../live-selection";
 import { planScroller } from "../scroll";
 import { nativeSelectionRect } from "./surface";
 
@@ -114,13 +115,11 @@ export function SelectionBar(
 		return editor.registerCommand(
 			KEY_ESCAPE_COMMAND,
 			(event: KeyboardEvent) => {
+				let selection = $syncLiveRangeSelection(editor);
+				if (!selection || selection.isCollapsed()) return false;
 				event.preventDefault();
-				editor.update(() => {
-					let selection = $getSelection();
-					if (!$isRangeSelection(selection)) return;
-					let { key, offset, type } = selection.focus;
-					selection.anchor.set(key, offset, type);
-				});
+				let { key, offset, type } = selection.focus;
+				selection.anchor.set(key, offset, type);
 				return true;
 			},
 			COMMAND_PRIORITY_HIGH,

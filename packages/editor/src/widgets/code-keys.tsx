@@ -25,6 +25,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import {
 	$createParagraphNode,
 	$createRangeSelectionFromDom,
+	$getNearestNodeFromDOMNode,
 	$getSelection,
 	$isElementNode,
 	$isParagraphNode,
@@ -45,6 +46,8 @@ import {
 } from "lexical";
 import { $createCodeBlockNode, $isCalloutNode, $isCodeBlockNode } from "@chopin/dialect";
 
+import { $liveRangeSelection, $syncLiveRangeSelection } from "../live-selection";
+
 import type { CodeBlockNode } from "@chopin/dialect";
 import type { LexicalEditor, LexicalNode } from "lexical";
 
@@ -55,9 +58,9 @@ export function fenceOf(text: string): string | undefined {
 }
 
 /** The code block holding the whole selection, if one does. */
-export function $selectedCode(): CodeBlockNode | undefined {
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection)) return undefined;
+export function $selectedCode(editor?: LexicalEditor): CodeBlockNode | undefined {
+	let selection = $liveRangeSelection(editor);
+	if (!selection) return undefined;
 	let code = (node: LexicalNode) => {
 		for (let at: LexicalNode | null = node; at; at = at.getParent()) {
 			if ($isCodeBlockNode(at)) return at;
@@ -69,9 +72,9 @@ export function $selectedCode(): CodeBlockNode | undefined {
 }
 
 /** The caret's offset in a code block's text, or nothing for a selection. */
-function $caretOffset(code: CodeBlockNode): number | undefined {
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection) || !selection.isCollapsed()) return undefined;
+function $caretOffset(code: CodeBlockNode, editor?: LexicalEditor): number | undefined {
+	let selection = $liveRangeSelection(editor);
+	if (!selection || !selection.isCollapsed()) return undefined;
 	let point = selection.anchor;
 	let node = point.getNode();
 	let offset = 0;
@@ -112,7 +115,7 @@ export function CodeKeysPlugin() {
 
 	useEffect(() => {
 		let leave = (event: KeyboardEvent | null) => {
-			let code = $selectedCode();
+			let code = $selectedCode(editor);
 			if (!code) return false;
 			event?.preventDefault();
 			$leaveCode(code);
@@ -122,9 +125,9 @@ export function CodeKeysPlugin() {
 		/** ArrowDown on the last line, ArrowRight at the very end, where nothing follows to go to. */
 		let past = (event: KeyboardEvent, right: boolean) => {
 			if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return false;
-			let code = $selectedCode();
+			let code = $selectedCode(editor);
 			if (!code || !$last(code)) return false;
-			let offset = $caretOffset(code);
+			let offset = $caretOffset(code, editor);
 			let text = code.getTextContent();
 			if (offset === undefined) return false;
 			if (right ? offset !== text.length : text.includes("\n", offset)) return false;
@@ -133,8 +136,8 @@ export function CodeKeysPlugin() {
 
 		/** A paragraph that holds only a typed fence becomes a code block in that language. */
 		let fence = (event: KeyboardEvent | null) => {
-			let selection = $getSelection();
-			if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+			let selection = $liveRangeSelection(editor);
+			if (!selection || !selection.isCollapsed()) return false;
 			let node = selection.anchor.getNode();
 			let paragraph = $isParagraphNode(node) ? node : node.getParent();
 			if (!$isParagraphNode(paragraph)) return false;
@@ -154,9 +157,17 @@ export function CodeKeysPlugin() {
 		/** Text typed into code with a tab in it, inserted at the browser's own selection. */
 		let typed = (event: InputEvent) => {
 			if (event.inputType !== "insertText" || !event.data || event.isComposing) return;
-			let tabbed = editor.getEditorState().read(() =>
-				!!$selectedCode()?.getTextContent().includes("\t")
-			);
+			let tabbed = editor.read(() => {
+				let anchor = editor.getRootElement()?.ownerDocument.getSelection()?.anchorNode;
+				for (
+					let at: LexicalNode | null = anchor ? $getNearestNodeFromDOMNode(anchor) : null;
+					at;
+					at = at.getParent()
+				) {
+					if ($isCodeBlockNode(at)) return at.getTextContent().includes("\t");
+				}
+				return !!$selectedCode()?.getTextContent().includes("\t");
+			});
 			if (!tabbed) return;
 			event.preventDefault();
 			// Ahead of the editor's own handler on the same element, which would leave it to the browser.
@@ -179,7 +190,7 @@ export function CodeKeysPlugin() {
 			editor.registerCommand(
 				KEY_ESCAPE_COMMAND,
 				event => {
-					let code = $selectedCode();
+					let code = $selectedCode(editor);
 					if (!leave(event)) return false;
 					leftCode.set(editor, code!.getKey());
 					return true;
@@ -201,10 +212,10 @@ export function CodeKeysPlugin() {
 			editor.registerCommand(
 				PASTE_COMMAND,
 				event => {
-					if (!(event instanceof ClipboardEvent) || !$selectedCode()) return false;
+					if (!(event instanceof ClipboardEvent) || !$selectedCode(editor)) return false;
 					let text = event.clipboardData?.getData("text/plain");
-					let selection = $getSelection();
-					if (!text || !$isRangeSelection(selection)) return false;
+					let selection = $syncLiveRangeSelection(editor);
+					if (!text || !selection) return false;
 					event.preventDefault();
 					selection.insertRawText(text.replace(/\r\n?/g, "\n"));
 					return true;
@@ -224,9 +235,9 @@ export function CodeKeysPlugin() {
 			editor.registerCommand(
 				SELECT_ALL_COMMAND,
 				event => {
-					let code = $selectedCode();
-					let selection = $getSelection();
-					if (!code || !$isRangeSelection(selection)) return false;
+					let code = $selectedCode(editor);
+					let selection = $liveRangeSelection(editor);
+					if (!code || !selection) return false;
 					// The second press is the document's.
 					if (selection.getTextContent() === code.getTextContent()) return false;
 					event?.preventDefault();
@@ -238,9 +249,9 @@ export function CodeKeysPlugin() {
 			editor.registerCommand(
 				KEY_BACKSPACE_COMMAND,
 				event => {
-					let code = $selectedCode();
-					let selection = $getSelection();
-					if (!code || !$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+					let code = $selectedCode(editor);
+					let selection = $liveRangeSelection(editor);
+					if (!code || !selection || !selection.isCollapsed()) return false;
 					if (code.getTextContent() !== "") return false;
 					event.preventDefault();
 					let paragraph = $createParagraphNode();

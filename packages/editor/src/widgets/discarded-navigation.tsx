@@ -4,9 +4,7 @@ import { useEffect } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useCellValue } from "@mdxeditor/gurx";
 import {
-	$getSelection,
 	$isElementNode,
-	$isRangeSelection,
 	$isRootNode,
 	$isTextNode,
 	COMMAND_PRIORITY_HIGH,
@@ -16,10 +14,10 @@ import {
 import { $isQuestionnaireNode, cardStatus } from "@chopin/dialect";
 
 import { atBlockEnd, atBlockStart } from "./discarded-navigation-boundary";
+import { $liveRangeSelection } from "../live-selection";
 import { widgets$ } from "../widget-options";
 
-import type { LexicalNode } from "lexical";
-import type { ElementNode } from "lexical";
+import type { ElementNode, LexicalEditor, LexicalNode } from "lexical";
 import type { CardMetaStore } from "../card-meta";
 
 type PreviousBoundary = { crossed: boolean; target?: LexicalNode };
@@ -81,10 +79,14 @@ function unmodified(event: KeyboardEvent) {
 		&& !event.metaKey;
 }
 
-function leaveDiscardedBehind(event: KeyboardEvent, cardMeta: CardMetaStore | undefined): boolean {
+function leaveDiscardedBehind(
+	editor: LexicalEditor,
+	event: KeyboardEvent,
+	cardMeta: CardMetaStore | undefined,
+): boolean {
 	if (!unmodified(event)) return false;
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+	let selection = $liveRangeSelection(editor);
+	if (!selection || !selection.isCollapsed()) return false;
 	let anchor = selection.anchor;
 	let boundary: PreviousBoundary = { crossed: false };
 	if (anchor.type === "text" && anchor.offset === 0 && atBlockStart(anchor.getNode())) {
@@ -107,10 +109,14 @@ function leaveDiscardedBehind(event: KeyboardEvent, cardMeta: CardMetaStore | un
 	return true;
 }
 
-function skipDiscardedOnRight(event: KeyboardEvent, cardMeta: CardMetaStore | undefined) {
+function skipDiscardedOnRight(
+	editor: LexicalEditor,
+	event: KeyboardEvent,
+	cardMeta: CardMetaStore | undefined,
+) {
 	if (!unmodified(event)) return false;
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+	let selection = $liveRangeSelection(editor);
+	if (!selection || !selection.isCollapsed()) return false;
 	let anchor = selection.anchor;
 	if (
 		anchor.type !== "text"
@@ -142,12 +148,12 @@ export function DiscardedNavigationPlugin() {
 		let off = [
 			editor.registerCommand(
 				KEY_ARROW_LEFT_COMMAND,
-				event => leaveDiscardedBehind(event, cardMeta),
+				event => leaveDiscardedBehind(editor, event, cardMeta),
 				COMMAND_PRIORITY_HIGH,
 			),
 			editor.registerCommand(
 				KEY_ARROW_RIGHT_COMMAND,
-				event => skipDiscardedOnRight(event, cardMeta),
+				event => skipDiscardedOnRight(editor, event, cardMeta),
 				COMMAND_PRIORITY_HIGH,
 			),
 		];

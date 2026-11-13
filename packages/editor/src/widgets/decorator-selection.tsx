@@ -36,7 +36,6 @@ import {
 	$isElementNode,
 	$isNodeSelection,
 	$isParagraphNode,
-	$isRangeSelection,
 	$isRootNode,
 	$isTextNode,
 	$setSelection,
@@ -52,6 +51,9 @@ import {
 	KEY_DOWN_COMMAND,
 	mergeRegister,
 } from "lexical";
+
+import { $liveRangeSelection, $syncLiveRangeSelection } from "../live-selection";
+import { $held } from "./block-selection";
 
 import type {
 	ElementNode,
@@ -109,9 +111,14 @@ function $isHiddenBlock(node: LexicalNode, hidden: Hidden): boolean {
  * Without `vertical` the caret must also be at the edge of its block, since a
  * horizontal key only crosses a block boundary from there.
  */
-function $across(direction: Direction, vertical: boolean, hidden: Hidden) {
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection) || !selection.isCollapsed()) return undefined;
+function $across(
+	direction: Direction,
+	vertical: boolean,
+	hidden: Hidden,
+	editor?: LexicalEditor,
+) {
+	let selection = $liveRangeSelection(editor);
+	if (!selection || !selection.isCollapsed()) return undefined;
 
 	let focus = selection.focus.getNode();
 	let root = $isRootNode(focus);
@@ -149,8 +156,9 @@ export function $skipHidden(
 	direction: Direction,
 	vertical: boolean,
 	hidden: Hidden,
+	editor?: LexicalEditor,
 ): "native" | "moved" | undefined {
-	let found = $across(direction, vertical, hidden);
+	let found = $across(direction, vertical, hidden, editor);
 	if (!found) return undefined;
 	let { landing } = found;
 	if ($isDecoratorNode(landing)) {
@@ -180,8 +188,12 @@ function $selectOnly(node: LexicalNode): void {
  * decision nobody can see. Two paragraphs join around it; any other pair just
  * gets the caret, and the placeholder stays where it is.
  */
-export function $deleteAcross(direction: Direction, hidden: Hidden): boolean {
-	let found = $across(direction, false, hidden);
+export function $deleteAcross(
+	direction: Direction,
+	hidden: Hidden,
+	editor?: LexicalEditor,
+): boolean {
+	let found = $across(direction, false, hidden, editor);
 	if (!found?.block) return false;
 	let { block, landing } = found;
 	if (!$isElementNode(landing)) return false;
@@ -249,8 +261,9 @@ export function registerDecoratorSelection(
 			command,
 			event => {
 				heading = direction;
+				if (!$held(editor)) $syncLiveRangeSelection(editor);
 				if (event?.shiftKey || event?.altKey || event?.metaKey || event?.ctrlKey) return false;
-				if (!$deleteAcross(direction, hidden)) return false;
+				if (!$deleteAcross(direction, hidden, editor)) return false;
 				event?.preventDefault();
 				return true;
 			},
@@ -262,7 +275,7 @@ export function registerDecoratorSelection(
 			event => {
 				heading = direction;
 				if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return false;
-				let outcome = $skipHidden(direction, vertical, hidden);
+				let outcome = $skipHidden(direction, vertical, hidden, editor);
 				if (outcome === undefined) return false;
 				if (outcome === "moved") event.preventDefault();
 				return true;

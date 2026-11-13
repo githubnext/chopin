@@ -22,10 +22,9 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $getListDepth, $isListItemNode, $isListNode } from "@lexical/list";
 import {
 	$createTabNode,
-	$getSelection,
-	$isRangeSelection,
 	$isTabNode,
 	$isTextNode,
+	COMMAND_PRIORITY_CRITICAL,
 	COMMAND_PRIORITY_LOW,
 	INDENT_CONTENT_COMMAND,
 	INSERT_TAB_COMMAND,
@@ -35,8 +34,11 @@ import {
 } from "lexical";
 import { $isCodeBlockNode } from "@chopin/dialect";
 
+import { $liveRangeSelection, $syncLiveRangeSelection } from "../live-selection";
+import { $held } from "./block-selection";
+
 import type { ListItemNode } from "@lexical/list";
-import type { ElementNode, LexicalNode, PointType, RangeSelection } from "lexical";
+import type { ElementNode, LexicalEditor, LexicalNode, PointType, RangeSelection } from "lexical";
 import type { CodeBlockNode } from "@chopin/dialect";
 
 /** Where the selection sits, as far as Tab is concerned. */
@@ -93,9 +95,9 @@ function $canUnnest(item: ListItemNode): boolean {
 }
 
 /** Every selected block has to agree; a selection from a list into a paragraph is prose. */
-export function $tabContext(): TabContext | null {
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection)) return null;
+export function $tabContext(editor?: LexicalEditor): TabContext | null {
+	let selection = $liveRangeSelection(editor);
+	if (!selection) return null;
 	let nodes = [selection.anchor.getNode(), selection.focus.getNode(), ...selection.getNodes()];
 	let place = $placeOf(nodes[0]!);
 	if (nodes.some(node => $placeOf(node) !== place)) return { place: "prose" };
@@ -258,24 +260,34 @@ export function TabKeyPlugin() {
 
 	useEffect(() => {
 		return mergeRegister(
+			// Ahead of `@lexical/table`'s HIGH handler, so Tab after a press in or out of a cell reads
+			// where the caret is now rather than where it was before the press.
+			editor.registerCommand(
+				KEY_TAB_COMMAND,
+				() => {
+					if (!$held(editor)) $syncLiveRangeSelection(editor);
+					return false;
+				},
+				COMMAND_PRIORITY_CRITICAL,
+			),
 			editor.registerCommand(
 				KEY_TAB_COMMAND,
 				event => {
-					let context = $tabContext();
+					let context = $tabContext(editor);
 					if (context === null) return false;
 					let action = tabAction(context, event.shiftKey);
 					// Handled without preventing the default, so Lexical's own
 					// indentation never runs and the browser moves focus.
 					if (action === "leave") return true;
 					event.preventDefault();
-					let selection = $getSelection();
-					let code = $isRangeSelection(selection) ? $enclosingCode(selection) : null;
+					let selection = $syncLiveRangeSelection(editor);
+					let code = selection ? $enclosingCode(selection) : null;
 					if (action === "untab") {
-						if ($isRangeSelection(selection) && code) $untab(code, selection);
+						if (selection && code) $untab(code, selection);
 						return true;
 					}
 					if (
-						action === "tab" && $isRangeSelection(selection) && code && !selection.isCollapsed()
+						action === "tab" && selection && code && !selection.isCollapsed()
 					) {
 						$indentLines(code, selection);
 						return true;

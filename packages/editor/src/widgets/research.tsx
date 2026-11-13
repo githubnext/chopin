@@ -12,7 +12,6 @@ import {
 	$getSelection,
 	$isElementNode,
 	$isNodeSelection,
-	$isRangeSelection,
 	COMMAND_PRIORITY_HIGH,
 	DELETE_CHARACTER_COMMAND,
 	DELETE_LINE_COMMAND,
@@ -24,6 +23,7 @@ import {
 import { SidecarCard } from "../card";
 import { SendAction } from "../send-action";
 import { Fold, Swap, useLast } from "./research-motion";
+import { $liveRangeSelection } from "../live-selection";
 import { widgets$ } from "../widget-options";
 import { $isInvestigationNode, $isResearchNode } from "@chopin/dialect";
 import { CloseIcon, SparkleIcon, WarningIcon } from "@chopin/icons";
@@ -598,17 +598,22 @@ function adjacentNode(selection: RangeSelection, backward: boolean): LexicalNode
 	return null;
 }
 
-function protectsActiveResearch(store: Guarded, backward?: boolean): boolean {
-	let selection = $getSelection();
-	if ($isNodeSelection(selection)) {
-		return selection.getNodes().some(node => protectedResearch(node, store));
+function protectsActiveResearch(
+	editor: LexicalEditor,
+	store: Guarded,
+	backward?: boolean,
+): boolean {
+	let range = $liveRangeSelection(editor);
+	if (!range) {
+		let selection = $getSelection();
+		return $isNodeSelection(selection)
+			&& selection.getNodes().some(node => protectedResearch(node, store));
 	}
-	if (!$isRangeSelection(selection)) return false;
-	if (!selection.isCollapsed()) {
-		return selection.getNodes().some(node => protectedResearch(node, store));
+	if (!range.isCollapsed()) {
+		return range.getNodes().some(node => protectedResearch(node, store));
 	}
 	if (backward === undefined) return false;
-	let adjacent = adjacentNode(selection, backward);
+	let adjacent = adjacentNode(range, backward);
 	return adjacent !== null && protectedResearch(adjacent, store);
 }
 
@@ -621,22 +626,22 @@ export function registerResearchDeletion(
 	return mergeRegister(
 		editor.registerCommand(
 			DELETE_CHARACTER_COMMAND,
-			backward => protectsActiveResearch(store, backward),
+			backward => protectsActiveResearch(editor, store, backward),
 			COMMAND_PRIORITY_HIGH,
 		),
 		editor.registerCommand(
 			DELETE_WORD_COMMAND,
-			backward => protectsActiveResearch(store, backward),
+			backward => protectsActiveResearch(editor, store, backward),
 			COMMAND_PRIORITY_HIGH,
 		),
 		editor.registerCommand(
 			DELETE_LINE_COMMAND,
-			backward => protectsActiveResearch(store, backward),
+			backward => protectsActiveResearch(editor, store, backward),
 			COMMAND_PRIORITY_HIGH,
 		),
 		editor.registerCommand(
 			REMOVE_TEXT_COMMAND,
-			() => protectsActiveResearch(store),
+			() => protectsActiveResearch(editor, store),
 			COMMAND_PRIORITY_HIGH,
 		),
 	);

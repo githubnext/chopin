@@ -9,13 +9,9 @@
  */
 
 import { $createListNode, $isListItemNode, $isListNode } from "@lexical/list";
-import {
-	$getSelection,
-	$isRangeSelection,
-	$isTextNode,
-	COMMAND_PRIORITY_LOW,
-	KEY_DOWN_COMMAND,
-} from "lexical";
+import { $isTextNode, COMMAND_PRIORITY_LOW, KEY_DOWN_COMMAND } from "lexical";
+
+import { $liveRangeSelection } from "../live-selection";
 
 import type { ListItemNode } from "@lexical/list";
 import type { LexicalEditor } from "lexical";
@@ -68,8 +64,8 @@ export function registerTaskRule(editor: LexicalEditor): () => void {
 			if (event.key !== " " || event.metaKey || event.ctrlKey || event.altKey) return false;
 			if (event.isComposing) return false;
 
-			let selection = $getSelection();
-			if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+			let selection = $liveRangeSelection(editor);
+			if (!selection || !selection.isCollapsed()) return false;
 			let node = selection.anchor.getNode();
 			if (!$isTextNode(node)) return false;
 			let item = node.getParent();

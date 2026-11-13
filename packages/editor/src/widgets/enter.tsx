@@ -26,13 +26,14 @@ import { useEffect } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
 	$createParagraphNode,
-	$getSelection,
 	$isLineBreakNode,
 	$isParagraphNode,
-	$isRangeSelection,
 	$isTextNode,
+	COMMAND_PRIORITY_HIGH,
 	COMMAND_PRIORITY_LOW,
 	INSERT_PARAGRAPH_COMMAND,
+	KEY_ENTER_COMMAND,
+	mergeRegister,
 } from "lexical";
 import {
 	$isCalloutNode,
@@ -42,7 +43,10 @@ import {
 	$isMathNode,
 } from "@chopin/dialect";
 
-import type { ElementNode, LexicalNode } from "lexical";
+import { $liveRangeSelection, $syncLiveRangeSelection } from "../live-selection";
+import { $held } from "./block-selection";
+
+import type { ElementNode, LexicalEditor, LexicalNode, RangeSelection } from "lexical";
 
 /**
  * The nearest block that holds lines of text.
@@ -84,9 +88,8 @@ function containerPosition(node: LexicalNode | null) {
  * is exactly the case this exists to catch — it is where the previous Enter
  * put it.
  */
-function done(block: ElementNode): boolean {
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+function done(block: ElementNode, selection: RangeSelection): boolean {
+	if (!selection.isCollapsed()) return false;
 
 	// An empty block is not a blank line: there is nothing to leave behind yet.
 	if (!block.getTextContent().endsWith("\n")) return false;
@@ -101,9 +104,9 @@ function done(block: ElementNode): boolean {
 	return $isTextNode(last) ? anchor.offset === last.getTextContentSize() : true;
 }
 
-export function handleEnter(): boolean {
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection)) return false;
+export function handleEnter(editor?: LexicalEditor): boolean {
+	let selection = editor ? $syncLiveRangeSelection(editor) : $liveRangeSelection();
+	if (!selection) return false;
 
 	if (selection.isCollapsed()) {
 		let position = containerPosition(selection.anchor.getNode());
@@ -164,7 +167,7 @@ export function handleEnter(): boolean {
 	let block = lines(selection.anchor.getNode());
 	if (!block) return false;
 
-	if (!$isCodeBlockNode(block) && done(block)) {
+	if (!$isCodeBlockNode(block) && done(block, selection)) {
 		// The blank line was the request to leave, not content, so
 		// it goes with it — otherwise every fence anybody escaped
 		// from would keep a trailing empty line nobody typed.
@@ -186,10 +189,22 @@ export function EnterPlugin() {
 	let [editor] = useLexicalComposerContext();
 
 	useEffect(() => {
-		return editor.registerCommand(
-			INSERT_PARAGRAPH_COMMAND,
-			handleEnter,
-			COMMAND_PRIORITY_LOW,
+		return mergeRegister(
+			// Below block-selection's CRITICAL Enter, ahead of the title, table, list and rich-text
+			// handlers, so Enter right after a press splits or leaves the block pressed.
+			editor.registerCommand(
+				KEY_ENTER_COMMAND,
+				() => {
+					if (!$held(editor)) $syncLiveRangeSelection(editor);
+					return false;
+				},
+				COMMAND_PRIORITY_HIGH,
+			),
+			editor.registerCommand(
+				INSERT_PARAGRAPH_COMMAND,
+				() => handleEnter(editor),
+				COMMAND_PRIORITY_LOW,
+			),
 		);
 	}, [editor]);
 
