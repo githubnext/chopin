@@ -253,6 +253,10 @@ export function ResizeHandle(
 		width,
 	});
 
+	// The grip's reach is wider than its 4px so a pointer finds it, and never lies over a scroll lane: a
+	// right-edge grip reaches into the gutter its pane keeps clear of its lanes and past its edge; a
+	// left-edge grip, whose neighbour's lanes run up to the divider, reaches over the divider and into
+	// its own pane only, so a thumb drawn beside the divider takes the pointer.
 	return (
 		<div
 			aria-label={label}
@@ -261,7 +265,9 @@ export function ResizeHandle(
 			aria-valuemin={min}
 			aria-valuenow={width}
 			className={`absolute inset-y-0 z-10 w-1 cursor-col-resize
-				before:absolute before:inset-y-0 before:-inset-x-1 before:content-['']
+				before:absolute before:inset-y-0 before:content-[''] ${
+				side === "left" ? "before:-left-px before:-right-2" : "before:-inset-x-1"
+			}
 				after:absolute after:inset-x-px after:inset-y-0 after:rounded-full after:bg-brand
 				after:opacity-0 after:transition-opacity pointer-fine:hover:after:opacity-100
 				data-dragging:after:opacity-100 ${side === "left" ? "left-0" : "right-0"}`}

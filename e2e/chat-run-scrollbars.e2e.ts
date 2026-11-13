@@ -8,10 +8,10 @@
  * transcript's thumb is Chopin's own, drawn over its rows; the transcript is long enough that the
  * thumb is held at its floor, which is where it was moved past its lane's end.
  */
-import { expect, test } from "./room";
+import { expect, ready, test } from "./room";
 
 import type { Chat } from "../packages/protocol/index";
-import type { Locator, Page } from "@playwright/test";
+import type { BrowserContextOptions, Locator, Page } from "@playwright/test";
 
 test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
 
@@ -66,33 +66,42 @@ function chatPane(page: Page): Locator {
 }
 
 /**
- * The transcript's thumb, pointed at so it shows and takes the pointer: how much of it can be seen
- * and reached, against its lane and against the floor it is never drawn shorter than.
+ * A transcript's thumb, pointed at so it shows and takes the pointer: how much of it can be seen
+ * and reached, against its lane and against the floor it is never drawn shorter than. `pane` is main
+ * Chat's column or a thread's panel; every column and row the thumb paints must be its own.
  */
-async function transcriptThumb(page: Page, at: "start" | "end", expected: Record<string, unknown>) {
-	let scroller = page.locator(".chat-split-main [data-chat-scroll]");
+async function transcriptThumb(
+	page: Page,
+	at: "start" | "end",
+	expected: Record<string, unknown>,
+	pane = ".chat-split-main",
+) {
+	let scroller = page.locator(`${pane} [data-chat-scroll]`);
 	await scroller.evaluate(
 		(node, end) => node.scrollTo({ top: end ? node.scrollHeight : 0 }),
 		at === "end",
 	);
 	await scroller.hover({ position: { x: 40, y: 40 } });
-	await expect(page.locator(".chat-split-main .chat-scroll-track"))
-		.toHaveAttribute("data-pointed", "");
+	await expect(page.locator(`${pane} .chat-scroll-track`)).toHaveAttribute("data-pointed", "");
 	await expect.poll(() =>
 		scroller.evaluate(node => {
 			let lane = node.parentElement!.querySelector<HTMLElement>(".chat-scroll-track")!;
 			let bar = lane.firstElementChild as HTMLElement;
 			let track = lane.getBoundingClientRect();
 			let thumb = bar.getBoundingClientRect();
-			let card = node.closest(".chat-main")!.querySelector("[data-chat-runs]")!
-				.getBoundingClientRect();
-			let x = thumb.left + thumb.width / 2;
+			let card = node.closest(".chat-main, [data-thread-panel]")!
+				.querySelector("[data-chat-runs], [data-thread-runs]")!.getBoundingClientRect();
+			// The ink is inside the thumb's transparent border.
+			let inset = Number.parseFloat(getComputedStyle(bar).borderLeftWidth);
 			let hidden = 0;
-			for (let y = Math.ceil(thumb.top) + 0.5; y < thumb.bottom; y++) {
-				if (document.elementFromPoint(x, y) !== bar) hidden++;
+			// Whole pixels: Chromium takes any fraction past one as the next pixel's hit.
+			for (let x = Math.ceil(thumb.left + inset); x < thumb.right - inset; x++) {
+				for (let y = Math.ceil(thumb.top + inset); y < thumb.bottom - inset; y++) {
+					if (document.elementFromPoint(x, y) !== bar) hidden++;
+				}
 			}
 			return {
-				// The thumb is drawn whole, its every row reached by the pointer.
+				// The thumb is drawn whole, its every painted point reached by the pointer.
 				hidden,
 				drawn: Math.round(thumb.height) >= Number.parseFloat(getComputedStyle(bar).minHeight),
 				// Inside its lane, at the lane's start or end as the transcript is.
@@ -183,10 +192,15 @@ async function laneWhole(scroller: Locator) {
 }
 
 /** At the transcript's end and at its start, its thumb is whole, at that end of its lane. */
-async function thumbWhole(page: Page) {
+async function thumbWhole(page: Page, pane?: string) {
 	let whole = { hidden: 0, drawn: true, clearOfCard: true };
-	await transcriptThumb(page, "end", { ...whole, fromStart: expect.any(Number), fromEnd: 0 });
-	await transcriptThumb(page, "start", { ...whole, fromStart: 0, fromEnd: expect.any(Number) });
+	await transcriptThumb(page, "end", { ...whole, fromStart: expect.any(Number), fromEnd: 0 }, pane);
+	await transcriptThumb(
+		page,
+		"start",
+		{ ...whole, fromStart: 0, fromEnd: expect.any(Number) },
+		pane,
+	);
 }
 
 for (let [width, height] of [[1280, 700], [1440, 900]] as const) {
@@ -234,5 +248,264 @@ for (let [width, height] of [[1280, 700], [1440, 900]] as const) {
 		await laneWhole(runs);
 		await laneWhole(stages);
 		await thumbWhole(page);
+	});
+}
+
+/**
+ * A thread's own transcript and runs come only from its Planner, so the socket hands the browser a
+ * thread already long and running: every thread opened gets `replies` replies and `runs`.
+ */
+async function longThreads(page: Page, replies: number, runs: Chat.Run[]) {
+	await page.routeWebSocket("**/ws?**", route => {
+		let server = route.connectToServer();
+		route.onMessage(message => server.send(message));
+		server.onMessage(message => {
+			if (typeof message !== "string") return route.send(message);
+			let frame = JSON.parse(message) as Chat.ThreadOpened;
+			if (frame.kind !== "chat:thread" || !frame.root) return route.send(message);
+			let entries = Array.from({ length: replies }, (_, index) =>
+				({
+					id: `reply-${index}`,
+					author: { kind: "member", handle: index % 2 ? "bo" : "ana" },
+					text: `Reply ${index + 1}: a thought long enough to wrap in a narrow thread column.`,
+					ts: frame.root.ts + (index + 1) * 60_000,
+				}) as Chat.Entry);
+			route.send(JSON.stringify({ ...frame, entries: [...frame.entries, ...entries], runs }));
+		});
+	});
+	await page.reload();
+	await ready(page);
+}
+
+async function openThread(page: Page) {
+	let last = chatPane(page).locator(".chat-split-main [data-chat-message-id]").last();
+	await last.locator("[data-chat-message-text]").hover();
+	await last.getByRole("button", { name: "Reply in thread" }).click();
+	await expect(page.locator("[data-thread-panel]")).toBeVisible();
+	await expect(page.locator("[data-thread-panel] [data-chat-message-id]")).toHaveCount(61);
+}
+
+/**
+ * Every resize grip (Resize Projects sidebar, Resize chat, Resize thread): where it takes the pointer,
+ * its box and the reach around it, and every scroll lane on the page, Chopin's own transcript lanes
+ * and the native lanes of whatever scrolls. A grip never lies over a lane, and every point of a
+ * native lane is the scroller's own, so its thumb takes the pointer wherever it is drawn.
+ */
+async function gripsBesideLanes(page: Page) {
+	return page.evaluate(() => {
+		type Box = { left: number; right: number; top: number; bottom: number };
+		let grips = [
+			...document.querySelectorAll<HTMLElement>("[role=separator][aria-label^='Resize']"),
+		]
+			.filter(grip => grip.offsetParent)
+			.map(grip => {
+				let own = grip.getBoundingClientRect();
+				let { left, right, top, bottom } = own;
+				for (let part of ["::before", "::after"]) {
+					let drawn = getComputedStyle(grip, part);
+					if (drawn.content === "none" || drawn.content === "normal") continue;
+					let start = own.left + Number.parseFloat(drawn.left);
+					left = Math.min(left, start);
+					right = Math.max(right, start + Number.parseFloat(drawn.width));
+				}
+				return { label: grip.getAttribute("aria-label")!, left, right, top, bottom };
+			});
+		let lanes: (Box & { lane: string; taken?: number })[] = [];
+		for (
+			let track of document.querySelectorAll<HTMLElement>(".chat-scroll-track:not([data-idle])")
+		) {
+			let where = track.closest("[data-thread-panel]") ? "thread transcript" : "Chat transcript";
+			lanes.push({ lane: where, ...track.getBoundingClientRect().toJSON() });
+		}
+		for (let element of document.querySelectorAll<HTMLElement>("*")) {
+			let style = getComputedStyle(element);
+			let side = Number.parseFloat(style.borderRightWidth);
+			let bar = element.offsetWidth - element.clientWidth - Number.parseFloat(style.borderLeftWidth)
+				- side;
+			if (!/auto|scroll/.test(style.overflowY) || bar <= 0) continue;
+			if (element.scrollHeight <= element.clientHeight) continue;
+			let box = element.getBoundingClientRect();
+			let right = box.right - side;
+			let top = box.top + Number.parseFloat(style.borderTopWidth);
+			let bottom = box.bottom - Number.parseFloat(style.borderBottomWidth);
+			let taken = 0;
+			// Whole pixels: Chromium takes any fraction past one as the next pixel's hit.
+			for (let x = Math.ceil(right - bar); x < right; x++) {
+				for (let y = Math.ceil(top); y < Math.min(bottom, innerHeight); y += 4) {
+					if (document.elementFromPoint(x, y) !== element) taken++;
+				}
+			}
+			let name = element.getAttribute("aria-label")
+				?? (element.closest("[data-project-sidebar]") ? "Projects" : element.className.toString());
+			lanes.push({ lane: name, left: right - bar, right, top, bottom, taken });
+		}
+		let overlaps = grips.flatMap(grip =>
+			lanes.filter(lane =>
+				Math.min(grip.right, lane.right) - Math.max(grip.left, lane.left) > 0.25
+				&& Math.min(grip.bottom, lane.bottom) - Math.max(grip.top, lane.top) > 0.25
+			).map(lane =>
+				`${grip.label} [${grip.left}, ${grip.right}] over ${lane.lane} [${lane.left}, ${lane.right}]`
+			)
+		);
+		return {
+			grips: grips.map(grip => ({ label: grip.label, reach: Math.round(grip.right - grip.left) })),
+			lanes: lanes.map(lane => lane.lane).sort(),
+			overlaps,
+			taken: lanes.filter(lane => lane.taken).map(lane => `${lane.lane}: ${lane.taken}`),
+		};
+	});
+}
+
+test("no resize grip lies over a scroll lane, each still at least 12px to grab (the sidebar's 4px), and every thumb takes the pointer wherever it is drawn", async ({ join, seed }) => {
+	test.setTimeout(180_000);
+	await seed("# Busy\n\nA long conversation.\n", {
+		transcript: messages(60),
+		workflowRuns: [run("huge", 12, STORED - 12), ...["a", "b", "c", "d"].map(id => run(id, 6))],
+		runStages: { huge: stored("huge", STORED), thuge: stored("thuge", STORED) },
+	});
+	let threadRuns = [run("thuge", 12, STORED - 12), ...["ta", "tb", "tc"].map(id => run(id, 6))];
+	for (let [width, height] of [[1920, 1000], [1440, 900]] as const) {
+		let page = await join("ana", { viewport: { width, height } });
+		await longThreads(page, 60, threadRuns);
+		// The Projects list long enough to scroll in its own lane.
+		await page.locator("[data-project-sidebar] > .overflow-y-auto > :last-child")
+			.evaluate(node => (node as HTMLElement).style.setProperty("margin-bottom", "2000px"));
+		// Main Chat's every run unfolded, so its card scrolls in its own lane.
+		let card = page.locator(".chat-split-main").getByRole("region", { name: "Workflow runs" });
+		await card.getByRole("button", { name: /^\+\d+ more$/ }).click();
+		for (let id of ["huge", "a", "b", "c", "d"]) {
+			await card.getByRole("button", { name: new RegExp(`^workflow-${id},`) }).click();
+		}
+		let grips = { label: expect.any(String), reach: expect.any(Number) };
+		let check = async (lanes: string[], labels: string[]) => {
+			await page.locator(".chat-split-main [data-chat-scroll]").hover({
+				position: { x: 40, y: 40 },
+			});
+			let found = await gripsBesideLanes(page);
+			expect(found.overlaps).toEqual([]);
+			expect(found.taken).toEqual([]);
+			for (let lane of lanes) expect(found.lanes).toContain(lane);
+			expect(found.grips.map(grip => grip.label).sort()).toEqual(labels);
+			for (let grip of found.grips) {
+				expect(grip).toEqual(grips);
+				expect(grip.reach).toBeGreaterThanOrEqual(
+					grip.label === "Resize Projects sidebar" ? 4 : 12,
+				);
+			}
+		};
+		await check(["Chat transcript", "Projects"], ["Resize Projects sidebar", "Resize chat"]);
+
+		// A thread beside main Chat, its own runs unfolded so they scroll too (at 1440 the document
+		// folds to its bar and Resize chat goes with it).
+		await openThread(page);
+		let threadCard = page.locator("[data-thread-panel]").getByRole("region", {
+			name: "Workflow runs",
+		});
+		await threadCard.getByRole("button", { name: /^\+\d+ more$/ }).click();
+		for (let id of ["thuge", "ta", "tb", "tc"]) {
+			await threadCard.getByRole("button", { name: new RegExp(`^workflow-${id},`) }).click();
+		}
+		await page.locator("[data-thread-panel] [data-chat-scroll]").hover({
+			position: { x: 40, y: 40 },
+		});
+		await check(
+			["Chat transcript", "Projects"],
+			width === 1920
+				? ["Resize Projects sidebar", "Resize chat", "Resize thread"]
+				: ["Resize Projects sidebar", "Resize thread"],
+		);
+		await thumbWhole(page);
+		await thumbWhole(page, "[data-thread-panel]");
+	}
+});
+
+/** A finger held on a message, which brings up its toolbar on a touch screen. */
+async function longPress(page: Page, target: Locator): Promise<void> {
+	let box = (await target.boundingBox())!;
+	let point = { x: box.x + 24, y: box.y + Math.min(8, box.height / 2) };
+	let session = await page.context().newCDPSession(page);
+	await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+	await page.waitForTimeout(700);
+	await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+	await session.detach();
+}
+
+const PHONE: BrowserContextOptions = {
+	hasTouch: true,
+	isMobile: true,
+	viewport: { width: 390, height: 844 },
+};
+
+/**
+ * On a touch screen the thumb shows only while the pane scrolls and the finger scrolls the rows
+ * under it, so it is read from its box: inside its lane, at the lane's end, drawn at its floor or
+ * taller, with its lane above the runs card.
+ */
+async function touchThumb(page: Page, pane: string) {
+	let scroller = page.locator(`${pane} [data-chat-scroll]`);
+	await scroller.evaluate(node => node.scrollTo({ top: 0 }));
+	await scroller.evaluate(node => node.scrollTo({ top: node.scrollHeight }));
+	await expect(page.locator(`${pane} .chat-scroll-track`)).toHaveAttribute("data-scrolling", "");
+	return scroller.evaluate(node => {
+		let lane = node.parentElement!.querySelector<HTMLElement>(".chat-scroll-track")!;
+		let bar = lane.firstElementChild as HTMLElement;
+		let track = lane.getBoundingClientRect();
+		let thumb = bar.getBoundingClientRect();
+		let card = node.closest(".chat-main, [data-thread-panel]")!
+			.querySelector("[data-chat-runs], [data-thread-runs]")!.getBoundingClientRect();
+		return {
+			drawn: Math.round(thumb.height) >= Number.parseFloat(getComputedStyle(bar).minHeight),
+			fromEnd: Math.round(track.bottom - thumb.bottom) || 0,
+			inside: thumb.top >= track.top - 0.5 && thumb.right <= track.right + 0.5,
+			clearOfCard: track.bottom <= card.top + 0.5,
+			inView: track.bottom <= innerHeight && thumb.left >= 0 && thumb.right <= innerWidth,
+		};
+	});
+}
+
+for (
+	let [layout, options] of [
+		["a phone", PHONE],
+		["a compact window", { viewport: { width: 640, height: 800 } }],
+		["the dark theme", { colorScheme: "dark", viewport: { width: 1280, height: 700 } }],
+	] as const
+) {
+	test(`in ${layout} the transcript's thumb is whole above the runs card, in Chat and in a thread with runs of its own`, async ({ join, seed }) => {
+		test.setTimeout(150_000);
+		await seed("# Busy\n\nA long conversation.\n", {
+			transcript: messages(60),
+			workflowRuns: [run("huge", 12, STORED - 12), ...["a", "b"].map(id => run(id, 6))],
+			runStages: { huge: stored("huge", STORED), thuge: stored("thuge", STORED) },
+		});
+		let page = await join("ana", options);
+		await longThreads(page, 60, [run("thuge", 12, STORED - 12), run("ta", 6)]);
+		if (layout === "the dark theme") {
+			await page.evaluate(() => document.documentElement.classList.add("dark"));
+		}
+		let touch = layout === "a phone";
+		if (layout !== "the dark theme") {
+			await page.getByRole("navigation", { name: "Workspace view" })
+				.getByRole("button", { name: /^Chat/ }).click();
+		}
+		let whole = { drawn: true, fromEnd: 0, inside: true, clearOfCard: true, inView: true };
+		let card = page.locator(".chat-split-main").getByRole("region", { name: "Workflow runs" });
+		await expect(card).toBeVisible();
+		let press = (target: Locator) => touch ? target.tap() : target.click();
+		await press(card.getByRole("button", { name: /^workflow-huge,/ }));
+		if (touch) expect(await touchThumb(page, ".chat-split-main")).toEqual(whole);
+		else await thumbWhole(page);
+
+		// A thread opens as a sheet here, beside Chat on the desktop.
+		let last = chatPane(page).locator(".chat-split-main [data-chat-message-id]").last();
+		await last.scrollIntoViewIfNeeded();
+		if (touch) await longPress(page, last.locator("[data-chat-message-text]"));
+		else await last.locator("[data-chat-message-text]").hover();
+		await press(last.getByRole("button", { name: "Reply in thread" }));
+		let thread = page.locator("[data-thread-panel]");
+		await expect(thread.locator("[data-chat-message-id]")).toHaveCount(61);
+		let threadCard = thread.getByRole("region", { name: "Workflow runs" });
+		await press(threadCard.getByRole("button", { name: /^workflow-thuge,/ }));
+		if (touch) expect(await touchThumb(page, "[data-thread-panel]")).toEqual(whole);
+		else await thumbWhole(page, "[data-thread-panel]");
 	});
 }

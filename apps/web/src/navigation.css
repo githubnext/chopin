@@ -353,9 +353,11 @@
 	flex: 0 0 var(--project-sidebar-width, 0px);
 }
 
+/* Its content ends where its edge, Resize Projects sidebar's 4px, begins: the list's scroll lane is never under the grip. */
 .motion-sidebar .project-sidebar {
 	width: var(--project-sidebar-width, 0px);
 	flex: 0 0 var(--project-sidebar-width, 0px);
+	padding-inline-end: 4px;
 }
 
 .motion-sidebar.is-open {

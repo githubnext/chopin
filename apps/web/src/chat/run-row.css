@@ -3,7 +3,8 @@
  * square, as a Chat row is across Chat; the card's own corners round the first line and the last.
  * The hairline above a line is its own and the shade runs under it, so lines meet with no band
  * between them and a pointer moving down the card shades one line after the next. The toggle keeps
- * its own box for its hit area and focus ring.
+ * its own box for its hit area and focus ring. The shade is a Chat row's (ink at 4% over the card's
+ * page), the same darker step as a shown message; the hover surface was fainter on the page.
  */
 .run-stack {
 	isolation: isolate;
@@ -20,7 +21,7 @@
 	z-index: -1;
 	inset-block: 0;
 	inset-inline: calc(var(--spacing) * -3);
-	background: var(--color-hover);
+	background: var(--color-chat-row-hover);
 	opacity: 0;
 	pointer-events: none;
 	transition: opacity var(--duration-fast) var(--ease-out);
