@@ -132,22 +132,40 @@ test("Chat reads GitHub's tables, strikethrough and task lists, and only those",
 	expect(markup).toContain(`<li class="${LI_CLASS} task-list-item">`);
 });
 
-test("a footnote, a bare address and a www link stay the plain text they were in Chat", () => {
+test("a web address written out is a link, as in Slack; a footnote, a www address and an email stay text", () => {
 	let markup = markdown(
 		"Claim[^1] and see https://example.com/page, www.example.com or ana@example.com.\n\n[^1]: The note.",
 	);
-	expect(markup).not.toContain("<a");
+	expect(markup.match(/<a /g)).toHaveLength(1);
+	expect(markup).toContain(
+		`see <a class="${A_CLASS}" href="https://example.com/page" rel="noopener noreferrer" target="_blank">https://example.com/page</a>, www.example.com or ana@example.com.`,
+	);
 	expect(markup).not.toContain("<sup");
 	expect(markup).not.toContain("<section");
 	expect(markup).not.toContain("footnote");
-	expect(markup).toContain(
-		"Claim[^1] and see https://example.com/page, www.example.com or ana@example.com.",
-	);
+	expect(markup).toContain("Claim[^1] and see ");
 	expect(markup).toContain("[^1]: The note.");
 	// A link someone wrote is still a link.
 	expect(markdown("[the page](https://example.com/page)")).toContain(
 		'href="https://example.com/page"',
 	);
+});
+
+test("a web address in code, or one with another scheme, is never a link", () => {
+	let markup = markdown(
+		"`https://code.example` and javascript:alert(1) and data:text/html,x\n\n```\nhttps://block.example\n```",
+	);
+	expect(markup).not.toContain("<a");
+	expect(markup).toContain("javascript:alert(1)");
+	expect(markup).toContain("https://code.example");
+	expect(markup).toContain("https://block.example");
+});
+
+test("a web address keeps a mention and a typed reference beside it as they were", () => {
+	let source = "@ana see https://example.com/x and #Score";
+	let markup = markdown(source, [reference(source, "#Score")]);
+	expect(markup).toContain('href="https://example.com/x"');
+	expect(markup).toContain('data-chat-reference="document"');
 });
 
 test("raw HTML in a Chat message is never drawn, an image tag included", () => {
