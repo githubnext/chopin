@@ -45,6 +45,11 @@ let scratch = await mkdtemp(join(tmpdir(), "chopin-planner-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
 
 const MACHINE = `chopin_m_${"M".repeat(43)}`;
+/**
+ * These connectors start every Planner cold, as a command from before spare mode is: a spare (see
+ * planner-spare.test.ts) would be one more launch of the backend they count.
+ */
+const COLD = { CHOPIN_PLANNER_SPARE: "0" };
 
 async function checkout() {
 	let root = await mkdtemp(join(scratch, "checkout-"));
@@ -161,6 +166,7 @@ test(
 				...process.env,
 				CHOPIN_URL: origin,
 				CHOPIN_CONNECTOR_STATE_DIR: state,
+				...COLD,
 			},
 			stdout: "pipe",
 			stderr: "pipe",
@@ -311,6 +317,7 @@ test(
 				CHOPIN_URL: origin,
 				CHOPIN_HOME: home,
 				CHOPIN_CONNECTOR_STATE_DIR: "",
+				...COLD,
 			},
 			terminal: {
 				cols: 200,
@@ -1199,6 +1206,7 @@ test.skipIf(process.platform === "win32")(
 				...process.env,
 				CHOPIN_URL: origin,
 				CHOPIN_CONNECTOR_STATE_DIR: state,
+				...COLD,
 			},
 			stdout: "pipe",
 			stderr: "pipe",
@@ -1215,7 +1223,8 @@ test.skipIf(process.platform === "win32")(
 				planner: null,
 				plannerCommand: "1",
 			});
-			expect(asked).toEqual([{ document }]);
+			// Its credential is asked for by the id Chopin named, which Chopin finds without GitHub.
+			expect(asked).toEqual([{ document: "D_1" }]);
 			let [launched] = await entries(log);
 			// A dispatched Planner gets its checkout and its own stable worktree path as well.
 			expect(launched.checkout).toBe(await realpath(root));
@@ -1369,7 +1378,7 @@ test.skipIf(process.platform === "win32")(
 			"--",
 			process.execPath,
 		], {
-			env: { ...process.env, CHOPIN_URL: origin, CHOPIN_CONNECTOR_STATE_DIR: state },
+			env: { ...process.env, CHOPIN_URL: origin, CHOPIN_CONNECTOR_STATE_DIR: state, ...COLD },
 			stdout: "pipe",
 			stderr: "pipe",
 		});
@@ -1489,7 +1498,7 @@ test.skipIf(process.platform === "win32")(
 			"--",
 			process.execPath,
 		], {
-			env: { ...process.env, CHOPIN_URL: origin, CHOPIN_CONNECTOR_STATE_DIR: state },
+			env: { ...process.env, CHOPIN_URL: origin, CHOPIN_CONNECTOR_STATE_DIR: state, ...COLD },
 			stdout: "pipe",
 			stderr: "pipe",
 		});
@@ -1976,7 +1985,7 @@ test.skipIf(process.platform === "win32")(
 			"--",
 			process.execPath,
 		], {
-			env: { ...process.env, CHOPIN_URL: origin, CHOPIN_CONNECTOR_STATE_DIR: state },
+			env: { ...process.env, CHOPIN_URL: origin, CHOPIN_CONNECTOR_STATE_DIR: state, ...COLD },
 			stdout: "pipe",
 			stderr: "pipe",
 		});

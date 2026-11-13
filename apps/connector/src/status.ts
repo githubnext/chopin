@@ -14,6 +14,7 @@ import {
 	plannerWorktrees,
 	processStart,
 	runs,
+	type SpareState,
 	type StartFailure,
 } from "./workspace";
 
@@ -83,6 +84,13 @@ export type StatusReport = {
 		failures?: Array<
 			Omit<StartFailure, "at" | "retryAt"> & { at: string; retryAt?: string }
 		>;
+		/**
+		 * Its spare Planners, one per registered checkout's repository: `state` is `starting`,
+		 * `ready` (since it printed ready), `unsupported` (the Planner command never took spare
+		 * mode, since then) or `off` (`--no-planner-spare`); `command` names the Planner command's
+		 * program. `since` is ISO 8601.
+		 */
+		spares?: Array<Omit<SpareState, "since"> & { since: string }>;
 	}>;
 	service: ServiceStatus | { state: "unknown"; detail: string };
 	/** Whether agents run in the system's process sandbox, and if not, why and the one fix. */
@@ -217,6 +225,14 @@ export async function collectStatus(options: {
 					})),
 				}
 				: {}),
+			...(item.spares
+				? {
+					spares: item.spares.map(({ since, ...spare }) => ({
+						...spare,
+						since: new Date(since).toISOString(),
+					})),
+				}
+				: {}),
 		})),
 		service,
 		...(options.sandbox ? { sandbox: options.sandbox } : {}),
@@ -296,6 +312,24 @@ function failing(failure: Failure, now: number) {
 }
 
 /** `bytes` as a person reads a size. */
+/** One status line for a repository's spare Planner. */
+function spareLine(spare: Omit<SpareState, "since"> & { since: string }, now: number) {
+	let since = Math.max(0, Math.round((now - Date.parse(spare.since)) / 60_000));
+	let ago = since < 1
+		? "just now"
+		: since < 120
+		? `${since} min ago`
+		: `${Math.round(since / 60)} h ago`;
+	let state = {
+		starting: "starting",
+		ready: `ready (since ${ago}${spare.command ? `, ${spare.command}` : ""})`,
+		unsupported: `not taken: the Planner command didn't start as a spare (found ${ago}); `
+			+ "new documents' Planners start as before",
+		off: "off (--no-planner-spare)",
+	}[spare.state];
+	return `Spare Planner for ${spare.repository}: ${state}`;
+}
+
 function size(bytes: number) {
 	if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} kB`;
 	if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
@@ -353,6 +387,7 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 						failure ? failing(failure, now) : ""
 					}`;
 				}),
+				...(item.spares ?? []).map(spare => `  ${spareLine(spare, now)}`),
 			]
 			: [
 				`stale lock${

@@ -1,8 +1,18 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, open, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	open,
+	readdir,
+	readFile,
+	realpath,
+	rename,
+	rm,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, sep, win32 } from "node:path";
+import { basename, join, sep, win32 } from "node:path";
 import type { RunInput } from "@chopin/experiment";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -117,17 +127,71 @@ export function segment(value: string) {
 }
 
 /**
- * Where a document's Planner command keeps its own git worktree of the checkout:
- * `<base>/planners/<owner>/<repo>/<document id>`, by the checkout's GitHub repository, so a
- * Planner started again finds it there. The folders above it are made private (0700); the
- * worktree itself is the Planner's to make, and nothing here ever removes it.
+ * The folder of a repository's Planner worktrees, `<base>/planners/<owner>/<repo>`, made private
+ * (0700) as it is asked for.
  */
-export async function plannerWorktree(directory: string, repository: string, document: string) {
+export async function plannerFolder(directory: string, repository: string) {
 	let [owner = "", name = ""] = repository.toLowerCase().split("/");
 	let parent = join(directory, "planners", segment(owner), segment(name));
 	// Never fatal here: a Planner that can't make its worktree says why itself.
 	await mkdir(parent, { recursive: true, mode: 0o700 }).catch(() => {});
-	return join(parent, segment(document));
+	return parent;
+}
+
+/** The name of a spare Planner's slot beside the worktrees: `spare-` and 12 hex digits. */
+export const SPARE_SLOT = /^spare-[0-9a-f]{12}$/;
+
+/** The file that says which spare slot became a document's worktree: `<document id>.worktree`. */
+function slotRecord(parent: string, document: string) {
+	return join(parent, `${segment(document)}.worktree`);
+}
+
+/** The slot `<document id>.worktree` names, when it names one that is there. */
+async function assignedSlot(parent: string, document: string) {
+	let slot = (await readFile(slotRecord(parent, document), "utf8").catch(() => "")).trim();
+	return SPARE_SLOT.test(slot) && existsSync(join(parent, slot)) ? slot : undefined;
+}
+
+/**
+ * Where a document's Planner command keeps its own git worktree of the checkout:
+ * `<base>/planners/<owner>/<repo>/<document id>`, by the checkout's GitHub repository, so a
+ * Planner started again finds it there; or, for a document whose Planner started on a spare, the
+ * spare's slot, which stays its worktree for good (see `assignSlot`). The folders above it are made
+ * private (0700); the worktree itself is the Planner's to make, and nothing here ever removes it.
+ */
+export async function plannerWorktree(directory: string, repository: string, document: string) {
+	let parent = await plannerFolder(directory, repository);
+	let slot = await assignedSlot(parent, document);
+	return join(parent, slot ?? segment(document));
+}
+
+/**
+ * Record that a spare's `slot` is `document`'s worktree from now on, so every later launch of its
+ * Planner, a cold one too, runs in it and finds its own state there. Written whole, through a
+ * temporary file and a rename.
+ */
+export async function assignSlot(
+	directory: string,
+	repository: string,
+	document: string,
+	slot: string,
+) {
+	let parent = await plannerFolder(directory, repository);
+	let path = slotRecord(parent, document);
+	let temporary = `${path}.${process.pid}.tmp`;
+	await writeFile(temporary, `${basename(slot)}\n`, { mode: 0o600 });
+	await rename(temporary, path);
+}
+
+/** The spare slots in a repository's Planner folder that became a document's worktree, by slot. */
+export async function assignedSlots(parent: string) {
+	let names = await readdir(parent).catch(() => [] as string[]);
+	let found = new Map<string, string>();
+	for (let name of names.filter(name => name.endsWith(".worktree"))) {
+		let slot = (await readFile(join(parent, name), "utf8").catch(() => "")).trim();
+		if (SPARE_SLOT.test(slot)) found.set(slot, name.slice(0, -".worktree".length));
+	}
+	return found;
 }
 
 /**
@@ -325,6 +389,7 @@ export async function lockWorkspace(
 		await rm(path.replace(/\.lock$/, ".failures.json"), { force: true });
 		await rm(path.replace(/\.lock$/, ".chosen.json"), { force: true });
 		await rm(path.replace(/\.lock$/, ".github.json"), { force: true });
+		await rm(path.replace(/\.lock$/, ".spares.json"), { force: true });
 	};
 }
 
@@ -404,6 +469,39 @@ export function chosenPlanners(directory: string, root: string) {
 
 export type ChosenPlanners = ReturnType<typeof chosenPlanners>;
 
+/**
+ * A repository's spare Planner, as `chopin status` shows it: `starting`, `ready` (`since` it
+ * printed ready), `unsupported` when the Planner command never took spare mode (`since` it was
+ * found so), or `off` (`--no-planner-spare`). `command` names the Planner command's program.
+ */
+export type SpareState = {
+	repository: string;
+	state: "starting" | "ready" | "unsupported" | "off";
+	since: number;
+	command?: string;
+};
+
+/**
+ * A connector's spare Planners, kept for `chopin status` in a file beside its lock. `record`
+ * replaces the list.
+ */
+export function spareStates(directory: string, root: string) {
+	let path = join(directory, `${lockId(root)}.spares.json`);
+	let writing = rm(path, { force: true }).catch(() => {});
+	return {
+		record(states: SpareState[]) {
+			writing = writing.then(() =>
+				states.length
+					? writeFile(path, JSON.stringify(states), { mode: 0o600 })
+					: rm(path, { force: true })
+			).catch(() => {});
+			return writing;
+		},
+	};
+}
+
+export type SpareStates = ReturnType<typeof spareStates>;
+
 /** Whether no process `pid` exists; EPERM means it exists but belongs to someone else. */
 function gone(pid: number) {
 	try {
@@ -468,6 +566,8 @@ export type RunningConnector = {
 	started?: number;
 	/** How its agent or Planner backends last failed to start, while it runs. */
 	failures?: StartFailure[];
+	/** Its spare Planners, by repository, while it runs. */
+	spares?: SpareState[];
 };
 
 /**
@@ -507,6 +607,11 @@ export async function connectors(
 				.then(text => JSON.parse(text))
 				.catch(() => undefined)
 			: undefined;
+		let spares: unknown = running
+			? await readFile(join(directory, name.replace(/\.lock$/, ".spares.json")), "utf8")
+				.then(text => JSON.parse(text))
+				.catch(() => undefined)
+			: undefined;
 		found.push({
 			pid: pid as number,
 			...(typeof root === "string" ? { root } : {}),
@@ -526,6 +631,7 @@ export async function connectors(
 			...(typeof protocol === "number" ? { protocol } : {}),
 			...(typeof started === "number" ? { started } : {}),
 			...(Array.isArray(failures) && failures.length ? { failures } : {}),
+			...(Array.isArray(spares) && spares.length ? { spares: spares as SpareState[] } : {}),
 		});
 	}
 	return found;
@@ -834,7 +940,8 @@ export async function pruneRuns(
 
 /**
  * The Planner worktrees in `<base>/planners/<owner>/<repo>/<document id>`: each folder a Planner
- * command made there, not the token folder (`tokenFolder`) kept beside each.
+ * command made there, not the token folder (`tokenFolder`) kept beside each, and each spare slot
+ * that became a document's worktree, under that document.
  */
 export async function plannerWorktrees(directory: string) {
 	let found: Array<{ path: string; repository: string; document: string }> = [];
@@ -844,13 +951,15 @@ export async function plannerWorktrees(directory: string) {
 	let base = join(directory, "planners");
 	for (let owner of await folders(base)) {
 		for (let name of await folders(join(base, owner))) {
-			for (let document of await folders(join(base, owner, name))) {
-				if (isTokenFolder(document)) continue;
-				found.push({
-					path: join(base, owner, name, document),
-					repository: `${owner}/${name}`,
-					document,
-				});
+			let parent = join(base, owner, name);
+			// A spare's slot is listed under the document it became the worktree of; one still waiting
+			// for a document is a spare, not a document's worktree.
+			let slots = await assignedSlots(parent);
+			for (let folder of await folders(parent)) {
+				if (isTokenFolder(folder)) continue;
+				let document = SPARE_SLOT.test(folder) ? slots.get(folder) : folder;
+				if (document === undefined) continue;
+				found.push({ path: join(parent, folder), repository: `${owner}/${name}`, document });
 			}
 		}
 	}

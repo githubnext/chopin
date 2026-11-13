@@ -158,6 +158,50 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 	expect(text.join("\n")).not.toContain(TOKEN);
 });
 
+test("status shows each repository's spare Planner under its connector, and a spare's slot under the document it became the worktree of", async () => {
+	let { directory, host } = await machine();
+	let lock = `${"f".repeat(64)}`;
+	await writeFile(
+		join(directory, `${lock}.lock`),
+		JSON.stringify({ pid: process.pid, checkouts: { "octo-org/score": "/work/score" } }),
+	);
+	let since = Date.now() - 5 * 60_000;
+	await writeFile(
+		join(directory, `${lock}.spares.json`),
+		JSON.stringify([
+			{ repository: "octo-org/score", state: "ready", since, command: "pdd" },
+			{ repository: "octo-org/other", state: "unsupported", since },
+		]),
+	);
+	let folder = join(directory, "planners", "octo-org", "score");
+	await mkdir(join(folder, "spare-0123456789ab"), { recursive: true });
+	await writeFile(join(folder, "D_1.worktree"), "spare-0123456789ab\n");
+	// A spare still waiting for a document is no document's worktree.
+	await mkdir(join(folder, "spare-ba9876543210"), { recursive: true });
+	let report = await collectStatus({ directory, server: "https://x", source: "config", host });
+	expect(report.connectors[0]?.spares).toEqual([
+		{
+			repository: "octo-org/score",
+			state: "ready",
+			since: new Date(since).toISOString(),
+			command: "pdd",
+		},
+		{ repository: "octo-org/other", state: "unsupported", since: new Date(since).toISOString() },
+	]);
+	expect(report.plannerWorktrees).toEqual([
+		{ path: join(folder, "spare-0123456789ab"), repository: "octo-org/score", document: "D_1" },
+	]);
+	let text = formatStatus(report);
+	expect(text).toContain(
+		"              Spare Planner for octo-org/score: ready (since 5 min ago, pdd)",
+	);
+	expect(text).toContainEqual(
+		expect.stringMatching(
+			/Spare Planner for octo-org\/other: not taken: the Planner command didn't start as a spare/,
+		),
+	);
+});
+
 test("status lists the checkouts the running connector registered and the repositories it cloned", async () => {
 	let { directory, host } = await machine();
 	await writeFile(
