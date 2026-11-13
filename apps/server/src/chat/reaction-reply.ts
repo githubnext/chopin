@@ -204,8 +204,8 @@ export function createResponder(
 					intent: reading.intent,
 					probability: reading.probability,
 					confidence: reading.confidence,
-					noul: reading.noul,
 					reply: reading.reply,
+					why: reading.why,
 					fixed: reading.fixed,
 				}),
 			);

@@ -5,14 +5,17 @@ export type ReactionIntent = "confused" | "disagree" | "approve" | "ack" | "more
 
 export const REPLYING: ReadonlySet<ReactionIntent> = new Set(["confused", "disagree", "more"]);
 
-/** A reply costs a Planner turn, so each of its thresholds is higher than the one for a reading. */
+/**
+ * Measured with the openai-decisions/gpt-6-luna classifier (the pull request that set them lists the readings): a reaction
+ * that asks for a reply reads at least 0.63 likely and 0.56 confident, and the nearest one that
+ * should not (a shrug read as confused) at most 0.58 and 0.50. A reply costs a Planner turn, so it
+ * needs more confidence than a reading that is only logged.
+ */
 export const THRESHOLDS = {
-	intent: 0.6,
-	confidence: 0.5,
-	replyIntent: 0.75,
-	replyConfidence: 0.7,
-	replyNoul: 0.8,
-	noReply: 0.3,
+	intent: 0.5,
+	confidence: 0.4,
+	replyIntent: 0.6,
+	replyConfidence: 0.55,
 } as const;
 
 const FIXED: Record<string, ReactionIntent> = {
@@ -80,26 +83,29 @@ export type ReactionItem = {
 	preceding: Array<{ author: "member" | "agent"; handle?: string; text: string }>;
 };
 
+/** Why a reading starts no reply: the answer was not usable, unsure, or not a kind that asks for one. */
+export type NoReply = "unreadable" | "unsure" | "not-asking" | "below-reply-threshold";
+
 export type Reading = {
 	intent: ReactionIntent;
 	probability?: number;
 	confidence?: number;
-	noul?: number;
 	reply: boolean;
+	why?: NoReply;
 	fixed?: true;
 };
 
 const INTENTS: Record<Exclude<ReactionIntent, never>, string> = {
-	confused: "The person did not follow the message and wants it explained again, differently "
-		+ "or more simply. Includes a question mark, a thinking face or a confused face.",
+	confused: "The person did not follow the message, or doubts it, and wants it explained again, "
+		+ "differently or more simply. Includes a question mark, a thinking face or a confused face.",
 	disagree: "The person thinks the message is wrong, incomplete or not what they wanted, "
 		+ "and wants it reconsidered or asks what is wrong with it. Includes a thumbs down or a cross.",
-	approve: "The person agrees with the message and is satisfied by it. Includes a check mark, "
-		+ "a thumbs up or celebration.",
+	approve: "The person agrees with the message or is satisfied by it. Includes a check mark, "
+		+ "a thumbs up, a plus one, thanks or celebration.",
 	ack: "The person only shows they have seen or are looking at the message. Includes eyes, "
 		+ "and any reaction that needs no reply.",
-	more: "The person wants the message taken further, with more detail, evidence or a deeper "
-		+ "look. Includes a plus sign or a magnifying glass.",
+	more: "The person wants the message taken further: more detail, evidence or a deeper look, or "
+		+ "they have a question or something to add about it. Includes a magnifying glass or a raised hand.",
 	none: "The reaction means none of these in this conversation, or says nothing about the message.",
 };
 
@@ -112,19 +118,6 @@ function intentQuestion(id: string): JevQuestion {
 			+ "mean as a response to that message of the Planner, given the messages before it and "
 			+ "the person who reacted?",
 		criteria: INTENTS,
-	};
-}
-
-function replyQuestion(id: string): JevQuestion {
-	return {
-		type: "noul",
-		instructions: `${FRAME}For the item with id ${id} in state.items: `
-			+ "Does the reaction ask the Planner to respond?",
-		criteria: {
-			true: "The reaction asks for an explanation, a second look or more, so a reply from the "
-				+ "Planner is wanted.",
-			false: "The reaction approves, acknowledges or says nothing that needs a reply.",
-		},
 	};
 }
 
@@ -174,21 +167,44 @@ export function chunks(items: ReactionItem[]): Array<Array<{ item: ReactionItem;
 	return result;
 }
 
-export function read(intent: JevAnswer | undefined, reply: JevAnswer | undefined): Reading {
-	if (intent?.type !== "choice" || reply?.type !== "noul") return { intent: "none", reply: false };
+/**
+ * Reads the Choice alone. A reply needs a kind of reaction that asks for one (confused, disagree,
+ * more), likely and confident enough; anything less is logged and left.
+ */
+export function read(intent: JevAnswer | undefined): Reading {
+	if (intent?.type !== "choice") return { intent: "none", reply: false, why: "unreadable" };
 	let chosen = intent.choice as ReactionIntent;
 	let probability = intent.probabilities[chosen] ?? 0;
-	let base = { probability, confidence: intent.confidence, noul: reply.noul };
+	let base = { probability, confidence: intent.confidence };
 	if (
 		!Object.hasOwn(INTENTS, chosen) || chosen === "none" || probability < THRESHOLDS.intent
-		|| intent.confidence < THRESHOLDS.confidence || reply.noul < THRESHOLDS.noReply
-	) return { ...base, intent: "none", reply: false };
-	return {
-		...base,
-		intent: chosen,
-		reply: REPLYING.has(chosen) && probability >= THRESHOLDS.replyIntent
-			&& intent.confidence >= THRESHOLDS.replyConfidence && reply.noul >= THRESHOLDS.replyNoul,
-	};
+		|| intent.confidence < THRESHOLDS.confidence
+	) {
+		return {
+			...base,
+			intent: "none",
+			reply: false,
+			why: chosen === "none" ? "not-asking" : "unsure",
+		};
+	}
+	if (!REPLYING.has(chosen)) return { ...base, intent: chosen, reply: false, why: "not-asking" };
+	if (probability < THRESHOLDS.replyIntent || intent.confidence < THRESHOLDS.replyConfidence) {
+		return { ...base, intent: chosen, reply: false, why: "below-reply-threshold" };
+	}
+	return { ...base, intent: chosen, reply: true };
+}
+
+/** Errors decisions.ts makes carry only a status or a kind; anything else is reported as unknown. */
+function failureReason(error: unknown): string {
+	let message = error instanceof Error ? error.message : "";
+	if (/^Decisions HTTP \d{3}$/.test(message)) return message.slice("Decisions ".length);
+	if (message === "Decisions request timed out") return "timeout";
+	if (message === "Decisions request aborted") return "aborted";
+	if (message === "Decisions request failed") return "request-failed";
+	if (message === "invalid decision request") return "invalid-request";
+	if (message === "invalid decision") return "invalid-answer";
+	if (message.endsWith("is not a classifier model in Atomic's registry")) return "unknown-model";
+	return error instanceof Error ? `unexpected ${error.name}` : "unexpected";
 }
 
 export async function classify(
@@ -216,22 +232,23 @@ export async function classify(
 		try {
 			let result = await options.decide({
 				state: { items: batch.map(({ state }) => state) },
-				questions: Object.fromEntries(batch.flatMap(({ item }) => [
-					[`intent:${item.id}`, intentQuestion(item.id)],
-					[`reply:${item.id}`, replyQuestion(item.id)],
+				questions: Object.fromEntries(batch.map(({ item }) => [
+					`intent:${item.id}`,
+					intentQuestion(item.id),
 				])),
 			}, { signal: options.signal });
 			for (let { item } of batch) {
-				readings.set(
-					item.id,
-					read(result.answers[`intent:${item.id}`], result.answers[`reply:${item.id}`]),
-				);
+				readings.set(item.id, read(result.answers[`intent:${item.id}`]));
 			}
 		} catch (error) {
-			// A provider's message can quote what was sent, so only the kind of failure is kept.
+			// A provider's message can quote what was sent, so only the reason and the sizes are kept.
 			console.error(
-				"[chat] a reaction could not be read:",
-				error instanceof Error ? error.name : "unknown",
+				"[chat] reactions could not be read",
+				JSON.stringify({
+					reason: failureReason(error),
+					items: batch.length,
+					stateCharacters: JSON.stringify(batch.map(({ state }) => state)).length,
+				}),
 			);
 		}
 	}
