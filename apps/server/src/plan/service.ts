@@ -1605,7 +1605,8 @@ export async function open(
 			sidecar.transcript,
 			sidecar.workflowRuns,
 			sidecar.initiativePaused,
-			backend.plannerKeepsRuns?.(id),
+			// An archived document's Planner ended with it: its runs come back stopped.
+			loaded.channel.archivedAt ? undefined : backend.plannerKeepsRuns?.(id),
 		),
 		conversationPlan: sidecar.conversationPlan ?? restoreConversationPlan(undefined),
 		conversationPlanRetries: sidecar.conversationPlanRetries ?? [],

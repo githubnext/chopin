@@ -2208,6 +2208,24 @@ export async function restoredRuns(
 	state(chat, server, room);
 }
 
+/**
+ * The document was archived: every run its Planner held ends with it, whether the Planner was
+ * attached, disconnected with its work kept, or between two processes of a deploy, so no card is
+ * left running or waiting on a question nobody can answer now. Saved with the document.
+ */
+export async function endRuns(
+	context: Pick<Room, "chat" | "room" | "server" | "persist">,
+): Promise<void> {
+	let { chat, room, server } = context;
+	if (!chat.runs?.length) return;
+	let at = now();
+	let next = chat.runs.map(run => ENDED_RUN[run.status] ? run : stopped(run, at));
+	if (JSON.stringify(next) === JSON.stringify(chat.runs)) return;
+	await context.persist(() => ({ entries: chat.entries, runs: next }));
+	chat.runs = next;
+	state(chat, server, room);
+}
+
 /** Run cards restored with the document; no session survives a reload of the room, so live ones were stopped. */
 export function restoreRuns(runs: Wire.Run[] | undefined): Wire.Run[] | undefined {
 	return runs?.length ? mergeRuns(runs, undefined, now()) : undefined;
