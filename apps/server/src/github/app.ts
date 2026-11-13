@@ -52,6 +52,11 @@ const REQUEST_TIMEOUT_MS = 15_000;
 /** GitHub accepts an App JWT for at most ten minutes; this one is made for nine and reused for eight. */
 const JWT_LIFETIME_S = 9 * 60;
 const JWT_REUSE_MS = 8 * 60_000;
+/**
+ * How long the App's installation on a repository is remembered: every launch on a paired machine
+ * asks for it, and it changes only when someone installs, suspends or removes the App.
+ */
+export const INSTALLATION_CACHE_MS = 5 * 60_000;
 
 function base64url(value: string | Uint8Array) {
 	return Buffer.from(value).toString("base64url");
@@ -77,6 +82,11 @@ export class GitHubAppClient implements GitHubApp {
 	readonly #api: string;
 	readonly #clock: () => number;
 	#jwt: { value: string; until: number } | undefined;
+	/** Installations found, by `owner/name` in lowercase: asked once however many ask at once. */
+	#installations = new Map<
+		string,
+		{ until: number; found: Promise<AppInstallation | undefined> }
+	>();
 
 	constructor(
 		credentials: AppCredentials,
@@ -111,7 +121,31 @@ export class GitHubAppClient implements GitHubApp {
 		return value;
 	}
 
+	/**
+	 * Remembered for `INSTALLATION_CACHE_MS` once found and not suspended; a repository without one,
+	 * or a suspended one, is asked again each time, so installing or resuming the App takes effect at
+	 * once. GitHub refusing a token of a remembered installation (401 or 404) forgets it.
+	 */
 	async installation(owner: string, name: string): Promise<AppInstallation | undefined> {
+		let key = `${owner}/${name}`.toLowerCase();
+		let now = this.#clock();
+		for (let [held, entry] of this.#installations) {
+			if (entry.until <= now) this.#installations.delete(held);
+		}
+		let known = this.#installations.get(key);
+		if (known) return known.found;
+		let entry = { until: now + INSTALLATION_CACHE_MS, found: this.#installation(owner, name) };
+		this.#installations.set(key, entry);
+		let forget = () => {
+			if (this.#installations.get(key) === entry) this.#installations.delete(key);
+		};
+		entry.found.then(found => {
+			if (!found || found.suspended) forget();
+		}, forget);
+		return entry.found;
+	}
+
+	async #installation(owner: string, name: string): Promise<AppInstallation | undefined> {
 		let response = await this.#request(
 			`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/installation`,
 			this.jwt(),
@@ -134,11 +168,26 @@ export class GitHubAppClient implements GitHubApp {
 		name: string,
 		permissions: AppPermissions,
 	): Promise<InstallationToken> {
-		let response = await this.#request(
-			`/app/installations/${encodeURIComponent(installation)}/access_tokens`,
-			this.jwt(),
-			{ body: { repositories: [name], permissions } },
-		);
+		let response;
+		try {
+			response = await this.#request(
+				`/app/installations/${encodeURIComponent(installation)}/access_tokens`,
+				this.jwt(),
+				{ body: { repositories: [name], permissions } },
+			);
+		} catch (error) {
+			// The installation is gone, or no longer the App's: it is asked for again next time.
+			if (error instanceof GitHubError && (error.status === 401 || error.status === 404)) {
+				for (let [key, entry] of this.#installations) {
+					void entry.found.then(found => {
+						if (found?.id === installation && this.#installations.get(key) === entry) {
+							this.#installations.delete(key);
+						}
+					}, () => {});
+				}
+			}
+			throw error;
+		}
 		let item = record(await response!.json().catch(() => undefined));
 		let expiresAt = typeof item?.expires_at === "string" ? Date.parse(item.expires_at) : NaN;
 		if (!item || typeof item.token !== "string" || !item.token || Number.isNaN(expiresAt)) {

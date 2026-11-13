@@ -73,6 +73,45 @@ describe("the GitHub App acting as itself", () => {
 		claims(calls[0]!.bearer);
 	});
 
+	it("remembers an installation found for minutes, never a missing or suspended one, and forgets one GitHub no longer takes", async () => {
+		let answers: Record<string, [number, unknown?]> = {
+			"GET /repos/octo-org/score/installation": [200, {
+				id: 77,
+				suspended_at: null,
+				permissions: {},
+			}],
+			"GET /repos/octo-org/paused/installation": [200, {
+				id: 78,
+				suspended_at: "2026-11-01T00:00:00Z",
+				permissions: {},
+			}],
+			"POST /app/installations/77/access_tokens": [404],
+		};
+		let { client, calls } = github(answers);
+		let asked = (path: string) => calls.filter(call => call.path === path).length;
+		let score = "/repos/octo-org/score/installation";
+		// Asked once, however many launches ask at once and for a while after.
+		await Promise.all([
+			client.installation("octo-org", "score"),
+			client.installation("Octo-Org", "Score"),
+		]);
+		expect(await client.installation("octo-org", "score")).toMatchObject({ id: "77" });
+		expect(asked(score)).toBe(1);
+		// A repository without one, or a suspended one, is asked each time.
+		await client.installation("octo-org", "other");
+		await client.installation("octo-org", "other");
+		expect(asked("/repos/octo-org/other/installation")).toBe(2);
+		await client.installation("octo-org", "paused");
+		await client.installation("octo-org", "paused");
+		expect(asked("/repos/octo-org/paused/installation")).toBe(2);
+		// GitHub no longer takes it: the next launch asks again.
+		await expect(client.token("77", "score", { contents: "write" })).rejects.toMatchObject({
+			status: 404,
+		});
+		await client.installation("octo-org", "score");
+		expect(asked(score)).toBe(2);
+	});
+
 	it("mints a token for one repository with exactly the permissions asked", async () => {
 		let { client, calls } = github({
 			"POST /app/installations/77/access_tokens": [201, {
