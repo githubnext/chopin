@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 
 import { Sessions } from "../../auth/session";
+import * as Chat from "../../chat/service";
+import * as Plan from "../../plan/service";
 import * as Store from "../../questions/store";
 import { hostInputRoom } from "../../testing/decisions";
 import { expectPlainStatus } from "../../testing/plain-words";
@@ -16,8 +18,9 @@ import { untilUnpaused } from "../atomic/full";
 import { createRemoteAdapter } from "./adapter";
 import { PlannerAttachments } from "./attachments";
 
+import type { DocumentRoom } from "../../agent/tools";
 import type { Lease } from "../../storage/model";
-import type { PlannerAttachment } from "./attachments";
+import type { PlannerAttachment, PlannerAttachmentOptions } from "./attachments";
 import type { RemotePlanner } from "./registry";
 
 const OFFER = "resumable-sessions, restart-notice";
@@ -119,7 +122,7 @@ async function deploy(input: Record<string, unknown> = ASK_CONFIRM, asked = 1) {
 	async function cut(
 		windowMs = WINDOW_MS,
 		spent: { beforeWrite?: number; beforeRelease?: number; beforeTakeover?: number } = {},
-		takeover: { failWrites?: boolean } = {},
+		takeover: { failWrites?: boolean; options?: PlannerAttachmentOptions } = {},
 	) {
 		first.attachments.shutdown();
 		let rows = first.attachments.freeze(windowMs);
@@ -144,6 +147,7 @@ async function deploy(input: Record<string, unknown> = ASK_CONFIRM, asked = 1) {
 			},
 			restoredRuns: (id, outcome) => events.push([`runs:${outcome}`, id]),
 			missed: (id, cause) => events.push([`missed:${cause}`, id]),
+			...takeover.options,
 		});
 		let changes: PlannerAttachment[] = [];
 		attachments.onChange((_id, status) => changes.push(status));
@@ -189,13 +193,14 @@ async function deploy(input: Record<string, unknown> = ASK_CONFIRM, asked = 1) {
 
 /**
  * The second process opens the document again from what the first stored, as the first request
- * for it does, so the questions its rebuilt hold's client left open are asked of the members again.
+ * for it does, so the questions its rebuilt hold's client left open are asked of the members again,
+ * and Chat shows what the sessions it rebuilt report and ask, as `main.ts` wires them.
  */
 async function reopen(
 	d: Awaited<ReturnType<typeof deploy>>,
 	next: Awaited<ReturnType<Awaited<ReturnType<typeof deploy>>["cut"]>>,
 ) {
-	await d.f.close();
+	if (!d.closed.first) await d.f.close();
 	d.closed.first = true;
 	let unsent: string[] = [];
 	let g = await hostInputRoom(undefined, {
@@ -203,10 +208,32 @@ async function reopen(
 		channelId: d.f.channelId,
 		lease: d.f.lease,
 		backend: {
+			// The fixture's document and the link's have their own ids: this is the link's.
+			plannerKeepsRuns: () => next.attachments.restoredWork(d.channel.id),
 			rejoinPlannerQuestions: (plan, server) =>
 				next.attachments.rejoinInputs(d.channel.id, {
 					join: (asked, signal) => rejoinInput({ id: plan.id, plan, server }, asked, signal),
 					unsent: decisions => unsent.push(...decisions),
+					live: () => !plan.persistence.closing,
+					humanInput: (hold, report) =>
+						createHumanInput(
+							{ id: plan.id, plan, server, anchors() {} } as DocumentRoom,
+							hold,
+							report,
+						),
+					runs: (session, runs, down) =>
+						void Chat.rebuiltRuns(
+							{
+								chat: plan.chat,
+								room: plan.id,
+								server,
+								persist: chat => Plan.persist(plan, chat),
+								auth: { storage: d.f.storage },
+							},
+							session,
+							runs,
+							down,
+						),
 				}),
 		},
 	});
@@ -781,5 +808,117 @@ describe("a remote Planner whose link a cut closed", () => {
 		await until(() => d.first.attachments.status(d.channel.id).state === "held");
 		let rows = d.first.attachments.freeze(WINDOW_MS);
 		expect(rows).toEqual([]);
+	});
+});
+
+describe("a workflow run its client carries on through a restart", () => {
+	const TRUST = {
+		method: "confirm",
+		title: "Trust the toolchain?",
+		message: "Its checks pass.",
+	} as const;
+
+	/** The first process's Chat shows the run as its retained session reported it, and stores it. */
+	async function shown(d: Awaited<ReturnType<typeof deploy>>) {
+		d.f.plan.chat.runs = [run];
+		await Plan.persist(d.f.plan, () => ({
+			entries: d.f.plan.chat.entries,
+			runs: [run],
+			initiativePaused: false,
+		}));
+	}
+
+	/** The client is back a second after the restart, before any browser opens the document. */
+	async function resumed(
+		d: Awaited<ReturnType<typeof deploy>>,
+		next: Awaited<ReturnType<Awaited<ReturnType<typeof deploy>>["cut"]>>,
+	) {
+		let client = await returns(d, next);
+		client.send({ type: "resume", sessions: [{ session: d.sessionId, requests: ["ask-1"] }] });
+		await client.next("resumed");
+		client.send({
+			type: "runs",
+			session: d.sessionId,
+			active: ["run"],
+			paused: [],
+			cards: [{
+				...run,
+				updated: 2,
+				stages: [{ id: "verify", name: "verify", status: "running" as const }],
+			}],
+		});
+		return client;
+	}
+
+	it("is shown running, not stopped, when its document opens after the client is back, with the stages it reports", async () => {
+		let d = await deploy();
+		await shown(d);
+		let next = await d.cut();
+		await resumed(d, next);
+		await Bun.sleep(50);
+		let { g } = await reopen(d, next);
+		expect(g.plan.chat.runs?.map(card => card.status)).toEqual(["running"]);
+		await until(() => g.plan.chat.runs?.[0]?.stages.some(stage => stage.id === "verify") === true);
+		expect(g.plan.chat.runs).toMatchObject([{ id: "run", status: "running", updated: 2 }]);
+		expect(g.plan.chat.runs?.[0]?.disconnected).toBeUndefined();
+	});
+
+	it("asks the question it asks after the restart as a Decision, and gives the client the answer", async () => {
+		let d = await deploy();
+		await shown(d);
+		let next = await d.cut();
+		let client = await resumed(d, next);
+		let { g } = await reopen(d, next);
+		client.send({
+			type: "input-request",
+			request: "ask-2",
+			session: d.sessionId,
+			workflowRunId: "run",
+			input: TRUST,
+		});
+		let asked = (await g.cards(2)).find(card => card.id !== d.card.id);
+		expect(asked!.definition.questions[0]!.question).toContain("Trust the toolchain?");
+		await g.answer(asked!.id, [0]);
+		expect(await client.next("input-result")).toMatchObject({
+			request: "ask-2",
+			status: "answered",
+			value: true,
+		});
+	});
+
+	it("opens its document to ask the question when nobody has it open, and keeps it open until the answer", async () => {
+		let d = await deploy();
+		await shown(d);
+		await d.f.close();
+		d.closed.first = true;
+		let opened: Array<Awaited<ReturnType<typeof reopen>>> = [];
+		let released = 0;
+		let next: Awaited<ReturnType<typeof d.cut>> = await d.cut(WINDOW_MS, {}, {
+			options: {
+				openDocument: async () => {
+					opened.push(await reopen(d, next));
+					return () => void released++;
+				},
+			},
+		});
+		let client = await resumed(d, next);
+		client.send({
+			type: "input-request",
+			request: "ask-2",
+			session: d.sessionId,
+			workflowRunId: "run",
+			input: TRUST,
+		});
+		await until(() => opened.length === 1);
+		let { g } = opened[0]!;
+		let asked = (await g.cards(2)).find(card => card.id !== d.card.id);
+		expect(released).toBe(0);
+		await g.answer(asked!.id, [0]);
+		expect(await client.next("input-result")).toMatchObject({
+			request: "ask-2",
+			status: "answered",
+			value: true,
+		});
+		await until(() => released === 1);
 	});
 });

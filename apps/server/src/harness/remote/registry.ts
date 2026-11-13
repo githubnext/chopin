@@ -1,6 +1,6 @@
 import type { FullPlanner } from "../atomic/full";
 import type { HumanInput, HumanInputStatus } from "../atomic/human-input";
-import type { AgentLink } from "./link";
+import type { AgentLink, RebuiltDocument } from "./link";
 
 /**
  * What Chopin keeps for one Planner session whose model runs in an attached
@@ -55,6 +55,11 @@ export type RemotePlanner =
 		forkedNatively?: boolean;
 		/** Reports `{ session, turn }` as each remote turn starts, so a thread can fork from it. */
 		onRemoteTurn?: (point: { session: string; turn: string }) => void;
+		/**
+		 * A session a restart rebuilt, which no turn of this process opened: how what its client
+		 * reports and asks reaches the document.
+		 */
+		rebuilt?: RebuiltDocument;
 	};
 
 let planners = new Map<string, RemotePlanner>();

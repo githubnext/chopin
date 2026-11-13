@@ -1422,9 +1422,13 @@ A returning client attaches, and sends `resume` as usual:
   sent, once. An answer given before the client is back waits and is sent after `resumed`; one
   given after goes straight to it. No turn of its own follows, because the question is waited
   on. A question a client resumes without, because it no longer waits on it, is withdrawn, as
-  `input-cancel` withdraws it. Each Stop held for the client is sent first. The client's
-  `runs` for a resumed session update nothing Chat shows until a Planner turn starts a session
-  of its own.
+  `input-cancel` withdraws it. Each Stop held for the client is sent first. No turn of the new
+  process opened a resumed session, yet it is the document's as before: its `runs` are Chat's
+  run cards, and a document that opens after the client is back shows them live, never stopped,
+  with what the client last reported. A question it asks after the restart, an `input-request`
+  on the resumed session, becomes Decisions as one asked before it did, and its answer goes to
+  that request; the document is opened for it if nobody has it open, and kept open until the
+  question ends.
 - **An answer its client is never given.** When the client that asked does not come back to
   resume (it attaches with nothing to resume, or resumes without the session), an answer a
   member had given meanwhile cannot reach its request. It reaches the Planner once, as a turn of
