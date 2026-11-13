@@ -4,7 +4,7 @@
  * makes it text before it merges.
  */
 
-import { content, expect, test, written } from "./room";
+import { content, edit, expect, test, written } from "./room";
 
 import type { Page } from "@playwright/test";
 
@@ -345,4 +345,39 @@ test("after the handle menu's Duplicate the editor keeps the keyboard on the cop
 	await expect.poll(editing, { message: "the editor has the keyboard after Delete" }).toBe(true);
 	await page.keyboard.press("ControlOrMeta+z");
 	await written(page, room, /^(?![\s\S]*Two\.\n\nTwo\.)[\s\S]*^One\.\n\nTwo\.\n\nThree\.$/m);
+});
+
+test("Escape and Mod+/ right after a press act on the block pressed, on a desktop and a phone", async ({ join, seed }) => {
+	await seed("One.\n\nTwo.\n\nThree.\n");
+	let page = await join("ana");
+	let one = (await content(page).getByText("One.").boundingBox())!;
+	let two = (await content(page).getByText("Two.").boundingBox())!;
+	let three = (await content(page).getByText("Three.").boundingBox())!;
+
+	await page.mouse.click(one.x + 20, one.y + 8);
+	await settle(page);
+	await page.mouse.click(two.x + 20, two.y + 8);
+	await page.keyboard.press("Escape");
+	await expect(selected(page)).toHaveText("Two.");
+	await expect(content(page)).toBeFocused();
+
+	await page.mouse.click(three.x + 20, three.y + 8);
+	await page.keyboard.press("ControlOrMeta+/");
+	let menu = page.getByRole("menu", { name: "Block" });
+	await expect(menu).toBeVisible();
+	await expect(selected(page)).toHaveText("Three.");
+	await page.keyboard.press("Escape");
+
+	let phone = await join("bo", {
+		hasTouch: true,
+		isMobile: true,
+		viewport: { width: 390, height: 844 },
+	});
+	await edit(phone);
+	let phoneTwo = (await content(phone).getByText("Two.").boundingBox())!;
+	await phone.mouse.click(phoneTwo.x + 20, phoneTwo.y + 8);
+	await phone.keyboard.press("Escape");
+	await expect(selected(phone)).toHaveText("Two.");
+	await expect(content(phone)).toBeFocused();
+	await expect(phone.getByRole("button", { name: "Block options" })).toBeVisible();
 });

@@ -23,10 +23,8 @@ import {
 	$createParagraphNode,
 	$createRangeSelection,
 	$getNodeByKey,
-	$getSelection,
 	$isElementNode,
 	$isParagraphNode,
-	$isRangeSelection,
 	$isRootNode,
 	$setSelection,
 	COMMAND_PRIORITY_CRITICAL,
@@ -47,6 +45,7 @@ import {
 	$held,
 	$hold,
 	$isBlock,
+	$liveRangeSelection,
 	$removeBlocks,
 } from "./block-selection";
 
@@ -345,10 +344,8 @@ export function BlockHandlePlugin() {
 				if (!mod || event.shiftKey || event.altKey || event.key !== "/") return false;
 				let found = $held(editor);
 				if (!found) {
-					let selection = $getSelection();
-					let block = $isRangeSelection(selection)
-						? $blockOf(selection.anchor.getNode())
-						: undefined;
+					let selection = $liveRangeSelection(editor);
+					let block = selection ? $blockOf(selection.anchor.getNode()) : undefined;
 					if (!block) return false;
 					$hold(editor, block, block);
 					found = $held(editor);
