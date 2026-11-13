@@ -60,7 +60,7 @@ import type { PointerOption } from "../mention-sources";
 import type { MentionCandidate } from "../mentions";
 import type { ComposerDraft, ReferenceTarget, SendFailure } from "../references";
 import type { TranscriptDecisions } from "../transcript";
-import type { ModelControl } from "../use-model-choice";
+import type { ComposerModel } from "../use-model-choice";
 import type { ThreadViewState } from "./thread-model";
 
 export type ThreadPanelProps = {
@@ -83,7 +83,7 @@ export type ThreadPanelProps = {
 	repository: { id: string; owner: string; name: string };
 	referencesEnabled: boolean;
 	sendAcknowledgements: boolean;
-	modelControl?: ModelControl;
+	modelControl?: ComposerModel;
 	modelNotice?: ComposerNotice;
 	decisions?: TranscriptDecisions;
 	loadStages: (

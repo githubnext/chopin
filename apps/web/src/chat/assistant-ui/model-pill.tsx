@@ -18,11 +18,12 @@ import {
 	ModelSelectorRoot,
 	ModelSelectorSearch,
 } from "@/components/assistant-ui/elements/model-selector";
-import { PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import {
 	chooseLevel,
 	chooseModel,
 	fallbackNotice,
+	pendingLabel,
 	triggerLabel,
 	triggerText,
 	triggerTitle,
@@ -30,7 +31,43 @@ import {
 import { modelSelection } from "./model-options";
 import { ScrollThumb } from "./scroll-thumb";
 
-import type { ModelControl } from "../use-model-choice";
+import type { ModelControl, PendingModel } from "../use-model-choice";
+
+/**
+ * The pill while the document's machine starts its Planner and has yet to say which models it runs:
+ * the same pill in the same place, with the saved choice's words (or _Model_), in quieter ink that
+ * breathes while the machine connects (still under reduced motion), so the composer is
+ * whole from the start and the real pill takes its place without moving anything. The machine's
+ * connecting dots stay on its own button, never in Chat. Nothing opens yet, so it is disabled for
+ * assistive technology and draws no hover; its name says what it waits for.
+ */
+export function ModelPillPending({ model }: { model: PendingModel }) {
+	let label = pendingLabel(model);
+	// The real pill's own trigger, the copied popover's, under a popover that never opens: the pill
+	// is then the trigger the real one is, with the type scale its slot gives it (`geometry.css`),
+	// so the two are one size, and it names the popup it will open once the models are in.
+	return (
+		<Popover onOpenChange={() => {}} open={false}>
+			<PopoverTrigger
+				render={
+					<button
+						aria-busy="true"
+						aria-disabled="true"
+						aria-label={label}
+						className="btn btn-sm btn-ghost composer-model-pill"
+						data-press="none"
+						title={label}
+						type="button"
+					>
+						<span className="composer-model-name">{model.name}</span>
+						{model.level && <span className="composer-model-level">{model.level}</span>}
+						<ChevronIcon aria-hidden="true" className="composer-model-chevron" size={12} />
+					</button>
+				}
+			/>
+		</Popover>
+	);
+}
 
 export function ModelPill({ control }: { control: ModelControl }) {
 	let { catalog, choice, choose, modelName } = control;

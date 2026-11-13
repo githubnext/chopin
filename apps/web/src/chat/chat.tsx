@@ -86,7 +86,7 @@ import { useFiles } from "./attachments/use-files";
 import { dictationSource, useDictation } from "./dictation/use-dictation";
 import { currentShortcutPlatform, shortcutLabel } from "../shortcuts";
 import { composerModelNotice } from "./model-picker-state";
-import { useModelChoice } from "./use-model-choice";
+import { pendingModel, useModelChoice } from "./use-model-choice";
 import {
 	chatAuthors,
 	filterMentions,
@@ -156,6 +156,7 @@ import type { ReferenceRow } from "./reference-picker";
 import type { MentionCandidate } from "./mentions";
 import type { ChatSendPayload, ComposerDraft, ReferenceTarget, SendFailure } from "./references";
 import type { Wire as Socket } from "../wire";
+import type { ComposerModel } from "./use-model-choice";
 
 export type ChatProps = {
 	/** The child document open beside this Chat, sent with a Planner message as its focus. */
@@ -233,6 +234,12 @@ export type ChatProps = {
 	 * How to fix unfolds, and the machine button's choice to open from them.
 	 */
 	machine?: { presence?: PlannerPresence; fix?: MachineFix; choose?: () => void };
+	/**
+	 * Where the document's Planner is coming from its machine, as the room last said, whether or not
+	 * the machine is named yet: `starting` while the machine starts it (and has not said it can't),
+	 * `attached` once it is there. The composer's model pill waits for its models meanwhile.
+	 */
+	plannerComing?: "starting" | "attached";
 	/** What the transcript tells the banner: a reply running, its size, and whether it is current. */
 	onTranscript?: (facts: TranscriptFacts) => void;
 };
@@ -326,6 +333,7 @@ export function Chat(
 		emptyNotice,
 		banner,
 		machine,
+		plannerComing,
 		onTranscript,
 		onShowDecisions,
 		build,
@@ -446,12 +454,28 @@ export function Chat(
 		savedName: modelSavedName,
 		unreadable: modelUnreadable,
 		commands: agentCommands,
+		waiting: modelWaiting,
 	} = useModelChoice({
 		wire,
 		room,
 		connected,
 		enabled: agent && !readonly && !archived,
 	});
+	// The pill from the moment the document opens: it waits in place while the machine starts the
+	// Planner, and becomes the real pill when the models arrive.
+	let waitingWith = modelControl ? undefined : pendingModel(modelWaiting, plannerComing);
+	let waitingName = waitingWith?.name;
+	let waitingLevel = waitingWith?.level;
+	let pillModel = useMemo<ComposerModel | undefined>(
+		() =>
+			modelControl
+				?? (waitingName === undefined ? undefined : {
+					pending: true,
+					name: waitingName,
+					...(waitingLevel ? { level: waitingLevel } : {}),
+				}),
+		[modelControl, waitingName, waitingLevel],
+	);
 	// A refused or unreadable choice has its own notice. A fallback is shown only until the
 	// transcript records it. One object while its words stand keeps the composer's transition stable.
 	let modelShown = composerModelNotice(
@@ -1434,7 +1458,7 @@ export function Chat(
 					handle={handle}
 					key={openThreadView.rootId}
 					loadStages={loadStages}
-					modelControl={modelControl}
+					modelControl={pillModel}
 					modelNotice={modelNotice}
 					offline={offline}
 					onAlsoToChatChange={value =>
@@ -1636,7 +1660,7 @@ export function Chat(
 				inputRef={textarea}
 				agent={!!agent}
 				alone={alone}
-				model={modelControl}
+				model={pillModel}
 				chopin={agent ? { disabled: !draftable || sending, onAsk: askChopin } : undefined}
 				banner={leadNode
 					? { id: bannerId, node: leadNode, invalid: slot.lead === "send" }

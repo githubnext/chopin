@@ -271,9 +271,14 @@ describe("the stored choice a room is told where nothing can be chosen", () => {
 			modelName: "Large",
 		});
 		// No client is attached, or it has yet to report (a restart, a blip): nothing is said of the
-		// choice, which is neither gone nor honoured, and the machine's own status speaks.
+		// choice, which is neither gone nor honoured, and the machine's own status speaks. The
+		// stored choice is told only as what the composer waits with.
 		known = false;
-		expect(await modelState(deps, opened.channel.id)).toEqual({ kind: "chat:model", ts: 0 });
+		expect(await modelState(deps, opened.channel.id)).toEqual({
+			kind: "chat:model",
+			ts: 0,
+			waiting: { choice: chosen, modelName: "Large" },
+		});
 		// A catalog carries the choice whatever else is known, and nothing stored was changed.
 		offered = catalog;
 		expect(await modelState(deps, opened.channel.id)).toEqual({
@@ -284,13 +289,29 @@ describe("the stored choice a room is told where nothing can be chosen", () => {
 			modelName: "Large",
 		});
 		expect(await opened.storage.plannerModelChoices.get(opened.channel.id)).toMatchObject(chosen);
-		// Nobody chose: there is no choice to say, known or not.
+		// Nobody chose: there is no choice to say, known or not; unknown, the composer still waits.
 		let fresh = await sets(() => undefined);
 		fresh.deps.known = () => true;
 		expect(await modelState(fresh.deps, fresh.opened.channel.id)).toEqual({
 			kind: "chat:model",
 			ts: 0,
 		});
+		fresh.deps.known = () => false;
+		expect(await modelState(fresh.deps, fresh.opened.channel.id)).toEqual({
+			kind: "chat:model",
+			ts: 0,
+			waiting: {},
+		});
+		// Unknown and not on its way (a Planner held while its client is away): nothing to wait for.
+		fresh.deps.incoming = () => false;
+		expect(await modelState(fresh.deps, fresh.opened.channel.id)).toEqual({
+			kind: "chat:model",
+			ts: 0,
+		});
+		deps.incoming = () => false;
+		known = false;
+		offered = undefined;
+		expect(await modelState(deps, opened.channel.id)).toEqual({ kind: "chat:model", ts: 0 });
 	});
 
 	test("a turn that falls back where what the harness offers is unknown says so once, so the room is told the choice", async () => {
@@ -307,8 +328,13 @@ describe("the stored choice a room is told where nothing can be chosen", () => {
 				known = true;
 			},
 		};
-		// Before any turn nothing is said of the choice, and nothing has fallen back.
-		expect(await modelState(silent, opened.channel.id)).toEqual({ kind: "chat:model", ts: 0 });
+		// Before any turn nothing is said of the choice but what the composer waits with, and nothing
+		// has fallen back.
+		expect(await modelState(silent, opened.channel.id)).toEqual({
+			kind: "chat:model",
+			ts: 0,
+			waiting: { choice: { model: "acme/large", thinkingLevel: "high" }, modelName: "Large" },
+		});
 		// The turn found no catalog to check it against: the default runs, with the notice, and the
 		// harness is told that it did.
 		expect(await turnModel(silent, opened.channel.id)).toEqual({

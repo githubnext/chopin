@@ -20,6 +20,7 @@ import {
 	harnessFor,
 	plannerCatalog,
 	plannerCommands,
+	plannerOfferIncoming,
 	plannerOfferKnown,
 	plannerRanWithoutOffer,
 	plannerSteers,
@@ -1193,6 +1194,12 @@ const modelChoices: ModelChoiceDeps = {
 		});
 	},
 	known: channelId => plannerOfferKnown(config.harness, channelId),
+	incoming: channelId =>
+		plannerOfferIncoming(
+			config.harness,
+			channelId,
+			(plannerAttachments?.status(channelId).state ?? "none") !== "none",
+		),
 	fellBack: channelId => {
 		if (plannerRanWithoutOffer(config.harness, channelId)) announceModel(channelId);
 	},

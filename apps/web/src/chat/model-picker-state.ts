@@ -134,6 +134,33 @@ export function triggerText(
 	return { name, ...(level ? { level: levelLabel(level) } : {}) };
 }
 
+/**
+ * The pill's words while the machine has yet to say which models it runs: the document's saved
+ * model by the name the catalog gave it when it was chosen, else just _Model_, and the saved level
+ * as the harness wrote it. Its name says what it waits for, since nothing opens yet.
+ */
+export function pendingTrigger(
+	choice: Choice | undefined,
+	modelName?: string,
+): { pending: true; name: string; level?: string } {
+	let name = choice?.model && modelName ? modelName : "Model";
+	let level = choice?.thinkingLevel ? levelLabel(choice.thinkingLevel) : undefined;
+	return { pending: true, name, ...(level ? { level } : {}) };
+}
+
+/**
+ * The waiting pill's accessible name and tooltip: what it waits for, then the saved choice. It never
+ * begins _Model:_, the real pill's name, so nothing takes one for the other.
+ */
+export function pendingLabel(trigger: { name: string; level?: string }): string {
+	let saved = [
+		trigger.name === "Model" ? undefined : trigger.name,
+		trigger.level && `reasoning ${trigger.level}`,
+	]
+		.filter(Boolean).join(", ");
+	return saved ? `Loading the machine's models (${saved})` : "Loading the machine's models";
+}
+
 /** The words a person who cannot see the trigger hears: the model, its level, and what went missing. */
 export function triggerLabel(
 	catalog: Catalog,

@@ -457,6 +457,14 @@ export declare namespace Chat {
 		/** The chosen model's catalog name, kept when the model is no longer offered. */
 		modelName?: string;
 		/**
+		 * Present while what the harness offers is not known yet (a remote Planner with no client
+		 * attached, or one that offered its models and has yet to report them), with the stored
+		 * choice and its name, if any: what a composer shows while it waits for the models. It is
+		 * not `choice`, which says only what a known offer honours or not. Absent once the offer is
+		 * known, though it may be nothing, and for every harness that always knows.
+		 */
+		waiting?: { choice?: ModelChoice; modelName?: string };
+		/**
 		 * What `/` offers beyond Chopin's own commands: the commands the document's agent reports,
 		 * in the order, spelling and with the duplicates it reported them. Absent where it
 		 * reports none (an older client, or a harness with no commands), and the composer then

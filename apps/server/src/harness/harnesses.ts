@@ -213,6 +213,20 @@ export function plannerOfferKnown(harness: string, channelId: string): boolean {
 }
 
 /**
+ * Whether the document's Planner's models are on their way, so a composer may wait for them: an
+ * attached remote client that offered its models and has yet to report them, or, with none
+ * attached, a Planner nobody holds (`held` false), which a machine may be starting. A Planner held
+ * while its client is away (a deploy's hand-over window, a machine that dropped) is not on its way:
+ * what it offered was told before it went, and the room sees nothing change until it is back.
+ * Never for any other harness, which always knows what it offers.
+ */
+export function plannerOfferIncoming(harness: string, channelId: string, held: boolean): boolean {
+	if (harness !== "remote") return false;
+	let link = attachedLink(channelId);
+	return link ? link.catalogPending : !held;
+}
+
+/**
  * A turn has fallen back on a saved choice for want of a catalog its remote Planner's client
  * offered and never reported. The wait is over for that client (`plannerOfferKnown` is then true
  * until it leaves), so what the turn did can be told. False where no client is attached, and for
