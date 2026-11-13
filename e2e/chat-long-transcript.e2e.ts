@@ -71,12 +71,23 @@ async function layouts(cdp: CDPSession): Promise<number> {
 	return metrics.find(metric => metric.name === "LayoutCount")!.value;
 }
 
+/**
+ * Wait for the Projects sidebar's initial document list to mount so a slow server under parallel
+ * workers does not land that mount (~10 elements per sibling channel in the shared repository)
+ * inside a trace of Chat's own hover and scroll work.
+ */
+async function sidebarReady(page: Page) {
+	await expect(page.locator(".project-sidebar-documents")).toBeVisible();
+}
+
 test("the pointer crossing a long Chat's messages restyles them, not the whole transcript", async ({ join, page, seed }) => {
 	await opened(seed);
+	await page.routeWebSocket("**/ws/sidebar", () => {});
 	await join("ana");
 	let chat = chatOf(page);
 	await expect(chat.locator(`[data-chat-message-id="message-${MESSAGES - 1}"]`)).toBeVisible();
 	await complete(chat);
+	await sidebarReady(page);
 	await settle(page);
 	let elements = await chat.evaluate(element => element.querySelectorAll("*").length);
 	let box = (await chat.locator("[data-chat-scroll]").boundingBox())!;
@@ -84,16 +95,19 @@ test("the pointer crossing a long Chat's messages restyles them, not the whole t
 	await settle(page);
 
 	let browser = page.context().browser()!;
-	await browser.startTracing(page, { categories: ["devtools.timeline"] });
+	await browser.startTracing(page, { categories: ["devtools.timeline", "blink.user_timing"] });
+	await page.evaluate(() => performance.mark("chat-trace-target"));
 	for (let y = box.y + 80; y < box.y + box.height - 120; y += 12) {
 		await page.mouse.move(box.x + box.width / 2, y);
 		await settle(page);
 	}
 	let trace = JSON.parse((await browser.stopTracing()).toString()) as {
-		traceEvents: { name: string; args?: { elementCount?: number } }[];
+		traceEvents: { name: string; pid?: number; args?: { elementCount?: number } }[];
 	};
+	let pid = trace.traceEvents.find(event => event.name === "chat-trace-target")?.pid;
+	expect(pid).toBeDefined();
 	let restyled = trace.traceEvents
-		.filter(event => event.name === "UpdateLayoutTree")
+		.filter(event => event.pid === pid && event.name === "UpdateLayoutTree")
 		.map(event => event.args?.elementCount ?? 0);
 	expect(restyled.length).toBeGreaterThan(0);
 	// Hiding every other message's toolbar with `:has()` of the transcript restyled all of it, and
@@ -103,10 +117,14 @@ test("the pointer crossing a long Chat's messages restyles them, not the whole t
 
 test("scrolling a long Chat under the pointer and sweeping it forces no layout and restyles only the rows the pointer crosses", async ({ join, page, seed }) => {
 	await opened(seed);
+	// Parallel workers share the repository and push sidebar:catalogue updates over /ws/sidebar; keep
+	// the initial HTTP sidebar list on screen without mid-trace cross-test pushes.
+	await page.routeWebSocket("**/ws/sidebar", () => {});
 	await join("ana");
 	let chat = chatOf(page);
 	await expect(chat.locator(`[data-chat-message-id="message-${MESSAGES - 1}"]`)).toBeVisible();
 	await complete(chat);
+	await sidebarReady(page);
 	let scroller = chat.locator(".chat-split-main [data-chat-scroll]");
 	let box = (await scroller.boundingBox())!;
 	let x = box.x + box.width / 2;
@@ -115,8 +133,13 @@ test("scrolling a long Chat under the pointer and sweeping it forces no layout a
 
 	let browser = page.context().browser()!;
 	await browser.startTracing(page, {
-		categories: ["devtools.timeline", "disabled-by-default-devtools.timeline.stack"],
+		categories: [
+			"devtools.timeline",
+			"blink.user_timing",
+			"disabled-by-default-devtools.timeline.stack",
+		],
 	});
+	await page.evaluate(() => performance.mark("chat-trace-target"));
 	// The wheel scrolls the rows under the resting pointer, which moves its hover from row to row.
 	for (let step = 0; step < 20; step++) {
 		await page.mouse.wheel(0, -90);
@@ -130,14 +153,18 @@ test("scrolling a long Chat under the pointer and sweeping it forces no layout a
 		traceEvents: {
 			name: string;
 			ph?: string;
+			pid?: number;
 			args?: { elementCount?: number; beginData?: { stackTrace?: Frame[] } };
 		}[];
 	};
+	let pid = trace.traceEvents.find(event => event.name === "chat-trace-target")?.pid;
+	expect(pid).toBeDefined();
+	let pageEvents = trace.traceEvents.filter(event => event.pid === pid);
 	// A layout or a style pass a script of the page asked for carries its stack, whose innermost frame
 	// of a script the page loaded says whose. Playwright's own scripts name no URL.
 	let forced = [
 		...new Set(
-			trace.traceEvents
+			pageEvents
 				.filter(event => event.name === "Layout" || event.name === "UpdateLayoutTree")
 				.flatMap(event => {
 					let frame = event.args?.beginData?.stackTrace?.find(value => value.url);
@@ -151,7 +178,7 @@ test("scrolling a long Chat under the pointer and sweeping it forces no layout a
 				}),
 		),
 	];
-	let restyled = trace.traceEvents
+	let restyled = pageEvents
 		.filter(event => event.name === "UpdateLayoutTree" && event.ph === "X")
 		.map(event => event.args?.elementCount ?? 0);
 	// The rows moved and the last one swept shows its toolbar.
