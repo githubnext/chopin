@@ -206,10 +206,13 @@ export function agentLink(
 ): AgentLink {
 	let channelId: string | undefined;
 	let link: AgentLink;
-	let locate = (document: string) =>
+	// A machine's credential names its document: one the link names by its id or its address is read
+	// without asking GitHub for the repository again (see `MachinePlanners.granted`).
+	let locate = async (document: string) =>
 		machine
-			? machine.planners.locate(machine.machine, document)
-			: locateDocument(auth, caller, document);
+			? await machine.planners.granted(machine.machine, machine.channelId, document)
+				?? await machine.planners.locate(machine.machine, document)
+			: await locateDocument(auth, caller, document);
 	async function attach(message: { document: string }): Promise<AttachOutcome> {
 		let located = await locate(message.document);
 		if (located === "forbidden") {

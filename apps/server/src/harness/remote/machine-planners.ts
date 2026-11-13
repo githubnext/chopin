@@ -12,12 +12,15 @@
 
 import { createHash, randomBytes } from "node:crypto";
 
+import { ownOrigin } from "../../auth/config";
 import { MachineError } from "../../auth/machines";
+import { documentUrl } from "../../channels/document-url";
 import { GitHubTokenError } from "../../github/client";
 import { locateDocument } from "../../mcp/hosted";
 
 import type { HostedAuth } from "../../auth/routes";
-import type { StoredMachine } from "../../storage/model";
+import type { Repository } from "../../github/client";
+import type { ChannelRecord, StoredMachine } from "../../storage/model";
 
 /** How long a Planner credential can open a link; an open link no longer depends on it. */
 export const PLANNER_CREDENTIAL_MS = 15 * 60_000;
@@ -107,6 +110,45 @@ export class MachinePlanners {
 		let stored = await this.#auth.machines.current(machine.id);
 		await this.#auth.machines.access(stored);
 		return stored;
+	}
+
+	/**
+	 * The document of a credential's grant, `channelId`, when `locator` names it by its id or its
+	 * address now, read without asking GitHub for the repository again: its access comes from the
+	 * machine token's installations, which are held a while (`repositoryAccess`), and must be the
+	 * stored repository's, readable. Undefined when `locator` names it no other way it could be told
+	 * without GitHub, so the caller locates it as before; "forbidden" when the machine can't read it.
+	 */
+	async granted(
+		machine: StoredMachine,
+		channelId: string,
+		locator: string,
+	): Promise<{ channel: ChannelRecord; repository: Repository } | "forbidden" | undefined> {
+		let channel = await this.#auth.storage.channels.get(channelId);
+		if (!channel) return undefined;
+		if (locator !== channel.id) {
+			let asked: URL;
+			try {
+				asked = new URL(locator, this.#auth.config.origin);
+			} catch {
+				return undefined;
+			}
+			if (!ownOrigin(this.#auth.config, asked.origin)) return undefined;
+			let address = new URL(
+				await documentUrl(channel, this.#auth.storage.channels),
+				this.#auth.config.origin,
+			);
+			if (asked.pathname.toLowerCase() !== address.pathname.toLowerCase()) return undefined;
+		}
+		let repository = await this.#auth.machines.use(
+			machine,
+			token =>
+				this.#auth.github.repositoryAccess(token, channel.repositoryOwner, channel.repositoryName),
+		);
+		if (!repository?.permissions.pull || repository.id !== channel.repositoryId) {
+			return "forbidden";
+		}
+		return { channel, repository };
 	}
 
 	/** The document a locator names, read with the machine's own GitHub token. */
