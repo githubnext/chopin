@@ -16,7 +16,7 @@ export function agentEntry(id: string, text: string, extra: object = {}): Wire.E
 }
 
 export function scripted(
-	scores?: { intent: string; probability: number; confidence: number; noul: number },
+	scores?: { intent: string; probability: number; confidence: number },
 ) {
 	let requests: JevRequest[] = [];
 	let decide = async (request: JevRequest): Promise<JevResult> => {
@@ -25,9 +25,8 @@ export function scripted(
 		for (let key of Object.keys(request.questions)) {
 			if (key === "input") answers.input = { type: "noul", noul: 0 };
 			if (!key.startsWith("intent:")) continue;
-			let id = key.slice("intent:".length);
-			let { intent, probability, confidence, noul } = scores
-				?? { intent: "confused", probability: 0.9, confidence: 0.88, noul: 0.95 };
+			let { intent, probability, confidence } = scores
+				?? { intent: "confused", probability: 0.9, confidence: 0.88 };
 			let rest = (1 - probability) / 5;
 			answers[key] = {
 				type: "choice",
@@ -40,7 +39,6 @@ export function scripted(
 					]),
 				),
 			};
-			answers[`reply:${id}`] = { type: "noul", noul };
 		}
 		return {
 			model: "fake/classifier",

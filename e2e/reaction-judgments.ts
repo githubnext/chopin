@@ -2,12 +2,18 @@ import type { JevRequest, JevResult } from "../apps/server/src/conversation-plan
 
 const INTENTS = ["confused", "disagree", "approve", "ack", "more", "none"];
 
-const READINGS: Record<string, { intent: string; reply: number }> = {
-	"🤔": { intent: "confused", reply: 0.96 },
-	"🔍": { intent: "more", reply: 0.96 },
-	"👍": { intent: "approve", reply: 0.04 },
-	"🙌": { intent: "approve", reply: 0.04 },
-	"👀": { intent: "ack", reply: 0.04 },
+/**
+ * Typical readings the deployed decisions classifier gave for these emojis on a Planner message
+ * (their probability, with confidence a few points lower); anything else reads as none.
+ */
+const READINGS: Record<string, { intent: string; probability: number }> = {
+	"🤔": { intent: "confused", probability: 0.86 },
+	"😕": { intent: "confused", probability: 0.95 },
+	"🙋": { intent: "more", probability: 0.88 },
+	"🔍": { intent: "more", probability: 0.9 },
+	"👍": { intent: "approve", probability: 0.97 },
+	"🙌": { intent: "approve", probability: 0.95 },
+	"👀": { intent: "ack", probability: 0.96 },
 };
 
 export function reactionJudgment(
@@ -23,16 +29,20 @@ export function reactionJudgment(
 		let id = key.slice("intent:".length);
 		let item = state.items.find(value => value.id === id);
 		let reading = READINGS[item?.reaction.emoji.replaceAll("\uFE0F", "") ?? ""]
-			?? { intent: "none", reply: 0.02 };
+			?? { intent: "none", probability: 0.6 };
 		answers[key] = {
 			type: "choice",
 			choice: reading.intent,
-			confidence: 0.94,
+			confidence: reading.probability - 0.03,
 			probabilities: Object.fromEntries(
-				INTENTS.map(name => [name, name === reading.intent ? 0.95 : 0.05 / (INTENTS.length - 1)]),
+				INTENTS.map(name => [
+					name,
+					name === reading.intent
+						? reading.probability
+						: (1 - reading.probability) / (INTENTS.length - 1),
+				]),
 			),
 		};
-		answers[`reply:${id}`] = { type: "noul", noul: reading.reply };
 	}
 	return {
 		model: "jev-e2e-reactions",

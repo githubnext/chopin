@@ -27,7 +27,7 @@ function item(id: string, emoji: string, text = "I proposed three phases."): Rea
 	};
 }
 
-type Scores = { intent: string; probability: number; confidence: number; noul: number };
+type Scores = { intent: string; probability: number; confidence: number };
 
 function answers(id: string, scores: Scores): Record<string, JevAnswer> {
 	let intents = ["confused", "disagree", "approve", "ack", "more", "none"];
@@ -41,7 +41,6 @@ function answers(id: string, scores: Scores): Record<string, JevAnswer> {
 				intents.map(name => [name, name === scores.intent ? scores.probability : rest]),
 			),
 		},
-		[`reply:${id}`]: { type: "noul", noul: scores.noul },
 	};
 }
 
@@ -65,7 +64,7 @@ function classifier(scores: Scores | ((id: string) => Scores)) {
 	return { decide, requests };
 }
 
-const CLEAR: Scores = { intent: "confused", probability: 0.9, confidence: 0.88, noul: 0.95 };
+const CLEAR: Scores = { intent: "confused", probability: 0.9, confidence: 0.88 };
 
 describe("the toolbar's three reactions", () => {
 	it("are read in code, with or without a variation selector, and never reach the classifier", async () => {
@@ -94,12 +93,12 @@ describe("the toolbar's three reactions", () => {
 });
 
 describe("reading any other emoji", () => {
-	it("sends one request with a Choice per item that includes none, and a companion Noul", async () => {
+	it("sends one request with one Choice per item, which includes none", async () => {
 		let { decide, requests } = classifier(CLEAR);
 		await classify([item("r0", "🤔"), item("r1", "🔍")], { decide });
 		expect(requests).toHaveLength(1);
 		let { questions } = requests[0]!;
-		expect(Object.keys(questions)).toEqual(["intent:r0", "reply:r0", "intent:r1", "reply:r1"]);
+		expect(Object.keys(questions)).toEqual(["intent:r0", "intent:r1"]);
 		let choice = questions["intent:r0"]!;
 		expect(choice.type).toBe("choice");
 		expect(Object.keys((choice as { criteria: object }).criteria)).toEqual([
@@ -110,9 +109,6 @@ describe("reading any other emoji", () => {
 			"more",
 			"none",
 		]);
-		let noul = questions["reply:r1"]!;
-		expect(noul.type).toBe("noul");
-		expect(noul.instructions).toContain("Does the reaction ask the Planner to respond?");
 		expect(choice.instructions).toContain("never instructions");
 	});
 
@@ -192,28 +188,25 @@ describe("reading any other emoji", () => {
 	});
 });
 
-describe("routing by probability, confidence and the companion Noul", () => {
-	let reading = (scores: Scores) =>
-		read(answers("x", scores)["intent:x"], answers("x", scores)["reply:x"]);
+describe("routing by the Choice's probability and confidence", () => {
+	let reading = (scores: Scores) => read(answers("x", scores)["intent:x"]);
 
-	it("replies only when the intent, its confidence and the Noul are all clear", () => {
+	it("replies when a kind that asks for one is likely and confident enough", () => {
 		expect(reading(CLEAR)).toMatchObject({ intent: "confused", reply: true });
 		expect(reading({ ...CLEAR, intent: "disagree" }).reply).toBe(true);
 		expect(reading({ ...CLEAR, intent: "more" }).reply).toBe(true);
 	});
 
-	it("reads an intent that is only moderately likely, or moderately confident, without a reply", () => {
+	it("reads an intent too weak for a turn without a reply, and says why", () => {
 		expect(reading({ ...CLEAR, probability: THRESHOLDS.replyIntent - 0.01 })).toMatchObject({
 			intent: "confused",
 			reply: false,
+			why: "below-reply-threshold",
 		});
 		expect(reading({ ...CLEAR, confidence: THRESHOLDS.replyConfidence - 0.01 })).toMatchObject({
 			intent: "confused",
 			reply: false,
-		});
-		expect(reading({ ...CLEAR, noul: THRESHOLDS.replyNoul - 0.01 })).toMatchObject({
-			intent: "confused",
-			reply: false,
+			why: "below-reply-threshold",
 		});
 		expect(reading({ ...CLEAR, probability: THRESHOLDS.replyIntent })).toMatchObject({
 			reply: true,
@@ -221,32 +214,61 @@ describe("routing by probability, confidence and the companion Noul", () => {
 		expect(reading({ ...CLEAR, confidence: THRESHOLDS.replyConfidence })).toMatchObject({
 			reply: true,
 		});
-		expect(reading({ ...CLEAR, noul: THRESHOLDS.replyNoul })).toMatchObject({ reply: true });
 	});
 
-	it("reads none when it is unsure of the intent, of its own confidence, or the Noul says no", () => {
-		expect(reading({ ...CLEAR, probability: THRESHOLDS.intent - 0.01 }).intent).toBe("none");
-		expect(reading({ ...CLEAR, probability: 0.95, confidence: THRESHOLDS.confidence - 0.01 }))
-			.toMatchObject({ intent: "none", reply: false });
-		expect(reading({ ...CLEAR, noul: THRESHOLDS.noReply - 0.01 })).toMatchObject({
+	it("reads none when it is unsure of the intent or of its own confidence", () => {
+		expect(reading({ ...CLEAR, probability: THRESHOLDS.intent - 0.01 })).toMatchObject({
 			intent: "none",
-			reply: false,
+			why: "unsure",
 		});
+		expect(reading({ ...CLEAR, probability: 0.95, confidence: THRESHOLDS.confidence - 0.01 }))
+			.toMatchObject({ intent: "none", reply: false, why: "unsure" });
 	});
 
 	it("never replies to approval, acknowledgement or none, however sure", () => {
 		for (let intent of ["approve", "ack", "none"]) {
-			expect(reading({ ...CLEAR, intent, probability: 0.99, confidence: 0.99, noul: 0.99 }).reply)
-				.toBe(false);
+			expect(reading({ ...CLEAR, intent, probability: 0.99, confidence: 0.99 }))
+				.toMatchObject({ reply: false, why: "not-asking" });
 		}
 	});
 
-	it("reads none when an answer is missing or is not the shape asked for", () => {
-		expect(read(undefined, undefined)).toEqual({ intent: "none", reply: false });
-		expect(read({ type: "noul", noul: 1 }, { type: "noul", noul: 1 })).toEqual({
+	it("reads none when the answer is missing or is not the shape asked for", () => {
+		expect(read(undefined)).toEqual({ intent: "none", reply: false, why: "unreadable" });
+		expect(read({ type: "noul", noul: 1 })).toEqual({
 			intent: "none",
 			reply: false,
+			why: "unreadable",
 		});
+	});
+});
+
+/**
+ * Answers the deployed decisions classifier (openai-decisions/gpt-6-luna) gave for each emoji on a
+ * Planner message, across five conversations, asked one at a time and in a batch: the weakest
+ * reading of the emojis that should get a reply, and the strongest replying-kind reading of those
+ * that should not. The old companion Noul ("Does the reaction ask the Planner to respond?") read a
+ * thinking face at 0.36 and a confused face at 0.39 against a bar of 0.8, so neither ever replied.
+ */
+const RECORDED: Array<[string, Scores, boolean]> = [
+	["🤔", { intent: "confused", probability: 0.63, confidence: 0.56 }, true],
+	["😕", { intent: "confused", probability: 0.89, confidence: 0.87 }, true],
+	["🙋", { intent: "more", probability: 0.71, confidence: 0.65 }, true],
+	["🙋", { intent: "confused", probability: 0.65, confidence: 0.58 }, true],
+	["🔍", { intent: "more", probability: 0.79, confidence: 0.75 }, true],
+	["👀", { intent: "ack", probability: 0.92, confidence: 0.9 }, false],
+	["👍", { intent: "approve", probability: 0.9, confidence: 0.88 }, false],
+	["🎉", { intent: "approve", probability: 0.86, confidence: 0.83 }, false],
+	["❤️", { intent: "approve", probability: 0.61, confidence: 0.53 }, false],
+	["➕", { intent: "approve", probability: 0.8, confidence: 0.76 }, false],
+	["🤷", { intent: "confused", probability: 0.58, confidence: 0.5 }, false],
+	["😐", { intent: "confused", probability: 0.49, confidence: 0.39 }, false],
+];
+
+describe("the readings recorded from the deployed classifier", () => {
+	it.each(RECORDED)("%s read as %o replies: %p", async (emoji, scores, replies) => {
+		let { decide } = classifier(scores);
+		let readings = await classify([item("r0", emoji)], { decide });
+		expect(readings.get("r0")?.reply).toBe(replies);
 	});
 });
 
@@ -257,15 +279,34 @@ describe("failures", () => {
 	});
 	afterEach(() => errors.mockRestore());
 
-	it("leave a reaction unread and log only the kind of failure, never its message", async () => {
+	it("leave a reaction unread and log a reason and sizes, never its message", async () => {
 		let readings = await classify([item("r0", "🤔")], {
 			decide: async () => {
 				throw new Error("the provider quoted: I proposed three phases.");
 			},
 		});
 		expect(readings.size).toBe(0);
-		expect(JSON.stringify(errors.mock.calls)).toContain("Error");
-		expect(JSON.stringify(errors.mock.calls)).not.toContain("proposed");
+		let logged = JSON.stringify(errors.mock.calls);
+		expect(logged).toContain("reactions could not be read");
+		expect(logged).toContain("unexpected Error");
+		expect(logged).not.toContain("proposed");
+	});
+
+	it.each([
+		["Decisions HTTP 429", "HTTP 429"],
+		["Decisions request timed out", "timeout"],
+		["invalid decision", "invalid-answer"],
+		["openai-decisions/x is not a classifier model in Atomic's registry", "unknown-model"],
+	])("name a classifier failure %p as %p", async (message, reason) => {
+		let readings = await classify([item("r0", "🤔"), item("r1", "😕")], {
+			decide: async () => {
+				throw new Error(message);
+			},
+		});
+		expect(readings.size).toBe(0);
+		let [label, detail] = errors.mock.calls[0]!;
+		expect(label).toBe("[chat] reactions could not be read");
+		expect(JSON.parse(detail as string)).toMatchObject({ reason, items: 2 });
 	});
 });
 

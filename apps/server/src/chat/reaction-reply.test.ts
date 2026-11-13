@@ -256,7 +256,7 @@ test("a reaction to a person's message, a notice or the Planner's own answer to 
 
 test("one turn for a message and reading however many people give it, and none again later", async () => {
 	let h = await room({
-		scores: { intent: "confused", probability: 0.9, confidence: 0.88, noul: 0.95 },
+		scores: { intent: "confused", probability: 0.9, confidence: 0.88 },
 	});
 	await reactAs(h, "ben", "\u2753");
 	await reactAs(h, "cy", "\u2753");
@@ -283,24 +283,28 @@ test("different readings of one message each get their one turn", async () => {
 	await finishTurn(h);
 });
 
-test("an unfixed emoji is read by the classifier with the companion Noul, and approval earns no turn", async () => {
+test("an unfixed emoji is read by the classifier's Choice alone, and approval earns no turn", async () => {
 	let h = await room({
-		scores: { intent: "approve", probability: 0.95, confidence: 0.94, noul: 0.99 },
+		scores: { intent: "approve", probability: 0.95, confidence: 0.94 },
 	});
 	await reactAs(h, "ben", "🙌");
 	await reactAs(h, "cy", "✅");
 	await h.clock.advance(DEBOUNCE_MS + 100);
 	await flush();
 	expect(h.requests).toHaveLength(1);
-	expect(Object.keys(h.requests[0]!.questions)).toEqual(["intent:r0", "reply:r0"]);
+	expect(Object.keys(h.requests[0]!.questions)).toEqual(["intent:r0"]);
 	expect(h.prompts).toEqual([]);
 });
 
 test.each([
-	["low confidence", { intent: "confused", probability: 0.95, confidence: 0.4, noul: 0.95 }],
-	["a Noul that says no", { intent: "confused", probability: 0.95, confidence: 0.95, noul: 0.1 }],
-	["an unsure intent", { intent: "confused", probability: 0.5, confidence: 0.9, noul: 0.95 }],
-	["none", { intent: "none", probability: 0.95, confidence: 0.95, noul: 0.95 }],
+	["low confidence", { intent: "confused", probability: 0.95, confidence: 0.4 }],
+	["a likely intent read with too little confidence for a turn", {
+		intent: "confused",
+		probability: 0.62,
+		confidence: 0.5,
+	}],
+	["an unsure intent", { intent: "confused", probability: 0.5, confidence: 0.9 }],
+	["none", { intent: "none", probability: 0.95, confidence: 0.95 }],
 ])("%s earns no turn", async (_, scores) => {
 	let h = await room({ scores });
 	await reactAs(h, "ben", "🤔");
@@ -397,12 +401,7 @@ test("reactions read together go to the classifier in one request", async () => 
 	await h.clock.advance(DEBOUNCE_MS + 100);
 	await flush();
 	expect(h.requests).toHaveLength(1);
-	expect(Object.keys(h.requests[0]!.questions)).toEqual([
-		"intent:r0",
-		"reply:r0",
-		"intent:r1",
-		"reply:r1",
-	]);
+	expect(Object.keys(h.requests[0]!.questions)).toEqual(["intent:r0", "intent:r1"]);
 	await until(() => h.prompts.length === 1);
 	await finishTurn(h);
 	await until(() => h.prompts.length === 2);
