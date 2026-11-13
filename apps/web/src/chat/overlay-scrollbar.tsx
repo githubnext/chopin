@@ -37,7 +37,11 @@ export function OverlayScrollbar(
 		let padding = 0;
 		let inner = 0;
 		let height = 0;
-		let drawn = 0;
+		// The thumb is drawn never shorter than its floor. It is read once, from style alone, so the
+		// thumb's travel always counts the box it is drawn in: counted from the size it is asked for, a
+		// thumb held at its floor (a long transcript, or one the runs card has shortened) was moved past
+		// the lane's end, where the lane's paint containment cut it off.
+		let floor = Number.parseFloat(getComputedStyle(bar).minHeight) || 0;
 		let size = 0;
 		let travel = 0;
 		let range = 0;
@@ -67,14 +71,13 @@ export function OverlayScrollbar(
 		};
 		let measure = () => {
 			range = Math.max(0, Math.round(padding + inner - shown));
-			let next = range > 0 ? height * shown / (shown + range) : 0;
-			travel = height - (next !== size ? next : Math.max(size, drawn));
-			size = next;
+			size = range > 0 ? height * shown / (shown + range) : 0;
+			travel = Math.max(0, height - Math.max(size, floor));
 			idle = range <= 0;
 			schedule();
 		};
-		// Every size comes from the resize observer's entries, the thumb's own (its floor included)
-		// among them, and the offset from the scroll event, so nothing here asks the page to lay out.
+		// Every size comes from the resize observer's entries and the offset from the scroll event, so
+		// nothing here asks the page to lay out.
 		let observer = new ResizeObserver(entries => {
 			for (let entry of entries) {
 				let block = entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height;
@@ -82,7 +85,6 @@ export function OverlayScrollbar(
 					shown = block;
 					padding = block - (entry.contentBoxSize[0]?.blockSize ?? entry.contentRect.height);
 				} else if (entry.target === stack) inner = block;
-				else if (entry.target === bar) drawn = block;
 				else height = block;
 			}
 			measure();
@@ -90,7 +92,6 @@ export function OverlayScrollbar(
 		observer.observe(view, { box: "border-box" });
 		observer.observe(stack, { box: "border-box" });
 		observer.observe(lane, { box: "border-box" });
-		observer.observe(bar, { box: "border-box" });
 
 		let scrolled = () => {
 			offset = view.scrollTop;
