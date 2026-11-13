@@ -370,21 +370,42 @@ async function servePlanner(options: {
 		let mcp: McpTokenFile | undefined;
 		let outcome: { how: string; stderr?: string; reason?: string } | undefined;
 		let github: GitHubToken | undefined;
+		let asked = githubToken({
+			url: options.url,
+			machine: options.machine,
+			repository,
+			purpose: "planner",
+			...(credential.document ?? options.id
+				? { document: credential.document ?? options.id }
+				: {}),
+			folder: tokenDirectory,
+			...(options.renewGitHubBeforeMs === undefined
+				? {}
+				: { renewBeforeMs: options.renewGitHubBeforeMs }),
+		});
+		// What needs no GitHub token is made while Chopin mints it: the files the backend reads its
+		// Chopin credentials from, and its own worktree of a checkout the person registered. A clone
+		// waits for the token, which fetching it takes.
+		let resolved = options.checkouts.resolve(repository, () => asked).then(value => value.root);
+		let prepared = resolved.then(
+			checkout => prepareWorktree(options, document, checkout, worktree),
+			() => {},
+		);
+		let files = credentialFiles(options, document, tokenDirectory, credential);
+		// Not yet read where a failure stops the launch first.
+		resolved.catch(() => {});
+		files.catch(() => {});
+		/** The launch stops before it starts: what was made for it meanwhile is let go. */
+		let abandon = async () => {
+			await prepared;
+			let made = await files.catch(() => undefined);
+			await made?.tokens?.stop();
+			await made?.mcp.stop();
+		};
 		try {
-			github = await githubToken({
-				url: options.url,
-				machine: options.machine,
-				repository,
-				purpose: "planner",
-				...(credential.document ?? options.id
-					? { document: credential.document ?? options.id }
-					: {}),
-				folder: tokenDirectory,
-				...(options.renewGitHubBeforeMs === undefined
-					? {}
-					: { renewBeforeMs: options.renewGitHubBeforeMs }),
-			});
+			github = await asked;
 		} catch (error) {
+			await abandon();
 			if (signal.aborted) return;
 			if (error instanceof GitHubRefused) {
 				output.error(`Stopped the Planner for ${document}: ${error.message}`);
@@ -405,14 +426,12 @@ async function servePlanner(options: {
 			};
 		}
 		let checkout = github
-			? await options.checkouts.resolve(repository, async () => github!).then(
-				value => value.root,
-				(error: unknown) => {
-					outcome = { how: error instanceof Error ? error.message : String(error) };
-					return undefined;
-				},
-			)
+			? await resolved.catch((error: unknown) => {
+				outcome = { how: error instanceof Error ? error.message : String(error) };
+				return undefined;
+			})
 			: undefined;
+		if (github && !checkout) await abandon();
 		if (checkout) {
 			output.say(`› Planner for ${document} started.`);
 			let healthy = setTimeout(() => {
@@ -423,37 +442,8 @@ async function servePlanner(options: {
 					report(reportedAs, undefined);
 				}
 			}, healthyMs);
-			// The backend may outlive its credential when its link drops, so it can read a new one.
-			// Chopin's own tools take a token minted from it, renewed with it, never a GitHub token.
-			mcp = await mcpTokenFile({
-				url: options.url,
-				machine: options.machine,
-				file: join(tokenDirectory, "mcp"),
-				credential: { planner: credential.token },
-				scheduled: false,
-			});
-			tokens = await plannerTokenFile({
-				url: options.url,
-				machine: options.machine,
-				document,
-				file: join(tokenDirectory, "planner"),
-				first: credential,
-				renewed: token => mcp!.renew({ planner: token }),
-			});
-			// A backend in the sandbox can't make its own worktree of the checkout (see
-			// `preparePlannerWorktree`), so it is made here. Never fatal: a backend that has no use
-			// for one starts all the same, and one that has says why itself.
-			if (options.sandbox && options.sandbox.report.engine !== "none") {
-				await preparePlannerWorktree(checkout, worktree).catch(error =>
-					output.say(
-						output.style.dim(
-							`… Couldn't make the worktree for ${document}'s Planner: ${
-								redacted(error instanceof Error ? error.message : String(error)).split("\n")[0]
-							}`,
-						),
-					)
-				);
-			}
+			({ mcp, tokens } = await files);
+			await prepared;
 			// A token that lapsed without a renewal stops the backend, which starts again with a new one.
 			let lapsed = github!.expired;
 			outcome = await launch(
@@ -528,6 +518,58 @@ async function servePlanner(options: {
 		);
 		await pause(wait);
 	}
+}
+
+/**
+ * The files a Planner backend reads its Chopin credentials from, which it may outlive its first
+ * credential to read anew: its Planner credential, and the token minted from it that Chopin's own
+ * tools take, renewed with it, never a GitHub token.
+ */
+async function credentialFiles(
+	options: { url: string; machine: string },
+	document: string,
+	folder: string,
+	credential: Awaited<ReturnType<typeof plannerCredential>>,
+) {
+	let mcp = await mcpTokenFile({
+		url: options.url,
+		machine: options.machine,
+		file: join(folder, "mcp"),
+		credential: { planner: credential.token },
+		scheduled: false,
+	});
+	let tokens = await plannerTokenFile({
+		url: options.url,
+		machine: options.machine,
+		document,
+		file: join(folder, "planner"),
+		first: credential,
+		renewed: token => mcp.renew({ planner: token }),
+	});
+	return { mcp, tokens };
+}
+
+/**
+ * A backend in the sandbox can't make its own worktree of the checkout (see
+ * `preparePlannerWorktree`), so it is made here. Never fatal: a backend that has no use for one
+ * starts all the same, and one that has says why itself.
+ */
+async function prepareWorktree(
+	options: { sandbox?: Sandbox; output: Output },
+	document: string,
+	checkout: string,
+	worktree: string,
+) {
+	if (!options.sandbox || options.sandbox.report.engine === "none") return;
+	await preparePlannerWorktree(checkout, worktree).catch(error =>
+		options.output.say(
+			options.output.style.dim(
+				`… Couldn't make the worktree for ${document}'s Planner: ${
+					redacted(error instanceof Error ? error.message : String(error)).split("\n")[0]
+				}`,
+			),
+		)
+	);
 }
 
 /** How many of a backend's last stderr lines are kept to find why it exited. */

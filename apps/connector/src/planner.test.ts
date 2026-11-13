@@ -445,6 +445,73 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
+	"a sandboxed backend's credential files and its worktree of a registered checkout are made while Chopin mints its GitHub token",
+	async () => {
+		let state = await mkdtemp(join(scratch, "overlap-state-"));
+		let worktree = join(state, "planners", "octo-org", "score", "D_1");
+		let mcpAsked = Promise.withResolvers<void>();
+		/** What the launch had made by the time Chopin answered for its GitHub token. */
+		let made: { mcp: boolean; worktree: boolean } | undefined;
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request) {
+				let path = new URL(request.url).pathname;
+				if (path === "/api/connector/mcp-token") mcpAsked.resolve();
+				if (path === "/api/connector/github-token") {
+					// GitHub is slow to mint it: the launch goes on meanwhile, or waits out the five seconds.
+					let ready = async () => {
+						await mcpAsked.promise;
+						await until(async () => existsSync(join(worktree, "sample.txt")), 5_000);
+					};
+					await Promise.race([ready(), Bun.sleep(5_000)]).catch(() => {});
+					let mcp = await Promise.race([
+						mcpAsked.promise.then(() => true),
+						Bun.sleep(0).then(() => false),
+					]);
+					made ??= { mcp, worktree: existsSync(join(worktree, "sample.txt")) };
+				}
+				return await answerTokens(request) ?? Response.json({
+					token: `chopin_p_${"P".repeat(43)}`,
+					expiresAt: Date.now() + 15 * 60_000,
+					document: { id: "D_1", repository: "octo-org/score", url: "http://x" },
+				});
+			},
+		});
+		let root = await checkout();
+		let script = join(state, "backend.ts");
+		let log = join(state, "launches.jsonl");
+		await writeFile(script, STAYING_BACKEND);
+		let abort = new AbortController();
+		let quiet = { write: () => true };
+		let serving = servePlanners({
+			url: `http://127.0.0.1:${chopin.port}`,
+			machine: MACHINE,
+			documents: ["D_1"],
+			command: [process.execPath, script, log],
+			checkouts: checkouts({ directory: state, registered: { "octo-org/score": root } }),
+			directory: state,
+			output: createOutput(quiet, quiet, {}),
+			signal: abort.signal,
+			sandbox: { report: { engine: "bubblewrap" }, spawn: plainSpawn, close: async () => {} },
+		});
+		try {
+			await until(async () => (await entries(log)).length >= 1, 20_000);
+			expect(made).toEqual({ mcp: true, worktree: true });
+			// It still starts only once all of it is there.
+			let [launched] = await entries(log);
+			expect(launched.worktree).toBe(worktree);
+			expect(await readFile(join(worktree, "sample.txt"), "utf8")).toBe("sample");
+		} finally {
+			abort.abort();
+			await serving;
+			await chopin.stop(true);
+		}
+	},
+	30_000,
+);
+
+test.skipIf(process.platform === "win32")(
 	"a backend's own children are killed with it, whether it exits by itself or is stopped",
 	async () => {
 		let chopin = serve({
