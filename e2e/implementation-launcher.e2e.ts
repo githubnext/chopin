@@ -605,7 +605,7 @@ test("a build of a revision whose plan files the Planner pushed starts from thei
 		await page.getByRole("group", { name: "Document view" })
 			.getByRole("button", { name: /^Build/ }).click();
 		let line = buildView(page).getByText(
-			`Built from plan revision ${revision} · plans/e2e@${commit.slice(0, 7)}`,
+			`Built from plan revision ${revision} at plans/e2e@${commit.slice(0, 7)}`,
 			{ exact: true },
 		);
 		await expect(line).toBeVisible();

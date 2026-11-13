@@ -322,7 +322,7 @@ export function planSourceLine(
 	let active = ["queued", "starting", "running"].includes(build.state);
 	return `${
 		active ? "Building" : "Built"
-	} from plan revision ${source.revision} · ${source.branch}@${source.commit.slice(0, 7)}`;
+	} from plan revision ${source.revision} at ${source.branch}@${source.commit.slice(0, 7)}`;
 }
 
 function latestRun(snapshot: Snapshot) {

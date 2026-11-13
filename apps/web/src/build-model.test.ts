@@ -247,9 +247,9 @@ describe("plan source", () => {
 	it("names the plan revision and the branch at its short commit a build started from", () => {
 		let planSource = { revision: 4, branch: "plans/launch", commit: "0123456789".repeat(4) };
 		expect(planSourceLine({ ...build("running"), planSource }))
-			.toBe("Building from plan revision 4 · plans/launch@0123456");
+			.toBe("Building from plan revision 4 at plans/launch@0123456");
 		expect(planSourceLine({ ...build("stopped"), planSource }))
-			.toBe("Built from plan revision 4 · plans/launch@0123456");
+			.toBe("Built from plan revision 4 at plans/launch@0123456");
 		expect(planSourceLine(build("stopped"))).toBeUndefined();
 	});
 });

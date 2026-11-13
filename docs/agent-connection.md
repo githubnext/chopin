@@ -1688,7 +1688,7 @@ branch: its worktree is detached at that commit. Build checks the commit again w
 the building machine's grant as it is pressed, and refuses with
 `plan-source-unavailable` when GitHub no longer has it; a connector that cannot fetch
 it fails the build naming the commit. The build records the source, the Build tab
-says _Built from plan revision 12 · plans/…@1a2b3c4_, and its run's
+says _Built from plan revision 12 at plans/…@1a2b3c4_, and its run's
 `read_implementation` returns it as `planSource`. A rebuild of a built document keeps
 the base it had unless a source was recorded for a revision after the one last built,
 which the rebuild then starts from. The Planner's `read_implementation_graph` returns
