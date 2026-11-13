@@ -22,6 +22,9 @@ test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
 
 const PHONE = { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } };
 
+/** A frame of a script's stack in Chromium's trace; a script Playwright injects names no URL. */
+type Frame = { functionName: string; url: string; lineNumber: number; columnNumber: number };
+
 function transcript() {
 	let rows = [
 		{
@@ -618,11 +621,30 @@ test("scrolling a long Chat moves only its thumb: it forces no layout and restyl
 	let trace = JSON.parse((await browser.stopTracing()).toString()) as {
 		traceEvents: {
 			name: string;
-			args?: { elementCount?: number; beginData?: { dirtyObjects?: number; stackTrace?: unknown } };
+			args?: { elementCount?: number; beginData?: { dirtyObjects?: number; stackTrace?: Frame[] } };
 		}[];
 	};
 	let laid = trace.traceEvents.filter(event => event.name === "Layout")
 		.map(event => event.args?.beginData ?? {});
+	// A script that reads geometry after a write forces a layout, and the layout carries its stack.
+	// Playwright's own scripts count only while it records a trace (every run but a first attempt in
+	// CI): each action's snapshot reads every element's scroll offset, which lays the page out, eight
+	// times for each step here. Their frames name no script, so only a layout with a frame of a
+	// script the page loaded is the page's; the innermost such frame says whose.
+	let forced = [
+		...new Set(
+			laid.flatMap(layout => {
+				let frame = layout.stackTrace?.find(value => value.url);
+				return frame
+					? [
+						`${
+							frame.functionName || "(anonymous)"
+						} ${frame.url}:${frame.lineNumber}:${frame.columnNumber}`,
+					]
+					: [];
+			}),
+		),
+	];
 	let restyled = trace.traceEvents
 		.filter(event => event.name === "UpdateLayoutTree")
 		.map(event => event.args?.elementCount ?? 0);
@@ -630,11 +652,11 @@ test("scrolling a long Chat moves only its thumb: it forces no layout and restyl
 	let thumb = chatOf(page).locator(".chat-split-main .chat-scroll-thumb");
 	await expect(thumb).toHaveCSS("opacity", "1");
 	expect(await thumb.evaluate(node => node.style.translate)).not.toBe("");
-	// Its moves are a transform. No script forced the page's layout (a read after a write would carry
-	// its stack), a layout in the frame touched a few objects of the thousands the transcript has, and
-	// a style pass touched the thumb and the pane's scroll edge, where anything the transcript's
-	// messages answered to would restyle thousands.
-	expect(laid.filter(layout => layout.stackTrace).length, "layouts a script forced").toBe(0);
+	// Its moves are a transform. No script of the page forced its layout, a layout in the frame
+	// touched a few objects of the thousands the transcript has, and a style pass touched the thumb
+	// and the pane's scroll edge, where anything the transcript's messages answered to would restyle
+	// thousands.
+	expect(forced, "scripts of the page that forced a layout").toEqual([]);
 	expect(Math.max(0, ...laid.map(layout => layout.dirtyObjects ?? 0))).toBeLessThan(40);
 	expect(restyled.length).toBeGreaterThan(0);
 	expect(Math.max(...restyled)).toBeLessThan(40);
