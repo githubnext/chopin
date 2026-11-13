@@ -39,6 +39,7 @@ import { MarkdownLine, questionHeading, ResolvedActions } from "@chopin/question
 import { useCellValue } from "@mdxeditor/gurx";
 
 import { currentDecision, releaseDecision, subscribeDecision } from "./decision-pin";
+import { focusIsFree } from "./focus-return";
 import { useResolvedActions } from "./resolved-actions";
 import { decisionHostVisible } from "./decision-placement";
 import { when } from "./card";
@@ -123,6 +124,8 @@ type Placed = {
 };
 
 const POPOVER_WIDTH = 336;
+/** The decision popover's id, and its phone sheet's: one of them is shown at a time. */
+const POPOVER_ID = "plan-decision-pop";
 const EMPTY_META: ReadonlyMap<string, Question.CardMeta> = new Map();
 function emptyMeta() {
 	return EMPTY_META;
@@ -614,15 +617,11 @@ export function ResolvedLayer(
 
 	let restoreFocus = useCallback(() => {
 		let target = origin.current;
-		if (!target?.isConnected) return;
-		if (
-			root.current?.contains(document.activeElement) || document.activeElement === document.body
-		) {
-			// Giving focus back is not a request for the preview.
-			restoring.current = true;
-			target.focus();
-			restoring.current = false;
-		}
+		if (!target?.isConnected || !focusIsFree(root.current)) return;
+		// Giving focus back is not a request for the preview.
+		restoring.current = true;
+		target.focus();
+		restoring.current = false;
 	}, []);
 	let dismiss = useCallback(() => {
 		act({ type: "dismiss" });
@@ -633,7 +632,8 @@ export function ResolvedLayer(
 		act({ type: "dismiss" });
 		let target = origin.current;
 		requestAnimationFrame(() => {
-			if (!target?.isConnected) return;
+			// Not over a control the person moved to while the sheet fell.
+			if (!target?.isConnected || !focusIsFree(document.getElementById(POPOVER_ID))) return;
 			// Giving focus back is not a request for the preview.
 			restoring.current = true;
 			target.focus({ preventScroll: true });
@@ -774,7 +774,6 @@ export function ResolvedLayer(
 			height: marker.compact ? lineHeight : markerSize,
 		})),
 	);
-	let popoverId = "plan-decision-pop";
 	let immediately = options.motionImmediately?.() ?? false;
 
 	return createPortal(
@@ -793,8 +792,8 @@ export function ResolvedLayer(
 						let opening = item.kind === "comment" ? item.comment.thread.notes[0]?.text : undefined;
 						return (
 							<button
-								aria-controls={view?.key === key && view.pinned ? popoverId : undefined}
-								aria-describedby={previewing ? popoverId : undefined}
+								aria-controls={view?.key === key && view.pinned ? POPOVER_ID : undefined}
+								aria-describedby={previewing ? POPOVER_ID : undefined}
 								aria-expanded={isPinned}
 								aria-label={item.kind === "decision"
 									? `Decision: ${item.decision.answer}`
@@ -839,7 +838,7 @@ export function ResolvedLayer(
 				scroller ?? host,
 			)}
 			<Surface
-				id={popoverId}
+				id={POPOVER_ID}
 				immediately={immediately}
 				onMeasure={setHeight}
 				render={current => {
@@ -927,7 +926,7 @@ export function ResolvedLayer(
 						quote: sheet.comment.thread.quote ?? "",
 						siblings: 1,
 					})}
-					id={popoverId}
+					id={POPOVER_ID}
 					key={sheet.key}
 					label="Resolved comment"
 					onClose={dismissSheet}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Drawer } from "@base-ui/react/drawer";
+import { focusIsFree } from "@chopin/editor/focus-return";
 
 import "./phone-sheets.css";
 
@@ -40,6 +41,7 @@ export function ActionSheet<Action extends string>(
 ) {
 	let [open, setOpen] = useState(false);
 	let chosen = useRef<Action | undefined>(undefined);
+	let popup = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		let frame = requestAnimationFrame(() => setOpen(true));
 		return () => cancelAnimationFrame(frame);
@@ -68,7 +70,9 @@ export function ActionSheet<Action extends string>(
 						aria-label={label}
 						className="action-sheet"
 						data-action-sheet=""
-						finalFocus={() => chosen.current === undefined}
+						// A choice hands focus on itself; a tap elsewhere while the sheet falls keeps its focus.
+						finalFocus={() => chosen.current === undefined && focusIsFree(popup.current)}
+						ref={popup}
 					>
 						<Drawer.Title className="sr-only">{label}</Drawer.Title>
 						<div className="action-sheet-group">
