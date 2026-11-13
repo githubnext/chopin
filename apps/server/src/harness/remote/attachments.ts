@@ -110,6 +110,11 @@ export type PlannerAttachmentOptions = {
 	restoredRuns?: (channelId: string, outcome: RestoredRuns) => void;
 	/** Heard when a hand-over window ends without the client back, with what was missing. */
 	missed?: (channelId: string, cause: "login" | "client") => void;
+	/**
+	 * Opens a document, and keeps it open until the returned function is called, for a question
+	 * the client of a hold a restart rebuilt asks while nobody has the document open.
+	 */
+	openDocument?: (channelId: string) => Promise<() => void>;
 };
 
 /** What a document's members are told about its Planner: only the holder's login and state. */
@@ -574,10 +579,12 @@ export class PlannerAttachments {
 				continue;
 			}
 			if (row.sessions.length > 0) {
+				let open = this.#options.openDocument;
 				hold.parked = AgentLink.rebuilt(row.channelId, row.sessions, {
 					lapse: () => this.#lapsed(hold, hold.parked!),
 					ended: () => this.#runs(hold, "ended"),
 					resumed: () => this.#runs(hold, "up"),
+					...(open ? { open: () => open(row.channelId) } : {}),
 				});
 			}
 			let length = row.handoverUntil
@@ -621,14 +628,21 @@ export class PlannerAttachments {
 	}
 
 	/**
-	 * Whether a hold a restart rebuilt still keeps sessions its client has not taken back, so the
-	 * workflow runs Chat stored for the document are live and not stopped when its Chat opens:
-	 * `live` through the hold's window, `down` once its client is known to be away.
+	 * Whether a hold a restart rebuilt still keeps sessions with work, so the workflow runs Chat
+	 * stored for the document are live and not stopped when its Chat opens: `live` through the
+	 * hold's window and once its client has taken them back, `down` while its client is known to be
+	 * away. A client that took them back keeps them on its link, where no turn of this process
+	 * retains them, so a document that opens after it resumed still shows its runs live.
 	 */
 	restoredWork(channelId: string): "live" | "down" | undefined {
 		let hold = this.#holds.get(channelId);
-		if (!hold?.restored || !hold.parked || hold.parked.snapshot().length === 0) return undefined;
-		return this.#inWindow(hold) ? "live" : "down";
+		if (!hold) return undefined;
+		if (hold.restored && hold.parked && hold.parked.snapshot().length > 0) {
+			return this.#inWindow(hold) ? "live" : "down";
+		}
+		if (hold.link?.keepsRebuilt) return "live";
+		if (hold.parked?.keepsRebuilt) return "down";
+		return undefined;
 	}
 
 	/**

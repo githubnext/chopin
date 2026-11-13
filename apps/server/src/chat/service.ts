@@ -2224,7 +2224,7 @@ const storedStages = new WeakMap<Chat, Map<string, { ids: string[]; json: Map<st
  * than its card carries. A report that only adds and changes stages writes those; one that drops
  * or reorders stages replaces the run's.
  */
-function storeStages(context: Room, cards: Wire.Run[]): Promise<void> | undefined {
+function storeStages(context: RunsRoom, cards: Wire.Run[]): Promise<void> | undefined {
 	let known = storedStages.get(context.chat)
 		?? new Map<string, { ids: string[]; json: Map<string, string> }>();
 	storedStages.set(context.chat, known);
@@ -2273,7 +2273,7 @@ function cardWindow(run: Wire.Run): Wire.Run {
 }
 
 /** Forgets the stored stages of runs Chat no longer shows. */
-async function forgetStages(context: Room, shown: Wire.Run[] | undefined): Promise<void> {
+async function forgetStages(context: RunsRoom, shown: Wire.Run[] | undefined): Promise<void> {
 	let ids = (shown ?? []).map(run => run.id);
 	let known = storedStages.get(context.chat);
 	for (let id of known?.keys() ?? []) if (!ids.includes(id)) known!.delete(id);
@@ -2285,11 +2285,50 @@ async function forgetStages(context: Room, shown: Wire.Run[] | undefined): Promi
 }
 
 const publishing = new WeakMap<Chat, Promise<void>>();
-const owners = new WeakMap<Chat, Map<string, PlannerSession>>();
-const unsaved = new WeakMap<PlannerSession, Runs>();
-const gone = new WeakSet<PlannerSession>();
+const owners = new WeakMap<Chat, Map<string, RunsOwner>>();
+const unsaved = new WeakMap<RunsOwner, Runs>();
+const gone = new WeakSet<RunsOwner>();
 
 type Runs = { active: string[]; paused: string[]; cards?: Wire.Run[] };
+
+/** The session whose runs a card shows: a retained Planner session, or one a restart rebuilt. */
+type RunsOwner = Pick<PlannerSession, "suspended">;
+
+/** What showing and storing a session's run cards needs of the room. */
+type RunsRoom = Pick<Room, "chat" | "room" | "server" | "persist"> & {
+	auth: { storage: Pick<Room["auth"]["storage"], "runStages"> };
+};
+
+/** Stand-ins, by session id, for the sessions a restart rebuilt whose clients report runs. */
+const rebuiltOwners = new WeakMap<Chat, Map<string, { owner: RunsOwner; down: boolean }>>();
+
+/**
+ * Shows the runs reported by a Planner session a restart rebuilt and its client took back, `down`
+ * while its client's link has dropped again. No turn of this process opened that session, so
+ * nothing here retains it and its reports reach Chat only this way, as a retained session's do.
+ */
+export function rebuiltRuns(
+	context: RunsRoom,
+	session: string,
+	runs: Runs,
+	down = false,
+): Promise<void> {
+	if (context.chat.closed) return Promise.resolve();
+	let known = rebuiltOwners.get(context.chat)
+		?? new Map<string, { owner: RunsOwner; down: boolean }>();
+	rebuiltOwners.set(context.chat, known);
+	let entry = known.get(session);
+	if (!entry) {
+		let made: { owner: RunsOwner; down: boolean } = {
+			owner: { suspended: () => made.down },
+			down,
+		};
+		entry = made;
+		known.set(session, entry);
+	}
+	entry.down = down;
+	return publishRuns(context, entry.owner, runs);
+}
 
 /**
  * Show the session's runs, keeping ended ones as summary cards until the next
@@ -2298,13 +2337,13 @@ type Runs = { active: string[]; paused: string[]; cards?: Wire.Run[] };
  * it: a report or release only changes its own session's cards.
  */
 function publishRuns(
-	context: Room,
-	session: PlannerSession,
+	context: RunsRoom,
+	session: RunsOwner,
 	runs: Runs | undefined,
 	releasing = false,
-	followUp = false,
+	followUp?: (run: Wire.Run, said: string) => Promise<void>,
 ): Promise<void> {
-	let known = owners.get(context.chat) ?? new Map<string, PlannerSession>();
+	let known = owners.get(context.chat) ?? new Map<string, RunsOwner>();
 	owners.set(context.chat, known);
 	for (let run of runs?.cards ?? []) known.set(run.id, session);
 	let turn = (publishing.get(context.chat) ?? Promise.resolve()).then(() =>
@@ -2315,11 +2354,11 @@ function publishRuns(
 }
 
 async function publishReport(
-	context: Room,
-	session: PlannerSession,
+	context: RunsRoom,
+	session: RunsOwner,
 	runs: Runs | undefined,
 	releasing: boolean,
-	followUp: boolean,
+	followUp: ((run: Wire.Run, said: string) => Promise<void>) | undefined,
 ): Promise<void> {
 	let { chat, room, server } = context;
 	let at = now();
@@ -2401,7 +2440,7 @@ async function publishReport(
 	for (let entry of finished) announce(server, room, entry);
 	state(chat, server, room);
 	if (prior.some(run => !shown.has(run.id))) await forgetStages(context, next);
-	for (let { run, said } of attention) await followUpEndedRun(context, run, said);
+	for (let { run, said } of attention) await followUp?.(run, said);
 }
 
 /**
@@ -2471,7 +2510,13 @@ function retain(
 			if (chat.retained?.session !== opened.session) return;
 			let planning = chat.busy && !chat.job && chat.agent === opened.session;
 			let followUp = !planning && opened.session.followsUpRuns !== false;
-			void publishRuns(context, opened.session, next, false, followUp);
+			void publishRuns(
+				context,
+				opened.session,
+				next,
+				false,
+				followUp ? (run, said) => followUpEndedRun(context, run, said) : undefined,
+			);
 			if (next.active.length || next.paused.length) return;
 			release();
 		});

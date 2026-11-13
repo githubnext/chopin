@@ -227,7 +227,7 @@ export type HumanInput = {
  * cannot tell apart.
  */
 export function createHumanInput(
-	room: DocumentRoom,
+	room: Pick<DocumentRoom, "id" | "plan" | "server" | "anchors" | "focusedChild">,
 	hold?: (workflowRunId: string, signal: AbortSignal) => Promise<void>,
 	report?: (status: HumanInputStatus) => void,
 	pending?: PendingInputs,

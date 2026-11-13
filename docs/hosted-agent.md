@@ -633,7 +633,10 @@ kept, the server writes each hold to `planner_link_holds` (see
 [Storage](storage.md#postgresql-schema)): the sessions the client holds, the questions
 it waits on, the answers it has not acknowledged and the Stops it has not heard. The next
 process rebuilds each as a suspended hold, so a client that returns and sends `resume`
-takes its sessions back. Startup's reset keeps the owner of a document whose hold names a
+takes its sessions back. No turn of the new process opened those sessions, so they reach the
+document through its room: their run reports are Chat's run cards, shown live, not stopped, when
+the document opens after the client is back, and a question asked on one after the restart is a
+Decision, for which the document is opened if nobody has it open. Startup's reset keeps the owner of a document whose hold names a
 browser sign-in that has stored credentials; a paired machine's hold names the machine
 and no login, which a restart cannot keep: the machine's backend attaches again with its
 credential, which is stored by digest and so accepted at once, and its new login takes over

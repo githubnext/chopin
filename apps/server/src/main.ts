@@ -131,7 +131,7 @@ import * as Explore from "./questions/explore";
 import { runningFindingRefs } from "./questions/service-findings";
 import { answerTurns } from "./questions/answer-turns";
 import { decisionGeneration } from "./questions/card-actions";
-import { rejoinInput } from "./harness/atomic/human-input";
+import { createHumanInput, rejoinInput } from "./harness/atomic/human-input";
 import type { RejoinHost } from "./harness/remote/link";
 import { deterministicChannelId } from "./channels/id";
 import type { Research as ResearchWire } from "@chopin/protocol";
@@ -529,8 +529,34 @@ function answerDecision(channelId: string, id: string, generation: number): void
  * members again, and an answer its client can never be given becomes a turn of its own.
  */
 function plannerQuestions(plan: Service.Plan, server: Server<SocketData>): RejoinHost {
+	let live = () => !plan.persistence.closing && !plan.chat.closed;
 	return {
 		join: (asked, signal) => rejoinInput({ id: plan.id, plan, server }, asked, signal),
+		live,
+		// A session a restart rebuilt asks and reports here as a retained session of this Chat would.
+		humanInput: (hold, report) =>
+			createHumanInput(
+				{ id: plan.id, plan, server, anchors: () => Service.anchors(plan, server, plan.id) },
+				hold,
+				report,
+			),
+		runs: (session, runs, down) => {
+			if (!live()) return;
+			void Chat.rebuiltRuns(
+				{
+					chat: plan.chat,
+					room: plan.id,
+					server,
+					persist: chat => Service.persist(plan, chat),
+					auth: hostedAuth,
+				},
+				session,
+				runs,
+				down,
+			).catch(err =>
+				console.error("chopin: could not show the workflow runs a restart kept -", err)
+			);
+		},
 		unsent: decisions => {
 			for (let id of decisions) {
 				let record = plan.records.get(id);
@@ -3083,6 +3109,25 @@ if (config.agent && config.harness === "remote") {
 				},
 			},
 		}),
+		// A question a rebuilt hold's client asks keeps its document open until it is answered.
+		openDocument: async channelId => {
+			if (deletingChannels.has(channelId) || archivingChannels.has(channelId)) {
+				throw new Error("document is unavailable");
+			}
+			await Rooms.get(channelId)?.closing;
+			let held = Rooms.hold(channelId);
+			let release = () => {
+				held.release();
+				evict(held.room);
+			};
+			try {
+				await plan(held.room, server);
+			} catch (err) {
+				release();
+				throw err;
+			}
+			return release;
+		},
 		restoredRuns: (channelId, outcome) => {
 			let room = Rooms.get(channelId);
 			let opened = room?.plan;
