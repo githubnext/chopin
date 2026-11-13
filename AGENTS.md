@@ -343,10 +343,18 @@ acknowledged at once and given to that turn (`PlannerSession.steer`, through the
 harness's own mid-run input: Atomic's `steer`, a `steer` frame to a remote client
 that offered `steer-turn`), which reads it at its next step as `@handle: text`, in the
 same turn. Steering takes the same write access as starting a turn: `chat:send` is
-checked before `Chat.send`, so a reader cannot steer. A harness that cannot take
-input mid-run (the Copilot SDK), or a running turn that is a background job's, refuses
-the message with `planner-busy`: "chopin can't take messages while it works on this
-machine. Stop it to ask now." (the server log names the harness). A machine that is away,
+checked before `Chat.send`, so a reader cannot steer. A background job never makes a
+person wait: a message to the Planner (or an `invoke_planner` message) while a job's turn
+runs, or while one is being handed the Chat, is acknowledged at once and the job gives way
+(`preempt` in `apps/server/src/chat/service.ts`). Its turn is stopped and starts the
+person's turn as it ends; a write its own tool has under way finishes first and stands as its
+result, and with none it goes back to pending, its attempts unspent, and runs again when that
+turn's end wakes the queue. One job (kind and target) gives way at most three times in a row;
+the next run is let finish, with the person's turn right behind it. A turn a person started, or
+one Chopin started for a Build or a comment, is never preempted. A harness that cannot take
+input mid-run (the Copilot SDK) refuses a message while a turn runs with `planner-busy`:
+"chopin can't take messages while it works on this machine. Stop it to ask now." (the server
+log names the harness). A machine that is away,
 in its hand-over window before the client resumes ("Still connecting to @mona's machine, so
 this message wasn't sent. Send it again in a moment."), or with none attached, refuses it with
 the connection's own words (`planner-not-attached`),
@@ -357,7 +365,7 @@ to be given to, and is answered as a passing trouble (`temporarily-unavailable`)
 turn ends before it can read the message, an idle Chat starts a turn for it and any other
 says plainly that Chopin did not read it. A comment note, an `invoke_planner as system` call
 and a task draft need a turn of their own, so a running turn refuses them before anything is
-saved. Only Chopin's own scheduling still waits for the running turn, in `chat.waiting`:
+saved. Only Chopin's own scheduling still waits for the running turn (or, for a job, a person's), in `chat.waiting`:
 background jobs and server-authored instructions nobody typed (initiative, an ended workflow
 run, readiness, decision follow-ups). `planner_deferred_turns` is no longer written or read;
 at start the writer-lease holder closes any row an earlier release left open

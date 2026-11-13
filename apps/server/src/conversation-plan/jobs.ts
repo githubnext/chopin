@@ -5,9 +5,13 @@ import type { ConversationPlan } from "@chopin/protocol";
 import type { JobIntent } from "./effects";
 
 export type Job = ConversationPlan.Job;
+/**
+ * How a run ended. `deferred` waits for the Planner to be available again; `preempted` gave way to
+ * a person's turn. Both leave the job pending, its attempts unspent.
+ */
 export type JobOutcome =
 	| { status: "done"; output: string }
-	| { status: "failed" | "skipped" | "deferred"; reason: string };
+	| { status: "failed" | "skipped" | "deferred" | "preempted"; reason: string };
 
 export const MAX_JOBS = 128;
 const MAX_TARGET = 200;
@@ -113,13 +117,28 @@ export function settle(jobs: Job[], id: string, outcome: JobOutcome, at: string)
 		|| outcome.status === "deferred" && running.kind !== "decision-followup"
 		|| (outcome.status === "done"
 			? !jsonOutput(outcome.output)
-			: !["failed", "skipped", "deferred"].includes(outcome.status)
+			: !["failed", "skipped", "deferred", "preempted"].includes(outcome.status)
 				|| !bounded(outcome.reason, MAX_REASON))
 	) invalid();
+	// A newer request for the same thing already waits: it replaces the one that gave way.
+	let superseded = outcome.status === "preempted" && jobs.some(job =>
+		job.status === "pending" && (
+			running.kind === "heading"
+				? job.kind === "heading"
+				: (running.kind === "refine" || running.kind === "suggest")
+					&& (job.kind === "refine" || job.kind === "suggest") && job.target === running.target
+		)
+	);
 	return jobs.map(job => {
 		if (job.id !== id) return job;
 		let { reason: _reason, output: _output, ...rest } = job;
-		if (outcome.status === "deferred") return { ...rest, status: "pending", at };
+		if (outcome.status === "deferred" || outcome.status === "preempted" && !superseded) {
+			return { ...rest, status: "pending", at };
+		}
+		if (outcome.status === "preempted") {
+			let reason = "A newer request replaced it.";
+			return { ...rest, status: "skipped", attempts: job.attempts + 1, reason, at };
+		}
 		return outcome.status === "done"
 			? { ...rest, status: "done", attempts: job.attempts + 1, output: outcome.output, at }
 			: { ...rest, status: outcome.status, attempts: job.attempts + 1, reason: outcome.reason, at };

@@ -199,19 +199,19 @@ test("a harness that takes no input mid-run refuses the message, naming how to a
 	expect(h.prompts).toHaveLength(1);
 });
 
-test("a background job's turn takes no message: it is refused, and Stop is how to ask now", async () => {
+test("a background job's turn takes no message: the person's own turn starts in its place", async () => {
 	let h = harness();
 	let job = Chat.job(h.context, JOB, "job prompt", "session");
 	await until(() => h.prompts.length === 1);
 	let frames: Frame[] = [];
-	await Chat.send(h.context, speaking("bo", frames), member("@chopin also this"));
-	expect(frames).toEqual([
-		expect.objectContaining({ kind: "session:error", message: CANNOT, code: "planner-busy" }),
-	]);
-	expect(h.chat.entries).toEqual([]);
+	let ask = member("@chopin also this");
+	await Chat.send(h.context, speaking("bo", frames), ask);
+	expect(frames).toEqual([expect.objectContaining({ kind: "chat:send", id: ask.requestId })]);
+	expect(await job).toMatchObject({ status: "preempted" });
+	await until(() => h.prompts.length === 2);
+	// Nothing was given to the job's session: the message began a turn of its own.
 	expect(h.steered).toEqual([]);
 	h.emit("session.idle");
-	await job;
 	await until(() => !h.chat.busy);
 });
 

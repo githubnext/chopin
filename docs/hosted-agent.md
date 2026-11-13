@@ -1156,8 +1156,19 @@ Nothing a person sends to the Planner is held for later. A message is never "wai
   does: `chat:send` is checked before it reaches Chat, so a reader cannot steer, and two people can
   steer one turn, each message read once in the order it was sent. A message with references
   carries them, and one sent from a child carries the child as focus.
+- **A background job is running** (keeping the title, writing up a decision): the message is
+  posted and acknowledged at once, and the job gives way. Its turn is stopped and the person's
+  turn starts as soon as it has ended, ahead of anything waiting. A write the job's own tool has
+  under way finishes first and is the job's result, so nothing is half written or written twice;
+  with none, the job goes back to pending with its attempts unspent and runs again when the
+  person's turn ends. A job about to be handed the Chat waits behind the person's turn instead. One
+  job (its kind and target) gives way at most three times in a row: the next run is let finish,
+  with the person's turn starting the moment it ends, so a job that keeps meeting messages still
+  completes. A newer request for the same thing that is already waiting replaces one that gave way.
+  An `invoke_planner` message does the same. A turn a person started, and one Chopin started for
+  something a person did (a Build, a comment), are never preempted.
 - **It cannot be taken:** it is refused, saves nothing and says so. With a harness that takes
-  no input mid-run (the Copilot SDK), or a running turn that is a background job's, the code is
+  no input mid-run (the Copilot SDK), the code is
   `planner-busy` and the words are "chopin can't take messages while it works on this machine. Stop
   it to ask now."; the server log names the harness. With no machine attached, or one that is away,
   the code is `planner-not-attached` with the connection's own words, mid-turn or not. For a
@@ -1186,7 +1197,8 @@ note sent to Chopin in a child document is admitted by the root's Chat in the sa
 
 What still waits for the running turn, in memory, is Chopin's own scheduling, which nobody typed
 and which is neither saved nor shown (its turn is sent as `quiet`, which Chat draws as no turn at
-all, as it does a reply whose words are all out while its after-answer check runs): background jobs (such as keeping a title) and the turns the
+all, as it does a reply whose words are all out while its after-answer check runs): background jobs
+(such as keeping a title), which also wait behind a person's turn they gave way to, and the turns the
 server writes for itself (answers to open decisions, relinking after a build, settling a prototyped
 passage, an ended workflow run, a readiness check, an initiative proposal). They start in the
 order they were asked once the running turn ends, a job that is no longer worth running is dropped
