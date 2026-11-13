@@ -31,7 +31,7 @@ test.each([false, true])(
 	},
 );
 
-test("a job waits for a human turn, and a person's message while a job runs is refused, without leaking job scope", async () => {
+test("a job waits for a human turn, and a person's message while a job runs preempts it, without leaking job scope", async () => {
 	let first = harness();
 	await Chat.send(first.context, socket(), member("Human first"));
 	await until(() => first.prompts.length === 1);
@@ -47,29 +47,25 @@ test("a job waits for a human turn, and a person's message while a job runs is r
 	let second = harness();
 	let ahead = Chat.job(second.context, JOB, "job first", "session");
 	await until(() => second.prompts.length === 1);
-	// A job's session is isolated: nobody talks to it, and nothing waits for it to end.
-	let refusals: Array<Record<string, unknown>> = [];
+	// A job's session is isolated: nobody talks to it, and a person's message takes its place.
+	let frames: Array<Record<string, unknown>> = [];
 	let sender = {
 		data: { handle: "ana", principalId: "U_ana" },
-		send: (frame: string) => refusals.push(JSON.parse(frame)),
+		send: (frame: string) => frames.push(JSON.parse(frame)),
 	} as unknown as Parameters<typeof Chat.send>[1];
 	await Chat.send(second.context, sender, member("Human second"));
-	expect(refusals).toEqual([
-		expect.objectContaining({
-			kind: "session:error",
-			message: "chopin can't take messages while it works on this machine. Stop it to ask now.",
-			code: "planner-busy",
-		}),
-	]);
-	expect(second.chat.waiting).toHaveLength(0);
-	expect(second.chat.entries).toEqual([]);
-	await runJobTool(second.chat, "refine_decision", async () => ({ output: { added: 0 } }));
-	second.emit("session.idle");
-	expect(await ahead).toEqual({ status: "done", output: '{"added":0}' });
-	await until(() => !second.chat.busy);
+	expect(frames).toEqual([expect.objectContaining({ kind: "chat:send" })]);
+	expect(await ahead).toMatchObject({ status: "preempted" });
+	await until(() => second.prompts.length === 2);
+	// The person's turn has no job scope: the job's tool is refused to it.
 	expect(second.chat.job).toBeUndefined();
-	expect(second.prompts).toEqual(["job first"]);
+	await expect(
+		runJobTool(second.chat, "refine_decision", async () => ({ output: { added: 0 } })),
+	).rejects.toThrow();
+	expect(second.chat.waiting).toHaveLength(0);
 	expect(second.steered).toEqual([]);
+	second.emit("session.idle");
+	await until(() => !second.chat.busy);
 });
 
 test("archiving cancels a job queued behind a human turn without dropping human work", async () => {

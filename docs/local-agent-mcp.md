@@ -202,7 +202,8 @@ Refusals return an object with `code`, and `planner-not-attached` also a
 - `planner-unavailable`: the Planner is disabled or the room is closing.
 - `planner-busy`: a turn is running and cannot be given the instruction. A message-like call is
   given to the running turn when its harness takes input mid-run, and refused with this code
-  when it does not (the Copilot SDK) or the running turn is a background job's; an `as: "system"`
+  when it does not (the Copilot SDK); a background job's turn gives way to it instead, and its
+  turn starts once the job's has ended. An `as: "system"`
   call needs a turn of its own and is always refused while one runs. Nothing is held for later:
   call again once the turn has ended.
 - `system-turn-forbidden`: `as: "system"` came from someone other than the

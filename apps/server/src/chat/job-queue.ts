@@ -11,6 +11,10 @@ export type JobTurn = {
 	prompt: string;
 	done: (outcome: JobOutcome) => void;
 	settled?: boolean;
+	/** A person's message cut its turn short; it runs again unless its own tool already wrote. */
+	preempted?: true;
+	/** What its own tool recorded before its turn was cut short. */
+	output?: string;
 };
 
 export function jobReason(error: unknown): string {

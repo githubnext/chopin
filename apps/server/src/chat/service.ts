@@ -351,6 +351,17 @@ export type Chat = {
 	jobToolNames?: ReadonlySet<string>;
 	/** The job taken from the waiting turns while its handoff save is pending. */
 	handoffJob?: JobTurn;
+	/** The background job whose turn holds the Chat, until the next turn starts or the Chat is idle. */
+	backgroundTurn?: JobTurn;
+	/** The running job's own tool write, which a preemption lets finish so it is recorded whole. */
+	jobWriting?: Promise<unknown>;
+	/**
+	 * A person's turn that preempted a background job, started as soon as the job's turn has wound
+	 * down, ahead of anything waiting.
+	 */
+	preempting?: Parameters<typeof run>;
+	/** How often each job (by kind and target) has given way since it last finished, so it ends. */
+	preemptions?: Map<string, number>;
 	/** Reads reactions to the Planner's messages and starts the turns that answer them. */
 	reactions?: import("./reaction-reply").ReactionResponder;
 	/** The id of the running turn when it is answering a reaction. */
@@ -948,10 +959,53 @@ function canSteer(context: Room): boolean {
 
 /** Says in the log why a message was refused while a turn runs, naming the harness that takes none. */
 function refusedWhileRunning(context: Room): void {
-	let why = context.chat.job
-		? "the running turn is a background job's"
-		: `the ${context.config.harness} harness takes no input while a turn runs`;
-	console.warn(`[chat] refused a message while a turn runs: ${why}`);
+	console.warn(
+		`[chat] refused a message while a turn runs: the ${context.config.harness} harness takes no input while a turn runs`,
+	);
+}
+
+/**
+ * How many runs in a row of one job (its kind and target) a person's message may cut short. The
+ * next run is let finish, with the person's turn starting the moment it ends, so a job that keeps
+ * meeting messages still completes.
+ */
+const MAX_PREEMPTIONS = 3;
+
+/** What a job that gave way to a person's turn reports: it goes back to wait, unchanged. */
+const PREEMPTED: JobOutcome = { status: "preempted", reason: "A person asked the Planner." };
+
+/**
+ * Whether what holds the Chat is a background job, running or being handed the Chat, which a
+ * person's message to the Planner goes ahead of. A turn a person started, or one Chopin started
+ * for something a person did (a Build, a comment, a follow-up), is never one.
+ */
+function preemptible(chat: Chat): boolean {
+	if (chat.closed || chat.preempting || startsHeld) return false;
+	if (chat.starting) return !!chat.handoffJob;
+	return chat.busy && !!chat.backgroundTurn;
+}
+
+/**
+ * Starts a person's turn ahead of the background job holding the Chat. The job's turn is stopped
+ * and starts this one as it ends; a job being handed the Chat waits behind it instead. A write the
+ * job's own tool has under way finishes first, so it is recorded whole and not made again.
+ */
+function preempt(context: Room, turn: Parameters<typeof run>): void {
+	let { chat } = context;
+	if (chat.closed) return;
+	// The job ended while the message was saved: nothing is in the way.
+	if (!chat.busy && !chat.starting) return startRun(...turn);
+	chat.preempting = turn;
+	let job = chat.backgroundTurn;
+	let controller = chat.turnController;
+	if (chat.starting || !job || job.preempted || !controller || controller.signal.aborted) return;
+	let key = `${job.job.kind}:${job.job.target}`;
+	let preemptions = chat.preemptions ??= new Map();
+	let count = preemptions.get(key) ?? 0;
+	if (count >= MAX_PREEMPTIONS) return;
+	preemptions.set(key, count + 1);
+	job.preempted = true;
+	void Promise.resolve(chat.jobWriting).catch(() => {}).then(() => controller.abort());
 }
 
 /** A message posted to the transcript for the Planner turn that is running to read. */
@@ -1102,7 +1156,9 @@ export async function invoke(
 			});
 			return undefined;
 		}
-		let running = occupied(chat);
+		// A background job gives way to a person's instruction, as to their message.
+		let preempts = preemptible(chat);
+		let running = !preempts && occupied(chat);
 		if (running && !canSteer(context)) {
 			refusedWhileRunning(context);
 			return "planner-busy" as const;
@@ -1136,7 +1192,7 @@ export async function invoke(
 			});
 			if (settled) void given.finally(settled).catch(() => {});
 		} else {
-			startRun(
+			let asked: Parameters<typeof run> = [
 				{ ...context, invokedBy: user.id },
 				user.login,
 				text,
@@ -1144,8 +1200,12 @@ export async function invoke(
 				context.claimantSessionId,
 				false,
 				{ entryId: entry.id, userId: user.id, ...(focus ? { focus } : {}) },
-			);
-			// Started here, so this promise is this turn's own (and the waiting turns it starts).
+				[],
+			];
+			if (preempts) preempt(context, asked);
+			else startRun(...asked);
+			// Started here, or by the job's turn it preempted as that ends, so this promise holds this
+			// turn (and the waiting turns it starts).
 			let turn = chat.running;
 			if (settled) {
 				if (turn) void turn.finally(settled).catch(() => {});
@@ -1424,12 +1484,52 @@ async function processSend(
 	if (chat.closed) return refuseClosed(ws, msg.rid);
 
 	chat.initiative?.cancel();
+	if (preemptible(chat)) {
+		// A background job gives way: the person's turn starts once the job's turn has wound down.
+		let bindFailure = await bindAttachments?.();
+		if (bindFailure) return fail(ws, msg.rid, bindFailure.refusal, bindFailure.code);
+		let entry: MemberEntry = {
+			id: requestId,
+			author: { kind: "member", handle },
+			text,
+			ts: now(),
+			...(references?.length ? { references } : {}),
+			...withAttachments,
+			delivery: savedDelivery,
+		};
+		chat.entries.push(entry);
+		try {
+			await context.persist();
+		} catch {
+			chat.entries = chat.entries.filter(value => value.id !== entry.id);
+			return fail(ws, msg.rid, "could not save message", PASSING);
+		}
+		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id });
+		if (chat.closed) return;
+		announce(server, room, entry);
+		preempt(context, [
+			context,
+			handle,
+			text,
+			undefined,
+			context.claimantSessionId,
+			false,
+			{ entryId: entry.id, userId: ws.data.principalId, ...(focus ? { focus } : {}) },
+			references ?? [],
+		]);
+		context.memberMessagePersisted?.(entry, context.claimantSessionId);
+		return;
+	}
 	if (chat.busy || chat.starting) {
 		if (!canSteer(context)) {
-			// A turn that is only beginning or finishing has no session to give a message to just now:
-			// the browser sends it again in a moment, to a Planner that is then idle or working. A
-			// background job's session, or a harness that takes no input mid-run, never will.
-			if (!chat.job && !chat.closed && context.steers?.()) {
+			// A stopping process starts no turn in place of a job, and says nothing: the browser sends
+			// the message again to the next one.
+			if (startsHeld && chat.backgroundTurn) return refuseClosed(ws, msg.rid);
+			// A turn that is only beginning or finishing, or a person's turn about to start in place of
+			// a job, has no session to give a message to just now: the browser sends it again in a
+			// moment, to a Planner that is then idle or working. A harness that takes no input mid-run
+			// never will.
+			if (!chat.closed && context.steers?.()) {
 				return fail(ws, msg.rid, `${PLANNER_NAME} is between replies`, PASSING);
 			}
 			refusedWhileRunning(context);
@@ -2989,6 +3089,7 @@ async function run(
 	let skipped = false;
 	let reader = !!about?.reader;
 	let isolated = reader || !!jobTurn;
+	chat.backgroundTurn = jobTurn;
 
 	if (!reserved) {
 		chat.busy = true;
@@ -3222,7 +3323,8 @@ async function run(
 				: { status: "done", output: chat.jobOutput };
 		}
 	} catch (err) {
-		console.error("[chat] turn failed:", err);
+		// A job that gave way to a person's turn did not fail: it runs again later.
+		if (!jobTurn?.preempted) console.error("[chat] turn failed:", err);
 		// A stop the room asked for is not a failure; an interruption is.
 		failed = !turnController.signal.aborted || !!chat.interruption;
 		// A reply the check refused ended no workflow run and answered no question.
@@ -3360,6 +3462,14 @@ async function run(
 			} else if (chat.interruption) {
 				outcome = { status: "failed", reason: jobReason(chat.interruption) };
 			}
+			if (jobTurn.preempted && !chat.closed && !persistenceError) {
+				// What its own tool wrote before it gave way is its result; with none, it runs again.
+				let output = jobTurn.output ?? (outcome?.status === "done" ? outcome.output : undefined);
+				outcome = output === undefined ? PREEMPTED : { status: "done", output };
+			}
+			if (outcome?.status !== "preempted") {
+				chat.preemptions?.delete(`${jobTurn.job.kind}:${jobTurn.job.target}`);
+			}
 		}
 
 		/*
@@ -3445,6 +3555,15 @@ async function startNext(
 	ended?: { job: boolean; outcome: JobOutcome | undefined },
 ): Promise<void> {
 	let { chat, room, server } = context;
+	// A person's turn that preempted a job goes first.
+	let preempting = chat.preempting;
+	chat.preempting = undefined;
+	if (preempting && !startsHeld) {
+		chat.starting = false;
+		if (ended) await run(...preempting);
+		else startRun(...preempting);
+		return;
+	}
 	let next = startsHeld ? undefined : pending(chat);
 	if (next) {
 		if (next.job) chat.handoffJob = next.job;
@@ -3464,6 +3583,11 @@ async function startNext(
 		}
 		if (next.job?.settled) {
 			// Settled while its handoff save was pending: it never runs, and the next one is tried.
+			return startNext(context, ended);
+		}
+		if (chat.preempting) {
+			// A person asked while it was handed the Chat: it waits behind their turn.
+			chat.waiting.unshift(next);
 			return startNext(context, ended);
 		}
 		let turnContext = { ...context };
@@ -3490,6 +3614,7 @@ async function startNext(
 	// Called with nothing running, there is nothing to settle.
 	if (!ended) return;
 	chat.busy = false;
+	chat.backgroundTurn = undefined;
 	chat.turn = undefined;
 	chat.acting = undefined;
 	chat.actingChannel = undefined;
@@ -4153,6 +4278,7 @@ export async function close(chat: Chat): Promise<void> {
 		chat.handoffJob = undefined;
 	}
 	chat.waiting = [];
+	chat.preempting = undefined;
 	chat.turnController?.abort();
 	chat.referenceCache.clear();
 	chat.bootstrapEntries = undefined;

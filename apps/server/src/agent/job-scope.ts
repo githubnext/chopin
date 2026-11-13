@@ -79,7 +79,25 @@ export async function runJobTool(
 	if (tool !== JOB_TOOLS[job.kind]) {
 		throw new Error("a background Planner job may run only its own tool");
 	}
+	// A job giving way to a person's turn writes nothing more; it runs again later.
+	if (chat.backgroundTurn?.preempted) {
+		throw new Error("a person's turn took the Planner; this job runs again later");
+	}
+	// Watched by a preemption, which lets a write under way finish before the turn stops.
+	let writing = record(chat, job, produce);
+	chat.jobWriting = writing;
+	try {
+		return await writing;
+	} finally {
+		if (chat.jobWriting === writing) chat.jobWriting = undefined;
+	}
+}
 
+async function record(
+	chat: Chat,
+	job: Job,
+	produce: (job: Job) => Promise<{ output: unknown } & Record<string, unknown>>,
+): Promise<unknown> {
 	let turn = chat.turn;
 	let id = job.id;
 	let { output, ...reply } = await produce(job);

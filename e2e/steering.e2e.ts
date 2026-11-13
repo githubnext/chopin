@@ -183,20 +183,38 @@ function speak(context: Parameters<AgentHandlers["turn"]>[0], id: string, text: 
  * and `steered` what its running turns were given. Without `steers` it offers no way to take a
  * message mid-run. `release` lets a turn that was given nothing end; a Stop ends it as ever.
  */
-async function machine(room: string, options: { steers?: boolean } = { steers: true }) {
+async function machine(
+	room: string,
+	options: { steers?: boolean; holdJob?: boolean } = { steers: true },
+) {
 	let prompts: string[] = [];
+	/** When each prompt in `prompts` reached the machine. */
+	let received: number[] = [];
 	let steered: string[] = [];
 	let aborted = 0;
+	let jobs = 0;
+	let jobsStopped = 0;
+	let jobRunning = Promise.withResolvers<void>();
 	let arrived = Promise.withResolvers<void>();
 	let released = Promise.withResolvers<void>();
 	let handlers: AgentHandlers = {
 		async turn(context) {
 			// Chopin's own upkeep of the document runs through the same Planner; it is not a message.
+			// With `holdJob` the first one works until it is stopped, as a slow title would.
 			if (context.message.prompt.startsWith("[Background job")) {
 				context.emit({ type: "stream-start", modelId: "scripted" });
+				if (options.holdJob && ++jobs === 1) {
+					jobRunning.resolve();
+					await new Promise<void>(resolve =>
+						context.signal.addEventListener("abort", () => resolve(), { once: true })
+					);
+					jobsStopped++;
+					return;
+				}
 				return finishTurn(context);
 			}
 			prompts.push(context.message.prompt);
+			received.push(Date.now());
 			context.emit({ type: "stream-start", modelId: "scripted" });
 			speak(context, "first", "Reading the plan.");
 			let stopped = new Promise<void>(resolve =>
@@ -230,8 +248,12 @@ async function machine(room: string, options: { steers?: boolean } = { steers: t
 	return {
 		client,
 		prompts,
+		received,
 		steered,
 		aborted: () => aborted,
+		jobs: () => jobs,
+		jobsStopped: () => jobsStopped,
+		jobRunning: jobRunning.promise,
 		release: () => released.resolve(),
 	};
 }
@@ -326,6 +348,45 @@ test("Stop with an empty draft ends the running turn, and the draft being empty 
 		await say(page, "try once more");
 		await expect.poll(() => planner.prompts.length).toBe(2);
 		planner.release();
+	} finally {
+		await planner.client.detach();
+	}
+});
+
+test("a message sent while Chopin writes the title starts its turn at once: the title waits and is written after", async ({ page }) => {
+	test.setTimeout(90_000);
+	let room = await open(page);
+	let planner = await machine(room, { steers: true, holdJob: true });
+	let input = chatInput(page);
+	try {
+		// The first message's turn ends, and the title job it asked for begins and keeps working.
+		planner.release();
+		await say(page, "outline the plan");
+		await expect.poll(() => planner.prompts.length).toBe(1);
+		await planner.jobRunning;
+		// The job's turn is quiet: no working row and no Stop while it keeps the title.
+		await expect(chat(page).getByRole("button", { name: "Stop generating" })).toHaveCount(0);
+		await expect(chat(page).getByText("Getting oriented")).toHaveCount(0);
+
+		let sent = Date.now();
+		await say(page, "what about the rollback?");
+		await expect.poll(() => planner.prompts.length).toBe(2);
+		let waited = planner.received[1]! - sent;
+		test.info().annotations.push({ type: "send-to-turn-ms", description: String(waited) });
+		console.log(`send to the person's turn while a title job runs: ${waited} ms`);
+		expect(planner.prompts[1]).toContain("what about the rollback?");
+		expect(planner.jobsStopped()).toBe(1);
+		await expect(chat(page).locator("[data-quiet-note]")).toHaveCount(0);
+		await expect(message(page, "what about the rollback?").locator("[data-chat-failed]"))
+			.toHaveCount(0);
+		await expectChatValue(input, "");
+
+		// Once the person's turn is over, the title job runs again, and this time finishes, quietly.
+		await expect.poll(planner.jobs).toBeGreaterThanOrEqual(2);
+		expect(planner.prompts).toHaveLength(2);
+		await expect(chat(page).getByRole("button", { name: "Stop generating" })).toHaveCount(0);
+		await expect(chat(page).getByText("Getting oriented")).toHaveCount(0);
+		await expect(chat(page).locator("[data-quiet-note]")).toHaveCount(0);
 	} finally {
 		await planner.client.detach();
 	}

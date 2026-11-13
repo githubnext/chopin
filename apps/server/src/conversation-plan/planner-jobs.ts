@@ -197,8 +197,9 @@ export function createPlannerJobs(deps: PlannerJobDeps) {
 			);
 			if (!settled) continue;
 			announce(settled.find(job => job.id === running.id));
-			// A later owner or Chat capacity notification retries this pending generation.
-			if (finalResult.status === "deferred") return;
+			// A later owner or Chat capacity notification retries this pending generation; one that
+			// gave way to a person's turn runs again when that turn's end wakes the queue.
+			if (finalResult.status === "deferred" || finalResult.status === "preempted") return;
 			if (!stopped && (finalResult.status === "done" || finalResult.status === "skipped")) {
 				try {
 					deps.onCapacityAvailable?.();
