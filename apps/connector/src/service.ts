@@ -332,6 +332,8 @@ export type ServiceHost = {
 	home: string;
 	/** The login name, for loginctl and the Windows task's name. */
 	user: string;
+	/** Where systemd-logind records which users linger; its own state directory unless a test supplies one. */
+	lingerDirectory?: string;
 	/** The user id, for launchctl's gui/<uid> domain. */
 	uid: number;
 	env: Env;
@@ -351,6 +353,28 @@ export class ServiceError extends Error {
 export { windowsArgument };
 
 export const LINGER_COMMAND = 'sudo loginctl enable-linger "$(id -un)"';
+
+/** systemd-logind's record of the users that linger: a file named for each, made by enable-linger. */
+const LINGER_DIRECTORY = "/var/lib/systemd/linger";
+
+/**
+ * Whether this user lingers: loginctl's answer, or, when loginctl can't answer (logind's D-Bus
+ * can jam while linger is on), the file systemd-logind keeps for each user that lingers.
+ * `unanswered` is why loginctl couldn't say, and `record` the file read instead.
+ */
+async function lingers(
+	host: ServiceHost,
+): Promise<{ on: boolean; unanswered?: string; record?: string }> {
+	let shown = await host.run("loginctl", ["show-user", host.user, "--property=Linger", "--value"]);
+	let value = shown.stdout.trim();
+	if (shown.code === 0 && value) return { on: value === "yes" };
+	let record = join(host.lingerDirectory ?? LINGER_DIRECTORY, host.user);
+	return {
+		on: existsSync(record),
+		unanswered: shown.code === 0 ? "it gave no answer" : why(shown),
+		record,
+	};
+}
 
 const LOGON_NOTE = "It runs only while you are logged on to Windows. To start it at boot, "
 	+ 'see "Run chopin as a service" in docs/local-experiments.md.';
@@ -867,13 +891,14 @@ export async function installService(
 					+ "that user directly rather than through su or sudo.",
 			);
 		}
-		let linger = await host.run("loginctl", [
-			"show-user",
-			host.user,
-			"--property=Linger",
-			"--value",
-		]);
-		if (linger.code !== 0 || linger.stdout.trim() !== "yes") {
+		let linger = await lingers(host);
+		if (linger.on && linger.unanswered) {
+			notes.push(
+				`loginctl isn't answering (${linger.unanswered}), so chopin read systemd-logind's `
+					+ `record instead: ${linger.record} says linger is on.`,
+			);
+		}
+		if (!linger.on) {
 			let enabled = await host.run("loginctl", ["--no-ask-password", "enable-linger", host.user]);
 			if (enabled.code !== 0) {
 				throw new ServiceError(
@@ -1103,18 +1128,25 @@ export async function serviceStatus(host: ServiceHost, directory: string): Promi
 			throw new ServiceError(`chopin can't reach your systemd user manager (${why(shown)}).`);
 		}
 		let unit = parseSystemd(shown.stdout);
-		let linger = await host.run("loginctl", [
-			"show-user",
-			host.user,
-			"--property=Linger",
-			"--value",
-		]);
-		let notes = [
-			...(!unit.enabled ? ["It is not enabled; chopin service install enables it."] : []),
-			...(linger.stdout.trim() === "yes" ? [] : [
+		let linger = await lingers(host);
+		let lingerNotes = !linger.unanswered
+			? linger.on ? [] : [
 				"Linger is off, so it starts when you log in and stops when you log out; "
 				+ `${LINGER_COMMAND} makes it start at boot.`,
-			]),
+			]
+			: linger.on
+			? [
+				`loginctl couldn't be asked whether linger is on (${linger.unanswered}); `
+				+ `systemd-logind's record ${linger.record} says it is, so it starts at boot.`,
+			]
+			: [
+				`loginctl couldn't be asked whether linger is on (${linger.unanswered}), and `
+				+ `systemd-logind has no record of it at ${linger.record}, so it likely starts when you `
+				+ `log in and stops when you log out; ${LINGER_COMMAND} makes it start at boot.`,
+			];
+		let notes = [
+			...(!unit.enabled ? ["It is not enabled; chopin service install enables it."] : []),
+			...lingerNotes,
 			...(unit.restarting
 				? ["It exited, and systemd starts it again in a few seconds; the log says why."]
 				: []),
