@@ -136,7 +136,9 @@ import { Transcript } from "./transcript";
 let LazyThreadPanel = lazy(() => import("./threads/thread-panel"));
 import {
 	initialTranscript,
+	offersStop,
 	progressOf,
+	shownWork,
 	silentRestart,
 	transcriptReducer,
 } from "./transcript-state";
@@ -183,8 +185,14 @@ export type ChatProps = {
 	/** The room's connection is lost, catching up or just back: the offline bar's to tell. */
 	offline?: boolean;
 	active?: boolean;
-	/** `history` marks the transcript arriving, after which `busy` is known rather than assumed. */
-	onActivity?: (event: { type: "message" | "working"; busy: boolean; history?: true }) => void;
+	/**
+	 * `history` marks the transcript arriving, after which `busy` is known rather than assumed.
+	 * `working` is whether that turn is one people watch: a quiet turn (`Chat.Turn.quiet`) is busy
+	 * and not working.
+	 */
+	onActivity?: (
+		event: { type: "message" | "working"; busy: boolean; working: boolean; history?: true },
+	) => void;
 	conversationPlan?: ConversationPlan.State;
 	conversationPlanJobs?: ConversationPlan.Job[];
 	onCardLink?: (link: CardLink) => void;
@@ -504,6 +512,7 @@ export function Chat(
 	let synchronized = useRef<Socket | undefined>(undefined);
 	let activity = useRef(onActivity);
 	let reportedBusy = useRef(false);
+	let reportedWorking = useRef(false);
 	activity.current = onActivity;
 	// A socket opens before its fresh transcript arrives, and reconnects reuse
 	// the same Wire. Only that transcript makes this composer current.
@@ -638,9 +647,13 @@ export function Chat(
 		!!draft.text.trim() || files.files.length > 0 || outbox.some(item => !item.acknowledged),
 	);
 	let quiet = quietRestart.current;
-	let { working: workingTurn, suspended: suspendedWork } = useMemo(
+	let { working: workingTurn, suspended: suspendedWork, settled: settledWork } = useMemo(
 		() => progressOf(transcript, transcriptReady, quiet),
 		[transcript, transcriptReady, quiet],
+	);
+	let completedWork = useMemo(
+		() => shownWork(transcript.completedWork, settledWork),
+		[transcript.completedWork, settledWork],
 	);
 	// `#` and `@` both open at the caret; the one typed nearer to it is the one being written.
 	let hashed = referencesEnabled && composerReady && !submitting
@@ -773,16 +786,26 @@ export function Chat(
 				dispatchIntents({ kind: "history", entries: frame.entries, handle });
 				setBusy(frame.busy);
 				reportedBusy.current = frame.busy;
+				reportedWorking.current = frame.busy && !frame.turn?.quiet;
 				setRuns(frame.runs);
 				setParticipation({ room, wire, state: frame.participation });
 				setParticipationKey(current => current + 1);
 				// History is not unread, but a turn already in progress still needs
 				// a signal outside a closed Chat destination.
-				activity.current?.({ type: "working", busy: frame.busy, history: true });
+				activity.current?.({
+					type: "working",
+					busy: frame.busy,
+					working: reportedWorking.current,
+					history: true,
+				});
 			}),
 			wire.on<Wire.Message>("chat:message", frame => {
 				if (loaded && !seen.has(frame.entry.id)) {
-					activity.current?.({ type: "message", busy: reportedBusy.current });
+					activity.current?.({
+						type: "message",
+						busy: reportedBusy.current,
+						working: reportedWorking.current,
+					});
 				}
 				seen.add(frame.entry.id);
 				dispatchTranscript({ kind: "message", entry: frame.entry });
@@ -813,10 +836,15 @@ export function Chat(
 				dispatchTranscript({ kind: "tool", entryId: frame.entry, activity: frame.activity });
 			}),
 			wire.on<Wire.State>("chat:state", frame => {
-				if (loaded && reportedBusy.current !== frame.busy) {
-					activity.current?.({ type: "working", busy: frame.busy });
+				let working = frame.busy && !frame.turn?.quiet;
+				if (
+					loaded
+					&& (reportedBusy.current !== frame.busy || reportedWorking.current !== working)
+				) {
+					activity.current?.({ type: "working", busy: frame.busy, working });
 				}
 				reportedBusy.current = frame.busy;
+				reportedWorking.current = working;
 				setBusy(frame.busy);
 				dispatchTranscript({ kind: "turn", turn: frame.turn });
 				setRuns(frame.runs);
@@ -853,7 +881,11 @@ export function Chat(
 					loaded && frame.frame.kind === "chat:message"
 					&& frame.frame.entry.author.kind !== "system"
 				) {
-					activity.current?.({ type: "message", busy: reportedBusy.current });
+					activity.current?.({
+						type: "message",
+						busy: reportedBusy.current,
+						working: reportedWorking.current,
+					});
 				}
 				dispatchThreads({ kind: "in-thread", frame });
 			}),
@@ -1516,7 +1548,7 @@ export function Chat(
 			reactionIntents={intents}
 			onRetry={retryMessage}
 			quietFailures={quietFailures}
-			completedWork={transcript.completedWork}
+			completedWork={completedWork}
 			suspendedWork={suspendedWork}
 			handle={handle}
 			live={transcriptReady}
@@ -1683,7 +1715,7 @@ export function Chat(
 					|| busyRefused
 					|| (connectionNotice !== "none" && !draftCommand(draft.text) && !plannerBound)}
 				onSubmit={submit}
-				run={agent && (busy || counts.active > 0)
+				run={agent && (offersStop(busy, transcript.turn, busyRefused) || counts.active > 0)
 					? {
 						action: "stop",
 						disabled: !composerReady && connectionNotice !== "none",

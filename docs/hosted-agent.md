@@ -1185,7 +1185,8 @@ running turn like one sent in Chat, and its `settled` hook runs once that is don
 note sent to Chopin in a child document is admitted by the root's Chat in the same way.
 
 What still waits for the running turn, in memory, is Chopin's own scheduling, which nobody typed
-and which is neither saved nor shown: background jobs (such as keeping a title) and the turns the
+and which is neither saved nor shown (its turn is sent as `quiet`, which Chat draws as no turn at
+all, as it does a reply whose words are all out while its after-answer check runs): background jobs (such as keeping a title) and the turns the
 server writes for itself (answers to open decisions, relinking after a build, settling a prototyped
 passage, an ended workflow run, a readiness check, an initiative proposal). They start in the
 order they were asked once the running turn ends, a job that is no longer worth running is dropped

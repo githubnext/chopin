@@ -639,10 +639,12 @@ test("the atomic harness verifies a checkout before posting and every later sess
 	await browserTurn(context, "@chopin Continue");
 	expect(await Chat.invoke(context, user, "Again", other)).toBe("checkout-unverified");
 	await browserTurn(context, "@chopin Once more");
-	let offsets = events.filter(event => event.kind === "chat:state" && event.busy)
-		.map(event => (event.turn as Wire.Turn).entryOffset);
+	let busy = events.filter(event => event.kind === "chat:state" && event.busy)
+		.map(event => event.turn as Wire.Turn);
 	// Invoked instructions post first; browser turns reserve their prompt before it is appended.
-	expect(offsets).toEqual([1, 2, 3]);
+	expect(busy.filter(turn => !turn.quiet).map(turn => turn.entryOffset)).toEqual([1, 2, 3]);
+	// Each turn goes quiet once its words are all out, the same turn at the same offset.
+	expect(busy.filter(turn => turn.quiet).map(turn => turn.entryOffset)).toEqual([1, 2, 3]);
 	expect(seen).toHaveLength(3);
 	for (let turn of seen) {
 		expect(turn.full?.cwd).toBe(matching);

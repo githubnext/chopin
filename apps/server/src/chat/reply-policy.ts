@@ -120,6 +120,11 @@ export async function publishPlannerReplies(options: {
 	/** Count decisions that already existed and that the Planner repeated this turn. */
 	keptDecisions?: () => number;
 	publish: (part: Part) => void;
+	/**
+	 * Told `true` once an attempt's words are all out, so what is left of the turn (the check) is not
+	 * shown as work, and `false` as a repair step begins, which is.
+	 */
+	quiet?: (quiet: boolean) => void;
 	beginAttempt?: () => void;
 }): Promise<void> {
 	let { session, decide, publish } = options;
@@ -132,6 +137,7 @@ export async function publishPlannerReplies(options: {
 	let toolsTruncated = false;
 	for (let attempt = 0; attempt < 2; attempt++) {
 		if (signal.aborted) return;
+		if (attempt > 0) options.quiet?.(false);
 		let asked = false;
 		let messages = new Map<string, string>();
 		let checks: Promise<void>[] = [];
@@ -206,6 +212,7 @@ export async function publishPlannerReplies(options: {
 		if (failure) throw failure;
 		if (signal.aborted) return;
 		for (let id of messages.keys()) check(id);
+		options.quiet?.(true);
 		await Promise.all(checks);
 		if (signal.aborted || !asked) return;
 		if (options.repair === false) {

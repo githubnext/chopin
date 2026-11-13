@@ -873,11 +873,23 @@ export function RoomWorkspace(
 	let workspacePresentation = presentWorkspace(workspace, mode, view);
 	let chatActive = workspacePresentation.chatVisible;
 	// `loaded` once this socket's transcript arrived, so `busy` reflects the room.
-	let [chatActivity, setChatActivity] = useState({ unread: 0, busy: false, loaded: false });
+	let [chatActivity, setChatActivity] = useState({
+		unread: 0,
+		busy: false,
+		working: false,
+		loaded: false,
+	});
+	// Chat's own mark says chopin is working only for a turn people watch; a quiet one (a background
+	// job, a reply's after-answer check) still holds the document's and its decisions' state.
+	let shownChatActivity = useMemo(
+		() => ({ unread: chatActivity.unread, busy: chatActivity.working }),
+		[chatActivity.unread, chatActivity.working],
+	);
 	let onChatActivity = useCallback(
-		(event: { type: "message" | "working"; busy: boolean; history?: true }) => {
+		(event: { type: "message" | "working"; busy: boolean; working: boolean; history?: true }) => {
 			setChatActivity(current => ({
 				busy: event.busy,
+				working: event.working,
 				loaded: current.loaded || !!event.history,
 				unread: event.type === "message" && !chatActive
 					? current.unread + 1
@@ -2155,7 +2167,7 @@ export function RoomWorkspace(
 								wire={wire}
 							/>
 						}
-						chatActivity={chatActivity}
+						chatActivity={shownChatActivity}
 						documentActivity={documentActivity(documentWatch, chatActivity.busy)}
 						header={phone
 							? (

@@ -45,6 +45,7 @@ function fixture(turns: Part[][], decide: Decide | undefined = verdict(0)) {
 		capturedDecisions: undefined as (() => number) | undefined,
 		keptDecisions: undefined as (() => number) | undefined,
 		repair: undefined as boolean | undefined,
+		quiet: undefined as ((quiet: boolean) => void) | undefined,
 		publish: (part: Part) => published.push(part),
 	};
 	return { options, published, prompts, controller, run: () => publishPlannerReplies(options) };
@@ -119,6 +120,44 @@ test("a finished message is checked while what follows it streams, and the check
 	checking.resolve();
 	await running;
 	expect(f.prompts).toHaveLength(1);
+});
+
+test("once the reply's words are all out, the turn is quiet while its check runs", async () => {
+	let checking = Promise.withResolvers<void>();
+	let checked = Promise.withResolvers<void>();
+	let f = fixture([text("I updated the document.")], async (request, options) => {
+		checked.resolve();
+		await checking.promise;
+		return verdict(0)(request, options);
+	});
+	let quiet: boolean[] = [];
+	let published = 0;
+	f.options.quiet = value => {
+		quiet.push(value);
+		published = f.published.length;
+	};
+	let running = f.run();
+	await checked.promise;
+	await Bun.sleep(0);
+	// Quiet only after the last of the words, while the check still runs.
+	expect(quiet).toEqual([true]);
+	expect(published).toBe(text("I updated the document.").length);
+	checking.resolve();
+	await running;
+	expect(quiet).toEqual([true]);
+});
+
+test("a repair step the check starts is work again, and its end is quiet", async () => {
+	let f = fixture(
+		[text("Which scope?"), text("I put the scope question beside the goal.")],
+		async (request, options) => verdict(said(f).length === 1 ? 1 : 0)(request, options),
+	);
+	f.options.capturedDecisions = () => 1;
+	let quiet: Array<[boolean, number]> = [];
+	f.options.quiet = value => quiet.push([value, f.prompts.length]);
+	await f.run();
+	// Quiet after the first reply, work again before the repair's prompt, quiet after it.
+	expect(quiet).toEqual([[true, 1], [false, 1], [true, 2]]);
 });
 
 test("tool activity passes through while a decision tool is waiting", async () => {
