@@ -711,6 +711,40 @@ test("keyboard Manage machines focuses the Machines heading", async ({ join: ent
 	await expect(page.getByRole("heading", { name: "Machines", exact: true })).toBeFocused();
 });
 
+test("the sidebar machine menu gives focus back to its entry when it closes, but not to a menu opened while it closes", async ({ seed, join: enter }) => {
+	await seed("# Machine choice\n\nThe build goes to the machine chosen here.\n", { graph: GRAPH });
+	let page = await enter(person(), DESKTOP);
+	await connected(page, "laptop");
+	await page.reload();
+	let entry = page.getByRole("complementary", { name: "Projects" })
+		.getByRole("button", { name: /^Machines/ });
+	let sidebar = page.getByRole("menu").filter({ hasText: "Default" });
+	let gone = () =>
+		expect(page.getByRole("menu", { includeHidden: true }).filter({ hasText: "Default" }))
+			.toHaveCount(0);
+	// Closed with nothing else taking focus meanwhile, it is the entry's again.
+	await entry.click();
+	await settledMenu(sidebar);
+	await page.keyboard.press("Escape");
+	await gone();
+	await expect(entry).toBeFocused();
+
+	// Closed, and the machine button pressed while it still fades out. The exit is held at a second
+	// so the test, not the speed of the hand, decides that the button is pressed in the middle of
+	// it. Base UI hands focus back to the entry as the menu leaves; that must not take it from the
+	// button's menu, which closes when focus leaves it.
+	await page.addStyleTag({ content: ".machines-menu { transition-duration: 1s !important; }" });
+	await entry.click();
+	await settledMenu(sidebar);
+	await page.keyboard.press("Escape");
+	let runs = await runOn(page);
+	let current = runs.getByRole("menuitemradio", { checked: true });
+	await expect(current).toBeFocused();
+	await gone();
+	await expect(machineButton(page)).toHaveAttribute("aria-expanded", "true");
+	await expect(current).toBeFocused();
+});
+
 for (let activation of ["Enter", "Space", "touch"] as const) {
 	test(`sidebar machine items close via ${activation}`, async ({ join: enter }) => {
 		let page = await enter(person(), {
