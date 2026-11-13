@@ -1354,7 +1354,9 @@ not apply to it.
   same account attaching with a client that does not resume, which includes a browser
   sign-in attaching over a paired machine's parked work, since that client cannot
   resume it. All of these withdraw the questions and show the runs as `stopped`, and a
-  later `resume` finds nothing. A server restart does not end it: see below. A person
+  later `resume` finds nothing. Archiving stops the document's run cards itself, before it
+  releases the link, so they end even when the Planner is disconnected or a deploy is handing
+  over and its link reports nothing; an archived document always opens with its runs stopped. A server restart does not end it: see below. A person
   with write access can always end a disconnected Planner by resetting it.
 
 #### When the server is restarting

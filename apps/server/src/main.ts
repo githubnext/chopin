@@ -2524,6 +2524,14 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 				await stopped;
 				await conversationRuntime.interrupt(active);
 				await Service.drain(active);
+				// Its runs end with it, whatever its Planner's link is doing: attached, disconnected
+				// with its work kept, or between two processes of a deploy, which report nothing.
+				await Chat.endRuns({
+					chat: active.chat,
+					room: channelId,
+					server,
+					persist: chat => Service.persist(active, chat),
+				});
 				await Service.persist(active);
 			}
 			return storage.channels.archive({ id: channelId, now });
