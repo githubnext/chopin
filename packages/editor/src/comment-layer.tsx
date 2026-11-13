@@ -19,6 +19,7 @@ import {
 import { containsHit, passageHits } from "./comment-hits";
 import { CommentSheet, commentSheetHeading } from "./comment-sheet";
 import { useCommentSheetReveal } from "./comment-sheet-reveal";
+import { focusIsFree } from "./focus-return";
 import { $rangeOf } from "./marks";
 import { blockElement } from "./scroll";
 import { usePendingWork } from "./pending-work";
@@ -798,6 +799,8 @@ export function CommentLayer({ store }: { store: ThreadStore }) {
 	let restoreOrigin = useCallback(() => {
 		let target = origin.current;
 		requestAnimationFrame(() => {
+			// Not over a control the person moved to while the card or its sheet left.
+			if (!focusIsFree(root.current, document.querySelector("[data-plan-comment-sheet]"))) return;
 			let fallback = editor.getRootElement();
 			(target?.isConnected ? target : fallback)?.focus();
 		});

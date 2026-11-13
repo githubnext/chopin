@@ -39,6 +39,10 @@
 			"types": "./src/follow-link.ts",
 			"default": "./src/follow-link.ts"
 		},
+		"./focus-return": {
+			"types": "./src/focus-return.ts",
+			"default": "./src/focus-return.ts"
+		},
 		"./image-lightbox": {
 			"types": "./src/widgets/image-lightbox.tsx",
 			"default": "./src/widgets/image-lightbox.tsx"

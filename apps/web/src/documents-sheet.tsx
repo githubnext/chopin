@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Drawer } from "@base-ui/react/drawer";
 import { Face } from "@chopin/editor/face";
+import { focusIsFree } from "@chopin/editor/focus-return";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
 import {
 	ArchiveIcon,
@@ -99,6 +100,7 @@ export function DocumentsSheet(
 	let [account, setAccount] = useState(false);
 	let close = useRef<HTMLButtonElement>(null);
 	let dismissed = useRef(false);
+	let popup = useRef<HTMLDivElement>(null);
 	let back = useRef<HTMLButtonElement>(null);
 	let archivedRow = useRef<HTMLButtonElement>(null);
 	let projectListId = useId();
@@ -248,8 +250,11 @@ export function DocumentsSheet(
 			onOpenChangeComplete={next => {
 				if (next) return;
 				reset();
-				// A dismissal hands focus back once the sheet, and any field in it, has gone.
-				if (dismissed.current) opener.current?.focus({ preventScroll: true });
+				// A dismissal hands focus back once the sheet, and any field in it, has gone, unless the
+				// person moved it while the sheet fell.
+				if (dismissed.current && focusIsFree(popup.current)) {
+					opener.current?.focus({ preventScroll: true });
+				}
 				dismissed.current = false;
 			}}
 			open={ready && open}
@@ -263,6 +268,7 @@ export function DocumentsSheet(
 						data-page={page}
 						finalFocus={false}
 						initialFocus={close}
+						ref={popup}
 					>
 						<span aria-hidden="true" className="phone-sheet-grabber" />
 						<Drawer.Title className="sr-only">Documents</Drawer.Title>

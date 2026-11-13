@@ -1,5 +1,6 @@
 import { Menu } from "@base-ui/react/menu";
 import { Count } from "@chopin/editor/count";
+import { focusIsFree } from "@chopin/editor/focus-return";
 import { CloudIcon, MachineIcon, PlusIcon, ServerIcon, WarningIcon } from "@chopin/icons";
 import { Fragment, useLayoutEffect, useRef } from "react";
 
@@ -187,24 +188,13 @@ function MachinesMenuPopup({ children }: { children: ReactNode }) {
 	return (
 		<Menu.Popup
 			className="machines-menu"
+			// The menu fades for 120ms; a machine button pressed meanwhile keeps its focus and its menu.
 			finalFocus={() => openedOn.current === location.href && focusIsFree(popup.current)}
 			ref={popup}
 		>
 			{children}
 		</Menu.Popup>
 	);
-}
-
-/**
- * Whether the menu may hand focus back to its entry as it leaves: focus is still in it, or nowhere.
- * Base UI keeps a menu from taking focus away from a control the person moved to while it closed,
- * but only when `finalFocus` is left a boolean; a function decides alone, so the guard is ours. The
- * menu takes 120ms to fade out, and a machine button pressed in that time was shut again by the
- * entry's focus coming back.
- */
-function focusIsFree(popup: HTMLElement | null) {
-	let active = document.activeElement;
-	return !active || active === document.body || !!popup?.contains(active);
 }
 
 /** A teammate's login after a machine name another machine has too, so the two can be told apart. */

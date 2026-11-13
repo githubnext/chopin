@@ -1,4 +1,4 @@
-import { expect, test } from "./room";
+import { content, edit, expect, test } from "./room";
 import { createChannel } from "./database";
 
 import type { Page } from "@playwright/test";
@@ -181,6 +181,55 @@ test("document menus open an action sheet on a phone", async ({ baseURL, join, r
 	await expect(page.getByText(`Archived ${title(other)}`)).toBeVisible();
 	await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
 });
+
+/**
+ * A sheet gives focus back to its opener once it has fallen away, but not over a tap the person made
+ * meanwhile. The fall is held at four seconds, so the test, not the speed of the hand or of a busy
+ * runner, decides that the tap lands while the sheet is still leaving.
+ */
+for (let opened of ["action sheet", "documents sheet"] as const) {
+	test(`a tap into the document while the ${opened} falls keeps its caret`, async ({ join, room }) => {
+		let page = await join("ana", PHONE);
+		await edit(page);
+		let opener = opened === "action sheet"
+			? page.locator(".phone-top-bar").getByRole("button", { name: `Actions for ${title(room)}` })
+			: documentsButton(page);
+		let shown = opened === "action sheet"
+			? page.getByRole("dialog", { name: `Actions for ${title(room)}` })
+			: sheet(page);
+		let falling = page.locator(
+			opened === "action sheet" ? "[data-action-sheet]" : "[data-documents-sheet]",
+		);
+
+		// Left alone, the sheet hands focus back to what opened it.
+		await opener.click();
+		await expect(shown).toBeVisible();
+		await page.keyboard.press("Escape");
+		await expect(falling).toHaveCount(0);
+		await expect(opener).toBeFocused();
+
+		await page.addStyleTag({
+			content: ":is(.action-sheet, .documents-sheet, .phone-sheet-backdrop)[data-ending-style]"
+				+ " { transition-duration: 4s !important; }",
+		});
+		await opener.click();
+		await expect(shown).toBeVisible();
+		await shown.evaluate(element =>
+			Promise.all(element.getAnimations({ subtree: true }).map(item => item.finished))
+		);
+		await page.keyboard.press("Escape");
+		await expect(falling).toHaveAttribute("data-ending-style", "");
+		let body = content(page);
+		await body.locator("p").first().click();
+		await expect(falling).toHaveAttribute("data-ending-style", "");
+		await expect(body).toBeFocused();
+		await expect(falling).toHaveCount(0);
+		await expect(body).toBeFocused();
+		await page.keyboard.type("Kept");
+		await expect(body).toContainText("Kept");
+		await expect(opener).not.toBeFocused();
+	});
+}
 
 test("desktop keeps the Projects sidebar and popover menus", async ({ join, room }) => {
 	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
