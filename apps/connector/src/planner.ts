@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -17,6 +18,7 @@ import { backoff, delay, HEALTHY_MS, transient } from "./reconnect";
 import type { Output } from "./output";
 import {
 	githubEnvironment,
+	githubIdentity,
 	GitHubRefused,
 	type GitHubToken,
 	githubToken,
@@ -25,6 +27,7 @@ import {
 import { type PlannerTokenFile, plannerTokenFile } from "./planner-token";
 import { type McpTokenFile, mcpTokenFile } from "./mcp-token";
 import {
+	assignSlot,
 	type ChosenPlanners,
 	plannerWorktree,
 	preparePlannerWorktree,
@@ -33,6 +36,7 @@ import {
 } from "./workspace";
 import type { Checkouts } from "./checkouts";
 import { type Sandbox, spawnIn } from "./sandbox";
+import { type PlannerSpares, type Spare, SPARE_PROTOCOL } from "./planner-spare";
 
 /** How long a stopped Planner backend has to exit before it is killed. */
 const STOP_GRACE_MS = 5000;
@@ -107,6 +111,8 @@ export async function servePlanners(options: {
 	renewGitHubBeforeMs?: number;
 	/** Where each backend starts: the machine's process sandbox, else plainly. */
 	sandbox?: Sandbox;
+	/** The machine's spare Planners, which a new document's Planner starts on. */
+	spares?: PlannerSpares;
 }) {
 	await Promise.all(options.documents.map(document => servePlanner({ ...options, document })));
 }
@@ -142,6 +148,7 @@ export function dispatchedPlanners(options: {
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
 	sandbox?: Sandbox;
+	spares?: PlannerSpares;
 }) {
 	type Backend = {
 		url: string;
@@ -287,6 +294,7 @@ async function servePlanner(options: {
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
 	sandbox?: Sandbox;
+	spares?: PlannerSpares;
 	/**
 	 * For a dispatched Planner: once the backend exits by itself, whether Chopin still asks for it,
 	 * so it starts again. Without it, a backend that exits is always started again.
@@ -323,7 +331,14 @@ async function servePlanner(options: {
 		let started = Date.now();
 		let credential;
 		try {
-			credential = await plannerCredential(options.url, options.machine, document, signal);
+			// By its id where Chopin named one: Chopin then reads the document without asking GitHub
+			// for its repository again.
+			credential = await plannerCredential(
+				options.url,
+				options.machine,
+				options.id ?? document,
+				signal,
+			);
 		} catch (error) {
 			if (signal.aborted) return;
 			if (!transient(classifyConnectorError(error))) {
@@ -354,115 +369,163 @@ async function servePlanner(options: {
 		let repository = credential.repository ?? "";
 		// Reports name the document by its id, which Chopin can check without asking GitHub.
 		let reportedAs = credential.document ?? options.id ?? document;
-		let worktree = await plannerWorktree(
-			options.directory,
-			repository,
-			credential.document ?? options.id ?? document,
-		);
-		// Its tokens are kept in a folder of their own, which is all of them a sandbox is shown.
-		let tokenDirectory = tokenFolder(worktree);
-		await mkdir(tokenDirectory, { recursive: true, mode: 0o700 }).catch(() => {});
-		// Chopin's GitHub token for the document's repository, which the backend needs before it
-		// starts: a refusal stops this Planner with the reason, and the machine never falls back to its
-		// own GitHub login. Chopin out of reach is retried, as a failed start is.
+		let id = credential.document ?? options.id ?? document;
+		let worktree = await plannerWorktree(options.directory, repository, id);
 		let launched = Date.now();
 		let tokens: PlannerTokenFile | undefined;
 		let mcp: McpTokenFile | undefined;
 		let outcome: { how: string; stderr?: string; reason?: string } | undefined;
 		let github: GitHubToken | undefined;
-		let asked = githubToken({
-			url: options.url,
-			machine: options.machine,
-			repository,
-			purpose: "planner",
-			...(credential.document ?? options.id
-				? { document: credential.document ?? options.id }
-				: {}),
-			folder: tokenDirectory,
-			...(options.renewGitHubBeforeMs === undefined
-				? {}
-				: { renewBeforeMs: options.renewGitHubBeforeMs }),
-		});
-		// What needs no GitHub token is made while Chopin mints it: the files the backend reads its
-		// Chopin credentials from, and its own worktree of a checkout the person registered. A clone
-		// waits for the token, which fetching it takes.
-		let resolved = options.checkouts.resolve(repository, () => asked).then(value => value.root);
-		let prepared = resolved.then(
-			checkout => prepareWorktree(options, document, checkout, worktree),
-			() => {},
-		);
-		let files = credentialFiles(options, document, tokenDirectory, credential);
-		// Not yet read where a failure stops the launch first.
-		resolved.catch(() => {});
-		files.catch(() => {});
-		/** The launch stops before it starts: what was made for it meanwhile is let go. */
-		let abandon = async () => {
-			await prepared;
-			let made = await files.catch(() => undefined);
-			await made?.tokens?.stop();
-			await made?.mcp.stop();
-		};
-		try {
-			github = await asked;
-		} catch (error) {
-			await abandon();
-			if (signal.aborted) return;
-			if (error instanceof GitHubRefused) {
-				output.error(`Stopped the Planner for ${document}: ${error.message}`);
+		// A document with no worktree here yet starts on the repository's spare, which has its code
+		// loaded already; any other, or one with no spare ready, starts cold.
+		let spare = options.spares && !existsSync(worktree)
+			? await options.spares.take(repository)
+			: undefined;
+		let handled = false;
+		if (spare) {
+			let ran = await onSpare(
+				{ ...options, document, id, repository, credential },
+				spare,
+				() => {
+					output.say(`› Planner for ${document} started.`);
+					return setTimeout(() => {
+						void options.failures?.started(document);
+						if (reported) {
+							reported = false;
+							report(reportedAs, undefined);
+						}
+					}, healthyMs);
+				},
+			);
+			if (signal.aborted && ran.kind !== "ran") return;
+			if (ran.kind === "refused") {
+				output.error(`Stopped the Planner for ${document}: ${ran.error.message}`);
 				await options.failures?.failed({
 					kind: "planner",
 					document,
-					how: error.message,
+					how: ran.error.message,
 					stopped: true,
 					at: Date.now(),
 				});
-				report(reportedAs, { attempts: 1, how: plain(error.message), at: Date.now() });
+				report(reportedAs, { attempts: 1, how: plain(ran.error.message), at: Date.now() });
+				await ran.tokens?.stop();
+				await ran.mcp?.stop();
 				return;
 			}
-			outcome = {
-				how: `Couldn't get a GitHub token for ${repository} from Chopin (${
-					redacted(error instanceof Error ? error.message : String(error)).split("\n")[0]
-				})`,
-			};
-		}
-		let checkout = github
-			? await resolved.catch((error: unknown) => {
-				outcome = { how: error instanceof Error ? error.message : String(error) };
-				return undefined;
-			})
-			: undefined;
-		if (github && !checkout) await abandon();
-		if (checkout) {
-			output.say(`› Planner for ${document} started.`);
-			let healthy = setTimeout(() => {
-				void options.failures?.started(document);
-				// Once it stays up, what was told to Chopin about its failing is no longer true.
-				if (reported) {
-					reported = false;
-					report(reportedAs, undefined);
-				}
-			}, healthyMs);
-			({ mcp, tokens } = await files);
-			await prepared;
-			// A token that lapsed without a renewal stops the backend, which starts again with a new one.
-			let lapsed = github!.expired;
-			outcome = await launch(
-				{ ...options, document, cwd: checkout, signal: AbortSignal.any([signal, lapsed]) },
-				credential.token,
-				worktree,
-				github!,
-				repository,
-				tokens,
-				mcp,
-			);
-			if (lapsed.aborted && !signal.aborted) {
-				outcome = { how: (lapsed.reason as Error).message };
+			if (ran.kind === "ran") {
+				handled = true;
+				({ outcome, tokens, mcp, github, launched } = ran);
+				worktree = spare.slot;
+			} else {
+				output.say(
+					output.style.dim(
+						`… Couldn't hand ${document} to the spare Planner (${ran.why}); starting it as before.`,
+					),
+				);
+				launched = Date.now();
 			}
-			await tokens?.stop();
-			await mcp?.stop();
-			clearTimeout(healthy);
-		} else {
-			output.error(`Can't start the Planner for ${document}: ${outcome!.how}`);
+		}
+		// Its tokens are kept in a folder of their own, which is all of them a sandbox is shown.
+		let tokenDirectory = tokenFolder(worktree);
+		if (!handled) await mkdir(tokenDirectory, { recursive: true, mode: 0o700 }).catch(() => {});
+		// Chopin's GitHub token for the document's repository, which the backend needs before it
+		// starts: a refusal stops this Planner with the reason, and the machine never falls back to its
+		// own GitHub login. Chopin out of reach is retried, as a failed start is.
+		if (!handled) {
+			let asked = githubToken({
+				url: options.url,
+				machine: options.machine,
+				repository,
+				purpose: "planner",
+				...(credential.document ?? options.id
+					? { document: credential.document ?? options.id }
+					: {}),
+				folder: tokenDirectory,
+				...(options.renewGitHubBeforeMs === undefined
+					? {}
+					: { renewBeforeMs: options.renewGitHubBeforeMs }),
+			});
+			// What needs no GitHub token is made while Chopin mints it: the files the backend reads its
+			// Chopin credentials from, and its own worktree of a checkout the person registered. A clone
+			// waits for the token, which fetching it takes.
+			let resolved = options.checkouts.resolve(repository, () => asked).then(value => value.root);
+			let prepared = resolved.then(
+				checkout => prepareWorktree(options, document, checkout, worktree),
+				() => {},
+			);
+			let files = credentialFiles(options, document, tokenDirectory, credential);
+			// Not yet read where a failure stops the launch first.
+			resolved.catch(() => {});
+			files.catch(() => {});
+			/** The launch stops before it starts: what was made for it meanwhile is let go. */
+			let abandon = async () => {
+				await prepared;
+				let made = await files.catch(() => undefined);
+				await made?.tokens?.stop();
+				await made?.mcp.stop();
+			};
+			try {
+				github = await asked;
+			} catch (error) {
+				await abandon();
+				if (signal.aborted) return;
+				if (error instanceof GitHubRefused) {
+					output.error(`Stopped the Planner for ${document}: ${error.message}`);
+					await options.failures?.failed({
+						kind: "planner",
+						document,
+						how: error.message,
+						stopped: true,
+						at: Date.now(),
+					});
+					report(reportedAs, { attempts: 1, how: plain(error.message), at: Date.now() });
+					return;
+				}
+				outcome = {
+					how: `Couldn't get a GitHub token for ${repository} from Chopin (${
+						redacted(error instanceof Error ? error.message : String(error)).split("\n")[0]
+					})`,
+				};
+			}
+			let checkout = github
+				? await resolved.catch((error: unknown) => {
+					outcome = { how: error instanceof Error ? error.message : String(error) };
+					return undefined;
+				})
+				: undefined;
+			if (github && !checkout) await abandon();
+			if (checkout) {
+				output.say(`› Planner for ${document} started.`);
+				let healthy = setTimeout(() => {
+					void options.failures?.started(document);
+					// Once it stays up, what was told to Chopin about its failing is no longer true.
+					if (reported) {
+						reported = false;
+						report(reportedAs, undefined);
+					}
+				}, healthyMs);
+				({ mcp, tokens } = await files);
+				await prepared;
+				// A token that lapsed without a renewal stops the backend, which starts again with a new one.
+				let lapsed = github!.expired;
+				outcome = await launch(
+					{ ...options, document, cwd: checkout, signal: AbortSignal.any([signal, lapsed]) },
+					credential.token,
+					worktree,
+					github!,
+					repository,
+					tokens,
+					mcp,
+				);
+				if (lapsed.aborted && !signal.aborted) {
+					outcome = { how: (lapsed.reason as Error).message };
+				}
+				await tokens?.stop();
+				await mcp?.stop();
+				clearTimeout(healthy);
+			} else {
+				output.error(`Can't start the Planner for ${document}: ${outcome!.how}`);
+			}
 		}
 		let { how, stderr, reason } = outcome!;
 		await github?.stop();
@@ -518,6 +581,189 @@ async function servePlanner(options: {
 		);
 		await pause(wait);
 	}
+}
+
+/** How a document's Planner went on a spare: it ran, Chopin refused its GitHub token, or no hand-over. */
+type SpareRan =
+	| {
+		kind: "ran";
+		outcome: { how: string; stderr?: string; reason?: string };
+		tokens?: PlannerTokenFile;
+		mcp: McpTokenFile;
+		github?: GitHubToken;
+		launched: number;
+	}
+	| { kind: "refused"; error: GitHubRefused; tokens?: PlannerTokenFile; mcp?: McpTokenFile }
+	| { kind: "fallback"; why: string };
+
+/**
+ * Hand a document to the repository's spare and run it as the document's Planner backend until it
+ * exits or `signal` aborts (see `planner-spare.ts`). What needs no GitHub token is done first and
+ * at once: the credential files in the spare's token folder and its worktree at the checkout's
+ * HEAD; then the slot becomes the document's worktree for good and the spare is told the document.
+ * Chopin's GitHub token follows in its own time, as a file and a `github` line: a refusal stops the
+ * backend with the reason, and Chopin out of reach is tried again while the backend runs. Before
+ * the hand-over, any failure lets the spare go and the document starts cold (`fallback`).
+ */
+async function onSpare(
+	options: {
+		url: string;
+		machine: string;
+		document: string;
+		id: string;
+		repository: string;
+		credential: Awaited<ReturnType<typeof plannerCredential>>;
+		directory: string;
+		output: Output;
+		signal: AbortSignal;
+		env?: Record<string, string>;
+		renewGitHubBeforeMs?: number;
+	},
+	spare: Spare,
+	started: () => ReturnType<typeof setTimeout>,
+): Promise<SpareRan> {
+	let { output, signal, document, repository, credential } = options;
+	let ask = () =>
+		githubToken({
+			url: options.url,
+			machine: options.machine,
+			repository,
+			purpose: "planner",
+			document: options.id,
+			folder: spare.tokens,
+			...(options.renewGitHubBeforeMs === undefined
+				? {}
+				: { renewBeforeMs: options.renewGitHubBeforeMs }),
+		});
+	let asked = ask();
+	asked.catch(() => {});
+	let files = credentialFiles(options, document, spare.tokens, credential);
+	files.catch(() => {});
+	let made = await Promise.all([files, spare.refresh()]).then(
+		([value]) => value,
+		(error: unknown) => error instanceof Error ? error : new Error(String(error)),
+	);
+	if (made instanceof Error || !spare.alive() || signal.aborted) {
+		let held = await files.catch(() => undefined);
+		await held?.tokens?.stop();
+		await held?.mcp.stop();
+		void asked.then(github => github.stop(), () => {});
+		await spare.discard();
+		return {
+			kind: "fallback",
+			why: made instanceof Error
+				? redacted(made.message).split("\n")[0]!
+				: spare.alive()
+				? "stopped"
+				: "it had exited",
+		};
+	}
+	let { tokens, mcp } = made;
+	await assignSlot(options.directory, repository, options.id, spare.slot);
+	let launched = Date.now();
+	let healthy = started();
+	let values = Object.values(options.env ?? {});
+	let github: GitHubToken | undefined;
+	let secrets = () => [
+		credential.token,
+		...tokens?.secrets() ?? [],
+		...mcp.secrets(),
+		...github?.secrets() ?? [],
+		...values,
+	];
+	let first: string | undefined;
+	let tail: string[] = [];
+	let drained = spare.listen({
+		secrets,
+		stderr: text => {
+			let lines = text.split("\n").map(line => line.trim()).filter(Boolean);
+			first ??= lines[0];
+			tail.push(...lines.map(line => line.slice(0, 1000)));
+			if (tail.length > TAIL_LINES) tail.splice(0, tail.length - TAIL_LINES);
+		},
+	});
+	// No secret is ever in a line: the credentials are in the files its environment names.
+	spare.send({
+		type: "assign",
+		protocol: SPARE_PROTOCOL,
+		document,
+		documentId: options.id,
+		env: { CHOPIN_DOCUMENT: document },
+		github: "pending",
+	});
+	// Ended by a refusal of its GitHub token, or by that token lapsing without a renewal.
+	let ended = new AbortController();
+	let done = new AbortController();
+	let refused: GitHubRefused | undefined;
+	let identified = (async () => {
+		let next = asked;
+		for (let attempt = 0;;) {
+			try {
+				github = await next;
+				break;
+			} catch (error) {
+				if (done.signal.aborted || signal.aborted) return;
+				if (error instanceof GitHubRefused) {
+					refused = error;
+					spare.send({ type: "stop", reason: error.message });
+					ended.abort(error);
+					return;
+				}
+				let wait = backoff(attempt++);
+				output.say(
+					output.style.dim(
+						`… Couldn't get a GitHub token for ${repository} from Chopin (${
+							redacted(error instanceof Error ? error.message : String(error)).split("\n")[0]
+						}); its Planner runs without one meanwhile, trying again in ${
+							Math.ceil(wait / 1000)
+						}s.`,
+					),
+				);
+				await delay(wait, AbortSignal.any([done.signal, signal]));
+				if (done.signal.aborted || signal.aborted) return;
+				next = ask();
+			}
+		}
+		spare.send({
+			type: "github",
+			env: {
+				CHOPIN_GITHUB_TOKEN_EXPIRES_AT: new Date(github.expiresAt).toISOString(),
+				...githubIdentity(github),
+			},
+		});
+		let lapsed = github.expired;
+		if (lapsed.aborted) ended.abort(lapsed.reason);
+		else lapsed.addEventListener("abort", () => ended.abort(lapsed.reason), { once: true });
+	})();
+	let halt = AbortSignal.any([signal, ended.signal]);
+	let stop!: () => void;
+	let stopped = new Promise<undefined>(resolve => {
+		stop = () => resolve(undefined);
+		halt.addEventListener("abort", stop, { once: true });
+		if (halt.aborted) stop();
+	});
+	let how = await Promise.race([spare.exited, stopped]);
+	halt.removeEventListener("abort", stop);
+	if (how === undefined || process.platform !== "win32") await spare.stop();
+	how ??= await spare.exited;
+	done.abort();
+	await identified;
+	clearTimeout(healthy);
+	await Promise.race([drained, new Promise(resolve => setTimeout(resolve, 500))]);
+	if (refused) {
+		await github?.stop();
+		return { kind: "refused", error: refused, tokens, mcp };
+	}
+	if (ended.signal.aborted && !signal.aborted) how = (ended.signal.reason as Error).message;
+	let reason = startFailureReason(tail);
+	return {
+		kind: "ran",
+		outcome: { how, ...(first ? { stderr: first } : {}), ...(reason ? { reason } : {}) },
+		...(tokens ? { tokens } : {}),
+		mcp,
+		...(github ? { github } : {}),
+		launched,
+	};
 }
 
 /**
@@ -616,11 +862,13 @@ const LONGEST_LINE = 65_536;
  * is dropped, a marker in its place, since a secret split across it could not be masked. Resolves
  * once the stream closes.
  */
-function passMasked(
+export function passMasked(
 	stream: Readable,
 	name: "stdout" | "stderr",
 	secrets: () => string[],
 	heard?: (text: string) => void,
+	/** Whole lines it returns false for are neither heard nor passed on, as a spare's ready line. */
+	keep: (line: string) => boolean = () => true,
 ): Promise<unknown> {
 	let dropped = `[chopin: dropped a ${name} line longer than ${LONGEST_LINE} characters]`;
 	let pass = (text: string) => {
@@ -638,7 +886,8 @@ function passMasked(
 		for (let line of lines) {
 			// The first newline ends a line already dropped.
 			if (dropping) dropping = false;
-			else whole.push(line.length > LONGEST_LINE ? dropped : line);
+			else if (line.length > LONGEST_LINE) whole.push(dropped);
+			else if (keep(line)) whole.push(line);
 		}
 		if (pending.length > LONGEST_LINE) {
 			if (!dropping) whole.push(dropped);
@@ -647,7 +896,7 @@ function passMasked(
 		}
 		if (whole.length) pass(whole.map(line => `${line}\n`).join(""));
 	});
-	stream.once("end", () => dropping || pass(pending));
+	stream.once("end", () => dropping || !keep(pending) || pass(pending));
 	return new Promise(resolve => stream.once("close", resolve));
 }
 
@@ -681,8 +930,9 @@ async function launch(
 			cwd: options.cwd,
 			env: {
 				// Nothing of the machine's GitHub setup: its own git, gh and agent reach GitHub with
-				// Chopin's token over https, and commit as Chopin's App (see `githubEnvironment`).
-				...withoutGitHub({ ...process.env, ...options.env }),
+				// Chopin's token over https, and commit as Chopin's App (see `githubEnvironment`). Never
+				// spare mode, which only a spare is offered.
+				...withoutSpare(withoutGitHub({ ...process.env, ...options.env })),
 				...githubEnvironment(github, repository),
 				CHOPIN_URL: options.url,
 				CHOPIN_DOCUMENT: options.document,
@@ -743,6 +993,12 @@ async function launch(
 	await Promise.race([drained, new Promise(resolve => setTimeout(resolve, 500))]);
 	let reason = startFailureReason(tail);
 	return { how, ...(first ? { stderr: first } : {}), ...(reason ? { reason } : {}) };
+}
+
+/** `env` without `CHOPIN_PLANNER_SPARE`: a cold launch is never offered spare mode. */
+function withoutSpare<T>(env: Record<string, T>): Record<string, T> {
+	let { CHOPIN_PLANNER_SPARE: _spare, ...rest } = env;
+	return rest;
 }
 
 /** How a backend's processes are stopped: on which platform, running which commands, how patiently. */

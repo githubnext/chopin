@@ -248,13 +248,41 @@ export function githubEnvironment(
 	github: GitHubToken,
 	repository?: string,
 ): Record<string, string> {
-	let { identity, starter } = github;
 	return {
-		GH_CONFIG_DIR: github.config,
+		...githubPaths(github.file, github.config, repository),
+		...githubIdentity(github),
+	};
+}
+
+/**
+ * The part of `githubEnvironment` that doesn't depend on the token or whose it is: where gh's
+ * configuration and the token file will be, git's credential helper reading that file, and the
+ * repository's URL rules. A spare Planner starts with it before it has a token (see
+ * `planner-spare.ts`); the files it names appear later.
+ */
+export function githubPaths(
+	file: string,
+	config: string,
+	repository?: string,
+): Record<string, string> {
+	return {
+		GH_CONFIG_DIR: config,
 		GH_PROMPT_DISABLED: "1",
 		GIT_TERMINAL_PROMPT: "0",
 		GIT_SSH_COMMAND: "false",
-		CHOPIN_GITHUB_TOKEN_FILE: github.file,
+		CHOPIN_GITHUB_TOKEN_FILE: file,
+		...gitCredentials(file, repository, [
+			["user.useConfigOnly", "true"],
+			["commit.gpgsign", "false"],
+			["tag.gpgsign", "false"],
+		]),
+	};
+}
+
+/** Who a launch's commits are made as, and the person its work is for (see `githubEnvironment`). */
+export function githubIdentity(github: Pick<GitHubToken, "identity" | "starter">) {
+	let { identity, starter } = github;
+	return {
 		GIT_AUTHOR_NAME: identity.name,
 		GIT_AUTHOR_EMAIL: identity.email,
 		GIT_COMMITTER_NAME: identity.name,
@@ -266,11 +294,6 @@ export function githubEnvironment(
 				CHOPIN_STARTER_EMAIL: starter.email,
 			}
 			: {}),
-		...gitCredentials(github.file, repository, [
-			["user.useConfigOnly", "true"],
-			["commit.gpgsign", "false"],
-			["tag.gpgsign", "false"],
-		]),
 	};
 }
 

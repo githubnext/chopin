@@ -36,6 +36,8 @@ export type ConnectSettings = {
 	keepRuns?: number;
 	/** `--require-sandbox`, `--no-sandbox`, `--sandbox-host`, `--sandbox-write` and `--sandbox-hide`. */
 	sandbox?: SandboxSettings;
+	/** `--no-planner-spare`: false, and no spare Planners start; absent runs them. */
+	plannerSpare?: false;
 };
 
 /**
