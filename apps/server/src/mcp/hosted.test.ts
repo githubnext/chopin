@@ -70,6 +70,8 @@ function createdDocument(id: string) {
 class GitHubBoundary implements GitHub {
 	readonly userTokens: string[] = [];
 	readonly repositoryCalls: Array<{ token: string; owner: string; name: string }> = [];
+	/** The commits GitHub has, in every repository. */
+	readonly commits = new Set<string>();
 	accessible = true;
 	repositoryValue: Repository = {
 		id: "R_score",
@@ -124,6 +126,10 @@ class GitHubBoundary implements GitHub {
 
 	async repositoryAccess(): Promise<Repository | undefined> {
 		throw new Error("installation-gated access must not be used by MCP");
+	}
+
+	async hasCommit(_token: string, _owner: string, _name: string, sha: string): Promise<boolean> {
+		return this.commits.has(sha);
 	}
 
 	invalidate(): void {}
@@ -2113,5 +2119,46 @@ describe("the hosted MCP adapter", () => {
 		// An idle one is forgotten, and its id is unknown again.
 		await context.storage.mcpSessions.deleteIdle(new Date(context.now.getTime() + 1));
 		expect(await code(await call(restarted, start, session))).toBe("session-required");
+	});
+
+	it("records where a revision's files were pushed, once checked on GitHub, and keeps it", async () => {
+		let context = setup();
+		context.github.repositoryValue.permissions.push = true;
+		let opened = await plan(context);
+		await Service.close(opened.plan);
+		let revision = 999;
+		let mcp = handler(hosted(context.auth, { lease: () => opened.lease }));
+		let record = (args: Record<string, unknown>) =>
+			call(mcp, {
+				jsonrpc: "2.0",
+				id: 1,
+				method: "tools/call",
+				params: {
+					name: "record_plan_source",
+					arguments: { id: opened.channel.id, revision, ...args },
+				},
+			});
+		let pushed = { branch: "plans/release", commit: "c".repeat(40) };
+		context.github.commits.add(pushed.commit);
+
+		expect(await code(await record({ ...pushed, commit: "abc" }))).toBe("invalid-plan-source");
+		expect(await code(await record({ ...pushed, branch: "a..b" }))).toBe("invalid-plan-source");
+		expect(await code(await record({ ...pushed, commit: "d".repeat(40) })))
+			.toBe("plan-source-unavailable");
+		// A revision the document hasn't reached is refused with the one it has.
+		let conflict = (await (await record(pushed)).json()).result.structuredContent;
+		expect(conflict).toEqual({ code: "revision-conflict", revision: expect.any(Number) });
+		revision = conflict.revision;
+		let recorded = await (await record(pushed)).json();
+		expect(recorded.result.isError).toBeUndefined();
+		expect(recorded.result.structuredContent).toEqual({ recorded: true, revision, ...pushed });
+		// Recording it again answers the same.
+		expect((await (await record(pushed)).json()).result.structuredContent)
+			.toEqual(recorded.result.structuredContent);
+		let stored = await context.storage.collaboration.load(opened.channel.id, context.now);
+		expect((await Service.readStored(stored!)).planSources).toEqual([{ revision, ...pushed }]);
+
+		context.github.repositoryValue.permissions.push = false;
+		expect(await code(await record(pushed))).toBe("repository-forbidden");
 	});
 });

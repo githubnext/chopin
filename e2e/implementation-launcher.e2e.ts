@@ -301,6 +301,8 @@ async function connector(baseURL: string, command: string[], env: Record<string,
 	});
 	return {
 		pairing,
+		git,
+		state,
 		output: () => output,
 		localEdit: () => readFile(join(root, "sample.txt"), "utf8"),
 		close: async () => {
@@ -516,6 +518,110 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 		}
 	});
 }
+
+test("a build of a revision whose plan files the Planner pushed starts from their commit", async ({ seed, join: enter, room, baseURL }) => {
+	test.setTimeout(60_000);
+	await seed("# Plan files\n\nThe Planner wrote the plan's files on its own branch.\n", {
+		graph: preparedGraph(),
+	});
+	let handle = person();
+	let local = await connector(baseURL!, [
+		"bun",
+		join(ROOT, "apps/connector/src/testing/fake-implementer.ts"),
+		"--complete",
+		"--http",
+	]);
+	try {
+		// The Planner's commit of the plan's files, on a branch beside the person's own work, which
+		// their checkout never has checked out.
+		let text = (...args: string[]) => String(local.git(...args)).trim();
+		let root = text("rev-parse", "--show-toplevel");
+		let stdin = (input: string, ...args: string[]) =>
+			execFileSync("git", ["-C", root, ...args], { input }).toString().trim();
+		let blob = stdin("# The plan's files\n", "hash-object", "-w", "--stdin");
+		let tree = stdin(
+			`100644 blob ${text("rev-parse", "HEAD:sample.txt")}\tsample.txt\n`
+				+ `100644 blob ${blob}\tplan.md\n`,
+			"mktree",
+		);
+		let commit = text("commit-tree", tree, "-p", "HEAD", "-m", "Plan files");
+		text("branch", "plans/e2e", commit);
+		let mcp = async (name: string, args: Record<string, unknown>) => {
+			let response = await fetch(`${baseURL}/mcp`, {
+				method: "POST",
+				headers: {
+					authorization: `Bearer ghu_e2e_${handle}_1`,
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					jsonrpc: "2.0",
+					id: 1,
+					method: "tools/call",
+					params: { name, arguments: args },
+				}),
+			});
+			expect(response.status).toBe(200);
+			return (await response.json()).result;
+		};
+		let { revision } = (await mcp("read_document", { id: room })).structuredContent;
+		// GitHub has no zero commit, so it isn't recorded.
+		expect(
+			(await mcp("record_plan_source", {
+				id: room,
+				revision,
+				branch: "plans/e2e",
+				commit: "0".repeat(40),
+			})).structuredContent,
+		).toEqual({ code: "plan-source-unavailable" });
+		expect(
+			(await mcp("record_plan_source", { id: room, revision, branch: "plans/e2e", commit }))
+				.structuredContent,
+		).toEqual({ recorded: true, revision, branch: "plans/e2e", commit });
+
+		let page = await enter(handle);
+		await page.goto(await local.pairing);
+		await page.getByRole("button", { name: "Add machine", exact: true }).click();
+		await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText(
+			"Connected",
+		);
+		await page.goto(testChannelPath(room));
+		await page.getByRole("button", { name: "Build plan", exact: true }).click();
+		await expect.poll(async () => {
+			let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
+			return snapshot.build?.state;
+		}, { timeout: 30_000 }).toBe("stopped");
+		let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
+		expect(snapshot.build.checkout).toEqual({
+			repository: "octo-org/score",
+			branch: "plans/e2e",
+			commit,
+		});
+		expect(snapshot.build.planSource).toEqual({ revision, branch: "plans/e2e", commit });
+		// The build's own worktree is that commit, with the plan's files in it.
+		let worktree = join(local.state, "runs", snapshot.build.id);
+		expect(execFileSync("git", ["-C", worktree, "rev-parse", "HEAD"]).toString().trim())
+			.toBe(commit);
+		expect(await readFile(join(worktree, "plan.md"), "utf8")).toBe("# The plan's files\n");
+		await page.getByRole("group", { name: "Document view" })
+			.getByRole("button", { name: /^Build/ }).click();
+		let line = buildView(page).getByText(
+			`Built from plan revision ${revision} · plans/e2e@${commit.slice(0, 7)}`,
+			{ exact: true },
+		);
+		await expect(line).toBeVisible();
+		await expect(line).toHaveAttribute("title", commit);
+		let shots = process.env.CHOPIN_PLAN_SOURCE_SHOTS;
+		// Chopin has one theme, so one look at desktop and phone widths.
+		for (let width of shots ? [1280, 390] : []) {
+			await page.setViewportSize({ width, height: 844 });
+			await buildView(page).locator(".build-card").screenshot({
+				path: join(shots!, `build-card-${width}.png`),
+			});
+		}
+	} finally {
+		await local.close();
+	}
+});
 
 test("a running build heads Chat's run strip with its task, and Chat says when it opens each pull request and when it finishes", async ({ seed, join: enter, room, baseURL }) => {
 	test.setTimeout(90_000);

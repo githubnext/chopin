@@ -28,6 +28,7 @@ import { limits, ULID } from "@chopin/dialect";
 import { READING_IN_PARTS } from "../document-reading";
 import { readingModelOutput } from "./reading-output";
 import { implementationGraphs, implementationReadiness } from "../tasks/plan-graphs";
+import { planSourceFor } from "../tasks/plan-source";
 import { documentIdentity, implementationActive } from "../plan/service";
 import { childTools, Refusal, shielded } from "./child-tools";
 import { experimentTools } from "./experiment-tools";
@@ -700,6 +701,8 @@ export const documentTools = {
 		description: "Read the current plan revision and implementation graph before drafting or "
 			+ "revising tasks. The returned plan_revision and graph_revision are required by "
 			+ "edit_implementation_graph; a newer plan or graph refuses the whole edit. "
+			+ "plan_source, when present, is the pushed commit holding the plan's files that a "
+			+ "build of this revision starts from. "
 			+ "When needs_revision is true, the graph is stale even if approved. Revise it "
 			+ "against plan_revision before calling it ready; replace an unchanged task if its content remains valid.",
 		inputSchema: jsonSchema({ type: "object", properties: {}, additionalProperties: false }),
@@ -707,6 +710,7 @@ export const documentTools = {
 		execute: (_raw, { context: { room: context } }) =>
 			answer("read_implementation_graph", () => {
 				let version = context.plan.graph?.versions.at(-1);
+				let planSource = planSourceFor(context.plan.planSources, context.plan.revision);
 				return {
 					plan_revision: context.plan.revision,
 					source: edit.source(context.plan),
@@ -714,6 +718,7 @@ export const documentTools = {
 					graph_plan_revision: version?.planRevision,
 					needs_revision: !!version && version.planRevision !== context.plan.revision,
 					graph: context.plan.graph,
+					...(planSource ? { plan_source: planSource } : {}),
 				};
 			}),
 	}),

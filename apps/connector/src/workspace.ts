@@ -652,6 +652,17 @@ export async function prepareWorkspace(
 			cwd: root,
 			timeout: 120_000,
 			env: { ...process.env, ...env, GIT_TERMINAL_PROMPT: "0" },
+		}).catch(error => {
+			let lines = String((error as { stderr?: unknown }).stderr ?? "").trim().split("\n");
+			let detail = redacted(
+				lines.find(line => line.startsWith("fatal:")) ?? (lines.at(-1) || (error as Error).message),
+			);
+			throw new Error(
+				`Couldn't fetch commit ${input.source.commit}${
+					input.source.branch ? ` (${input.source.branch})` : ""
+				} of ${input.source.repository} to start from (${detail}).`,
+				{ cause: error },
+			);
 		});
 	}
 	let path = join(directory, "runs", attempt);

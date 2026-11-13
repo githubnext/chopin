@@ -4,6 +4,8 @@ import type { Plan } from "./plan";
 type KIND<K extends string> = Frame & { kind: K };
 
 export type CheckoutContext = { repository: string; branch?: string; commit: string };
+/** Where a plan revision's files were pushed: a branch and the commit on it that holds them. */
+export type PlanSource = { revision: number; branch: string; commit: string };
 export type BuildRequest = {
 	id: string;
 	retryOf?: string;
@@ -21,6 +23,11 @@ export type BuildRequest = {
 	machineService?: true;
 	repositoryId: string;
 	checkout: CheckoutContext;
+	/**
+	 * The commit holding the plan's files that the Planner pushed for plan revision `revision`,
+	 * which `checkout` starts from; absent when the build started from the builder's checkout.
+	 */
+	planSource?: PlanSource;
 	planRevision: number;
 	graphVersion: number;
 	graphRevision: number;

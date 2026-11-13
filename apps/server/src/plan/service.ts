@@ -8,6 +8,7 @@ import {
 	withDocumentTitle,
 } from "@chopin/dialect";
 import { locksEditing, releaseEndedRun, restoreBuilds, restoreLive } from "../tasks/builds";
+import { restorePlanSources } from "../tasks/plan-source";
 import {
 	announceImplementation,
 	implementationStatus,
@@ -81,6 +82,7 @@ import type { StorageAdapter } from "../storage/port";
 import type { PendingCardAction } from "../questions/card-actions";
 import type { ClaimInput, ClaimResult, Graph, Run } from "../tasks/graphs";
 import type { LiveBuild } from "../tasks/builds";
+import type { PlanSource } from "../tasks/plan-source";
 import type { Lifecycle, LifecycleInput, LifecycleResult } from "../tasks/lifecycle";
 
 /** Updates are grouped for this long before being applied together. */
@@ -317,6 +319,8 @@ export type Plan = {
 	lifecycle: Lifecycle;
 	/** The finished build this living document was last delivered from. */
 	live?: LiveBuild;
+	/** Where recent revisions' files were pushed, oldest first; a build starts from one. */
+	planSources: PlanSource[];
 	/**
 	 * A one-click Build plan waiting for its tasks, kept until the build starts or is cancelled so
 	 * the click outlives a decision the draft raised and a reload. In memory only (prototype).
@@ -365,6 +369,7 @@ type Sidecar = {
 	execution?: Run;
 	lifecycle?: Lifecycle;
 	live?: LiveBuild;
+	planSources?: PlanSource[];
 	mcpUpdates?: McpUpdateRecord[];
 	questions: Questions.Record[];
 	openQuestions: Questions.StoredOpen[];
@@ -398,6 +403,7 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 			? { lifecycle: plan.lifecycle }
 			: {}),
 		...(plan.live ? { live: plan.live } : {}),
+		...(plan.planSources.length ? { planSources: plan.planSources } : {}),
 		...(plan.mcpUpdates.length > 0 ? { mcpUpdates: plan.mcpUpdates } : {}),
 		questions: [...plan.records.values()],
 		openQuestions: Questions.dump(plan.questions),
@@ -602,6 +608,7 @@ function restoredState(
 	if (Object.hasOwn(item, "execution")) expected.push("execution");
 	if (Object.hasOwn(item, "lifecycle")) expected.push("lifecycle");
 	if (Object.hasOwn(item, "live")) expected.push("live");
+	if (Object.hasOwn(item, "planSources")) expected.push("planSources");
 	if (Object.hasOwn(item, "mcpUpdates")) expected.push("mcpUpdates");
 	if (Object.hasOwn(item, "conversationPlan")) expected.push("conversationPlan");
 	if (Object.hasOwn(item, "conversationPlanRetries")) expected.push("conversationPlanRetries");
@@ -660,6 +667,7 @@ function restoredState(
 	let live = Object.hasOwn(item, "live")
 		? restoreLive(item.live, builds, lifecycle, graph, item.revision)
 		: undefined;
+	let planSources = restorePlanSources(item.planSources, item.revision);
 	let questions = objects(item.questions, "question record");
 	let records = questions.map(question => Questions.normalizeRecord(question));
 	let openQuestions = objects(item.openQuestions, "open questionnaire");
@@ -812,6 +820,7 @@ function restoredState(
 		...(execution ? { execution } : {}),
 		...(lifecycle ? { lifecycle } : {}),
 		...(live ? { live } : {}),
+		...(planSources.length ? { planSources } : {}),
 		...(mcpUpdates.length > 0 ? { mcpUpdates } : {}),
 		questions: records,
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
@@ -1546,6 +1555,7 @@ export async function readStored(
 	execution?: Run;
 	lifecycle?: Lifecycle;
 	records?: Questions.Record[];
+	planSources?: PlanSource[];
 }> {
 	let restored = await restoreHosted(loaded.channel.id, loaded);
 	try {
@@ -1559,6 +1569,7 @@ export async function readStored(
 			...(restored.sidecar.builds ? { builds: restored.sidecar.builds } : {}),
 			...(restored.sidecar.execution ? { execution: restored.sidecar.execution } : {}),
 			...(restored.sidecar.lifecycle ? { lifecycle: restored.sidecar.lifecycle } : {}),
+			...(restored.sidecar.planSources ? { planSources: restored.sidecar.planSources } : {}),
 		};
 	} finally {
 		restored.document.doc.destroy();
@@ -1614,6 +1625,7 @@ export async function open(
 		execution: sidecar.execution,
 		lifecycle: sidecar.lifecycle ?? { history: [] },
 		...(sidecar.live ? { live: sidecar.live } : {}),
+		planSources: sidecar.planSources ?? [],
 		claiming: false,
 		queue: [],
 		timer: undefined,

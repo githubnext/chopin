@@ -90,6 +90,28 @@ async function scoreCheckout() {
 	return { root, state, source };
 }
 
+test("a run whose commit can't be fetched fails naming the commit, branch and repository", async () => {
+	let { root, state, source } = await scoreCheckout();
+	try {
+		let missing = { ...source, commit: "f".repeat(40), branch: "plans/one" };
+		// GitHub is sent to a local path, which the connector's git never fetches from: no network.
+		let env = {
+			GIT_CONFIG_COUNT: "1",
+			GIT_CONFIG_KEY_0: `url.${join(state, "nowhere")}.insteadOf`,
+			GIT_CONFIG_VALUE_0: "https://github.com/",
+		};
+		await expect(prepareWorkspace(root, state, { id: "f1", source: missing }, 1, undefined, env))
+			.rejects.toThrow(
+				`Couldn't fetch commit ${
+					"f".repeat(40)
+				} (plans/one) of octo-org/score to start from (fatal:`,
+			);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+		await rm(state, { recursive: true, force: true });
+	}
+});
+
 test("a run isn't started in a checkout whose git directory an agent gave a commondir: it is removed, and the run goes on once it is asked again", async () => {
 	let { root, state, source } = await scoreCheckout();
 	try {

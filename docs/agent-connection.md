@@ -1650,3 +1650,47 @@ the answer leaves its document out. When a document is renamed, the poll's next
 answer names it at its new address; the connector shows that address in
 `chopin status` and its output, and starts the backend there next time, without
 restarting a backend that is running.
+
+### Plan sources
+
+A backend that writes files for a document revision (a specification, a proof, a
+schema) in `CHOPIN_WORKTREE` makes them reachable by a build by committing them on a
+branch, pushing it to the document's repository, and recording where at `/mcp`,
+with the MCP token in `CHOPIN_MCP_TOKEN_FILE`:
+
+```json
+{
+	"name": "record_plan_source",
+	"arguments": {
+		"id": "<document id or URL>",
+		"revision": 12,
+		"branch": "plans/<document id>",
+		"commit": "<40 hex characters>"
+	}
+}
+```
+
+`revision` is the document revision the files belong to, such as the one
+`update_document` returned; `branch` is a branch name git accepts, without
+`refs/heads/`; `commit` is the full SHA, already pushed. Chopin asks GitHub for the
+commit with the machine's own grant and keeps one source per revision, the newest
+20 revisions, beside the document; recording another commit for a revision replaces
+it, and the same one again changes nothing. It answers
+`{ "recorded": true, "revision", "branch", "commit" }`, or an error whose `code` is
+`invalid-plan-source` (a bad branch or SHA), `plan-source-unavailable` (GitHub has
+no such commit in the repository), `revision-conflict` with the document's current
+`revision` (one it has not reached), `document-archived`, `document-unavailable` or
+`repository-forbidden`. A server without the tool answers JSON-RPC error `-32601`.
+
+A build of the tasks drafted against revision R starts from the source recorded for
+the newest revision at or before R, instead of the builder's checkout or the default
+branch: its worktree is detached at that commit. Build checks the commit again with
+the building machine's grant as it is pressed, and refuses with
+`plan-source-unavailable` when GitHub no longer has it; a connector that cannot fetch
+it fails the build naming the commit. The build records the source, the Build tab
+says _Built from plan revision 12 · plans/…@1a2b3c4_, and its run's
+`read_implementation` returns it as `planSource`. A rebuild of a built document keeps
+the base it had unless a source was recorded for a revision after the one last built,
+which the rebuild then starts from. The Planner's `read_implementation_graph` returns
+the source for the current revision as `plan_source`. A document with no recorded
+source builds as before.

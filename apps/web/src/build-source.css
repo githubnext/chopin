@@ -1,0 +1,8 @@
+/* The plan's pushed commit the build started from, as quiet as the machine beside it. */
+.build-card-source {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--color-text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

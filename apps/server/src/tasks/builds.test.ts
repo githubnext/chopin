@@ -52,6 +52,36 @@ test("approval queues the reviewed graph once and pickup survives reopening", as
 	await Plan.close(reopened);
 });
 
+test("a build keeps the plan source it started from across a reopen, and one recorded since its press is refused", async () => {
+	let { plan, backend, server } = await prepared();
+	let planSource = { revision: 0, branch: "plans/one", commit: "c".repeat(40) };
+	let input = {
+		planRevision: 0,
+		graphVersion: 1,
+		graphRevision: 1,
+		user: "U_test",
+		connectionId: "laptop",
+		machineId: "M_laptop",
+		repositoryId: "R_test",
+		checkout: {
+			repository: checkout.repository,
+			branch: planSource.branch,
+			commit: planSource.commit,
+		},
+	};
+	plan.planSources = [planSource];
+	// The press was checked before the Planner recorded it: that press is refused.
+	await expect(queueBuild(plan, { ...input, checkout })).rejects.toThrow("plan source has changed");
+	let queued = await queueBuild(plan, { ...input, planSource });
+	expect(queued.planSource).toEqual(planSource);
+	let id = plan.id;
+	await Plan.close(plan);
+	let reopened = await Plan.open(id, backend, server);
+	expect(reopened.planSources).toEqual([planSource]);
+	expect(reopened.builds[0]!.planSource).toEqual(planSource);
+	await Plan.close(reopened);
+});
+
 test("a stale graph approval or an accepted comment cannot queue a build", async () => {
 	let { plan } = await prepared();
 	let input = {

@@ -9,6 +9,7 @@ import {
 	runner,
 } from "./builds";
 import { implementationLifecycle } from "./lifecycle";
+import { planSourceFor } from "./plan-source";
 import { planningReadiness, reportImplementationLifecycle } from "./plan-graphs";
 import { exclusive } from "../plan/service";
 import { GitHubError } from "../github/client";
@@ -27,6 +28,7 @@ import type {
 	BuildMachine,
 	BuildRequest,
 	ImplementationSnapshot,
+	PlanSource,
 } from "@chopin/protocol/implementation";
 
 type Options = {
@@ -58,10 +60,11 @@ type Options = {
 	/** Reads the stored machine choices, or throws `machine-choice-unavailable`. */
 	machineChoices?: () => Promise<void>;
 	/**
-	 * The checkout a connection's build of a document starts from; without it, only a checkout the
-	 * connection said it has.
+	 * The checkout a connection's build of a document starts from: the plan source's commit when
+	 * there is one, checked on GitHub (else `plan-source-unavailable`). Without it, only a checkout
+	 * the connection said it has, at the plan source's commit when there is one.
 	 */
-	sourceFor?: (connection: Connection, documentId: string) => Promise<Source>;
+	sourceFor?: (connection: Connection, documentId: string, plan?: PlanSource) => Promise<Source>;
 };
 let buildSchema = z.object({
 	retryOf: z.string().uuid().optional(),
@@ -382,11 +385,20 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 					409,
 				);
 			}
+			// The plan's files the Planner pushed for this revision, which the build starts from.
+			let planSource = await options.withPlan(
+				id,
+				async plan => planSourceFor(plan.planSources, input.planRevision),
+			);
 			let source: Source | undefined;
 			try {
-				source = options.sourceFor
-					? await options.sourceFor(connection, id)
-					: checkoutOf(connection, channel.repositoryId);
+				if (options.sourceFor) source = await options.sourceFor(connection, id, planSource);
+				else {
+					source = checkoutOf(connection, channel.repositoryId);
+					if (source && planSource) {
+						source = { ...source, commit: planSource.commit, branch: planSource.branch };
+					}
+				}
 			} catch (error) {
 				let code = (error as { code?: unknown } | undefined)?.code;
 				throw new GitHubError(typeof code === "string" ? code : "no-workspace", 409);
@@ -420,6 +432,7 @@ export function registerImplementationRoutes(router: Router, auth: HostedAuth, o
 							...(connection.about?.service ? { machineService: true as const } : {}),
 							repositoryId: channel.repositoryId,
 							checkout,
+							...(planSource ? { planSource } : {}),
 						});
 						let holder = options.connections.assigned(connection.id);
 						// Another document's build holds the connection: this one starts after it.
