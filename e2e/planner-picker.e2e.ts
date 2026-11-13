@@ -520,6 +520,28 @@ test("a document on Default machine runs its Planner on its creator's favorite m
 	await second.detach();
 });
 
+test("creating a document asks its creator's machine to start its Planner at once, before the page has opened it", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await remoteServer();
+	let page = await open(browser, "mona", room, DESKTOP);
+	let studio = await machine(page, "studio", true);
+
+	// New document, as the sidebar's button creates it. Its creator is about to open it, so their
+	// machine is told now rather than once the page has loaded and joined the document; the page
+	// here never opens it at all.
+	let created = await page.request.post(`${ORIGIN}/api/repositories/octo-org/score/channels`, {
+		data: {},
+		headers: { origin: ORIGIN },
+	});
+	expect(created.status()).toBe(201);
+	let { channel } = await created.json() as { channel: { id: string; slug: string } };
+	let answer = await studio.poll([]) as { planners?: Array<{ id: string; url: string }> };
+	expect(answer.planners).toContainEqual({
+		id: channel.id,
+		url: expect.stringContaining(`/documents/octo-org/score/${channel.slug}`),
+	});
+});
+
 test("connecting to a machine is the calm dots on the machine button, still under reduced motion, told in words and never drawn in Chat", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
