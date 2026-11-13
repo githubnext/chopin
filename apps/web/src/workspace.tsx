@@ -116,22 +116,33 @@ export function useWorkspaceLayout() {
 	useLayoutEffect(() => {
 		let element = frame.current;
 		if (!element) return;
+		// A change seen while the sidebar moves is measured once a transition ends. Only then: every
+		// transition on the page ends here, a Chat row's fade on each row a pointer crosses, and each
+		// measure asks for the page's layout.
+		let deferred = true;
 		let measure = () => {
-			if (sidebarMoving()) return;
+			if (sidebarMoving()) {
+				deferred = true;
+				return;
+			}
+			deferred = false;
 			let width = element.clientWidth;
 			space.set(width);
 			setNarrow(workspaceSizing(width, 500).mode === "compact");
 			measured();
 		};
+		let settled = () => {
+			if (deferred) measure();
+		};
 		measure();
 		let observer = new ResizeObserver(measure);
 		observer.observe(element);
-		document.addEventListener("transitionend", measure);
-		document.addEventListener("transitioncancel", measure);
+		document.addEventListener("transitionend", settled);
+		document.addEventListener("transitioncancel", settled);
 		return () => {
 			observer.disconnect();
-			document.removeEventListener("transitionend", measure);
-			document.removeEventListener("transitioncancel", measure);
+			document.removeEventListener("transitionend", settled);
+			document.removeEventListener("transitioncancel", settled);
 		};
 	}, [space]);
 	// A phone keeps one destination at a time even when landscape gives it a wide window.

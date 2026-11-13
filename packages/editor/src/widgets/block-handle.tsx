@@ -213,6 +213,12 @@ export function BlockHandlePlugin() {
 			let root = editor.getRootElement();
 			if (!event || !root || dragging.current || menu) return;
 			if (event.target instanceof Node && handle.current?.contains(event.target)) return;
+			// The pointer is outside the document's pane, over Chat or the sidebar: no block is under it,
+			// and measuring the editor would lay out a page the pointer's own hover has just restyled.
+			let pane = root.closest("[data-plan-scroll]");
+			if (pane && event.target instanceof Node && !pane.contains(event.target)) {
+				return place(undefined);
+			}
 			let bounds = root.getBoundingClientRect();
 			let x = event.clientX;
 			let y = event.clientY;

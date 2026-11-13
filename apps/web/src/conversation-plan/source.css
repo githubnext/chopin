@@ -1,4 +1,8 @@
-::highlight(conversation-source) {
+/*
+ * Set on a message's text and taken by what is in it by highlight inheritance, so nothing else the
+ * page restyles resolves it (as `packages/editor/src/styles.css` says of the document's marks).
+ */
+[data-chat-message-text]::highlight(conversation-source) {
 	background: color-mix(in srgb, var(--color-brand) 35%, transparent);
 	text-decoration: underline;
 	text-decoration-color: var(--color-brand);

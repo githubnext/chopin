@@ -1,6 +1,7 @@
 import { type RefObject, useLayoutEffect, useRef } from "react";
 
 import "./overlay-scrollbar.css";
+import { scrollProgress } from "./scroll-progress";
 
 /** How long the thumb stays after the last scroll, as an overlay scrollbar lingers. */
 const LINGER_MS = 1000;
@@ -13,7 +14,8 @@ const LINGER_MS = 1000;
  * unchanged; the thumb is hidden from assistive technology.
  *
  * It costs the transcript nothing: sizes come from the resize observer's entries, not from the
- * layout, a scroll reads only the offset, and every write is to the thumb's own element.
+ * layout, a scroll reads only how far it has gone, from a scroll timeline where there is one, and
+ * every write is to the thumb's own element.
  */
 export function OverlayScrollbar(
 	{ scroller, content }: {
@@ -93,8 +95,9 @@ export function OverlayScrollbar(
 		observer.observe(stack, { box: "border-box" });
 		observer.observe(lane, { box: "border-box" });
 
+		let progress = scrollProgress(view);
 		let scrolled = () => {
-			offset = view.scrollTop;
+			offset = progress ? progress() * range : view.scrollTop;
 			scrolling = true;
 			schedule();
 			clearTimeout(linger);

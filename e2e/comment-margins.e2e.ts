@@ -134,8 +134,9 @@ test("an open comment is washed at rest, stronger when pointed at, underlined wh
 	await chip.click();
 	await expect(page.getByRole("dialog", { name: "Comment thread" })).toBeVisible();
 	await expect.poll(() => sizes(page)).toMatchObject({ "plan-comment-open": 1 });
-	let underline = await page.evaluate(() =>
-		getComputedStyle(document.body, "::highlight(plan-comment-open)").textDecorationLine
+	// The document's marks are its prose's, so the prose is where the open one's style is read.
+	let underline = await content(page).locator("p").first().evaluate(paragraph =>
+		getComputedStyle(paragraph, "::highlight(plan-comment-open)").textDecorationLine
 	);
 	expect(underline).toContain("underline");
 

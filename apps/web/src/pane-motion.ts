@@ -49,15 +49,17 @@ export function usePaneSettledWidth(target: RefObject<HTMLElement | null>) {
 			target.current?.style.removeProperty("align-self");
 		};
 		let run = (event: TransitionEvent) => {
-			let element = target.current;
-			let available = element?.parentElement?.clientWidth;
+			// Every transition on the page starts here, a Chat row's fade on each row a pointer crosses,
+			// so only a pane track's width is measured for.
 			if (
-				!element || !available || event.propertyName !== "width"
-				|| !(event.target instanceof HTMLElement)
+				event.propertyName !== "width" || !(event.target instanceof HTMLElement)
 				|| !event.target.matches(".motion-sidebar, .workspace-chat-panel")
 			) {
 				return;
 			}
+			let element = target.current;
+			let available = element?.parentElement?.clientWidth;
+			if (!element || !available) return;
 			let effect = event.target.getAnimations()
 				.find(animation =>
 					animation instanceof CSSTransition && animation.transitionProperty === "width"
