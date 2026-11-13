@@ -85,7 +85,19 @@ export function stateDirectory() {
  * file and only a folder shows the new one.
  */
 export function tokenFolder(worktree: string) {
-	return `${worktree}.tokens`;
+	return `${worktree}${TOKENS}`;
+}
+
+/** What `tokenFolder` adds to a worktree's path. */
+const TOKENS = ".tokens";
+
+/**
+ * Whether `name`, a folder beside worktrees, is the token folder `tokenFolder` makes for one
+ * rather than a worktree: a worktree's name is a segment of a document or attempt id, which never
+ * ends so.
+ */
+function isTokenFolder(name: string) {
+	return name.length > TOKENS.length && name.endsWith(TOKENS);
 }
 
 /**
@@ -822,7 +834,7 @@ export async function pruneRuns(
 
 /**
  * The Planner worktrees in `<base>/planners/<owner>/<repo>/<document id>`: each folder a Planner
- * command made there.
+ * command made there, not the token folder (`tokenFolder`) kept beside each.
  */
 export async function plannerWorktrees(directory: string) {
 	let found: Array<{ path: string; repository: string; document: string }> = [];
@@ -833,6 +845,7 @@ export async function plannerWorktrees(directory: string) {
 	for (let owner of await folders(base)) {
 		for (let name of await folders(join(base, owner))) {
 			for (let document of await folders(join(base, owner, name))) {
+				if (isTokenFolder(document)) continue;
 				found.push({
 					path: join(base, owner, name, document),
 					repository: `${owner}/${name}`,
