@@ -35,6 +35,7 @@ import type { Session } from "@chopin/protocol";
 import type { PlannerAssignment, PlannerControl } from "@chopin/protocol/connector";
 import { documentsPath } from "@chopin/protocol/document-url";
 import { documentUrl } from "../channels/document-url";
+import { isChannelId } from "../channels/id";
 import type { PlannerAttachments } from "../harness/remote/attachments";
 import type { MachinePlanners } from "../harness/remote/machine-planners";
 import { ANY_REPOSITORY_PROTOCOL, checkoutOf, Connections, serves } from "./connections";
@@ -1659,10 +1660,16 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let { document } = z.object({ document: z.string().min(1).max(2048) }).strict().parse(
 			await body(request),
 		);
-		let located = await machineRefusal(() => planners.locate(machine, document));
-		if (located === "forbidden") fail("repository-forbidden");
-		if (!located) fail("not-found");
-		let { channel } = await documentAccess(await machineCaller(machine), located.channel.id, true);
+		// A document named by its id needs no reading of its repository from GitHub to be found:
+		// `documentAccess` checks the machine can write it, through its token's installations.
+		let id = isChannelId(document) ? document : undefined;
+		if (!id) {
+			let located = await machineRefusal(() => planners.locate(machine, document));
+			if (located === "forbidden") fail("repository-forbidden");
+			if (!located) fail("not-found");
+			id = located.channel.id;
+		}
+		let { channel } = await documentAccess(await machineCaller(machine), id, true);
 		await auth.machines.seen(machine);
 		let url = new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
 		let issued = await planners.issue(machine, channel.id);

@@ -134,6 +134,51 @@ describe("a paired machine's Planner", () => {
 			.toMatchObject({ status: 401, body: { error: "machine-revoked" } });
 	});
 
+	it("gets its credential and attaches by its document's id or address with no new read of the repository from GitHub", async () => {
+		let { pair, credential, channel, server, auth, storage } = await machineServer();
+		let github = auth.github as { repository: (...args: never[]) => Promise<unknown> };
+		let direct = github.repository.bind(github);
+		let reads = 0;
+		github.repository = (...args) => {
+			reads++;
+			return direct(...args);
+		};
+		let member = await pair("member", "U_member");
+		let { body } = await credential(member.token, channel.id);
+		let client = await attach(server.url, channel.id, scriptedPlanner().handlers, body.token);
+		await client.detach();
+		// Its address, as a backend's CHOPIN_DOCUMENT names it.
+		let again = await credential(member.token, channel.id);
+		let addressed = await attach(
+			server.url,
+			body.document.url,
+			scriptedPlanner().handlers,
+			again.body.token,
+		);
+		expect(addressed.document).toMatchObject({ id: channel.id });
+		await addressed.detach();
+		expect(reads).toBe(0);
+
+		// Another document's address is located as before, and refused for this credential.
+		let other = await storage.channels.create({
+			id: crypto.randomUUID(),
+			repositoryId: "R_score",
+			repositoryOwner: "octo-org",
+			repositoryName: "score",
+			title: "Other document",
+			createdBy: "U_member",
+			now: new Date(),
+		});
+		let third = await credential(member.token, channel.id);
+		let raw = await rawLink(server.url, third.body.token);
+		raw.send({ type: "attach", version: AGENT_VERSION, document: other.id });
+		expect(await raw.next("refused")).toMatchObject({ code: "repository-forbidden" });
+		raw.socket.close();
+		// A credential asked for by address still finds its document.
+		expect((await credential(member.token, body.document.url)).body.document.id).toBe(channel.id);
+		expect(reads).toBeGreaterThan(0);
+	});
+
 	it("is refused when the server does not run the remote Planner", async () => {
 		let { auth, storage, channel } = await linkAuth();
 		let machines = new Machines(storage, () => new Date(), {
