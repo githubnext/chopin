@@ -126,12 +126,9 @@ async function open(page: Page, phone: boolean) {
  */
 async function point(page: Page, x: number, y: number, phone: boolean) {
 	if (!phone) return page.mouse.move(x, y, { steps: 2 });
-	// The editor takes a tapped caret a task later; an Escape that arrives first selects nothing.
-	await expect(async () => {
-		await page.mouse.click(x, y);
-		await page.keyboard.press("Escape");
-		await expect(page.locator("[data-block-selected]")).toHaveCount(1, { timeout: 1_000 });
-	}).toPass();
+	await page.mouse.click(x, y);
+	await page.keyboard.press("Escape");
+	await expect(page.locator("[data-block-selected]")).toHaveCount(1);
 }
 
 const PROSE = "The rollout goes team by team, starting with the docs team.";

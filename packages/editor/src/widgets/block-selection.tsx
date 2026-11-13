@@ -78,8 +78,27 @@ import { isApplePlatform } from "../toolbar/shortcut";
 import { $plainBlock, $serializeBlock } from "./block-keys";
 import { leftCode } from "./code-keys";
 
-import type { EditorState, ElementNode, LexicalEditor, LexicalNode, PointType } from "lexical";
+import type {
+	EditorState,
+	ElementNode,
+	LexicalEditor,
+	LexicalNode,
+	PointType,
+	RangeSelection,
+} from "lexical";
 import type { SerializedBlock } from "./block-keys";
+
+/**
+ * The range selection at the caret now, from the page's own selection when a press moved it and
+ * `selectionchange` has not yet told Lexical.
+ */
+export function $liveRangeSelection(editor: LexicalEditor): RangeSelection | undefined {
+	let dom = editor.getRootElement()?.ownerDocument.getSelection();
+	let fromDom = dom?.rangeCount ? $createRangeSelectionFromDom(dom, editor) : null;
+	if (fromDom) return fromDom;
+	let selection = $getSelection();
+	return $isRangeSelection(selection) ? selection : undefined;
+}
 
 /** A list item that holds only a nested list: the list's place, not a block of its own. */
 function $isWrapper(node: LexicalNode): boolean {
@@ -705,7 +724,6 @@ export function registerBlockSelection(editor: LexicalEditor): () => void {
 					});
 					return true;
 				}
-				let selection = $getSelection();
 				// The second Escape after leaving a code block selects the block it left.
 				let code = leftCode.get(editor);
 				leftCode.delete(editor);
@@ -715,7 +733,10 @@ export function registerBlockSelection(editor: LexicalEditor): () => void {
 					$hold(editor, left, left);
 					return true;
 				}
-				if ($isNodeSelection(selection)) {
+				let range = $liveRangeSelection(editor);
+				if (!range) {
+					let selection = $getSelection();
+					if (!$isNodeSelection(selection)) return false;
 					// A card or image a click selected becomes the block selection.
 					let nodes = selection.getNodes();
 					let block = nodes.length === 1 && $isDecoratorNode(nodes[0])
@@ -726,9 +747,8 @@ export function registerBlockSelection(editor: LexicalEditor): () => void {
 					$hold(editor, block, block);
 					return true;
 				}
-				if (!$isRangeSelection(selection)) return false;
-				let anchor = $blockOf(selection.anchor.getNode());
-				let focus = $blockOf(selection.focus.getNode());
+				let anchor = $blockOf(range.anchor.getNode());
+				let focus = $blockOf(range.focus.getNode());
 				if (!anchor || !focus) return false;
 				event.preventDefault();
 				$hold(editor, anchor, focus);
