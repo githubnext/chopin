@@ -50,7 +50,10 @@ export function translateJob(context: Room, part: TextStreamPart<ToolSet>): void
 			) {
 				chat.jobFailures = (chat.jobFailures ?? 0) + 1;
 				if (chat.jobFailures >= 2) {
-					interrupt(chat.jobFailureCode ?? `The Planner's ${own} failed twice.`);
+					let why = cause(content);
+					interrupt(
+						chat.jobFailureCode ?? `The Planner's ${own} failed twice${why ? `: ${why}` : ""}.`,
+					);
 				}
 			}
 			return;
@@ -64,4 +67,23 @@ export function translateJob(context: Room, part: TextStreamPart<ToolSet>): void
 		default:
 			return;
 	}
+}
+
+/**
+ * Why a job's own tool refused, in plain words, for the causes Chopin names. Anything else says
+ * nothing, so a refusal that quotes the tool's arguments never reaches the card.
+ */
+function cause(content: unknown): string | undefined {
+	let text = content instanceof Error
+		? content.message
+		: typeof content === "string"
+		? content
+		: "";
+	if (/saved answers changed/.test(text)) {
+		return "another answer to it changed while it was being written";
+	}
+	if (/orphaned|ambiguous/.test(text)) return "the passage it rewrites was removed or changed";
+	if (/visuals-required/.test(text)) return "the passage needs a diagram or table it did not add";
+	if (/\bstale\b/.test(text)) return "the document changed while it was being written";
+	if (/implementation is active/.test(text)) return "a build is running";
 }

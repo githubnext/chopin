@@ -42,11 +42,21 @@ export async function writeScope(
 		if (record.followUp!.appliedGeneration === decisionGeneration(record)) {
 			return { replay: true as const };
 		}
-		if (args.revision !== plan.revision) throw new Error("stale; read_decision_scope again");
 		let snapshot = scopeSnapshot(plan, args.id);
 		if (snapshot.answersHash !== args.answersHash) {
 			throw new Error("saved answers changed; read_decision_scope again");
 		}
+		// The document may have moved on elsewhere since the read, as a run publishing its plan or
+		// another decision's write-up does: the write still lands if this turn read this passage,
+		// under these headings, at the revision it names.
+		let read = plan.chat.jobScopeRead;
+		if (
+			args.revision !== plan.revision && !(
+				read?.job === job && read.turn === turn && read.revision === args.revision
+				&& read.answersHash === args.answersHash && read.scope === snapshot.scope
+				&& read.source === snapshot.source && read.context === snapshot.context
+			)
+		) throw new Error("stale; read_decision_scope again");
 		if (typeof args.source !== "string" || args.source.length > 50_000) {
 			throw new Error("scope source exceeds 50000 characters");
 		}
@@ -64,7 +74,7 @@ export async function writeScope(
 			{ op: "replace", index: snapshot.indices[0]!, source: args.source },
 			...snapshot.indices.slice(1).map(index => ({ op: "delete" as const, index })),
 		];
-		let prepared = Edit.prepare(plan, args.revision, operations);
+		let prepared = Edit.prepare(plan, plan.revision, operations);
 		if (!prepared.ok) {
 			throw new Error(prepared.reason === "invalid" ? prepared.message : "stale scope");
 		}

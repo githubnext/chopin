@@ -37,7 +37,9 @@ test("two failed own-tool calls end the turn after one possible re-read", async 
 	let outcome = await running;
 	expect(outcome.status).toBe("failed");
 	if (outcome.status === "done") throw new Error("two tool failures completed the job");
-	expect(outcome.reason).toContain("failed twice");
+	expect(outcome.reason).toBe(
+		"The Planner's refine_decision failed twice: the document changed while it was being written.",
+	);
 	expect(state.aborts()).toBe(1);
 	expect(state.chat.job).toBeUndefined();
 });

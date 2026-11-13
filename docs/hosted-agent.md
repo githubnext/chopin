@@ -174,7 +174,11 @@ and does not edit prose; only people approve and start implementation.
 Saving an anchored Planner decision durably queues a scoped prose update, independently of
 conversation-analysis flags. It uses the complete saved answers affecting that passage and
 updates only its explicit target. Applied answer generations commit with the source, so an
-interrupted retry cannot write them twice. Lost or ambiguous targets refuse safely. Work waits
+interrupted retry cannot write them twice. Lost or ambiguous targets refuse safely. Edits
+elsewhere in the document between the job's read of its passage and its write, such as a
+workflow run publishing its plan or another decision's update, do not refuse the write: it
+lands when its passage, headings and saved answers are still the ones it read. A write-up that
+still fails says why on its card in plain words, beside Retry. Work waits
 for an existing authorized Planner owner; it never claims ownership from a viewer or saver.
 The same Save also hands the answer to a Planner turn, so the Planner acts on what was decided
 rather than only rewriting the passage; answers saved close together share one turn.
