@@ -42,6 +42,8 @@ export type BuildRequest = {
 	activity?: { text: string; at: string };
 	/** A human Stop suppresses automatic work for edits up through this document revision. */
 	stoppedAtRevision?: number;
+	/** The login of the person who pressed Stop in Chopin, for builds stopped since it was recorded. */
+	stoppedBy?: string;
 	/** The connector's key for the report that set `state`, so a retry of it is recognized. */
 	reportKey?: string;
 	/**

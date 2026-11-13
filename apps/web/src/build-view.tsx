@@ -23,6 +23,7 @@ import {
 	buildProgress,
 	builtCount,
 	builtDetail,
+	endedCard,
 	linkParts,
 	liveTaskGroups,
 	liveTaskState,
@@ -239,8 +240,9 @@ export function BuildView(
 						: "This document can’t be built yet.",
 				};
 			}
-			if (phase.kind === "drafting" && phase.draft === "returned") {
-				return { title: "Returned for changes", detail: "Build plan builds it again." };
+			// Who stopped it, the task its agent blocked, or why it failed, as Chat's end line says.
+			if (phase.kind === "drafting" && phase.draft === "returned" && snapshot) {
+				return endedCard(snapshot);
 			}
 			// Build plan is the approval: pressing it approves these tasks and starts them.
 			return {

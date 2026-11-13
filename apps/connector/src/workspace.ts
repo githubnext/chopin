@@ -694,7 +694,10 @@ function extraWorktrees(path: string) {
 /** How a run ended, as its journal records it: its agent finished, failed and why, or was stopped. */
 export type RunOutcome =
 	| { state: "finished" }
-	| { state: "stopped" }
+	/** `reason` names who stopped it in Chopin; Ctrl-C here has none. */
+	| { state: "stopped"; reason?: string }
+	/** Its agent blocked a task: which one and why. */
+	| { state: "blocked"; reason: string }
 	| { state: "failed"; error: string };
 
 /**

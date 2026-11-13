@@ -11,6 +11,7 @@ import { implementationGraphs } from "./plan-graphs";
 import { registerImplementationRoutes } from "./routes";
 import { queueRebuild, requestBuild } from "./builds";
 import { implementationStatus } from "./notifications";
+import { buildNotices } from "./build-notices";
 import { LiveSyncCoordinator } from "./live-sync";
 import { serves } from "../experiments/connections";
 import type { GitHub } from "../github/client";
@@ -422,6 +423,96 @@ test("the build owner can stop from the browser without losing reported pull req
 		})).isError,
 	).toBe(true);
 	await Plan.close(context.plan);
+});
+
+test("a person's Stop names who stopped the build to its machine, its run record and Chat", async () => {
+	let context = await setup();
+	try {
+		let { connection, built } = await running(context);
+		expect((await context.call(`${context.path}/stop`, { id: built.id })).status).toBe(200);
+		let snapshot = await (await context.call(context.path)).json();
+		expect(snapshot.build).toMatchObject({ state: "failed", stoppedBy: "test" });
+		expect(snapshot.lifecycle.history.at(-1).outcome).toEqual({
+			kind: "revision_requested",
+			reason: "Stopped in Chopin by @test.",
+		});
+		// The machine's next heartbeat hears that a person stopped it, not that it was refused.
+		let refused = await tool(context, connection.token, "renew_implementation_build", {
+			id: built.id,
+			documentId: context.plan.id,
+		});
+		expect(refused.isError).toBe(true);
+		expect(refused.content[0].text).toBe("build-stopped: Stopped in Chopin by @test.");
+		expect(buildNotices(context.plan).at(-1)?.text).toBe("Build stopped by @test.");
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a build whose agent blocked a task ends blocked, with its reason, wherever it shows", async () => {
+	let context = await setup();
+	try {
+		let { connection, built, claim } = await running(context);
+		await tool(context, claim.runToken, "start_task", { taskId: "first", idempotencyKey: "start" });
+		await tool(context, claim.runToken, "block_task", {
+			taskId: "first",
+			idempotencyKey: "block",
+			reason: "Missing source: the formal files are not in the repository",
+		});
+		let ended = await tool(context, connection.token, "report_implementation_build", {
+			id: built.id,
+			state: "stopped",
+		});
+		expect(ended).toEqual({
+			accepted: true,
+			ending: {
+				kind: "blocked",
+				task: "First",
+				reason: "Missing source: the formal files are not in the repository",
+			},
+		});
+		let snapshot = await (await context.call(context.path)).json();
+		expect(snapshot.lifecycle.history.at(-1).outcome).toEqual({
+			kind: "revision_requested",
+			reason: "“First” is blocked: Missing source: the formal files are not in the repository",
+		});
+		expect(buildNotices(context.plan).at(-1)?.text).toBe(
+			"Build blocked on “First”: Missing source: the formal files are not in the repository.",
+		);
+	} finally {
+		await Plan.close(context.plan);
+	}
+});
+
+test("a build that delivered tells its machine which pull requests it opened", async () => {
+	let context = await setup();
+	try {
+		let { connection, built, claim } = await running(context);
+		let url = "https://github.com/owner/repository/pull/7";
+		for (
+			let [name, args] of [
+				["start_task", { taskId: "first", idempotencyKey: "start" }],
+				["report_pr", { taskId: "first", idempotencyKey: "pr", url, state: "open" }],
+				["complete_task", { taskId: "first", idempotencyKey: "done", summary: "Launched" }],
+				["report_verification", {
+					idempotencyKey: "verified",
+					passed: true,
+					summary: "Reviewed.",
+					reviewerMethod: "Ran the suite.",
+					evidence: [{ taskId: "first", evidence: ["Suite passed."] }],
+					tasksNeedingWork: [],
+				}],
+			] as const
+		) expect((await tool(context, claim.runToken, name, args)).isError).toBeUndefined();
+		expect(
+			await tool(context, connection.token, "report_implementation_build", {
+				id: built.id,
+				state: "stopped",
+			}),
+		).toEqual({ accepted: true, ending: { kind: "finished", pullRequests: [url], tasks: 1 } });
+	} finally {
+		await Plan.close(context.plan);
+	}
 });
 
 test("a stale Stop rejects a naturally ended build instead of claiming cancellation", async () => {
@@ -1068,7 +1159,7 @@ test.each([false, true])(
 					...args,
 					state: "stopped",
 				}),
-			).toEqual({ accepted: true });
+			).toEqual({ accepted: true, ending: { kind: "unfinished" } });
 			expect(context.plan.builds.at(-1)).toMatchObject({ state: "stopped" });
 		} finally {
 			await Plan.close(context.plan);
@@ -1197,7 +1288,7 @@ test("a build carries on across a server restart once its machine comes back", a
 				...hint,
 				state: "stopped",
 			}),
-		).toEqual({ accepted: true });
+		).toEqual({ accepted: true, ending: { kind: "unfinished" } });
 		expect(context.plan.builds.at(-1)).toMatchObject({ state: "stopped" });
 		expect(context.plan.builds.at(-1)!.error).toBeUndefined();
 		// Its run credential ended with the build.
@@ -1244,7 +1335,8 @@ test("a build that ended before a restart stays ended", async () => {
 			id: built.id,
 			documentId: context.plan.id,
 		});
-		expect(renewed.content[0].text).toMatch(/^build-inactive:/);
+		// Its machine hears who stopped it, after the restart too.
+		expect(renewed.content[0].text).toBe("build-stopped: Stopped in Chopin by @test.");
 		let agent = await tool(context, claim.runToken, "start_task", {
 			taskId: "first",
 			idempotencyKey: "start",
@@ -1412,6 +1504,7 @@ test("a build report retried after its answer was lost lands once, and an invali
 	await tool(context, connection.token, "report_implementation_build", stopped);
 	expect(await tool(context, connection.token, "report_implementation_build", stopped)).toEqual({
 		accepted: true,
+		ending: { kind: "unfinished" },
 	});
 	expect(context.plan.builds.at(-1)!.state).toBe("stopped");
 	// The run's earlier report no longer describes the build, so its key no longer passes.

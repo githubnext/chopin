@@ -5,10 +5,14 @@
  */
 
 import { implementationLifecycle } from "./lifecycle";
+import { blockedTask } from "./build-ending";
 
 import type { Plan } from "../plan/service";
 
 export type BuildNotice = { id: string; text: string };
+
+/** A person's Ctrl-C at the machine's terminal: a stop, not a failure. */
+const STOPPED_HERE = "Stopped from the connector terminal.";
 
 type State = Pick<Plan, "graph" | "execution" | "lifecycle" | "builds" | "live">;
 
@@ -95,17 +99,22 @@ export function buildNotices(state: State): BuildNotice[] {
 					? `Build finished: ${count}, ${links(opened)}.`
 					: `Build finished: ${count}, no code change needed.`,
 			});
+		} else if (ended && build.stoppedBy) {
+			notices.push({ id, text: `Build stopped by @${build.stoppedBy}.` });
 		} else if (ended && ended.outcome.kind === "revision_requested") {
 			// A blocked task says why better than the release that followed it.
-			let blocked = ended.progress.tasks.find(task => task.state === "blocked" && task.blocker);
-			let title = blocked && titles(ended.run.graphVersion).get(blocked.id);
+			let blocked = build.state === "stopped"
+				? blockedTask(graph, ended.run.graphVersion, ended.progress.tasks)
+				: undefined;
 			let reason = sentence(ended.outcome.reason);
 			notices.push({
 				id,
-				text: blocked?.blocker
-					? `Build stopped: ${title ? `“${sentence(title)}” is blocked: ` : ""}${
-						sentence(blocked.blocker)
+				text: blocked
+					? `Build blocked${blocked.task ? ` on “${sentence(blocked.task)}”` : ""}: ${
+						sentence(blocked.reason)
 					}.`
+					: build.state === "failed" && build.error && build.error !== STOPPED_HERE
+					? `Build failed: ${sentence(build.error)}.`
 					: /^the build stopped before it finished$/i.test(reason)
 					? "Build stopped before it finished."
 					: `Build stopped: ${reason}.`,

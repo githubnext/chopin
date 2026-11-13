@@ -200,6 +200,49 @@ export function endedReason(build: { error?: string } | undefined): string | und
 	}
 }
 
+const AGAIN = "Build plan builds it again.";
+const UNFINISHED = "The build stopped before it finished.";
+
+/** `text` as a sentence, ending with one full stop unless it ends a sentence already. */
+function said(text: string): string {
+	let trimmed = text.replace(/\s+/g, " ").trim();
+	return /[.?!…]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+/**
+ * The Build view's card for a first build whose run ended with it: who stopped it in Chopin and
+ * when, the task its agent blocked and why, why it failed, or that its agent or a reviewer
+ * returned it for changes. Each says what Chat's end line and the machine's terminal say.
+ */
+export function endedCard(snapshot: Snapshot): { title: string; detail: string } {
+	let build = snapshot.build;
+	let run = latestRun(snapshot);
+	if (build?.stoppedBy) {
+		let at = build.finishedAt
+			? new Date(build.finishedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+			: undefined;
+		return { title: `Stopped by @${build.stoppedBy}`, detail: at ? `At ${at}. ${AGAIN}` : AGAIN };
+	}
+	let blocked = build?.state === "stopped"
+		? run?.progress.tasks.find(task => task.state === "blocked" && task.blocker?.trim())
+		: undefined;
+	// The blocked task's row, open beneath, names it; the card's one line leads with why.
+	if (blocked?.blocker) {
+		return { title: "Blocked", detail: `${said(blockerText(blocked.blocker))} ${AGAIN}` };
+	}
+	if (build?.state === "failed" && build.error === "Stopped from the connector terminal.") {
+		return { title: "Stopped from the connector terminal", detail: AGAIN };
+	}
+	if (build?.state === "failed") {
+		return { title: "Build failed", detail: build.error ? `${said(build.error)} ${AGAIN}` : AGAIN };
+	}
+	let reason = run?.outcome.kind === "revision_requested" ? run.outcome.reason : undefined;
+	if (!reason || reason === UNFINISHED) {
+		return { title: "Stopped before it finished", detail: AGAIN };
+	}
+	return { title: "Returned for changes", detail: `${said(reason)} ${AGAIN}` };
+}
+
 /**
  * Why a task the build left unfinished stopped: the agent's last report, or where it
  * stopped when it said nothing.

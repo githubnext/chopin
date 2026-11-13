@@ -2,6 +2,8 @@
  * The connector's human-facing terminal lines. Messages go to stdout so terminals don't paint them
  * as errors; failures go to stderr. ANSI styling only reaches a TTY and honours `NO_COLOR`.
  */
+import { blockedText, type BuildEnding } from "./ending";
+
 type Stream = { write(text: string): unknown; isTTY?: boolean };
 
 const CODES = {
@@ -147,8 +149,37 @@ export function createOutput(
 		finished() {
 			say(`  ${s.green("✓")} Finished`, "");
 		},
-		stopped() {
-			say(`  ${s.dim("✗ Stopped from the connector terminal.")}`, "");
+		/**
+		 * A build's agent ended its turn, and Chopin said how the build ended: blocked on a task and
+		 * why, finished with the pull requests it opened, or with tasks left. A server that says
+		 * nothing gets plain Finished.
+		 */
+		ended(ending?: BuildEnding) {
+			if (ending?.kind === "blocked") {
+				return say(`  ${s.dim(`✗ Blocked: ${blockedText(ending)}.`)}`, "");
+			}
+			if (ending?.kind === "unfinished") {
+				return say(
+					`  ${s.dim("✗ Ended with tasks left; Build plan in Chopin builds them again.")}`,
+					"",
+				);
+			}
+			if (ending?.kind === "returned") {
+				return say(
+					`  ${s.dim(`✗ Returned for changes: ${ending.reason.replace(/[.\s]+$/, "")}.`)}`,
+					"",
+				);
+			}
+			if (ending?.kind === "finished") {
+				let tasks = `${ending.tasks} ${ending.tasks === 1 ? "task" : "tasks"}`;
+				let opened = ending.pullRequests.length ? `, ${ending.pullRequests.join(", ")}` : "";
+				return say(`  ${s.green("✓")} Finished: ${tasks}${opened}`, "");
+			}
+			say(`  ${s.green("✓")} Finished`, "");
+		},
+		/** Ctrl-C here, or `why`: a person's Stop in Chopin, which names them. */
+		stopped(why = "Stopped from the connector terminal.") {
+			say(`  ${s.dim(`✗ ${why}`)}`, "");
 		},
 		/** `agent` is the agent's last stderr lines, shown when debugging didn't already show them. */
 		failed(message: string, agent: string[] = []) {

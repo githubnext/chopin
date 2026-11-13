@@ -11,6 +11,7 @@ import { AgentTimedOut, runAgent, timedOut } from "./acp";
 import type { AgentInfo } from "./acp";
 import { serveLocalBridge } from "./local-bridge";
 import { createOutput } from "./output";
+import { blockedText, endingOf } from "./ending";
 import type { Output } from "./output";
 import { ask, describePermission, permissionMemory } from "./permission";
 import type { Sandbox } from "./sandbox";
@@ -86,6 +87,12 @@ export const STOPPED = "Stopped from the connector terminal.";
 /** A run out of reach says it is still trying at most this often. */
 const RETRY_SAID_MS = 10_000;
 
+/** A refusal's message without the code Chopin put in front of it. */
+function refusalMessage(error: unknown): string | undefined {
+	let message = error instanceof Error ? error.message.replace(/^[a-z][a-z0-9-]*:\s*/, "") : "";
+	return message.trim() || undefined;
+}
+
 function minutes(ms: number) {
 	let value = Math.round(ms / 60_000);
 	return value >= 1
@@ -142,6 +149,8 @@ export async function runWork(
 	let ended: string | undefined;
 	/** Chopin forgot this connection, so the connector must stop once the run has reported. */
 	let forgotten = false;
+	/** A person stopped the build in Chopin, which says who: a stop, not a failure. */
+	let stoppedInChopin = false;
 	let now = options.now ?? Date.now;
 	/** When the terminal last said Chopin is out of reach, so retries say so at most every 10 s. */
 	let saidAt = 0;
@@ -211,6 +220,10 @@ export async function runWork(
 					continue;
 				}
 				let code = errorCode(error);
+				if (code === "build-stopped" && ended === undefined) {
+					stoppedInChopin = true;
+					ended = refusalMessage(error) ?? "Stopped in Chopin.";
+				}
 				// A build claimed before Chopin restarted is one it no longer knows.
 				ended ??= code === "server-restarted"
 					? "Chopin restarted, so it ended this run."
@@ -444,12 +457,19 @@ export async function runWork(
 			agentStop = stop;
 			throw new Error(`Agent stopped: ${stop}`);
 		}
-		await reports.deliver(implementation ? "report_implementation_build" : "complete_experiment", {
-			...identity,
-			...(implementation ? { state: "stopped", idempotencyKey: crypto.randomUUID() } : {}),
-		});
-		output.finished();
-		outcome = { state: "finished" };
+		let answer = await reports.deliver(
+			implementation ? "report_implementation_build" : "complete_experiment",
+			{
+				...identity,
+				...(implementation ? { state: "stopped", idempotencyKey: crypto.randomUUID() } : {}),
+			},
+		);
+		// Chopin says how the build ended: blocked on a task, or the pull requests it opened.
+		let ending = endingOf(answer);
+		output.ended(ending);
+		outcome = ending?.kind === "blocked"
+			? { state: "blocked", reason: blockedText(ending) }
+			: { state: "finished" };
 	} catch (error) {
 		// Ctrl-C reports why before the connector disconnects, so Chopin knows at once. An agent
 		// that cancelled its own turn was interrupted too, unless the connector cancelled it.
@@ -469,10 +489,16 @@ export async function runWork(
 			: error instanceof Error
 			? error.message
 			: "Local work failed";
+		// A person's Stop in Chopin ended the build there already: nothing failed, and nothing is
+		// left to report.
+		let chopinStop = !stopped && stoppedInChopin && ended === message;
 		outcome = stopped
 			? { state: "stopped" }
+			: chopinStop
+			? { state: "stopped", reason: message }
 			: { state: "failed", error: redacted(message, secrets()).slice(0, 2000) };
 		if (stopped) output.stopped();
+		else if (chopinStop) output.stopped(message);
 		else {
 			output.failed(
 				redacted(message, secrets()),
@@ -481,13 +507,15 @@ export async function runWork(
 		}
 		// After Ctrl-C, or out of reach for the whole grace period, the failure gets one bounded attempt.
 		let send = stopped || reports.expired() ? reports.final : reports.deliver;
-		await send(implementation ? "report_implementation_build" : "fail_experiment", {
-			...identity,
-			...(implementation ? { state: "failed", idempotencyKey: crypto.randomUUID() } : {}),
-			error: stopped || ended || late || !implementation
-				? message.slice(0, 2000)
-				: "Local implementation failed. Inspect the connector terminal.",
-		}).catch(() => {});
+		if (!chopinStop) {
+			await send(implementation ? "report_implementation_build" : "fail_experiment", {
+				...identity,
+				...(implementation ? { state: "failed", idempotencyKey: crypto.randomUUID() } : {}),
+				error: stopped || ended || late || !implementation
+					? message.slice(0, 2000)
+					: "Local implementation failed. Inspect the connector terminal.",
+			}).catch(() => {});
+		}
 		// Retrying cannot reach a server that forgot this connection, so the connector stops too.
 		if (forgotten && !stopped) throw new ConnectorStopped("forgotten", message);
 	} finally {

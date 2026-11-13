@@ -14,6 +14,7 @@ import {
 } from "./lifecycle";
 import { announceImplementation } from "./notifications";
 import { planSourceFor, planSourceSchema } from "./plan-source";
+import { endedReason } from "./build-ending";
 import { drain, exclusive, persistExclusive, source } from "../plan/service";
 import { broadcast } from "../wire";
 import type { Plan } from "../plan/service";
@@ -57,6 +58,8 @@ let buildSchema = z.object({
 	session: z.string().min(1).max(128).optional(),
 	error: z.string().max(2000).optional(),
 	stoppedAtRevision: z.number().int().nonnegative().optional(),
+	/** The login of the person who pressed Stop in Chopin. */
+	stoppedBy: z.string().min(1).max(128).optional(),
 	activity: z.object({
 		text: z.string().min(1).max(2000),
 		at: z.string().datetime(),
@@ -102,7 +105,7 @@ export function releaseEndedRun(
 	let result = transition(state, {
 		kind: "request_revision",
 		runId: run.id,
-		reason: build.error ?? "The build stopped before it finished.",
+		reason: endedReason(state, build),
 		idempotencyKey: `${run.id}:ended`,
 	});
 	return result.kind === "accepted" ? result.state : state;
@@ -634,7 +637,8 @@ export function reportBuild(
 		expiresAt?: number;
 		reportKey?: string;
 		progress?: string;
-		stoppedByUser?: true;
+		/** A person pressed Stop in Chopin: their login. */
+		stoppedBy?: string;
 	},
 ): Promise<void> {
 	return exclusive(plan, async () => {
@@ -652,13 +656,13 @@ export function reportBuild(
 		) {
 			throw new Error("build report is out of order");
 		}
-		let { progress: reported, stoppedByUser, ...fields } = report;
+		let { progress: reported, ...fields } = report;
 		// Whatever a connector sends, the progress line never shows a raw command or a credential.
 		let progress = reported === undefined ? undefined : activityText(reported);
 		let next = buildSchema.parse({
 			...current,
 			...fields,
-			...(stoppedByUser ? { stoppedAtRevision: plan.revision } : {}),
+			...(report.stoppedBy ? { stoppedAtRevision: plan.revision } : {}),
 			// A build's age is counted from when it finished, not from when it was asked for.
 			...(current.state !== report.state
 					&& (report.state === "stopped" || report.state === "failed")

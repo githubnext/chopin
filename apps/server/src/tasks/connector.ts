@@ -3,6 +3,7 @@ import { APP_TOKEN_PROTOCOL, RESUME_PROTOCOL, serves } from "../experiments/conn
 import type { Connection, Connections, DurableRun, Grant } from "../experiments/connections";
 import { ExperimentError } from "@chopin/experiment";
 import { fail } from "../experiments/service";
+import { buildEnding, stoppedIn } from "./build-ending";
 import { LIFECYCLE_TOOLS, lifecycleCall } from "../mcp/lifecycle";
 import { exclusive, source } from "../plan/service";
 import type { Plan } from "../plan/service";
@@ -467,6 +468,21 @@ export function implementationConnector(
 					}
 				}
 				let build = plan.builds.at(-1);
+				// A person stopped it in Chopin: its machine hears who did, not that it was refused.
+				if (
+					build && !grant.run && build.id === args.id && build.stoppedBy !== undefined
+					&& build.state === "failed" && runner(build) === connection.owner
+					&& (build.machineId !== undefined
+						? build.machineId === connection.machineId
+						: build.connectionId === connection.id)
+					&& ["renew_implementation_build", "report_implementation_build"].includes(name)
+				) {
+					console.info(
+						`chopin: told ${caller} that build ${build.id} of document ${plan.id} was stopped `
+							+ "in Chopin",
+					);
+					fail("build-stopped", stoppedIn(build.stoppedBy));
+				}
 				// Chopin restarted since the build's connection opened. Its machine may carry on with a
 				// resumable build for a while; any other is over.
 				let restarted = !!build && !grant.run && build.id === args.id
@@ -607,7 +623,13 @@ export function implementationConnector(
 					name === "report_implementation_build" && args.idempotencyKey !== undefined
 					&& build.reportKey === args.idempotencyKey
 				) {
-					return { accepted: true };
+					let ending = args.state !== "running" && plan.graph
+						? buildEnding(
+							{ graph: plan.graph, execution: plan.execution, lifecycle: plan.lifecycle },
+							build,
+						)
+						: undefined;
+					return { accepted: true, ...(ending ? { ending } : {}) };
 				}
 				if (!["starting", "running"].includes(build.state) || build.expiresAt <= Date.now()) {
 					refuse("build-inactive", build);
@@ -660,6 +682,14 @@ export function implementationConnector(
 						if (claim.kind !== "started") fail("build-claim-refused");
 					}
 					await reportBuild(plan, connection.owner, connection.id, build.id, report);
+					// The machine's terminal and journal say how the build ended, as Chopin does.
+					let ending = report.state !== "running" && plan.graph
+						? buildEnding(
+							{ graph: plan.graph, execution: plan.execution, lifecycle: plan.lifecycle },
+							plan.builds.at(-1)!,
+						)
+						: undefined;
+					if (ending) return { accepted: true, ending };
 				} else fail("tool-forbidden");
 				return { accepted: true };
 			});
