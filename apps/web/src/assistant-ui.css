@@ -26,6 +26,21 @@
 /* Chopin is light only (`color-scheme: light`), so `dark:` never follows the system. */
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * `group-hover:` as a descendant of the hovered group, with the same specificity as Tailwind's own.
+ * Tailwind writes it `&:is(:where(.group):hover *)`, and Chromium answers a `:hover *` anywhere in
+ * the page by restyling the whole subtree of every element the pointer enters or leaves: each row a
+ * pointer crossed in Chat, toolbar and all. A named group (`group-hover/<name>:`) is not generated;
+ * the one copy that writes one, the composer's `ComposerContext`, is not drawn.
+ */
+@custom-variant group-hover {
+	@media (hover: hover) {
+		:where(.group):hover & {
+			@slot;
+		}
+	}
+}
+
 @theme static {
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);

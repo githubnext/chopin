@@ -12,6 +12,32 @@
  * its own lane above the message instead.
  */
 
+/*
+ * Whether a row shows, and how fast it fades, are set on the row and inherited by nothing but the
+ * parts that draw them (`--chat-shown: inherit` below). Inherited by everything, each hover change
+ * also restyled the parts of the row it left and the row it reached that use neither, a fifth more
+ * of every step while a pointer rests on a scrolling Chat.
+ */
+@property --chat-shown {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 0;
+}
+
+@property --chat-fade {
+	syntax: "<time>";
+	inherits: false;
+	initial-value: 0s;
+}
+
+.chat-message-body::before,
+.chat-message-body > :is(.chat-gutter-time, .chat-toolbar-rail, .chat-reactions),
+.chat-toolbar-rail > .chat-message-toolbar,
+.chat-reactions > .chat-reaction-add {
+	--chat-shown: inherit;
+	--chat-fade: inherit;
+}
+
 .chat-message-body {
 	/*
 	 * A row's pitch, as Slack's: its shade and its hit area reach halfway across the gap to the row

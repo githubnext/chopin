@@ -3,41 +3,42 @@
  * and inks are Chat's (`apps/web/src/chat/markdown.css`), so code reads the same in a message and
  * in the document: keywords in petrol, names of functions and types in plum, strings in green,
  * numbers and constants in amber, comments and punctuation in the tertiary ink, each at 4.5:1 or
- * more on the page.
+ * more on the page. They are set on the editor's root, which its code takes them from, so nothing
+ * else the page restyles resolves them (`styles.css`, beside `plan-related`).
  */
-::highlight(plan-code-keyword) {
+.plan-content::highlight(plan-code-keyword) {
 	color: var(--color-brand-ink);
 }
 
-::highlight(plan-code-function) {
+.plan-content::highlight(plan-code-function) {
 	color: var(--color-merged-icon);
 }
 
-::highlight(plan-code-string),
-::highlight(plan-code-string-expression),
-::highlight(plan-code-inserted) {
+.plan-content::highlight(plan-code-string),
+.plan-content::highlight(plan-code-string-expression),
+.plan-content::highlight(plan-code-inserted) {
 	color: var(--color-success-ink);
 }
 
-::highlight(plan-code-constant),
-::highlight(plan-code-changed) {
+.plan-content::highlight(plan-code-constant),
+.plan-content::highlight(plan-code-changed) {
 	color: var(--color-warning-ink);
 }
 
-::highlight(plan-code-comment),
-::highlight(plan-code-punctuation) {
+.plan-content::highlight(plan-code-comment),
+.plan-content::highlight(plan-code-punctuation) {
 	color: var(--color-text-tertiary);
 }
 
-::highlight(plan-code-parameter) {
+.plan-content::highlight(plan-code-parameter) {
 	color: var(--color-text-secondary);
 }
 
-::highlight(plan-code-link) {
+.plan-content::highlight(plan-code-link) {
 	color: var(--color-brand);
 }
 
-::highlight(plan-code-deleted) {
+.plan-content::highlight(plan-code-deleted) {
 	color: var(--color-destructive-ink);
 }
 

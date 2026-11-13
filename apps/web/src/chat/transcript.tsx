@@ -53,6 +53,7 @@ import { messageSpeaker, researchSpeaker } from "./speakers";
 import type { ToolbarActions } from "./actions/message-toolbar";
 import { clearSourceHighlight, highlightSource } from "../conversation-plan/source";
 import { OverlayScrollbar } from "./overlay-scrollbar";
+import { scrollProgress } from "./scroll-progress";
 import type { ChatDestination } from "../conversation-plan/source";
 
 /** The files of a message are drawn by code that loads when a message first has some. */
@@ -684,6 +685,10 @@ export let Transcript = memo(function Transcript(
 	// distance without their having moved.
 	let follow = useRef(true);
 	let scrolledTo = useRef(0);
+	// How far the transcript can scroll, from its resize observer, and how far it has, from its scroll
+	// timeline; undefined until the observer has answered, or where there are no scroll timelines.
+	let scrollRange = useRef<number>(undefined);
+	let scrollProgressOf = useRef<() => number>(undefined);
 	// Whether the pointer is on a message. The message it is on shows its toolbar, and a message with
 	// the keyboard's focus gives way to it; the transcript says so to the stylesheet only while a
 	// message has that focus, the one time it changes anything, since saying it restyles every message.
@@ -956,6 +961,38 @@ export let Transcript = memo(function Transcript(
 	});
 	useEffect(() => () => cancelAnimationFrame(pin.current), []);
 
+	// How far the transcript can scroll: its stack and its padding past what shows of it, from the
+	// observer's entries, as the overlay scrollbar counts it, so a scroll step asks for no layout.
+	useLayoutEffect(() => {
+		let element = scroller.current;
+		let inner = stack.current;
+		if (!element || !inner) return;
+		scrollProgressOf.current = scrollProgress(element);
+		if (!scrollProgressOf.current) return;
+		let shown: number | undefined;
+		let padding = 0;
+		let content: number | undefined;
+		let observer = new ResizeObserver(entries => {
+			for (let entry of entries) {
+				let block = entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height;
+				if (entry.target === element) {
+					shown = block;
+					padding = block - (entry.contentBoxSize[0]?.blockSize ?? entry.contentRect.height);
+				} else content = block;
+			}
+			if (shown !== undefined && content !== undefined) {
+				scrollRange.current = Math.max(0, Math.round(padding + content - shown));
+			}
+		});
+		observer.observe(element, { box: "border-box" });
+		observer.observe(inner, { box: "border-box" });
+		return () => {
+			observer.disconnect();
+			scrollRange.current = undefined;
+			scrollProgressOf.current = undefined;
+		};
+	}, []);
+
 	// Rows grow after they mount (streaming, work details, offer cards) and the pane resizes
 	// (phone keyboard, composer, window); a reader at the bottom stays on the newest line.
 	useLayoutEffect(() => {
@@ -1012,13 +1049,20 @@ export let Transcript = memo(function Transcript(
 			onBlur={event => markPointing(event.currentTarget)}
 			onScroll={event => {
 				let element = event.currentTarget;
-				let distance = element.scrollHeight - element.scrollTop - element.clientHeight;
+				// How far it can scroll comes from the resize observer and how far it has from the scroll
+				// timeline, so a step under a resting pointer lays nothing out (`scroll-progress.ts`).
+				let range = scrollRange.current;
+				let progress = range === undefined ? undefined : scrollProgressOf.current?.();
+				let top = progress === undefined ? element.scrollTop : progress * range!;
+				let distance = progress === undefined
+					? element.scrollHeight - top - element.clientHeight
+					: range! - top;
 				pinned.current = distance < 48;
 				flush.current = distance <= 2;
 				// Near the newest line is following it; moving up leaves it.
 				if (pinned.current) follow.current = true;
-				else if (element.scrollTop < scrolledTo.current) follow.current = false;
-				scrolledTo.current = element.scrollTop;
+				else if (top < scrolledTo.current) follow.current = false;
+				scrolledTo.current = top;
 			}}
 		>
 			<span

@@ -2425,8 +2425,15 @@
  *
  * The colour is recorded beside the declaration because it is calibrated as
  * a rendered wash, not as an abstract percentage of a darker accent.
+ *
+ * Every mark is in an editor, so every rule is set on the editor's root, and
+ * its text takes it from there by highlight inheritance. A `::highlight()` any
+ * element could take was resolved for each element the page restyled, anywhere:
+ * a Chat row a pointer crossed resolved ten of them per element. Set under the
+ * root (`.plan-content ::highlight()`), a scroll or a view switch restyled the
+ * whole document instead.
  */
-::highlight(plan-related) {
+.plan-content::highlight(plan-related) {
 	/* #d8eaee */
 	background-color: var(--color-brand-wash);
 }
@@ -2436,17 +2443,17 @@
  * its passage or chip is pointed at (and while a draft or a resolved marker
  * points at it), underlined while its card is open.
  */
-::highlight(plan-comment) {
+.plan-content::highlight(plan-comment) {
 	background-color: var(--color-comment-wash);
 }
 
-::highlight(plan-comment-hover),
-::highlight(plan-comment-pin),
-::highlight(plan-comment-resolved) {
+.plan-content::highlight(plan-comment-hover),
+.plan-content::highlight(plan-comment-pin),
+.plan-content::highlight(plan-comment-resolved) {
 	background-color: var(--color-comment-wash-strong);
 }
 
-::highlight(plan-comment-open) {
+.plan-content::highlight(plan-comment-open) {
 	background-color: var(--color-comment-wash-strong);
 	text-decoration-line: underline;
 	text-decoration-color: var(--color-comment-underline);
@@ -2455,7 +2462,7 @@
 }
 
 /* The passage a link is being added to, while its field holds the selection. */
-::highlight(plan-link-target) {
+.plan-content::highlight(plan-link-target) {
 	background-color: var(--color-brand-wash);
 }
 
@@ -5102,7 +5109,7 @@
 	text-overflow: ellipsis;
 }
 
-::highlight(plan-decided) {
+.plan-content::highlight(plan-decided) {
 	background-color: var(--color-success-wash);
 }
 /* Presence on a decision card: aligned to the 1.5rem mark beside the title. */
@@ -5144,7 +5151,7 @@
  * Reader-local chrome drawn over the document like the comment layer, and
  * for the same reason: nothing here may move a collaborative line box.
  */
-::highlight(plan-decision) {
+.plan-content::highlight(plan-decision) {
 	background-color: var(--color-success-wash);
 }
 
