@@ -1,6 +1,8 @@
+import { gfmAutolinkLiteralFromMarkdown } from "mdast-util-gfm-autolink-literal";
 import { gfmStrikethroughFromMarkdown } from "mdast-util-gfm-strikethrough";
 import { gfmTableFromMarkdown } from "mdast-util-gfm-table";
 import { gfmTaskListItemFromMarkdown } from "mdast-util-gfm-task-list-item";
+import { gfmAutolinkLiteral } from "micromark-extension-gfm-autolink-literal";
 import { gfmStrikethrough } from "micromark-extension-gfm-strikethrough";
 import { gfmTable } from "micromark-extension-gfm-table";
 import { gfmTaskListItem } from "micromark-extension-gfm-task-list-item";
@@ -17,6 +19,7 @@ export type MessageGfmExtensions = {
 const TABLE = 1;
 const STRIKETHROUGH = 2;
 const TASKS = 4;
+const ADDRESSES = 8;
 
 /**
  * A table needs a delimiter row, and micromark reads one only if it holds a pipe or a colon: a row
@@ -44,14 +47,64 @@ const TASK_BOX = /\[[\s>]*(?:[xX][\s>]*)?\]/;
 
 /**
  * Which parts of GitHub's Markdown a source can use, from marks without which the syntax cannot
- * match: a delimiter row for a table, a tilde for strikethrough, and a bracket around a space,
- * a line ending, `x` or `X` for a task box. A single tilde is enough, because the strikethrough
- * syntax, even with single-tilde strikethrough off, changes how emphasis around a tilde parses. Each test only has to be necessary, never sufficient,
- * since a part read for a source that has no use for it changes nothing.
+ * match: a delimiter row for a table, a tilde for strikethrough, a bracket around a space, a line
+ * ending, `x` or `X` for a task box, and `http://` or `https://` for a web address. A single tilde
+ * is enough, because the strikethrough syntax, even with single-tilde strikethrough off, changes how
+ * emphasis around a tilde parses. Each test only has to be necessary, never sufficient, since a
+ * part read for a source that has no use for it changes nothing.
  */
 function partsOf(source: string): number {
 	return (DELIMITER_ROW.test(source) ? TABLE : 0) | (source.includes("~") ? STRIKETHROUGH : 0)
-		| (TASK_BOX.test(source) ? TASKS : 0);
+		| (TASK_BOX.test(source) ? TASKS : 0) | (WEB_ADDRESS.test(source) ? ADDRESSES : 0);
+}
+
+/** A web address written out, which is the only kind of bare text Chat makes a link of. */
+const WEB_ADDRESS = /https?:\/\//i;
+
+type Node = {
+	type: string;
+	value?: string;
+	url?: string;
+	children?: Node[];
+	position?: { start: { offset?: number }; end: { offset?: number } };
+};
+
+/**
+ * GitHub's literal links also read `www.example.com` and `ana@example.com`, which Chat leaves as
+ * the text they were written as: only an address written with `http://` or `https://` becomes a
+ * link, as Slack does. A literal is told from a written link (`[a](…)`, `<https://…>`) by having
+ * no brackets around its text, so its text starts and ends where it does; one made after the parse
+ * has no position at all. The text a literal leaves is joined to the text beside it.
+ */
+function keepWebAddresses(tree: Node): void {
+	let visit = (node: Node) => {
+		if (!node.children) return;
+		let children: Node[] = [];
+		for (let child of node.children) {
+			let text = child.children?.length === 1 ? child.children[0] : undefined;
+			let literal = child.type === "link" && text?.type === "text"
+				&& (!child.position || !text.position
+					|| child.position.start.offset === text.position.start.offset
+						&& child.position.end.offset === text.position.end.offset);
+			if (literal && !WEB_ADDRESS.test(text!.value?.slice(0, 8) ?? "")) {
+				let previous = children.at(-1);
+				if (previous?.type === "text") {
+					previous.value += text!.value ?? "";
+					delete previous.position;
+				} else children.push({ type: "text", value: text!.value ?? "" });
+				continue;
+			}
+			let previous = children.at(-1);
+			if (child.type === "text" && previous?.type === "text" && !previous.position) {
+				previous.value += child.value ?? "";
+				continue;
+			}
+			visit(child);
+			children.push(child);
+		}
+		node.children = children;
+	};
+	visit(tree);
 }
 
 function extensionsFor(parts: number): MessageGfmExtensions {
@@ -68,6 +121,12 @@ function extensionsFor(parts: number): MessageGfmExtensions {
 	if (parts & TASKS) {
 		extensions.push(gfmTaskListItem());
 		mdastExtensions.push(gfmTaskListItemFromMarkdown());
+	}
+	if (parts & ADDRESSES) {
+		extensions.push(gfmAutolinkLiteral());
+		mdastExtensions.push(gfmAutolinkLiteralFromMarkdown(), {
+			transforms: [keepWebAddresses],
+		} as unknown as FromMarkdownExtension);
 	}
 	return { extensions, mdastExtensions };
 }
@@ -98,9 +157,9 @@ export function messageGfmExtensions(source: string): MessageGfmExtensions | und
 
 /**
  * The parts of GitHub's Markdown that a Chat message reads: pipe tables, strikethrough written
- * with two tildes, and task lists. remark-gfm also reads footnotes and bare URLs, and in Chat both
- * were always plain text (a footnote would draw a second list of links and ids, and a bare address
- * would become a link nobody wrote), so this takes only the three parts.
+ * with two tildes, task lists, and a web address written out (`https://…`), which becomes a link
+ * as it does in Slack. remark-gfm also reads footnotes, which in Chat stay plain text (they would
+ * draw a second list of links and ids), and `www.` and email literals (`keepWebAddresses`).
  *
  * It takes only those the source can use. The table's syntax is tried at the start of every line
  * of every message, and most messages have no delimiter row, so a source with none of the marks is
@@ -115,5 +174,5 @@ export function messageGfmRemarkPlugin(source: string): Plugin | undefined {
 	return held;
 }
 
-/** All three parts whatever the source, for the test that the choice above never changes a tree. */
-export let allMessageGfmParts: Plugin = plugin(TABLE | STRIKETHROUGH | TASKS);
+/** Every part whatever the source, for the test that the choice above never changes a tree. */
+export let allMessageGfmParts: Plugin = plugin(TABLE | STRIKETHROUGH | TASKS | ADDRESSES);

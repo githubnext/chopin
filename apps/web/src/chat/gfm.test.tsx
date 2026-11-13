@@ -103,6 +103,12 @@ const SOURCES = [
 	"[x] outside a list",
 	// A table inside code, a quote, a list and a task list at once.
 	"- [x] | A |\n  | - |",
+	// Web addresses written out, beside the literals Chat leaves as text and links already written.
+	"see https://example.com/a_(b). and www.example.com, `https://code.example`, ana@example.com",
+	"[x](https://a.example) then https://b.example/path?q=1#part, and <https://c.example>",
+	"HTTPS://EXAMPLE.COM and http:// alone and javascript:alert(1) and https://x.example**bold**",
+	"```\nhttps://inside.example\n```\n\n> https://quoted.example\n\n- https://listed.example",
+	"www.example.com then https://example.com then mail@example.com then www.example.org",
 ];
 
 /** Every prefix of a source, as a stream delivers it. */
@@ -110,6 +116,7 @@ const STREAMED = [
 	"Intro\n\n| Queue | Owner |\n| :-- | --: |\n| shared | platform |\n\n- [x] done\n- [ ] open\n\n~~gone~~ text\n",
 	"a\n:-:\nb\n\n> | q |\n> | - |\n",
 	"- [\r\n  ] a\n\n> - [\n>   ] b\r\n1. [\n   x] c\n",
+	"Read https://example.com/docs/page#section-two, then www.example.com or ana@example.com.\n",
 ];
 
 /** A small deterministic generator, so a failure names the same source every run. */
@@ -166,8 +173,10 @@ function sources(count: number): string[] {
 }
 
 test("a message takes the parts of GitHub's Markdown its text can use, and nothing else", () => {
-	expect(messageGfmRemarkPlugin("plain text, a `code` span and a [link](https://example.com)"))
+	expect(messageGfmRemarkPlugin("plain text, a `code` span and a [link](/docs/page)"))
 		.toBeUndefined();
+	expect(messageGfmRemarkPlugin("www.example.com and ana@example.com")).toBeUndefined();
+	expect(messageGfmRemarkPlugin("see https://example.com")).toBeDefined();
 	expect(messageGfmRemarkPlugin("")).toBeUndefined();
 	expect(messageGfmRemarkPlugin("| a |\n| - |")).toBeDefined();
 	expect(messageGfmRemarkPlugin("| a |")).toBeUndefined();
@@ -219,14 +228,60 @@ test("a column with no pipe is a table the choice keeps, and a row of hyphens al
 	expect(messageGfmRemarkPlugin("Note: a | b, 3 - 1 and :- are text")).toBeUndefined();
 });
 
-test("what it reads is tables, strikethrough and task lists, and no footnote or bare address", () => {
+test("what it reads is tables, strikethrough, task lists and web addresses, and no footnote", () => {
 	let tables = draw(SOURCES[1]!, messageGfmRemarkPlugin(SOURCES[1]!));
 	expect(tables).toContain("<table");
 	expect(draw(SOURCES[4]!, messageGfmRemarkPlugin(SOURCES[4]!))).toContain("<del>gone</del>");
 	expect(draw(SOURCES[5]!, messageGfmRemarkPlugin(SOURCES[5]!))).toContain('type="checkbox"');
-	let footnote = draw(SOURCES[13]!, messageGfmRemarkPlugin(SOURCES[13]!));
-	expect(footnote).not.toContain("<a");
-	expect(footnote).toContain("Footnote[^1] and https://example.com and a@b.co");
+	expect(shown(SOURCES[13]!)).toBe(
+		'<p>Footnote[^1] and <a href="https://example.com">https://example.com</a> and a@b.co</p>\n'
+			+ "<p>[^1]: The note.</p>",
+	);
+});
+
+/** What a source draws as, through the parts it takes: its tags, with only a link's address kept. */
+function shown(source: string): string {
+	return draw(source, messageGfmRemarkPlugin(source))
+		.replace(/^<div[^>]*>|<\/div>$/g, "")
+		.replace(/<(\w+)([^>]*)>/g, (_tag, name: string, attributes: string) => {
+			let href = / href="[^"]*"/.exec(attributes)?.[0] ?? "";
+			return `<${name}${href}>`;
+		});
+}
+
+test("a web address written out is a link, as in Slack, and the punctuation after it is not", () => {
+	expect(shown("see https://example.com/a_(b). next")).toBe(
+		'<p>see <a href="https://example.com/a_(b)">https://example.com/a_(b)</a>. next</p>',
+	);
+	expect(shown("Read https://example.com/docs/page#section-two, then stop")).toBe(
+		'<p>Read <a href="https://example.com/docs/page#section-two">'
+			+ "https://example.com/docs/page#section-two</a>, then stop</p>",
+	);
+	expect(shown("HTTP://EXAMPLE.COM")).toBe(
+		'<p><a href="HTTP://EXAMPLE.COM">HTTP://EXAMPLE.COM</a></p>',
+	);
+});
+
+test("only an address with http:// or https:// is linked: www., email, other schemes and code stay text", () => {
+	expect(shown("https://a.example and www.example.com and ana@example.com")).toBe(
+		'<p><a href="https://a.example">https://a.example</a> and www.example.com and ana@example.com</p>',
+	);
+	expect(shown("javascript:alert(1) https://ok.example")).toBe(
+		'<p>javascript:alert(1) <a href="https://ok.example">https://ok.example</a></p>',
+	);
+	expect(shown("`https://code.example` and http://")).toBe(
+		"<p><code>https://code.example</code> and http://</p>",
+	);
+	expect(shown("```\nhttps://inside.example\n```")).toContain(
+		"<pre><code>https://inside.example\n</code></pre>",
+	);
+	expect(shown("```\nhttps://inside.example\n```")).not.toContain("<a");
+});
+
+test("a link already written keeps its own text and address", () => {
+	expect(shown("[the docs](https://a.example) and <https://b.example>")).toBe(
+		'<p><a href="https://a.example">the docs</a> and <a href="https://b.example">https://b.example</a></p>',
+	);
 });
 
 // What the choice was before its two scans were made linear, kept here as the reference they are
@@ -245,6 +300,8 @@ function referenceChoice(source: string) {
 	if (REFERENCE_DELIMITER_ROW.test(source)) marks.push(TABLE_ONLY);
 	if (source.includes("~")) marks.push(STRIKETHROUGH_ONLY);
 	if (REFERENCE_TASK_BOX.test(source)) marks.push(TASKS_ONLY);
+	// The web address's test was never quadratic, so it has no reference of its own.
+	if (/https?:\/\//i.test(source)) marks.push("https://");
 	return messageGfmRemarkPlugin(marks.join("\n\n"));
 }
 

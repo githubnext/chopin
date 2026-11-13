@@ -266,6 +266,39 @@ test("links in Chat that point into the document go there in the same tab", asyn
 	await expectAtTop(page, heading(page, "Deep section"));
 });
 
+test("a web address pasted into Chat is a link, and one into the document is followed in the same tab", async ({ baseURL, join, room }) => {
+	let { other } = await seedDocuments(baseURL!, room);
+	let page = await join("ana");
+	let tabs = tabsOpened(page);
+	let path = new URL(page.url()).pathname;
+	let chat = page.getByRole("complementary", { name: "Chat", exact: true });
+	let here = `${baseURL}${path}#über-café`;
+	let deep = `${baseURL}${other}#deep-section`;
+	await chatInput(chat).fill(
+		`Pasted: ${here}, then ${deep} and https://example.com/docs. Not www.example.com or \`https://code.example\`.`,
+	);
+	await chat.getByRole("button", { name: "Send message" }).click();
+	let message = chat.locator("[data-chat-message-id]").filter({ hasText: "Pasted:" });
+	let link = (name: string) => message.getByRole("link", { name, exact: true });
+
+	// The comma and full stop after an address are the sentence's, not the link's.
+	await expect(message.getByRole("link")).toHaveCount(3);
+	await expect(link("https://example.com/docs")).toHaveAttribute("target", "_blank");
+	await expect(link("https://example.com/docs")).toHaveAttribute("rel", /noopener/);
+	await expect(message).toContainText("Not www.example.com or https://code.example.");
+	await expect(message.locator("code")).toHaveText("https://code.example");
+
+	await expect(link(here)).not.toHaveAttribute("target", /./);
+	await link(here).click();
+	await expect.poll(() => decodeURIComponent(new URL(page.url()).hash)).toBe("#über-café");
+	await expectAtTop(page, heading(page, "Über café"));
+
+	await link(deep).click();
+	await expect(page).toHaveURL(`${other}#deep-section`);
+	await expectAtTop(page, heading(page, "Deep section"));
+	expect(tabs()).toBe(0);
+});
+
 test("a reader's tap on a section link goes there in the same tab", async ({ baseURL, join, room }) => {
 	await seedDocuments(baseURL!, room);
 	let page = await join("ana", {
