@@ -17,6 +17,7 @@ import {
 	builtDetail,
 	draftRefusalCopy,
 	elapsed,
+	endedCard,
 	endedReason,
 	firstBuildStep,
 	linkParts,
@@ -115,6 +116,72 @@ function run(outcome: History["outcome"], pullRequests = 0): History {
 		outcome,
 	};
 }
+
+describe("endedCard", () => {
+	let returned = (
+		ended: BuildRequest,
+		reason: string,
+		tasks: History["progress"]["tasks"] = [],
+	) =>
+		endedCard(snapshot({
+			build: ended,
+			lifecycle: {
+				execution: { state: "idle" },
+				history: [{
+					...run({ kind: "revision_requested", reason }),
+					progress: { tasks, events: [] },
+				}],
+			},
+		}));
+
+	it("says who stopped a build in Chopin, and when", () => {
+		let at = "2026-10-10T17:54:55.000Z";
+		let time = new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+		expect(returned(
+			{ ...build("failed"), error: "Stopped in Chopin.", stoppedBy: "ana", finishedAt: at },
+			"Stopped in Chopin by @ana.",
+		)).toEqual({ title: "Stopped by @ana", detail: `At ${time}. Build plan builds it again.` });
+	});
+
+	it("says its agent blocked a task, leading with the agent's reason", () => {
+		expect(returned(build("stopped"), "“First” is blocked: Missing source: the files", [{
+			id: "a",
+			state: "blocked",
+			blocker: "Missing source: the files",
+		}])).toEqual({
+			title: "Blocked",
+			detail: "Missing source: the files. Build plan builds it again.",
+		});
+	});
+
+	it("says a build failed, and why", () => {
+		expect(returned(
+			{ ...build("failed"), error: "Your local agent disconnected." },
+			"Your local agent disconnected.",
+		)).toEqual({
+			title: "Build failed",
+			detail: "Your local agent disconnected. Build plan builds it again.",
+		});
+		expect(returned(
+			{ ...build("failed"), error: "Stopped from the connector terminal." },
+			"Stopped from the connector terminal.",
+		)).toEqual({
+			title: "Stopped from the connector terminal",
+			detail: "Build plan builds it again.",
+		});
+	});
+
+	it("keeps Returned for changes for a run its agent or a reviewer returned", () => {
+		expect(returned(build("stopped"), "Split it")).toEqual({
+			title: "Returned for changes",
+			detail: "Split it. Build plan builds it again.",
+		});
+		expect(returned(build("stopped"), "The build stopped before it finished.")).toEqual({
+			title: "Stopped before it finished",
+			detail: "Build plan builds it again.",
+		});
+	});
+});
 
 describe("buildPhase", () => {
 	it("loads before the first snapshot", () => {

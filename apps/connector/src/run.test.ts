@@ -981,6 +981,81 @@ test("a run Chopin has ended stops its agent at once", async () => {
 	}]);
 });
 
+/** The run's journal, read before the run's folders are removed. */
+function journalOf(into: { value?: Record<string, unknown> }) {
+	return async ({ state, id }: { state: string; id: string }) => {
+		into.value = JSON.parse(await readFile(join(state, "runs", `${id}.json`), "utf8"));
+	};
+}
+
+test("a build a person stopped in Chopin says who stopped it, as a stop and not a failure", async () => {
+	let terminal = captured();
+	let journal: { value?: Record<string, unknown> } = {};
+	let { calls } = await run(
+		{},
+		["--hang"],
+		name => {
+			if (name === "renew_implementation_build") {
+				throw new ConnectorError("build-stopped", "build-stopped: Stopped in Chopin by @ana.");
+			}
+			return {};
+		},
+		undefined,
+		{ output: terminal.output },
+		journalOf(journal),
+	);
+	expect(terminal.out()).toContain("  ✗ Stopped in Chopin by @ana.\n");
+	expect(terminal.err()).toBe("");
+	// Chopin ended the build itself, so there is nothing to report back.
+	expect(calls.at(-1)?.[0]).toBe("renew_implementation_build");
+	expect(journal.value).toMatchObject({
+		state: "finished",
+		outcome: { state: "stopped", reason: "Stopped in Chopin by @ana." },
+	});
+});
+
+test("a build whose agent blocked a task says it is blocked and why, not Finished", async () => {
+	let terminal = captured();
+	let journal: { value?: Record<string, unknown> } = {};
+	await run(
+		{ live: true },
+		["--live"],
+		name =>
+			name === "report_implementation_build"
+				? {
+					accepted: true,
+					ending: { kind: "blocked", task: "Prove it", reason: "Missing source: the files" },
+				}
+				: {},
+		undefined,
+		{ output: terminal.output },
+		journalOf(journal),
+	);
+	expect(terminal.out()).toContain(
+		"  ✗ Blocked: “Prove it” is blocked: Missing source: the files.\n",
+	);
+	expect(terminal.out()).not.toContain("Finished");
+	expect(journal.value).toMatchObject({
+		outcome: { state: "blocked", reason: "“Prove it” is blocked: Missing source: the files" },
+	});
+});
+
+test("a build that delivered names its pull requests when it finishes", async () => {
+	let terminal = captured();
+	let url = "https://github.com/org/repo/pull/7";
+	await run(
+		{ live: true },
+		["--live"],
+		name =>
+			name === "report_implementation_build"
+				? { accepted: true, ending: { kind: "finished", pullRequests: [url], tasks: 1 } }
+				: {},
+		undefined,
+		{ output: terminal.output },
+	);
+	expect(terminal.out()).toContain(`  ✓ Finished: 1 task, ${url}\n`);
+});
+
 test("a build Chopin forgot by restarting stops saying so", async () => {
 	let { calls } = await run({}, ["--hang"], name => {
 		if (name === "renew_implementation_build") {

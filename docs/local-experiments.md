@@ -246,7 +246,7 @@ back ends as **your local agent disconnected** when the window passes, once
 someone opens the document or the agent calls Chopin. The window, the agent's
 `unavailable` answers and the machine taking the build back follow the same
 rule, so they never disagree. A build that ended before the restart stays ended
-(`build-inactive`).
+(`build-inactive`, or `build-stopped` with who stopped it when a person pressed Stop).
 
 A build claimed by an older connector, or by a server without this change,
 cannot go on, as Chopin cannot find it again: the connector stops its agent with

@@ -105,12 +105,19 @@ If a claimed run stops or fails, it ends with its build: Chopin records a revisi
 request with the build's error as the reason, releases the graph and opens the
 document for editing again. Its agent can no longer report on the run, so keeping
 the lock would only leave the document read-only. Build keeps the run's tasks,
-blocker and pull requests and reads **Returned for changes**; the retained checkout
-is there to inspect. **Build plan** then asks the Planner to revise the tasks and
+blocker and pull requests, and its card says how the build ended, in the same words
+as Chat's end line, the run's recorded reason and the connector's terminal:
+**Stopped by @login** and when, for a person's Stop; **Blocked**, with the task and
+the agent's reason, when its agent blocked a task and ended its turn; **Build
+failed** with the error; or **Returned for changes** with the reason, when the agent
+or a reviewer returned it. A build that delivered reads **Built**, and the connector
+prints **Finished** with its pull requests. The retained checkout is there to
+inspect. **Build plan** then asks the Planner to revise the tasks and
 builds the replacement. While the agent is still running the document stays locked;
 select **Stop build** in Build to end the run. Stop preserves existing commits and pull requests and rejects further
 reports from that run. The connector stops the agent on its next heartbeat (normally
-within 10 seconds) and stays connected. Ctrl-C in its terminal also stops the work
+within 10 seconds), printing **✗ Stopped in Chopin by @login.** rather than a failure,
+and stays connected. Ctrl-C in its terminal also stops the work
 and disconnects the connector. Reconnect with the updated connector to receive
 activity updates.
 Stop also cancels automatic rebuilds already waiting behind the run; a later

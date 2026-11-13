@@ -343,7 +343,8 @@ for (let width of [1280, 390]) {
 			"--command-activity",
 		]);
 		try {
-			let page = await enter(person(), { viewport: { width, height: 844 } });
+			let login = person();
+			let page = await enter(login, { viewport: { width, height: 844 } });
 			await page.goto(await local.pairing);
 			await page.getByRole("button", { name: "Add machine", exact: true }).click();
 			await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText(
@@ -372,15 +373,27 @@ for (let width of [1280, 390]) {
 				contentType: "image/png",
 			});
 			await page.keyboard.press("Enter");
-			// Stopping ends the run the build claimed: it is returned for changes, and the document opens.
-			await expect(view).toContainText("Returned for changes");
+			// Stopping ends the run the build claimed, and the document opens. The Build tab, Chat, the
+			// run record and the connector's terminal each say who stopped it, never a failure.
+			await expect(view.getByText(`Stopped by @${login}`, { exact: true })).toBeVisible();
+			await expect(view).not.toContainText("Returned for changes");
 			await expect(stop).toHaveCount(0);
 			await expect(page.getByRole("textbox", { name: "editable markdown", includeHidden: true }))
 				.toHaveAttribute("contenteditable", "true");
 			await expect.poll(() => local.output(), { timeout: 20_000 })
-				.toMatch(/Chopin ended this run \(build-(?:inactive|forbidden)\)/);
+				.toContain(`✗ Stopped in Chopin by @${login}.`);
+			expect(local.output()).not.toContain("Failed");
 			let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
-			expect(snapshot.build.error).toBe("Stopped in Chopin.");
+			expect(snapshot.build).toMatchObject({ error: "Stopped in Chopin.", stoppedBy: login });
+			expect(snapshot.lifecycle.history.at(-1).outcome.reason).toBe(
+				`Stopped in Chopin by @${login}.`,
+			);
+			// A phone shows Build in Chat's place; a desktop shows Chat's end line beside it, which
+			// draws the handle as a mention.
+			if (width > 390) {
+				let chat = page.getByRole("complementary", { name: "Chat", exact: true });
+				await expect(chat.getByText(new RegExp(`^Build stopped by @?${login}\\.$`))).toBeVisible();
+			}
 			expect(snapshot.localAgent).toBe(true);
 		} finally {
 			await local.close();
@@ -479,9 +492,21 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 				await expect(chat).toBeVisible();
 				await expect(chat.getByRole("region", { name: "Workflow runs" })).toHaveCount(0);
 			} else {
-				// The run ended with its build, so it was returned for changes and keeps its blocker.
-				await expect(view.getByText("Returned for changes", { exact: true })).toBeVisible();
-				await expect(view.getByText("Build plan builds it again.", { exact: true })).toBeVisible();
+				// The run ended with its build, blocked: the card says why, as Chat and the connector's
+				// terminal do, and the blocked task's row names it.
+				await expect(view.getByText("Blocked", { exact: true })).toBeVisible();
+				await expect(view).not.toContainText("Returned for changes");
+				await expect(
+					view.getByText(
+						"Choose the next tracer. Build plan builds it again.",
+						{ exact: true },
+					),
+				).toBeVisible();
+				if (mode === "block") {
+					await expect.poll(() => local.output(), { timeout: 20_000 })
+						.toContain("✗ Blocked: “Connect the local agent” is blocked: Choose the next tracer.");
+					expect(local.output()).not.toContain("Finished");
+				}
 				await expect(blocked).toHaveAttribute("aria-expanded", "true");
 				await expect(view.getByText(/^Blocked: Choose the next tracer/)).toBeVisible();
 				// Build replaces the document area, so the open editor is hidden here.
