@@ -37,6 +37,7 @@ import {
 } from "lexical";
 import { boundDocumentTitle, MAX_TITLE_LENGTH } from "@chopin/dialect";
 import { atBlockEnd, atBlockStart } from "./widgets/discarded-navigation-boundary";
+import { $liveRangeSelection, $syncLiveRangeSelection } from "./live-selection";
 
 import type { HeadingNode } from "@lexical/rich-text";
 import type { LexicalEditor, LexicalNode, PointType } from "lexical";
@@ -79,10 +80,10 @@ export function registerDocumentTitle(editor: LexicalEditor, canEdit = true): ()
 		let node = key ? $getNodeByKey(key) : null;
 		return $isHeadingNode(node) && node.isAttached() ? node : undefined;
 	}
-	function inside() {
-		let selection = $getSelection();
+	function inside(sync = false) {
+		let selection = sync ? $syncLiveRangeSelection(editor) : $liveRangeSelection(editor);
 		let heading = title();
-		return heading && $isRangeSelection(selection)
+		return heading && selection
 				&& block(selection.anchor.getNode()).getKey() === key
 				&& block(selection.focus.getNode()).getKey() === key
 			? { heading, selection }
@@ -100,9 +101,9 @@ export function registerDocumentTitle(editor: LexicalEditor, canEdit = true): ()
 		return true;
 	}
 	function crossing() {
-		let selection = $getSelection();
+		let selection = $liveRangeSelection(editor);
 		let heading = title();
-		if (!canEdit || !heading || !$isRangeSelection(selection) || selection.isCollapsed()) return;
+		if (!canEdit || !heading || !selection || selection.isCollapsed()) return;
 		let start = selection.isBackward() ? selection.focus : selection.anchor;
 		let end = selection.isBackward() ? selection.anchor : selection.focus;
 		let node = start.getNode();
@@ -134,9 +135,9 @@ export function registerDocumentTitle(editor: LexicalEditor, canEdit = true): ()
 	}
 	function boundary(backward: boolean): boolean {
 		if (!canEdit) return false;
-		let selection = $getSelection();
+		let selection = $liveRangeSelection(editor);
 		let heading = title();
-		if (!heading || !$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+		if (!heading || !selection || !selection.isCollapsed()) return false;
 		let point = selection.anchor;
 		let node = point.getNode();
 		if ($isRootNode(node)) return point.offset <= 1;
@@ -155,7 +156,7 @@ export function registerDocumentTitle(editor: LexicalEditor, canEdit = true): ()
 		if (editor.isComposing()) return false;
 		if (crossing()?.blocked) return true;
 		removeAcross();
-		let found = canEdit && inside();
+		let found = canEdit && inside(true);
 		if (!found) return false;
 		let { heading, selection } = found;
 		let remaining = MAX_TITLE_LENGTH - [...heading.getTextContent()].length

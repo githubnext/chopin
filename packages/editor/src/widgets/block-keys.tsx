@@ -20,13 +20,12 @@ import { $isTableNode } from "@lexical/table";
 import { $isHeadingNode, $isQuoteNode } from "@lexical/rich-text";
 import {
 	$createParagraphNode,
-	$getSelection,
 	$isDecoratorNode,
 	$isElementNode,
 	$isParagraphNode,
-	$isRangeSelection,
 	$isRootNode,
 	$parseSerializedNode,
+	$setSelection,
 	COMMAND_PRIORITY_CRITICAL,
 	COMMAND_PRIORITY_LOW,
 	FORMAT_TEXT_COMMAND,
@@ -43,6 +42,7 @@ import {
 } from "@chopin/dialect";
 
 import { $isDocumentTitle } from "../document-title";
+import { $liveRangeSelection, $syncLiveRangeSelection } from "../live-selection";
 import { isApplePlatform } from "../toolbar/shortcut";
 
 import type { LexicalEditor, LexicalNode, SerializedLexicalNode } from "lexical";
@@ -54,9 +54,9 @@ function $holdsBlocks(node: LexicalNode | null): boolean {
 }
 
 /** The block the caret is in, if it is one that moves. */
-export function $caretBlock(): LexicalNode | undefined {
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection)) return undefined;
+export function $caretBlock(editor?: LexicalEditor): LexicalNode | undefined {
+	let selection = $liveRangeSelection(editor);
+	if (!selection) return undefined;
 	for (let at: LexicalNode | null = selection.anchor.getNode(); at; at = at.getParent()) {
 		if ($holdsBlocks(at.getParent())) return $isDocumentTitle(at) ? undefined : at;
 	}
@@ -109,9 +109,9 @@ export function $duplicateBlock(block: LexicalNode): boolean {
 }
 
 /** `---` on an empty line: the line becomes a divider with an empty line after it. */
-function $divider(): boolean {
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+function $divider(editor: LexicalEditor): boolean {
+	let selection = $liveRangeSelection(editor);
+	if (!selection || !selection.isCollapsed()) return false;
 	let node = selection.anchor.getNode();
 	let line = $isParagraphNode(node) ? node : node.getParent();
 	if (!$isParagraphNode(line) || !$holdsBlocks(line.getParent()) || $isListNode(line.getParent())) {
@@ -130,8 +130,8 @@ function $divider(): boolean {
  * title is not turned: it stays the title.
  */
 export function $unformat(editor: LexicalEditor): boolean {
-	let selection = $getSelection();
-	if (!$isRangeSelection(selection) || !selection.isCollapsed() || selection.anchor.offset !== 0) {
+	let selection = $liveRangeSelection(editor);
+	if (!selection || !selection.isCollapsed() || selection.anchor.offset !== 0) {
 		return false;
 	}
 	let node = selection.anchor.getNode();
@@ -149,6 +149,7 @@ export function $unformat(editor: LexicalEditor): boolean {
 	let list = block.getParent();
 	if (!$isListNode(list)) return false;
 	if ($isListItemNode(list.getParent())) {
+		$setSelection(selection);
 		editor.dispatchCommand(OUTDENT_CONTENT_COMMAND, undefined);
 		return true;
 	}
@@ -186,27 +187,30 @@ export function registerBlockKeys(editor: LexicalEditor): () => void {
 			let mod = apple ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
 			if (mod && event.shiftKey && !event.altKey) {
 				if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
-				let block = $caretBlock();
+				let selection = $liveRangeSelection(editor);
+				let block = $caretBlock(editor);
 				if (!block || !$moveBlock(block, event.key === "ArrowUp" ? "up" : "down")) return false;
+				if (selection) $setSelection(selection);
 				event.preventDefault();
 				return true;
 			}
 			if (mod && !event.shiftKey && !event.altKey) {
 				let key = event.key.toLowerCase();
 				if (key === "d") {
-					let block = $caretBlock();
+					let block = $caretBlock(editor);
 					if (!block || !$duplicateBlock(block)) return false;
 					event.preventDefault();
 					return true;
 				}
 				if (key === "e") {
 					event.preventDefault();
+					$syncLiveRangeSelection(editor);
 					editor.dispatchCommand(FORMAT_TEXT_COMMAND, "code");
 					return true;
 				}
 				return false;
 			}
-			if (event.key === "-" && !mod && !event.altKey && $divider()) {
+			if (event.key === "-" && !mod && !event.altKey && $divider(editor)) {
 				event.preventDefault();
 				return true;
 			}

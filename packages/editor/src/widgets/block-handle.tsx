@@ -38,6 +38,7 @@ import { useTransitionPresence } from "../transition-presence";
 import { $block, convertBlock } from "../toolbar/bubble";
 import { isApplePlatform, shortcut } from "../toolbar/shortcut";
 import { $plainBlock } from "./block-keys";
+import { $liveRangeSelection } from "../live-selection";
 import {
 	$blockOf,
 	$blocks,
@@ -45,7 +46,6 @@ import {
 	$held,
 	$hold,
 	$isBlock,
-	$liveRangeSelection,
 	$removeBlocks,
 } from "./block-selection";
 

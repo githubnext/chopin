@@ -6,14 +6,9 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import {
-	$getSelection,
-	$isRangeSelection,
-	COMMAND_PRIORITY_HIGH,
-	KEY_BACKSPACE_COMMAND,
-	KEY_DELETE_COMMAND,
-} from "lexical";
+import { COMMAND_PRIORITY_HIGH, KEY_BACKSPACE_COMMAND, KEY_DELETE_COMMAND } from "lexical";
 import { $isDocumentTitle } from "./document-title";
+import { $liveRangeSelection } from "./live-selection";
 
 import { useRelations } from "./questionnaires";
 import { blankBehindDecisions, writingEntries } from "./widgets/questionnaire";
@@ -111,8 +106,8 @@ export function BlankBehindDecisions(
 	useEffect(() => {
 		if (!editor || content || !hidden) return;
 		let refuse = (event: KeyboardEvent | null) => {
-			let selection = $getSelection();
-			if ($isRangeSelection(selection)) {
+			let selection = $liveRangeSelection(editor);
+			if (selection) {
 				let node = selection.anchor.getNode();
 				if ($isDocumentTitle(node) || $isDocumentTitle(node.getTopLevelElement())) return false;
 			}

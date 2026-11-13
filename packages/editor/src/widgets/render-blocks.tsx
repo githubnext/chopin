@@ -62,6 +62,7 @@ import { $isTableCellNode, $isTableRowNode } from "@lexical/table";
 import { $isCodeBlockNode, $isMathNode, codeWraps, withCodeWrap } from "@chopin/dialect";
 
 import { enclosing, remember } from "../collapse";
+import { $liveRangeSelection } from "../live-selection";
 import { widgets$ } from "../widget-options";
 import { describeDiagramError, kindOf, languageOptions, plainText, titleOf } from "./code";
 import { CodeView } from "./code-view";
@@ -1223,7 +1224,13 @@ export function PreviewPlugin() {
 			let node = $getNodeByKey(block.key);
 			let preview = editor.getElementByKey(block.key);
 			if (block.kind === "math") node?.selectNext(0, 0);
-			else $setSelection(null);
+			else {
+				$setSelection(null);
+				// Moving focus to the preview below makes Lexical leave the DOM selection alone on
+				// commit; without clearing it here, a press's pending selectionchange puts the caret
+				// straight back into the source and reopens it.
+				root()?.ownerDocument.getSelection()?.removeAllRanges();
+			}
 			flushSync(() =>
 				setShown(prev => {
 					let next = { ...prev };
@@ -1373,8 +1380,8 @@ export function PreviewPlugin() {
 				KEY_ESCAPE_COMMAND,
 				event => {
 					if (latest.current.disabled) return false;
-					let selection = $getSelection();
-					if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+					let selection = $liveRangeSelection(editor);
+					if (!selection || !selection.isCollapsed()) return false;
 					let key = enclosing(selection.anchor.getNode());
 					let block = key ? blockAt(editor.getElementByKey(key)) : undefined;
 					if (!block || !latest.current.hidable.has(block.key)) return false;
@@ -1451,8 +1458,8 @@ export function PreviewPlugin() {
 		let collapsed = !current.current[key];
 		if (!collapsed) {
 			editor.update(() => {
-				let selection = $getSelection();
-				if (!$isRangeSelection(selection)) return;
+				let selection = $liveRangeSelection(editor);
+				if (!selection) return;
 				if (enclosing(selection.anchor.getNode()) !== key) return;
 				$getNodeByKey(key)?.selectNext(0, 0);
 			});

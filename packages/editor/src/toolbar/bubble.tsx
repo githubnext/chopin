@@ -49,6 +49,8 @@ import {
 	SELECTION_CHANGE_COMMAND,
 } from "lexical";
 
+import { $syncLiveRangeSelection } from "../live-selection";
+
 import type { HeadingTagType } from "@lexical/rich-text";
 import type { ElementNode, LexicalEditor, LexicalNode, TextFormatType } from "lexical";
 import type { DOMRectLike, SurfacePlacement } from "./placement";
@@ -318,18 +320,18 @@ export function SelectionBubble(
 		return editor.registerCommand(
 			KEY_ESCAPE_COMMAND,
 			(event: KeyboardEvent) => {
-				event.preventDefault();
-				event.stopPropagation();
 				if (choosing) {
+					event.preventDefault();
+					event.stopPropagation();
 					setChoosing(false);
 					return true;
 				}
-				editor.update(() => {
-					let selection = $getSelection();
-					if (!$isRangeSelection(selection)) return;
-					let { key, offset, type } = selection.focus;
-					selection.anchor.set(key, offset, type);
-				});
+				let selection = $syncLiveRangeSelection(editor);
+				if (!selection || selection.isCollapsed()) return false;
+				event.preventDefault();
+				event.stopPropagation();
+				let { key, offset, type } = selection.focus;
+				selection.anchor.set(key, offset, type);
 				return true;
 			},
 			COMMAND_PRIORITY_HIGH,

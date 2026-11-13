@@ -33,6 +33,7 @@ import {
 import { parseGitHubReference } from "@chopin/protocol/github-reference";
 
 import { GitHubCard } from "../github-card";
+import { $liveRangeSelection } from "../live-selection";
 import { useGitHubEntry } from "../github-hover";
 import { useFollowLink } from "../follow-link";
 import { useGitHubReferences } from "../github-references";
@@ -250,12 +251,9 @@ export function LinkSurface(
 					}
 					if (event.key !== "Enter") return false;
 					// ⌘↵ follows the link under the caret: the keyboard's way to Open.
-					let link = editor.getEditorState().read(() => {
-						let selection = $getSelection();
-						if (!$isRangeSelection(selection) || !selection.isCollapsed()) return;
-						let node = $linkAt(selection);
-						return node && { key: node.getKey(), url: node.getURL() };
-					});
+					let selection = $liveRangeSelection(editor);
+					let node = selection?.isCollapsed() ? $linkAt(selection) : undefined;
+					let link = node && { key: node.getKey(), url: node.getURL() };
 					if (!link) return false;
 					event.preventDefault();
 					follow(editor, link.key, link.url, repository, inPlace);

@@ -74,31 +74,15 @@ import {
 } from "@chopin/dialect";
 
 import { $isDocumentTitle } from "../document-title";
+import { $liveRangeSelection } from "../live-selection";
 import { isApplePlatform } from "../toolbar/shortcut";
 import { $plainBlock, $serializeBlock } from "./block-keys";
 import { leftCode } from "./code-keys";
 
-import type {
-	EditorState,
-	ElementNode,
-	LexicalEditor,
-	LexicalNode,
-	PointType,
-	RangeSelection,
-} from "lexical";
+import type { EditorState, ElementNode, LexicalEditor, LexicalNode, PointType } from "lexical";
 import type { SerializedBlock } from "./block-keys";
 
-/**
- * The range selection at the caret now, from the page's own selection when a press moved it and
- * `selectionchange` has not yet told Lexical.
- */
-export function $liveRangeSelection(editor: LexicalEditor): RangeSelection | undefined {
-	let dom = editor.getRootElement()?.ownerDocument.getSelection();
-	let fromDom = dom?.rangeCount ? $createRangeSelectionFromDom(dom, editor) : null;
-	if (fromDom) return fromDom;
-	let selection = $getSelection();
-	return $isRangeSelection(selection) ? selection : undefined;
-}
+export { $liveRangeSelection };
 
 /** A list item that holds only a nested list: the list's place, not a block of its own. */
 function $isWrapper(node: LexicalNode): boolean {

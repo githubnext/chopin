@@ -9,7 +9,6 @@ import {
 	$isElementNode,
 	$isNodeSelection,
 	$isParagraphNode,
-	$isRangeSelection,
 	$isRootNode,
 	COMMAND_PRIORITY_CRITICAL,
 	COMMAND_PRIORITY_HIGH,
@@ -22,6 +21,7 @@ import {
 } from "lexical";
 
 import { $isQuestionnaireNode, cardStatus } from "@chopin/dialect";
+import { $liveRangeSelection } from "../live-selection";
 import { widgets$ } from "../widget-options";
 import { atBlockEnd, atBlockStart } from "./discarded-navigation-boundary";
 
@@ -105,16 +105,20 @@ function moveIntoProse(card: LexicalNode, questions: QuestionnaireStore | undefi
 }
 
 function protect(
+	editor: LexicalEditor,
 	backward: boolean | undefined,
 	meta: CardMetaStore | undefined,
 	questions: QuestionnaireStore | undefined,
 ): boolean {
-	let selection = $getSelection();
-	if ($isNodeSelection(selection)) return selection.getNodes().some(node => decided(node, meta));
-	if (!$isRangeSelection(selection)) return false;
-	if (!selection.isCollapsed()) return selection.getNodes().some(node => decided(node, meta));
+	let range = $liveRangeSelection(editor);
+	if (!range) {
+		let selection = $getSelection();
+		return $isNodeSelection(selection)
+			&& selection.getNodes().some(node => decided(node, meta));
+	}
+	if (!range.isCollapsed()) return range.getNodes().some(node => decided(node, meta));
 	if (backward === undefined) return false;
-	let card = boundary(selection, backward);
+	let card = boundary(range, backward);
 	if (!decided(card, meta)) return false;
 	if (backward) moveIntoProse(card!, questions);
 	return true;
@@ -141,22 +145,22 @@ export function registerDecisionDeletion(
 		),
 		editor.registerCommand(
 			DELETE_CHARACTER_COMMAND,
-			backward => protect(backward, meta, questions),
+			backward => protect(editor, backward, meta, questions),
 			COMMAND_PRIORITY_HIGH,
 		),
 		editor.registerCommand(
 			DELETE_WORD_COMMAND,
-			backward => protect(backward, meta, questions),
+			backward => protect(editor, backward, meta, questions),
 			COMMAND_PRIORITY_HIGH,
 		),
 		editor.registerCommand(
 			DELETE_LINE_COMMAND,
-			backward => protect(backward, meta, questions),
+			backward => protect(editor, backward, meta, questions),
 			COMMAND_PRIORITY_HIGH,
 		),
 		editor.registerCommand(
 			REMOVE_TEXT_COMMAND,
-			() => protect(undefined, meta, questions),
+			() => protect(editor, undefined, meta, questions),
 			COMMAND_PRIORITY_HIGH,
 		),
 	);
