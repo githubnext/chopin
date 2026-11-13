@@ -2,6 +2,8 @@
  * A long workflow run's stages unfold into a bounded lane inside its card, on a
  * desktop window and a touch phone, against the `AGENT=on` harness project.
  */
+import { appendFileSync } from "node:fs";
+
 import { expect, ready, test } from "./room";
 
 import type { Chat } from "../packages/protocol/index";
@@ -288,3 +290,170 @@ test("a hovered run's line is shaded across the whole card, edge to edge, square
 		)
 	).toBe("0");
 });
+
+type RGB = [number, number, number];
+
+/** The colour the page paints at each point, read from a screenshot of it. */
+async function painted(page: Page, points: { x: number; y: number }[]): Promise<RGB[]> {
+	let png = (await page.screenshot()).toString("base64");
+	return page.evaluate(async ({ data, points }) => {
+		let bytes = Uint8Array.from(atob(data), character => character.charCodeAt(0));
+		let bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }));
+		let canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+		let context = canvas.getContext("2d", { willReadFrequently: true })!;
+		context.drawImage(bitmap, 0, 0);
+		let scale = bitmap.width / innerWidth;
+		return points.map(({ x, y }) => {
+			let d = context.getImageData(Math.round(x * scale), Math.round(y * scale), 1, 1).data;
+			return [d[0]!, d[1]!, d[2]!] as [number, number, number];
+		});
+	}, { data: png, points });
+}
+
+function linear(v: number): number {
+	let c = v / 255;
+	return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+function luminance([r, g, b]: RGB): number {
+	return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+}
+
+function contrast(a: RGB, b: RGB): number {
+	let [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+	return Math.round((high! + 0.05) / (low! + 0.05) * 1000) / 1000;
+}
+
+/**
+ * What a hovered run line draws over its shade: each text and the chevron in its toggle, as the
+ * computed colour composited over the shade's paint (with every opacity up to the line).
+ */
+async function inks(line: Locator, shade: RGB) {
+	return line.evaluate((node, shade) => {
+		let probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
+		let rgba = (value: string) => {
+			probe.clearRect(0, 0, 1, 1);
+			probe.fillStyle = value;
+			probe.fillRect(0, 0, 1, 1);
+			let d = probe.getImageData(0, 0, 1, 1).data;
+			return [d[0]!, d[1]!, d[2]!, d[3]! / 255];
+		};
+		let toggle = node.querySelector("[data-run-toggle]")!;
+		let parts = [...toggle.querySelectorAll<HTMLElement | SVGElement>("span, svg")]
+			.filter(part =>
+				part.tagName === "svg"
+				|| [...part.childNodes].some(child =>
+					child.nodeType === Node.TEXT_NODE && child.textContent!.trim()
+				)
+			);
+		return parts.map(part => {
+			let [r, g, b, a] = rgba(getComputedStyle(part).color);
+			for (let up: Element | null = part; up && up !== node; up = up.parentElement) {
+				a! *= Number.parseFloat(getComputedStyle(up).opacity);
+			}
+			let fg = [r!, g!, b!].map((value, index) => value * a! + shade[index]! * (1 - a!));
+			return {
+				text: part.tagName === "svg" ? "chevron" : part.textContent!.trim(),
+				icon: part.tagName === "svg",
+				fg: fg as [number, number, number],
+			};
+		});
+	}, shade);
+}
+
+function waitingRun(): Chat.Run {
+	let started = Math.floor(Date.now() / 1000) - 300;
+	return {
+		id: "run-wait",
+		name: "short-workflow",
+		status: "waiting",
+		started,
+		updated: started + 60,
+		stages: [{ id: "run-wait:s0", name: "ask", status: "awaiting_input", started }],
+		waiting: 1,
+	};
+}
+
+for (let scheme of ["light", "dark"] as const) {
+	test(`a hovered run's line is the same darker step as a shown Chat row, and every text and icon on it meets AA, in ${scheme}`, async ({ join, seed }) => {
+		await seed("# Runs\n", {
+			transcript: [{
+				id: "m1",
+				author: { kind: "member", handle: "bo" },
+				text: "The canary held overnight.",
+				ts: 1_700_000_000_000,
+			}],
+			// Two runs of one name carry a tag; one waits on people, in the warning ink.
+			workflowRuns: [longRun(), shortRun(), waitingRun()],
+		});
+		let page = await join("ana", { ...DESKTOP, colorScheme: scheme });
+		if (scheme === "dark") {
+			await page.evaluate(() => document.documentElement.classList.add("dark"));
+		}
+		let card = chatPane(page).getByRole("region", { name: "Workflow runs" });
+		await expect(card.locator("[data-run-toggle]")).toHaveCount(3);
+		let away = { x: 1270, y: 790 };
+		await page.mouse.move(away.x, away.y);
+
+		// A Chat row: its shade over the ground, read in the gutter before its avatar.
+		let row = chatPane(page).locator(".chat-split-main [data-chat-message-id='m1']");
+		let rowBox = (await row.boundingBox())!;
+		let main = (await page.locator(".chat-split-main").boundingBox())!;
+		let rowPoint = { x: main.x + 4, y: rowBox.y + rowBox.height / 2 };
+		let [ground] = await painted(page, [rowPoint]);
+		await row.locator("[data-chat-message-text]").hover();
+		await expect.poll(async () => contrast((await painted(page, [rowPoint]))[0]!, ground!))
+			.toBeGreaterThan(1.03);
+		let [rowShade] = await painted(page, [rowPoint]);
+		let rowStep = contrast(rowShade!, ground!);
+
+		// Each run line: its shade over the card, read inside the card's edge, before the toggle.
+		let frame = (await card.boundingBox())!;
+		for (let index of [0, 1, 2]) {
+			let line = card.locator("[data-run-toggle]").nth(index).locator("xpath=..");
+			let lineBox = (await line.boundingBox())!;
+			let point = { x: frame.x + 4, y: lineBox.y + lineBox.height / 2 };
+			await page.mouse.move(away.x, away.y);
+			await expect.poll(() => line.evaluate(node => getComputedStyle(node, "::before").opacity))
+				.toBe("0");
+			let [page_] = await painted(page, [point]);
+			await line.locator("[data-run-toggle]").hover();
+			await expect.poll(() => line.evaluate(node => getComputedStyle(node, "::before").opacity))
+				.toBe("1");
+			let [shade] = await painted(page, [point]);
+			let step = contrast(shade!, page_!);
+			// As far darker than the card as a shown Chat row is than Chat.
+			expect({ line: index, step: Math.round(step * 100) / 100 })
+				.toEqual({ line: index, step: expect.any(Number) });
+			expect(Math.abs(step - rowStep), `run step ${step}, Chat row step ${rowStep}`)
+				.toBeLessThanOrEqual(0.01);
+			let drawn = await inks(line, shade!);
+			// The name, the status, the age and the chevron at least.
+			expect(drawn.length).toBeGreaterThanOrEqual(4);
+			if (process.env.HOVER_CONTRAST_OUT) {
+				appendFileSync(
+					process.env.HOVER_CONTRAST_OUT,
+					`${
+						JSON.stringify({
+							scheme,
+							line: index,
+							step,
+							rowStep,
+							inks: drawn.map(ink => ({ text: ink.text, ratio: contrast(ink.fg, shade!) })),
+						})
+					}\n`,
+				);
+			}
+			for (let ink of drawn) {
+				let ratio = contrast(ink.fg, shade!);
+				expect({
+					...ink,
+					ratio,
+					threshold: ink.icon ? 3 : 4.5,
+					meets: ratio >= (ink.icon ? 3 : 4.5),
+				})
+					.toEqual({ ...ink, ratio, threshold: ink.icon ? 3 : 4.5, meets: true });
+			}
+		}
+	});
+}
