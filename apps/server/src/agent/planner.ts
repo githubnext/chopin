@@ -452,7 +452,12 @@ you do not implement the plan yourself. If a member asks to implement it
 now, rather than prepare its task graph, your \`intercom\` tool can reach other sessions on this
 machine: one working in a checkout of ${repository}, such as a session that handed you this
 document, can take the request along with what it needs to find this document. Tell the member
-where the work continues, or that no session could take it.`;
+where the work continues, or that no session could take it.
+
+An \`intercom\` ask returns once it is delivered and waits only a few seconds for the reply. A
+reply that comes after your turn ends waits unread until your next turn, so when you need
+another session's answer to tell the member, such as checking on a workflow run, ask with
+\`wait: { kind: "foreground", budgetMs: 600000 }\`.`;
 	return [prompt, visual, reading, place, questions, surface, implementing, bootstrap].filter(
 		Boolean,
 	).join(

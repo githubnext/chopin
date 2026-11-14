@@ -461,6 +461,13 @@ the same machine, such as one working in a checkout of the document's
 repository, and that it can pass the request to one of them and tell the member
 where the work continues. Chopin does not track or verify that handoff.
 
+An Intercom `ask` returns once it is delivered and waits only Atomic's automatic
+yield, a few seconds, for the reply. Chopin starts no turn it did not ask for, so
+a reply that arrives after the turn ends stays in the session unread until the
+next turn. The instructions therefore tell the Planner to ask with a foreground
+`wait` of up to ten minutes when it needs the answer for a member, such as when
+it checks on a workflow run.
+
 Chopin implements Atomic's `HostInput`, bound through
 `extensionBindings.humanInput`; it does not intercept tools. `ask_user_question`,
 extension dialogs, and workflow-stage input become ordinary shared Decisions:
