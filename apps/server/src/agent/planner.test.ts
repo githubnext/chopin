@@ -85,6 +85,8 @@ test("a remote Planner learns where it runs and that its questions become Decisi
 	expect(prompt).toContain("**Stop Planner** pauses it");
 	expect(prompt).not.toContain("You have no shell");
 	expect(prompt).not.toContain("Your working directory");
+	// The member's own Atomic decides how its `intercom` asks wait.
+	expect(prompt).not.toContain("budgetMs");
 	expect(prompt.endsWith("Earlier context.")).toBe(true);
 });
 

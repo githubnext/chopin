@@ -447,6 +447,7 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain("Chat shows a card for each workflow run you start");
 			expect(instructions).toContain("`intercom` tool can reach other sessions");
 			expect(instructions).toContain("one working in a checkout of owner/repo");
+			expect(instructions).toContain('wait: { kind: "foreground", budgetMs: 600000 }');
 			expect(instructions).not.toContain("You have no shell");
 		}
 		let git = Bun.spawn(["git", "-C", path, "remote", "set-url", "origin", "workgit:other/repo"], {
