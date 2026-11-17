@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
 
+import * as Chat from "./service";
 import { installJobCleanup, until } from "./job.test-fixtures";
 import { LIMITS, PNG, setup } from "./attachments.test-fixtures";
 
 import type { Config } from "../config";
+import type { Socket } from "../wire";
 
 installJobCleanup();
 
@@ -236,4 +238,117 @@ test("a send with no files keeps the shape it always had", async () => {
 		"attachments",
 	);
 	await until(() => !h.chat.busy);
+});
+
+/** Turns that take messages as they run, recording each in the order they reach the turn. */
+function steeringTurns(context: Awaited<ReturnType<typeof setup>>["context"]) {
+	let prompts: string[] = [];
+	let steered: string[] = [];
+	let finish = Promise.withResolvers<void>();
+	let closing = Promise.withResolvers<void>();
+	(context as { steers?: () => boolean }).steers = () => true;
+	context.openPlannerSession = async () => ({
+		ok: true,
+		value: {
+			async stream(prompt: string, signal: AbortSignal) {
+				prompts.push(prompt);
+				let stopped = new Promise<void>(resolve =>
+					signal.addEventListener("abort", () => resolve())
+				);
+				return {
+					fullStream: (async function*() {
+						await Promise.race([finish.promise, stopped]);
+						yield { type: "finish" };
+					})(),
+				} as never;
+			},
+			steer: async (text: string) => {
+				steered.push(text);
+			},
+			destroy: () => closing.promise,
+		},
+	});
+	return {
+		prompts,
+		steered,
+		finish: () => finish.resolve(),
+		closeHeld: () => closing,
+	};
+}
+
+/** Holds every read of a message's files until `release` is called. */
+function slowFileReads(storage: Awaited<ReturnType<typeof setup>>["storage"]) {
+	let reading = Promise.withResolvers<void>();
+	let forEntry = storage.chatAttachments.forEntry.bind(storage.chatAttachments);
+	storage.chatAttachments.forEntry = async (channelId, entryId) => {
+		await reading.promise;
+		return forEntry(channelId, entryId);
+	};
+	return { release: () => reading.resolve() };
+}
+
+function bo(): Socket {
+	return { data: { handle: "bo", principalId: "U_bo" }, send() {} } as unknown as Socket;
+}
+
+test("messages steered into a running turn reach it in the order they were sent, though the first one's files are slow to read", async () => {
+	let { h, upload, send, storage, context } = await setup();
+	let turns = steeringTurns(context);
+	turns.closeHeld().resolve();
+	let reads = slowFileReads(storage);
+	try {
+		expect((await send({ to: "planner", text: "First turn" })).reply?.kind).toBe("chat:send");
+		await until(() => turns.prompts.length === 1 && h.chat.steering !== undefined);
+		let notes = await upload("U_ana", "notes.md", "slow notes");
+		expect((await send({ to: "planner", text: "Read this", attachments: [notes] })).reply?.kind)
+			.toBe("chat:send");
+		await send({ to: "planner", text: "And keep it short" }, bo());
+		await Bun.sleep(20);
+		expect(turns.steered).toEqual([]);
+
+		reads.release();
+		await until(() => turns.steered.length === 2);
+		expect(turns.steered[0]).toStartWith("@ana: Read this");
+		expect(turns.steered[0]).toContain('<file name="notes.md">\nslow notes\n</file>');
+		expect(turns.steered[1]).toBe("@bo: And keep it short");
+	} finally {
+		reads.release();
+		turns.finish();
+		await until(() => !h.chat.busy);
+	}
+});
+
+test("messages kept for a turn that has not opened reach it, once it opens, in the order they were sent, though the first one's files are slow to read", async () => {
+	let { h, upload, send, storage, context, ana } = await setup();
+	let turns = steeringTurns(context);
+	let reads = slowFileReads(storage);
+	try {
+		expect((await send({ to: "planner", text: "First turn" })).reply?.kind).toBe("chat:send");
+		await until(() => turns.prompts.length === 1 && h.chat.steering !== undefined);
+		await Chat.abort(h.context, ana);
+		await until(() => h.chat.busy && h.chat.steering === undefined);
+
+		await send({ to: "planner", text: "Start over" }, bo());
+		let notes = await upload("U_ana", "notes.md", "slow notes");
+		expect((await send({ to: "planner", text: "Read this", attachments: [notes] })).reply?.kind)
+			.toBe("chat:send");
+		await send({ to: "planner", text: "And keep it short" }, bo());
+		expect(h.chat.following?.map(given => given.handle)).toEqual(["ana", "bo"]);
+
+		turns.closeHeld().resolve();
+		await until(() => turns.prompts.length === 2);
+		expect(turns.prompts[1]).toContain("@bo: Start over");
+		await Bun.sleep(20);
+		expect(turns.steered).toEqual([]);
+
+		reads.release();
+		await until(() => turns.steered.length === 2);
+		expect(turns.steered[0]).toStartWith("@ana: Read this");
+		expect(turns.steered[1]).toBe("@bo: And keep it short");
+	} finally {
+		reads.release();
+		turns.closeHeld().resolve();
+		turns.finish();
+		await until(() => !h.chat.busy);
+	}
 });

@@ -399,6 +399,8 @@ export type Chat = {
 	sending: Promise<void>;
 	/** Work admitted to the send FIFO, including the operation currently resolving. */
 	pendingSends: number;
+	/** Messages given to the running turn, each after the one admitted before it. */
+	giving: Promise<void>;
 	/**
 	 * A waiting turn is being taken and has not begun, which can take a commit. Until it has,
 	 * nothing else may start one: two turns would run at once, and the first to end would let a
@@ -503,6 +505,7 @@ export function create(): Chat {
 		waiting: [],
 		sending: Promise.resolve(),
 		pendingSends: 0,
+		giving: Promise.resolve(),
 		busy: false,
 		lifecycle: 0,
 		closed: false,
@@ -554,6 +557,7 @@ export function restore(
 		waiting: [],
 		sending: Promise.resolve(),
 		pendingSends: 0,
+		giving: Promise.resolve(),
 		busy: false,
 		lifecycle: 0,
 		closed: false,
@@ -1098,14 +1102,22 @@ type Given = {
 };
 
 /**
- * Gives a posted message to the Planner turn that is running, to be read at its next step. The
- * session may not be ready for it yet, so this waits for it. When the turn ends first or cannot
- * take it, the message is not lost to a queue: a Planner that is idle by then starts a turn for
- * it, and any other says plainly that it was not read.
+ * Gives a posted message to the Planner turn that is running, to be read at its next step, after
+ * every message given before it: one with files to read never lets a later one reach the turn
+ * first. The session may not be ready for it yet, so this waits for it. When the turn ends first
+ * or cannot take it, the message is not lost to a queue: a Planner that is idle by then starts a
+ * turn for it, and any other says plainly that it was not read.
  */
-async function give(context: Room, message: Given): Promise<void> {
+function give(context: Room, message: Given): Promise<void> {
 	let { chat } = context;
 	let way = chat.steering;
+	let given = chat.giving.then(() => deliver(context, message, way));
+	chat.giving = given.catch(() => {});
+	return given;
+}
+
+async function deliver(context: Room, message: Given, way: Steering | undefined): Promise<void> {
+	let { chat } = context;
 	let session = await way?.ready;
 	if (session?.steer && chat.steering === way && !chat.closed) {
 		try {
