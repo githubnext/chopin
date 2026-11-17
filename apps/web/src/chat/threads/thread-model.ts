@@ -118,6 +118,7 @@ function applyInThreadFrame(
 					kind: "reactions",
 					id: inner.id,
 					reactions: inner.reactions,
+					...(inner.reactionsSeq === undefined ? {} : { reactionsSeq: inner.reactionsSeq }),
 				}),
 			};
 		case "chat:context":
@@ -198,6 +199,7 @@ export function threadsReducer(state: ThreadsState, action: ThreadsAction): Thre
 					kind: "history",
 					entries: action.frame.entries,
 					turn: action.frame.turn,
+					...(action.frame.seq === undefined ? {} : { seq: action.frame.seq }),
 				}),
 				busy: action.frame.busy,
 				runs: action.frame.runs,

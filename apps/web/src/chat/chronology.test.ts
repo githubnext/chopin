@@ -31,10 +31,22 @@ function rows(entries: Chat.Entry[], local: Local[]): string[] {
 describe("an entry's place in time", () => {
 	it("goes after every entry of its second or before", () => {
 		let entries = [{ ts: 1 }, { ts: 2 }, { ts: 2 }, { ts: 4 }];
-		expect(placeOf(entries, 0)).toBe(0);
-		expect(placeOf(entries, 2)).toBe(3);
-		expect(placeOf(entries, 3)).toBe(3);
-		expect(placeOf(entries, 9)).toBe(4);
+		expect(placeOf(entries, { ts: 0 })).toBe(0);
+		expect(placeOf(entries, { ts: 2 })).toBe(3);
+		expect(placeOf(entries, { ts: 3 })).toBe(3);
+		expect(placeOf(entries, { ts: 9 })).toBe(4);
+	});
+
+	it("goes among the entries of its second by the server's sequence", () => {
+		let entries = [{ ts: 2, seq: 10 }, { ts: 2, seq: 30 }];
+		expect(placeOf(entries, { ts: 2, seq: 5 })).toBe(0);
+		expect(placeOf(entries, { ts: 2, seq: 20 })).toBe(1);
+		expect(placeOf(entries, { ts: 2, seq: 40 })).toBe(2);
+	});
+
+	it("goes after the entries of its second saved before the sequence existed", () => {
+		let entries = [{ ts: 2 }, { ts: 2 }, { ts: 3 }];
+		expect(placeOf(entries, { ts: 2, seq: 1 })).toBe(2);
 	});
 });
 

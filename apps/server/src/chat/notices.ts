@@ -107,7 +107,7 @@ export function createNotices({ now, announce }: {
 			ts: now(),
 			...(decision ? { decision: { ...decision } } : {}),
 		};
-		appendEntries(chat.entries, entry);
+		appendEntries(chat, entry);
 		try {
 			await Service.persistExclusive(context.plan);
 		} catch (error) {

@@ -394,16 +394,24 @@ are `planner-busy` and `planner-not-attached`. One the server kept, though the c
 was lost, is answered with its first answer when the same request is sent again, and is given
 to a turn once.
 
-Chat and every thread read in the order things happened. The server appends entries and never
-gives one an earlier second than the entry ahead of it (`appendEntries` in
-`apps/server/src/chat/chronology.ts`, a thread's copy into Chat included); entries of one second
-keep the order they were appended in. The browser places a new entry by its time, keeps a known
-one where it is, ignores a streaming copy older than what it shows, adds a `chat:delta` only at its
-`at`, and remembers what a Retry removed, so a frame applied twice, late or after a reconnect's
-history changes nothing (`transcript-state.ts`). What only the browser has (a message still
-sending, the quiet note, a local notice under its send) joins the server's entries by its own
-time, after the entries of its second, in `group()` (`chat/chronology.ts`), so turn offsets still
-count the server's entries.
+Chat and every thread read in the order things happened: by `ts`, then by the server's `seq`.
+The server appends entries and never gives one an earlier second than the entry ahead of it, and
+gives each a sequence (its clock in milliseconds, or one more than the last it gave out) past every
+entry and history before it (`appendEntries` in `apps/server/src/chat/chronology.ts`). A thread's
+entry that Chat holds too is stamped against both transcripts before it is saved, so both say the
+same time and sequence; if Chat took an entry meanwhile, the copy moves past it and the thread
+record is saved again. Each `chat:history` and opened thread carries `seq`, larger than every
+entry it holds and smaller than any appended after it. An entry saved before sequences existed
+keeps its stored place among those of its second. The browser (`transcript-state.ts`) places an
+entry by time and sequence, merges two copies of one entry by what the server only adds (text while
+it streams, tool calls that only finish, images; reactions by `reactionsSeq`), keeps a `chat:delta`
+past the text's end, and a tool or reaction frame for an entry not yet shown, until they fit,
+ignores a history older than one applied, drops an entry a history lacks though its `seq` covers
+it, and remembers what a Retry removed. So every frame and history, applied in any order, more
+than once, or after a reconnect, leaves the server's transcript (`transcript-replay.test.ts`).
+What only the browser has (a message still sending, the quiet note, a local notice under its send)
+joins the server's entries by its own time, after the entries of its second, in `group()`
+(`chat/chronology.ts`), so turn offsets still count the server's entries.
 
 A reply that fails is retried on the same message (`chat:retry`), never as a new one. Only the
 message's sender may, while its failure is the latest Planner turn and asking again can help. The

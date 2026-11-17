@@ -337,17 +337,24 @@ describe("message reactions", () => {
 		expect(next.turn).toBe(state.turn);
 	});
 
-	it("clears them when the last one is taken back, and ignores a message it does not have", () => {
+	it("clears them when the last one is taken back, and keeps those of a message not yet shown for it", () => {
 		let state = transcriptReducer(initialTranscript, {
 			kind: "history",
 			entries: [{ ...entry("a", { kind: "agent" }, "one"), reactions: [reaction("✅", "ana")] }],
 		});
 		let cleared = transcriptReducer(state, { kind: "reactions", id: "a", reactions: [] });
 		expect(cleared.entries[0]!.reactions).toBeUndefined();
-		expect(
-			transcriptReducer(state, { kind: "reactions", id: "gone", reactions: [reaction("✅", "x")] }),
-		)
-			.toBe(state);
+		let early = transcriptReducer(state, {
+			kind: "reactions",
+			id: "later",
+			reactions: [reaction("✅", "x")],
+		});
+		expect(early.entries).toEqual(state.entries);
+		let arrived = transcriptReducer(early, {
+			kind: "message",
+			entry: entry("later", { kind: "agent" }, "two"),
+		});
+		expect(arrived.entries.at(-1)!.reactions).toEqual([reaction("✅", "x")]);
 	});
 
 	it("keeps a message's reactions when its entry is replaced by a streamed one", () => {

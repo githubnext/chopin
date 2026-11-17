@@ -1,9 +1,11 @@
 /**
- * The order a transcript is read in: by when each thing happened, in seconds.
+ * The order a transcript is read in: by when each thing happened, in seconds, then by the
+ * server's sequence (`Entry.seq`).
  *
  * The server keeps a transcript's entries in the order it appended them, and never appends one
- * earlier than the last (`appendEntries` on the server). Entries at the same second keep that
- * order. What only this browser has (a message still sending, chopin's note to this person alone,
+ * earlier than the last (`appendEntries` on the server), so this is the order it stores them in.
+ * An entry saved before the sequence existed keeps its place in that list among those of its
+ * second. What only this browser has (a message still sending, chopin's note to this person alone,
  * a local notice under a send) takes its place among them by its own time, after the entries of
  * the same second, or right under the message it is about.
  */
@@ -25,10 +27,21 @@ export function isNote(row: object): row is NoteRow {
 	return (row as { kind?: unknown }).kind === "note";
 }
 
-/** Where an entry of time `ts` goes: after every entry of its second or before. */
-export function placeOf(entries: readonly { ts: number }[], ts: number): number {
+type Timed = { ts: number; seq?: number };
+
+/** Whether `entry` is read after `other`, as far as their time and sequence say. */
+export function readsAfter(entry: Timed, other: Timed): boolean {
+	if (entry.ts !== other.ts) return entry.ts > other.ts;
+	return entry.seq !== undefined && other.seq !== undefined && entry.seq > other.seq;
+}
+
+/**
+ * Where an entry goes: after every entry read before it, and after one of its second whose
+ * sequence, or its own, is unknown.
+ */
+export function placeOf(entries: readonly Timed[], entry: Timed): number {
 	let at = entries.length;
-	while (at > 0 && entries[at - 1]!.ts > ts) at--;
+	while (at > 0 && readsAfter(entries[at - 1]!, entry)) at--;
 	return at;
 }
 

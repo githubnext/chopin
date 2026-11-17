@@ -159,13 +159,15 @@ async function reactNow(
 		...numbered,
 	} as const;
 	if (!next.changed) return reply(ws, msg.rid, answer);
+	// A copy of the message with an older list is older: a reader keeps the list of the larger one.
+	let reactionsSeq = Math.max((entry.reactionsSeq ?? 0) + 1, Date.now());
 	// Persistence before publication: the saved transcript carries the new list before the live one.
 	await context.persist(() => ({
 		entries: chat.entries.map(value =>
 			value === entry
 				? (next.reactions.length
-					? { ...value, reactions: next.reactions }
-					: (({ reactions: _reactions, ...rest }) => rest)(value))
+					? { ...value, reactions: next.reactions, reactionsSeq }
+					: (({ reactions: _reactions, ...rest }) => ({ ...rest, reactionsSeq }))(value))
 				: value
 		),
 		runs: chat.runs,
@@ -173,12 +175,14 @@ async function reactNow(
 	}));
 	if (next.reactions.length) entry.reactions = next.reactions;
 	else delete entry.reactions;
+	entry.reactionsSeq = reactionsSeq;
 	reply(ws, msg.rid, answer);
 	broadcast(server, room, {
 		kind: "chat:reactions",
 		ts: 0,
 		id: msg.id,
 		reactions: next.reactions,
+		reactionsSeq,
 		...(msg.seq === undefined ? {} : {
 			by: handle,
 			emoji: msg.emoji,

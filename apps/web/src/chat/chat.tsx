@@ -805,7 +805,12 @@ export function Chat(
 				loaded = true;
 				synchronized.current = wire;
 				seen = new Set(frame.entries.map(entry => entry.id));
-				dispatchTranscript({ kind: "history", entries: frame.entries, turn: frame.turn });
+				dispatchTranscript({
+					kind: "history",
+					entries: frame.entries,
+					turn: frame.turn,
+					...(frame.seq === undefined ? {} : { seq: frame.seq }),
+				});
 				dispatchOutbox({ kind: "history", ids: frame.entries.map(entry => entry.id) });
 				dispatchIntents({ kind: "history", entries: frame.entries, handle });
 				setBusy(frame.busy);
@@ -840,7 +845,12 @@ export function Chat(
 				dispatchTranscript({ kind: "removed", ids: frame.ids });
 			}),
 			wire.on<Wire.Reactions>("chat:reactions", frame => {
-				dispatchTranscript({ kind: "reactions", id: frame.id, reactions: frame.reactions });
+				dispatchTranscript({
+					kind: "reactions",
+					id: frame.id,
+					reactions: frame.reactions,
+					...(frame.reactionsSeq === undefined ? {} : { reactionsSeq: frame.reactionsSeq }),
+				});
 				dispatchIntents({
 					kind: "settle",
 					id: frame.id,

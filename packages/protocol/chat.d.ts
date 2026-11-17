@@ -237,6 +237,13 @@ export declare namespace Chat {
 		text: string;
 		ts: number;
 		/**
+		 * Where the server put the entry among those of its second: entries are read by `ts`, then
+		 * by `seq`. It only grows in a transcript, past every entry and snapshot (`History.seq`)
+		 * before it, and an entry also in a thread has the same one in both. Absent on an entry saved
+		 * before it existed, which keeps its place in the stored list among those of its second.
+		 */
+		seq?: number;
+		/**
 		 * Images the agent's turn made or showed, in order, on the turn's first message that has one.
 		 * Absent on any other entry.
 		 */
@@ -315,6 +322,11 @@ export declare namespace Chat {
 		 * Only a member's or the Planner's message carries any.
 		 */
 		reactions?: Reaction[];
+		/**
+		 * Grows each time `reactions` changes: of two copies of the message, the one with the larger
+		 * `reactionsSeq` has the newer list. Absent until someone first reacts.
+		 */
+		reactionsSeq?: number;
 	};
 
 	/**
@@ -507,6 +519,12 @@ export declare namespace Chat {
 	/** Everything said so far, sent on join. */
 	export type History = KIND<"chat:history"> & {
 		entries: Entry[];
+		/**
+		 * Larger than every entry's `seq` in `entries` and smaller than any appended after: an entry
+		 * whose `seq` is at most this and that `entries` lacks had been taken out. A history with a
+		 * smaller one than a history already applied is older than it.
+		 */
+		seq?: number;
 		busy: boolean;
 		turn?: Turn;
 		runs?: Runs;
@@ -522,7 +540,8 @@ export declare namespace Chat {
 		text: string;
 		/**
 		 * Where in the entry's text the piece begins. A client that already holds it, after a
-		 * reconnect or a second copy, does not add it again. Absent from older servers.
+		 * reconnect or a second copy, does not add it again, and keeps one that begins past its text
+		 * until the text before it arrives. Absent from older servers.
 		 */
 		at?: number;
 	};
@@ -657,6 +676,8 @@ export declare namespace Chat {
 		root: Entry;
 		forkedAt: number;
 		entries: Entry[];
+		/** As `History.seq`, for the thread's entries; absent when the thread has none yet. */
+		seq?: number;
 		busy: boolean;
 		turn?: Turn;
 		runs?: Runs;
@@ -792,6 +813,8 @@ export declare namespace Chat {
 	export type Reactions = KIND<"chat:reactions"> & {
 		id: string;
 		reactions: Reaction[];
+		/** The message's `reactionsSeq` with this list. */
+		reactionsSeq?: number;
 		by?: string;
 		emoji?: string;
 		seq?: number;
