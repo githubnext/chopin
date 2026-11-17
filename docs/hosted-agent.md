@@ -511,8 +511,8 @@ nor forgets which cards were noted. The
 note starts no turn and is not posted in Chat. The Chat Planner's next turn is
 given every unread note, with the thread's words quoted as data rather than
 instructions: ahead of its prompt, or, when the turn opens with a skill or a
-prompt template that has to stand first, beside its instructions for that turn
-alone. The notes a turn for a message was given are saved with the session
+prompt template that has to stand first, as a session message recorded before
+the command so later turns keep it. The notes a turn for a message was given are saved with the session
 state, so a Retry of that turn is given them again, after a restart too.
 `copilot-sdk` and `remote` Planners are not offered the tool. The `[agent] N
 tools:` line logged as an Atomic Planner session opens lists what Atomic

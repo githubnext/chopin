@@ -3403,7 +3403,7 @@ async function run(
 		let prompt: string;
 		// The files sent with the message that began the turn, given with the first attempt's prompt.
 		let files: PlannerFiles | undefined;
-		// What this turn alone is told beside its instructions, when its prompt has to open with a command.
+		// What this turn is told before its prompt when the prompt itself has to open with a command.
 		let turnContext: string | undefined;
 		if (jobTurn) {
 			prompt = jobTurn.prompt;
@@ -3468,13 +3468,15 @@ async function run(
 							? { id: member.entryId, ...(retrying ? { retry: true as const } : {}) }
 							: undefined;
 						retrying = false;
+						let context = turnContext;
+						turnContext = undefined;
 						let result = await session.stream(
 							withBootstrap(text),
 							abort,
 							choice,
 							sent,
 							answers,
-							turnContext,
+							context,
 						);
 						// Its first call is made: a message given to the turn now reaches it, and
 						// people are told the turn is running, as the machine has its prompt.

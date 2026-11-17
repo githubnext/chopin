@@ -40,6 +40,8 @@ function chunk(id: string, delta: Record<string, unknown>, finishReason: string 
 
 export type StubRequest = {
 	prompt: string;
+	/** Every non-system message in the request, in order. */
+	messages: string[];
 	system: string;
 	toolNames: string[];
 	hasPriorToolResult: boolean;
@@ -78,6 +80,9 @@ export function startStubModelServer(
 				model: body.model ?? "",
 				...(body.reasoning_effort ? { reasoningEffort: body.reasoning_effort } : {}),
 				prompt,
+				messages: body.messages
+					.filter(message => message.role !== "system" && message.role !== "developer")
+					.map(message => extractText(message.content)),
 				system,
 				hasPriorToolResult,
 				toolNames: (body.tools ?? []).map(entry => entry.function?.name ?? ""),

@@ -1124,10 +1124,18 @@ export function createAtomicAdapter(
 							if (!run.stopped) {
 								run.emit({ type: "stream-start", modelId: agent.model?.id });
 								await agent.agent.waitForIdle();
-								await agent.prompt(text, {
-									expandPromptTemplates: !!full,
-									...(images.length ? { images } : {}),
-								});
+								if (full && turn.context && !run.stopped) {
+									await agent.sendCustomMessage(
+										{ customType: "chopin.turn_context", content: turn.context, display: false },
+										{ triggerTurn: false },
+									);
+								}
+								if (!run.stopped) {
+									await agent.prompt(text, {
+										expandPromptTemplates: !!full,
+										...(images.length ? { images } : {}),
+									});
+								}
 							}
 							if (run.failure) throw run.failure;
 							if (run.stopped) return;

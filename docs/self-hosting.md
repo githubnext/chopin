@@ -158,7 +158,8 @@ Atomic caveats:
   temporary file. For the isolated worker sessions the adapter overrides each
   default and fails closed on the ones it can observe, but a new Atomic release
   can add a default the suite does not check. Planner sessions deliberately keep
-  those capabilities.
+  those capabilities, except that `intercom` is unavailable to Planner turns
+  while the Intercom package stays loaded for workflow stages.
 - Sessions live only in memory. `doStop` returns a state the adapter refuses to
   resume, so a session never survives a restart. Chopin does not resume
   harness sessions.

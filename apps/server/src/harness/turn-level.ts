@@ -13,16 +13,30 @@ import type {
  * and none of them can hold a level, so the level travels beside the call that starts the turn
  * (`startingTurn`) and `carryingThinkingLevel` puts it on the turn where the harness takes it.
  */
-export type PlannerTurn = HarnessV1PromptTurnOptions & { thinkingLevel?: string };
+export type PlannerTurn = HarnessV1PromptTurnOptions & {
+	thinkingLevel?: string;
+	/**
+	 * What this turn is told before its prompt when the prompt itself has to open with a command:
+	 * an Atomic Planner session records it in the session before the command so later turns keep it.
+	 */
+	context?: string;
+};
 
-let started = new AsyncLocalStorage<{ thinkingLevel: string | undefined }>();
+let started = new AsyncLocalStorage<{ thinkingLevel?: string; context?: string }>();
 
-/** Runs `start`, the call that begins a turn, so the turn it gives the harness carries `thinkingLevel`. */
-export function startingTurn<T>(thinkingLevel: string | undefined, start: () => T): T {
-	return started.run({ thinkingLevel }, start);
+/**
+ * Runs `start`, the call that begins a turn, so the turn it gives the harness carries
+ * `thinkingLevel` and `context`.
+ */
+export function startingTurn<T>(
+	thinkingLevel: string | undefined,
+	start: () => T,
+	context?: string,
+): T {
+	return started.run({ thinkingLevel, context }, start);
 }
 
-/** Puts the level a turn was started with on the turn the harness is given; none where there was none. */
+/** Puts the level and context a turn was started with on the turn the harness is given. */
 export function carryingThinkingLevel<T extends HarnessV1>(harness: T): T {
 	return {
 		...harness,
@@ -31,10 +45,12 @@ export function carryingThinkingLevel<T extends HarnessV1>(harness: T): T {
 			return {
 				...session,
 				doPromptTurn: async turn => {
-					let thinkingLevel = started.getStore()?.thinkingLevel;
-					return session.doPromptTurn(
-						thinkingLevel === undefined ? turn : { ...turn, thinkingLevel } as PlannerTurn,
-					);
+					let held = started.getStore();
+					return session.doPromptTurn({
+						...turn,
+						...(held?.thinkingLevel !== undefined ? { thinkingLevel: held.thinkingLevel } : {}),
+						...(held?.context !== undefined ? { context: held.context } : {}),
+					} as PlannerTurn);
 				},
 			} satisfies HarnessV1Session;
 		},
