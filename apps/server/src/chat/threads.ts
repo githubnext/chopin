@@ -1,6 +1,7 @@
 import { summarizeThread } from "@chopin/protocol/threads";
 
 import { broadcast, fail, PASSING, reply, tell } from "../wire";
+import { appendEntries } from "./chronology";
 import * as Chat from "./service";
 import { NOTE_SENT, threadNote, threadNotesContext } from "./thread-notes";
 
@@ -348,7 +349,10 @@ function copyToChat(top: Chat.Room, managed: ManagedThread, frame: Frame): Outgo
 			if (own) own.fromThread = rootId;
 			if (!managed.copied.has(entry.id)) {
 				managed.copied.add(entry.id);
-				topChat.entries.push(own ?? structuredClone(entry));
+				let copied = own ?? structuredClone(entry);
+				appendEntries(topChat.entries, copied);
+				// Both transcripts, and both frames, say the time Chat placed it at.
+				entry.ts = copied.ts;
 			}
 			if (!entry.streaming) {
 				void top.persist().catch(err =>

@@ -553,6 +553,47 @@ describe("Chat threads server", () => {
 		expect(w.plan.chat.entries.some(entry => entry.document)).toBe(false);
 	});
 
+	test("a reply copied into Chat takes its place in time there, and says the same time in both", async () => {
+		let w = await buildWorld();
+		let alice = w.makeSocket("alice", "U_alice");
+		let rootId = crypto.randomUUID();
+		await Threads.sendMessage(w.context, alice.ws, {
+			kind: "chat:send",
+			rid: "root",
+			requestId: rootId,
+			to: "room",
+			text: "Root: let us use PostgreSQL.",
+			ts: 0,
+		});
+		// Chat's newest entry was given a later second than the clock now says.
+		let ahead = Math.floor(Date.now() / 1000) + 120;
+		w.plan.chat.entries.push({ id: "ahead", author: { kind: "system" }, text: "Ahead", ts: ahead });
+		let replyId = crypto.randomUUID();
+		await Threads.sendMessage(w.context, alice.ws, {
+			kind: "chat:send",
+			rid: "reply",
+			requestId: replyId,
+			to: "room",
+			thread: rootId,
+			alsoToChat: true,
+			text: "Shared with Chat.",
+			ts: 0,
+		});
+		let inChat = w.plan.chat.entries.at(-1)!;
+		expect(inChat.id).toBe(replyId);
+		expect(inChat.ts).toBe(ahead);
+		let inThread = w.plan.chat.childChats?.get(rootId)?.entries.find(entry => entry.id === replyId);
+		expect(inThread?.ts).toBe(ahead);
+		let said = w.broadcasts.flatMap(frame => {
+			let inner = frame.kind === "chat:in-thread" ? (frame as Wire.InThread).frame : frame;
+			return inner.kind === "chat:message" && (inner as Wire.Message).entry.id === replyId
+				? [(inner as Wire.Message).entry.ts]
+				: [];
+		});
+		expect(said.length).toBeGreaterThan(1);
+		expect(new Set(said)).toEqual(new Set([ahead]));
+	});
+
 	test("a Retry branches the Atomic session back to before the failed attempt, and gives it no word of the attempt", async () => {
 		let w = await buildWorld();
 		let alice = w.makeSocket("alice", "U_alice");

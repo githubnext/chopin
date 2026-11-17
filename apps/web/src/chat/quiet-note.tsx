@@ -13,7 +13,8 @@ import "./quiet-note.css";
 
 /**
  * What chopin says to one person when a message to it could not be taken: Slack's ephemeral
- * message, the last row of the transcript, under a quiet "Only visible to you". chopin's own row
+ * message, under a quiet "Only visible to you", in the transcript at the time it was said: what is
+ * said after it comes after it, as Slack's does (`chronology.ts`). chopin's own row
  * says it in one sentence (the server's words), and where there is something to fix, How to fix
  * unfolds the same fix-it steps as the machine button's menu. Nothing is kept for later, so the
  * words are back in the draft; the row stays until chopin takes a message, or a later refusal

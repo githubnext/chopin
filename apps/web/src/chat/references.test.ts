@@ -26,7 +26,6 @@ import {
 	selectedReplacement,
 	sendFailure,
 	shownSendFailure,
-	withNoticesAfter,
 } from "./references";
 import { WireLost, WireRefusal } from "../wire";
 
@@ -399,17 +398,6 @@ describe("unavailable Planner notices", () => {
 		expect(payload("@chopin hello").to).toBe("room");
 		expect(addressesPlanner(payload("@chopin hello"))).toBe(true);
 		expect(addressesPlanner(payload("hello team"))).toBe(false);
-	});
-
-	test("places a notice under its message only", () => {
-		let entry = (id: string) => ({ id, author: { kind: "system" as const }, text: id, ts: 1 });
-		let notice = entry("notice");
-		expect(withNoticesAfter([entry("a"), entry("b")], { a: notice }).map(e => e.id)).toEqual([
-			"a",
-			"notice",
-			"b",
-		]);
-		expect(withNoticesAfter([entry("b")], { a: notice }).map(e => e.id)).toEqual(["b"]);
 	});
 });
 

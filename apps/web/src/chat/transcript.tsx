@@ -70,6 +70,7 @@ const ANALYSIS = import.meta.env.DEV || import.meta.env.VITE_MESSAGE_ANALYSIS ==
 
 import type { Chat, ConversationPlan } from "@chopin/protocol";
 import type { CompletedWork, Group, Message } from "./model";
+import type { Local } from "./chronology";
 import type { OfferPlace } from "./offer-motion";
 import type { CardMetaStore, QuestionnaireStore } from "@chopin/editor";
 import type { Transport } from "@chopin/question/react";
@@ -655,7 +656,8 @@ export let Transcript = memo(function Transcript(
 		entries,
 		handle,
 		lead,
-		tail,
+		local,
+		note,
 		live,
 		onCardLink,
 		onAddExcerpt,
@@ -681,8 +683,10 @@ export let Transcript = memo(function Transcript(
 		conversationPlan?: ConversationPlan.State;
 		conversationPlanJobs?: ConversationPlan.Job[];
 		lead?: ReactNode;
-		/** The last row, after every entry: chopin's ephemeral note to this person. */
-		tail?: ReactNode;
+		/** What only this browser has: messages still sending, and notices under a send. */
+		local?: readonly Local[];
+		/** chopin's ephemeral note to this person, drawn where its time puts it among the rest. */
+		note?: { id: string; ts: number; row: ReactNode };
 		threads?: TranscriptThreads;
 		onCardLink?: (link: CardLink) => void;
 		onAddExcerpt?: (action: ExcerptCorrectionAction) => Promise<void>;
@@ -752,9 +756,20 @@ export let Transcript = memo(function Transcript(
 	let offers = researchOffers ? conversationPlan?.researchOffers : undefined;
 	// The same rows while the transcript does not change, so a row already mounted is not rendered
 	// again when older ones are mounted above it.
+	let noteId = note?.id;
+	let noteTs = note?.ts;
 	let groups = useMemo(
-		() => researchTranscript(group(entries, working, completedWork, suspendedWork), offers ?? []),
-		[entries, working, completedWork, suspendedWork, offers],
+		() =>
+			researchTranscript(
+				group(entries, working, completedWork, suspendedWork, [
+					...local ?? [],
+					...noteId === undefined || noteTs === undefined
+						? []
+						: [{ kind: "note" as const, id: noteId, ts: noteTs }],
+				]),
+				offers ?? [],
+			),
+		[entries, working, completedWork, suspendedWork, offers, local, noteId, noteTs],
 	);
 	let messages = groups.flatMap(item => item.kind === "messages" ? item.messages : []);
 	// A turn keeps one row from its placeholder through completion, so it enters once.
@@ -767,6 +782,7 @@ export let Transcript = memo(function Transcript(
 	let keyed = groups.map(item => {
 		if (item.kind === "research") return { item, key: `research:${item.offer.id}` };
 		if (item.kind === "system") return { item, key: item.id };
+		if (item.kind === "note") return { item, key: `note:${item.id}` };
 		let first = item.messages[0]!;
 		let turn = first.working ? working?.id : turns.get(first.id);
 		return { item, key: turn ? `turn:${turn}` : `sent-${first.id}` };
@@ -775,7 +791,13 @@ export let Transcript = memo(function Transcript(
 		groups.flatMap(item =>
 			item.kind === "messages"
 				? item.messages.map(message => message.id)
-				: [item.kind === "research" ? `research:${item.offer.id}` : item.id]
+				: [
+					item.kind === "research"
+						? `research:${item.offer.id}`
+						: item.kind === "note"
+						? `note:${item.id}`
+						: item.id,
+				]
 		),
 	);
 	let before = previous.current;
@@ -1141,7 +1163,9 @@ export let Transcript = memo(function Transcript(
 					let afterCompactions = compactions?.filter(
 						compaction => compaction.afterEntryId && groupIds.has(compaction.afterEntryId),
 					) ?? [];
-					let node = item.kind === "research"
+					let node = item.kind === "note"
+						? note?.row
+						: item.kind === "research"
 						? (
 							<div
 								data-chat-enter={enters(key) || undefined}
@@ -1226,14 +1250,13 @@ export let Transcript = memo(function Transcript(
 					);
 				})}
 				{compacting && <CompactingRow />}
-				{tail}
 				{/* With the stack's own gap, the last message ends 20px above the box, as Slack's clears its. */}
 				<div className="h-1 shrink-0" />
 				{emptyHint && (
 					<div
-						aria-hidden={groups.length > 0 || !!tail || undefined}
+						aria-hidden={groups.length > 0 || undefined}
 						className={`pointer-events-none absolute inset-0 flex items-center justify-center px-6 transition-opacity motion-reduce:transition-none ${
-							groups.length > 0 || tail ? "opacity-0" : "opacity-100"
+							groups.length > 0 ? "opacity-0" : "opacity-100"
 						}`}
 						data-chat-empty=""
 					>

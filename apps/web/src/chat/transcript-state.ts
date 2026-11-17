@@ -1,3 +1,4 @@
+import { placeOf } from "./chronology";
 import { withReactions } from "./reactions";
 
 import type { Chat } from "@chopin/protocol";
@@ -8,12 +9,20 @@ export type TranscriptState = {
 	turn?: Chat.Turn;
 	activeAnchorId?: string;
 	completedWork: CompletedWork[];
+	/**
+	 * Entries a Retry took out, most recent last. An entry's id is never used again, so a copy of one
+	 * that arrives late, or again, does not bring it back.
+	 */
+	removed?: string[];
 };
+
+const REMOVED_KEPT = 500;
 
 export type TranscriptAction =
 	| { kind: "history"; entries: Chat.Entry[]; turn?: Chat.Turn }
 	| { kind: "message"; entry: Chat.Entry }
-	| { kind: "delta"; id: string; text: string }
+	/** `at` is where in the entry's text it begins, when the server said. */
+	| { kind: "delta"; id: string; text: string; at?: number }
 	| { kind: "tool"; entryId: string; activity: Chat.Activity }
 	| { kind: "turn"; turn?: Chat.Turn }
 	| { kind: "reactions"; id: string; reactions: Chat.Reaction[] }
@@ -120,6 +129,27 @@ function finish(
 	}].slice(-50);
 }
 
+/**
+ * Whether a copy of an entry is older than the one shown. The server only adds to a streaming
+ * entry's text and never streams an entry again once it has finished, so a streaming copy is older
+ * than a finished entry, and older than a streaming one whose text runs on past it.
+ */
+function behind(copy: Chat.Entry, shown: Chat.Entry): boolean {
+	if (!copy.streaming) return false;
+	if (!shown.streaming) return true;
+	return shown.text.length > copy.text.length && shown.text.startsWith(copy.text);
+}
+
+/**
+ * An entry's text with a streamed piece added. A piece the server placed (`at`) that the text
+ * already holds, or one that starts past its end, changes nothing: the next copy of the whole
+ * entry brings what is missing.
+ */
+function streamed(text: string, piece: string, at: number | undefined): string {
+	if (at === undefined || at === text.length) return text + piece;
+	return text;
+}
+
 export function transcriptReducer(
 	state: TranscriptState,
 	action: TranscriptAction,
@@ -132,9 +162,11 @@ export function transcriptReducer(
 					action.entries.some(entry => entry.id === item.anchorId)
 				)
 				: finish(state, action.turn?.entryOffset ?? state.entries.length, action.entries);
+			let removed = state.removed?.filter(id => !action.entries.some(entry => entry.id === id));
 			return withAnchor({
 				entries: action.entries,
 				turn: action.turn,
+				...(removed?.length ? { removed } : {}),
 				activeAnchorId: sameTurn && action.entries.some(entry => entry.id === state.activeAnchorId)
 					? state.activeAnchorId
 					: undefined,
@@ -142,18 +174,25 @@ export function transcriptReducer(
 			});
 		}
 		case "message": {
+			// A message already shown keeps its place; a new one takes its place by its time.
+			if (state.removed?.includes(action.entry.id)) return state;
 			let index = state.entries.findIndex(entry => entry.id === action.entry.id);
-			let entries = index < 0 ? [...state.entries, action.entry] : [...state.entries];
+			if (index >= 0 && behind(action.entry, state.entries[index]!)) return state;
+			let entries = [...state.entries];
 			if (index >= 0) entries[index] = action.entry;
+			else entries.splice(placeOf(entries, action.entry.ts), 0, action.entry);
 			return withAnchor({ ...state, entries });
 		}
-		case "delta":
-			return withAnchor({
-				...state,
-				entries: state.entries.map(entry =>
-					entry.id === action.id ? { ...entry, text: entry.text + action.text } : entry
-				),
-			});
+		case "delta": {
+			let index = state.entries.findIndex(entry => entry.id === action.id);
+			let entry = state.entries[index];
+			if (!entry) return state;
+			let text = streamed(entry.text, action.text, action.at);
+			if (text === entry.text) return state;
+			let entries = [...state.entries];
+			entries[index] = { ...entry, text };
+			return withAnchor({ ...state, entries });
+		}
 		case "tool": {
 			let index = state.entries.findIndex(entry => entry.id === action.entryId);
 			if (index < 0) return state;
@@ -188,9 +227,16 @@ export function transcriptReducer(
 		case "removed": {
 			// A failed attempt a Retry replaced: its entries go, and with them the work it showed.
 			let gone = new Set(action.ids);
-			if (!state.entries.some(entry => gone.has(entry.id))) return state;
+			let known = new Set(state.removed);
+			let removed = action.ids.every(id => known.has(id))
+				? state.removed ?? []
+				: [...new Set([...known, ...action.ids])].slice(-REMOVED_KEPT);
+			if (!state.entries.some(entry => gone.has(entry.id))) {
+				return removed === state.removed ? state : { ...state, removed };
+			}
 			return {
 				...state,
+				removed,
 				entries: state.entries.filter(entry => !gone.has(entry.id)),
 				completedWork: state.completedWork.filter(item => !gone.has(item.anchorId)),
 				...(state.activeAnchorId && gone.has(state.activeAnchorId)

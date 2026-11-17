@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { ulid } from "@chopin/dialect";
 import * as Service from "../plan/service";
+import { appendEntries } from "./chronology";
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Server } from "bun";
 import type { SocketData } from "../wire";
@@ -106,7 +107,7 @@ export function createNotices({ now, announce }: {
 			ts: now(),
 			...(decision ? { decision: { ...decision } } : {}),
 		};
-		chat.entries.push(entry);
+		appendEntries(chat.entries, entry);
 		try {
 			await Service.persistExclusive(context.plan);
 		} catch (error) {

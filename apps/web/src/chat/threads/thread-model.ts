@@ -84,6 +84,7 @@ function applyInThreadFrame(
 					kind: "delta",
 					id: inner.id,
 					text: inner.text,
+					...(inner.at === undefined ? {} : { at: inner.at }),
 				}),
 			};
 		case "chat:tool":

@@ -80,6 +80,7 @@ import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./r
 import { withSessionContext } from "./session-context";
 import { TOOL_UNAVAILABLE, turnFailureOf } from "./turn-failure";
 import { retryTarget } from "./retry";
+import { appendEntries } from "./chronology";
 import { runDuration } from "./run-duration";
 import { READER_INSTRUCTIONS } from "./reaction-instructions";
 import type { InitiativeSchedule } from "./initiative-schedule";
@@ -749,7 +750,7 @@ function say(
 	room: string,
 	entry: Wire.Entry,
 ): Wire.Entry {
-	chat.entries.push(entry);
+	appendEntries(chat.entries, entry);
 	announce(server, room, entry);
 	return entry;
 }
@@ -1218,7 +1219,7 @@ export async function invoke(
 			text,
 			ts: now(),
 		};
-		chat.entries.push(entry);
+		appendEntries(chat.entries, entry);
 		try {
 			await context.persist();
 		} catch (error) {
@@ -1472,7 +1473,7 @@ async function processSend(
 			...withAttachments,
 			delivery: savedDelivery,
 		};
-		if (!context.commitRoomMessage) chat.entries.push(entry);
+		if (!context.commitRoomMessage) appendEntries(chat.entries, entry);
 		try {
 			if (context.commitRoomMessage) await context.commitRoomMessage(entry);
 			else await context.persist();
@@ -1512,7 +1513,7 @@ async function processSend(
 			text: "The agent is not running, so the plan has not been revised.",
 			ts: now(),
 		}];
-		chat.entries.push(...entries);
+		appendEntries(chat.entries, ...entries);
 		try {
 			await context.persist();
 		} catch {
@@ -1546,7 +1547,7 @@ async function processSend(
 			...withAttachments,
 			delivery: savedDelivery,
 		};
-		chat.entries.push(entry);
+		appendEntries(chat.entries, entry);
 		try {
 			await context.persist();
 		} catch {
@@ -1595,7 +1596,7 @@ async function processSend(
 			...withAttachments,
 			delivery: savedDelivery,
 		};
-		chat.entries.push(entry);
+		appendEntries(chat.entries, entry);
 		try {
 			await context.persist();
 		} catch {
@@ -1634,7 +1635,7 @@ async function processSend(
 	// The turn holds the Chat from here; people are told it is running once the machine has its prompt.
 	chat.busy = true;
 	chat.turn = begin(handle, chat.entries.length + 1);
-	chat.entries.push(entry);
+	appendEntries(chat.entries, entry);
 	try {
 		await context.persist();
 	} catch {
@@ -1804,7 +1805,7 @@ function postNotice(
 		ts: now(),
 		...(comment ? { comment } : {}),
 	};
-	chat.entries.push(entry);
+	appendEntries(chat.entries, entry);
 	return context.persist().then(() => {
 		announce(server, room, entry);
 	});
@@ -1846,7 +1847,7 @@ export function instruct(
 				text: "The agent is not running, so the plan has not been revised.",
 				ts: now(),
 			};
-			chat.entries.push(entry);
+			appendEntries(chat.entries, entry);
 			return context.persist().then(() => announce(server, room, entry));
 		}
 
@@ -2502,7 +2503,7 @@ async function publishReport(
 		return;
 	}
 	unsaved.delete(session);
-	chat.entries.push(...finished);
+	appendEntries(chat.entries, ...finished);
 	chat.runs = next;
 	for (let entry of finished) announce(server, room, entry);
 	state(chat, server, room);
@@ -3995,8 +3996,9 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 					...answeringReaction(chat),
 				} as Wire.Entry);
 			} else {
+				let at = entry.text.length;
 				entry.text += part.text;
-				broadcast(server, room, { kind: "chat:delta", ts: 0, id, text: part.text });
+				broadcast(server, room, { kind: "chat:delta", ts: 0, id, text: part.text, at });
 			}
 			responded(chat, server, room, part.text);
 			return;
@@ -4351,7 +4353,7 @@ function showImages(
 		?? chat.entries.find(item => item.id === chat.writing);
 	if (!entry) {
 		entry = { id: ulid(), author: { kind: "agent" }, text: "", ts: now() };
-		chat.entries.push(entry);
+		appendEntries(chat.entries, entry);
 	}
 	turn.entry = entry.id;
 	let before = entry.images?.length ?? 0;

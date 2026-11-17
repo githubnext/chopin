@@ -1278,7 +1278,7 @@ browser has it, in an outbox that sends it by itself, in order and once, when th
 is back, it says **Sending**; never waiting, queued or a clock. When the server refuses it because
 no machine took it or the running turn cannot take input mid-run, and the composer holds no newer
 draft, the message's words (with its mention, references and staged files) return to the composer
-draft, chopin says why in a row at the end of the transcript only that person sees (with _How
+draft, chopin says why in a row only that person sees, at the time it was said (with _How
 to fix_ where the machine has something to fix), so nothing typed is lost, and while Chopin works the composer's
 one button offers Stop so the person can stop Chopin and send it. When a newer draft was already
 typed, or another refusal turned the message down, it says **Couldn't send** on itself, with the
