@@ -37,7 +37,7 @@ import { rememberCheckout } from "../harness/atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
-import type { NewDocumentRequest, NewDocumentResult } from "../agent/new-documents";
+import type { NewDocumentRequest, NewDocumentResult, TurnDocuments } from "../agent/new-documents";
 import type { VisualAdmission } from "../agent/visual-admission";
 import type { ChildDocuments } from "./children";
 import * as Service from "../plan/service";
@@ -181,6 +181,8 @@ export type ActiveMemberRequest = {
 	turnId: string;
 	lifecycle: number;
 	focus?: Focus;
+	/** The documents this turn had the Planner create, counted for as long as the turn runs. */
+	documents?: TurnDocuments;
 };
 
 /** `retry` runs the message's turn again after it failed: the same message, once in context. */
@@ -2779,7 +2781,7 @@ export function documentRoom(context: Room): DocumentRoom {
 					(value): value is AbortSignal => !!value,
 				);
 				return context.createDocument!({
-					turnId: active.turnId,
+					turn: active.documents ??= { created: 0 },
 					creator: {
 						userId: active.userId,
 						handle: active.handle,

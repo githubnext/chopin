@@ -6,8 +6,9 @@
  * again for write access to the repository, as `chat:send` is; the Planner's credential never
  * authorizes a new document by itself. A retried call with the same key returns the document the
  * first call made, from the base that call recorded and outside the limits, and creates and starts
- * nothing; it only posts the Chat line if the first call could not save it. A document is stored
- * before its Chat line, the sidebar or its own Planner hear of it.
+ * nothing; it only posts the Chat line if the first call could not save it. A document is stored,
+ * with the creating document's model choice, before its Chat line, the sidebar or its own Planner
+ * hear of it.
  */
 import { deterministicChannelId } from "../channels/id";
 import { BRIEF, prepare } from "../mcp/create";
@@ -19,7 +20,7 @@ import type { InvokePlannerError } from "../mcp";
 import type { Brief, CreateDocumentInput, CreationOrigin } from "../mcp/create";
 import type { CreatedDocument, DocumentCreator, PlannerInvocation } from "../mcp/hosted";
 import type { Repository as GitHubRepository } from "../github/client";
-import type { ChannelRecord } from "../storage/model";
+import type { ChannelRecord, CreateChannel } from "../storage/model";
 import type { Issue } from "@chopin/dialect";
 
 export const MAX_DOCUMENTS_PER_TURN = 10;
@@ -96,9 +97,11 @@ export function newDocumentArguments(raw: unknown): NewDocumentArguments {
 	};
 }
 
+/** The documents one turn has created; it lives exactly as long as the turn that holds it. */
+export type TurnDocuments = { created: number };
+
 /** How many documents one turn, and one person in an hour, may create. */
 export class NewDocumentLimits {
-	#turns = new Map<string, number>();
 	#hours = new Map<string, number[]>();
 	#now: () => number;
 
@@ -107,25 +110,20 @@ export class NewDocumentLimits {
 	}
 
 	/** Counts one for the turn and the person, or says which limit is spent. */
-	take(turnId: string, userId: string): "turn" | "hour" | undefined {
+	take(turn: TurnDocuments, userId: string): "turn" | "hour" | undefined {
 		let now = this.#now();
 		let recent = (this.#hours.get(userId) ?? []).filter(at => now - at < HOUR_MS);
 		this.#hours.set(userId, recent);
-		if ((this.#turns.get(turnId) ?? 0) >= MAX_DOCUMENTS_PER_TURN) return "turn";
+		if (turn.created >= MAX_DOCUMENTS_PER_TURN) return "turn";
 		if (recent.length >= MAX_DOCUMENTS_PER_HOUR) return "hour";
 		recent.push(now);
-		this.#turns.set(turnId, (this.#turns.get(turnId) ?? 0) + 1);
-		// A turn's count is kept only as long as an hour's.
-		let expired = setTimeout(() => this.#turns.delete(turnId), HOUR_MS);
-		(expired as { unref?: () => void }).unref?.();
+		turn.created++;
 		return undefined;
 	}
 
 	/** Gives back the latest one taken, for a call that created nothing. */
-	refund(turnId: string, userId: string): void {
-		let count = this.#turns.get(turnId) ?? 0;
-		if (count <= 1) this.#turns.delete(turnId);
-		else this.#turns.set(turnId, count - 1);
+	refund(turn: TurnDocuments, userId: string): void {
+		turn.created = Math.max(0, turn.created - 1);
 		let recent = this.#hours.get(userId);
 		recent?.pop();
 		if (recent?.length === 0) this.#hours.delete(userId);
@@ -135,7 +133,8 @@ export class NewDocumentLimits {
 export type NewDocumentRequest = {
 	/** The document whose turn asked. */
 	sourceId: string;
-	turnId: string;
+	/** The asking turn's own count, held by that turn and gone with it. */
+	turn: TurnDocuments;
 	creator: { userId: string; handle: string; claimantSessionId?: string };
 	arguments: NewDocumentArguments;
 	/**
@@ -172,8 +171,11 @@ export type NewDocumentDeps = {
 		input: CreateDocumentInput,
 		instructed: boolean,
 	) => Promise<CreatedDocument>;
-	/** Gives the new document the creating document's model and thinking level. */
-	copyModel: (from: string, to: string, userId: string) => Promise<void>;
+	/**
+	 * The creating document's model and thinking level, chosen again by the creator, to be stored
+	 * with the new document in the transaction that creates it; undefined when it has none.
+	 */
+	modelChoice: (from: string, userId: string) => Promise<CreateChannel["modelChoice"]>;
 	invoke: (input: PlannerInvocation) => Promise<InvokePlannerError | undefined>;
 	/** What a refused instruction says, for refusals that have their own words. */
 	refusal?: (
@@ -236,7 +238,7 @@ export async function createNewDocument(
 	deps: NewDocumentDeps,
 	request: NewDocumentRequest,
 ): Promise<NewDocumentResult> {
-	let { creator, sourceId, turnId } = request;
+	let { creator, sourceId, turn } = request;
 	let args = request.arguments;
 	let source = await deps.channel(sourceId);
 	if (!source || source.archivedAt || deps.deleting(sourceId) || source.parentChannelId) {
@@ -278,7 +280,7 @@ export async function createNewDocument(
 	if ("issues" in prepared) return refused("invalid-document", prepared.issues);
 	let counted = !earlier;
 	if (counted) {
-		let limit = deps.limits.take(turnId, creator.userId);
+		let limit = deps.limits.take(turn, creator.userId);
 		if (limit) return refused(`${limit}-limit`);
 	}
 	let outcome: CreatedDocument;
@@ -292,16 +294,17 @@ export async function createNewDocument(
 					return !!current
 						&& writes(await deps.repository(current, owner, name), source.repositoryId);
 				},
+				modelChoice: () => deps.modelChoice(sourceId, creator.userId),
 				...(request.signal ? { signal: request.signal } : {}),
 			},
 			prepared.input,
 			args.instruction !== undefined,
 		);
 	} catch (err) {
-		if (counted) deps.limits.refund(turnId, creator.userId);
+		if (counted) deps.limits.refund(turn, creator.userId);
 		throw err;
 	}
-	if (counted && outcome.kind !== "created") deps.limits.refund(turnId, creator.userId);
+	if (counted && outcome.kind !== "created") deps.limits.refund(turn, creator.userId);
 	if (outcome.kind === "conflict") return refused("idempotency-conflict");
 	if (outcome.kind === "title-taken") return refused("title-taken");
 	if (outcome.kind === "forbidden") return refused("repository-forbidden");
@@ -333,9 +336,6 @@ export async function createNewDocument(
 				+ "was created or started.",
 		};
 	}
-	await deps.copyModel(sourceId, channel.id, creator.userId).catch(err =>
-		console.error("[chat] could not give a new document its model choice:", err)
-	);
 	if (args.instruction === undefined) {
 		return {
 			ok: true,

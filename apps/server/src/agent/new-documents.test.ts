@@ -15,7 +15,7 @@ import type { AuthenticatedSession } from "../auth/session";
 import type { Repository } from "../github/client";
 import type { PlannerInvocation } from "../mcp/hosted";
 import type { InvokePlannerError } from "../mcp";
-import type { NewDocumentArguments, NewDocumentDeps } from "./new-documents";
+import type { NewDocumentArguments, NewDocumentDeps, TurnDocuments } from "./new-documents";
 import type { CreationOrigin } from "../mcp/create";
 
 const NOW = new Date("2026-11-16T12:00:00.000Z");
@@ -66,9 +66,12 @@ async function fixture(options: {
 	invoked?: InvokePlannerError;
 	archived?: boolean;
 	unsavedLines?: number;
+	chosen?: { model: string; modelName: string; thinkingLevel: string };
 } = {}) {
 	let storage = new MemoryStorage();
 	await storage.users.put({ id: "U_mona", login: "mona", avatarUrl: "", now: NOW });
+	await storage.users.put({ id: "U_ana", login: "ana", avatarUrl: "", now: NOW });
+	let writer = { lease: (await storage.leases.acquire("writer", "test", 60_000))! };
 	let source = await storage.channels.create({
 		id: crypto.randomUUID(),
 		repositoryId: "R_app",
@@ -79,6 +82,14 @@ async function fixture(options: {
 		now: NOW,
 	});
 	if (options.archived) await storage.channels.archive({ id: source.id, now: NOW });
+	if (options.chosen) {
+		await storage.plannerModelChoices.put(writer.lease, {
+			channelId: source.id,
+			...options.chosen,
+			userId: "U_ana",
+			updatedAt: NOW,
+		});
+	}
 	let events: string[] = [];
 	let invocations: PlannerInvocation[] = [];
 	let announced: Array<{ id: string; title: string; path: string }> = [];
@@ -113,11 +124,24 @@ async function fixture(options: {
 				creator,
 				input,
 			),
-		copyModel: async (from, to, userId) => {
-			events.push(`model:${from === source.id}:${to !== source.id}:${userId}`);
+		modelChoice: async (from, userId) => {
+			events.push(`model:${from === source.id}:${userId}`);
+			let choice = await storage.plannerModelChoices.get(from);
+			if (!choice) return undefined;
+			return {
+				lease: writer.lease,
+				choice: {
+					model: choice.model!,
+					modelName: choice.modelName!,
+					thinkingLevel: choice.thinkingLevel!,
+					userId,
+					updatedAt: NOW,
+				},
+			};
 		},
 		invoke: async input => {
-			events.push("invoke");
+			let inherited = await storage.plannerModelChoices.get(input.channel.id);
+			events.push(inherited ? `invoke:${inherited.model}` : "invoke");
 			invocations.push(input);
 			return options.invoked;
 		},
@@ -125,10 +149,11 @@ async function fixture(options: {
 		appOrigin: "https://chopin.test",
 		limits: new NewDocumentLimits(() => NOW.getTime()),
 	};
+	let turns = new Map<string, TurnDocuments>();
 	let request = (value: NewDocumentArguments = args(), turnId = "turn-1") =>
 		createNewDocument(deps, {
 			sourceId: source.id,
-			turnId,
+			turn: turns.get(turnId) ?? turns.set(turnId, { created: 0 }).get(turnId)!,
 			creator: { userId: "U_mona", handle: "mona", claimantSessionId: "session-U_mona" },
 			arguments: value,
 			announce: async document => {
@@ -141,7 +166,18 @@ async function fixture(options: {
 				announced.push(document);
 			},
 		});
-	return { storage, source, deps, events, invocations, announced, created, head, request };
+	return {
+		storage,
+		source,
+		deps,
+		events,
+		invocations,
+		announced,
+		created,
+		head,
+		writer,
+		request,
+	};
 }
 
 describe("create_document arguments", () => {
@@ -164,19 +200,33 @@ describe("new document limits", () => {
 	test("bound one turn and one person's hour, and give back refunds", () => {
 		let now = 0;
 		let limits = new NewDocumentLimits(() => now);
+		let turnA = { created: 0 };
 		for (let index = 0; index < MAX_DOCUMENTS_PER_TURN; index++) {
-			expect(limits.take("turn-a", "U_mona")).toBeUndefined();
+			expect(limits.take(turnA, "U_mona")).toBeUndefined();
 		}
-		expect(limits.take("turn-a", "U_mona")).toBe("turn");
-		limits.refund("turn-a", "U_mona");
-		expect(limits.take("turn-a", "U_mona")).toBeUndefined();
+		expect(limits.take(turnA, "U_mona")).toBe("turn");
+		limits.refund(turnA, "U_mona");
+		expect(limits.take(turnA, "U_mona")).toBeUndefined();
 		let turn = 0;
-		while (limits.take(`turn-${++turn}`, "U_mona") === undefined && turn < 100) {}
-		expect(limits.take("turn-next", "U_mona")).toBe("hour");
-		expect(limits.take("turn-next", "U_other")).toBeUndefined();
+		while (limits.take({ created: 0 }, "U_mona") === undefined && ++turn < 100) {}
+		let next = { created: 0 };
+		expect(limits.take(next, "U_mona")).toBe("hour");
+		expect(limits.take(next, "U_other")).toBeUndefined();
 		now += 60 * 60_000;
-		expect(limits.take("turn-next", "U_mona")).toBeUndefined();
+		expect(limits.take(next, "U_mona")).toBeUndefined();
 		expect(MAX_DOCUMENTS_PER_HOUR).toBeGreaterThan(MAX_DOCUMENTS_PER_TURN);
+	});
+
+	test("hold a turn's count for as long as the turn runs, however long that is", () => {
+		let now = 0;
+		let limits = new NewDocumentLimits(() => now);
+		let turn = { created: 0 };
+		for (let index = 0; index < MAX_DOCUMENTS_PER_TURN; index++) {
+			expect(limits.take(turn, "U_mona")).toBeUndefined();
+		}
+		now += 3 * 60 * 60_000;
+		expect(limits.take(turn, "U_mona")).toBe("turn");
+		expect(limits.take({ created: 0 }, "U_mona")).toBeUndefined();
 	});
 });
 
@@ -198,9 +248,9 @@ describe("createNewDocument", () => {
 		expect(result.instruction).toEqual({ started: true });
 		expect(context.events).toEqual([
 			"head:trunk",
+			"model:true:U_mona",
 			"sidebar:in-use",
 			"announce",
-			"model:true:true:U_mona",
 			"invoke",
 		]);
 		expect(context.announced).toEqual([{
@@ -233,7 +283,7 @@ describe("createNewDocument", () => {
 		let result = await context.request();
 		expect(result.ok).toBe(true);
 		expect(context.events).not.toContain("head:trunk");
-		expect(context.events).toEqual(["sidebar:listed", "announce", "model:true:true:U_mona"]);
+		expect(context.events).toEqual(["model:true:U_mona", "sidebar:listed", "announce"]);
 	});
 
 	test("a retry with the same key creates and starts nothing again", async () => {
@@ -314,6 +364,65 @@ describe("createNewDocument", () => {
 		expect(context.announced).toHaveLength(1);
 		expect(context.created).toHaveLength(1);
 		expect(context.invocations).toHaveLength(1);
+	});
+
+	test("stores the creating document's model choice with the new document before its Planner starts", async () => {
+		let context = await fixture({
+			chosen: { model: "acme/large", modelName: "Large", thinkingLevel: "high" },
+		});
+		let result = await context.request(args({ instruction: "Start." }));
+		if (!result.ok) throw new Error(result.message);
+		expect(await context.storage.plannerModelChoices.get(result.document.id)).toEqual({
+			channelId: result.document.id,
+			model: "acme/large",
+			modelName: "Large",
+			thinkingLevel: "high",
+			userId: "U_mona",
+			updatedAt: NOW,
+		});
+		expect(context.events.at(-1)).toBe("invoke:acme/large");
+		expect(result.instruction).toEqual({ started: true });
+	});
+
+	test("a model choice that can't be stored creates nothing, and the retry creates the document with it", async () => {
+		let context = await fixture({
+			chosen: { model: "acme/large", modelName: "Large", thinkingLevel: "high" },
+		});
+		await context.storage.leases.release(context.writer.lease);
+		await expect(context.request(args({ instruction: "Start." }))).rejects.toThrow(
+			"needs the writer lease",
+		);
+		expect(context.created).toEqual([]);
+		expect(context.invocations).toEqual([]);
+		context.writer.lease = (await context.storage.leases.acquire("writer", "test", 60_000))!;
+		let retried = await context.request(args({ instruction: "Start." }));
+		if (!retried.ok) throw new Error(retried.message);
+		expect(retried.replayed).toBeUndefined();
+		expect(await context.storage.plannerModelChoices.get(retried.document.id)).toMatchObject({
+			model: "acme/large",
+			thinkingLevel: "high",
+		});
+		expect(context.events.at(-1)).toBe("invoke:acme/large");
+	});
+
+	test("a retry leaves a model chosen in the new document since", async () => {
+		let context = await fixture({
+			chosen: { model: "acme/large", modelName: "Large", thinkingLevel: "high" },
+		});
+		let first = await context.request();
+		if (!first.ok) throw new Error(first.message);
+		let id = first.document.id;
+		let later = { channelId: id, model: "acme/small", userId: "U_ana", updatedAt: NOW };
+		await context.storage.plannerModelChoices.put(context.writer.lease, later);
+		expect(await context.request()).toMatchObject({ ok: true, replayed: true });
+		expect(await context.storage.plannerModelChoices.get(id)).toEqual(later);
+		await context.storage.plannerModelChoices.put(context.writer.lease, {
+			channelId: id,
+			userId: "U_ana",
+			updatedAt: NOW,
+		});
+		expect(await context.request()).toMatchObject({ ok: true, replayed: true });
+		expect(await context.storage.plannerModelChoices.get(id)).toBeUndefined();
 	});
 
 	test("a different draft under the same key is a conflict", async () => {

@@ -97,7 +97,7 @@ describe("a Planner turn creating a document", () => {
 		let result = await documentRoom(context).createDocument!(draft);
 		expect(result).toMatchObject({ ok: true });
 		expect(requests).toMatchObject([{
-			turnId: "turn-1",
+			turn: { created: 0 },
 			creator: { userId: "U_ana", handle: "ana", claimantSessionId: "session-ana" },
 			arguments: draft,
 		}]);
@@ -113,6 +113,18 @@ describe("a Planner turn creating a document", () => {
 		});
 		expect(order).toEqual(["persisted", "published:chat:message"]);
 		expect(frames.at(-1)).toMatchObject({ kind: "chat:message", entry: { id: line.id } });
+	});
+
+	it("counts every call of one turn together, and a new turn afresh", async () => {
+		let { chat, context, requests } = room();
+		let tools = documentRoom(context);
+		await tools.createDocument!(draft);
+		await tools.createDocument!(draft);
+		expect(requests[1]!.turn).toBe(requests[0]!.turn);
+		chat.activeRequest = { ...chat.activeRequest!, turnId: "turn-2", documents: undefined };
+		chat.turn = { ...chat.turn!, id: "turn-2" };
+		await tools.createDocument!(draft);
+		expect(requests[2]!.turn).not.toBe(requests[0]!.turn);
 	});
 
 	it("is refused in a turn nobody typed", async () => {

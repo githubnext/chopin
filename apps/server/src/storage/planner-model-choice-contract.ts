@@ -100,6 +100,44 @@ export function plannerModelChoiceContract(name: string, factory: StorageFactory
 			}
 		});
 
+		test("is stored with a document created with it, and refused with the document for a stale writer", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId, repositoryId, lease } = await userAndChannel(storage);
+				let created = {
+					repositoryId,
+					repositoryOwner: "octo-org",
+					repositoryName: "score",
+					createdBy: userId,
+					now: AT,
+				};
+				let choice = { model: "acme/large", modelName: "Large", userId, updatedAt: AT };
+				let channelId = id("channel");
+				await storage.channels.create({
+					...created,
+					id: channelId,
+					title: "Settings page",
+					modelChoice: { lease, choice },
+				});
+				expect(await storage.plannerModelChoices.get(channelId)).toEqual({ channelId, ...choice });
+
+				await storage.leases.release(lease);
+				let refusedId = id("channel");
+				let stale = await storage.channels.create({
+					...created,
+					id: refusedId,
+					title: "Billing page",
+					modelChoice: { lease, choice },
+				}).then(() => undefined, err => err);
+				expect(stale).toMatchObject({ failure: "unavailable" });
+				expect(stale).toBeInstanceOf(StorageError);
+				expect(await storage.channels.get(refusedId)).toBeUndefined();
+				expect(await storage.plannerModelChoices.get(refusedId)).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
 		test("goes with its document", async () => {
 			let storage = await openedStorage(factory);
 			try {

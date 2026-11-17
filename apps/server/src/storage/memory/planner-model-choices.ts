@@ -28,6 +28,11 @@ export class MemoryPlannerModelChoiceStore implements PlannerModelChoiceStore {
 		}
 		this.#choices.set(input.channelId, copy(input));
 	}
+	/** Stores the choice of a document being created, whose writer and person are checked. */
+	create(input: PlannerModelChoice) {
+		if (input.model === undefined && input.thinkingLevel === undefined) return;
+		this.#choices.set(input.channelId, copy(input));
+	}
 	async get(channelId: string) {
 		let found = this.#choices.get(channelId);
 		return found && copy(found);

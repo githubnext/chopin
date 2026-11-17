@@ -313,6 +313,8 @@ export type CreateChannel =
 		now: Date;
 		/** A complete revision-zero checkpoint published in the channel's creation transaction. */
 		initial?: InitialChannel;
+		/** A Planner model choice stored in the creation transaction, fenced by the writer lease. */
+		modelChoice?: { lease: Lease; choice: Omit<PlannerModelChoice, "channelId"> };
 	};
 
 export type RenameChannel = {
