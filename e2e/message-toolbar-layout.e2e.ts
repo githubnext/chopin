@@ -1,8 +1,9 @@
 /**
  * Where the message toolbar, its row highlight and the emoji picker sit, on a desktop and on a phone:
- * the highlight shades the message and leaves its avatar, name and time drawn, a long press brings
- * up a toolbar that covers no text and stays in the part of the transcript that is on screen, and
- * the picker stays inside the viewport once its emoji have loaded.
+ * the highlight shades the message and leaves its avatar, name and time drawn, the bar stands on the
+ * row's top edge over none of the row and leaves with that edge, a long press brings up a toolbar
+ * that covers no text and stays in the part of the transcript that is on screen, and the picker stays
+ * inside the viewport once its emoji have loaded.
  */
 import { expect, test } from "./room";
 
@@ -158,6 +159,49 @@ async function coveredText(bar: Locator, within?: string): Promise<string[]> {
 	}, within);
 }
 
+/** What of the message's own row the bar covers: a line of its text or of its name line. */
+async function coveredOwnText(target: Locator): Promise<string[]> {
+	return target.evaluate(body => {
+		let box = body.querySelector(".chat-message-toolbar")!.getBoundingClientRect();
+		let head = body.previousElementSibling?.matches("[data-chat-head]")
+			? body.previousElementSibling
+			: null;
+		let found: string[] = [];
+		for (let root of [head, body]) {
+			if (!root) continue;
+			let walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+			while (walker.nextNode()) {
+				let node = walker.currentNode as Text;
+				let parent = node.parentElement;
+				if (
+					!node.textContent?.trim() || !parent
+					|| parent.closest('.sr-only, [data-slot="message-actions"], .chat-gutter-time')
+				) continue;
+				let range = document.createRange();
+				range.selectNodeContents(node);
+				for (let rect of range.getClientRects()) {
+					let across = Math.min(rect.right, box.right) - Math.max(rect.left, box.left);
+					let down = Math.min(rect.bottom, box.bottom) - Math.max(rect.top, box.top);
+					if (rect.width > 1 && rect.height > 1 && across > 0.5 && down > 0.5) {
+						found.push(node.textContent.trim().slice(0, 40));
+					}
+				}
+			}
+		}
+		return found;
+	});
+}
+
+/** The top of the row's first line: its name line where it heads its group, else its text. */
+async function firstLineTop(target: Locator): Promise<number> {
+	return target.evaluate(element => {
+		let head = element.previousElementSibling?.matches("[data-chat-head]")
+			? element.previousElementSibling
+			: element;
+		return head.getBoundingClientRect().top;
+	});
+}
+
 async function hold(page: Page, x: number, y: number): Promise<void> {
 	let session = await page.context().newCDPSession(page);
 	await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
@@ -215,9 +259,9 @@ test("the row highlight shades a message and leaves its avatar, name and time dr
 	expect(focused.avatar).toBeLessThan(150);
 });
 
-test("the toolbar floats as Slack's does: one box over the row's top edge at its right, 16 px above it and inside the pane, moving nothing, with nothing set aside for it", async ({ join, seed }) => {
-	// m5 follows m4 in its group, so the bar reaches down beside its first line, which runs the whole
-	// width of the message as Slack's does: the bar may cover its end while it shows.
+test("the toolbar floats as Slack's does: one box on the row's top edge at its right, above its first line and inside the pane, covering none of the row, moving nothing, with nothing set aside for it", async ({ join, seed }) => {
+	// m5 follows m4 in its group and its first line runs the whole width of the message: the bar stands
+	// above that line, over the end of m4, and covers none of m5.
 	let long = `${PARAGRAPH} ${PARAGRAPH}`;
 	await seed("# Layout\n", {
 		transcript: transcript().map(item => item.id === "m5" ? { ...item, text: long } : item),
@@ -248,7 +292,7 @@ test("the toolbar floats as Slack's does: one box over the row's top edge at its
 			return { top: box.top + Number.parseFloat(style.top), right };
 		});
 		let box = (await bar.boundingBox())!;
-		// Slack's `c-message_actions__container` stands 16px above the message's top edge, inside its right.
+		// Slack's `c-message_actions__container` stands on the message's top edge, inside its right.
 		// The row is shaded on over the 8px before the document's sheet, where Resize chat is taken;
 		// the bar stands clear of that grip, 12px in from where it begins.
 		let grip = await page.getByRole("separator", { name: "Resize chat" }).evaluate(handle =>
@@ -260,8 +304,10 @@ test("the toolbar floats as Slack's does: one box over the row's top edge at its
 		expect(box.height).toBe(36);
 		let pane = (await scroller(page).boundingBox())!;
 		expect(box.y, `${id} is inside the pane`).toBeGreaterThanOrEqual(pane.y);
-		// A message that heads its group has its name line under the bar; one that continues it does not.
-		if (id !== "m5") expect(await coveredText(bar), `${id} covers no text`).toEqual([]);
+		expect(box.y + box.height, `${id} stands above the row's first line`).toBeLessThanOrEqual(
+			(await firstLineTop(target)) + 0.5,
+		);
+		expect(await coveredOwnText(target), `${id} covers none of its row`).toEqual([]);
 	}
 	// The first line of a message that continues its group is as wide as its other lines: it wraps at
 	// the text column's end, not where the bar would stand, shown or not.
@@ -522,64 +568,55 @@ test("on a phone a reaction pill is a 44 px target in both directions, and a tap
 	await expect(target.getByRole("button", { name: "You reacted with ❓" })).toBeVisible();
 });
 
-test("on a desktop the toolbar of a message taller than the viewport stays in the visible part of it while the pointer is on it", async ({ join, seed }) => {
-	await seed("# Layout\n", { transcript: transcript() });
-	let page = await join("ana");
-	let target = message(page, "m6");
-	let view = (await scroller(page).boundingBox())!;
-	await scroller(page).evaluate((element, wanted) => {
-		let top = element.querySelector('[data-chat-message-id="m6"]')!.getBoundingClientRect().top
+/** Scroll so that the message's top edge is `hidden` px above the pane's top. */
+async function hideTop(page: Page, id: string, hidden: number): Promise<void> {
+	await scroller(page).evaluate((element, { id, hidden }) => {
+		let top = element.querySelector(`[data-chat-message-id="${id}"]`)!.getBoundingClientRect().top
 			- element.getBoundingClientRect().top;
-		element.scrollTop += top + wanted;
-	}, 80);
-	expect((await target.boundingBox())!.y).toBeLessThan(view.y - 40);
-	await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
-	let bar = toolbar(target);
-	await expect(bar).toHaveCSS("opacity", "1");
-	await expect.poll(async () => (await bar.boundingBox())!.y).toBeGreaterThanOrEqual(view.y);
-	let barBox = (await bar.boundingBox())!;
-	expect(barBox.y + barBox.height).toBeLessThanOrEqual(view.y + view.height);
-	for (let button of await bar.getByRole("button").all()) {
-		let hit = await button.evaluate(element => {
-			let box = element.getBoundingClientRect();
-			let at = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-			return !!at && element.contains(at);
-		});
-		expect(hit).toBe(true);
-	}
-	let first = (await bar.getByRole("button").first().boundingBox())!;
-	await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2, { steps: 12 });
-	await expect(bar).toHaveCSS("opacity", "1");
-});
+		element.scrollTop += top + hidden;
+	}, { id, hidden });
+}
 
-test("on a desktop the toolbar kept in view on a message taller than the viewport floats over its text, which keeps the message's whole width, at the middle, near the top and near the end", async ({ join, seed }) => {
+async function expectNoBarInView(page: Page, target: Locator, label: string): Promise<void> {
+	let view = (await scroller(page).boundingBox())!;
+	await expect.poll(
+		() => target.evaluate(element => getComputedStyle(element, "::before").opacity),
+		{ message: `${label}: the row under the pointer is shaded` },
+	).toBe("1");
+	let bar = (await toolbar(target).boundingBox())!;
+	expect(bar.y + bar.height, `${label}: the bar left the pane with the row's top edge`)
+		.toBeLessThanOrEqual(view.y);
+	let met = await toolbar(target).evaluate(element =>
+		[...element.querySelectorAll("button")].filter(button => {
+			let box = button.getBoundingClientRect();
+			let hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+			return !!hit && button.contains(hit);
+		}).length
+	);
+	expect(met, `${label}: no button is what the pointer meets`).toBe(0);
+}
+
+test("on a desktop a message taller than the viewport whose top edge is scrolled out shows no toolbar over its text, at the middle, near the top and near the end, and its text keeps the message's whole width", async ({ join, seed }) => {
 	await seed("# Layout\n", { transcript: transcript() });
 	let page = await join("ana");
 	let target = message(page, "m6");
-	let bar = toolbar(target);
 	let view = (await scroller(page).boundingBox())!;
 	expect((await target.boundingBox())!.height).toBeGreaterThan(view.height);
 	// As Slack's: nothing is set aside beside the text for the bar, so a tall message's paragraphs are
-	// as wide as a short one's, before the pointer arrives and while the bar is shown.
+	// as wide as a short one's, before the pointer arrives and while it is on the message.
 	let short = await textWidths(message(page, "m2"));
 	expect(await textWidths(target)).toEqual(Array(10).fill(short[0]));
 	for (let hidden of [80, 300, 520]) {
-		await scroller(page).evaluate((element, wanted) => {
-			let top = element.querySelector('[data-chat-message-id="m6"]')!.getBoundingClientRect().top
-				- element.getBoundingClientRect().top;
-			element.scrollTop += top + wanted;
-		}, hidden);
+		await hideTop(page, "m6", hidden);
 		await page.mouse.move(0, 0);
 		await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
-		await expect(bar, String(hidden)).toHaveCSS("opacity", "1");
-		await expect.poll(async () => (await bar.boundingBox())!.y, { message: String(hidden) })
-			.toBeGreaterThanOrEqual(view.y);
+		await expectNoBarInView(page, target, String(hidden));
 		await expect.poll(() => textWidths(target), { message: String(hidden) })
 			.toEqual(Array(10).fill(short[0]));
 	}
 });
 
-test("on a desktop a message that is 13 px shorter than the pane, scrolled until its top is 78 px above it, still has its toolbar in the pane, over text that keeps its whole width", async ({ join, seed }) => {
+test("on a desktop a message that is 13 px shorter than the pane, scrolled until its top is 78 px above it, shows no toolbar over its text, and its toolbar is back above it once its top edge is in view", async ({ join, seed }) => {
 	let almost = [
 		{ id: "n1", author: { kind: "member", handle: "ben" }, text: "Before it.", ts: 1_700_000_001 },
 		{
@@ -607,24 +644,26 @@ test("on a desktop a message that is 13 px shorter than the pane, scrolled until
 		width: size.width,
 		height: Math.round(size.height + box!.height + 13 - view!.height),
 	});
-	// The pane is 13 px taller than the message, whose bar hangs above its top.
 	await expect.poll(async () => Math.round((await scroller(page).boundingBox())!.height))
 		.toBe(Math.round(box!.height + 13));
 	let pane = (await scroller(page).boundingBox())!;
-	await scroller(page).evaluate((element, wanted) => {
-		let top = element.querySelector('[data-chat-message-id="n2"]')!.getBoundingClientRect().top
-			- element.getBoundingClientRect().top;
-		element.scrollTop += top + wanted;
-	}, 78);
+	await hideTop(page, "n2", 78);
 	let seen = (await target.boundingBox())!;
 	expect(Math.round(pane.y - seen.y)).toBe(78);
 
 	await page.mouse.move(0, 0);
 	await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
-	await expect(bar).toHaveCSS("opacity", "1");
-	await expect.poll(async () => (await bar.boundingBox())!.y).toBeGreaterThanOrEqual(pane.y);
+	await expectNoBarInView(page, target, "top 78 px out");
 	let whole = (await textWidths(message(page, "n1")))[0];
 	expect(await textWidths(target)).toEqual(Array(5).fill(whole));
+
+	await hideTop(page, "n2", -100);
+	await page.mouse.move(0, 0);
+	await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
+	await expect(bar).toHaveCSS("opacity", "1");
+	let shownBar = (await bar.boundingBox())!;
+	expect(shownBar.y).toBeGreaterThanOrEqual(pane.y);
+	expect(await coveredOwnText(target)).toEqual([]);
 	let first = (await bar.getByRole("button").first().boundingBox())!;
 	await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2, { steps: 12 });
 	await expect(bar).toHaveCSS("opacity", "1");

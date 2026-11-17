@@ -130,7 +130,7 @@ test("a code block is as wide as the message's text, in a message taller than th
 	);
 	expect(new Set(widths).size).toBe(1);
 	expect(await shortfalls(chat)).toEqual([]);
-	// With the pointer on it and its toolbar kept in view over it, nothing moves.
+	// With the pointer on it, nothing moves.
 	await reply(chat).hover();
 	expect(await shortfalls(chat)).toEqual([]);
 
