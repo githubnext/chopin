@@ -1622,8 +1622,17 @@ async function processSend(
 		let following = !canSteer(context) && !!chat.preempting && !!context.steers?.();
 		if (!canSteer(context)) {
 			// A stopping process starts no turn, and says nothing: the browser sends the message again
-			// to the next one.
-			if (startsHeld || chat.closed) return refuseClosed(ws, msg.rid);
+			// to the next one. A turn that is still running on a harness that takes no input mid-run is
+			// refused as usual, since the process waits for that turn before it hands over.
+			if (
+				chat.closed
+				|| (
+					startsHeld
+					&& (!chat.steering || !!chat.turnController?.signal.aborted || !!chat.preempting)
+				)
+			) {
+				return refuseClosed(ws, msg.rid);
+			}
 			if (!following) {
 				// A harness that takes no input mid-run never will.
 				refusedWhileRunning(context);

@@ -196,6 +196,21 @@ test("a harness that takes no input mid-run refuses the message, naming how to a
 	expect(h.chat.entries.map(entry => entry.text)).toEqual(["draft it"]);
 	expect(h.chat.waiting).toEqual([]);
 	expect(h.steered).toEqual([]);
+	// Even once the process is stopping and waiting for the running turn to end, a message sent to
+	// that turn is refused with the same words rather than left silent in the browser's outbox.
+	let duringDrain: Frame[] = [];
+	let drainWarned = spyOn(console, "warn").mockImplementation(() => {});
+	Chat.holdStarts();
+	try {
+		await Chat.send(h.context, speaking("bo", duringDrain), member("@chopin while draining"));
+	} finally {
+		Chat.holdStarts(false);
+		drainWarned.mockRestore();
+	}
+	expect(duringDrain).toEqual([
+		expect.objectContaining({ kind: "session:error", message: CANNOT, code: "planner-busy" }),
+	]);
+	expect(saved).toBe(0);
 	h.emit("session.idle");
 	await until(() => !h.chat.busy);
 	expect(h.prompts).toHaveLength(1);
