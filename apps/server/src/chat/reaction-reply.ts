@@ -5,7 +5,7 @@ import type { Chat as Wire } from "@chopin/protocol";
 import { actor as actorOf } from "./initiative";
 import { classify, type ReactionIntent, type ReactionItem, type Reading } from "./reaction-intent";
 import type { Reacted } from "./reactions";
-import { full, instruct, jobReady, type MemberEntry, type Room } from "./service";
+import { full, instruct, jobReady, type MemberEntry, type Room, startsAreHeld } from "./service";
 
 export const DEBOUNCE_MS = 5_000;
 const BATCH_SLACK_MS = 1_000;
@@ -253,7 +253,9 @@ export function createResponder(
 				return release();
 			}
 			let answerIn = candidate.thread?.answerIn;
-			if (answerIn && (closed || chat.closed || !await ready(context))) return release();
+			if (answerIn && (closed || chat.closed || startsAreHeld() || !await ready(context))) {
+				return release();
+			}
 			// A Chat message is answered in its thread, which is started for it if it has none.
 			let target = answerIn ? await answerIn() : context;
 			if (!target || closed || chat.closed || target.chat.closed) return release();

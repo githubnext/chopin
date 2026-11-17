@@ -277,6 +277,11 @@ export function holdStarts(held = true): void {
 	startsHeld = held;
 }
 
+/** Whether the process has stopped starting turns. */
+export function startsAreHeld(): boolean {
+	return startsHeld;
+}
+
 /**
  * What a Chat that has closed says to a request. A process that is stopping says nothing at all:
  * the request was not taken, its browser keeps it and sends it again, with the same id, to the
