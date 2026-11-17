@@ -5,7 +5,7 @@ import { MAX_LINK_MESSAGE_BYTES, MAX_LINK_NOTE_LENGTH, parseClientMessage } from
 
 import type { ServerWebSocket } from "bun";
 import type { AgentHandlers, HostToolResult, TurnContext } from "./client";
-import type { ClientMessage, ClientMessageOf, ServerMessage } from "./protocol";
+import type { ClientMessage, ClientMessageOf, ServerMessage, ServerMessageOf } from "./protocol";
 
 let stops: Array<() => unknown> = [];
 afterEach(async () => {
@@ -525,6 +525,48 @@ describe("Agent connection client", () => {
 			ok: true,
 		});
 		expect(steered).toEqual(["@bo: Also X"]);
+	});
+
+	it("asks for session-choice only when told to, and hands a session's start its chosen model", async () => {
+		let capabilities = {
+			models: { available: [{ id: "acme/large", name: "Large", thinkingLevels: ["high"] }] },
+		};
+		let plain = fakeServer();
+		let unasked = await connectAgent({
+			url: plain.url,
+			token: "t",
+			document: "d",
+			handlers: { turn() {} },
+			capabilities,
+		});
+		stops.push(() => unasked.detach());
+		expect(plain.asked[0]).toContain("capability-catalog");
+		expect(plain.asked[0]).not.toContain("session-choice");
+
+		let server = fakeServer({ features: ["capability-catalog", "session-choice"] });
+		let started = Promise.withResolvers<ServerMessageOf<"start">>();
+		let client = await connectAgent({
+			url: server.url,
+			token: "t",
+			document: "d",
+			handlers: { turn() {}, start: message => started.resolve(message) },
+			capabilities,
+			sessionChoice: true,
+		});
+		stops.push(() => client.detach());
+		expect(server.asked[0]?.split(", ")).toEqual(
+			expect.arrayContaining(["capability-catalog", "session-choice"]),
+		);
+		expect(client.features).toEqual(["capability-catalog", "session-choice"]);
+		server.send({
+			type: "start",
+			session: "s",
+			mode: "planner",
+			model: "acme/large",
+			thinkingLevel: "high",
+		});
+		expect(await started.promise).toMatchObject({ model: "acme/large", thinkingLevel: "high" });
+		await server.next("started");
 	});
 
 	it("answers a steer for a turn that has ended, or that its handler refuses, with ok false", async () => {

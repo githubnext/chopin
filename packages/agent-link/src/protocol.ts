@@ -89,9 +89,9 @@ export const AGENT_FEATURES = {
 	/**
 	 * With `capability-catalog`: `start` and `fork` carry the document's chosen `model` and
 	 * `thinkingLevel`, checked against the catalog the client last reported, so the session the
-	 * client makes runs them from its first turn, and so does any session it makes again for the
-	 * document on its own. Every turn still carries them as well. Without the feature neither
-	 * message has the fields.
+	 * client makes, and any it makes again for the document on its own, opens on them. They only
+	 * open the session: each turn runs its own fields, and one it leaves out means the client's
+	 * default. Without the feature neither message has the fields.
 	 */
 	sessionChoice: "session-choice",
 } as const;
@@ -580,8 +580,8 @@ export const refusalCodeSchema = z.enum([
 
 /**
  * With `session-choice`: the document's chosen model and thinking level, as the client's catalog
- * spelled them, for a session to run from its first turn. Absent where nobody chose one, or the
- * catalog no longer offers it: the client uses its own.
+ * spelled them, for a session to open on. Absent where nobody chose one, or the catalog no longer
+ * offers it: the client uses its own. A turn's own fields, or their absence, still decide it.
  */
 const sessionChoice = {
 	model: z.string().optional(),
