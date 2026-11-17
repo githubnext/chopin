@@ -64,7 +64,6 @@ type ChannelThreads = {
 	notedQuestions: Set<string>;
 	/** The notes the Chat's last turn was given, for a Retry of that turn to be given again. */
 	given?: { entryId: string; notes: ChatThreadNote[] };
-	replaying?: { entryId: string; notes: ChatThreadNote[] };
 	/** The session state's saves and the turns' taking of notes, one after another. */
 	sessionQueue: Promise<unknown>;
 };
@@ -514,11 +513,7 @@ export function bindTopLevel(
 		...context,
 		sessionForks: {
 			prepareTurn(currentEntryId, retry) {
-				if (retry && currentEntryId) {
-					rewind(state, context.chat.entries, currentEntryId);
-					if (state.given?.entryId !== currentEntryId) state.given = undefined;
-				}
-				state.replaying = retry ? state.given : undefined;
+				if (retry && currentEntryId) rewind(state, context.chat.entries, currentEntryId);
 				let hasAtomic = !!state.atomicEntries?.length;
 				let untrackedEntries = hasAtomic
 					? context.chat.entries.filter(
@@ -551,12 +546,12 @@ export function bindTopLevel(
 			async load() {
 				await ensureLoaded(context, override);
 			},
-			takeNotes(currentEntryId) {
+			takeNotes(currentEntryId, retry) {
 				return inSessionQueue(state, async () => {
 					await ensureLoaded(context, override);
-					let replaying = state.replaying;
-					state.replaying = undefined;
-					let replayed = replaying?.entryId === currentEntryId ? replaying?.notes ?? [] : [];
+					let replayed = retry && currentEntryId && state.given?.entryId === currentEntryId
+						? state.given.notes
+						: [];
 					let notes = [...replayed, ...state.notes];
 					if (!notes.length) return undefined;
 					state.notes = [];

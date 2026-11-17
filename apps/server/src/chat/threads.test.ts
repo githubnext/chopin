@@ -25,6 +25,7 @@ import type { Server } from "bun";
 import type { DocumentRoom } from "../agent/tools";
 import type { HostedAuth } from "../auth/routes";
 import type { NewDocumentRequest, NewDocumentResult } from "../agent/new-documents";
+import type { PlannerRuns } from "../harness/atomic/full";
 import type { PlannerForkHooks, PlannerSession } from "../harness/session";
 import type { TellChat } from "./thread-notes";
 import type { Socket, SocketData } from "../wire";
@@ -64,6 +65,7 @@ async function buildWorld(config: Record<string, string> = {}, extra: Partial<Ch
 	let emitExtra:
 		| ((emit: (part: Record<string, unknown>) => void) => Promise<void> | void)
 		| undefined;
+	let liveRuns: PlannerRuns | undefined;
 
 	let fakeOpen: typeof openPlannerSession = async (_binding, options) => {
 		forks.push(options.fork);
@@ -98,6 +100,7 @@ async function buildWorld(config: Record<string, string> = {}, extra: Partial<Ch
 				return { fullStream: parts() } as never;
 			},
 			destroy: async () => {},
+			runs: () => liveRuns,
 		};
 		return { ok: true, value: session };
 	};
@@ -156,6 +159,9 @@ async function buildWorld(config: Record<string, string> = {}, extra: Partial<Ch
 		tellers,
 		setEmitExtra: (fn: typeof emitExtra) => {
 			emitExtra = fn;
+		},
+		setRuns: (runs: PlannerRuns | undefined) => {
+			liveRuns = runs;
 		},
 		makeSocket,
 	};
@@ -1000,64 +1006,82 @@ describe("Chat threads server", () => {
 		expect(w.prompts.at(-1)!.prompt).toContain('"Ship it on Friday."');
 	});
 
-	test("a Retry keeps the unread notes under their cap, and gives every attempt the replayed notes before the unread ones", async () => {
-		let unreadSaved: number[] = [];
-		let w: Awaited<ReturnType<typeof buildWorld>>;
-		w = await buildWorld(ATOMIC, {
-			sessionChoice: async () => {
-				await w.context.onSessionMetaChanged!();
-				let saved = await w.storage.chatThreads.getSessionState(w.channel.id);
-				unreadSaved.push(saved?.threadNotes?.length ?? 0);
-				return undefined as never;
-			},
-		});
-		let alice = w.makeSocket("alice", "U_alice");
-		let tell = await threadTeller(w, alice.ws);
-		let first = Array.from({ length: MAX_UNREAD_NOTES }, (_, index) => `First batch ${index}.`);
-		let second = Array.from({ length: MAX_UNREAD_NOTES }, (_, index) => `Second batch ${index}.`);
-		for (let decision of first) await tell({ decision, decidedBy: ["alice"] });
+	for (
+		let failure of [
+			{ name: "an unreachable agent", keepsSession: false },
+			{ name: "a refused reply that keeps its session", keepsSession: true },
+		]
+	) {
+		test(`a Retry after ${failure.name} keeps the unread notes under their cap, and gives every attempt the replayed notes before the unread ones`, async () => {
+			let unreadSaved: number[] = [];
+			let w: Awaited<ReturnType<typeof buildWorld>>;
+			w = await buildWorld(ATOMIC, {
+				...(failure.keepsSession
+					? { decide: decideReplying({ input: { type: "noul", noul: 1 } }) }
+					: {}),
+				modelChoice: async () => {
+					await w.context.onSessionMetaChanged!();
+					let saved = await w.storage.chatThreads.getSessionState(w.channel.id);
+					unreadSaved.push(saved?.threadNotes?.length ?? 0);
+					return {};
+				},
+			});
+			let alice = w.makeSocket("alice", "U_alice");
+			let tell = await threadTeller(w, alice.ws);
+			let first = Array.from({ length: MAX_UNREAD_NOTES }, (_, index) => `First batch ${index}.`);
+			let second = Array.from({ length: MAX_UNREAD_NOTES }, (_, index) => `Second batch ${index}.`);
+			for (let decision of first) await tell({ decision, decidedBy: ["alice"] });
 
-		let failing = crypto.randomUUID();
-		w.setEmitExtra(() => {
-			throw new Error("503 Service Unavailable");
-		});
-		await Threads.sendMessage(w.context, alice.ws, {
-			kind: "chat:send",
-			rid: "m1",
-			requestId: failing,
-			to: "planner",
-			text: "@chopin when do we ship?",
-			ts: 0,
-		});
-		await w.plan.chat.running;
-		for (let decision of second) await tell({ decision, decidedBy: ["alice"] });
-		expect((await w.storage.chatThreads.getSessionState(w.channel.id))?.threadNotes)
-			.toHaveLength(MAX_UNREAD_NOTES);
-
-		let replays: string[] = [];
-		for (let attempt of ["retry-1", "retry-2"]) {
-			unreadSaved = [];
-			await Threads.retryMessage(w.context, alice.ws, {
-				kind: "chat:retry",
-				rid: attempt,
-				message: failing,
+			let failing = crypto.randomUUID();
+			if (failure.keepsSession) w.setRuns({ active: ["run-1"], paused: [], cards: [] });
+			else {
+				w.setEmitExtra(() => {
+					throw new Error("503 Service Unavailable");
+				});
+			}
+			let opened = w.forks.length;
+			await Threads.sendMessage(w.context, alice.ws, {
+				kind: "chat:send",
+				rid: "m1",
+				requestId: failing,
+				to: "planner",
+				text: "@chopin when do we ship?",
 				ts: 0,
 			});
 			await w.plan.chat.running;
-			expect(unreadSaved.length).toBeGreaterThan(0);
-			for (let unread of unreadSaved) expect(unread).toBeLessThanOrEqual(MAX_UNREAD_NOTES);
-			let prompt = w.prompts.at(-1)!.prompt;
-			let at = [...first, ...second].map(decision => prompt.indexOf(JSON.stringify(decision)));
-			expect(at.every(index => index >= 0)).toBe(true);
-			expect(at).toEqual([...at].sort((a, b) => a - b));
-			replays.push(prompt.slice(0, prompt.indexOf("when do we ship?")));
-		}
-		expect(replays[1]).toBe(replays[0]);
+			expect(w.plan.chat.entries.at(-1)?.turnFailure).toBeDefined();
+			for (let decision of second) await tell({ decision, decidedBy: ["alice"] });
+			expect((await w.storage.chatThreads.getSessionState(w.channel.id))?.threadNotes)
+				.toHaveLength(MAX_UNREAD_NOTES);
 
-		let saved = await w.storage.chatThreads.getSessionState(w.channel.id);
-		expect(saved?.threadNotes).toBeUndefined();
-		expect(saved?.givenNotes?.notes.map(note => note.decision)).toEqual([...first, ...second]);
-	});
+			let replays: string[] = [];
+			for (let attempt of ["retry-1", "retry-2"]) {
+				unreadSaved = [];
+				let before = w.prompts.length;
+				await Threads.retryMessage(w.context, alice.ws, {
+					kind: "chat:retry",
+					rid: attempt,
+					message: failing,
+					ts: 0,
+				});
+				await w.plan.chat.running;
+				expect(w.plan.chat.entries.at(-1)?.turnFailure).toBeDefined();
+				expect(unreadSaved.length).toBeGreaterThan(0);
+				for (let unread of unreadSaved) expect(unread).toBeLessThanOrEqual(MAX_UNREAD_NOTES);
+				let prompt = w.prompts[before]!.prompt;
+				let at = [...first, ...second].map(decision => prompt.indexOf(JSON.stringify(decision)));
+				expect(at.every(index => index >= 0)).toBe(true);
+				expect(at).toEqual([...at].sort((a, b) => a - b));
+				replays.push(prompt.slice(0, prompt.indexOf("when do we ship?")));
+			}
+			expect(replays[1]).toBe(replays[0]);
+			expect(w.forks.length - opened).toBe(failure.keepsSession ? 1 : 3);
+
+			let saved = await w.storage.chatThreads.getSessionState(w.channel.id);
+			expect(saved?.threadNotes).toBeUndefined();
+			expect(saved?.givenNotes?.notes.map(note => note.decision)).toEqual([...first, ...second]);
+		});
+	}
 
 	test("a note reaches the Chat Planner only once it is saved, and one that could not be saved never does", async () => {
 		let w = await buildWorld(ATOMIC);
