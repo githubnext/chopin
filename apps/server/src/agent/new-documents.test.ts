@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { MemoryStorage } from "../storage/memory/adapter";
 import { createDocument } from "../mcp/hosted";
+import * as Plan from "../plan/service";
 import {
 	createNewDocument,
 	MAX_DOCUMENTS_PER_HOUR,
@@ -64,6 +65,7 @@ async function fixture(options: {
 	origin?: CreationOrigin;
 	invoked?: InvokePlannerError;
 	archived?: boolean;
+	unsavedLines?: number;
 } = {}) {
 	let storage = new MemoryStorage();
 	await storage.users.put({ id: "U_mona", login: "mona", avatarUrl: "", now: NOW });
@@ -81,6 +83,8 @@ async function fixture(options: {
 	let invocations: PlannerInvocation[] = [];
 	let announced: Array<{ id: string; title: string; path: string }> = [];
 	let created: string[] = [];
+	let head = { commit: HEAD };
+	let unsavedLines = options.unsavedLines ?? 0;
 	let access = "access" in options ? options.access : repository();
 	let session = "session" in options ? options.session : login();
 	let deps: NewDocumentDeps = {
@@ -90,9 +94,13 @@ async function fixture(options: {
 		repository: async () => access,
 		branchHead: async (_login, _owner, _name, branch) => {
 			events.push(`head:${branch}`);
-			return HEAD;
+			return head.commit;
 		},
 		origin: async () => options.origin,
+		created: async channelId => {
+			let stored = await storage.collaboration.load(channelId, NOW);
+			return stored ? (await Plan.readStored(stored)).creation?.origin : undefined;
+		},
 		create: (creator, input, instructed) =>
 			createDocument(
 				{ storage, clock: () => NOW },
@@ -124,11 +132,16 @@ async function fixture(options: {
 			creator: { userId: "U_mona", handle: "mona", claimantSessionId: "session-U_mona" },
 			arguments: value,
 			announce: async document => {
+				if (announced.some(value => value.id === document.id)) return;
+				if (unsavedLines > 0) {
+					unsavedLines--;
+					throw new Error("storage is down");
+				}
 				events.push("announce");
 				announced.push(document);
 			},
 		});
-	return { storage, source, deps, events, invocations, announced, created, request };
+	return { storage, source, deps, events, invocations, announced, created, head, request };
 }
 
 describe("create_document arguments", () => {
@@ -232,6 +245,74 @@ describe("createNewDocument", () => {
 		expect(second.replayed).toBe(true);
 		expect(context.created).toHaveLength(1);
 		expect(context.announced).toHaveLength(1);
+		expect(context.invocations).toHaveLength(1);
+	});
+
+	test("a retry after the default branch moved returns the first document", async () => {
+		let context = await fixture();
+		let first = await context.request();
+		context.head.commit = "fedcba9876543210fedcba9876543210fedcba98";
+		let second = await context.request();
+		if (!first.ok || !second.ok) throw new Error("expected both calls to succeed");
+		expect(second).toMatchObject({ replayed: true, document: first.document });
+		expect(context.created).toHaveLength(1);
+	});
+
+	test("a retry is answered with its document after the turn's limit is spent", async () => {
+		let context = await fixture();
+		let pieces = Array.from({ length: MAX_DOCUMENTS_PER_TURN }, (_, index) =>
+			args({
+				idempotencyKey: `piece-number-${index}`,
+				title: `Piece ${index}`,
+				document: `# Piece ${index}\n`,
+			}));
+		let first = await context.request(pieces[0]);
+		for (let piece of pieces.slice(1)) expect((await context.request(piece)).ok).toBe(true);
+		let retried = await context.request(pieces[0]);
+		if (!first.ok) throw new Error(first.message);
+		expect(retried).toMatchObject({ ok: true, replayed: true, document: first.document });
+		expect(context.created).toHaveLength(MAX_DOCUMENTS_PER_TURN);
+	});
+
+	test("a retry is answered with its document after the person's hour is spent", async () => {
+		let context = await fixture();
+		let first = await context.request(args(), "turn-0");
+		for (let index = 1; index < MAX_DOCUMENTS_PER_HOUR; index++) {
+			let result = await context.request(
+				args({
+					idempotencyKey: `piece-number-${index}`,
+					title: `Piece ${index}`,
+					document: `# Piece ${index}\n`,
+				}),
+				`turn-${index}`,
+			);
+			expect(result.ok).toBe(true);
+		}
+		let over = await context.request(
+			args({ idempotencyKey: "piece-number-over", title: "Over", document: "# Over\n" }),
+			"turn-over",
+		);
+		expect(over).toMatchObject({ ok: false, reason: "hour-limit" });
+		let retried = await context.request(args(), "turn-over");
+		if (!first.ok) throw new Error(first.message);
+		expect(retried).toMatchObject({ ok: true, replayed: true, document: first.document });
+	});
+
+	test("a Chat line that could not be saved is posted by the retry, once", async () => {
+		let context = await fixture({ unsavedLines: 1 });
+		let first = await context.request(args({ instruction: "Start." }));
+		if (!first.ok) throw new Error(first.message);
+		expect(first.announced).toBe(false);
+		expect(first.next).toContain("Call create_document again with the same arguments");
+		expect(first.instruction).toEqual({ started: true });
+		expect(context.announced).toEqual([]);
+		let second = await context.request(args({ instruction: "Start." }));
+		expect(second).toMatchObject({ ok: true, replayed: true, document: first.document });
+		expect(second.ok && second.announced).toBeUndefined();
+		let third = await context.request(args({ instruction: "Start." }));
+		expect(third).toMatchObject({ ok: true, replayed: true });
+		expect(context.announced).toHaveLength(1);
+		expect(context.created).toHaveLength(1);
 		expect(context.invocations).toHaveLength(1);
 	});
 

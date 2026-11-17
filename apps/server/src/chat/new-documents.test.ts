@@ -130,6 +130,23 @@ describe("a Planner turn creating a document", () => {
 		expect(documentRoom(context).createDocument).toBeUndefined();
 	});
 
+	it("posts a line a failed save left out when the call is retried, and never a second", async () => {
+		let saves = 0;
+		let { chat, context, frames } = room({
+			persist: async () => {
+				if (saves++ === 0) throw new Error("storage is down");
+			},
+		});
+		let tools = documentRoom(context);
+		await expect(tools.createDocument!(draft)).rejects.toThrow("storage is down");
+		expect(chat.entries.some(entry => entry.document)).toBe(false);
+		await tools.createDocument!(draft);
+		await tools.createDocument!(draft);
+		expect(chat.entries.filter(entry => entry.document)).toHaveLength(1);
+		expect(frames.filter(frame => frame.kind === "chat:message")).toHaveLength(1);
+		expect(saves).toBe(2);
+	});
+
 	it("shows no Chat line that could not be saved", async () => {
 		let { chat, context, frames } = room({
 			persist: async () => {

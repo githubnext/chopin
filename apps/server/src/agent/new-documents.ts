@@ -5,9 +5,11 @@
  * The person whose message drives the turn is the creator. Their own browser login is asked
  * again for write access to the repository, as `chat:send` is; the Planner's credential never
  * authorizes a new document by itself. A retried call with the same key returns the document the
- * first call made and creates nothing. A document is stored before its Chat line, the sidebar or
- * its own Planner hear of it.
+ * first call made, from the base that call recorded and outside the limits, and creates and starts
+ * nothing; it only posts the Chat line if the first call could not save it. A document is stored
+ * before its Chat line, the sidebar or its own Planner hear of it.
  */
+import { deterministicChannelId } from "../channels/id";
 import { BRIEF, prepare } from "../mcp/create";
 import { MAX_TITLE_LENGTH } from "../channels/title";
 
@@ -136,7 +138,10 @@ export type NewDocumentRequest = {
 	turnId: string;
 	creator: { userId: string; handle: string; claimantSessionId?: string };
 	arguments: NewDocumentArguments;
-	/** Posts the creating document's Chat line naming a new document; called once it is stored. */
+	/**
+	 * Saves, then shows, the creating Chat's line naming a new document, unless that Chat already
+	 * holds it. Called once the document is stored, and again by a retry.
+	 */
 	announce: (document: { id: string; title: string; path: string }) => Promise<void>;
 	signal?: AbortSignal;
 };
@@ -160,6 +165,8 @@ export type NewDocumentDeps = {
 	) => Promise<string>;
 	/** The base a document was created from, when it records one. */
 	origin: (channelId: string) => Promise<CreationOrigin | undefined>;
+	/** The creation stored under a new document's id, when an earlier call already made it. */
+	created: (channelId: string) => Promise<CreationOrigin | undefined>;
 	create: (
 		creator: DocumentCreator,
 		input: CreateDocumentInput,
@@ -185,6 +192,8 @@ export type NewDocumentResult =
 		document: { id: string; title: string; url: string };
 		/** True when an earlier call with this key made it; nothing new was created or started. */
 		replayed?: true;
+		/** False when the creating Chat's line naming it could not be saved; a retry posts it. */
+		announced?: false;
 		instruction?: { started: true } | { started: false; reason: string; message?: string };
 		next: string;
 	}
@@ -242,8 +251,9 @@ export async function createNewDocument(
 		return refused("repository-forbidden");
 	}
 	let idempotencyKey = `planner:${sourceId}:${args.idempotencyKey}`;
-	let inherited = await deps.origin(sourceId);
-	let base = inherited?.repository === `${owner}/${name}`
+	let earlier = await deps.created(deterministicChannelId(source.repositoryId, idempotencyKey));
+	let inherited = earlier ?? await deps.origin(sourceId);
+	let base = inherited && (earlier || inherited.repository === `${owner}/${name}`)
 		? { baseBranch: inherited.baseBranch, baseCommit: inherited.baseCommit }
 		: undefined;
 	if (!base) {
@@ -266,8 +276,11 @@ export async function createNewDocument(
 		}]);
 	}
 	if ("issues" in prepared) return refused("invalid-document", prepared.issues);
-	let limit = deps.limits.take(turnId, creator.userId);
-	if (limit) return refused(`${limit}-limit`);
+	let counted = !earlier;
+	if (counted) {
+		let limit = deps.limits.take(turnId, creator.userId);
+		if (limit) return refused(`${limit}-limit`);
+	}
 	let outcome: CreatedDocument;
 	try {
 		outcome = await deps.create(
@@ -285,10 +298,10 @@ export async function createNewDocument(
 			args.instruction !== undefined,
 		);
 	} catch (err) {
-		deps.limits.refund(turnId, creator.userId);
+		if (counted) deps.limits.refund(turnId, creator.userId);
 		throw err;
 	}
-	if (outcome.kind !== "created") deps.limits.refund(turnId, creator.userId);
+	if (counted && outcome.kind !== "created") deps.limits.refund(turnId, creator.userId);
 	if (outcome.kind === "conflict") return refused("idempotency-conflict");
 	if (outcome.kind === "title-taken") return refused("title-taken");
 	if (outcome.kind === "forbidden") return refused("repository-forbidden");
@@ -298,18 +311,28 @@ export async function createNewDocument(
 	let path = outcome.document.url;
 	let url = new URL(path, deps.appOrigin).href;
 	let document = { id: channel.id, title: channel.title, url };
+	let announced = await request.announce({ id: channel.id, title: channel.title, path }).then(
+		() => true,
+		(err: unknown) => {
+			console.error("[chat] could not post a new document's Chat line:", err);
+			return false;
+		},
+	);
+	let unsaved = announced ? {} : { announced: false as const };
+	let retry = announced
+		? ""
+		: "Its line in this Chat could not be saved. Call create_document again with the same "
+			+ "arguments to post it; nothing new is created. ";
 	if (outcome.kind === "replayed") {
 		return {
 			ok: true,
 			document,
 			replayed: true,
-			next: "An earlier call with this idempotencyKey made this document; nothing new was "
-				+ "created or started.",
+			...unsaved,
+			next: `${retry}An earlier call with this idempotencyKey made this document; nothing new `
+				+ "was created or started.",
 		};
 	}
-	await request.announce({ id: channel.id, title: channel.title, path }).catch(err =>
-		console.error("[chat] could not post a new document's Chat line:", err)
-	);
 	await deps.copyModel(sourceId, channel.id, creator.userId).catch(err =>
 		console.error("[chat] could not give a new document its model choice:", err)
 	);
@@ -317,8 +340,9 @@ export async function createNewDocument(
 		return {
 			ok: true,
 			document,
-			next: "The document is in the sidebar and has its own Chat. Its Planner starts when "
-				+ "someone writes to it there.",
+			...unsaved,
+			next: `${retry}The document is in the sidebar and has its own Chat. Its Planner starts `
+				+ "when someone writes to it there.",
 		};
 	}
 	let hosted: HostedRepository = {
@@ -345,16 +369,18 @@ export async function createNewDocument(
 		return {
 			ok: true,
 			document,
+			...unsaved,
 			instruction: { started: false, reason: code, ...(message ? { message } : {}) },
-			next: "The document was created, but its Planner did not start. Tell the person, with "
-				+ "its link, so they can ask it there.",
+			next: `${retry}The document was created, but its Planner did not start. Tell the person, `
+				+ "with its link, so they can ask it there.",
 		};
 	}
 	return {
 		ok: true,
 		document,
+		...unsaved,
 		instruction: { started: true },
-		next: "Its own Planner started on the instruction, as the requesting person's message, "
-			+ "in that document's Chat. It runs on its own; this turn need not wait for it.",
+		next: `${retry}Its own Planner started on the instruction, as the requesting person's `
+			+ "message, in that document's Chat. It runs on its own; this turn need not wait for it.",
 	};
 }

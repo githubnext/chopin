@@ -7,7 +7,7 @@ function portOf(baseURL: string): number {
 
 test(
 	"a document the Planner created is one Chat line whose title opens it in the same tab",
-	async ({ baseURL, join, room, seed }) => {
+	async ({ baseURL, join, seed }) => {
 		let created = crypto.randomUUID();
 		await createChannel(portOf(baseURL!), created);
 		let title = `Test ${created.slice(0, 8)}`;
