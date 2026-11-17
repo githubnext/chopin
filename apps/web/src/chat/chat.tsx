@@ -42,8 +42,10 @@ import {
 	outboxReducer,
 	passing,
 	refusalText,
+	refusedByChopin,
 	restoreOutbox,
 } from "./delivery";
+import { refusedWhileBusy } from "./assistant-ui/send-stop";
 import type { DraftInputHandle } from "./draft-input";
 import type { CSSProperties } from "react";
 import { keepFormatPreference, readFormatPreference } from "./format-preference";
@@ -503,7 +505,7 @@ export function Chat(
 	// chopin's ephemeral row: a message to it it could not take, said to this person alone.
 	let [note, setNote] = useState<{ text: string; code: string; ts: number }>();
 	let noteRefusal = (failure: SendFailure & { code?: string }) => {
-		if (failure.code !== "planner-not-attached" && failure.code !== "planner-busy") return;
+		if (!refusedByChopin(failure.code)) return;
 		setNote({ text: failure.text, code: failure.code, ts: Math.floor(Date.now() / 1000) });
 	};
 	let [researchBlock, setResearchBlock] = useState<ResearchLaunchBlock>();
@@ -611,8 +613,11 @@ export function Chat(
 		submitted: draft.submission?.to,
 	});
 	let plannerBound = outboxed && askingChopin;
-	let busyRefused = (askingChopin || alone) && sendError?.code === "planner-busy"
-		&& (busy || counts.active > 0);
+	let busyRefused = refusedWhileBusy(
+		askingChopin || alone,
+		sendError?.code,
+		busy || counts.active > 0,
+	);
 	// An image goes where people read it, and to the Planner only if its model does.
 	let imagesAllowed = !agent || !(askingChopin || alone)
 		|| modelReadsImages(modelControl?.catalog, modelControl?.choice);
@@ -1170,7 +1175,7 @@ export function Chat(
 					dispatchOutbox({ kind: "trouble", id });
 					setTimeout(() => dispatchOutbox({ kind: "recovered" }), TROUBLE_RETRY_MS);
 				} else if (
-					(error.code === "planner-not-attached" || error.code === "planner-busy")
+					refusedByChopin(error.code)
 					&& next.draft
 					&& !draftRef.current.text.trim()
 					&& filesRef.current.files.length === 0
@@ -1417,11 +1422,9 @@ export function Chat(
 
 	let bannerId = useId();
 	// A message chopin could not take is its ephemeral row in the transcript, not a banner.
-	let refusedByChopin = shownSend?.code === "planner-not-attached"
-		|| shownSend?.code === "planner-busy";
 	let slot = bannerSlot(
 		banner?.view,
-		!!sendBanner && !refusedByChopin,
+		!!sendBanner && !refusedByChopin(shownSend?.code),
 		!!failed,
 		!readonly && !archived,
 	);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { group } from "./model";
+import { refusedWhileBusy } from "./assistant-ui/send-stop";
 import {
 	initialTranscript,
 	offersStop,
@@ -278,7 +279,8 @@ describe("a quiet turn: nothing left of it is for people to watch", () => {
 		let quiet = { ...turn, quiet: true };
 		expect(offersStop(true, turn, false)).toBe(true);
 		expect(offersStop(true, quiet, false)).toBe(false);
-		expect(offersStop(true, quiet, true)).toBe(true);
+		expect(offersStop(true, quiet, refusedWhileBusy(true, "planner-busy", true))).toBe(true);
+		expect(offersStop(true, quiet, refusedWhileBusy(true, "planner-starting", true))).toBe(false);
 		expect(offersStop(false, undefined, false)).toBe(false);
 		// A server that does not say which turn runs keeps its Stop.
 		expect(offersStop(true, undefined, false)).toBe(true);

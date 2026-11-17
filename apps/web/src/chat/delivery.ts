@@ -28,6 +28,19 @@ export function passing(code: Session.Failure["code"]): boolean {
 	return code === "temporarily-unavailable";
 }
 
+/**
+ * Whether a refusal says the Planner could not take the message (`planner-not-attached`,
+ * `planner-busy`, `planner-starting`). When nothing newer was typed, the words return from the
+ * outbox to the composer draft and chopin says why in its quiet row at the foot of the transcript.
+ */
+export function refusedByChopin(
+	code: unknown,
+): code is "planner-not-attached" | "planner-busy" | "planner-starting" {
+	return code === "planner-not-attached"
+		|| code === "planner-busy"
+		|| code === "planner-starting";
+}
+
 const NO_MACHINE = "No machine is connected to reply.";
 /**
  * What the server says of a machine that is only away: that this message was not sent, which is
@@ -46,6 +59,9 @@ export function refusalText(code: string | undefined, message: string): string {
 		return MACHINE_AWAY.test(trimmed) || MACHINE_RECONNECTING.test(trimmed)
 			? trimmed
 			: NO_MACHINE;
+	}
+	if ((code === "planner-busy" || code === "planner-starting") && message.trim()) {
+		return message.trim();
 	}
 	let detail = message.trim();
 	if (!detail) return "The server turned it down.";

@@ -174,4 +174,19 @@ test("a message the machine could not take says so as the server did, and points
 		title: "chopin can't take messages while it works on this machine. Stop it to ask now.",
 		retry: false,
 	});
+	let starting = sendFailureView(
+		sendFailure(
+			new WireRefusal(
+				"chopin is about to answer another message and can't take more while it works on this machine. Send yours again once it has answered.",
+				"planner-starting",
+			),
+		),
+		"planner-starting",
+	);
+	expect(starting).toEqual({
+		kind: "send",
+		title:
+			"chopin is about to answer another message and can't take more while it works on this machine. Send yours again once it has answered.",
+		retry: false,
+	});
 });
