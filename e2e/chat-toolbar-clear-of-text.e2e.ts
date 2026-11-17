@@ -3,7 +3,8 @@
  * row it belongs to: not a line of its text or its name line, not its reaction pills, not its code.
  * Each case compares the bar's rectangle with the client rectangles of everything the row draws, for
  * a message that heads its group and one that continues it, in a narrow and a wide Chat and in a
- * thread. A row whose top edge is scrolled out of the pane shows no bar at all.
+ * thread. A row whose top edge is scrolled out of the pane shows no bar at all. A pointer heading
+ * from the text to the bar across the row before, straight up, slantwise or slowly, still finds it.
  */
 import { chatInput, fillChat } from "./chat-input";
 import { expect, test } from "./room";
@@ -295,3 +296,113 @@ test(
 		}
 	},
 );
+
+function sameAuthorRun() {
+	return Array.from({ length: 16 }, (_, index) => ({
+		id: `r${index}`,
+		author: { kind: "member", handle: "ben" },
+		text: "This is a message with words to read. ".repeat(3).trim(),
+		ts: 1_700_000_300 + index,
+	}));
+}
+
+type Point = { x: number; y: number };
+
+async function stepTo(page: Page, from: Point, to: Point, pauseMs: number): Promise<void> {
+	await page.mouse.move(0, 0);
+	await page.mouse.move(from.x, from.y);
+	await page.waitForTimeout(300);
+	let steps = 25;
+	for (let at = 1; at <= steps; at++) {
+		await page.mouse.move(
+			from.x + (to.x - from.x) * at / steps,
+			from.y + (to.y - from.y) * at / steps,
+		);
+		if (pauseMs) await page.waitForTimeout(pauseMs);
+	}
+}
+
+async function rowUnder(page: Page, point: Point): Promise<string | null> {
+	return page.evaluate(({ x, y }) => {
+		let hit = document.elementFromPoint(x, y);
+		let inBar = hit?.closest('[data-slot="message-actions"]');
+		let row = hit?.closest("[data-chat-message-id]")?.getAttribute("data-chat-message-id");
+		return row ? `${row}${inBar ? " toolbar" : ""}` : null;
+	}, point);
+}
+
+async function shownRows(scope: Locator): Promise<string[]> {
+	return scope.locator(".chat-message-body[data-chat-message-id]").evaluateAll(rows =>
+		rows.filter(row => getComputedStyle(row, "::before").opacity !== "0").map(row =>
+			row.getAttribute("data-chat-message-id")!
+		)
+	);
+}
+
+for (
+	let [path, pauseMs] of [
+		["straight up", 0],
+		["up and to the left", 0],
+		["up and to the right, quickly", 0],
+		["up and to the right, slowly", 70],
+		["straight up, slowly", 70],
+	] as const
+) {
+	test(
+		`a pointer moving ${path} from a message's text to its toolbar keeps the toolbar and reaches its buttons`,
+		async ({ join, seed }, info) => {
+			await seed("# Toolbar\n", { transcript: sameAuthorRun() });
+			let page = await join("ana", { viewport: { width: 1600, height: 900 } });
+			let chat = chatOf(page);
+			let target = messageIn(chat, "r8");
+			await placeTop(chat, "r8", 160);
+			await hoverText(page, target);
+			let bar = toolbar(target);
+			await expect(bar).toHaveCSS("opacity", "1");
+			let row = (await target.boundingBox())!;
+			let box = await barBox(target);
+			let aim = { x: box.left + 16, y: (box.top + box.bottom) / 2 };
+			let start = {
+				"straight up": { x: aim.x, y: row.y + row.height - 10 },
+				"straight up, slowly": { x: aim.x, y: row.y + row.height - 10 },
+				"up and to the left": { x: box.right - 10, y: row.y + row.height - 10 },
+				"up and to the right, quickly": { x: row.x + 8, y: row.y + row.height - 10 },
+				"up and to the right, slowly": { x: row.x + 8, y: row.y + row.height - 10 },
+			}[path];
+			await attach(info, path, { row, bar: box, start, aim });
+			await stepTo(page, start, aim, pauseMs);
+			await page.waitForTimeout(400);
+			expect(await rowUnder(page, aim), "the pointer is on r8's toolbar").toBe("r8 toolbar");
+			await expect(bar).toHaveCSS("opacity", "1");
+			expect(await shownRows(chat)).toEqual(["r8"]);
+			await bar.getByRole("button", { name: "Message actions" }).click();
+			await expect(page.getByRole("menuitem", { name: "Copy", exact: true })).toBeVisible();
+		},
+	);
+}
+
+test("a pointer moving up from a message's text away from its toolbar, or resting on the row before, gives that row the hover", async ({ join, seed }) => {
+	await seed("# Toolbar\n", { transcript: sameAuthorRun() });
+	let page = await join("ana", { viewport: { width: 1600, height: 900 } });
+	let chat = chatOf(page);
+	let target = messageIn(chat, "r8");
+	await placeTop(chat, "r8", 160);
+	await hoverText(page, target);
+	await expect(toolbar(target)).toHaveCSS("opacity", "1");
+	let row = (await target.boundingBox())!;
+	let box = await barBox(target);
+	let below = { x: row.x + row.width / 2, y: row.y + row.height - 10 };
+
+	await stepTo(page, below, { x: row.x + 8, y: box.top + 10 }, 0);
+	await expect.poll(() => shownRows(chat)).toEqual(["r7"]);
+	await expect(toolbar(target)).toHaveCSS("opacity", "0");
+
+	await stepTo(page, { x: row.x + 8, y: row.y + row.height - 10 }, {
+		x: (row.x + 8 + box.left) / 2,
+		y: (box.top + box.bottom) / 2,
+	}, 0);
+	expect(await shownRows(chat), "heading for the bar, r8 stays shown").toEqual(["r8"]);
+	await page.waitForTimeout(500);
+	await expect.poll(() => shownRows(chat), { message: "resting on r7, it takes the hover" })
+		.toEqual(["r7"]);
+});
