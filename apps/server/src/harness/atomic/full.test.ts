@@ -78,6 +78,14 @@ let stub = startStubModelServer((prompt, prior) =>
 		? { kind: "tool", name: "ask_user_question", arguments: JSON.stringify(freeText[prompt]) }
 		: prompt === "cwd"
 		? { kind: "tool", name: "read", arguments: JSON.stringify({ path: "where.txt" }) }
+		: prompt === "intercom"
+		? { kind: "tool", name: "intercom", arguments: JSON.stringify({ action: "list" }) }
+		: prompt === "intercom-script"
+		? {
+			kind: "tool",
+			name: "codemode",
+			arguments: JSON.stringify({ code: 'return await tools.intercom({ action: "list" });' }),
+		}
 		: prompt === "workflows"
 		? { kind: "tool", name: "workflow", arguments: JSON.stringify({ action: "list" }) }
 		: prompt === "launch"
@@ -105,7 +113,6 @@ async function run(
 		during,
 		events,
 		reports,
-		thread = false,
 	}: {
 		host?: HostInput;
 		/** False runs the Planner in an empty directory, as a channel without a checkout does. */
@@ -128,8 +135,6 @@ async function run(
 		events?: string[];
 		/** Collects every runs report the Planner session makes. */
 		reports?: PlannerRuns[];
-		/** Registers the Planner as a Chat thread's. */
-		thread?: boolean;
 	} = {},
 ) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-atomic-full-"));
@@ -319,7 +324,6 @@ export default workflow({
 			humanInput,
 			toolReport: events && ((_id, _output, state) => events.push(`report:${state}`)),
 			onRuns: reports && (runs => reports.push(structuredClone(runs))),
-			...(thread ? { thread } : {}),
 		};
 		if (registered) release = registerFullPlanner(sessionId, planner);
 		let agent = new HarnessAgent({
@@ -410,12 +414,11 @@ const PLANNER_TOOLS = [
 	"search",
 	"ask_user_question",
 	"workflow",
-	"intercom",
 	"web_search",
 	"codemode",
 	"host_tool",
 ];
-const WITHHELD_TOOLS = ["bash", "edit", "write", "todo", "subagent", "operator_tool"];
+const WITHHELD_TOOLS = ["bash", "edit", "write", "todo", "subagent", "intercom", "operator_tool"];
 
 function expectPlannerTools(toolNames: string[]): void {
 	for (let name of PLANNER_TOOLS) expect(toolNames).toContain(name);
@@ -439,12 +442,20 @@ test("registered Planner sessions load operator resources and offer only read-on
 	expect(request.system).not.toBe(ATOMIC_DEFAULT_SYSTEM_PROMPT);
 });
 
-test("a Chat thread's Planner is offered every Planner tool but Atomic's intercom", async () => {
-	let result = await run(true, "plain", { thread: true });
-	let names = result.requests[0]!.toolNames;
-	expect(names).not.toContain("intercom");
-	for (let name of PLANNER_TOOLS.filter(name => name !== "intercom")) expect(names).toContain(name);
-	expect(result.offered).not.toContain("intercom");
+test("a Planner reaches no session through Atomic's intercom, from a script or named by the operator", async () => {
+	let cases: Array<[string, string, Record<string, unknown> | undefined]> = [
+		["called directly", "intercom", undefined],
+		["called from codemode", "intercom-script", undefined],
+		["named in plannerTools", "intercom", { chopin: { plannerTools: ["intercom"] } }],
+	];
+	for (let [label, prompt, operatorSettings] of cases) {
+		let result = await run(true, prompt, operatorSettings ? { operatorSettings } : {});
+		expect(result.requests[0]!.toolNames, label).not.toContain("intercom");
+		expect(result.offered, label).not.toContain("intercom");
+		let refusal = result.requests.at(-1)!.toolResults.join("\n");
+		expect(refusal, label).toContain("intercom");
+		expect(refusal, label).toMatch(/not found|not available|does not exist/);
+	}
 });
 
 test("a full Planner streams an Atomic builtin live and reports its tools as the turn's active set", async () => {

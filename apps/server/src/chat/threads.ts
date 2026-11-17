@@ -197,6 +197,7 @@ function saveTopSessionState(
 	note?: ChatThreadNote,
 ): Promise<void> {
 	return inSessionQueue(state, async () => {
+		await ensureLoaded(context, override);
 		let persistence = resolvePersistence(context, override);
 		if (persistence) {
 			await persistence.store.putSessionState(
@@ -511,8 +512,12 @@ export function bindTopLevel(
 					untrackedEntries,
 				};
 			},
+			async load() {
+				await ensureLoaded(context, override);
+			},
 			takeNotes(currentEntryId) {
-				return inSessionQueue(state, () => {
+				return inSessionQueue(state, async () => {
+					await ensureLoaded(context, override);
 					let notes = state.notes;
 					if (!notes.length) return undefined;
 					state.notes = [];
@@ -553,6 +558,7 @@ function tellChat(
 ): TellChat {
 	return async request => {
 		let state = channelState(topContext.chat);
+		if (!state.loaded) await ensureLoaded(topContext, override);
 		let note = threadNote(
 			request,
 			{

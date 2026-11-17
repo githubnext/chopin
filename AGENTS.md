@@ -806,9 +806,9 @@ MCP versions. A healthy boundary includes Chopin's document tools (currently
 plan-named), `create_document`, child document tools, repository tools, and allowed pull-request
 tools, and excludes ambient capabilities such as `bash`, filesystem access, URL
 fetch, host Git, issues, and unrestricted search. The exception is an `atomic`
-Planner session, which deliberately adds Atomic's builtins and coding tools (in a
-Chat thread, `tell_chat_planner` in place of `intercom`); its summary and research
-worker sessions must still show only their own tools.
+Planner session, which deliberately adds Atomic's builtins and coding tools but
+withholds `intercom` from its turns (a Chat thread's adds `tell_chat_planner`); its
+summary and research worker sessions must still show only their own tools.
 
 Treat a missing required tool or an unexpected ambient tool as a security or
 configuration failure even when the overall count looks plausible.

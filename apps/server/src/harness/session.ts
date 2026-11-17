@@ -302,7 +302,6 @@ export async function openPlannerSession(
 				...(channel.fork?.onAtomicEntries
 					? { onSessionEntries: channel.fork.onAtomicEntries }
 					: {}),
-				...(channel.tellChat ? { thread: true } : {}),
 			};
 			unregisterFull = registerFullPlanner(sessionId, planner);
 		}

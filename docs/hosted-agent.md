@@ -410,8 +410,8 @@ their usual [bind rules](self-hosting.md#choose-and-trust-a-harness).
 
 The Planner's own turns offer only read-only tools beside Chopin's document and
 repository tools: `read`, `find` and `search` for the working directory,
-Atomic's web research tools, `ask_user_question`, `workflow`, and `intercom`
-(in a Chat thread, `tell_chat_planner` instead of `intercom`; see
+Atomic's web research tools, `ask_user_question`, and `workflow` (in a Chat
+thread, also `tell_chat_planner`; see
 [What a thread decided reaches the Chat](#what-a-thread-decided-reaches-the-chat)),
 plus the read-only tools the operator names in `chopin.plannerTools` of the
 agent directory's `settings.json`, such as a code search tool a package
@@ -426,8 +426,13 @@ tools to a Planner, and a name that edits files, runs commands or starts agents
 (`bash`, `edit`, `write`, `kill`, `subagent`, `todo`) stops the Planner from
 starting. It cannot edit files, run commands, or start subagents itself, so it
 never implements the plan; a workflow it starts keeps the tools its stages
-declare. Atomic's workflows, MCP, web access, and Intercom run alongside
-Chopin's tools. The normal Atomic
+declare. Atomic's workflows, MCP, and web access run alongside Chopin's tools.
+Atomic's `intercom` is never offered to a Planner's turns, and they refuse it
+even from a codemode script, even when the operator names it in
+`chopin.plannerTools`: its model would choose the sessions and groups it
+reaches, so one document's Planner could list or message another's. Atomic's
+Intercom package stays loaded, so the stages of a workflow a Planner starts keep
+their run's own Intercom group. The normal Atomic
 agent directory (including `ATOMIC_CODING_AGENT_DIR` or the legacy
 `PI_CODING_AGENT_DIR` override) supplies extensions, skills, prompt templates,
 context files, and a read-only copy of its settings. A verified checkout's
@@ -469,34 +474,24 @@ instructions state which case applies: a verified checkout, or an empty
 directory with no repository files, in which case it reads the repository through
 Chopin's repository tools.
 
-The Planner still does not implement the plan. When a member asks to implement it
-now, outside a Chat thread, its instructions note that its `intercom` tool can reach other sessions on
-the same machine, such as one working in a checkout of the document's
-repository, and that it can pass the request to one of them and tell the member
-where the work continues. Chopin does not track or verify that handoff.
-
-An Intercom `ask` returns once it is delivered and waits only Atomic's automatic
-yield, a few seconds, for the reply. Chopin starts no turn it did not ask for, so
-a reply that arrives after the turn ends stays in the session unread until the
-next turn. The instructions therefore tell the Planner to ask with a foreground
-`wait` of up to ten minutes when it needs the answer for a member, such as when
-it checks on a workflow run.
+The Planner still does not implement the plan, and it cannot hand the request
+to another session. When a member asks to implement it now, its instructions
+tell it to say so and offer to prepare the task graph instead.
 
 ### What a thread decided reaches the Chat
 
 A Chat thread's Planner session is a fork of the Chat's session at the thread's
 root, and nothing said in the thread reaches the Chat's Planner by itself. Under
 `HARNESS=atomic` a thread's Planner turns are offered one more host tool,
-`tell_chat_planner`, its Intercom to the Planner of the same document's Chat. It
+`tell_chat_planner`, its route to the Planner of the same document's Chat. It
 sends a short note: what was decided, by whom, and the thread it was decided in.
 The tool takes no target. The server fixes it from the thread's own document, so
 a Planner can reach only its own document's Chat Planner and never another
-document's. The route is Chopin's, not Atomic's broker: Atomic's Intercom
-delivers to a live session and starts a turn in an idle one, while a Chat Planner
-session lives only for its turn. A thread's Planner is not offered Atomic's
-`intercom`, whose target the model chooses, and its turns refuse that tool even
-from a codemode script, so `tell_chat_planner` is its only route to another
-session; its instructions leave out the implementation handoff described above.
+document's. The route is Chopin's, not Atomic's Intercom broker: Atomic's
+Intercom delivers to a live session and starts a turn in an idle one, while a
+Chat Planner session lives only for its turn. Like every Planner, a thread's is
+not offered Atomic's `intercom` (see [Full Atomic Planner](#full-atomic-planner)),
+so `tell_chat_planner` is its only route to another session.
 
 The thread's Planner sends one note for each Decision card it asked in the
 thread that a person answered, naming the card, and the server refuses a second
@@ -508,16 +503,22 @@ on, and sends nothing when nothing was decided. The server checks that each
 person named took part in the thread or answered the card, and keeps at most 20
 unread notes per document. A note is saved with the Chat's session state before
 any Chat turn can be given it and before the tool says it was sent; one that
-could not be saved is reported as not sent and is never given to a turn. The
+could not be saved is reported as not sent and is never given to a turn. Every
+Chat turn reads the saved session state before it takes notes or saves the
+state, however it started (a browser message, a Retry, `invoke_planner`), so a
+turn in a room opened after a restart or eviction neither misses a waiting note
+nor forgets which cards were noted. The
 note starts no turn and is not posted in Chat. The Chat Planner's next turn is
 given every unread note, with the thread's words quoted as data rather than
 instructions: ahead of its prompt, or, when the turn opens with a skill or a
 prompt template that has to stand first, beside its instructions for that turn
 alone. The notes a turn for a message was given are saved with the session
 state, so a Retry of that turn is given them again, after a restart too.
-`copilot-sdk` and `remote` Planners are not offered the tool. The `[agent] N tools:` line logged as an Atomic session opens lists it for
-a thread's Planner, and the line after it says the session withholds `intercom`
-and names `tell_chat_planner` as its route out.
+`copilot-sdk` and `remote` Planners are not offered the tool. The `[agent] N
+tools:` line logged as an Atomic Planner session opens lists what Atomic
+registered, `intercom` included; the line after it, `[agent] Planner withholds
+intercom; route out: …`, says its turns refuse `intercom` and names
+`tell_chat_planner` for a thread's Planner, or `none`.
 
 Chopin implements Atomic's `HostInput`, bound through
 `extensionBindings.humanInput`; it does not intercept tools. `ask_user_question`,
@@ -1307,11 +1308,10 @@ The one exception is an atomic Planner session that still owns Atomic workflow
 runs when its turn ends. A workflow the Planner starts outlives the turn that
 launched it, and its runs belong to that session, so Chopin keeps the session
 and its owner binding, and keeps the document loaded, until every run has
-finished. The next turn reuses that session, so the Planner can still see and
-steer its runs over Intercom; people steer through Chat and Decisions, never a
-stage directly. Since Atomic 0.9.44 such a message reaches a busy stage after
-its current tool calls finish rather than cancelling them, unless the Planner
-sends it as an `interrupt`. **Stop Planner** also pauses the session's live runs, resumably,
+finished. The next turn reuses that session, so the Planner can still see,
+pause and resume its runs with its `workflow` tool; it cannot message their
+stages, since it has no `intercom`. People steer through Chat and Decisions,
+never a stage directly. **Stop Planner** also pauses the session's live runs, resumably,
 through Atomic's session run control, and **Resume Planner** resumes the runs it
 paused. A run waiting on a question pauses too: Atomic withdraws the question
 from Decisions while the run is paused and presents it again on Resume, and an
@@ -1373,9 +1373,9 @@ server's process environment is left unchanged. An operator's non-empty
 `ATOMIC_STORAGE` selections do not move a Planner session's journal, and
 neither does the shared top-level `storage` setting, including an adapter named
 by package such as the libSQL selection `atomic storage join` writes. That
-setting does reach the Planner's Intercom: its sessions use the machine's
-Intercom broker, which keeps its routing in the selected database and so can
-reach sessions on every machine that selects the same one. Atomic
+setting does reach the Intercom of the workflow stages a Planner starts: they
+use the machine's Intercom broker, which keeps its routing in the selected
+database and so can reach sessions on every machine that selects the same one. Atomic
 still checks every set `ATOMIC_STORAGE`, `ATOMIC_SESSIONS_STORAGE`, and
 `ATOMIC_WORKFLOWS_JOURNAL` when it creates a session, so an invalid value fails
 every Atomic turn with a `StorageConfigError` naming the variable. A Build is not a workflow run and has no card in Chat: its tasks, their

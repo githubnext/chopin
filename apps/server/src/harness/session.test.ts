@@ -488,9 +488,8 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain("a withdrawn question is not an answer or approval");
 			expect(instructions).toContain("never tell them to use `/workflow connect`");
 			expect(instructions).toContain("Chat shows a card for each workflow run you start");
-			expect(instructions).toContain("`intercom` tool can reach other sessions");
-			expect(instructions).toContain("one working in a checkout of owner/repo");
-			expect(instructions).toContain('wait: { kind: "foreground", budgetMs: 600000 }');
+			expect(instructions).toContain("cannot edit files, run commands or reach other\nsessions");
+			expect(instructions).not.toContain("intercom");
 			expect(instructions).not.toContain("You have no shell");
 		}
 		let git = Bun.spawn(["git", "-C", path, "remote", "set-url", "origin", "workgit:other/repo"], {
@@ -563,7 +562,7 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain("a withdrawn question is not an answer or approval");
 			expect(instructions).toContain("never tell them to use `/workflow connect`");
 			expect(instructions).toContain("Chat shows a card for each workflow run you start");
-			expect(instructions).toContain("one working in a checkout of owner/repo");
+			expect(instructions).not.toContain("intercom");
 		}
 		forgetWorkspaces();
 		expect((await stat(first.registered!.cwd)).isDirectory()).toBe(true);

@@ -67,11 +67,11 @@ export const ATOMIC_DEFAULT_SYSTEM_PROMPT =
 
 /**
  * What a full Planner's own turns may call besides Chopin's tools: reading the
- * checkout and the web, asking Decisions, running workflows, Intercom, and
- * codemode. Codemode scripts call only the tools this turn already offers, plus
- * non-LLM models such as classifiers and image generators, so it adds no file
- * edits or commands. The Planner cannot edit files or run commands, so
- * implementing the plan goes to another session.
+ * checkout and the web, asking Decisions, running workflows, and codemode.
+ * Codemode scripts call only the tools this turn already offers, plus non-LLM
+ * models such as classifiers and image generators, so it adds no file edits or
+ * commands. The Planner cannot edit files or run commands, so it never
+ * implements the plan itself.
  */
 export const FULL_PLANNER_TOOLS: ReadonlySet<string> = new Set([
 	"read",
@@ -83,12 +83,15 @@ export const FULL_PLANNER_TOOLS: ReadonlySet<string> = new Set([
 	"get_search_content",
 	"ask_user_question",
 	"workflow",
-	"intercom",
 	"codemode",
 ]);
 
-/** What a Chat thread's Planner is never offered: its only route to another session is the server's. */
-export const THREAD_WITHHELD_TOOLS: ReadonlySet<string> = new Set(["intercom"]);
+/**
+ * What no full Planner's turn may call, however it is reached: Atomic's `intercom` lets the model
+ * pick its target and group, so one document's Planner could reach another's. A thread's one route
+ * out is Chopin's `tell_chat_planner`, to its own document's Chat Planner.
+ */
+export const PLANNER_WITHHELD_TOOLS: ReadonlySet<string> = new Set(["intercom"]);
 
 /** Atomic tools that change files, run commands or start agents, which no setting gives a Planner's own turns. */
 const WRITING_TOOLS: ReadonlySet<string> = new Set([
@@ -329,7 +332,7 @@ export function atomicTurnExtension(policy: TurnPolicy): ExtensionFactory {
 				return { block: true, reason: `${event.toolName} is not available in a workflow stage.` };
 			}
 			if (policy.withheld?.has(event.toolName)) {
-				return { block: true, reason: `${event.toolName} is not available in a Chat thread.` };
+				return { block: true, reason: `${event.toolName} is not available to a Chopin Planner.` };
 			}
 			if (policy.full && event.toolName !== ATOMIC_RESULT_TOOL_NAME) return;
 			if (activeNames(policy).includes(event.toolName)) return;
@@ -729,7 +732,7 @@ export function createAtomicAdapter(
 			let settingsManager = SettingsManager.inMemory(SETTINGS);
 			let policy: TurnPolicy = {
 				full: !!full,
-				...(full?.thread ? { withheld: THREAD_WITHHELD_TOOLS } : {}),
+				...(full ? { withheld: PLANNER_WITHHELD_TOOLS } : {}),
 				hostNames: [],
 				structured: false,
 				systemPrompt: ATOMIC_DEFAULT_SYSTEM_PROMPT,
@@ -991,7 +994,7 @@ export function createAtomicAdapter(
 					if (policy.withheld) {
 						let route = hostNames.includes(THREAD_NOTE_TOOL_NAME) ? THREAD_NOTE_TOOL_NAME : "none";
 						let withheld = [...policy.withheld].join(", ");
-						console.log(`[agent] Chat thread Planner withholds ${withheld}; route out: ${route}`);
+						console.log(`[agent] Planner withholds ${withheld}; route out: ${route}`);
 					}
 					live = {
 						session,
