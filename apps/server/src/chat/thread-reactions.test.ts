@@ -519,6 +519,35 @@ for (let initiative of [true, false]) {
 	});
 }
 
+for (let initiative of [true, false]) {
+	test(`a Chat reaction in a stopping process starts no thread (${initiative ? "initiative" : "reader"})`, async () => {
+		let w = await world();
+		let ana = w.socket("ana");
+		await w.send(ana.ws, "@chopin where does the cache key live?");
+		await until(() => agents(w.plan.chat).length === 1 && !w.plan.chat.busy);
+		let root = plannerRoot(w);
+		let asked = w.prompts.length;
+		w.context.initiativeAuthorize = async () => initiative;
+		let before = w.broadcasts.length;
+		Chat.holdStarts();
+		cleanups.push(() => Chat.holdStarts(false));
+
+		await w.reactInChatAs(ana.ws, root, "\u2753");
+		await Bun.sleep(50);
+
+		expect(w.plan.chat.childChats?.get(root)).toBeUndefined();
+		expect(await w.storage.chatThreads.listThreads(w.context.room)).toEqual([]);
+		expect(w.broadcasts.slice(before).some(frame => frame.kind === "chat:thread-summary")).toBe(
+			false,
+		);
+		expect(w.prompts).toHaveLength(asked);
+		let message = w.plan.chat.entries.find(entry => entry.id === root) as {
+			answeredIntents?: string[];
+		};
+		expect(message.answeredIntents).toBeUndefined();
+	});
+}
+
 test("an answer to a Chat reaction is still not answered again after a reload", async () => {
 	let w = await world();
 	let ana = w.socket("ana");
