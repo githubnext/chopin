@@ -1921,3 +1921,141 @@ test("a refused reply's first attempt image that finishes storing after the repa
 		[holders[0]!.id, ["Slow first try"]],
 	]);
 });
+
+/**
+ * An attached Planner whose turn asks which store to use and waits for the Decision before it
+ * replies with the answer, as a model asking through `ask_user_question` does. Like a real client
+ * it runs one turn at a time in a session. `steers` offers `steer-turn`. A client that does not
+ * `endOnAbort` leaves its question waiting when Chopin stops the turn, and only the server's own
+ * withdrawal of the question ends it.
+ */
+async function decidingPlanner(options: { steers: boolean; endOnAbort?: boolean }) {
+	let room = await remoteRoom();
+	let { context, channel } = room;
+	// As `main.ts` asks the selected harness.
+	context.steers = () => attachedLink(channel.id)?.steers === true;
+	let steered: string[] = [];
+	let results: Array<{ status: string; value?: unknown }> = [];
+	let working = new Set<string>();
+	let client: AgentClient | undefined;
+	let reply = (turn: Parameters<AgentHandlers["turn"]>[0], text: string) => {
+		let id = crypto.randomUUID();
+		turn.emit({ type: "text-start", id });
+		turn.emit({ type: "text-delta", id, delta: text });
+		turn.emit({ type: "text-end", id });
+		finishTurn(turn);
+	};
+	let handlers: Partial<AgentHandlers> = {
+		async turn(turn) {
+			let { session, prompt } = turn.message;
+			turn.emit({ type: "stream-start", modelId: "scripted" });
+			if (working.has(session)) {
+				turn.emit({ type: "error", error: "This session is still working on a turn." });
+				return;
+			}
+			working.add(session);
+			try {
+				if (!prompt.endsWith("which store?")) return reply(turn, "Done.");
+				let result = await client!.ask(
+					session,
+					{ method: "select", title: "Which store?", choices: ["Postgres", "Redis"] },
+					options.endOnAbort === false ? {} : { signal: turn.signal },
+				);
+				results.push(result);
+				if (turn.signal.aborted) return;
+				reply(turn, `Going with ${String(result.value)}.`);
+			} finally {
+				working.delete(session);
+			}
+		},
+		...(options.steers ? { steer: message => void steered.push(message.prompt) } : {}),
+	};
+	client = await attach(room.server.url, channel.id, handlers as AgentHandlers);
+	cleanups.push(() => client!.detach());
+	let decision = async () => {
+		await until(() => [...context.plan.records.values()].some(record => record.status === "open"));
+		return [...context.plan.records.values()].find(record => record.status === "open")!.id;
+	};
+	return {
+		...room,
+		steered,
+		results,
+		decision,
+		said: () => context.chat.entries.map(entry => entry.text),
+		failures: () => context.chat.entries.filter(entry => entry.turnFailure),
+	};
+}
+
+test("a message sent while the attached Planner's turn waits on its open decision is given to that turn, the answer still reaches it, and the next message starts a turn", async () => {
+	let room = await decidingPlanner({ steers: true });
+	let { context } = room;
+	expect(await room.send("@chopin which store?")).toMatchObject({ kind: "chat:send" });
+	let id = await room.decision();
+
+	expect(await room.send("@chopin also cover the rollback")).toMatchObject({ kind: "chat:send" });
+	await until(() => room.steered.length === 1);
+	expect(room.steered).toEqual(["@rival: also cover the rollback"]);
+	expect(context.chat.busy).toBe(true);
+	expect(context.plan.records.get(id)?.status).toBe("open");
+
+	await answerChoice(context, id, 0);
+	await until(() => !context.chat.busy);
+	expect(room.results).toEqual([
+		expect.objectContaining({ status: "answered", value: "Postgres" }),
+	]);
+	expect(room.said()).toEqual(["which store?", "also cover the rollback", "Going with Postgres."]);
+
+	expect(await room.send("@chopin and then?")).toMatchObject({ kind: "chat:send" });
+	await until(() => !context.chat.busy && room.said().at(-1) === "Done.");
+	expect(room.failures()).toEqual([]);
+});
+
+test("a client that takes no message mid-turn refuses one sent while its turn waits on an open decision, saving nothing, and once the decision is answered the next message starts a turn", async () => {
+	let room = await decidingPlanner({ steers: false });
+	let { context } = room;
+	await room.send("@chopin which store?");
+	let id = await room.decision();
+
+	expect(await room.send("@chopin also cover the rollback")).toMatchObject({
+		kind: "session:error",
+		code: "planner-busy",
+		message: "chopin can't take messages while it works on this machine. Stop it to ask now.",
+	});
+	expect(room.said()).toEqual(["which store?"]);
+
+	await answerChoice(context, id, 0);
+	await until(() => !context.chat.busy);
+	expect(room.said()).toEqual(["which store?", "Going with Postgres."]);
+	expect(await room.send("@chopin also cover the rollback")).toMatchObject({ kind: "chat:send" });
+	await until(() => !context.chat.busy && room.said().at(-1) === "Done.");
+	expect(room.failures()).toEqual([]);
+});
+
+for (let steers of [false, true]) {
+	test(
+		`Stop while the turn waits on its own open decision withdraws the decision with the turn, even from a client that leaves its question waiting, and the next message starts a turn without a Retry (${
+			steers ? "a client that takes messages mid-turn" : "a client that takes none"
+		})`,
+		async () => {
+			let room = await decidingPlanner({ steers, endOnAbort: false });
+			let { context } = room;
+			await room.send("@chopin which store?");
+			let id = await room.decision();
+			// What the refusal tells a person to do, or a message the turn takes, then Stop.
+			await room.send("@chopin also cover the rollback");
+			await Chat.abort(context, room.ws);
+
+			// Well within the 10 seconds the server would otherwise wait for the client to end the turn.
+			await until(() => !context.chat.busy);
+			expect(context.plan.records.get(id)?.status).toBe("cancelled");
+			expect(room.results).toEqual([expect.objectContaining({ status: "cancelled" })]);
+			expect(context.chat.retained).toBeUndefined();
+
+			expect(await room.send("@chopin and then?")).toMatchObject({ kind: "chat:send" });
+			await until(() => !context.chat.busy && room.said().at(-1) === "Done.");
+			expect(await room.send("@chopin one more")).toMatchObject({ kind: "chat:send" });
+			await until(() => !context.chat.busy && room.said().at(-1) === "Done.");
+			expect(room.failures()).toEqual([]);
+		},
+	);
+}
