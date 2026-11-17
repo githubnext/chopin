@@ -898,6 +898,8 @@ export type Room = {
 	threadAsked?: (ids: string[]) => void;
 	/** Session-tree and remote fork hooks for top-level Chat and threads. */
 	sessionForks?: {
+		/** Resolves once the saved session state is read, before anything of a turn reads or writes it. */
+		load?: () => Promise<void>;
 		/** `retry`: the turn runs `currentEntryId` again, and nothing of its failed attempt is kept. */
 		prepareTurn: (currentEntryId?: string, retry?: boolean) => {
 			fork?: PlannerForkHooks;
@@ -3375,6 +3377,7 @@ async function run(
 		// A skill or a prompt template has to open the prompt, as a background job's header does, so
 		// their fresh sessions are told what the room said in their instructions instead.
 		let command = jobTurn || reader ? undefined : commandReference(references);
+		await context.sessionForks?.load?.();
 		let { bootstrap, ...repositoryOpened } = await repositorySession(
 			context,
 			claimantSessionId,

@@ -43,11 +43,6 @@ export type FullPlanner = {
 	branchLeafId?: string | null;
 	/** Called as Atomic appends entries so fork points and session trees stay durable. */
 	onSessionEntries?: (entries: unknown[], leafId: string | null) => void;
-	/**
-	 * A Chat thread's Planner. Atomic's `intercom`, whose target the model picks, is withheld: its
-	 * one route out is `tell_chat_planner`, to the Chat Planner of its own document.
-	 */
-	thread?: boolean;
 };
 
 let planners = new Map<string, FullPlanner>();

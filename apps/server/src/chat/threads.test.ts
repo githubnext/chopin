@@ -853,6 +853,37 @@ describe("Chat threads server", () => {
 		expect(w.prompts.at(-1)!.prompt).toContain("when do we ship?");
 	});
 
+	test("a Planner turn invoked directly in a freshly opened room reads the notes an earlier process saved, and keeps its noted cards", async () => {
+		let w = await buildWorld(ATOMIC);
+		let rootId = crypto.randomUUID();
+		await w.storage.chatThreads.putSessionState(w.lease, {
+			channelId: w.channel.id,
+			compactions: [],
+			entryForks: {},
+			threadNotes: [{
+				id: crypto.randomUUID(),
+				rootId,
+				root: { author: "alice", excerpt: "Which queue?" },
+				decision: "Use one queue per document.",
+				decidedBy: ["alice"],
+				question: "q1",
+				ts: 0,
+			}],
+			notedQuestions: ["q1"],
+			updatedAt: new Date(),
+		});
+
+		expect(await Chat.invoke(w.context, { id: "U_alice", login: "alice" }, "What did we settle?"))
+			.toBeUndefined();
+		await w.plan.chat.running;
+
+		expect(w.prompts.at(-1)!.prompt).toContain('"Use one queue per document."');
+		let saved = await w.storage.chatThreads.getSessionState(w.channel.id);
+		expect(saved?.threadNotes).toBeUndefined();
+		expect(saved?.notedQuestions).toEqual(["q1"]);
+		expect(saved?.givenNotes?.notes).toMatchObject([{ decision: "Use one queue per document." }]);
+	});
+
 	test("a skill or prompt template that opens the Chat Planner's turn is given the waiting notes beside its instructions", async () => {
 		let w = await buildWorld(ATOMIC);
 		w.context.references = new ReferenceService({

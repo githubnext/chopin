@@ -85,6 +85,7 @@ test("a remote Planner learns where it runs and that its questions become Decisi
 	expect(prompt).toContain("**Stop Planner** pauses it");
 	expect(prompt).not.toContain("You have no shell");
 	expect(prompt).not.toContain("Your working directory");
+	expect(prompt).toContain("with your `workflow` and `intercom` tools when someone asks");
 	// The member's own Atomic decides how its `intercom` asks wait.
 	expect(prompt).not.toContain("budgetMs");
 	expect(prompt.endsWith("Earlier context.")).toBe(true);
@@ -105,15 +106,17 @@ test("a Planner with workflows says a Build's tasks show under Build, not as car
 	}
 });
 
-test("a thread's Atomic Planner is told to note decisions for the Chat, and of no other session", () => {
+test("an Atomic Planner is told of no Intercom, and only a thread's of tell_chat_planner", () => {
 	let workspace = { cwd: "/tmp/chopin-test", checkout: false };
 	let chat = plannerInstructions("octo-org/score", undefined, workspace).replace(/\s+/g, " ");
 	let thread = plannerInstructions("octo-org/score", undefined, workspace, false, true)
 		.replace(/\s+/g, " ");
-	expect(chat).toContain("your `intercom` tool can reach other sessions");
+	for (let prompt of [chat, thread]) {
+		expect(prompt).not.toContain("intercom");
+		expect(prompt).toContain("with your `workflow` tool when someone asks");
+		expect(prompt).toContain("cannot edit files, run commands or reach other sessions");
+	}
 	expect(chat).not.toContain("tell_chat_planner");
-	expect(thread).not.toContain("intercom");
-	expect(thread).toContain("with your `workflow` tool when someone asks");
 	expect(thread).toContain("You answer in a thread of this document's Chat");
 	expect(thread).toContain("Use `tell_chat_planner` as its description says");
 });

@@ -102,8 +102,10 @@ RPC mode.
 **Choosing `HARNESS=atomic` gives the Planner shell and filesystem access as the
 server process's user, on hosted instances as well as local ones.** Every Planner
 session is a full Atomic session: Atomic's workflows, subagents, MCP, web access,
-Intercom, and default coding tools run beside Chopin's document tools, with the
-operator's Atomic extensions, skills, prompt templates, and context files. There is
+and default coding tools run beside Chopin's document tools, with the
+operator's Atomic extensions, skills, prompt templates, and context files. Its own
+turns are never offered Atomic's `intercom`, so one document's Planner cannot list or
+message another's; the stages of a workflow it starts keep their run's Intercom. There is
 no separate flag; choosing the harness is the choice. Operators who do not want that
 should use `copilot-sdk`, whose Planner keeps the isolated, Chopin-tools-only
 boundary. Only the summary and research workers still run isolated Atomic sessions.

@@ -9,9 +9,9 @@ import {
 	hostLeak,
 	inputParts,
 	ownToolParts,
+	PLANNER_WITHHELD_TOOLS,
 	resolveModel,
 	resultText,
-	THREAD_WITHHELD_TOOLS,
 	turnSystemPrompt,
 } from "./adapter";
 
@@ -95,10 +95,10 @@ test("a Planner turn keeps Atomic's tools and prompt but still refuses the resul
 	expect(atomic.call(ATOMIC_RESULT_TOOL_NAME)).toBeUndefined();
 });
 
-test("a Chat thread's Planner turn refuses Atomic's intercom however it is called", () => {
+test("a full Planner turn refuses Atomic's intercom however it is called", () => {
 	let policy: TurnPolicy = {
 		full: true,
-		withheld: THREAD_WITHHELD_TOOLS,
+		withheld: PLANNER_WITHHELD_TOOLS,
 		hostNames: ["tell_chat_planner"],
 		structured: false,
 		systemPrompt: "Plan.",
@@ -106,7 +106,7 @@ test("a Chat thread's Planner turn refuses Atomic's intercom however it is calle
 	let atomic = fakeExtensionApi(policy);
 	expect(atomic.call("intercom")).toMatchObject({
 		block: true,
-		reason: "intercom is not available in a Chat thread.",
+		reason: "intercom is not available to a Chopin Planner.",
 	});
 	expect(atomic.call("tell_chat_planner")).toBeUndefined();
 	expect(atomic.call("workflow")).toBeUndefined();
