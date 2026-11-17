@@ -36,6 +36,7 @@ import type {
 import type { Chat as Wire } from "@chopin/protocol";
 import type { JsonValue, PlannerHeldSession } from "../../storage/model";
 import type { PlannerRuns } from "../atomic/full";
+import { withdrawnValue } from "../atomic/human-input";
 import type { AskedInput, HumanInput, HumanInputStatus, InputMethod } from "../atomic/human-input";
 import type { PlannerTurn } from "../turn-level";
 import type { RemotePlanner } from "./registry";
@@ -2050,7 +2051,7 @@ export class AgentLink {
 			return void reply("failed", undefined, "Decisions are not available to this session.");
 		}
 		if (message.workflowRunId === undefined && session.withdrawing) {
-			return void reply("cancelled", null);
+			return void reply("cancelled", withdrawnValue(message.input.method));
 		}
 		if (this.#inputs.size >= MAX_OPEN_INPUTS) {
 			return void reply("failed", undefined, "Too many questions are already open.");

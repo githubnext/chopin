@@ -491,8 +491,9 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   the server withdraws its Decision and answers its `input-request` with
   `input-result` status `cancelled`, as a full Atomic Planner's Stop does, so a
   client whose question is still waiting can end the turn. One the turn asks
-  after `abort`, before its `turn-end`, is answered `cancelled` at once and opens
-  no Decision. A workflow run's question is the run's and stays open.
+  after `abort`, before its `turn-end`, is answered `cancelled` at once, with its
+  method's `cancelled` value (see [Questions](#questions)), and opens no
+  Decision. A workflow run's question is the run's and stays open.
 - `steer`, with `steer-turn`, gives the turn that is running a message a person sent to Chopin
   while it works. Chopin never holds a message for the next turn, so this is how a person talks to
   a Planner mid-reply: `prompt` is the message as the model should read it (the sender's handle
