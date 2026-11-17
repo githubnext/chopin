@@ -47,6 +47,13 @@ export type Group =
 	/** chopin's note to this person alone (`Local`), where it falls in time. */
 	| { kind: "note"; id: string; ts: number };
 
+/**
+ * The turn in progress. `anchorId` is the entry its work is drawn on once it has one
+ * (`TranscriptState.activeAnchorId`), which the work keeps when the turn ends, so an entry placed
+ * before it by its time does not take the work from it.
+ */
+export type WorkingTurn = Pick<Chat.Turn, "id" | "started" | "entryOffset"> & { anchorId?: string };
+
 export type CompletedWork = {
 	turnId: string;
 	entryOffset: number;
@@ -113,7 +120,7 @@ export function displayText(value: string): string {
 
 export function group(
 	entries: Chat.Entry[],
-	working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">,
+	working?: WorkingTurn,
 	completed: CompletedWork[] = [],
 	suspended?: CompletedWork,
 	local: readonly Local[] = [],
@@ -142,7 +149,7 @@ export function group(
 			? [{
 				entryOffset: working.entryOffset,
 				endOffset: entries.length,
-				anchorId: "",
+				anchorId: working.anchorId ?? "",
 				active: true,
 				disconnected: false,
 			}]
@@ -152,11 +159,14 @@ export function group(
 		let current = entries.slice(span.entryOffset, span.endOffset)
 			.map((entry, index) => ({ entry, index: index + span.entryOffset }))
 			.filter(({ entry }) => entry.author.kind === "agent");
-		let anchor = span.anchorId
+		let anchor = (span.anchorId
 			? current.find(({ entry }) => entry.id === span.anchorId)
-			: current.find(({ entry }) =>
-				!!entry.tools?.length || !!entry.text.trim() || !!entry.streaming
-			);
+			: undefined)
+			?? (span.active
+				? current.find(({ entry }) =>
+					!!entry.tools?.length || !!entry.text.trim() || !!entry.streaming
+				)
+				: undefined);
 		if (!anchor) continue;
 		let tools = current.flatMap(({ entry }) => entry.tools ?? []);
 		if (!span.active && !span.disconnected && !tools.length) continue;
