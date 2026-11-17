@@ -288,6 +288,32 @@ describe("AI SDK stream projection", () => {
 		expect(chat.entries[0]?.tools?.[0]?.result?.length).toBe(4_000);
 	});
 
+	it("reports each tool call whole, with its place among the entry's calls and a growing revision", () => {
+		let chat = create();
+		let { context, sent } = room(chat);
+		translate(context, call("read_plan", "t1", { revision: 1 }));
+		translate(context, call("read_plan", "t2", { revision: 2 }));
+		progressed(context, "t1", "Read 1 file");
+		progressed(context, "t1", "Read 2 files");
+		translate(
+			context,
+			part({ type: "tool-result", toolCallId: "t1", toolName: "read_plan", output: "ok" }),
+		);
+		let reports = sent.flatMap(frame =>
+			frame.kind === "chat:tool" ? [(frame as unknown as Wire.Tool).activity] : []
+		);
+		expect(reports.map(report => [report.id, report.order, report.rev, report.status])).toEqual([
+			["t1", 0, 1, "running"],
+			["t2", 1, 1, "running"],
+			["t1", 0, 2, "running"],
+			["t1", 0, 3, "running"],
+			["t1", 0, 4, "done"],
+		]);
+		expect(reports.every(report => report.name === "read_plan" && report.args !== undefined))
+			.toBe(true);
+		expect(chat.entries[0]?.tools).toEqual([reports[4], reports[1]]);
+	});
+
 	it("never publishes referenced source content", () => {
 		let chat = create();
 		let { context } = room(chat);

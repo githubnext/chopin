@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { appendEntries, snapshotSeq, stampEntries } from "./chronology";
+import { appendEntries, snapshotSeq, stampEntries, takeOut } from "./chronology";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Transcript } from "./chronology";
@@ -48,18 +48,68 @@ describe("a transcript's entries in time", () => {
 		let transcript: Transcript = { entries: [] };
 		appendEntries(transcript, said("a", 10));
 		let snapshot = snapshotSeq(transcript);
-		expect(snapshot).toBeGreaterThan(transcript.entries[0]!.seq!);
+		expect(snapshot).toBeGreaterThanOrEqual(transcript.entries[0]!.seq!);
 		appendEntries(transcript, said("b", 10));
 		expect(transcript.entries[1]!.seq).toBeGreaterThan(snapshot);
-		expect(snapshotSeq(transcript)).toBeGreaterThan(transcript.entries[1]!.seq!);
+		expect(snapshotSeq(transcript)).toBeGreaterThanOrEqual(transcript.entries[1]!.seq!);
 	});
 
 	it("does not take back a sequence when the last entry is taken out", () => {
 		let transcript: Transcript = { entries: [] };
 		appendEntries(transcript, said("a", 10), said("b", 10));
-		let removed = transcript.entries.pop()!;
+		let before = snapshotSeq(transcript);
+		let removed = transcript.entries[1]!;
+		takeOut(transcript, ["b"]);
+		expect(transcript.entries.map(entry => entry.id)).toEqual(["a"]);
+		expect(snapshotSeq(transcript)).toBeGreaterThan(before);
 		appendEntries(transcript, said("c", 10));
 		expect(transcript.entries[1]!.seq).toBeGreaterThan(removed.seq!);
+	});
+
+	it("gives out nothing for a snapshot, so a restart whose clock is behind gives out no snapshot's sequence again", () => {
+		let realNow = Date.now;
+		try {
+			let clock = 1000;
+			Date.now = () => clock;
+			let transcript: Transcript = { entries: [] };
+			appendEntries(transcript, said("old", 10));
+			clock = 2000;
+			let seen = snapshotSeq(transcript);
+			clock = 1500;
+			let restarted: Transcript = {
+				entries: structuredClone(transcript.entries),
+				lastSeq: transcript.lastSeq,
+			};
+			expect(snapshotSeq(restarted)).toBeGreaterThanOrEqual(seen);
+			appendEntries(restarted, said("new", 10));
+			expect(restarted.entries[1]!.seq).toBeGreaterThan(seen);
+		} finally {
+			Date.now = realNow;
+		}
+	});
+
+	it("gives out nothing a removal moved past once its sequence is restored after a restart", () => {
+		let realNow = Date.now;
+		try {
+			let clock = 1000;
+			Date.now = () => clock;
+			let transcript: Transcript = { entries: [] };
+			appendEntries(transcript, said("old", 10));
+			clock = 2000;
+			appendEntries(transcript, said("failed", 10));
+			takeOut(transcript, ["failed"]);
+			let seen = snapshotSeq(transcript);
+			clock = 1500;
+			let restarted: Transcript = {
+				entries: structuredClone(transcript.entries),
+				lastSeq: transcript.lastSeq,
+			};
+			expect(snapshotSeq(restarted)).toBe(seen);
+			appendEntries(restarted, said("new", 10));
+			expect(restarted.entries[1]!.seq).toBeGreaterThan(seen);
+		} finally {
+			Date.now = realNow;
+		}
 	});
 
 	it("keeps the time and sequence an entry was stamped with when nothing came ahead of it", () => {

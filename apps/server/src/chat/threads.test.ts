@@ -13,6 +13,7 @@ import * as Plan from "../plan/service";
 import { finishTurn, linkAuth, linkServer, MEMBER_TOKEN } from "../testing/agent-link";
 import { configured } from "../testing/config";
 import { ReferenceService } from "./references";
+import { appendEntries, snapshotSeq, takeOut } from "./chronology";
 import * as Chat from "./service";
 import { sessionContextOf } from "./session-context";
 import * as Threads from "./threads";
@@ -610,6 +611,50 @@ describe("Chat threads server", () => {
 		let reopened = await w.storage.chatThreads.getThread(w.channel.id, rootId);
 		expect(reopened?.entries.find(entry => entry.id === replyId)?.ts).toBe(ahead);
 		await Chat.close(freshChat);
+	});
+
+	test("a thread saves the last sequence it gave out, so a restart whose clock is behind gives none again", async () => {
+		let w = await buildWorld();
+		let alice = w.makeSocket("alice", "U_alice");
+		let rootId = crypto.randomUUID();
+		let send = (requestId: string, text: string) =>
+			Threads.sendMessage(w.context, alice.ws, {
+				kind: "chat:send",
+				rid: requestId,
+				requestId,
+				to: "room",
+				...(text.startsWith("Root") ? {} : { thread: rootId }),
+				text,
+				ts: 0,
+			});
+		await send(rootId, "Root: let us use PostgreSQL.");
+		await send(crypto.randomUUID(), "First reply.");
+		let thread = w.plan.chat.childChats!.get(rootId)!;
+		let failed = thread.entries.at(-1)!;
+		takeOut(thread, [failed.id]);
+		let given = snapshotSeq(thread);
+		expect(given).toBeGreaterThan(failed.seq!);
+		await send(crypto.randomUUID(), "Second reply.");
+		given = snapshotSeq(thread);
+		let stored = await w.storage.chatThreads.getThread(w.channel.id, rootId);
+		expect(stored?.lastSeq).toBe(given);
+
+		let realNow = Date.now;
+		try {
+			Date.now = () => 1;
+			let freshChat = Chat.restore(structuredClone(w.plan.chat.entries));
+			let reloaded = Threads.bindTopLevel({ ...w.context, chat: freshChat });
+			await Threads.greetThreads(reloaded, w.makeSocket("carol", "U_carol", false).ws);
+			let restored = freshChat.childChats!.get(rootId)!;
+			expect(snapshotSeq(restored)).toBe(given);
+			expect(freshChat.lastSeq).toBeGreaterThanOrEqual(given);
+			let next: Wire.Entry = { id: "next", author: { kind: "system" }, text: "next", ts: 1 };
+			appendEntries(restored, next);
+			expect(next.seq).toBeGreaterThan(given);
+			await Chat.close(freshChat);
+		} finally {
+			Date.now = realNow;
+		}
 	});
 
 	test("a Retry branches the Atomic session back to before the failed attempt, and gives it no word of the attempt", async () => {

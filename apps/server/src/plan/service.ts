@@ -375,6 +375,8 @@ type Sidecar = {
 	openQuestions: Questions.StoredOpen[];
 	threads: Comments.Record[];
 	transcript: Chat.Chat["entries"];
+	/** The last sequence Chat gave out, which taking entries out moves past (`chat/chronology.ts`). */
+	transcriptSeq?: number;
 	conversationPlan?: ConversationPlan.State;
 	conversationPlanRetries?: Array<{ id: string; messageId: string }>;
 	conversationPlanJobs?: ConversationPlan.Job[];
@@ -387,7 +389,7 @@ type Sidecar = {
 	titleChosen?: true;
 };
 
-type ChatView = Pick<Chat.Chat, "entries" | "runs" | "initiativePaused">;
+type ChatView = Pick<Chat.Chat, "entries" | "runs" | "initiativePaused" | "lastSeq">;
 
 function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 	return {
@@ -409,6 +411,7 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 		openQuestions: Questions.dump(plan.questions),
 		threads: [...plan.threads.values()],
 		transcript: entriesForStorage(chat.entries),
+		...transcriptSeqOf(chat, plan.chat.lastSeq),
 		conversationPlan: plan.conversationPlan,
 		...(plan.conversationPlanRetries.length
 			? { conversationPlanRetries: plan.conversationPlanRetries }
@@ -428,6 +431,15 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 		...(plan.plannerTitle !== undefined ? { plannerTitle: plan.plannerTitle } : {}),
 		...(plan.titleChosen ? { titleChosen: true as const } : {}),
 	};
+}
+
+/**
+ * Chat's last sequence, saved only when its entries do not say it: after a Retry took out the
+ * entries that held it. An earlier release refuses a sidecar with it, so it is written only then.
+ */
+function transcriptSeqOf(chat: ChatView, live?: number): { transcriptSeq?: number } {
+	let seq = Math.max(chat.lastSeq ?? 0, live ?? 0);
+	return seq > (chat.entries.at(-1)?.seq ?? 0) ? { transcriptSeq: seq } : {};
 }
 
 function jsonState(plan: Plan, chat?: ChatView): { value: JsonValue; text: string } {
@@ -622,6 +634,7 @@ function restoredState(
 	if (Object.hasOwn(item, "initiativePaused")) expected.push("initiativePaused");
 	if (Object.hasOwn(item, "plannerTitle")) expected.push("plannerTitle");
 	if (Object.hasOwn(item, "titleChosen")) expected.push("titleChosen");
+	if (Object.hasOwn(item, "transcriptSeq")) expected.push("transcriptSeq");
 	expected.sort();
 	if (
 		keys.length !== expected.length
@@ -640,6 +653,8 @@ function restoredState(
 		|| (Object.hasOwn(item, "initiativePaused") && typeof item.initiativePaused !== "boolean")
 		|| (Object.hasOwn(item, "plannerTitle") && typeof item.plannerTitle !== "string")
 		|| (Object.hasOwn(item, "titleChosen") && item.titleChosen !== true)
+		|| (Object.hasOwn(item, "transcriptSeq")
+			&& !(Number.isSafeInteger(item.transcriptSeq) && (item.transcriptSeq as number) >= 0))
 	) throw new Error("hosted channel has an invalid sidecar");
 	let execution = Object.hasOwn(item, "execution")
 		? restoreRun(item.execution, graph, item.revision)
@@ -826,6 +841,7 @@ function restoredState(
 		openQuestions: openQuestions as unknown as Questions.StoredOpen[],
 		threads: threads as never[],
 		transcript: transcript as unknown as Chat.Chat["entries"],
+		...(typeof item.transcriptSeq === "number" ? { transcriptSeq: item.transcriptSeq } : {}),
 		conversationPlan,
 		...(conversationPlanRetries.length ? { conversationPlanRetries } : {}),
 		...(conversationPlanJobs.length ? { conversationPlanJobs } : {}),
@@ -1601,13 +1617,16 @@ export async function open(
 		presence: presence.create(),
 		questions: Questions.restore(sidecar.openQuestions),
 		comments: Comments.create(),
-		chat: Chat.restore(
-			sidecar.transcript,
-			sidecar.workflowRuns,
-			sidecar.initiativePaused,
-			// An archived document's Planner ended with it: its runs come back stopped.
-			loaded.channel.archivedAt ? undefined : backend.plannerKeepsRuns?.(id),
-		),
+		chat: {
+			...Chat.restore(
+				sidecar.transcript,
+				sidecar.workflowRuns,
+				sidecar.initiativePaused,
+				// An archived document's Planner ended with it: its runs come back stopped.
+				loaded.channel.archivedAt ? undefined : backend.plannerKeepsRuns?.(id),
+			),
+			...(sidecar.transcriptSeq !== undefined ? { lastSeq: sidecar.transcriptSeq } : {}),
+		},
 		conversationPlan: sidecar.conversationPlan ?? restoreConversationPlan(undefined),
 		conversationPlanRetries: sidecar.conversationPlanRetries ?? [],
 		conversationPlanJobs: sidecar.conversationPlanJobs ?? [],

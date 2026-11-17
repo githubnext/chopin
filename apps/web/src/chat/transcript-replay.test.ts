@@ -26,8 +26,10 @@ function pick<T>(next: () => number, items: readonly T[]): T {
 /**
  * What a server says over a transcript's life, in the order it says it: entries appended with a
  * time that never goes back and a sequence that only grows, often several in one second; agent
- * entries streamed in pieces, with tool calls that start and finish; reactions given and taken
- * back; entries a Retry takes out; and copies of the whole transcript (`history`) along the way.
+ * entries streamed in pieces, or holding only tool calls, with tool calls that start, report
+ * partial results and finish, each report the whole call with its place and revision; reactions given and taken
+ * back; entries a Retry takes out, which moves the sequence past them; and copies of the whole
+ * transcript (`history`) along the way, which give out no sequence.
  */
 function server(next: () => number, count: number) {
 	let entries: Chat.Entry[] = [];
@@ -36,7 +38,6 @@ function server(next: () => number, count: number) {
 	let ts = 1_700_000_000;
 	let seq = 0;
 	let snapshot = () => {
-		seq += 1 + Math.floor(next() * 3);
 		frames.push({
 			kind: "history",
 			entries: structuredClone(entries.filter(entry => !removed.has(entry.id))),
@@ -60,45 +61,72 @@ function server(next: () => number, count: number) {
 			reactionsSeq: entry.reactionsSeq,
 		});
 	};
+	let report = (entry: Chat.Entry, change: Chat.Activity) => {
+		let tools = entry.tools ??= [];
+		let at = tools.findIndex(tool => tool.id === change.id);
+		let before = tools[at];
+		let sent: Chat.Activity = {
+			...before,
+			...change,
+			order: before ? before.order! : tools.length,
+			rev: (before?.rev ?? 0) + 1,
+		};
+		if (before) tools[at] = sent;
+		else tools.push(sent);
+		frames.push({ kind: "tool", entryId: entry.id, activity: structuredClone(sent) });
+		if (next() < 0.3) frames.push({ kind: "message", entry: structuredClone(entry) });
+		if (next() < 0.15) snapshot();
+	};
 	for (let index = 0; index < count; index++) {
 		ts += next() < 0.6 ? 0 : 1 + Math.floor(next() * 30);
 		seq += 1 + Math.floor(next() * 3);
 		let id = `e${index}`;
-		if (next() < 0.35) {
+		let kind = next();
+		if (kind < 0.35) {
 			let entry: Chat.Entry = { id, author: { kind: "member", handle: "ana" }, text: id, ts, seq };
 			entries.push(entry);
 			frames.push({ kind: "message", entry: structuredClone(entry) });
 		} else {
+			let toolOnly = kind < 0.55;
 			let words = ["Look", "ing at", " the", " plan", " now."].slice(0, 2 + Math.floor(next() * 4));
-			let entry: Chat.Entry = {
-				id,
-				author: { kind: "agent" },
-				text: words[0]!,
-				ts,
-				seq,
-				streaming: true,
-			};
+			let entry: Chat.Entry = toolOnly
+				? { id, author: { kind: "agent" }, text: "", ts, seq, tools: [] }
+				: { id, author: { kind: "agent" }, text: words[0]!, ts, seq, streaming: true };
 			entries.push(entry);
 			frames.push({ kind: "message", entry: structuredClone(entry) });
-			let tools = Math.floor(next() * 3);
-			for (let piece of words.slice(1)) {
-				frames.push({ kind: "delta", id, text: piece, at: entry.text.length });
-				entry.text += piece;
-				if (next() < 0.2) snapshot();
+			if (!toolOnly) {
+				for (let piece of words.slice(1)) {
+					frames.push({ kind: "delta", id, text: piece, at: entry.text.length });
+					entry.text += piece;
+					if (next() < 0.2) snapshot();
+				}
 			}
-			for (let call = 0; call < tools; call++) {
-				let running: Chat.Activity = { id: `${id}-t${call}`, name: "read_plan", status: "running" };
-				entry.tools = [...entry.tools ?? [], running];
-				frames.push({ kind: "tool", entryId: id, activity: { ...running } });
-				if (next() < 0.5) frames.push({ kind: "message", entry: structuredClone(entry) });
-				let done: Chat.Activity = { ...running, status: next() < 0.8 ? "done" : "failed", took: 5 };
-				entry.tools = entry.tools.map(tool => tool.id === done.id ? done : tool);
-				frames.push({ kind: "tool", entryId: id, activity: { ...done } });
+			let calls = (toolOnly ? 1 : 0) + Math.floor(next() * 3);
+			for (let call = 0; call < calls; call++) {
+				let tool = `${id}-t${call}`;
+				report(entry, { id: tool, name: "read_plan", status: "running", startedAt: call });
+				for (let read = 1; read <= Math.floor(next() * 3); read++) {
+					report(entry, {
+						id: tool,
+						name: "read_plan",
+						status: "running",
+						result: `Read ${read} file${read === 1 ? "" : "s"}`,
+					});
+				}
+				report(entry, {
+					id: tool,
+					name: "read_plan",
+					status: next() < 0.8 ? "done" : "failed",
+					took: 5,
+				});
 			}
-			delete entry.streaming;
-			frames.push({ kind: "message", entry: structuredClone(entry) });
+			if (!toolOnly) {
+				delete entry.streaming;
+				frames.push({ kind: "message", entry: structuredClone(entry) });
+			}
 			if (next() < 0.25) {
 				removed.add(id);
+				seq += 1;
 				frames.push({ kind: "removed", ids: [id] });
 			}
 		}
@@ -261,6 +289,53 @@ describe("a transcript's regressions", () => {
 			{ kind: "tool", entryId: "a", activity: running },
 		]);
 		expect(state.entries[0]!.tools).toEqual([done]);
+	});
+
+	it("puts a tool-only entry's calls in the server's order, whatever order their reports come in", () => {
+		let entry = agent("a", 1, 1, "", { tools: [] });
+		let call = (
+			id: string,
+			order: number,
+			rev: number,
+			status: Chat.ToolStatus,
+		): TranscriptAction => ({
+			kind: "tool",
+			entryId: "a",
+			activity: { id, name: "read_plan", status, order, rev },
+		});
+		let reports = [
+			call("t1", 0, 1, "running"),
+			call("t1", 0, 2, "done"),
+			call("t2", 1, 1, "running"),
+			call("t2", 1, 2, "done"),
+		];
+		let inOrder = apply(initialTranscript, [{ kind: "message", entry }, ...reports]);
+		let reversed = apply(initialTranscript, [{ kind: "message", entry }, ...reports.toReversed()]);
+		let early = apply(initialTranscript, [...reports.toReversed(), { kind: "message", entry }]);
+		for (let state of [inOrder, reversed, early]) {
+			expect(state.entries[0]!.tools!.map(tool => [tool.id, tool.status])).toEqual([
+				["t1", "done"],
+				["t2", "done"],
+			]);
+		}
+	});
+
+	it("keeps a running tool's latest result when an earlier report arrives again", () => {
+		let entry = agent("a", 1, 1, "", { tools: [] });
+		let report = (rev: number, result: string) => ({
+			kind: "tool" as const,
+			entryId: "a",
+			activity: { id: "t", name: "read_plan", status: "running" as const, order: 0, rev, result },
+		});
+		let first = report(1, "Read 1 file");
+		let state = apply(initialTranscript, [
+			{ kind: "message", entry },
+			first,
+			report(2, "Read 2 files"),
+			first,
+			{ kind: "message", entry: { ...entry, tools: [first.activity] } },
+		]);
+		expect(state.entries[0]!.tools!.map(tool => tool.result)).toEqual(["Read 2 files"]);
 	});
 
 	it("keeps tool calls when a streaming copy with the same text arrives again", () => {
