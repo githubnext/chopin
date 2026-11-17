@@ -1,10 +1,9 @@
 /**
- * A Chat message's toolbar is where the pointer can reach it whatever part of the message is on
- * screen, as Slack's is: hovering any visible part of a message whose top is scrolled out of the pane
- * shows its bar pinned to the top of what is visible of it, following it while the pane scrolls and
- * back at the row's top-right corner once its top is in view; a message cut by the composer has its
- * bar in the pane too. Each case records where the bar is and whether each of its buttons is on
- * screen, drawn at full strength and the thing the pointer meets.
+ * A Chat message's toolbar stands on its row's top edge and scrolls with it, as Slack's does: a
+ * message whose top edge is in the pane, a message cut by the composer included, has its bar in the
+ * pane where the pointer reaches it, and a message whose top edge is scrolled out of the pane shows
+ * no bar over what remains of it. Each case records where the bar is and whether each of its buttons
+ * is on screen, drawn at full strength and the thing the pointer meets.
  */
 import { chatInput, fillChat } from "./chat-input";
 import { expect, test } from "./room";
@@ -222,14 +221,38 @@ async function expectReachable(
 	return seen;
 }
 
+/** The top of the row's first line: its name line where it heads its group, else its text. */
+async function firstLineTop(target: Locator): Promise<number> {
+	return target.evaluate(element => {
+		let head = element.previousElementSibling?.matches("[data-chat-head]")
+			? element.previousElementSibling
+			: element;
+		return head.getBoundingClientRect().top;
+	});
+}
+
+async function expectNoBar(scroller: Locator, target: Locator, label: string, info: TestInfo) {
+	await expect.poll(
+		() => target.evaluate(element => getComputedStyle(element, "::before").opacity),
+		{ message: `${label}: the row under the pointer is shaded` },
+	).toBe("1");
+	let seen = await record(scroller, target);
+	await attach(info, label, seen);
+	expect(seen.bar!.bottom, `${label}: the bar left the pane with the row's top edge`)
+		.toBeLessThanOrEqual(seen.pane.top);
+	expect(
+		seen.buttons.filter(button => button.onScreen || button.hit).map(button => button.name),
+		`${label}: no button is on screen or under the pointer`,
+	).toEqual([]);
+}
+
 test(
-	"on a desktop a message whose top is scrolled out of the pane shows its toolbar where the pointer can reach it, short, medium and tall",
+	"on a desktop a message whose top edge is scrolled out of the pane shows no toolbar over what remains of it, short, medium and tall",
 	async ({ join, seed }, info) => {
 		await seed("# Toolbar\n", { transcript: transcript() });
 		let page = await join("ana");
 		let chat = chatOf(page);
 		let scroller = scrollerOf(chat);
-		let resting = await restingInk(page, scroller, chat);
 
 		for (
 			let [id, cut, at] of [
@@ -245,35 +268,18 @@ test(
 			await cutTop(scroller, id, cut);
 			let point = await visiblePoint(scroller, target, at);
 			await page.mouse.move(point.x, point.y);
-			let label = `${id}, top ${cut} px out, pointer at the ${at} of what shows`;
-			// A row that shows less of itself than the pane's 56px top fade keeps its bar at its last line,
-			// so the pointer reaches it from there; any other has it clear of the fade, at full strength.
-			let seen = await expectReachable(
+			await expectNoBar(
 				scroller,
 				target,
-				label,
+				`${id}, top ${cut} px out, pointer at the ${at} of what shows`,
 				info,
-				id === "short" ? undefined : resting,
 			);
-			// Pinned to the top of what shows of the message, as Slack's is, not somewhere down its text.
-			expect(seen.bar!.top - seen.pane.top, `${label}: next to the pane's top`).toBeLessThanOrEqual(
-				58,
-			);
-			let first = (await toolbar(target).getByRole("button").first().boundingBox())!;
-			await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2, { steps: 8 });
-			await expect(toolbar(target), label).toHaveCSS("opacity", "1");
-			expect(
-				await toolbar(target).getByRole("button").first().evaluate(element =>
-					element.matches(":hover")
-				),
-				`${label}: the pointer reaches the first button`,
-			).toBe(true);
 		}
 	},
 );
 
 test(
-	"on a desktop the toolbar of a message under the pointer follows the pane as it scrolls, and is back at the row's corner once its top is in view",
+	"on a desktop the toolbar of a message under the pointer scrolls with its row, standing on the row's first line, and leaves with its top edge",
 	async ({ join, seed }, info) => {
 		await seed("# Toolbar\n", { transcript: transcript() });
 		let page = await join("ana");
@@ -283,35 +289,30 @@ test(
 		let bar = toolbar(target);
 		let resting = await restingInk(page, scroller, chat);
 		await page.mouse.move(0, 0);
-		await cutTop(scroller, "tall", 120);
+		await cutTop(scroller, "tall", -200);
 		let pane = await shown(scroller);
-		await page.mouse.move(0, 0);
 		await page.mouse.move(400, (pane.top + pane.bottom) / 2);
 		await expect(bar).toHaveCSS("opacity", "1");
-		let tops: number[] = [];
-		for (let step = 0; step < 4; step++) {
-			await page.mouse.wheel(0, 80);
-			await expect.poll(async () => (await bar.boundingBox())!.y).toBeGreaterThanOrEqual(pane.top);
-			tops.push(Math.round((await bar.boundingBox())!.y));
+		await expectReachable(scroller, target, "tall, top 200 px into the pane", info, resting);
+		let gaps: number[] = [];
+		for (let step = 0; step < 3; step++) {
+			let box = (await bar.boundingBox())!;
+			gaps.push((await firstLineTop(target)) - (box.y + box.height));
+			await page.mouse.wheel(0, 50);
+			await expect.poll(async () => Math.round((await bar.boundingBox())!.y)).toBeLessThan(
+				Math.round(box.y),
+			);
 		}
-		await attach(info, "bar top while scrolling down 80 px at a time", { pane, tops });
-		expect(Math.max(...tops) - Math.min(...tops), "it stays put at the pane's top")
-			.toBeLessThanOrEqual(1);
-		await expectReachable(scroller, target, "tall, scrolled with the pointer on it", info, resting);
+		await attach(info, "gap from the bar's foot to the row's first line while scrolling", gaps);
+		expect(gaps).toHaveLength(3);
+		expect(
+			Math.max(...gaps.map(Math.abs)),
+			"the bar stands on the row's first line as it scrolls",
+		).toBeLessThanOrEqual(0.5);
 
-		// Its top back in view: the bar stands at the row's top right, 16 px above the row's shade.
-		await cutTop(scroller, "tall", -200);
-		await page.mouse.move(0, 0);
-		let point = await visiblePoint(scroller, target, "middle");
-		await page.mouse.move(point.x, point.y);
-		await expect(bar).toHaveCSS("opacity", "1");
-		let row = await target.evaluate(element => {
-			let style = getComputedStyle(element, "::before");
-			return element.getBoundingClientRect().top + Number.parseFloat(style.top);
-		});
-		let box = (await bar.boundingBox())!;
-		await attach(info, "tall, top back in view", { row, bar: box.y });
-		expect(row - box.y).toBeCloseTo(16, 0);
+		await page.mouse.wheel(0, 300);
+		await expect.poll(async () => (await firstLineTop(target)) < pane.top).toBe(true);
+		await expectNoBar(scroller, target, "tall, scrolled until its top edge left the pane", info);
 	},
 );
 
@@ -335,18 +336,18 @@ test(
 				info,
 			);
 		}
-		// A tall message cut at both ends.
+		// A tall message cut at both ends shows no bar: its top edge is out of the pane.
 		let tall = messageIn(chat, "tall");
 		await page.mouse.move(0, 0);
 		await cutTop(scroller, "tall", 200);
 		let point = await visiblePoint(scroller, tall, "bottom");
 		await page.mouse.move(point.x, point.y);
-		await expectReachable(scroller, tall, "tall, cut at the top and by the composer", info);
+		await expectNoBar(scroller, tall, "tall, cut at the top and by the composer", info);
 	},
 );
 
 test(
-	"in a thread panel a reply whose top is scrolled out shows its toolbar where the pointer can reach it",
+	"in a thread panel a reply whose top edge is in the pane shows its toolbar where the pointer reaches it, and one whose top edge is scrolled out shows none",
 	async ({ join, seed }, info) => {
 		await seed("# Toolbar\n", { transcript: transcript() });
 		let page = await join("ana", WIDE);
@@ -384,16 +385,21 @@ test(
 		for (let [id, cut, name] of [[medium, 50, "medium"], [tall, 250, "tall"]] as const) {
 			let target = messageIn(panel, id);
 			await page.mouse.move(0, 0);
-			await cutTop(scroller, id, cut);
+			await cutTop(scroller, id, -120);
 			let point = await visiblePoint(scroller, target, "middle");
 			await page.mouse.move(point.x, point.y);
 			await expectReachable(
 				scroller,
 				target,
-				`thread ${name} reply, top ${cut} px out`,
+				`thread ${name} reply, top 120 px into the pane`,
 				info,
 				resting,
 			);
+			await page.mouse.move(0, 0);
+			await cutTop(scroller, id, cut);
+			point = await visiblePoint(scroller, target, "middle");
+			await page.mouse.move(point.x, point.y);
+			await expectNoBar(scroller, target, `thread ${name} reply, top ${cut} px out`, info);
 		}
 	},
 );
@@ -454,14 +460,14 @@ async function openOnCutMessage(
 	page: Page,
 	scope: Locator,
 	id: string,
-	cut: number,
+	seen: number,
 	info: TestInfo,
 	label: string,
 ) {
 	let scroller = scrollerOf(scope);
 	let target = messageIn(scope, id);
 	await page.mouse.move(0, 0);
-	await cutTop(scroller, id, cut);
+	await cutBottom(scroller, id, seen);
 	let point = await visiblePoint(scroller, target, "middle");
 	await page.mouse.move(point.x, point.y);
 	let bar = toolbar(target);
@@ -486,7 +492,8 @@ async function openOnCutMessage(
 	await attach(info, `${label}: menu`, { pane, before, open, menu: menuBox });
 	expect(Math.abs(open.y - before.y), `${label}: the bar stays put while its menu is open`)
 		.toBeLessThanOrEqual(1);
-	expect(inside(menuBox, pane), `${label}: the menu opens inside the pane`).toBe(true);
+	let screen = { top: 0, bottom: page.viewportSize()!.height };
+	expect(inside(menuBox, screen), `${label}: the menu opens on screen`).toBe(true);
 	let copy = menu.getByRole("menuitem", { name: "Copy", exact: true });
 	let copyBox = (await copy.boundingBox())!;
 	expect(
@@ -527,18 +534,25 @@ async function openOnCutMessage(
 }
 
 test(
-	"on a desktop the menu and emoji picker of a tall message scrolled partly out of view open on screen, and its toolbar stays where it was",
+	"on a desktop the menu and emoji picker of a message cut by the composer open on screen, and its toolbar stays where it was",
 	async ({ join, seed }, info) => {
 		await seed("# Toolbar\n", { transcript: transcript() });
 		let page = await join("ana");
 		let chat = chatOf(page);
-		await openOnCutMessage(page, chat, "tall", 300, info, "tall, top 300 px out");
-		await openOnCutMessage(page, chat, "medium", 120, info, "medium, top 120 px out");
+		await openOnCutMessage(page, chat, "tall", 60, info, "tall, only its top 60 px in the pane");
+		await openOnCutMessage(
+			page,
+			chat,
+			"medium",
+			30,
+			info,
+			"medium, only its top 30 px in the pane",
+		);
 	},
 );
 
 test(
-	"in a thread panel the menu and emoji picker of a tall reply scrolled partly out of view open on screen",
+	"in a thread panel the menu and emoji picker of a tall reply cut by the composer open on screen",
 	async ({ join, seed }, info) => {
 		await seed("# Toolbar\n", { transcript: transcript() });
 		let page = await join("ana", WIDE);
@@ -562,9 +576,9 @@ test(
 			page,
 			panel,
 			ids.at(-3)!,
-			250,
+			60,
 			info,
-			"thread tall reply, top 250 px out",
+			"thread tall reply, only its top 60 px in the pane",
 		);
 	},
 );

@@ -20,14 +20,25 @@ export function ResearchAvatar() {
 	);
 }
 
-/** The name line of a row: the name in bold, the kind's tag, and the time beside them. */
+/**
+ * The name line of a row: the name in bold, the kind's tag, and the time beside them, on one line
+ * whatever the pane's width, so the row's toolbar stands just above it. A name too long for it ends
+ * in an ellipsis.
+ */
 export function SpeakerHead({ speaker }: { speaker: Speaker }) {
 	return (
 		<div className="flex items-baseline gap-2 text-base" data-chat-head="">
-			<span className="min-w-0 break-all font-bold" data-speaker-name="">{speaker.name}</span>
+			<span
+				className="min-w-0 overflow-x-clip text-ellipsis whitespace-nowrap font-bold"
+				data-speaker-name=""
+			>
+				{speaker.name}
+			</span>
 			{speaker.kind !== "user" && <SpeakerTag kind={speaker.kind} />}
 			{speaker.time !== undefined && (
-				<span className="text-xs text-text-tertiary tabular-nums">{speaker.time}</span>
+				<span className="shrink-0 whitespace-nowrap text-xs text-text-tertiary tabular-nums">
+					{speaker.time}
+				</span>
 			)}
 		</div>
 	);

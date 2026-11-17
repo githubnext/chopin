@@ -44,6 +44,7 @@ const EmojiPicker = lazy(() =>
 );
 
 const TOOLBAR_MARGIN = 8;
+const AIM_MS = 300;
 const SHEET_WIDTH = 600;
 
 type Which = "markdown" | "plain";
@@ -135,6 +136,46 @@ function useAnchored(
 	return position;
 }
 
+/**
+ * Keeps a row shown for a moment after a mouse leaves it upwards and towards the row's end, where its
+ * toolbar stands over the row before: a pointer heading for the bar from the row's text crosses that
+ * row. It reads no geometry, so a hover moving from row to row lays nothing out.
+ */
+function useToolbarAim(host: RefObject<HTMLElement | null>) {
+	useEffect(() => {
+		let element = host.current;
+		if (!element) return;
+		let last: { x: number; y: number } | undefined;
+		let timer = 0;
+		let stop = () => {
+			clearTimeout(timer);
+			element.removeAttribute("data-chat-aiming");
+		};
+		let track = (event: PointerEvent) => {
+			last = { x: event.clientX, y: event.clientY };
+		};
+		let leave = (event: PointerEvent) => {
+			let from = last;
+			last = undefined;
+			if (
+				event.pointerType !== "mouse" || !from || event.clientY >= from.y || event.clientX <= from.x
+			) return;
+			element.setAttribute("data-chat-aiming", "");
+			clearTimeout(timer);
+			timer = window.setTimeout(stop, AIM_MS);
+		};
+		element.addEventListener("pointermove", track);
+		element.addEventListener("pointerleave", leave);
+		element.addEventListener("pointerenter", stop);
+		return () => {
+			stop();
+			element.removeEventListener("pointermove", track);
+			element.removeEventListener("pointerleave", leave);
+			element.removeEventListener("pointerenter", stop);
+		};
+	}, [host]);
+}
+
 function CopyMenuIcon({ copied }: { copied: boolean }) {
 	return (
 		<MessageActions
@@ -177,6 +218,7 @@ export let MessageToolbar = memo(function MessageToolbar(
 	let { isCopied, isFailed, copyToClipboard } = useCopyToClipboard({ copiedDuration: COPIED_MS });
 	let engaged = pinned || menuOpen || pickerOpen || isCopied || isFailed;
 
+	useToolbarAim(host);
 	let pickerPosition = useAnchored(pickerOpen, addButton, picker);
 	let pickerPlaced = !!pickerPosition;
 	let closePicker = (restoreFocus = false) => {
@@ -389,7 +431,7 @@ export let MessageToolbar = memo(function MessageToolbar(
 				}}
 				open={menuOpen}
 			>
-				<div className="chat-toolbar-rail">
+				<div className="chat-toolbar-slot">
 					<MessageActions
 						aria-label="Reactions and actions"
 						aria-orientation="horizontal"
