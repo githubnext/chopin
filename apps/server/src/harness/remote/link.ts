@@ -224,6 +224,8 @@ type Port = {
 	): Promise<void>;
 	/** Gives the client's running `turn` a person's message; rejects when it could not take it. */
 	steer(session: string, turn: string, prompt: string): Promise<void>;
+	/** Withdraws the questions `turn` asked for itself, outside any workflow run. */
+	withdraw(session: string, turn: string): void;
 	forget(session: string): void;
 	/** Whether the client's work in `session` goes on past a restart: it is kept, not destroyed. */
 	kept(session: string): boolean;
@@ -281,6 +283,8 @@ type Owed = {
 /** A request waiting on the document's members, and the decisions it asked once they exist. */
 type OpenInput = {
 	session: string;
+	/** The turn that asked it for itself; a workflow run's question belongs to its run instead. */
+	turn?: string;
 	controller: AbortController;
 	method: InputMethod;
 	decisions: string[];
@@ -408,6 +412,12 @@ class RemoteSession {
 	/** Whether a turn is under way: the Planner is replying. */
 	get replying(): boolean {
 		return this.#current !== undefined;
+	}
+
+	/** The id of the turn under way, if one is. */
+	get turn(): string | undefined {
+		let turn = this.#current;
+		return turn && !turn.ended ? turn.id : undefined;
 	}
 
 	async start(): Promise<HarnessV1Session> {
@@ -872,10 +882,22 @@ class RemoteSession {
 		else turn.settle.resolve();
 	}
 
+	/**
+	 * Chopin stopped the turn. A question it asked for itself ends with it, as a full Atomic
+	 * Planner's does, so neither its card nor the session stays behind waiting on it. A workflow
+	 * run's question is the run's, and a server that is restarting withdraws nothing.
+	 */
+	#stopped(turn: Turn): void {
+		if (!turn.stopped && !turn.ended && !this.planner.stopping) {
+			this.#port.withdraw(this.id, turn.id);
+		}
+		this.#stop(turn);
+	}
+
 	#listen(turn: Turn, signal: AbortSignal | undefined): void {
 		if (!signal) return;
-		if (signal.aborted) return this.#stop(turn);
-		let abort = () => this.#stop(turn);
+		if (signal.aborted) return this.#stopped(turn);
+		let abort = () => this.#stopped(turn);
 		signal.addEventListener("abort", abort, { once: true });
 		turn.listeners.push(() => signal.removeEventListener("abort", abort));
 	}
@@ -1122,6 +1144,13 @@ export class AgentLink {
 			send: message => this.#send(message),
 			control: (session, action, runId, sent) => this.#control(session, action, runId, sent),
 			steer: (session, turn, prompt) => this.#steer(session, turn, prompt),
+			withdraw: (session, turn) => {
+				for (let [request, input] of this.#inputs) {
+					if (input.session !== session || input.turn !== turn) continue;
+					input.controller.abort();
+					this.#inputs.delete(request);
+				}
+			},
 			forget: session => {
 				this.#sessions.delete(session);
 				this.#cancelInputs(session);
@@ -2019,8 +2048,10 @@ export class AgentLink {
 		// The session outlives the question until its answer reaches the client: an answer given
 		// to a session with nothing else to keep it would otherwise find it already let go.
 		delivered = session.planner.holdInput?.() ?? delivered;
+		let asking = message.workflowRunId === undefined ? session.turn : undefined;
 		let open: OpenInput = {
 			session: message.session,
+			...(asking ? { turn: asking } : {}),
 			controller,
 			method: message.input.method,
 			decisions: [],

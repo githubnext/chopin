@@ -819,7 +819,10 @@ through the same path as the [full Atomic Planner](#full-atomic-planner): the sa
 verbatim text, the same 30-minute expiry, cancellation that withdraws open
 cards, and answers to a workflow question held while the client reports that
 run's root as paused. `input-result` returns what Atomic would have received in
-process, with a status that tells an expiry from a cancellation.
+process, with a status that tells an expiry from a cancellation. Stopping a turn
+withdraws the questions it asked while it ran outside any workflow run, as Stop
+does an Atomic Planner's, so a Decision the turn waited on never keeps its
+session for the next message.
 
 **Runs.** The client reports its workflow runs with `runs`; Chat shows those
 cards and keeps the session after its turn while any run is live or paused, as

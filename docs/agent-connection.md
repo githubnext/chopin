@@ -486,7 +486,12 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   `json`, the turn's text must be that JSON.
 - `abort` stops the turn. Answer with `turn-end`; after **10 seconds** the
   server ends the turn anyway. The server sends no `host-tool-result` for the
-  turn's calls after `abort`, so settle any call still waiting as failed.
+  turn's calls after `abort`, so settle any call still waiting as failed. A
+  question the turn asked while it ran, outside any workflow run, ends with it:
+  the server withdraws its Decision and answers its `input-request` with
+  `input-result` status `cancelled`, as a full Atomic Planner's Stop does, so a
+  client whose question is still waiting can end the turn. A workflow run's
+  question is the run's and stays open.
 - `steer`, with `steer-turn`, gives the turn that is running a message a person sent to Chopin
   while it works. Chopin never holds a message for the next turn, so this is how a person talks to
   a Planner mid-reply: `prompt` is the message as the model should read it (the sender's handle
