@@ -39,6 +39,7 @@ export type Group =
 		ts?: number;
 		decision?: Chat.Entry["decision"];
 		comment?: Chat.Entry["comment"];
+		document?: Chat.Entry["document"];
 	};
 
 export type CompletedWork = {
@@ -210,6 +211,7 @@ export function group(
 				ts: notice.ts,
 				decision: notice.decision,
 				...(notice.comment ? { comment: notice.comment } : {}),
+				...(notice.document ? { document: notice.document } : {}),
 			});
 			continue;
 		}

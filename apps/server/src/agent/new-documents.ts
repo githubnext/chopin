@@ -1,0 +1,360 @@
+/**
+ * The Planner's `create_document`: a new top-level document, in the same repository and base
+ * branch as the one whose turn asked, with its own Chat, Decisions and Planner session.
+ *
+ * The person whose message drives the turn is the creator. Their own browser login is asked
+ * again for write access to the repository, as `chat:send` is; the Planner's credential never
+ * authorizes a new document by itself. A retried call with the same key returns the document the
+ * first call made and creates nothing. A document is stored before its Chat line, the sidebar or
+ * its own Planner hear of it.
+ */
+import { BRIEF, prepare } from "../mcp/create";
+import { MAX_TITLE_LENGTH } from "../channels/title";
+
+import type { AuthenticatedSession } from "../auth/session";
+import type { HostedRepository } from "./repository";
+import type { InvokePlannerError } from "../mcp";
+import type { Brief, CreateDocumentInput, CreationOrigin } from "../mcp/create";
+import type { CreatedDocument, DocumentCreator, PlannerInvocation } from "../mcp/hosted";
+import type { Repository as GitHubRepository } from "../github/client";
+import type { ChannelRecord } from "../storage/model";
+import type { Issue } from "@chopin/dialect";
+
+export const MAX_DOCUMENTS_PER_TURN = 10;
+export const MAX_DOCUMENTS_PER_HOUR = 30;
+export const MAX_INSTRUCTION_BYTES = 64 * 1_024;
+const HOUR_MS = 60 * 60_000;
+const KEY = /^[A-Za-z0-9_-]{8,64}$/;
+
+export type NewDocumentArguments = {
+	idempotencyKey: string;
+	title: string;
+	brief: Brief;
+	document: string;
+	instruction?: string;
+};
+
+export const NEW_DOCUMENT_SCHEMA = {
+	type: "object",
+	properties: {
+		idempotencyKey: {
+			type: "string",
+			pattern: KEY.source,
+			description: "A stable key for this one new document, such as auth-settings-page. Reuse "
+				+ "it when retrying the same call; a retry returns the document already made.",
+		},
+		title: { type: "string", minLength: 1, maxLength: MAX_TITLE_LENGTH },
+		brief: BRIEF,
+		document: {
+			type: "string",
+			minLength: 1,
+			description: "The new document's whole first draft in the document dialect, as `read_plan` "
+				+ "shows a document's source.",
+		},
+		instruction: {
+			type: "string",
+			minLength: 1,
+			description: "Optional. What the new document's own Planner should do first. It is posted "
+				+ "in the new document's Chat as the requesting person's message and starts its turn.",
+		},
+	},
+	required: ["idempotencyKey", "title", "brief", "document"],
+	additionalProperties: false,
+};
+
+/** The tool's arguments, checked; throws with a sentence the model can act on. */
+export function newDocumentArguments(raw: unknown): NewDocumentArguments {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+		throw new Error("create_document arguments must be an object");
+	}
+	let args = raw as Record<string, unknown>;
+	let allowed = new Set(["idempotencyKey", "title", "brief", "document", "instruction"]);
+	let unknown = Object.keys(args).find(key => !allowed.has(key));
+	if (unknown) throw new Error(`create_document does not take \`${unknown}\``);
+	if (typeof args.idempotencyKey !== "string" || !KEY.test(args.idempotencyKey)) {
+		throw new Error("idempotencyKey must be 8 to 64 letters, digits, `-` or `_`");
+	}
+	if (typeof args.title !== "string" || !args.title.trim()) {
+		throw new Error("title must be non-empty text");
+	}
+	if (typeof args.document !== "string" || !args.document.trim()) {
+		throw new Error("document must be the new document's non-empty source");
+	}
+	if (
+		Object.hasOwn(args, "instruction")
+		&& (typeof args.instruction !== "string" || !args.instruction.trim()
+			|| Buffer.byteLength(args.instruction, "utf8") > MAX_INSTRUCTION_BYTES)
+	) throw new Error("instruction must be non-empty text of at most 64 KiB");
+	return {
+		idempotencyKey: args.idempotencyKey,
+		title: args.title,
+		brief: args.brief as Brief,
+		document: args.document,
+		...(typeof args.instruction === "string" ? { instruction: args.instruction } : {}),
+	};
+}
+
+/** How many documents one turn, and one person in an hour, may create. */
+export class NewDocumentLimits {
+	#turns = new Map<string, number>();
+	#hours = new Map<string, number[]>();
+	#now: () => number;
+
+	constructor(now: () => number = Date.now) {
+		this.#now = now;
+	}
+
+	/** Counts one for the turn and the person, or says which limit is spent. */
+	take(turnId: string, userId: string): "turn" | "hour" | undefined {
+		let now = this.#now();
+		let recent = (this.#hours.get(userId) ?? []).filter(at => now - at < HOUR_MS);
+		this.#hours.set(userId, recent);
+		if ((this.#turns.get(turnId) ?? 0) >= MAX_DOCUMENTS_PER_TURN) return "turn";
+		if (recent.length >= MAX_DOCUMENTS_PER_HOUR) return "hour";
+		recent.push(now);
+		this.#turns.set(turnId, (this.#turns.get(turnId) ?? 0) + 1);
+		// A turn's count is kept only as long as an hour's.
+		let expired = setTimeout(() => this.#turns.delete(turnId), HOUR_MS);
+		(expired as { unref?: () => void }).unref?.();
+		return undefined;
+	}
+
+	/** Gives back the latest one taken, for a call that created nothing. */
+	refund(turnId: string, userId: string): void {
+		let count = this.#turns.get(turnId) ?? 0;
+		if (count <= 1) this.#turns.delete(turnId);
+		else this.#turns.set(turnId, count - 1);
+		let recent = this.#hours.get(userId);
+		recent?.pop();
+		if (recent?.length === 0) this.#hours.delete(userId);
+	}
+}
+
+export type NewDocumentRequest = {
+	/** The document whose turn asked. */
+	sourceId: string;
+	turnId: string;
+	creator: { userId: string; handle: string; claimantSessionId?: string };
+	arguments: NewDocumentArguments;
+	/** Posts the creating document's Chat line naming a new document; called once it is stored. */
+	announce: (document: { id: string; title: string; path: string }) => Promise<void>;
+	signal?: AbortSignal;
+};
+
+export type NewDocumentDeps = {
+	channel: (id: string) => Promise<ChannelRecord | undefined>;
+	deleting: (id: string) => boolean;
+	/** The creator's own live browser login, preferring the one that sent the message. */
+	login: (userId: string, sessionId?: string) => Promise<AuthenticatedSession | undefined>;
+	/** The repository as that login reads it on GitHub now, or undefined when it cannot. */
+	repository: (
+		login: AuthenticatedSession,
+		owner: string,
+		name: string,
+	) => Promise<GitHubRepository | undefined>;
+	branchHead: (
+		login: AuthenticatedSession,
+		owner: string,
+		name: string,
+		branch: string,
+	) => Promise<string>;
+	/** The base a document was created from, when it records one. */
+	origin: (channelId: string) => Promise<CreationOrigin | undefined>;
+	create: (
+		creator: DocumentCreator,
+		input: CreateDocumentInput,
+		instructed: boolean,
+	) => Promise<CreatedDocument>;
+	/** Gives the new document the creating document's model and thinking level. */
+	copyModel: (from: string, to: string, userId: string) => Promise<void>;
+	invoke: (input: PlannerInvocation) => Promise<InvokePlannerError | undefined>;
+	/** What a refused instruction says, for refusals that have their own words. */
+	refusal?: (
+		code: InvokePlannerError,
+		channel: ChannelRecord,
+		url: string,
+	) => Promise<string | undefined>;
+	/** This deployment's origin, for the URL the model is given. */
+	appOrigin: string;
+	limits: NewDocumentLimits;
+};
+
+export type NewDocumentResult =
+	| {
+		ok: true;
+		document: { id: string; title: string; url: string };
+		/** True when an earlier call with this key made it; nothing new was created or started. */
+		replayed?: true;
+		instruction?: { started: true } | { started: false; reason: string; message?: string };
+		next: string;
+	}
+	| { ok: false; reason: string; message: string; issues?: Issue[] };
+
+const REFUSALS: Record<string, string> = {
+	"sign-in-required": "The person who asked has no live Chopin login in a browser, so their "
+		+ "access can't be checked. Ask them to open Chopin and try again.",
+	"repository-forbidden": "The person who asked can't write to this repository, so no document "
+		+ "was created.",
+	"document-unavailable": "This document is archived, deleted or closing, so it can't create "
+		+ "others.",
+	"turn-limit": `One turn may create at most ${MAX_DOCUMENTS_PER_TURN} documents.`,
+	"hour-limit": `A person's turns may create at most ${MAX_DOCUMENTS_PER_HOUR} documents an hour.`,
+	"idempotency-conflict": "Another document was already created with this idempotencyKey and "
+		+ "different content. Use a new key for a different document.",
+	"title-taken": "The repository already has a document with this title. Choose another title.",
+	"invalid-document": "The document is not valid in the dialect. Fix the issues and retry with "
+		+ "the same idempotencyKey.",
+	"visuals-required": "Add the required diagrams or tables beside the named passages and retry "
+		+ "with the same idempotencyKey; nothing was saved.",
+	unavailable: "The document could not be created now. Retry with the same idempotencyKey.",
+};
+
+function refused(reason: string, issues?: Issue[]): NewDocumentResult {
+	return {
+		ok: false,
+		reason,
+		message: REFUSALS[reason] ?? REFUSALS.unavailable!,
+		...(issues ? { issues } : {}),
+	};
+}
+
+function writes(repository: GitHubRepository | undefined, id: string): boolean {
+	return !!repository && repository.id === id
+		&& (repository.permissions.push || repository.permissions.admin);
+}
+
+export async function createNewDocument(
+	deps: NewDocumentDeps,
+	request: NewDocumentRequest,
+): Promise<NewDocumentResult> {
+	let { creator, sourceId, turnId } = request;
+	let args = request.arguments;
+	let source = await deps.channel(sourceId);
+	if (!source || source.archivedAt || deps.deleting(sourceId) || source.parentChannelId) {
+		return refused("document-unavailable");
+	}
+	let login = await deps.login(creator.userId, creator.claimantSessionId);
+	if (!login || login.user.id !== creator.userId) return refused("sign-in-required");
+	let owner = source.repositoryOwner;
+	let name = source.repositoryName;
+	let repository = await deps.repository(login, owner, name);
+	if (!repository || !writes(repository, source.repositoryId)) {
+		return refused("repository-forbidden");
+	}
+	let idempotencyKey = `planner:${sourceId}:${args.idempotencyKey}`;
+	let inherited = await deps.origin(sourceId);
+	let base = inherited?.repository === `${owner}/${name}`
+		? { baseBranch: inherited.baseBranch, baseCommit: inherited.baseCommit }
+		: undefined;
+	if (!base) {
+		let baseBranch = repository.defaultBranch;
+		base = { baseBranch, baseCommit: await deps.branchHead(login, owner, name, baseBranch) };
+	}
+	let prepared = prepare({
+		idempotencyKey,
+		repository: `${owner}/${name}`,
+		...base,
+		title: args.title,
+		brief: args.brief,
+		plan: args.document,
+	});
+	if (!prepared) {
+		return refused("invalid-document", [{
+			code: "arguments",
+			message: "title, brief and document must match the create_document schema",
+			path: "root",
+		}]);
+	}
+	if ("issues" in prepared) return refused("invalid-document", prepared.issues);
+	let limit = deps.limits.take(turnId, creator.userId);
+	if (limit) return refused(`${limit}-limit`);
+	let outcome: CreatedDocument;
+	try {
+		outcome = await deps.create(
+			{
+				user: login.user,
+				repository,
+				stillWrites: async () => {
+					let current = await deps.login(creator.userId, creator.claimantSessionId);
+					return !!current
+						&& writes(await deps.repository(current, owner, name), source.repositoryId);
+				},
+				...(request.signal ? { signal: request.signal } : {}),
+			},
+			prepared.input,
+			args.instruction !== undefined,
+		);
+	} catch (err) {
+		deps.limits.refund(turnId, creator.userId);
+		throw err;
+	}
+	if (outcome.kind !== "created") deps.limits.refund(turnId, creator.userId);
+	if (outcome.kind === "conflict") return refused("idempotency-conflict");
+	if (outcome.kind === "title-taken") return refused("title-taken");
+	if (outcome.kind === "forbidden") return refused("repository-forbidden");
+	if (outcome.kind === "unavailable") return refused("unavailable");
+	if (outcome.kind === "visuals-required") return refused("visuals-required", outcome.issues);
+	let { channel } = outcome;
+	let path = outcome.document.url;
+	let url = new URL(path, deps.appOrigin).href;
+	let document = { id: channel.id, title: channel.title, url };
+	if (outcome.kind === "replayed") {
+		return {
+			ok: true,
+			document,
+			replayed: true,
+			next: "An earlier call with this idempotencyKey made this document; nothing new was "
+				+ "created or started.",
+		};
+	}
+	await request.announce({ id: channel.id, title: channel.title, path }).catch(err =>
+		console.error("[chat] could not post a new document's Chat line:", err)
+	);
+	await deps.copyModel(sourceId, channel.id, creator.userId).catch(err =>
+		console.error("[chat] could not give a new document its model choice:", err)
+	);
+	if (args.instruction === undefined) {
+		return {
+			ok: true,
+			document,
+			next: "The document is in the sidebar and has its own Chat. Its Planner starts when "
+				+ "someone writes to it there.",
+		};
+	}
+	let hosted: HostedRepository = {
+		id: repository.id,
+		owner: repository.owner,
+		name: repository.name,
+		defaultBranch: repository.defaultBranch,
+	};
+	let code: InvokePlannerError | undefined;
+	try {
+		code = await deps.invoke({
+			channel,
+			repository: hosted,
+			user: { id: login.user.id, login: login.user.login, avatarUrl: login.user.avatarUrl },
+			session: login,
+			instruction: args.instruction,
+		});
+	} catch (err) {
+		console.error("[chat] a new document's first instruction failed:", err);
+		code = "planner-unavailable";
+	}
+	if (code) {
+		let message = await deps.refusal?.(code, channel, url);
+		return {
+			ok: true,
+			document,
+			instruction: { started: false, reason: code, ...(message ? { message } : {}) },
+			next: "The document was created, but its Planner did not start. Tell the person, with "
+				+ "its link, so they can ask it there.",
+		};
+	}
+	return {
+		ok: true,
+		document,
+		instruction: { started: true },
+		next: "Its own Planner started on the instruction, as the requesting person's message, "
+			+ "in that document's Chat. It runs on its own; this turn need not wait for it.",
+	};
+}

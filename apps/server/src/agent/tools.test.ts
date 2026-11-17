@@ -85,6 +85,7 @@ test("document tool names and schemas remain available to the Planner", async ()
 		"list_background_jobs",
 		"read_background_job",
 		"create_research_workspace",
+		"create_document",
 		"upload_plan_image",
 		"assess_visual",
 		"edit_plan",
@@ -270,6 +271,66 @@ test("read_plan and edit_plan give a child document its nested canonical URL", a
 		operations: [{ op: "replace", index: 0, source: "Edited child.\n" }],
 	});
 	expect(edited).toMatchObject({ ok: true, document: identity });
+});
+
+test("create_document hands checked arguments to the member turn and refuses without one", async () => {
+	let { plan, server } = await opened("Split context.\n");
+	let room = {
+		plan,
+		server,
+		room: "test",
+		persist: () => Service.persist(plan),
+		exclusive: <T>(action: () => Promise<T>) => Service.exclusive(plan, action),
+		async publish() {},
+		anchors() {},
+		changes() {},
+	};
+	let call = async (tools: ReturnType<typeof fixtureTools>, raw: unknown) => {
+		let createDocument = tools.find(tool => tool.name === "create_document");
+		if (!createDocument?.handler) throw new Error("create_document is missing");
+		let text = String(await createDocument.handler(raw as never, { toolCallId: "call" }));
+		return text.startsWith("Error: ") ? text : JSON.parse(text);
+	};
+	let draft = {
+		idempotencyKey: "settings-page",
+		title: "Settings page",
+		brief: {
+			goal: "Add the settings page.",
+			constraints: [],
+			settledDecisions: [],
+			openQuestions: [],
+			repositoryFindings: [],
+		},
+		document: "# Settings page\n",
+		instruction: "Draft it.",
+	};
+	expect(await call(fixtureTools(room), draft)).toEqual({
+		ok: false,
+		reason: "member-request-required",
+		message: "Only a turn a person asked for in Chat can create documents.",
+	});
+	let received: unknown[] = [];
+	let tools = fixtureTools({
+		...room,
+		createDocument: async args => {
+			received.push(args);
+			return {
+				ok: true,
+				document: { id: "doc", title: "Settings page", url: "https://chopin.test/d" },
+				next: "done",
+			};
+		},
+	});
+	expect(await call(tools, draft)).toMatchObject({ ok: true, document: { id: "doc" } });
+	expect(received).toEqual([draft]);
+	let error = spyOn(console, "error").mockImplementation(() => {});
+	try {
+		expect(await call(tools, { ...draft, repository: "octo/other" }))
+			.toBe("Error: create_document does not take `repository`");
+	} finally {
+		error.mockRestore();
+	}
+	expect(received).toHaveLength(1);
 });
 
 test("create_research_workspace validates one question and waits for immediate research start", async () => {

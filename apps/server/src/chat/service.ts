@@ -37,6 +37,7 @@ import { rememberCheckout } from "../harness/atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
+import type { NewDocumentRequest, NewDocumentResult } from "../agent/new-documents";
 import type { VisualAdmission } from "../agent/visual-admission";
 import type { ChildDocuments } from "./children";
 import * as Service from "../plan/service";
@@ -871,6 +872,8 @@ export type Room = {
 		text: string;
 		question: string;
 	}) => Promise<ResearchWorkspaceRequest>;
+	/** Creates a top-level document for the person whose message drives the turn. */
+	createDocument?: (request: Omit<NewDocumentRequest, "sourceId">) => Promise<NewDocumentResult>;
 	/** Keeps the room loaded while a retained Planner still owns workflow runs; returns the release. */
 	hold?: () => () => void;
 	/** The task draft the turn being started carries. */
@@ -2762,6 +2765,32 @@ export function documentRoom(context: Room): DocumentRoom {
 				reference,
 			});
 		},
+		...(!chat.job && context.createDocument && !context.rootChannelId && {
+			createDocument: async (args, signal) => {
+				let active = currentMemberRequest(chat);
+				if (chat.job || !active) {
+					return {
+						ok: false,
+						reason: "member-request-required",
+						message: "Only a turn a person asked for in Chat can create documents.",
+					};
+				}
+				let signals = [signal, chat.turnController?.signal].filter(
+					(value): value is AbortSignal => !!value,
+				);
+				return context.createDocument!({
+					turnId: active.turnId,
+					creator: {
+						userId: active.userId,
+						handle: active.handle,
+						...(active.claimantSessionId ? { claimantSessionId: active.claimantSessionId } : {}),
+					},
+					arguments: args,
+					...(signals.length ? { signal: AbortSignal.any(signals) } : {}),
+					announce: document => createdNotice(context, active.handle, document),
+				});
+			},
+		}),
 		createResearch: async _question => {
 			let active = currentMemberRequest(chat);
 			if (!active) {
@@ -2780,6 +2809,30 @@ export function documentRoom(context: Room): DocumentRoom {
 			});
 		},
 	};
+}
+
+/** Saves, then shows, the creating document's line naming a document its Planner created. */
+async function createdNotice(
+	context: Room,
+	handle: string,
+	document: { id: string; title: string; path: string },
+): Promise<void> {
+	let { chat, room, server } = context;
+	let entry: Wire.Entry = {
+		id: ulid(),
+		author: { kind: "system" },
+		text: `${PLANNER_NAME} created ${document.title} for @${handle}.`,
+		ts: now(),
+		document: { channelId: document.id, title: document.title, path: document.path },
+	};
+	chat.entries.push(entry);
+	try {
+		await context.persist();
+	} catch (error) {
+		chat.entries = chat.entries.filter(value => value !== entry);
+		throw error;
+	}
+	announce(server, room, entry);
 }
 
 export function retainReferences(chat: Chat, references: Wire.Reference[]): void {
