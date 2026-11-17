@@ -19,7 +19,7 @@ let thread: NoteThread = {
 	requester: "bo",
 };
 
-let none: NoteQuestions = { answeredBy: () => undefined, noted: new Set() };
+let none: NoteQuestions = { asked: new Set(), answeredBy: () => undefined, noted: new Set() };
 
 describe("a thread's note to the Chat Planner", () => {
 	test("names the thread, what was decided and the person whose message the turn answers", () => {
@@ -44,8 +44,9 @@ describe("a thread's note to the Chat Planner", () => {
 		).toThrow("Name who decided");
 	});
 
-	test("notes an answered Decision card once, decided by whoever answered it", () => {
+	test("notes an answered Decision card this thread asked once, decided by whoever answered it", () => {
 		let questions: NoteQuestions = {
+			asked: new Set(["q-1", "q-2", "q-3"]),
 			answeredBy: id => id === "q-1" ? "cy" : id === "q-2" ? "system" : undefined,
 			noted: new Set(),
 		};
@@ -64,7 +65,9 @@ describe("a thread's note to the Chat Planner", () => {
 			)
 		).toThrow("already told");
 		expect(() => threadNote({ decision: "Something.", question: "q-9" }, thread, questions, 0, 1))
-			.toThrow("no answered Decision card");
+			.toThrow('No Decision card "q-9" was asked in this thread');
+		expect(() => threadNote({ decision: "Something.", question: "q-3" }, thread, questions, 0, 1))
+			.toThrow("has not been answered");
 		expect(threadNote({ decision: "Something.", question: "q-2" }, thread, questions, 0, 1))
 			.toMatchObject({ decidedBy: ["bo"] });
 	});

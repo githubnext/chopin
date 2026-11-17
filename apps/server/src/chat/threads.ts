@@ -54,12 +54,16 @@ type ChannelThreads = {
 	atomicEntries?: JsonValue[];
 	atomicLeafId?: string | null;
 	lastRemoteTurn?: { session: string; turn: string };
-	/** What threads' Planners told the Chat's Planner that it has not read yet. */
+	/** What threads' Planners told the Chat's Planner, saved, that it has not read yet. */
 	notes: ChatThreadNote[];
+	/** Notes being saved: counted against the limits, and never given to a turn before they are. */
+	staged: ChatThreadNote[];
 	/** Every Decision card a thread's Planner sent a note for. */
 	notedQuestions: Set<string>;
 	/** The notes the Chat's last turn was given, for a Retry of that turn to be given again. */
 	given?: { entryId: string; notes: ChatThreadNote[] };
+	/** The session state's saves and the turns' taking of notes, one after another. */
+	sessionQueue: Promise<unknown>;
 };
 
 let channels = new WeakMap<Chat.Chat, ChannelThreads>();
@@ -72,7 +76,9 @@ function channelState(topChat: Chat.Chat): ChannelThreads {
 			threads: new Map(),
 			entryForks: {},
 			notes: [],
+			staged: [],
 			notedQuestions: new Set(),
+			sessionQueue: Promise.resolve(),
 		};
 		channels.set(topChat, found);
 	}
@@ -149,6 +155,7 @@ async function ensureLoaded(
 			state.atomicLeafId = sessionState.atomicLeafId;
 			state.notes = structuredClone(sessionState.threadNotes ?? []);
 			state.notedQuestions = new Set(sessionState.notedQuestions ?? []);
+			state.given = sessionState.givenNotes ? structuredClone(sessionState.givenNotes) : undefined;
 			context.chat.compactions = structuredClone(sessionState.compactions);
 			context.chat.usage = sessionState.usage
 				? structuredClone(sessionState.usage)
@@ -172,14 +179,47 @@ async function ensureLoaded(
 	return state;
 }
 
-async function saveTopSessionState(
+/** Runs `work` after every save of the session state and taking of notes queued before it. */
+function inSessionQueue<T>(state: ChannelThreads, work: () => Promise<T> | T): Promise<T> {
+	let done = state.sessionQueue.catch(() => {}).then(work);
+	state.sessionQueue = done;
+	return done;
+}
+
+/**
+ * Saves the top-level session state. With `note`, the note is saved with it and only then joins
+ * the notes the next turn is given, before anything queued after it runs.
+ */
+function saveTopSessionState(
 	context: Chat.Room,
 	state: ChannelThreads,
 	override?: ThreadPersistence,
+	note?: ChatThreadNote,
 ): Promise<void> {
-	let persistence = resolvePersistence(context, override);
-	if (!persistence) return;
-	let record: ChatSessionState = {
+	return inSessionQueue(state, async () => {
+		let persistence = resolvePersistence(context, override);
+		if (persistence) {
+			await persistence.store.putSessionState(
+				persistence.lease(),
+				sessionRecord(context, state, note),
+			);
+		}
+		if (note) {
+			state.notes.push(note);
+			if (note.question) state.notedQuestions.add(note.question);
+		}
+	});
+}
+
+function sessionRecord(
+	context: Chat.Room,
+	state: ChannelThreads,
+	note?: ChatThreadNote,
+): ChatSessionState {
+	let notes = note ? [...state.notes, note] : state.notes;
+	let noted = new Set(state.notedQuestions);
+	if (note?.question) noted.add(note.question);
+	return {
 		channelId: context.room,
 		compactions: structuredClone(context.chat.compactions ?? []),
 		...(context.chat.usage ? { usage: structuredClone(context.chat.usage) } : {}),
@@ -190,11 +230,11 @@ async function saveTopSessionState(
 			}
 			: {}),
 		entryForks: structuredClone(state.entryForks),
-		...(state.notes.length ? { threadNotes: structuredClone(state.notes) } : {}),
-		...(state.notedQuestions.size ? { notedQuestions: [...state.notedQuestions] } : {}),
+		...(notes.length ? { threadNotes: structuredClone(notes) } : {}),
+		...(noted.size ? { notedQuestions: [...noted] } : {}),
+		...(state.given ? { givenNotes: structuredClone(state.given) } : {}),
 		updatedAt: new Date(),
 	};
-	await persistence.store.putSessionState(persistence.lease(), record);
 }
 
 async function saveThreadRecord(
@@ -472,11 +512,13 @@ export function bindTopLevel(
 				};
 			},
 			takeNotes(currentEntryId) {
-				let notes = state.notes;
-				if (!notes.length) return undefined;
-				state.notes = [];
-				state.given = currentEntryId ? { entryId: currentEntryId, notes } : undefined;
-				return threadNotesContext(notes);
+				return inSessionQueue(state, () => {
+					let notes = state.notes;
+					if (!notes.length) return undefined;
+					state.notes = [];
+					state.given = currentEntryId ? { entryId: currentEntryId, notes } : undefined;
+					return threadNotesContext(notes);
+				});
 			},
 			async finishTurn(requestEntryId, turnEntries) {
 				let point: EntryForkPoint = {
@@ -501,8 +543,8 @@ export function bindTopLevel(
 
 /**
  * How a thread's Planner tells the Chat Planner of its own document what a person decided in the
- * thread. The note is saved with the document's Chat session before the Planner is told it was
- * sent, and waits there for the Chat Planner's next turn.
+ * thread. The note is saved with the document's Chat session before any turn can be given it or
+ * the Planner is told it was sent, and waits there for the Chat Planner's next turn.
  */
 function tellChat(
 	topContext: Chat.Room,
@@ -520,24 +562,27 @@ function tellChat(
 				requester: managed.chat.activeRequest?.handle,
 			},
 			{
+				asked: new Set(managed.record.askedQuestions ?? []),
 				answeredBy: id => {
 					let record = topContext.plan.records.get(id);
 					return record?.status === "answered" ? record.resolver ?? "" : undefined;
 				},
-				noted: state.notedQuestions,
+				noted: new Set([
+					...state.notedQuestions,
+					...state.staged.flatMap(value => value.question ? [value.question] : []),
+				]),
 			},
-			state.notes.length,
+			state.notes.length + state.staged.length,
 			nowSeconds(),
 		);
-		state.notes.push(note);
-		if (note.question) state.notedQuestions.add(note.question);
+		state.staged.push(note);
 		try {
-			await saveTopSessionState(topContext, state, override);
+			await saveTopSessionState(topContext, state, override, note);
 		} catch (err) {
 			console.error("[chat] could not save a thread's note to the Chat Planner:", err);
-			state.notes = state.notes.filter(value => value.id !== note.id);
-			if (note.question) state.notedQuestions.delete(note.question);
 			throw new Error("The note could not be saved. Nothing was sent.", { cause: err });
+		} finally {
+			state.staged = state.staged.filter(value => value.id !== note.id);
 		}
 		return NOTE_SENT;
 	};
@@ -584,6 +629,14 @@ function buildThreadRoom(
 		},
 		threadRoot: managed.record.rootId,
 		tellChat: tellChat(topContext, managed, override),
+		threadAsked: ids => {
+			let asked = new Set(managed.record.askedQuestions ?? []);
+			if (ids.every(id => asked.has(id))) return;
+			managed.record.askedQuestions = [...new Set([...asked, ...ids])];
+			saveThreadRecord(topContext, managed, override).catch(err =>
+				console.error("[chat] could not save the Decision cards a thread asked:", err)
+			);
+		},
 		sessionForks: {
 			prepareTurn(currentEntryId, retry) {
 				let forkState = managed.record.forkState;

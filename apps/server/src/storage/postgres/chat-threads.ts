@@ -12,6 +12,7 @@ type ThreadRow = {
 	compactionsJson: ChatThreadRecord["compactions"] | string;
 	usageJson: ChatThreadRecord["usage"] | string | null;
 	forkStateJson: ChatThreadRecord["forkState"] | string;
+	askedQuestionsJson: NonNullable<ChatThreadRecord["askedQuestions"]> | string;
 	updatedAt: Date | string;
 };
 
@@ -24,6 +25,7 @@ type SessionRow = {
 	entryForksJson: ChatSessionState["entryForks"] | string;
 	threadNotesJson: NonNullable<ChatSessionState["threadNotes"]> | string;
 	notedQuestionsJson: NonNullable<ChatSessionState["notedQuestions"]> | string;
+	givenNotesJson: ChatSessionState["givenNotes"] | string | null;
 	updatedAt: Date | string;
 };
 
@@ -33,6 +35,7 @@ function parseJson<T>(value: T | string): T {
 
 function hydrateThread(row: ThreadRow): ChatThreadRecord {
 	let usage = row.usageJson === null ? undefined : parseJson(row.usageJson);
+	let askedQuestions = parseJson(row.askedQuestionsJson);
 	return {
 		channelId: row.channelId,
 		rootId: row.rootId,
@@ -43,6 +46,7 @@ function hydrateThread(row: ThreadRow): ChatThreadRecord {
 		compactions: parseJson(row.compactionsJson),
 		...(usage ? { usage } : {}),
 		forkState: parseJson(row.forkStateJson),
+		...(askedQuestions.length ? { askedQuestions } : {}),
 		updatedAt: new Date(row.updatedAt),
 	};
 }
@@ -52,6 +56,7 @@ function hydrateSession(row: SessionRow): ChatSessionState {
 	let atomicEntries = row.atomicEntriesJson === null ? undefined : parseJson(row.atomicEntriesJson);
 	let threadNotes = parseJson(row.threadNotesJson);
 	let notedQuestions = parseJson(row.notedQuestionsJson);
+	let givenNotes = row.givenNotesJson === null ? undefined : parseJson(row.givenNotesJson);
 	return {
 		channelId: row.channelId,
 		compactions: parseJson(row.compactionsJson),
@@ -61,6 +66,7 @@ function hydrateSession(row: SessionRow): ChatSessionState {
 		entryForks: parseJson(row.entryForksJson),
 		...(threadNotes.length ? { threadNotes } : {}),
 		...(notedQuestions.length ? { notedQuestions } : {}),
+		...(givenNotes ? { givenNotes } : {}),
 		updatedAt: new Date(row.updatedAt),
 	};
 }
@@ -81,17 +87,18 @@ export class PostgresChatThreadStore implements ChatThreadStore {
 				let compactionsJson = JSON.stringify(thread.compactions);
 				let usageJson = thread.usage === undefined ? null : JSON.stringify(thread.usage);
 				let forkStateJson = JSON.stringify(thread.forkState);
+				let askedQuestionsJson = JSON.stringify(thread.askedQuestions ?? []);
 				await sql`
 					INSERT INTO chat_threads (
 						channel_id, root_id, root_json, forked_at, created_by,
 						entries_json, compactions_json, usage_json, fork_state_json,
-						updated_at, fencing
+						asked_questions_json, updated_at, fencing
 					) VALUES (
 						${thread.channelId}, ${thread.rootId}, ${rootJson}::text::jsonb,
 						${thread.forkedAt}, ${thread.createdBy},
 						${entriesJson}::text::jsonb, ${compactionsJson}::text::jsonb,
 						${usageJson}::text::jsonb, ${forkStateJson}::text::jsonb,
-						${thread.updatedAt}, ${lease.fencing}
+						${askedQuestionsJson}::text::jsonb, ${thread.updatedAt}, ${lease.fencing}
 					)
 					ON CONFLICT (channel_id, root_id) DO UPDATE SET
 						root_json = EXCLUDED.root_json,
@@ -101,6 +108,7 @@ export class PostgresChatThreadStore implements ChatThreadStore {
 						compactions_json = EXCLUDED.compactions_json,
 						usage_json = EXCLUDED.usage_json,
 						fork_state_json = EXCLUDED.fork_state_json,
+						asked_questions_json = EXCLUDED.asked_questions_json,
 						updated_at = EXCLUDED.updated_at,
 						fencing = EXCLUDED.fencing
 				`;
@@ -114,7 +122,7 @@ export class PostgresChatThreadStore implements ChatThreadStore {
 					forked_at AS "forkedAt", created_by AS "createdBy",
 					entries_json AS "entriesJson", compactions_json AS "compactionsJson",
 					usage_json AS "usageJson", fork_state_json AS "forkStateJson",
-					updated_at AS "updatedAt"
+					asked_questions_json AS "askedQuestionsJson", updated_at AS "updatedAt"
 				FROM chat_threads
 				WHERE channel_id = ${channelId} AND root_id = ${rootId}
 			`;
@@ -129,7 +137,7 @@ export class PostgresChatThreadStore implements ChatThreadStore {
 					forked_at AS "forkedAt", created_by AS "createdBy",
 					entries_json AS "entriesJson", compactions_json AS "compactionsJson",
 					usage_json AS "usageJson", fork_state_json AS "forkStateJson",
-					updated_at AS "updatedAt"
+					asked_questions_json AS "askedQuestionsJson", updated_at AS "updatedAt"
 				FROM chat_threads
 				WHERE channel_id = ${channelId}
 				ORDER BY forked_at ASC, root_id ASC
@@ -153,16 +161,17 @@ export class PostgresChatThreadStore implements ChatThreadStore {
 				let entryForksJson = JSON.stringify(state.entryForks);
 				let threadNotesJson = JSON.stringify(state.threadNotes ?? []);
 				let notedQuestionsJson = JSON.stringify(state.notedQuestions ?? []);
+				let givenNotesJson = state.givenNotes ? JSON.stringify(state.givenNotes) : null;
 				await sql`
 					INSERT INTO chat_session_state (
 						channel_id, compactions_json, usage_json, atomic_entries_json,
 						atomic_leaf_id, entry_forks_json, thread_notes_json, noted_questions_json,
-						updated_at, fencing
+						given_notes_json, updated_at, fencing
 					) VALUES (
 						${state.channelId}, ${compactionsJson}::text::jsonb, ${usageJson}::text::jsonb,
 						${atomicEntriesJson}::text::jsonb, ${atomicLeafId}, ${entryForksJson}::text::jsonb,
 						${threadNotesJson}::text::jsonb, ${notedQuestionsJson}::text::jsonb,
-						${state.updatedAt}, ${lease.fencing}
+						${givenNotesJson}::text::jsonb, ${state.updatedAt}, ${lease.fencing}
 					)
 					ON CONFLICT (channel_id) DO UPDATE SET
 						compactions_json = EXCLUDED.compactions_json,
@@ -172,6 +181,7 @@ export class PostgresChatThreadStore implements ChatThreadStore {
 						entry_forks_json = EXCLUDED.entry_forks_json,
 						thread_notes_json = EXCLUDED.thread_notes_json,
 						noted_questions_json = EXCLUDED.noted_questions_json,
+						given_notes_json = EXCLUDED.given_notes_json,
 						updated_at = EXCLUDED.updated_at,
 						fencing = EXCLUDED.fencing
 				`;
@@ -185,7 +195,8 @@ export class PostgresChatThreadStore implements ChatThreadStore {
 					usage_json AS "usageJson", atomic_entries_json AS "atomicEntriesJson",
 					atomic_leaf_id AS "atomicLeafId", entry_forks_json AS "entryForksJson",
 					thread_notes_json AS "threadNotesJson",
-					noted_questions_json AS "notedQuestionsJson", updated_at AS "updatedAt"
+					noted_questions_json AS "notedQuestionsJson",
+					given_notes_json AS "givenNotesJson", updated_at AS "updatedAt"
 				FROM chat_session_state
 				WHERE channel_id = ${channelId}
 			`;

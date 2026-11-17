@@ -26,6 +26,7 @@ export async function capture(
 	let input = openDecisions(raw);
 	let result = await Questions.captureDecisions(room.plan, room.server, room.id, input, signal);
 	for (let { id } of result.decisions) room.plan.chat.captured?.add(id);
+	room.decisionsAsked?.(result.decisions.map(({ id }) => id));
 	room.anchors();
 	return { ...result, current_plan: currentPlan(await documentView(room.plan), "read_plan") };
 }
