@@ -833,7 +833,8 @@ export type Room = {
 	modelChoice?: () => Promise<import("./model-choice").TurnModel>;
 	/**
 	 * What a Planner session is opened with: the chosen model and thinking level where the harness
-	 * offers them now, read without waiting or saying anything. Absent where nothing can be chosen.
+	 * offers them, once it has said what it offers (or waited long enough for that), saying nothing.
+	 * Absent where nothing can be chosen.
 	 */
 	sessionChoice?: () => Promise<PlannerChoice>;
 	/**

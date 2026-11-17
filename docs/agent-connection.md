@@ -445,16 +445,22 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 - `model` and `thinkingLevel` on `start` and `fork` are sent only to a client
   that offered both `capability-catalog` and `session-choice`: the document's
   chosen model and level when the session opens, checked against the catalog
-  the client last reported, as it spelled them. They only open the session:
-  make it on them, so whatever it does before its first turn, and any session
-  the client makes again for the document on its own (after its process
-  restarts, say), starts on the document's choice. Each is absent where nobody
-  chose one or the catalog no longer offers it: use the client's own. They
-  never outlast a turn. Every `turn` carries the choice it runs, and a turn's
-  absent `model` or `thinkingLevel` means the client's own default for it,
-  even where `start` or `fork` named one: that is how a person choosing Default,
-  or clearing the level, reaches a session Chopin keeps, as no new `start` is
-  sent for it. Run each turn on its own fields alone.
+  the client last reported, as it spelled them, and the same `model` and
+  `thinkingLevel` the session's first `turn` carries. Where nobody chose a
+  model, `model` is the operator's `MODEL` when it is set, as in `turn`. A
+  session that opens before a client that offered `capability-catalog` has sent
+  `capabilities`, such as the first after it attaches or resumes, waits for the
+  report, up to **10 seconds**, before `start` or `fork` is sent. They only
+  open the session: make it on them, so whatever it does before its first
+  turn, and any session the client makes again for the document on its own
+  (after its process restarts, say), starts on them. A field present is what
+  to run; a field absent means neither the document nor the operator names
+  one, or the catalog no longer offers it: use the client's own default. They
+  never outlast a turn. Every `turn` carries what it runs by the same rule, and
+  a turn's absent `model` or `thinkingLevel` means the client's own default for
+  it, even where `start` or `fork` named one: that is how a person choosing
+  Default, or clearing the level, reaches a session Chopin keeps, as no new
+  `start` is sent for it. Run each turn on its own fields alone.
 - `fork`, with `session-forks`, opens a thread's Planner session branched from
   `from.session` (and `from.turn` when named), preserving the conversation,
   tool results, compaction state and session memory up to that point. Answer

@@ -66,8 +66,9 @@ export type PlannerChannel = {
 	model?: string;
 	/**
 	 * The document's chosen model and thinking level when the session opens, already checked against
-	 * the harness's catalog. A remote client that offered `session-choice` makes its session on it;
-	 * every turn still passes its own `choice` to `stream`.
+	 * the harness's catalog. A remote client that offered `session-choice` makes its session on it,
+	 * with `model` as the model where none was chosen, as each turn has; every turn still passes its
+	 * own `choice` to `stream`.
 	 */
 	choice?: PlannerChoice;
 	/**
@@ -291,10 +292,14 @@ export async function openPlannerSession(
 		}
 		let remote: RemotePlanner | undefined;
 		if (channel.harness === "remote") {
+			let opensOn: PlannerChoice = {
+				...(channel.model ? { model: channel.model } : {}),
+				...channel.choice,
+			};
 			let held: RemotePlanner = {
 				channelId: channel.room.id,
 				isolated,
-				...(channel.choice ? { choice: { ...channel.choice } } : {}),
+				...(opensOn.model || opensOn.thinkingLevel ? { choice: opensOn } : {}),
 				...(channel.fork?.remoteFrom ? { forkFrom: { ...channel.fork.remoteFrom } } : {}),
 				...(channel.fork?.onRemoteTurn ? { onRemoteTurn: channel.fork.onRemoteTurn } : {}),
 			};

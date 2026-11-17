@@ -614,6 +614,55 @@ describe("what the next turn runs", () => {
 		expect(fellBack).toBe(1);
 	});
 
+	test("opens a session on the stored choice once a harness that has yet to say what it offers does", async () => {
+		let offered: Wire.ModelCatalog | undefined = catalog;
+		let { deps, opened, choose } = await sets(() => offered);
+		await choose({ model: "acme/large", thinkingLevel: "high" });
+		offered = undefined;
+		let reported = Promise.withResolvers<void>();
+		deps.known = () => offered !== undefined;
+		deps.offered = () => reported.promise;
+		let settled = false;
+		let session = sessionModel(deps, opened.channel.id).then(value => {
+			settled = true;
+			return value;
+		});
+		await Bun.sleep(10);
+		expect(settled).toBe(false);
+		offered = catalog;
+		reported.resolve();
+		expect(await session).toEqual({ model: "acme/large", thinkingLevel: "high" });
+	});
+
+	test("waits once when nothing is offered in time: the session opens and the turn runs on the default", async () => {
+		let offered: Wire.ModelCatalog | undefined = catalog;
+		let { deps, opened, choose } = await sets(() => offered);
+		await choose({ model: "acme/large", thinkingLevel: "high" });
+		offered = undefined;
+		let known = false;
+		let waits = 0;
+		let fellBack = 0;
+		deps.known = () => known;
+		deps.offered = async () => void waits++;
+		deps.fellBack = () => {
+			fellBack++;
+			known = true;
+		};
+		expect(await sessionModel(deps, opened.channel.id)).toEqual({});
+		expect(await turnModel(deps, opened.channel.id)).toEqual({
+			notice: "Large is no longer available, so chopin used its default model.",
+		});
+		expect({ waits, fellBack }).toEqual({ waits: 1, fellBack: 1 });
+	});
+
+	test("does not wait for what a harness offers when no choice is stored", async () => {
+		let { deps, opened } = await sets(() => undefined);
+		deps.known = () => false;
+		deps.offered = () => new Promise<void>(() => {});
+		expect(await sessionModel(deps, opened.channel.id)).toEqual({});
+		expect(await turnModel(deps, opened.channel.id)).toEqual({});
+	});
+
 	test("falls back when the harness offers no catalog at all", async () => {
 		let offered: Wire.ModelCatalog | undefined = catalog;
 		let { deps, opened, choose } = await sets(() => offered);

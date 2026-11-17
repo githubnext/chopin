@@ -50,8 +50,9 @@ export type RemotePlanner =
 		/** The Chat message the next turn answers, taken by that turn like `hostTools`. */
 		turnMessage?: { id: string; retry?: true };
 		/**
-		 * The document's chosen model and thinking level when the session opens, checked against the
-		 * client's catalog; a client that offered `session-choice` is told them in `start` or `fork`.
+		 * What the session opens on, as its first turn would run it: the document's chosen model and
+		 * thinking level checked against the client's catalog, and the operator's `MODEL` where no
+		 * model was chosen. A client that offered `session-choice` is told them in `start` or `fork`.
 		 */
 		choice?: { model?: string; thinkingLevel?: string };
 		/** Parent session and turn to branch from when starting a thread session. */
