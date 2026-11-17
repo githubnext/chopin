@@ -577,9 +577,14 @@ export declare namespace Chat {
 	 *
 	 * To the room, always accepted. To the Planner: with no turn running it starts one; while a
 	 * turn runs it is posted at once and given to that turn, to be read at its next step, when
-	 * the document's harness takes input mid-run. Otherwise it is refused (`planner-busy` while
-	 * a turn runs that cannot take it, `planner-not-attached` where no machine can), and nothing
-	 * is held for later. The same write access as starting a turn is required.
+	 * the document's harness takes input mid-run. While a background job's turn runs, a turn is
+	 * being stopped or finishing, or one of Chopin's own turns is being handed the Chat, it is saved
+	 * and acknowledged at once and starts the next turn, ahead of anything waiting. While another
+	 * person's turn waits to start, it is saved and given to that turn once it can take one.
+	 * Otherwise it is refused and saves nothing: `planner-busy` where a harness that takes no input
+	 * mid-run cannot be given it (a running turn, or another person's turn waiting to start),
+	 * `planner-not-attached` where no machine can take it. A refusal is never kept to send later.
+	 * The same write access as starting a turn is required.
 	 */
 	export type Send = KIND<"chat:send"> & {
 		requestId: string;
@@ -625,7 +630,8 @@ export declare namespace Chat {
 	 * with `Retried`, tells the room with `Removed`, and runs the turn for `message` as it began the
 	 * first time. The agent is given the message once and nothing of the failed attempt (see
 	 * `retry-turn` in the agent connection). It takes the same write access as `Send`, and is
-	 * refused like it (`planner-not-attached`, `planner-busy`, or a passing trouble); nothing is held.
+	 * refused like it (`planner-not-attached` or a passing trouble) and while a turn runs; nothing
+	 * is held.
 	 */
 	export type Retry = KIND<"chat:retry"> & {
 		message: string;
