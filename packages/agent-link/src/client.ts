@@ -35,6 +35,7 @@ export const WIRE = {
 	sessionForks: "session-forks",
 	steerTurn: "steer-turn",
 	retryTurn: "retry-turn",
+	sessionChoice: "session-choice",
 	/** How often a client retries a `resume` refused with `retry`, after a `restarting` notice. */
 	restartResumeRetryMs: 250,
 } as const;

@@ -46,6 +46,12 @@ export type ModelChoiceDeps = {
 	 * the choice, since what the turn did is now a fact. Called once per such turn.
 	 */
 	fellBack?: (channelId: string) => void;
+	/**
+	 * Resolves when what the harness offers is no longer on its way, or has been waited for long
+	 * enough: a turn waits on it while `known` is false, so a remote client that has just attached
+	 * runs the stored choice from its first turn instead of its own default. Absent means no wait.
+	 */
+	offered?: (channelId: string) => Promise<void>;
 	storage: Pick<StorageAdapter, "plannerModelChoices">;
 	lease: () => Lease;
 	now?: () => Date;
@@ -112,8 +118,12 @@ export async function modelState(
 /**
  * What the next turn runs: the stored choice checked against the catalog as it is now. A model or
  * level the catalog no longer offers is left out, the harness's default runs, and `notice` says so.
+ * Every turn reads it, typed or not, a background job's included, so a session made again (after a
+ * restart, a reset, a link that could not resume) runs the stored choice from its first turn. Where
+ * the harness has yet to say what it offers, the turn waits for it first (`offered`).
  */
 export async function turnModel(deps: ModelChoiceDeps, channelId: string): Promise<TurnModel> {
+	if (deps.known?.(channelId) === false) await deps.offered?.(channelId);
 	let [catalog, saved] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
 	let resolved = resolveChoice(catalog, saved.choice);
 	// The turn runs the default for a choice nothing could check, where the harness had not yet said
@@ -127,6 +137,24 @@ export async function turnModel(deps: ModelChoiceDeps, channelId: string): Promi
 		...(resolved.unavailable
 			? { notice: unavailableNotice(catalog, resolved.unavailable, saved.modelName) }
 			: {}),
+	};
+}
+
+/**
+ * What a Planner session is opened with: the stored choice, where the catalog the harness reports
+ * now offers it, and nothing otherwise. It never waits and says nothing; the turn that follows reads
+ * the choice again (`turnModel`) and tells the room of a fallback. A remote client that offered
+ * `session-choice` is told it when the server asks it for a session.
+ */
+export async function sessionModel(
+	deps: ModelChoiceDeps,
+	channelId: string,
+): Promise<{ model?: string; thinkingLevel?: string }> {
+	let [catalog, saved] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
+	let resolved = resolveChoice(catalog, saved.choice);
+	return {
+		...(resolved.model !== undefined ? { model: resolved.model } : {}),
+		...(resolved.thinkingLevel !== undefined ? { thinkingLevel: resolved.thinkingLevel } : {}),
 	};
 }
 

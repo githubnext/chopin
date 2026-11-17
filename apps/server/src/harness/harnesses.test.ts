@@ -8,6 +8,7 @@ import {
 	harnessFor,
 	plannerCatalog,
 	plannerCommands,
+	plannerOffered,
 	plannerOfferIncoming,
 	plannerOfferKnown,
 	plannerRanWithoutOffer,
@@ -313,4 +314,40 @@ it("offers an Atomic Planner the models of its own runtime, once the harness is 
 	// Gateway authentication offers only the gateway's models, and none has a default here.
 	expect(catalog!.models.every(model => model.provider?.id === "vercel-ai-gateway")).toBe(true);
 	expect(catalog!.default).toBeUndefined();
+});
+
+it("holds a turn until an attached remote client reports what it offers, and no longer than its bound", async () => {
+	let pending = true;
+	let reported = Promise.withResolvers<void>();
+	let link = {
+		get catalogPending() {
+			return pending;
+		},
+		get offered() {
+			return reported.promise;
+		},
+	} as unknown as AgentLink;
+	// Nothing attached, and every other harness: nothing to wait for.
+	await plannerOffered("remote", "doc-a", 60_000);
+	for (let harness of ["copilot-sdk", "atomic"]) await plannerOffered(harness, "doc-a", 60_000);
+	let detach = attachLink("doc-a", link);
+	try {
+		let done = false;
+		let waiting = plannerOffered("remote", "doc-a", 60_000).then(() => done = true);
+		await Bun.sleep(10);
+		expect(done).toBe(false);
+		pending = false;
+		reported.resolve();
+		await waiting;
+		// A client that has yet to report and never does holds the turn only until the bound.
+		pending = true;
+		let silent = { catalogPending: true, offered: new Promise<void>(() => {}) };
+		detach();
+		detach = attachLink("doc-a", silent as unknown as AgentLink);
+		let started = Date.now();
+		await plannerOffered("remote", "doc-a", 30);
+		expect(Date.now() - started).toBeGreaterThanOrEqual(25);
+	} finally {
+		detach();
+	}
 });

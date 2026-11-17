@@ -212,6 +212,31 @@ export function plannerOfferKnown(harness: string, channelId: string): boolean {
 	return link !== undefined && !link.catalogPending;
 }
 
+/** How long a turn waits for an attached client to report what it offers before it runs. */
+export const PLANNER_OFFER_WAIT_MS = 10_000;
+
+/**
+ * Waits, at most `timeoutMs`, for the attached remote client that offered its models to report
+ * them, so a turn that starts as it attaches (the first after a restart, or one nobody typed) runs
+ * the document's chosen model rather than falling back for want of a catalog. Returns at once for
+ * every other harness, for a client that has reported or offered none, and with nobody attached.
+ */
+export async function plannerOffered(
+	harness: string,
+	channelId: string,
+	timeoutMs = PLANNER_OFFER_WAIT_MS,
+): Promise<void> {
+	if (harness !== "remote") return;
+	let link = attachedLink(channelId);
+	if (!link?.catalogPending) return;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	await Promise.race([
+		link.offered,
+		new Promise<void>(resolve => timer = setTimeout(resolve, timeoutMs)),
+	]);
+	clearTimeout(timer);
+}
+
 /**
  * Whether the document's Planner's models are on their way, so a composer may wait for them: an
  * attached remote client that offered its models and has yet to report them, or, with none

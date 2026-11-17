@@ -120,6 +120,7 @@ client must then use none of them.
 | `session-forks`            | A [`fork`](#server-to-client) message to branch a thread's Planner session from an earlier session and turn, multiplexed over the same connection                             |
 | `steer-turn`               | A [`steer`](#server-to-client) message: a person's message for the turn the client is running, read at its next step                                                          |
 | `retry-turn`               | A `turn`'s `message`, the Chat message it answers, and `retry` when it [runs a failed message again](#retrying-a-failed-turn)                                                 |
+| `session-choice`           | With `capability-catalog`, the document's chosen `model` and `thinkingLevel` in [`start` and `fork`](#server-to-client), so a session the client makes starts on them         |
 
 ### Pings
 
@@ -421,8 +422,8 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 ## Server to client
 
 ```text
-{ "type": "start", "session": "", "mode": "planner" }
-{ "type": "fork", "session": "", "mode": "planner", "from": { "session": "", "turn?": "" } }
+{ "type": "start", "session": "", "mode": "planner", "model?": "", "thinkingLevel?": "" }
+{ "type": "fork", "session": "", "mode": "planner", "from": { "session": "", "turn?": "" }, "model?": "", "thinkingLevel?": "" }
 { "type": "turn", "session": "", "turn": "", "prompt": "", "instructions?": "", "model?": "", "thinkingLevel?": "", "attachments?": [{ "id": "", "name": "", "kind": "image", "mediaType": "", "size": 0, "data": "" }], "message?": "", "retry?": true, "tools": [], "responseFormat?": {} }
 { "type": "abort", "session": "", "turn": "" }
 { "type": "steer", "request": "", "session": "", "turn": "", "prompt": "" }
@@ -441,6 +442,16 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   session refused with `start-failed` or not answered in time gets `destroy`,
   and any question asked for it meanwhile is withdrawn and answered
   `cancelled`.
+- `model` and `thinkingLevel` on `start` and `fork` are sent only to a client
+  that offered both `capability-catalog` and `session-choice`: the document's
+  chosen model and level when the session opens, checked against the catalog
+  the client last reported, as it spelled them. Make the session on them, so
+  its first turn runs them and so does any session the client makes again for
+  the document on its own (after its process restarts, say), and keep them as
+  the session's model and level until a turn names others. Each is absent where
+  nobody chose one or the catalog no longer offers it: use the client's own.
+  Every `turn` still carries the choice too, which takes precedence; a client
+  that applies only the turn's loses nothing but the first turn's head start.
 - `fork`, with `session-forks`, opens a thread's Planner session branched from
   `from.session` (and `from.turn` when named), preserving the conversation,
   tool results, compaction state and session memory up to that point. Answer
@@ -671,14 +682,18 @@ level can therefore never be chosen, and a turn never carries one.
   workflow of that name, with the words after it as its input, for a `workflow`. Chopin checks the
   name and kind against the last report when the message is sent and refuses an unknown one.
 
-A person's choice reaches the client in the next turn: `model` is the chosen model's `id`, and
+A person's choice reaches the client in every turn, whoever or whatever started it, a background
+job's (in an `isolated` session) included: `model` is the chosen model's `id`, and
 `thinkingLevel` one of that model's levels (or the default model's, when no model was chosen),
 each exactly as the client spelled it. Neither is ever empty: an empty model `id` or level is
 skipped when the catalog is read (above), so no one can choose it, and a `model` that is absent
 means no model was chosen (an operator's empty `MODEL` reads the same way).
 Chopin checks both against the last catalog the client reported when it accepts the choice and
 again when the turn starts. A model the catalog no longer lists, or a level its model no longer
-lists, is not sent: the turn runs with the client's default, and the document's Chat says so. The
+lists, is not sent: the turn runs with the client's default, and the document's Chat says so. A
+turn that starts before a client that offered the feature has sent `capabilities`, such as the
+first after it attaches or resumes, waits for the report, up to **10 seconds**, before it checks
+the choice, so a client that reports promptly runs the choice from its first turn. The
 catalog name is saved with the choice so that notice can name it even after it disappears. The
 browser's `chat:model` state includes an optional `modelName` for that saved name; older choices
 without a name use the current catalog's name if known, otherwise the id. Older browsers can ignore

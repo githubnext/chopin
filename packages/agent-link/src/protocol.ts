@@ -86,6 +86,14 @@ export const AGENT_FEATURES = {
 	 * fresh session whose `instructions` hold neither the message nor the failed attempt.
 	 */
 	retryTurn: "retry-turn",
+	/**
+	 * With `capability-catalog`: `start` and `fork` carry the document's chosen `model` and
+	 * `thinkingLevel`, checked against the catalog the client last reported, so the session the
+	 * client makes runs them from its first turn, and so does any session it makes again for the
+	 * document on its own. Every turn still carries them as well. Without the feature neither
+	 * message has the fields.
+	 */
+	sessionChoice: "session-choice",
 } as const;
 
 /** How often a client that offered `restart-notice` retries a `resume` refused with `retry`. */
@@ -570,6 +578,16 @@ export const refusalCodeSchema = z.enum([
 	"unavailable",
 ]);
 
+/**
+ * With `session-choice`: the document's chosen model and thinking level, as the client's catalog
+ * spelled them, for a session to run from its first turn. Absent where nobody chose one, or the
+ * catalog no longer offers it: the client uses its own.
+ */
+const sessionChoice = {
+	model: z.string().optional(),
+	thinkingLevel: z.string().optional(),
+};
+
 /** Every message a server sends. */
 export const serverMessageSchema = z.discriminatedUnion("type", [
 	z.strictObject({
@@ -608,6 +626,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 		type: z.literal("start"),
 		session: id,
 		mode: z.enum(["planner", "isolated"]),
+		...sessionChoice,
 	}),
 	z.strictObject({
 		type: z.literal("fork"),
@@ -617,6 +636,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 			session: id,
 			turn: id.optional(),
 		}),
+		...sessionChoice,
 	}),
 	z.strictObject({
 		type: z.literal("turn"),
