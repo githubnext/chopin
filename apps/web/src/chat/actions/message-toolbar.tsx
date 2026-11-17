@@ -29,11 +29,13 @@ import {
 import { useMenuDismissal } from "../../menu-dismissal";
 import { LongPress } from "../long-press";
 import { QUICK_REACTIONS } from "../reactions";
+import { AIM_REST_MS, keepsHeadingForBar, leavesTowardsBar } from "./toolbar-aim";
 import { useCopyToClipboard } from "./use-copy-to-clipboard";
 
 import "./message-actions.css";
 
 import type { MessageActionItem } from "@/components/assistant-ui/elements/message-actions";
+import type { Bar, Point } from "./toolbar-aim";
 import type { CSSProperties, KeyboardEvent, RefObject } from "react";
 
 export let COPIED_MS = 1500;
@@ -44,7 +46,6 @@ const EmojiPicker = lazy(() =>
 );
 
 const TOOLBAR_MARGIN = 8;
-const AIM_MS = 300;
 const SHEET_WIDTH = 600;
 
 type Which = "markdown" | "plain";
@@ -136,33 +137,73 @@ function useAnchored(
 	return position;
 }
 
-/**
- * Keeps a row shown for a moment after a mouse leaves it upwards and towards the row's end, where its
- * toolbar stands over the row before: a pointer heading for the bar from the row's text crosses that
- * row. It reads no geometry, so a hover moving from row to row lays nothing out.
- */
+function pointOf(event: PointerEvent): Point {
+	return { x: event.clientX, y: event.clientY };
+}
+
 function useToolbarAim(host: RefObject<HTMLElement | null>) {
 	useEffect(() => {
 		let element = host.current;
 		if (!element) return;
-		let last: { x: number; y: number } | undefined;
-		let timer = 0;
+		let lastInside: Point | undefined;
+		let heading: { bar: Bar; at: Point } | undefined;
+		let crossed: Element | undefined;
+		let restTimer = 0;
+		let uncross = () => {
+			crossed?.removeAttribute("data-chat-crossed");
+			crossed = undefined;
+		};
+		let rowAt = (target: EventTarget | null) => {
+			if (!(target instanceof Element)) return null;
+			let head = target.closest("[data-chat-head]");
+			return head ? head.nextElementSibling : target.closest(".chat-message-body");
+		};
+		let cross = (target: EventTarget | null) => {
+			let row = rowAt(target);
+			if (row === crossed) return;
+			uncross();
+			if (!row || row === element) return;
+			crossed = row;
+			crossed.setAttribute("data-chat-crossed", "");
+		};
 		let stop = () => {
-			clearTimeout(timer);
+			clearTimeout(restTimer);
+			window.removeEventListener("pointermove", follow);
+			window.removeEventListener("pointerdown", stop);
+			heading = undefined;
+			uncross();
 			element.removeAttribute("data-chat-aiming");
 		};
+		let rest = () => {
+			clearTimeout(restTimer);
+			restTimer = window.setTimeout(stop, AIM_REST_MS);
+		};
+		let follow = (event: PointerEvent) => {
+			if (!heading) return;
+			let next = pointOf(event);
+			if (!keepsHeadingForBar(heading.bar, heading.at, next)) return stop();
+			heading.at = next;
+			cross(event.target);
+			rest();
+		};
 		let track = (event: PointerEvent) => {
-			last = { x: event.clientX, y: event.clientY };
+			lastInside = pointOf(event);
 		};
 		let leave = (event: PointerEvent) => {
-			let from = last;
-			last = undefined;
-			if (
-				event.pointerType !== "mouse" || !from || event.clientY >= from.y || event.clientX <= from.x
-			) return;
+			let from = lastInside;
+			lastInside = undefined;
+			let leftAt = pointOf(event);
+			if (event.pointerType !== "mouse" || !from || leftAt.y >= from.y) return;
+			let toolbar = element.querySelector(":scope > .chat-toolbar-slot > .chat-message-toolbar");
+			if (!toolbar) return;
+			let bar = toolbar.getBoundingClientRect();
+			if (bar.width === 0 || !leavesTowardsBar(bar, from, leftAt)) return;
+			heading = { bar, at: leftAt };
 			element.setAttribute("data-chat-aiming", "");
-			clearTimeout(timer);
-			timer = window.setTimeout(stop, AIM_MS);
+			cross(event.relatedTarget);
+			window.addEventListener("pointermove", follow, { passive: true });
+			window.addEventListener("pointerdown", stop, { passive: true });
+			rest();
 		};
 		element.addEventListener("pointermove", track);
 		element.addEventListener("pointerleave", leave);

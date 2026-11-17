@@ -344,8 +344,10 @@
 
 /*
  * The bar stands over the row before, so a pointer heading up to it from the row's text may cross
- * that row on the way. A row a mouse has just left upwards and towards its end stays shown for a
- * moment (`data-chat-aiming`), so its bar is still there when the pointer arrives.
+ * that row on the way. A row a mouse has left upwards, level with its bar and towards it, stays shown
+ * while each move keeps it heading there (`data-chat-aiming`), so its bar is still there when the
+ * pointer arrives, and the row it crosses (`data-chat-crossed`) waits until the pointer turns away or
+ * rests there.
  */
 .chat-message-body[data-chat-aiming] {
 	--chat-shown: 1;
@@ -354,6 +356,16 @@
 
 .chat-message-body[data-chat-aiming] > .chat-toolbar-slot > .chat-message-toolbar {
 	pointer-events: auto;
+}
+
+.chat-message-body[data-chat-crossed]:not([data-chat-engaged]) {
+	--chat-shown: 0;
+}
+
+.chat-message-body[data-chat-crossed]:not([data-chat-engaged])
+	> .chat-toolbar-slot
+	> .chat-message-toolbar {
+	pointer-events: none;
 }
 
 /*
