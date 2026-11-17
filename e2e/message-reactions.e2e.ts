@@ -3,6 +3,7 @@
  * in code and every other emoji by the decisions model, here the browser suite's fake; ✅, 👍, 👀 and
  * 🙌 need no answer, and a reaction to a person's message never starts a turn. The scripted Planner
  * answers with the plan's heading and the latest pull request, so a reply is a line that says "Plan:".
+ * The answer is in the message's thread, started for it, and Chat shows only the thread's summary.
  */
 import { expect, test } from "./room";
 
@@ -29,7 +30,16 @@ function chatOf(page: Page) {
 }
 
 function message(page: Page, id: string): Locator {
-	return chatOf(page).locator(`[data-chat-message-id="${id}"]`);
+	return chatOf(page).locator(".chat-split-main").locator(`[data-chat-message-id="${id}"]`);
+}
+
+/** The answer is in the Planner message's thread: Chat shows the thread's summary, not the answer. */
+async function answeredInThread(page: Page): Promise<void> {
+	let summary = message(page, PLANNER.id).locator("[data-thread-summary]");
+	await expect(summary).toContainText(/\d+ repl/, { timeout: 60_000 });
+	await expect(chatOf(page).locator(".chat-split-main")).not.toContainText(REPLY);
+	await summary.click();
+	await expect(page.locator("[data-thread-panel]")).toContainText(REPLY);
 }
 
 async function quick(page: Page, id: string, label: string): Promise<void> {
@@ -52,7 +62,7 @@ async function pick(page: Page, id: string, search: string, emoji: string): Prom
 	await picker.getByRole("button", { name: emoji }).first().click();
 }
 
-test("❓ Explain this on the Planner's message makes the Planner answer in the Chat", async ({ join, seed }) => {
+test("❓ Explain this on the Planner's message makes the Planner answer in the message's thread", async ({ join, seed }) => {
 	test.setTimeout(120_000);
 	await seed("# Reaction harness\nThe cache lives in the router.\n", { transcript: transcript() });
 	let page = await join("ana");
@@ -60,7 +70,7 @@ test("❓ Explain this on the Planner's message makes the Planner answer in the 
 	await quick(page, PLANNER.id, "Explain this");
 	await expect(message(page, PLANNER.id).getByRole("button", { name: "You reacted with ❓" }))
 		.toHaveText("❓1");
-	await expect(chatOf(page)).toContainText(REPLY, { timeout: 60_000 });
+	await answeredInThread(page);
 });
 
 test("🤔 read by the decisions model as confusion makes the Planner answer too", async ({ join, seed }) => {
@@ -70,7 +80,7 @@ test("🤔 read by the decisions model as confusion makes the Planner answer too
 	await pick(page, PLANNER.id, "thinking", "🤔");
 	await expect(message(page, PLANNER.id).getByRole("button", { name: "You reacted with 🤔" }))
 		.toHaveText("🤔1");
-	await expect(chatOf(page)).toContainText(REPLY, { timeout: 60_000 });
+	await answeredInThread(page);
 });
 
 test("👍 is an acknowledgement and starts no turn, and neither does a reaction to a person's message", async ({ join, seed }) => {
@@ -86,6 +96,7 @@ test("👍 is an acknowledgement and starts no turn, and neither does a reaction
 	await page.waitForTimeout(12_000);
 	await expect(chatOf(page)).not.toContainText(REPLY);
 	await expect(chatOf(page).locator("[data-chat-message-id]")).toHaveCount(2);
+	await expect(chatOf(page).locator("[data-thread-summary]")).toHaveCount(0);
 });
 
 test("a reaction taken back within the debounce starts no turn", async ({ join, seed }) => {
