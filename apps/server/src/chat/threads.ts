@@ -36,10 +36,11 @@ type ManagedThread = {
 	 * with Also send to Chat, and the Planner's answers to those sent to it, with their failures.
 	 */
 	copied: Set<string>;
-	/** The request id of a reply being sent with Also send to Chat, until the thread announces it. */
-	copyNext?: string;
+	/** The request ids of replies being sent with Also send to Chat, until the thread announces them. */
+	copyNext: Set<string>;
 	/** The reply to the Planner, also sent to Chat, whose turn's answer is copied into Chat. */
 	answering?: string;
+	saving?: Promise<void>;
 	/** Where the thread's session stood before the first turn for each message: a Retry goes back there. */
 	beforeTurn: Map<
 		string,
@@ -133,6 +134,7 @@ function buildManagedThread(topChat: Chat.Chat, record: ChatThreadRecord): Manag
 		chat: threadChat,
 		untrackedAfterFork: [],
 		copied,
+		copyNext: new Set(),
 		beforeTurn: new Map(),
 	};
 	// An entry Chat will hold too is given a time and sequence that are right in both, before saving.
@@ -146,7 +148,7 @@ function buildManagedThread(topChat: Chat.Chat, record: ChatThreadRecord): Manag
  */
 function goesToChat(managed: ManagedThread, entry: Wire.Entry): boolean {
 	if (managed.copied.has(entry.id)) return true;
-	if (entry.author.kind === "member") return entry.id === managed.copyNext;
+	if (entry.author.kind === "member") return managed.copyNext.has(entry.id);
 	return entry.author.kind === "agent" && managed.answering !== undefined
 		|| entry.turnFailure?.request !== undefined && managed.copied.has(entry.turnFailure.request);
 }
@@ -262,17 +264,23 @@ async function saveThreadRecord(
 	context: Chat.Room,
 	managed: ManagedThread,
 	override?: ThreadPersistence,
-	entries: readonly Wire.Entry[] = managed.chat.entries,
+	entries?: readonly Wire.Entry[],
 ): Promise<void> {
-	managed.record.entries = entries.map(Chat.storedThreadEntry);
-	if (managed.chat.lastSeq !== undefined) managed.record.lastSeq = managed.chat.lastSeq;
-	managed.record.compactions = structuredClone(managed.chat.compactions ?? []);
-	if (managed.chat.usage) managed.record.usage = structuredClone(managed.chat.usage);
-	else delete managed.record.usage;
-	managed.record.updatedAt = new Date();
-	let persistence = resolvePersistence(context, override);
-	if (!persistence) return;
-	await persistence.store.putThread(persistence.lease(), managed.record);
+	let task = async () => {
+		let current = entries ?? managed.chat.entries;
+		managed.record.entries = current.map(Chat.storedThreadEntry);
+		if (managed.chat.lastSeq !== undefined) managed.record.lastSeq = managed.chat.lastSeq;
+		managed.record.compactions = structuredClone(managed.chat.compactions ?? []);
+		if (managed.chat.usage) managed.record.usage = structuredClone(managed.chat.usage);
+		else delete managed.record.usage;
+		managed.record.updatedAt = new Date();
+		let persistence = resolvePersistence(context, override);
+		if (!persistence) return;
+		await persistence.store.putThread(persistence.lease(), managed.record);
+	};
+	let run = (managed.saving ?? Promise.resolve()).then(task, task);
+	managed.saving = run.catch(() => {});
+	return run;
 }
 
 /**
@@ -359,8 +367,7 @@ function copyToChat(
 		case "chat:message": {
 			let entry = (frame as Wire.Message).entry;
 			if (!goesToChat(managed, entry)) return undefined;
-			if (entry.author.kind === "member" && entry.id === managed.copyNext) {
-				managed.copyNext = undefined;
+			if (entry.author.kind === "member" && managed.copyNext.delete(entry.id)) {
 				if (entry.to === "planner") managed.answering = entry.id;
 			}
 			entry.fromThread = rootId;
@@ -369,16 +376,16 @@ function copyToChat(
 			if (!managed.copied.has(entry.id)) {
 				managed.copied.add(entry.id);
 				let copied = own ?? structuredClone(entry);
-				// Chat took an entry while this one was saved: it goes after it, in both transcripts.
-				if (appendEntries(topChat, copied) && own && !entry.streaming) {
-					void saveThreadRecord(top, managed, override).catch(err =>
-						console.error("[chat] could not save a thread's message at its place in Chat:", err)
-					);
-				}
+				appendEntries(topChat, copied);
 				entry.ts = copied.ts;
 				if (copied.seq !== undefined) entry.seq = copied.seq;
 			}
 			if (!entry.streaming) {
+				if (managed.record.lastSeq !== managed.chat.lastSeq) {
+					void saveThreadRecord(top, managed, override).catch(err =>
+						console.error("[chat] could not save a thread's message:", err)
+					);
+				}
 				void top.persist().catch(err =>
 					console.error("[chat] could not save a thread's message in Chat:", err)
 				);
@@ -955,12 +962,12 @@ export async function sendMessage(
 	let requestId = (msg as { requestId?: unknown }).requestId;
 	let also = msg.alsoToChat === true && typeof requestId === "string"
 		&& !managed.copied.has(requestId);
-	if (also) managed.copyNext = requestId as string;
+	if (also) managed.copyNext.add(requestId as string);
 	let tRoom = buildThreadRoom(boundTop, managed, override);
 	try {
 		await Chat.send(tRoom, ws, msg);
 	} finally {
-		if (also && managed.copyNext === requestId) managed.copyNext = undefined;
+		if (also) managed.copyNext.delete(requestId as string);
 	}
 	let copy = also
 		? boundTop.chat.entries.find(entry => entry.id === requestId && entry.fromThread === msg.thread)

@@ -426,7 +426,16 @@ test("❓ on a Planner's message in Chat starts its thread, saved first, and is 
 	);
 	let stored = await w.storage.chatThreads.listThreads(w.context.room);
 	expect(stored.map(record => record.rootId)).toEqual([root]);
-	expect(stored[0]!.entries.map(entry => entry.id)).toContain(answer.id);
+	expect(typeof answer.seq).toBe("number");
+	expect(stored[0]!.lastSeq).toBe(answer.seq);
+	expect(stored[0]!.entries.find(entry => entry.id === answer.id)).toMatchObject({
+		id: answer.id,
+		seq: answer.seq,
+		viaReaction: true,
+	});
+	let followUp = await w.send(ana.ws, "Thanks, that clears it up.", { thread: root });
+	expect(thread.entries.map(entry => entry.id)).toEqual([answer.id, followUp]);
+	expect(thread.entries[1]!.seq).toBeGreaterThan(answer.seq!);
 });
 
 test("❓ on a Chat message whose thread exists adds the answer to that thread", async () => {

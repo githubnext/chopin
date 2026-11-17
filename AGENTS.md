@@ -398,9 +398,9 @@ Chat and every thread read in the order things happened: by `ts`, then by the se
 The server appends entries and never gives one an earlier second than the entry ahead of it, and
 gives each a sequence (its clock in milliseconds, or one more than the last it gave out) past every
 entry and history before it (`appendEntries` in `apps/server/src/chat/chronology.ts`). A thread's
-entry that Chat holds too is stamped against both transcripts before it is saved, so both say the
-same time and sequence; if Chat took an entry meanwhile, the copy moves past it and the thread
-record is saved again. Each `chat:history` and opened thread carries `seq`, at least every entry
+entry that Chat holds too is stamped once against both transcripts when it enters the thread,
+raising both transcripts' last sequence, and its copy into Chat keeps that time and sequence and
+takes its place by them. Each `chat:history` and opened thread carries `seq`, at least every entry
 it holds and smaller than any appended after it; it gives out no number, and a Retry's removal
 moves the last sequence past what it took out (`takeOut`). That last sequence is saved with the
 transcript (the sidecar's `transcriptSeq`, a thread's `last_seq`), so a restart whose clock is
