@@ -11,6 +11,7 @@ import {
 } from "./transcript-state";
 
 import type { Chat } from "@chopin/protocol";
+import type { TranscriptState } from "./transcript-state";
 
 let turn: Chat.Turn = {
 	id: "turn-1",
@@ -128,6 +129,49 @@ describe("transcript work retention", () => {
 		expect(messages.find(message => message.id === "tool-b")?.tools).toMatchObject([{
 			id: "read-b",
 		}]);
+	});
+
+	it("draws a turn's work on the row it began on when an entry read before that row arrives later", () => {
+		let messages = (state: TranscriptState) =>
+			group(state.entries, progressOf(state, true, false).working, state.completedWork).flatMap(
+				item => item.kind === "messages" ? item.messages : [],
+			);
+		let state = transcriptReducer(initialTranscript, {
+			kind: "history",
+			entries: [entry("prompt", { kind: "member", handle: "ana" })],
+			turn,
+		});
+		state = transcriptReducer(state, {
+			kind: "message",
+			entry: {
+				...entry("prose", { kind: "agent" }, "I found it."),
+				ts: 1_700_000_002,
+				streaming: true,
+			},
+		});
+		// Its earlier time places the tool's entry above the prose that arrived first.
+		state = transcriptReducer(state, {
+			kind: "message",
+			entry: entry("tool-entry", { kind: "agent" }),
+		});
+		state = transcriptReducer(state, {
+			kind: "tool",
+			entryId: "tool-entry",
+			activity: { id: "read", name: "read_plan", status: "running" },
+		});
+
+		expect(state.entries.map(item => item.id)).toEqual(["prompt", "tool-entry", "prose"]);
+		let working = messages(state);
+		expect(working.filter(message => message.working)).toMatchObject([{
+			id: "prose",
+			tools: [{ id: "read" }],
+		}]);
+		expect(working.find(message => message.id === "tool-entry")?.tools).toBeUndefined();
+
+		state = transcriptReducer(state, { kind: "turn" });
+		let ended = messages(state);
+		expect(ended.find(message => message.id === "prose")?.tools).toMatchObject([{ id: "read" }]);
+		expect(ended.find(message => message.id === "tool-entry")?.tools).toBeUndefined();
 	});
 });
 

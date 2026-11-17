@@ -69,7 +69,7 @@ let MessageFiles = lazy(() => import("./attachments/message-files"));
 const ANALYSIS = import.meta.env.DEV || import.meta.env.VITE_MESSAGE_ANALYSIS === "on";
 
 import type { Chat, ConversationPlan } from "@chopin/protocol";
-import type { CompletedWork, Group, Message } from "./model";
+import type { CompletedWork, Group, Message, WorkingTurn } from "./model";
 import type { Local } from "./chronology";
 import type { OfferPlace } from "./offer-motion";
 import type { CardMetaStore, QuestionnaireStore } from "@chopin/editor";
@@ -715,7 +715,7 @@ export let Transcript = memo(function Transcript(
 		/** The page's connection banner shows: a message's "Couldn't send" gives way to it, and is back with the connection. */
 		quietFailures?: boolean;
 		suspendedWork?: CompletedWork;
-		working?: Pick<Chat.Turn, "id" | "started" | "entryOffset">;
+		working?: WorkingTurn;
 		sourceDestination?: ChatDestination;
 	},
 ) {

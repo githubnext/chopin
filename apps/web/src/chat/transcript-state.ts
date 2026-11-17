@@ -2,7 +2,7 @@ import { placeOf, readsAfter } from "./chronology";
 import { withReactions } from "./reactions";
 
 import type { Chat } from "@chopin/protocol";
-import type { CompletedWork } from "./model";
+import type { CompletedWork, WorkingTurn } from "./model";
 
 export type TranscriptState = {
 	entries: Chat.Entry[];
@@ -57,9 +57,15 @@ export function progressOf(
 	state: TranscriptState,
 	current: boolean,
 	quiet: boolean,
-): { working?: Chat.Turn; suspended?: CompletedWork; settled?: CompletedWork } {
+): { working?: Chat.Turn & WorkingTurn; suspended?: CompletedWork; settled?: CompletedWork } {
 	if (current || quiet) {
-		if (!state.turn?.quiet) return { working: state.turn };
+		if (!state.turn?.quiet) {
+			return {
+				working: state.turn && state.activeAnchorId
+					? { ...state.turn, anchorId: state.activeAnchorId }
+					: state.turn,
+			};
+		}
 		// Nothing left of a quiet turn is for people to watch: it is drawn as the turn that ended.
 		if (!state.activeAnchorId) return {};
 		return {
