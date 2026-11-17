@@ -80,7 +80,7 @@ import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./r
 import { withSessionContext } from "./session-context";
 import { TOOL_UNAVAILABLE, turnFailureOf } from "./turn-failure";
 import { retryTarget } from "./retry";
-import { appendEntries } from "./chronology";
+import { appendEntries, snapshotSeq, stampEntries } from "./chronology";
 import { runDuration } from "./run-duration";
 import { READER_INSTRUCTIONS } from "./reaction-instructions";
 import type { InitiativeSchedule } from "./initiative-schedule";
@@ -486,6 +486,10 @@ export type Chat = {
 	forkBootstrap?: Wire.Entry[];
 	/** Open thread `Chat` instances owned by this top-level Chat, closed when it closes. */
 	childChats?: Map<string, Chat>;
+	/** The last sequence given to an entry or a snapshot (`chronology.ts`). */
+	lastSeq?: number;
+	/** For a thread Chat: the top-level Chat an entry appended here is copied into, if it is. */
+	sharedWith?: (entry: Wire.Entry) => Chat | undefined;
 };
 
 export function create(): Chat {
@@ -750,7 +754,7 @@ function say(
 	room: string,
 	entry: Wire.Entry,
 ): Wire.Entry {
-	appendEntries(chat.entries, entry);
+	appendEntries(chat, entry);
 	announce(server, room, entry);
 	return entry;
 }
@@ -765,6 +769,7 @@ export function greet(chat: Chat, ws: Socket): void {
 		kind: "chat:history",
 		ts: 0,
 		entries: chat.entries.map(publicEntry),
+		seq: snapshotSeq(chat),
 		busy: chat.busy,
 		...(chat.turn ? { turn: chat.turn } : {}),
 		...(chat.runs ? { runs: chat.runs } : {}),
@@ -1219,7 +1224,7 @@ export async function invoke(
 			text,
 			ts: now(),
 		};
-		appendEntries(chat.entries, entry);
+		appendEntries(chat, entry);
 		try {
 			await context.persist();
 		} catch (error) {
@@ -1473,7 +1478,7 @@ async function processSend(
 			...withAttachments,
 			delivery: savedDelivery,
 		};
-		if (!context.commitRoomMessage) appendEntries(chat.entries, entry);
+		if (!context.commitRoomMessage) appendEntries(chat, entry);
 		try {
 			if (context.commitRoomMessage) await context.commitRoomMessage(entry);
 			else await context.persist();
@@ -1513,7 +1518,7 @@ async function processSend(
 			text: "The agent is not running, so the plan has not been revised.",
 			ts: now(),
 		}];
-		appendEntries(chat.entries, ...entries);
+		appendEntries(chat, ...entries);
 		try {
 			await context.persist();
 		} catch {
@@ -1547,7 +1552,7 @@ async function processSend(
 			...withAttachments,
 			delivery: savedDelivery,
 		};
-		appendEntries(chat.entries, entry);
+		appendEntries(chat, entry);
 		try {
 			await context.persist();
 		} catch {
@@ -1596,7 +1601,7 @@ async function processSend(
 			...withAttachments,
 			delivery: savedDelivery,
 		};
-		appendEntries(chat.entries, entry);
+		appendEntries(chat, entry);
 		try {
 			await context.persist();
 		} catch {
@@ -1635,7 +1640,7 @@ async function processSend(
 	// The turn holds the Chat from here; people are told it is running once the machine has its prompt.
 	chat.busy = true;
 	chat.turn = begin(handle, chat.entries.length + 1);
-	appendEntries(chat.entries, entry);
+	appendEntries(chat, entry);
 	try {
 		await context.persist();
 	} catch {
@@ -1805,7 +1810,7 @@ function postNotice(
 		ts: now(),
 		...(comment ? { comment } : {}),
 	};
-	appendEntries(chat.entries, entry);
+	appendEntries(chat, entry);
 	return context.persist().then(() => {
 		announce(server, room, entry);
 	});
@@ -1847,7 +1852,7 @@ export function instruct(
 				text: "The agent is not running, so the plan has not been revised.",
 				ts: now(),
 			};
-			appendEntries(chat.entries, entry);
+			appendEntries(chat, entry);
 			return context.persist().then(() => announce(server, room, entry));
 		}
 
@@ -2495,6 +2500,7 @@ async function publishReport(
 	try {
 		let storing = storeStages(context, (runs?.cards ?? []).filter(card => !kept.has(card.id)));
 		if (storing) await storing;
+		stampEntries(chat, ...finished);
 		await context.persist(() => ({ entries: [...chat.entries, ...finished], runs: next }));
 	} catch (err) {
 		console.error("[chat] storing workflow runs failed:", err);
@@ -2503,8 +2509,13 @@ async function publishReport(
 		return;
 	}
 	unsaved.delete(session);
-	appendEntries(chat.entries, ...finished);
 	chat.runs = next;
+	// Whatever Chat took while this was saved goes ahead of it, and the save follows.
+	if (appendEntries(chat, ...finished)) {
+		await context.persist().catch(err =>
+			console.error("[chat] could not save workflow notices in their place:", err)
+		);
+	}
 	for (let entry of finished) announce(server, room, entry);
 	state(chat, server, room);
 	if (prior.some(run => !shown.has(run.id))) await forgetStages(context, next);
@@ -4353,7 +4364,7 @@ function showImages(
 		?? chat.entries.find(item => item.id === chat.writing);
 	if (!entry) {
 		entry = { id: ulid(), author: { kind: "agent" }, text: "", ts: now() };
-		appendEntries(chat.entries, entry);
+		appendEntries(chat, entry);
 	}
 	turn.entry = entry.id;
 	let before = entry.images?.length ?? 0;

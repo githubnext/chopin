@@ -1,7 +1,7 @@
 import { summarizeThread } from "@chopin/protocol/threads";
 
 import { broadcast, fail, PASSING, reply, tell } from "../wire";
-import { appendEntries } from "./chronology";
+import { appendEntries, snapshotSeq } from "./chronology";
 import * as Chat from "./service";
 import { NOTE_SENT, threadNote, threadNotesContext } from "./thread-notes";
 
@@ -123,13 +123,27 @@ function buildManagedThread(topChat: Chat.Chat, record: ChatThreadRecord): Manag
 		copied.add(entry.id);
 		return own;
 	});
-	return {
+	let managed: ManagedThread = {
 		record: structuredClone(record),
 		chat: threadChat,
 		untrackedAfterFork: [],
 		copied,
 		beforeTurn: new Map(),
 	};
+	// An entry Chat will hold too is given a time and sequence that are right in both, before saving.
+	threadChat.sharedWith = entry => goesToChat(managed, entry) ? topChat : undefined;
+	return managed;
+}
+
+/**
+ * Whether a thread's entry is also in the top-level Chat: a reply sent with Also send to Chat, the
+ * Planner's answer to one sent to it, and the notice that its turn failed.
+ */
+function goesToChat(managed: ManagedThread, entry: Wire.Entry): boolean {
+	if (managed.copied.has(entry.id)) return true;
+	if (entry.author.kind === "member") return entry.id === managed.copyNext;
+	return entry.author.kind === "agent" && managed.answering !== undefined
+		|| entry.turnFailure?.request !== undefined && managed.copied.has(entry.turnFailure.request);
 }
 
 async function ensureLoaded(
@@ -326,33 +340,37 @@ const THREAD_FRAME_KINDS = new Set<string>([
  * Their entries are one object in both transcripts, marked `fromThread`. What a Retry takes out of
  * the thread leaves Chat too.
  */
-function copyToChat(top: Chat.Room, managed: ManagedThread, frame: Frame): Outgoing | undefined {
+function copyToChat(
+	top: Chat.Room,
+	managed: ManagedThread,
+	frame: Frame,
+	override?: ThreadPersistence,
+): Outgoing | undefined {
 	let rootId = managed.record.rootId;
 	let topChat = top.chat;
 	let shared = (id: string) => managed.chat.entries.find(entry => entry.id === id);
 	switch (frame.kind) {
 		case "chat:message": {
 			let entry = (frame as Wire.Message).entry;
-			let copy = managed.copied.has(entry.id);
-			if (!copy && entry.author.kind === "member" && entry.id === managed.copyNext) {
+			if (!goesToChat(managed, entry)) return undefined;
+			if (entry.author.kind === "member" && entry.id === managed.copyNext) {
 				managed.copyNext = undefined;
-				copy = true;
 				if (entry.to === "planner") managed.answering = entry.id;
-			} else if (!copy) {
-				copy = entry.author.kind === "agent" && managed.answering !== undefined
-					|| entry.turnFailure?.request !== undefined
-						&& managed.copied.has(entry.turnFailure.request);
 			}
-			if (!copy) return undefined;
 			entry.fromThread = rootId;
 			let own = shared(entry.id);
 			if (own) own.fromThread = rootId;
 			if (!managed.copied.has(entry.id)) {
 				managed.copied.add(entry.id);
 				let copied = own ?? structuredClone(entry);
-				appendEntries(topChat.entries, copied);
-				// Both transcripts, and both frames, say the time Chat placed it at.
+				// Chat took an entry while this one was saved: it goes after it, in both transcripts.
+				if (appendEntries(topChat, copied) && own && !entry.streaming) {
+					void saveThreadRecord(top, managed, override).catch(err =>
+						console.error("[chat] could not save a thread's message at its place in Chat:", err)
+					);
+				}
 				entry.ts = copied.ts;
+				if (copied.seq !== undefined) entry.seq = copied.seq;
 			}
 			if (!entry.streaming) {
 				void top.persist().catch(err =>
@@ -394,6 +412,7 @@ function copyToChat(top: Chat.Room, managed: ManagedThread, frame: Frame): Outgo
 function wrapThreadServer(
 	top: Chat.Room,
 	managed: ManagedThread,
+	override?: ThreadPersistence,
 ): Server<SocketData> {
 	let server = top.server;
 	let room = top.room;
@@ -425,7 +444,7 @@ function wrapThreadServer(
 					try {
 						let parsed = JSON.parse(data) as Frame;
 						if (THREAD_FRAME_KINDS.has(parsed.kind)) {
-							let copied = copyToChat(top, managed, parsed);
+							let copied = copyToChat(top, managed, parsed, override);
 							let wrapped: Wire.InThread = {
 								kind: "chat:in-thread",
 								ts: parsed.ts || nowSeconds(),
@@ -603,7 +622,7 @@ function buildThreadRoom(
 	managed: ManagedThread,
 	override?: ThreadPersistence,
 ): Chat.Room {
-	let wrappedServer = wrapThreadServer(topContext, managed);
+	let wrappedServer = wrapThreadServer(topContext, managed, override);
 	return {
 		investigations: topContext.investigations,
 		chat: managed.chat,
@@ -845,6 +864,7 @@ export async function openThread(
 		root: result.root,
 		forkedAt: managed?.record.forkedAt ?? nowSeconds(),
 		entries: managed ? managed.chat.entries.map(Chat.publicEntry) : [],
+		...(managed ? { seq: snapshotSeq(managed.chat) } : {}),
 		busy: managed?.chat.busy ?? false,
 		...(managed?.chat.turn ? { turn: managed.chat.turn } : {}),
 		...(managed?.chat.runs ? { runs: managed.chat.runs } : {}),

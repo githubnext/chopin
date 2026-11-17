@@ -592,6 +592,24 @@ describe("Chat threads server", () => {
 		});
 		expect(said.length).toBeGreaterThan(1);
 		expect(new Set(said)).toEqual(new Set([ahead]));
+		expect(inChat.seq).toBe(inThread?.seq);
+		expect(inChat.seq).toBeGreaterThan(0);
+
+		// The thread's saved record says the same time and sequence, so a restart reads it in place.
+		await Bun.sleep(0);
+		let stored = await w.storage.chatThreads.getThread(w.channel.id, rootId);
+		let storedReply = stored?.entries.find(entry => entry.id === replyId);
+		expect({ ts: storedReply?.ts, seq: storedReply?.seq }).toEqual({ ts: ahead, seq: inChat.seq });
+
+		let freshChat = Chat.restore(structuredClone(w.plan.chat.entries));
+		let reloaded = Threads.bindTopLevel({ ...w.context, chat: freshChat });
+		await Threads.greetThreads(reloaded, w.makeSocket("carol", "U_carol", false).ws);
+		let restored = freshChat.entries.find(entry => entry.id === replyId);
+		expect({ ts: restored?.ts, seq: restored?.seq }).toEqual({ ts: ahead, seq: inChat.seq });
+		expect(freshChat.entries.slice(-2).map(entry => entry.id)).toEqual(["ahead", replyId]);
+		let reopened = await w.storage.chatThreads.getThread(w.channel.id, rootId);
+		expect(reopened?.entries.find(entry => entry.id === replyId)?.ts).toBe(ahead);
+		await Chat.close(freshChat);
 	});
 
 	test("a Retry branches the Atomic session back to before the failed attempt, and gives it no word of the attempt", async () => {

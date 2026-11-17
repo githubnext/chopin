@@ -23,7 +23,7 @@ export function createCommands(
 			if (!active()) throw new Error("conversation analysis is unavailable");
 			let previous = plan.conversationPlan;
 			let index = plan.chat.entries.length;
-			appendEntries(plan.chat.entries, message);
+			appendEntries(plan.chat, message);
 			try {
 				if (previous.queue.length < MAX_QUEUE) {
 					plan.conversationPlan = enqueue(previous, message.id);
