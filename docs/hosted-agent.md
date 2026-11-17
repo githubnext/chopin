@@ -1253,9 +1253,9 @@ being handed the Chat, has no session to be given to just now. It is saved and a
 once, and starts the next turn as that one winds down, ahead of anything waiting, as a message
 that preempts a job does. A message sent while such a person's turn waits to start is saved and
 acknowledged at once too, and given to that turn once it can take one; a harness that takes no
-input mid-run refuses it with `planner-busy` and words that ask for no Stop, since nothing is running
-for Stop to end: "chopin is about to answer another message and can't take more while it works on
-this machine. Send yours again once it has answered." None of these is answered as a passing
+input mid-run refuses it with `planner-starting` and words that ask for no Stop, since nothing is
+running for Stop to end: "chopin is about to answer another message and can't take more while it
+works on this machine. Send yours again once it has answered." None of these is answered as a passing
 trouble, so no message waits in its browser's outbox behind another. If a turn ends between a
 message being posted and the turn reading it, an idle Chat starts a turn for the message; otherwise
 Chat says that Chopin did not read it, and it is not sent again on its own. A process that is
@@ -1285,11 +1285,13 @@ at that point, and none counts against what a person may send.
 **What a person sees.** The message is in Chat at once, as theirs, with no mark. While only the
 browser has it, in an outbox that sends it by itself, in order and once, when the page's connection
 is back, it says **Sending**; never waiting, queued or a clock. When the server refuses it because
-no machine took it or the running turn cannot take input mid-run, and the composer holds no newer
+no machine took it or the harness cannot take input mid-run (`planner-not-attached`,
+`planner-busy`, `planner-starting`), and the composer holds no newer
 draft, the message's words (with its mention, references and staged files) return to the composer
 draft, chopin says why in a row only that person sees, at the time it was said (with _How
-to fix_ where the machine has something to fix), so nothing typed is lost, and while Chopin works the composer's
-one button offers Stop so the person can stop Chopin and send it. When a newer draft was already
+to fix_ where the machine has something to fix), so nothing typed is lost, and for `planner-busy`
+while Chopin works the composer's one button offers Stop so the person can stop Chopin and send it
+(`planner-starting` keeps Send, so it never stops the waiting person's turn). When a newer draft was already
 typed, or another refusal turned the message down, it says **Couldn't send** on itself, with the
 reason, **Try again** and **Delete**, which act on the outbox alone since the server kept nothing.
 While the page's offline bar shows, both give way to it and return with the connection. The

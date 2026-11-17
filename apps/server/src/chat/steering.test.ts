@@ -303,7 +303,11 @@ test("a harness that takes no input mid-run starts the next turn for a message s
 	await Chat.send(h.context, speaking("cy", frames), member("@chopin and name an owner"));
 	expect(frames).toEqual([
 		expect.objectContaining({ kind: "chat:send", id: first.requestId }),
-		expect.objectContaining({ kind: "session:error", message: CANNOT_YET, code: "planner-busy" }),
+		expect.objectContaining({
+			kind: "session:error",
+			message: CANNOT_YET,
+			code: "planner-starting",
+		}),
 	]);
 	warned.mockRestore();
 	expect(h.chat.entries.map(entry => entry.text)).not.toContain("and name an owner");

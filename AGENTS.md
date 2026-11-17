@@ -366,7 +366,7 @@ own turns is being handed the Chat, has no session to be given to; it is acknowl
 and starts the next turn as that one winds down (`windingDown` in `chat/service.ts`), ahead of
 anything waiting. One sent while such a person's turn waits to start is acknowledged at once and
 given to that turn once it can take one (`chat.following`); a harness that takes no input
-mid-run refuses it with `planner-busy` and words that ask for no Stop ("chopin is about to answer
+mid-run refuses it with `planner-starting` and words that ask for no Stop ("chopin is about to answer
 another message and can't take more while it works on this machine. Send yours again once it has
 answered."). None is answered as a passing trouble, so no message waits in its browser's outbox
 behind another. A stopping process (`holdStarts`) keeps no such message: it refuses one in silence
@@ -387,19 +387,20 @@ its outbox (`apps/web/src/chat/delivery.ts`) as the person's own, saying Sending
 waiting, queued or a clock), until the server's entry for the same request ID arrives; from
 then it carries no mark. The outbox holds a message only for the browser's own connection:
 it sends one message at a time, oldest first, once the current connection's transcript has
-arrived, and only to a server that acknowledges sends. When `planner-not-attached` or
-`planner-busy` refuses a send and the composer holds no newer draft, the typed text (with its
-mention, references and staged files) returns to the composer draft and chopin says why in a row
-only that person sees, placed at the time it was said (`chat/quiet-note.tsx`, with How to fix where
-the machine has something to fix), and while Chopin works the one button offers Stop so the
-person can stop Chopin and send it;
+arrived, and only to a server that acknowledges sends. When `planner-not-attached`,
+`planner-busy` or `planner-starting` refuses a send and the composer holds no newer draft, the
+typed text (with its mention, references and staged files) returns to the composer draft and
+chopin says why in a row only that person sees, placed at the time it was said
+(`chat/quiet-note.tsx`, with How to fix where the machine has something to fix), and for
+`planner-busy` while Chopin works the one button offers Stop so the person can stop Chopin and
+send it (`planner-starting` keeps Send, so it cannot stop the other person's turn);
 when a newer draft was already typed, or another refusal rejected the message, it says
 "Couldn't send" on the message with Try again and Delete (which act on the outbox alone, since
 the server kept nothing), and not while the page's offline bar
 shows. A refusal with a passing reason is not a refusal of the message: a storage, room or
 authorization trouble that will pass (`temporarily-unavailable`). The browser keeps the message sending and sends it again, in order
 and with the same request ID, in a moment. Only a refusal with neither code is final, and so
-are `planner-busy` and `planner-not-attached`. One the server kept, though the commit's answer
+are `planner-busy`, `planner-starting` and `planner-not-attached`. One the server kept, though the commit's answer
 was lost, is answered with its first answer when the same request is sent again, and is given
 to a turn once.
 

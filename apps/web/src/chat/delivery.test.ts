@@ -11,6 +11,7 @@ import {
 	outboxReducer,
 	passing,
 	refusalText,
+	refusedByChopin,
 	restoreOutbox,
 } from "./delivery";
 
@@ -150,14 +151,25 @@ describe("refusals of a send", () => {
 	 *   is away), and nothing is kept for when one can.
 	 * - final, `planner-busy`: a turn is running and cannot be given a message (its harness takes
 	 *   none mid-run, or it is a background job's).
+	 * - final, `planner-starting`: another person's turn is about to start on a harness that takes no
+	 *   input mid-run, and cannot be given a message.
 	 * Not sends, and so with no code of their own to read: a task draft and a comment note sent to
 	 * Chopin have no outbox, say why in the page's own words and are pressed again.
 	 */
 	const CODES: Record<Code, "passing" | "final"> = {
 		"planner-not-attached": "final",
 		"planner-busy": "final",
+		"planner-starting": "final",
 		"temporarily-unavailable": "passing",
 	};
+
+	test("returns the draft to the composer and speaks in chopin's quiet row for every Planner refusal, including a starting turn", () => {
+		expect(refusedByChopin("planner-not-attached")).toBe(true);
+		expect(refusedByChopin("planner-busy")).toBe(true);
+		expect(refusedByChopin("planner-starting")).toBe(true);
+		expect(refusedByChopin("temporarily-unavailable")).toBe(false);
+		expect(refusedByChopin(undefined)).toBe(false);
+	});
 
 	test("every code in the protocol is classified, and only a passing one is sent again", async () => {
 		let source = await Bun.file(
@@ -283,6 +295,14 @@ describe("the words", () => {
 				"chopin can't take messages while it works on this machine. Stop it to ask now.",
 			),
 		).toBe("chopin can't take messages while it works on this machine. Stop it to ask now.");
+		expect(
+			refusalText(
+				"planner-starting",
+				"chopin is about to answer another message and can't take more while it works on this machine. Send yours again once it has answered.",
+			),
+		).toBe(
+			"chopin is about to answer another message and can't take more while it works on this machine. Send yours again once it has answered.",
+		);
 	});
 });
 

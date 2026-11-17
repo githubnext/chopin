@@ -2134,6 +2134,7 @@ async function waitingPlanner(steers: boolean) {
 					message: "Use Postgres for the store.",
 				});
 				answers.push(answer);
+				if (answer.status !== "answered") await new Promise(() => {});
 			}
 			// A model that is still working when a message is given to its turn.
 			if (steers && turn.message.prompt.endsWith("keep it short")) await reading.promise;
@@ -2211,7 +2212,7 @@ for (let steers of [true, false]) {
 			expect(await room.send("@chopin keep it short")).toMatchObject({ kind: "chat:send" });
 			let second = await room.send("@chopin and name an owner");
 			if (steers) expect(second).toMatchObject({ kind: "chat:send" });
-			else expect(second).toMatchObject({ kind: "session:error", code: "planner-busy" });
+			else expect(second).toMatchObject({ kind: "session:error", code: "planner-starting" });
 			expect(room.script.turns).toHaveLength(1);
 
 			await until(() => room.script.turns.length === 2);

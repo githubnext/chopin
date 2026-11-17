@@ -1631,7 +1631,7 @@ async function processSend(
 					ws,
 					msg.rid,
 					chat.preempting ? CANNOT_STEER_STARTING_TURN : CANNOT_STEER,
-					"planner-busy",
+					chat.preempting ? "planner-starting" : "planner-busy",
 				);
 			}
 		}

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { announcement, sendStop } from "./send-stop";
+import { announcement, refusedWhileBusy, sendStop } from "./send-stop";
 
 import type { SendStopInput } from "./send-stop";
 
@@ -65,6 +65,25 @@ describe("the one button turns from send into stop", () => {
 			action: "send",
 			disabled: false,
 		});
+	});
+
+	test("keeps send, and never offers stop, when a draft to Chopin was refused because another person's turn is about to start", () => {
+		expect(refusedWhileBusy(true, "planner-busy", true)).toBe(true);
+		expect(refusedWhileBusy(false, "planner-busy", true)).toBe(false);
+		expect(refusedWhileBusy(true, "planner-busy", false)).toBe(false);
+		// Another person's turn is about to start: the draft returns, and once that turn runs the
+		// button stays Send rather than offering a Stop that would abort their turn.
+		let busy = refusedWhileBusy(true, "planner-starting", true);
+		expect(busy).toBe(false);
+		expect(refusedWhileBusy(true, "planner-not-attached", true)).toBe(false);
+		expect(
+			sendStop({
+				...READY,
+				running: true,
+				canSend: !busy,
+				refusedWhileBusy: busy,
+			}),
+		).toEqual({ action: "send", disabled: false });
 	});
 });
 

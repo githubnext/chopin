@@ -582,9 +582,9 @@ export declare namespace Chat {
 	 * and acknowledged at once and starts the next turn, ahead of anything waiting. While another
 	 * person's turn waits to start, it is saved and given to that turn once it can take one.
 	 * Otherwise it is refused and saves nothing: `planner-busy` where a harness that takes no input
-	 * mid-run cannot be given it (a running turn, or another person's turn waiting to start),
-	 * `planner-not-attached` where no machine can take it. A refusal is never kept to send later.
-	 * The same write access as starting a turn is required.
+	 * mid-run cannot be given it while a turn runs, `planner-starting` where another person's turn
+	 * waits to start on such a harness, `planner-not-attached` where no machine can take it. A
+	 * refusal is never kept to send later. The same write access as starting a turn is required.
 	 */
 	export type Send = KIND<"chat:send"> & {
 		requestId: string;

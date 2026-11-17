@@ -61,7 +61,9 @@ export function sendFailureView(
 	return {
 		kind: "send",
 		title: failure.text,
-		retry: code !== "planner-not-attached" && code !== "planner-busy",
+		retry: code !== "planner-not-attached"
+			&& code !== "planner-busy"
+			&& code !== "planner-starting",
 		...(code === "planner-not-attached"
 			? { link: { label: "Open machines", href: "/machines" } }
 			: {}),
