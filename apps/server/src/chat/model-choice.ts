@@ -41,15 +41,16 @@ export type ModelChoiceDeps = {
 	 */
 	incoming?: (channelId: string) => boolean;
 	/**
-	 * A turn fell back on a saved choice with no catalog to check it against while `known` was
-	 * false: the harness is to treat what it offers as known (nothing), and the room is to be told
-	 * the choice, since what the turn did is now a fact. Called once per such turn.
+	 * A session or turn fell back on a saved choice with no catalog to check it against while `known`
+	 * was false: the harness is to treat what it offers as known (nothing), and the room is to be
+	 * told the choice, since what it did is now a fact. Called once each time that happens.
 	 */
 	fellBack?: (channelId: string) => void;
 	/**
 	 * Resolves when what the harness offers is no longer on its way, or has been waited for long
-	 * enough: a turn waits on it while `known` is false, so a remote client that has just attached
-	 * runs the stored choice from its first turn instead of its own default. Absent means no wait.
+	 * enough: opening a session and starting a turn wait on it while `known` is false and a choice
+	 * is stored, so a remote client that has just attached opens its session on the stored choice
+	 * and runs it from its first turn, instead of its own default. Absent means no wait.
 	 */
 	offered?: (channelId: string) => Promise<void>;
 	storage: Pick<StorageAdapter, "plannerModelChoices">;
@@ -116,6 +117,22 @@ export async function modelState(
 }
 
 /**
+ * The stored choice checked against the catalog as it is now. Where the harness has yet to say what
+ * it offers, it waits for that first (`offered`), unless nothing is stored to check. A choice nothing
+ * could check, because the harness never said, is run as the default, and `fellBack` is told so.
+ */
+async function resolveStored(deps: ModelChoiceDeps, channelId: string) {
+	let saved = await stored(deps, channelId);
+	if (saved.choice && deps.known?.(channelId) === false) await deps.offered?.(channelId);
+	let catalog = await deps.catalog(channelId);
+	let resolved = resolveChoice(catalog, saved.choice);
+	if (resolved.unavailable && !catalog && deps.known?.(channelId) === false) {
+		deps.fellBack?.(channelId);
+	}
+	return { catalog, saved, resolved };
+}
+
+/**
  * What the next turn runs: the stored choice checked against the catalog as it is now. A model or
  * level the catalog no longer offers is left out, the harness's default runs, and `notice` says so.
  * Every turn reads it, typed or not, a background job's included, so a session made again (after a
@@ -123,14 +140,7 @@ export async function modelState(
  * the harness has yet to say what it offers, the turn waits for it first (`offered`).
  */
 export async function turnModel(deps: ModelChoiceDeps, channelId: string): Promise<TurnModel> {
-	if (deps.known?.(channelId) === false) await deps.offered?.(channelId);
-	let [catalog, saved] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
-	let resolved = resolveChoice(catalog, saved.choice);
-	// The turn runs the default for a choice nothing could check, where the harness had not yet said
-	// what it offers: from now on that is known, and the composer is told what the turn did.
-	if (resolved.unavailable && !catalog && deps.known?.(channelId) === false) {
-		deps.fellBack?.(channelId);
-	}
+	let { catalog, saved, resolved } = await resolveStored(deps, channelId);
 	return {
 		...(resolved.model !== undefined ? { model: resolved.model } : {}),
 		...(resolved.thinkingLevel !== undefined ? { thinkingLevel: resolved.thinkingLevel } : {}),
@@ -142,16 +152,17 @@ export async function turnModel(deps: ModelChoiceDeps, channelId: string): Promi
 
 /**
  * What a Planner session is opened with: the stored choice, where the catalog the harness reports
- * now offers it, and nothing otherwise. It never waits and says nothing; the turn that follows reads
- * the choice again (`turnModel`) and tells the room of a fallback. A remote client that offered
+ * offers it, and nothing otherwise. Like a turn, it first waits for a harness that has yet to say
+ * what it offers (`offered`), so a remote client that has just attached is asked for a session on
+ * the stored choice, not its own default. It says nothing; the turn that follows reads the choice
+ * again (`turnModel`) and tells the room of a fallback. A remote client that offered
  * `session-choice` is told it when the server asks it for a session.
  */
 export async function sessionModel(
 	deps: ModelChoiceDeps,
 	channelId: string,
 ): Promise<{ model?: string; thinkingLevel?: string }> {
-	let [catalog, saved] = await Promise.all([deps.catalog(channelId), stored(deps, channelId)]);
-	let resolved = resolveChoice(catalog, saved.choice);
+	let { resolved } = await resolveStored(deps, channelId);
 	return {
 		...(resolved.model !== undefined ? { model: resolved.model } : {}),
 		...(resolved.thinkingLevel !== undefined ? { thinkingLevel: resolved.thinkingLevel } : {}),
