@@ -376,10 +376,15 @@ export type Chat = {
 	/** The running job's own tool write, which a preemption lets finish so it is recorded whole. */
 	jobWriting?: Promise<unknown>;
 	/**
-	 * A person's turn that preempted a background job, started as soon as the job's turn has wound
-	 * down, ahead of anything waiting.
+	 * A person's turn that preempted a background job, or was sent while a turn was stopping or
+	 * finishing, started as soon as what holds the Chat has wound down, ahead of anything waiting.
 	 */
 	preempting?: Parameters<typeof run>;
+	/**
+	 * Messages posted while `preempting` waits to start, given to that turn once it can take them,
+	 * in the order they were sent.
+	 */
+	following?: Given[];
 	/** How often each job (by kind and target) has given way since it last finished, so it ends. */
 	preemptions?: Map<string, number>;
 	/** Reads reactions to the Planner's messages and starts the turns that answer them. */
@@ -1043,6 +1048,17 @@ function preemptible(chat: Chat): boolean {
 }
 
 /**
+ * Whether what holds the Chat ends with no person's turn waiting behind it, and no session to give
+ * a message to meanwhile: a turn being stopped or finishing, or one of Chopin's own being handed
+ * the Chat. A person's message sent now starts the next turn as it winds down.
+ */
+function windingDown(chat: Chat): boolean {
+	if (chat.closed || chat.preempting || startsHeld) return false;
+	if (chat.starting) return true;
+	return chat.busy && (!chat.steering || !!chat.turnController?.signal.aborted);
+}
+
+/**
  * Starts a person's turn ahead of the background job holding the Chat. The job's turn is stopped
  * and starts this one as it ends; a job being handed the Chat waits behind it instead. A write the
  * job's own tool has under way finishes first, so it is recorded whole and not made again.
@@ -1541,8 +1557,10 @@ async function processSend(
 	if (chat.closed) return refuseClosed(ws, msg.rid);
 
 	chat.initiative?.cancel();
-	if (preemptible(chat)) {
-		// A background job gives way: the person's turn starts once the job's turn has wound down.
+	let preempts = preemptible(chat);
+	if (preempts || windingDown(chat)) {
+		// A background job gives way, and a turn being stopped or finishing ends anyway: the person's
+		// turn starts once it has wound down.
 		let bindFailure = await bindAttachments?.();
 		if (bindFailure) return fail(ws, msg.rid, bindFailure.refusal, bindFailure.code);
 		let entry: MemberEntry = {
@@ -1564,31 +1582,40 @@ async function processSend(
 		reply(ws, msg.rid, { kind: "chat:send", ts: 0, id: entry.id });
 		if (chat.closed) return;
 		announce(server, room, entry);
-		preempt(context, [
-			context,
-			handle,
-			text,
-			undefined,
-			context.claimantSessionId,
-			false,
-			{ entryId: entry.id, userId: ws.data.principalId, ...(focus ? { focus } : {}) },
-			references ?? [],
-		]);
+		// One of Chopin's own turns may have begun while the message was saved: it takes it.
+		if (!preempts && canSteer(context)) {
+			void give(context, {
+				entry: entry.id,
+				handle,
+				text,
+				...(references?.length ? { references } : {}),
+				...(focus ? { focus } : {}),
+				userId: ws.data.principalId,
+			});
+		} else {
+			preempt(context, [
+				context,
+				handle,
+				text,
+				undefined,
+				context.claimantSessionId,
+				false,
+				{ entryId: entry.id, userId: ws.data.principalId, ...(focus ? { focus } : {}) },
+				references ?? [],
+			]);
+		}
 		context.memberMessagePersisted?.(entry, context.claimantSessionId);
 		return;
 	}
 	if (chat.busy || chat.starting) {
-		if (!canSteer(context)) {
-			// A stopping process starts no turn in place of a job, and says nothing: the browser sends
-			// the message again to the next one.
-			if (startsHeld && chat.backgroundTurn) return refuseClosed(ws, msg.rid);
-			// A turn that is only beginning or finishing, or a person's turn about to start in place of
-			// a job, has no session to give a message to just now: the browser sends it again in a
-			// moment, to a Planner that is then idle or working. A harness that takes no input mid-run
-			// never will.
-			if (!chat.closed && context.steers?.()) {
-				return fail(ws, msg.rid, `${PLANNER_NAME} is between replies`, PASSING);
-			}
+		// A person's turn waits to start behind the one holding the Chat: the message is given to it
+		// once it can take one.
+		let following = !canSteer(context) && !!chat.preempting && !!context.steers?.();
+		if (!canSteer(context) && !following) {
+			// A stopping process starts no turn, and says nothing: the browser sends the message again
+			// to the next one.
+			if (startsHeld || chat.closed) return refuseClosed(ws, msg.rid);
+			// A harness that takes no input mid-run never will.
 			refusedWhileRunning(context);
 			return fail(ws, msg.rid, CANNOT_STEER, "planner-busy");
 		}
@@ -1614,14 +1641,16 @@ async function processSend(
 		if (chat.closed) return;
 		announce(server, room, entry);
 		context.memberMessagePersisted?.(entry, context.claimantSessionId);
-		void give(context, {
+		let given: Given = {
 			entry: entry.id,
 			handle,
 			text,
 			...(references?.length ? { references } : {}),
 			...(focus ? { focus } : {}),
 			userId: ws.data.principalId,
-		});
+		};
+		if (following && chat.preempting) (chat.following ??= []).push(given);
+		else void give(context, given);
 		return;
 	}
 	// A process that is stopping starts no turn, and says nothing: the browser sends the message
@@ -3327,6 +3356,9 @@ async function run(
 	// isolated: it takes none.
 	let steered = !jobTurn && chat.turn ? steering(chat.turn.id) : undefined;
 	chat.steering = steered;
+	if (steered) {
+		for (let message of chat.following?.splice(0) ?? []) void give(context, message);
+	}
 	try {
 		about?.started?.();
 	} catch (err) {
@@ -4507,6 +4539,7 @@ export async function close(chat: Chat): Promise<void> {
 	}
 	chat.waiting = [];
 	chat.preempting = undefined;
+	chat.following = undefined;
 	chat.turnController?.abort();
 	chat.referenceCache.clear();
 	chat.bootstrapEntries = undefined;

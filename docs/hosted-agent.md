@@ -1248,9 +1248,13 @@ Nothing a person sends to the Planner is held for later. A message is never "wai
   machine's own work is, and the status beside the composer says so (_Your work is kept._), but
   the message is not.
 
-A message sent while a turn is only beginning or finishing has no session to be given to just
-now. It is answered as a passing trouble (`temporarily-unavailable`), and its browser sends it
-again, with the same request ID, in a moment. If a turn ends between a message being posted and
+A message sent while a turn is being stopped or finishing, or while one of Chopin's own turns is
+being handed the Chat, has no session to be given to just now. It is saved and acknowledged at
+once, and starts the next turn as that one winds down, ahead of anything waiting, as a message
+that preempts a job does. A message sent while such a person's turn waits to start is saved and
+acknowledged at once too, and given to that turn once it can take one; a harness that takes no
+input mid-run refuses it with `planner-busy`. None of these is answered as a passing trouble, so
+no message waits in its browser's outbox behind another. If a turn ends between a message being posted and
 the turn reading it, an idle Chat starts a turn for the message; otherwise Chat says that Chopin
 did not read it, and it is not sent again on its own. A process that is stopping starts no turn and
 says nothing, so the browser sends the message again to the next process. Sends are admitted one

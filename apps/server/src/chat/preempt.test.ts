@@ -132,6 +132,39 @@ test("a job that keeps meeting messages gives way three times, then finishes wit
 	await until(() => !h.chat.busy);
 });
 
+test("a message sent while a person's turn waits behind a job that is let finish is given to that turn, not held behind it", async () => {
+	let h = harness();
+	for (let round = 1; round <= 3; round++) {
+		let job = Chat.job(h.context, JOB, "job prompt", "session");
+		await until(() => h.prompts.length === 2 * round - 1);
+		await Chat.send(h.context, speaking("bo"), member(`@chopin question ${round}`));
+		expect(await job).toMatchObject({ status: "preempted" });
+		await until(() => h.prompts.length === 2 * round);
+		h.emit("session.idle");
+		await until(() => !h.chat.busy);
+	}
+	let job = Chat.job(h.context, JOB, "job prompt", "session");
+	await until(() => h.prompts.length === 7);
+	await Chat.send(h.context, speaking("bo"), member("@chopin question 4"));
+
+	let frames: Frame[] = [];
+	let later = member("@chopin and the rollback");
+	await Chat.send(h.context, speaking("cy", frames), later);
+	expect(frames).toEqual([expect.objectContaining({ kind: "chat:send", id: later.requestId })]);
+	expect(h.chat.entries.at(-1)?.text).toBe("and the rollback");
+
+	await runJobTool(h.chat, "refine_decision", async () => ({ output: { added: 0 } }));
+	h.emit("session.idle");
+	expect(await job).toEqual({ status: "done", output: '{"added":0}' });
+	await until(() => h.prompts.length === 8);
+	expect(h.prompts[7]).toContain("question 4");
+	await until(() => h.steered.length === 1);
+	expect(h.steered).toEqual(["@cy: and the rollback"]);
+	h.emit("session.idle");
+	await until(() => !h.chat.busy);
+	expect(h.prompts).toHaveLength(8);
+});
+
 test("a job being handed the Chat when a person asks waits behind their turn, then runs", async () => {
 	let h = harness();
 	await Chat.send(h.context, speaking("ana"), member("@chopin first"));

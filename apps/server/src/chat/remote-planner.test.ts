@@ -2109,3 +2109,122 @@ for (
 		expect(room.failures()).toEqual([]);
 	});
 }
+
+/**
+ * An attached client, with or without `steer-turn`, whose turn for "which store?" asks a question
+ * and waits for its answer before it ends, even once stopped: that turn ends when the server stops
+ * waiting for its `turn-end`.
+ */
+async function waitingPlanner(steers: boolean) {
+	let room = await remoteRoom(undefined, 500);
+	room.context.steers = () => attachedLink(room.channel.id)?.steers === true;
+	let script = scriptedPlanner();
+	let steered: string[] = [];
+	let answers: Array<{ status: string; value?: unknown }> = [];
+	let reading = Promise.withResolvers<void>();
+	let client: AgentClient;
+	client = await attach(room.server.url, room.channel.id, {
+		...script.handlers,
+		async turn(turn) {
+			script.turns.push(turn.message);
+			if (turn.message.prompt.endsWith("which store?")) {
+				let answer = await client.ask(turn.message.session, {
+					method: "confirm",
+					title: "Postgres?",
+					message: "Use Postgres for the store.",
+				});
+				answers.push(answer);
+			}
+			// A model that is still working when a message is given to its turn.
+			if (steers && turn.message.prompt.endsWith("keep it short")) await reading.promise;
+			finishTurn(turn);
+		},
+		...(steers
+			? {
+				steer: (message: { prompt: string }) => {
+					steered.push(message.prompt);
+					reading.resolve();
+				},
+			}
+			: {}),
+	});
+	cleanups.push(() => client.detach());
+	expect(attachedLink(room.channel.id)?.steers).toBe(steers);
+	let decision = async () => {
+		await until(() =>
+			[...room.context.plan.records.values()].some(record => record.status === "open")
+		);
+		return [...room.context.plan.records.values()].find(record => record.status === "open")!.id;
+	};
+	return {
+		...room,
+		script,
+		steered,
+		answers,
+		decision,
+		said: () => room.context.chat.entries.map(entry => entry.text),
+	};
+}
+
+for (let steers of [true, false]) {
+	let client = steers ? "a client that takes messages mid-turn" : "a client that takes none";
+	test(`while ${client} waits on its open decision, a message ends in a stated state, the answer reaches the turn, and the next message is not held`, async () => {
+		let room = await waitingPlanner(steers);
+		let { context } = room;
+		expect(await room.send("@chopin which store?")).toMatchObject({ kind: "chat:send" });
+		let id = await room.decision();
+
+		let first = await room.send("@chopin also cover the rollback");
+		if (steers) {
+			expect(first).toMatchObject({ kind: "chat:send" });
+			await until(() => room.steered.length === 1);
+			expect(room.steered[0]).toContain("also cover the rollback");
+		} else {
+			expect(first).toMatchObject({ kind: "session:error", code: "planner-busy" });
+			expect(room.said()).not.toContain("also cover the rollback");
+		}
+
+		await answerChoice(context, id, 0);
+		await until(() => room.answers.length === 1);
+		expect(room.answers[0]).toMatchObject({ status: "answered", value: true });
+		await until(() => !context.chat.busy);
+
+		expect(await room.send("@chopin and then?")).toMatchObject({ kind: "chat:send" });
+		await until(() => room.script.turns.length === 2);
+		expect(room.script.turns[1]!.prompt).toContain("and then?");
+		await until(() => !context.chat.busy);
+		expect(context.chat.entries.filter(entry => entry.turnFailure)).toEqual([]);
+	});
+
+	test(
+		`while ${client} has not ended a stopped turn, a message is kept and starts the next turn, and the one after it is ${
+			steers ? "given to that turn" : "refused for good"
+		}, never held`,
+		async () => {
+			let room = await waitingPlanner(steers);
+			let { context } = room;
+			expect(await room.send("@chopin which store?")).toMatchObject({ kind: "chat:send" });
+			await room.decision();
+			await Chat.abort(context, room.ws);
+			expect(context.chat.busy).toBe(true);
+
+			expect(await room.send("@chopin keep it short")).toMatchObject({ kind: "chat:send" });
+			let second = await room.send("@chopin and name an owner");
+			if (steers) expect(second).toMatchObject({ kind: "chat:send" });
+			else expect(second).toMatchObject({ kind: "session:error", code: "planner-busy" });
+			expect(room.script.turns).toHaveLength(1);
+
+			await until(() => room.script.turns.length === 2);
+			expect(room.script.turns[1]!.prompt).toContain("keep it short");
+			if (steers) {
+				await until(() => room.steered.length === 1);
+				expect(room.steered[0]).toContain("and name an owner");
+			} else {
+				expect(room.said()).not.toContain("and name an owner");
+			}
+			await until(() => !context.chat.busy);
+			expect(room.said().some(text => /did not read/.test(text))).toBe(false);
+			expect(context.chat.entries.filter(entry => entry.turnFailure)).toEqual([]);
+		},
+	);
+}
