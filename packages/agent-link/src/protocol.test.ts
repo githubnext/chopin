@@ -331,6 +331,7 @@ describe("Agent connection messages", () => {
 			sessionForks: AGENT_FEATURES.sessionForks,
 			steerTurn: AGENT_FEATURES.steerTurn,
 			retryTurn: AGENT_FEATURES.retryTurn,
+			sessionChoice: AGENT_FEATURES.sessionChoice,
 			restartResumeRetryMs: RESTART_RESUME_RETRY_MS,
 		});
 		expect(AGENT_FEATURES.restartNotice).toBe("restart-notice");
@@ -357,6 +358,34 @@ describe("Agent connection messages", () => {
 		expect(parseServerMessage(JSON.stringify({ ...steer, extra: 1 }))).toMatchObject({ ok: false });
 		// Only the server steers: a client that sends one is malformed.
 		expect(parseClientMessage(JSON.stringify(steer))).toMatchObject({ ok: false });
+	});
+
+	it("may name the document's chosen model and level on a session's start or fork, as strings", () => {
+		expect(AGENT_FEATURES.sessionChoice).toBe("session-choice");
+		for (
+			let message of [
+				{
+					type: "start",
+					session: "s",
+					mode: "planner",
+					model: "acme/large",
+					thinkingLevel: "xhigh",
+				},
+				{
+					type: "fork",
+					session: "s",
+					mode: "planner",
+					from: { session: "p" },
+					model: "acme/large",
+				},
+				{ type: "start", session: "s", mode: "isolated", thinkingLevel: "low" },
+			] as const
+		) {
+			expect(parseServerMessage(encodeMessage(message))).toEqual({ ok: true, message });
+			expect(parseServerMessage(JSON.stringify({ ...message, model: 1 }))).toMatchObject({
+				ok: false,
+			});
+		}
 	});
 
 	it("names the Chat message a turn answers, and a retry of it as `true` or nothing", () => {

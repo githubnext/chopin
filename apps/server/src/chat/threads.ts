@@ -499,6 +499,7 @@ function buildThreadRoom(
 		activeOwner: topContext.activeOwner,
 		openPlannerSession: topContext.openPlannerSession,
 		modelChoice: topContext.modelChoice,
+		sessionChoice: topContext.sessionChoice,
 		commands: topContext.commands,
 		fileExists: topContext.fileExists,
 		readsImages: topContext.readsImages,

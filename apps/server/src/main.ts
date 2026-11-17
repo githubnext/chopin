@@ -20,13 +20,20 @@ import {
 	harnessFor,
 	plannerCatalog,
 	plannerCommands,
+	plannerOffered,
 	plannerOfferIncoming,
 	plannerOfferKnown,
 	plannerRanWithoutOffer,
 	plannerSteers,
 	shutdownHarnesses,
 } from "./harness/harnesses";
-import { chooseModel, publishModelState, turnModel, turnReadsImages } from "./chat/model-choice";
+import {
+	chooseModel,
+	publishModelState,
+	sessionModel,
+	turnModel,
+	turnReadsImages,
+} from "./chat/model-choice";
 import type { ModelChoiceDeps } from "./chat/model-choice";
 import * as Threads from "./chat/threads";
 import {
@@ -840,6 +847,7 @@ function conversation(
 				}),
 			}),
 		modelChoice: () => turnModel(modelChoices, room.id),
+		sessionChoice: () => sessionModel(modelChoices, room.id),
 		commands: () => modelChoices.commands?.(room.id) ?? Promise.resolve(undefined),
 		fileExists: (path, sessionId) => repositoryFiles.has(room.id, repository, sessionId, path),
 		readsImages: () => turnReadsImages(modelChoices, room.id),
@@ -1194,6 +1202,7 @@ const modelChoices: ModelChoiceDeps = {
 		});
 	},
 	known: channelId => plannerOfferKnown(config.harness, channelId),
+	offered: channelId => plannerOffered(config.harness, channelId),
 	incoming: channelId =>
 		plannerOfferIncoming(
 			config.harness,

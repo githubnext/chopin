@@ -7,12 +7,19 @@ import { openPlan } from "../testing/plan";
 import { expectPlain } from "../testing/plain-words";
 import { broadcast, tell } from "../wire";
 import { authenticatedMemory } from "./job-authenticated-memory.test-fixtures";
-import { chooseModel, modelState, publishModelState, turnModel } from "./model-choice";
+import {
+	chooseModel,
+	modelState,
+	publishModelState,
+	sessionModel,
+	turnModel,
+} from "./model-choice";
 import * as Chat from "./service";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
 import type { Chat as Wire } from "@chopin/protocol";
 import type { ModelChoiceDeps } from "./model-choice";
+import type { PlannerChoice } from "../harness/session";
 import type { Socket } from "../wire";
 
 afterEach(() => Chat.holdStarts(false));
@@ -568,6 +575,45 @@ describe("what the next turn runs", () => {
 		});
 	});
 
+	test("waits for a harness that has yet to say what it offers, then runs the stored choice", async () => {
+		let offered: Wire.ModelCatalog | undefined = catalog;
+		let { deps, opened, choose } = await sets(() => offered);
+		await choose({ model: "acme/large", thinkingLevel: "high" });
+		// A client attached after a restart and has yet to report its models.
+		offered = undefined;
+		let reported = Promise.withResolvers<void>();
+		let fellBack = 0;
+		deps.known = () => offered !== undefined;
+		deps.offered = () => reported.promise;
+		deps.fellBack = () => fellBack++;
+		let settled = false;
+		let turn = turnModel(deps, opened.channel.id).then(value => {
+			settled = true;
+			return value;
+		});
+		await Bun.sleep(10);
+		expect(settled).toBe(false);
+		offered = catalog;
+		reported.resolve();
+		expect(await turn).toEqual({ model: "acme/large", thinkingLevel: "high" });
+		expect(fellBack).toBe(0);
+	});
+
+	test("falls back, and says so, when the wait ends with nothing offered", async () => {
+		let offered: Wire.ModelCatalog | undefined = catalog;
+		let { deps, opened, choose } = await sets(() => offered);
+		await choose({ model: "acme/large", thinkingLevel: "high" });
+		offered = undefined;
+		let fellBack = 0;
+		deps.known = () => false;
+		deps.offered = async () => {};
+		deps.fellBack = () => fellBack++;
+		expect(await turnModel(deps, opened.channel.id)).toEqual({
+			notice: "Large is no longer available, so chopin used its default model.",
+		});
+		expect(fellBack).toBe(1);
+	});
+
 	test("falls back when the harness offers no catalog at all", async () => {
 		let offered: Wire.ModelCatalog | undefined = catalog;
 		let { deps, opened, choose } = await sets(() => offered);
@@ -867,4 +913,104 @@ describe("a document's commands in its model state", () => {
 			console.error = error;
 		}
 	});
+});
+
+describe("a Planner session made again", () => {
+	/**
+	 * A document whose stored choice is not the harness's default, opened as after a restart: no
+	 * Planner session is held, so the next turn of any kind makes a new one.
+	 */
+	async function restarted() {
+		let { opened, deps, choose } = await sets();
+		await choose({ model: "acme/large", thinkingLevel: "high" });
+		let identity = await authenticatedMemory(opened);
+		let { fake, models, levels } = recordingPlanner();
+		let opens: Array<PlannerChoice | undefined> = [];
+		identity.context.modelChoice = () => turnModel(deps, opened.channel.id);
+		identity.context.sessionChoice = () => sessionModel(deps, opened.channel.id);
+		identity.context.openPlannerSession = (owner, channel) => {
+			opens.push(channel.choice);
+			return openPlannerSession(owner, channel, {
+				agent: createPlannerAgent(fake),
+				githubTools: async () => ({ ok: true, value: {} }),
+				createSandbox: async () =>
+					({
+						defaultWorkingDirectory: "/tmp",
+						async run() {
+							return { exitCode: 0, stdout: "", stderr: "" };
+						},
+						async destroy() {},
+					}) as never,
+				registerCredential: () => () => {},
+			});
+		};
+		let settle = async () => {
+			for (let attempt = 0; attempt < 300 && opened.plan.chat.busy; attempt++) await Bun.sleep(10);
+			await opened.plan.chat.running;
+		};
+		let finish = async () => {
+			identity.revokeAll();
+			await Plan.close(opened.plan);
+		};
+		return { opened, deps, identity, models, levels, opens, settle, finish };
+	}
+
+	let kinds: Record<string, (room: Awaited<ReturnType<typeof restarted>>) => Promise<unknown>> = {
+		"a person's message": async ({ identity, settle }) => {
+			let socket = { data: { handle: "ana", principalId: "U_test" }, send() {} } as never;
+			await Chat.send(identity.context, socket, {
+				kind: "chat:send",
+				rid: crypto.randomUUID(),
+				requestId: crypto.randomUUID(),
+				text: "hello",
+				to: "planner",
+				ts: 0,
+			});
+			await settle();
+		},
+		"an instruction nobody typed": async ({ identity, settle }) => {
+			await Chat.instruct(identity.context, "ana", "Finish existing work.", "Work finished.");
+			await settle();
+		},
+		"a background job": ({ identity }) =>
+			Chat.job(
+				identity.context,
+				{
+					id: "heading:document:m0",
+					kind: "heading",
+					target: "document",
+					trigger: "m0",
+					status: "running",
+					attempts: 0,
+					at: "2026-09-25T10:00:00.000Z",
+				},
+				"Draft the title and goal",
+				identity.sessionId,
+			),
+	};
+
+	for (let [kind, run] of Object.entries(kinds)) {
+		test(`runs the stored choice from its first turn: ${kind}`, async () => {
+			let room = await restarted();
+			let silenced = console.error;
+			console.error = () => {};
+			try {
+				// The pill shows the stored choice, not the default, before anything has run.
+				expect((await modelState(room.deps, room.opened.channel.id)).choice).toEqual({
+					model: "acme/large",
+					thinkingLevel: "high",
+				});
+				await run(room);
+			} finally {
+				console.error = silenced;
+				await room.finish();
+			}
+			expect(room.opens).toEqual([{ model: "acme/large", thinkingLevel: "high" }]);
+			expect(room.models).toEqual(["acme/large"]);
+			expect(room.levels).toEqual(["high"]);
+			// Making the session again never changed what is stored.
+			expect(await room.opened.storage.plannerModelChoices.get(room.opened.channel.id))
+				.toMatchObject({ model: "acme/large", thinkingLevel: "high", modelName: "Large" });
+		});
+	}
 });

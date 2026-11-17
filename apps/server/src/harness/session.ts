@@ -65,6 +65,12 @@ export type PlannerChannel = {
 		) => string);
 	model?: string;
 	/**
+	 * The document's chosen model and thinking level when the session opens, already checked against
+	 * the harness's catalog. A remote client that offered `session-choice` makes its session on it;
+	 * every turn still passes its own `choice` to `stream`.
+	 */
+	choice?: PlannerChoice;
+	/**
 	 * `atomic` runs the session as a full Atomic session in the channel's workspace;
 	 * `remote` runs it in the client attached to the channel.
 	 */
@@ -108,7 +114,7 @@ export type PlannerSession = {
 	/**
 	 * Runs one turn. `choice` is what a person chose for the document, already checked against the
 	 * harness's catalog: the model replaces the channel's, and the thinking level goes to the
-	 * harness that offers one. Background jobs never pass one.
+	 * harness that offers one. Every turn passes it, a background job's included.
 	 */
 	stream: (
 		prompt: string,
@@ -288,6 +294,7 @@ export async function openPlannerSession(
 			let held: RemotePlanner = {
 				channelId: channel.room.id,
 				isolated,
+				...(channel.choice ? { choice: { ...channel.choice } } : {}),
 				...(channel.fork?.remoteFrom ? { forkFrom: { ...channel.fork.remoteFrom } } : {}),
 				...(channel.fork?.onRemoteTurn ? { onRemoteTurn: channel.fork.onRemoteTurn } : {}),
 			};
@@ -341,6 +348,7 @@ export async function openPlannerSession(
 			void opening.then(late => late.destroy()).catch(() => {});
 			throw cause;
 		}
+		let { choice: _opened, ...callOptions } = channel;
 		let instructions = typeof channel.instructions === "function"
 			? channel.instructions(
 				workspace
@@ -426,7 +434,7 @@ export async function openPlannerSession(
 								: prompt,
 							abortSignal,
 							options: {
-								...channel,
+								...callOptions,
 								...(choice?.model ? { model: choice.model } : {}),
 								instructions,
 								owner: current,

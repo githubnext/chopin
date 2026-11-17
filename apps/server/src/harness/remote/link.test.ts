@@ -2130,6 +2130,67 @@ describe("Agent connection capability catalog", () => {
 			await raw.closed;
 		}
 	});
+
+	it("tells a client that offered session-choice the document's choice when it asks for a session", async () => {
+		let { server, channel } = await setup();
+		for (
+			let [header, told] of [
+				["capability-catalog", false],
+				["session-choice", false],
+				["capability-catalog, session-choice", true],
+			] as const
+		) {
+			let raw = await rawLink(server.url, undefined, header);
+			raw.send({ type: "attach", version: 1, document: channel.id });
+			await raw.next("attached");
+			let planner: RemotePlanner = {
+				channelId: channel.id,
+				isolated: false,
+				choice: { model: "acme/large", thinkingLevel: "high" },
+			};
+			let opening = adapterFor(server, planner).doStart({
+				sessionId: `session-choice-${header}`,
+				sandboxSession,
+				sessionWorkDir: "/tmp",
+			});
+			let start = await raw.next("start");
+			if (told) expect(start).toMatchObject({ model: "acme/large", thinkingLevel: "high" });
+			else {
+				expect("model" in start).toBe(false);
+				expect("thinkingLevel" in start).toBe(false);
+			}
+			raw.send({ type: "started", session: start.session });
+			let opened = await opening;
+			cleanups.push(() => opened.doDestroy());
+			raw.send({ type: "detach" });
+			await raw.closed;
+		}
+	});
+
+	it("says a client's offer is settled once it reports, or once its link ends", async () => {
+		let { server, channel } = await setup();
+		let raw = await rawLink(server.url, undefined, "capability-catalog");
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		let link = server.links.at(-1)!;
+		let settled = false;
+		void link.offered.then(() => settled = true);
+		await Bun.sleep(20);
+		expect(settled).toBe(false);
+		raw.send({ type: "capabilities", catalog });
+		await until(() => settled, 1_000);
+		raw.send({ type: "detach" });
+		await raw.closed;
+
+		let gone = await rawLink(server.url, undefined, "capability-catalog");
+		gone.send({ type: "attach", version: 1, document: channel.id });
+		await gone.next("attached");
+		let ended = server.links.at(-1)!;
+		let waited = ended.offered;
+		gone.send({ type: "detach" });
+		await gone.closed;
+		await waited;
+	});
 });
 
 describe("Agent connection questions", () => {

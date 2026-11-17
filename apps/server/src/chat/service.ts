@@ -26,7 +26,12 @@ import type { ToolImage } from "./images";
 import { ulid } from "@chopin/dialect";
 
 import { PLANNER_TOOL_NAMES } from "../harness/tool-names";
-import type { PlannerFiles, PlannerForkHooks, PlannerSession } from "../harness/session";
+import type {
+	PlannerChoice,
+	PlannerFiles,
+	PlannerForkHooks,
+	PlannerSession,
+} from "../harness/session";
 import { verifiedCheckout } from "../harness/atomic/checkout";
 import { rememberCheckout } from "../harness/atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
@@ -826,6 +831,11 @@ export type Room = {
 	 * what its harness offers now. Absent where nothing can be chosen.
 	 */
 	modelChoice?: () => Promise<import("./model-choice").TurnModel>;
+	/**
+	 * What a Planner session is opened with: the chosen model and thinking level where the harness
+	 * offers them now, read without waiting or saying anything. Absent where nothing can be chosen.
+	 */
+	sessionChoice?: () => Promise<PlannerChoice>;
 	/**
 	 * The commands the document's Planner offers now, which a command in a message is checked
 	 * against: none where it reports none, and none for a Planner that is not attached.
@@ -2994,6 +3004,11 @@ async function repositorySession(
 			: fullBootstrap;
 		let open = context.openPlannerSession
 			?? (await import("../harness/session")).openPlannerSession;
+		// A session made again starts on the document's choice, not its harness's default.
+		let choice = await context.sessionChoice?.().catch((error): undefined => {
+			console.error("[chat] could not read the model choice for a new session:", error);
+			return undefined;
+		});
 		// What the room said changes every turn, and a fresh session starts for each one, so it goes
 		// before the turn's prompt: the instructions stay the same from turn to turn, and the model
 		// provider can reuse its cache of them instead of reading them all again.
@@ -3016,6 +3031,7 @@ async function repositorySession(
 				);
 			},
 			model: context.config.model || undefined,
+			...(choice?.model || choice?.thinkingLevel ? { choice } : {}),
 			harness: context.config.harness,
 			...(reader ? { reader: true as const } : {}),
 		});
@@ -3056,6 +3072,37 @@ async function repositorySession(
 	} finally {
 		if (chat.openingOwner === openingOwner) chat.openingOwner = undefined;
 	}
+}
+
+/**
+ * What a turn runs: the document's chosen model and thinking level, checked against what its
+ * harness offers now, for every turn a person typed or nobody did, a background job's included. A
+ * choice the harness no longer offers, or that could not be read, falls back to its default, and
+ * Chat says so once; the composers are told whether the choice could be read.
+ */
+async function turnChoice(context: Room): Promise<PlannerChoice> {
+	let { chat, server, room } = context;
+	let unreadable = false;
+	let picked = await context.modelChoice?.().catch((error): { notice: string } => {
+		console.error("[chat] could not read the model choice:", error);
+		unreadable = true;
+		return { notice: UNREADABLE_NOTICE };
+	});
+	if (picked?.notice && picked.notice !== chat.modelNotice) {
+		say(chat, server, room, {
+			id: ulid(),
+			author: { kind: "system" },
+			text: picked.notice,
+			ts: now(),
+		});
+	}
+	chat.modelNotice = picked?.notice;
+	if (unreadable !== !!chat.modelUnreadable) {
+		chat.modelUnreadable = unreadable;
+		broadcast(server, room, { kind: "chat:model-unreadable", ts: 0, unreadable });
+	}
+	let { notice: _, ...choice } = picked ?? {};
+	return choice;
 }
 
 /** The login that may claim Planner ownership for the room; none where only an attachment may. */
@@ -3310,36 +3357,14 @@ async function run(
 		let signal = AbortSignal.any([opened.binding.signal, turnController.signal]);
 		if (jobTurn) releaseJobAbort = watchJobAbort(chat, jobTurn, signal);
 		if (jobTurn) {
-			let result = await opened.session.stream(prompt, signal);
+			let result = await opened.session.stream(prompt, signal, await turnChoice(context));
 			for await (let part of result.fullStream) {
 				if (turnController.signal.aborted) break;
 				translate(context, part);
 			}
 		} else {
 			let existingDecisions = new Set(plan.records.keys());
-			let unreadable = false;
-			let picked = await context.modelChoice?.().catch((error): { notice: string } => {
-				console.error("[chat] could not read the model choice:", error);
-				unreadable = true;
-				return { notice: UNREADABLE_NOTICE };
-			});
-			// A choice the harness no longer offers, or that could not be read, falls back to its
-			// default: say so, once.
-			if (picked?.notice && picked.notice !== chat.modelNotice) {
-				say(chat, server, room, {
-					id: ulid(),
-					author: { kind: "system" },
-					text: picked.notice,
-					ts: now(),
-				});
-			}
-			chat.modelNotice = picked?.notice;
-			// The composers show it too, and are told when it no longer holds.
-			if (unreadable !== !!chat.modelUnreadable) {
-				chat.modelUnreadable = unreadable;
-				broadcast(server, room, { kind: "chat:model-unreadable", ts: 0, unreadable });
-			}
-			let { notice: _, ...choice } = picked ?? {};
+			let choice = await turnChoice(context);
 			let session = opened.session;
 			// Only the first attempt runs the message again; a repair continues it.
 			let retrying = !!member?.retry;

@@ -49,6 +49,11 @@ export type RemotePlanner =
 		hostTools?: AbortController;
 		/** The Chat message the next turn answers, taken by that turn like `hostTools`. */
 		turnMessage?: { id: string; retry?: true };
+		/**
+		 * The document's chosen model and thinking level when the session opens, checked against the
+		 * client's catalog; a client that offered `session-choice` is told them in `start` or `fork`.
+		 */
+		choice?: { model?: string; thinkingLevel?: string };
 		/** Parent session and turn to branch from when starting a thread session. */
 		forkFrom?: { session: string; turn?: string };
 		/** Set `true` when the client accepted `fork` over `session-forks`. */

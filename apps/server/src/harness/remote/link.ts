@@ -415,9 +415,17 @@ class RemoteSession {
 		let forkFrom = this.#port.features?.includes(AGENT_FEATURES.sessionForks)
 			? this.planner.forkFrom
 			: undefined;
+		let choice = this.#port.features?.includes(AGENT_FEATURES.sessionChoice)
+				&& this.#port.features.includes(AGENT_FEATURES.capabilityCatalog)
+			? this.planner.choice
+			: undefined;
+		let chosen = {
+			...(choice?.model ? { model: choice.model } : {}),
+			...(choice?.thinkingLevel ? { thinkingLevel: choice.thinkingLevel } : {}),
+		};
 		let message = forkFrom
-			? { type: "fork" as const, session: this.id, mode, from: forkFrom }
-			: { type: "start" as const, session: this.id, mode };
+			? { type: "fork" as const, session: this.id, mode, from: forkFrom, ...chosen }
+			: { type: "start" as const, session: this.id, mode, ...chosen };
 		if (!this.#port.send(message)) {
 			throw new Error("The agent connection is closed.");
 		}
@@ -1102,6 +1110,8 @@ export class AgentLink {
 	#catalog: CapabilityCatalog | undefined;
 	/** Whether a turn has run without the catalog this client offered, so it is not waited for. */
 	#ranWithoutCatalog = false;
+	/** Settles once nothing is pending: the client reported, a turn ran without it, or the link ended. */
+	#offered = Promise.withResolvers<void>();
 	/** Set on a link rebuilt after a restart: told when its sessions are given back or end. */
 	#rebuilt: { ended(): void; resumed(): void } | undefined;
 
@@ -1347,6 +1357,16 @@ export class AgentLink {
 	 */
 	settleWithoutCatalog(): void {
 		this.#ranWithoutCatalog = true;
+		this.#offered.resolve();
+	}
+
+	/**
+	 * Settles when what the client offers is no longer pending (`catalogPending`): it reported, a
+	 * turn ran without it, or the link ended. Already settled for a client that offered no catalog.
+	 */
+	get offered(): Promise<void> {
+		if (!this.catalogPending) return Promise.resolve();
+		return this.#offered.promise;
 	}
 
 	/** Whether this link offered `resumable-sessions`. */
@@ -1615,6 +1635,7 @@ export class AgentLink {
 
 	/** Every session and open question this link still holds ends, as when any link closes. */
 	#teardown(): void {
+		this.#offered.resolve();
 		for (let session of this.#sessions.values()) session.linkClosed();
 		this.#sessions.clear();
 		if (!this.#stopping) { for (let input of this.#inputs.values()) input.controller.abort(); }
@@ -1669,6 +1690,7 @@ export class AgentLink {
 		let owed = this.#outbox;
 		this.#outbox = [];
 		this.#state = "closed";
+		this.#offered.resolve();
 		this.#successor = next;
 		next.#inputs = this.#inputs;
 		next.#inputIds = this.#inputIds;
@@ -1848,6 +1870,7 @@ export class AgentLink {
 					);
 				}
 				this.#catalog = catalog;
+				this.#offered.resolve();
 				this.#options.catalogChanged?.();
 				return;
 			}

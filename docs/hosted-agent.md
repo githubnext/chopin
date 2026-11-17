@@ -45,24 +45,32 @@ changes:
 | Harness                     | Catalog                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Applied by                                                                                                                                                                                                                                                     |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `atomic`                    | The models of the Atomic model runtime the adapter builds: every chat model it has credentials for that `HARNESS_AUTH` would run, as `provider/model`, in the order the runtime reports them (the picker groups them by provider, in the order each first appears, and a model it reports twice is listed twice, a choice of that id being the first entry's), with each model's thinking levels as Atomic reads them (`xhigh` and `max` only where the model maps them) and its context size as the description. `MODEL` is the default. | The turn's `model` and `thinkingLevel`, set on the session; with no level chosen the model runs its own (the level saved for it in the operator's Atomic settings, else their default level, else `medium`), whichever model or level the session held before. |
-| `remote`                    | What the attached client reported in its [capability catalog](agent-connection.md#capability-catalog), with `MODEL` as the default when set. An older client, or one that reports no models, offers none.                                                                                                                                                                                                                                                                                                                                 | `model` and `thinkingLevel` in the `turn` message; the level only to a client that offered `capability-catalog`.                                                                                                                                               |
+| `remote`                    | What the attached client reported in its [capability catalog](agent-connection.md#capability-catalog), with `MODEL` as the default when set. An older client, or one that reports no models, offers none.                                                                                                                                                                                                                                                                                                                                 | `model` and `thinkingLevel` in the `turn` message; the level only to a client that offered `capability-catalog`. With `session-choice` too, also in `start` and `fork`, so a session the client makes starts on them.                                          |
 | `copilot-sdk` and any other | None: the composer offers no control, because a choice nobody honors is not offered.                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Not applicable.                                                                                                                                                                                                                                                |
 
 The thinking level is a field of the turn the harness is given, beside `model` (`PlannerTurn` in
 `apps/server/src/harness/turn-level.ts`). `HarnessAgent` builds a turn from a fixed set of fields
 that has none for it, so the call that starts a Planner turn carries the level and the harness
-wrapper puts it on that turn; no turn can see another's, and a background job's turn has none.
+wrapper puts it on that turn; no turn can see another's.
 
 `chat:model` checks a choice against the catalog reported now, stores it under the writer lease
 and only then answers the sender and tells the room. It refuses a model or a level the catalog
 does not list (whatever its spelling or length: only the catalog decides, and what it lists is
 stored as written), a field that is not a string, a choice for a child document
 (which uses its root's), and every choice where no catalog is offered; choosing nothing goes back
-to the default. Every Planner turn a person started resolves the stored choice again. A model that
+to the default. Every Planner turn resolves the stored choice again: one a person typed, one nobody
+did (initiative, readiness, decision follow-ups, a finished run) and a background job's alike. A
+Planner session that has to be made again (after a crash, a restart, a reset, or a link that could
+not resume) is opened with it too, so its first turn runs the chosen model and level, never the
+harness's default, and making it again never changes what is stored. A remote client that offered
+`session-choice` is told it in [`start` and `fork`](agent-connection.md#server-to-client), so a
+session it makes starts on it. A turn that starts while an attached client has yet to report its
+catalog, such as the first after a restart, waits up to 10 seconds for the report rather than
+falling back for want of it. A model that
 has gone, or a level its model no longer lists, is not sent: the default runs, Chat says so once
 while the reason stands (and again if it changes, or comes back after the choice was honored), and
 the composer shows what will run. The stored choice is
-kept, so it returns to force if the model does. Background jobs never carry a choice.
+kept, so it returns to force if the model does.
 
 The composer says so even where nothing can be chosen any longer. When a client withdraws all its
 models, or an older client takes its place, there is no catalog and the picker is gone, but the
