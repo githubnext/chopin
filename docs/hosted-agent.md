@@ -821,8 +821,8 @@ cards, and answers to a workflow question held while the client reports that
 run's root as paused. `input-result` returns what Atomic would have received in
 process, with a status that tells an expiry from a cancellation. Stopping a turn
 withdraws the questions it asked while it ran outside any workflow run, as Stop
-does an Atomic Planner's, so a Decision the turn waited on never keeps its
-session for the next message.
+does an Atomic Planner's, and cancels at once any it asks before it ends, so a
+Decision the turn waited on never keeps its session for the next message.
 
 **Runs.** The client reports its workflow runs with `runs`; Chat shows those
 cards and keeps the session after its turn while any run is live or paused, as
