@@ -663,6 +663,14 @@ export function publicEntry(value: Wire.Entry): Wire.Entry {
 	return delivery?.destination === "planner" ? { ...entry, to: "planner" } : entry;
 }
 
+export function storedThreadEntry(value: Wire.Entry): Wire.Entry {
+	let { viaReaction, answeredIntents } = value as MemberEntry;
+	let kept: MemberEntry = publicEntry(value);
+	if (viaReaction) kept.viaReaction = viaReaction;
+	if (answeredIntents?.length) kept.answeredIntents = [...answeredIntents];
+	return kept;
+}
+
 export function validateDelivery(entry: Wire.Entry): void {
 	let saved = (entry as MemberEntry).delivery;
 	if (saved === undefined) return;

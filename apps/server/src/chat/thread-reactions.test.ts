@@ -462,3 +462,40 @@ test("a Chat reaction nobody may have answered starts no thread", async () => {
 	expect(await w.storage.chatThreads.listThreads(w.context.room)).toEqual([]);
 	expect(w.prompts).toHaveLength(0);
 });
+
+test("an answer to a Chat reaction is still not answered again after a reload", async () => {
+	let w = await world();
+	let ana = w.socket("ana");
+	let root = plannerRoot(w);
+	await w.reactInChatAs(ana.ws, root, "\u2753");
+	await until(() => agents(w.plan.chat.childChats?.get(root)).length === 1);
+	let thread = w.plan.chat.childChats!.get(root)!;
+	await until(() => !thread.busy);
+	let answer = agents(thread)[0]!;
+	let stored = (await w.storage.chatThreads.listThreads(w.context.room))[0]!;
+	expect(stored.entries.find(entry => entry.id === answer.id)).toMatchObject({ viaReaction: true });
+	let prompts = w.prompts.length;
+
+	let freshChat = Chat.restore(w.plan.chat.entries);
+	freshChat.reactions = createResponder({ delayMs: 1 });
+	cleanups.push(() => Chat.close(freshChat));
+	let reloaded = Threads.bindTopLevel({ ...w.context, chat: freshChat });
+	await reactInThread(reloaded, ana.ws, {
+		kind: "chat:react",
+		rid: crypto.randomUUID(),
+		ts: 0,
+		id: answer.id,
+		emoji: "\u2753",
+		on: true,
+		thread: root,
+	});
+	let restored = freshChat.childChats!.get(root)!;
+	expect(restored.entries.find(entry => entry.id === answer.id)).toMatchObject({
+		viaReaction: true,
+		reactions: [{ emoji: "\u2753", handles: ["ana"] }],
+	});
+	await Bun.sleep(100);
+
+	expect(w.prompts).toHaveLength(prompts);
+	expect(agents(restored)).toHaveLength(1);
+});

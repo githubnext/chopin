@@ -188,7 +188,7 @@ async function saveThreadRecord(
 	override?: ThreadPersistence,
 	entries: readonly Wire.Entry[] = managed.chat.entries,
 ): Promise<void> {
-	managed.record.entries = entries.map(Chat.publicEntry);
+	managed.record.entries = entries.map(Chat.storedThreadEntry);
 	managed.record.compactions = structuredClone(managed.chat.compactions ?? []);
 	if (managed.chat.usage) managed.record.usage = structuredClone(managed.chat.usage);
 	else delete managed.record.usage;
