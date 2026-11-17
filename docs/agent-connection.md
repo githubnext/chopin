@@ -495,8 +495,8 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   method's `cancelled` value (see [Questions](#questions)), and opens no
   Decision. A workflow run's question is the run's and stays open.
 - `steer`, with `steer-turn`, gives the turn that is running a message a person sent to Chopin
-  while it works. Chopin never holds a message for the next turn, so this is how a person talks to
-  a Planner mid-reply: `prompt` is the message as the model should read it (the sender's handle
+  while it works. Chopin never holds a message behind a turn that is working, so this is how a
+  person talks to a Planner mid-reply: `prompt` is the message as the model should read it (the sender's handle
   first, `@bo: ...`), to be read at the turn's next step, after the tool calls of the step it is
   in and before its next call to the model, as an ordinary user message in the same turn. Answer
   with `control-result` within **10 seconds**: `ok: true` once the turn has taken it, `ok: false`
@@ -504,7 +504,11 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   it on. A refusal is final: Chat then says the message was not read, and it is not sent again.
   A client that did not offer the feature never receives one, and a message sent while it works
   is refused in Chat ("chopin can't take messages while it works on this machine. Stop it to ask
-  now.") rather than kept for later.
+  now.") rather than kept for later. A message sent once its turn is being stopped or finishing
+  (after `abort`, or after its `turn-end` while Chopin finishes recording it) is kept, and starts
+  the next turn as that one ends, with the message as its `prompt`; one sent while that next turn waits to start is
+  refused ("chopin is about to answer another message and can't take more while it works on this
+  machine. Send yours again once it has answered.").
 - `host-tool-result` answers a `host-tool-call`. `output` is the tool's result
   as JSON. A failed call has `"isError": true` and `output`
   `{ "error": "<message>" }`; that includes a tool that threw, invalid input, a

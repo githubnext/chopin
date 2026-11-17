@@ -165,6 +165,35 @@ test("a message sent while a person's turn waits behind a job that is let finish
 	expect(h.prompts).toHaveLength(8);
 });
 
+test("a person's turn waiting behind a job's write is said to be unread when the process stops first, and a send after the stop is not kept", async () => {
+	let h = harness();
+	let job = Chat.job(h.context, JOB, "job prompt", "session");
+	await until(() => h.prompts.length === 1);
+	let writing = Promise.withResolvers<void>();
+	h.chat.jobWriting = writing.promise;
+	await Chat.send(h.context, speaking("bo"), member("@chopin next turn"));
+	expect(h.chat.preempting).toBeDefined();
+
+	let frames: Frame[] = [];
+	Chat.holdStarts();
+	try {
+		await Chat.send(h.context, speaking("cy", frames), member("@chopin during shutdown"));
+		expect(frames).toEqual([]);
+		writing.resolve();
+		await job;
+		await until(() => !h.chat.busy);
+		await Chat.settled(h.chat);
+	} finally {
+		Chat.holdStarts(false);
+	}
+	expect(h.prompts).toHaveLength(1);
+	expect(h.chat.entries.map(entry => entry.text)).not.toContain("during shutdown");
+	expect(h.chat.entries.at(-1)).toMatchObject({
+		author: { kind: "system" },
+		text: "chopin did not read @bo's message. Send it again to ask.",
+	});
+});
+
 test("a job being handed the Chat when a person asks waits behind their turn, then runs", async () => {
 	let h = harness();
 	await Chat.send(h.context, speaking("ana"), member("@chopin first"));

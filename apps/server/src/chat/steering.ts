@@ -5,6 +5,9 @@ import type { PlannerSession } from "../harness/session";
 export const CANNOT_STEER =
 	`${PLANNER_NAME} can't take messages while it works on this machine. Stop it to ask now.`;
 
+export const CANNOT_STEER_STARTING_TURN =
+	`${PLANNER_NAME} is about to answer another message and can't take more while it works on this machine. Send yours again once it has answered.`;
+
 /**
  * The way to the running turn's session for a message given to it. `ready` is the session once it
  * can take one (its first model call has been made), or nothing if the turn ends first.
