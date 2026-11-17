@@ -1937,6 +1937,8 @@ async function decidingPlanner(options: { steers: boolean; endOnAbort?: boolean 
 	let steered: string[] = [];
 	let results: Array<{ status: string; value?: unknown }> = [];
 	let working = new Set<string>();
+	let late: Promise<{ status: string; value?: unknown }>[] = [];
+	let asking: string | undefined;
 	let client: AgentClient | undefined;
 	let reply = (turn: Parameters<AgentHandlers["turn"]>[0], text: string) => {
 		let id = crypto.randomUUID();
@@ -1956,12 +1958,15 @@ async function decidingPlanner(options: { steers: boolean; endOnAbort?: boolean 
 			working.add(session);
 			try {
 				if (!prompt.endsWith("which store?")) return reply(turn, "Done.");
-				let result = await client!.ask(
+				let question = client!.ask(
 					session,
 					{ method: "select", title: "Which store?", choices: ["Postgres", "Redis"] },
 					options.endOnAbort === false ? {} : { signal: turn.signal },
 				);
+				asking = session;
+				let result = await question;
 				results.push(result);
+				for (let question of late) results.push(await question);
 				if (turn.signal.aborted) return;
 				reply(turn, `Going with ${String(result.value)}.`);
 			} finally {
@@ -1981,6 +1986,14 @@ async function decidingPlanner(options: { steers: boolean; endOnAbort?: boolean 
 		steered,
 		results,
 		decision,
+		askAgain: () =>
+			void late.push(
+				client!.ask(asking!, {
+					method: "select",
+					title: "Which cache?",
+					choices: ["Redis", "None"],
+				}),
+			),
 		said: () => context.chat.entries.map(entry => entry.text),
 		failures: () => context.chat.entries.filter(entry => entry.turnFailure),
 	};
@@ -2059,3 +2072,25 @@ for (let steers of [false, true]) {
 		},
 	);
 }
+
+test("a question the attached Planner's turn asks just as Stop withdraws its open decision is cancelled too, and the next message starts a turn", async () => {
+	let room = await decidingPlanner({ steers: false, endOnAbort: false });
+	let { context } = room;
+	await room.send("@chopin which store?");
+	let id = await room.decision();
+	room.askAgain();
+	await Chat.abort(context, room.ws);
+
+	await until(() => !context.chat.busy);
+	expect(context.plan.records.get(id)?.status).toBe("cancelled");
+	expect([...context.plan.records.values()].filter(record => record.status === "open")).toEqual([]);
+	expect(room.results).toEqual([
+		expect.objectContaining({ status: "cancelled" }),
+		expect.objectContaining({ status: "cancelled" }),
+	]);
+	expect(context.chat.retained).toBeUndefined();
+
+	expect(await room.send("@chopin and then?")).toMatchObject({ kind: "chat:send" });
+	await until(() => !context.chat.busy && room.said().at(-1) === "Done.");
+	expect(room.failures()).toEqual([]);
+});

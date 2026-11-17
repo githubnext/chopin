@@ -246,6 +246,7 @@ type Turn = {
 	hostIds: Set<string>;
 	hostCalls: Map<string, string>;
 	stopped: boolean;
+	withdrawn: boolean;
 	ended: boolean;
 	settle: PromiseWithResolvers<void>;
 	/** Aborted when the turn ends, so the server's host tools still running for it stop too. */
@@ -418,6 +419,11 @@ class RemoteSession {
 	get turn(): string | undefined {
 		let turn = this.#current;
 		return turn && !turn.ended ? turn.id : undefined;
+	}
+
+	get withdrawing(): boolean {
+		let turn = this.#current;
+		return turn !== undefined && turn.withdrawn && !turn.ended;
 	}
 
 	async start(): Promise<HarnessV1Session> {
@@ -889,6 +895,7 @@ class RemoteSession {
 	 */
 	#stopped(turn: Turn): void {
 		if (!turn.stopped && !turn.ended && !this.planner.stopping) {
+			turn.withdrawn = true;
 			this.#port.withdraw(this.id, turn.id);
 		}
 		this.#stop(turn);
@@ -981,6 +988,7 @@ class RemoteSession {
 			hostIds: new Set(),
 			hostCalls: new Map(),
 			stopped: false,
+			withdrawn: false,
 			ended: false,
 			settle: Promise.withResolvers<void>(),
 			...(hostTools ? { hostTools } : {}),
@@ -2040,6 +2048,9 @@ export class AgentLink {
 		let humanInput = session?.planner.humanInput;
 		if (!session || !humanInput) {
 			return void reply("failed", undefined, "Decisions are not available to this session.");
+		}
+		if (message.workflowRunId === undefined && session.withdrawing) {
+			return void reply("cancelled", null);
 		}
 		if (this.#inputs.size >= MAX_OPEN_INPUTS) {
 			return void reply("failed", undefined, "Too many questions are already open.");
