@@ -1,6 +1,7 @@
 import type { Chat, ConversationPlan } from "@chopin/protocol";
 import type { Dependencies, Member, State } from "./processor-types";
 import { applyCorrection, enqueue, retryMessage } from "./domain";
+import { appendEntries } from "../chat/chronology";
 import { effectsFor } from "./effects";
 import { assertOptionCapacity } from "./option-capacity";
 import { applyEvent } from "./events";
@@ -22,7 +23,7 @@ export function createCommands(
 			if (!active()) throw new Error("conversation analysis is unavailable");
 			let previous = plan.conversationPlan;
 			let index = plan.chat.entries.length;
-			plan.chat.entries.push(message);
+			appendEntries(plan.chat.entries, message);
 			try {
 				if (previous.queue.length < MAX_QUEUE) {
 					plan.conversationPlan = enqueue(previous, message.id);

@@ -57,6 +57,7 @@ import { silencesFailedSends } from "./connection-phase";
 import { ErrorState } from "./error-state";
 import { QuietNote } from "./quiet-note";
 import { PlannerPresenceContext } from "./presence";
+import { localRows } from "./chronology";
 import { failureBanner, sendFailureView, withoutFailure } from "./failure";
 import { TypingReporter } from "./typing";
 import { useSteadyCallback, useSteadyFields } from "./steady";
@@ -122,7 +123,6 @@ import {
 	runsCommand,
 	sendFailure,
 	shownSendFailure,
-	withNoticesAfter,
 } from "./references";
 import { runCounts, RunStack } from "./run-card";
 import type { BuildRun } from "../build-model";
@@ -853,7 +853,12 @@ export function Chat(
 				});
 			}),
 			wire.on<Wire.Delta>("chat:delta", frame => {
-				dispatchTranscript({ kind: "delta", id: frame.id, text: frame.text });
+				dispatchTranscript({
+					kind: "delta",
+					id: frame.id,
+					text: frame.text,
+					...(frame.at === undefined ? {} : { at: frame.at }),
+				});
 				response(true, frame.text);
 			}),
 			wire.on<Wire.Tool>("chat:tool", frame => {
@@ -1089,7 +1094,7 @@ export function Chat(
 					id: `unanswered-${payload.requestId}`,
 					author: { kind: "system" },
 					text: PLANNER_UNAVAILABLE_NOTICE,
-					ts: Date.now(),
+					ts: Math.floor(Date.now() / 1000),
 				},
 			}));
 		}
@@ -1489,11 +1494,12 @@ export function Chat(
 	// the same object while it means the same thing, so that the transcript is not rendered with it.
 	let hiddenFailure = slot.lead === "failure" ? failed?.entry : undefined;
 	let shownEntries = useMemo(
-		() => [
-			...withNoticesAfter(withoutFailure(entries, hiddenFailure), unanswered),
-			...echoes(outbox),
-		],
-		[entries, hiddenFailure, unanswered, outbox],
+		() => withoutFailure(entries, hiddenFailure),
+		[entries, hiddenFailure],
+	);
+	let localEntries = useMemo(
+		() => localRows(echoes(outbox), unanswered),
+		[outbox, unanswered],
 	);
 	let canStartThread = !readonly && !archived && transcriptReady;
 	let transcriptThreads = useMemo(
@@ -1529,22 +1535,26 @@ export function Chat(
 	let steadyChoose = useSteadyCallback(machine?.choose);
 	let noteRow = useMemo(
 		() =>
-			note && (
-				<QuietNote
-					fix={noteFix}
-					key={note.ts}
-					onChoose={steadyChoose}
-					onNavigate={navigateTo}
-					text={noteFix ? refusedSentence(noteFix) : note.text}
-					ts={note.ts}
-				/>
-			),
+			note && {
+				id: String(note.ts),
+				ts: note.ts,
+				row: (
+					<QuietNote
+						fix={noteFix}
+						onChoose={steadyChoose}
+						onNavigate={navigateTo}
+						text={noteFix ? refusedSentence(noteFix) : note.text}
+						ts={note.ts}
+					/>
+				),
+			},
 		// oxlint-disable-next-line react-hooks/exhaustive-deps -- noteFix is compared by its words
 		[note, noteFixWords, steadyChoose],
 	);
 	let transcriptView = (
 		<Transcript
-			tail={noteRow}
+			local={localEntries}
+			note={noteRow}
 			active={active}
 			canEdit={composerShown}
 			compacting={threadsState.topCompacting}

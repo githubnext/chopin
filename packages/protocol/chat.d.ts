@@ -517,7 +517,15 @@ export declare namespace Chat {
 	export type Message = KIND<"chat:message"> & { entry: Entry };
 
 	/** Text appended to an entry still being written. */
-	export type Delta = KIND<"chat:delta"> & { id: string; text: string };
+	export type Delta = KIND<"chat:delta"> & {
+		id: string;
+		text: string;
+		/**
+		 * Where in the entry's text the piece begins. A client that already holds it, after a
+		 * reconnect or a second copy, does not add it again. Absent from older servers.
+		 */
+		at?: number;
+	};
 
 	/** A tool call starting, or finishing. */
 	export type Tool = KIND<"chat:tool"> & { entry: string; activity: Activity };

@@ -536,6 +536,40 @@ test("a machine that takes no message mid-run refuses one sent while it works, k
 	}
 });
 
+test("chopin's note only one person sees stays at its own time, above what is said after it", async ({ browser, page }) => {
+	test.setTimeout(120_000);
+	let room = await open(page);
+	let planner = await machine(room, { steers: false });
+	let other = await teammate(browser, room, "hubot");
+	try {
+		await say(page, "outline the plan");
+		await expect(READING(page)).toBeVisible();
+		await say(page, "and cover the rollback too");
+		let refusal = chat(page).locator("[data-quiet-note]");
+		await expect(refusal).toContainText(CANNOT);
+
+		// A later second than the note's, so that the order is the note's time and not a tie.
+		await page.waitForTimeout(1_100);
+		let otherInput = chatInput(other);
+		await fillChat(otherInput, "sounds good to me");
+		await otherInput.press("Enter");
+		let later = chat(page).locator("[data-chat-message-id]").filter({
+			hasText: "sounds good to me",
+		});
+		await expect(later).toHaveCount(1);
+		await expect(refusal).toHaveCount(1);
+		let noteFirst = await refusal.evaluate(
+			(note, after) =>
+				!!(note.compareDocumentPosition(after as Node) & Node.DOCUMENT_POSITION_FOLLOWING),
+			await later.elementHandle(),
+		);
+		expect(noteFirst).toBe(true);
+		planner.release();
+	} finally {
+		await planner.client.detach();
+	}
+});
+
 test("two people steer one turn: each message is in both Chats at once and the turn reads both, in the order they were sent", async ({ browser, page }) => {
 	test.setTimeout(120_000);
 	let room = await open(page);

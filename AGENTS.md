@@ -380,7 +380,7 @@ it sends one message at a time, oldest first, once the current connection's tran
 arrived, and only to a server that acknowledges sends. When `planner-not-attached` or
 `planner-busy` refuses a send and the composer holds no newer draft, the typed text (with its
 mention, references and staged files) returns to the composer draft and chopin says why in a row
-at the end of the transcript only that person sees (`chat/quiet-note.tsx`, with How to fix where
+only that person sees, placed at the time it was said (`chat/quiet-note.tsx`, with How to fix where
 the machine has something to fix), and while Chopin works the one button offers Stop so the
 person can stop Chopin and send it;
 when a newer draft was already typed, or another refusal rejected the message, it says
@@ -393,6 +393,17 @@ and with the same request ID, in a moment. Only a refusal with neither code is f
 are `planner-busy` and `planner-not-attached`. One the server kept, though the commit's answer
 was lost, is answered with its first answer when the same request is sent again, and is given
 to a turn once.
+
+Chat and every thread read in the order things happened. The server appends entries and never
+gives one an earlier second than the entry ahead of it (`appendEntries` in
+`apps/server/src/chat/chronology.ts`, a thread's copy into Chat included); entries of one second
+keep the order they were appended in. The browser places a new entry by its time, keeps a known
+one where it is, ignores a streaming copy older than what it shows, adds a `chat:delta` only at its
+`at`, and remembers what a Retry removed, so a frame applied twice, late or after a reconnect's
+history changes nothing (`transcript-state.ts`). What only the browser has (a message still
+sending, the quiet note, a local notice under its send) joins the server's entries by its own
+time, after the entries of its second, in `group()` (`chat/chronology.ts`), so turn offsets still
+count the server's entries.
 
 A reply that fails is retried on the same message (`chat:retry`), never as a new one. Only the
 message's sender may, while its failure is the latest Planner turn and asking again can help. The

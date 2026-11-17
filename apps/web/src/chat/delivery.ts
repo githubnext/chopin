@@ -170,7 +170,7 @@ export function nextToSend(outbox: readonly Outgoing[]): Outgoing | undefined {
 	return undefined;
 }
 
-/** The outbox as transcript entries, after everything the server has sent. */
+/** The outbox as transcript entries, each placed by its own time (`chronology.ts`). */
 export function echoes(outbox: readonly Outgoing[]): LocalEntry[] {
 	return outbox.map(item => ({
 		id: item.payload.requestId,
