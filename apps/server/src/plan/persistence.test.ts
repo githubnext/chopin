@@ -6,6 +6,7 @@ import * as Y from "yjs";
 
 import * as Room from "./room";
 import * as Service from "./service";
+import { appendEntries, snapshotSeq, takeOut } from "../chat/chronology";
 import * as Chat from "../chat/service";
 import { MemoryStorage } from "../storage/memory/adapter";
 
@@ -168,6 +169,35 @@ describe("hosted plan persistence", () => {
 		let restored = await Service.open(context.channel.id, context.backend, context.server);
 		expect(restored.chat.entries.map(entry => entry.text)).toEqual(["Keep this conversation"]);
 		await Service.close(restored);
+	});
+
+	it("keeps Chat's sequence past every history sent, across a restart whose clock is behind", async () => {
+		let realNow = Date.now;
+		try {
+			let clock = 1_000;
+			Date.now = () => clock;
+			let context = await hosted();
+			let plan = await Service.open(context.channel.id, context.backend, context.server);
+			let old: ChatWire.Entry = { id: ulid(), author: { kind: "agent" }, text: "old", ts: 1 };
+			let failed: ChatWire.Entry = { id: ulid(), author: { kind: "agent" }, text: "failed", ts: 1 };
+			appendEntries(plan.chat, old);
+			clock = 2_000;
+			appendEntries(plan.chat, failed);
+			takeOut(plan.chat, [failed.id]);
+			await Service.persist(plan);
+			let seen = snapshotSeq(plan.chat);
+			await Service.close(plan);
+
+			clock = 1_500;
+			let restored = await Service.open(context.channel.id, context.backend, context.server);
+			expect(snapshotSeq(restored.chat)).toBe(seen);
+			let added: ChatWire.Entry = { id: ulid(), author: { kind: "agent" }, text: "new", ts: 1 };
+			appendEntries(restored.chat, added);
+			expect(added.seq).toBeGreaterThan(seen);
+			await Service.close(restored);
+		} finally {
+			Date.now = realNow;
+		}
 	});
 
 	it("restores a failed tool's structured error with its transcript entry", async () => {

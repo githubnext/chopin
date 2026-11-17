@@ -1,7 +1,7 @@
 import { summarizeThread } from "@chopin/protocol/threads";
 
 import { broadcast, fail, PASSING, reply, tell } from "../wire";
-import { appendEntries, snapshotSeq } from "./chronology";
+import { appendEntries, snapshotSeq, takeOut } from "./chronology";
 import * as Chat from "./service";
 import { NOTE_SENT, threadNote, threadNotesContext } from "./thread-notes";
 
@@ -109,6 +109,11 @@ function nowSeconds(): number {
 
 function buildManagedThread(topChat: Chat.Chat, record: ChatThreadRecord): ManagedThread {
 	let threadChat = Chat.restore(record.entries);
+	if (record.lastSeq !== undefined) {
+		threadChat.lastSeq = record.lastSeq;
+		// Chat holds copies of the thread's entries, stamped past both transcripts' last sequence.
+		topChat.lastSeq = Math.max(topChat.lastSeq ?? 0, record.lastSeq);
+	}
 	threadChat.forkBootstrap = structuredClone(record.forkState.bootstrapEntries);
 	threadChat.compactions = structuredClone(record.compactions);
 	threadChat.usage = record.usage ? structuredClone(record.usage) : undefined;
@@ -260,6 +265,7 @@ async function saveThreadRecord(
 	entries: readonly Wire.Entry[] = managed.chat.entries,
 ): Promise<void> {
 	managed.record.entries = entries.map(Chat.storedThreadEntry);
+	if (managed.chat.lastSeq !== undefined) managed.record.lastSeq = managed.chat.lastSeq;
 	managed.record.compactions = structuredClone(managed.chat.compactions ?? []);
 	if (managed.chat.usage) managed.record.usage = structuredClone(managed.chat.usage);
 	else delete managed.record.usage;
@@ -387,8 +393,7 @@ function copyToChat(
 			let ids = (frame as Wire.Removed).ids.filter(id => managed.copied.has(id));
 			if (!ids.length) return undefined;
 			for (let id of ids) managed.copied.delete(id);
-			let gone = new Set(ids);
-			topChat.entries = topChat.entries.filter(entry => !gone.has(entry.id));
+			takeOut(topChat, ids);
 			void top.persist().catch(err =>
 				console.error("[chat] could not take a thread's retried reply out of Chat:", err)
 			);

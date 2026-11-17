@@ -31,6 +31,14 @@ Compatibility conversion is limited to explicitly supported former fields. An
 invalid optional implementation graph is dropped instead of rejecting the
 sidecar.
 
+The sidecar's `transcriptSeq` is the last sequence Chat gave out when its entries no longer say it:
+after a Retry took out the entries that held it. It is written only then, and a thread keeps the
+same number in `chat_threads.last_seq` (migration 042), so a restart whose clock is behind gives
+out no sequence a browser has already seen. An earlier release refuses a sidecar that has
+`transcriptSeq`; rolling back past this release needs the key removed from those sidecars, and
+`ALTER TABLE chat_threads DROP COLUMN last_seq;` with
+`DELETE FROM chopin_migrations WHERE id = '043_chat_thread_seq';`.
+
 Conversation state version two lives inside that sidecar and has separate
 decision/research analysis queues. Research offers retain exact source references,
 topic and placement identities, generation metadata, bounded shared text-CRDT
@@ -128,7 +136,7 @@ applied migration. The application schema contains:
 | `mcp_sessions` | MCP sessions: ID, user, client name and version, creation and last-seen times. Idle sessions are swept. |
 | `decision_answers` | Saved answers to decisions the Planner left open, one row per document and decision: the saved generation, when it was saved, the Planner turn claimed to carry it and when that turn was delivered. A newer generation replaces the row and waits again; a delivered row stays marked so it never runs twice. Rows go with the document. |
 | `chat_attachments` | The images and text files sent with Chat messages, one row per file: its bytes, its sniffed type (a PNG, JPEG, WebP or GIF image, or plain text, held by a check, never HTML or SVG), its name and size, who uploaded it and when. A row has no message until one is sent with it (then the message's request ID and the file's place in it); until then only its uploader reads it, and one nobody sent within a day is forgotten. Deleting the message or the document removes it. |
-| `chat_threads` | One row per Chat thread in a document, keyed by `(channel_id, root_id)`: the root message snapshot, fork timestamp, creator, reply entries (with the server-only marks that keep a reaction from being answered twice: an answer to a reaction, and which readings of a reaction were answered), compaction records, latest context usage, fork provenance (`bootstrapEntries`, Atomic branched session entries/leaf or remote `from`), the Decision cards the thread's Planner asked (`asked_questions_json`), update time and writer-lease fencing token. Stored outside the document sidecar so an earlier release reads the sidecar unchanged. Rows go with the document. |
+| `chat_threads` | One row per Chat thread in a document, keyed by `(channel_id, root_id)`: the root message snapshot, fork timestamp, creator, reply entries (with the server-only marks that keep a reaction from being answered twice: an answer to a reaction, and which readings of a reaction were answered), the last entry sequence the thread gave out (`last_seq`), compaction records, latest context usage, fork provenance (`bootstrapEntries`, Atomic branched session entries/leaf or remote `from`), the Decision cards the thread's Planner asked (`asked_questions_json`), update time and writer-lease fencing token. Stored outside the document sidecar so an earlier release reads the sidecar unchanged. Rows go with the document. |
 | `chat_session_state` | One row per document with top-level Chat compactions, context usage, Atomic session entries/leaf, per-entry fork points (`entry_forks_json`), the notes threads' Planners sent the Chat Planner that it has not read (`thread_notes_json`), every Decision card a note was sent for (`noted_questions_json`) and the notes its latest turn for a message was given, for a Retry (`given_notes_json`), fenced by the writer lease and removed with the document. |
 | `plan_images` | Images a document holds, one row per document and SHA-256 of the image's bytes: its type (PNG, JPEG, WebP, GIF, AVIF, BMP or ICO), the bytes, their size, and who stored them and when. `size` is always the length of `bytes` and has no limit of its own in the table; what brings an image bounds it: the 1 MiB of `upload_image`, and for an image a tool made, whichever harness ran the tool, the server's `MAX_STORED_IMAGE_BYTES` (10 MiB by default) and, over the agent connection, its 2 MiB message limit. The server refuses a larger one before it decodes it, so the table never holds one. Rows go with the document. |
 

@@ -152,13 +152,27 @@ function further(shown: string, copy: string): string {
 
 const settled = (status: Chat.ToolStatus) => status !== "running";
 
-/** One tool call from two reports of it: a finished one is never running again. */
+/**
+ * One tool call from two reports of it, in either order. A report with a `rev` is the whole call as
+ * the server held it then, so the larger wins. Without one, a finished call is never running again.
+ */
 function laterActivity(shown: Chat.Activity, copy: Chat.Activity): Chat.Activity {
+	if (shown.rev !== undefined && copy.rev !== undefined && shown.rev !== copy.rev) {
+		return copy.rev > shown.rev ? copy : shown;
+	}
 	if (settled(shown.status) && !settled(copy.status)) return { ...copy, ...shown };
 	return { ...shown, ...copy };
 }
 
-/** The tool calls of two copies of an entry, in the order of the copy, then any it lacks. */
+/** Tool calls in the server's order: by `order`, and where a call has none, where it was listed. */
+function inOrder(tools: readonly Chat.Activity[]): Chat.Activity[] {
+	return tools
+		.map((tool, at) => ({ tool, at }))
+		.sort((a, b) => (a.tool.order ?? a.at) - (b.tool.order ?? b.at) || a.at - b.at)
+		.map(item => item.tool);
+}
+
+/** The tool calls of two copies of an entry, in the server's order. */
 function laterTools(
 	shown: readonly Chat.Activity[] = [],
 	copy: readonly Chat.Activity[] = [],
@@ -169,7 +183,14 @@ function laterTools(
 		return before ? laterActivity(before, item) : item;
 	});
 	let listed = new Set(copy.map(item => item.id));
-	return [...tools, ...shown.filter(item => !listed.has(item.id))];
+	return inOrder([...tools, ...shown.filter(item => !listed.has(item.id))]);
+}
+
+/** An entry's tool calls with one more report of a call, in the server's order. */
+function withTool(tools: readonly Chat.Activity[] = [], activity: Chat.Activity): Chat.Activity[] {
+	let existing = tools.findIndex(item => item.id === activity.id);
+	if (existing < 0) return inOrder([...tools, activity]);
+	return tools.map((item, at) => at === existing ? laterActivity(item, activity) : item);
 }
 
 function longer<T>(shown: T[] | undefined, copy: T[] | undefined): T[] | undefined {
@@ -408,19 +429,12 @@ export function transcriptReducer(
 			if (index < 0) {
 				return wait(state, action.entryId, item => ({
 					...item,
-					tools: laterTools(item.tools, [action.activity]),
+					tools: withTool(item.tools, action.activity),
 				}));
 			}
 			let entries = [...state.entries];
 			let entry = entries[index]!;
-			let tools = entry.tools ?? [];
-			let existing = tools.findIndex(item => item.id === action.activity.id);
-			entries[index] = {
-				...entry,
-				tools: existing < 0
-					? [...tools, action.activity]
-					: tools.map((item, at) => at === existing ? laterActivity(item, action.activity) : item),
-			};
+			entries[index] = { ...entry, tools: withTool(entry.tools, action.activity) };
 			return withAnchor({ ...state, entries });
 		}
 		case "turn": {

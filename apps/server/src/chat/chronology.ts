@@ -2,9 +2,10 @@ import type { Chat as Wire } from "@chopin/protocol";
 
 /**
  * A transcript the server appends to: Chat, or one thread. `lastSeq` is the last sequence it gave
- * out, to an entry or a snapshot, which a removal from the end does not take back. `sharedWith`
- * names the other transcript an entry appended here is copied into, so the entry is given a time
- * and sequence that are right in both.
+ * out, which taking entries out moves past, and which is saved with the transcript so that a
+ * restart, even one whose clock is behind, gives out none it gave before. `sharedWith` names the
+ * other transcript an entry appended here is copied into, so the entry is given a time and
+ * sequence that are right in both.
  */
 export type Transcript = {
 	entries: Wire.Entry[];
@@ -58,12 +59,23 @@ export function appendEntries(transcript: Transcript, ...added: Wire.Entry[]): b
 }
 
 /**
- * The sequence a copy of the whole transcript is sent with: every entry it holds has a smaller
- * one, and every entry appended after it a larger one, so a reader can tell an entry newer than
- * the copy from one taken out before it.
+ * Take entries out of a transcript for good, as a Retry does, and move its sequence past them, so
+ * a copy of the transcript taken after it says it is newer than one that still had them. Save the
+ * transcript before anyone is told.
+ */
+export function takeOut(transcript: Transcript, ids: Iterable<string>): void {
+	let gone = new Set(ids);
+	if (!transcript.entries.some(entry => gone.has(entry.id))) return;
+	transcript.lastSeq = lastSeqOf(transcript) + 1;
+	transcript.entries = transcript.entries.filter(entry => !gone.has(entry.id));
+}
+
+/**
+ * The sequence a copy of the whole transcript is sent with: every entry it holds has one at most
+ * as large, and every entry appended after it a larger one, so a reader can tell an entry newer
+ * than the copy from one taken out before it. It gives out no new sequence, so it is never more
+ * than what was saved.
  */
 export function snapshotSeq(transcript: Transcript): number {
-	let seq = Math.max(lastSeqOf(transcript) + 1, Date.now());
-	transcript.lastSeq = seq;
-	return seq;
+	return lastSeqOf(transcript);
 }

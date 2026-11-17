@@ -195,6 +195,18 @@ export declare namespace Chat {
 		refused?: true;
 		/** Milliseconds, once finished. */
 		took?: number;
+		/**
+		 * Where the call goes among its entry's tool calls: how many the server had filed under the
+		 * entry before it. It never changes. Absent on a call saved before it existed, which keeps
+		 * its place in the stored list.
+		 */
+		order?: number;
+		/**
+		 * How many times the server has reported the call, this report included. A `chat:tool` with
+		 * one carries the whole call as the server held it then, so the report of the larger one is
+		 * the newer, whichever arrives first. Absent on a call saved before it existed.
+		 */
+		rev?: number;
 	};
 
 	/**
@@ -520,9 +532,11 @@ export declare namespace Chat {
 	export type History = KIND<"chat:history"> & {
 		entries: Entry[];
 		/**
-		 * Larger than every entry's `seq` in `entries` and smaller than any appended after: an entry
-		 * whose `seq` is at most this and that `entries` lacks had been taken out. A history with a
-		 * smaller one than a history already applied is older than it.
+		 * At least every entry's `seq` in `entries` and smaller than any appended after, and larger
+		 * once an entry is taken out: an entry whose `seq` is at most this and that `entries` lacks
+		 * had been taken out. A history with a smaller one than a history already applied is older
+		 * than it. The server saves it with the transcript, so it never goes back, even across a
+		 * restart whose clock is behind.
 		 */
 		seq?: number;
 		busy: boolean;

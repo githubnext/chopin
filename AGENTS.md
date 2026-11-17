@@ -400,11 +400,16 @@ gives each a sequence (its clock in milliseconds, or one more than the last it g
 entry and history before it (`appendEntries` in `apps/server/src/chat/chronology.ts`). A thread's
 entry that Chat holds too is stamped against both transcripts before it is saved, so both say the
 same time and sequence; if Chat took an entry meanwhile, the copy moves past it and the thread
-record is saved again. Each `chat:history` and opened thread carries `seq`, larger than every
-entry it holds and smaller than any appended after it. An entry saved before sequences existed
+record is saved again. Each `chat:history` and opened thread carries `seq`, at least every entry
+it holds and smaller than any appended after it; it gives out no number, and a Retry's removal
+moves the last sequence past what it took out (`takeOut`). That last sequence is saved with the
+transcript (the sidecar's `transcriptSeq`, a thread's `last_seq`), so a restart whose clock is
+behind gives out no sequence a browser has seen. An entry saved before sequences existed
 keeps its stored place among those of its second. The browser (`transcript-state.ts`) places an
 entry by time and sequence, merges two copies of one entry by what the server only adds (text while
-it streams, tool calls that only finish, images; reactions by `reactionsSeq`), keeps a `chat:delta`
+it streams, images; reactions by `reactionsSeq`; a tool call is reported whole, with a fixed
+`order` among its entry's calls and a growing `rev`, so the larger `rev` wins and the calls keep
+the server's order), keeps a `chat:delta`
 past the text's end, and a tool or reaction frame for an entry not yet shown, until they fit,
 ignores a history older than one applied, drops an entry a history lacks though its `seq` covers
 it, and remembers what a Retry removed. So every frame and history, applied in any order, more

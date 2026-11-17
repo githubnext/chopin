@@ -9,6 +9,7 @@ type ThreadRow = {
 	forkedAt: number | string;
 	createdBy: string;
 	entriesJson: ChatThreadRecord["entries"] | string;
+	lastSeq: number | string | null;
 	compactionsJson: ChatThreadRecord["compactions"] | string;
 	usageJson: ChatThreadRecord["usage"] | string | null;
 	forkStateJson: ChatThreadRecord["forkState"] | string;
@@ -43,6 +44,7 @@ function hydrateThread(row: ThreadRow): ChatThreadRecord {
 		forkedAt: Number(row.forkedAt),
 		createdBy: row.createdBy,
 		entries: parseJson(row.entriesJson),
+		...(row.lastSeq === null ? {} : { lastSeq: Number(row.lastSeq) }),
 		compactions: parseJson(row.compactionsJson),
 		...(usage ? { usage } : {}),
 		forkState: parseJson(row.forkStateJson),
@@ -91,12 +93,13 @@ export class PostgresChatThreadStore implements ChatThreadStore {
 				await sql`
 					INSERT INTO chat_threads (
 						channel_id, root_id, root_json, forked_at, created_by,
-						entries_json, compactions_json, usage_json, fork_state_json,
+						entries_json, last_seq, compactions_json, usage_json, fork_state_json,
 						asked_questions_json, updated_at, fencing
 					) VALUES (
 						${thread.channelId}, ${thread.rootId}, ${rootJson}::text::jsonb,
 						${thread.forkedAt}, ${thread.createdBy},
-						${entriesJson}::text::jsonb, ${compactionsJson}::text::jsonb,
+						${entriesJson}::text::jsonb, ${thread.lastSeq ?? null},
+						${compactionsJson}::text::jsonb,
 						${usageJson}::text::jsonb, ${forkStateJson}::text::jsonb,
 						${askedQuestionsJson}::text::jsonb, ${thread.updatedAt}, ${lease.fencing}
 					)
@@ -105,6 +108,7 @@ export class PostgresChatThreadStore implements ChatThreadStore {
 						forked_at = EXCLUDED.forked_at,
 						created_by = EXCLUDED.created_by,
 						entries_json = EXCLUDED.entries_json,
+						last_seq = EXCLUDED.last_seq,
 						compactions_json = EXCLUDED.compactions_json,
 						usage_json = EXCLUDED.usage_json,
 						fork_state_json = EXCLUDED.fork_state_json,
@@ -120,7 +124,7 @@ export class PostgresChatThreadStore implements ChatThreadStore {
 			let [row] = await this.sql<ThreadRow[]>`
 				SELECT channel_id AS "channelId", root_id AS "rootId", root_json AS "rootJson",
 					forked_at AS "forkedAt", created_by AS "createdBy",
-					entries_json AS "entriesJson", compactions_json AS "compactionsJson",
+					entries_json AS "entriesJson", last_seq AS "lastSeq", compactions_json AS "compactionsJson",
 					usage_json AS "usageJson", fork_state_json AS "forkStateJson",
 					asked_questions_json AS "askedQuestionsJson", updated_at AS "updatedAt"
 				FROM chat_threads
@@ -135,7 +139,7 @@ export class PostgresChatThreadStore implements ChatThreadStore {
 			let rows = await this.sql<ThreadRow[]>`
 				SELECT channel_id AS "channelId", root_id AS "rootId", root_json AS "rootJson",
 					forked_at AS "forkedAt", created_by AS "createdBy",
-					entries_json AS "entriesJson", compactions_json AS "compactionsJson",
+					entries_json AS "entriesJson", last_seq AS "lastSeq", compactions_json AS "compactionsJson",
 					usage_json AS "usageJson", fork_state_json AS "forkStateJson",
 					asked_questions_json AS "askedQuestionsJson", updated_at AS "updatedAt"
 				FROM chat_threads

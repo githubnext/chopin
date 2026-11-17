@@ -80,7 +80,7 @@ import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./r
 import { withSessionContext } from "./session-context";
 import { TOOL_UNAVAILABLE, turnFailureOf } from "./turn-failure";
 import { retryTarget } from "./retry";
-import { appendEntries, snapshotSeq, stampEntries } from "./chronology";
+import { appendEntries, snapshotSeq, stampEntries, takeOut } from "./chronology";
 import { runDuration } from "./run-duration";
 import { READER_INSTRUCTIONS } from "./reaction-instructions";
 import type { InitiativeSchedule } from "./initiative-schedule";
@@ -539,7 +539,9 @@ export function restore(
 				? {
 					...rest,
 					tools: rest.tools.map(tool =>
-						tool.status === "running" ? { ...tool, status: "failed" as const } : tool
+						tool.status === "running"
+							? { ...tool, status: "failed" as const, rev: (tool.rev ?? 0) + 1 }
+							: tool
 					),
 				}
 				: rest;
@@ -1744,9 +1746,8 @@ async function processRetry(
 	let target = retryTarget(ownEntries(context), message, ws.data.handle);
 	if ("refusal" in target) return fail(ws, rid, target.refusal);
 	let { request, removed } = target;
-	let gone = new Set(removed);
 	let before = chat.entries;
-	chat.entries = before.filter(entry => !gone.has(entry.id));
+	takeOut(chat, removed);
 	chat.busy = true;
 	chat.turn = begin(request.author.handle, chat.entries.length);
 	try {
@@ -3271,6 +3272,7 @@ function settle(chat: Chat, server: Server<SocketData>, room: string, stopped: b
 				status: "failed",
 				result: stopped ? "Turn stopped." : "Turn ended without a result.",
 				...(started ? { took: Date.now() - started } : {}),
+				rev: (activity.rev ?? 0) + 1,
 			};
 			Object.assign(activity, finished);
 			broadcast(server, room, { kind: "chat:tool", ts: 0, entry: entry.id, activity: finished });
@@ -4238,11 +4240,12 @@ function begun(chat: Chat, id: string): void {
 
 function publish(context: Room, activity: Wire.Activity): void {
 	let { room, server } = context;
+	let filed = attach(context, activity);
 	broadcast(server, room, {
 		kind: "chat:tool",
 		ts: 0,
-		entry: attach(context, activity),
-		activity,
+		entry: filed.entry,
+		activity: filed.report,
 	});
 }
 
@@ -4273,14 +4276,19 @@ function named(chat: Chat, id: string): string {
 }
 
 /**
- * File a tool call under the message that made it, and say which that was.
+ * File a tool call under the message that made it, and say which that was and the report to send:
+ * the whole call as it now stands, with its place among the entry's calls, which never changes,
+ * and the count of its reports.
  *
  * A tool call that arrives before the agent has said anything — which is most
  * of them, since reading precedes writing — has no message to attach to yet.
  * It gets an entry of its own so the work is visible while it happens rather
  * than appearing retrospectively once the agent finishes talking.
  */
-function attach(context: Room, activity: Wire.Activity): string {
+function attach(
+	context: Room,
+	activity: Wire.Activity,
+): { entry: string; report: Wire.Activity } {
 	let { chat, room, server } = context;
 	// Completion can arrive after idle; find its original activity by call id.
 	let entry = holder(chat, activity.id)
@@ -4303,10 +4311,17 @@ function attach(context: Room, activity: Wire.Activity): string {
 
 	entry.tools ??= [];
 	let existing = entry.tools.findIndex(item => item.id === activity.id);
-	if (existing >= 0) entry.tools[existing] = { ...entry.tools[existing], ...activity };
-	else entry.tools.push(activity);
+	let before = entry.tools[existing];
+	let report: Wire.Activity = {
+		...before,
+		...activity,
+		order: before ? before.order ?? existing : entry.tools.length,
+		rev: (before?.rev ?? 0) + 1,
+	};
+	if (before) entry.tools[existing] = report;
+	else entry.tools.push(report);
 	(chat.toolEntries ??= new Map()).set(activity.id, entry.id);
-	return entry.id;
+	return { entry: entry.id, report: { ...report } };
 }
 
 /** Whoever the turn is for owns what it stores; a turn nobody asked for is the Planner owner's. */

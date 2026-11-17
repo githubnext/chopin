@@ -76,8 +76,10 @@ export function chatThreadContract(name: string, factory: StorageFactory) {
 							author: { kind: "agent" },
 							text: "Side answer",
 							ts: 130,
+							seq: 1_767_225_600_123,
 						},
 					],
+					lastSeq: 1_767_225_600_124,
 					compactions: [
 						{
 							id: "c-1",
@@ -119,6 +121,7 @@ export function chatThreadContract(name: string, factory: StorageFactory) {
 				await storage.chatThreads.putThread(lease, first);
 
 				expect(await storage.chatThreads.getThread(channelId, "root-1")).toEqual(first);
+				expect(await storage.chatThreads.getThread(channelId, "root-2")).toEqual(second);
 				expect((await storage.chatThreads.listThreads(channelId)).map(item => item.rootId)).toEqual(
 					["root-1", "root-2"],
 				);

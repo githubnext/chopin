@@ -1081,6 +1081,11 @@ export type ChatThreadRecord = {
 	forkedAt: number;
 	createdBy: string;
 	entries: import("@chopin/protocol").Chat.Entry[];
+	/**
+	 * The last sequence the thread gave out (`Entry.seq`), which taking entries out moves past.
+	 * Absent on a thread saved before it existed, whose entries' own sequences are all it gave.
+	 */
+	lastSeq?: number;
 	compactions: import("@chopin/protocol").Chat.CompactionRecord[];
 	usage?: import("@chopin/protocol").Chat.ContextUsage;
 	forkState: ChatThreadForkState;
