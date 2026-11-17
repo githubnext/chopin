@@ -100,33 +100,53 @@ export function newDocumentArguments(raw: unknown): NewDocumentArguments {
 /** The documents one turn has created; it lives exactly as long as the turn that holds it. */
 export type TurnDocuments = { created: number };
 
+/** One reservation against a turn's and a person's hourly document limits. */
+export type NewDocumentReservation = {
+	id: number;
+	turn: TurnDocuments;
+	userId: string;
+	at: number;
+};
+
 /** How many documents one turn, and one person in an hour, may create. */
 export class NewDocumentLimits {
-	#hours = new Map<string, number[]>();
+	#hours = new Map<string, NewDocumentReservation[]>();
+	#refunded = new WeakSet<NewDocumentReservation>();
 	#now: () => number;
+	#nextId = 1;
 
 	constructor(now: () => number = Date.now) {
 		this.#now = now;
 	}
 
 	/** Counts one for the turn and the person, or says which limit is spent. */
-	take(turn: TurnDocuments, userId: string): "turn" | "hour" | undefined {
+	take(turn: TurnDocuments, userId: string): NewDocumentReservation | "turn" | "hour" {
 		let now = this.#now();
-		let recent = (this.#hours.get(userId) ?? []).filter(at => now - at < HOUR_MS);
+		let recent = (this.#hours.get(userId) ?? []).filter(entry => now - entry.at < HOUR_MS);
 		this.#hours.set(userId, recent);
 		if (turn.created >= MAX_DOCUMENTS_PER_TURN) return "turn";
 		if (recent.length >= MAX_DOCUMENTS_PER_HOUR) return "hour";
-		recent.push(now);
+		let reservation: NewDocumentReservation = {
+			id: this.#nextId++,
+			turn,
+			userId,
+			at: now,
+		};
+		recent.push(reservation);
 		turn.created++;
-		return undefined;
+		return reservation;
 	}
 
-	/** Gives back the latest one taken, for a call that created nothing. */
-	refund(turn: TurnDocuments, userId: string): void {
-		turn.created = Math.max(0, turn.created - 1);
-		let recent = this.#hours.get(userId);
-		recent?.pop();
-		if (recent?.length === 0) this.#hours.delete(userId);
+	/** Gives back the reservation a call took, for a call that created nothing. */
+	refund(reservation: NewDocumentReservation): void {
+		if (this.#refunded.has(reservation)) return;
+		this.#refunded.add(reservation);
+		reservation.turn.created = Math.max(0, reservation.turn.created - 1);
+		let recent = this.#hours.get(reservation.userId);
+		if (!recent) return;
+		let next = recent.filter(entry => entry.id !== reservation.id);
+		if (next.length === 0) this.#hours.delete(reservation.userId);
+		else this.#hours.set(reservation.userId, next);
 	}
 }
 
@@ -278,10 +298,11 @@ export async function createNewDocument(
 		}]);
 	}
 	if ("issues" in prepared) return refused("invalid-document", prepared.issues);
-	let counted = !earlier;
-	if (counted) {
-		let limit = deps.limits.take(turn, creator.userId);
-		if (limit) return refused(`${limit}-limit`);
+	let reservation: NewDocumentReservation | undefined;
+	if (!earlier) {
+		let taken = deps.limits.take(turn, creator.userId);
+		if (typeof taken === "string") return refused(`${taken}-limit`);
+		reservation = taken;
 	}
 	let outcome: CreatedDocument;
 	try {
@@ -301,10 +322,10 @@ export async function createNewDocument(
 			args.instruction !== undefined,
 		);
 	} catch (err) {
-		if (counted) deps.limits.refund(turn, creator.userId);
+		if (reservation) deps.limits.refund(reservation);
 		throw err;
 	}
-	if (counted && outcome.kind !== "created") deps.limits.refund(turn, creator.userId);
+	if (reservation && outcome.kind !== "created") deps.limits.refund(reservation);
 	if (outcome.kind === "conflict") return refused("idempotency-conflict");
 	if (outcome.kind === "title-taken") return refused("title-taken");
 	if (outcome.kind === "forbidden") return refused("repository-forbidden");

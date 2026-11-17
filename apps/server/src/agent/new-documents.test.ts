@@ -15,7 +15,12 @@ import type { AuthenticatedSession } from "../auth/session";
 import type { Repository } from "../github/client";
 import type { PlannerInvocation } from "../mcp/hosted";
 import type { InvokePlannerError } from "../mcp";
-import type { NewDocumentArguments, NewDocumentDeps, TurnDocuments } from "./new-documents";
+import type {
+	NewDocumentArguments,
+	NewDocumentDeps,
+	NewDocumentReservation,
+	TurnDocuments,
+} from "./new-documents";
 import type { CreationOrigin } from "../mcp/create";
 
 const NOW = new Date("2026-11-16T12:00:00.000Z");
@@ -95,6 +100,7 @@ async function fixture(options: {
 	let announced: Array<{ id: string; title: string; path: string }> = [];
 	let created: string[] = [];
 	let head = { commit: HEAD };
+	let clock = { now: NOW.getTime() };
 	let unsavedLines = options.unsavedLines ?? 0;
 	let access = "access" in options ? options.access : repository();
 	let session = "session" in options ? options.session : login();
@@ -147,7 +153,7 @@ async function fixture(options: {
 		},
 		refusal: async code => code === "planner-not-attached" ? "No machine runs it." : undefined,
 		appOrigin: "https://chopin.test",
-		limits: new NewDocumentLimits(() => NOW.getTime()),
+		limits: new NewDocumentLimits(() => clock.now),
 	};
 	let turns = new Map<string, TurnDocuments>();
 	let request = (value: NewDocumentArguments = args(), turnId = "turn-1") =>
@@ -175,6 +181,7 @@ async function fixture(options: {
 		announced,
 		created,
 		head,
+		clock,
 		writer,
 		request,
 	};
@@ -201,19 +208,22 @@ describe("new document limits", () => {
 		let now = 0;
 		let limits = new NewDocumentLimits(() => now);
 		let turnA = { created: 0 };
+		let taken: NewDocumentReservation[] = [];
 		for (let index = 0; index < MAX_DOCUMENTS_PER_TURN; index++) {
-			expect(limits.take(turnA, "U_mona")).toBeUndefined();
+			let reservation = limits.take(turnA, "U_mona");
+			if (typeof reservation === "string") throw new Error(`unexpected ${reservation} limit`);
+			taken.push(reservation);
 		}
 		expect(limits.take(turnA, "U_mona")).toBe("turn");
-		limits.refund(turnA, "U_mona");
-		expect(limits.take(turnA, "U_mona")).toBeUndefined();
+		limits.refund(taken[0]!);
+		expect(typeof limits.take(turnA, "U_mona")).toBe("object");
 		let turn = 0;
-		while (limits.take({ created: 0 }, "U_mona") === undefined && ++turn < 100) {}
+		while (typeof limits.take({ created: 0 }, "U_mona") === "object" && ++turn < 100) {}
 		let next = { created: 0 };
 		expect(limits.take(next, "U_mona")).toBe("hour");
-		expect(limits.take(next, "U_other")).toBeUndefined();
+		expect(typeof limits.take(next, "U_other")).toBe("object");
 		now += 60 * 60_000;
-		expect(limits.take(next, "U_mona")).toBeUndefined();
+		expect(typeof limits.take(next, "U_mona")).toBe("object");
 		expect(MAX_DOCUMENTS_PER_HOUR).toBeGreaterThan(MAX_DOCUMENTS_PER_TURN);
 	});
 
@@ -222,11 +232,26 @@ describe("new document limits", () => {
 		let limits = new NewDocumentLimits(() => now);
 		let turn = { created: 0 };
 		for (let index = 0; index < MAX_DOCUMENTS_PER_TURN; index++) {
-			expect(limits.take(turn, "U_mona")).toBeUndefined();
+			expect(typeof limits.take(turn, "U_mona")).toBe("object");
 		}
 		now += 3 * 60 * 60_000;
 		expect(limits.take(turn, "U_mona")).toBe("turn");
-		expect(limits.take({ created: 0 }, "U_mona")).toBeUndefined();
+		expect(typeof limits.take({ created: 0 }, "U_mona")).toBe("object");
+	});
+
+	test("refund removes only the failed reservation, not a newer one", () => {
+		let now = 0;
+		let limits = new NewDocumentLimits(() => now);
+		let first = limits.take({ created: 0 }, "U_mona");
+		if (typeof first === "string") throw new Error(`unexpected ${first} limit`);
+		now = 55 * 60_000;
+		expect(typeof limits.take({ created: 0 }, "U_mona")).toBe("object");
+		limits.refund(first);
+		now = 60 * 60_000 + 1_000;
+		for (let index = 1; index < MAX_DOCUMENTS_PER_HOUR; index++) {
+			expect(typeof limits.take({ created: 0 }, "U_mona")).toBe("object");
+		}
+		expect(limits.take({ created: 0 }, "U_mona")).toBe("hour");
 	});
 });
 
@@ -346,6 +371,59 @@ describe("createNewDocument", () => {
 		let retried = await context.request(args(), "turn-over");
 		if (!first.ok) throw new Error(first.message);
 		expect(retried).toMatchObject({ ok: true, replayed: true, document: first.document });
+	});
+
+	test("a failed request refunds its own hourly reservation, not a newer one", async () => {
+		let context = await fixture();
+		let create = context.deps.create;
+		let finishFirst!: () => void;
+		let firstWaiting = new Promise<void>(resolve => {
+			finishFirst = resolve;
+		});
+		let firstEntered!: () => void;
+		let entered = new Promise<void>(resolve => {
+			firstEntered = resolve;
+		});
+		let calls = 0;
+		context.deps.create = async (creator, input, instructed) => {
+			if (++calls === 1) {
+				firstEntered();
+				await firstWaiting;
+				return { kind: "unavailable" };
+			}
+			return create(creator, input, instructed);
+		};
+		let first = context.request(
+			args({ idempotencyKey: "piece-slow-fail", title: "Slow", document: "# Slow\n" }),
+			"turn-slow",
+		);
+		await entered;
+		context.clock.now += 55 * 60_000;
+		let second = await context.request(
+			args({ idempotencyKey: "piece-at-55m", title: "At 55m", document: "# At 55m\n" }),
+			"turn-55m",
+		);
+		expect(second.ok).toBe(true);
+		finishFirst();
+		expect(await first).toMatchObject({ ok: false, reason: "unavailable" });
+		context.clock.now = NOW.getTime() + 60 * 60_000 + 1_000;
+		for (let index = 1; index < MAX_DOCUMENTS_PER_HOUR; index++) {
+			let result = await context.request(
+				args({
+					idempotencyKey: `piece-after-hour-${index}`,
+					title: `After ${index}`,
+					document: `# After ${index}\n`,
+				}),
+				`turn-after-${index}`,
+			);
+			expect(result.ok).toBe(true);
+		}
+		let over = await context.request(
+			args({ idempotencyKey: "piece-number-over", title: "Over", document: "# Over\n" }),
+			"turn-over",
+		);
+		expect(over).toMatchObject({ ok: false, reason: "hour-limit" });
+		expect(context.created).toHaveLength(MAX_DOCUMENTS_PER_HOUR);
 	});
 
 	test("a Chat line that could not be saved is posted by the retry, once", async () => {
