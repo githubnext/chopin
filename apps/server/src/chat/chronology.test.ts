@@ -150,4 +150,59 @@ describe("a transcript's entries in time", () => {
 		expect(appendEntries(chat, shared)).toBe(false);
 		expect(order(chat)).toEqual(["ahead", "shared"]);
 	});
+
+	it("keeps the sequence high-water mark past an unsequenced entry appended during a rollback", () => {
+		let realNow = Date.now;
+		try {
+			Date.now = () => 50;
+			let transcript: Transcript = {
+				entries: [
+					{ ...said("sequenced", 10), seq: 100 },
+					said("rolled-back", 10),
+				],
+			};
+			expect(snapshotSeq(transcript)).toBe(100);
+			let next = said("after-upgrade", 10);
+			appendEntries(transcript, next);
+			expect(next.seq).toBeGreaterThan(100);
+		} finally {
+			Date.now = realNow;
+		}
+	});
+
+	it("keeps a shared thread entry's sequence and order when a later thread entry is copied to Chat first", () => {
+		let realNow = Date.now;
+		try {
+			Date.now = () => 1000;
+			let chat: Transcript = { entries: [] };
+			appendEntries(chat, said("root", 10));
+			let thread: Transcript = {
+				entries: [],
+				sharedWith: () => chat,
+			};
+			let replyA = said("reply-a", 10);
+			appendEntries(thread, replyA);
+			let seqA = replyA.seq!;
+
+			let agentC = said("agent-c", 10);
+			appendEntries(thread, agentC);
+			appendEntries(chat, agentC);
+
+			expect(appendEntries(chat, replyA)).toBe(false);
+			expect(replyA.seq).toBe(seqA);
+			expect(replyA.seq).toBeLessThan(agentC.seq!);
+			expect(thread.entries.map(entry => entry.id)).toEqual(["reply-a", "agent-c"]);
+			expect(order(thread)).toEqual(["reply-a", "agent-c"]);
+			expect(chat.entries.map(entry => entry.id)).toEqual(["root", "reply-a", "agent-c"]);
+			expect(order(chat)).toEqual(["root", "reply-a", "agent-c"]);
+			expect(snapshotSeq(thread)).toBe(agentC.seq!);
+			expect(snapshotSeq(chat)).toBe(agentC.seq!);
+
+			let later = said("later", 10);
+			appendEntries(thread, later);
+			expect(later.seq).toBeGreaterThan(agentC.seq!);
+		} finally {
+			Date.now = realNow;
+		}
+	});
 });

@@ -657,6 +657,145 @@ describe("Chat threads server", () => {
 		}
 	});
 
+	test("holding a shared room reply's save while a Planner reply streams keeps live, reconnect, and Chat orders identical and reuses no sequence", async () => {
+		let w = await buildWorld();
+		let alice = w.makeSocket("alice", "U_alice");
+		let bob = w.makeSocket("bob", "U_bob");
+		w.context.people = () => new Set(["U_alice", "U_bob"]);
+
+		let rootId = crypto.randomUUID();
+		await Threads.sendMessage(w.context, alice.ws, {
+			kind: "chat:send",
+			rid: "root",
+			requestId: rootId,
+			to: "room",
+			text: "Root: let us use PostgreSQL.",
+			ts: 0,
+		});
+
+		let releaseTurn!: () => void;
+		let savingReplyA = new Promise<void>(resolve => {
+			releaseTurn = resolve;
+		});
+		w.setEmitExtra(() => savingReplyA);
+
+		let askId = crypto.randomUUID();
+		await Threads.sendMessage(w.context, alice.ws, {
+			kind: "chat:send",
+			rid: "ask",
+			requestId: askId,
+			to: "planner",
+			thread: rootId,
+			alsoToChat: true,
+			text: "@chopin explain the index",
+			ts: 0,
+		});
+		let thread = w.plan.chat.childChats!.get(rootId)!;
+
+		let replyA = crypto.randomUUID();
+		let realPutThread = w.storage.chatThreads.putThread.bind(w.storage.chatThreads);
+		let heldOnce = false;
+		w.storage.chatThreads.putThread = async (lease, record) => {
+			if (!heldOnce && record.entries.some(entry => entry.id === replyA)) {
+				heldOnce = true;
+				releaseTurn();
+				while (
+					!w.plan.chat.entries.some(
+						entry =>
+							entry.fromThread === rootId && entry.author.kind === "agent" && !entry.streaming,
+					)
+				) {
+					await Bun.sleep(0);
+				}
+			}
+			return realPutThread(lease, record);
+		};
+
+		await Threads.sendMessage(w.context, bob.ws, {
+			kind: "chat:send",
+			rid: "reply-a",
+			requestId: replyA,
+			to: "room",
+			thread: rootId,
+			alsoToChat: true,
+			text: "Room reply A while Planner streams.",
+			ts: 0,
+		});
+		await thread.running;
+		await Bun.sleep(0);
+
+		let agentC = thread.entries.find(entry => entry.author.kind === "agent")!.id;
+		let expectedThread = [askId, replyA, agentC];
+		let expectedChat = [rootId, askId, replyA, agentC];
+
+		let applyLive = (messages: Wire.Entry[]): string[] => {
+			let shown: Wire.Entry[] = [];
+			for (let entry of messages) {
+				let existing = shown.findIndex(item => item.id === entry.id);
+				if (existing >= 0) shown.splice(existing, 1);
+				let at = shown.length;
+				while (
+					at > 0
+					&& (shown[at - 1]!.ts > entry.ts
+						|| (shown[at - 1]!.ts === entry.ts
+							&& shown[at - 1]!.seq !== undefined
+							&& entry.seq !== undefined
+							&& shown[at - 1]!.seq! > entry.seq))
+				) {
+					at--;
+				}
+				shown.splice(at, 0, entry);
+			}
+			return shown.map(entry => entry.id);
+		};
+
+		let liveThreadMessages = w.broadcasts.flatMap(frame =>
+			frame.kind === "chat:in-thread"
+				&& (frame as Wire.InThread).rootId === rootId
+				&& (frame as Wire.InThread).frame.kind === "chat:message"
+				? [((frame as Wire.InThread).frame as Wire.Message).entry]
+				: []
+		);
+		let liveChatMessages = w.broadcasts.flatMap(frame =>
+			frame.kind === "chat:message" ? [(frame as Wire.Message).entry] : []
+		);
+
+		expect(applyLive(liveThreadMessages)).toEqual(expectedThread);
+		expect(applyLive(liveChatMessages)).toEqual(expectedChat);
+		expect(thread.entries.map(entry => entry.id)).toEqual(expectedThread);
+		expect(w.plan.chat.entries.map(entry => entry.id)).toEqual(expectedChat);
+
+		let viewer = w.makeSocket("reader", "U_reader", false);
+		await Threads.openThread(
+			w.context,
+			viewer.ws,
+			{ kind: "chat:thread", rid: "open-thread", rootId, create: false, ts: 0 },
+			false,
+		);
+		let opened = viewer.frames[0] as Wire.ThreadOpened;
+		expect(opened.entries.map(entry => entry.id)).toEqual(expectedThread);
+
+		let stored = await w.storage.chatThreads.getThread(w.channel.id, rootId);
+		expect(stored?.entries.map(entry => entry.id)).toEqual(expectedThread);
+
+		let threadSeqs = thread.entries.map(entry => entry.seq!);
+		expect(new Set(threadSeqs).size).toBe(threadSeqs.length);
+		expect(threadSeqs[0]!).toBeLessThan(threadSeqs[1]!);
+		expect(threadSeqs[1]!).toBeLessThan(threadSeqs[2]!);
+		expect(snapshotSeq(thread)).toBeGreaterThanOrEqual(Math.max(...threadSeqs));
+
+		let realNow = Date.now;
+		try {
+			Date.now = () => 1;
+			let next: Wire.Entry = { id: "next", author: { kind: "system" }, text: "next", ts: 1 };
+			appendEntries(thread, next);
+			expect(threadSeqs).not.toContain(next.seq!);
+			expect(next.seq!).toBeGreaterThan(Math.max(...threadSeqs));
+		} finally {
+			Date.now = realNow;
+		}
+	});
+
 	test("a Retry branches the Atomic session back to before the failed attempt, and gives it no word of the attempt", async () => {
 		let w = await buildWorld();
 		let alice = w.makeSocket("alice", "U_alice");
