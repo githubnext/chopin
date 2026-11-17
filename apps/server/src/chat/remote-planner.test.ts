@@ -39,7 +39,7 @@ import { member } from "../questions/text-response.test-fixtures";
 
 import type { Server } from "bun";
 import type { Chat as Wire } from "@chopin/protocol";
-import type { CapabilityCatalog } from "@chopin/agent-link";
+import type { CapabilityCatalog, InputCall } from "@chopin/agent-link";
 import type { AgentClient, AgentHandlers } from "@chopin/agent-link/client";
 import type { HostedAuth } from "../auth/routes";
 import type { Socket, SocketData } from "../wire";
@@ -1986,14 +1986,7 @@ async function decidingPlanner(options: { steers: boolean; endOnAbort?: boolean 
 		steered,
 		results,
 		decision,
-		askAgain: () =>
-			void late.push(
-				client!.ask(asking!, {
-					method: "select",
-					title: "Which cache?",
-					choices: ["Redis", "None"],
-				}),
-			),
+		askAgain: (input: InputCall) => void late.push(client!.ask(asking!, input)),
 		said: () => context.chat.entries.map(entry => entry.text),
 		failures: () => context.chat.entries.filter(entry => entry.turnFailure),
 	};
@@ -2073,24 +2066,46 @@ for (let steers of [false, true]) {
 	);
 }
 
-test("a question the attached Planner's turn asks just as Stop withdraws its open decision is cancelled too, and the next message starts a turn", async () => {
-	let room = await decidingPlanner({ steers: false, endOnAbort: false });
-	let { context } = room;
-	await room.send("@chopin which store?");
-	let id = await room.decision();
-	room.askAgain();
-	await Chat.abort(context, room.ws);
+for (
+	let [input, value] of [
+		[{ method: "select", title: "Which cache?", choices: ["Redis", "None"] }, null],
+		[{ method: "confirm", title: "Add a cache?", message: "Redis in front." }, false],
+		[
+			{
+				method: "questionnaire",
+				params: {
+					questions: [{
+						header: "Cache",
+						question: "Which cache?",
+						options: [{ label: "Redis", description: "" }, { label: "None", description: "" }],
+					}],
+				},
+			},
+			{ answers: [], cancelled: true },
+		],
+	] satisfies Array<[InputCall, unknown]>
+) {
+	test(`a ${input.method} the attached Planner's turn asks just as Stop withdraws its open decision is cancelled too with its method's withdrawn value, and the next message starts a turn`, async () => {
+		let room = await decidingPlanner({ steers: false, endOnAbort: false });
+		let { context } = room;
+		await room.send("@chopin which store?");
+		let id = await room.decision();
+		room.askAgain(input);
+		await Chat.abort(context, room.ws);
 
-	await until(() => !context.chat.busy);
-	expect(context.plan.records.get(id)?.status).toBe("cancelled");
-	expect([...context.plan.records.values()].filter(record => record.status === "open")).toEqual([]);
-	expect(room.results).toEqual([
-		expect.objectContaining({ status: "cancelled" }),
-		expect.objectContaining({ status: "cancelled" }),
-	]);
-	expect(context.chat.retained).toBeUndefined();
+		await until(() => !context.chat.busy);
+		expect(context.plan.records.get(id)?.status).toBe("cancelled");
+		expect([...context.plan.records.values()].filter(record => record.status === "open")).toEqual(
+			[],
+		);
+		expect(room.results).toEqual([
+			expect.objectContaining({ status: "cancelled" }),
+			expect.objectContaining({ status: "cancelled", value }),
+		]);
+		expect(context.chat.retained).toBeUndefined();
 
-	expect(await room.send("@chopin and then?")).toMatchObject({ kind: "chat:send" });
-	await until(() => !context.chat.busy && room.said().at(-1) === "Done.");
-	expect(room.failures()).toEqual([]);
-});
+		expect(await room.send("@chopin and then?")).toMatchObject({ kind: "chat:send" });
+		await until(() => !context.chat.busy && room.said().at(-1) === "Done.");
+		expect(room.failures()).toEqual([]);
+	});
+}

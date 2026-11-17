@@ -152,6 +152,11 @@ function valueOf(method: InputMethod, result: QuestionnaireResult, choices: stri
 	return answer?.kind === "custom" ? answer.answer ?? undefined : undefined;
 }
 
+/** What a request of this method is given when it is withdrawn before any question is answered. */
+export function withdrawnValue(method: InputMethod): unknown {
+	return valueOf(method, { answers: [], cancelled: true }, []) ?? null;
+}
+
 /** The params of a request that asks one question with these choices. */
 function single(header: string, question: string, choices: string[]): QuestionParams {
 	return {
