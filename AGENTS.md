@@ -473,6 +473,22 @@ linked, deliberately empty, and orphaned. Preserve the distinction. Empty means
 the Planner reviewed the decision and intentionally linked no prose; orphaned
 means a former target can no longer be identified safely.
 
+## Planner-created documents
+
+The Planner's `create_document` host tool (every harness) makes new top-level
+documents, one per piece of work that splits naturally, each with its own Chat,
+Decisions and Planner. Only a turn a person's message drives may call it: that
+person is the creator, and their own live browser login is rechecked for write
+access as for `chat:send`; a turn nobody typed and background jobs are refused.
+It reuses MCP `create_document`'s draft validation, visual assessment and
+creation (`createDocument` in `apps/server/src/mcp/hosted.ts`), keeps the creating
+document's repository and base branch, and is bounded per turn and per person per
+hour, with an idempotency key scoped to the creating document. The document is
+stored before the sidebar, the creating Chat's one linked line (`Entry.document`)
+or its optional first instruction (posted as the creator's message, as
+`invoke_planner` does) hear of it. See
+[Creating documents](docs/hosted-agent.md#creating-documents).
+
 ## Research requests and child documents
 
 Conversation research offers are distinct from research requests. With
@@ -782,7 +798,7 @@ run `bun run ci` and validate relative links with exact casing.
 When a disposable Planner session is created, diagnostics report available tool
 names and the external GitHub MCP contribution. Counts vary with SDK and remote
 MCP versions. A healthy boundary includes Chopin's document tools (currently
-plan-named), child document tools, repository tools, and allowed pull-request
+plan-named), `create_document`, child document tools, repository tools, and allowed pull-request
 tools, and excludes ambient capabilities such as `bash`, filesystem access, URL
 fetch, host Git, issues, and unrestricted search. The exception is an `atomic`
 Planner session, which deliberately adds Atomic's builtins and coding tools; its

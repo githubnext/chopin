@@ -277,6 +277,13 @@ differs. `update_document` later replaces that canonical source against the
 plan revision last read, with the same dialect validation and an idempotency key
 that returns the original applied result on replay.
 
+The Planner's `create_document` tool goes through the same creation transaction
+from a member's turn: its draft is validated and assessed for visuals as MCP's,
+its repository and base branch are the creating document's (the base it recorded,
+else the default branch's current commit), and its idempotency key is scoped to
+the creating document. See
+[Creating documents](hosted-agent.md#creating-documents).
+
 ## Generated descriptions
 
 The optional channel description is generated catalogue metadata, not authored

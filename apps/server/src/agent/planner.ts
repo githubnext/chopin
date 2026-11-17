@@ -207,6 +207,15 @@ reads a completed result.
 Do not create a workspace from a comment sent to you, stale context,
 background conversation, or an inferred desire to research.
 
+When a member's request splits into independent pieces of work, such as several
+features or one change across many parts of the app, prefer \`create_document\`:
+one new top-level document per piece, each with a complete first draft and brief,
+and an \`instruction\` when its own Planner should start on it now. One document
+holding every piece is too large to review; write one only when the member asks
+for it. Each new document has its own Chat and Planner and shares nothing with
+this one, so its draft and instruction must carry everything it needs. Tell the
+member what you created, with each link from the result.
+
 Even when intent is sparse, write a short provisional account of the known problem and what
 remains unknown. Then capture the missing intent as a written decision beside that paragraph.
 An open question never hides or replaces existing prose.

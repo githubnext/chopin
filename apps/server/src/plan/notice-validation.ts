@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
-import { ULID } from "@chopin/dialect";
+import { MAX_TITLE_LENGTH, ULID } from "@chopin/dialect";
 import { isChannelId } from "../channels/id";
+import { parseDocumentPath } from "@chopin/protocol/document-url";
 import * as Question from "@chopin/question";
 import { assertSourceShape, validateSource } from "../conversation-plan/sources";
 import type { ConversationPlan } from "@chopin/protocol";
@@ -24,6 +25,18 @@ export function validateNotice(
 			|| typeof comment.note !== "string" || comment.note.length > 4_000
 			|| Object.hasOwn(comment, "channelId")
 				&& (typeof comment.channelId !== "string" || !isChannelId(comment.channelId))
+		) throw new Error("hosted channel has an invalid transcript entry");
+	}
+	if (Object.hasOwn(entry, "document")) {
+		let author = entry.author as Record<string, JsonValue>;
+		let created = entry.document as Record<string, JsonValue> | null;
+		if (
+			author.kind !== "system" || !created || typeof created !== "object"
+			|| Array.isArray(created)
+			|| Object.keys(created).length !== 3
+			|| typeof created.channelId !== "string" || !isChannelId(created.channelId)
+			|| typeof created.title !== "string" || Array.from(created.title).length > MAX_TITLE_LENGTH
+			|| typeof created.path !== "string" || !parseDocumentPath(created.path)?.slug
 		) throw new Error("hosted channel has an invalid transcript entry");
 	}
 	if (Object.hasOwn(entry, "decision")) {

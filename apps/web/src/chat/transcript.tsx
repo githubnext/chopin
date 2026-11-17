@@ -15,7 +15,13 @@ import {
 	useSyncExternalStore,
 } from "react";
 import type { ReactNode } from "react";
-import { MessageForwardIcon, MessageIcon, SignInIcon, WrenchIcon } from "@chopin/icons";
+import {
+	DocumentIcon,
+	MessageForwardIcon,
+	MessageIcon,
+	SignInIcon,
+	WrenchIcon,
+} from "@chopin/icons";
 import { parseChildDocumentPath } from "@chopin/protocol/document-url";
 
 import { ChopinMark, Face, openCommentThread, PLANNER_NAME, useCardMeta } from "@chopin/editor";
@@ -27,7 +33,7 @@ import { ReactionPills, ReactionRefusal } from "./actions/reaction-pills";
 import { DeliveryMark, FailedLine } from "./message-delivery";
 import { ChatImageDocument, MessageImages } from "./image";
 import { messageMenuActions } from "./message-menu-actions";
-import { MessageMarkdown } from "./markdown";
+import { ChatLink, MessageMarkdown } from "./markdown";
 import { plainTextOf } from "./message-copy";
 import { withIntents } from "./pending-reactions";
 import { ownEmoji, reactionChanges, reactionCounts } from "./reactions";
@@ -196,6 +202,40 @@ function SystemEntry(
 			</p>
 		</div>
 	);
+}
+
+/** A document the Planner created from this one, linking to it. */
+function CreatedDocumentEntry(
+	{ created, enter, text }: {
+		created: NonNullable<Chat.Entry["document"]>;
+		enter: boolean;
+		text: string;
+	},
+) {
+	let [before, after] = splitAround(displayText(text), created.title);
+	return (
+		<div
+			className="flex items-start justify-start gap-3 text-left text-text-tertiary"
+			data-chat-created-document={created.channelId}
+			data-chat-enter={enter || undefined}
+			data-chat-system
+		>
+			<div className="mt-0.5 shrink-0">
+				<DocumentIcon aria-hidden="true" size={16} />
+			</div>
+			<p className="m-0 min-w-0 break-words text-sm [overflow-wrap:anywhere]">
+				{before}
+				<ChatLink className="link" href={created.path}>{created.title}</ChatLink>
+				{after}
+			</p>
+		</div>
+	);
+}
+
+/** The words of a line before and after the first `part`, or the whole line before it. */
+function splitAround(text: string, part: string): [string, string] {
+	let at = text.indexOf(part);
+	return at < 0 ? [`${text} `, ""] : [text.slice(0, at), text.slice(at + part.length)];
 }
 
 /** A comment sent to Chopin: what it was about and what it said, linking back to the thread. */
@@ -1135,6 +1175,14 @@ export let Transcript = memo(function Transcript(
 									enter={enters(key)}
 									onOpenChild={onOpenChild}
 									room={room}
+								/>
+							)
+							: item.document
+							? (
+								<CreatedDocumentEntry
+									created={item.document}
+									enter={enters(key)}
+									text={item.text}
 								/>
 							)
 							: announced.has(readyChild(item.text) ?? "")

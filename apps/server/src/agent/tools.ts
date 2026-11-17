@@ -33,6 +33,8 @@ import { documentIdentity, implementationActive } from "../plan/service";
 import { childTools, Refusal, shielded } from "./child-tools";
 import { experimentTools } from "./experiment-tools";
 import { planImage } from "./plan-images";
+import { NEW_DOCUMENT_SCHEMA, newDocumentArguments } from "./new-documents";
+import type { NewDocumentArguments, NewDocumentResult } from "./new-documents";
 import type { InvestigationTools } from "./experiment-tools";
 
 import type { ActiveOwnerBinding } from "./active-owner";
@@ -184,6 +186,14 @@ export type DocumentRoom = {
 	focusedChild?: () => string | undefined;
 	/** A server readiness review or live Build task draft may propose using its existing owner. */
 	readinessInvestigationRequest?: () => Promise<{ userId: string; entryId: string } | undefined>;
+	/**
+	 * Creates a top-level document for the person whose message drives the current turn; absent,
+	 * or refusing, in a turn nobody typed.
+	 */
+	createDocument?: (
+		args: NewDocumentArguments,
+		signal?: AbortSignal,
+	) => Promise<NewDocumentResult>;
 	/** Starts the exact research request represented by the current member turn. */
 	createResearch?: (question: string) => Promise<ResearchWorkspaceRequest>;
 	/** Reads one reference retained by this room's active Planner session. */
@@ -323,6 +333,32 @@ export const documentTools = {
 					throw new Error("a current member request is required to create a research workspace");
 				}
 				return context.createResearch(question);
+			}),
+	}),
+
+	create_document: tool({
+		contextSchema: roomContext,
+		description: "Create a new top-level document in this repository and base branch, with its "
+			+ "own Chat, Decisions and Planner, listed in the sidebar like any other. When the work "
+			+ "asked for splits into separate pieces, such as several features or one change across "
+			+ "many parts of an app, create one document per piece rather than one document too "
+			+ "large to review, unless the person asked for a single document. Give each a "
+			+ "complete first draft and brief; `instruction`, when given, starts its own Planner on "
+			+ "it as the person's message, so the documents run in parallel. Only a turn a person "
+			+ "asked for can create documents, at most 10 a turn. The result gives each document's "
+			+ "id and url; mention its link when you tell the person.",
+		inputSchema: jsonSchema(NEW_DOCUMENT_SCHEMA),
+		execute: (raw, { context: { room: context }, abortSignal }) =>
+			answer("create_document", async () => {
+				let args = newDocumentArguments(raw);
+				if (!context.createDocument) {
+					return {
+						ok: false,
+						reason: "member-request-required",
+						message: "Only a turn a person asked for in Chat can create documents.",
+					};
+				}
+				return context.createDocument(args, abortSignal);
 			}),
 	}),
 

@@ -98,6 +98,27 @@ describe("transcript groups", () => {
 		expect(result.map(item => item.kind)).toEqual(["messages", "system", "messages"]);
 	});
 
+	it("keeps the document a system line says the Planner created", () => {
+		let created = {
+			channelId: "0f5b2c1e-8d3a-5b6f-9a21-7c4e5d6f7a8b",
+			title: "Settings page",
+			path: "/documents/octo/app/settings-page",
+		};
+		expect(group([
+			{
+				...entry("line", { kind: "system" }, "chopin created Settings page for @ana."),
+				document: created,
+			},
+		])).toEqual([{
+			kind: "system",
+			id: "line",
+			text: "chopin created Settings page for @ana.",
+			ts: 1_700_000_000,
+			decision: undefined,
+			document: created,
+		}]);
+	});
+
 	it("omits routine decision activity without splitting a speaker's messages", () => {
 		let activity: Chat.Entry = {
 			...entry("activity", { kind: "system" }, "chopin updated the passage for Auth"),

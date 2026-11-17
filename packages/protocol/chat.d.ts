@@ -279,6 +279,11 @@ export declare namespace Chat {
 		 * `channelId` the child document holding the thread, absent when it is this one.
 		 */
 		comment?: { thread: string; excerpt: string; note: string; channelId?: string };
+		/**
+		 * A system notice that the Planner created a top-level document; text remains its fallback.
+		 * `path` is the document's address when it was created, which still opens it after a rename.
+		 */
+		document?: { channelId: string; title: string; path: string };
 		/** True while the agent is still writing this one. */
 		streaming?: boolean;
 		tools?: Activity[];

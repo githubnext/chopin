@@ -38,7 +38,9 @@ import type {
 	RecordPlanSourceInput,
 	RenameDocumentInput,
 } from "../mcp";
+import type { CreateDocumentInput } from "./create";
 import type { UpdateClient, UpdateDocumentInput } from "./update";
+import type { Issue } from "@chopin/dialect";
 import type { LifecycleArguments } from "./lifecycle";
 import type { ChannelArchiveResult, ChannelRecord, Lease, StoredChannel } from "../storage/model";
 import type { ClaimResult, Run } from "../tasks/graphs";
@@ -273,6 +275,133 @@ async function locateAny(auth: LocatorAuth, caller: HostedCaller, locator: strin
 		return "forbidden" as const;
 	}
 	return { channel, repository };
+}
+
+/** Who is creating a document, already allowed to write `repository`. */
+export type DocumentCreator = {
+	user: GitHubUser;
+	repository: GitHubRepository;
+	/** Asks again, after the visual assessment, whether the creator may still write the repository. */
+	stillWrites: () => Promise<boolean>;
+	signal?: AbortSignal;
+};
+
+export type CreatedDocument =
+	| {
+		kind: "created" | "replayed";
+		document: PublicDocument & { url: string };
+		channel: ChannelRecord;
+	}
+	| { kind: "conflict" }
+	| { kind: "title-taken" }
+	| { kind: "forbidden" }
+	| { kind: "unavailable" }
+	| { kind: "visuals-required"; issues: Issue[] };
+
+/**
+ * Create a top-level document from a prepared draft, or return the one an earlier call with the
+ * same idempotency key made. The document is stored before anyone is told of it.
+ */
+export async function createDocument(
+	auth: Pick<HostedAuth, "storage" | "clock">,
+	callbacks: Pick<
+		HostedCallbacks,
+		"visualAdmission" | "isChannelDeleting" | "onChannelCreated" | "onDocumentPersisted"
+	>,
+	creator: DocumentCreator,
+	input: CreateDocumentInput,
+): Promise<CreatedDocument> {
+	let { repository, signal, user } = creator;
+	let id = deterministicChannelId(repository.id, input.idempotencyKey);
+	if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
+	let replay = async (stored: StoredChannel): Promise<CreatedDocument> => {
+		if (stored.channel.repositoryId !== repository.id) return { kind: "conflict" };
+		let restored = await Plan.readStored(stored);
+		if (
+			!restored.creation
+			|| restored.creation.origin.idempotencyKey !== input.idempotencyKey
+			|| restored.creation.origin.fingerprint !== input.fingerprint
+		) return { kind: "conflict" };
+		callbacks.onDocumentPersisted?.({
+			channelId: id,
+			revision: restored.revision,
+			source: restored.source,
+			sourceHash: Plan.sourceHash(restored.source),
+		});
+		return {
+			kind: "replayed",
+			channel: stored.channel,
+			document: document({
+				id,
+				title: stored.channel.title,
+				...(stored.channel.description ? { description: stored.channel.description.value } : {}),
+				creation: restored.creation,
+				source: restored.source,
+				revision: restored.revision,
+				archivedAt: stored.channel.archivedAt,
+				url: documentPath(repository.owner, repository.name, stored.channel.slug),
+			}),
+		};
+	};
+	// A durable replay must not rerun model judgments or reject a previously saved import.
+	let stored = await auth.storage.collaboration.load(id, auth.clock());
+	if (stored) return replay(stored);
+	if (callbacks.visualAdmission) {
+		let issues = await callbacks.visualAdmission({ sources: [input.plan], signal });
+		if (issues.length) return { kind: "visuals-required", issues };
+		if (!await creator.stillWrites()) return { kind: "forbidden" };
+		if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
+	}
+	if (signal?.aborted) return { kind: "unavailable" };
+	await auth.storage.users.put({
+		id: user.id,
+		login: user.login,
+		avatarUrl: user.avatarUrl,
+		now: auth.clock(),
+	});
+	let { brief, plan, ...origin } = input;
+	let creation: Plan.CreationMetadata = { brief, origin };
+	let initial = await Plan.initial(plan, creation, input.title);
+	let created: ChannelRecord;
+	try {
+		created = await auth.storage.channels.create({
+			id,
+			repositoryId: repository.id,
+			repositoryOwner: repository.owner,
+			repositoryName: repository.name,
+			title: displayTitle(documentTitleText(parse(initial.source)) ?? input.title),
+			createdBy: user.id,
+			now: auth.clock(),
+			initial,
+		});
+	} catch (err) {
+		if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
+		if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
+		let stored = await auth.storage.collaboration.load(id, auth.clock());
+		// Nothing stored under this key's id: the repository already has a document with this title.
+		if (!stored) return { kind: "title-taken" };
+		return replay(stored);
+	}
+	callbacks.onChannelCreated?.(created);
+	callbacks.onDocumentPersisted?.({
+		channelId: id,
+		revision: 0,
+		source: initial.source,
+		sourceHash: initial.sourceHash,
+	});
+	return {
+		kind: "created",
+		channel: created,
+		document: document({
+			id,
+			title: created.title,
+			...(created.description ? { description: created.description.value } : {}),
+			creation,
+			source: initial.source,
+			revision: 0,
+			url: documentPath(repository.owner, repository.name, created.slug),
+		}),
+	};
 }
 
 const MAX_MCP_SESSION_ID = 128;
@@ -614,103 +743,18 @@ export function hosted(
 				if (!repository || (!repository.permissions.push && !repository.permissions.admin)) {
 					return { kind: "forbidden" };
 				}
-				let id = deterministicChannelId(repository.id, input.idempotencyKey);
-				if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
-				let replay = async (stored: StoredChannel) => {
-					if (stored.channel.repositoryId !== repository.id) return { kind: "conflict" as const };
-					let restored = await Plan.readStored(stored);
-					if (
-						!restored.creation
-						|| restored.creation.origin.idempotencyKey !== input.idempotencyKey
-						|| restored.creation.origin.fingerprint !== input.fingerprint
-					) return { kind: "conflict" as const };
-					callbacks.onDocumentPersisted?.({
-						channelId: id,
-						revision: restored.revision,
-						source: restored.source,
-						sourceHash: Plan.sourceHash(restored.source),
-					});
-					return {
-						kind: "replayed" as const,
-						document: document({
-							id,
-							title: stored.channel.title,
-							...(stored.channel.description
-								? { description: stored.channel.description.value }
-								: {}),
-							creation: restored.creation,
-							source: restored.source,
-							revision: restored.revision,
-							archivedAt: stored.channel.archivedAt,
-							url: documentPath(repository.owner, repository.name, stored.channel.slug),
-						}),
-					};
-				};
-				// A durable replay must not rerun model judgments or reject a previously saved import.
-				let stored = await auth.storage.collaboration.load(id, auth.clock());
-				if (stored) return replay(stored);
-				if (callbacks.visualAdmission) {
-					let issues = await callbacks.visualAdmission({
-						sources: [input.plan],
-						signal: caller.signal,
-					});
-					if (issues.length) return { kind: "visuals-required", issues };
-					let current = await directRepository(caller, parts[0], parts[1]);
-					if (
-						!current || current.id !== repository.id
-						|| (!current.permissions.push && !current.permissions.admin)
-					) return { kind: "forbidden" };
-					if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
-				}
-				if (caller.signal?.aborted) return { kind: "unavailable" };
-				await auth.storage.users.put({
-					id: caller.user.id,
-					login: caller.user.login,
-					avatarUrl: caller.user.avatarUrl,
-					now: auth.clock(),
-				});
-				let { brief, plan, ...origin } = input;
-				let creation: Plan.CreationMetadata = { brief, origin };
-				let initial = await Plan.initial(plan, creation, input.title);
-				let created: ChannelRecord;
-				try {
-					created = await auth.storage.channels.create({
-						id,
-						repositoryId: repository.id,
-						repositoryOwner: repository.owner,
-						repositoryName: repository.name,
-						title: displayTitle(documentTitleText(parse(initial.source)) ?? input.title),
-						createdBy: caller.user.id,
-						now: auth.clock(),
-						initial,
-					});
-				} catch (err) {
-					if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;
-					if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
-					let stored = await auth.storage.collaboration.load(id, auth.clock());
-					// Nothing stored under this key's id: the repository already has a document with this title.
-					if (!stored) return { kind: "title-taken" };
-					return replay(stored);
-				}
-				callbacks.onChannelCreated?.(created);
-				callbacks.onDocumentPersisted?.({
-					channelId: id,
-					revision: 0,
-					source: initial.source,
-					sourceHash: initial.sourceHash,
-				});
-				return {
-					kind: "created",
-					document: document({
-						id,
-						title: created.title,
-						...(created.description ? { description: created.description.value } : {}),
-						creation,
-						source: initial.source,
-						revision: 0,
-						url: documentPath(repository.owner, repository.name, created.slug),
-					}),
-				};
+				let outcome = await createDocument(auth, callbacks, {
+					user: caller.user,
+					repository,
+					stillWrites: async () => {
+						let current = await directRepository(caller, parts[0]!, parts[1]!);
+						return !!current && current.id === repository.id
+							&& (current.permissions.push || current.permissions.admin);
+					},
+					...(caller.signal ? { signal: caller.signal } : {}),
+				}, input);
+				if (outcome.kind !== "created" && outcome.kind !== "replayed") return outcome;
+				return { kind: outcome.kind, document: outcome.document };
 			},
 		},
 		update: {

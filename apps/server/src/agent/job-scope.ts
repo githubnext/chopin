@@ -23,6 +23,7 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set([
 	"reply_comment",
 	"edit_implementation_graph",
 	"create_research_workspace",
+	"create_document",
 	"propose_investigation",
 	"set_investigation_build_blocker",
 	"revise_open_decision",

@@ -315,6 +315,9 @@ Chopin's tools available to the Planner under every harness are:
   [pages like `read_plan`](#reading-a-large-document). They are
   never offered to background jobs, and unexpected storage errors reach the
   model only as a generic message;
+- `create_document`, which makes new top-level documents for the person whose
+  message drives the turn (see [Creating documents](#creating-documents)); it is
+  never offered to background jobs;
 - bounded file and tree reads plus commit history using the session's default
   branch, or an explicitly supplied full commit ID when inspecting investigation evidence;
 - repository-scoped code search, post-filtered by repository node ID; and
@@ -1350,6 +1353,50 @@ attempt. `AGENT=off` prevents those turns and disables the background-job
 runner. For the `copilot-sdk` adapter this also avoids starting Copilot CLI.
 `AGENT=off` does not disable `/mcp`, and the prototype UI may still contain
 Planner-oriented explanatory copy.
+
+## Creating documents
+
+When a request splits into separate pieces of work (several features, or one
+change across the whole app), the Planner can open one new document per piece
+with `create_document` instead of writing one document too large to review. Its
+instructions prefer separate documents unless the person asks for one.
+
+The tool takes an `idempotencyKey`, a `title`, a `brief` (MCP's
+`create_document` brief), the whole first `document` in the dialect, and an
+optional `instruction`. It is a host tool, so it is offered under every harness
+(`copilot-sdk`, `atomic` and `remote`), and it is among the Planner's tools the
+Copilot SDK adapter checks a session against. `apps/server/src/agent/new-documents.ts`
+holds its rules:
+
+- **Who creates it.** Only a turn a person's Chat message (or an `invoke_planner`
+  message) drives may create documents; a turn nobody typed, a comment turn and a
+  background job are refused. That person is the creator. Their own live browser
+  login is asked again for push or administration access to the repository, as
+  `chat:send` is, both before and after the visual assessment; the Planner owner's
+  credential never authorizes a new document. A person with no live login is
+  refused.
+- **What it makes.** A top-level document in the creating document's repository,
+  with its own Chat, Decisions and Planner session, sharing no transcript with the
+  creating one. Its recorded base is the creating document's own (from its MCP
+  creation), or else the repository's default branch at its current commit. The
+  draft goes through MCP's `prepare` and the same visual assessment
+  (`createDocument` in `apps/server/src/mcp/hosted.ts` serves both). It is given
+  the creating document's model and thinking level.
+- **Bounds.** At most 10 documents a turn and 30 an hour for one person, counted
+  in the process. The idempotency key is scoped to the creating document, so a
+  retried call returns the document the first made and creates, announces and
+  starts nothing again; the same key with a different draft is a conflict.
+- **Order.** The document is stored first. Then the sidebar hears of it through
+  `/ws/sidebar`, the creating document's Chat gets one system line naming it with
+  a link (`Chat.Entry.document`), saved before it is shown, and, if an
+  `instruction` was given, it is posted in the new document's Chat as the
+  creator's message, exactly as `invoke_planner` posts one, starting that
+  document's Planner under the same machine rules as any other document. A
+  refused instruction (no machine attached, for one) leaves the document in place
+  and is reported to the model.
+
+The result gives each new document's `id` and absolute `url`, so the model, or a
+workflow it started, can follow up on it.
 
 ## Background jobs
 
