@@ -59,7 +59,7 @@ import {
 	remember,
 } from "./address";
 import { createNotices } from "./notices";
-import { CANNOT_STEER, type Steering, steering } from "./steering";
+import { CANNOT_STEER, CANNOT_STEER_STARTING_TURN, type Steering, steering } from "./steering";
 import { ChatCommandError, ChatMentionError, ChatReferenceError } from "./references";
 import { createJobQueue, finishJob, jobReason, type JobTurn, safeProjection } from "./job-queue";
 import { translateJob } from "./job-translate";
@@ -978,10 +978,11 @@ async function rebindRetained(context: Room, retained: Retained): Promise<boolea
 /**
  * Take a message.
  *
- * A room message appears immediately. A message to the Planner is never held: it starts a turn
- * when none is running, is posted and given to the turn that is running when its harness can take
- * input mid-run, and is refused, saying why, when it cannot. The destination, rather than its
- * prose, decides which lifecycle it takes. A person alone in the conversation is talking to the
+ * A room message appears immediately. A message to the Planner is never held behind a working
+ * turn: it starts a turn when none is running, is posted and given to the turn that is running
+ * when its harness can take input mid-run, starts the next turn when the one holding the Chat is
+ * a job or is being stopped or finishing, and is refused, saying why, when it cannot. The
+ * destination, rather than its prose, decides which lifecycle it takes. A person alone in the conversation is talking to the
  * Planner, so their message to the room goes to it, as if it named it, with no wait for silence
  * and no judgment; once a second person is there, it goes to the room again.
  */
@@ -1067,7 +1068,10 @@ function preempt(context: Room, turn: Parameters<typeof run>): void {
 	let { chat } = context;
 	if (chat.closed) return;
 	// The job ended while the message was saved: nothing is in the way.
-	if (!chat.busy && !chat.starting) return startRun(...turn);
+	if (!chat.busy && !chat.starting) {
+		if (startsHeld) return void notRead(context, turn[1]);
+		return startRun(...turn);
+	}
 	chat.preempting = turn;
 	let job = chat.backgroundTurn;
 	let controller = chat.turnController;
@@ -1160,9 +1164,14 @@ async function give(context: Room, message: Given): Promise<void> {
 		);
 		return;
 	}
+	await notRead(context, message.handle);
+}
+
+async function notRead(context: Room, handle: string): Promise<void> {
+	if (context.chat.closed) return;
 	await postNotice(
 		context,
-		`${PLANNER_NAME} did not read @${message.handle}'s message. Send it again to ask.`,
+		`${PLANNER_NAME} did not read @${handle}'s message. Send it again to ask.`,
 		undefined,
 		ulid(),
 	).catch(err => console.error("[chat] could not say that a message was not read:", err));
@@ -1611,13 +1620,20 @@ async function processSend(
 		// A person's turn waits to start behind the one holding the Chat: the message is given to it
 		// once it can take one.
 		let following = !canSteer(context) && !!chat.preempting && !!context.steers?.();
-		if (!canSteer(context) && !following) {
+		if (!canSteer(context)) {
 			// A stopping process starts no turn, and says nothing: the browser sends the message again
 			// to the next one.
 			if (startsHeld || chat.closed) return refuseClosed(ws, msg.rid);
-			// A harness that takes no input mid-run never will.
-			refusedWhileRunning(context);
-			return fail(ws, msg.rid, CANNOT_STEER, "planner-busy");
+			if (!following) {
+				// A harness that takes no input mid-run never will.
+				refusedWhileRunning(context);
+				return fail(
+					ws,
+					msg.rid,
+					chat.preempting ? CANNOT_STEER_STARTING_TURN : CANNOT_STEER,
+					"planner-busy",
+				);
+			}
 		}
 		let bindFailure = await bindAttachments?.();
 		if (bindFailure) return fail(ws, msg.rid, bindFailure.refusal, bindFailure.code);
@@ -3804,6 +3820,10 @@ async function startNext(
 	// A person's turn that preempted a job goes first.
 	let preempting = chat.preempting;
 	chat.preempting = undefined;
+	if (preempting && startsHeld) {
+		let unread = [preempting[1], ...(chat.following?.splice(0) ?? []).map(given => given.handle)];
+		for (let handle of unread) await notRead(context, handle);
+	}
 	if (preempting && !startsHeld) {
 		chat.starting = false;
 		if (ended) await run(...preempting);

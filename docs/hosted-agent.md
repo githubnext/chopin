@@ -1253,11 +1253,16 @@ being handed the Chat, has no session to be given to just now. It is saved and a
 once, and starts the next turn as that one winds down, ahead of anything waiting, as a message
 that preempts a job does. A message sent while such a person's turn waits to start is saved and
 acknowledged at once too, and given to that turn once it can take one; a harness that takes no
-input mid-run refuses it with `planner-busy`. None of these is answered as a passing trouble, so
-no message waits in its browser's outbox behind another. If a turn ends between a message being posted and
-the turn reading it, an idle Chat starts a turn for the message; otherwise Chat says that Chopin
-did not read it, and it is not sent again on its own. A process that is stopping starts no turn and
-says nothing, so the browser sends the message again to the next process. Sends are admitted one
+input mid-run refuses it with `planner-busy` and words that ask for no Stop, since nothing is running
+for Stop to end: "chopin is about to answer another message and can't take more while it works on
+this machine. Send yours again once it has answered." None of these is answered as a passing
+trouble, so no message waits in its browser's outbox behind another. If a turn ends between a
+message being posted and the turn reading it, an idle Chat starts a turn for the message; otherwise
+Chat says that Chopin did not read it, and it is not sent again on its own. A process that is
+stopping starts no turn and says nothing, so the browser sends the message again to the next
+process. A message it had already kept for a turn that has not started yet is not lost silently:
+the stopping process says in Chat that Chopin did not read it ("chopin did not read @bo's message.
+Send it again to ask."), before it hands over. Sends are admitted one
 at a time, and at most 20 are processed at once (past that a send is answered
 `temporarily-unavailable`).
 

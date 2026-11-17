@@ -167,7 +167,8 @@ durable.
   connection's own words and nothing is kept for later. A client that offers the
   optional `steer-turn` feature is given a message sent while its turn runs as a
   `steer` frame (`docs/agent-connection.md`); one that does not is refused such a
-  message. Signing out the owner's login, its expiry, or a Planner reset closes the link. A lost
+  message, except one sent once the turn is being stopped or finishing, which starts
+  its next turn. Signing out the owner's login, its expiry, or a Planner reset closes the link. A lost
   connection never ends work by itself: a link that offered
   `resumable-sessions` and then dropped unexpectedly keeps its sessions that hold
   a live run or an open question, however long it stays away, and holds any Stop
@@ -365,8 +366,12 @@ own turns is being handed the Chat, has no session to be given to; it is acknowl
 and starts the next turn as that one winds down (`windingDown` in `chat/service.ts`), ahead of
 anything waiting. One sent while such a person's turn waits to start is acknowledged at once and
 given to that turn once it can take one (`chat.following`); a harness that takes no input
-mid-run refuses it with `planner-busy`. None is answered as a passing trouble, so no message
-waits in its browser's outbox behind another. If the
+mid-run refuses it with `planner-busy` and words that ask for no Stop ("chopin is about to answer
+another message and can't take more while it works on this machine. Send yours again once it has
+answered."). None is answered as a passing trouble, so no message waits in its browser's outbox
+behind another. A stopping process (`holdStarts`) keeps no such message: it refuses one in silence
+for the browser to send to the next process, and says in Chat that Chopin did not read any it had
+already kept for a turn it will not start. If the
 turn ends before it can read the message, an idle Chat starts a turn for it and any other
 says plainly that Chopin did not read it. A comment note, an `invoke_planner as system` call
 and a task draft need a turn of their own, so a running turn refuses them before anything is

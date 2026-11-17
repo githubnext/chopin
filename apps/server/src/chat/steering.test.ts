@@ -24,6 +24,8 @@ function speaking(handle: string, frames: Frame[] = []): Socket {
 }
 
 const CANNOT = "chopin can't take messages while it works on this machine. Stop it to ask now.";
+const CANNOT_YET =
+	"chopin is about to answer another message and can't take more while it works on this machine. Send yours again once it has answered.";
 
 test("a message sent while a turn runs is posted at once and given to that turn, not held", async () => {
 	let h = harness();
@@ -288,7 +290,7 @@ test("a message sent while a stopped turn winds down is kept at once and starts 
 		.toBe(false);
 });
 
-test("a harness that takes no input mid-run starts the next turn for a message sent while a stopped turn winds down, and refuses the one after it for good", async () => {
+test("a harness that takes no input mid-run starts the next turn for a message sent while a stopped turn winds down, and refuses the one after it for good, without asking for a Stop that would do nothing", async () => {
 	let h = harness();
 	h.context.steers = undefined;
 	h.context.config.harness = "copilot-sdk";
@@ -301,7 +303,7 @@ test("a harness that takes no input mid-run starts the next turn for a message s
 	await Chat.send(h.context, speaking("cy", frames), member("@chopin and name an owner"));
 	expect(frames).toEqual([
 		expect.objectContaining({ kind: "chat:send", id: first.requestId }),
-		expect.objectContaining({ kind: "session:error", message: CANNOT, code: "planner-busy" }),
+		expect.objectContaining({ kind: "session:error", message: CANNOT_YET, code: "planner-busy" }),
 	]);
 	warned.mockRestore();
 	expect(h.chat.entries.map(entry => entry.text)).not.toContain("and name an owner");
@@ -312,6 +314,35 @@ test("a harness that takes no input mid-run starts the next turn for a message s
 	h.emit("session.idle");
 	await until(() => !h.chat.busy);
 	expect(h.steered).toEqual([]);
+});
+
+test("a message kept while a stopped turn winds down, and one given after it, are said to be unread when the process stops before their turn starts, and a send after that is not kept", async () => {
+	let h = harness();
+	let stopped = await stoppedTurn(h);
+	await Chat.send(h.context, speaking("bo"), member("@chopin keep it short"));
+	await Chat.send(h.context, speaking("cy"), member("@chopin and name an owner"));
+
+	let frames: Frame[] = [];
+	Chat.holdStarts();
+	try {
+		await Chat.send(h.context, speaking("di", frames), member("@chopin during shutdown"));
+		expect(frames).toEqual([]);
+		stopped.release();
+		await until(() => !h.chat.busy && !h.chat.preempting);
+		await Chat.settled(h.chat);
+	} finally {
+		Chat.holdStarts(false);
+	}
+	expect(h.prompts).toHaveLength(1);
+	expect(h.steered).toEqual([]);
+	expect(h.chat.entries.map(entry => entry.text)).not.toContain("during shutdown");
+	expect(
+		h.chat.entries.filter(entry => entry.author.kind === "system").map(entry => entry.text),
+	).toEqual(expect.arrayContaining([
+		"chopin did not read @bo's message. Send it again to ask.",
+		"chopin did not read @cy's message. Send it again to ask.",
+	]));
+	expect(h.chat.following ?? []).toEqual([]);
 });
 
 test("a message sent while one of Chopin's own turns is being handed the Chat starts the person's turn first, and the other runs after it", async () => {
