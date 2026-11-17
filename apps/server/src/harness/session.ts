@@ -2,6 +2,7 @@ import {
 	BACKGROUND_TOOL_NAMES,
 	PLANNER_TOOL_NAMES,
 	REACTION_TOOL_NAMES,
+	THREAD_NOTE_TOOL_NAME,
 	VISUAL_PLANNER_TOOL_NAMES,
 } from "./tool-names";
 import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
@@ -12,6 +13,8 @@ import {
 	prosePlannerAgent,
 	reactionPlannerAgent,
 	refinePlannerAgent,
+	threadPlannerAgent,
+	threadVisualPlannerAgent,
 	visualPlannerAgent,
 } from "./agents";
 import { githubTools, type GitHubToolsError, lazyGithubTools, type Result } from "./github-tools";
@@ -29,6 +32,7 @@ import { type PlannerWorkspace, plannerWorkspace } from "./atomic/workspace";
 import { registerRemotePlanner, type RemotePlanner } from "./remote/registry";
 import { promptWithAttachments } from "../chat/attachment-prompt";
 import type { SentAttachment } from "../chat/attachment-prompt";
+import type { TellChat } from "../chat/thread-notes";
 import { startingTurn } from "./turn-level";
 
 import type { HarnessAgent } from "@ai-sdk/harness/agent";
@@ -83,6 +87,11 @@ export type PlannerChannel = {
 	>;
 	/** Session-tree and remote fork hooks for Chat threads. */
 	fork?: PlannerForkHooks;
+	/**
+	 * A thread's full Atomic Planner only: sends the Chat Planner of the same document a note of
+	 * what was decided in the thread, offered to its turns as `tell_chat_planner`.
+	 */
+	tellChat?: TellChat;
 	/** An answer to a reader's reaction: no tools, isolated on every harness. */
 	reader?: true;
 };
@@ -203,6 +212,9 @@ export type PlannerSessionDependencies = {
 	followupAgent?: PlannerAgent;
 	reactionAgent?: PlannerAgent;
 	visualAgent?: PlannerAgent;
+	/** A thread's full Atomic Planner, which is offered `tell_chat_planner`. */
+	threadAgent?: PlannerAgent;
+	threadVisualAgent?: PlannerAgent;
 	githubTools?: typeof githubTools;
 	createSandbox?: () => Promise<Sandbox>;
 	registerCredential?: typeof registerCredential;
@@ -287,6 +299,7 @@ export async function openPlannerSession(
 				...(channel.fork?.onAtomicEntries
 					? { onSessionEntries: channel.fork.onAtomicEntries }
 					: {}),
+				...(channel.tellChat ? { thread: true } : {}),
 			};
 			unregisterFull = registerFullPlanner(sessionId, planner);
 		}
@@ -327,6 +340,7 @@ export async function openPlannerSession(
 			remote = held;
 			unregisterRemote = registerRemotePlanner(sessionId, held);
 		}
+		let noting = !!channel.tellChat && !!planner;
 		let agent = deps.agent ?? (job?.kind === "heading"
 			? deps.headingAgent ?? headingPlannerAgent
 			: job?.kind === "refine" || job?.kind === "suggest"
@@ -337,6 +351,10 @@ export async function openPlannerSession(
 			? deps.followupAgent ?? decisionFollowupPlannerAgent
 			: channel.reader
 			? deps.reactionAgent ?? reactionPlannerAgent
+			: noting && channel.room.visual
+			? deps.threadVisualAgent ?? threadVisualPlannerAgent
+			: noting
+			? deps.threadAgent ?? threadPlannerAgent
 			: channel.room.visual
 			? deps.visualAgent ?? visualPlannerAgent
 			: plannerAgent);
@@ -395,6 +413,7 @@ export async function openPlannerSession(
 				: channel.room.visual
 				? VISUAL_PLANNER_TOOL_NAMES
 				: PLANNER_TOOL_NAMES),
+			...(noting ? [THREAD_NOTE_TOOL_NAME] : []),
 		]);
 		return {
 			ok: true,

@@ -105,6 +105,7 @@ async function run(
 		during,
 		events,
 		reports,
+		thread = false,
 	}: {
 		host?: HostInput;
 		/** False runs the Planner in an empty directory, as a channel without a checkout does. */
@@ -127,6 +128,8 @@ async function run(
 		events?: string[];
 		/** Collects every runs report the Planner session makes. */
 		reports?: PlannerRuns[];
+		/** Registers the Planner as a Chat thread's. */
+		thread?: boolean;
 	} = {},
 ) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-atomic-full-"));
@@ -316,6 +319,7 @@ export default workflow({
 			humanInput,
 			toolReport: events && ((_id, _output, state) => events.push(`report:${state}`)),
 			onRuns: reports && (runs => reports.push(structuredClone(runs))),
+			...(thread ? { thread } : {}),
 		};
 		if (registered) release = registerFullPlanner(sessionId, planner);
 		let agent = new HarnessAgent({
@@ -433,6 +437,14 @@ test("registered Planner sessions load operator resources and offer only read-on
 		]
 	) expect(request.system).toContain(marker);
 	expect(request.system).not.toBe(ATOMIC_DEFAULT_SYSTEM_PROMPT);
+});
+
+test("a Chat thread's Planner is offered every Planner tool but Atomic's intercom", async () => {
+	let result = await run(true, "plain", { thread: true });
+	let names = result.requests[0]!.toolNames;
+	expect(names).not.toContain("intercom");
+	for (let name of PLANNER_TOOLS.filter(name => name !== "intercom")) expect(names).toContain(name);
+	expect(result.offered).not.toContain("intercom");
 });
 
 test("a full Planner streams an Atomic builtin live and reports its tools as the turn's active set", async () => {

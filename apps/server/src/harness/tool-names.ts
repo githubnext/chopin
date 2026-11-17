@@ -34,6 +34,9 @@ export const PLANNER_TOOL_NAMES = [
 	"revise_open_decision",
 ];
 
+/** A thread's full Atomic Planner tells the Chat Planner of its own document what was decided. */
+export const THREAD_NOTE_TOOL_NAME = "tell_chat_planner";
+
 export const VISUAL_PLANNER_TOOL_NAMES = Object.freeze([
 	...PLANNER_TOOL_NAMES,
 	"assess_visual",

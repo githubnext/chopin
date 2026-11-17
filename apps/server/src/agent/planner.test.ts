@@ -105,6 +105,19 @@ test("a Planner with workflows says a Build's tasks show under Build, not as car
 	}
 });
 
+test("a thread's Atomic Planner is told to note decisions for the Chat, and of no other session", () => {
+	let workspace = { cwd: "/tmp/chopin-test", checkout: false };
+	let chat = plannerInstructions("octo-org/score", undefined, workspace).replace(/\s+/g, " ");
+	let thread = plannerInstructions("octo-org/score", undefined, workspace, false, true)
+		.replace(/\s+/g, " ");
+	expect(chat).toContain("your `intercom` tool can reach other sessions");
+	expect(chat).not.toContain("tell_chat_planner");
+	expect(thread).not.toContain("intercom");
+	expect(thread).toContain("with your `workflow` tool when someone asks");
+	expect(thread).toContain("You answer in a thread of this document's Chat");
+	expect(thread).toContain("Use `tell_chat_planner` as its description says");
+});
+
 test("ordinary guidance supplies an executable numerical chart example", () => {
 	let examples = [...DIAGRAM_AUTHORING.matchAll(/```seecode\n([^`]+)\n```/g)]
 		.map(match => JSON.parse(match[1]!));

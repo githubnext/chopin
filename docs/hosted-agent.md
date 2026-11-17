@@ -468,7 +468,7 @@ directory with no repository files, in which case it reads the repository throug
 Chopin's repository tools.
 
 The Planner still does not implement the plan. When a member asks to implement it
-now, its instructions note that its `intercom` tool can reach other sessions on
+now, outside a Chat thread, its instructions note that its `intercom` tool can reach other sessions on
 the same machine, such as one working in a checkout of the document's
 repository, and that it can pass the request to one of them and tell the member
 where the work continues. Chopin does not track or verify that handoff.
@@ -479,6 +479,36 @@ a reply that arrives after the turn ends stays in the session unread until the
 next turn. The instructions therefore tell the Planner to ask with a foreground
 `wait` of up to ten minutes when it needs the answer for a member, such as when
 it checks on a workflow run.
+
+### What a thread decided reaches the Chat
+
+A Chat thread's Planner session is a fork of the Chat's session at the thread's
+root, and nothing said in the thread reaches the Chat's Planner by itself. Under
+`HARNESS=atomic` a thread's Planner turns are offered one more host tool,
+`tell_chat_planner`, its Intercom to the Planner of the same document's Chat. It
+sends a short note: what was decided, by whom, and the thread it was decided in.
+The tool takes no target. The server fixes it from the thread's own document, so
+a Planner can reach only its own document's Chat Planner and never another
+document's. The route is Chopin's, not Atomic's broker: Atomic's Intercom
+delivers to a live session and starts a turn in an idle one, while a Chat Planner
+session lives only for its turn. A thread's Planner is not offered Atomic's
+`intercom`, whose target the model chooses, and its turns refuse that tool even
+from a codemode script, so `tell_chat_planner` is its only route to another
+session; its instructions leave out the implementation handoff described above.
+
+The thread's Planner sends one note for each Decision card a person answered in
+the thread, naming the card, and the server refuses a second note for the same
+card. It may also note a choice a person settled in words that it acts on, and
+sends nothing when nothing was decided. The server checks that each person named
+took part in the thread or answered the card, keeps at most 20 unread notes per
+document, and saves the note with the Chat's session state before the tool says
+it was sent. The note starts no turn and is not posted in Chat. The Chat
+Planner's next turn is given every unread note ahead of its prompt, with the
+thread's words quoted as data rather than instructions, and a Retry of that turn
+is given them again. `copilot-sdk` and `remote` Planners are not offered the
+tool. The `[agent] N tools:` line logged as an Atomic session opens lists it for
+a thread's Planner, and the line after it says the session withholds `intercom`
+and names `tell_chat_planner` as its route out.
 
 Chopin implements Atomic's `HostInput`, bound through
 `extensionBindings.humanInput`; it does not intercept tools. `ask_user_question`,

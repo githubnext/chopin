@@ -11,6 +11,7 @@ import {
 	reactionPlannerAgent,
 } from "./agents";
 import { openPlannerSession } from "./session";
+import { THREAD_NOTE_TOOL_NAME } from "./tool-names";
 
 import type { HarnessV1 } from "@ai-sdk/harness";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
@@ -466,4 +467,103 @@ it("a reader's session offers the harness no tool even when the owner's GitHub t
 	} finally {
 		await opened.value.destroy();
 	}
+});
+
+it("only a thread's agent offers tell_chat_planner, which sends through the thread's own route", async () => {
+	let offered: string[][] = [];
+	let results: unknown[] = [];
+	let fake: HarnessV1 = {
+		specificationVersion: "harness-v1",
+		harnessId: "thread-fake",
+		builtinTools: {},
+		async doStart(start) {
+			return {
+				sessionId: start.sessionId,
+				isResume: false,
+				async doPromptTurn(turn) {
+					let names = turn.tools.map(spec => spec.name);
+					offered.push(names);
+					let done = Promise.withResolvers<void>();
+					let finish = () => {
+						turn.emit({
+							type: "finish-step",
+							finishReason: { unified: "stop", raw: undefined },
+							usage: {
+								inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
+								outputTokens: { total: 0, text: 0, reasoning: 0 },
+							},
+						});
+						done.resolve();
+					};
+					queueMicrotask(() => {
+						if (!names.includes(THREAD_NOTE_TOOL_NAME)) return finish();
+						turn.emit({
+							type: "tool-call",
+							toolCallId: "note-1",
+							toolName: THREAD_NOTE_TOOL_NAME,
+							input: JSON.stringify({ decision: "Keep PostgreSQL.", question: "q-db" }),
+						});
+					});
+					return {
+						done: done.promise,
+						async submitToolResult(value) {
+							results.push(value);
+							finish();
+						},
+						async submitToolApproval() {},
+					};
+				},
+				async doDestroy() {},
+				async doCompact() {},
+				async doContinueTurn() {
+					throw new Error("unused");
+				},
+				async doSuspendTurn() {
+					throw new Error("unused");
+				},
+				async doDetach() {
+					throw new Error("unused");
+				},
+				async doStop() {
+					throw new Error("unused");
+				},
+			};
+		},
+	};
+	let sent: unknown[] = [];
+	let run = async (agent: ReturnType<typeof createPlannerAgent>) => {
+		let session = await agent.createSession({
+			sandboxSession: {
+				defaultWorkingDirectory: "/tmp",
+				run: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
+				destroy: async () => {},
+			} as never,
+		});
+		try {
+			let result = await agent.stream({
+				session,
+				prompt: "we decided",
+				options: {
+					room: { id: "channel", plan: {}, server: {} } as never,
+					repository: { id: "R", owner: "o", name: "r", defaultBranch: "main" },
+					owner: {} as never,
+					githubTools: {},
+					instructions: "Thread",
+					tellChat: async request => {
+						sent.push(request);
+						return "Sent.";
+					},
+				},
+			});
+			for await (let _part of result.fullStream);
+		} finally {
+			await session.destroy();
+		}
+	};
+	await run(createPlannerAgent(fake));
+	await run(createPlannerAgent(fake, undefined, false, true));
+	expect(offered[0]).toEqual(PLANNER_TOOL_NAMES);
+	expect(offered[1]).toEqual([...PLANNER_TOOL_NAMES, THREAD_NOTE_TOOL_NAME]);
+	expect(sent).toEqual([{ decision: "Keep PostgreSQL.", question: "q-db" }]);
+	expect(results).toMatchObject([{ toolCallId: "note-1", output: "Sent." }]);
 });
