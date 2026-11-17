@@ -124,9 +124,10 @@ export type PlannerSession = {
 	/**
 	 * Runs one turn. `choice` is what a person chose for the document, already checked against the
 	 * harness's catalog: the model replaces the channel's, and the thinking level goes to the
-	 * harness that offers one. Every turn passes it, a background job's included. `context` is added
-	 * to the session's instructions for this turn alone, for what cannot go before a prompt that
-	 * opens with a command.
+	 * harness that offers one. Every turn passes it, a background job's included. `context` is what
+	 * cannot go before a prompt that opens with a command: an Atomic session records it in the
+	 * session before the command so later turns keep it, and any other harness adds it to the turn's
+	 * instructions.
 	 */
 	stream: (
 		prompt: string,
@@ -451,23 +452,30 @@ export async function openPlannerSession(
 						remote.hostTools = hostTools;
 						remote.turnMessage = message;
 					}
-					// The level is on this turn alone, as the model is: nothing is left for the next one.
-					return startingTurn(choice?.thinkingLevel, () =>
-						agent.stream({
-							session: active,
-							prompt: files?.attachments.length
-								? [promptWithAttachments(prompt, files.attachments, files.readsImages)]
-								: prompt,
-							abortSignal,
-							options: {
-								...callOptions,
-								...(choice?.model ? { model: choice.model } : {}),
-								instructions: context ? `${instructions}\n\n${context}` : instructions,
-								owner: current,
-								githubTools: tools,
-								...(hostTools ? { toolSignal: hostTools.signal } : {}),
-							},
-						}));
+					// The level is on this turn alone, as the model is; an Atomic session records `context`
+					// in the session before a command prompt so later turns still have it.
+					return startingTurn(
+						choice?.thinkingLevel,
+						() =>
+							agent.stream({
+								session: active,
+								prompt: files?.attachments.length
+									? [promptWithAttachments(prompt, files.attachments, files.readsImages)]
+									: prompt,
+								abortSignal,
+								options: {
+									...callOptions,
+									...(choice?.model ? { model: choice.model } : {}),
+									instructions: context && !planner
+										? `${instructions}\n\n${context}`
+										: instructions,
+									owner: current,
+									githubTools: tools,
+									...(hostTools ? { toolSignal: hostTools.signal } : {}),
+								},
+							}),
+						planner ? context : undefined,
+					);
 				},
 				...(job ? {} : { steer: (text: string) => active.experimental_steerTurn(text) }),
 				destroy: () =>
