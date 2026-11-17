@@ -156,6 +156,16 @@ export function chatThreadContract(name: string, factory: StorageFactory) {
 					entryForks: {
 						"root-1": { atomicLeafId: "leaf-1", remote: { session: "rs-1", turn: "rt-1" } },
 					},
+					threadNotes: [{
+						id: "note-1",
+						rootId: "root-1",
+						root: { author: "@ana", excerpt: "Hello" },
+						decision: "Use one index per document.",
+						decidedBy: ["ana"],
+						question: "q-1",
+						ts: 160,
+					}],
+					notedQuestions: ["q-1"],
 					updatedAt: AT,
 				};
 				await storage.chatThreads.putSessionState(lease, sessionState);

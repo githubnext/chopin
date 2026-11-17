@@ -28,6 +28,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fullPlanner, settleEndedRuns, workflowRuns } from "./full";
 import { atomicThinkingLevels } from "../catalog";
+import { THREAD_NOTE_TOOL_NAME } from "../tool-names";
 
 import type {
 	HarnessV1,
@@ -85,6 +86,9 @@ export const FULL_PLANNER_TOOLS: ReadonlySet<string> = new Set([
 	"intercom",
 	"codemode",
 ]);
+
+/** What a Chat thread's Planner is never offered: its only route to another session is the server's. */
+export const THREAD_WITHHELD_TOOLS: ReadonlySet<string> = new Set(["intercom"]);
 
 /** Atomic tools that change files, run commands or start agents, which no setting gives a Planner's own turns. */
 const WRITING_TOOLS: ReadonlySet<string> = new Set([
@@ -274,6 +278,8 @@ export type TurnPolicy = {
 	systemPrompt: string;
 	result?: { value: unknown };
 	full?: boolean;
+	/** Tools refused in this session however they are reached, a codemode script included. */
+	withheld?: ReadonlySet<string>;
 };
 
 /**
@@ -321,6 +327,9 @@ export function atomicTurnExtension(policy: TurnPolicy): ExtensionFactory {
 			if (stage) {
 				if (event.toolName !== ATOMIC_RESULT_TOOL_NAME) return;
 				return { block: true, reason: `${event.toolName} is not available in a workflow stage.` };
+			}
+			if (policy.withheld?.has(event.toolName)) {
+				return { block: true, reason: `${event.toolName} is not available in a Chat thread.` };
 			}
 			if (policy.full && event.toolName !== ATOMIC_RESULT_TOOL_NAME) return;
 			if (activeNames(policy).includes(event.toolName)) return;
@@ -720,6 +729,7 @@ export function createAtomicAdapter(
 			let settingsManager = SettingsManager.inMemory(SETTINGS);
 			let policy: TurnPolicy = {
 				full: !!full,
+				...(full?.thread ? { withheld: THREAD_WITHHELD_TOOLS } : {}),
 				hostNames: [],
 				structured: false,
 				systemPrompt: ATOMIC_DEFAULT_SYSTEM_PROMPT,
@@ -978,6 +988,11 @@ export function createAtomicAdapter(
 					}
 					let registered = session.getAllTools().map(tool => tool.name);
 					console.log(`[agent] ${registered.length} tools: ${registered.sort().join(", ")}`);
+					if (policy.withheld) {
+						let route = hostNames.includes(THREAD_NOTE_TOOL_NAME) ? THREAD_NOTE_TOOL_NAME : "none";
+						let withheld = [...policy.withheld].join(", ");
+						console.log(`[agent] Chat thread Planner withholds ${withheld}; route out: ${route}`);
+					}
 					live = {
 						session,
 						signature,
@@ -1053,8 +1068,9 @@ export function createAtomicAdapter(
 					let structured = turn.responseFormat?.type === "json";
 					let names = full
 						? agent.getAllTools().map(tool => tool.name).filter(name =>
-							FULL_PLANNER_TOOLS.has(name) || plannerTools.has(name)
-							|| policy.hostNames.includes(name)
+							!policy.withheld?.has(name)
+							&& (FULL_PLANNER_TOOLS.has(name) || plannerTools.has(name)
+								|| policy.hostNames.includes(name))
 						)
 						: policy.hostNames;
 					let expected = structured ? [...names, ATOMIC_RESULT_TOOL_NAME] : names;

@@ -11,6 +11,7 @@ import {
 	ownToolParts,
 	resolveModel,
 	resultText,
+	THREAD_WITHHELD_TOOLS,
 	turnSystemPrompt,
 } from "./adapter";
 
@@ -92,6 +93,23 @@ test("a Planner turn keeps Atomic's tools and prompt but still refuses the resul
 	expect(atomic.call(ATOMIC_RESULT_TOOL_NAME)).toMatchObject({ block: true });
 	policy.structured = true;
 	expect(atomic.call(ATOMIC_RESULT_TOOL_NAME)).toBeUndefined();
+});
+
+test("a Chat thread's Planner turn refuses Atomic's intercom however it is called", () => {
+	let policy: TurnPolicy = {
+		full: true,
+		withheld: THREAD_WITHHELD_TOOLS,
+		hostNames: ["tell_chat_planner"],
+		structured: false,
+		systemPrompt: "Plan.",
+	};
+	let atomic = fakeExtensionApi(policy);
+	expect(atomic.call("intercom")).toMatchObject({
+		block: true,
+		reason: "intercom is not available in a Chat thread.",
+	});
+	expect(atomic.call("tell_chat_planner")).toBeUndefined();
+	expect(atomic.call("workflow")).toBeUndefined();
 });
 
 test("builds the system prompt from instructions and the structured response format", () => {

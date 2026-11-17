@@ -145,6 +145,9 @@ const MIGRATIONS = [{
 }, {
 	id: "041_document_full_width",
 	path: join(import.meta.dir, "migrations/041_document_full_width.sql"),
+}, {
+	id: "042_chat_thread_notes",
+	path: join(import.meta.dir, "migrations/042_chat_thread_notes.sql"),
 }] satisfies Migration[];
 
 /** Navigation shipped as 002 before document slugs claimed that number on main. */

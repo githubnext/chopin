@@ -40,6 +40,7 @@ import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
 import type { NewDocumentRequest, NewDocumentResult, TurnDocuments } from "../agent/new-documents";
 import type { VisualAdmission } from "../agent/visual-admission";
 import type { ChildDocuments } from "./children";
+import type { TellChat } from "./thread-notes";
 import * as Service from "../plan/service";
 import { instruction, PLANNER_NAME } from "@chopin/protocol/address";
 import { checkMessageAttachments, refusalText } from "@chopin/protocol/attachment";
@@ -888,6 +889,11 @@ export type Room = {
 	root?: RootChat;
 	/** Set only on a thread's room: the thread's root message id. */
 	threadRoot?: string;
+	/**
+	 * Set only on a thread's room: sends the Chat Planner of the same document a note of what was
+	 * decided in the thread. Only a full Atomic Planner's turn is given it.
+	 */
+	tellChat?: TellChat;
 	/** Session-tree and remote fork hooks for top-level Chat and threads. */
 	sessionForks?: {
 		/** `retry`: the turn runs `currentEntryId` again, and nothing of its failed attempt is kept. */
@@ -900,6 +906,11 @@ export type Room = {
 			requestEntryId: string | undefined,
 			turnEntries: Wire.Entry[],
 		) => Promise<void> | void;
+		/**
+		 * What threads told the Chat's Planner since its last turn, for this turn's prompt, once.
+		 * Absent on a thread's own room.
+		 */
+		takeNotes?: (currentEntryId?: string) => string | undefined;
 	};
 	/** Called when harness-reported context usage or compactions change. */
 	onSessionMetaChanged?: () => Promise<void> | void;
@@ -3081,11 +3092,13 @@ async function repositorySession(
 		// before the turn's prompt: the instructions stay the same from turn to turn, and the model
 		// provider can reuse its cache of them instead of reading them all again.
 		let bootstrap: string | undefined;
+		let noting = !!context.tellChat && !isolated && context.config.harness === "atomic";
 		let result = await open(binding, {
 			room: documentRoom(context),
 			repository,
 			chat,
 			...(forkSetup?.fork ? { fork: forkSetup.fork } : {}),
+			...(noting ? { tellChat: context.tellChat } : {}),
 			instructions: reader ? READER_INSTRUCTIONS : workspace => {
 				let usedNative = !!forkSetup?.skipBootstrap
 					&& !(workspace && "remote" in workspace && workspace.forkedNatively === false);
@@ -3096,6 +3109,7 @@ async function repositorySession(
 					bootstrapInPrompt ? undefined : chosen,
 					workspace,
 					visualRouting(context),
+					noting,
 				);
 			},
 			model: context.config.model || undefined,
@@ -3405,6 +3419,8 @@ async function run(
 			prompt = compose(backscroll, handle, text, references, available, !!context.invokedBy);
 			let focus = chat.focus;
 			if (focus && !opening) prompt = `${focusContext(focus)}\n\n${prompt}`;
+			let notes = opening ? undefined : context.sessionForks?.takeNotes?.(member?.entryId);
+			if (notes) prompt = `${notes}\n\n${prompt}`;
 			if (member && chat.entries.find(value => value.id === member.entryId)?.attachments?.length) {
 				let sent = await context.auth.storage.chatAttachments.forEntry(room, member.entryId);
 				if (sent.length) {

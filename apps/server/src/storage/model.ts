@@ -1087,6 +1087,20 @@ export type ChatThreadRecord = {
 	updatedAt: Date;
 };
 
+/** What a thread's Planner told the document's Chat Planner a person decided in the thread. */
+export type ChatThreadNote = {
+	id: string;
+	/** The thread's root message id. */
+	rootId: string;
+	/** Who wrote the root message, and its opening words, when the note was sent. */
+	root: { author: string; excerpt: string };
+	decision: string;
+	decidedBy: string[];
+	/** The answered Decision card the note is about; one card is noted at most once. */
+	question?: string;
+	ts: number;
+};
+
 export type ChatSessionState = {
 	channelId: string;
 	compactions: import("@chopin/protocol").Chat.CompactionRecord[];
@@ -1094,6 +1108,10 @@ export type ChatSessionState = {
 	atomicEntries?: JsonValue[];
 	atomicLeafId?: string | null;
 	entryForks: Record<string, EntryForkPoint>;
+	/** Notes from threads that the Chat Planner has not read yet, oldest first. */
+	threadNotes?: ChatThreadNote[];
+	/** Every Decision card a thread's Planner has sent a note for, read or not. */
+	notedQuestions?: string[];
 	updatedAt: Date;
 };
 

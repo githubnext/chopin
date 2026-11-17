@@ -6,6 +6,7 @@ import { type DocumentRoom, documentTools } from "../agent/tools";
 import { type HostedRepository, repositoryTools } from "../agent/repository";
 import { jobTools, scopedJobTools } from "../agent/job-tools";
 import { createScopedTools } from "../agent/scoped-tools";
+import { threadNoteTool } from "../agent/thread-note-tool";
 import type { ConversationPlan } from "@chopin/protocol";
 import { harnessSelection } from "../config";
 import { GITHUB_TOOL_SCHEMAS } from "./github-tools";
@@ -13,6 +14,7 @@ import {
 	BACKGROUND_TOOL_NAMES,
 	PLANNER_TOOL_NAMES,
 	REACTION_TOOL_NAMES,
+	THREAD_NOTE_TOOL_NAME,
 	VISUAL_PLANNER_TOOL_NAMES,
 } from "./tool-names";
 import { harnessFor } from "./harnesses";
@@ -21,6 +23,7 @@ import { carryingThinkingLevel } from "./turn-level";
 import type { HarnessV1 } from "@ai-sdk/harness";
 import type { ToolSet } from "ai";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
+import type { TellChat } from "../chat/thread-notes";
 
 const repositories = repositoryTools();
 const githubPlaceholders: ToolSet = Object.fromEntries(
@@ -42,6 +45,7 @@ const plannerTools: ToolSet = {
 	...githubPlaceholders,
 	...jobTools,
 	...createScopedTools(),
+	[THREAD_NOTE_TOOL_NAME]: threadNoteTool(),
 };
 export { PLANNER_TOOL_NAMES } from "./tool-names";
 
@@ -52,6 +56,8 @@ type PlannerCallOptions = {
 	githubTools: ToolSet;
 	instructions: string;
 	model?: string;
+	/** Offers `tell_chat_planner`, on a thread's full Atomic Planner turn alone. */
+	tellChat?: TellChat;
 	/**
 	 * Also stops the host tools, beside the caller's signal: a remote Planner's turn can
 	 * end, or its link drop, while one of them still runs.
@@ -92,10 +98,15 @@ function reporting(tools: ToolSet, room: DocumentRoom, toolSignal?: AbortSignal)
 	);
 }
 
+/**
+ * `thread` makes the agent for a thread's full Atomic Planner, the only one offered
+ * `tell_chat_planner`.
+ */
 export function createPlannerAgent(
 	harness: HarnessV1,
 	profile?: ConversationPlan.JobKind | "reaction",
 	visual = false,
+	thread = false,
 ) {
 	let reaction = profile === "reaction";
 	let names: readonly string[] = profile === "reaction"
@@ -105,19 +116,22 @@ export function createPlannerAgent(
 		: visual
 		? VISUAL_PLANNER_TOOL_NAMES
 		: PLANNER_TOOL_NAMES;
+	let noting = thread && !profile;
 	return new HarnessAgent({
 		harness: carryingThinkingLevel(harness),
 		tools: reaction ? {} : plannerTools,
-		activeTools: [...names],
+		activeTools: noting ? [...names, THREAD_NOTE_TOOL_NAME] : [...names],
 		permissionMode: "allow-reads",
 		callOptionsSchema: z.custom<PlannerCallOptions>(),
 		prepareCall: ({ options, ...rest }) => {
+			let turnTools: ToolSet = { ...rest.tools, ...options.githubTools };
+			if (noting) turnTools[THREAD_NOTE_TOOL_NAME] = threadNoteTool(options.tellChat);
 			return {
 				...rest,
 				model: options.model,
 				instructions: options.instructions,
 				tools: reaction ? {} : reporting(
-					scopedJobTools({ ...rest.tools, ...options.githubTools }, options.room),
+					scopedJobTools(turnTools, options.room),
 					options.room,
 					options.toolSignal,
 				),
@@ -133,6 +147,18 @@ export function createPlannerAgent(
 
 export let plannerAgent = createPlannerAgent(harnessFor(harnessSelection()));
 export let visualPlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), undefined, true);
+export let threadPlannerAgent = createPlannerAgent(
+	harnessFor(harnessSelection()),
+	undefined,
+	false,
+	true,
+);
+export let threadVisualPlannerAgent = createPlannerAgent(
+	harnessFor(harnessSelection()),
+	undefined,
+	true,
+	true,
+);
 export let headingPlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "heading");
 export let refinePlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "refine");
 export let prosePlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "prose");
