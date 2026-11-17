@@ -9,7 +9,7 @@ import { until } from "./job.test-fixtures";
 import { createResponder } from "./reaction-reply";
 import { sessionContextOf } from "./session-context";
 import * as Chat from "./service";
-import { copiedFrom, reactInThread } from "./thread-reactions";
+import { copiedFrom, reactInChat, reactInThread } from "./thread-reactions";
 import * as Threads from "./threads";
 
 import type { Chat as Wire } from "@chopin/protocol";
@@ -125,7 +125,26 @@ async function world() {
 			on,
 			thread,
 		});
-	return { broadcasts, context, plan, prompts, react, send, socket, storage };
+	let reactInChatAs = (ws: Socket, id: string, emoji: string) =>
+		reactInChat(context, ws, {
+			kind: "chat:react",
+			rid: crypto.randomUUID(),
+			ts: 0,
+			id,
+			emoji,
+			on: true,
+		});
+	return { broadcasts, context, plan, prompts, react, reactInChatAs, send, socket, storage };
+}
+
+function plannerRoot(w: Awaited<ReturnType<typeof world>>, id = "planner-root") {
+	w.plan.chat.entries.push({
+		id,
+		author: { kind: "agent" },
+		text: "I moved the cache key into the router.",
+		ts: 1,
+	});
+	return id;
 }
 
 let agents = (chat: Chat.Chat | undefined) =>
@@ -357,4 +376,89 @@ test("a reply also sent to Chat is one message: its reactions, made in either pl
 	expect(w.plan.chat.entries.find(entry => entry.id === shared)?.reactions).toEqual(both);
 	let stored = (await w.storage.chatThreads.listThreads(w.context.room))[0]!;
 	expect(stored.entries.find(entry => entry.id === shared)?.reactions).toEqual(both);
+});
+
+test("❓ on a Planner's message in Chat starts its thread, saved first, and is answered there, not in Chat", async () => {
+	let w = await world();
+	let ana = w.socket("ana");
+	let root = plannerRoot(w);
+	let order: string[] = [];
+	let put = w.storage.chatThreads.putThread.bind(w.storage.chatThreads);
+	w.storage.chatThreads.putThread = async (lease, record) => {
+		await put(lease, record);
+		order.push(`saved ${record.rootId}`);
+	};
+	let publish = w.context.server.publish.bind(w.context.server);
+	w.context.server.publish = ((topic: string, message: string) => {
+		let frame = JSON.parse(message) as Wire.Outgoing;
+		if (frame.kind === "chat:in-thread") order.push(`told ${frame.frame.kind}`);
+		return publish(topic, message);
+	}) as typeof w.context.server.publish;
+	let before = w.broadcasts.length;
+
+	await w.reactInChatAs(ana.ws, root, "\u2753");
+
+	expect(w.plan.chat.entries.find(entry => entry.id === root)?.reactions).toEqual([
+		{ emoji: "\u2753", handles: ["ana"] },
+	]);
+	await until(() => agents(w.plan.chat.childChats?.get(root)).length === 1);
+	let thread = w.plan.chat.childChats!.get(root)!;
+	await until(() => !thread.busy);
+	let answer = agents(thread)[0]!;
+	expect(answer).toMatchObject({ viaReaction: true });
+	let { turn } = sessionContextOf(w.prompts.at(-1)!.prompt);
+	expect(turn).toContain("A person reacted to one of your messages in this thread.");
+	expect(turn).toContain(JSON.stringify(root));
+	expect(order[0]).toBe(`saved ${root}`);
+	expect(order).toContain("told chat:message");
+	expect(agents(w.plan.chat).map(entry => entry.id)).toEqual([root]);
+	expect(
+		(w.plan.chat.entries.find(entry => entry.id === root) as { answeredIntents?: string[] })
+			.answeredIntents,
+	).toEqual(["confused"]);
+	let told = w.broadcasts.slice(before);
+	expect(told.some(frame => frame.kind === "chat:message")).toBe(false);
+	expect(told).toContainEqual(
+		expect.objectContaining({
+			kind: "chat:thread-summary",
+			summary: expect.objectContaining({ rootId: root, replyCount: 1 }),
+		}),
+	);
+	let stored = await w.storage.chatThreads.listThreads(w.context.room);
+	expect(stored.map(record => record.rootId)).toEqual([root]);
+	expect(stored[0]!.entries.map(entry => entry.id)).toContain(answer.id);
+});
+
+test("❓ on a Chat message whose thread exists adds the answer to that thread", async () => {
+	let w = await world();
+	let ana = w.socket("ana");
+	let root = plannerRoot(w);
+	await w.send(ana.ws, "Which router?", { thread: root });
+	let thread = w.plan.chat.childChats!.get(root)!;
+	let forkedAt = (await w.storage.chatThreads.listThreads(w.context.room))[0]!.forkedAt;
+
+	await w.reactInChatAs(ana.ws, root, "👎");
+
+	await until(() => agents(thread).length === 1 && !thread.busy);
+	expect(thread.entries.map(entry => entry.author.kind)).toEqual(["member", "agent"]);
+	expect(agents(thread)[0]).toMatchObject({ viaReaction: true });
+	expect(agents(w.plan.chat).map(entry => entry.id)).toEqual([root]);
+	let stored = await w.storage.chatThreads.listThreads(w.context.room);
+	expect(stored).toHaveLength(1);
+	expect(stored[0]!.forkedAt).toBe(forkedAt);
+});
+
+test("a Chat reaction nobody may have answered starts no thread", async () => {
+	let w = await world();
+	let ana = w.socket("ana");
+	let root = plannerRoot(w);
+	w.context.initiativeAuthorize = async () => false;
+	w.context.reactionAuthorize = async () => false;
+
+	await w.reactInChatAs(ana.ws, root, "\u2753");
+	await Bun.sleep(50);
+
+	expect(w.plan.chat.childChats?.get(root)).toBeUndefined();
+	expect(await w.storage.chatThreads.listThreads(w.context.room)).toEqual([]);
+	expect(w.prompts).toHaveLength(0);
 });

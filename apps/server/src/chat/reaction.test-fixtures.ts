@@ -9,7 +9,6 @@ import { until } from "./job.test-fixtures";
 import { createResponder } from "./reaction-reply";
 import { react } from "./reactions";
 import * as Chat from "./service";
-import { respond } from "./reaction-reply";
 
 export function agentEntry(id: string, text: string, extra: object = {}): Wire.Entry {
 	return { id, author: { kind: "agent" }, text, ts: 2, ...extra } as Wire.Entry;
@@ -100,7 +99,7 @@ export async function reactAs(h: Room, handle: string, emoji: string, on = true,
 		h.context,
 		person(handle),
 		{ kind: "chat:react", rid: crypto.randomUUID(), ts: 0, id, emoji, on },
-		reacted => respond(h.context, reacted),
+		reacted => h.chat.reactions!.reacted(h.context, reacted),
 	);
 }
 
