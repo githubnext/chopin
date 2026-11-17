@@ -139,9 +139,8 @@ describe("refusals of a send", () => {
 	 * server's own tests inject each failure they can reach):
 	 * - passing, `temporarily-unavailable`: the room is busy with too many sends; the message could
 	 *   not be saved; the Chat or the room is closing or being replaced; the open child could not be
-	 *   looked up; a reference could not be looked up for storage's sake; a turn is only beginning or
-	 *   finishing and has no session to give the message to just now; authorization is temporarily
-	 *   unavailable; any failure the send itself threw.
+	 *   looked up; a reference could not be looked up for storage's sake; authorization is
+	 *   temporarily unavailable; any failure the send itself threw.
 	 * - final, no code: a request id that is invalid, reused with different content or in conflict;
 	 *   a message that was deleted; an invalid destination, text, focus or reference (a reference the
 	 *   server found at fault: malformed, outside this repository, or no longer there); an empty or

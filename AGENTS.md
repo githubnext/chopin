@@ -360,8 +360,13 @@ this message wasn't sent. Send it again in a moment."), or with none attached, r
 the connection's own words (`planner-not-attached`),
 mid-turn too; for a machine that is away they say the message was not sent and to send it again
 when the machine is back, and never that it is kept (the machine's own work is; the message is
-not). A message sent while a turn is only beginning or finishing has no session
-to be given to, and is answered as a passing trouble (`temporarily-unavailable`). If the
+not). A message sent while a turn is being stopped or finishing, or while one of Chopin's
+own turns is being handed the Chat, has no session to be given to; it is acknowledged at once
+and starts the next turn as that one winds down (`windingDown` in `chat/service.ts`), ahead of
+anything waiting. One sent while such a person's turn waits to start is acknowledged at once and
+given to that turn once it can take one (`chat.following`); a harness that takes no input
+mid-run refuses it with `planner-busy`. None is answered as a passing trouble, so no message
+waits in its browser's outbox behind another. If the
 turn ends before it can read the message, an idle Chat starts a turn for it and any other
 says plainly that Chopin did not read it. A comment note, an `invoke_planner as system` call
 and a task draft need a turn of their own, so a running turn refuses them before anything is
@@ -387,8 +392,7 @@ when a newer draft was already typed, or another refusal rejected the message, i
 "Couldn't send" on the message with Try again and Delete (which act on the outbox alone, since
 the server kept nothing), and not while the page's offline bar
 shows. A refusal with a passing reason is not a refusal of the message: a storage, room or
-authorization trouble that will pass, or a turn that is only beginning or finishing
-(`temporarily-unavailable`). The browser keeps the message sending and sends it again, in order
+authorization trouble that will pass (`temporarily-unavailable`). The browser keeps the message sending and sends it again, in order
 and with the same request ID, in a moment. Only a refusal with neither code is final, and so
 are `planner-busy` and `planner-not-attached`. One the server kept, though the commit's answer
 was lost, is answered with its first answer when the same request is sent again, and is given

@@ -605,6 +605,8 @@ type Run = {
 	stop: () => void;
 	/** Gives the model a person's message at its next step, between a step's tool calls and its next call. */
 	steer: (text: string) => Promise<void>;
+	/** Settles once Atomic has begun the turn's prompt, or the turn is over. */
+	begun: PromiseWithResolvers<void>;
 	done: Promise<void>;
 };
 
@@ -788,6 +790,7 @@ export function createAtomicAdapter(
 					}
 					return;
 				}
+				if (event.type === "agent_start") run.begun.resolve();
 				if (event.type === "turn_start") {
 					let offered = session.agent.state.tools.map(tool => tool.name);
 					if (!full && !sameNames(offered, activeNames(policy))) {
@@ -1105,7 +1108,12 @@ export function createAtomicAdapter(
 							run.pending.clear();
 							void bounded(agent.abort(), "Atomic abort timed out.").catch(() => {});
 						},
+						begun: Promise.withResolvers<void>(),
 						steer: async text => {
+							// A message given as the turn opens waits for Atomic to begin its prompt.
+							if (!run.stopped && current === run && !agent.isStreaming) {
+								await bounded(run.begun.promise, "Atomic turn did not begin.");
+							}
 							// Atomic would start a turn of its own for a message it is given while idle, and
 							// Chopin never starts one it did not ask for.
 							if (run.stopped || current !== run || !agent.isStreaming) {
@@ -1201,6 +1209,7 @@ export function createAtomicAdapter(
 							});
 						} finally {
 							if (current === run) current = undefined;
+							run.begun.resolve();
 						}
 					})();
 					listen(run, turn.abortSignal);
