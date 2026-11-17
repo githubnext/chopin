@@ -64,10 +64,10 @@ Planner session that has to be made again (after a crash, a restart, a reset, or
 not resume) is opened with it too, so its first turn runs the chosen model and level, never the
 harness's default, and making it again never changes what is stored. A remote client that offered
 `session-choice` is told it in [`start` and `fork`](agent-connection.md#server-to-client), so a
-session it makes starts on it. A turn that starts while an attached client has yet to report its
-catalog, such as the first after a restart, waits up to 10 seconds for the report rather than
-falling back for want of it. A model that
-has gone, or a level its model no longer lists, is not sent: the default runs, Chat says so once
+session it makes opens on it; each turn still carries its own, and one that names none, after a
+person chose Default or cleared the level, runs the client's default. A turn that starts while an
+attached client has yet to report its catalog, such as the first after a restart, waits up to 10
+seconds for the report rather than falling back for want of it. A model that has gone, or a level its model no longer lists, is not sent: the default runs, Chat says so once
 while the reason stands (and again if it changes, or comes back after the choice was honored), and
 the composer shows what will run. The stored choice is
 kept, so it returns to force if the model does.

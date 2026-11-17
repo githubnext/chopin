@@ -1865,6 +1865,86 @@ describe("Agent connection capability catalog", () => {
 		}
 	});
 
+	it("opens a session on the stored choice, and leaves out of a later turn a model or level set back to Default", async () => {
+		let f = await hostInputRoom();
+		cleanups.push(f.close);
+		let linked = await linkAuth(f.room.id);
+		let server = linkServer(linked.auth, 300);
+		cleanups.push(server.stop);
+		let starts: Array<{ model?: string; thinkingLevel?: string }> = [];
+		let seen: Array<{ model?: string; thinkingLevel?: string }> = [];
+		let client = await connectAgent({
+			url: server.url,
+			token: MEMBER_TOKEN,
+			document: f.room.id,
+			resumable: false,
+			capabilities: catalog,
+			sessionChoice: true,
+			handlers: {
+				start(message) {
+					starts.push({
+						...(message.model ? { model: message.model } : {}),
+						...(message.thinkingLevel ? { thinkingLevel: message.thinkingLevel } : {}),
+					});
+				},
+				async turn(context) {
+					seen.push({
+						...("model" in context.message ? { model: context.message.model } : {}),
+						...("thinkingLevel" in context.message
+							? { thinkingLevel: context.message.thinkingLevel }
+							: {}),
+					});
+					finishTurn(context);
+				},
+			},
+		});
+		cleanups.push(() => client.detach());
+		await until(() => !server.links.at(-1)!.catalogPending, 1_000);
+		let agent = createPlannerAgent(
+			createRemoteAdapter(sessionId => ({
+				link: server.links.at(-1)!,
+				planner: remotePlanner(sessionId)!,
+			})),
+		);
+		let owner = {
+			channelId: f.room.id,
+			token: "test-token",
+			repository: { id: "R_test", owner: "org", name: "repo", defaultBranch: "main" },
+			signal: new AbortController().signal,
+			currentToken: () => "test-token",
+			revalidate: async () => true,
+			release() {},
+		} as unknown as ActiveOwnerBinding;
+		let opened = await openPlannerSession(owner, {
+			room: f.room,
+			repository: owner.repository,
+			instructions: "Plan.",
+			harness: "remote",
+			choice: { model: "acme/large", thinkingLevel: "high" },
+		}, {
+			githubTools: async () => ({ ok: true, value: {} }),
+			createSandbox: async () => sandboxSession,
+			registerCredential: () => () => {},
+			agent,
+		});
+		if (!opened.ok) throw new Error("Planner unavailable");
+		let session = opened.value;
+		cleanups.push(() => session.destroy());
+		let run = async (choice?: { model?: string; thinkingLevel?: string }) => {
+			let result = await session.stream("go", new AbortController().signal, choice);
+			for await (let _part of result.fullStream);
+		};
+		await run({ model: "acme/large", thinkingLevel: "high" });
+		await run();
+		await run({ model: "acme/large" });
+		expect(starts).toEqual([{ model: "acme/large", thinkingLevel: "high" }]);
+		expect(seen).toEqual([
+			{ model: "acme/large", thinkingLevel: "high" },
+			{},
+			{ model: "acme/large" },
+		]);
+	});
+
 	it("carries a message's images and files to a client that offered attachments, and as words to one that did not", async () => {
 		let png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 		let notes = new TextEncoder().encode("# Notes\n");

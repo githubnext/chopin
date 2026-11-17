@@ -120,7 +120,7 @@ client must then use none of them.
 | `session-forks`            | A [`fork`](#server-to-client) message to branch a thread's Planner session from an earlier session and turn, multiplexed over the same connection                             |
 | `steer-turn`               | A [`steer`](#server-to-client) message: a person's message for the turn the client is running, read at its next step                                                          |
 | `retry-turn`               | A `turn`'s `message`, the Chat message it answers, and `retry` when it [runs a failed message again](#retrying-a-failed-turn)                                                 |
-| `session-choice`           | With `capability-catalog`, the document's chosen `model` and `thinkingLevel` in [`start` and `fork`](#server-to-client), so a session the client makes starts on them         |
+| `session-choice`           | With `capability-catalog`, the document's chosen `model` and `thinkingLevel` in [`start` and `fork`](#server-to-client), so a session the client makes opens on them          |
 
 ### Pings
 
@@ -445,13 +445,16 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 - `model` and `thinkingLevel` on `start` and `fork` are sent only to a client
   that offered both `capability-catalog` and `session-choice`: the document's
   chosen model and level when the session opens, checked against the catalog
-  the client last reported, as it spelled them. Make the session on them, so
-  its first turn runs them and so does any session the client makes again for
-  the document on its own (after its process restarts, say), and keep them as
-  the session's model and level until a turn names others. Each is absent where
-  nobody chose one or the catalog no longer offers it: use the client's own.
-  Every `turn` still carries the choice too, which takes precedence; a client
-  that applies only the turn's loses nothing but the first turn's head start.
+  the client last reported, as it spelled them. They only open the session:
+  make it on them, so whatever it does before its first turn, and any session
+  the client makes again for the document on its own (after its process
+  restarts, say), starts on the document's choice. Each is absent where nobody
+  chose one or the catalog no longer offers it: use the client's own. They
+  never outlast a turn. Every `turn` carries the choice it runs, and a turn's
+  absent `model` or `thinkingLevel` means the client's own default for it,
+  even where `start` or `fork` named one: that is how a person choosing Default,
+  or clearing the level, reaches a session Chopin keeps, as no new `start` is
+  sent for it. Run each turn on its own fields alone.
 - `fork`, with `session-forks`, opens a thread's Planner session branched from
   `from.session` (and `from.turn` when named), preserving the conversation,
   tool results, compaction state and session memory up to that point. Answer
