@@ -477,16 +477,18 @@ means a former target can no longer be identified safely.
 
 The Planner's `create_document` host tool (every harness) makes new top-level
 documents, one per piece of work that splits naturally, each with its own Chat,
-Decisions and Planner. Only a turn a person's message drives may call it: that
-person is the creator, and their own live browser login is rechecked for write
-access as for `chat:send`; a turn nobody typed and background jobs are refused.
-It reuses MCP `create_document`'s draft validation, visual assessment and
-creation (`createDocument` in `apps/server/src/mcp/hosted.ts`), keeps the creating
-document's repository and base branch, and is bounded per turn and per person per
-hour, with an idempotency key scoped to the creating document. The document is
-stored before the sidebar, the creating Chat's one linked line (`Entry.document`)
-or its optional first instruction (posted as the creator's message, as
-`invoke_planner` does) hear of it. See
+Decisions and Planner. Only a turn a person's message (in Chat or a thread)
+drives may call it: that person is the creator, and their own live browser login
+is rechecked for write access as for `chat:send`; a turn nobody typed and
+background jobs are refused. It reuses MCP `create_document`'s draft validation,
+visual assessment and creation (`createDocument` in `apps/server/src/mcp/hosted.ts`),
+keeps the creating document's repository and base branch, and is bounded per turn
+and per person per hour, with an idempotency key scoped to the creating document.
+A retry is found in storage before the limits are counted, is compared against
+the base the first call recorded, and posts the linked line only if the first call
+could not save it. The document is stored before the sidebar, the asking Chat's
+one linked line (`Entry.document`) or its optional first instruction (posted as
+the creator's message, as `invoke_planner` does) hear of it. See
 [Creating documents](docs/hosted-agent.md#creating-documents).
 
 ## Research requests and child documents

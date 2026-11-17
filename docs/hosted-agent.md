@@ -1368,8 +1368,8 @@ optional `instruction`. It is a host tool, so it is offered under every harness
 Copilot SDK adapter checks a session against. `apps/server/src/agent/new-documents.ts`
 holds its rules:
 
-- **Who creates it.** Only a turn a person's Chat message (or an `invoke_planner`
-  message) drives may create documents; a turn nobody typed, a comment turn and a
+- **Who creates it.** Only a turn a person's Chat message, thread reply or
+  `invoke_planner` message drives may create documents; a turn nobody typed, a comment turn and a
   background job are refused. That person is the creator. Their own live browser
   login is asked again for push or administration access to the repository, as
   `chat:send` is, both before and after the visual assessment; the Planner owner's
@@ -1384,16 +1384,22 @@ holds its rules:
   the creating document's model and thinking level.
 - **Bounds.** At most 10 documents a turn and 30 an hour for one person, counted
   in the process. The idempotency key is scoped to the creating document, so a
-  retried call returns the document the first made and creates, announces and
-  starts nothing again; the same key with a different draft is a conflict.
+  retried call returns the document the first made and creates and starts
+  nothing again; the same key with a different draft is a conflict. A retry is
+  looked up in storage first: it is compared against the base the first call
+  recorded, so a default branch that moved since is no conflict, and it is
+  answered even after the limits are spent, since it counts toward neither.
 - **Order.** The document is stored first. Then the sidebar hears of it through
-  `/ws/sidebar`, the creating document's Chat gets one system line naming it with
-  a link (`Chat.Entry.document`), saved before it is shown, and, if an
+  `/ws/sidebar`, the Chat or thread whose turn asked gets one system line naming
+  it with a link (`Chat.Entry.document`), saved before it is shown, and, if an
   `instruction` was given, it is posted in the new document's Chat as the
   creator's message, exactly as `invoke_planner` posts one, starting that
   document's Planner under the same machine rules as any other document. A
   refused instruction (no machine attached, for one) leaves the document in place
-  and is reported to the model.
+  and is reported to the model. A line that could not be saved is reported too
+  (`announced: false`), and the same call again posts it; one the Chat already
+  holds is never posted twice, so a retry after a crash between the two posts
+  the missing line and nothing else.
 
 The result gives each new document's `id` and absolute `url`, so the model, or a
 workflow it started, can follow up on it.

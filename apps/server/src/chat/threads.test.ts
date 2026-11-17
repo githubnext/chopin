@@ -19,7 +19,9 @@ import * as Threads from "./threads";
 import type { ServerMessageOf } from "@chopin/agent-link";
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Server } from "bun";
+import type { DocumentRoom } from "../agent/tools";
 import type { HostedAuth } from "../auth/routes";
+import type { NewDocumentRequest, NewDocumentResult } from "../agent/new-documents";
 import type { PlannerForkHooks, PlannerSession } from "../harness/session";
 import type { Socket, SocketData } from "../wire";
 
@@ -28,7 +30,7 @@ afterEach(async () => {
 	for (let cleanup of cleanups.splice(0).toReversed()) await cleanup();
 });
 
-async function buildWorld() {
+async function buildWorld(extra: Partial<Chat.Room> = {}) {
 	let { auth, storage, channel, logins } = await linkAuth();
 	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
 	let broadcasts: Array<Wire.Outgoing> = [];
@@ -51,12 +53,14 @@ async function buildWorld() {
 	let owners = new ActiveOwnerBindings(auth as unknown as HostedAuth);
 	let prompts: Array<{ instructions: string; prompt: string }> = [];
 	let forks: Array<PlannerForkHooks | undefined> = [];
+	let rooms: DocumentRoom[] = [];
 	let emitExtra:
 		| ((emit: (part: Record<string, unknown>) => void) => Promise<void> | void)
 		| undefined;
 
 	let fakeOpen: typeof openPlannerSession = async (_binding, options) => {
 		forks.push(options.fork);
+		rooms.push(options.room);
 		let instructions = typeof options.instructions === "function"
 			? options.instructions(undefined)
 			: options.instructions;
@@ -103,6 +107,7 @@ async function buildWorld() {
 		activeOwner: () => owners.resolve(channel.id),
 		persist: () => Plan.persist(plan),
 		openPlannerSession: fakeOpen,
+		...extra,
 	});
 
 	cleanups.push(async () => {
@@ -139,6 +144,7 @@ async function buildWorld() {
 		broadcasts,
 		prompts,
 		forks,
+		rooms,
 		setEmitExtra: (fn: typeof emitExtra) => {
 			emitExtra = fn;
 		},
@@ -447,6 +453,73 @@ describe("Chat threads server", () => {
 		expect(inChat.map(entry => entry.author.kind)).toEqual(["member", "agent"]);
 		expect(Chat.publicEntry(inChat[0]!).to).toBe("planner");
 		expect(threadChat!.entries.at(-1)!.id).toBe(inChat[1]!.id);
+	});
+
+	test("a person asking in a thread can create a document, named by a line in that thread", async () => {
+		let requests: Array<Omit<NewDocumentRequest, "sourceId">> = [];
+		let w = await buildWorld({
+			createDocument: async request => {
+				requests.push(request);
+				let document = {
+					id: "0f5b2c1e-8d3a-5b6f-9a21-7c4e5d6f7a8b",
+					title: "Settings page",
+					path: "/documents/octo-org/score/settings-page",
+				};
+				await request.announce(document);
+				return {
+					ok: true,
+					document: { ...document, url: `https://chopin.test${document.path}` },
+					next: "done",
+				} satisfies NewDocumentResult;
+			},
+		});
+		let results: NewDocumentResult[] = [];
+		w.setEmitExtra(async () => {
+			let room = w.rooms.at(-1)!;
+			expect(room.createDocument).toBeDefined();
+			results.push(
+				await room.createDocument!({
+					idempotencyKey: "settings-page",
+					title: "Settings page",
+					brief: {
+						goal: "Add the settings page.",
+						constraints: [],
+						settledDecisions: [],
+						openQuestions: [],
+						repositoryFindings: [],
+					},
+					document: "# Settings page\n",
+				}),
+			);
+		});
+		let alice = w.makeSocket("alice", "U_alice");
+		let rootReq = crypto.randomUUID();
+		await Threads.sendMessage(w.context, alice.ws, {
+			kind: "chat:send",
+			rid: "r1",
+			requestId: rootReq,
+			to: "room",
+			text: "Root: the whole app.",
+			ts: 0,
+		});
+		await Threads.sendMessage(w.context, alice.ws, {
+			kind: "chat:send",
+			rid: "t1",
+			requestId: crypto.randomUUID(),
+			to: "planner",
+			thread: rootReq,
+			text: "@chopin split out the settings page",
+			ts: 0,
+		});
+		let threadChat = w.plan.chat.childChats?.get(rootReq);
+		await threadChat!.running;
+		expect(results).toMatchObject([{ ok: true }]);
+		expect(requests).toMatchObject([{ creator: { handle: "alice" } }]);
+		expect(threadChat!.entries.filter(entry => entry.document)).toMatchObject([{
+			author: { kind: "system" },
+			document: { title: "Settings page" },
+		}]);
+		expect(w.plan.chat.entries.some(entry => entry.document)).toBe(false);
 	});
 
 	test("a Retry branches the Atomic session back to before the failed attempt, and gives it no word of the attempt", async () => {

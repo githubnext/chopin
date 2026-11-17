@@ -2811,13 +2811,17 @@ export function documentRoom(context: Room): DocumentRoom {
 	};
 }
 
-/** Saves, then shows, the creating document's line naming a document its Planner created. */
+/**
+ * Saves, then shows, the line naming a document the Planner created in the Chat or thread whose
+ * turn asked, unless it already holds one.
+ */
 async function createdNotice(
 	context: Room,
 	handle: string,
 	document: { id: string; title: string; path: string },
 ): Promise<void> {
 	let { chat, room, server } = context;
+	if (chat.entries.some(value => value.document?.channelId === document.id)) return;
 	let entry: Wire.Entry = {
 		id: ulid(),
 		author: { kind: "system" },

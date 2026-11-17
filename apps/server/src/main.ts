@@ -2512,6 +2512,10 @@ function plannerDocuments(): NewDocumentDeps {
 			)).value;
 		},
 		origin: async channelId => Rooms.get(channelId)?.plan?.creation?.origin,
+		created: async channelId => {
+			let stored = await storage.collaboration.load(channelId, hostedAuth.clock());
+			return stored ? (await Service.readStored(stored)).creation?.origin : undefined;
+		},
 		create: (creator, input, instructed) =>
 			createHostedDocument(
 				hostedAuth,
