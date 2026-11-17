@@ -16,6 +16,7 @@ import { ReferenceService } from "./references";
 import { appendEntries, snapshotSeq, takeOut } from "./chronology";
 import * as Chat from "./service";
 import { sessionContextOf } from "./session-context";
+import { MAX_UNREAD_NOTES } from "./thread-notes";
 import * as Threads from "./threads";
 
 import type { ServerMessageOf } from "@chopin/agent-link";
@@ -997,6 +998,65 @@ describe("Chat threads server", () => {
 		});
 		await w.plan.chat.running;
 		expect(w.prompts.at(-1)!.prompt).toContain('"Ship it on Friday."');
+	});
+
+	test("a Retry keeps the unread notes under their cap, and gives every attempt the replayed notes before the unread ones", async () => {
+		let unreadSaved: number[] = [];
+		let w: Awaited<ReturnType<typeof buildWorld>>;
+		w = await buildWorld(ATOMIC, {
+			sessionChoice: async () => {
+				await w.context.onSessionMetaChanged!();
+				let saved = await w.storage.chatThreads.getSessionState(w.channel.id);
+				unreadSaved.push(saved?.threadNotes?.length ?? 0);
+				return undefined as never;
+			},
+		});
+		let alice = w.makeSocket("alice", "U_alice");
+		let tell = await threadTeller(w, alice.ws);
+		let first = Array.from({ length: MAX_UNREAD_NOTES }, (_, index) => `First batch ${index}.`);
+		let second = Array.from({ length: MAX_UNREAD_NOTES }, (_, index) => `Second batch ${index}.`);
+		for (let decision of first) await tell({ decision, decidedBy: ["alice"] });
+
+		let failing = crypto.randomUUID();
+		w.setEmitExtra(() => {
+			throw new Error("503 Service Unavailable");
+		});
+		await Threads.sendMessage(w.context, alice.ws, {
+			kind: "chat:send",
+			rid: "m1",
+			requestId: failing,
+			to: "planner",
+			text: "@chopin when do we ship?",
+			ts: 0,
+		});
+		await w.plan.chat.running;
+		for (let decision of second) await tell({ decision, decidedBy: ["alice"] });
+		expect((await w.storage.chatThreads.getSessionState(w.channel.id))?.threadNotes)
+			.toHaveLength(MAX_UNREAD_NOTES);
+
+		let replays: string[] = [];
+		for (let attempt of ["retry-1", "retry-2"]) {
+			unreadSaved = [];
+			await Threads.retryMessage(w.context, alice.ws, {
+				kind: "chat:retry",
+				rid: attempt,
+				message: failing,
+				ts: 0,
+			});
+			await w.plan.chat.running;
+			expect(unreadSaved.length).toBeGreaterThan(0);
+			for (let unread of unreadSaved) expect(unread).toBeLessThanOrEqual(MAX_UNREAD_NOTES);
+			let prompt = w.prompts.at(-1)!.prompt;
+			let at = [...first, ...second].map(decision => prompt.indexOf(JSON.stringify(decision)));
+			expect(at.every(index => index >= 0)).toBe(true);
+			expect(at).toEqual([...at].sort((a, b) => a - b));
+			replays.push(prompt.slice(0, prompt.indexOf("when do we ship?")));
+		}
+		expect(replays[1]).toBe(replays[0]);
+
+		let saved = await w.storage.chatThreads.getSessionState(w.channel.id);
+		expect(saved?.threadNotes).toBeUndefined();
+		expect(saved?.givenNotes?.notes.map(note => note.decision)).toEqual([...first, ...second]);
 	});
 
 	test("a note reaches the Chat Planner only once it is saved, and one that could not be saved never does", async () => {

@@ -513,7 +513,9 @@ given every unread note, with the thread's words quoted as data rather than
 instructions: ahead of its prompt, or, when the turn opens with a skill or a
 prompt template that has to stand first, as a session message recorded before
 the command so later turns keep it. The notes a turn for a message was given are saved with the session
-state, so a Retry of that turn is given them again, after a restart too.
+state, so a Retry of that turn is given them again, after a restart too: ahead of the notes
+unread since, without counting them against the 20, and the Retry is then saved as given both,
+so a further Retry of the message is given the same notes.
 `copilot-sdk` and `remote` Planners are not offered the tool. The `[agent] N
 tools:` line logged as an Atomic Planner session opens lists what Atomic
 registered, `intercom` included; the line after it, `[agent] Planner withholds
