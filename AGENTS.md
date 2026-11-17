@@ -483,7 +483,10 @@ is rechecked for write access as for `chat:send`; a turn nobody typed and
 background jobs are refused. It reuses MCP `create_document`'s draft validation,
 visual assessment and creation (`createDocument` in `apps/server/src/mcp/hosted.ts`),
 keeps the creating document's repository and base branch, and is bounded per turn
-and per person per hour, with an idempotency key scoped to the creating document.
+(counted on the turn's own member request, for as long as it runs) and per person
+per hour, with an idempotency key scoped to the creating document. The creating
+document's model choice is stored in the transaction that creates the new one
+(`CreateChannel.modelChoice`), so a retry never overwrites a choice made since.
 A retry is found in storage before the limits are counted, is compared against
 the base the first call recorded, and posts the linked line only if the first call
 could not save it. The document is stored before the sidebar, the asking Chat's

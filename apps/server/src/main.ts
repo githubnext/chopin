@@ -2529,16 +2529,22 @@ function plannerDocuments(): NewDocumentDeps {
 				creator,
 				input,
 			),
-		copyModel: async (from, to, userId) => {
+		modelChoice: async (from, userId) => {
 			let choice = await storage.plannerModelChoices.get(from);
-			if (!choice || (!choice.model && !choice.thinkingLevel)) return;
+			if (!choice || (choice.model === undefined && choice.thinkingLevel === undefined)) {
+				return undefined;
+			}
 			if (!writerLease.held) throw new Error("storage writer lease is unavailable");
-			await storage.plannerModelChoices.put(writerLease.held, {
-				...choice,
-				channelId: to,
-				userId,
-				updatedAt: hostedAuth.clock(),
-			});
+			return {
+				lease: writerLease.held,
+				choice: {
+					...(choice.model !== undefined ? { model: choice.model } : {}),
+					...(choice.modelName !== undefined ? { modelName: choice.modelName } : {}),
+					...(choice.thinkingLevel !== undefined ? { thinkingLevel: choice.thinkingLevel } : {}),
+					userId,
+					updatedAt: hostedAuth.clock(),
+				},
+			};
 		},
 		invoke: input =>
 			invokeRouted({

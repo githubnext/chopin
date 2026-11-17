@@ -42,7 +42,13 @@ import type { CreateDocumentInput } from "./create";
 import type { UpdateClient, UpdateDocumentInput } from "./update";
 import type { Issue } from "@chopin/dialect";
 import type { LifecycleArguments } from "./lifecycle";
-import type { ChannelArchiveResult, ChannelRecord, Lease, StoredChannel } from "../storage/model";
+import type {
+	ChannelArchiveResult,
+	ChannelRecord,
+	CreateChannel,
+	Lease,
+	StoredChannel,
+} from "../storage/model";
 import type { ClaimResult, Run } from "../tasks/graphs";
 import type { SocketData } from "../wire";
 import type { VisualAdmission } from "../agent/visual-admission";
@@ -283,6 +289,8 @@ export type DocumentCreator = {
 	repository: GitHubRepository;
 	/** Asks again, after the visual assessment, whether the creator may still write the repository. */
 	stillWrites: () => Promise<boolean>;
+	/** The Planner model choice to store in the transaction that creates the document. */
+	modelChoice?: () => Promise<CreateChannel["modelChoice"]>;
 	signal?: AbortSignal;
 };
 
@@ -362,6 +370,7 @@ export async function createDocument(
 	let { brief, plan, ...origin } = input;
 	let creation: Plan.CreationMetadata = { brief, origin };
 	let initial = await Plan.initial(plan, creation, input.title);
+	let modelChoice = await creator.modelChoice?.();
 	let created: ChannelRecord;
 	try {
 		created = await auth.storage.channels.create({
@@ -373,6 +382,7 @@ export async function createDocument(
 			createdBy: user.id,
 			now: auth.clock(),
 			initial,
+			...(modelChoice ? { modelChoice } : {}),
 		});
 	} catch (err) {
 		if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;

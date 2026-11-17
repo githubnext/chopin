@@ -1381,9 +1381,15 @@ holds its rules:
   creation), or else the repository's default branch at its current commit. The
   draft goes through MCP's `prepare` and the same visual assessment
   (`createDocument` in `apps/server/src/mcp/hosted.ts` serves both). It is given
-  the creating document's model and thinking level.
+  the creating document's model and thinking level, stored with the creator as
+  its chooser in the same transaction that creates the document, fenced by the
+  writer lease (`CreateChannel.modelChoice`). A choice that can't be stored
+  creates nothing, so a retry creates the document with it; a retry of a
+  document already made never writes a choice, and so keeps any chosen since.
 - **Bounds.** At most 10 documents a turn and 30 an hour for one person, counted
-  in the process. The idempotency key is scoped to the creating document, so a
+  in the process. A turn's count is kept with the turn itself (its active member
+  request) for as long as it runs, a turn waiting on a Decision included, and
+  goes with it. The idempotency key is scoped to the creating document, so a
   retried call returns the document the first made and creates and starts
   nothing again; the same key with a different draft is a conflict. A retry is
   looked up in storage first: it is compared against the base the first call

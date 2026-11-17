@@ -896,6 +896,11 @@ export class PostgresStorage implements StorageAdapter {
 		transaction: TransactionSQL,
 		input: CreateChannel,
 	): Promise<ChannelRecord> {
+		if (input.modelChoice) {
+			await this.#assertLease(transaction, input.modelChoice.lease).catch((err: unknown) => {
+				throw unavailable("a document's model choice needs the writer lease", err);
+			});
+		}
 		await this.#lockChannelTitles(transaction, input.repositoryId);
 		if (input.parentChannelId !== undefined) {
 			if (input.parentChannelId.length === 0) throw missing("parent channel id is required");
@@ -956,6 +961,18 @@ export class PostgresStorage implements StorageAdapter {
 					${input.initial.source}, ${input.initial.sourceHash},
 					${input.initial.document}, ${JSON.stringify(input.initial.sidecar)}::jsonb,
 					${input.now}
+				)
+			`;
+		}
+		let chosen = input.modelChoice?.choice;
+		if (chosen && (chosen.model !== undefined || chosen.thinkingLevel !== undefined)) {
+			await transaction`
+				INSERT INTO planner_model_choices (
+					channel_id, model, model_name, thinking_level, user_id, updated_at, fencing
+				) VALUES (
+					${input.id}, ${chosen.model ?? null}, ${chosen.modelName ?? null},
+					${chosen.thinkingLevel ?? null}, ${chosen.userId}, ${chosen.updatedAt},
+					${input.modelChoice!.lease.fencing}
 				)
 			`;
 		}
