@@ -2,7 +2,8 @@
  * A thread's root and its replies have Chat's message toolbar, as Slack's thread view has it: the
  * three quick reactions, Add reaction and the menu, and no Reply in thread, since they are in that
  * thread. Their reactions are kept, live for everyone with the thread open, and the root's are Chat's
- * own. A reaction the Planner answers is answered in the thread, never in Chat. The scripted Planner
+ * own. A reaction the Planner answers is answered in the thread, never in Chat, and one made in Chat
+ * is answered in its message's thread, started for it if it has none. The scripted Planner
  * answers with the plan's heading and the latest pull request.
  */
 import { chatInput } from "./chat-input";
@@ -211,6 +212,30 @@ test("❓ and 👎 in a thread are answered in that thread and never in Chat, an
 	await expect(main(ana)).not.toContainText(ANSWER);
 	// The thread's replies are counted in Chat, which shows none of them.
 	await expect(rootIn(main(ana)).locator("[data-thread-summary]")).toContainText(/\d+ replies/);
+});
+
+test("❓ on a Chat message starts its thread for the answer, and Chat shows only the thread's summary", async ({ join, seed }) => {
+	test.setTimeout(180_000);
+	await seed("# Thread reactions\nThe cache lives in the router.\n", { transcript: transcript() });
+	let ana = await join("ana", WIDE);
+	let cy = await join("cy", WIDE);
+	let root = rootIn(main(ana));
+
+	await quick(root, "Explain this");
+	await expect(pill(root, "You reacted with ❓")).toHaveText("❓1");
+	for (let page of [ana, cy]) {
+		await expect(rootIn(main(page)).locator("[data-thread-summary]")).toContainText(/\d+ repl/, {
+			timeout: 60_000,
+		});
+		await expect(main(page)).not.toContainText(ANSWER);
+	}
+	await expect(panelOf(ana)).toHaveCount(0);
+
+	await rootIn(main(cy)).locator("[data-thread-summary]").click();
+	let panel = panelOf(cy);
+	await expect(rootIn(panel)).toBeVisible();
+	await expect(panel.locator(".chat-message-body[data-chat-message-id]", { hasText: ANSWER }))
+		.toHaveCount(1);
 });
 
 test("on a phone a long press in a thread brings up the toolbar without Reply in thread, and Add reaction opens the sheet", async ({ join, seed }) => {

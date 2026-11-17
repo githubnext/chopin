@@ -24,7 +24,7 @@ const SYSTEM_CLOCK: ReactionClock = {
 	clear: timer => clearTimeout(timer as ReturnType<typeof setTimeout>),
 };
 
-/** Where a reaction made in a thread's view is answered: in that thread, never in Chat. */
+/** The thread a reaction is answered in, never Chat: its message's, or the one it was made in. */
 export type InThread = {
 	rootId: string;
 	/** The thread's room, which a reaction to its root, a Chat message, is answered in. */
@@ -241,11 +241,17 @@ export function createResponder(
 		};
 		try {
 			if (closed || chat.closed) return release();
-			// A thread's root is a Chat message; reacted to in the thread, it is answered there.
+			let sessionId = candidate.sessionId;
+			let initiative = !!await context.initiativeAuthorize?.(sessionId, candidate.actor);
+			// Asked before a thread is started for the answer, so a reaction nobody may have answered
+			// leaves no empty thread behind.
+			if (!initiative && !await context.reactionAuthorize?.(sessionId, candidate.actor)) {
+				return release();
+			}
+			// A Chat message is answered in its thread, which is started for it if it has none.
 			let target = candidate.thread?.answerIn ? await candidate.thread.answerIn() : context;
 			if (!target || closed || chat.closed || target.chat.closed) return release();
-			let sessionId = candidate.sessionId;
-			if (await context.initiativeAuthorize?.(sessionId, candidate.actor)) {
+			if (initiative) {
 				if (closed || chat.closed || !await jobReady(target, sessionId)) return release();
 				return await turn(
 					candidate,
@@ -410,15 +416,10 @@ export function createResponder(
 	};
 }
 
-export function respond(context: Room, reacted: Reacted): void {
-	context.chat.reactions ??= createResponder();
-	context.chat.reactions.reacted(context, reacted);
-}
-
 /**
- * Answers a reaction made in a thread's view, by the top-level Chat's responder, which its close
- * stops. `context` is the room whose transcript holds the message: the thread's for a reply, the
- * Chat's for the root.
+ * Answers a reaction in a thread, by the top-level Chat's responder, which its close stops.
+ * `context` is the room whose transcript holds the message: the thread's for a reply, the Chat's
+ * for a Chat message, whose thread `thread.answerIn` gives.
  */
 export function respondInThread(
 	top: Room,

@@ -65,9 +65,7 @@ import * as Chat from "./chat/service";
 import { answerWake } from "./chat/wake";
 import { plannerAttachment } from "./chat/planner-attachment";
 import * as Initiative from "./chat/initiative";
-import * as Reactions from "./chat/reactions";
-import { respond as respondToReaction } from "./chat/reaction-reply";
-import { copiedFrom, reactInThread } from "./chat/thread-reactions";
+import { copiedFrom, reactInChat, reactInThread } from "./chat/thread-reactions";
 import { createChildDocuments } from "./chat/children";
 import { createRootChat } from "./chat/root";
 import { serverInstruction as runServerInstruction } from "./chat/server-instruction";
@@ -1602,9 +1600,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				let context = chat(room, ws);
 				let thread = frame.thread ?? copiedFrom(context, frame.id);
 				if (thread !== undefined) await reactInThread(context, ws, { ...frame, thread });
-				else {
-					await Reactions.react(context, ws, frame, reacted => respondToReaction(context, reacted));
-				}
+				else await reactInChat(context, ws, frame);
 			}
 			return;
 

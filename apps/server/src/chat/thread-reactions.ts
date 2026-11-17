@@ -3,6 +3,7 @@
  * thread's record and told as a `chat:in-thread` frame. The root is the Chat's message, shown at the
  * head of the thread: its reaction is saved and told as Chat's own, so its pills in Chat change too.
  * Either way a reaction the Planner answers is answered in the thread, by the thread's session.
+ * A reaction made in Chat is answered in its message's thread too, started for it if it has none.
  */
 import type { Chat as Wire, Request } from "@chopin/protocol";
 
@@ -23,6 +24,23 @@ export function copiedFrom(top: Room, id: unknown): string | undefined {
 	return top.chat.entries.find(entry => entry.id === id)?.fromThread;
 }
 
+/**
+ * A reaction to a Chat message, made in Chat or at the head of its thread: saved and told as Chat's,
+ * and answered in the message's thread. The thread is started for the answer only if nobody has
+ * opened it to write in yet, and is saved before the answer runs.
+ */
+export function reactInChat(
+	top: Room,
+	ws: Socket,
+	msg: Request<Wire.React>,
+	override?: ThreadPersistence,
+): Promise<void> {
+	let rootId = msg.id;
+	let handle = ws.data.handle;
+	let answerIn = () => threadRoomFor(top, rootId, handle, true, override);
+	return react(top, ws, msg, reacted => respondInThread(top, top, reacted, { rootId, answerIn }));
+}
+
 export async function reactInThread(
 	top: Room,
 	ws: Socket,
@@ -34,12 +52,7 @@ export async function reactInThread(
 		return fail(ws, msg.rid, "invalid thread root id");
 	}
 	if (top.rootChannelId) return fail(ws, msg.rid, "this document's Chat is on its root document");
-	if (msg.id === rootId) {
-		let handle = ws.data.handle;
-		// The thread is started for the answer only if nobody has opened it to write in yet.
-		let answerIn = () => threadRoomFor(top, rootId, handle, true, override);
-		return react(top, ws, msg, reacted => respondInThread(top, top, reacted, { rootId, answerIn }));
-	}
+	if (msg.id === rootId) return reactInChat(top, ws, msg, override);
 	let room: Room | undefined;
 	try {
 		room = await threadRoomFor(top, rootId, ws.data.handle, false, override);
