@@ -14,7 +14,8 @@ export const threadNoteInput = z.object({
 			+ "card, or else the person whose message you are answering.",
 	),
 	question: z.string().min(1).max(128).optional().describe(
-		"The id of the Decision card the person answered, when the decision was an answer to one.",
+		"The id of a Decision card you asked in this thread that a person answered, when the "
+			+ "decision was that answer.",
 	),
 }).strict();
 
@@ -23,10 +24,11 @@ Chat. The Planner answering the Chat itself does not see what is said here, so t
 person decides here, or its next turn can contradict it. The note goes only to this document's
 Chat Planner, which reads it before its next turn; it is not posted in Chat and starts nothing.
 
-Send one note for each Decision card a person answered in this thread, with its id in
-\`question\`; a card is noted once. Also send one when a person settles something in words that
-you act on: they choose an approach, agree to a proposal, or rule an option out. Send nothing when
-nothing was decided, for your own suggestions, or for a choice you already noted.`;
+Send one note for each Decision card you asked in this thread that a person answered, with its id
+in \`question\`; a card is noted once, and a card asked elsewhere is not this thread's to note.
+Also send one when a person settles something in words that you act on: they choose an approach,
+agree to a proposal, or rule an option out. Send nothing when nothing was decided, for your own
+suggestions, or for a choice you already noted.`;
 
 /** `tell_chat_planner`, which sends through `tell`; without it the tool only refuses. */
 export function threadNoteTool(tell?: TellChat) {

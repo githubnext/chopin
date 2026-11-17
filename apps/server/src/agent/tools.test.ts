@@ -637,8 +637,9 @@ test("anchor_plan keeps same-block decisions in original ask order", async () =>
 	expect(second).toBeLessThan(source.indexOf("The second paragraph."));
 });
 
-test("ask publishes a pending questionnaire beside its validated prose", async () => {
+test("ask publishes a pending questionnaire beside its validated prose, and tells the room it asked it", async () => {
 	let published: unknown[] = [];
+	let asked: string[] = [];
 	let { broadcasts, plan, server } = await opened("Related prose.\n");
 	let anchors = 0;
 	let created = Promise.withResolvers<void>();
@@ -656,6 +657,7 @@ test("ask publishes a pending questionnaire beside its validated prose", async (
 			created.resolve();
 		},
 		changes() {},
+		decisionsAsked: ids => asked.push(...ids),
 	}).find(tool => tool.name === "ask");
 	if (!ask?.handler) throw new Error("ask has no handler");
 	let digest = room.digests(plan.document)[0]!;
@@ -691,6 +693,7 @@ test("ask publishes a pending questionnaire beside its validated prose", async (
 	expect(JSON.parse(result as string).outcomes).toEqual([
 		{ status: "cancelled", cancelled_by: "test" },
 	]);
+	expect(asked).toEqual([record.id]);
 });
 
 test("a stale ask does not announce an anchor snapshot", async () => {

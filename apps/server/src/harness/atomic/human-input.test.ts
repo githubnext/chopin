@@ -934,3 +934,19 @@ test("a workflow question's answer is returned only after its paused run is rele
 	release();
 	expect((await response).answers).toMatchObject([{ kind: "option", answer: " A " }]);
 });
+
+test("the room hears which Decision cards its Planner's request asked, as the request does", async () => {
+	let f = await fixture();
+	let heard: string[][] = [];
+	let told: string[][] = [];
+	let input = createHumanInput({ ...f.room, decisionsAsked: ids => heard.push(ids) });
+	let confirmed = input.confirm("Confirm", "Proceed?", {
+		...f.options,
+		asked: ids => told.push(ids),
+	});
+	let [card] = await f.cards(1);
+	expect(heard).toEqual([[card!.id]]);
+	expect(told).toEqual(heard);
+	await f.answer(card!.id, [0]);
+	expect(await confirmed).toBe(true);
+});

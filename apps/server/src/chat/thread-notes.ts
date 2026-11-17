@@ -30,6 +30,8 @@ export type NoteThread = {
 
 /** What the server knows of a Decision card a note names, and of the cards already noted. */
 export type NoteQuestions = {
+	/** The cards this thread's Planner asked: a note can name only one of them. */
+	asked: ReadonlySet<string>;
 	/** Who answered the card, or undefined when the document has no answered card by that id. */
 	answeredBy: (id: string) => string | undefined;
 	/** Cards a thread's Planner already sent a note for. */
@@ -66,10 +68,15 @@ function participants(thread: NoteThread, answerer: string | undefined): Map<str
 function questionOf(request: ThreadNoteRequest, questions: NoteQuestions) {
 	if (request.question === undefined) return {};
 	let id = typeof request.question === "string" ? request.question.trim() : "";
-	let answerer = id ? questions.answeredBy(id) : undefined;
+	if (!questions.asked.has(id)) {
+		throw new Error(
+			`No Decision card ${JSON.stringify(id)} was asked in this thread. Nothing was sent.`,
+		);
+	}
+	let answerer = questions.answeredBy(id);
 	if (answerer === undefined) {
 		throw new Error(
-			`This document has no answered Decision card ${JSON.stringify(id)}. Nothing was sent.`,
+			`Decision card ${JSON.stringify(id)} has not been answered. Nothing was sent.`,
 		);
 	}
 	if (questions.noted.has(id)) {

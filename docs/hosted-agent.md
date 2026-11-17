@@ -410,7 +410,9 @@ their usual [bind rules](self-hosting.md#choose-and-trust-a-harness).
 
 The Planner's own turns offer only read-only tools beside Chopin's document and
 repository tools: `read`, `find` and `search` for the working directory,
-Atomic's web research tools, `ask_user_question`, `workflow`, and `intercom`,
+Atomic's web research tools, `ask_user_question`, `workflow`, and `intercom`
+(in a Chat thread, `tell_chat_planner` instead of `intercom`; see
+[What a thread decided reaches the Chat](#what-a-thread-decided-reaches-the-chat)),
 plus the read-only tools the operator names in `chopin.plannerTools` of the
 agent directory's `settings.json`, such as a code search tool a package
 registers:
@@ -496,17 +498,24 @@ session lives only for its turn. A thread's Planner is not offered Atomic's
 from a codemode script, so `tell_chat_planner` is its only route to another
 session; its instructions leave out the implementation handoff described above.
 
-The thread's Planner sends one note for each Decision card a person answered in
-the thread, naming the card, and the server refuses a second note for the same
-card. It may also note a choice a person settled in words that it acts on, and
-sends nothing when nothing was decided. The server checks that each person named
-took part in the thread or answered the card, keeps at most 20 unread notes per
-document, and saves the note with the Chat's session state before the tool says
-it was sent. The note starts no turn and is not posted in Chat. The Chat
-Planner's next turn is given every unread note ahead of its prompt, with the
-thread's words quoted as data rather than instructions, and a Retry of that turn
-is given them again. `copilot-sdk` and `remote` Planners are not offered the
-tool. The `[agent] N tools:` line logged as an Atomic session opens lists it for
+The thread's Planner sends one note for each Decision card it asked in the
+thread that a person answered, naming the card, and the server refuses a second
+note for the same card. The server keeps the ids of the cards each thread's
+Planner asks with the thread (`ask_user_question`, `ask`, `open_decision` and
+`open_decisions` all count) and refuses a note naming a card asked anywhere
+else. The Planner may also note a choice a person settled in words that it acts
+on, and sends nothing when nothing was decided. The server checks that each
+person named took part in the thread or answered the card, and keeps at most 20
+unread notes per document. A note is saved with the Chat's session state before
+any Chat turn can be given it and before the tool says it was sent; one that
+could not be saved is reported as not sent and is never given to a turn. The
+note starts no turn and is not posted in Chat. The Chat Planner's next turn is
+given every unread note, with the thread's words quoted as data rather than
+instructions: ahead of its prompt, or, when the turn opens with a skill or a
+prompt template that has to stand first, beside its instructions for that turn
+alone. The notes a turn for a message was given are saved with the session
+state, so a Retry of that turn is given them again, after a restart too.
+`copilot-sdk` and `remote` Planners are not offered the tool. The `[agent] N tools:` line logged as an Atomic session opens lists it for
 a thread's Planner, and the line after it says the session withholds `intercom`
 and names `tell_chat_planner` as its route out.
 

@@ -232,7 +232,10 @@ export type HumanInput = {
  * cannot tell apart.
  */
 export function createHumanInput(
-	room: Pick<DocumentRoom, "id" | "plan" | "server" | "anchors" | "focusedChild">,
+	room: Pick<
+		DocumentRoom,
+		"id" | "plan" | "server" | "anchors" | "focusedChild" | "decisionsAsked"
+	>,
 	hold?: (workflowRunId: string, signal: AbortSignal) => Promise<void>,
 	report?: (status: HumanInputStatus) => void,
 	pending?: PendingInputs,
@@ -269,7 +272,10 @@ export function createHumanInput(
 			options.block ? { near: options.block } : undefined,
 			room.anchors,
 			options.signal,
-			options.asked,
+			ids => {
+				options.asked?.(ids);
+				room.decisionsAsked?.(ids);
+			},
 		);
 		if (options.signal.aborted) {
 			report?.("cancelled");

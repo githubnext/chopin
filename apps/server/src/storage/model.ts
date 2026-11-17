@@ -1084,6 +1084,8 @@ export type ChatThreadRecord = {
 	compactions: import("@chopin/protocol").Chat.CompactionRecord[];
 	usage?: import("@chopin/protocol").Chat.ContextUsage;
 	forkState: ChatThreadForkState;
+	/** Decision cards this thread's Planner asked: the only cards it may tell the Chat's Planner about. */
+	askedQuestions?: string[];
 	updatedAt: Date;
 };
 
@@ -1112,6 +1114,8 @@ export type ChatSessionState = {
 	threadNotes?: ChatThreadNote[];
 	/** Every Decision card a thread's Planner has sent a note for, read or not. */
 	notedQuestions?: string[];
+	/** The notes the Chat Planner's latest turn for a message was given, for a Retry of it. */
+	givenNotes?: { entryId: string; notes: ChatThreadNote[] };
 	updatedAt: Date;
 };
 

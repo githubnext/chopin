@@ -204,6 +204,8 @@ export type DocumentRoom = {
 	visualAdmission?: VisualAdmission;
 	/** The current turn's cancellation, read per call when a session is retained. */
 	turnSignal?: () => AbortSignal | undefined;
+	/** Hears the ids of the Decision cards this room's Planner creates; set in a Chat thread. */
+	decisionsAsked?: (ids: string[]) => void;
 	/** The same server-owned prose check used before publishing ordinary Planner replies. */
 	checkReply?: (text: string, signal?: AbortSignal) => Promise<boolean>;
 	/** This root's children; absent in a child room and in tests that do not need them. */
@@ -615,6 +617,7 @@ export const documentTools = {
 				let id = await Questions.capture(context.plan, context.server, context.id, input, {
 					revision,
 				});
+				context.decisionsAsked?.([id]);
 				context.anchors();
 				let status = Questions.meta(context.plan, context.plan.records.get(id)!).status;
 				return { id, status };
@@ -680,6 +683,7 @@ export const documentTools = {
 					{ revision: args.revision, blocks: args.questions.map(question => question.blocks) },
 					context.anchors,
 					abortSignal,
+					ids => context.decisionsAsked?.(ids),
 				);
 				let result = {
 					outcomes: ended.map(outcome =>

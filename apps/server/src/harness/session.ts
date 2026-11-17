@@ -124,7 +124,9 @@ export type PlannerSession = {
 	/**
 	 * Runs one turn. `choice` is what a person chose for the document, already checked against the
 	 * harness's catalog: the model replaces the channel's, and the thinking level goes to the
-	 * harness that offers one. Every turn passes it, a background job's included.
+	 * harness that offers one. Every turn passes it, a background job's included. `context` is added
+	 * to the session's instructions for this turn alone, for what cannot go before a prompt that
+	 * opens with a command.
 	 */
 	stream: (
 		prompt: string,
@@ -132,6 +134,7 @@ export type PlannerSession = {
 		choice?: PlannerChoice,
 		files?: PlannerFiles,
 		message?: PlannerTurnMessage,
+		context?: string,
 	) => ReturnType<PlannerAgent["stream"]>;
 	destroy: () => Promise<void>;
 	/**
@@ -442,7 +445,7 @@ export async function openPlannerSession(
 						},
 					}
 					: {}),
-				stream: (prompt, abortSignal, choice, files, message) => {
+				stream: (prompt, abortSignal, choice, files, message, context) => {
 					// The remote turn aborts it when the turn ends or the link drops mid-tool.
 					let hostTools = remote ? new AbortController() : undefined;
 					if (remote) {
@@ -460,7 +463,7 @@ export async function openPlannerSession(
 							options: {
 								...callOptions,
 								...(choice?.model ? { model: choice.model } : {}),
-								instructions,
+								instructions: context ? `${instructions}\n\n${context}` : instructions,
 								owner: current,
 								githubTools: tools,
 								...(hostTools ? { toolSignal: hostTools.signal } : {}),

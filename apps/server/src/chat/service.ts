@@ -894,6 +894,8 @@ export type Room = {
 	 * decided in the thread. Only a full Atomic Planner's turn is given it.
 	 */
 	tellChat?: TellChat;
+	/** Set only on a thread's room: hears the ids of the Decision cards the thread's Planner asks. */
+	threadAsked?: (ids: string[]) => void;
 	/** Session-tree and remote fork hooks for top-level Chat and threads. */
 	sessionForks?: {
 		/** `retry`: the turn runs `currentEntryId` again, and nothing of its failed attempt is kept. */
@@ -907,10 +909,10 @@ export type Room = {
 			turnEntries: Wire.Entry[],
 		) => Promise<void> | void;
 		/**
-		 * What threads told the Chat's Planner since its last turn, for this turn's prompt, once.
-		 * Absent on a thread's own room.
+		 * What threads told the Chat's Planner since its last turn, for this turn, once: resolves
+		 * after every note already being saved is saved or refused. Absent on a thread's own room.
 		 */
-		takeNotes?: (currentEntryId?: string) => string | undefined;
+		takeNotes?: (currentEntryId?: string) => Promise<string | undefined>;
 	};
 	/** Called when harness-reported context usage or compactions change. */
 	onSessionMetaChanged?: () => Promise<void> | void;
@@ -2674,6 +2676,7 @@ export function documentRoom(context: Room): DocumentRoom {
 		jobs: context.jobs,
 		children: context.children,
 		turnSignal: () => chat.turnController?.signal,
+		...(context.threadAsked && { decisionsAsked: context.threadAsked }),
 		...((!chat.job || chat.job.kind === "decision-followup") && context.visualAdmission && {
 			visualAdmission: input => {
 				let signals = [input.signal, chat.turnController?.signal].filter(
@@ -3397,6 +3400,8 @@ async function run(
 		let prompt: string;
 		// The files sent with the message that began the turn, given with the first attempt's prompt.
 		let files: PlannerFiles | undefined;
+		// What this turn alone is told beside its instructions, when its prompt has to open with a command.
+		let turnContext: string | undefined;
 		if (jobTurn) {
 			prompt = jobTurn.prompt;
 		} else if (reader) {
@@ -3419,8 +3424,9 @@ async function run(
 			prompt = compose(backscroll, handle, text, references, available, !!context.invokedBy);
 			let focus = chat.focus;
 			if (focus && !opening) prompt = `${focusContext(focus)}\n\n${prompt}`;
-			let notes = opening ? undefined : context.sessionForks?.takeNotes?.(member?.entryId);
-			if (notes) prompt = `${notes}\n\n${prompt}`;
+			let notes = await context.sessionForks?.takeNotes?.(member?.entryId);
+			if (notes && opening) turnContext = notes;
+			else if (notes) prompt = `${notes}\n\n${prompt}`;
 			if (member && chat.entries.find(value => value.id === member.entryId)?.attachments?.length) {
 				let sent = await context.auth.storage.chatAttachments.forEntry(room, member.entryId);
 				if (sent.length) {
@@ -3459,7 +3465,14 @@ async function run(
 							? { id: member.entryId, ...(retrying ? { retry: true as const } : {}) }
 							: undefined;
 						retrying = false;
-						let result = await session.stream(withBootstrap(text), abort, choice, sent, answers);
+						let result = await session.stream(
+							withBootstrap(text),
+							abort,
+							choice,
+							sent,
+							answers,
+							turnContext,
+						);
 						// Its first call is made: a message given to the turn now reaches it, and
 						// people are told the turn is running, as the machine has its prompt.
 						steered?.open(session);

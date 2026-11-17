@@ -111,6 +111,7 @@ export function chatThreadContract(name: string, factory: StorageFactory) {
 						atomicEntries: [{ type: "session", id: "s1" }, { id: "leaf-1", type: "message" }],
 						atomicLeafId: "leaf-1",
 					},
+					askedQuestions: ["q-1", "q-2"],
 					updatedAt: AT,
 				};
 
@@ -166,6 +167,17 @@ export function chatThreadContract(name: string, factory: StorageFactory) {
 						ts: 160,
 					}],
 					notedQuestions: ["q-1"],
+					givenNotes: {
+						entryId: "entry-9",
+						notes: [{
+							id: "note-0",
+							rootId: "root-1",
+							root: { author: "@ana", excerpt: "Hello" },
+							decision: "Ship on Friday.",
+							decidedBy: ["bo"],
+							ts: 150,
+						}],
+					},
 					updatedAt: AT,
 				};
 				await storage.chatThreads.putSessionState(lease, sessionState);
