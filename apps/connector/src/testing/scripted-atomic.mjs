@@ -1,4 +1,4 @@
-import { createAssistantMessageEventStream } from "@bastani/pi-ai";
+import { createAssistantMessageEventStream } from "@bastani/atomic-ai";
 import { readFileSync } from "node:fs";
 
 // An Atomic extension with one scripted model, so a test can run the real Atomic without a login:
