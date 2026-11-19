@@ -1,7 +1,10 @@
 import { AI_LAUNCH_HEADER, AI_PROXY_PATH, isAiProvider } from "@chopin/protocol/ai-credentials";
 
 import type { AiProvider } from "@chopin/protocol/ai-credentials";
-import type { AiCredentials, AiRefusal } from "./credentials";
+import type { AiAdmitted, AiCredentials, AiDeadlines, AiRefusal } from "./credentials";
+
+/** A send the transport took: the credential it carries, and the provider's answer to come. */
+type Handed = { secret: string; upstream: Promise<Response> };
 
 /** Each provider's own API origin, the only host the proxy sends its credential to. */
 export const AI_UPSTREAMS: Record<AiProvider, string> = {
@@ -134,6 +137,11 @@ const REFUSALS: Record<AiRefusal, { status: number; message: string }> = {
 		status: 502,
 		message: "GitHub can't give a Copilot token now. Try again in a moment.",
 	},
+	cancelled: { status: 499, message: "The request was cancelled." },
+	restarting: {
+		status: 503,
+		message: "Chopin is restarting, so this wasn't sent. Send it again in a moment.",
+	},
 	busy: {
 		status: 503,
 		message: "Launches or credentials kept changing in Chopin while this was sent. Send it again.",
@@ -145,6 +153,10 @@ export type AiProxyOptions = {
 	/** Each provider's origin, and the catalog's; tests point them at fakes. */
 	upstreams?: Partial<Record<AiProvider, string>> & { catalog?: string };
 	fetch?: typeof fetch;
+	/**
+	 * The clock the transport reads as it takes a send, against a launch's and a Copilot token's
+	 * deadlines, and the catalog's age is told by; the credentials' own unless given.
+	 */
 	clock?: () => number;
 };
 
@@ -214,16 +226,41 @@ function forwardedHeaders(request: Request): Headers {
 }
 
 /**
- * Whether a header the proxy drops, other than the two `key` is taken from, carries it too: sent
- * without that header, the request would not be the one its agent sent.
+ * A launch's stand-in as Chopin hands it out (`chopin_ai_` and 43 base64url characters), in any
+ * case, since a header's name is sent lowercased.
  */
-function keyDropped(request: Request, key: string): boolean {
+const STAND_IN = /chopin_ai_[A-Za-z0-9_-]{43}/i;
+
+/**
+ * Whether a header the proxy does not send on (`discarded`), other than the two the key is taken
+ * from, carries any launch's stand-in in its name or its value: sent without it, the request would
+ * not be the one its agent sent.
+ */
+function standInDropped(request: Request, discarded: (name: string) => boolean): boolean {
 	for (let [name, value] of request.headers) {
-		if (name !== "authorization" && name !== "x-api-key" && dropped(name) && value.includes(key)) {
-			return true;
-		}
+		if (name === "authorization" || name === "x-api-key" || !discarded(name)) continue;
+		if (STAND_IN.test(name) || STAND_IN.test(value)) return true;
 	}
 	return false;
+}
+
+/** Whether a query carries a stand-in, as it came or with its escapes decoded. */
+function standInQueried(search: string): boolean {
+	let decoded = search;
+	try {
+		decoded = decodeURIComponent(search.replaceAll("+", " "));
+	} catch {
+		// An escape that doesn't decode is read as it came.
+	}
+	return STAND_IN.test(search) || STAND_IN.test(decoded);
+}
+
+function droppedStandIn(): Response {
+	return failure(
+		400,
+		"This request also carries a key Chopin gave a launch in a header Chopin doesn't forward. Send the key only in Authorization or x-api-key.",
+		"dropped-header",
+	);
 }
 
 function routed(provider: AiProvider, method: string, path: string): boolean {
@@ -231,26 +268,47 @@ function routed(provider: AiProvider, method: string, path: string): boolean {
 }
 
 /**
+ * Whether a header, as it is emitted, holds `secret`: in its name, in any case (a name is sent
+ * lowercased), or in its value.
+ */
+function holds(name: string, value: string, secret: string): boolean {
+	return name.includes(secret.toLowerCase()) || value.includes(secret);
+}
+
+/**
  * The upstream's headers to pass back: only those `RETURNED_RESPONSE` names, each with `secret`
  * replaced wherever its value holds it, and `no-store` when the provider says nothing of caching.
  * What is emitted is checked, not what came: a name passed by its prefix that holds `secret`, in
- * any case (a name is sent lowercased), and a value whose replacement forms `secret` again with
- * the text around it, are left out. The allow-list and the check are the last step, so no value
- * is set after them.
+ * any case, and a value whose replacement forms `secret` again with the text around it, are left
+ * out. Last, the finished set, the `no-store` Chopin adds included, is checked again: when one of
+ * Chopin's own would hold `secret`, there is no set to pass back (undefined), since the answer must
+ * not go back without its protection from caching either.
  */
-function returnedHeaders(upstream: Response, secret: string): Headers {
+function returnedHeaders(upstream: Response, secret: string): Headers | undefined {
 	let headers = new Headers({ "cache-control": "no-store" });
-	let named = secret.toLowerCase();
 	for (let [name, value] of upstream.headers) {
 		if (
 			!RETURNED_RESPONSE.has(name)
 			&& !RETURNED_RESPONSE_PREFIXES.some(prefix => name.startsWith(prefix))
 		) continue;
 		let emitted = value.replaceAll(secret, REDACTED_TEXT);
-		if (name.includes(named) || emitted.includes(secret)) continue;
+		if (holds(name, emitted, secret)) continue;
 		headers.set(name, emitted);
 	}
+	for (let [name, value] of headers) if (holds(name, value, secret)) return undefined;
 	return headers;
+}
+
+/**
+ * A failure answered once the proxy holds `secret`, with every header of its own that would hold
+ * it left out: the failure is no answer to keep, and carries nothing of the provider's.
+ */
+function failedHolding(secret: string, status: number, message: string, code: string): Response {
+	let response = failure(status, message, code);
+	let holding: string[] = [];
+	for (let [name, value] of response.headers) if (holds(name, value, secret)) holding.push(name);
+	for (let name of holding) response.headers.delete(name);
+	return response;
 }
 
 /** Whether `fetch` decoded the upstream's body, so a credential in it can be found and replaced. */
@@ -356,22 +414,26 @@ type CachedCatalog = { body: Uint8Array; headers: Headers; fetchedAt: number };
  * placeholder a live launch was handed for that provider, and in `AI_LAUNCH_HEADER` the credential
  * of that same launch, which its runner adds. The proxy drops these headers, reads the body, takes
  * a fresh Copilot token for one that expired meanwhile, and at the final handoff, in the same step
- * as the send, checks the launch is still live and the person's credential unchanged. It puts
+ * as the send, checks the launch is still live and the person's credential unchanged; the send
+ * itself checks the launch's and the token's deadlines on the clock reading it is made at. It puts
  * the real credential of the launch's person in the one header the provider takes it in, and sends
  * the request, path, query and body unchanged, to the provider's own origin and nowhere else: a
- * placeholder anywhere else in the request is sent on as it is, and a redirect comes back to the
+ * request with any launch's placeholder in a header the proxy drops, in its name or its value, is
+ * refused, one anywhere else in the request is sent on as it is, and a redirect comes back to the
  * agent rather than being followed with the credential. The answer carries the provider's status
  * code, never its reason phrase, and only allow-listed headers; a credential the provider echoes
- * is taken out of them and the body, and a body the proxy can't decode is refused.
- * `/api/v1/ai/models.dev/api.json` serves the public model catalog, held for ten minutes, to a
- * request carrying a live launch's credential alone, and is fetched with no credential.
+ * is taken out of them and the body, a body the proxy can't decode is refused, and so is an answer
+ * a header Chopin adds would carry the credential in. `/api/v1/ai/models.dev/api.json` serves the
+ * public model catalog, held for ten minutes, to a request carrying a live launch's credential
+ * alone, and is fetched with no credential, so a placeholder in its query or another header is
+ * refused.
  */
 export function aiProxy(options: AiProxyOptions) {
 	let send = options.fetch ?? fetch;
-	let clock = options.clock ?? Date.now;
+	let clock = options.clock ?? (() => options.credentials.now());
 	let catalog: CachedCatalog | undefined;
 
-	let serveCatalog = async (request: Request, path: string): Promise<Response> => {
+	let serveCatalog = async (request: Request, url: URL, path: string): Promise<Response> => {
 		if (path !== "/api.json") return failure(404, "Only the catalog is served here.", "not-found");
 		if (request.method !== "GET" && request.method !== "HEAD") {
 			return failure(405, "The catalog is read with GET.", "method");
@@ -380,6 +442,15 @@ export function aiProxy(options: AiProxyOptions) {
 		if (key === null) {
 			return failure(401, "Send one key, as Authorization: Bearer or x-api-key.", "no-placeholder");
 		}
+		// The catalog is fetched with nothing of the request: a stand-in anywhere but the key is lost.
+		if (standInQueried(url.search)) {
+			return failure(
+				400,
+				"This request carries a key Chopin gave a launch in its query, which the catalog doesn't use. Send the key only in Authorization or x-api-key.",
+				"dropped-query",
+			);
+		}
+		if (standInDropped(request, () => true)) return droppedStandIn();
 		let launchToken = request.headers.get(AI_LAUNCH_HEADER)?.trim() || undefined;
 		if (!catalog || clock() - catalog.fetchedAt >= CATALOG_FRESH_MS) {
 			let admitted = await options.credentials.forLaunch(key, launchToken, () => true as const);
@@ -429,7 +500,7 @@ export function aiProxy(options: AiProxyOptions) {
 		let slash = rest.indexOf("/");
 		let name = slash < 0 ? rest : rest.slice(0, slash);
 		let path = slash < 0 ? "/" : rest.slice(slash);
-		if (name === "models.dev") return serveCatalog(request, path);
+		if (name === "models.dev") return serveCatalog(request, url, path);
 		if (!isAiProvider(name)) {
 			return failure(404, "Chopin doesn't proxy this provider.", "not-found");
 		}
@@ -441,13 +512,7 @@ export function aiProxy(options: AiProxyOptions) {
 		if (key === null) {
 			return failure(401, "Send one key, as Authorization: Bearer or x-api-key.", "no-placeholder");
 		}
-		if (key && keyDropped(request, key)) {
-			return failure(
-				400,
-				"This request also carries its key in a header Chopin doesn't forward. Send the key only in Authorization or x-api-key.",
-				"dropped-header",
-			);
-		}
+		if (standInDropped(request, dropped)) return droppedStandIn();
 		let launchToken = request.headers.get(AI_LAUNCH_HEADER)?.trim() || undefined;
 		let checked = await options.credentials.authorize(key, provider, launchToken);
 		if ("refused" in checked) return refused(checked.refused);
@@ -472,27 +537,49 @@ export function aiProxy(options: AiProxyOptions) {
 				redirect: "manual",
 				signal: request.signal,
 			};
-			return () => ({ secret: authorized.secret, upstream: (async () => send(target, init))() });
-		});
+			// The deadlines are checked on the very clock reading the request is sent at.
+			return (deadlines: AiDeadlines): AiAdmitted<Handed> => {
+				let now = clock();
+				if (now >= deadlines.launch) return { late: "launch" };
+				if (deadlines.token !== undefined && now >= deadlines.token) return { late: "token" };
+				return {
+					sent: { secret: authorized.secret, upstream: (async () => send(target, init))() },
+				};
+			};
+		}, request.signal);
 		if ("refused" in handed) return refused(handed.refused);
+		let { secret } = handed;
 		let upstream: Response;
 		try {
 			upstream = await handed.upstream;
 		} catch {
-			if (request.signal.aborted) return failure(499, "The request was cancelled.", "cancelled");
-			return failure(502, `${provider} can't be reached.`, "upstream");
+			if (request.signal.aborted) {
+				return failedHolding(secret, 499, "The request was cancelled.", "cancelled");
+			}
+			return failedHolding(secret, 502, `${provider} can't be reached.`, "upstream");
 		}
 		if (!readable(upstream)) {
 			await upstream.body?.cancel();
-			return failure(
+			return failedHolding(
+				secret,
 				502,
 				`${provider} answered in an encoding Chopin can't read to take the key out of.`,
 				"upstream-encoding",
 			);
 		}
-		return new Response(upstream.body && scrubbed(upstream.body, handed.secret), {
+		let headers = returnedHeaders(upstream, secret);
+		if (!headers) {
+			await upstream.body?.cancel();
+			return failedHolding(
+				secret,
+				502,
+				`${provider}'s answer can't be passed back: a header Chopin adds to it would carry the key.`,
+				"upstream-headers",
+			);
+		}
+		return new Response(upstream.body && scrubbed(upstream.body, secret), {
 			status: upstream.status,
-			headers: returnedHeaders(upstream, handed.secret),
+			headers,
 		});
 	};
 }

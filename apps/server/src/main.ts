@@ -131,6 +131,7 @@ import { createDocument as createHostedDocument, MCP_SESSION_IDLE_MS } from "./m
 import { CANNOT_STEER } from "./chat/steering";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
+import { AI_PROXY_PATH } from "@chopin/protocol/ai-credentials";
 import { AiCredentials } from "./ai/credentials";
 import { aiProxy } from "./ai/proxy";
 import { copilotTokenExchange } from "./ai/copilot";
@@ -2194,10 +2195,12 @@ async function route(
 		if ("status" in outcome) return refused(outcome);
 		return upgraded(req, self, outcome.data);
 	}
-	// An MCP call stops its tool work when its caller goes away; a request the cut abandons is
-	// the same to it.
+	// An MCP call stops its tool work when its caller goes away, and a request to the AI proxy
+	// sends nothing once it does; a request the cut abandons is the same to both.
 	let routed = await router.handle(
-		url.pathname === "/mcp" ? abandonable(req, abandoned) : req,
+		url.pathname === "/mcp" || url.pathname.startsWith(`${AI_PROXY_PATH}/`)
+			? abandonable(req, abandoned)
+			: req,
 		url,
 	);
 	if (routed) return routed;
@@ -3617,6 +3620,7 @@ let connectedAi = new AiCredentials({
 	clock: hostedAuth.clock,
 	githubToken: githubSignIn(hostedAuth),
 	copilotToken: copilotTokenExchange(),
+	writer: () => writerLease.holds(),
 });
 aiCredentials = connectedAi;
 hostedAuth.machines.onEnded(machineId => {

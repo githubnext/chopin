@@ -1165,6 +1165,12 @@ export type AiPlaceholder = {
 	machineId?: string;
 	/** The document the launch works on, whose archiving or deletion ends it. */
 	channelId?: string;
+	/**
+	 * With `channelId`, the document's archive generation the launch was prepared in: how many times
+	 * it had been archived. A placeholder is stored only while the document is open in that
+	 * generation, so one prepared before an archive is never stored after it, a restore included.
+	 */
+	generation?: number;
 	expiresAt: Date;
 };
 

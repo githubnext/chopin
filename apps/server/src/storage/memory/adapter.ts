@@ -182,6 +182,8 @@ export class MemoryStorage implements StorageAdapter {
 	#operations = new Map<string, Map<string, Operation>>();
 	#agents = new Map<string, AgentState>();
 	#leases = new Map<string, Lease>();
+	/** How many times each document has been archived, which a restore never takes back. */
+	#archiveGenerations = new Map<string, number>();
 	readonly #images = new MemoryImageStore({
 		channelExists: id => this.#channels.has(id),
 		userExists: id => this.#users.has(id),
@@ -240,6 +242,10 @@ export class MemoryStorage implements StorageAdapter {
 		userExists: id => this.#users.has(id),
 		machineExists: id => this.#machines.has(id),
 		channelExists: id => this.#channels.has(id),
+		generation: id => {
+			let found = this.#channels.get(id);
+			return found && !found.archivedAt ? this.#archiveGenerations.get(id) ?? 0 : undefined;
+		},
 		cutoffs: this.#aiCutoffs,
 	});
 	readonly aiPlaceholders: AiPlaceholderStore = this.#aiPlaceholders;
@@ -700,6 +706,7 @@ export class MemoryStorage implements StorageAdapter {
 		let saved: ChannelRecord;
 		if (archived) {
 			saved = { ...found, updatedAt, archivedAt: new Date(updatedAt) };
+			this.#archiveGenerations.set(input.id, (this.#archiveGenerations.get(input.id) ?? 0) + 1);
 			this.#aiPlaceholders.deleteChannel(input.id);
 		} else {
 			let { archivedAt: _, ...active } = found;
@@ -736,6 +743,7 @@ export class MemoryStorage implements StorageAdapter {
 		this.#chatThreads.deleteChannel(id);
 		this.#plannerCredentials.deleteChannel(id);
 		this.#aiPlaceholders.deleteChannel(id);
+		this.#archiveGenerations.delete(id);
 		this.#snapshots.delete(id);
 		this.#sequences.delete(id);
 		this.#updates.delete(id);

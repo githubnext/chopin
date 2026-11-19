@@ -16,6 +16,10 @@ CREATE TABLE ai_credentials (
 	)
 );
 
+-- How many times each document has been archived; a restore never takes it back, so a launch
+-- prepared before an archive stores no placeholder after it.
+ALTER TABLE channels ADD COLUMN archive_generation integer NOT NULL DEFAULT 0;
+
 CREATE TABLE ai_placeholders (
 	digest bytea PRIMARY KEY CHECK (octet_length(digest) = 32),
 	launch_id text NOT NULL CHECK (char_length(launch_id) BETWEEN 1 AND 128),
@@ -24,6 +28,7 @@ CREATE TABLE ai_placeholders (
 	provider text NOT NULL CHECK (provider IN ('github-copilot', 'openai', 'anthropic')),
 	machine_id text REFERENCES machines(id) ON DELETE CASCADE,
 	channel_id text REFERENCES channels(id) ON DELETE CASCADE,
+	archive_generation integer CHECK ((channel_id IS NULL) = (archive_generation IS NULL)),
 	expires_at timestamptz NOT NULL
 );
 CREATE INDEX ai_placeholders_launch ON ai_placeholders(launch_id);

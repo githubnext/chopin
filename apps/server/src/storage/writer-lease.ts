@@ -29,6 +29,8 @@ export class WriterLease {
 	#renewedAt = 0;
 	#renewalStartedAt: number | undefined;
 	#renewalError: unknown;
+	/** Set once the owner stops renewing to release the lease; a later `hold` takes it back. */
+	#stopped = false;
 
 	constructor(store: LeaseStore, timing: WriterLeaseTiming, lost: () => void) {
 		this.#store = store;
@@ -40,6 +42,18 @@ export class WriterLease {
 	hold(lease: Lease): void {
 		this.held = lease;
 		this.#renewedAt = Date.now();
+		this.#stopped = false;
+	}
+
+	/**
+	 * Whether this process holds the lease now: held, not stopped on its way to being released, and
+	 * before the deadline its safety margin sets, measured from when the last renewal was sent, by
+	 * this process's own clock, whether or not the watchdog has run yet.
+	 */
+	holds(): boolean {
+		return this.held !== undefined
+			&& !this.#stopped
+			&& Date.now() < this.#renewedAt + this.#timing.ttlMs - this.#timing.safetyMs;
 	}
 
 	/** Arms the safety deadline and starts renewing. */
@@ -50,6 +64,7 @@ export class WriterLease {
 
 	/** Stops renewing and waits for any renewal in flight. */
 	async stop(): Promise<void> {
+		this.#stopped = true;
 		if (this.#renewal) clearInterval(this.#renewal);
 		this.#renewal = undefined;
 		if (this.#retry) clearTimeout(this.#retry);

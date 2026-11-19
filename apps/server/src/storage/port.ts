@@ -305,7 +305,10 @@ export interface ChannelStore {
 	rename(channel: RenameChannel): Promise<RenameResult>;
 	/** Sets Full width. Refused for an archived document, as a rename is. */
 	setFullWidth(input: ChannelWidthInput): Promise<RenameResult>;
-	/** Archives a document and ends, for good, the AI placeholders of every launch on it. */
+	/**
+	 * Archives a document and ends, for good, the AI placeholders of every launch on it, moving its
+	 * archive generation on (see `AiPlaceholderStore.generation`).
+	 */
 	archive(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
 	restore(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
 	delete(id: string): Promise<boolean>;
@@ -515,7 +518,8 @@ export interface AiCredentialStore {
 	/**
 	 * How many times this process has connected, replaced or removed one of `userId`'s credentials,
 	 * each counted once its write settles and before its caller hears so; one process serves a
-	 * database at a time, so a count unchanged across a read says none completed meanwhile.
+	 * database at a time, so while it holds the writer lease a count unchanged across a read says
+	 * none completed meanwhile.
 	 */
 	version(userId: string): number;
 }
@@ -525,8 +529,17 @@ export interface AiCredentialStore {
  * handed out, so a process that starts later accepts it while its launch lasts.
  */
 export interface AiPlaceholderStore {
-	/** One launch's placeholders, together; throws a conflict for a digest already stored. */
-	put(placeholders: AiPlaceholder[]): Promise<void>;
+	/**
+	 * One launch's placeholders, together; throws a conflict for a digest already stored. Stores
+	 * nothing and returns false when a placeholder's document is archived, or is open in another
+	 * archive generation than its `generation`, so a launch prepared before an archive keeps nothing.
+	 */
+	put(placeholders: AiPlaceholder[]): Promise<boolean>;
+	/**
+	 * A document's archive generation while it is open: how many times it has been archived.
+	 * Undefined while it is archived, or once it is gone. Restoring it does not go back.
+	 */
+	generation(channelId: string): Promise<number | undefined>;
 	/** The placeholder for this digest while it has not expired at `now`. */
 	find(digest: Uint8Array, now: Date): Promise<AiPlaceholder | undefined>;
 	/** Ends a launch: its placeholders stop working. Returns how many there were. */
@@ -538,8 +551,9 @@ export interface AiPlaceholderStore {
 	 * How many writes this process has committed that end a placeholder's authority before it
 	 * expires: a launch ended, a machine revoked or its launches ended, a document archived, and a
 	 * credential connected, replaced or removed. Each is counted once its write settles and before
-	 * its caller hears so; one process serves a database at a time, so a count unchanged across a
-	 * read says none completed meanwhile. Expiry is not counted: a reader checks the deadline itself.
+	 * its caller hears so; one process serves a database at a time, so while it holds the writer
+	 * lease a count unchanged across a read says none completed meanwhile. Expiry is not counted: a
+	 * reader checks the deadline itself.
 	 */
 	cutoffs(): number;
 }
