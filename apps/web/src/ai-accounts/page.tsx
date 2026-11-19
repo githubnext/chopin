@@ -51,6 +51,11 @@ function useCredentials() {
 	return { credentials, setCredentials, problem, load };
 }
 
+function focusLost() {
+	let active = document.activeElement;
+	return !active || active === document.body || !!active.closest("[inert]");
+}
+
 export function AiAccountsView(
 	{ credentials, now, onAction, pending, problem, usage }: {
 		credentials: readonly AiCredentialSummary[];
@@ -74,6 +79,8 @@ export function AiAccountsView(
 
 export default function AiAccountsPage({ usage }: { usage?: ReactNode }) {
 	let heading = useRef<HTMLHeadingElement>(null);
+	let main = useRef<HTMLElement>(null);
+	let [returnTo, setReturnTo] = useState<AiProvider>();
 	let { credentials, setCredentials, problem, load } = useCredentials();
 	let [keyRequest, setKeyRequest] = useState<KeyRequest>();
 	let [removing, setRemoving] = useState<{ provider: AiProvider; opened: number }>();
@@ -83,11 +90,21 @@ export default function AiAccountsPage({ usage }: { usage?: ReactNode }) {
 	let [announcement, setAnnouncement] = useState("");
 	let keyDialog = useDialog(keyRequest);
 	let removeDialog = useDialog(removing);
+	let dialogShown = [keyDialog.phase, removeDialog.phase].some(phase =>
+		phase === "opening" || phase === "open"
+	);
 	useLayoutEffect(() => {
 		if (!document.activeElement?.closest('[role="dialog"]')) {
 			heading.current?.focus({ preventScroll: true });
 		}
 	}, []);
+	useLayoutEffect(() => {
+		if (!returnTo || dialogShown) return;
+		setReturnTo(undefined);
+		if (!focusLost()) return;
+		let row = main.current?.querySelector(`[data-provider="${returnTo}"]`);
+		(row?.querySelector<HTMLElement>("button:enabled") ?? heading.current)?.focus();
+	}, [returnTo, dialogShown]);
 	let changed = (summary: AiCredentialSummary) =>
 		setCredentials(current => withCredential(current ?? [], summary));
 	async function run(row: AccountRow, action: AccountAction, work: () => Promise<void>) {
@@ -104,6 +121,7 @@ export default function AiAccountsPage({ usage }: { usage?: ReactNode }) {
 			});
 		} finally {
 			setPending(undefined);
+			setReturnTo(row.provider);
 		}
 	}
 	let act = (row: AccountRow, action: AccountAction) => {
@@ -135,7 +153,7 @@ export default function AiAccountsPage({ usage }: { usage?: ReactNode }) {
 	};
 	return (
 		<div className="ai-accounts-page" data-hosted="">
-			<main className="ai-accounts-main">
+			<main className="ai-accounts-main" ref={main}>
 				<div className="ai-accounts-heading">
 					<h1 className="text-xl font-semibold" ref={heading} tabIndex={-1}>AI accounts</h1>
 					<p className="ai-accounts-description text-sm text-text-secondary">
@@ -182,6 +200,7 @@ export default function AiAccountsPage({ usage }: { usage?: ReactNode }) {
 					onSaved={summary => {
 						changed(summary);
 						setKeyRequest(undefined);
+						setReturnTo(summary.provider);
 						setAnnouncement(`${PROVIDER_NAMES[summary.provider]} connected`);
 					}}
 					request={keyDialog.value}
@@ -196,6 +215,7 @@ export default function AiAccountsPage({ usage }: { usage?: ReactNode }) {
 						let { provider } = removeDialog.value;
 						setCredentials(current => withoutCredential(current ?? [], provider));
 						setRemoving(undefined);
+						setReturnTo(provider);
 						setAnnouncement(`${PROVIDER_NAMES[provider]} key removed`);
 					}}
 					provider={removeDialog.value.provider}
