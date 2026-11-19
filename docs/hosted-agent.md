@@ -974,6 +974,20 @@ transaction, so restoring it brings none back. A launch also says which
 connected providers it was not given and why (`withheld`); a launch with no
 grants stores nothing and starts no runner.
 
+**No AI account.** Under `HARNESS=remote`, before a person's message to the
+Planner (or their Retry) starts a turn, Chopin reads what a launch for them
+would be given (`AiCredentials.available`: the same reading as a launch, with
+GitHub's answer about Copilot access kept a few minutes and nothing stored). A
+person with no Copilot access and no API key is refused with `no-ai-account`
+before anything is saved, told privately that chopin needs an AI account, with
+a link to AI accounts, and their words return to the composer. Where GitHub
+couldn't be asked about their Copilot access, or their sign-in couldn't be read,
+and they have no key, the same refusal says the check couldn't finish and to
+send it again, never that they have no subscription. Accounts that keep
+changing while they are read, or storage that fails, are a passing refusal
+(`temporarily-unavailable`) that the browser sends again
+(`apps/server/src/ai/account-check.ts`).
+
 A placeholder alone is not enough. Each launch also gets a launch credential of
 its own (`launchToken`, `chopin_launch_` and 43 base64url characters), kept only
 as a digest beside each of its placeholders. The launch's runner keeps it out of

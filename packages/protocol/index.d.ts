@@ -240,17 +240,22 @@ export declare namespace Session {
 		 * `planner-starting`: a message to the Planner while another person's turn waits to start on a
 		 * harness taking no input mid-run: it is refused, never held, and `message` says to send again
 		 * once that turn has answered, and asks for no Stop. Final.
+		 * `no-ai-account`: a message to the Planner from a person with no AI account it can use (no
+		 * Copilot access and no API key), or whose Copilot access couldn't be checked and who has no
+		 * key: it is refused, never held, and `message` says which, to that person alone, with where
+		 * to add one (`AI_ACCOUNTS_PATH` in `ai-credentials`). Final.
 		 * `temporarily-unavailable`: a refusal of a `chat:send` for a passing reason (storage busy,
 		 * the room changing, too many sends being handled, a lookup of a reference or of the open
-		 * child that failed). The message is fine and is sent again, with the same request id, and
-		 * is kept once even if an earlier attempt was saved before its answer was lost. Any refusal
-		 * of a send without a code, or with `planner-not-attached`, `planner-busy` or
-		 * `planner-starting`, is final.
+		 * child that failed, the person's AI accounts changing while they were read). The message is
+		 * fine and is sent again, with the same request id, and is kept once even if an earlier
+		 * attempt was saved before its answer was lost. Any refusal of a send without a code, or with
+		 * `planner-not-attached`, `planner-busy`, `planner-starting` or `no-ai-account`, is final.
 		 */
 		code?:
 			| "planner-not-attached"
 			| "planner-busy"
 			| "planner-starting"
+			| "no-ai-account"
 			| "temporarily-unavailable";
 	};
 

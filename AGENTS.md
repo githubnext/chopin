@@ -417,7 +417,13 @@ this message wasn't sent. Send it again in a moment."), or with none attached, r
 the connection's own words (`planner-not-attached`),
 mid-turn too; for a machine that is away they say the message was not sent and to send it again
 when the machine is back, and never that it is kept (the machine's own work is; the message is
-not). A message sent while a turn is being stopped or finishing, or while one of Chopin's
+not). Under `HARNESS=remote` a message to the Planner, or a Retry, from a person a launch would
+give no provider (no Copilot access and no API key, read from `AiCredentials.available` with
+nothing stored) is refused with `no-ai-account` before anything is saved: "chopin needs an AI
+account to answer, so this message wasn't sent. Add one, then send it again.", or, where GitHub
+couldn't be asked about their Copilot access and they have no key, that the check couldn't finish
+(`ai/account-check.ts`), never that they have no subscription. Their accounts changing while they
+are read is a passing trouble. A message sent while a turn is being stopped or finishing, or while one of Chopin's
 own turns is being handed the Chat, has no session to be given to; it is acknowledged at once
 and starts the next turn as that one winds down (`windingDown` in `chat/service.ts`), ahead of
 anything waiting. One sent while such a person's turn waits to start is acknowledged at once and
@@ -444,19 +450,20 @@ waiting, queued or a clock), until the server's entry for the same request ID ar
 then it carries no mark. The outbox holds a message only for the browser's own connection:
 it sends one message at a time, oldest first, once the current connection's transcript has
 arrived, and only to a server that acknowledges sends. When `planner-not-attached`,
-`planner-busy` or `planner-starting` refuses a send and the composer holds no newer draft, the
+`planner-busy`, `planner-starting` or `no-ai-account` refuses a send and the composer holds no newer draft, the
 typed text (with its mention, references and staged files) returns to the composer draft and
 chopin says why in a row only that person sees, placed at the time it was said
-(`chat/quiet-note.tsx`, with How to fix where the machine has something to fix), and for
+(`chat/quiet-note.tsx`, with How to fix where the machine has something to fix, and a link to
+AI accounts for `no-ai-account`), and for
 `planner-busy` while Chopin works the one button offers Stop so the person can stop Chopin and
 send it (`planner-starting` keeps Send, so it cannot stop the other person's turn);
 when a newer draft was already typed, or another refusal rejected the message, it says
 "Couldn't send" on the message with Try again and Delete (which act on the outbox alone, since
 the server kept nothing), and not while the page's offline bar
-shows. A refusal with a passing reason is not a refusal of the message: a storage, room or
-authorization trouble that will pass (`temporarily-unavailable`). The browser keeps the message sending and sends it again, in order
+shows. A refusal with a passing reason is not a refusal of the message: a storage, room,
+authorization or AI-account-read trouble that will pass (`temporarily-unavailable`). The browser keeps the message sending and sends it again, in order
 and with the same request ID, in a moment. Only a refusal with neither code is final, and so
-are `planner-busy`, `planner-starting` and `planner-not-attached`. One the server kept, though the commit's answer
+are `planner-busy`, `planner-starting`, `planner-not-attached` and `no-ai-account`. One the server kept, though the commit's answer
 was lost, is answered with its first answer when the same request is sent again, and is given
 to a turn once.
 

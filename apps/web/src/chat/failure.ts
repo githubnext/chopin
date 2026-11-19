@@ -8,6 +8,8 @@
  * The words are a machine's and a person's own, none of Chopin's terms (`status-copy.test.tsx`).
  */
 
+import { AI_ACCOUNTS_PATH } from "@chopin/protocol/ai-credentials";
+
 import type { Chat } from "@chopin/protocol";
 import type { SendFailure } from "./references";
 
@@ -50,9 +52,13 @@ export function failureView(failure: Chat.TurnFailure): FailureView | undefined 
 	};
 }
 
+/** Where a refusal for want of an AI account sends the person to add one. */
+export const AI_ACCOUNTS_LINK = { label: "Open AI accounts", href: AI_ACCOUNTS_PATH };
+
 /**
- * The refused room message, in the server's words. Where no machine took it, sending it again
- * cannot help, so the action that can is offered instead: where to look at the machines.
+ * The refused room message, in the server's words. Where no machine took it, or the person has no
+ * AI account chopin can use, sending it again cannot help, so the action that can is offered
+ * instead: where to look at the machines, or at their AI accounts.
  */
 export function sendFailureView(
 	failure: Pick<SendFailure, "text">,
@@ -63,9 +69,12 @@ export function sendFailureView(
 		title: failure.text,
 		retry: code !== "planner-not-attached"
 			&& code !== "planner-busy"
-			&& code !== "planner-starting",
+			&& code !== "planner-starting"
+			&& code !== "no-ai-account",
 		...(code === "planner-not-attached"
 			? { link: { label: "Open machines", href: "/machines" } }
+			: code === "no-ai-account"
+			? { link: AI_ACCOUNTS_LINK }
 			: {}),
 	};
 }

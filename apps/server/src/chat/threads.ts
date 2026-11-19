@@ -647,6 +647,7 @@ function buildThreadRoom(
 		claimantSessionId: topContext.claimantSessionId,
 		repository: topContext.repository,
 		plannerNotAttached: topContext.plannerNotAttached,
+		aiAccount: topContext.aiAccount,
 		plannerStarting: topContext.plannerStarting,
 		// A reply in a thread is the document's conversation too: alone, it goes to the Planner.
 		people: topContext.people,

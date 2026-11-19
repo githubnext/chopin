@@ -60,7 +60,7 @@ import { ErrorState } from "./error-state";
 import { QuietNote } from "./quiet-note";
 import { PlannerPresenceContext } from "./presence";
 import { localRows } from "./chronology";
-import { failureBanner, sendFailureView, withoutFailure } from "./failure";
+import { AI_ACCOUNTS_LINK, failureBanner, sendFailureView, withoutFailure } from "./failure";
 import { TypingReporter } from "./typing";
 import { useSteadyCallback, useSteadyFields } from "./steady";
 import { asksChopin, asksChopinKey, withChopinMention } from "./ask-chopin";
@@ -1542,6 +1542,7 @@ export function Chat(
 	// Where the machine has something to fix, chopin's row says so in one sentence, and How to fix
 	// unfolds the rest; any other refusal is the server's own words.
 	let noteFix = note?.code === "planner-not-attached" ? machine?.fix : undefined;
+	let noteLink = note?.code === "no-ai-account" ? AI_ACCOUNTS_LINK : undefined;
 	// The room builds the steps anew with each of its renders; the row is kept the same element while
 	// they say the same, so the memoized transcript is not rendered again for it.
 	let noteFixWords = noteFix ? JSON.stringify(noteFix) : "";
@@ -1554,6 +1555,7 @@ export function Chat(
 				row: (
 					<QuietNote
 						fix={noteFix}
+						link={noteLink}
 						onChoose={steadyChoose}
 						onNavigate={navigateTo}
 						text={noteFix ? refusedSentence(noteFix) : note.text}

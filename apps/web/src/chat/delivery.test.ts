@@ -153,6 +153,9 @@ describe("refusals of a send", () => {
 	 *   none mid-run, or it is a background job's).
 	 * - final, `planner-starting`: another person's turn is about to start on a harness that takes no
 	 *   input mid-run, and cannot be given a message.
+	 * - final, `no-ai-account`: the sender has no AI account chopin can use, or their Copilot access
+	 *   couldn't be checked and they have no key; their AI accounts changing while they were read is
+	 *   `temporarily-unavailable`.
 	 * Not sends, and so with no code of their own to read: a task draft and a comment note sent to
 	 * Chopin have no outbox, say why in the page's own words and are pressed again.
 	 */
@@ -160,6 +163,7 @@ describe("refusals of a send", () => {
 		"planner-not-attached": "final",
 		"planner-busy": "final",
 		"planner-starting": "final",
+		"no-ai-account": "final",
 		"temporarily-unavailable": "passing",
 	};
 
@@ -167,6 +171,7 @@ describe("refusals of a send", () => {
 		expect(refusedByChopin("planner-not-attached")).toBe(true);
 		expect(refusedByChopin("planner-busy")).toBe(true);
 		expect(refusedByChopin("planner-starting")).toBe(true);
+		expect(refusedByChopin("no-ai-account")).toBe(true);
 		expect(refusedByChopin("temporarily-unavailable")).toBe(false);
 		expect(refusedByChopin(undefined)).toBe(false);
 	});
@@ -302,6 +307,14 @@ describe("the words", () => {
 			),
 		).toBe(
 			"chopin is about to answer another message and can't take more while it works on this machine. Send yours again once it has answered.",
+		);
+		expect(
+			refusalText(
+				"no-ai-account",
+				"chopin needs an AI account to answer, so this message wasn't sent. Add one, then send it again.",
+			),
+		).toBe(
+			"chopin needs an AI account to answer, so this message wasn't sent. Add one, then send it again.",
 		);
 	});
 });

@@ -84,6 +84,9 @@ export const AI_KEY_VARIABLES: Record<AiProvider, string> = {
  */
 export const AI_LAUNCH_HEADER = "x-chopin-launch";
 
+/** The page where a person connects their AI accounts, which a refusal for want of one links to. */
+export const AI_ACCOUNTS_PATH = "/ai-accounts";
+
 /** The path under Chopin's origin each provider's proxied API is served at. */
 export const AI_PROXY_PATH = "/api/v1/ai";
 
