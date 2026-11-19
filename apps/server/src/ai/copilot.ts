@@ -4,6 +4,17 @@ export const GITHUB_API = "https://api.github.com";
 /** Statuses with which GitHub refuses a Copilot token: the account has no Copilot access. */
 const REFUSED = new Set([401, 403, 404]);
 
+/**
+ * Whether GitHub refused for its rate limit rather than for the account: a 429, or a 403 that says
+ * when to try again (`Retry-After`) or that no request is left (`X-RateLimit-Remaining: 0`).
+ */
+function throttled(response: Response): boolean {
+	return response.status === 429
+		|| response.status === 403
+			&& (response.headers.has("retry-after")
+				|| response.headers.get("x-ratelimit-remaining")?.trim() === "0");
+}
+
 /** The hosts a Copilot token may name as its model API; any other answer keeps the default. */
 const COPILOT_API = /^https:\/\/api\.(?:[a-z0-9-]+\.)*githubcopilot\.com$/;
 
@@ -37,8 +48,8 @@ function exchanged(body: unknown): CopilotToken {
 /**
  * Asks GitHub for a Copilot token with `githubToken`, the person's GitHub sign-in or the token
  * they connected: the token when GitHub gives one, undefined when it refuses (the account has no
- * Copilot subscription). Throws when GitHub can't be asked or answers anything else, which says
- * nothing about the account.
+ * Copilot subscription). Throws when GitHub can't be asked or answers anything else, a refusal for
+ * its rate limit included, which says nothing about the account.
  */
 export function copilotTokenExchange(
 	options: { api?: string; fetch?: typeof fetch } = {},
@@ -57,7 +68,7 @@ export function copilotTokenExchange(
 		});
 		if (response.ok) return exchanged(await response.json());
 		await response.body?.cancel();
-		if (REFUSED.has(response.status)) return undefined;
+		if (REFUSED.has(response.status) && !throttled(response)) return undefined;
 		throw new Error(`GitHub answered ${response.status} to a Copilot token exchange`);
 	};
 }

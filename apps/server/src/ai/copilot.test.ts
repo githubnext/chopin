@@ -8,7 +8,11 @@ afterEach(() => {
 	servers = [];
 });
 
-function github(status: number, body: unknown = { token: "tid=1;exp=2", expires_at: 2_000 }) {
+function github(
+	status: number,
+	body: unknown = { token: "tid=1;exp=2", expires_at: 2_000 },
+	headers: Record<string, string> = {},
+) {
 	let asked: Array<{ path: string; authorization: string | null }> = [];
 	let server = Bun.serve({
 		hostname: "127.0.0.1",
@@ -18,7 +22,7 @@ function github(status: number, body: unknown = { token: "tid=1;exp=2", expires_
 				path: new URL(request.url).pathname,
 				authorization: request.headers.get("authorization"),
 			});
-			return Response.json(body, { status });
+			return Response.json(body, { status, headers });
 		},
 	});
 	servers.push(server);
@@ -62,5 +66,23 @@ describe("Copilot token exchange", () => {
 		expect(copilotTokenExchange({ api: github(200, { message: "ok" }).api })("ghu_person"))
 			.rejects.toThrow("without a token");
 		expect(copilotTokenExchange({ api: "http://127.0.0.1:9" })("ghu_person")).rejects.toThrow();
+	});
+
+	it("can't be told from a refusal GitHub gives for its rate limit", async () => {
+		let limited = { message: "API rate limit exceeded" };
+		for (
+			let [status, headers] of [
+				[403, { "retry-after": "60" }],
+				[403, { "x-ratelimit-remaining": "0" }],
+				[429, {}],
+			] as Array<[number, Record<string, string>]>
+		) {
+			let exchange = copilotTokenExchange({ api: github(status, limited, headers).api });
+			await expect(exchange("ghu_person")).rejects.toThrow(String(status));
+		}
+		let refused = github(403, { message: "Resource not accessible" }, {
+			"x-ratelimit-remaining": "4999",
+		});
+		expect(await copilotTokenExchange({ api: refused.api })("ghu_person")).toBeUndefined();
 	});
 });

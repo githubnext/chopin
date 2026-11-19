@@ -525,6 +525,12 @@ export interface AiCredentialStore {
 	 */
 	used(record: AiCredentialRecord, at: Date): Promise<void>;
 	/**
+	 * Records that `record`'s provider refused it, the key as it was read, as invalid `at`. Changes
+	 * nothing once that key was replaced or removed, so a late refusal of a key never marks the one
+	 * that replaced it.
+	 */
+	rejected(record: AiCredentialRecord, at: Date): Promise<void>;
+	/**
 	 * How many times this process has connected, replaced or removed one of `userId`'s credentials,
 	 * each counted once its write settles and before its caller hears so; one process serves a
 	 * database at a time, so while it holds the writer lease a count unchanged across a read says

@@ -6,6 +6,8 @@ CREATE TABLE ai_credentials (
 	suffix text CHECK (char_length(suffix) BETWEEN 1 AND 4),
 	updated_at timestamptz NOT NULL,
 	last_used_at timestamptz,
+	-- When the provider answered a request with this very key that the key is invalid.
+	rejected_at timestamptz,
 	PRIMARY KEY (user_id, provider),
 	CONSTRAINT ai_credentials_secret CHECK (
 		(kind = 'api-key' AND ciphertext IS NOT NULL AND octet_length(ciphertext) > 29)

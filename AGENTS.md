@@ -153,11 +153,13 @@ durable.
   send in the same step as it enters the transport: a cutoff (a launch ended, a machine
   revoked, a document archived, a credential replaced or removed) that completed while
   those reads were pending makes it read again (one process holds the writer lease, so
-  storage counts each cutoff in memory as it commits), and the transport checks the
-  launch's deadline and a Copilot token's on the clock reading it sends at, so a request
-  is never sent after a cutoff its caller saw complete. A successor's cutoffs are not
-  counted by the process before it, so a process sends nothing once its writer lease is
-  released, lost or past its deadline, nor for a request its hand-over abandoned (the
+  storage counts each cutoff in memory as it commits, and each cutoff is written under
+  that lease, checked in its own transaction, so a process that no longer holds it is
+  refused one rather than acknowledge it), and the transport is handed the launch's
+  deadline and a Copilot token's and checks them on the clock reading it takes the request
+  at, so a request is never sent after a cutoff its caller saw complete. A successor's
+  cutoffs are not counted by the process before it, so a process sends nothing once its
+  writer lease is released, lost or past its deadline, nor for a request its hand-over abandoned (the
   proxy's requests get the cut's abandon signal, as `/mcp`'s do). A renewed Copilot token
   is sent only if it came from the credential the request was admitted with and still
   connected. It refuses a request carrying any launch's placeholder in a header it
@@ -178,14 +180,18 @@ durable.
   placeholder for a provider its person can't use. Every answer GitHub gives about
   Copilot access (a launch's, the list's, Check again's, a proxied request's) is kept
   against the account it concerns, ordered by when it completed, and replaces older
-  answers of the other kind held for that account. A launch's grants are published
-  only while its person's credentials are those it was prepared with, no answer of
-  the other kind about its Copilot account has completed since it asked, and before
+  answers of the other kind held for that account; one that crossed an answer of the
+  other kind is asked again, and a refusal for GitHub's rate limit is no answer. A
+  launch's grants are published only while its person's credentials are those it was
+  prepared with, no answer of the other kind about its Copilot account has completed since it asked, and before
   its deadline; changes that never settle fail the launch with a retryable error,
   never an empty grant list. An OpenAI or Anthropic key is
-  saved only once that provider accepts it. The model catalog route serves only a
+  saved only once that provider accepts it, and given to no launch once it refuses it as
+  invalid on a request (`rejectedAt`, until it is connected again) or while it doesn't
+  decrypt. The model catalog route serves only a
   request carrying one of a live launch's placeholders with that launch's credential,
-  and none with a placeholder in its query or another header.
+  while the process holds the writer lease, and none with a placeholder in its query or
+  another header or a query field that can't be decoded.
   Handing placeholders to runners
   is not wired yet. See [Hosted agent](docs/hosted-agent.md#ai-credentials).
 - **Planner ownership is process-bound.** The first eligible Planner or

@@ -134,6 +134,35 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		test("records a key its provider refused for that key alone, until it is connected again", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId, lease } = await userAndChannel(storage);
+				let key: AiCredentialRecord = {
+					userId,
+					provider: "openai",
+					kind: "api-key",
+					ciphertext: bytes(48),
+					suffix: "6789",
+					updatedAt: AT,
+				};
+				await storage.aiCredentials.put(lease, key);
+				await storage.aiCredentials.rejected(key, later(60));
+				await storage.aiCredentials.rejected(key, later(90));
+				expect(await storage.aiCredentials.get(userId, "openai")).toEqual({
+					...key,
+					rejectedAt: later(60),
+				});
+
+				let replaced = { ...key, ciphertext: bytes(48), suffix: "4321", updatedAt: later(120) };
+				await storage.aiCredentials.put(lease, replaced);
+				await storage.aiCredentials.rejected(key, later(150));
+				expect(await storage.aiCredentials.list(userId)).toEqual([replaced]);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		test("finds a placeholder by its digest until it expires, and refuses a repeated digest", async () => {
 			let storage = await openedStorage(factory);
 			try {

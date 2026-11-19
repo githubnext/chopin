@@ -913,10 +913,15 @@ DELETE /api/ai/credentials/:provider
 for `github-copilot` alone. The list says which providers a person connected,
 how, and when (`updatedAt`); no route returns a secret. A key is listed with its
 last four characters (`suffix`, kept beside the ciphertext) and the time a
-launch last sent a request with it (`lastUsedAt`, saved as a request is sent
-unless a use in the same minute, or a later one, is saved already, so it shows the
-minute of the latest use and never moves back, and absent until one is;
-replacing the key starts it afresh). GitHub Copilot is always listed and usable through the person's
+launch last sent a request with it (`lastUsedAt`, the time the transport took the
+request, saved unless a use in the same minute, or a later one, is saved already, so it
+shows the minute of the latest use and never moves back, and absent until one is;
+replacing the key starts it afresh). A key whose provider answered a request with it
+that the key itself is invalid (a 401 with OpenAI's `invalid_api_key` or Anthropic's
+`authentication_error`) is listed with `rejectedAt` and needs connecting again: no
+launch is given it until it is. Only the key that was sent is marked, so a refusal
+that arrives after the key was replaced leaves the replacement as it is, and a rate
+limit or a refusal of one model marks nothing. GitHub Copilot is always listed and usable through the person's
 current GitHub sign-in, with nothing saved, until they connect a token instead;
 removing that token returns them to the sign-in, and `check` asks GitHub about
 whichever is theirs. Connecting and disconnecting need a
@@ -952,7 +957,11 @@ archived while it was prepared, restored since or not, takes its placeholders
 back and is given nothing. Any other change takes them back and prepares the
 launch afresh, at most three times, keeping every key that is still usable: a
 seat refused meanwhile withholds Copilot alone, and a key added meanwhile is
-given. Changes that keep coming for all three fail the launch with a retryable
+given. The launch's machine and document are read again when a cutoff completed
+while the final reads were made, so a machine revoked or a document archived after
+their read and before the credentials' gives the launch nothing. A key is given only
+when it decrypts with this deployment's key and its provider hasn't refused it as
+invalid; otherwise it is withheld as `key-unusable`. Changes that keep coming for all three fail the launch with a retryable
 error (503), never a launch given nothing while a verified key is there. So no
 placeholder is handed out for a credential that changed before it was, nor is
 one missing for a key added before it was. A placeholder works until its launch ends or
@@ -1004,16 +1013,20 @@ nothing awaited between that check and the send: when a cutoff (a launch ended, 
 machine revoked, a document archived, a credential connected, replaced or removed)
 completed while those reads were pending, it reads them again; the launch must
 not have reached its deadline by then; and a Copilot token whose deadline came
-while the request was built is renewed and the request built again. The send
-itself checks the launch's and the token's deadlines again, on the clock reading
-it is made at: a launch past its deadline then is refused, and a token past its
-own is renewed and the whole check made again. Storage counts each cutoff in
-memory as it commits, before its caller hears so, which one process under the
-writer lease makes exact while it holds the lease. A successor's cutoffs are not
-counted by the process it took over from, so a process sends nothing once its
-lease is released, lost or past its deadline (`restarting`, 503), and nothing for
-a request its hand-over abandoned (`cancelled`, 499); a request already sent is
-not recalled. So a launch ended, a machine revoked or a document archived before
+while the request was built is renewed and the request built again. The transport
+that submits the request is handed the launch's and the token's deadlines and
+checks them on the clock reading it takes the request at: a launch past its
+deadline then is refused, and a token past its own is renewed and the whole check
+made again. Storage counts each cutoff in memory as it commits, before its caller
+hears so, which one process under the writer lease makes exact while it holds the
+lease. Each cutoff is written under the writer lease, checked in its own
+transaction as other fenced writes are, so a process that no longer holds the lease
+commits none: its revocation, archive or credential change is refused and never
+acknowledged, and the successor that holds the lease counts every one it could
+miss. A successor's cutoffs are not counted by the process it took over from, so a
+process sends nothing once its lease is released, lost or past its deadline
+(`restarting`, 503), and nothing for a request its hand-over abandoned
+(`cancelled`, 499); a request already sent is not recalled. So a launch ended, a machine revoked or a document archived before
 the send, during a Copilot renewal or a pending read included, sends nothing
 (`launch-ended`), nor does a provider disconnected (`not-connected`), a
 credential replaced, or removed and connected again, since the request was
@@ -1071,7 +1084,9 @@ placeholder, and a placeholder handed out before is refused with
 
 A GitHub sign-in is not Copilot access. A Copilot token given is `access`; a
 refusal (401, 403 or 404) is `none`, which means the account has no Copilot
-subscription and is not an error; anything else is `unknown`. The list and the
+subscription and is not an error; anything else is `unknown`, a refusal for GitHub's
+rate limit included (a 429, or a 403 with `Retry-After` or
+`X-RateLimit-Remaining: 0`), which records no seat lost. The list and the
 connect answer carry it as `copilotAccess`, from an answer at most five minutes
 old; `POST /api/ai/credentials/github-copilot/check` asks GitHub again at once.
 Every answer GitHub gives, to the list, a Check again, a launch or a proxied
@@ -1079,7 +1094,10 @@ request, is recorded against the account it is about: the person's GitHub
 sign-in, whichever of its tokens asked (a browser login's or a paired
 machine's), or a token they connected instead, which is another account. Answers
 are ordered by when they completed, not when they were asked, and a failure to
-ask is no answer. An answer held for one token of an account is dropped once a
+ask is no answer. GitHub decides an answer before Chopin has it, so one that
+completes after an answer of the other kind about the same account that was asked
+later (the two crossed) may have been decided first: it is dropped and GitHub asked
+again, at most three times, before anything is shown or kept. An answer held for one token of an account is dropped once a
 newer one of the other kind completes for the same account, so a seat lost in one
 session is not shown as there in another, and a seat back is shown in all once
 GitHub says so; a separately connected account keeps its own. A launch whose
@@ -1105,9 +1123,13 @@ or a `304` included (`no-placeholder`, `no-launch`, `unknown-placeholder`,
 `other-launch` or `launch-ended`, 401). The catalog is fetched with nothing of
 the request, so one carrying any launch's placeholder in its query
 (`dropped-query`) or in another header, by value or name (`dropped-header`), is
-refused (400) rather than served without it. The last check is made in the same step
+refused (400) rather than served without it. Each name and value in the query is
+decoded on its own, and a query with one that can't be decoded is refused
+(`unreadable-query`, 400), so a field that doesn't decode can't hide a placeholder in
+another. The last check is made in the same step
 as the answer, and read again when a cutoff completed meanwhile, so a launch that
-ended while it was checked is refused even a warm copy.
+ended while it was checked is refused even a warm copy, and a process that no longer
+holds the writer lease serves nothing (`restarting`, 503).
 Chopin fetches the catalog with no credential, at most every ten minutes, and
 answers with its `ETag`, for an agent's catalog base URL (Atomic's
 `ATOMIC_MODEL_CATALOG_URL` is `<origin>/api/v1/ai/models.dev`).

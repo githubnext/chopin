@@ -15,6 +15,7 @@ type CredentialRow = {
 	suffix: string | null;
 	updatedAt: Date | string;
 	lastUsedAt: Date | string | null;
+	rejectedAt: Date | string | null;
 };
 
 type PlaceholderRow = {
@@ -30,7 +31,7 @@ type PlaceholderRow = {
 };
 
 const CREDENTIAL_COLUMNS = `user_id AS "userId", provider, kind, ciphertext, suffix,
-	updated_at AS "updatedAt", last_used_at AS "lastUsedAt"`;
+	updated_at AS "updatedAt", last_used_at AS "lastUsedAt", rejected_at AS "rejectedAt"`;
 const PLACEHOLDER_COLUMNS = `digest, launch_id AS "launchId",
 	launch_digest AS "launchDigest", user_id AS "userId", provider,
 	machine_id AS "machineId", channel_id AS "channelId", archive_generation AS "generation",
@@ -46,6 +47,7 @@ function credential(row: CredentialRow): AiCredentialRecord {
 		...(row.suffix ? { suffix: row.suffix } : {}),
 		updatedAt: new Date(row.updatedAt),
 		...(row.lastUsedAt ? { lastUsedAt: new Date(row.lastUsedAt) } : {}),
+		...(row.rejectedAt ? { rejectedAt: new Date(row.rejectedAt) } : {}),
 	};
 }
 
@@ -78,18 +80,20 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 					await this.fence(transaction, lease);
 					await transaction`
 				INSERT INTO ai_credentials (
-					user_id, provider, kind, ciphertext, suffix, updated_at, last_used_at
+					user_id, provider, kind, ciphertext, suffix, updated_at, last_used_at, rejected_at
 				)
 				VALUES (
 					${record.userId}, ${record.provider}, ${record.kind}, ${record.ciphertext ?? null},
-					${record.suffix ?? null}, ${record.updatedAt}, ${record.lastUsedAt ?? null}
+					${record.suffix ?? null}, ${record.updatedAt}, ${record.lastUsedAt ?? null},
+					${record.rejectedAt ?? null}
 				)
 				ON CONFLICT (user_id, provider) DO UPDATE SET
 					kind = EXCLUDED.kind,
 					ciphertext = EXCLUDED.ciphertext,
 					suffix = EXCLUDED.suffix,
 					updated_at = EXCLUDED.updated_at,
-					last_used_at = EXCLUDED.last_used_at
+					last_used_at = EXCLUDED.last_used_at,
+					rejected_at = EXCLUDED.rejected_at
 			`;
 				})),
 		);
@@ -134,6 +138,17 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 					AND updated_at = ${record.updatedAt}
 					AND ciphertext IS NOT DISTINCT FROM ${record.ciphertext ?? null}
 					AND (last_used_at IS NULL OR last_used_at < ${at})
+			`;
+		});
+	}
+	rejected(record: AiCredentialRecord, at: Date) {
+		return this.run("record that an AI credential was refused", async () => {
+			await this.sql`
+				UPDATE ai_credentials SET rejected_at = ${at}
+				WHERE user_id = ${record.userId} AND provider = ${record.provider}
+					AND updated_at = ${record.updatedAt}
+					AND ciphertext IS NOT DISTINCT FROM ${record.ciphertext ?? null}
+					AND rejected_at IS NULL
 			`;
 		});
 	}

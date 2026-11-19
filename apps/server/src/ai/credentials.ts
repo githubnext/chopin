@@ -34,6 +34,8 @@ const USE_MINUTE_MS = 60 * 1000;
 const LAUNCH_ATTEMPTS = 3;
 /** How many times the final handoff reads again when a cutoff completes while it reads. */
 const HANDOFF_ATTEMPTS = 3;
+/** How many times GitHub is asked about an account whose answers keep crossing others' answers. */
+const ANSWER_ATTEMPTS = 3;
 
 type Clock = () => Date;
 
@@ -95,8 +97,11 @@ export type AiLaunchGrants = {
  */
 export type AiDeadlines = { launch: number; token?: number };
 
-/** What the transport did with a send: took it, or found one of its deadlines come first. */
-export type AiAdmitted<T> = { sent: T } | { late: "launch" | "token" };
+/**
+ * What the transport did with a send: took it at `at` (milliseconds since the epoch, its clock's
+ * reading as it took it), or found one of its deadlines come first.
+ */
+export type AiAdmitted<T> = { sent: T; at: number } | { late: "launch" | "token" };
 
 /** GitHub gave a Copilot token that had already expired by the time Chopin had it. */
 class CopilotTokenExpired extends Error {
@@ -134,12 +139,19 @@ function copilotAccount(record: AiCredentialRecord, githubToken: string): string
 
 /**
  * A provider its person connected that a launch was not given, and why: their GitHub sign-in
- * can't be read now, GitHub refused a Copilot token (no Copilot access), or GitHub couldn't be
- * asked (`copilot-unavailable`, which a later launch may not meet).
+ * can't be read now, GitHub refused a Copilot token (no Copilot access), GitHub couldn't be
+ * asked (`copilot-unavailable`, which a later launch may not meet), or Chopin knows the key won't
+ * work (`key-unusable`: its provider refused it as invalid, or this deployment can't decrypt it),
+ * until it is connected again.
  */
 export type AiWithheld = {
 	provider: AiProvider;
-	reason: "sign-in-unavailable" | "not-connected" | "no-copilot-access" | "copilot-unavailable";
+	reason:
+		| "sign-in-unavailable"
+		| "not-connected"
+		| "no-copilot-access"
+		| "copilot-unavailable"
+		| "key-unusable";
 };
 
 export type AiLaunch = {
@@ -226,6 +238,7 @@ function summary(record: AiCredentialRecord, copilotAccess?: CopilotAccess): AiC
 		...(record.updatedAt.getTime() ? { updatedAt: record.updatedAt.toISOString() } : {}),
 		...(record.suffix ? { suffix: record.suffix } : {}),
 		...(record.lastUsedAt ? { lastUsedAt: record.lastUsedAt.toISOString() } : {}),
+		...(record.rejectedAt ? { rejectedAt: record.rejectedAt.toISOString() } : {}),
 		...(record.provider === "github-copilot" && copilotAccess ? { copilotAccess } : {}),
 	};
 }
@@ -405,20 +418,23 @@ export class AiCredentials {
 	 * Placeholders for one launch, one per provider its person can use now, stored before they are
 	 * returned. GitHub Copilot is given only when GitHub gives the person's GitHub token a Copilot
 	 * token at this launch; otherwise it is `withheld`, with the reason. A launch on a document is
-	 * prepared in the archive generation the document is open in when it begins, and its placeholders
-	 * are stored only while the document is still open in it. Once they are stored, the person's
-	 * credentials are read a final time, and the grants are published (none included) in the same
-	 * step as the last check, with nothing awaited between, only while all of it holds: that read
-	 * found the very credentials the launch was prepared with, none was connected, replaced or removed
-	 * since it began, GitHub has given no answer of the other kind about the same Copilot account
-	 * since the launch asked (a Check again, another launch or a proxied request; answers are ordered
-	 * by when they completed), its machine is not revoked, its document is open in the same
-	 * generation, and the launch has not reached its deadline. A launch past its deadline, or whose
-	 * machine was revoked or document archived meanwhile (restored or not), takes its placeholders
-	 * back and is given nothing; any other change takes them back and prepares the launch afresh,
-	 * keys and all, at most `LAUNCH_ATTEMPTS` times, and then throws a retryable `AiCredentialError`
-	 * (503) rather than give nothing. So no grant is returned for a credential that changed before it
-	 * was, nor without one that was added. With no grants nothing is stored, and the caller starts no
+	 * prepared in the archive generation the document is open in when it begins, and its
+	 * placeholders are stored only while the document is still open in it. Once they are stored,
+	 * the person's credentials are read a final time, and the grants are published (none included)
+	 * in the same step as the last check, with nothing awaited between, only while all of it holds:
+	 * that read found the very credentials the launch was prepared with, none was connected,
+	 * replaced or removed since it began, GitHub has given no answer of the other kind about the
+	 * same Copilot account since the launch asked (a Check again, another launch or a proxied
+	 * request; answers are ordered by when they completed), its machine is not revoked, its
+	 * document is open in the same generation, and the launch has not reached its deadline. The
+	 * machine and the document are read again when a cutoff completed while the final reads were
+	 * made, so an archive or a revocation after their read and before the credentials' is in the
+	 * decision. A launch past its deadline, or whose machine was revoked or document archived
+	 * meanwhile (restored or not), takes its placeholders back and is given nothing; any other
+	 * change takes them back and prepares the launch afresh, keys and all, at most
+	 * `LAUNCH_ATTEMPTS` times, and then throws a retryable `AiCredentialError` (503) rather than
+	 * give nothing. So no grant is returned for a credential that changed before it was, nor
+	 * without one that was added. With no grants nothing is stored, and the caller starts no
 	 * runner.
 	 */
 	async launch(input: AiLaunch): Promise<AiLaunchGrants> {
@@ -447,11 +463,24 @@ export class AiCredentials {
 				)
 			) return cancelled();
 			let version = this.#storage.aiCredentials.version(input.userId);
+			let cutoffs = this.#storage.aiPlaceholders.cutoffs();
 			let [current, open] = await Promise.all([
 				this.#connected(input.userId),
 				this.#prepared(input, generation),
 			]);
+			// An archive or a revocation that completed after the document and machine were read,
+			// while the accounts still were, moved the count: they are read again, so the grants are
+			// never published on a read it outdated.
+			for (
+				let read = 1;
+				open && read < HANDOFF_ATTEMPTS && this.#storage.aiPlaceholders.cutoffs() !== cutoffs;
+				read++
+			) {
+				cutoffs = this.#storage.aiPlaceholders.cutoffs();
+				open = await this.#prepared(input, generation);
+			}
 			let held = this.#storage.aiCredentials.version(input.userId) === version
+				&& this.#storage.aiPlaceholders.cutoffs() === cutoffs
 				&& sameSet(admitted.connected, current)
 				&& !this.#contradicted(admitted.copilot);
 			let due = this.#clock() >= input.expiresAt;
@@ -482,7 +511,8 @@ export class AiCredentials {
 
 	/**
 	 * The person's connected providers (`connected`), those a launch can be given now, and those it
-	 * can't, with why. `copilot` is what GitHub answered about Copilot access at this launch.
+	 * can't, with why. `copilot` is what GitHub answered about Copilot access at this launch. A key
+	 * is given only when it decrypts and its provider hasn't refused it as invalid.
 	 */
 	async #admitted(input: AiLaunch) {
 		let copilot: CopilotAnswer | undefined;
@@ -507,6 +537,9 @@ export class AiCredentials {
 					});
 					continue;
 				}
+			} else if (record.rejectedAt || !await this.#secret(record)) {
+				withheld.push({ provider: record.provider, reason: "key-unusable" });
+				continue;
 			}
 			usable.push(record);
 		}
@@ -546,6 +579,16 @@ export class AiCredentials {
 			...(input.channelId ? { channelId: input.channelId, generation } : {}),
 			expiresAt: input.expiresAt,
 		}));
+	}
+
+	/**
+	 * Records that the provider answered a request sent with `record`, the key as it was read, that
+	 * the key is invalid: no launch is given that key again, and the list says it needs connecting
+	 * again. A key replaced or removed since keeps nothing of it.
+	 */
+	async rejected(record: AiCredentialRecord): Promise<void> {
+		if (record.kind !== "api-key") return;
+		await this.#storage.aiCredentials.rejected(record, this.#clock());
 	}
 
 	/** Ends a launch: its placeholders stop working at once. */
@@ -632,18 +675,19 @@ export class AiCredentials {
 	 * transport. Last, with nothing awaited between this check and that admission: when a cutoff (a
 	 * launch ended, a machine revoked, a document archived, a credential connected or removed)
 	 * completed while they were read, they are read again; the launch must not have reached its
-	 * deadline; and a Copilot token whose deadline came meanwhile is renewed and the request prepared
-	 * again. The admission is given both deadlines and checks them again on the clock reading it
-	 * sends at: a launch past its deadline then is refused, and a token past its own is renewed and
-	 * the whole check made again. Nothing is sent once `signal` is aborted, as a drain abandoning the
-	 * request does (`cancelled`), nor once this process no longer holds the writer lease
-	 * (`restarting`), since a cutoff its successor commits is not counted here. So a request is
-	 * refused when its launch ended or expired, its machine was revoked or its document archived
-	 * (`launch-ended`), when its person disconnected the provider (`not-connected`), or when the
-	 * credential it was admitted with, or the one a renewed Copilot token came from, was replaced, or
-	 * removed and connected again (`credential-changed`), whenever that completed before the send, and
-	 * never carries an expired Copilot token or another account's. Cutoffs that keep completing while
-	 * it reads refuse it as `busy`.
+	 * deadline; and a Copilot token whose deadline came meanwhile is renewed and the request
+	 * prepared again. The admission hands both deadlines to the transport, which checks them on the
+	 * clock reading it takes the send at: a launch past its deadline then is refused, and a token
+	 * past its own is renewed and the whole check made again. The credential's last use is recorded
+	 * at that reading, for the very credential sent. Nothing is sent once `signal` is aborted, as a
+	 * drain abandoning the request does (`cancelled`), nor once this process no longer holds the
+	 * writer lease (`restarting`), since a cutoff its successor commits is not counted here. So a
+	 * request is refused when its launch ended or expired, its machine was revoked or its document
+	 * archived (`launch-ended`), when its person disconnected the provider (`not-connected`), or
+	 * when the credential it was admitted with, or the one a renewed Copilot token came from, was
+	 * replaced, or removed and connected again (`credential-changed`), whenever that completed
+	 * before the send, and never carries an expired Copilot token or another account's. Cutoffs
+	 * that keep completing while it reads refuse it as `busy`.
 	 */
 	async handoff<T>(
 		authorized: AiAuthorized,
@@ -691,7 +735,7 @@ export class AiCredentials {
 				renew = true;
 				continue;
 			}
-			this.#used(record, now);
+			this.#used(record, new Date(admitted.at));
 			return admitted.sent;
 		}
 		return { refused: "busy" };
@@ -859,26 +903,50 @@ export class AiCredentials {
 			if (entry.until <= now) this.#copilotTokens.delete(other);
 		}
 		let entry: HeldAnswer = {
-			answer: this.#exchange(githubToken),
+			answer: Promise.resolve(undefined),
 			until: now + ACCESS_KNOWN_MS,
 			account,
 			since: this.#completed,
 		};
+		entry.answer = this.#asked(key, entry, githubToken);
 		this.#copilotTokens.set(key, entry);
-		// Before any caller resumes with the answer, so each finds it recorded.
-		entry.answer.then(
-			token => {
+		return entry;
+	}
+
+	/**
+	 * GitHub's answer for `entry`, recorded before any caller resumes with it. GitHub decides an
+	 * answer before Chopin has it, so one that crossed an answer of the other kind about the same
+	 * account (the other completed after this one was asked) may have been decided first: it is
+	 * dropped and GitHub asked again, at most `ANSWER_ATTEMPTS` times, after which it is a failure,
+	 * like one GitHub couldn't give.
+	 */
+	async #asked(
+		key: string,
+		entry: HeldAnswer,
+		githubToken: string,
+	): Promise<CopilotToken | undefined> {
+		try {
+			for (let attempt = 0; attempt < ANSWER_ATTEMPTS; attempt++) {
+				if (attempt) entry.since = this.#completed;
+				let token = await this.#exchange(githubToken);
+				let access = token ? "access" as const : "none" as const;
+				if (this.#crossed(entry, access)) continue;
 				if (token) entry.until = Math.min(entry.until, token.expiresAt - RENEW_BEFORE_MS);
 				// A token already expired is no answer, as every caller takes it.
-				if (!token || token.expiresAt > this.#clock().getTime()) {
-					this.#answered(entry, token ? "access" : "none");
-				}
-			},
-			() => {
-				if (this.#copilotTokens.get(key) === entry) this.#copilotTokens.delete(key);
-			},
-		);
-		return entry;
+				if (!token || token.expiresAt > this.#clock().getTime()) this.#answered(entry, access);
+				return token;
+			}
+			throw new Error("GitHub's answers about this Copilot account kept crossing others");
+		} catch (err) {
+			if (this.#copilotTokens.get(key) === entry) this.#copilotTokens.delete(key);
+			throw err;
+		}
+	}
+
+	/** Whether an answer of the other kind about `entry`'s account completed after it was asked. */
+	#crossed(entry: HeldAnswer, access: "access" | "none"): boolean {
+		let latest = this.#answers.get(entry.account);
+		return !!latest && latest[access === "access" ? "none" : "access"] > entry.since;
 	}
 
 	/**
