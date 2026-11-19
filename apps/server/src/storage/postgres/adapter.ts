@@ -18,6 +18,7 @@ import { PostgresMachineStore } from "./machines";
 import { PostgresDeferredTurnStore } from "./deferred-turns";
 import { PostgresMcpSessionStore } from "./mcp-sessions";
 import { PostgresPlannerCredentialStore } from "./planner-credentials";
+import { PostgresAiCredentialStore, PostgresAiPlaceholderStore } from "./ai-credentials";
 import { PostgresChatThreadStore } from "./chat-threads";
 import { PostgresPlannerLinkHoldStore } from "./planner-holds";
 import { PostgresPlannerModelChoiceStore } from "./planner-model-choices";
@@ -590,6 +591,14 @@ export class PostgresStorage implements StorageAdapter {
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
 		);
+		this.aiCredentials = new PostgresAiCredentialStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+		);
+		this.aiPlaceholders = new PostgresAiPlaceholderStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+		);
 		this.mcpSessions = new PostgresMcpSessionStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
@@ -774,6 +783,8 @@ export class PostgresStorage implements StorageAdapter {
 	readonly plannerModelChoices: PostgresPlannerModelChoiceStore;
 	readonly chatThreads: PostgresChatThreadStore;
 	readonly plannerCredentials: PostgresPlannerCredentialStore;
+	readonly aiCredentials: PostgresAiCredentialStore;
+	readonly aiPlaceholders: PostgresAiPlaceholderStore;
 	readonly mcpSessions: PostgresMcpSessionStore;
 	readonly deferredTurns: PostgresDeferredTurnStore;
 

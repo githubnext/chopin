@@ -14,6 +14,7 @@ import { MemoryMachineStore } from "./machines";
 import { MemoryDeferredTurnStore } from "./deferred-turns";
 import { MemoryMcpSessionStore } from "./mcp-sessions";
 import { MemoryPlannerCredentialStore } from "./planner-credentials";
+import { MemoryAiCredentialStore, MemoryAiPlaceholderStore } from "./ai-credentials";
 import { MemoryChatThreadStore } from "./chat-threads";
 import { MemoryPlannerLinkHoldStore } from "./planner-holds";
 import { MemoryPlannerModelChoiceStore } from "./planner-model-choices";
@@ -57,6 +58,8 @@ import type {
 	UserRecord,
 } from "../model";
 import type {
+	AiCredentialStore,
+	AiPlaceholderStore,
 	BackgroundJobStore,
 	ChannelStore,
 	ChatAttachmentStore,
@@ -226,6 +229,15 @@ export class MemoryStorage implements StorageAdapter {
 		channelExists: id => this.#channels.has(id),
 	});
 	readonly plannerCredentials: PlannerCredentialStore = this.#plannerCredentials;
+	readonly aiCredentials: AiCredentialStore = new MemoryAiCredentialStore({
+		userExists: id => this.#users.has(id),
+	});
+	readonly #aiPlaceholders = new MemoryAiPlaceholderStore({
+		userExists: id => this.#users.has(id),
+		machineExists: id => this.#machines.has(id),
+		channelExists: id => this.#channels.has(id),
+	});
+	readonly aiPlaceholders: AiPlaceholderStore = this.#aiPlaceholders;
 	readonly mcpSessions: McpSessionStore = new MemoryMcpSessionStore();
 	readonly deferredTurns: DeferredTurnStore = new MemoryDeferredTurnStore({
 		assertLease: held => this.#assertLease(held),
@@ -717,6 +729,7 @@ export class MemoryStorage implements StorageAdapter {
 		this.#plannerModelChoices.deleteChannel(id);
 		this.#chatThreads.deleteChannel(id);
 		this.#plannerCredentials.deleteChannel(id);
+		this.#aiPlaceholders.deleteChannel(id);
 		this.#snapshots.delete(id);
 		this.#sequences.delete(id);
 		this.#updates.delete(id);

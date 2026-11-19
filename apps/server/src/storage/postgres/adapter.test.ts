@@ -1105,6 +1105,7 @@ if (url) {
 				"041_document_full_width",
 				"042_chat_thread_notes",
 				"043_chat_thread_seq",
+				"044_ai_credentials",
 			]);
 			expect([
 				...await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`,

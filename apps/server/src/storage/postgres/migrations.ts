@@ -151,6 +151,9 @@ const MIGRATIONS = [{
 }, {
 	id: "043_chat_thread_seq",
 	path: join(import.meta.dir, "migrations/043_chat_thread_seq.sql"),
+}, {
+	id: "044_ai_credentials",
+	path: join(import.meta.dir, "migrations/044_ai_credentials.sql"),
 }] satisfies Migration[];
 
 /** Navigation shipped as 002 before document slugs claimed that number on main. */

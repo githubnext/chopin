@@ -131,6 +131,10 @@ import { createDocument as createHostedDocument, MCP_SESSION_IDLE_MS } from "./m
 import { CANNOT_STEER } from "./chat/steering";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
+import { AiCredentials } from "./ai/credentials";
+import { aiProxy } from "./ai/proxy";
+import { copilotEntitlement } from "./ai/copilot";
+import { githubSignIn, registerAiRoutes } from "./ai/routes";
 import * as Edit from "./plan/edit";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
@@ -266,6 +270,7 @@ let implementations: ReturnType<typeof registerImplementationRoutes> | undefined
 let experimentTimer: ReturnType<typeof setInterval> | undefined;
 let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
+let aiCredentials: AiCredentials | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
 let plannerAttachments: PlannerAttachments | undefined;
 /** Each document's recent automatic follow-ups through `invoke_planner`, for their hourly limit. */
@@ -2458,6 +2463,7 @@ function cleanSessions(): void {
 		let now = hostedAuth.clock();
 		await storage.mcpSessions.deleteIdle(new Date(now.getTime() - MCP_SESSION_IDLE_MS));
 		await storage.plannerCredentials.deleteExpired(now);
+		await aiCredentials?.sweep();
 	}).catch(err => {
 		console.error("chopin: could not delete idle MCP sessions or expired credentials -", err);
 	}).finally(() => {
@@ -3604,6 +3610,24 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 	},
 });
 registerNavigationRoutes(router, hostedAuth, { storage });
+let connectedAi = new AiCredentials({
+	storage,
+	key: config.auth.encryptionKey,
+	origin: config.auth.origin,
+	clock: hostedAuth.clock,
+	githubToken: githubSignIn(hostedAuth),
+	copilotEntitlement: copilotEntitlement(),
+});
+aiCredentials = connectedAi;
+hostedAuth.machines.onEnded(machineId => {
+	void connectedAi.machineEnded(machineId).catch(err =>
+		console.error("chopin: could not end a machine's AI placeholders -", err)
+	);
+});
+registerAiRoutes(router, hostedAuth, {
+	credentials: connectedAi,
+	proxy: aiProxy({ credentials: connectedAi }),
+});
 registerImageRoutes(router, hostedAuth);
 registerAttachmentRoutes(router, hostedAuth, { limits: chatAttachmentLimits });
 registerTranscriptionRoutes(

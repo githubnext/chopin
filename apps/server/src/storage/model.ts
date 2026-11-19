@@ -1133,6 +1133,35 @@ export type PlannerCredential = {
 	expiresAt: Date;
 };
 
+/**
+ * A provider a person connected for their launches' agents. `ciphertext` holds their key, encrypted
+ * by the server; a GitHub sign-in has none, as Chopin reads the sign-in it already holds.
+ */
+export type AiCredentialRecord = {
+	userId: string;
+	provider: import("@chopin/protocol/ai-credentials").AiProvider;
+	kind: import("@chopin/protocol/ai-credentials").AiCredentialKind;
+	ciphertext?: Uint8Array;
+	updatedAt: Date;
+};
+
+/**
+ * A placeholder one launch was handed for one provider, known by its digest and never the
+ * placeholder itself. It stands for the credential of the person the launch runs for.
+ */
+export type AiPlaceholder = {
+	/** SHA-256 of the placeholder. */
+	digest: Uint8Array;
+	launchId: string;
+	userId: string;
+	provider: import("@chopin/protocol/ai-credentials").AiProvider;
+	/** The paired machine the launch runs on, whose revocation ends it. */
+	machineId?: string;
+	/** The document the launch works on, whose archiving or deletion ends it. */
+	channelId?: string;
+	expiresAt: Date;
+};
+
 export type McpSession = {
 	id: string;
 	userId: string;
