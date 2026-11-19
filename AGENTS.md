@@ -142,6 +142,17 @@ durable.
   instead presents an MCP token minted from its launch's credential, limited to
   that launch's documents and life (`experiments/mcp-token.ts`); `/mcp` never
   takes a GitHub App installation token or a launch's own Planner or run credential.
+- **AI credentials stay in Chopin.** A person's connected AI keys
+  (`ai_credentials`, encrypted) are never returned by any route. A launch holds
+  random per-provider placeholders, kept only as digests; `/api/v1/ai/<provider>/`
+  accepts one only from a live launch, in `Authorization` or `x-api-key`, swaps it
+  for the real credential of the launch's person in that provider's one header,
+  and forwards to that provider's fixed origin, following no redirect. A
+  revoked machine or an archived document ends its launches' placeholders. Copilot
+  through the GitHub sign-in uses the person's current GitHub token, renewed by
+  Chopin, and only while GitHub gives that account a Copilot token; a launch gets
+  no placeholder for a provider its person can't use. Handing placeholders to runners is not wired yet. See
+  [Hosted agent](docs/hosted-agent.md#ai-credentials).
 - **Planner ownership is process-bound.** The first eligible Planner or
   model-backed research request supplies its GitHub App token and Copilot
   entitlement. Server-authored turns nobody typed (re-linking decisions after a

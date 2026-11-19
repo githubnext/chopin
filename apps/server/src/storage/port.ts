@@ -2,6 +2,8 @@ import type {
 	AddUserProject,
 	AddUserProjectResult,
 	AgentState,
+	AiCredentialRecord,
+	AiPlaceholder,
 	AppendBackgroundJobProgress,
 	AppendResearchAgentMessage,
 	AppendResearchAgentMessageResult,
@@ -492,6 +494,36 @@ export interface PlannerCredentialStore {
 	deleteExpired(now: Date): Promise<number>;
 }
 
+/** The AI providers each person connected, one row per person and provider. */
+export interface AiCredentialStore {
+	/** Connects a provider, replacing what the person connected for it before. */
+	put(record: AiCredentialRecord): Promise<void>;
+	get(
+		userId: string,
+		provider: AiCredentialRecord["provider"],
+	): Promise<AiCredentialRecord | undefined>;
+	/** A person's connected providers, ordered by provider. */
+	list(userId: string): Promise<AiCredentialRecord[]>;
+	/** False when the person had not connected it. */
+	delete(userId: string, provider: AiCredentialRecord["provider"]): Promise<boolean>;
+}
+
+/**
+ * The placeholders launches were handed, by digest. Rows are written before a placeholder is
+ * handed out, so a process that starts later accepts it while its launch lasts.
+ */
+export interface AiPlaceholderStore {
+	/** One launch's placeholders, together; throws a conflict for a digest already stored. */
+	put(placeholders: AiPlaceholder[]): Promise<void>;
+	/** The placeholder for this digest while it has not expired at `now`. */
+	find(digest: Uint8Array, now: Date): Promise<AiPlaceholder | undefined>;
+	/** Ends a launch: its placeholders stop working. Returns how many there were. */
+	deleteLaunch(launchId: string): Promise<number>;
+	/** Every launch on a machine, as revoking it does; returns how many placeholders went. */
+	deleteForMachine(machineId: string): Promise<number>;
+	deleteExpired(now: Date): Promise<number>;
+}
+
 /** MCP sessions, which a restart no longer ends. Idle ones are swept. */
 export interface McpSessionStore {
 	/** Idempotent: an id already stored keeps its first record. */
@@ -546,6 +578,8 @@ export interface StorageAdapter {
 	readonly plannerModelChoices: PlannerModelChoiceStore;
 	readonly chatThreads: ChatThreadStore;
 	readonly plannerCredentials: PlannerCredentialStore;
+	readonly aiCredentials: AiCredentialStore;
+	readonly aiPlaceholders: AiPlaceholderStore;
 	readonly mcpSessions: McpSessionStore;
 	readonly deferredTurns: DeferredTurnStore;
 

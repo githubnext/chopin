@@ -27,6 +27,7 @@ function plain(status: number, message: string, headers?: HeadersInit): Response
 export class Router {
 	readonly #routes: Routes = new Map();
 	readonly #patterns: Pattern[] = [];
+	readonly #prefixes = new Map<string, RouteHandler>();
 
 	on(method: string, path: string, handler: RouteHandler): void {
 		if (path.split("/").some(segment => segment.startsWith(":"))) {
@@ -46,6 +47,13 @@ export class Router {
 		this.#routes.set(path, methods);
 	}
 
+	/** Every method on every path under `prefix`, which ends in `/`, after the exact routes. */
+	prefix(prefix: string, handler: RouteHandler): void {
+		if (!prefix.endsWith("/")) throw new Error(`${prefix} must end with /`);
+		if (this.#prefixes.has(prefix)) throw new Error(`${prefix} is already registered`);
+		this.#prefixes.set(prefix, handler);
+	}
+
 	async handle(request: Request, url = new URL(request.url)): Promise<Response | undefined> {
 		let methods = this.#routes.get(url.pathname);
 		if (methods) {
@@ -62,6 +70,9 @@ export class Router {
 			return plain(405, "method not allowed", {
 				allow: [...matched.pattern.methods.keys()].sort().join(", "),
 			});
+		}
+		for (let [prefix, handler] of this.#prefixes) {
+			if (url.pathname.startsWith(prefix)) return handler(request, url, {});
 		}
 
 		if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {

@@ -893,6 +893,90 @@ have no model in the server either; they run as isolated sessions on the same
 client, so attaching also lends that client's model to the document's
 background work.
 
+## AI credentials
+
+People connect their AI credentials in Chopin once, so a runner that does their
+work needs no model sign-in or key of its own: GitHub Copilot (through the GitHub
+sign-in Chopin already holds for them, or a personal access token), an OpenAI API
+key, and an Anthropic API key.
+
+```text
+GET    /api/ai/credentials
+PUT    /api/ai/credentials/:provider     {"kind":"api-key","secret":"…"} or {"kind":"github-sign-in"}
+POST   /api/ai/credentials/github-copilot/check
+DELETE /api/ai/credentials/:provider
+```
+
+`:provider` is `github-copilot`, `openai` or `anthropic`; `github-sign-in` is
+for `github-copilot` alone. The list says which providers a person connected,
+how, and when; no route returns a secret. Connecting and disconnecting need a
+signed-in browser login and Chopin's own `Origin`. A key is 8 to 4096 printable
+characters with no spaces, and is stored encrypted with AES-GCM under a key
+derived from `SESSION_ENCRYPTION_KEY`, bound to its person and provider
+(`ai_credentials` in [Storage](storage.md)).
+
+**Placeholders.** A launch (a Planner session or a build or run) is given, per
+provider its person connected, a random placeholder (`chopin_ai_` and 43
+base64url characters), the provider's base URL on Chopin, and the environment
+variable agents read that provider's key from
+(`AiProviderGrant` in `packages/protocol/ai-credentials.ts`). Chopin keeps only
+each placeholder's SHA-256 digest (`ai_placeholders`), written before the
+placeholder is handed out. A placeholder works until its launch ends or expires,
+and is refused once the launch's machine is revoked or its document is archived
+or deleted.
+
+| Provider         | Base URL                            | Key variable           | Sent to                         | Credential header |
+| ---------------- | ----------------------------------- | ---------------------- | ------------------------------- | ----------------- |
+| `github-copilot` | `<origin>/api/v1/ai/github-copilot` | `COPILOT_GITHUB_TOKEN` | `https://api.githubcopilot.com` | `Authorization`   |
+| `openai`         | `<origin>/api/v1/ai/openai/v1`      | `OPENAI_API_KEY`       | `https://api.openai.com`        | `Authorization`   |
+| `anthropic`      | `<origin>/api/v1/ai/anthropic`      | `ANTHROPIC_API_KEY`    | `https://api.anthropic.com`     | `x-api-key`       |
+
+**The credential proxy.** `/api/v1/ai/<provider>/…` accepts a request only with
+a live launch's placeholder for that provider in `Authorization: Bearer` or
+`x-api-key`, and only one value across the two. It drops both headers, the
+caller's cookies and forwarding headers, puts the real credential of the person
+the launch runs for in the one header the provider takes, and sends the method,
+path, query and body unchanged to the provider's own origin. The path cannot
+name another host. A placeholder anywhere else (the query, another header, the
+body) is sent on as the placeholder it is. A redirect is returned to the agent,
+never followed with the credential. The response streams back without the
+provider's cookies. Refusals are JSON with a `code`: `no-placeholder`,
+`unknown-placeholder`, `other-provider` or `launch-ended` (401), and
+`not-connected`, `sign-in-unavailable` or `no-copilot-access` (403).
+
+**GitHub Copilot through the GitHub sign-in.** Chopin sends Copilot the
+person's current GitHub user token as a raw token and renews it itself: from the paired machine's own GitHub authorization
+when the launch runs on the person's own machine, else from their live browser
+login, each refreshed by Chopin before it expires. No runner sees the token or
+its refresh token. A launch whose person has no live login Chopin can read is
+refused with `sign-in-unavailable`; a personal access token connected as an
+`api-key` has no such limit.
+
+A GitHub sign-in is not Copilot access. Chopin asks GitHub for a Copilot token
+with the person's GitHub token (`GET /copilot_internal/v2/token` on
+`api.github.com`) and keeps only the answer, for five minutes: a token given is
+`access`, a refusal (401, 403 or 404) is `none`, which means the account has no
+Copilot subscription and is not an error, and anything else is `unknown`. The
+list and the connect answer carry it as `copilotAccess`; `POST
+/api/ai/credentials/github-copilot/check` asks GitHub again at once. A launch
+gets no Copilot placeholder while the answer is `none`, so a person who loses
+access stops getting Copilot in later launches, and a placeholder handed out
+before is refused with `no-copilot-access` (403). An `unknown` answer withholds
+nothing. API keys alone are enough: a person with only an OpenAI or Anthropic
+key gets those, and a person with nothing usable gets no placeholder at all,
+never one that would only fail.
+
+**Model lists.** A provider's model list is an ordinary request through the
+proxy (Copilot's account `GET /models`, OpenAI's and Anthropic's `/v1/models`).
+`GET /api/v1/ai/models.dev/api.json` serves the public models.dev catalog with
+no credential, fetched at most every ten minutes and answered with its `ETag`,
+for an agent's catalog base URL (Atomic's `ATOMIC_MODEL_CATALOG_URL` is
+`<origin>/api/v1/ai/models.dev`).
+
+Handing placeholders to runners, through the agent connection and the
+connector's launch, is not wired yet; until it is, a paired machine's agents
+still use the machine's own sign-ins. Per-launch usage is not recorded yet.
+
 ## Permission checks
 
 Before each Chopin host tool or its repository-bound GitHub MCP tool executes, callbacks recheck:

@@ -29,6 +29,10 @@
 			"types": "./attachment.ts",
 			"default": "./attachment.ts"
 		},
+		"./ai-credentials": {
+			"types": "./ai-credentials.ts",
+			"default": "./ai-credentials.ts"
+		},
 		"./commands": {
 			"types": "./commands.ts",
 			"default": "./commands.ts"

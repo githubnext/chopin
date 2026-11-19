@@ -35,6 +35,24 @@ describe("HTTP routing", () => {
 		expect(await router.handle(new Request("https://chopin.test/missing"))).toBeUndefined();
 	});
 
+	it("gives every method under a prefix to its handler, after the exact routes", async () => {
+		let router = new Router();
+		router.on("GET", "/api/v1/ai/exact", () => new Response("exact"));
+		router.prefix(
+			"/api/v1/ai/",
+			(request, url) => new Response(`${request.method} ${url.pathname}`),
+		);
+
+		let answer = async (path: string, method = "GET") =>
+			(await router.handle(new Request(`https://chopin.test${path}`, { method })))!.text();
+		expect(await answer("/api/v1/ai/exact")).toBe("exact");
+		expect(await answer("/api/v1/ai/openai/v1/responses", "POST")).toBe(
+			"POST /api/v1/ai/openai/v1/responses",
+		);
+		expect((await router.handle(new Request("https://chopin.test/api/v1/ai")))!.status).toBe(404);
+		expect(() => router.prefix("/api/v1/ai", () => new Response())).toThrow();
+	});
+
 	it("matches and decodes complete path segments", async () => {
 		let router = new Router();
 		router.on(

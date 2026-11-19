@@ -476,8 +476,15 @@ GET  /api/channels/:channelId
 PATCH /api/channels/:channelId
 POST /api/channels/:channelId/agent/reset
 GET  /api/channels/:channelId/github-references?ref=owner/repository/pull/12
+GET  /api/ai/credentials
+PUT  /api/ai/credentials/:provider
+POST /api/ai/credentials/github-copilot/check
+DELETE /api/ai/credentials/:provider
 POST /auth/logout
 ```
+
+The AI credential routes and the credential proxy at `/api/v1/ai/` are
+described in [Hosted agent](hosted-agent.md#ai-credentials).
 
 Local mode (`AUTH_MODE=local`) additionally registers these routes. It disables
 the authorization-code flow, so `/auth/github` and `/auth/github/callback`
