@@ -1,13 +1,243 @@
 import type { AiTokenCounts } from "../storage/model";
 
-/** The most of a JSON answer read for its token counts; a larger one is passed on uncounted. */
-const MAX_JSON = 16 * 1024 * 1024;
 /** The most of one server-sent event read; a larger one is passed on and skipped. */
 const MAX_EVENT = 4 * 1024 * 1024;
 const MAX_MODEL = 200;
 const ERROR_CODE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
 
 type Json = Record<string, unknown>;
+
+/**
+ * The fields of a JSON answer that say its usage and error, by the object they are in: the answer
+ * itself (`""`), or its `response` or `message`.
+ */
+const WANTED = new Map<string, readonly string[]>([
+	["", ["usage", "error", "type"]],
+	["response", ["usage", "error"]],
+	["message", ["usage"]],
+]);
+/** The most of one wanted field kept; a larger one is skipped. */
+const MAX_FIELD = 64 * 1024;
+/** No wanted name is longer, so a longer key is not kept. */
+const MAX_KEY = 16;
+const STRING_STOP = /["\\]/g;
+const STRUCTURE = /["{}[\]]/g;
+
+type Frame = { array: boolean; name: string | undefined; key: string | undefined };
+type Field = {
+	path: string;
+	depth: number;
+	kind: "string" | "literal" | "container";
+	text: string;
+	long: boolean;
+};
+
+/**
+ * Keeps the text of the wanted fields of a JSON answer as it passes, however large the answer:
+ * everything else is scanned for its structure and let go.
+ */
+class JsonFields {
+	#stack: Frame[] = [];
+	#string = false;
+	#escaped = false;
+	#key: string | undefined;
+	#expectKey = false;
+	#valueNext = true;
+	#field: Field | undefined;
+	#fields = new Map<string, string>();
+	#closed = false;
+
+	push(text: string): void {
+		let at = 0;
+		while (at < text.length) {
+			if (this.#unwanted()) {
+				at = this.#skip(text, at);
+			} else {
+				this.#char(text[at]!);
+				at++;
+			}
+		}
+	}
+
+	/** The wanted fields, in the shape of the answer, once its outermost object has closed. */
+	found(): Json | undefined {
+		if (!this.#closed) return undefined;
+		let parsed = (path: string): unknown => {
+			let text = this.#fields.get(path);
+			if (text === undefined) return undefined;
+			try {
+				return JSON.parse(text);
+			} catch {
+				return undefined;
+			}
+		};
+		return {
+			usage: parsed("usage"),
+			error: parsed("error"),
+			type: parsed("type"),
+			response: { usage: parsed("response.usage"), error: parsed("response.error") },
+			message: { usage: parsed("message.usage") },
+		};
+	}
+
+	#char(c: string): void {
+		if (this.#string) {
+			this.#keep(c);
+			if (this.#escaped) {
+				this.#escaped = false;
+				this.#keyChar(c);
+			} else if (c === "\\") {
+				this.#escaped = true;
+				this.#keyChar(c);
+			} else if (c === '"') {
+				this.#string = false;
+				this.#stringEnded();
+			} else {
+				this.#keyChar(c);
+			}
+			return;
+		}
+		switch (c) {
+			case '"': {
+				let top = this.#stack.at(-1);
+				if (top && !top.array && this.#expectKey) {
+					this.#expectKey = false;
+					this.#key = "";
+				} else {
+					this.#value("string");
+				}
+				this.#string = true;
+				this.#keep(c);
+				return;
+			}
+			case "{":
+			case "[": {
+				let parent = this.#stack.at(-1);
+				this.#value("container");
+				this.#keep(c);
+				let name = c === "[" ? undefined : !parent
+					? ""
+					: !parent.array && parent.name === "" && parent.key && WANTED.has(parent.key)
+					? parent.key
+					: undefined;
+				this.#stack.push({ array: c === "[", name, key: undefined });
+				this.#expectKey = c === "{";
+				this.#valueNext = c === "[";
+				return;
+			}
+			case "}":
+			case "]": {
+				this.#literalEnded();
+				this.#keep(c);
+				this.#stack.pop();
+				if (this.#stack.length === 0) this.#closed = true;
+				let field = this.#field;
+				if (field?.kind === "container" && field.depth === this.#stack.length) this.#fieldEnded();
+				this.#expectKey = false;
+				this.#valueNext = false;
+				return;
+			}
+			case ":":
+				this.#keep(c);
+				this.#valueNext = true;
+				return;
+			case ",": {
+				this.#literalEnded();
+				this.#keep(c);
+				let top = this.#stack.at(-1);
+				if (top && !top.array) this.#expectKey = true;
+				else this.#valueNext = true;
+				return;
+			}
+			case " ":
+			case "\t":
+			case "\n":
+			case "\r":
+				this.#literalEnded();
+				this.#keep(c);
+				return;
+			default:
+				if (this.#valueNext) this.#value("literal");
+				this.#keep(c);
+		}
+	}
+
+	/** Whether the scan is inside a value none of whose keys or text can be wanted. */
+	#unwanted(): boolean {
+		return !this.#field && this.#key === undefined && this.#stack.at(-1)?.name === undefined
+			&& this.#stack.length > 0;
+	}
+
+	/** Passes over unwanted text from `at` to the next character that changes the structure. */
+	#skip(text: string, at: number): number {
+		if (this.#string) {
+			if (this.#escaped) {
+				this.#escaped = false;
+				return at + 1;
+			}
+			STRING_STOP.lastIndex = at;
+			let stop = STRING_STOP.exec(text);
+			if (!stop) return text.length;
+			if (stop[0] === "\\") this.#escaped = true;
+			else this.#string = false;
+			return stop.index + 1;
+		}
+		STRUCTURE.lastIndex = at;
+		let stop = STRUCTURE.exec(text);
+		if (!stop) return text.length;
+		if (stop[0] === '"') this.#string = true;
+		else this.#char(stop[0]);
+		return stop.index + 1;
+	}
+
+	#keyChar(c: string): void {
+		if (this.#key !== undefined && this.#key.length <= MAX_KEY) this.#key += c;
+	}
+
+	#stringEnded(): void {
+		if (this.#key !== undefined) {
+			let top = this.#stack.at(-1);
+			if (top) top.key = this.#key.length <= MAX_KEY ? this.#key : undefined;
+			this.#key = undefined;
+			return;
+		}
+		let field = this.#field;
+		if (field?.kind === "string" && field.depth === this.#stack.length) this.#fieldEnded();
+	}
+
+	#literalEnded(): void {
+		let field = this.#field;
+		if (field?.kind === "literal" && field.depth === this.#stack.length) this.#fieldEnded();
+	}
+
+	#value(kind: Field["kind"]): void {
+		if (!this.#valueNext) return;
+		this.#valueNext = false;
+		let top = this.#stack.at(-1);
+		if (this.#field || !top || top.array || top.name === undefined || !top.key) return;
+		if (!WANTED.get(top.name)?.includes(top.key)) return;
+		this.#field = {
+			path: top.name ? `${top.name}.${top.key}` : top.key,
+			depth: this.#stack.length,
+			kind,
+			text: "",
+			long: false,
+		};
+	}
+
+	#keep(c: string): void {
+		let field = this.#field;
+		if (!field || field.long) return;
+		if (field.text.length < MAX_FIELD) field.text += c;
+		else field.long = true;
+	}
+
+	#fieldEnded(): void {
+		let field = this.#field!;
+		this.#field = undefined;
+		if (!field.long) this.#fields.set(field.path, field.text);
+	}
+}
 
 function object(value: unknown): Json | undefined {
 	return value && typeof value === "object" && !Array.isArray(value) ? value as Json : undefined;
@@ -77,15 +307,15 @@ function errorCode(value: Json): string | undefined {
 
 /**
  * Reads the token counts and any error a provider reports in its answer as it passes, without
- * holding it back: a JSON body once it has all come, or each event of a server-sent event stream,
+ * holding it back: a JSON body's usage and error once it has all come, however large it is, or each
+ * event of a server-sent event stream,
  * in which a later count replaces an earlier one (Anthropic sends its output count again as it
  * grows, OpenAI its usage in the last event).
  */
 export class UsageReader {
 	readonly #stream: boolean;
 	readonly #decoder = new TextDecoder();
-	#chunks: Uint8Array[] = [];
-	#size = 0;
+	readonly #json = new JsonFields();
 	#line = "";
 	#skipping = false;
 	#data: string[] = [];
@@ -98,28 +328,19 @@ export class UsageReader {
 	}
 
 	push(bytes: Uint8Array): void {
-		if (!this.#stream) {
-			this.#size += bytes.byteLength;
-			if (this.#size <= MAX_JSON) this.#chunks.push(bytes.slice());
-			else this.#chunks = [];
-			return;
-		}
-		this.#lines(this.#decoder.decode(bytes, { stream: true }));
+		let text = this.#decoder.decode(bytes, { stream: true });
+		if (this.#stream) this.#lines(text);
+		else this.#json.push(text);
 	}
 
 	/** What was read once the answer has ended. */
 	end(): { tokens: AiTokenCounts; error?: string } {
 		if (this.#stream) {
 			this.#lines(`${this.#decoder.decode()}\n\n`);
-		} else if (this.#size > 0 && this.#size <= MAX_JSON) {
-			let body = new Uint8Array(this.#size);
-			let offset = 0;
-			for (let chunk of this.#chunks) {
-				body.set(chunk, offset);
-				offset += chunk.byteLength;
-			}
-			this.#chunks = [];
-			this.#read(this.#decoder.decode(body));
+		} else {
+			this.#json.push(this.#decoder.decode());
+			let found = this.#json.found();
+			if (found) this.#take(found);
 		}
 		return { tokens: this.#tokens, ...(this.#error ? { error: this.#error } : {}) };
 	}
@@ -167,7 +388,10 @@ export class UsageReader {
 		} catch {
 			return;
 		}
-		if (!parsed) return;
+		if (parsed) this.#take(parsed);
+	}
+
+	#take(parsed: Json): void {
 		let error = errorCode(parsed);
 		if (error) this.#error = error;
 		for (

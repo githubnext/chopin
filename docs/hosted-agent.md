@@ -1156,11 +1156,15 @@ for any other status with the provider's error code (`error.code`, else
 body that broke off (`interrupted`) or one the agent stopped reading
 (`cancelled`). It holds the provider's status and the token counts the provider
 reported, read from the answer as it passes, never holding it back: a JSON
-body's `usage`, or each server-sent event's, a later count replacing an earlier
-one (Anthropic's growing output count, OpenAI's usage in its last chunk). Input
+body's `usage` (only its usage and error fields are kept, so an answer of any size,
+such as a large batch of embeddings, is counted), or each server-sent event's, a
+later count replacing an earlier one (Anthropic's growing output count, OpenAI's
+usage in its last chunk). Input
 is what was read without the cache, so OpenAI's cached input is taken out of its
 input and counted as a cache read; Anthropic's cache reads and writes are its
-own. A completion sent again changes nothing. A process that stops between the
+own. A completion sent again changes nothing, so one whose write fails for a
+passing storage trouble is written again, waiting longer each time up to 30
+seconds, for as long as the process holds the writer lease it began under. A process that stops between the
 send and the record (a crash, or a hand-over whose answers were still streaming)
 leaves the request `pending`, and the next holder of the writer lease marks
 every request an earlier holder left pending `unknown` once it is ready, so none
@@ -1175,9 +1179,9 @@ answers the signed-in person's own totals for the last seven days
 provider and model, most requested first, the requests sent (pending ones
 included, those refused at the send not), how many ended in an error, how many
 are unknown, and the input, output, cache read and cache write tokens. Requests
-that named no model (a model list) are counted under no model. The AI accounts
-page shows them under _Usage by model_
-(`apps/web/src/ai-usage/usage-by-model.tsx`).
+that named no model (a model list) are counted under no model. The _Usage by
+model_ section (`apps/web/src/ai-usage/usage-by-model.tsx`) shows them; it is not
+on any page yet, and goes on the AI accounts page once that page lands.
 
 ## Permission checks
 
