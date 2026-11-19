@@ -1596,3 +1596,91 @@ exec "${real}" "$@"
 		}
 	},
 );
+
+test("a run Chopin hands no AI grant starts its agent on the owner's setup, as before", async () => {
+	let folder = await mkdtemp(join(tmpdir(), "chopin-ai-none-"));
+	let report = join(folder, "report.json");
+	try {
+		let asked: string[] = [];
+		await run({}, [], undefined, undefined, {
+			command: [process.execPath, new URL("./testing/ai-agent.ts", import.meta.url).pathname],
+			env: {
+				AI_AGENT_REPORT: report,
+				OPENAI_API_KEY: "sk-owner",
+				ATOMIC_CODING_AGENT_DIR: "/owner",
+			},
+			ai: {
+				launch: async run => void asked.push(run),
+				end: async () => {},
+			},
+		});
+		expect(asked).toEqual(["token"]);
+		let { env } = JSON.parse(await readFile(report, "utf8"));
+		expect(env.OPENAI_API_KEY).toBe("sk-owner");
+		expect(env.ATOMIC_CODING_AGENT_DIR).toBe("/owner");
+		expect(env.OPENAI_BASE_URL).toBeUndefined();
+	} finally {
+		await rm(folder, { recursive: true, force: true });
+	}
+});
+
+test("a run handed AI grants gives its agent stand-ins through the relay and its own state, and ends the launch", async () => {
+	let folder = await mkdtemp(join(tmpdir(), "chopin-ai-granted-"));
+	let report = join(folder, "report.json");
+	let seen: Array<{ path: string; launch: string | null; authorization: string | null }> = [];
+	let chopin = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch(request) {
+			seen.push({
+				path: new URL(request.url).pathname,
+				launch: request.headers.get("x-chopin-launch"),
+				authorization: request.headers.get("authorization"),
+			});
+			return Response.json({ choices: [{ message: { content: "relayed" } }] });
+		},
+	});
+	let ended: string[] = [];
+	try {
+		await run({}, [], undefined, undefined, {
+			command: [process.execPath, new URL("./testing/ai-agent.ts", import.meta.url).pathname],
+			env: {
+				AI_AGENT_REPORT: report,
+				OPENAI_API_KEY: "sk-owner",
+				ANTHROPIC_API_KEY: "sk-ant-owner",
+			},
+			ai: {
+				launch: async () => ({
+					launch: "chopin_launch_run",
+					expiresAt: Date.now() + 60_000,
+					providers: [{
+						provider: "openai",
+						baseUrl: `http://127.0.0.1:${chopin.port}/api/v1/ai/openai/v1`,
+						placeholder: "chopin_ai_run",
+						keyVariable: "OPENAI_API_KEY",
+					}],
+					withheld: [],
+				}),
+				end: async launch => void ended.push(launch),
+			},
+		});
+		let { env, answer, state } = JSON.parse(await readFile(report, "utf8"));
+		expect(answer).toMatchObject({
+			status: 200,
+			body: { choices: [{ message: { content: "relayed" } }] },
+		});
+		expect(seen).toEqual([{
+			path: "/api/v1/ai/openai/v1/chat/completions",
+			launch: "chopin_launch_run",
+			authorization: "Bearer chopin_ai_run",
+		}]);
+		expect(env.OPENAI_API_KEY).toBe("chopin_ai_run");
+		expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+		expect(env.ATOMIC_CODING_AGENT_DIR).toEndWith(".agent/atomic");
+		expect(JSON.stringify({ env, state })).not.toContain("chopin_launch_run");
+		expect(ended).toEqual(["chopin_launch_run"]);
+	} finally {
+		await chopin.stop(true);
+		await rm(folder, { recursive: true, force: true });
+	}
+});

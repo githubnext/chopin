@@ -898,9 +898,8 @@ background work.
 People connect their AI credentials in Chopin once: GitHub Copilot (through the
 GitHub sign-in Chopin already holds for them, or a personal access token), an
 OpenAI API key, and an Anthropic API key. The server keeps them and serves them
-through its credential proxy now; runners receiving only placeholders, with no
-model sign-in or key of their own, arrives with the runner handoff (see the end
-of this section).
+through its credential proxy; runners receive only placeholders, with no model
+sign-in or key of their own (see [Handing launches to runners](#handing-launches-to-runners)).
 
 ```text
 GET    /api/ai/credentials
@@ -1152,12 +1151,6 @@ Chopin fetches the catalog with no credential, at most every ten minutes, and
 answers with its `ETag`, for an agent's catalog base URL (Atomic's
 `ATOMIC_MODEL_CATALOG_URL` is `<origin>/api/v1/ai/models.dev`).
 
-Handing placeholders and the launch credential to runners, through the agent
-connection and the connector's launch, is not wired yet; until it is, a paired machine's agents
-still use the machine's own sign-ins. That handoff also gives a Copilot agent the
-client headers Copilot expects with a Copilot token, since the agent only sees a
-placeholder.
-
 **Usage.** Every request the proxy is about to send to a provider is recorded
 first (`ai_usage` in [Storage](storage.md)), once its placeholder and launch
 credential are accepted and its body is read: a fresh id, the launch, its person,
@@ -1207,6 +1200,49 @@ that named no model (a model list) are counted under no model. The _Usage by
 model_ section (`apps/web/src/ai-usage/usage-by-model.tsx`) shows them on the AI
 accounts page, after _API keys_, with a model's pending and unknown requests
 noted quietly under its count.
+
+### Handing launches to runners
+
+Every launch is prepared by `handOut` (`apps/server/src/ai/launches.ts`), which
+calls `AiCredentials.launch()` for the person the launch runs for and turns its
+result into what the runner is handed: the launch credential, its deadline and
+one placeholder per granted provider with its base URL on the proxy and key
+variable, and what was withheld. A launch given no provider is handed out with an
+empty `providers` and no launch credential; the runner then uses its own models,
+as before. A launch Chopin could not prepare (503) fails the start.
+
+- **A Planner session** on a client attached at `/api/v1/agent` that offers the
+  `ai-credentials` feature is launched for the account that attached (for a paired
+  machine's Planner credential, the machine's owner, on that machine, as its other
+  work there runs), for the document, for 12 hours. `start` and `fork` carry it in
+  `ai`, and an `ai` message hands the session a new launch when the person connects,
+  replaces or removes a provider, half an hour before the deadline, and when a
+  resumed session comes back; the earlier launch ends once the new one is sent. The
+  session's end (`destroy`, or its link closing for good) ends its launch. A client
+  that does not offer the feature is launched nothing. See
+  [Models through Chopin](agent-connection.md#models-through-chopin).
+- **A build, investigation or prototype** on a paired machine asks with its run
+  credential:
+
+  ```text
+  POST /api/connector/ai-launch       { "run": "<run credential>" }
+  POST /api/connector/ai-launch/end   { "launch": "<launch credential>" }
+  ```
+
+  with the machine token as its bearer. The launch is for whoever started the run,
+  on their own machine or a teammate's shared one (as the run's MCP token acts for
+  them), on that machine and the run's document, for 5 hours. Only that machine can
+  end it, with the launch credential, which the connector does when the run ends; a
+  Chopin without people's AI credentials answers 404 and the run's agent uses its
+  own models. The connector keeps the launch credential and relays the agent's
+  requests (see [Sandbox](chopin-cli.md#sandbox)).
+
+A launch's machine revoked, its document archived or its deadline passed ends its
+placeholders (see above); the runner learns it from the proxy's `launch-ended`,
+and the connector stops a run whose launch ended. A Copilot agent sends
+`Copilot-Integration-Id: vscode-chat`, the header of an editor's sign-in, since
+Chopin sends Copilot an exchanged Copilot token. Each request a launch's
+placeholder sends is recorded against that launch (see Usage above).
 
 ## Permission checks
 

@@ -53,6 +53,7 @@ import { remoteCatalog } from "../catalog";
 import { plannerCatalog, plannerOffered, plannerOfferKnown } from "../harnesses";
 import { createRemoteAdapter } from "./adapter";
 import { admitAgent } from "./endpoint";
+import type { AgentAi } from "./endpoint";
 import { remotePlanner } from "./registry";
 import { testLease } from "../../storage/contract-support";
 
@@ -2763,5 +2764,119 @@ describe("Agent connection background workers", () => {
 			aborted: new Promise<never>(() => {}),
 			openSandbox: async () => sandboxSession,
 		})).rejects.toThrow("No machine is connected to this document.");
+	});
+});
+
+describe("Agent connection AI launches", () => {
+	/** Launches as Chopin would hand them out, each with its own stand-in, recorded. */
+	function launches() {
+		let asked: Array<{ userId: string; machineId?: string; channelId: string }> = [];
+		let ended: string[] = [];
+		let listeners = new Set<(userId: string) => void>();
+		let ai: AgentAi = {
+			async launch(input) {
+				asked.push(input);
+				let n = asked.length;
+				return {
+					launchId: `launch-${n}`,
+					grants: {
+						launch: `chopin_launch_${n}`,
+						expiresAt: Date.now() + 60 * 60_000,
+						providers: [{
+							provider: "anthropic",
+							baseUrl: "https://chopin.test/api/v1/ai/anthropic",
+							placeholder: `chopin_ai_${n}`,
+							keyVariable: "ANTHROPIC_API_KEY",
+						}],
+						withheld: [],
+					},
+				};
+			},
+			end: launchId => void ended.push(launchId),
+			onChanged(listener) {
+				listeners.add(listener);
+				return () => listeners.delete(listener);
+			},
+		};
+		let changed = (userId: string) => {
+			for (let listener of listeners) listener(userId);
+		};
+		return { ai, asked, ended, changed, listeners };
+	}
+
+	async function opened(header: string | undefined) {
+		let { auth, channel } = await linkAuth();
+		let made = launches();
+		let server = linkServer(auth, 2_000, undefined, 2_000, undefined, undefined, { ai: made.ai });
+		cleanups.push(server.stop);
+		let raw = await rawLink(server.url, undefined, header);
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		let opening = adapterFor(server, { channelId: channel.id, isolated: false }).doStart({
+			sessionId: `ai-${header}`,
+			sandboxSession,
+			sessionWorkDir: "/tmp",
+		});
+		let start = await raw.next("start");
+		raw.send({ type: "started", session: start.session });
+		let session = await opening;
+		return { ...made, raw, start, session, channel };
+	}
+
+	it("hands a client that offered ai-credentials a launch for its account on start, and new grants when they change", async () => {
+		let { raw, start, session, channel, asked, ended, changed, listeners } = await opened(
+			"ai-credentials",
+		);
+		expect(asked).toEqual([{ userId: "U_member", channelId: channel.id }]);
+		expect(start.ai).toEqual({
+			launch: "chopin_launch_1",
+			expiresAt: expect.any(Number),
+			providers: [{
+				provider: "anthropic",
+				baseUrl: "https://chopin.test/api/v1/ai/anthropic",
+				placeholder: "chopin_ai_1",
+				keyVariable: "ANTHROPIC_API_KEY",
+			}],
+			withheld: [],
+		});
+		// Someone else's credentials changing changes nothing here.
+		changed("U_rival");
+		await Bun.sleep(30);
+		expect(asked).toHaveLength(1);
+		changed("U_member");
+		let renewed = await raw.next("ai");
+		expect(renewed).toMatchObject({
+			session: start.session,
+			ai: { launch: "chopin_launch_2", providers: [{ placeholder: "chopin_ai_2" }] },
+		});
+		await until(() => ended.length === 1, 1_000);
+		expect(ended).toEqual(["launch-1"]);
+		await session.doDestroy();
+		await raw.next("destroy");
+		expect(ended).toEqual(["launch-1", "launch-2"]);
+		expect(listeners.size).toBe(0);
+		raw.send({ type: "detach" });
+		await raw.closed;
+	});
+
+	it("ends a session's launch when its link closes for good", async () => {
+		let { raw, ended } = await opened("ai-credentials");
+		raw.send({ type: "detach" });
+		await raw.closed;
+		await until(() => ended.length === 1, 1_000);
+		expect(ended).toEqual(["launch-1"]);
+	});
+
+	it("leaves a client that did not offer ai-credentials as it was: no launch, and no grants", async () => {
+		for (let header of [undefined, "capability-catalog"]) {
+			let { raw, start, session, asked, changed } = await opened(header);
+			expect("ai" in start).toBe(false);
+			changed("U_member");
+			await Bun.sleep(30);
+			expect(asked).toEqual([]);
+			await session.doDestroy();
+			raw.send({ type: "detach" });
+			await raw.closed;
+		}
 	});
 });

@@ -196,8 +196,15 @@ durable.
   (`ai_usage`), and one it can't record is not sent; it is completed once with its
   outcome and the provider's token counts, and the next lease holder marks one left
   pending `unknown`. A person reads only their own totals (`GET /api/ai/usage`).
-  Handing placeholders to runners
-  is not wired yet. See [Hosted agent](docs/hosted-agent.md#ai-credentials).
+  Runners get only a launch credential, placeholders and the proxy's base URLs,
+  all from `handOut` (`apps/server/src/ai/launches.ts`), the one place a launch's
+  result is decided on: a Planner session on a client offering `ai-credentials`
+  (`start`/`fork` carry `ai`, and an `ai` message replaces it when the person's
+  credentials change, before its deadline and after a resume) is launched for the
+  account that attached; a run on a paired machine (`/api/connector/ai-launch`)
+  for whoever started it. A launch given no provider is handed an empty list and
+  its runner uses its own models. The runner adds the launch credential itself; no
+  agent sees it. See [Hosted agent](docs/hosted-agent.md#handing-launches-to-runners).
 - **Planner ownership is process-bound.** The first eligible Planner or
   model-backed research request supplies its GitHub App token and Copilot
   entitlement. Server-authored turns nobody typed (re-linking decisions after a
@@ -368,7 +375,12 @@ durable.
   an owner's `--sandbox-write` path that holds the state directory, a home or a dotfiles checkout, is read
   and written around it too, and the connected start check with no registered checkout runs in an empty
   folder of its own, not the home); egress goes only
-  through a loopback allow-list proxy. Credentials in the agent's environment are not hidden. A
+  through a loopback allow-list proxy. A run handed AI grants (`Launch.agentHome`) gets a state
+  directory of its own (`<worktree>.agent`, with a generated `models.json` for Atomic), stand-ins in
+  its providers' key variables, base URLs on the connector's loopback relay (`ai-relay.ts`), which
+  adds the launch credential the agent never holds, and none of the owner's agent configuration,
+  logins or model variables (`ownerAgentPaths`, `withoutOwnerAgent`). Other credentials in the
+  agent's environment are not hidden. A
   machine with no working sandbox runs agents unsandboxed and says so, unless its owner chose
   `--require-sandbox`. Do not start an agent process outside the seam. The one exception is the two
   ACP `initialize` start checks, `chopin service install`'s and `chopin connect --install-service`'s

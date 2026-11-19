@@ -291,6 +291,43 @@ export function secretPaths(platform: NodeJS.Platform, home: string): string[] {
 }
 
 /**
+ * Where the owner keeps their own agents' configuration, logins and sessions: Atomic's agent
+ * directory and journal, and the Copilot, Claude, Codex and Gemini directories, with any of them
+ * the owner's environment moved elsewhere. A launch given an agent state directory of its own (see
+ * `Launch.agentHome`) may not read any of them.
+ */
+export function ownerAgentPaths(
+	platform: NodeJS.Platform,
+	home: string,
+	env: Record<string, string | undefined> = {},
+): string[] {
+	let path = platform === "win32" ? win32 : posix;
+	let under = (...parts: string[]) => path.join(home, ...parts);
+	let moved = [
+		"ATOMIC_CODING_AGENT_DIR",
+		"PI_CODING_AGENT_DIR",
+		"COPILOT_HOME",
+		"CLAUDE_CONFIG_DIR",
+		"CODEX_HOME",
+	].flatMap(name => {
+		let value = env[name];
+		return value && isAbsolute(value) ? [value] : [];
+	});
+	return [
+		under(".atomic", "agent"),
+		under(".atomic", "workflows"),
+		under(".pi", "agent"),
+		under(".copilot"),
+		under(".claude"),
+		under(".claude.json"),
+		under(".codex"),
+		under(".gemini"),
+		under(".config", "github-copilot"),
+		...moved,
+	];
+}
+
+/**
  * The directories an agent keeps its own state in: its sessions, journal and settings. Known for
  * the built-in agents; any other agent's are added with `--sandbox-write`. An agent's own
  * variables for these directories move them.

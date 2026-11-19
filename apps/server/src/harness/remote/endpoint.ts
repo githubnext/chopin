@@ -40,7 +40,7 @@ import type { ServerWebSocket } from "bun";
 import type { HostedAuth } from "../../auth/routes";
 import type { HostedCaller } from "../../mcp/hosted";
 import type { PlannerAttachments } from "./attachments";
-import type { AttachOutcome, LinkOptions, LinkSocket } from "./link";
+import type { AttachOutcome, LinkAi, LinkOptions, LinkSocket } from "./link";
 import type { MachineGrant } from "./machine-planners";
 
 export type AgentAuth = Pick<HostedAuth, "admission" | "config" | "github" | "storage">;
@@ -60,6 +60,19 @@ export type AgentSocketData = {
 	link?: AgentLink;
 	/** The link's liveness: any frame from the client is `heard`; `stop` ends its pings. */
 	alive?: { heard(): void; stop(): void };
+};
+
+/**
+ * AI launches for the people links act for: the attached account, which for a paired machine's
+ * Planner credential is the machine's owner, on that machine.
+ */
+export type AgentAi = {
+	launch(
+		input: { userId: string; machineId?: string; channelId: string },
+	): ReturnType<LinkAi["launch"]>;
+	end(launchId: string): void;
+	/** Calls `listener` with a person's id whenever their AI credentials change. */
+	onChanged(listener: (userId: string) => void): () => void;
 };
 
 export type AgentHooks = {
@@ -85,6 +98,8 @@ export type AgentHooks = {
 	 * queue drains meanwhile, before it is closed as dropped. 15 minutes by default.
 	 */
 	maxSilenceMs?: number;
+	/** Hands a client that offered `ai-credentials` what its sessions call models with. */
+	ai?: AgentAi;
 };
 
 const BEARER = /^Bearer ([A-Za-z0-9._~+/-]+=*)$/i;
@@ -299,9 +314,25 @@ export function agentLink(
 			throw err;
 		}
 	}
+	let ai = hooks.ai;
+	let userId = caller.user.id;
+	let machineId = machine?.machine.id;
 	link = new AgentLink(socket, {
 		attach,
 		revalidate,
+		...(ai
+			? {
+				ai: {
+					launch: channelId =>
+						ai.launch({ userId, ...(machineId ? { machineId } : {}), channelId }),
+					end: launchId => ai.end(launchId),
+					watch: changed =>
+						ai.onChanged(person => {
+							if (person === userId) changed();
+						}),
+				},
+			}
+			: {}),
 		register: hooks.register,
 		timeoutMs: hooks.timeoutMs,
 		revalidateEveryMs: hooks.revalidateEveryMs,

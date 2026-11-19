@@ -154,7 +154,22 @@ export async function mintMcpToken(
 		});
 		return { token, expiresAt };
 	}
-	let named = sources.runCredential(from.run);
+	let run = await liveRun(sources, machine, from.run);
+	let expiresAt = now + RUN_MCP_TOKEN_MS;
+	let token = sources.tokens.mint({ kind: "run", machineId: machine.id, ...run, expiresAt });
+	return { token, expiresAt };
+}
+
+/**
+ * The run a run credential names, while Chopin has it on `machine` now, and the person it acts for:
+ * whoever started it, on their own machine or a teammate's. Throws otherwise.
+ */
+export async function liveRun(
+	sources: Pick<McpTokenSources, "runCredential" | "run">,
+	machine: { id: string },
+	credential: string,
+): Promise<{ runId: string; documentId: string; userId: string }> {
+	let named = sources.runCredential(credential);
 	if (!named || (named.machineId !== undefined && named.machineId !== machine.id)) {
 		fail("credential-invalid", "That run credential isn't one Chopin gave this machine.");
 	}
@@ -163,16 +178,7 @@ export async function mintMcpToken(
 		!run || (run.machineId !== undefined && run.machineId !== machine.id)
 		|| (run.documentId !== undefined && run.documentId !== named.documentId)
 	) fail("run-unknown", "Chopin has no such run on this machine now.");
-	let expiresAt = now + RUN_MCP_TOKEN_MS;
-	let token = sources.tokens.mint({
-		kind: "run",
-		machineId: machine.id,
-		documentId: named.documentId,
-		runId: named.runId,
-		userId: run.starter,
-		expiresAt,
-	});
-	return { token, expiresAt };
+	return { runId: named.runId, documentId: named.documentId, userId: run.starter };
 }
 
 /**

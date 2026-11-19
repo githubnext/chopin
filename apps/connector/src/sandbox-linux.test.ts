@@ -1565,17 +1565,22 @@ sandboxTest(
 );
 
 let atomic = Bun.which("atomic-acp") && Bun.which("atomic");
-test.skipIf(!usable || !atomic)(
-	"Atomic, through atomic-acp with a scripted model, runs its tools in the sandbox",
-	async () => {
-		let made = world("atomic");
-		let chopin = server("chopin");
-		let worktree = join(made.state, "runs", "mine");
-		git(made.checkout, "worktree", "add", "--detach", worktree);
-		let script = join(made.root, "command.sh");
-		writeFileSync(
-			script,
-			`{
+for (let isolated of [false, true]) {
+	test.skipIf(!usable || !atomic)(
+		`Atomic, through atomic-acp with a scripted model, runs its tools in the sandbox${
+			isolated ? ", on a state directory of its own" : ""
+		}`,
+		async () => {
+			let made = world(isolated ? "atomic-isolated" : "atomic");
+			let chopin = server("chopin");
+			let worktree = join(made.state, "runs", "mine");
+			let agentHome = `${worktree}.agent`;
+			if (isolated) mkdirSync(join(agentHome, "atomic"), { recursive: true });
+			git(made.checkout, "worktree", "add", "--detach", worktree);
+			let script = join(made.root, "command.sh");
+			writeFileSync(
+				script,
+				`{
 cat README.md > /dev/null 2>&1 && echo readRepository=ok || echo readRepository=FAILED
 (echo ok > written.txt) 2>/dev/null && echo writeWorktree=ok || echo writeWorktree=FAILED
 (echo x > ${home}/escaped.txt) 2>/dev/null && echo writeOutside=LEAKED || echo writeOutside=blocked
@@ -1586,64 +1591,67 @@ curl -sS -m 10 -o /dev/null https://example.org/ > /dev/null 2>&1 && echo offLis
 curl -sS -m 10 -o /dev/null ${chopin.url} > /dev/null 2>&1 && echo chopin=ok || echo chopin=FAILED
 } > probe.log 2>&1
 `,
-		);
-		let sandbox = await createSandbox({
-			directory: made.state,
-			home,
-			server: new URL(chopin.url).origin,
-			settings: { writable: [made.remote] },
-		});
-		try {
-			expect(sandbox.report.engine).toBe("bubblewrap");
-			let stop = await runAgent({
-				command: ["atomic-acp"],
-				cwd: worktree,
-				prompt: "Run the script.",
-				mcpServers: [],
-				signal: new AbortController().signal,
-				onUpdate: () => {},
-				permission: async () => undefined,
-				env: {
-					ATOMIC_ACP_HEADLESS: "1",
-					SCRIPTED_COMMAND_FILE: script,
-					ATOMIC_ACP_ATOMIC_ARGS: JSON.stringify([
-						"-e",
-						join(import.meta.dir, "testing/scripted-atomic.mjs"),
-						"--provider",
-						"scripted",
-						"--model",
-						"scripted-1",
-					]),
-				},
-				sandbox,
-				own: [worktree],
-			});
-			expect(stop).toBe("end_turn");
-			let lines = readFileSync(join(worktree, "probe.log"), "utf8").trim().split("\n").sort();
-			let expected = [
-				"chopin=ok",
-				"offList=blocked",
-				"push=ok",
-				"readRepository=ok",
-				"readSsh=blocked",
-				"readToken=blocked",
-				"writeOutside=blocked",
-				"writeWorktree=ok",
-			];
-			// curl may be missing where the test runs; the network lines are then left out.
-			let hasCurl = Bun.which("curl") !== null;
-			expect(lines).toEqual(
-				hasCurl ? expected : expected.filter(line => !/^(chopin|offList)=/.test(line)),
 			);
-			expect(existsSync(join(home, "escaped.txt"))).toBe(false);
-			expect(git(made.remote, "branch", "--list", "scripted")).toContain("scripted");
-		} finally {
-			await sandbox.close();
-			chopin.stop();
-		}
-	},
-	180_000,
-);
+			let sandbox = await createSandbox({
+				directory: made.state,
+				home,
+				server: new URL(chopin.url).origin,
+				settings: { writable: [made.remote] },
+			});
+			try {
+				expect(sandbox.report.engine).toBe("bubblewrap");
+				let stop = await runAgent({
+					command: ["atomic-acp"],
+					cwd: worktree,
+					prompt: "Run the script.",
+					mcpServers: [],
+					signal: new AbortController().signal,
+					onUpdate: () => {},
+					permission: async () => undefined,
+					env: {
+						ATOMIC_ACP_HEADLESS: "1",
+						SCRIPTED_COMMAND_FILE: script,
+						ATOMIC_ACP_ATOMIC_ARGS: JSON.stringify([
+							"-e",
+							join(import.meta.dir, "testing/scripted-atomic.mjs"),
+							"--provider",
+							"scripted",
+							"--model",
+							"scripted-1",
+						]),
+						...isolated ? { ATOMIC_CODING_AGENT_DIR: join(agentHome, "atomic") } : {},
+					},
+					sandbox,
+					own: [worktree, ...isolated ? [agentHome] : []],
+					...isolated ? { agentHome } : {},
+				});
+				expect(stop).toBe("end_turn");
+				let lines = readFileSync(join(worktree, "probe.log"), "utf8").trim().split("\n").sort();
+				let expected = [
+					"chopin=ok",
+					"offList=blocked",
+					"push=ok",
+					"readRepository=ok",
+					"readSsh=blocked",
+					"readToken=blocked",
+					"writeOutside=blocked",
+					"writeWorktree=ok",
+				];
+				// curl may be missing where the test runs; the network lines are then left out.
+				let hasCurl = Bun.which("curl") !== null;
+				expect(lines).toEqual(
+					hasCurl ? expected : expected.filter(line => !/^(chopin|offList)=/.test(line)),
+				);
+				expect(existsSync(join(home, "escaped.txt"))).toBe(false);
+				expect(git(made.remote, "branch", "--list", "scripted")).toContain("scripted");
+			} finally {
+				await sandbox.close();
+				chopin.stop();
+			}
+		},
+		180_000,
+	);
+}
 
 /** The processes, other than this test's own, whose command line holds any of `values`. */
 function onCommandLines(values: string[]) {

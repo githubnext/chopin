@@ -569,6 +569,56 @@ describe("Agent connection client", () => {
 		await server.next("started");
 	});
 
+	it("asks for ai-credentials only with an ai handler, and hands it a session's new grants", async () => {
+		let plain = fakeServer();
+		let unasked = await connectAgent({
+			url: plain.url,
+			token: "t",
+			document: "d",
+			handlers: { turn() {} },
+		});
+		stops.push(() => unasked.detach());
+		expect(plain.asked[0]).not.toContain("ai-credentials");
+
+		let ai = {
+			launch: "chopin_launch_x",
+			expiresAt: 1_700_000_000_000,
+			providers: [{
+				provider: "anthropic",
+				baseUrl: "https://chopin.example/api/v1/ai/anthropic",
+				placeholder: "chopin_ai_x",
+				keyVariable: "ANTHROPIC_API_KEY",
+			}],
+			withheld: [],
+		};
+		let server = fakeServer({ features: ["ai-credentials"] });
+		let started = Promise.withResolvers<ServerMessageOf<"start">>();
+		let changed: Array<ServerMessageOf<"ai">> = [];
+		let client = await connectAgent({
+			url: server.url,
+			token: "t",
+			document: "d",
+			handlers: {
+				turn() {},
+				start: message => started.resolve(message),
+				ai: message => void changed.push(message),
+			},
+		});
+		stops.push(() => client.detach());
+		expect(server.asked[0]?.split(", ")).toContain("ai-credentials");
+		// Grants for a session the client does not hold are not its own.
+		server.send({ type: "ai", session: "other", ai });
+		server.send({ type: "start", session: "s", mode: "planner", ai });
+		expect((await started.promise).ai).toEqual(ai);
+		await server.next("started");
+		let ended = { providers: [], withheld: [] };
+		server.send({ type: "ai", session: "s", ai: ended });
+		for (let deadline = Date.now() + 2000; !changed.length; await Bun.sleep(5)) {
+			if (Date.now() > deadline) throw new Error("The grants never arrived.");
+		}
+		expect(changed).toEqual([{ type: "ai", session: "s", ai: ended }]);
+	});
+
 	it("answers a steer for a turn that has ended, or that its handler refuses, with ok false", async () => {
 		let server = fakeServer({ features: ["steer-turn"] });
 		let steered: string[] = [];

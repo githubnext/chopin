@@ -8,6 +8,7 @@ import type {
 import { PROCESSES, stopBackend } from "./planner";
 import { type Sandbox, spawnIn } from "./sandbox";
 import { withoutGitHub } from "./github-token";
+import { withoutOwnerAgent } from "./ai-agent";
 import { VERSION } from "./version";
 
 /** How long a stopped agent's process group has to exit before it is killed. */
@@ -37,6 +38,11 @@ export type AgentOptions = {
 	/** What it may write beside its worktree, and its own files in the connector's state directory. */
 	writable?: string[];
 	own?: string[];
+	/**
+	 * The agent's own state directory, for a run handed AI grants: nothing of the owner's agent setup
+	 * reaches it, in its environment or on disk (see `Launch.agentHome`).
+	 */
+	agentHome?: string;
 	/** How long the agent's turn may run before it is stopped; one hour unless said. */
 	limitMs?: number;
 };
@@ -86,7 +92,7 @@ function startAgent(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 	stderr?: (chunk: string) => void,
-	where: Pick<AgentOptions, "sandbox" | "writable" | "own"> = {},
+	where: Pick<AgentOptions, "sandbox" | "writable" | "own" | "agentHome"> = {},
 ) {
 	let child = spawnIn(where.sandbox, {
 		command,
@@ -95,6 +101,7 @@ function startAgent(
 		stdin: "pipe",
 		...(where.writable ? { writable: where.writable } : {}),
 		...(where.own ? { own: where.own } : {}),
+		...(where.agentHome ? { agentHome: where.agentHome } : {}),
 	});
 	let kill = (signal: NodeJS.Signals = "SIGTERM") => {
 		try {
@@ -241,13 +248,20 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 		app,
 		options.command,
 		options.cwd,
-		// Nothing of the machine's GitHub setup reaches a run's agent; its own comes in `env`.
-		{ ...withoutGitHub(process.env), ...options.env },
+		// Nothing of the machine's GitHub setup reaches a run's agent; its own comes in `env`. One
+		// with a state directory of its own gets nothing of the owner's agent setup either.
+		{
+			...(options.agentHome
+				? withoutOwnerAgent(withoutGitHub(process.env))
+				: withoutGitHub(process.env)),
+			...options.env,
+		},
 		options.stderr,
 		{
 			...(options.sandbox ? { sandbox: options.sandbox } : {}),
 			...(options.writable ? { writable: options.writable } : {}),
 			...(options.own ? { own: options.own } : {}),
+			...(options.agentHome ? { agentHome: options.agentHome } : {}),
 		},
 	);
 	let { connection } = agent;
