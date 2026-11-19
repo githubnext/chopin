@@ -22,6 +22,34 @@ const CREDENTIAL_HEADER: Record<AiProvider, "authorization" | "x-api-key"> = {
 	anthropic: "x-api-key",
 };
 
+const SEGMENT = "[A-Za-z0-9][A-Za-z0-9._:-]*";
+
+/**
+ * The model API routes the proxy serves for each provider, by method, relative to the provider's
+ * route: listing models and asking for completions or messages, nothing else on that host. A path
+ * with an empty, dot or percent-encoded segment matches none.
+ */
+const ROUTES: Record<AiProvider, Array<{ methods: readonly string[]; path: RegExp }>> = {
+	"github-copilot": [
+		{ methods: ["GET"], path: /^\/models$/ },
+		{ methods: ["POST"], path: new RegExp(`^/models/${SEGMENT}/policy$`) },
+		{ methods: ["POST"], path: /^\/(?:chat\/completions|responses|embeddings)$/ },
+		{ methods: ["POST"], path: /^\/v1\/(?:messages(?:\/count_tokens)?|systemone)$/ },
+	],
+	openai: [
+		{ methods: ["GET"], path: new RegExp(`^/v1/models(?:/${SEGMENT})?$`) },
+		{ methods: ["GET", "POST"], path: new RegExp(`^/v1/responses(?:/${SEGMENT}){0,2}$`) },
+		{ methods: ["POST"], path: /^\/v1\/(?:chat\/completions|completions|embeddings)$/ },
+	],
+	anthropic: [
+		{ methods: ["GET"], path: new RegExp(`^/v1/models(?:/${SEGMENT})?$`) },
+		{ methods: ["POST"], path: /^\/v1\/(?:messages(?:\/count_tokens)?|complete)$/ },
+	],
+};
+
+/** What the proxy sends back in place of the credential, should a provider echo it. */
+const REDACTED = new TextEncoder().encode("[redacted]");
+
 /** The largest request body the proxy forwards: well past any model request with images. */
 const MAX_BODY = 64 * 1024 * 1024;
 const CATALOG_FRESH_MS = 10 * 60 * 1000;
@@ -76,6 +104,10 @@ const REFUSALS: Record<AiRefusal, { status: number; message: string }> = {
 	"no-copilot-access": {
 		status: 403,
 		message: "Your GitHub account has no Copilot subscription.",
+	},
+	"copilot-unavailable": {
+		status: 502,
+		message: "GitHub can't give a Copilot token now. Try again in a moment.",
 	},
 };
 
@@ -144,10 +176,15 @@ function forwardedHeaders(request: Request): Headers {
 	return headers;
 }
 
-function returnedHeaders(upstream: Response): Headers {
+function routed(provider: AiProvider, method: string, path: string): boolean {
+	return ROUTES[provider].some(route => route.methods.includes(method) && route.path.test(path));
+}
+
+/** The upstream's headers to pass back, without its hop's own and without any that holds `secret`. */
+function returnedHeaders(upstream: Response, secret: string): Headers {
 	let headers = new Headers();
 	for (let [name, value] of upstream.headers) {
-		if (!DROPPED_RESPONSE.has(name)) headers.append(name, value);
+		if (!DROPPED_RESPONSE.has(name) && !value.includes(secret)) headers.append(name, value);
 	}
 	headers.set("cache-control", upstream.headers.get("cache-control") ?? "no-store");
 	return headers;
@@ -163,16 +200,79 @@ function upstreamUrl(origin: string, path: string, search: string): URL {
 	return target;
 }
 
+/** The length of the longest end of `bytes` that `secret` starts with. */
+function partialMatch(bytes: Uint8Array, secret: Uint8Array): number {
+	for (let length = Math.min(secret.length - 1, bytes.length); length > 0; length--) {
+		let start = bytes.length - length;
+		let matches = true;
+		for (let index = 0; index < length && matches; index++) {
+			matches = bytes[start + index] === secret[index];
+		}
+		if (matches) return length;
+	}
+	return 0;
+}
+
+function indexOf(bytes: Uint8Array, secret: Uint8Array, from: number): number {
+	let last = bytes.length - secret.length;
+	for (let start = from; start <= last; start++) {
+		let index = 0;
+		while (index < secret.length && bytes[start + index] === secret[index]) index++;
+		if (index === secret.length) return start;
+	}
+	return -1;
+}
+
+function joined(left: Uint8Array, right: Uint8Array): Uint8Array {
+	let bytes = new Uint8Array(left.length + right.length);
+	bytes.set(left);
+	bytes.set(right, left.length);
+	return bytes;
+}
+
+/**
+ * `body` with every occurrence of `secret` replaced, even one split across chunks. Only an end of a
+ * chunk that could begin the secret waits for the next chunk, so a stream is not held back.
+ */
+function scrubbed(body: ReadableStream<Uint8Array>, secret: string): ReadableStream<Uint8Array> {
+	let needle = new TextEncoder().encode(secret);
+	let pending: Uint8Array = new Uint8Array();
+	return body.pipeThrough(
+		new TransformStream<Uint8Array, Uint8Array>({
+			transform(chunk, controller) {
+				let bytes = joined(pending, chunk);
+				let parts: Uint8Array[] = [];
+				let from = 0;
+				for (let at = indexOf(bytes, needle, 0); at >= 0; at = indexOf(bytes, needle, from)) {
+					parts.push(bytes.subarray(from, at), REDACTED);
+					from = at + needle.length;
+				}
+				let rest = bytes.subarray(from);
+				let held = partialMatch(rest, needle);
+				parts.push(rest.subarray(0, rest.length - held));
+				pending = rest.slice(rest.length - held);
+				let out = parts.reduce(joined, new Uint8Array());
+				if (out.length) controller.enqueue(out);
+			},
+			flush(controller) {
+				if (pending.length) controller.enqueue(pending);
+			},
+		}),
+	);
+}
+
 type CachedCatalog = { body: Uint8Array; headers: Headers; fetchedAt: number };
 
 /**
- * Chopin's AI credential proxy, served at `/api/v1/ai/<provider>/...`. A request must carry, in
- * `Authorization: Bearer` or `x-api-key`, a placeholder a live launch was handed for that
- * provider. The proxy drops both headers, puts the real credential of the launch's person in the
+ * Chopin's AI credential proxy, served at `/api/v1/ai/<provider>/...`, for the provider's model
+ * API routes alone (`ROUTES`). A request must carry, in `Authorization: Bearer` or `x-api-key`, a
+ * placeholder a live launch was handed for that provider. The proxy drops both headers, reads the
+ * body, checks the launch is still live, puts the real credential of the launch's person in the
  * one header the provider takes it in, and sends the request, path, query and body unchanged, to
  * the provider's own origin and nowhere else: a placeholder anywhere else in the request is sent
  * on as it is, and a redirect comes back to the agent rather than being followed with the
- * credential. `/api/v1/ai/models.dev/api.json` serves the public model catalog, which needs no
+ * credential. A credential the provider echoes is taken out of the headers and body it answers
+ * with. `/api/v1/ai/models.dev/api.json` serves the public model catalog, which needs no
  * credential, held for ten minutes.
  */
 export function aiProxy(options: AiProxyOptions) {
@@ -232,6 +332,9 @@ export function aiProxy(options: AiProxyOptions) {
 			return failure(404, "Chopin doesn't proxy this provider.", "not-found");
 		}
 		let provider = name;
+		if (!routed(provider, request.method, path)) {
+			return failure(404, "Chopin's proxy serves this provider's model API only.", "route");
+		}
 		let key = presented(request);
 		if (key === null) {
 			return failure(401, "Send one key, as Authorization: Bearer or x-api-key.", "no-placeholder");
@@ -241,11 +344,13 @@ export function aiProxy(options: AiProxyOptions) {
 			let refusal = REFUSALS[authorized.refused];
 			return failure(refusal.status, refusal.message, authorized.refused);
 		}
-		let body = request.method === "GET" || request.method === "HEAD"
-			? undefined
-			: await boundedBody(request);
-		if (body === undefined && request.method !== "GET" && request.method !== "HEAD") {
+		let body = request.method === "GET" ? undefined : await boundedBody(request);
+		if (body === undefined && request.method !== "GET") {
 			return failure(413, "The request is too large.", "too-large");
+		}
+		if (!await options.credentials.current(authorized.placeholder)) {
+			let refusal = REFUSALS["launch-ended"];
+			return failure(refusal.status, refusal.message, "launch-ended");
 		}
 		let headers = forwardedHeaders(request);
 		headers.set(
@@ -254,26 +359,24 @@ export function aiProxy(options: AiProxyOptions) {
 				? `Bearer ${authorized.secret}`
 				: authorized.secret,
 		);
+		let origin = options.upstreams?.[provider] ?? authorized.origin ?? AI_UPSTREAMS[provider];
 		let upstream: Response;
 		try {
-			upstream = await send(
-				upstreamUrl(options.upstreams?.[provider] ?? AI_UPSTREAMS[provider], path, url.search),
-				{
-					method: request.method,
-					headers,
-					...(body ? { body } : {}),
-					redirect: "manual",
-					signal: request.signal,
-				},
-			);
+			upstream = await send(upstreamUrl(origin, path, url.search), {
+				method: request.method,
+				headers,
+				...(body ? { body } : {}),
+				redirect: "manual",
+				signal: request.signal,
+			});
 		} catch {
 			if (request.signal.aborted) return failure(499, "The request was cancelled.", "cancelled");
 			return failure(502, `${provider} can't be reached.`, "upstream");
 		}
-		return new Response(request.method === "HEAD" ? null : upstream.body, {
+		return new Response(upstream.body && scrubbed(upstream.body, authorized.secret), {
 			status: upstream.status,
 			statusText: upstream.statusText,
-			headers: returnedHeaders(upstream),
+			headers: returnedHeaders(upstream, authorized.secret),
 		});
 	};
 }

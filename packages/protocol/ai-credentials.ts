@@ -17,8 +17,9 @@ export type AiProvider = (typeof AI_PROVIDERS)[number];
 export type AiCredentialKind = "api-key" | "github-sign-in";
 
 /**
- * Whether a GitHub sign-in can use GitHub Copilot: `access`, `none` when GitHub refused it a
- * Copilot token (the account has no Copilot subscription), or `unknown` when Chopin couldn't ask.
+ * Whether a connected GitHub Copilot can be used: `access`, `none` when GitHub refused its GitHub
+ * token a Copilot token (the account has no Copilot subscription), or `unknown` when Chopin
+ * couldn't ask.
  */
 export type CopilotAccess = "access" | "none" | "unknown";
 
@@ -28,7 +29,7 @@ export type AiCredentialSummary = {
 	kind: AiCredentialKind;
 	/** When it was connected or last replaced, as an ISO 8601 time. */
 	updatedAt: string;
-	/** For a GitHub sign-in: whether it has Copilot access now. */
+	/** For GitHub Copilot: whether it has Copilot access, as GitHub said in the last few minutes. */
 	copilotAccess?: CopilotAccess;
 };
 
