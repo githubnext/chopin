@@ -2,6 +2,8 @@ import { AI_USAGE_DAYS } from "@chopin/protocol/ai-usage";
 
 import { requestedModel, UsageReader } from "./usage-reader";
 
+import { StorageError } from "../storage/errors";
+
 import type { AiUsageSummary } from "@chopin/protocol/ai-usage";
 import type { AiAttemptResult, AiPlaceholder, Lease } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
@@ -17,7 +19,25 @@ export type AiUsageOptions = {
 	/** The writer lease this process holds, which every record is written under. */
 	lease: () => Lease | undefined;
 	clock?: () => Date;
+	/**
+	 * How long to wait before writing a request's ending again after `failures` writes of it failed
+	 * with a passing storage trouble; doubling from a quarter second to 30 seconds unless given.
+	 */
+	retryMs?: (failures: number) => number;
 };
+
+function backoff(failures: number): number {
+	return Math.min(250 * 2 ** (failures - 1), 30_000);
+}
+
+/** Whether a failed write could succeed if made again under the same lease. */
+function passing(err: unknown): boolean {
+	return !(err instanceof StorageError) || err.failure === "unavailable";
+}
+
+function sameHolding(a: Lease, b: Lease | undefined): boolean {
+	return b !== undefined && a.name === b.name && a.fencing === b.fencing;
+}
 
 /** The proxy could not record a request before sending it, so it was not sent. */
 export class AiUsageUnrecorded extends Error {
@@ -123,11 +143,13 @@ export class AiUsage {
 	readonly #storage: StorageAdapter;
 	readonly #lease: () => Lease | undefined;
 	readonly #clock: () => Date;
+	readonly #retryMs: (failures: number) => number;
 
 	constructor(options: AiUsageOptions) {
 		this.#storage = options.storage;
 		this.#lease = options.lease;
 		this.#clock = options.clock ?? (() => new Date());
+		this.#retryMs = options.retryMs ?? backoff;
 	}
 
 	/**
@@ -187,11 +209,33 @@ export class AiUsage {
 		);
 	}
 
+	/**
+	 * Writes how a request ended, again after each passing storage trouble, for as long as this
+	 * process holds the lease it started under: the write changes only a pending record, so making it
+	 * again is safe, and once the lease is gone its next holder marks the request unknown.
+	 */
 	#complete(id: string, ending: Ending): void {
-		let lease = this.#lease();
-		if (!lease) return;
-		this.#storage.aiUsage.complete(lease, id, { ...ending, completedAt: this.#clock() }).catch(
-			err => console.warn("[ai] couldn't record how a proxied request ended", err),
-		);
+		let holding = this.#lease();
+		if (!holding) return;
+		let result: AiAttemptResult = { ...ending, completedAt: this.#clock() };
+		let write = async (failures: number): Promise<void> => {
+			let lease = this.#lease();
+			if (!lease || !sameHolding(holding, lease)) return;
+			try {
+				await this.#storage.aiUsage.complete(lease, id, result);
+			} catch (err) {
+				if (!passing(err) || !sameHolding(holding, this.#lease())) {
+					console.warn("[ai] couldn't record how a proxied request ended", err);
+					return;
+				}
+				let wait = this.#retryMs(failures + 1);
+				console.warn(
+					`[ai] couldn't record how a proxied request ended; trying again in ${wait} ms`,
+					err,
+				);
+				setTimeout(() => void write(failures + 1), wait).unref?.();
+			}
+		};
+		void write(0);
 	}
 }

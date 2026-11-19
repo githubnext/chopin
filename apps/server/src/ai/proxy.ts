@@ -670,6 +670,7 @@ export function aiProxy(options: AiProxyOptions) {
 			try {
 				body = new Uint8Array(await upstream.arrayBuffer());
 			} catch {
+				attempt?.failed("unreachable", upstream.status);
 				return failedHolding(secret, 502, `${provider} can't be reached.`, "upstream");
 			}
 			if (body.byteLength <= MAX_REFUSAL && refusal(parsed(body))) {

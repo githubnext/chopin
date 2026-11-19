@@ -6,6 +6,7 @@ import { Admission } from "../auth/admission";
 import { Machines } from "../auth/machines";
 import { Sessions } from "../auth/session";
 import { Router } from "../http/router";
+import { unavailable } from "../storage/errors";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { AiCredentials } from "./credentials";
 import { aiProxy } from "./proxy";
@@ -77,7 +78,10 @@ function sse(events: unknown[]): Response {
 	);
 }
 
-async function setup(answers: Array<(request: Request) => Response | Promise<Response>>) {
+async function setup(
+	answers: Array<(request: Request) => Response | Promise<Response>>,
+	retryMs?: (failures: number) => number,
+) {
 	let now = new Date("2026-10-09T12:00:00.000Z");
 	let clock = () => now;
 	let storage = new MemoryStorage();
@@ -132,7 +136,12 @@ async function setup(answers: Array<(request: Request) => Response | Promise<Res
 		upstreams: { openai: keyCheck.url },
 		lease: () => held,
 	});
-	let usage = new RecordedUsage({ storage, lease: () => lease, clock });
+	let usage = new RecordedUsage({
+		storage,
+		lease: () => lease,
+		clock,
+		...(retryMs ? { retryMs } : {}),
+	});
 	let router = new Router();
 	registerAiRoutes(router, auth, {
 		credentials,
@@ -349,6 +358,54 @@ describe("AI usage", () => {
 				tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 			}],
 		});
+	});
+
+	it("writes how a request ended again after a passing storage trouble, while its lease is held", async () => {
+		let waits: number[] = [];
+		let world = await setup([
+			() => Response.json({ usage: { prompt_tokens: 123, completion_tokens: 9 } }),
+			() => Response.json({ usage: { prompt_tokens: 1, completion_tokens: 1 } }),
+		], failures => {
+			waits.push(failures);
+			return 1;
+		});
+		let mona = await world.launch("U_mona", "sk-mona-openai-key-0123456789");
+		let original = world.storage.aiUsage.complete.bind(world.storage.aiUsage);
+		let tries = 0;
+		world.storage.aiUsage.complete = async (lease, id, result) => {
+			tries++;
+			if (tries <= 2) throw unavailable("the database is restarting");
+			return original(lease, id, result);
+		};
+		let warned = spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			let answered = await world.call(mona, "/chat/completions", { model: "gpt-a", messages: [] });
+			expect(answered.status).toBe(200);
+			await answered.text();
+			let [ended] = await world.settled(world.usage.ids);
+			expect(ended).toMatchObject({
+				outcome: "ok",
+				status: 200,
+				tokens: { input: 123, output: 9 },
+				completedAt: world.clock(),
+			});
+			expect(tries).toBe(3);
+			expect(waits).toEqual([1, 2]);
+
+			tries = 0;
+			world.storage.aiUsage.complete = async () => {
+				tries++;
+				world.dropLease();
+				throw unavailable("the database is restarting");
+			};
+			let lost = await world.call(mona, "/chat/completions", { model: "gpt-a", messages: [] });
+			await lost.text();
+			await Bun.sleep(20);
+			expect(tries).toBe(1);
+			expect((await world.storage.aiUsage.get(world.usage.ids[1]!))?.outcome).toBe("pending");
+		} finally {
+			warned.mockRestore();
+		}
 	});
 
 	it("sends nothing it couldn't record first", async () => {

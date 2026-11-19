@@ -61,6 +61,45 @@ describe("reading the tokens a provider reports", () => {
 		expect(read("application/json", "{not json")).toEqual({ tokens: {} });
 	});
 
+	it("reads the usage of a JSON answer of any size, split at any byte", () => {
+		let vector = Array.from({ length: 3072 }, (_, at) => (at % 7) / 7 - 0.4321987654);
+		let large = JSON.stringify({
+			object: "list",
+			data: Array.from({ length: 512 }, (_, index) => ({
+				object: "embedding",
+				index,
+				embedding: vector,
+				usage: { prompt_tokens: 999_999 },
+			})),
+			model: "text-embedding-large",
+			usage: { prompt_tokens: 512, total_tokens: 512 },
+		});
+		expect(large.length).toBeGreaterThan(16 * 1024 * 1024);
+		expect(read("application/json", large, 97)).toEqual({ tokens: { input: 512 } });
+
+		let small = JSON.stringify({
+			id: 'msg "usage": {"input_tokens": 1} \\',
+			content: [{ type: "text", text: '{"usage":{"output_tokens":2}}' }],
+			message: { usage: { input_tokens: 7, output_tokens: 3 }, id: "é😀" },
+			type: "message",
+			response: { output: [{ usage: { input_tokens: 1 } }], error: null },
+		});
+		let bytes = new TextEncoder().encode(small);
+		for (let cut = 0; cut <= bytes.length; cut++) {
+			let reader = new UsageReader("application/json");
+			reader.push(bytes.slice(0, cut));
+			reader.push(bytes.slice(cut));
+			expect(reader.end()).toEqual({ tokens: { input: 7, output: 3 } });
+		}
+		expect(read("application/json", small.slice(0, -1))).toEqual({ tokens: {} });
+		expect(
+			read("application/json", ` { "usage" : { "prompt_tokens" : 4 } , "type" : "error" } `),
+		).toEqual({ tokens: { input: 4 }, error: "provider-error" });
+		expect(
+			read("application/json", JSON.stringify({ toString: { usage: { input_tokens: 1 } } })),
+		).toEqual({ tokens: {} });
+	});
+
 	it("takes the provider's error code from an error answer", () => {
 		expect(
 			read(
