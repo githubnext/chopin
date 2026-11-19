@@ -34,6 +34,7 @@ type TotalsRow = {
 	model: string | null;
 	requests: number;
 	errors: number;
+	pending: number;
 	unknown: number;
 	input: number;
 	output: number;
@@ -137,8 +138,9 @@ export class PostgresAiUsageStore implements AiUsageStore {
 		return this.run("sum a person's AI requests", async () => {
 			let rows = await this.sql<TotalsRow[]>`
 				SELECT provider, model,
-					count(*)::int AS requests,
+					count(*) FILTER (WHERE outcome IN ('ok', 'error'))::int AS requests,
 					count(*) FILTER (WHERE outcome = 'error')::int AS errors,
+					count(*) FILTER (WHERE outcome = 'pending')::int AS pending,
 					count(*) FILTER (WHERE outcome = 'unknown')::int AS unknown,
 					coalesce(sum(input_tokens), 0)::float8 AS input,
 					coalesce(sum(output_tokens), 0)::float8 AS output,
@@ -154,6 +156,7 @@ export class PostgresAiUsageStore implements AiUsageStore {
 				...(row.model ? { model: row.model } : {}),
 				requests: row.requests,
 				errors: row.errors,
+				pending: row.pending,
 				unknown: row.unknown,
 				tokens: {
 					input: row.input,

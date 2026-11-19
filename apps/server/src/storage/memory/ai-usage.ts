@@ -95,12 +95,14 @@ export class MemoryAiUsageStore implements AiUsageStore {
 				...(value.model ? { model: value.model } : {}),
 				requests: 0,
 				errors: 0,
+				pending: 0,
 				unknown: 0,
 				tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 			};
-			entry.requests++;
+			if (value.outcome === "pending") entry.pending++;
+			else if (value.outcome === "unknown") entry.unknown++;
+			else entry.requests++;
 			if (value.outcome === "error") entry.errors++;
-			if (value.outcome === "unknown") entry.unknown++;
 			for (let field of TOKEN_FIELDS) entry.tokens[field] += value.tokens[field] ?? 0;
 			totals.set(key, entry);
 		}

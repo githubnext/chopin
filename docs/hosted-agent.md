@@ -1163,9 +1163,13 @@ first (`ai_usage` in [Storage](storage.md)), once its placeholder and launch
 credential are accepted and its body is read: a fresh id, the launch, its person,
 the provider and the model the request's JSON body names (`model`), as
 `pending`, written under the writer lease. A request that can't be recorded is
-not sent (`unrecorded`, 503). The record is completed once, by the first way the
-request ends: `unsent` with the refusal's code when the final check refuses it,
-so nothing reached the provider; `error` with `unreachable` or `cancelled` when
+not sent (`unrecorded`, 503); when the write may have been saved with only its
+acknowledgement lost, the record is completed `unsent` with `unrecorded`, so a
+request sent again after it is the only one counted. The record is completed
+once, by the first way the request ends: `unsent` with the refusal's code when
+the final check refuses it, or with `unchecked` when that check fails (a
+storage trouble) before the transport took the request, so nothing reached the
+provider; `error` with `unreachable` or `cancelled` when
 no answer came, or the proxy's code when it refused the answer; else, when the
 answer's body has passed back whole, `ok` for a status under 400, and `error`
 for any other status with the provider's error code (`error.code`, else
@@ -1193,12 +1197,16 @@ GET /api/ai/usage
 
 answers the signed-in person's own totals for the last seven days
 (`AiUsageSummary` in `packages/protocol/ai-usage.ts`), and nobody else's: per
-provider and model, most requested first, the requests sent (pending ones
-included, those refused at the send not), how many ended in an error, how many
-are unknown, and the input, output, cache read and cache write tokens. Requests
+provider and model, most requested first, the requests sent, which counts only
+those the transport took and that have ended (`ok` or `error`), how many of them
+ended in an error, and apart from them how many are `pending` (recorded, and
+being sent or answered now) and how many are `unknown` (Chopin can't say
+whether they were sent), and the input, output, cache read and cache write
+tokens. Requests that were never sent (`unsent`) are not counted. Requests
 that named no model (a model list) are counted under no model. The _Usage by
 model_ section (`apps/web/src/ai-usage/usage-by-model.tsx`) shows them on the AI
-accounts page, after _API keys_.
+accounts page, after _API keys_, with a model's pending and unknown requests
+noted quietly under its count.
 
 ## Permission checks
 

@@ -21,15 +21,20 @@ export type AiUsageTokens = {
 };
 
 /**
- * One provider's model: how many requests were sent to it, how many ended in an error, and how
- * many are unknown because Chopin restarted before their answer ended. `model` is absent for
- * requests that named none, such as listing the provider's models.
+ * One provider's model. `requests` counts only the requests Chopin's transport sent it, once they
+ * ended, and `errors` those of them that ended in an error. Requests whose sending can't be counted
+ * yet, or ever, are counted apart and never in `requests`: `pending` ones are recorded and being
+ * sent or answered now, and `unknown` ones were left so when Chopin restarted, so it can't say
+ * whether they were sent. Requests Chopin refused, or couldn't check, before sending them are not
+ * counted at all. `model` is absent for requests that named none, such as listing the provider's
+ * models.
  */
 export type AiModelUsage = {
 	provider: AiProvider;
 	model?: string;
 	requests: number;
 	errors: number;
+	pending: number;
 	unknown: number;
 	tokens: AiUsageTokens;
 };

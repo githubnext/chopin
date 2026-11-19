@@ -42,11 +42,13 @@ function ModelRow({ model }: { model: AiModelUsage }) {
 				</span>
 			</TableCell>
 			<TableCell className="text-right tabular-nums">
-				{wholeNumber.format(model.requests)}
-			</TableCell>
-			<TableCell className="text-right tabular-nums">
 				<span className="flex flex-col items-end">
-					<span>{wholeNumber.format(model.errors)}</span>
+					<span>{wholeNumber.format(model.requests)}</span>
+					{model.pending > 0 && (
+						<span className="text-xs text-text-tertiary">
+							{wholeNumber.format(model.pending)} pending
+						</span>
+					)}
 					{model.unknown > 0 && (
 						<span className="text-xs text-text-tertiary">
 							{wholeNumber.format(model.unknown)} unknown
@@ -54,6 +56,7 @@ function ModelRow({ model }: { model: AiModelUsage }) {
 					)}
 				</span>
 			</TableCell>
+			<TableCell className="text-right tabular-nums">{wholeNumber.format(model.errors)}</TableCell>
 			<TableCell className="text-right tabular-nums">{tokens(model.tokens.input)}</TableCell>
 			<TableCell className="text-right tabular-nums">{tokens(model.tokens.output)}</TableCell>
 			<TableCell className="text-right tabular-nums">{tokens(model.tokens.cacheRead)}</TableCell>
@@ -64,7 +67,8 @@ function ModelRow({ model }: { model: AiModelUsage }) {
 
 /**
  * The person's own AI requests over the last week, by model: how many their launches sent, how
- * many ended in an error, and the tokens the providers reported.
+ * many ended in an error, and the tokens the providers reported. Requests still pending, or whose
+ * sending Chopin can't confirm, are not counted as sent and are noted quietly under the count.
  */
 export function UsageByModelSection(
 	{ state, onRetry }: { state: UsageByModelState; onRetry: () => void },

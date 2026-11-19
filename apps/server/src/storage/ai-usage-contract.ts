@@ -72,7 +72,7 @@ export function aiUsageContract(name: string, factory: StorageFactory) {
 			}
 		});
 
-		test("sums only one person's requests since a time, by model, refused sends left out", async () => {
+		test("sums only one person's sent requests since a time, by model, pending ones apart and refused sends left out", async () => {
 			let storage = await openedStorage(factory);
 			try {
 				let { userId, lease } = await userAndChannel(storage);
@@ -111,25 +111,28 @@ export function aiUsageContract(name: string, factory: StorageFactory) {
 
 				expect(await storage.aiUsage.summary(userId, AT)).toEqual([
 					{
+						provider: "openai",
+						model: "gpt-test",
+						requests: 2,
+						errors: 1,
+						pending: 0,
+						unknown: 0,
+						tokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 },
+					},
+					{
 						provider: "anthropic",
 						model: "claude-test",
-						requests: 2,
+						requests: 1,
 						errors: 0,
+						pending: 1,
 						unknown: 0,
 						tokens: { input: 0, output: 7, cacheRead: 0, cacheWrite: 0 },
 					},
 					{
 						provider: "openai",
-						model: "gpt-test",
-						requests: 2,
-						errors: 1,
-						unknown: 0,
-						tokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 },
-					},
-					{
-						provider: "openai",
 						requests: 1,
 						errors: 0,
+						pending: 0,
 						unknown: 0,
 						tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 					},
@@ -191,8 +194,9 @@ export function aiUsageContract(name: string, factory: StorageFactory) {
 				expect(await storage.aiUsage.summary(userId, AT)).toEqual([{
 					provider: "openai",
 					model: "gpt-test",
-					requests: 3,
+					requests: 1,
 					errors: 0,
+					pending: 1,
 					unknown: 1,
 					tokens: { input: 0, output: 3, cacheRead: 0, cacheWrite: 0 },
 				}]);

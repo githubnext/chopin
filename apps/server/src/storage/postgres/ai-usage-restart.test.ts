@@ -45,8 +45,9 @@ if (url) {
 				expect((await restarted.summary(userId)).models).toEqual([{
 					provider: "anthropic",
 					model: "claude-test",
-					requests: 1,
+					requests: 0,
 					errors: 0,
+					pending: 0,
 					unknown: 1,
 					tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 				}]);
