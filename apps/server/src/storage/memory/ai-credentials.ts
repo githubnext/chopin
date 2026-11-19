@@ -18,7 +18,12 @@ function copyCredential(value: AiCredentialRecord): AiCredentialRecord {
 }
 
 function copyPlaceholder(value: AiPlaceholder): AiPlaceholder {
-	return { ...value, digest: new Uint8Array(value.digest), expiresAt: new Date(value.expiresAt) };
+	return {
+		...value,
+		digest: new Uint8Array(value.digest),
+		launchDigest: new Uint8Array(value.launchDigest),
+		expiresAt: new Date(value.expiresAt),
+	};
 }
 
 export class MemoryAiCredentialStore implements AiCredentialStore {

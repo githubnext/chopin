@@ -1,4 +1,4 @@
-import { AI_PROXY_PATH, isAiProvider } from "@chopin/protocol/ai-credentials";
+import { AI_LAUNCH_HEADER, AI_PROXY_PATH, isAiProvider } from "@chopin/protocol/ai-credentials";
 
 import type { AiProvider } from "@chopin/protocol/ai-credentials";
 import type { AiCredentials, AiRefusal } from "./credentials";
@@ -58,6 +58,7 @@ const CATALOG_FRESH_MS = 10 * 60 * 1000;
 const DROPPED_REQUEST = new Set([
 	"authorization",
 	"x-api-key",
+	AI_LAUNCH_HEADER,
 	"proxy-authorization",
 	"cookie",
 	"host",
@@ -90,8 +91,13 @@ const REFUSALS: Record<AiRefusal, { status: number; message: string }> = {
 		status: 401,
 		message: "Send the key Chopin gave this launch in Authorization or x-api-key.",
 	},
+	"no-launch": {
+		status: 401,
+		message: `Send this launch's own credential in ${AI_LAUNCH_HEADER}.`,
+	},
 	"unknown-placeholder": { status: 401, message: "Chopin doesn't know this key." },
 	"other-provider": { status: 401, message: "This key is for another provider." },
+	"other-launch": { status: 401, message: "This key was given to another launch." },
 	"launch-ended": { status: 401, message: "The launch this key was given to has ended." },
 	"not-connected": {
 		status: 403,
@@ -124,6 +130,11 @@ function failure(status: number, message: string, code: string): Response {
 		status,
 		headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
 	});
+}
+
+function refused(reason: AiRefusal): Response {
+	let refusal = REFUSALS[reason];
+	return failure(refusal.status, refusal.message, reason);
 }
 
 /** The one value the request carries as its key, from `Authorization: Bearer` or `x-api-key`. */
@@ -266,14 +277,16 @@ type CachedCatalog = { body: Uint8Array; headers: Headers; fetchedAt: number };
 /**
  * Chopin's AI credential proxy, served at `/api/v1/ai/<provider>/...`, for the provider's model
  * API routes alone (`ROUTES`). A request must carry, in `Authorization: Bearer` or `x-api-key`, a
- * placeholder a live launch was handed for that provider. The proxy drops both headers, reads the
- * body, checks the launch is still live, puts the real credential of the launch's person in the
- * one header the provider takes it in, and sends the request, path, query and body unchanged, to
- * the provider's own origin and nowhere else: a placeholder anywhere else in the request is sent
- * on as it is, and a redirect comes back to the agent rather than being followed with the
- * credential. A credential the provider echoes is taken out of the headers and body it answers
- * with. `/api/v1/ai/models.dev/api.json` serves the public model catalog, which needs no
- * credential, held for ten minutes.
+ * placeholder a live launch was handed for that provider, and in `AI_LAUNCH_HEADER` the credential
+ * of that same launch, which its runner adds. The proxy drops these headers, reads the body, checks
+ * the launch is still live (and takes a fresh Copilot token for one that expired meanwhile), puts
+ * the real credential of the launch's person in the one header the provider takes it in, and sends
+ * the request, path, query and body unchanged, to the provider's own origin and nowhere else: a
+ * placeholder anywhere else in the request is sent on as it is, and a redirect comes back to the
+ * agent rather than being followed with the credential. The answer carries the provider's status
+ * code, never its reason phrase, and a credential the provider echoes is taken out of the headers
+ * and body it answers with. `/api/v1/ai/models.dev/api.json` serves the public model catalog,
+ * which needs no credential, held for ten minutes.
  */
 export function aiProxy(options: AiProxyOptions) {
 	let send = options.fetch ?? fetch;
@@ -339,19 +352,15 @@ export function aiProxy(options: AiProxyOptions) {
 		if (key === null) {
 			return failure(401, "Send one key, as Authorization: Bearer or x-api-key.", "no-placeholder");
 		}
-		let authorized = await options.credentials.authorize(key, provider);
-		if ("refused" in authorized) {
-			let refusal = REFUSALS[authorized.refused];
-			return failure(refusal.status, refusal.message, authorized.refused);
-		}
+		let launchToken = request.headers.get(AI_LAUNCH_HEADER)?.trim() || undefined;
+		let checked = await options.credentials.authorize(key, provider, launchToken);
+		if ("refused" in checked) return refused(checked.refused);
 		let body = request.method === "GET" ? undefined : await boundedBody(request);
 		if (body === undefined && request.method !== "GET") {
 			return failure(413, "The request is too large.", "too-large");
 		}
-		if (!await options.credentials.current(authorized.placeholder)) {
-			let refusal = REFUSALS["launch-ended"];
-			return failure(refusal.status, refusal.message, "launch-ended");
-		}
+		let authorized = await options.credentials.handoff(checked);
+		if ("refused" in authorized) return refused(authorized.refused);
 		let headers = forwardedHeaders(request);
 		headers.set(
 			CREDENTIAL_HEADER[provider],
@@ -375,7 +384,6 @@ export function aiProxy(options: AiProxyOptions) {
 		}
 		return new Response(upstream.body && scrubbed(upstream.body, authorized.secret), {
 			status: upstream.status,
-			statusText: upstream.statusText,
 			headers: returnedHeaders(upstream, authorized.secret),
 		});
 	};

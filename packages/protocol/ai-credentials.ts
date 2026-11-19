@@ -58,6 +58,13 @@ export const AI_KEY_VARIABLES: Record<AiProvider, string> = {
 	anthropic: "ANTHROPIC_API_KEY",
 };
 
+/**
+ * The header in which a launch's runner presents the launch's own credential with every proxied
+ * request. The runner adds it on its way out and never hands it to the agent, so a placeholder
+ * alone, copied out of one launch, reaches nothing from another.
+ */
+export const AI_LAUNCH_HEADER = "x-chopin-launch";
+
 /** The path under Chopin's origin each provider's proxied API is served at. */
 export const AI_PROXY_PATH = "/api/v1/ai";
 

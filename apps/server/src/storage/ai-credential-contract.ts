@@ -23,9 +23,11 @@ async function launched(storage: StorageAdapter) {
 	let input = machine(await owner(storage));
 	await storage.machines.create(input);
 	let launchId = id("launch");
+	let launchDigest = bytes(32);
 	let placeholder = (overrides: Partial<AiPlaceholder> = {}): AiPlaceholder => ({
 		digest: bytes(32),
 		launchId,
+		launchDigest,
 		userId,
 		provider: "openai",
 		machineId: input.id,

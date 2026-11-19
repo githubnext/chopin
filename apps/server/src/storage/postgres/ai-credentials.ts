@@ -15,6 +15,7 @@ type CredentialRow = {
 type PlaceholderRow = {
 	digest: Uint8Array;
 	launchId: string;
+	launchDigest: Uint8Array;
 	userId: string;
 	provider: AiPlaceholder["provider"];
 	machineId: string | null;
@@ -24,7 +25,8 @@ type PlaceholderRow = {
 
 const CREDENTIAL_COLUMNS = `user_id AS "userId", provider, kind, ciphertext,
 	updated_at AS "updatedAt"`;
-const PLACEHOLDER_COLUMNS = `digest, launch_id AS "launchId", user_id AS "userId", provider,
+const PLACEHOLDER_COLUMNS = `digest, launch_id AS "launchId",
+	launch_digest AS "launchDigest", user_id AS "userId", provider,
 	machine_id AS "machineId", channel_id AS "channelId", expires_at AS "expiresAt"`;
 const PROVIDER_ORDER = `CASE provider WHEN 'github-copilot' THEN 0 WHEN 'openai' THEN 1 ELSE 2 END`;
 
@@ -42,6 +44,7 @@ function placeholder(row: PlaceholderRow): AiPlaceholder {
 	return {
 		digest: new Uint8Array(row.digest),
 		launchId: row.launchId,
+		launchDigest: new Uint8Array(row.launchDigest),
 		userId: row.userId,
 		provider: row.provider,
 		...(row.machineId ? { machineId: row.machineId } : {}),
@@ -104,10 +107,12 @@ export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
 				for (let value of placeholders) {
 					await transaction`
 						INSERT INTO ai_placeholders (
-							digest, launch_id, user_id, provider, machine_id, channel_id, expires_at
+							digest, launch_id, launch_digest, user_id, provider, machine_id, channel_id,
+							expires_at
 						)
 						VALUES (
-							${value.digest}, ${value.launchId}, ${value.userId}, ${value.provider},
+							${value.digest}, ${value.launchId}, ${value.launchDigest}, ${value.userId},
+							${value.provider},
 							${value.machineId ?? null}, ${value.channelId ?? null}, ${value.expiresAt}
 						)
 					`;

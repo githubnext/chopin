@@ -927,9 +927,18 @@ expires, and is refused once the launch's machine is revoked or its document is
 deleted. Archiving a document deletes its launches' placeholders in the same
 transaction, so restoring it brings none back. A launch also says which
 connected providers it was not given and why (`withheld`); a launch with no
-grants stores nothing and starts no runner. The placeholder is the launch's
-credential: anyone who holds it acts as that launch, so a runner keeps it to
-the launch it was given to.
+grants stores nothing and starts no runner.
+
+A placeholder alone is not enough. Each launch also gets a launch credential of
+its own (`launchToken`, `chopin_launch_` and 43 base64url characters), kept only
+as a digest beside each of its placeholders. The launch's runner keeps it out of
+the agent's sandbox and adds it, in `x-chopin-launch` (`AI_LAUNCH_HEADER`), to
+every request it carries to the proxy; the agent only ever sees placeholders and
+base URLs. The proxy refuses a placeholder presented without its own launch's
+credential (`no-launch`) or with another launch's (`other-launch`), whether that
+launch is someone else's or the same person's, before it reads any credential.
+So a placeholder copied out of one launch, onto the same runner or elsewhere,
+reaches nothing.
 
 | Provider         | Base URL                            | Key variable           | Sent to                                                          | Credential header |
 | ---------------- | ----------------------------------- | ---------------------- | ---------------------------------------------------------------- | ----------------- |
@@ -950,20 +959,22 @@ Any other method or path, and a path with an empty, dot or percent-encoded
 segment, is refused with `route` (404) before a credential is read, so a Copilot
 placeholder can't reach Copilot's other services (its MCP server among them). A
 request must carry a live launch's placeholder for that provider in
-`Authorization: Bearer` or `x-api-key`, and only one value across the two. The
-proxy drops both headers, the caller's cookies and forwarding headers, reads the
-body, checks again that the launch is live and the provider still connected,
-puts the real credential of the person the launch runs for in the one header the
+`Authorization: Bearer` or `x-api-key`, only one value across the two, and that
+same launch's credential in `x-chopin-launch`. The proxy drops these headers,
+the caller's cookies and forwarding headers, reads the body, checks again that
+the launch is live and the provider still connected (and takes the next Copilot
+token for one that expired meanwhile), puts the real credential of the person the launch runs for in the one header the
 provider takes, and sends the method, path, query and body unchanged to the
 provider's own origin. The path cannot name another host. A placeholder anywhere
 else (the query, another header, the body) is sent on as the placeholder it is.
 A redirect is returned to the agent, never followed with the credential. The
-response streams back without the provider's cookies, without any header that
-holds the credential, and with the credential replaced by `[redacted]` wherever
-the body holds it, even split across chunks. Refusals are JSON with a `code`:
-`no-placeholder`, `unknown-placeholder`, `other-provider` or `launch-ended`
-(401), `not-connected`, `sign-in-unavailable` or `no-copilot-access` (403), and
-`copilot-unavailable` (502).
+response streams back with the provider's status code but not its reason phrase,
+without the provider's cookies, without any header that holds the credential,
+and with the credential replaced by `[redacted]` wherever the body holds it,
+even split across chunks. Refusals are JSON with a `code`: `no-placeholder`,
+`no-launch`, `unknown-placeholder`, `other-provider`, `other-launch` or
+`launch-ended` (401), `not-connected`, `sign-in-unavailable` or
+`no-copilot-access` (403), and `copilot-unavailable` (502).
 
 **GitHub Copilot.** Copilot's model API takes a Copilot token, which GitHub
 exchanges a GitHub token for (`GET /copilot_internal/v2/token` on
@@ -971,7 +982,10 @@ exchanges a GitHub token for (`GET /copilot_internal/v2/token` on
 GitHub user token for a GitHub sign-in or the token they connected as an
 `api-key`, and sends Copilot only the Copilot token, never the GitHub token. It
 holds a Copilot token until a minute before it expires, and five minutes at
-most, then asks for the next; when GitHub names the account's own Copilot host
+most, then asks for the next. It never sends one past its expiry: a token GitHub
+gives already expired, or that expires while GitHub answers, is taken as GitHub
+not answering (`copilot-unavailable`), and one that expires while a request's
+body arrives is replaced by the next before the request is sent; when GitHub names the account's own Copilot host
 (`endpoints.api`, a `githubcopilot.com` host) the proxy sends there. A GitHub
 sign-in's token comes from the paired machine's own GitHub authorization when
 the launch runs on the person's own machine, else from their live browser
@@ -1001,8 +1015,8 @@ no credential, fetched at most every ten minutes and answered with its `ETag`,
 for an agent's catalog base URL (Atomic's `ATOMIC_MODEL_CATALOG_URL` is
 `<origin>/api/v1/ai/models.dev`).
 
-Handing placeholders to runners, through the agent connection and the
-connector's launch, is not wired yet; until it is, a paired machine's agents
+Handing placeholders and the launch credential to runners, through the agent
+connection and the connector's launch, is not wired yet; until it is, a paired machine's agents
 still use the machine's own sign-ins. That handoff also gives a Copilot agent the
 client headers Copilot expects with a Copilot token, since the agent only sees a
 placeholder. Per-launch usage is not recorded yet.

@@ -14,6 +14,7 @@ CREATE TABLE ai_credentials (
 CREATE TABLE ai_placeholders (
 	digest bytea PRIMARY KEY CHECK (octet_length(digest) = 32),
 	launch_id text NOT NULL CHECK (char_length(launch_id) BETWEEN 1 AND 128),
+	launch_digest bytea NOT NULL CHECK (octet_length(launch_digest) = 32),
 	user_id text NOT NULL REFERENCES users(id),
 	provider text NOT NULL CHECK (provider IN ('github-copilot', 'openai', 'anthropic')),
 	machine_id text REFERENCES machines(id) ON DELETE CASCADE,

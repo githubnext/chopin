@@ -1153,6 +1153,8 @@ export type AiPlaceholder = {
 	/** SHA-256 of the placeholder. */
 	digest: Uint8Array;
 	launchId: string;
+	/** SHA-256 of the credential the launch's runner presents beside the placeholder. */
+	launchDigest: Uint8Array;
 	userId: string;
 	provider: import("@chopin/protocol/ai-credentials").AiProvider;
 	/** The paired machine the launch runs on, whose revocation ends it. */
