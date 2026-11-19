@@ -583,8 +583,9 @@ export declare namespace Chat {
 	 * person's turn waits to start, it is saved and given to that turn once it can take one.
 	 * Otherwise it is refused and saves nothing: `planner-busy` where a harness that takes no input
 	 * mid-run cannot be given it while a turn runs, `planner-starting` where another person's turn
-	 * waits to start on such a harness, `planner-not-attached` where no machine can take it. A
-	 * refusal is never kept to send later. The same write access as starting a turn is required.
+	 * waits to start on such a harness, `planner-not-attached` where no machine can take it,
+	 * `no-ai-account` where the sender has no AI account the Planner can use. A refusal is never
+	 * kept to send later. The same write access as starting a turn is required.
 	 */
 	export type Send = KIND<"chat:send"> & {
 		requestId: string;
@@ -630,8 +631,8 @@ export declare namespace Chat {
 	 * with `Retried`, tells the room with `Removed`, and runs the turn for `message` as it began the
 	 * first time. The agent is given the message once and nothing of the failed attempt (see
 	 * `retry-turn` in the agent connection). It takes the same write access as `Send`, and is
-	 * refused like it (`planner-not-attached` or a passing trouble) and while a turn runs; nothing
-	 * is held.
+	 * refused like it (`planner-not-attached`, `no-ai-account` or a passing trouble) and while a
+	 * turn runs; nothing is held.
 	 */
 	export type Retry = KIND<"chat:retry"> & {
 		message: string;

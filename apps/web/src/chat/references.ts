@@ -550,6 +550,7 @@ export function sendFailure(error: unknown): SendFailure {
 			code === "planner-not-attached"
 			|| code === "planner-busy"
 			|| code === "planner-starting"
+			|| code === "no-ai-account"
 		)
 	) {
 		return { text: detail, lost: false };

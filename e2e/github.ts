@@ -63,6 +63,8 @@ const SCORE_OUTSIDER = "score-outsider-";
 // machine is listed to nobody else on the server: a shared machine serves every repository its
 // owner can push to, and a teammate sees it wherever they can push to one too.
 const MACHINE_SHARER = "machine-sharer-";
+// Someone GitHub gives no Copilot token: no Copilot subscription. Everyone else has Copilot.
+const NO_COPILOT = "no-copilot-";
 
 function sharerRepository(handle: string) {
 	let name = `relay-${handle.slice(MACHINE_SHARER.length)}`;
@@ -184,7 +186,9 @@ function copilotGate(handle: string): string {
 async function copilotToken(authorization: string): Promise<Response> {
 	let token = /^token (\S+)$/.exec(authorization)?.[1] ?? "";
 	let handle = /^ghu_e2e_(.+)_\d+$/.exec(token)?.[1];
-	let access = handle
+	let access = handle?.startsWith(NO_COPILOT)
+		? "none"
+		: handle
 		? (await readFile(copilotGate(handle), "utf8").catch(() => "")).trim()
 		: token.includes("no-copilot")
 		? "none"

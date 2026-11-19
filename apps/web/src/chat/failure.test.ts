@@ -190,3 +190,15 @@ test("a message the machine could not take says so as the server did, and points
 		retry: false,
 	});
 });
+
+test("a message refused for want of an AI account says so as the server did, and points to AI accounts", () => {
+	let words =
+		"chopin needs an AI account to answer, so this message wasn't sent. Add one, then send it again.";
+	expect(sendFailureView(sendFailure(new WireRefusal(words, "no-ai-account")), "no-ai-account"))
+		.toEqual({
+			kind: "send",
+			title: words,
+			retry: false,
+			link: { label: "Open AI accounts", href: "/ai-accounts" },
+		});
+});

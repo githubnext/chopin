@@ -429,6 +429,33 @@ test("a message to a machine that is away is refused with the draft kept, nothin
 	}
 });
 
+test("someone with no AI account chopin can use is told so where only they see it, with a link to AI accounts, and their words return to the draft", async ({ browser, page }) => {
+	test.setTimeout(120_000);
+	let room = await open(page);
+	let planner = await machine(room);
+	let other = await teammate(browser, room, "no-copilot-ana");
+	try {
+		await say(other, "outline the plan");
+		let refusal = chat(other).locator("[data-quiet-note]");
+		await expect(refusal).toContainText("Only visible to you");
+		await expect(refusal).toContainText(
+			"chopin needs an AI account to answer, so this message wasn't sent. Add one, then send it again.",
+		);
+		await expect(refusal).not.toContainText(/subscription/i);
+		await expect(refusal.getByRole("link", { name: "Open AI accounts", exact: true }))
+			.toHaveAttribute("href", "/ai-accounts");
+		await expectChatValue(chatInput(other), "@chopin outline the plan");
+		await expect(message(other, "outline the plan")).toHaveCount(0);
+		await expect(chat(other).locator("[data-chat-failed]")).toHaveCount(0);
+
+		await expect(chat(page).locator("[data-quiet-note]")).toHaveCount(0);
+		await expect(message(page, "outline the plan")).toHaveCount(0);
+		expect(planner.prompts).toEqual([]);
+	} finally {
+		await planner.client.detach();
+	}
+});
+
 test("alone, a message without the mention is Chopin's: refused while no machine is there, then a turn at once, and given to the turn that runs", async ({ page }) => {
 	test.setTimeout(90_000);
 	let room = await open(page);

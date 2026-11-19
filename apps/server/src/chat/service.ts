@@ -35,6 +35,7 @@ import type {
 import { verifiedCheckout } from "../harness/atomic/checkout";
 import { rememberCheckout } from "../harness/atomic/workspace";
 import { plannerInstructions } from "../agent/planner";
+import type { AiAccountRefusal } from "../ai/account-check";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
 import type { NewDocumentRequest, NewDocumentResult, TurnDocuments } from "../agent/new-documents";
@@ -826,6 +827,12 @@ export type Room = {
 	 */
 	plannerNotAttached?: () => Promise<string | undefined>;
 	/**
+	 * Why a person's own message to the Planner, or their Retry, cannot start work for them: they
+	 * have no AI account it can use, or their accounts could not be read just now. Undefined when
+	 * they have one. Checked after `plannerNotAttached`, before anything is posted.
+	 */
+	aiAccount?: (userId: string) => Promise<AiAccountRefusal | undefined>;
+	/**
 	 * Under `HARNESS=remote`, waits a bounded time for a Planner a machine is starting for this
 	 * document, before an `@chopin` message or `invoke_planner` is checked for one.
 	 */
@@ -1581,6 +1588,8 @@ async function processSend(
 	// away) the message is refused, saying so.
 	let unattached = await context.plannerNotAttached?.();
 	if (unattached) return fail(ws, msg.rid, unattached, "planner-not-attached");
+	let noAccount = await context.aiAccount?.(ws.data.principalId);
+	if (noAccount) return fail(ws, msg.rid, noAccount.message, noAccount.code);
 	if (chat.closed) return refuseClosed(ws, msg.rid);
 
 	chat.initiative?.cancel();
@@ -1798,6 +1807,8 @@ async function processRetry(
 	if ("refusal" in found) return fail(ws, rid, found.refusal);
 	let unattached = await context.plannerNotAttached?.();
 	if (unattached) return fail(ws, rid, unattached, "planner-not-attached");
+	let noAccount = await context.aiAccount?.(ws.data.principalId);
+	if (noAccount) return fail(ws, rid, noAccount.message, noAccount.code);
 	let focus: Focus | undefined;
 	if (found.failure.focus) {
 		let child: Awaited<ReturnType<ChildDocuments["resolve"]>>;

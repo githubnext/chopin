@@ -133,6 +133,7 @@ import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import { AI_PROXY_PATH } from "@chopin/protocol/ai-credentials";
 import { AiCredentials } from "./ai/credentials";
+import { aiAccountRefusal } from "./ai/account-check";
 import { aiProxy } from "./ai/proxy";
 import { copilotTokenExchange } from "./ai/copilot";
 import { githubSignIn, registerAiRoutes } from "./ai/routes";
@@ -840,6 +841,10 @@ function conversation(
 			}
 			: undefined,
 		plannerStarting: plannerAttachments ? () => plannerStarting(room.id) : undefined,
+		aiAccount: plannerAttachments
+			? userId =>
+				aiCredentials ? aiAccountRefusal(aiCredentials, userId) : Promise.resolve(undefined)
+			: undefined,
 		// A message sent while a turn runs reaches it only where the harness takes input mid-run.
 		steers: () => plannerSteers(room.id),
 		persist: chat => Service.persist(opened, chat),

@@ -154,6 +154,9 @@ export type AiWithheld = {
 		| "key-unusable";
 };
 
+/** What a launch for a person would be given now: `providers` they can use, and what is `withheld`. */
+export type AiAvailable = { providers: AiProvider[]; withheld: AiWithheld[] };
+
 export type AiLaunch = {
 	userId: string;
 	/** The paired machine the launch runs on; revoking it ends the launch. */
@@ -456,7 +459,7 @@ export class AiCredentials {
 			: await this.#storage.aiPlaceholders.generation(input.channelId);
 		if (input.channelId !== undefined && generation === undefined) return cancelled();
 		for (let attempt = 0; attempt < LAUNCH_ATTEMPTS; attempt++) {
-			let admitted = await this.#admitted(input);
+			let admitted = await this.#admitted(input, true);
 			withheld = admitted.withheld;
 			let grants: AiProviderGrant[] = admitted.usable.map(record => ({
 				provider: record.provider,
@@ -504,6 +507,34 @@ export class AiCredentials {
 	}
 
 	/**
+	 * What a launch for `userId` would be given now, without preparing one: nothing is stored. The
+	 * providers they can use, and those they connected that a launch would not be given, with why.
+	 * GitHub's answer about Copilot access may be a few minutes old, as the list's is. A read during
+	 * which their credentials change, or GitHub says otherwise about their Copilot account, is read
+	 * again, at most `LAUNCH_ATTEMPTS` times, and then it throws the retryable `AiCredentialError`
+	 * (503) `launch` throws, rather than say they have nothing.
+	 */
+	async available(userId: string): Promise<AiAvailable> {
+		for (let attempt = 0; attempt < LAUNCH_ATTEMPTS; attempt++) {
+			let version = this.#storage.aiCredentials.version(userId);
+			let admitted = await this.#admitted({ userId }, false);
+			if (
+				this.#storage.aiCredentials.version(userId) === version
+				&& !this.#contradicted(admitted.copilot)
+			) {
+				return {
+					providers: admitted.usable.map(record => record.provider),
+					withheld: admitted.withheld,
+				};
+			}
+		}
+		throw new AiCredentialError(
+			"Your AI accounts kept changing while Chopin read them. Try again.",
+			503,
+		);
+	}
+
+	/**
 	 * Whether a launch can still be given what it was prepared with: its machine is not revoked, and
 	 * its document is open in the archive generation the launch began in, so a document archived
 	 * meanwhile, and restored or not, cancels it.
@@ -519,10 +550,11 @@ export class AiCredentials {
 
 	/**
 	 * The person's connected providers (`connected`), those a launch can be given now, and those it
-	 * can't, with why. `copilot` is what GitHub answered about Copilot access at this launch. A key
-	 * is given only when it decrypts and its provider hasn't refused it as invalid.
+	 * can't, with why. `copilot` is what GitHub answered about Copilot access, asked again when
+	 * `fresh`, as every launch does. A key is given only when it decrypts and its provider hasn't
+	 * refused it as invalid.
 	 */
-	async #admitted(input: AiLaunch) {
+	async #admitted(input: Pick<AiLaunch, "userId" | "machineId">, fresh: boolean) {
 		let copilot: CopilotAnswer | undefined;
 		let connected = await this.#connected(input.userId);
 		let usable: AiCredentialRecord[] = [];
@@ -537,7 +569,7 @@ export class AiCredentials {
 					});
 					continue;
 				}
-				copilot = await this.#copilotAccess(record, token, true);
+				copilot = await this.#copilotAccess(record, token, fresh);
 				if (copilot.access !== "access") {
 					withheld.push({
 						provider: record.provider,
