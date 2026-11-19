@@ -133,7 +133,7 @@ import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import { AiCredentials } from "./ai/credentials";
 import { aiProxy } from "./ai/proxy";
-import { copilotEntitlement } from "./ai/copilot";
+import { copilotTokenExchange } from "./ai/copilot";
 import { githubSignIn, registerAiRoutes } from "./ai/routes";
 import * as Edit from "./plan/edit";
 import * as Service from "./plan/service";
@@ -3616,7 +3616,7 @@ let connectedAi = new AiCredentials({
 	origin: config.auth.origin,
 	clock: hostedAuth.clock,
 	githubToken: githubSignIn(hostedAuth),
-	copilotEntitlement: copilotEntitlement(),
+	copilotToken: copilotTokenExchange(),
 });
 aiCredentials = connectedAi;
 hostedAuth.machines.onEnded(machineId => {

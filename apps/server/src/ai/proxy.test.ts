@@ -7,7 +7,7 @@ import { Machines } from "../auth/machines";
 import { Sessions } from "../auth/session";
 import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
-import { copilotEntitlement } from "./copilot";
+import { copilotTokenExchange } from "./copilot";
 import { AiCredentials } from "./credentials";
 import { aiProxy } from "./proxy";
 import { githubSignIn, registerAiRoutes } from "./routes";
@@ -103,11 +103,15 @@ async function setup() {
 		Response.json({ openai: { models: {} } }, { headers: { etag: '"v1"' } })
 	);
 	let entitled = new Map<string, number>();
+	let copilotLifetime = { seconds: 1_800 };
 	let githubApi = provider(request => {
 		let token = request.headers.get("authorization")?.replace(/^token /, "") ?? "";
 		let status = entitled.get(token) ?? 200;
 		return status === 200
-			? Response.json({ token: "tid=exchanged;exp=1", expires_at: 1 })
+			? Response.json({
+				token: `tid=copilot;for=${token}`,
+				expires_at: Math.floor(now.getTime() / 1000) + copilotLifetime.seconds,
+			})
 			: Response.json({ message: "Resource not accessible" }, { status });
 	});
 	let credentials = new AiCredentials({
@@ -116,7 +120,7 @@ async function setup() {
 		origin: ORIGIN,
 		clock,
 		githubToken: githubSignIn(auth),
-		copilotEntitlement: copilotEntitlement({ api: githubApi.url }),
+		copilotToken: copilotTokenExchange({ api: githubApi.url }),
 	});
 	let router = new Router();
 	registerAiRoutes(router, auth, {
@@ -159,6 +163,7 @@ async function setup() {
 	return {
 		storage,
 		entitled,
+		copilotLifetime,
 		githubApi,
 		router,
 		credentials,
@@ -284,7 +289,10 @@ describe("GitHub Copilot access through a GitHub sign-in", () => {
 				userId: "U_mona",
 				expiresAt: new Date(world.now().getTime() + 3_600_000),
 			});
-		expect((await launch()).grants).toEqual([]);
+		expect(await launch()).toMatchObject({
+			grants: [],
+			withheld: [{ provider: "github-copilot", reason: "no-copilot-access" }],
+		});
 		expect(await world.storage.aiPlaceholders.deleteExpired(new Date(8.64e15))).toBe(0);
 
 		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
@@ -453,13 +461,12 @@ describe("the AI credential proxy", () => {
 			expiresAt: new Date(world.now().getTime() + 3_600_000),
 		})).grants[0]!;
 		let headers = { authorization: `Bearer ${openai.placeholder}` };
-		for (let path of [`//${elsewhere.host}/steal`, `/@${elsewhere.host}/steal`]) {
-			expect((await world.call(openai, path, { headers })).status).toBe(200);
+		for (let path of [`//${elsewhere.host}/v1/models`, `/models/@${elsewhere.host}`]) {
+			let refused = await world.call(openai, path, { headers });
+			expect(refused.status).toBe(404);
+			expect(((await refused.json()) as { error: { code: string } }).error.code).toBe("route");
 		}
-		expect(world.upstreams.openai.seen.map(seen => seen.path)).toEqual([
-			`/v1//${elsewhere.host}/steal`,
-			`/v1/@${elsewhere.host}/steal`,
-		]);
+		expect(world.upstreams.openai.seen).toEqual([]);
 
 		let bouncing = provider(() =>
 			new Response(null, { status: 307, headers: { location: `${elsewhere.url}/v1/models` } })
@@ -537,10 +544,12 @@ describe("the AI credential proxy", () => {
 		await world.storage.channels.archive({ id: world.channel.id, now: world.now() });
 		expect(await status(onMachine)).toBe(401);
 		expect(await status(onDocument)).toBe(401);
+		await world.storage.channels.restore({ id: world.channel.id, now: world.now() });
+		expect(await status(onDocument)).toBe(401);
 		expect(world.upstreams.openai.seen).toHaveLength(2);
 	});
 
-	it("sends GitHub Copilot the person's GitHub token, renewed by Chopin, and its model list through", async () => {
+	it("sends GitHub Copilot the Copilot token GitHub gives the person's GitHub token, renewed by Chopin", async () => {
 		let world = await setup();
 		await world.connect(world.mona, "github-copilot", { kind: "github-sign-in" });
 		await world.connect(world.hubot, "github-copilot", {
@@ -576,11 +585,11 @@ describe("the AI credential proxy", () => {
 		let seen = world.upstreams.copilot.seen;
 		expect(seen.map(request => request.path)).toEqual(Array(5).fill("/models"));
 		expect(seen.map(request => request.headers.authorization)).toEqual([
-			"Bearer ghu_mona_signed_in",
-			"Bearer ghu_machine",
-			"Bearer github_pat_hubot_0123456789",
-			"Bearer ghu_renewed_1",
-			"Bearer ghu_machine_renewed",
+			"Bearer tid=copilot;for=ghu_mona_signed_in",
+			"Bearer tid=copilot;for=ghu_machine",
+			"Bearer tid=copilot;for=github_pat_hubot_0123456789",
+			"Bearer tid=copilot;for=ghu_renewed_1",
+			"Bearer tid=copilot;for=ghu_machine_renewed",
 		]);
 		expect(seen.every(request => request.headers["copilot-integration-id"] === "x")).toBe(true);
 	});
@@ -624,5 +633,302 @@ describe("the AI credential proxy", () => {
 		).toBe(404);
 		expect((await world.router.handle(new Request(`${ORIGIN}/api/v1/ai/gemini/v1`)))!.status)
 			.toBe(404);
+	});
+});
+
+async function code(response: Response) {
+	return ((await response.json()) as { error: { code: string } }).error.code;
+}
+
+function launch(world: Awaited<ReturnType<typeof setup>>) {
+	return world.credentials.launch({
+		userId: "U_mona",
+		expiresAt: new Date(world.now().getTime() + 86_400_000 * 60),
+	});
+}
+
+describe("what a launch is given", () => {
+	it("gives no Copilot placeholder while Chopin can't read the person's GitHub sign-in", async () => {
+		let world = await setup();
+		await world.connect(world.mona, "github-copilot", { kind: "github-sign-in" });
+		expect((await launch(world)).grants.map(grant => grant.provider)).toEqual(["github-copilot"]);
+		world.advance(31 * 86_400_000);
+		expect(await launch(world)).toMatchObject({
+			grants: [],
+			withheld: [{ provider: "github-copilot", reason: "sign-in-unavailable" }],
+		});
+
+		await world.credentials.connect("U_mona", "openai", { kind: "api-key", secret: OPENAI_KEY });
+		let { grants } = await launch(world);
+		expect(grants.map(grant => grant.provider)).toEqual(["openai"]);
+		expect(
+			(await world.call(grants[0]!, "/models", {
+				headers: { authorization: `Bearer ${grants[0]!.placeholder}` },
+			})).status,
+		).toBe(200);
+	});
+
+	it("asks GitHub afresh at each launch, and gives no Copilot placeholder when it can't say", async () => {
+		let world = await setup();
+		await world.connect(world.mona, "github-copilot", { kind: "github-sign-in" });
+		let listed = await (await world.api("/api/ai/credentials", world.mona)).json();
+		expect(listed).toMatchObject({ credentials: [{ copilotAccess: "access" }] });
+
+		world.entitled.set("ghu_mona_signed_in", 403);
+		expect(await launch(world)).toMatchObject({
+			grants: [],
+			withheld: [{ provider: "github-copilot", reason: "no-copilot-access" }],
+		});
+		world.entitled.set("ghu_mona_signed_in", 502);
+		expect(await launch(world)).toMatchObject({
+			grants: [],
+			withheld: [{ provider: "github-copilot", reason: "copilot-unavailable" }],
+		});
+		expect(await world.storage.aiPlaceholders.deleteExpired(new Date(8.64e15))).toBe(0);
+	});
+
+	it("gives nothing for a key removed while the launch was being prepared", async () => {
+		let world = await setup();
+		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
+		await world.connect(world.mona, "anthropic", { kind: "api-key", secret: ANTHROPIC_KEY });
+		let store = world.storage.aiCredentials;
+		let list = store.list.bind(store);
+		let removing: string[] = ["openai"];
+		store.list = async userId => {
+			let listed = await list(userId);
+			for (let provider of removing.splice(0)) {
+				await store.delete(userId, provider as "openai" | "anthropic");
+			}
+			return listed;
+		};
+		let { grants } = await launch(world);
+		expect(grants.map(grant => grant.provider)).toEqual(["anthropic"]);
+		expect(
+			(await world.call(grants[0]!, "/v1/models", {
+				headers: { "x-api-key": grants[0]!.placeholder },
+			})).status,
+		).toBe(200);
+
+		removing = ["anthropic"];
+		expect((await launch(world)).grants).toEqual([]);
+		expect(await world.storage.aiPlaceholders.deleteExpired(new Date(8.64e15))).toBe(1);
+	});
+});
+
+describe("GitHub Copilot through the proxy", () => {
+	it("never sends the GitHub token, nor any request outside the model API, to Copilot's host", async () => {
+		let world = await setup();
+		await world.connect(world.mona, "github-copilot", { kind: "github-sign-in" });
+		let copilot = (await world.credentials.launch({
+			userId: "U_mona",
+			expiresAt: new Date(world.now().getTime() + 3_600_000),
+		})).grants[0]!;
+		let sent: Array<{ url: string; authorization: string | null }> = [];
+		let proxied = aiProxy({
+			credentials: world.credentials,
+			fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+				sent.push({
+					url: String(input),
+					authorization: new Headers(init?.headers).get("authorization"),
+				});
+				return Response.json({ ok: true });
+			}) as typeof fetch,
+		});
+		let call = (path: string, method = "POST") => {
+			let url = new URL(`${copilot.baseUrl}${path}`);
+			return proxied(
+				new Request(url, {
+					method,
+					headers: { authorization: `Bearer ${copilot.placeholder}` },
+					...(method === "GET" ? {} : { body: '{"method":"tools/list"}' }),
+				}),
+				url,
+			);
+		};
+		for (
+			let path of [
+				"/mcp/",
+				"/mcp",
+				"/models/../mcp/",
+				"/%6Dcp/",
+				"/models/x%2F..%2F..%2Fmcp/policy",
+				"/chat/completions/",
+				"//mcp/",
+			]
+		) {
+			let refused = await call(path);
+			expect(refused.status).toBe(404);
+			expect(await code(refused)).toBe("route");
+		}
+		expect((await call("/models", "DELETE")).status).toBe(404);
+		expect(sent).toEqual([]);
+
+		expect((await call("/chat/completions")).status).toBe(200);
+		expect((await call("/models", "GET")).status).toBe(200);
+		expect(sent).toEqual([
+			{
+				url: "https://api.githubcopilot.com/chat/completions",
+				authorization: "Bearer tid=copilot;for=ghu_mona_signed_in",
+			},
+			{
+				url: "https://api.githubcopilot.com/models",
+				authorization: "Bearer tid=copilot;for=ghu_mona_signed_in",
+			},
+		]);
+	});
+
+	it("sends to the account's own Copilot host when GitHub names one", async () => {
+		let world = await setup();
+		let sent: string[] = [];
+		let credentials = new AiCredentials({
+			storage: world.storage,
+			key: new Uint8Array(32).fill(5),
+			origin: ORIGIN,
+			clock: world.now,
+			githubToken: async () => "ghu_mona",
+			copilotToken: async () => ({
+				token: "tid=business",
+				expiresAt: world.now().getTime() + 1_800_000,
+				api: "https://api.business.githubcopilot.com",
+			}),
+		});
+		await credentials.connect("U_mona", "github-copilot", { kind: "github-sign-in" });
+		let copilot = (await credentials.launch({
+			userId: "U_mona",
+			expiresAt: new Date(world.now().getTime() + 3_600_000),
+		})).grants[0]!;
+		let proxied = aiProxy({
+			credentials,
+			fetch: (async (input: string | URL | Request) => {
+				sent.push(String(input));
+				return Response.json({ data: [] });
+			}) as typeof fetch,
+		});
+		let url = new URL(`${copilot.baseUrl}/models`);
+		await proxied(
+			new Request(url, { headers: { authorization: `Bearer ${copilot.placeholder}` } }),
+			url,
+		);
+		expect(sent).toEqual(["https://api.business.githubcopilot.com/models"]);
+	});
+
+	it("asks GitHub for the next Copilot token before the one it holds expires", async () => {
+		let world = await setup();
+		world.copilotLifetime.seconds = 180;
+		await world.connect(world.mona, "github-copilot", { kind: "github-sign-in" });
+		let copilot = (await world.credentials.launch({
+			userId: "U_mona",
+			expiresAt: new Date(world.now().getTime() + 3_600_000),
+		})).grants[0]!;
+		let models = () =>
+			world.call(copilot, "/models", {
+				headers: { authorization: `Bearer ${copilot.placeholder}` },
+			});
+		let exchanges = world.githubApi.seen.length;
+		expect((await models()).status).toBe(200);
+		expect(world.githubApi.seen).toHaveLength(exchanges);
+		world.advance(125_000);
+		expect((await models()).status).toBe(200);
+		expect(world.githubApi.seen).toHaveLength(exchanges + 1);
+
+		world.entitled.set("ghu_mona_signed_in", 500);
+		world.advance(125_000);
+		let failed = await models();
+		expect(failed.status).toBe(502);
+		expect(await code(failed)).toBe("copilot-unavailable");
+		expect(world.upstreams.copilot.seen).toHaveLength(2);
+	});
+});
+
+describe("the proxy's final handoff", () => {
+	it("takes a key the provider echoes out of its headers and its body, even split across chunks", async () => {
+		let world = await setup();
+		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
+		let openai = (await world.credentials.launch({
+			userId: "U_mona",
+			expiresAt: new Date(world.now().getTime() + 3_600_000),
+		})).grants[0]!;
+		let middle = 9;
+		let proxied = aiProxy({
+			credentials: world.credentials,
+			fetch: (async () =>
+				new Response(
+					new ReadableStream<Uint8Array>({
+						start(controller) {
+							let encoder = new TextEncoder();
+							controller.enqueue(encoder.encode(`{"echo":"${OPENAI_KEY.slice(0, middle)}`));
+							controller.enqueue(encoder.encode(`${OPENAI_KEY.slice(middle)}","again":"`));
+							controller.enqueue(encoder.encode(`${OPENAI_KEY}"}\n`));
+							controller.close();
+						},
+					}),
+					{
+						headers: {
+							"content-type": "application/json",
+							"x-echo": `Bearer ${OPENAI_KEY}`,
+							"x-request-id": "req_1",
+						},
+					},
+				)) as unknown as typeof fetch,
+		});
+		let url = new URL(`${openai.baseUrl}/models`);
+		let answer = await proxied(
+			new Request(url, { headers: { authorization: `Bearer ${openai.placeholder}` } }),
+			url,
+		);
+		expect(answer.headers.get("x-echo")).toBeNull();
+		expect(answer.headers.get("x-request-id")).toBe("req_1");
+		let text = await answer.text();
+		expect(text).not.toContain(OPENAI_KEY);
+		expect(JSON.parse(text)).toEqual({ echo: "[redacted]", again: "[redacted]" });
+	});
+
+	it("sends nothing once the launch ended, its machine was revoked or its document archived while its body arrived", async () => {
+		let world = await setup();
+		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
+		let cutoffs: Array<(launch: { launchId: string; machineId: string }) => Promise<unknown>> = [
+			launch => world.credentials.end(launch.launchId),
+			launch => world.storage.machines.revoke(launch.machineId, "U_mona", world.now()),
+			() => world.storage.channels.archive({ id: world.channel.id, now: world.now() }),
+		];
+		for (let cutoff of cutoffs) {
+			let { machine } = await world.machines.pair({
+				userId: "U_mona",
+				label: "studio",
+				repositories: [],
+				autoRun: false,
+				grant: grant("ghu_machine"),
+			});
+			let launched = await world.credentials.launch({
+				userId: "U_mona",
+				machineId: machine.id,
+				channelId: world.channel.id,
+				expiresAt: new Date(world.now().getTime() + 3_600_000),
+			});
+			let openai = launched.grants[0]!;
+			let reading = Promise.withResolvers<void>();
+			let release = Promise.withResolvers<void>();
+			let body = new ReadableStream<Uint8Array>({
+				async pull(controller) {
+					reading.resolve();
+					await release.promise;
+					controller.enqueue(new TextEncoder().encode("{}"));
+					controller.close();
+				},
+			});
+			let answered = world.call(openai, "/responses", {
+				method: "POST",
+				headers: { authorization: `Bearer ${openai.placeholder}` },
+				body,
+				duplex: "half",
+			} as RequestInit);
+			await reading.promise;
+			await cutoff({ launchId: launched.launchId, machineId: machine.id });
+			release.resolve();
+			let refused = await answered;
+			expect(refused.status).toBe(401);
+			expect(await code(refused)).toBe("launch-ended");
+		}
+		expect(world.upstreams.openai.seen).toEqual([]);
 	});
 });

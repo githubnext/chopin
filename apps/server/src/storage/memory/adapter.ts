@@ -695,6 +695,7 @@ export class MemoryStorage implements StorageAdapter {
 		let saved: ChannelRecord;
 		if (archived) {
 			saved = { ...found, updatedAt, archivedAt: new Date(updatedAt) };
+			this.#aiPlaceholders.deleteChannel(input.id);
 		} else {
 			let { archivedAt: _, ...active } = found;
 			saved = { ...active, updatedAt };

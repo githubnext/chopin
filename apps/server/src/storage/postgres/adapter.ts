@@ -1090,6 +1090,9 @@ export class PostgresStorage implements StorageAdapter {
 					RETURNING ${transaction.unsafe(CHANNEL_RETURNING)}
 				`;
 					if (!saved) throw corrupt("changing channel archival returned no record");
+					if (archived) {
+						await transaction`DELETE FROM ai_placeholders WHERE channel_id = ${input.id}`;
+					}
 					return { channel: channel({ ...saved, slug: existing.slug }), changed: true };
 				}),
 		);

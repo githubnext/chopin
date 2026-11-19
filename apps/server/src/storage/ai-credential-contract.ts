@@ -148,6 +148,24 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		test("ends a document's placeholders for good when it is archived", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { channelId, placeholder } = await launched(storage);
+				let onDocument = placeholder();
+				let elsewhere = placeholder({ launchId: id("launch") });
+				delete elsewhere.channelId;
+				await storage.aiPlaceholders.put([onDocument]);
+				await storage.aiPlaceholders.put([elsewhere]);
+				await storage.channels.archive({ id: channelId, now: AT });
+				await storage.channels.restore({ id: channelId, now: later(1) });
+				expect(await storage.aiPlaceholders.find(onDocument.digest, AT)).toBeUndefined();
+				expect(await storage.aiPlaceholders.find(elsewhere.digest, AT)).toEqual(elsewhere);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		test("goes with its document", async () => {
 			let storage = await openedStorage(factory);
 			try {

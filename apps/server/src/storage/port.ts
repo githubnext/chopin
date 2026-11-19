@@ -305,6 +305,7 @@ export interface ChannelStore {
 	rename(channel: RenameChannel): Promise<RenameResult>;
 	/** Sets Full width. Refused for an archived document, as a rename is. */
 	setFullWidth(input: ChannelWidthInput): Promise<RenameResult>;
+	/** Archives a document and ends, for good, the AI placeholders of every launch on it. */
 	archive(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
 	restore(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
 	delete(id: string): Promise<boolean>;
