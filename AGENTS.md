@@ -192,6 +192,10 @@ durable.
   request carrying one of a live launch's placeholders with that launch's credential,
   while the process holds the writer lease, and none with a placeholder in its query or
   another header or a query field that can't be decoded.
+  Each request the proxy sends is recorded under the writer lease before it is sent
+  (`ai_usage`), and one it can't record is not sent; it is completed once with its
+  outcome and the provider's token counts, and the next lease holder marks one left
+  pending `unknown`. A person reads only their own totals (`GET /api/ai/usage`).
   Handing placeholders to runners
   is not wired yet. See [Hosted agent](docs/hosted-agent.md#ai-credentials).
 - **Planner ownership is process-bound.** The first eligible Planner or

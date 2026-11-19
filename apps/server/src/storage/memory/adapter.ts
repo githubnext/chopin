@@ -15,6 +15,7 @@ import { MemoryDeferredTurnStore } from "./deferred-turns";
 import { MemoryMcpSessionStore } from "./mcp-sessions";
 import { MemoryPlannerCredentialStore } from "./planner-credentials";
 import { MemoryAiCredentialStore, MemoryAiPlaceholderStore } from "./ai-credentials";
+import { MemoryAiUsageStore } from "./ai-usage";
 import { AiCutoffs } from "../ai-cutoffs";
 import { MemoryChatThreadStore } from "./chat-threads";
 import { MemoryPlannerLinkHoldStore } from "./planner-holds";
@@ -61,6 +62,7 @@ import type {
 import type {
 	AiCredentialStore,
 	AiPlaceholderStore,
+	AiUsageStore,
 	BackgroundJobStore,
 	ChannelStore,
 	ChatAttachmentStore,
@@ -252,6 +254,10 @@ export class MemoryStorage implements StorageAdapter {
 		cutoffs: this.#aiCutoffs,
 	});
 	readonly aiPlaceholders: AiPlaceholderStore = this.#aiPlaceholders;
+	readonly aiUsage: AiUsageStore = new MemoryAiUsageStore({
+		userExists: id => this.#users.has(id),
+		assertLease: held => this.#assertLease(held),
+	});
 	readonly mcpSessions: McpSessionStore = new MemoryMcpSessionStore();
 	readonly deferredTurns: DeferredTurnStore = new MemoryDeferredTurnStore({
 		assertLease: held => this.#assertLease(held),

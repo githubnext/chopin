@@ -1060,9 +1060,10 @@ a `code`: `no-placeholder`, `no-launch`, `unknown-placeholder`,
 `other-provider`, `other-launch` or `launch-ended` (401), `not-connected`,
 `sign-in-unavailable` or `no-copilot-access` (403), `credential-changed` (409,
 which clients send again), `cancelled` (499), `copilot-unavailable` (502),
-`restarting` (503, sent again to the next process), and `busy` (503, sent again
+`restarting` (503, sent again to the next process), `busy` (503, sent again
 too) when cutoffs kept completing while the final check read, three times
-running.
+running, and `unrecorded` (503, sent again too) when the request could not be
+recorded before it was sent (see Usage below).
 
 **GitHub Copilot.** Copilot's model API takes a Copilot token, which GitHub
 exchanges a GitHub token for (`GET /copilot_internal/v2/token` on
@@ -1138,7 +1139,45 @@ Handing placeholders and the launch credential to runners, through the agent
 connection and the connector's launch, is not wired yet; until it is, a paired machine's agents
 still use the machine's own sign-ins. That handoff also gives a Copilot agent the
 client headers Copilot expects with a Copilot token, since the agent only sees a
-placeholder. Per-launch usage is not recorded yet.
+placeholder.
+
+**Usage.** Every request the proxy is about to send to a provider is recorded
+first (`ai_usage` in [Storage](storage.md)), once its placeholder and launch
+credential are accepted and its body is read: a fresh id, the launch, its person,
+the provider and the model the request's JSON body names (`model`), as
+`pending`, written under the writer lease. A request that can't be recorded is
+not sent (`unrecorded`, 503). The record is completed once, by the first way the
+request ends: `unsent` with the refusal's code when the final check refuses it,
+so nothing reached the provider; `error` with `unreachable` or `cancelled` when
+no answer came, or the proxy's code when it refused the answer; else, when the
+answer's body has passed back whole, `ok` for a status under 400, and `error`
+for any other status with the provider's error code (`error.code`, else
+`error.type`, or `http-<status>`), for a stream that reported an error event, a
+body that broke off (`interrupted`) or one the agent stopped reading
+(`cancelled`). It holds the provider's status and the token counts the provider
+reported, read from the answer as it passes, never holding it back: a JSON
+body's `usage`, or each server-sent event's, a later count replacing an earlier
+one (Anthropic's growing output count, OpenAI's usage in its last chunk). Input
+is what was read without the cache, so OpenAI's cached input is taken out of its
+input and counted as a cache read; Anthropic's cache reads and writes are its
+own. A completion sent again changes nothing. A process that stops between the
+send and the record (a crash, or a hand-over whose answers were still streaming)
+leaves the request `pending`, and the next holder of the writer lease marks
+every request an earlier holder left pending `unknown` once it is ready, so none
+is lost or counted twice. Records are kept for 90 days.
+
+```text
+GET /api/ai/usage
+```
+
+answers the signed-in person's own totals for the last seven days
+(`AiUsageSummary` in `packages/protocol/ai-usage.ts`), and nobody else's: per
+provider and model, most requested first, the requests sent (pending ones
+included, those refused at the send not), how many ended in an error, how many
+are unknown, and the input, output, cache read and cache write tokens. Requests
+that named no model (a model list) are counted under no model. The AI accounts
+page shows them under _Usage by model_
+(`apps/web/src/ai-usage/usage-by-model.tsx`).
 
 ## Permission checks
 

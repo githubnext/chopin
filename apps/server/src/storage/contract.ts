@@ -13,6 +13,7 @@ import { plannerModelChoiceContract } from "./planner-model-choice-contract";
 import { chatThreadContract } from "./chat-thread-contract";
 import { plannerCredentialContract } from "./planner-credential-contract";
 import { aiCredentialContract } from "./ai-credential-contract";
+import { aiUsageContract } from "./ai-usage-contract";
 import { deferredTurnContract } from "./deferred-turn-contract";
 import { mcpSessionContract } from "./mcp-session-contract";
 import { leasePeekContract } from "./lease-peek-contract";
@@ -64,6 +65,7 @@ export function storageContract(name: string, factory: Factory): void {
 	chatThreadContract(name, factory);
 	plannerCredentialContract(name, factory);
 	aiCredentialContract(name, factory);
+	aiUsageContract(name, factory);
 	deferredTurnContract(name, factory);
 	mcpSessionContract(name, factory);
 	leasePeekContract(name, factory);
