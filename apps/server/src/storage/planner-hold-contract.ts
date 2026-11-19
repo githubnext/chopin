@@ -82,6 +82,7 @@ export function plannerHoldContract(name: string, factory: StorageFactory) {
 						asked: [{ request: "request-2", method: "questionnaire", decisions: ["d-1", "d-2"] }],
 						owed: [{ request: "request-1", answer: { choice: "a" } }],
 						stops: [{ run: "run-1" }, { run: null }],
+						aiLaunchId: "launch-1",
 					}, { id: "session-2", waiting: [], owed: [], stops: [] }],
 				});
 				expect(await storage.plannerHolds.get(channelId)).toBeUndefined();

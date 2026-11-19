@@ -1014,6 +1014,11 @@ export type PlannerHeldSession = {
 	owed: JsonValue[];
 	/** Stops pressed while the link was down, for the client to hear first. */
 	stops: JsonValue[];
+	/**
+	 * The AI launch the client holds for the session, so the next process ends it with the session
+	 * or replaces it when the client resumes. An id, not a credential.
+	 */
+	aiLaunchId?: string;
 };
 
 /**

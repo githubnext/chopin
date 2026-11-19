@@ -140,6 +140,14 @@ export class MemoryAiPlaceholderStore implements AiPlaceholderStore {
 		this.deps.assertLease(lease);
 		return this.#cut(this.#deleteWhere(value => value.launchId === launchId));
 	}
+	async deleteHeldLaunch(lease: Lease, launchDigest: Uint8Array, machineId: string) {
+		this.deps.assertLease(lease);
+		return this.#cut(
+			this.#deleteWhere(value =>
+				value.machineId === machineId && sameBytes(value.launchDigest, launchDigest)
+			),
+		);
+	}
 	async deleteForMachine(lease: Lease, machineId: string) {
 		this.deps.assertLease(lease);
 		return this.#cut(this.#deleteWhere(value => value.machineId === machineId));

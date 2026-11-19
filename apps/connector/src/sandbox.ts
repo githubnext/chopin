@@ -482,6 +482,25 @@ function writtenPlaces(launch: Pick<Launch, "cwd" | "writable" | "own">) {
 	];
 }
 
+/**
+ * The owner's agent setup a launch with a state directory of its own may not read, by the path
+ * it is named by and its real path, but for a place that is the home or holds what the launch
+ * itself works in, which denying would take from the launch too.
+ */
+function ownerAgentDenials(
+	platform: NodeJS.Platform,
+	home: string,
+	env: Record<string, string | undefined>,
+	launchPlaces: readonly string[],
+) {
+	let kept = [home, ...launchPlaces].map(real);
+	return [
+		...new Set(
+			ownerAgentPaths(platform, home, env, process.cwd()).flatMap(path => [path, real(path)]),
+		),
+	].filter(path => !kept.some(place => inside(place, path, platform)));
+}
+
 /** The policy for one launch, from what is on the disk now. */
 export function launchPolicy(
 	engine: SandboxEngine,
@@ -584,7 +603,7 @@ export function launchPolicy(
 	let readonlyInside = [...git?.readonlyInside ?? [], ...reopened];
 	let denied = [
 		...secretPaths(platform, home),
-		...launch.agentHome ? ownerAgentPaths(platform, home, host.env) : [],
+		...launch.agentHome ? ownerAgentDenials(platform, home, host.env, [...places, ...state]) : [],
 		...concealed,
 	].filter(path => exists(path));
 	let env: Record<string, string | undefined> = { ...launch.env };

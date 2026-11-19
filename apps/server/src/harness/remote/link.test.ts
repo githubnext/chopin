@@ -2867,6 +2867,38 @@ describe("Agent connection AI launches", () => {
 		expect(ended).toEqual(["launch-1"]);
 	});
 
+	it("ends a launch prepared for a session whose link closed while it was being prepared, and sends it nowhere", async () => {
+		let { auth, channel } = await linkAuth();
+		let made = launches();
+		let preparing = Promise.withResolvers<void>();
+		let prepared = Promise.withResolvers<void>();
+		let launch = made.ai.launch;
+		made.ai.launch = async input => {
+			preparing.resolve();
+			await prepared.promise;
+			return launch(input);
+		};
+		let server = linkServer(auth, 2_000, undefined, 2_000, undefined, undefined, { ai: made.ai });
+		cleanups.push(server.stop);
+		let raw = await rawLink(server.url, undefined, "ai-credentials");
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		let opening = adapterFor(server, { channelId: channel.id, isolated: false }).doStart({
+			sessionId: "ai-closed-while-preparing",
+			sandboxSession,
+			sessionWorkDir: "/tmp",
+		});
+		let failed = opening.then(() => undefined, (error: unknown) => error);
+		await preparing.promise;
+		raw.send({ type: "detach" });
+		await raw.closed;
+		prepared.resolve();
+		expect(await failed).toBeInstanceOf(Error);
+		await until(() => made.ended.length === 1, 1_000);
+		expect(made.ended).toEqual(["launch-1"]);
+		expect(raw.messages.some(message => message.type === "start")).toBe(false);
+	});
+
 	it("leaves a client that did not offer ai-credentials as it was: no launch, and no grants", async () => {
 		for (let header of [undefined, "capability-catalog"]) {
 			let { raw, start, session, asked, changed } = await opened(header);

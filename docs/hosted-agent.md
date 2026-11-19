@@ -1218,7 +1218,10 @@ as before. A launch Chopin could not prepare (503) fails the start.
   `ai`, and an `ai` message hands the session a new launch when the person connects,
   replaces or removes a provider, half an hour before the deadline, and when a
   resumed session comes back; the earlier launch ends once the new one is sent. The
-  session's end (`destroy`, or its link closing for good) ends its launch. A client
+  session's end (`destroy`, or its link closing for good) ends its launch. A session
+  a restart's hold keeps keeps its launch, named in the hold (`aiLaunchId`, an id and
+  no credential): the next process ends it when the session ends or the hold does,
+  and replaces it when the client resumes. A client
   that does not offer the feature is launched nothing. See
   [Models through Chopin](agent-connection.md#models-through-chopin).
 - **A build, investigation or prototype** on a paired machine asks with its run
@@ -1232,7 +1235,9 @@ as before. A launch Chopin could not prepare (503) fails the start.
   with the machine token as its bearer. The launch is for whoever started the run,
   on their own machine or a teammate's shared one (as the run's MCP token acts for
   them), on that machine and the run's document, for 5 hours. Only that machine can
-  end it, with the launch credential, which the connector does when the run ends; a
+  end it, with the launch credential, which the connector does when the run ends.
+  Storage keeps the credential's digest and the machine with the launch, so a process
+  started since the launch ends it too; a
   Chopin without people's AI credentials answers 404 and the run's agent uses its
   own models. The connector keeps the launch credential and relays the agent's
   requests (see [Sandbox](chopin-cli.md#sandbox)).

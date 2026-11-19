@@ -563,6 +563,11 @@ export interface AiPlaceholderStore {
 	find(digest: Uint8Array, now: Date): Promise<AiPlaceholder | undefined>;
 	/** Ends a launch: its placeholders stop working. Returns how many there were. */
 	deleteLaunch(lease: Lease, launchId: string): Promise<number>;
+	/**
+	 * Ends the launch whose own credential has this digest, when it was handed out on `machineId`,
+	 * as `deleteLaunch` does: what the machine that holds a launch ends it by, in any process.
+	 */
+	deleteHeldLaunch(lease: Lease, launchDigest: Uint8Array, machineId: string): Promise<number>;
 	/** Every launch on a machine, as revoking it does; returns how many placeholders went. */
 	deleteForMachine(lease: Lease, machineId: string): Promise<number>;
 	deleteExpired(now: Date): Promise<number>;

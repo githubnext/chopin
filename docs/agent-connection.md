@@ -851,7 +851,9 @@ session is one launch, prepared before its `start` or `fork` and carried in `ai`
   `providers` says the session has no grant now.
 - A launch ends with its session (`destroy`, or a link that closes for good), and
   when its machine is revoked or its document archived; Chopin's proxy then answers
-  `launch-ended` (401). A launch that Chopin could not prepare (the person's accounts
+  `launch-ended` (401). A session a server restart keeps for a resume keeps its
+  launch: the next server replaces it when the client resumes, or ends it with the
+  session. A launch that Chopin could not prepare (the person's accounts
   kept changing) fails the session's start with the reason, which can be tried again.
 
 A client that does not offer the feature is sent none of this and uses its own

@@ -246,8 +246,9 @@ durable.
   close keeps it.
   A restart keeps what the cut writes to `planner_link_holds`: the sessions a client holds,
   the questions it waits on (with the decisions each asked, which the next process waits on
-  again so a member's answer reaches the client's own request), the answers it is owed and the
-  Stops it has not heard. Until its window (`HANDOVER_PLANNER_WINDOW_MS`, counted from the
+  again so a member's answer reaches the client's own request), the answers it is owed, the
+  Stops it has not heard and each session's AI launch id, which the next process ends with the
+  session or replaces when its client resumes. Until its window (`HANDOVER_PLANNER_WINDOW_MS`, counted from the
   release of the lease: the next process starts it as it rebuilds the hold, so no step between
   the write and the release, however slow, and no late takeover takes anything from it; only a
   row the cut wrote more than an hour before is no window's) ends, a hold whose link the cut

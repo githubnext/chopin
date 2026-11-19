@@ -3274,6 +3274,7 @@ if (config.agent && config.harness === "remote") {
 				},
 			},
 		}),
+		endAi: launchId => plannerAi?.end(launchId),
 		// A question a rebuilt hold's client asks keeps its document open until it is answered.
 		openDocument: async channelId => {
 			if (deletingChannels.has(channelId) || archivingChannels.has(channelId)) {

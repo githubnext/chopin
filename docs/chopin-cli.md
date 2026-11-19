@@ -810,7 +810,8 @@ runs on those accounts with nothing of yours:
   `~/.atomic/agent`, `~/.atomic/workflows`, `~/.pi/agent`, `~/.copilot`,
   `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`,
   `~/.config/github-copilot` and the directories your environment moves them to
-  are unreadable, and no model key or agent directory variable of yours (from the
+  (`~` and `~/…` from your home, a `file:` URL, a relative path from where the
+  connector started) are unreadable, and no model key or agent directory variable of yours (from the
   connector's environment or `--env`) reaches it.
 - **Atomic** finds a generated `models.json` there that sends each granted
   provider (and `openai-api` and `anthropic-api`) to its base URL on the relay,

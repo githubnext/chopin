@@ -2216,9 +2216,15 @@ test("a build's AI launch is for whoever asked for it, on the build's machine an
 	let builds = new Map<string, { repository: string; starter: string; machineId?: string }>();
 	let launched: AiLaunch[] = [];
 	let ended: string[] = [];
+	/** What storage keeps of each launch: its id and machine, by its credential. */
+	let held = new Map<string, { launchId: string; machineId?: string }>();
 	let credentials = {
 		async launch(input: AiLaunch) {
 			launched.push(input);
+			held.set(`chopin_launch_${launched.length}`, {
+				launchId: `launch-${launched.length}`,
+				...(input.machineId ? { machineId: input.machineId } : {}),
+			});
 			return {
 				launchId: `launch-${launched.length}`,
 				launchToken: `chopin_launch_${launched.length}`,
@@ -2231,17 +2237,25 @@ test("a build's AI launch is for whoever asked for it, on the build's machine an
 				withheld: [{ provider: "github-copilot", reason: "no-copilot-access" }],
 			};
 		},
-		async end(launchId: string) {
-			ended.push(launchId);
+		async endHeld(launchToken: string, machineId: string) {
+			let found = held.get(launchToken);
+			if (!found || found.machineId !== machineId) return false;
+			held.delete(launchToken);
+			ended.push(found.launchId);
+			return true;
 		},
 	} as unknown as AiCredentials;
-	let { alice, documentId, request, pair, runtime } = await setup(undefined, {
+	let options = {
 		ai: () => credentials,
 		implementations: () =>
 			({
 				build: async (document: string, id: string) => builds.get(`${document} ${id}`),
 			}) as unknown as ImplementationConnector,
-	});
+	};
+	let { alice, documentId, request, pair, runtime, storage, lease } = await setup(
+		undefined,
+		options,
+	);
 	let connection = await pair(alice.cookie);
 	let other = await pair(alice.cookie);
 	let id = crypto.randomUUID();
@@ -2279,13 +2293,19 @@ test("a build's AI launch is for whoever asked for it, on the build's machine an
 	expect(await ask("/api/connector/ai-launch/end", { launch: grants.launch }, other.machineToken))
 		.toEqual({ ended: false });
 	expect(ended).toEqual([]);
-	expect(await ask("/api/connector/ai-launch/end", { launch: grants.launch })).toEqual({
-		ended: true,
-	});
+	// The process that handed it out is gone: its successor, on the same storage, ends it.
+	let successor = await setup({ storage, lease }, options);
+	let end = (machineToken: string) =>
+		successor.request(
+			"/api/connector/ai-launch/end",
+			{ launch: grants.launch },
+			undefined,
+			machineToken,
+		)
+			.then(response => response.json());
+	expect(await end(connection.machineToken)).toEqual({ ended: true });
 	expect(ended).toEqual(["launch-1"]);
-	expect(await ask("/api/connector/ai-launch/end", { launch: grants.launch })).toEqual({
-		ended: false,
-	});
+	expect(await end(connection.machineToken)).toEqual({ ended: false });
 	// A build that has ended gets nothing.
 	builds.delete(`${documentId} ${id}`);
 	expect(await ask("/api/connector/ai-launch", { run: runToken })).toMatchObject({
