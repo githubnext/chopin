@@ -13,6 +13,7 @@ import {
 	withoutCredential,
 } from "./accounts";
 import { KeyDialog, RemoveKeyDialog, useDialog } from "./dialogs";
+import { UsageByModel } from "../ai-usage/usage-by-model";
 import { AccountSection } from "./rows";
 
 import type { AiCredentialSummary, AiProvider } from "@chopin/protocol/ai-credentials";
@@ -77,7 +78,7 @@ export function AiAccountsView(
 	);
 }
 
-export default function AiAccountsPage({ usage }: { usage?: ReactNode }) {
+export default function AiAccountsPage() {
 	let heading = useRef<HTMLHeadingElement>(null);
 	let main = useRef<HTMLElement>(null);
 	let [returnTo, setReturnTo] = useState<AiProvider>();
@@ -170,7 +171,7 @@ export default function AiAccountsPage({ usage }: { usage?: ReactNode }) {
 							onAction={act}
 							pending={pending}
 							problem={rowProblem}
-							usage={usage}
+							usage={<UsageByModel />}
 						/>
 					)
 					: problem
