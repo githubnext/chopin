@@ -182,6 +182,8 @@ test.skipIf(!binary)(
 				if (path === "/api/connector/connections") {
 					return Response.json({ token: "connection-token" });
 				}
+				// A Chopin that hands runs no AI launch: the agent uses its own models.
+				if (path === "/api/connector/ai-launch") return new Response(null, { status: 404 });
 				// The run's GitHub token, which the binary asks for before anything starts.
 				let issued = await answerTokens(request);
 				if (issued) return issued;

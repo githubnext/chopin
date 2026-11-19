@@ -14,6 +14,7 @@ import {
 	parseClientMessage,
 	usableCatalog,
 } from "@chopin/agent-link";
+import { AI_RENEW_BEFORE_MS } from "../../ai/launches";
 import { untilUnpaused } from "../atomic/full";
 
 import type {
@@ -24,6 +25,7 @@ import type {
 	HarnessV1StreamPart,
 } from "@ai-sdk/harness";
 import type {
+	AiGrants,
 	CapabilityCatalog,
 	ClientMessage,
 	ClientMessageOf,
@@ -42,6 +44,8 @@ import type { PlannerTurn } from "../turn-level";
 import type { RemotePlanner } from "./registry";
 
 const OPERATION_TIMEOUT_MS = 10_000;
+/** How soon a renewal of a session's AI launch that failed is tried again. */
+const AI_RETRY_MS = 60_000;
 const REVALIDATE_EVERY_MS = 5 * 60_000;
 const MAX_OPEN_INPUTS = 16;
 /** How many settled `input-request` ids a link remembers to refuse their reuse. */
@@ -88,6 +92,21 @@ export type AttachOutcome =
 	}
 	| { ok: false; code: RefusalCode; message: string };
 
+/**
+ * The AI launches of a link's sessions, all for the person the link acts for. Given only to a
+ * link whose client offered `ai-credentials`.
+ */
+export type LinkAi = {
+	/**
+	 * Prepares a launch for a session of the document: what the runner is handed, and the id that
+	 * ends it, absent when it was given nothing. Throws when it could not be prepared now.
+	 */
+	launch(channelId: string): Promise<{ launchId?: string; grants: AiGrants }>;
+	end(launchId: string): void;
+	/** Calls `changed` whenever the person's AI credentials change; returns how to stop. */
+	watch(changed: () => void): () => void;
+};
+
 export type LinkOptions = {
 	/** Resolves the document the client asked for and takes its Planner, or refuses. */
 	attach(message: ClientMessageOf<"attach">): Promise<AttachOutcome>;
@@ -102,6 +121,8 @@ export type LinkOptions = {
 	features?: string[];
 	/** The client reported what it offers, which may be nothing now; read it from `catalog`. */
 	catalogChanged?(): void;
+	/** Launches the sessions' AI, once the client offered `ai-credentials`. */
+	ai?: LinkAi;
 };
 
 const REFUSAL_CLOSE: Record<RefusalCode, number> = {
@@ -235,6 +256,8 @@ type Port = {
 	timeoutMs: number;
 	/** The features the client asked for that this server supports; absent when it asked for none. */
 	features?: readonly string[];
+	/** The sessions' AI launches, when the client offered `ai-credentials`. */
+	ai?: LinkAi;
 };
 
 type Turn = {
@@ -403,6 +426,14 @@ class RemoteSession {
 	#unanswered = new Set<OwedStop>();
 	/** The Stops sent and not yet answered, by control request, for an answer that comes late. */
 	#requests = new Map<string, OwedStop>();
+	/** The session's AI launch: the one the client holds, ended when the session is. */
+	#launchId: string | undefined;
+	/** When the AI launch is next prepared again, ahead of its deadline or after a failure. */
+	#renewal: ReturnType<typeof setTimeout> | undefined;
+	/** Stops hearing of the person's credential changes. */
+	#unwatch: (() => void) | undefined;
+	/** The renewal under way, so renewals run one at a time. */
+	#renewing: Promise<void> = Promise.resolve();
 
 	constructor(id: string, planner: RemotePlanner, port: Port) {
 		this.id = id;
@@ -436,9 +467,11 @@ class RemoteSession {
 				&& this.#port.features.includes(AGENT_FEATURES.capabilityCatalog)
 			? this.planner.choice
 			: undefined;
+		let ai = await this.#launch();
 		let chosen = {
 			...(choice?.model ? { model: choice.model } : {}),
 			...(choice?.thinkingLevel ? { thinkingLevel: choice.thinkingLevel } : {}),
+			...(ai ? { ai } : {}),
 		};
 		let message = forkFrom
 			? { type: "fork" as const, session: this.id, mode, from: forkFrom, ...chosen }
@@ -635,6 +668,71 @@ class RemoteSession {
 		this.planner.stopping = true;
 	}
 
+	/**
+	 * Prepares the session's AI launch for `start` or `fork`, and keeps it current: prepared again
+	 * before its deadline and whenever the person's credentials change. Undefined when the client did
+	 * not offer `ai-credentials`.
+	 */
+	async #launch(): Promise<AiGrants | undefined> {
+		let ai = this.#port.ai;
+		if (!ai) return undefined;
+		let launched = await ai.launch(this.planner.channelId);
+		this.#adopt(ai, launched);
+		return launched.grants;
+	}
+
+	#adopt(ai: LinkAi, launched: { launchId?: string; grants: AiGrants }): void {
+		let previous = this.#launchId;
+		this.#launchId = launched.launchId;
+		if (previous && previous !== launched.launchId) ai.end(previous);
+		this.#unwatch ??= ai.watch(() => this.renewAi());
+		let { expiresAt } = launched.grants;
+		if (expiresAt !== undefined) this.#renewAt(expiresAt - AI_RENEW_BEFORE_MS - Date.now());
+		else clearTimeout(this.#renewal);
+	}
+
+	#renewAt(delay: number): void {
+		clearTimeout(this.#renewal);
+		this.#renewal = setTimeout(() => this.renewAi(), Math.min(Math.max(delay, 0), 2 ** 31 - 1));
+		this.#renewal.unref?.();
+	}
+
+	/**
+	 * Prepares the session's AI launch again and hands the client the new grants in `ai`; the earlier
+	 * launch ends once they are sent. A link that is down sends nothing and keeps the earlier launch,
+	 * for its client's return to renew; a launch that could not be prepared is tried again soon.
+	 */
+	renewAi(): void {
+		this.#renewing = this.#renewing.then(async () => {
+			let ai = this.#port.ai;
+			if (!ai || this.#closed || !this.#acknowledged) return;
+			let launched: { launchId?: string; grants: AiGrants };
+			try {
+				launched = await ai.launch(this.planner.channelId);
+			} catch (error) {
+				console.error("[agent] a session's AI launch could not be prepared again:", error);
+				this.#renewAt(AI_RETRY_MS);
+				return;
+			}
+			if (this.#closed || !this.#port.send({ type: "ai", session: this.id, ai: launched.grants })) {
+				if (launched.launchId) ai.end(launched.launchId);
+				return;
+			}
+			this.#adopt(ai, launched);
+		});
+	}
+
+	/** Ends the session's AI launch, or, when `ended` is false, only stops keeping it current. */
+	#releaseAi(ended = true): void {
+		clearTimeout(this.#renewal);
+		this.#renewal = undefined;
+		this.#unwatch?.();
+		this.#unwatch = undefined;
+		let launchId = this.#launchId;
+		this.#launchId = undefined;
+		if (ended && launchId) this.#port.ai?.end(launchId);
+	}
+
 	/** The client is back on another link, which carries the session from here on. */
 	rebind(port: Port): void {
 		this.#port = port;
@@ -707,6 +805,7 @@ class RemoteSession {
 		}
 		this.#closed = true;
 		this.planner.control = undefined;
+		this.#releaseAi();
 	}
 
 	receive(message: TurnMessage): void {
@@ -1042,6 +1141,8 @@ class RemoteSession {
 				this.#finish(turn);
 			}
 			this.planner.control = undefined;
+			// Its launch lasts to its deadline, for the next process to renew once the client resumes.
+			this.#releaseAi(false);
 			return;
 		}
 		this.#closed = true;
@@ -1051,6 +1152,7 @@ class RemoteSession {
 			this.#finish(turn);
 		}
 		this.planner.control = undefined;
+		this.#releaseAi();
 		this.#port.send({ type: "destroy", session: this.id });
 		this.#port.forget(this.id);
 	}
@@ -1177,6 +1279,9 @@ export class AgentLink {
 			revalidate: () => this.#recheck(),
 			timeoutMs: options.timeoutMs ?? OPERATION_TIMEOUT_MS,
 			...(options.features ? { features: options.features } : {}),
+			...(options.ai && options.features?.includes(AGENT_FEATURES.aiCredentials)
+				? { ai: options.ai }
+				: {}),
 		};
 	}
 
@@ -1716,6 +1821,8 @@ export class AgentLink {
 		if (earlier) results = earlier.#hand(this, held, resumed);
 		this.#send({ type: "resumed", sessions: resumed });
 		for (let { session } of resumed) this.#sessions.get(session)?.deliverHeldStops();
+		// The launch a resumed session held may have ended with its link, or with the process.
+		for (let { session } of resumed) this.#sessions.get(session)?.renewAi();
 		for (let { result, session, delivered } of results) this.#answer(result, session, delivered);
 	}
 

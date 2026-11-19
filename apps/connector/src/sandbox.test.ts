@@ -917,3 +917,53 @@ test("on Linux and macOS a launch's environment goes to the sandbox in a 0600 fi
 		platform: "win32",
 	});
 });
+
+test("an agent given a state directory of its own writes there, and reads none of the owner's agents' setup", () => {
+	let root = mkdtempSync(join(scratch, "agent-home-"));
+	let home = join(root, "home");
+	let base = join(root, "state");
+	let worktree = join(base, "runs", "mine");
+	let agentHome = `${worktree}.agent`;
+	let moved = join(root, "elsewhere-atomic");
+	let owners = [
+		join(home, ".atomic", "agent"),
+		join(home, ".atomic", "workflows"),
+		join(home, ".copilot"),
+		join(home, ".claude"),
+		join(home, ".codex"),
+		join(home, ".config", "github-copilot"),
+		moved,
+	];
+	for (let path of [worktree, agentHome, ...owners]) mkdirSync(path, { recursive: true });
+	writeFileSync(join(home, ".claude.json"), "{}");
+	let temporary = join(root, "tmp");
+	mkdirSync(temporary);
+	let policy = (own: boolean) =>
+		launchPolicy(
+			"bubblewrap",
+			{ ...systemHost({ ATOMIC_CODING_AGENT_DIR: moved }), platform: "linux" },
+			{
+				command: ["atomic-acp"],
+				cwd: worktree,
+				env: { PATH: process.env.PATH, ATOMIC_CODING_AGENT_DIR: join(agentHome, "atomic") },
+				stdin: "pipe",
+				own: [worktree, ...own ? [agentHome] : []],
+				...own ? { agentHome } : {},
+			},
+			{ directory: base, home },
+			"http://127.0.0.1:4000",
+			temporary,
+		);
+	let isolated = policy(true);
+	expect(isolated.writable).toContain(agentHome);
+	expect(isolated.readable).not.toContain(agentHome);
+	expect(isolated.writable).not.toContain(join(home, ".atomic"));
+	for (let path of [...owners, join(home, ".claude.json")]) {
+		expect(isolated.denied, path).toContain(path);
+	}
+	// Without one, an agent keeps its state where the owner's agents do, as before.
+	let shared = policy(false);
+	expect(shared.writable).toContain(join(home, ".atomic"));
+	expect(shared.denied).not.toContain(join(home, ".atomic", "agent"));
+	expect(shared.denied).not.toContain(join(home, ".claude"));
+});

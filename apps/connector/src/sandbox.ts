@@ -28,6 +28,7 @@ import {
 	type Disk,
 	inside,
 	mxcRequest,
+	ownerAgentPaths,
 	type Policy,
 	readableRoots,
 	readGrantsAround,
@@ -38,6 +39,7 @@ import {
 	windowsReadRoots,
 } from "./sandbox-policy";
 import { type Proxy, startProxy } from "./sandbox-proxy";
+import { type AiRelay, startAiRelay } from "./ai-relay";
 
 /** What one agent or Planner process is started with, and what it may touch. */
 export type Launch = {
@@ -64,6 +66,13 @@ export type Launch = {
 	 * directory, but for where commits go (see `gitAccess`).
 	 */
 	own?: string[];
+	/**
+	 * The agent's own state directory, made for this launch and among `own`, in place of the owner's:
+	 * it writes there and nowhere else of an agent's, and reads none of the owner's agents'
+	 * configuration, logins or sessions (see `ownerAgentPaths`). Without it an agent keeps its state
+	 * where the owner's agents do, as before.
+	 */
+	agentHome?: string;
 };
 
 /** A started process: its stdout and stderr are always pipes. */
@@ -74,6 +83,8 @@ export type Sandbox = {
 	report: SandboxReport;
 	/** Start `launch` in the sandbox. Throws a `SandboxRefused` when the owner requires one and there is none. */
 	spawn(launch: Launch): Spawned;
+	/** The loopback relay through which its launches reach Chopin's credential proxy. */
+	aiRelay?: AiRelay;
 	close(): Promise<void>;
 };
 
@@ -247,13 +258,15 @@ export type SandboxOptions = {
 
 /** The sandbox that doesn't confine: where none works or the owner turned it off. */
 function unconfined(report: SandboxReport, refusal?: string): Sandbox {
+	let aiRelay = startAiRelay();
 	return {
 		report,
 		spawn(launch) {
 			if (refusal) throw new SandboxRefused(refusal);
 			return plainSpawn(launch);
 		},
-		close: async () => {},
+		aiRelay,
+		close: () => aiRelay.close(),
 	};
 }
 
@@ -304,14 +317,19 @@ export async function createSandbox(options: SandboxOptions): Promise<Sandbox> {
 		return unconfined(report, refusal);
 	}
 	let engine = report.engine;
+	let aiRelay = startAiRelay();
 	let proxy: Proxy = await startProxy({
-		hosts: allowedHosts(options.server, settings.hosts),
+		hosts: [...allowedHosts(options.server, settings.hosts), aiRelay.host],
 		refused: (name, port) => options.refused?.(name, port),
 	});
 	return {
 		report,
 		spawn: launch => spawnConfined(executor, engine, host, proxy, options, launch),
-		close: () => proxy.close(),
+		aiRelay,
+		close: async () => {
+			await proxy.close();
+			await aiRelay.close();
+		},
 	};
 }
 
@@ -475,7 +493,9 @@ export function launchPolicy(
 ): Policy {
 	let { platform } = host;
 	let home = options.home ?? homedir();
-	let state = agentStateDirectories(launch.command, launch.env, home, platform);
+	let state = launch.agentHome
+		? [launch.agentHome]
+		: agentStateDirectories(launch.command, launch.env, home, platform);
 	for (let directory of state) {
 		try {
 			mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -562,7 +582,11 @@ export function launchPolicy(
 		...repository ? named(repository.commonDir) : [],
 	].filter(path => !written.has(real(path)));
 	let readonlyInside = [...git?.readonlyInside ?? [], ...reopened];
-	let denied = [...secretPaths(platform, home), ...concealed].filter(path => exists(path));
+	let denied = [
+		...secretPaths(platform, home),
+		...launch.agentHome ? ownerAgentPaths(platform, home, host.env) : [],
+		...concealed,
+	].filter(path => exists(path));
 	let env: Record<string, string | undefined> = { ...launch.env };
 	let pathKey = Object.keys(env).find(key => key.toUpperCase() === "PATH") ?? "PATH";
 	env[pathKey] = sandboxPath(env[pathKey], platform, real);

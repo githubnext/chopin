@@ -293,6 +293,7 @@ export class AiCredentials {
 	 * so answers are ordered by when GitHub gave them, not by when they were asked.
 	 */
 	readonly #answers = new Map<string, Record<"access" | "none", number>>();
+	readonly #changed = new Set<(userId: string) => void>();
 
 	constructor(options: AiCredentialsOptions) {
 		this.#storage = options.storage;
@@ -381,6 +382,7 @@ export class AiCredentials {
 			};
 		}
 		await this.#storage.aiCredentials.put(this.#lease(), record);
+		this.#told(userId);
 		return summary(
 			record,
 			provider === "github-copilot"
@@ -391,7 +393,28 @@ export class AiCredentials {
 	}
 
 	async disconnect(userId: string, provider: AiProvider): Promise<boolean> {
-		return this.#storage.aiCredentials.delete(this.#lease(), userId, provider);
+		let removed = await this.#storage.aiCredentials.delete(this.#lease(), userId, provider);
+		if (removed) this.#told(userId);
+		return removed;
+	}
+
+	/**
+	 * Calls `listener` with the person's id once they connected, replaced or removed a provider, so
+	 * a launch that lasts can be prepared again with what they have now. Returns how to stop.
+	 */
+	onChanged(listener: (userId: string) => void): () => void {
+		this.#changed.add(listener);
+		return () => this.#changed.delete(listener);
+	}
+
+	#told(userId: string): void {
+		for (let listener of this.#changed) {
+			try {
+				listener(userId);
+			} catch (err) {
+				console.error("chopin: a change of AI credentials could not be told -", err);
+			}
+		}
 	}
 
 	/**

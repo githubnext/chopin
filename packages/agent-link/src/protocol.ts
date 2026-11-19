@@ -94,7 +94,23 @@ export const AGENT_FEATURES = {
 	 * default. Without the feature neither message has the fields.
 	 */
 	sessionChoice: "session-choice",
+	/**
+	 * `start` and `fork` carry `ai`: what the session's runner is handed for the models it calls,
+	 * in place of any key or sign-in of its own, and an `ai` message replaces it whenever it changes
+	 * (the person connected or removed a provider, or the launch was renewed before its deadline). A
+	 * runner sends each provider's requests to its `baseUrl` with its `placeholder` as the key, and
+	 * adds the launch's own credential in `AI_LAUNCH_HEADER` itself, never handing it to the agent's
+	 * tools. Without the feature neither message has the field and no `ai` message is sent: the
+	 * client uses its own models as before.
+	 */
+	aiCredentials: "ai-credentials",
 } as const;
+
+/**
+ * The header in which a runner sends the launch's own credential (`ai.launch`) with every request
+ * to Chopin's credential proxy. The runner adds it on the way out; the agent never sees it.
+ */
+export const AI_LAUNCH_HEADER = "x-chopin-launch";
 
 /** How often a client that offered `restart-notice` retries a `resume` refused with `retry`. */
 export const RESTART_RESUME_RETRY_MS = 250;
@@ -467,6 +483,31 @@ const heldSessions = z.array(z.strictObject({
 	requests: z.array(id).max(MAX_OPEN_REQUESTS),
 })).max(MAX_RUNS);
 
+/** An environment variable's name, as a runner sets a provider's key variable. */
+const variable = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/);
+
+/**
+ * With `ai-credentials`: what a session's runner is handed for one launch, for the person the
+ * Planner runs for. `launch` is the launch's own credential and `expiresAt` its deadline in
+ * milliseconds since the epoch; both are present exactly when `providers` is not empty. Each of
+ * `providers` is one model provider: its `baseUrl` on Chopin's credential proxy, the `placeholder`
+ * that stands in for the person's key there, and the environment variable (`keyVariable`) agents
+ * read that provider's key from. `withheld` names each provider the person connected that the
+ * launch was not given, with why. An empty `providers` means the runner has no grant now: none
+ * was given, or the ones it had ended.
+ */
+export const aiGrantsSchema = z.strictObject({
+	launch: z.string().min(1).max(256).optional(),
+	expiresAt: count.optional(),
+	providers: z.array(z.strictObject({
+		provider: identifier,
+		baseUrl: z.string().min(1).max(2_048),
+		placeholder: z.string().min(1).max(256),
+		keyVariable: variable,
+	})).max(16),
+	withheld: z.array(z.strictObject({ provider: identifier, reason: identifier })).max(16),
+});
+
 /** Every message a client sends. */
 export const clientMessageSchema = z.discriminatedUnion("type", [
 	z.strictObject({
@@ -579,13 +620,17 @@ export const refusalCodeSchema = z.enum([
 ]);
 
 /**
- * With `session-choice`: the document's chosen model and thinking level, as the client's catalog
- * spelled them, for a session to open on. Absent where nobody chose one, or the catalog no longer
- * offers it: the client uses its own. A turn's own fields, or their absence, still decide it.
+ * What a session opens on. With `session-choice`: the document's chosen model and thinking level,
+ * as the client's catalog spelled them; absent where nobody chose one, or the catalog no longer
+ * offers it, and the client uses its own. A turn's own fields, or their absence, still decide it.
  */
-const sessionChoice = {
+const sessionOpening = {
+	/** With `session-choice`. */
 	model: z.string().optional(),
+	/** With `session-choice`. */
 	thinkingLevel: z.string().optional(),
+	/** With `ai-credentials`: what the session's runner is handed for the models it calls. */
+	ai: aiGrantsSchema.optional(),
 };
 
 /** Every message a server sends. */
@@ -626,7 +671,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 		type: z.literal("start"),
 		session: id,
 		mode: z.enum(["planner", "isolated"]),
-		...sessionChoice,
+		...sessionOpening,
 	}),
 	z.strictObject({
 		type: z.literal("fork"),
@@ -636,7 +681,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 			session: id,
 			turn: id.optional(),
 		}),
-		...sessionChoice,
+		...sessionOpening,
 	}),
 	z.strictObject({
 		type: z.literal("turn"),
@@ -677,6 +722,12 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 	}),
 	z.strictObject({ type: z.literal("abort"), session: id, turn: id }),
 	/**
+	 * With `ai-credentials`: the session's grants changed, and `ai` replaces what `start`, `fork` or
+	 * an earlier `ai` gave. The earlier launch's credential and placeholders stop working; an empty
+	 * `providers` says the session has no grant now.
+	 */
+	z.strictObject({ type: z.literal("ai"), session: id, ai: aiGrantsSchema }),
+	/**
 	 * With `steer-turn`: a person's message for the turn that is running, to read at its next
 	 * step. The client answers with `control-result`, `ok: false` when the turn has ended.
 	 */
@@ -708,6 +759,7 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 ]);
 
 export type CapabilityCatalog = z.infer<typeof capabilityCatalogSchema>;
+export type AiGrants = z.infer<typeof aiGrantsSchema>;
 export type CatalogModel = z.infer<typeof catalogModelSchema>;
 export type TurnAttachment = z.infer<typeof turnAttachment>;
 export type CatalogCommand = z.infer<typeof catalogCommandSchema>;

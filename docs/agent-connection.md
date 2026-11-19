@@ -121,6 +121,7 @@ client must then use none of them.
 | `steer-turn`               | A [`steer`](#server-to-client) message: a person's message for the turn the client is running, read at its next step                                                          |
 | `retry-turn`               | A `turn`'s `message`, the Chat message it answers, and `retry` when it [runs a failed message again](#retrying-a-failed-turn)                                                 |
 | `session-choice`           | With `capability-catalog`, the document's chosen `model` and `thinkingLevel` in [`start` and `fork`](#server-to-client), so a session the client makes opens on them          |
+| `ai-credentials`           | An [AI launch](#models-through-chopin) in `start` and `fork`, and an `ai` message whenever it changes: stand-ins for the person's own AI accounts, reached through Chopin     |
 
 ### Pings
 
@@ -422,8 +423,9 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 ## Server to client
 
 ```text
-{ "type": "start", "session": "", "mode": "planner", "model?": "", "thinkingLevel?": "" }
-{ "type": "fork", "session": "", "mode": "planner", "from": { "session": "", "turn?": "" }, "model?": "", "thinkingLevel?": "" }
+{ "type": "start", "session": "", "mode": "planner", "model?": "", "thinkingLevel?": "", "ai?": {} }
+{ "type": "fork", "session": "", "mode": "planner", "from": { "session": "", "turn?": "" }, "model?": "", "thinkingLevel?": "", "ai?": {} }
+{ "type": "ai", "session": "", "ai": { "launch?": "", "expiresAt?": 0, "providers": [], "withheld": [] } }
 { "type": "turn", "session": "", "turn": "", "prompt": "", "instructions?": "", "model?": "", "thinkingLevel?": "", "attachments?": [{ "id": "", "name": "", "kind": "image", "mediaType": "", "size": 0, "data": "" }], "message?": "", "retry?": true, "tools": [], "responseFormat?": {} }
 { "type": "abort", "session": "", "turn": "" }
 { "type": "steer", "request": "", "session": "", "turn": "", "prompt": "" }
@@ -461,6 +463,8 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   it, even where `start` or `fork` named one: that is how a person choosing
   Default, or clearing the level, reaches a session Chopin keeps, as no new
   `start` is sent for it. Run each turn on its own fields alone.
+- `ai` on `start` and `fork`, and the `ai` message, are sent only to a client that
+  offered `ai-credentials`: see [Models through Chopin](#models-through-chopin).
 - `fork`, with `session-forks`, opens a thread's Planner session branched from
   `from.session` (and `from.turn` when named), preserving the conversation,
   tool results, compaction state and session memory up to that point. Answer
@@ -801,6 +805,57 @@ With `retry-turn`, every `turn` that a person's Chat message began names it:
 
 Nothing here changes an existing message for a client that did not offer the feature, so the
 subprotocol stays `chopin.agent.v1`.
+
+### Models through Chopin
+
+People connect their AI accounts in Chopin once (see
+[AI credentials](hosted-agent.md#ai-credentials)). A client that offers
+`ai-credentials` runs its sessions' models on the account of the person the link
+acts for, without a key or sign-in of its own: the account that attached, which for
+a paired machine's [Planner credential](#credential) is the machine's owner. Each
+session is one launch, prepared before its `start` or `fork` and carried in `ai`:
+
+```json
+{
+	"launch": "chopin_launch_…",
+	"expiresAt": 1700000000000,
+	"providers": [
+		{
+			"provider": "openai",
+			"baseUrl": "https://chopin.example/api/v1/ai/openai/v1",
+			"placeholder": "chopin_ai_…",
+			"keyVariable": "OPENAI_API_KEY"
+		}
+	],
+	"withheld": [{ "provider": "github-copilot", "reason": "no-copilot-access" }]
+}
+```
+
+- Each of `providers` is a provider the session may call: send its requests to
+  `baseUrl` with `placeholder` as the key, where the provider takes it
+  (`Authorization: Bearer`, or `x-api-key` for Anthropic). `keyVariable` is the
+  environment variable that provider's clients read their key from, for an agent
+  that takes its key from there. `withheld` names each provider the person
+  connected that the launch was not given, and why.
+- `launch` is the launch's own credential. The client adds it, in
+  `x-chopin-launch`, to every request to Chopin's credential proxy, and keeps it
+  in its own process: it is never in the environment, files or arguments of the
+  agent's tools, so a stand-in copied out of them reaches nothing. `launch` and
+  `expiresAt`, the launch's deadline in milliseconds since the epoch (12 hours
+  after it began), are present exactly when `providers` is not empty.
+- An `ai` message replaces the session's grants whole: when the person connects,
+  replaces or removes a provider, half an hour before the launch's deadline, and
+  after a [resume](#resuming-after-a-dropped-link), because the launch a session
+  held may have ended with its link or with the server's process. The earlier
+  launch ends once the new one is sent, so use the new grants from then on. An empty
+  `providers` says the session has no grant now.
+- A launch ends with its session (`destroy`, or a link that closes for good), and
+  when its machine is revoked or its document archived; Chopin's proxy then answers
+  `launch-ended` (401). A launch that Chopin could not prepare (the person's accounts
+  kept changing) fails the session's start with the reason, which can be tried again.
+
+A client that does not offer the feature is sent none of this and uses its own
+models, as before.
 
 ### Stream parts
 
@@ -1637,6 +1692,9 @@ pull request (see
   [environment](#environment). The token is never in its arguments; do not log
   it.
 - Keep any worktree of its own at `CHOPIN_WORKTREE`.
+- To run its models on its owner's AI accounts in Chopin, rather than a sign-in
+  of the machine's, offer `ai-credentials` and use each session's
+  [grants](#models-through-chopin), adding the launch's credential itself.
 - Open `/api/v1/agent` on `CHOPIN_URL` offering the `chopin.agent.v1`
   subprotocol, with `Authorization: Bearer <CHOPIN_PLANNER_TOKEN>`, and `attach`
   to `CHOPIN_DOCUMENT`.

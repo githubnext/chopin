@@ -30,6 +30,7 @@ import { credentialDigest } from "./mcp-token";
 import { Connections } from "./connections";
 import { testLease } from "../storage/contract-support";
 import type { ImplementationConnector } from "../tasks/connector";
+import type { AiCredentials, AiLaunch } from "../ai/credentials";
 
 function text(value: { result: { content: Array<{ text: string }> } }) {
 	return JSON.parse(value.result.content[0].text);
@@ -52,6 +53,7 @@ async function setup(
 		/** Whether machines hold their own GitHub authorization, as everywhere but AUTH_MODE=local. */
 		durable?: boolean;
 		app?: GitHubApp;
+		ai?: () => AiCredentials | undefined;
 	} = {},
 ) {
 	let storage = shared?.storage ?? new MemoryStorage();
@@ -2208,6 +2210,88 @@ test("a launch's MCP token reaches Chopin's tools only for its own documents, wh
 	expect(await caller(`chopin_r_${"b".repeat(60)}`)).toBeUndefined();
 	expect(await caller("ghs_installationtoken")).toBeUndefined();
 	expect((await caller("token"))?.user).toMatchObject({ login: "alice" });
+});
+
+test("a build's AI launch is for whoever asked for it, on the build's machine and document, and only that machine ends it", async () => {
+	let builds = new Map<string, { repository: string; starter: string; machineId?: string }>();
+	let launched: AiLaunch[] = [];
+	let ended: string[] = [];
+	let credentials = {
+		async launch(input: AiLaunch) {
+			launched.push(input);
+			return {
+				launchId: `launch-${launched.length}`,
+				launchToken: `chopin_launch_${launched.length}`,
+				grants: [{
+					provider: "openai",
+					baseUrl: "https://chopin.test/api/v1/ai/openai/v1",
+					placeholder: `chopin_ai_${launched.length}`,
+					keyVariable: "OPENAI_API_KEY",
+				}],
+				withheld: [{ provider: "github-copilot", reason: "no-copilot-access" }],
+			};
+		},
+		async end(launchId: string) {
+			ended.push(launchId);
+		},
+	} as unknown as AiCredentials;
+	let { alice, documentId, request, pair, runtime } = await setup(undefined, {
+		ai: () => credentials,
+		implementations: () =>
+			({
+				build: async (document: string, id: string) => builds.get(`${document} ${id}`),
+			}) as unknown as ImplementationConnector,
+	});
+	let connection = await pair(alice.cookie);
+	let other = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	builds.set(`${documentId} ${id}`, {
+		repository: "org/repo",
+		starter: "bob",
+		machineId: connection.machine,
+	});
+	let runToken = runtime.connections.runToken(connection.id, documentId, id, 1, "implementation");
+	let ask = (path: string, body: unknown, machineToken = connection.machineToken) =>
+		request(path, body, undefined, machineToken).then(response => response.json());
+	let grants = await ask("/api/connector/ai-launch", { run: runToken });
+	expect(launched).toEqual([{
+		userId: "bob",
+		machineId: connection.machine,
+		channelId: documentId,
+		expiresAt: expect.any(Date),
+	}]);
+	expect(launched[0]!.expiresAt.getTime()).toBeGreaterThan(Date.now() + 4 * 60 * 60_000);
+	// The runner gets its stand-ins and its own credential, never the launch's id.
+	expect(grants).toEqual({
+		launch: "chopin_launch_1",
+		expiresAt: launched[0]!.expiresAt.getTime(),
+		providers: [{
+			provider: "openai",
+			baseUrl: "https://chopin.test/api/v1/ai/openai/v1",
+			placeholder: "chopin_ai_1",
+			keyVariable: "OPENAI_API_KEY",
+		}],
+		withheld: [{ provider: "github-copilot", reason: "no-copilot-access" }],
+	});
+	// Another machine can't ask for it, nor end it.
+	expect((await ask("/api/connector/ai-launch", { run: runToken }, other.machineToken)).error)
+		.toBeOneOf(["credential-invalid", "run-unknown"]);
+	expect(await ask("/api/connector/ai-launch/end", { launch: grants.launch }, other.machineToken))
+		.toEqual({ ended: false });
+	expect(ended).toEqual([]);
+	expect(await ask("/api/connector/ai-launch/end", { launch: grants.launch })).toEqual({
+		ended: true,
+	});
+	expect(ended).toEqual(["launch-1"]);
+	expect(await ask("/api/connector/ai-launch/end", { launch: grants.launch })).toEqual({
+		ended: false,
+	});
+	// A build that has ended gets nothing.
+	builds.delete(`${documentId} ${id}`);
+	expect(await ask("/api/connector/ai-launch", { run: runToken })).toMatchObject({
+		error: "run-unknown",
+	});
+	expect(launched).toHaveLength(1);
 });
 
 test("a build's MCP token acts as whoever asked for it, on the build's machine, until it ends", async () => {

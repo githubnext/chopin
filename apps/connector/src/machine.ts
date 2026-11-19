@@ -17,6 +17,7 @@ import {
 } from "@chopin/protocol/connector";
 import { redacted } from "./connection";
 import { CONNECTOR_HEADERS, ConnectorError, jsonObject, refusal } from "./mcp";
+import { type AiProviderGrant, isAiProvider } from "@chopin/protocol/ai-credentials";
 import type { Output } from "./output";
 
 /**
@@ -498,6 +499,85 @@ export async function machineMcpToken(
 		throw new Error("Missing token for Chopin's tools.");
 	}
 	return { token: value.token, expiresAt: value.expiresAt };
+}
+
+/**
+ * What Chopin hands one run for the models its agent calls: the launch's own credential and
+ * deadline, present exactly when `providers` is not empty, one stand-in per granted provider, and
+ * the providers the person connected that the launch was not given, with why.
+ */
+export type RunAiLaunch = {
+	launch?: string;
+	expiresAt?: number;
+	providers: AiProviderGrant[];
+	withheld: Array<{ provider: string; reason: string }>;
+};
+
+const VARIABLE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+
+function aiGrant(value: unknown): AiProviderGrant | undefined {
+	if (!value || typeof value !== "object") return undefined;
+	let { provider, baseUrl, placeholder, keyVariable } = value as Record<string, unknown>;
+	if (
+		!isAiProvider(provider) || typeof baseUrl !== "string" || !URL.canParse(baseUrl)
+		|| typeof placeholder !== "string" || !placeholder || typeof keyVariable !== "string"
+		|| !VARIABLE.test(keyVariable)
+	) return undefined;
+	return { provider, baseUrl, placeholder, keyVariable };
+}
+
+/**
+ * Asks Chopin for a run's AI launch with the run's own credential. Undefined from a Chopin that
+ * hands out none (one from before AI launches, or without people's AI credentials): the run's agent
+ * then uses its own models, as before. Any other refusal rejects with the server's code.
+ */
+export async function machineAiLaunch(
+	url: string,
+	token: string,
+	run: string,
+	signal?: AbortSignal,
+): Promise<RunAiLaunch | undefined> {
+	let value: Record<string, unknown>;
+	try {
+		value = await post(url + "/api/connector/ai-launch", { run }, token, signal);
+	} catch (error) {
+		if (error instanceof ConnectorError && (error.code === "not-found" || error.status === 404)) {
+			return undefined;
+		}
+		throw error;
+	}
+	let providers = Array.isArray(value.providers) ? value.providers.map(aiGrant) : undefined;
+	let withheld = Array.isArray(value.withheld)
+		? value.withheld.flatMap(item => {
+			let { provider, reason } = (item ?? {}) as Record<string, unknown>;
+			return typeof provider === "string" && typeof reason === "string"
+				? [{ provider, reason }]
+				: [];
+		})
+		: [];
+	if (!providers || providers.some(grant => !grant)) {
+		throw new Error("Chopin's answer had no usable AI grants.");
+	}
+	if (!providers.length) return { providers: [], withheld };
+	if (typeof value.launch !== "string" || typeof value.expiresAt !== "number") {
+		throw new Error("Chopin's answer had no launch credential for its AI grants.");
+	}
+	return {
+		launch: value.launch,
+		expiresAt: value.expiresAt,
+		providers: providers as AiProviderGrant[],
+		withheld,
+	};
+}
+
+/** Ends a run's AI launch with its own credential, so its stand-ins stop working at once. */
+export async function endMachineAiLaunch(
+	url: string,
+	token: string,
+	launch: string,
+	signal?: AbortSignal,
+): Promise<void> {
+	await post(url + "/api/connector/ai-launch/end", { launch }, token, signal);
 }
 
 /** Why Chopin gives no GitHub token for a launch; none of these is retried. */

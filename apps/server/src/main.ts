@@ -138,6 +138,7 @@ import { aiProxy } from "./ai/proxy";
 import { copilotTokenExchange } from "./ai/copilot";
 import { githubSignIn, registerAiRoutes } from "./ai/routes";
 import { AiUsage } from "./ai/usage";
+import { endLaunch, handOut, PLANNER_AI_LAUNCH_MS } from "./ai/launches";
 import * as Edit from "./plan/edit";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
@@ -196,7 +197,7 @@ import { SERVICE_RESTART } from "@chopin/protocol/restart";
 import { PLANNER_NAME } from "@chopin/protocol/address";
 
 import type { Server, ServerWebSocket } from "bun";
-import type { AgentSocketData } from "./harness/remote/endpoint";
+import type { AgentAi, AgentSocketData } from "./harness/remote/endpoint";
 import type { RepositoryAuthorizer, WatchTopics } from "./socket/decision-watch";
 import type { DocumentSummaryInput } from "./jobs/document-summary";
 import type { JobDefinition } from "./jobs/registry";
@@ -275,6 +276,8 @@ let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
 let aiCredentials: AiCredentials | undefined;
 let aiUsage: AiUsage | undefined;
+/** What a remote Planner client that offered `ai-credentials` hands its sessions' models. */
+let plannerAi: AgentAi | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
 let plannerAttachments: PlannerAttachments | undefined;
 /** Each document's recent automatic follow-ups through `invoke_planner`, for their hourly limit. */
@@ -2252,6 +2255,7 @@ function listen(): Server<SocketData> {
 						pongTimeoutMs: config.agentConnectionTimeoutMs,
 						maxSilenceMs: config.agentConnectionMaxSilenceMs,
 						catalogChanged: announceModel,
+						...(plannerAi ? { ai: plannerAi } : {}),
 					});
 					return;
 				}
@@ -3203,6 +3207,7 @@ let machinePlanners = config.agent && config.harness === "remote"
 	? new MachinePlanners(hostedAuth)
 	: undefined;
 experiments = registerExperimentRoutes(router, hostedAuth, {
+	ai: () => aiCredentials,
 	...(config.auth.app ? { app: new GitHubAppClient(config.auth.app) } : {}),
 	planners: machinePlanners,
 	attachments: () => plannerAttachments,
@@ -3644,6 +3649,15 @@ let connectedAi = new AiCredentials({
 	lease: heldLease,
 });
 aiCredentials = connectedAi;
+plannerAi = {
+	launch: input =>
+		handOut(connectedAi, {
+			...input,
+			expiresAt: new Date(hostedAuth.clock().getTime() + PLANNER_AI_LAUNCH_MS),
+		}),
+	end: launchId => endLaunch(connectedAi, launchId),
+	onChanged: listener => connectedAi.onChanged(listener),
+};
 hostedAuth.machines.onEnded(machineId => {
 	void connectedAi.machineEnded(machineId).catch(err =>
 		console.error("chopin: could not end a machine's AI placeholders -", err)

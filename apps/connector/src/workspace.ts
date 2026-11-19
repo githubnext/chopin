@@ -102,6 +102,15 @@ export function tokenFolder(worktree: string) {
 const TOKENS = ".tokens";
 
 /**
+ * Where a run's agent keeps its state when the run was handed AI grants: `<worktree>.agent`, a
+ * folder of that run alone, in place of the owner's agents' own. It stays with the run's worktree
+ * for inspection, and goes with it.
+ */
+export function agentFolder(worktree: string) {
+	return `${worktree}.agent`;
+}
+
+/**
  * Whether `name`, a folder beside worktrees, is the token folder `tokenFolder` makes for one
  * rather than a worktree: a worktree's name is a segment of a document or attempt id, which never
  * ends so.
@@ -931,6 +940,7 @@ export async function pruneRuns(
 		await rm(path, { recursive: true, force: true });
 		if (where) await gitAsync(["worktree", "prune"], where).catch(() => {});
 		await rm(tokenFolder(path), { recursive: true, force: true });
+		await rm(agentFolder(path), { recursive: true, force: true });
 		for (let file of legacyTokenFiles(path)) await rm(file, { force: true });
 		await rm(join(folder, `${entry.attempt}.json`), { force: true });
 		removed.push(entry.attempt);
