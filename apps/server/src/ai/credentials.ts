@@ -3,6 +3,7 @@ import { createHash, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto"
 import { AI_KEY_VARIABLES, AI_PROXY_PATH } from "@chopin/protocol/ai-credentials";
 
 import { decrypted, encrypted, imported } from "../auth/session";
+import { AI_UPSTREAMS } from "./proxy";
 
 import type {
 	AiCredentialSummary,
@@ -19,26 +20,38 @@ const CREDENTIAL_CONTEXT = "chopin:ai-credential:v1";
 const PLACEHOLDER_PREFIX = "chopin_ai_";
 const PLACEHOLDER = /^chopin_ai_[A-Za-z0-9_-]{43}$/;
 const LAUNCH_PREFIX = "chopin_launch_";
+const LAUNCH = /^chopin_launch_[A-Za-z0-9_-]{43}$/;
 /** A key as providers issue them: printable, without spaces, so it can only ever be a header value. */
 const SECRET = /^[\x21-\x7e]{8,4096}$/;
 /** How long GitHub's answer about a GitHub token's Copilot access, and its Copilot token, is used. */
 const ACCESS_KNOWN_MS = 5 * 60 * 1000;
 /** How long before a Copilot token expires that Chopin asks GitHub for the next one. */
 const RENEW_BEFORE_MS = 60 * 1000;
+/** How many of a key's last characters the list shows, to tell keys apart. */
+const SUFFIX_LENGTH = 4;
+/** How often a credential's last use is saved: the list says when to the minute. */
+const USE_RECORDED_MS = 60 * 1000;
 /** How many times a launch is prepared again when its person's credentials change meanwhile. */
 const LAUNCH_ATTEMPTS = 3;
 
 type Clock = () => Date;
 
-/** Why a connection was refused, said to the person who asked. */
+/** Why a connection was refused, said to the person who asked, with the status that says it. */
 export class AiCredentialError extends Error {
 	override name = "AiCredentialError";
+	constructor(message: string, readonly status = 422) {
+		super(message);
+	}
 }
+
+/** How each provider whose key Chopin checks before saving it is named to the person. */
+const CHECKED: Partial<Record<AiProvider, string>> = { openai: "OpenAI", anthropic: "Anthropic" };
 
 /** Why the proxy refused a request, as it tells the agent that sent it. */
 export type AiRefusal =
 	| "no-placeholder"
 	| "no-launch"
+	| "unknown-launch"
 	| "unknown-placeholder"
 	| "other-provider"
 	| "other-launch"
@@ -111,6 +124,9 @@ export type AiCredentialsOptions = {
 	githubToken: (launch: Pick<AiPlaceholder, "userId" | "machineId">) => Promise<string | undefined>;
 	/** Exchanges a GitHub token for the Copilot token Copilot's model API takes. */
 	copilotToken: CopilotTokenExchange;
+	/** Each provider's origin a key is checked at before it is saved; tests point them at fakes. */
+	upstreams?: Partial<Record<AiProvider, string>>;
+	fetch?: typeof fetch;
 };
 
 function digest(value: string): Uint8Array {
@@ -141,9 +157,20 @@ function summary(record: AiCredentialRecord, copilotAccess?: CopilotAccess): AiC
 	return {
 		provider: record.provider,
 		kind: record.kind,
-		updatedAt: record.updatedAt.toISOString(),
+		...(record.updatedAt.getTime() ? { updatedAt: record.updatedAt.toISOString() } : {}),
+		...(record.suffix ? { suffix: record.suffix } : {}),
+		...(record.lastUsedAt ? { lastUsedAt: record.lastUsedAt.toISOString() } : {}),
 		...(record.provider === "github-copilot" && copilotAccess ? { copilotAccess } : {}),
 	};
+}
+
+/**
+ * GitHub Copilot through the person's GitHub sign-in, which is theirs without connecting it while
+ * no row for it is saved (no token they connected instead); it was never connected, so its time is
+ * the epoch, which the list leaves out.
+ */
+function signIn(userId: string): AiCredentialRecord {
+	return { userId, provider: "github-copilot", kind: "github-sign-in", updatedAt: new Date(0) };
 }
 
 /** Chopin's base URL for a provider's API, which its proxy route serves. */
@@ -167,6 +194,8 @@ export class AiCredentials {
 	readonly #clock: Clock;
 	readonly #githubToken: AiCredentialsOptions["githubToken"];
 	readonly #exchange: CopilotTokenExchange;
+	readonly #upstreams: Partial<Record<AiProvider, string>>;
+	readonly #fetch: typeof fetch;
 	readonly #copilotTokens = new Map<
 		string,
 		{ answer: Promise<CopilotToken | undefined>; until: number }
@@ -181,15 +210,17 @@ export class AiCredentials {
 		this.#clock = options.clock ?? (() => new Date());
 		this.#githubToken = options.githubToken;
 		this.#exchange = options.copilotToken;
+		this.#upstreams = options.upstreams ?? {};
+		this.#fetch = options.fetch ?? fetch;
 	}
 
 	/**
-	 * A person's connected providers, never a secret. GitHub Copilot says whether it has Copilot
-	 * access, asked with the token it was connected with, or for a GitHub sign-in `githubToken`,
-	 * their own sign-in's current token. The answer may be a few minutes old.
+	 * A person's connected providers, never a secret, GitHub Copilot always among them. GitHub Copilot
+	 * says whether it has Copilot access, asked with the token it was connected with, or for a GitHub
+	 * sign-in `githubToken`, their own sign-in's current token. The answer may be a few minutes old.
 	 */
 	async list(userId: string, githubToken?: string): Promise<AiCredentialSummary[]> {
-		let records = await this.#storage.aiCredentials.list(userId);
+		let records = await this.#connected(userId);
 		return Promise.all(records.map(async record =>
 			summary(
 				record,
@@ -200,17 +231,20 @@ export class AiCredentials {
 		));
 	}
 
-	/** Asks GitHub again whether a connected GitHub Copilot has Copilot access, as Check again does. */
-	async check(userId: string, githubToken: string): Promise<AiCredentialSummary | undefined> {
-		let record = await this.#storage.aiCredentials.get(userId, "github-copilot");
-		if (!record) return undefined;
+	/** Asks GitHub again whether the person's GitHub Copilot has Copilot access, as Check again does. */
+	async check(userId: string, githubToken: string): Promise<AiCredentialSummary> {
+		let record = await this.#storage.aiCredentials.get(userId, "github-copilot") ?? signIn(userId);
 		return summary(
 			record,
 			await this.#copilotAccess(await this.#connectedToken(record, githubToken), true),
 		);
 	}
 
-	/** Connects `provider` for `userId`, replacing what they connected for it before. */
+	/**
+	 * Connects `provider` for `userId`, replacing what they connected for it before. An OpenAI or
+	 * Anthropic key is first checked with one request to that provider, and saved only when it is
+	 * accepted, so a refused key never replaces one that works.
+	 */
 	async connect(
 		userId: string,
 		provider: AiProvider,
@@ -231,11 +265,13 @@ export class AiCredentials {
 					"A key is 8 to 4096 printable characters, with no spaces.",
 				);
 			}
+			await this.#checkKey(provider, secret);
 			record = {
 				userId,
 				provider,
 				kind: "api-key",
 				ciphertext: await encrypted(await this.#key, aad(userId, provider), { secret }),
+				suffix: secret.slice(-SUFFIX_LENGTH),
 				updatedAt,
 			};
 		}
@@ -250,6 +286,37 @@ export class AiCredentials {
 
 	disconnect(userId: string, provider: AiProvider): Promise<boolean> {
 		return this.#storage.aiCredentials.delete(userId, provider);
+	}
+
+	/**
+	 * Asks the provider, once, to list its models with `secret`, and throws unless it answers: a
+	 * refusal (401 or 403) says the key is wrong, anything else that the key couldn't be checked.
+	 */
+	async #checkKey(provider: AiProvider, secret: string): Promise<void> {
+		let name = CHECKED[provider];
+		if (!name) return;
+		let headers: Record<string, string> = provider === "anthropic"
+			? { "x-api-key": secret, "anthropic-version": "2023-06-01" }
+			: { authorization: `Bearer ${secret}` };
+		let status: number | undefined;
+		try {
+			let answer = await this.#fetch(
+				`${this.#upstreams[provider] ?? AI_UPSTREAMS[provider]}/v1/models`,
+				{ headers, redirect: "manual", signal: AbortSignal.timeout(10_000) },
+			);
+			status = answer.status;
+			await answer.body?.cancel();
+		} catch {
+			status = undefined;
+		}
+		if (status !== undefined && status >= 200 && status < 300) return;
+		if (status === 401 || status === 403) {
+			throw new AiCredentialError(`${name} refused this key. Check it and try again.`);
+		}
+		throw new AiCredentialError(
+			`Chopin couldn't check this key with ${name} now. Try again in a moment.`,
+			502,
+		);
 	}
 
 	/**
@@ -278,7 +345,7 @@ export class AiCredentials {
 				keyVariable: AI_KEY_VARIABLES[record.provider],
 			}));
 			await this.#storage.aiPlaceholders.put(this.#rows(launchId, launchDigest, input, grants));
-			let current = await this.#storage.aiCredentials.list(input.userId);
+			let current = await this.#connected(input.userId);
 			let kept = admitted.usable.every(record =>
 				unchanged(record, current.find(now => now.provider === record.provider))
 			);
@@ -290,7 +357,7 @@ export class AiCredentials {
 
 	/** The person's connected providers a launch can be given now, and those it can't, with why. */
 	async #admitted(input: AiLaunch) {
-		let connected = await this.#storage.aiCredentials.list(input.userId);
+		let connected = await this.#connected(input.userId);
 		let usable: AiCredentialRecord[] = [];
 		let withheld: AiWithheld[] = [];
 		for (let record of connected) {
@@ -350,6 +417,19 @@ export class AiCredentials {
 	}
 
 	/**
+	 * Whether `launchToken` is the credential of a live launch: one Chopin stored placeholders for,
+	 * unexpired, on a machine not revoked and a document not archived. What a launch's runner may
+	 * read without a placeholder (the model catalog) needs this alone.
+	 */
+	async authorizeLaunch(launchToken: string | undefined): Promise<true | { refused: AiRefusal }> {
+		if (!launchToken) return { refused: "no-launch" };
+		if (!LAUNCH.test(launchToken)) return { refused: "unknown-launch" };
+		let found = await this.#storage.aiPlaceholders.findLaunch(digest(launchToken), this.#clock());
+		if (!found) return { refused: "unknown-launch" };
+		return await this.#launchLive(found) ? true : { refused: "launch-ended" };
+	}
+
+	/**
 	 * The real credential `placeholder` stands for on `provider`'s route, or why there is none. The
 	 * request must come from the launch the placeholder was given to, proved by `launchToken`, the
 	 * launch's own credential that its runner holds and its agent never sees, so a placeholder copied
@@ -402,7 +482,7 @@ export class AiCredentials {
 		let [found, live, record] = await Promise.all([
 			this.#storage.aiPlaceholders.find(placeholder.digest, this.#clock()),
 			this.#launchLive(placeholder),
-			this.#storage.aiCredentials.get(placeholder.userId, placeholder.provider),
+			this.#record(placeholder.userId, placeholder.provider),
 		]);
 		if (!found || found.launchId !== placeholder.launchId || !live) {
 			return { refused: "launch-ended" };
@@ -412,11 +492,22 @@ export class AiCredentials {
 		if (current.expiresAt !== undefined && this.#clock().getTime() >= current.expiresAt) {
 			return { refused: "copilot-unavailable" };
 		}
-		return send(current);
+		let sent = send(current);
+		this.#used(record);
+		return sent;
+	}
+
+	/** Saves that `record` was just sent, unless that was saved less than a minute ago. */
+	#used(record: AiCredentialRecord): void {
+		let now = this.#clock();
+		if (record.lastUsedAt && now.getTime() - record.lastUsedAt.getTime() < USE_RECORDED_MS) return;
+		this.#storage.aiCredentials.used(record, now).catch(err =>
+			console.warn("[ai] couldn't record when a credential was last used", err)
+		);
 	}
 
 	async #credential(found: AiPlaceholder): Promise<AiAuthorized | { refused: AiRefusal }> {
-		let record = await this.#storage.aiCredentials.get(found.userId, found.provider);
+		let record = await this.#record(found.userId, found.provider);
 		if (!record) return { refused: "not-connected" };
 		if (found.provider !== "github-copilot") {
 			let secret = await this.#secret(record);
@@ -442,6 +533,20 @@ export class AiCredentials {
 			expiresAt: copilot.expiresAt,
 			...(copilot.api ? { origin: copilot.api } : {}),
 		};
+	}
+
+	/** A person's saved provider rows, with GitHub Copilot through their sign-in when none is saved. */
+	async #connected(userId: string): Promise<AiCredentialRecord[]> {
+		let records = await this.#storage.aiCredentials.list(userId);
+		return records.some(record => record.provider === "github-copilot")
+			? records
+			: [signIn(userId), ...records];
+	}
+
+	/** A person's credential for `provider`: the saved row, else for GitHub Copilot their sign-in. */
+	async #record(userId: string, provider: AiProvider): Promise<AiCredentialRecord | undefined> {
+		let record = await this.#storage.aiCredentials.get(userId, provider);
+		return record ?? (provider === "github-copilot" ? signIn(userId) : undefined);
 	}
 
 	async #launchLive(placeholder: AiPlaceholder): Promise<boolean> {

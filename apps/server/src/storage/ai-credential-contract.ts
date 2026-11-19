@@ -86,6 +86,45 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		test("keeps a key's suffix, and records its last use for the credential used alone, never moving it back", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId } = await userAndChannel(storage);
+				let key: AiCredentialRecord = {
+					userId,
+					provider: "anthropic",
+					kind: "api-key",
+					ciphertext: bytes(48),
+					suffix: "6789",
+					updatedAt: AT,
+				};
+				await storage.aiCredentials.put(key);
+				expect(await storage.aiCredentials.get(userId, "anthropic")).toEqual(key);
+
+				await storage.aiCredentials.used(key, later(60));
+				await storage.aiCredentials.used(key, later(30));
+				expect(await storage.aiCredentials.get(userId, "anthropic")).toEqual({
+					...key,
+					lastUsedAt: later(60),
+				});
+
+				let replaced = { ...key, ciphertext: bytes(48), suffix: "4321" };
+				await storage.aiCredentials.put(replaced);
+				await storage.aiCredentials.used(key, later(90));
+				expect(await storage.aiCredentials.get(userId, "anthropic")).toEqual(replaced);
+				await storage.aiCredentials.used(replaced, later(120));
+				expect(await storage.aiCredentials.list(userId)).toEqual([
+					{ ...replaced, lastUsedAt: later(120) },
+				]);
+
+				await storage.aiCredentials.delete(userId, "anthropic");
+				await storage.aiCredentials.used(replaced, later(150));
+				expect(await storage.aiCredentials.get(userId, "anthropic")).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
 		test("finds a placeholder by its digest until it expires, and refuses a repeated digest", async () => {
 			let storage = await openedStorage(factory);
 			try {
@@ -99,6 +138,12 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 				expect(await storage.aiPlaceholders.find(unbound.digest, AT)).toEqual(unbound);
 				expect(await storage.aiPlaceholders.find(stored.digest, later(900))).toBeUndefined();
 				expect(await storage.aiPlaceholders.find(bytes(32), AT)).toBeUndefined();
+				expect((await storage.aiPlaceholders.findLaunch(stored.launchDigest, AT))?.launchId).toBe(
+					stored.launchId,
+				);
+				expect(await storage.aiPlaceholders.findLaunch(stored.launchDigest, later(900)))
+					.toBeUndefined();
+				expect(await storage.aiPlaceholders.findLaunch(bytes(32), AT)).toBeUndefined();
 
 				expect(
 					await failure(() => storage.aiPlaceholders.put([placeholder({ digest: stored.digest })])),

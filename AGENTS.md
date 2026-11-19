@@ -158,8 +158,11 @@ durable.
   placeholders, and archiving a document deletes them for good. Copilot is sent
   only the Copilot token Chopin exchanges the person's GitHub token for and renews,
   never the GitHub token and never one past its expiry; a launch gets a Copilot
-  placeholder only when GitHub gives that token a Copilot token at launch, and no
-  placeholder for a provider its person can't use. Handing placeholders to runners
+  placeholder only when GitHub gives that token a Copilot token at launch (through
+  the person's sign-in unless they connected a token instead), and no
+  placeholder for a provider its person can't use. An OpenAI or Anthropic key is
+  saved only once that provider accepts it. The model catalog route serves only a
+  live launch's credential. Handing placeholders to runners
   is not wired yet. See [Hosted agent](docs/hosted-agent.md#ai-credentials).
 - **Planner ownership is process-bound.** The first eligible Planner or
   model-backed research request supplies its GitHub App token and Copilot

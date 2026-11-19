@@ -28,7 +28,7 @@ function empty(status: number): Response {
 }
 
 function failed(err: unknown): Response {
-	if (err instanceof AiCredentialError) return json({ error: err.message }, 422);
+	if (err instanceof AiCredentialError) return json({ error: err.message }, err.status);
 	if (err instanceof StorageError && err.failure === "unavailable") {
 		return json({ error: "storage is unavailable" }, 503);
 	}
@@ -128,8 +128,7 @@ export function registerAiRoutes(
 		try {
 			let session = await auth.sessions.authenticate(request);
 			if (!session) return json({ error: "authentication required" }, 401);
-			let checked = await credentials.check(session.user.id, session.access.token);
-			return checked ? json(checked) : json({ error: "GitHub Copilot is not connected" }, 404);
+			return json(await credentials.check(session.user.id, session.access.token));
 		} catch (err) {
 			return failed(err);
 		}

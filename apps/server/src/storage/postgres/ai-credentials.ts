@@ -9,7 +9,9 @@ type CredentialRow = {
 	provider: AiCredentialRecord["provider"];
 	kind: AiCredentialRecord["kind"];
 	ciphertext: Uint8Array | null;
+	suffix: string | null;
 	updatedAt: Date | string;
+	lastUsedAt: Date | string | null;
 };
 
 type PlaceholderRow = {
@@ -23,8 +25,8 @@ type PlaceholderRow = {
 	expiresAt: Date | string;
 };
 
-const CREDENTIAL_COLUMNS = `user_id AS "userId", provider, kind, ciphertext,
-	updated_at AS "updatedAt"`;
+const CREDENTIAL_COLUMNS = `user_id AS "userId", provider, kind, ciphertext, suffix,
+	updated_at AS "updatedAt", last_used_at AS "lastUsedAt"`;
 const PLACEHOLDER_COLUMNS = `digest, launch_id AS "launchId",
 	launch_digest AS "launchDigest", user_id AS "userId", provider,
 	machine_id AS "machineId", channel_id AS "channelId", expires_at AS "expiresAt"`;
@@ -36,7 +38,9 @@ function credential(row: CredentialRow): AiCredentialRecord {
 		provider: row.provider,
 		kind: row.kind,
 		...(row.ciphertext ? { ciphertext: new Uint8Array(row.ciphertext) } : {}),
+		...(row.suffix ? { suffix: row.suffix } : {}),
 		updatedAt: new Date(row.updatedAt),
+		...(row.lastUsedAt ? { lastUsedAt: new Date(row.lastUsedAt) } : {}),
 	};
 }
 
@@ -58,15 +62,19 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 	put(record: AiCredentialRecord) {
 		return this.run("save an AI credential", async () => {
 			await this.sql`
-				INSERT INTO ai_credentials (user_id, provider, kind, ciphertext, updated_at)
+				INSERT INTO ai_credentials (
+					user_id, provider, kind, ciphertext, suffix, updated_at, last_used_at
+				)
 				VALUES (
 					${record.userId}, ${record.provider}, ${record.kind}, ${record.ciphertext ?? null},
-					${record.updatedAt}
+					${record.suffix ?? null}, ${record.updatedAt}, ${record.lastUsedAt ?? null}
 				)
 				ON CONFLICT (user_id, provider) DO UPDATE SET
 					kind = EXCLUDED.kind,
 					ciphertext = EXCLUDED.ciphertext,
-					updated_at = EXCLUDED.updated_at
+					suffix = EXCLUDED.suffix,
+					updated_at = EXCLUDED.updated_at,
+					last_used_at = EXCLUDED.last_used_at
 			`;
 		});
 	}
@@ -97,6 +105,17 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 			return removed.length > 0;
 		});
 	}
+	used(record: AiCredentialRecord, at: Date) {
+		return this.run("record an AI credential's use", async () => {
+			await this.sql`
+				UPDATE ai_credentials SET last_used_at = ${at}
+				WHERE user_id = ${record.userId} AND provider = ${record.provider}
+					AND updated_at = ${record.updatedAt}
+					AND ciphertext IS NOT DISTINCT FROM ${record.ciphertext ?? null}
+					AND (last_used_at IS NULL OR last_used_at < ${at})
+			`;
+		});
+	}
 }
 
 export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
@@ -125,6 +144,16 @@ export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
 			let [row] = await this.sql<PlaceholderRow[]>`
 				SELECT ${this.sql.unsafe(PLACEHOLDER_COLUMNS)} FROM ai_placeholders
 				WHERE digest = ${digest} AND expires_at > ${now}
+			`;
+			return row && placeholder(row);
+		});
+	}
+	findLaunch(launchDigest: Uint8Array, now: Date) {
+		return this.run("read an AI launch", async () => {
+			let [row] = await this.sql<PlaceholderRow[]>`
+				SELECT ${this.sql.unsafe(PLACEHOLDER_COLUMNS)} FROM ai_placeholders
+				WHERE launch_digest = ${launchDigest} AND expires_at > ${now}
+				LIMIT 1
 			`;
 			return row && placeholder(row);
 		});
