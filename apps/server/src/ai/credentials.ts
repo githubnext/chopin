@@ -25,6 +25,8 @@ const SECRET = /^[\x21-\x7e]{8,4096}$/;
 const ACCESS_KNOWN_MS = 5 * 60 * 1000;
 /** How long before a Copilot token expires that Chopin asks GitHub for the next one. */
 const RENEW_BEFORE_MS = 60 * 1000;
+/** How many times a launch is prepared again when its person's credentials change meanwhile. */
+const LAUNCH_ATTEMPTS = 3;
 
 type Clock = () => Date;
 
@@ -42,6 +44,7 @@ export type AiRefusal =
 	| "other-launch"
 	| "launch-ended"
 	| "not-connected"
+	| "credential-changed"
 	| "sign-in-unavailable"
 	| "no-copilot-access"
 	| "copilot-unavailable";
@@ -49,10 +52,13 @@ export type AiRefusal =
 /**
  * The credential a placeholder stands for now: `secret` goes in the provider's credential header,
  * and `origin` (for Copilot, the account's own model host) replaces the provider's default origin.
- * A Copilot token is good until `expiresAt` (milliseconds since the epoch) and never after.
+ * `record` is the person's credential as it was read, which must still be theirs, unchanged, when
+ * the request is sent. A Copilot token is good until `expiresAt` (milliseconds since the epoch) and
+ * never after.
  */
 export type AiAuthorized = {
 	placeholder: AiPlaceholder;
+	record: AiCredentialRecord;
 	secret: string;
 	origin?: string;
 	expiresAt?: number;
@@ -113,6 +119,22 @@ function digest(value: string): Uint8Array {
 
 function aad(userId: string, provider: AiProvider) {
 	return `${CREDENTIAL_CONTEXT}:${userId}:${provider}`;
+}
+
+/**
+ * Whether `current` is still the credential `read` was: the same person, provider and kind,
+ * connected at the same time, and for a key the same ciphertext, which every connect makes anew
+ * with a fresh nonce, so a key replaced, or removed and added again, is never the same.
+ */
+function unchanged(read: AiCredentialRecord, current: AiCredentialRecord | undefined): boolean {
+	return current !== undefined
+		&& current.userId === read.userId
+		&& current.provider === read.provider
+		&& current.kind === read.kind
+		&& current.updatedAt.getTime() === read.updatedAt.getTime()
+		&& (current.ciphertext && read.ciphertext
+			? Buffer.from(current.ciphertext).equals(read.ciphertext)
+			: !current.ciphertext && !read.ciphertext);
 }
 
 function summary(record: AiCredentialRecord, copilotAccess?: CopilotAccess): AiCredentialSummary {
@@ -233,14 +255,41 @@ export class AiCredentials {
 	/**
 	 * Placeholders for one launch, one per provider its person can use now, stored before they are
 	 * returned. GitHub Copilot is given only when GitHub gives the person's GitHub token a Copilot
-	 * token at this launch; otherwise it is `withheld`, with the reason. A provider disconnected
-	 * while the launch was being prepared is not given either. With no grants nothing is stored, and
-	 * the caller starts no runner.
+	 * token at this launch; otherwise it is `withheld`, with the reason. Once they are stored, the
+	 * person's credentials are read again, and a launch whose granted providers did not all keep the
+	 * credential they were admitted with (one disconnected, replaced, or removed and added again
+	 * meanwhile) takes its placeholders back and is prepared afresh, at most `LAUNCH_ATTEMPTS` times,
+	 * so no grant is returned for a credential that changed before it was handed out. With no grants
+	 * nothing is stored, and the caller starts no runner.
 	 */
 	async launch(input: AiLaunch): Promise<AiLaunchGrants> {
 		let launchId = crypto.randomUUID();
 		let launchToken = LAUNCH_PREFIX + randomBytes(32).toString("base64url");
 		let launchDigest = digest(launchToken);
+		let withheld: AiWithheld[] = [];
+		for (let attempt = 0; attempt < LAUNCH_ATTEMPTS; attempt++) {
+			let admitted = await this.#admitted(input);
+			withheld = admitted.withheld;
+			if (!admitted.usable.length) break;
+			let grants: AiProviderGrant[] = admitted.usable.map(record => ({
+				provider: record.provider,
+				baseUrl: aiBaseUrl(this.#origin, record.provider),
+				placeholder: PLACEHOLDER_PREFIX + randomBytes(32).toString("base64url"),
+				keyVariable: AI_KEY_VARIABLES[record.provider],
+			}));
+			await this.#storage.aiPlaceholders.put(this.#rows(launchId, launchDigest, input, grants));
+			let current = await this.#storage.aiCredentials.list(input.userId);
+			let kept = admitted.usable.every(record =>
+				unchanged(record, current.find(now => now.provider === record.provider))
+			);
+			if (kept) return { launchId, launchToken, grants, withheld };
+			await this.#storage.aiPlaceholders.deleteLaunch(launchId);
+		}
+		return { launchId, launchToken, grants: [], withheld };
+	}
+
+	/** The person's connected providers a launch can be given now, and those it can't, with why. */
+	async #admitted(input: AiLaunch) {
 		let connected = await this.#storage.aiCredentials.list(input.userId);
 		let usable: AiCredentialRecord[] = [];
 		let withheld: AiWithheld[] = [];
@@ -265,24 +314,7 @@ export class AiCredentials {
 			}
 			usable.push(record);
 		}
-		let grants: AiProviderGrant[] = usable.map(record => ({
-			provider: record.provider,
-			baseUrl: aiBaseUrl(this.#origin, record.provider),
-			placeholder: PLACEHOLDER_PREFIX + randomBytes(32).toString("base64url"),
-			keyVariable: AI_KEY_VARIABLES[record.provider],
-		}));
-		if (!grants.length) return { launchId, launchToken, grants, withheld };
-		let rows = (kept: AiProviderGrant[]) => this.#rows(launchId, launchDigest, input, kept);
-		await this.#storage.aiPlaceholders.put(rows(grants));
-		let still = new Set(
-			(await this.#storage.aiCredentials.list(input.userId)).map(record => record.provider),
-		);
-		let kept = grants.filter(grant => still.has(grant.provider));
-		if (kept.length !== grants.length) {
-			await this.#storage.aiPlaceholders.deleteLaunch(launchId);
-			if (kept.length) await this.#storage.aiPlaceholders.put(rows(kept));
-		}
-		return { launchId, launchToken, grants: kept, withheld };
+		return { usable, withheld };
 	}
 
 	#rows(
@@ -346,27 +378,41 @@ export class AiCredentials {
 	}
 
 	/**
-	 * What the proxy may send now, asked again at the final handoff once the request's body is read:
-	 * refused when its launch ended or expired, its machine was revoked, its document archived or
-	 * its person disconnected the provider meanwhile, and for a Copilot token that expired
-	 * meanwhile, the next one, or a refusal; never an expired token.
+	 * Sends a request through `send` with what the proxy may send now, decided at the final handoff
+	 * once the request's body is read. A Copilot token that expired meanwhile is renewed first. Then,
+	 * after any renewal, the launch, its machine, its document and the person's credential are read
+	 * again together, and `send` is called in the same step as that check, with nothing awaited
+	 * between: the request is refused when its launch ended or expired, its machine was revoked or
+	 * its document archived (`launch-ended`), when its person disconnected the provider
+	 * (`not-connected`), or when the credential it was admitted with was replaced, or removed and
+	 * connected again (`credential-changed`), so a request never carries a credential its person no
+	 * longer has, nor an expired Copilot token.
 	 */
-	async handoff(authorized: AiAuthorized): Promise<AiAuthorized | { refused: AiRefusal }> {
-		let found = await this.#storage.aiPlaceholders.find(
-			authorized.placeholder.digest,
-			this.#clock(),
-		);
-		if (!found || found.launchId !== authorized.placeholder.launchId) {
+	async handoff<T>(
+		authorized: AiAuthorized,
+		send: (authorized: AiAuthorized) => T,
+	): Promise<T | { refused: AiRefusal }> {
+		let current = authorized;
+		if (current.expiresAt !== undefined && this.#clock().getTime() >= current.expiresAt) {
+			let renewed = await this.#credential(current.placeholder);
+			if ("refused" in renewed) return renewed;
+			current = renewed;
+		}
+		let placeholder = current.placeholder;
+		let [found, live, record] = await Promise.all([
+			this.#storage.aiPlaceholders.find(placeholder.digest, this.#clock()),
+			this.#launchLive(placeholder),
+			this.#storage.aiCredentials.get(placeholder.userId, placeholder.provider),
+		]);
+		if (!found || found.launchId !== placeholder.launchId || !live) {
 			return { refused: "launch-ended" };
 		}
-		if (!await this.#launchLive(found)) return { refused: "launch-ended" };
-		if (authorized.expiresAt !== undefined && this.#clock().getTime() >= authorized.expiresAt) {
-			return this.#credential(found);
+		if (!record) return { refused: "not-connected" };
+		if (!unchanged(authorized.record, record)) return { refused: "credential-changed" };
+		if (current.expiresAt !== undefined && this.#clock().getTime() >= current.expiresAt) {
+			return { refused: "copilot-unavailable" };
 		}
-		if (!await this.#storage.aiCredentials.get(found.userId, found.provider)) {
-			return { refused: "not-connected" };
-		}
-		return authorized;
+		return send(current);
 	}
 
 	async #credential(found: AiPlaceholder): Promise<AiAuthorized | { refused: AiRefusal }> {
@@ -374,7 +420,7 @@ export class AiCredentials {
 		if (!record) return { refused: "not-connected" };
 		if (found.provider !== "github-copilot") {
 			let secret = await this.#secret(record);
-			return secret ? { placeholder: found, secret } : { refused: "not-connected" };
+			return secret ? { placeholder: found, record, secret } : { refused: "not-connected" };
 		}
 		let token = await this.#launchToken(record, found);
 		if (!token) {
@@ -391,6 +437,7 @@ export class AiCredentials {
 		if (!copilot) return { refused: "no-copilot-access" };
 		return {
 			placeholder: found,
+			record,
 			secret: copilot.token,
 			expiresAt: copilot.expiresAt,
 			...(copilot.api ? { origin: copilot.api } : {}),
@@ -398,14 +445,12 @@ export class AiCredentials {
 	}
 
 	async #launchLive(placeholder: AiPlaceholder): Promise<boolean> {
-		if (placeholder.machineId) {
-			let machine = await this.#storage.machines.get(placeholder.machineId);
-			if (!machine || machine.revokedAt) return false;
-		}
-		if (placeholder.channelId) {
-			let channel = await this.#storage.channels.get(placeholder.channelId);
-			if (!channel || channel.archivedAt) return false;
-		}
+		let [machine, channel] = await Promise.all([
+			placeholder.machineId ? this.#storage.machines.get(placeholder.machineId) : undefined,
+			placeholder.channelId ? this.#storage.channels.get(placeholder.channelId) : undefined,
+		]);
+		if (placeholder.machineId && (!machine || machine.revokedAt)) return false;
+		if (placeholder.channelId && (!channel || channel.archivedAt)) return false;
 		return true;
 	}
 

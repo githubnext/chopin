@@ -895,10 +895,12 @@ background work.
 
 ## AI credentials
 
-People connect their AI credentials in Chopin once, so a runner that does their
-work needs no model sign-in or key of its own: GitHub Copilot (through the GitHub
-sign-in Chopin already holds for them, or a personal access token), an OpenAI API
-key, and an Anthropic API key.
+People connect their AI credentials in Chopin once: GitHub Copilot (through the
+GitHub sign-in Chopin already holds for them, or a personal access token), an
+OpenAI API key, and an Anthropic API key. The server keeps them and serves them
+through its credential proxy now; runners receiving only placeholders, with no
+model sign-in or key of their own, arrives with the runner handoff (see the end
+of this section).
 
 ```text
 GET    /api/ai/credentials
@@ -921,8 +923,12 @@ base64url characters), the provider's base URL on Chopin, and the environment
 variable agents read that provider's key from
 (`AiProviderGrant` in `packages/protocol/ai-credentials.ts`). Chopin keeps only
 each placeholder's SHA-256 digest (`ai_placeholders`), written before the
-placeholder is handed out, and gives nothing for a provider disconnected while
-the launch was being prepared. A placeholder works until its launch ends or
+placeholder is handed out. Once they are written it reads the person's
+credentials again: a launch whose providers did not all keep the credential they
+were admitted with (one disconnected, replaced, or removed and added again
+meanwhile) takes its placeholders back and is prepared afresh, at most three
+times, so no placeholder is handed out for a credential that changed before it
+was. A placeholder works until its launch ends or
 expires, and is refused once the launch's machine is revoked or its document is
 deleted. Archiving a document deletes its launches' placeholders in the same
 transaction, so restoring it brings none back. A launch also says which
@@ -961,20 +967,32 @@ placeholder can't reach Copilot's other services (its MCP server among them). A
 request must carry a live launch's placeholder for that provider in
 `Authorization: Bearer` or `x-api-key`, only one value across the two, and that
 same launch's credential in `x-chopin-launch`. The proxy drops these headers,
-the caller's cookies and forwarding headers, reads the body, checks again that
-the launch is live and the provider still connected (and takes the next Copilot
-token for one that expired meanwhile), puts the real credential of the person the launch runs for in the one header the
+the caller's cookies and forwarding headers, and reads the body. Then, at the
+final handoff, it takes the next Copilot token for one that expired meanwhile,
+and after that reads the launch, its machine, its document and the person's
+credential again together, and sends in the same step as that check: a launch
+ended, a machine revoked or a document archived meanwhile, during a Copilot
+renewal included, sends nothing (`launch-ended`), nor does a provider
+disconnected (`not-connected`) or a credential replaced, or removed and
+connected again, since the request was admitted (`credential-changed`), so the
+provider never sees a key its person no longer has. It puts the real credential
+of the person the launch runs for in the one header the
 provider takes, and sends the method, path, query and body unchanged to the
 provider's own origin. The path cannot name another host. A placeholder anywhere
 else (the query, another header, the body) is sent on as the placeholder it is.
 A redirect is returned to the agent, never followed with the credential. The
 response streams back with the provider's status code but not its reason phrase,
-without the provider's cookies, without any header that holds the credential,
-and with the credential replaced by `[redacted]` wherever the body holds it,
-even split across chunks. Refusals are JSON with a `code`: `no-placeholder`,
-`no-launch`, `unknown-placeholder`, `other-provider`, `other-launch` or
-`launch-ended` (401), `not-connected`, `sign-in-unavailable` or
-`no-copilot-access` (403), and `copilot-unavailable` (502).
+with only the headers model clients read (`RETURNED_RESPONSE` in `proxy.ts`: the
+content type, caching, validators, `location`, retry and rate-limit headers and
+request IDs; `Cache-Control: no-store` when the provider sends none), and with
+the credential replaced by `[redacted]` wherever one of those headers or the
+body holds it, even split across chunks. A body in a content coding the proxy
+can't decode, which it could not take the credential out of, is refused with
+`upstream-encoding` (502) and none of it is passed back. Refusals are JSON with
+a `code`: `no-placeholder`, `no-launch`, `unknown-placeholder`,
+`other-provider`, `other-launch` or `launch-ended` (401), `not-connected`,
+`sign-in-unavailable` or `no-copilot-access` (403), `credential-changed` (409,
+which clients send again), and `copilot-unavailable` (502).
 
 **GitHub Copilot.** Copilot's model API takes a Copilot token, which GitHub
 exchanges a GitHub token for (`GET /copilot_internal/v2/token` on

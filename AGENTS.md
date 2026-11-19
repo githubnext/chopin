@@ -148,10 +148,13 @@ durable.
   the agent, all kept only as digests; `/api/v1/ai/<provider>/` serves only that
   provider's model API routes, accepts a placeholder only from a live launch, in
   `Authorization` or `x-api-key`, with that same launch's credential in
-  `x-chopin-launch`, checks the launch again once the body is read, swaps the
+  `x-chopin-launch`, checks the launch, its machine, its document and the person's
+  credential again once the body is read, after any Copilot renewal and in the same
+  step as the send (a credential replaced or removed meanwhile is never sent), swaps the
   placeholder for the real credential of the launch's person in that provider's
   one header, forwards to that provider's fixed origin, following no redirect, and
-  takes the credential out of what it answers. A revoked machine ends its launches'
+  passes back only allow-listed response headers, with the credential taken out of
+  them and the body. A revoked machine ends its launches'
   placeholders, and archiving a document deletes them for good. Copilot is sent
   only the Copilot token Chopin exchanges the person's GitHub token for and renews,
   never the GitHub token and never one past its expiry; a launch gets a Copilot
