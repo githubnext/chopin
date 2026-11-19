@@ -53,7 +53,7 @@ export function AccountRowView(
 ) {
 	let checking = busy?.provider === row.provider && busy.action === "check-again";
 	return (
-		<li className="ai-account">
+		<li className="ai-account" data-provider={row.provider}>
 			<span aria-hidden="true" className="ai-account-mark">
 				{row.provider === "github-copilot" ? <GitHubIcon size={18} /> : <KeyIcon size={18} />}
 			</span>
