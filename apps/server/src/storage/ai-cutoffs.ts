@@ -3,8 +3,9 @@
  * ended, a machine revoked or its launches ended, a document archived, and a credential connected,
  * replaced or removed, which also counts for its person. Each is counted once its write has
  * settled and before its caller hears so. One process serves a database at a time, under the
- * writer lease, so a count read before a read and found the same after it says that no such write
- * completed while the read was made.
+ * writer lease, so while it holds the lease a count read before a read and found the same after it
+ * says that no such write completed while the read was made. A successor's writes are not counted
+ * here: a process sends nothing once its lease is released, lost or past its deadline.
  */
 export class AiCutoffs {
 	#all = 0;

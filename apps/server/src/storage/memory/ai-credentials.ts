@@ -75,6 +75,8 @@ export class MemoryAiPlaceholderStore implements AiPlaceholderStore {
 			userExists: (id: string) => boolean;
 			machineExists: (id: string) => boolean;
 			channelExists: (id: string) => boolean;
+			/** A document's archive generation while it is open, else undefined. */
+			generation: (channelId: string) => number | undefined;
 			cutoffs: AiCutoffs;
 		},
 	) {}
@@ -96,9 +98,19 @@ export class MemoryAiPlaceholderStore implements AiPlaceholderStore {
 			}
 			keys.add(key);
 		}
+		if (
+			placeholders.some(placeholder =>
+				placeholder.channelId
+				&& this.deps.generation(placeholder.channelId) !== placeholder.generation
+			)
+		) return false;
 		for (let placeholder of placeholders) {
 			this.#placeholders.set(hex(placeholder.digest), copyPlaceholder(placeholder));
 		}
+		return true;
+	}
+	async generation(channelId: string) {
+		return this.deps.generation(channelId);
 	}
 	async find(digest: Uint8Array, now: Date) {
 		let found = this.#placeholders.get(hex(digest));

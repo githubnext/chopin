@@ -1090,7 +1090,8 @@ export class PostgresStorage implements StorageAdapter {
 					let archivedAt = archived ? updatedAt : null;
 					let [saved] = await transaction<ChannelRow[]>`
 					UPDATE channels
-					SET archived_at = ${archivedAt}, updated_at = ${updatedAt}
+					SET archived_at = ${archivedAt}, updated_at = ${updatedAt},
+						archive_generation = archive_generation + ${archived ? 1 : 0}
 					WHERE id = ${input.id}
 					RETURNING ${transaction.unsafe(CHANNEL_RETURNING)}
 				`;

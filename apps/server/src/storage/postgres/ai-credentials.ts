@@ -23,6 +23,7 @@ type PlaceholderRow = {
 	provider: AiPlaceholder["provider"];
 	machineId: string | null;
 	channelId: string | null;
+	generation: number | null;
 	expiresAt: Date | string;
 };
 
@@ -30,7 +31,8 @@ const CREDENTIAL_COLUMNS = `user_id AS "userId", provider, kind, ciphertext, suf
 	updated_at AS "updatedAt", last_used_at AS "lastUsedAt"`;
 const PLACEHOLDER_COLUMNS = `digest, launch_id AS "launchId",
 	launch_digest AS "launchDigest", user_id AS "userId", provider,
-	machine_id AS "machineId", channel_id AS "channelId", expires_at AS "expiresAt"`;
+	machine_id AS "machineId", channel_id AS "channelId", archive_generation AS "generation",
+	expires_at AS "expiresAt"`;
 const PROVIDER_ORDER = `CASE provider WHEN 'github-copilot' THEN 0 WHEN 'openai' THEN 1 ELSE 2 END`;
 
 function credential(row: CredentialRow): AiCredentialRecord {
@@ -54,6 +56,7 @@ function placeholder(row: PlaceholderRow): AiPlaceholder {
 		provider: row.provider,
 		...(row.machineId ? { machineId: row.machineId } : {}),
 		...(row.channelId ? { channelId: row.channelId } : {}),
+		...(row.generation !== null ? { generation: row.generation } : {}),
 		expiresAt: new Date(row.expiresAt),
 	};
 }
@@ -135,22 +138,50 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
 	constructor(private sql: SQL, private run: Run, private counted: AiCutoffs) {}
 	put(placeholders: AiPlaceholder[]) {
-		return this.run("save AI placeholders", async () => {
-			await this.sql.begin(async transaction => {
+		return this.run("save AI placeholders", () =>
+			this.sql.begin(async transaction => {
+				// Shared, so an archive waits for this to commit and then deletes what it stored, or
+				// commits first and this reads the document archived.
+				for (let channelId of new Set(placeholders.map(value => value.channelId))) {
+					if (channelId === undefined) continue;
+					let [open] = await transaction<{ generation: number; archived: boolean }[]>`
+						SELECT archive_generation AS generation, archived_at IS NOT NULL AS archived
+						FROM channels WHERE id = ${channelId}
+						FOR SHARE
+					`;
+					// A missing document is refused by its reference, below.
+					if (!open) continue;
+					if (
+						open.archived
+						|| placeholders.some(value =>
+							value.channelId === channelId && value.generation !== open.generation
+						)
+					) return false;
+				}
 				for (let value of placeholders) {
 					await transaction`
 						INSERT INTO ai_placeholders (
 							digest, launch_id, launch_digest, user_id, provider, machine_id, channel_id,
-							expires_at
+							archive_generation, expires_at
 						)
 						VALUES (
 							${value.digest}, ${value.launchId}, ${value.launchDigest}, ${value.userId},
 							${value.provider},
-							${value.machineId ?? null}, ${value.channelId ?? null}, ${value.expiresAt}
+							${value.machineId ?? null}, ${value.channelId ?? null},
+							${value.channelId === undefined ? null : value.generation ?? null}, ${value.expiresAt}
 						)
 					`;
 				}
-			});
+				return true;
+			}));
+	}
+	generation(channelId: string) {
+		return this.run("read a document's archive generation", async () => {
+			let [open] = await this.sql<{ generation: number }[]>`
+				SELECT archive_generation AS generation FROM channels
+				WHERE id = ${channelId} AND archived_at IS NULL
+			`;
+			return open?.generation;
 		});
 	}
 	find(digest: Uint8Array, now: Date) {

@@ -153,24 +153,39 @@ durable.
   send in the same step as it enters the transport: a cutoff (a launch ended, a machine
   revoked, a document archived, a credential replaced or removed) that completed while
   those reads were pending makes it read again (one process holds the writer lease, so
-  storage counts each cutoff in memory as it commits), and the launch's deadline and a
-  Copilot token's are checked then, so a request is never sent after a cutoff its
-  caller saw complete. It refuses a request that also carries its placeholder in a
-  header the proxy drops rather than send it changed, swaps the
+  storage counts each cutoff in memory as it commits), and the transport checks the
+  launch's deadline and a Copilot token's on the clock reading it sends at, so a request
+  is never sent after a cutoff its caller saw complete. A successor's cutoffs are not
+  counted by the process before it, so a process sends nothing once its writer lease is
+  released, lost or past its deadline, nor for a request its hand-over abandoned (the
+  proxy's requests get the cut's abandon signal, as `/mcp`'s do). A renewed Copilot token
+  is sent only if it came from the credential the request was admitted with and still
+  connected. It refuses a request carrying any launch's placeholder in a header it
+  drops, by value or name, rather than send it changed, swaps the
   placeholder for the real credential of the launch's person in that provider's
   one header, forwards to that provider's fixed origin, following no redirect, and
   passes back only allow-listed response headers, with the credential taken out of
-  them and the body and what is emitted checked for it. A revoked machine ends its launches'
-  placeholders, and archiving a document deletes them for good. Copilot is sent
+  them and the body and what is emitted checked for it, the headers Chopin adds
+  included (an answer they would carry it in is refused, never sent without
+  `no-store`). A revoked machine ends its launches'
+  placeholders, and archiving a document deletes them for good: a launch prepared
+  across an archive stores and publishes nothing, restored or not
+  (`channels.archive_generation`). Copilot is sent
   only the Copilot token Chopin exchanges the person's GitHub token for and renews,
   never the GitHub token and never one past its expiry; a launch gets a Copilot
   placeholder only when GitHub gives that token a Copilot token at launch (through
   the person's sign-in unless they connected a token instead), and no
-  placeholder for a provider its person can't use. A launch's grants are published
-  only while its person's credentials and latest Copilot answer are those it was
-  prepared with, and before its deadline. An OpenAI or Anthropic key is
+  placeholder for a provider its person can't use. Every answer GitHub gives about
+  Copilot access (a launch's, the list's, Check again's, a proxied request's) is kept
+  against the account it concerns, ordered by when it completed, and replaces older
+  answers of the other kind held for that account. A launch's grants are published
+  only while its person's credentials are those it was prepared with, no answer of
+  the other kind about its Copilot account has completed since it asked, and before
+  its deadline; changes that never settle fail the launch with a retryable error,
+  never an empty grant list. An OpenAI or Anthropic key is
   saved only once that provider accepts it. The model catalog route serves only a
-  request carrying one of a live launch's placeholders with that launch's credential.
+  request carrying one of a live launch's placeholders with that launch's credential,
+  and none with a placeholder in its query or another header.
   Handing placeholders to runners
   is not wired yet. See [Hosted agent](docs/hosted-agent.md#ai-credentials).
 - **Planner ownership is process-bound.** The first eligible Planner or

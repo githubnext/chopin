@@ -6,19 +6,25 @@ import { AI_KEY_VARIABLES, AI_LAUNCH_HEADER } from "@chopin/protocol/ai-credenti
 import { Admission } from "../auth/admission";
 import { Machines } from "../auth/machines";
 import { Sessions } from "../auth/session";
+import { abandonable, Requests } from "../handover/requests";
 import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
+import { WriterLease } from "../storage/writer-lease";
 import { copilotTokenExchange } from "./copilot";
-import { AiCredentials } from "./credentials";
+import { AiCredentialError, AiCredentials } from "./credentials";
 import { aiProxy } from "./proxy";
 import { githubSignIn, registerAiRoutes } from "./routes";
 
-import type { AiCredentialList, AiProviderGrant } from "@chopin/protocol/ai-credentials";
+import type {
+	AiCredentialList,
+	AiCredentialSummary,
+	AiProviderGrant,
+} from "@chopin/protocol/ai-credentials";
 import type { CopilotToken } from "./copilot";
 import type { AiLaunch } from "./credentials";
 import type { HostedAuth } from "../auth/routes";
 import type { GitHub, GitHubTokenGrant } from "../github/client";
-import type { AiCredentialStore } from "../storage/port";
+import type { AiCredentialStore, StorageAdapter } from "../storage/port";
 
 const ORIGIN = "https://chopin.test";
 const OPENAI_KEY = "sk-real-openai-key-0123456789";
@@ -199,6 +205,7 @@ async function setup() {
 	};
 	return {
 		storage,
+		sessions,
 		entitled,
 		copilotLifetime,
 		githubApi,
@@ -495,6 +502,38 @@ describe("GitHub Copilot access through a GitHub sign-in", () => {
 		expect(await hubot.json()).toMatchObject({ copilotAccess: "access" });
 	});
 
+	it("shows every session of a person the Copilot access GitHub last confirmed for their sign-in, lost and back again", async () => {
+		let world = await setup();
+		let second = (await world.sessions.issue("U_mona", grant("ghu_mona_second"))).cookie.split(
+			";",
+		)[0]!;
+		let listed = async (cookie: string) =>
+			((await (await world.api("/api/ai/credentials", cookie)).json()) as AiCredentialList)
+				.credentials[0]!.copilotAccess;
+		let checked = async (cookie: string) =>
+			((await (await world.api("/api/ai/credentials/github-copilot/check", cookie, {
+				method: "POST",
+			})).json()) as AiCredentialSummary).copilotAccess;
+		let seat = (status?: number) => {
+			for (let token of ["ghu_mona_signed_in", "ghu_mona_second"]) {
+				if (status) world.entitled.set(token, status);
+				else world.entitled.delete(token);
+			}
+		};
+		expect(await listed(world.mona)).toBe("access");
+		expect(await listed(second)).toBe("access");
+
+		seat(403);
+		expect(await checked(second)).toBe("none");
+		expect(await listed(world.mona)).toBe("none");
+		expect(await listed(second)).toBe("none");
+
+		seat();
+		expect(await checked(world.mona)).toBe("access");
+		expect(await listed(world.mona)).toBe("access");
+		expect(await listed(second)).toBe("access");
+	});
+
 	it("gives a launch no Copilot placeholder without access, and an API key alone is enough", async () => {
 		let world = await setup();
 		world.entitled.set("ghu_mona_signed_in", 403);
@@ -652,6 +691,43 @@ describe("the AI credential proxy", () => {
 		expect(seen!.headers["x-trace"]).toBe(openai.placeholder);
 		expect(seen!.headers.referer).toBeUndefined();
 		expect(seen!.headers.authorization).toBe(`Bearer ${OPENAI_KEY}`);
+	});
+
+	it("refuses a request carrying any launch's stand-in in a header it drops, by its value or its name, and forwards the headers it keeps unchanged", async () => {
+		let world = await setup();
+		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
+		await world.connect(world.mona, "anthropic", { kind: "api-key", secret: ANTHROPIC_KEY });
+		let { openai, anthropic } = byProvider((await launch(world)).grants);
+		let elsewhere = byProvider((await launch(world)).grants).anthropic!;
+		let responses = (headers: Record<string, string>) =>
+			world.call(openai!, "/responses", {
+				method: "POST",
+				headers: { authorization: `Bearer ${openai!.placeholder}`, ...headers },
+				body: "{}",
+			});
+		let dropping: Array<Record<string, string>> = [
+			{ cookie: `other=${anthropic!.placeholder}` },
+			{ referer: `https://agent.test/?key=${elsewhere.placeholder}` },
+			{ [`x-forwarded-${openai!.placeholder}`]: "1" },
+			{ [`x-forwarded-${anthropic!.placeholder}`]: "1" },
+		];
+		for (let headers of dropping) {
+			let refused = await responses(headers);
+			expect(refused.status).toBe(400);
+			expect(await code(refused)).toBe("dropped-header");
+		}
+		expect(world.upstreams.openai.seen).toEqual([]);
+
+		let sent = await responses({
+			"x-trace": anthropic!.placeholder,
+			"openai-beta": "responses=v1",
+			cookie: "theme=dark",
+		});
+		expect(sent.status).toBe(200);
+		let [seen] = world.upstreams.openai.seen;
+		expect(seen!.headers["x-trace"]).toBe(anthropic!.placeholder);
+		expect(seen!.headers["openai-beta"]).toBe("responses=v1");
+		expect(seen!.headers.cookie).toBeUndefined();
 	});
 
 	it("refuses a placeholder that is not in Authorization or x-api-key, or not a live launch's", async () => {
@@ -955,6 +1031,46 @@ describe("the AI credential proxy", () => {
 			.toBe(404);
 	});
 
+	it("refuses the catalog to a request carrying a stand-in in its query or a header it doesn't send on, and fetches it with no credential", async () => {
+		let world = await setup();
+		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
+		let launched = await launch(world);
+		let { "github-copilot": copilot, openai } = byProvider(launched.grants);
+		let get = (search: string, headers: Record<string, string> = {}) =>
+			world.router.handle(
+				new Request(`${ORIGIN}/api/v1/ai/models.dev/api.json${search}`, {
+					headers: {
+						authorization: `Bearer ${copilot!.placeholder}`,
+						[AI_LAUNCH_HEADER]: launched.launchToken,
+						...headers,
+					},
+				}),
+			) as Promise<Response>;
+		let cases: Array<[search: string, headers: Record<string, string>, refusal: string]> = [
+			[`?key=${openai!.placeholder}`, {}, "dropped-query"],
+			[`?key=${copilot!.placeholder.replaceAll("_", "%5F")}`, {}, "dropped-query"],
+			["", { "x-trace": openai!.placeholder }, "dropped-header"],
+			["", { "if-none-match": `"${copilot!.placeholder}"` }, "dropped-header"],
+			["", { [`x-${openai!.placeholder}`]: "1" }, "dropped-header"],
+		];
+		for (let warm of [false, true]) {
+			for (let [search, headers, refusal] of cases) {
+				let refused = await get(search, headers);
+				expect(refused.status).toBe(400);
+				expect(await code(refused)).toBe(refusal);
+			}
+			expect(world.catalog.seen).toHaveLength(warm ? 1 : 0);
+			let served = await get("?v=1", { "x-trace": "run-7" });
+			expect(served.status).toBe(200);
+			expect(await served.json()).toEqual({ openai: { models: {} } });
+		}
+		let [fetched] = world.catalog.seen;
+		expect(fetched!.path).toBe("/api.json");
+		for (let header of ["authorization", "x-api-key", AI_LAUNCH_HEADER, "x-trace"]) {
+			expect(fetched!.headers[header]).toBeUndefined();
+		}
+	});
+
 	it("refuses the catalog to a launch that ended while it was checked, from a warm copy too", async () => {
 		let world = await setup();
 		let launched = await world.credentials.launch({
@@ -1085,8 +1201,9 @@ describe("what a launch is given", () => {
 		let deleteLaunch = placeholders.deleteLaunch.bind(placeholders);
 		let puts = 0;
 		placeholders.put = async rows => {
-			await put(rows);
+			let stored = await put(rows);
 			if (++puts === 1) await keys.delete("U_mona", "anthropic");
+			return stored;
 		};
 		placeholders.deleteLaunch = async launchId => {
 			let removing = keys.delete("U_mona", "openai");
@@ -1131,17 +1248,18 @@ describe("which providers a launch is given while they change", () => {
 			},
 			upstreams: { openai: world.keyChecks.openai.url, anthropic: world.keyChecks.anthropic.url },
 		});
-		let launch = () =>
+		let launch = (on: Pick<AiLaunch, "machineId" | "channelId"> = {}) =>
 			credentials.launch({
 				userId: "U_mona",
+				...on,
 				expiresAt: new Date(world.now().getTime() + 3_600_000),
 			});
 		/** Starts a launch and returns once it is asking GitHub about Copilot, held there. */
-		let held = async () => {
+		let held = async (on: Pick<AiLaunch, "machineId" | "channelId"> = {}) => {
 			state.hold = Promise.withResolvers();
 			state.asked = Promise.withResolvers();
 			let release = state.hold;
-			let pending = launch();
+			let pending = launch(on);
 			await state.asked.promise;
 			return { pending, release: () => release.resolve() };
 		};
@@ -1178,6 +1296,68 @@ describe("which providers a launch is given while they change", () => {
 		}]);
 	});
 
+	it("gives nothing and keeps nothing for a launch whose document was archived while it was prepared, restored or not, and a fresh launch works after the restore", async () => {
+		let { world, credentials, held, launch, rows } = await changing();
+		await credentials.connect("U_mona", "openai", { kind: "api-key", secret: OPENAI_KEY });
+		let document = { id: world.channel.id };
+		let archivals: Array<() => Promise<unknown>> = [
+			() => world.storage.channels.archive({ ...document, now: world.now() }),
+			async () => {
+				await world.storage.channels.archive({ ...document, now: world.now() });
+				await world.storage.channels.restore({ ...document, now: world.now() });
+			},
+		];
+		for (let archive of archivals) {
+			let launching = await held({ channelId: document.id });
+			await archive();
+			launching.release();
+			let launched = await launching.pending;
+			expect(launched.grants).toEqual([]);
+			expect(await rows()).toBe(0);
+			await world.storage.channels.restore({ ...document, now: world.now() });
+		}
+
+		let fresh = await launch({ channelId: document.id });
+		expect(fresh.grants.map(grant => grant.provider)).toEqual(["github-copilot", "openai"]);
+		let openai = fresh.grants.find(isOpenai)!;
+		let proxied = aiProxy({ credentials, upstreams: { openai: world.upstreams.openai.url } });
+		let url = new URL(`${openai.baseUrl}/models`);
+		let answer = await proxied(
+			new Request(url, {
+				headers: { authorization: `Bearer ${openai.placeholder}`, ...runner(openai) },
+			}),
+			url,
+		);
+		expect(answer.status).toBe(200);
+		expect(await rows()).toBe(2);
+	});
+
+	it("asks for the launch again, never giving nothing, when one provider changes at every attempt while another's verified key stays", async () => {
+		let { world, credentials, state, launch, rows } = await changing();
+		state.access = false;
+		await credentials.connect("U_mona", "openai", { kind: "api-key", secret: OPENAI_KEY });
+		await credentials.connect("U_mona", "anthropic", { kind: "api-key", secret: ANTHROPIC_KEY });
+		let store = world.storage.aiCredentials;
+		let list = store.list.bind(store);
+		let reads = 0;
+		store.list = async userId => {
+			let listed = await list(userId);
+			// Each attempt reads twice: as it is prepared, and last, as it is published.
+			if (++reads % 2 === 0) {
+				let anthropic = (await store.get(userId, "anthropic"))!;
+				await store.put({ ...anthropic, updatedAt: new Date(anthropic.updatedAt.getTime() + 1) });
+			}
+			return listed;
+		};
+		let outcome = await launch().then(launched => launched, (err: unknown) => err);
+		expect(outcome).toBeInstanceOf(AiCredentialError);
+		expect((outcome as AiCredentialError).status).toBe(503);
+		expect(await rows()).toBe(0);
+
+		store.list = list;
+		expect((await launch()).grants.map(grant => grant.provider)).toEqual(["openai", "anthropic"]);
+	});
+
 	it("gives nothing for the last key removed after the launch's final read of the person's keys", async () => {
 		let { world, credentials, state, launch, rows } = await changing();
 		state.access = false;
@@ -1194,6 +1374,179 @@ describe("which providers a launch is given while they change", () => {
 		expect(await store.get("U_mona", "openai")).toBeUndefined();
 		expect(launched.grants).toEqual([]);
 		expect(await rows()).toBe(0);
+	});
+});
+
+describe("a Copilot answer another check gets while a launch is prepared", () => {
+	/**
+	 * A world whose GitHub answers each Copilot token request when the test resolves it, unless
+	 * `seat` says how to answer at once, and whose sign-in token is whichever `signIn` names.
+	 */
+	async function answering() {
+		let world = await setup();
+		let state = {
+			seat: "access" as "access" | "none" | undefined,
+			signIn: "ghu_mona_1",
+			asks: [] as Array<PromiseWithResolvers<"access" | "none">>,
+			asked: Promise.withResolvers<void>(),
+		};
+		let token = (githubToken: string, seat: "access" | "none") =>
+			seat === "access"
+				? { token: `tid=${githubToken}`, expiresAt: world.now().getTime() + 1_800_000 }
+				: undefined;
+		let credentials = new RunnerCredentials({
+			storage: world.storage,
+			key: new Uint8Array(32).fill(5),
+			origin: ORIGIN,
+			clock: world.now,
+			githubToken: async () => state.signIn,
+			copilotToken: async githubToken => {
+				if (state.seat) return token(githubToken, state.seat);
+				let answer = Promise.withResolvers<"access" | "none">();
+				state.asks.push(answer);
+				state.asked.resolve();
+				return token(githubToken, await answer.promise);
+			},
+			upstreams: { openai: world.keyChecks.openai.url, anthropic: world.keyChecks.anthropic.url },
+		});
+		/** Resolves once GitHub has been asked one question more than `count`, and returns it. */
+		let question = async (count: number) => {
+			while (state.asks.length <= count) {
+				state.asked = Promise.withResolvers();
+				await state.asked.promise;
+			}
+			return state.asks[count]!;
+		};
+		let sent: string[] = [];
+		let proxied = aiProxy({
+			credentials,
+			fetch: (async (_input: string | URL | Request, init?: RequestInit) => {
+				sent.push(new Headers(init?.headers).get("authorization") ?? "");
+				return Response.json({ ok: true });
+			}) as typeof fetch,
+		});
+		let call = (copilot: AiProviderGrant) => {
+			let url = new URL(`${copilot.baseUrl}/chat/completions`);
+			return proxied(
+				new Request(url, {
+					method: "POST",
+					body: "{}",
+					headers: { authorization: `Bearer ${copilot.placeholder}`, ...runner(copilot) },
+				}),
+				url,
+			);
+		};
+		/** Holds the next launch once its placeholders are about to be saved, after its answer. */
+		let holdBeforeSaving = () => {
+			let placeholders = world.storage.aiPlaceholders;
+			let put = placeholders.put.bind(placeholders);
+			let reached = Promise.withResolvers<void>();
+			let release = Promise.withResolvers<void>();
+			placeholders.put = async rows => {
+				placeholders.put = put;
+				reached.resolve();
+				await release.promise;
+				return put(rows);
+			};
+			return { reached: reached.promise, release: () => release.resolve() };
+		};
+		let launch = () =>
+			credentials.launch({
+				userId: "U_mona",
+				expiresAt: new Date(world.now().getTime() + 3_600_000),
+			});
+		return { world, credentials, state, question, sent, call, holdBeforeSaving, launch };
+	}
+
+	/**
+	 * The orders in which a new launch's answer (access) and an existing launch's request (no seat,
+	 * for the same sign-in through another of its tokens) can be asked and answered.
+	 */
+	let orders: Record<
+		string,
+		(steps: {
+			launchAsks: () => Promise<PromiseWithResolvers<"access" | "none">>;
+			requestAsks: () => Promise<PromiseWithResolvers<"access" | "none">>;
+			launchHeld: () => Promise<void>;
+		}) => Promise<void>
+	> = {
+		"the refusal is asked and answered after the launch's answer": async steps => {
+			(await steps.launchAsks()).resolve("access");
+			await steps.launchHeld();
+			(await steps.requestAsks()).resolve("none");
+		},
+		"the refusal is answered before the launch's earlier question": async steps => {
+			let launchAnswer = await steps.launchAsks();
+			(await steps.requestAsks()).resolve("none");
+			launchAnswer.resolve("access");
+			await steps.launchHeld();
+		},
+		"the refusal is asked before the launch's question and answered after it": async steps => {
+			let requestAnswer = await steps.requestAsks();
+			(await steps.launchAsks()).resolve("access");
+			await steps.launchHeld();
+			requestAnswer.resolve("none");
+		},
+	};
+
+	for (let [order, run] of Object.entries(orders)) {
+		it(`gives a launch the verified key alone once an existing launch's request finds no seat for the same sign-in: ${order}`, async () => {
+			let { credentials, state, question, sent, call, holdBeforeSaving, launch } =
+				await answering();
+			await credentials.connect("U_mona", "openai", { kind: "api-key", secret: OPENAI_KEY });
+			let existing = (await launch()).grants.find(grant => grant.provider === "github-copilot")!;
+			state.seat = undefined;
+			let asked = 0;
+			let pending: Promise<Awaited<ReturnType<typeof launch>>> | undefined;
+			let refused: Promise<Response> | undefined;
+			let held = holdBeforeSaving();
+			await run({
+				launchAsks: async () => {
+					state.signIn = "ghu_mona_2";
+					pending = launch();
+					return question(asked++);
+				},
+				requestAsks: async () => {
+					state.signIn = "ghu_mona_3";
+					refused = call(existing);
+					return question(asked++);
+				},
+				launchHeld: () => held.reached,
+			});
+			let answer = await refused!;
+			expect(answer.status).toBe(403);
+			expect(await code(answer)).toBe("no-copilot-access");
+			state.seat = "none";
+			held.release();
+			let launched = await pending!;
+			expect(launched.grants.map(grant => grant.provider)).toEqual(["openai"]);
+			expect(launched.withheld).toEqual([{
+				provider: "github-copilot",
+				reason: "no-copilot-access",
+			}]);
+			expect(sent).toEqual([]);
+		});
+	}
+
+	it("keeps Copilot for a launch when an existing launch's request finds GitHub can't answer, which says nothing of the seat", async () => {
+		let { credentials, state, question, call, holdBeforeSaving, launch } = await answering();
+		await credentials.connect("U_mona", "openai", { kind: "api-key", secret: OPENAI_KEY });
+		let existing = (await launch()).grants.find(grant => grant.provider === "github-copilot")!;
+		state.seat = undefined;
+		let held = holdBeforeSaving();
+		state.signIn = "ghu_mona_2";
+		let pending = launch();
+		(await question(0)).resolve("access");
+		await held.reached;
+		state.signIn = "ghu_mona_3";
+		let failed = call(existing);
+		(await question(1)).reject(new Error("GitHub can't be reached"));
+		expect(await code(await failed)).toBe("copilot-unavailable");
+		held.release();
+		expect((await pending).grants.map(grant => grant.provider)).toEqual([
+			"github-copilot",
+			"openai",
+		]);
 	});
 });
 
@@ -1392,6 +1745,8 @@ describe("which launch presents a placeholder", () => {
 describe("Copilot tokens that expire", () => {
 	async function copilotWorld(
 		exchange: (githubToken: string) => Promise<CopilotToken | undefined>,
+		/** The clock the proxy's transport reads as it takes a send, when not the system's. */
+		transport?: () => number,
 	) {
 		let world = await setup();
 		let sent: string[] = [];
@@ -1411,12 +1766,13 @@ describe("Copilot tokens that expire", () => {
 				sent.push(new Headers(init?.headers).get("authorization") ?? "");
 				return Response.json({ ok: true });
 			}) as typeof fetch,
+			...(transport ? { clock: transport } : {}),
 		});
-		let launch = (on: Pick<AiLaunch, "machineId" | "channelId"> = {}) =>
+		let launch = (on: Partial<Pick<AiLaunch, "machineId" | "channelId" | "expiresAt">> = {}) =>
 			credentials.launch({
 				userId: "U_mona",
-				...on,
 				expiresAt: new Date(world.now().getTime() + 3_600_000),
+				...on,
 			});
 		let call = (copilot: AiProviderGrant, init: RequestInit = {}) => {
 			let url = new URL(`${copilot.baseUrl}/chat/completions`);
@@ -1432,6 +1788,40 @@ describe("Copilot tokens that expire", () => {
 		};
 		return { world, credentials, proxied, sent, launch, call };
 	}
+
+	it("decides a send against the launch's and the token's deadlines on the clock reading the transport takes it at, renewing a token found expired then", async () => {
+		let readings: number[] = [];
+		let lifetimes: number[] = [];
+		let issued = 0;
+		let { world, sent, launch, call } = await copilotWorld(
+			async () => ({
+				token: `tid=${++issued}`,
+				expiresAt: world.now().getTime() + (lifetimes.shift() ?? 1_800_000),
+			}),
+			() => readings.length > 1 ? readings.shift()! : readings[0]!,
+		);
+		let deadline = new Date(world.now().getTime() + 60_000);
+		let short = (await launch({ expiresAt: deadline })).grants[0]!;
+		world.advance(60_000 - 1);
+		readings = [deadline.getTime()];
+		let refused = await call(short);
+		expect(refused.status).toBe(401);
+		expect(await code(refused)).toBe("launch-ended");
+		expect(sent).toEqual([]);
+		readings = [deadline.getTime() - 1];
+		expect((await call(short)).status).toBe(200);
+		expect(sent).toEqual(["Bearer tid=1"]);
+
+		let long = (await launch()).grants[0]!;
+		world.advance(6 * 60_000);
+		lifetimes = [1];
+		let tokenDeadline = world.now().getTime() + 1;
+		readings = [tokenDeadline, tokenDeadline - 1];
+		let renewed = await call(long);
+		expect(renewed.status).toBe(200);
+		expect(sent).toEqual(["Bearer tid=1", `Bearer tid=${issued}`]);
+		expect(issued).toBe(4);
+	});
 
 	it("never hands the provider a Copilot token GitHub gave already expired", async () => {
 		let expired = false;
@@ -1553,6 +1943,55 @@ describe("Copilot tokens that expire", () => {
 		expect(answer.status).toBe(200);
 		expect(issued).toBe(2);
 		expect(sent).toEqual(["Bearer tid=2"]);
+	});
+
+	it("sends a renewed Copilot token only when the account that gave it is the one the request was admitted with and the one connected at the send", async () => {
+		let issued = 0;
+		let { world, credentials, sent, launch, call } = await copilotWorld(async githubToken => ({
+			token: `tid=${++issued};for=${githubToken}`,
+			expiresAt: world.now().getTime() + 90_000,
+		}));
+		let store = world.storage.aiCredentials;
+		let signIn = await store.get("U_mona", "github-copilot");
+		await credentials.connect("U_mona", "github-copilot", {
+			kind: "api-key",
+			secret: "ghp_another_account_token",
+		});
+		let anotherAccount = await store.get("U_mona", "github-copilot");
+		await store.put(signIn!);
+		let copilot = (await launch()).grants[0]!;
+
+		let get = store.get.bind(store);
+		/** The records the request reads: when admitted, when its token is renewed, and at the send. */
+		let cases: Array<{ renewal?: typeof anotherAccount; sentWith?: string }> = [
+			{ renewal: anotherAccount },
+			{ sentWith: "ghu_mona" },
+		];
+		for (let { renewal, sentWith } of cases) {
+			let reads: Array<"original" | "renewal" | "current"> = [];
+			store.get = async (userId, provider) => {
+				let label = (["original", "renewal", "current"] as const)[reads.length]!;
+				reads.push(label);
+				return label === "renewal" && renewal ? renewal : get(userId, provider);
+			};
+			let paused = pausedBody();
+			let pending = call(copilot, { body: paused.body, duplex: "half" } as RequestInit);
+			await paused.reading;
+			world.advance(120_000);
+			paused.release();
+			let answer = await pending;
+			store.get = get;
+			expect(reads).toEqual(["original", "renewal", "current"]);
+			if (sentWith) {
+				expect(answer.status).toBe(200);
+				expect(sent.at(-1)).toEndWith(`;for=${sentWith}`);
+			} else {
+				expect(answer.status).toBe(409);
+				expect(await code(answer)).toBe("credential-changed");
+			}
+		}
+		expect(sent).toHaveLength(1);
+		expect(sent.join()).not.toContain("ghp_another_account_token");
 	});
 
 	it("sends nothing once the launch ended, its machine was revoked or its document archived while its Copilot token was renewed", async () => {
@@ -1756,6 +2195,37 @@ describe("the proxy's final handoff", () => {
 				// An answer that would have emitted the key is cut short.
 			}
 			expect(emitted).not.toContain(key);
+		}
+	});
+
+	it("never emits the key in a header Chopin adds, and refuses an answer it couldn't pass back with no-store without it", async () => {
+		let world = await setup();
+		let cases: Array<[key: string, status: number]> = [
+			["cache-control", 502],
+			["no-store", 502],
+			["sk-unrelated-fixture-0123", 200],
+		];
+		for (let [key, status] of cases) {
+			await world.connect(world.mona, "openai", { kind: "api-key", secret: key });
+			let openai = (await launch(world)).grants.find(isOpenai)!;
+			let proxied = aiProxy({
+				credentials: world.credentials,
+				fetch: (async () => new Response(null, { status: 200 })) as unknown as typeof fetch,
+			});
+			let url = new URL(`${openai.baseUrl}/models`);
+			let answer = await proxied(
+				new Request(url, {
+					headers: { authorization: `Bearer ${openai.placeholder}`, ...runner(openai) },
+				}),
+				url,
+			);
+			expect(answer.status).toBe(status);
+			for (let [name, value] of answer.headers) {
+				expect(name).not.toContain(key.toLowerCase());
+				expect(value).not.toContain(key);
+			}
+			expect(await answer.text()).not.toContain(key);
+			if (status === 200) expect(answer.headers.get("cache-control")).toBe("no-store");
 		}
 	});
 
@@ -2051,5 +2521,158 @@ describe("the proxy's final handoff", () => {
 		expect(world.upstreams.openai.seen.map(seen => seen.headers.authorization)).toEqual([
 			`Bearer ${replacement}`,
 		]);
+	});
+});
+
+/** `target`'s member `name`, a method bound to it. */
+function own(target: object, name: PropertyKey): unknown {
+	let value: unknown = Reflect.get(target, name, target);
+	return typeof value === "function" ? value.bind(target) : value;
+}
+
+/**
+ * `storage` as another process serving it sees it: the same rows, but it counts in memory only the
+ * cutoffs it commits itself, none here, so it never hears of one its successor commits.
+ */
+function seenByAnotherProcess(storage: MemoryStorage): StorageAdapter {
+	let cutoffs = storage.aiPlaceholders.cutoffs();
+	let placeholders = new Proxy(storage.aiPlaceholders, {
+		get: (target, name) => name === "cutoffs" ? () => cutoffs : own(target, name),
+	});
+	let credentials = new Proxy(storage.aiCredentials, {
+		get: (target, name) => name === "version" ? () => 0 : own(target, name),
+	});
+	return new Proxy(storage, {
+		get: (target, name) =>
+			name === "aiPlaceholders"
+				? placeholders
+				: name === "aiCredentials"
+				? credentials
+				: own(target, name),
+	});
+}
+
+describe("a request pending while its server hands the database over", () => {
+	/**
+	 * A former server holding the writer lease for `ttlMs`, which serves requests as a server does,
+	 * through its requests, whose drain abandons those still running, and sends through a transport
+	 * that records whatever it is handed, cancelled or not; and its successor on the same store.
+	 */
+	async function servers(ttlMs: number) {
+		let world = await setup();
+		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
+		let { machine } = await world.machines.pair({
+			userId: "U_mona",
+			label: "studio",
+			repositories: [],
+			autoRun: false,
+			grant: grant("ghu_machine"),
+		});
+		let held = (await world.storage.leases.acquire("chopin:writer", "former", ttlMs))!;
+		let lease = new WriterLease(world.storage.leases, {
+			ttlMs,
+			renewMs: ttlMs,
+			safetyMs: ttlMs / 4,
+			retryMs: ttlMs,
+		}, () => {});
+		lease.hold(held);
+		let former = new RunnerCredentials({
+			storage: seenByAnotherProcess(world.storage),
+			key: new Uint8Array(32).fill(5),
+			origin: ORIGIN,
+			clock: world.now,
+			githubToken: async () => undefined,
+			copilotToken: async () => undefined,
+			writer: () => lease.holds(),
+		});
+		let sent: string[] = [];
+		let proxied = aiProxy({
+			credentials: former,
+			fetch: (async (_input: string | URL | Request, init?: RequestInit) => {
+				sent.push(new Headers(init?.headers).get("authorization") ?? "");
+				return Response.json({ ok: true });
+			}) as typeof fetch,
+		});
+		let requests = new Requests({ holdMs: 1_000, exempt: () => false });
+		let openai = (await former.launch({
+			userId: "U_mona",
+			machineId: machine.id,
+			expiresAt: new Date(world.now().getTime() + 3_600_000),
+		})).grants.find(isOpenai)!;
+		let responses = (body: BodyInit) => {
+			let request = new Request(`${openai.baseUrl}/responses`, {
+				method: "POST",
+				headers: { authorization: `Bearer ${openai.placeholder}`, ...runner(openai) },
+				body,
+				duplex: "half",
+			} as RequestInit);
+			let handled = Promise.withResolvers<Response>();
+			let answered = requests.handle(request, abandoned => {
+				let handling = proxied(abandonable(request, abandoned), new URL(request.url));
+				handled.resolve(handling);
+				return handling;
+			});
+			return { answered, handled: handled.promise };
+		};
+		/** Sends a request whose final reads the former makes, the machine read live, and holds. */
+		let pending = async () => {
+			let store = world.storage.aiCredentials;
+			let get = store.get.bind(store);
+			let reads = 0;
+			let reading = Promise.withResolvers<void>();
+			let release = Promise.withResolvers<void>();
+			store.get = async (userId, provider) => {
+				let read = await get(userId, provider);
+				// After the read made as the request is admitted comes the final one.
+				if (++reads === 2) {
+					store.get = get;
+					reading.resolve();
+					await release.promise;
+				}
+				return read;
+			};
+			let request = responses("{}");
+			await reading.promise;
+			return { ...request, release: () => release.resolve() };
+		};
+		/** The successor takes the lease, which only a release or its expiry frees, and revokes the machine. */
+		let succeed = async () => {
+			expect(await world.storage.leases.acquire("chopin:writer", "successor", 30_000))
+				.toBeDefined();
+			expect(await world.storage.machines.revoke(machine.id, "U_mona", world.now())).toBe(true);
+			await world.credentials.machineEnded(machine.id);
+		};
+		return { world, lease, held, requests, sent, responses, pending, succeed };
+	}
+
+	it("sends nothing from the former server after a graceful release once its successor confirms a revocation, and keeps what it sent before", async () => {
+		let { world, lease, held, requests, sent, responses, pending, succeed } = await servers(30_000);
+		let before = await responses("{}").answered;
+		expect(before!.status).toBe(200);
+		expect(await before!.json()).toEqual({ ok: true });
+
+		let request = await pending();
+		expect(await requests.finish(0)).toEqual(["POST /api/v1/ai/openai/v1/responses"]);
+		await lease.stop();
+		expect(await world.storage.leases.release(held)).toBe(true);
+		await succeed();
+		request.release();
+		expect((await request.handled).status).not.toBe(200);
+		expect(sent).toEqual([`Bearer ${OPENAI_KEY}`]);
+	});
+
+	it("sends nothing from a former server whose lease expired unreleased once its successor confirms a revocation, and keeps what it sent before", async () => {
+		let ttlMs = 400;
+		let { sent, responses, pending, succeed } = await servers(ttlMs);
+		expect((await responses("{}").answered)!.status).toBe(200);
+
+		let request = await pending();
+		await Bun.sleep(ttlMs + 50);
+		await succeed();
+		request.release();
+		let refused = (await request.answered)!;
+		expect(refused.status).toBe(503);
+		expect(await code(refused)).toBe("restarting");
+		expect(sent).toEqual([`Bearer ${OPENAI_KEY}`]);
 	});
 });

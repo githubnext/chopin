@@ -32,6 +32,7 @@ async function launched(storage: StorageAdapter) {
 		provider: "openai",
 		machineId: input.id,
 		channelId,
+		generation: 0,
 		expiresAt: later(900),
 		...overrides,
 	});
@@ -140,7 +141,8 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 				let unbound = placeholder({ provider: "anthropic" });
 				delete unbound.machineId;
 				delete unbound.channelId;
-				await storage.aiPlaceholders.put([stored, unbound]);
+				delete unbound.generation;
+				expect(await storage.aiPlaceholders.put([stored, unbound])).toBe(true);
 				expect(await storage.aiPlaceholders.find(stored.digest, AT)).toEqual(stored);
 				expect(await storage.aiPlaceholders.find(unbound.digest, AT)).toEqual(unbound);
 				expect(await storage.aiPlaceholders.find(stored.digest, later(900))).toBeUndefined();
@@ -203,12 +205,48 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 				let onDocument = placeholder();
 				let elsewhere = placeholder({ launchId: id("launch") });
 				delete elsewhere.channelId;
+				delete elsewhere.generation;
 				await storage.aiPlaceholders.put([onDocument]);
 				await storage.aiPlaceholders.put([elsewhere]);
 				await storage.channels.archive({ id: channelId, now: AT });
 				await storage.channels.restore({ id: channelId, now: later(1) });
 				expect(await storage.aiPlaceholders.find(onDocument.digest, AT)).toBeUndefined();
 				expect(await storage.aiPlaceholders.find(elsewhere.digest, AT)).toEqual(elsewhere);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		test("stores no placeholder for a launch prepared before its document was archived, restored or not", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { channelId, placeholder } = await launched(storage);
+				let generation = await storage.aiPlaceholders.generation(channelId);
+				expect(generation).toBe(0);
+				let before = placeholder({ generation });
+				expect(await storage.aiPlaceholders.put([before])).toBe(true);
+
+				await storage.channels.archive({ id: channelId, now: AT });
+				expect(await storage.aiPlaceholders.generation(channelId)).toBeUndefined();
+				let whileArchived = placeholder({ generation });
+				expect(await storage.aiPlaceholders.put([whileArchived])).toBe(false);
+
+				await storage.channels.restore({ id: channelId, now: later(1) });
+				let afterRestore = placeholder({ generation });
+				let unbound = placeholder({ provider: "anthropic" });
+				delete unbound.channelId;
+				delete unbound.generation;
+				expect(await storage.aiPlaceholders.put([unbound, afterRestore])).toBe(false);
+				for (let stale of [before, whileArchived, afterRestore, unbound]) {
+					expect(await storage.aiPlaceholders.find(stale.digest, AT)).toBeUndefined();
+				}
+
+				let reopened = await storage.aiPlaceholders.generation(channelId);
+				expect(reopened).toBe(1);
+				let fresh = placeholder({ generation: reopened });
+				expect(await storage.aiPlaceholders.put([fresh])).toBe(true);
+				expect(await storage.aiPlaceholders.find(fresh.digest, AT)).toEqual(fresh);
+				expect(await storage.aiPlaceholders.generation(id("nowhere"))).toBeUndefined();
 			} finally {
 				await storage.close();
 			}

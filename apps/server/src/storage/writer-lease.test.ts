@@ -30,6 +30,25 @@ describe("WriterLease", () => {
 		for (let spy of quiet) spy.mockRestore();
 	});
 
+	it("holds the lease only while it is held, before its deadline and until it is stopped to be released", async () => {
+		let writer = new WriterLease(
+			leases(async () => undefined),
+			{ ttlMs: 80, renewMs: 1_000, safetyMs: 20, retryMs: 1_000 },
+			() => {},
+		);
+		expect(writer.holds()).toBe(false);
+		writer.hold(lease());
+		expect(writer.holds()).toBe(true);
+		await Bun.sleep(70);
+		expect(writer.holds()).toBe(false);
+
+		writer.hold(lease());
+		expect(writer.holds()).toBe(true);
+		await writer.stop();
+		expect(writer.held).toBeDefined();
+		expect(writer.holds()).toBe(false);
+	});
+
 	it("does not arm a new safety deadline when a renewal succeeds after stopping", async () => {
 		let renewal = Promise.withResolvers<Lease | undefined>();
 		let sent = Promise.withResolvers<void>();
