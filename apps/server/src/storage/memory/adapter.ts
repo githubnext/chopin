@@ -15,6 +15,7 @@ import { MemoryDeferredTurnStore } from "./deferred-turns";
 import { MemoryMcpSessionStore } from "./mcp-sessions";
 import { MemoryPlannerCredentialStore } from "./planner-credentials";
 import { MemoryAiCredentialStore, MemoryAiPlaceholderStore } from "./ai-credentials";
+import { AiCutoffs } from "../ai-cutoffs";
 import { MemoryChatThreadStore } from "./chat-threads";
 import { MemoryPlannerLinkHoldStore } from "./planner-holds";
 import { MemoryPlannerModelChoiceStore } from "./planner-model-choices";
@@ -200,9 +201,11 @@ export class MemoryStorage implements StorageAdapter {
 		user: id => this.#users.get(id),
 	});
 	readonly versions: DocumentVersionStore = this.#versions;
+	readonly #aiCutoffs = new AiCutoffs();
 	readonly #machines = new MemoryMachineStore(
 		id => this.#users.has(id),
 		id => this.#channels.has(id),
+		() => this.#aiCutoffs.cut(),
 	);
 	readonly machines: MachineStore = this.#machines;
 	readonly #plannerHolds = new MemoryPlannerLinkHoldStore({
@@ -231,11 +234,13 @@ export class MemoryStorage implements StorageAdapter {
 	readonly plannerCredentials: PlannerCredentialStore = this.#plannerCredentials;
 	readonly aiCredentials: AiCredentialStore = new MemoryAiCredentialStore({
 		userExists: id => this.#users.has(id),
+		cutoffs: this.#aiCutoffs,
 	});
 	readonly #aiPlaceholders = new MemoryAiPlaceholderStore({
 		userExists: id => this.#users.has(id),
 		machineExists: id => this.#machines.has(id),
 		channelExists: id => this.#channels.has(id),
+		cutoffs: this.#aiCutoffs,
 	});
 	readonly aiPlaceholders: AiPlaceholderStore = this.#aiPlaceholders;
 	readonly mcpSessions: McpSessionStore = new MemoryMcpSessionStore();

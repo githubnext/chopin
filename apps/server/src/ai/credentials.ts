@@ -20,7 +20,6 @@ const CREDENTIAL_CONTEXT = "chopin:ai-credential:v1";
 const PLACEHOLDER_PREFIX = "chopin_ai_";
 const PLACEHOLDER = /^chopin_ai_[A-Za-z0-9_-]{43}$/;
 const LAUNCH_PREFIX = "chopin_launch_";
-const LAUNCH = /^chopin_launch_[A-Za-z0-9_-]{43}$/;
 /** A key as providers issue them: printable, without spaces, so it can only ever be a header value. */
 const SECRET = /^[\x21-\x7e]{8,4096}$/;
 /** How long GitHub's answer about a GitHub token's Copilot access, and its Copilot token, is used. */
@@ -29,10 +28,12 @@ const ACCESS_KNOWN_MS = 5 * 60 * 1000;
 const RENEW_BEFORE_MS = 60 * 1000;
 /** How many of a key's last characters the list shows, to tell keys apart. */
 const SUFFIX_LENGTH = 4;
-/** How often a credential's last use is saved: the list says when to the minute. */
-const USE_RECORDED_MS = 60 * 1000;
+/** The list says when a credential was last used to the minute, so one use a minute is saved. */
+const USE_MINUTE_MS = 60 * 1000;
 /** How many times a launch is prepared again when its person's credentials change meanwhile. */
 const LAUNCH_ATTEMPTS = 3;
+/** How many times the final handoff reads again when a cutoff completes while it reads. */
+const HANDOFF_ATTEMPTS = 3;
 
 type Clock = () => Date;
 
@@ -51,7 +52,6 @@ const CHECKED: Partial<Record<AiProvider, string>> = { openai: "OpenAI", anthrop
 export type AiRefusal =
 	| "no-placeholder"
 	| "no-launch"
-	| "unknown-launch"
 	| "unknown-placeholder"
 	| "other-provider"
 	| "other-launch"
@@ -60,7 +60,8 @@ export type AiRefusal =
 	| "credential-changed"
 	| "sign-in-unavailable"
 	| "no-copilot-access"
-	| "copilot-unavailable";
+	| "copilot-unavailable"
+	| "busy";
 
 /**
  * The credential a placeholder stands for now: `secret` goes in the provider's credential header,
@@ -153,6 +154,19 @@ function unchanged(read: AiCredentialRecord, current: AiCredentialRecord | undef
 			: !current.ciphertext && !read.ciphertext);
 }
 
+/** Whether a Copilot token's deadline has come at `now`; a key has none. */
+function expired(authorized: AiAuthorized, now: Date): boolean {
+	return authorized.expiresAt !== undefined && now.getTime() >= authorized.expiresAt;
+}
+
+/** Whether `current` is the very set of credentials `read` was, provider by provider. */
+function sameSet(read: AiCredentialRecord[], current: AiCredentialRecord[]): boolean {
+	return read.length === current.length
+		&& read.every(record =>
+			unchanged(record, current.find(now => now.provider === record.provider))
+		);
+}
+
 function summary(record: AiCredentialRecord, copilotAccess?: CopilotAccess): AiCredentialSummary {
 	return {
 		provider: record.provider,
@@ -198,8 +212,15 @@ export class AiCredentials {
 	readonly #fetch: typeof fetch;
 	readonly #copilotTokens = new Map<
 		string,
-		{ answer: Promise<CopilotToken | undefined>; until: number }
+		{ answer: Promise<CopilotToken | undefined>; until: number; asked: number }
 	>();
+	/** How many times GitHub was asked for a Copilot token, numbering each question in order. */
+	#asked = 0;
+	/**
+	 * The latest answer GitHub gave about each person's Copilot access, by the order it was asked
+	 * in: a newer question's answer replaces an older one's, whichever arrived first.
+	 */
+	readonly #entitlements = new Map<string, { asked: number; access: "access" | "none" }>();
 
 	constructor(options: AiCredentialsOptions) {
 		this.#storage = options.storage;
@@ -225,7 +246,8 @@ export class AiCredentials {
 			summary(
 				record,
 				record.provider === "github-copilot"
-					? await this.#copilotAccess(await this.#connectedToken(record, githubToken))
+					? (await this.#copilotAccess(userId, await this.#connectedToken(record, githubToken)))
+						.access
 					: undefined,
 			)
 		));
@@ -236,7 +258,8 @@ export class AiCredentials {
 		let record = await this.#storage.aiCredentials.get(userId, "github-copilot") ?? signIn(userId);
 		return summary(
 			record,
-			await this.#copilotAccess(await this.#connectedToken(record, githubToken), true),
+			(await this.#copilotAccess(userId, await this.#connectedToken(record, githubToken), true))
+				.access,
 		);
 	}
 
@@ -279,7 +302,8 @@ export class AiCredentials {
 		return summary(
 			record,
 			provider === "github-copilot"
-				? await this.#copilotAccess(await this.#connectedToken(record, githubToken), true)
+				? (await this.#copilotAccess(userId, await this.#connectedToken(record, githubToken), true))
+					.access
 				: undefined,
 		);
 	}
@@ -323,11 +347,15 @@ export class AiCredentials {
 	 * Placeholders for one launch, one per provider its person can use now, stored before they are
 	 * returned. GitHub Copilot is given only when GitHub gives the person's GitHub token a Copilot
 	 * token at this launch; otherwise it is `withheld`, with the reason. Once they are stored, the
-	 * person's credentials are read again, and a launch whose granted providers did not all keep the
-	 * credential they were admitted with (one disconnected, replaced, or removed and added again
-	 * meanwhile) takes its placeholders back and is prepared afresh, at most `LAUNCH_ATTEMPTS` times,
-	 * so no grant is returned for a credential that changed before it was handed out. With no grants
-	 * nothing is stored, and the caller starts no runner.
+	 * person's credentials are read a final time, and the grants are published (none included) in
+	 * the same step as the last check, with nothing awaited between, only while all of it holds:
+	 * that read found the very credentials the launch was prepared with, none was connected, replaced
+	 * or removed since it began, no answer about Copilot asked after the launch's own (a Check again)
+	 * says otherwise, and the launch has not reached its deadline. A launch past its deadline takes
+	 * its placeholders back and is given nothing; any other change takes them back and prepares the
+	 * launch afresh, keys and all, at most `LAUNCH_ATTEMPTS` times. So no grant is returned for a
+	 * credential that changed before it was, nor without one that was added. With no grants nothing
+	 * is stored, and the caller starts no runner.
 	 */
 	async launch(input: AiLaunch): Promise<AiLaunchGrants> {
 		let launchId = crypto.randomUUID();
@@ -337,26 +365,38 @@ export class AiCredentials {
 		for (let attempt = 0; attempt < LAUNCH_ATTEMPTS; attempt++) {
 			let admitted = await this.#admitted(input);
 			withheld = admitted.withheld;
-			if (!admitted.usable.length) break;
 			let grants: AiProviderGrant[] = admitted.usable.map(record => ({
 				provider: record.provider,
 				baseUrl: aiBaseUrl(this.#origin, record.provider),
 				placeholder: PLACEHOLDER_PREFIX + randomBytes(32).toString("base64url"),
 				keyVariable: AI_KEY_VARIABLES[record.provider],
 			}));
-			await this.#storage.aiPlaceholders.put(this.#rows(launchId, launchDigest, input, grants));
+			if (grants.length) {
+				await this.#storage.aiPlaceholders.put(this.#rows(launchId, launchDigest, input, grants));
+			}
+			let version = this.#storage.aiCredentials.version(input.userId);
 			let current = await this.#connected(input.userId);
-			let kept = admitted.usable.every(record =>
-				unchanged(record, current.find(now => now.provider === record.provider))
-			);
-			if (kept) return { launchId, launchToken, grants, withheld };
-			await this.#storage.aiPlaceholders.deleteLaunch(launchId);
+			let latest = this.#entitlements.get(input.userId);
+			let held = this.#storage.aiCredentials.version(input.userId) === version
+				&& sameSet(admitted.connected, current)
+				&& (!latest || latest.asked <= admitted.decided || latest.access === admitted.copilot);
+			let due = this.#clock() >= input.expiresAt;
+			if (held && !due) return { launchId, launchToken, grants, withheld };
+			if (grants.length) await this.#storage.aiPlaceholders.deleteLaunch(launchId);
+			if (due) break;
 		}
 		return { launchId, launchToken, grants: [], withheld };
 	}
 
-	/** The person's connected providers a launch can be given now, and those it can't, with why. */
+	/**
+	 * The person's connected providers (`connected`), those a launch can be given now, and those it
+	 * can't, with why. `copilot` is what GitHub answered about Copilot access at this launch, and
+	 * `decided` the number of the question it answered, or, unanswered, of the latest answer there
+	 * was before the launch asked.
+	 */
 	async #admitted(input: AiLaunch) {
+		let decided = this.#entitlements.get(input.userId)?.asked ?? 0;
+		let copilot: CopilotAccess | undefined;
 		let connected = await this.#connected(input.userId);
 		let usable: AiCredentialRecord[] = [];
 		let withheld: AiWithheld[] = [];
@@ -370,18 +410,22 @@ export class AiCredentials {
 					});
 					continue;
 				}
-				let access = await this.#copilotAccess(token, true);
-				if (access !== "access") {
+				let answer = await this.#copilotAccess(input.userId, token, true);
+				if (answer.asked !== undefined) {
+					decided = answer.asked;
+					copilot = answer.access;
+				}
+				if (answer.access !== "access") {
 					withheld.push({
 						provider: record.provider,
-						reason: access === "none" ? "no-copilot-access" : "copilot-unavailable",
+						reason: answer.access === "none" ? "no-copilot-access" : "copilot-unavailable",
 					});
 					continue;
 				}
 			}
 			usable.push(record);
 		}
-		return { usable, withheld };
+		return { connected, usable, withheld, decided, copilot };
 	}
 
 	#rows(
@@ -417,16 +461,34 @@ export class AiCredentials {
 	}
 
 	/**
-	 * Whether `launchToken` is the credential of a live launch: one Chopin stored placeholders for,
-	 * unexpired, on a machine not revoked and a document not archived. What a launch's runner may
-	 * read without a placeholder (the model catalog) needs this alone.
+	 * Calls `serve` for what a launch's runner reads for itself and is sent no credential for (the
+	 * model catalog). The request must carry one of that launch's placeholders, of any provider, and
+	 * the launch's own credential, and the launch must be live: unexpired, on a machine not revoked
+	 * and a document not archived. The last check is made in the same step as `serve` is called,
+	 * with nothing awaited between, and is read again when a cutoff completed while it was read, so
+	 * a launch that ended before `serve` is never served.
 	 */
-	async authorizeLaunch(launchToken: string | undefined): Promise<true | { refused: AiRefusal }> {
+	async forLaunch<T>(
+		placeholder: string | undefined,
+		launchToken: string | undefined,
+		serve: () => T,
+	): Promise<T | { refused: AiRefusal }> {
+		if (!placeholder) return { refused: "no-placeholder" };
 		if (!launchToken) return { refused: "no-launch" };
-		if (!LAUNCH.test(launchToken)) return { refused: "unknown-launch" };
-		let found = await this.#storage.aiPlaceholders.findLaunch(digest(launchToken), this.#clock());
-		if (!found) return { refused: "unknown-launch" };
-		return await this.#launchLive(found) ? true : { refused: "launch-ended" };
+		if (!PLACEHOLDER.test(placeholder)) return { refused: "unknown-placeholder" };
+		for (let attempt = 0; attempt < HANDOFF_ATTEMPTS; attempt++) {
+			let cutoffs = this.#storage.aiPlaceholders.cutoffs();
+			let found = await this.#storage.aiPlaceholders.find(digest(placeholder), this.#clock());
+			if (!found) return { refused: "unknown-placeholder" };
+			if (!timingSafeEqual(found.launchDigest, digest(launchToken))) {
+				return { refused: "other-launch" };
+			}
+			if (!await this.#launchLive(found)) return { refused: "launch-ended" };
+			if (this.#storage.aiPlaceholders.cutoffs() !== cutoffs) continue;
+			if (this.#clock() >= found.expiresAt) return { refused: "launch-ended" };
+			return serve();
+		}
+		return { refused: "busy" };
 	}
 
 	/**
@@ -458,49 +520,66 @@ export class AiCredentials {
 	}
 
 	/**
-	 * Sends a request through `send` with what the proxy may send now, decided at the final handoff
-	 * once the request's body is read. A Copilot token that expired meanwhile is renewed first. Then,
-	 * after any renewal, the launch, its machine, its document and the person's credential are read
-	 * again together, and `send` is called in the same step as that check, with nothing awaited
-	 * between: the request is refused when its launch ended or expired, its machine was revoked or
-	 * its document archived (`launch-ended`), when its person disconnected the provider
-	 * (`not-connected`), or when the credential it was admitted with was replaced, or removed and
-	 * connected again (`credential-changed`), so a request never carries a credential its person no
-	 * longer has, nor an expired Copilot token.
+	 * Sends a request with what the proxy may send now, decided at the final handoff once the
+	 * request's body is read. A Copilot token that expired meanwhile is renewed first. Then the
+	 * launch, its machine, its document and the person's credential are read again together, and
+	 * `prepare` builds the whole request for that credential and returns its entry to the transport.
+	 * Last, with nothing awaited between this check and that entry: when a cutoff (a launch ended, a
+	 * machine revoked, a document archived, a credential connected or removed) completed while they
+	 * were read, they are read again; the launch must not have reached its deadline; and a Copilot
+	 * token whose deadline came meanwhile is renewed and the request prepared again. So a request is
+	 * refused when its launch ended or expired, its machine was revoked or its document archived
+	 * (`launch-ended`), when its person disconnected the provider (`not-connected`), or when the
+	 * credential it was admitted with was replaced, or removed and connected again
+	 * (`credential-changed`), whenever that completed before the send, and never carries an expired
+	 * Copilot token. Cutoffs that keep completing while it reads refuse it as `busy`.
 	 */
 	async handoff<T>(
 		authorized: AiAuthorized,
-		send: (authorized: AiAuthorized) => T,
+		prepare: (authorized: AiAuthorized) => () => T,
 	): Promise<T | { refused: AiRefusal }> {
 		let current = authorized;
-		if (current.expiresAt !== undefined && this.#clock().getTime() >= current.expiresAt) {
-			let renewed = await this.#credential(current.placeholder);
-			if ("refused" in renewed) return renewed;
-			current = renewed;
+		for (let attempt = 0; attempt < HANDOFF_ATTEMPTS; attempt++) {
+			if (expired(current, this.#clock())) {
+				let renewed = await this.#credential(current.placeholder);
+				if ("refused" in renewed) return renewed;
+				current = renewed;
+			}
+			let placeholder = current.placeholder;
+			let cutoffs = this.#storage.aiPlaceholders.cutoffs();
+			let [found, live, record] = await Promise.all([
+				this.#storage.aiPlaceholders.find(placeholder.digest, this.#clock()),
+				this.#launchLive(placeholder),
+				this.#record(placeholder.userId, placeholder.provider),
+			]);
+			if (!found || found.launchId !== placeholder.launchId || !live) {
+				return { refused: "launch-ended" };
+			}
+			if (!record) return { refused: "not-connected" };
+			if (!unchanged(authorized.record, record)) return { refused: "credential-changed" };
+			let enter = prepare(current);
+			if (this.#storage.aiPlaceholders.cutoffs() !== cutoffs) continue;
+			let now = this.#clock();
+			if (now >= found.expiresAt) return { refused: "launch-ended" };
+			if (expired(current, now)) continue;
+			let sent = enter();
+			this.#used(record, now);
+			return sent;
 		}
-		let placeholder = current.placeholder;
-		let [found, live, record] = await Promise.all([
-			this.#storage.aiPlaceholders.find(placeholder.digest, this.#clock()),
-			this.#launchLive(placeholder),
-			this.#record(placeholder.userId, placeholder.provider),
-		]);
-		if (!found || found.launchId !== placeholder.launchId || !live) {
-			return { refused: "launch-ended" };
-		}
-		if (!record) return { refused: "not-connected" };
-		if (!unchanged(authorized.record, record)) return { refused: "credential-changed" };
-		if (current.expiresAt !== undefined && this.#clock().getTime() >= current.expiresAt) {
-			return { refused: "copilot-unavailable" };
-		}
-		let sent = send(current);
-		this.#used(record);
-		return sent;
+		return { refused: "busy" };
 	}
 
-	/** Saves that `record` was just sent, unless that was saved less than a minute ago. */
-	#used(record: AiCredentialRecord): void {
-		let now = this.#clock();
-		if (record.lastUsedAt && now.getTime() - record.lastUsedAt.getTime() < USE_RECORDED_MS) return;
+	/**
+	 * Saves that `record` was sent at `now`, unless the use it was read with is in the same minute,
+	 * which the list already shows, or later, which it must keep showing.
+	 */
+	#used(record: AiCredentialRecord, now: Date): void {
+		let last = record.lastUsedAt?.getTime();
+		if (
+			last !== undefined
+			&& (last >= now.getTime()
+				|| Math.floor(last / USE_MINUTE_MS) === Math.floor(now.getTime() / USE_MINUTE_MS))
+		) return;
 		this.#storage.aiCredentials.used(record, now).catch(err =>
 			console.warn("[ai] couldn't record when a credential was last used", err)
 		);
@@ -589,26 +668,45 @@ export class AiCredentials {
 
 	/**
 	 * Whether a GitHub token's account has Copilot access, from GitHub's answer to exchanging it,
-	 * which is used for a few minutes unless `fresh`. A refusal is `none`, not an error; a token
-	 * Chopin can't read, or a question GitHub couldn't answer, is `unknown`.
+	 * which is used for a few minutes unless `fresh`, with the number of the question it answered
+	 * (`asked`), kept as `userId`'s latest answer unless one asked later is. A refusal is `none`, not
+	 * an error; a token Chopin can't read, or a question GitHub couldn't answer, is `unknown`.
 	 */
-	async #copilotAccess(githubToken: string | undefined, fresh = false): Promise<CopilotAccess> {
-		if (!githubToken) return "unknown";
+	async #copilotAccess(
+		userId: string,
+		githubToken: string | undefined,
+		fresh = false,
+	): Promise<{ access: CopilotAccess; asked?: number }> {
+		if (!githubToken) return { access: "unknown" };
+		let answer: { token: CopilotToken | undefined; asked: number };
 		try {
-			return await this.#copilotToken(githubToken, fresh) ? "access" : "none";
+			answer = await this.#copilotAnswer(githubToken, fresh);
 		} catch {
-			return "unknown";
+			return { access: "unknown" };
 		}
+		let access = answer.token ? "access" as const : "none" as const;
+		let latest = this.#entitlements.get(userId);
+		if (!latest || latest.asked < answer.asked) {
+			this.#entitlements.set(userId, { asked: answer.asked, access });
+		}
+		return { access, asked: answer.asked };
+	}
+
+	async #copilotToken(githubToken: string): Promise<CopilotToken | undefined> {
+		return (await this.#copilotAnswer(githubToken)).token;
 	}
 
 	/**
 	 * The Copilot token GitHub gives `githubToken`, asked once for every caller at a time and held
-	 * until a minute before it expires, or five minutes at most, so a seat GitHub removes is noticed.
-	 * A refusal is held as long; a failure is not held. A token that has expired by the time a caller
-	 * has it, one GitHub gave already expired or one that expired while GitHub answered, is a
-	 * failure: it is never returned.
+	 * until a minute before it expires, or five minutes at most, so a seat GitHub removes is noticed,
+	 * with the number of the question it answers. A refusal is held as long; a failure is not held. A
+	 * token that has expired by the time a caller has it, one GitHub gave already expired or one that
+	 * expired while GitHub answered, is a failure: it is never returned.
 	 */
-	async #copilotToken(githubToken: string, fresh = false): Promise<CopilotToken | undefined> {
+	async #copilotAnswer(
+		githubToken: string,
+		fresh = false,
+	): Promise<{ token: CopilotToken | undefined; asked: number }> {
 		let key = Buffer.from(digest(githubToken)).toString("hex");
 		let now = this.#clock().getTime();
 		let held = this.#copilotTokens.get(key);
@@ -618,14 +716,18 @@ export class AiCredentials {
 			if (this.#copilotTokens.get(key) === entry) this.#copilotTokens.delete(key);
 			throw new CopilotTokenExpired();
 		}
-		return token;
+		return { token, asked: entry.asked };
 	}
 
 	#ask(key: string, githubToken: string, now: number) {
 		for (let [other, entry] of this.#copilotTokens) {
 			if (entry.until <= now) this.#copilotTokens.delete(other);
 		}
-		let entry = { answer: this.#exchange(githubToken), until: now + ACCESS_KNOWN_MS };
+		let entry = {
+			answer: this.#exchange(githubToken),
+			until: now + ACCESS_KNOWN_MS,
+			asked: ++this.#asked,
+		};
 		this.#copilotTokens.set(key, entry);
 		entry.answer.then(
 			token => {

@@ -27,6 +27,8 @@ export class MemoryMachineStore implements MachineStore {
 	constructor(
 		private userExists: (id: string) => boolean,
 		private channelExists: (id: string) => boolean = () => true,
+		/** Told once a machine is revoked, before its caller hears so. */
+		private revoked: () => void = () => {},
 	) {}
 	async create(input: CreateMachine) {
 		if (!this.userExists(input.userId)) throw missing(`user ${input.userId} does not exist`);
@@ -108,6 +110,7 @@ export class MemoryMachineStore implements MachineStore {
 		found.revokedAt = new Date(now);
 		for (let [key, choice] of this.#choices) if (choice.machineId === id) this.#choices.delete(key);
 		this.#unfavor(id);
+		this.revoked();
 		return true;
 	}
 	/** Forget everyone's favorite of a machine, except `keep`'s: its owner's own stays. */

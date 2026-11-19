@@ -512,6 +512,12 @@ export interface AiCredentialStore {
 	 * and changes nothing once that credential was replaced or removed.
 	 */
 	used(record: AiCredentialRecord, at: Date): Promise<void>;
+	/**
+	 * How many times this process has connected, replaced or removed one of `userId`'s credentials,
+	 * each counted once its write settles and before its caller hears so; one process serves a
+	 * database at a time, so a count unchanged across a read says none completed meanwhile.
+	 */
+	version(userId: string): number;
 }
 
 /**
@@ -523,13 +529,19 @@ export interface AiPlaceholderStore {
 	put(placeholders: AiPlaceholder[]): Promise<void>;
 	/** The placeholder for this digest while it has not expired at `now`. */
 	find(digest: Uint8Array, now: Date): Promise<AiPlaceholder | undefined>;
-	/** One of the placeholders of the launch whose credential has this digest, unexpired at `now`. */
-	findLaunch(launchDigest: Uint8Array, now: Date): Promise<AiPlaceholder | undefined>;
 	/** Ends a launch: its placeholders stop working. Returns how many there were. */
 	deleteLaunch(launchId: string): Promise<number>;
 	/** Every launch on a machine, as revoking it does; returns how many placeholders went. */
 	deleteForMachine(machineId: string): Promise<number>;
 	deleteExpired(now: Date): Promise<number>;
+	/**
+	 * How many writes this process has committed that end a placeholder's authority before it
+	 * expires: a launch ended, a machine revoked or its launches ended, a document archived, and a
+	 * credential connected, replaced or removed. Each is counted once its write settles and before
+	 * its caller hears so; one process serves a database at a time, so a count unchanged across a
+	 * read says none completed meanwhile. Expiry is not counted: a reader checks the deadline itself.
+	 */
+	cutoffs(): number;
 }
 
 /** MCP sessions, which a restart no longer ends. Idle ones are swept. */

@@ -149,20 +149,29 @@ durable.
   provider's model API routes, accepts a placeholder only from a live launch, in
   `Authorization` or `x-api-key`, with that same launch's credential in
   `x-chopin-launch`, checks the launch, its machine, its document and the person's
-  credential again once the body is read, after any Copilot renewal and in the same
-  step as the send (a credential replaced or removed meanwhile is never sent), swaps the
+  credential again once the body is read, after any Copilot renewal, and decides the
+  send in the same step as it enters the transport: a cutoff (a launch ended, a machine
+  revoked, a document archived, a credential replaced or removed) that completed while
+  those reads were pending makes it read again (one process holds the writer lease, so
+  storage counts each cutoff in memory as it commits), and the launch's deadline and a
+  Copilot token's are checked then, so a request is never sent after a cutoff its
+  caller saw complete. It refuses a request that also carries its placeholder in a
+  header the proxy drops rather than send it changed, swaps the
   placeholder for the real credential of the launch's person in that provider's
   one header, forwards to that provider's fixed origin, following no redirect, and
   passes back only allow-listed response headers, with the credential taken out of
-  them and the body. A revoked machine ends its launches'
+  them and the body and what is emitted checked for it. A revoked machine ends its launches'
   placeholders, and archiving a document deletes them for good. Copilot is sent
   only the Copilot token Chopin exchanges the person's GitHub token for and renews,
   never the GitHub token and never one past its expiry; a launch gets a Copilot
   placeholder only when GitHub gives that token a Copilot token at launch (through
   the person's sign-in unless they connected a token instead), and no
-  placeholder for a provider its person can't use. An OpenAI or Anthropic key is
+  placeholder for a provider its person can't use. A launch's grants are published
+  only while its person's credentials and latest Copilot answer are those it was
+  prepared with, and before its deadline. An OpenAI or Anthropic key is
   saved only once that provider accepts it. The model catalog route serves only a
-  live launch's credential. Handing placeholders to runners
+  request carrying one of a live launch's placeholders with that launch's credential.
+  Handing placeholders to runners
   is not wired yet. See [Hosted agent](docs/hosted-agent.md#ai-credentials).
 - **Planner ownership is process-bound.** The first eligible Planner or
   model-backed research request supplies its GitHub App token and Copilot

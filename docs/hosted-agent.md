@@ -913,9 +913,10 @@ DELETE /api/ai/credentials/:provider
 for `github-copilot` alone. The list says which providers a person connected,
 how, and when (`updatedAt`); no route returns a secret. A key is listed with its
 last four characters (`suffix`, kept beside the ciphertext) and the time a
-launch last sent a request with it (`lastUsedAt`, saved at most once a minute
-as a request is sent, and absent until one is; replacing the key starts it
-afresh). GitHub Copilot is always listed and usable through the person's
+launch last sent a request with it (`lastUsedAt`, saved as a request is sent
+unless a use in the same minute, or a later one, is saved already, so it shows the
+minute of the latest use and never moves back, and absent until one is;
+replacing the key starts it afresh). GitHub Copilot is always listed and usable through the person's
 current GitHub sign-in, with nothing saved, until they connect a token instead;
 removing that token returns them to the sign-in, and `check` asks GitHub about
 whichever is theirs. Connecting and disconnecting need a
@@ -935,11 +936,18 @@ variable agents read that provider's key from
 (`AiProviderGrant` in `packages/protocol/ai-credentials.ts`). Chopin keeps only
 each placeholder's SHA-256 digest (`ai_placeholders`), written before the
 placeholder is handed out. Once they are written it reads the person's
-credentials again: a launch whose providers did not all keep the credential they
-were admitted with (one disconnected, replaced, or removed and added again
-meanwhile) takes its placeholders back and is prepared afresh, at most three
-times, so no placeholder is handed out for a credential that changed before it
-was. A placeholder works until its launch ends or
+credentials a final time and publishes the grants, an empty list included, in the
+same step as its last check, only while all of this holds: that read found the
+very credentials the launch was prepared with; none of the person's credentials
+was connected, replaced or removed since (storage counts each such write in
+memory as it commits, which one process under the writer lease makes exact); no
+answer about Copilot asked after the launch's own, such as a Check again, says
+otherwise; and the launch has not reached its deadline. A launch past its deadline
+takes its placeholders back and is given nothing. Any other change takes them
+back and prepares the launch afresh, at most three times, keeping every key that
+is still usable: a seat refused meanwhile withholds Copilot alone, and a key
+added meanwhile is given. So no placeholder is handed out for a credential that
+changed before it was, nor is one missing for a key added before it was. A placeholder works until its launch ends or
 expires, and is refused once the launch's machine is revoked or its document is
 deleted. Archiving a document deletes its launches' placeholders in the same
 transaction, so restoring it brings none back. A launch also says which
@@ -978,32 +986,49 @@ placeholder can't reach Copilot's other services (its MCP server among them). A
 request must carry a live launch's placeholder for that provider in
 `Authorization: Bearer` or `x-api-key`, only one value across the two, and that
 same launch's credential in `x-chopin-launch`. The proxy drops these headers,
-the caller's cookies and forwarding headers, and reads the body. Then, at the
-final handoff, it takes the next Copilot token for one that expired meanwhile,
-and after that reads the launch, its machine, its document and the person's
-credential again together, and sends in the same step as that check: a launch
-ended, a machine revoked or a document archived meanwhile, during a Copilot
-renewal included, sends nothing (`launch-ended`), nor does a provider
-disconnected (`not-connected`) or a credential replaced, or removed and
-connected again, since the request was admitted (`credential-changed`), so the
-provider never sees a key its person no longer has. It puts the real credential
-of the person the launch runs for in the one header the
-provider takes, and sends the method, path, query and body unchanged to the
-provider's own origin. The path cannot name another host. A placeholder anywhere
-else (the query, another header, the body) is sent on as the placeholder it is.
+the caller's cookies and forwarding headers, and reads the body. A request that
+also carries its placeholder in a header the proxy drops (`Referer`, `Cookie`,
+`Forwarded` and the like) is refused with `dropped-header` (400) rather than sent
+without it. Then, at the final handoff, it takes the next Copilot token for one
+that expired meanwhile, reads the launch, its machine, its document and the
+person's credential again together, and builds the whole request. Last, with
+nothing awaited between that check and the send: when a cutoff (a launch ended, a
+machine revoked, a document archived, a credential connected, replaced or removed)
+completed while those reads were pending, it reads them again; the launch must
+not have reached its deadline by then; and a Copilot token whose deadline came
+while the request was built is renewed and the request built again. Storage
+counts each cutoff in memory as it commits, before its caller hears so, which one
+process under the writer lease makes exact. So a launch ended, a machine revoked
+or a document archived before the send, during a Copilot renewal or a pending
+read included, sends nothing (`launch-ended`), nor does a provider disconnected
+(`not-connected`) or a credential replaced, or removed and connected again, since
+the request was admitted (`credential-changed`), and the provider never sees a
+key its person no longer has. A request already handed to the provider when a
+cutoff completes was sent once and is answered. It puts the real credential of
+the person the launch runs for in the one header the provider takes, and sends
+the method, path, query and body unchanged to the provider's own origin. The path
+cannot name another host. A placeholder in the query, another header the proxy
+forwards or the body is sent on as the placeholder it is.
 A redirect is returned to the agent, never followed with the credential. The
 response streams back with the provider's status code but not its reason phrase,
 with only the headers model clients read (`RETURNED_RESPONSE` in `proxy.ts`: the
 content type, caching, validators, `location`, retry and rate-limit headers and
 request IDs; `Cache-Control: no-store` when the provider sends none), and with
 the credential replaced by `[redacted]` wherever one of those headers or the
-body holds it, even split across chunks. A body in a content coding the proxy
+body holds it, even split across chunks. What is emitted is checked, not only
+what came: a rate-limit header whose name holds the credential, in any case, is
+left out, as is a header whose value forms the credential again once replaced
+with the text around it; and a body that would emit it, the replacement and its
+neighbours forming it within a chunk or across two, ends there with an error and
+none of it emitted. A body in a content coding the proxy
 can't decode, which it could not take the credential out of, is refused with
 `upstream-encoding` (502) and none of it is passed back. Refusals are JSON with
-a `code`: `no-placeholder`, `no-launch`, `unknown-launch`, `unknown-placeholder`,
+a `code`: `no-placeholder`, `no-launch`, `unknown-placeholder`,
 `other-provider`, `other-launch` or `launch-ended` (401), `not-connected`,
 `sign-in-unavailable` or `no-copilot-access` (403), `credential-changed` (409,
-which clients send again), and `copilot-unavailable` (502).
+which clients send again), `copilot-unavailable` (502), and `busy` (503, sent
+again too) when cutoffs kept completing while the final check read, three times
+running.
 
 **GitHub Copilot.** Copilot's model API takes a Copilot token, which GitHub
 exchanges a GitHub token for (`GET /copilot_internal/v2/token` on
@@ -1014,7 +1039,7 @@ holds a Copilot token until a minute before it expires, and five minutes at
 most, then asks for the next. It never sends one past its expiry: a token GitHub
 gives already expired, or that expires while GitHub answers, is taken as GitHub
 not answering (`copilot-unavailable`), and one that expires while a request's
-body arrives is replaced by the next before the request is sent; when GitHub names the account's own Copilot host
+body arrives, or while the request is built, is replaced by the next before the request is sent; when GitHub names the account's own Copilot host
 (`endpoints.api`, a `githubcopilot.com` host) the proxy sends there. A GitHub
 sign-in's token comes from the paired machine's own GitHub authorization when
 the launch runs on the person's own machine, else from their live browser
@@ -1041,9 +1066,13 @@ one that would only fail.
 **Model lists.** A provider's model list is an ordinary request through the
 proxy (Copilot's account `GET /models`, OpenAI's and Anthropic's `/v1/models`).
 `GET /api/v1/ai/models.dev/api.json` serves the public models.dev catalog to a
-live launch alone: the request needs that launch's credential in
-`x-chopin-launch`, checked before anything is fetched or served, a cached copy
-or a `304` included (`no-launch`, `unknown-launch` or `launch-ended`, 401).
+live launch alone: the request needs one of that launch's placeholders, of any
+provider, in `Authorization: Bearer` or `x-api-key`, with that launch's credential
+in `x-chopin-launch`, checked before anything is fetched or served, a cached copy
+or a `304` included (`no-placeholder`, `no-launch`, `unknown-placeholder`,
+`other-launch` or `launch-ended`, 401). The last check is made in the same step
+as the answer, and read again when a cutoff completed meanwhile, so a launch that
+ended while it was checked is refused even a warm copy.
 Chopin fetches the catalog with no credential, at most every ten minutes, and
 answers with its `ETag`, for an agent's catalog base URL (Atomic's
 `ATOMIC_MODEL_CATALOG_URL` is `<origin>/api/v1/ai/models.dev`).

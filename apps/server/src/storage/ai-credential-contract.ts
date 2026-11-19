@@ -35,7 +35,14 @@ async function launched(storage: StorageAdapter) {
 		expiresAt: later(900),
 		...overrides,
 	});
-	return { userId, channelId, machineId: input.id, launchId, placeholder };
+	return {
+		userId,
+		channelId,
+		machineId: input.id,
+		machineOwner: input.userId,
+		launchId,
+		placeholder,
+	};
 }
 
 async function failure(action: () => Promise<unknown>) {
@@ -138,12 +145,6 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 				expect(await storage.aiPlaceholders.find(unbound.digest, AT)).toEqual(unbound);
 				expect(await storage.aiPlaceholders.find(stored.digest, later(900))).toBeUndefined();
 				expect(await storage.aiPlaceholders.find(bytes(32), AT)).toBeUndefined();
-				expect((await storage.aiPlaceholders.findLaunch(stored.launchDigest, AT))?.launchId).toBe(
-					stored.launchId,
-				);
-				expect(await storage.aiPlaceholders.findLaunch(stored.launchDigest, later(900)))
-					.toBeUndefined();
-				expect(await storage.aiPlaceholders.findLaunch(bytes(32), AT)).toBeUndefined();
 
 				expect(
 					await failure(() => storage.aiPlaceholders.put([placeholder({ digest: stored.digest })])),
@@ -222,6 +223,53 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 				await storage.channels.archive({ id: channelId, now: AT });
 				expect(await storage.channels.delete(channelId)).toBe(true);
 				expect(await storage.aiPlaceholders.find(stored.digest, AT)).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		test("counts each write that ends AI authority by the time its caller hears it committed", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId, channelId, machineId, machineOwner, launchId, placeholder } = await launched(
+					storage,
+				);
+				let other = await owner(storage);
+				let counted = async (write: () => Promise<unknown>) => {
+					let before = storage.aiPlaceholders.cutoffs();
+					await write();
+					return storage.aiPlaceholders.cutoffs() - before;
+				};
+				let key: AiCredentialRecord = {
+					userId,
+					provider: "openai",
+					kind: "api-key",
+					ciphertext: bytes(48),
+					updatedAt: AT,
+				};
+				let stored = placeholder();
+
+				expect(await counted(() => storage.aiPlaceholders.put([stored]))).toBe(0);
+				expect(await counted(() => storage.aiPlaceholders.find(stored.digest, AT))).toBe(0);
+				expect(await counted(() => storage.aiPlaceholders.deleteExpired(AT))).toBe(0);
+				let version = storage.aiCredentials.version(userId);
+				expect(await counted(() => storage.aiCredentials.put(key))).toBe(1);
+				expect(await counted(() => storage.aiCredentials.used(key, later(1)))).toBe(0);
+				expect(await counted(() => storage.aiCredentials.put({ ...key, ciphertext: bytes(48) })))
+					.toBe(1);
+				expect(await counted(() => storage.aiCredentials.delete(userId, "openai"))).toBe(1);
+				expect(storage.aiCredentials.version(userId)).toBe(version + 3);
+				let theirs = storage.aiCredentials.version(other);
+				await storage.aiCredentials.put({ ...key, userId: other });
+				expect(storage.aiCredentials.version(userId)).toBe(version + 3);
+				expect(storage.aiCredentials.version(other)).toBe(theirs + 1);
+
+				expect(await counted(() => storage.aiPlaceholders.deleteLaunch(launchId))).toBe(1);
+				expect(await counted(() => storage.aiPlaceholders.deleteForMachine(machineId))).toBe(1);
+				expect(await counted(() => storage.machines.revoke(machineId, machineOwner, AT))).toBe(1);
+				expect(await counted(() => storage.channels.archive({ id: channelId, now: AT }))).toBe(1);
+				expect(await counted(() => storage.channels.restore({ id: channelId, now: later(1) })))
+					.toBe(0);
 			} finally {
 				await storage.close();
 			}
