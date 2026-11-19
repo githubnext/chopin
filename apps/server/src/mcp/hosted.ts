@@ -701,9 +701,16 @@ export function hosted(
 				if (access.kind !== "allowed") return access;
 				try {
 					let now = auth.clock();
-					let result = callbacks.archiveChannel
-						? await callbacks.archiveChannel(access.channel.id, now)
-						: await auth.storage.channels.archive({ id: access.channel.id, now });
+					let result: ChannelArchiveResult;
+					if (callbacks.archiveChannel) {
+						result = await callbacks.archiveChannel(access.channel.id, now);
+					} else if (persistence) {
+						result = await auth.storage.channels.archive({
+							id: access.channel.id,
+							now,
+							lease: persistence.lease(),
+						});
+					} else throw new Error("storage writer lease is unavailable");
 					if (!result.channel.archivedAt) {
 						throw new Error("archiving a document returned active metadata");
 					}

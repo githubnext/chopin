@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { bigPng, fixture } from "../images/raster.test-fixtures";
-import { contractId as id, openedStorage, userAndChannel } from "./contract-support";
+import { contractId as id, openedStorage, testLease, userAndChannel } from "./contract-support";
 import { StorageError } from "./errors";
 
 import type { StorageFactory } from "./contract-support";
@@ -121,7 +121,7 @@ export function imageContract(name: string, factory: StorageFactory) {
 				});
 				expect(await storage.images.channels(hash)).toEqual([channelId, other.id]);
 
-				await storage.channels.archive({ id: other.id, now });
+				await storage.channels.archive({ id: other.id, now, lease: await testLease(storage) });
 				expect(await storage.channels.delete(other.id)).toBe(true);
 				expect(await storage.images.channels(hash)).toEqual([channelId]);
 				expect(await storage.images.get(other.id, hash)).toBeUndefined();

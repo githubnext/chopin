@@ -3,7 +3,7 @@ import { AI_PROVIDERS } from "@chopin/protocol/ai-credentials";
 import { conflict, missing } from "../errors";
 
 import type { AiCutoffs } from "../ai-cutoffs";
-import type { AiCredentialRecord, AiPlaceholder } from "../model";
+import type { AiCredentialRecord, AiPlaceholder, Lease } from "../model";
 import type { AiCredentialStore, AiPlaceholderStore } from "../port";
 
 function hex(value: Uint8Array): string {
@@ -30,8 +30,16 @@ function copyPlaceholder(value: AiPlaceholder): AiPlaceholder {
 
 export class MemoryAiCredentialStore implements AiCredentialStore {
 	#records = new Map<string, AiCredentialRecord>();
-	constructor(private deps: { userExists: (id: string) => boolean; cutoffs: AiCutoffs }) {}
-	async put(record: AiCredentialRecord) {
+	constructor(
+		private deps: {
+			userExists: (id: string) => boolean;
+			/** Throws unless `lease` is held now, as every cutoff must be written under it. */
+			assertLease: (lease: Lease) => void;
+			cutoffs: AiCutoffs;
+		},
+	) {}
+	async put(lease: Lease, record: AiCredentialRecord) {
+		this.deps.assertLease(lease);
 		if (!this.deps.userExists(record.userId)) throw missing(`user ${record.userId} does not exist`);
 		this.#records.set(`${record.userId}\n${record.provider}`, copyCredential(record));
 		this.deps.cutoffs.cut(record.userId);
@@ -48,7 +56,8 @@ export class MemoryAiCredentialStore implements AiCredentialStore {
 			)
 			.map(copyCredential);
 	}
-	async delete(userId: string, provider: AiCredentialRecord["provider"]) {
+	async delete(lease: Lease, userId: string, provider: AiCredentialRecord["provider"]) {
+		this.deps.assertLease(lease);
 		let removed = this.#records.delete(`${userId}\n${provider}`);
 		this.deps.cutoffs.cut(userId);
 		return removed;
@@ -73,6 +82,8 @@ export class MemoryAiPlaceholderStore implements AiPlaceholderStore {
 	constructor(
 		private deps: {
 			userExists: (id: string) => boolean;
+			/** Throws unless `lease` is held now, as every cutoff must be written under it. */
+			assertLease: (lease: Lease) => void;
 			machineExists: (id: string) => boolean;
 			channelExists: (id: string) => boolean;
 			/** A document's archive generation while it is open, else undefined. */
@@ -116,10 +127,12 @@ export class MemoryAiPlaceholderStore implements AiPlaceholderStore {
 		let found = this.#placeholders.get(hex(digest));
 		return found && found.expiresAt > now ? copyPlaceholder(found) : undefined;
 	}
-	async deleteLaunch(launchId: string) {
+	async deleteLaunch(lease: Lease, launchId: string) {
+		this.deps.assertLease(lease);
 		return this.#cut(this.#deleteWhere(value => value.launchId === launchId));
 	}
-	async deleteForMachine(machineId: string) {
+	async deleteForMachine(lease: Lease, machineId: string) {
+		this.deps.assertLease(lease);
 		return this.#cut(this.#deleteWhere(value => value.machineId === machineId));
 	}
 	async deleteExpired(now: Date) {

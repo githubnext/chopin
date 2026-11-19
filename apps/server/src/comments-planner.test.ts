@@ -20,6 +20,7 @@ import * as room from "./plan/room";
 import { openPlan } from "./testing/plan";
 import { rooted } from "./testing/rooted";
 import * as Wire from "./wire";
+import { testLease } from "./storage/contract-support";
 
 import type { Config } from "./config";
 import type { Plan } from "./plan/service";
@@ -840,6 +841,7 @@ describe("a comment sent to Chopin inside a child document", () => {
 		await child.plan.persistence.storage.channels.archive({
 			id: child.channel.id,
 			now: new Date(),
+			lease: await testLease(child.plan.persistence.storage),
 		});
 		let quiet = console.error;
 		console.error = () => {};

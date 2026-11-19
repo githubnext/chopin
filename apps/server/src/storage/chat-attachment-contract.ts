@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { contractId as id, openedStorage, userAndChannel } from "./contract-support";
+import { contractId as id, openedStorage, testLease, userAndChannel } from "./contract-support";
 import { StorageError } from "./errors";
 
 import type { StorageFactory } from "./contract-support";
@@ -355,7 +355,7 @@ export function chatAttachmentContract(name: string, factory: StorageFactory) {
 					ids: [goes.id],
 					entryId: id("message"),
 				});
-				await storage.channels.archive({ id: other.id, now: NOW });
+				await storage.channels.archive({ id: other.id, now: NOW, lease: await testLease(storage) });
 				expect(await storage.channels.delete(other.id)).toBe(true);
 				expect(await storage.chatAttachments.get(other.id, goes.id)).toBeUndefined();
 				expect(await storage.chatAttachments.get(channelId, stays.id)).toBeDefined();

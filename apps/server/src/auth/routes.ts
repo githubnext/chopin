@@ -14,6 +14,7 @@ import type { SetupAgent } from "@chopin/protocol/agents";
 import type { AuthConfig } from "./config";
 import type { GitHub, GitHubConditional, GitHubTokenGrant } from "../github/client";
 import type { Router } from "../http/router";
+import type { Lease } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
 
 type Clock = () => Date;
@@ -37,6 +38,8 @@ type Dependencies = {
 	delay?: (ms: number, signal: AbortSignal) => Promise<void>;
 	onSessionRevoked?: (sessionId: string) => Promise<void>;
 	onCredentialsWillRotate?: (sessionId: string, revision: number) => Promise<void>;
+	/** The writer lease this process holds, which revoking a machine is written under. */
+	lease?: () => Lease;
 };
 
 export type HostedAuth = {
@@ -249,6 +252,7 @@ export function registerAuthRoutes(
 			}
 		},
 		invalidate: token => admission.invalidate(token),
+		...(dependencies.lease ? { lease: dependencies.lease } : {}),
 	});
 	let attempts = new OAuthAttempts(config.encryptionKey, secure, clock);
 	let redirectUri = `${config.origin}/auth/github/callback`;

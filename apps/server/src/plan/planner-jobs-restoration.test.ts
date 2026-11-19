@@ -3,6 +3,7 @@ import type { ConversationPlan } from "@chopin/protocol";
 import * as Service from "./service";
 import { openPlan } from "../testing/plan";
 import { storedRunning } from "./planner-jobs.test-fixtures";
+import { testLease } from "../storage/contract-support";
 
 test("a missing Planner job field restores as empty and stays optional", async () => {
 	let context = await openPlan();
@@ -61,7 +62,11 @@ test("one malformed Planner job rejects the entire saved sidecar", async () => {
 
 test("archived documents durably interrupt running jobs during maintenance open", async () => {
 	let context = await storedRunning();
-	await context.storage.channels.archive({ id: context.channel.id, now: context.now });
+	await context.storage.channels.archive({
+		id: context.channel.id,
+		now: context.now,
+		lease: await testLease(context.storage),
+	});
 	let opened = await Service.open(context.channel.id, context.backend, context.server);
 	try {
 		expect(opened.conversationPlanJobs[0]).toMatchObject({

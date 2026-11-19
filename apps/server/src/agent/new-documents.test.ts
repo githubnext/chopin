@@ -10,6 +10,7 @@ import {
 	newDocumentArguments,
 	NewDocumentLimits,
 } from "./new-documents";
+import { testLease } from "../storage/contract-support";
 
 import type { AuthenticatedSession } from "../auth/session";
 import type { Repository } from "../github/client";
@@ -86,7 +87,9 @@ async function fixture(options: {
 		createdBy: "U_mona",
 		now: NOW,
 	});
-	if (options.archived) await storage.channels.archive({ id: source.id, now: NOW });
+	if (options.archived) {
+		await storage.channels.archive({ id: source.id, now: NOW, lease: await testLease(storage) });
+	}
 	if (options.chosen) {
 		await storage.plannerModelChoices.put(writer.lease, {
 			channelId: source.id,

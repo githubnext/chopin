@@ -18,6 +18,7 @@ import {
 	createLegacyChildDraft,
 	createLegacyChildRequest,
 } from "./test-support";
+import { testLease } from "../storage/contract-support";
 
 import type { HostedAuth } from "../auth/routes";
 import type { GitHub, GitHubTokenGrant, Repository } from "../github/client";
@@ -605,6 +606,7 @@ describe("research workspace routes", () => {
 		await context.storage.channels.archive({
 			id: context.channel.id,
 			now: new Date(context.now.getTime() + 3),
+			lease: await testLease(context.storage),
 		});
 		expect(
 			(await context.router.handle(request(

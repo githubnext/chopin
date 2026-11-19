@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { GitHubError, GitHubTokenError } from "../github/client";
+import { testLease } from "../storage/contract-support";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { MachineError, Machines } from "./machines";
 
@@ -20,6 +21,7 @@ function grant(access: string, refresh: string, accessExpiresIn = 28_800): GitHu
 async function setup() {
 	let storage = new MemoryStorage();
 	await storage.users.put({ id: "alice", login: "alice", avatarUrl: "", now: new Date() });
+	let lease = await testLease(storage);
 	let now = new Date("2026-03-01T00:00:00.000Z");
 	let refreshed: string[] = [];
 	let github = {
@@ -43,6 +45,7 @@ async function setup() {
 			clientId: "client",
 			refresh,
 			authorize: async () => admitted,
+			lease: () => lease,
 		});
 	let machines = create();
 	let paired = await machines.pair({

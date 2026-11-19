@@ -15,6 +15,7 @@ import type {
 	BackgroundJobPage,
 	CancelBackgroundJob,
 	ChannelAgent,
+	ChannelArchive,
 	ChannelArchiveInput,
 	ChannelArchiveResult,
 	ChannelDecisionCount,
@@ -144,8 +145,12 @@ export interface MachineStore {
 	rotate(id: string, expectedRevision: number, credentials: MachineCredentials): Promise<boolean>;
 	/** Drop credentials GitHub refused at `expectedRevision`; the owner must pair again. */
 	reauthorize(id: string, expectedRevision: number, now: Date): Promise<boolean>;
-	/** True only for the call that revoked the owner's live machine. */
-	revoke(id: string, userId: string, now: Date): Promise<boolean>;
+	/**
+	 * True only for the call that revoked the owner's live machine. Revoking ends its launches' AI
+	 * authority, which only the writer lease's holder counts, so it is written under `lease`, checked
+	 * in the same transaction: a process that no longer holds it is refused with a conflict.
+	 */
+	revoke(lease: Lease, id: string, userId: string, now: Date): Promise<boolean>;
 	/** Rename the owner's live machine; false for anyone else's, or a revoked one. */
 	rename(id: string, userId: string, label: string): Promise<boolean>;
 	/** Add a repository the machine connected a checkout of, unless it already serves it. */
@@ -307,9 +312,10 @@ export interface ChannelStore {
 	setFullWidth(input: ChannelWidthInput): Promise<RenameResult>;
 	/**
 	 * Archives a document and ends, for good, the AI placeholders of every launch on it, moving its
-	 * archive generation on (see `AiPlaceholderStore.generation`).
+	 * archive generation on (see `AiPlaceholderStore.generation`). Written under `input.lease`, as
+	 * every cutoff is (see `AiPlaceholderStore.cutoffs`).
 	 */
-	archive(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
+	archive(input: ChannelArchive): Promise<ChannelArchiveResult>;
 	restore(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
 	delete(id: string): Promise<boolean>;
 	publishDescription(input: PublishChannelDescription): Promise<PublishChannelDescriptionResult>;
@@ -498,10 +504,13 @@ export interface PlannerCredentialStore {
 	deleteExpired(now: Date): Promise<number>;
 }
 
-/** The AI providers each person connected, one row per person and provider. */
+/**
+ * The AI providers each person connected, one row per person and provider. Connecting, replacing
+ * and removing one are cutoffs, written under the writer lease (see `AiPlaceholderStore.cutoffs`).
+ */
 export interface AiCredentialStore {
 	/** Connects a provider, replacing what the person connected for it before, last use included. */
-	put(record: AiCredentialRecord): Promise<void>;
+	put(lease: Lease, record: AiCredentialRecord): Promise<void>;
 	get(
 		userId: string,
 		provider: AiCredentialRecord["provider"],
@@ -509,7 +518,7 @@ export interface AiCredentialStore {
 	/** A person's connected providers, ordered by provider. */
 	list(userId: string): Promise<AiCredentialRecord[]>;
 	/** False when the person had not connected it. */
-	delete(userId: string, provider: AiCredentialRecord["provider"]): Promise<boolean>;
+	delete(lease: Lease, userId: string, provider: AiCredentialRecord["provider"]): Promise<boolean>;
 	/**
 	 * Records that `record`, the credential as it was read, was used `at`. Never moves the time back,
 	 * and changes nothing once that credential was replaced or removed.
@@ -543,17 +552,19 @@ export interface AiPlaceholderStore {
 	/** The placeholder for this digest while it has not expired at `now`. */
 	find(digest: Uint8Array, now: Date): Promise<AiPlaceholder | undefined>;
 	/** Ends a launch: its placeholders stop working. Returns how many there were. */
-	deleteLaunch(launchId: string): Promise<number>;
+	deleteLaunch(lease: Lease, launchId: string): Promise<number>;
 	/** Every launch on a machine, as revoking it does; returns how many placeholders went. */
-	deleteForMachine(machineId: string): Promise<number>;
+	deleteForMachine(lease: Lease, machineId: string): Promise<number>;
 	deleteExpired(now: Date): Promise<number>;
 	/**
 	 * How many writes this process has committed that end a placeholder's authority before it
 	 * expires: a launch ended, a machine revoked or its launches ended, a document archived, and a
 	 * credential connected, replaced or removed. Each is counted once its write settles and before
-	 * its caller hears so; one process serves a database at a time, so while it holds the writer
-	 * lease a count unchanged across a read says none completed meanwhile. Expiry is not counted: a
-	 * reader checks the deadline itself.
+	 * its caller hears so. Each is written under the writer lease, checked in its own transaction, so
+	 * a process that no longer holds the lease commits none, and is refused rather than acknowledge
+	 * one its successor would not count. One process serves a database at a time, so while it holds
+	 * the writer lease a count unchanged across a read says none completed meanwhile. Expiry is not
+	 * counted: a reader checks the deadline itself.
 	 */
 	cutoffs(): number;
 }

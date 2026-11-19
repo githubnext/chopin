@@ -11,6 +11,7 @@ import { GitHubReferences } from "../github/references";
 import { Router } from "../http/router";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { registerChannelRoutes } from "./routes";
+import { testLease } from "../storage/contract-support";
 
 import type { HostedAuth } from "../auth/routes";
 import type {
@@ -234,7 +235,7 @@ async function setup(random?: () => number) {
 			reset.push(id);
 		},
 		onChannelArchived: async (id, at) => {
-			let result = await storage.channels.archive({ id, now: at });
+			let result = await storage.channels.archive({ id, now: at, lease: await testLease(storage) });
 			archived.push({ id, changed: result.changed });
 			return result;
 		},
@@ -725,7 +726,11 @@ describe("channel routes", () => {
 		let second = await createChannel(storage, now, "Second active");
 		let archived = await createChannel(storage, now, "Archived plan");
 		let archivedAt = new Date(now.getTime() + 1_000);
-		await storage.channels.archive({ id: archived.id, now: archivedAt });
+		await storage.channels.archive({
+			id: archived.id,
+			now: archivedAt,
+			lease: await testLease(storage),
+		});
 
 		let defaultResponse = await router.handle(request(
 			"/api/repositories/octo-org/score/channels",
@@ -869,7 +874,11 @@ describe("channel routes", () => {
 		let { router, storage, cookie, now } = await setup();
 		let channel = await createChannel(storage, now, "Archived direct read");
 		let archivedAt = new Date(now.getTime() + 1_000);
-		await storage.channels.archive({ id: channel.id, now: archivedAt });
+		await storage.channels.archive({
+			id: channel.id,
+			now: archivedAt,
+			lease: await testLease(storage),
+		});
 
 		for (
 			let path of [
@@ -894,6 +903,7 @@ describe("channel routes", () => {
 		await storage.channels.archive({
 			id: inactive.id,
 			now: new Date(now.getTime() + 1_000),
+			lease: await testLease(storage),
 		});
 		github.repo = { ...github.repo, permissions: { pull: true, push: false, admin: false } };
 
@@ -965,6 +975,7 @@ describe("channel routes", () => {
 		await storage.channels.archive({
 			id: inactive.id,
 			now: new Date(now.getTime() + 1_000),
+			lease: await testLease(storage),
 		});
 
 		for (
@@ -1004,6 +1015,7 @@ describe("channel routes", () => {
 		await storage.channels.archive({
 			id: channel.id,
 			now: new Date(now.getTime() + 1_000),
+			lease: await testLease(storage),
 		});
 		let archived = await remove();
 		expect(archived!.status).toBe(204);

@@ -41,11 +41,13 @@ afterEach(async () => {
 async function machineServer(options: { revalidateEveryMs?: number; local?: boolean } = {}) {
 	let linked = await linkAuth();
 	let { auth, storage, sessions } = linked;
+	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
 	let machines = new Machines(storage, () => new Date(), {
 		...(options.local ? {} : { key: new Uint8Array(32).fill(7) }),
 		origin: auth.config.origin,
 		clientId: "client",
 		authorize: async (userId, token) => (await auth.admission.user(token)).id === userId,
+		lease: () => lease,
 	});
 	let time = { offsetMs: 0 };
 	let planners = new MachinePlanners({
@@ -60,7 +62,6 @@ async function machineServer(options: { revalidateEveryMs?: number; local?: bool
 	cleanups.push(server.stop);
 	linked.revocations.add(id => server.attachments.sessionRevoked(id));
 	let router = new Router();
-	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
 	registerExperimentRoutes(router, { ...auth, machines, pairings: {} } as never, {
 		lease: () => lease,
 		changed: () => {},

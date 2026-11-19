@@ -72,6 +72,7 @@ async function dispatchServer(
 			origin: auth.config.origin,
 			clientId: "client",
 			authorize: async (userId, token) => (await auth.admission.user(token)).id === userId,
+			lease: () => lease,
 		});
 		planners = new MachinePlanners({
 			machines,

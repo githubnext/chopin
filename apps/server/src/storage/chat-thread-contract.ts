@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { contractId as id, openedStorage, userAndChannel } from "./contract-support";
+import { contractId as id, openedStorage, testLease, userAndChannel } from "./contract-support";
 import { StorageError } from "./errors";
 
 import type { StorageFactory } from "./contract-support";
@@ -225,7 +225,7 @@ export function chatThreadContract(name: string, factory: StorageFactory) {
 				expect(stale).toBeInstanceOf(StorageError);
 				expect((await storage.chatThreads.getThread(channelId, "root-1"))!.forkedAt).toBe(2);
 
-				await storage.channels.archive({ id: channelId, now: AT });
+				await storage.channels.archive({ id: channelId, now: AT, lease: await testLease(storage) });
 				await storage.channels.delete(channelId);
 				expect(await storage.chatThreads.getThread(channelId, "root-1")).toBeUndefined();
 				expect(await storage.chatThreads.listThreads(channelId)).toEqual([]);

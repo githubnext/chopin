@@ -573,6 +573,7 @@ export class PostgresStorage implements StorageAdapter {
 		this.machines = new PostgresMachineStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
+			(transaction, lease) => this.#assertLease(transaction, lease),
 			() => this.#aiCutoffs.cut(),
 		);
 		this.plannerHolds = new PostgresPlannerLinkHoldStore(
@@ -597,11 +598,13 @@ export class PostgresStorage implements StorageAdapter {
 		this.aiCredentials = new PostgresAiCredentialStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
+			(transaction, lease) => this.#assertLease(transaction, lease),
 			this.#aiCutoffs,
 		);
 		this.aiPlaceholders = new PostgresAiPlaceholderStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
+			(transaction, lease) => this.#assertLease(transaction, lease),
 			this.#aiCutoffs,
 		);
 		this.mcpSessions = new PostgresMcpSessionStore(
@@ -837,7 +840,8 @@ export class PostgresStorage implements StorageAdapter {
 			}),
 		rename: input => this.#renameChannel(input),
 		setFullWidth: input => this.#setChannelWidth(input),
-		archive: input => this.#setChannelArchived(input, true).finally(() => this.#aiCutoffs.cut()),
+		archive: input =>
+			this.#setChannelArchived(input, true, input.lease).finally(() => this.#aiCutoffs.cut()),
 		restore: input => this.#setChannelArchived(input, false),
 		delete: id => this.#deleteChannel(id),
 		publishDescription: input => this.#publishChannelDescription(input),
@@ -1068,11 +1072,14 @@ export class PostgresStorage implements StorageAdapter {
 	#setChannelArchived(
 		input: ChannelArchiveInput,
 		archived: boolean,
+		lease?: Lease,
 	): Promise<ChannelArchiveResult> {
 		return this.#run(
 			archived ? "archive channel" : "restore channel",
 			() =>
 				this.#sql.begin(async transaction => {
+					// An archive ends AI authority, which only the writer lease's holder counts.
+					if (lease) await this.#assertLease(transaction, lease);
 					let [current] = await transaction<ChannelRow[]>`
 					SELECT ${transaction.unsafe(CHANNEL_COLUMNS)}
 					FROM channels

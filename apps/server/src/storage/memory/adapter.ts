@@ -207,6 +207,7 @@ export class MemoryStorage implements StorageAdapter {
 	readonly #machines = new MemoryMachineStore(
 		id => this.#users.has(id),
 		id => this.#channels.has(id),
+		held => this.#assertLease(held),
 		() => this.#aiCutoffs.cut(),
 	);
 	readonly machines: MachineStore = this.#machines;
@@ -236,10 +237,12 @@ export class MemoryStorage implements StorageAdapter {
 	readonly plannerCredentials: PlannerCredentialStore = this.#plannerCredentials;
 	readonly aiCredentials: AiCredentialStore = new MemoryAiCredentialStore({
 		userExists: id => this.#users.has(id),
+		assertLease: held => this.#assertLease(held),
 		cutoffs: this.#aiCutoffs,
 	});
 	readonly #aiPlaceholders = new MemoryAiPlaceholderStore({
 		userExists: id => this.#users.has(id),
+		assertLease: held => this.#assertLease(held),
 		machineExists: id => this.#machines.has(id),
 		channelExists: id => this.#channels.has(id),
 		generation: id => {
@@ -437,7 +440,10 @@ export class MemoryStorage implements StorageAdapter {
 		},
 		rename: input => this.#renameChannel(input),
 		setFullWidth: input => this.#setChannelWidth(input),
-		archive: input => this.#setChannelArchived(input, true),
+		archive: async input => {
+			this.#assertLease(input.lease);
+			return this.#setChannelArchived(input, true);
+		},
 		restore: input => this.#setChannelArchived(input, false),
 		delete: id => this.#deleteChannel(id),
 		publishDescription: input => this.#publishChannelDescription(input),

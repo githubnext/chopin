@@ -13,6 +13,7 @@ import {
 import { createHumanInput } from "../atomic/human-input";
 import { untilUnpaused } from "../atomic/full";
 import { createRemoteAdapter } from "./adapter";
+import { testLease } from "../../storage/contract-support";
 
 import type { RemotePlanner } from "./registry";
 
@@ -513,7 +514,11 @@ describe("a resumable link that drops", () => {
 		let next = await h.reattach();
 		await next.next("attached");
 		// The document is archived as main.ts does: storage first, then the attachments.
-		await h.auth.storage.channels.archive({ id: h.channel.id, now: new Date() });
+		await h.auth.storage.channels.archive({
+			id: h.channel.id,
+			now: new Date(),
+			lease: await testLease(h.auth.storage),
+		});
 		await h.server.attachments.documentEnded(h.channel.id);
 		await until(() => h.status() === "cancelled");
 		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });

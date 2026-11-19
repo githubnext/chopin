@@ -1,9 +1,11 @@
-import type { SQL } from "bun";
+import type { SQL, TransactionSQL } from "bun";
 import type { AiCutoffs } from "../ai-cutoffs";
-import type { AiCredentialRecord, AiPlaceholder } from "../model";
+import type { AiCredentialRecord, AiPlaceholder, Lease } from "../model";
 import type { AiCredentialStore, AiPlaceholderStore } from "../port";
 
 type Run = <T>(action: string, execute: () => Promise<T>) => Promise<T>;
+/** Throws unless `lease` is held, in the transaction a cutoff is written in. */
+type Fence = (transaction: TransactionSQL, lease: Lease) => Promise<void>;
 
 type CredentialRow = {
 	userId: string;
@@ -62,12 +64,19 @@ function placeholder(row: PlaceholderRow): AiPlaceholder {
 }
 
 export class PostgresAiCredentialStore implements AiCredentialStore {
-	constructor(private sql: SQL, private run: Run, private cutoffs: AiCutoffs) {}
-	put(record: AiCredentialRecord) {
+	constructor(
+		private sql: SQL,
+		private run: Run,
+		private fence: Fence,
+		private cutoffs: AiCutoffs,
+	) {}
+	put(lease: Lease, record: AiCredentialRecord) {
 		return this.#cut(
 			record.userId,
-			this.run("save an AI credential", async () => {
-				await this.sql`
+			this.run("save an AI credential", () =>
+				this.sql.begin(async transaction => {
+					await this.fence(transaction, lease);
+					await transaction`
 				INSERT INTO ai_credentials (
 					user_id, provider, kind, ciphertext, suffix, updated_at, last_used_at
 				)
@@ -82,7 +91,7 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 					updated_at = EXCLUDED.updated_at,
 					last_used_at = EXCLUDED.last_used_at
 			`;
-			}),
+				})),
 		);
 	}
 	get(userId: string, provider: AiCredentialRecord["provider"]) {
@@ -103,16 +112,18 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 			return rows.map(credential);
 		});
 	}
-	delete(userId: string, provider: AiCredentialRecord["provider"]) {
+	delete(lease: Lease, userId: string, provider: AiCredentialRecord["provider"]) {
 		return this.#cut(
 			userId,
-			this.run("remove an AI credential", async () => {
-				let removed = await this.sql<{ provider: string }[]>`
+			this.run("remove an AI credential", () =>
+				this.sql.begin(async transaction => {
+					await this.fence(transaction, lease);
+					let removed = await transaction<{ provider: string }[]>`
 				DELETE FROM ai_credentials WHERE user_id = ${userId} AND provider = ${provider}
 				RETURNING provider
 			`;
-				return removed.length > 0;
-			}),
+					return removed.length > 0;
+				})),
 		);
 	}
 	used(record: AiCredentialRecord, at: Date) {
@@ -136,7 +147,12 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 }
 
 export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
-	constructor(private sql: SQL, private run: Run, private counted: AiCutoffs) {}
+	constructor(
+		private sql: SQL,
+		private run: Run,
+		private fence: Fence,
+		private counted: AiCutoffs,
+	) {}
 	put(placeholders: AiPlaceholder[]) {
 		return this.run("save AI placeholders", () =>
 			this.sql.begin(async transaction => {
@@ -193,23 +209,27 @@ export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
 			return row && placeholder(row);
 		});
 	}
-	deleteLaunch(launchId: string) {
-		return this.run("end a launch's AI placeholders", async () => {
-			let removed = await this.sql<{ launchId: string }[]>`
+	deleteLaunch(lease: Lease, launchId: string) {
+		return this.run("end a launch's AI placeholders", () =>
+			this.sql.begin(async transaction => {
+				await this.fence(transaction, lease);
+				let removed = await transaction<{ launchId: string }[]>`
 				DELETE FROM ai_placeholders WHERE launch_id = ${launchId}
 				RETURNING launch_id AS "launchId"
 			`;
-			return removed.length;
-		}).finally(() => this.counted.cut());
+				return removed.length;
+			})).finally(() => this.counted.cut());
 	}
-	deleteForMachine(machineId: string) {
-		return this.run("end a machine's AI placeholders", async () => {
-			let removed = await this.sql<{ launchId: string }[]>`
+	deleteForMachine(lease: Lease, machineId: string) {
+		return this.run("end a machine's AI placeholders", () =>
+			this.sql.begin(async transaction => {
+				await this.fence(transaction, lease);
+				let removed = await transaction<{ launchId: string }[]>`
 				DELETE FROM ai_placeholders WHERE machine_id = ${machineId}
 				RETURNING launch_id AS "launchId"
 			`;
-			return removed.length;
-		}).finally(() => this.counted.cut());
+				return removed.length;
+			})).finally(() => this.counted.cut());
 	}
 	deleteExpired(now: Date) {
 		return this.run("remove expired AI placeholders", async () => {

@@ -14,6 +14,7 @@ import { implementationStatus } from "./notifications";
 import { buildNotices } from "./build-notices";
 import { LiveSyncCoordinator } from "./live-sync";
 import { serves } from "../experiments/connections";
+import { testLease } from "../storage/contract-support";
 import type { GitHub } from "../github/client";
 import type { HostedAuth } from "../auth/routes";
 
@@ -49,7 +50,11 @@ test("opening an archived document cannot start a new readiness review", async (
 	try {
 		await context.call(context.path);
 		expect(assessments).toBe(1);
-		await context.storage.channels.archive({ id: context.plan.id, now: context.now });
+		await context.storage.channels.archive({
+			id: context.plan.id,
+			now: context.now,
+			lease: await testLease(context.storage),
+		});
 		await context.call(context.path);
 		expect(assessments).toBe(1);
 	} finally {
@@ -204,6 +209,7 @@ async function setup(
 		machines: new Machines(context.storage, () => new Date(), {
 			origin: "https://chopin.test",
 			clientId: "test",
+			lease: () => context.lease,
 		}),
 		pairings: {},
 	};
@@ -1532,7 +1538,11 @@ test("a deleted document cannot block implementation recovery sweeps", async () 
 	});
 	context.experiments.connections.revoke(connection.connection.id);
 	await Plan.close(context.plan);
-	await context.storage.channels.archive({ id: context.plan.id, now: context.now });
+	await context.storage.channels.archive({
+		id: context.plan.id,
+		now: context.now,
+		lease: await testLease(context.storage),
+	});
 	await context.storage.channels.delete(context.plan.id);
 	await expect(context.implementations.sweep()).resolves.toBeUndefined();
 	await expect(context.implementations.sweep()).resolves.toBeUndefined();
@@ -1788,7 +1798,11 @@ test("a second document queues behind the first on one connection, which a finis
 		expect(queued.state).toBe("queued");
 		await Plan.close(third);
 		context.plans.delete(third.id);
-		await context.storage.channels.archive({ id: third.id, now: context.now });
+		await context.storage.channels.archive({
+			id: third.id,
+			now: context.now,
+			lease: await testLease(context.storage),
+		});
 		await context.storage.channels.delete(third.id);
 		let snapshot = await context.call(context.path);
 		expect(snapshot.status).toBe(200);
@@ -2724,7 +2738,11 @@ test("a pressed Build refuses pull-only callers, archived documents and children
 		});
 		expect((await context.call(`/api/channels/${child}/implementation/rebuild`, {})).status)
 			.toBe(404);
-		await context.storage.channels.archive({ id: context.plan.id, now: context.now });
+		await context.storage.channels.archive({
+			id: context.plan.id,
+			now: context.now,
+			lease: await testLease(context.storage),
+		});
 		expect((await context.call(rebuild, {})).status).toBe(403);
 		let cancel = await context.router.handle(
 			new Request(`https://chopin.test${context.path}/request`, {

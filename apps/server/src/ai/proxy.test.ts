@@ -8,6 +8,7 @@ import { Machines } from "../auth/machines";
 import { Sessions } from "../auth/session";
 import { abandonable, Requests } from "../handover/requests";
 import { Router } from "../http/router";
+import { testLease } from "../storage/contract-support";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { WriterLease } from "../storage/writer-lease";
 import { copilotTokenExchange } from "./copilot";
@@ -90,6 +91,8 @@ async function setup() {
 	for (let [id, login] of [["U_mona", "mona"], ["U_hubot", "hubot"]] as const) {
 		await storage.users.put({ id, login, avatarUrl: "avatar", now });
 	}
+	/** The writer lease this server holds, which every cutoff it writes is written under. */
+	let lease = await testLease(storage);
 	let github = {
 		user: async () => ({ id: "U_mona", login: "mona", avatarUrl: "avatar" }),
 		organizationMembership: async () => undefined,
@@ -113,6 +116,7 @@ async function setup() {
 		clientId: "client-id",
 		key: new Uint8Array(32).fill(9),
 		refresh: async () => grant("ghu_machine_renewed"),
+		lease: () => lease,
 	});
 	let auth: HostedAuth = {
 		config,
@@ -157,6 +161,7 @@ async function setup() {
 		githubToken: githubSignIn(auth),
 		copilotToken: copilotTokenExchange({ api: githubApi.url }),
 		upstreams: { openai: keyChecks.openai.url, anthropic: keyChecks.anthropic.url },
+		lease: () => lease,
 	});
 	let router = new Router();
 	registerAiRoutes(router, auth, {
@@ -205,6 +210,7 @@ async function setup() {
 	};
 	return {
 		storage,
+		lease,
 		sessions,
 		entitled,
 		copilotLifetime,
@@ -874,8 +880,12 @@ describe("the AI credential proxy", () => {
 		expect(await status(onMachine)).toBe(200);
 		expect(await status(onDocument)).toBe(200);
 
-		await world.storage.machines.revoke(machine.id, "U_mona", world.now());
-		await world.storage.channels.archive({ id: world.channel.id, now: world.now() });
+		await world.storage.machines.revoke(world.lease, machine.id, "U_mona", world.now());
+		await world.storage.channels.archive({
+			id: world.channel.id,
+			now: world.now(),
+			lease: world.lease,
+		});
 		expect(await status(onMachine)).toBe(401);
 		expect(await status(onDocument)).toBe(401);
 		await world.storage.channels.restore({ id: world.channel.id, now: world.now() });
@@ -1173,7 +1183,7 @@ describe("what a launch is given", () => {
 		store.list = async userId => {
 			let listed = await list(userId);
 			for (let provider of removing.splice(0)) {
-				await store.delete(userId, provider as "openai" | "anthropic");
+				await store.delete(world.lease, userId, provider as "openai" | "anthropic");
 			}
 			return listed;
 		};
@@ -1202,12 +1212,12 @@ describe("what a launch is given", () => {
 		let puts = 0;
 		placeholders.put = async rows => {
 			let stored = await put(rows);
-			if (++puts === 1) await keys.delete("U_mona", "anthropic");
+			if (++puts === 1) await keys.delete(world.lease, "U_mona", "anthropic");
 			return stored;
 		};
-		placeholders.deleteLaunch = async launchId => {
-			let removing = keys.delete("U_mona", "openai");
-			let removed = await deleteLaunch(launchId);
+		placeholders.deleteLaunch = async (lease, launchId) => {
+			let removing = keys.delete(lease, "U_mona", "openai");
+			let removed = await deleteLaunch(lease, launchId);
 			await removing;
 			return removed;
 		};
@@ -1247,6 +1257,7 @@ describe("which providers a launch is given while they change", () => {
 					: undefined;
 			},
 			upstreams: { openai: world.keyChecks.openai.url, anthropic: world.keyChecks.anthropic.url },
+			lease: () => world.lease,
 		});
 		let launch = (on: Pick<AiLaunch, "machineId" | "channelId"> = {}) =>
 			credentials.launch({
@@ -1301,9 +1312,9 @@ describe("which providers a launch is given while they change", () => {
 		await credentials.connect("U_mona", "openai", { kind: "api-key", secret: OPENAI_KEY });
 		let document = { id: world.channel.id };
 		let archivals: Array<() => Promise<unknown>> = [
-			() => world.storage.channels.archive({ ...document, now: world.now() }),
+			() => world.storage.channels.archive({ ...document, now: world.now(), lease: world.lease }),
 			async () => {
-				await world.storage.channels.archive({ ...document, now: world.now() });
+				await world.storage.channels.archive({ ...document, now: world.now(), lease: world.lease });
 				await world.storage.channels.restore({ ...document, now: world.now() });
 			},
 		];
@@ -1345,7 +1356,10 @@ describe("which providers a launch is given while they change", () => {
 			// Each attempt reads twice: as it is prepared, and last, as it is published.
 			if (++reads % 2 === 0) {
 				let anthropic = (await store.get(userId, "anthropic"))!;
-				await store.put({ ...anthropic, updatedAt: new Date(anthropic.updatedAt.getTime() + 1) });
+				await store.put(world.lease, {
+					...anthropic,
+					updatedAt: new Date(anthropic.updatedAt.getTime() + 1),
+				});
 			}
 			return listed;
 		};
@@ -1408,6 +1422,7 @@ describe("a Copilot answer another check gets while a launch is prepared", () =>
 				return token(githubToken, await answer.promise);
 			},
 			upstreams: { openai: world.keyChecks.openai.url, anthropic: world.keyChecks.anthropic.url },
+			lease: () => world.lease,
 		});
 		/** Resolves once GitHub has been asked one question more than `count`, and returns it. */
 		let question = async (count: number) => {
@@ -1626,6 +1641,7 @@ describe("GitHub Copilot through the proxy", () => {
 				expiresAt: world.now().getTime() + 1_800_000,
 				api: "https://api.business.githubcopilot.com",
 			}),
+			lease: () => world.lease,
 		});
 		await credentials.connect("U_mona", "github-copilot", { kind: "github-sign-in" });
 		let copilot = (await credentials.launch({
@@ -1758,6 +1774,7 @@ describe("Copilot tokens that expire", () => {
 			githubToken: async () => "ghu_mona",
 			copilotToken: exchange,
 			upstreams: { openai: world.keyChecks.openai.url, anthropic: world.keyChecks.anthropic.url },
+			lease: () => world.lease,
 		});
 		await credentials.connect("U_mona", "github-copilot", { kind: "github-sign-in" });
 		let proxied = aiProxy({
@@ -1958,7 +1975,7 @@ describe("Copilot tokens that expire", () => {
 			secret: "ghp_another_account_token",
 		});
 		let anotherAccount = await store.get("U_mona", "github-copilot");
-		await store.put(signIn!);
+		await store.put(world.lease, signIn!);
 		let copilot = (await launch()).grants[0]!;
 
 		let get = store.get.bind(store);
@@ -2008,8 +2025,13 @@ describe("Copilot tokens that expire", () => {
 		});
 		let cutoffs: Array<(launch: { launchId: string; machineId: string }) => Promise<unknown>> = [
 			launch => credentials.end(launch.launchId),
-			launch => world.storage.machines.revoke(launch.machineId, "U_mona", world.now()),
-			() => world.storage.channels.archive({ id: world.channel.id, now: world.now() }),
+			launch => world.storage.machines.revoke(world.lease, launch.machineId, "U_mona", world.now()),
+			() =>
+				world.storage.channels.archive({
+					id: world.channel.id,
+					now: world.now(),
+					lease: world.lease,
+				}),
 		];
 		for (let cutoff of cutoffs) {
 			renewal = undefined;
@@ -2296,8 +2318,13 @@ describe("the proxy's final handoff", () => {
 		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
 		let cutoffs: Array<(launch: { launchId: string; machineId: string }) => Promise<unknown>> = [
 			launch => world.credentials.end(launch.launchId),
-			launch => world.storage.machines.revoke(launch.machineId, "U_mona", world.now()),
-			() => world.storage.channels.archive({ id: world.channel.id, now: world.now() }),
+			launch => world.storage.machines.revoke(world.lease, launch.machineId, "U_mona", world.now()),
+			() =>
+				world.storage.channels.archive({
+					id: world.channel.id,
+					now: world.now(),
+					lease: world.lease,
+				}),
 		];
 		for (let cutoff of cutoffs) {
 			let { machine } = await world.machines.pair({
@@ -2356,12 +2383,18 @@ describe("the proxy's final handoff", () => {
 		> = [
 			[launch => world.credentials.end(launch.launchId), 401, "launch-ended"],
 			[
-				launch => world.storage.machines.revoke(launch.machineId, "U_mona", world.now()),
+				launch =>
+					world.storage.machines.revoke(world.lease, launch.machineId, "U_mona", world.now()),
 				401,
 				"launch-ended",
 			],
 			[
-				launch => world.storage.channels.archive({ id: launch.channelId, now: world.now() }),
+				launch =>
+					world.storage.channels.archive({
+						id: launch.channelId,
+						now: world.now(),
+						lease: world.lease,
+					}),
 				401,
 				"launch-ended",
 			],
@@ -2584,6 +2617,7 @@ describe("a request pending while its server hands the database over", () => {
 			githubToken: async () => undefined,
 			copilotToken: async () => undefined,
 			writer: () => lease.holds(),
+			lease: () => held,
 		});
 		let sent: string[] = [];
 		let proxied = aiProxy({
@@ -2637,9 +2671,10 @@ describe("a request pending while its server hands the database over", () => {
 		};
 		/** The successor takes the lease, which only a release or its expiry frees, and revokes the machine. */
 		let succeed = async () => {
-			expect(await world.storage.leases.acquire("chopin:writer", "successor", 30_000))
-				.toBeDefined();
-			expect(await world.storage.machines.revoke(machine.id, "U_mona", world.now())).toBe(true);
+			let successor = await world.storage.leases.acquire("chopin:writer", "successor", 30_000);
+			expect(successor).toBeDefined();
+			expect(await world.storage.machines.revoke(successor!, machine.id, "U_mona", world.now()))
+				.toBe(true);
 			await world.credentials.machineEnded(machine.id);
 		};
 		return { world, lease, held, requests, sent, responses, pending, succeed };
@@ -2674,5 +2709,165 @@ describe("a request pending while its server hands the database over", () => {
 		expect(refused.status).toBe(503);
 		expect(await code(refused)).toBe("restarting");
 		expect(sent).toEqual([`Bearer ${OPENAI_KEY}`]);
+	});
+});
+
+describe("cutoffs on either side of a hand-over", () => {
+	/**
+	 * Two servers on one store once the first has handed the database over: the former, which
+	 * released its writer lease, and the successor, which holds it now. Each writes under its own
+	 * lease, revokes through its own machines, and sends through a transport that records what it
+	 * takes; the successor counts the cutoffs it commits, and the former none of its successor's.
+	 */
+	async function handedOver() {
+		let world = await setup();
+		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
+		let { machine } = await world.machines.pair({
+			userId: "U_mona",
+			label: "studio",
+			repositories: [],
+			autoRun: false,
+			grant: grant("ghu_machine"),
+		});
+		let server = async (owner: string, storage: StorageAdapter) => {
+			let held = (await world.storage.leases.acquire("chopin:writer", owner, 30_000))!;
+			let lease = new WriterLease(world.storage.leases, {
+				ttlMs: 30_000,
+				renewMs: 30_000,
+				safetyMs: 7_500,
+				retryMs: 30_000,
+			}, () => {});
+			lease.hold(held);
+			let credentials = new RunnerCredentials({
+				storage,
+				key: new Uint8Array(32).fill(5),
+				origin: ORIGIN,
+				clock: world.now,
+				githubToken: async () => undefined,
+				copilotToken: async () => undefined,
+				writer: () => lease.holds(),
+				lease: () => held,
+			});
+			let machines = new Machines(storage, world.now, {
+				origin: ORIGIN,
+				clientId: "client-id",
+				key: new Uint8Array(32).fill(9),
+				lease: () => held,
+			});
+			let sent: string[] = [];
+			let proxied = aiProxy({
+				credentials,
+				fetch: (async (input: string | URL | Request, init?: RequestInit) => {
+					if (String(input).startsWith(world.catalog.url)) return fetch(input, init);
+					sent.push(new Headers(init?.headers).get("authorization") ?? "");
+					return Response.json({ ok: true });
+				}) as typeof fetch,
+				upstreams: { catalog: world.catalog.url },
+			});
+			return { held, lease, credentials, machines, proxied, sent };
+		};
+		let former = await server("former", seenByAnotherProcess(world.storage));
+		let openai = (await former.credentials.launch({
+			userId: "U_mona",
+			machineId: machine.id,
+			expiresAt: new Date(world.now().getTime() + 3_600_000),
+		})).grants.find(isOpenai)!;
+		await former.lease.stop();
+		expect(await world.storage.leases.release(former.held)).toBe(true);
+		let successor = await server("successor", world.storage);
+		let model = (on: typeof former) => {
+			let url = new URL(`${openai.baseUrl}/responses`);
+			return on.proxied(
+				new Request(url, {
+					method: "POST",
+					body: "{}",
+					headers: { authorization: `Bearer ${openai.placeholder}`, ...runner(openai) },
+				}),
+				url,
+			);
+		};
+		let catalog = (on: typeof former) => {
+			let url = new URL(`${ORIGIN}/api/v1/ai/models.dev/api.json`);
+			return on.proxied(
+				new Request(url, {
+					headers: { authorization: `Bearer ${openai.placeholder}`, ...runner(openai) },
+				}),
+				url,
+			);
+		};
+		/**
+		 * Starts `request` and holds it once it has read the launch's machine for the `nth` time, the
+		 * last read before it is sent or served, until released: a model request reads it as it is
+		 * admitted and again at its handoff, a catalog request from a warm copy once.
+		 */
+		let heldAtMachineRead = async (nth: number, request: () => Promise<Response>) => {
+			let machines = world.storage.machines;
+			let get = machines.get.bind(machines);
+			let reads = 0;
+			let read = Promise.withResolvers<void>();
+			let release = Promise.withResolvers<void>();
+			machines.get = async id => {
+				let found = await get(id);
+				if (++reads === nth) {
+					machines.get = get;
+					read.resolve();
+					await release.promise;
+				}
+				return found;
+			};
+			let answered = request();
+			await read.promise;
+			return { answered, release: () => release.resolve() };
+		};
+		return { world, machine, former, successor, model, catalog, heldAtMachineRead };
+	}
+
+	it("refuses a revocation the former server makes once its successor holds the writer lease, so the successor's pending send follows no acknowledged revocation", async () => {
+		let { world, machine, former, successor, model, heldAtMachineRead } = await handedOver();
+		let pending = await heldAtMachineRead(2, () => model(successor));
+		let revoked = await former.machines.revoke(machine.id, "U_mona").then(
+			done => ({ done }),
+			(err: unknown) => ({ err }),
+		);
+		expect(revoked).toMatchObject({ err: expect.any(Error) });
+		expect((await world.storage.machines.get(machine.id))!.revokedAt).toBeUndefined();
+		pending.release();
+		expect((await pending.answered).status).toBe(200);
+		expect(successor.sent).toEqual([`Bearer ${OPENAI_KEY}`]);
+		expect(former.sent).toEqual([]);
+	});
+
+	it("stops the successor's own pending send when it revokes the machine", async () => {
+		let { world, machine, successor, model, heldAtMachineRead } = await handedOver();
+		expect((await model(successor)).status).toBe(200);
+		let pending = await heldAtMachineRead(2, () => model(successor));
+		expect(await successor.machines.revoke(machine.id, "U_mona")).toBe(true);
+		expect((await world.storage.machines.get(machine.id))!.revokedAt).toBeDefined();
+		pending.release();
+		let refused = await pending.answered;
+		expect(refused.status).toBe(401);
+		expect(await code(refused)).toBe("launch-ended");
+		expect(successor.sent).toEqual([`Bearer ${OPENAI_KEY}`]);
+	});
+
+	it("serves the catalog only from the server holding the writer lease, and stops the successor's pending answer when it revokes the machine", async () => {
+		let { world, machine, former, successor, catalog, heldAtMachineRead } = await handedOver();
+		let refused = await catalog(former);
+		expect(refused.status).toBe(503);
+		expect(await code(refused)).toBe("restarting");
+		expect(world.catalog.seen).toHaveLength(0);
+
+		expect((await catalog(successor)).status).toBe(200);
+		expect(world.catalog.seen).toHaveLength(1);
+		let stale = await catalog(former);
+		expect(stale.status).toBe(503);
+
+		let pending = await heldAtMachineRead(1, () => catalog(successor));
+		expect(await successor.machines.revoke(machine.id, "U_mona")).toBe(true);
+		pending.release();
+		let ended = await pending.answered;
+		expect(ended.status).toBe(401);
+		expect(await code(ended)).toBe("launch-ended");
+		expect(world.catalog.seen).toHaveLength(1);
 	});
 });

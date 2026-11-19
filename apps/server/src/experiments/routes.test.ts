@@ -28,6 +28,7 @@ import type { GitHubApp } from "../github/app";
 import { hosted, locateDocument } from "../mcp/hosted";
 import { credentialDigest } from "./mcp-token";
 import { Connections } from "./connections";
+import { testLease } from "../storage/contract-support";
 import type { ImplementationConnector } from "../tasks/connector";
 
 function text(value: { result: { content: Array<{ text: string }> } }) {
@@ -151,6 +152,7 @@ async function setup(
 				refreshExpiresIn: 15_897_600,
 			};
 		},
+		lease: () => lease,
 	});
 	let router = new Router();
 	let lock = { locked: false, documents: new Set<string>() };
@@ -674,7 +676,7 @@ test("a claim refuses a document in another repository and interrupts archived o
 
 	let second = await document();
 	let archived = await queued(second);
-	await storage.channels.archive({ id: second, now: new Date() });
+	await storage.channels.archive({ id: second, now: new Date(), lease: await testLease(storage) });
 	expect(error(await tool(connection.token, "claim_experiment", { id: archived })))
 		.toStartWith("invalid-state");
 	expect((await runtime.service.store.get(archived))?.state).toBe("interrupted");

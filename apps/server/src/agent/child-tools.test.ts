@@ -6,6 +6,7 @@ import * as Service from "../plan/service";
 import { openPlan, seedOpenThread } from "../testing/plan";
 import { readingOutput } from "./reading-output";
 import { type DocumentRoom, documentTools } from "./tools";
+import { testLease } from "../storage/contract-support";
 
 import type { Plan } from "../plan/service";
 
@@ -235,7 +236,11 @@ test("edit_child refuses once the root is archived while the edit waits its turn
 		operations: [{ op: "insert_root", source: "Too late." }],
 	});
 	await Bun.sleep(10);
-	await child.storage.channels.archive({ id: rootId, now: new Date() });
+	await child.storage.channels.archive({
+		id: rootId,
+		now: new Date(),
+		lease: await testLease(child.storage),
+	});
 	release();
 	await busy;
 	expect(await editing).toContain("no such child document");
