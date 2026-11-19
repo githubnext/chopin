@@ -348,12 +348,15 @@ export declare namespace Chat {
 	 * reached, and `dropped` the machine's connection going while it replied (the connection's to
 	 * tell, not a failure to retry). `request` is the member message that began the turn, and
 	 * `focus` the child document that was open when it was sent, so a retry is the same turn.
+	 * `code` is `no-ai-account` where the session was not started because the account its AI
+	 * launch is for has no AI account Chopin can use, as a message is refused with that code.
 	 */
 	export type TurnFailure = {
 		kind: "error" | "refused" | "tool" | "timed-out" | "unreachable" | "dropped";
 		detail?: string;
 		request?: string;
 		focus?: string;
+		code?: "no-ai-account";
 	};
 
 	/** One emoji on a message and everyone who used it. The emoji is kept exactly as sent. */

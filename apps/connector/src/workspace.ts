@@ -102,21 +102,22 @@ export function tokenFolder(worktree: string) {
 const TOKENS = ".tokens";
 
 /**
- * Where a run's agent keeps its state when the run was handed AI grants: `<worktree>.agent`, a
- * folder of that run alone, in place of the owner's agents' own. It stays with the run's worktree
- * for inspection, and goes with it.
+ * Where a run's agent, or a Planner backend, keeps its state when it runs on people's AI accounts in
+ * Chopin: `<worktree>.agent`, a folder of that launch alone, in place of the owner's agents' own. It
+ * stays with the worktree for inspection, and goes with it.
  */
 export function agentFolder(worktree: string) {
 	return `${worktree}.agent`;
 }
 
 /**
- * Whether `name`, a folder beside worktrees, is the token folder `tokenFolder` makes for one
- * rather than a worktree: a worktree's name is a segment of a document or attempt id, which never
- * ends so.
+ * Whether `name`, a folder beside worktrees, is the token folder `tokenFolder` makes for one, or the
+ * agent state folder `agentFolder` makes for one, rather than a worktree: a worktree's name is a
+ * segment of a document or attempt id, which never ends so.
  */
 function isTokenFolder(name: string) {
-	return name.length > TOKENS.length && name.endsWith(TOKENS);
+	return name.length > TOKENS.length && name.endsWith(TOKENS)
+		|| name.length > ".agent".length && name.endsWith(".agent");
 }
 
 /**

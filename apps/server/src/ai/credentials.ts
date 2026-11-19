@@ -36,6 +36,14 @@ const LAUNCH_ATTEMPTS = 3;
 const HANDOFF_ATTEMPTS = 3;
 /** How many times GitHub is asked about an account whose answers keep crossing others' answers. */
 const ANSWER_ATTEMPTS = 3;
+/**
+ * How long a launch just handed out counts as owned while its owner takes it up (a session holds it
+ * once its start is sent): no sweep ends it meanwhile for want of an owner.
+ */
+const HANDED_MS = 2 * 60_000;
+/** How soon an end that storage refused is tried again, at first; it doubles to `END_RETRY_MAX_MS`. */
+const END_RETRY_MS = 5_000;
+const END_RETRY_MAX_MS = 5 * 60_000;
 
 type Clock = () => Date;
 
@@ -89,6 +97,12 @@ export type AiLaunchGrants = {
 	launchToken: string;
 	grants: AiProviderGrant[];
 	withheld: AiWithheld[];
+	/**
+	 * The launch ended before it was handed out: its document was archived, its machine revoked or
+	 * its grants taken back with the machine's, or its deadline passed. It is given nothing, and not
+	 * for want of an account.
+	 */
+	ended?: true;
 };
 
 /**
@@ -164,6 +178,11 @@ export type AiLaunch = {
 	/** The document the launch works on; archiving or deleting it ends the launch. */
 	channelId?: string;
 	expiresAt: Date;
+	/**
+	 * What the launch is for, whose end ends it: `run:<id>` for a run on a paired machine, or
+	 * `session:<id>` for a Planner session (see `AiCredentialsOptions.ownerLive`).
+	 */
+	owner?: string;
 };
 
 export type AiCredentialsOptions = {
@@ -195,6 +214,15 @@ export type AiCredentialsOptions = {
 	 * same transaction; throws when it holds none.
 	 */
 	lease: () => Lease;
+	/**
+	 * Whether what a launch is for (its `owner`, with its document) is still live: the run still
+	 * running, the session still held. Read with every final check, so a launch whose run or session
+	 * ended stops working whichever process ended it and whether or not its end reached storage. A
+	 * launch with no owner, as one from before owners were kept, is live until it ends or expires.
+	 */
+	ownerLive?: (launch: Pick<AiPlaceholder, "launchId" | "owner" | "channelId">) =>
+		| boolean
+		| Promise<boolean>;
 };
 
 function digest(value: string): Uint8Array {
@@ -226,12 +254,17 @@ function expired(authorized: AiAuthorized, now: Date): boolean {
 	return authorized.expiresAt !== undefined && now.getTime() >= authorized.expiresAt;
 }
 
-/** Whether `current` is the very set of credentials `read` was, provider by provider. */
+/**
+ * Whether `current` is the very set of credentials `read` was, provider by provider, each refused
+ * as invalid or not as it was read: a key refused since is no longer one a launch may be given.
+ */
 function sameSet(read: AiCredentialRecord[], current: AiCredentialRecord[]): boolean {
 	return read.length === current.length
-		&& read.every(record =>
-			unchanged(record, current.find(now => now.provider === record.provider))
-		);
+		&& read.every(record => {
+			let now = current.find(value => value.provider === record.provider);
+			return unchanged(record, now)
+				&& now!.rejectedAt?.getTime() === record.rejectedAt?.getTime();
+		});
 }
 
 function summary(
@@ -294,6 +327,19 @@ export class AiCredentials {
 	 */
 	readonly #answers = new Map<string, Record<"access" | "none", number>>();
 	readonly #changed = new Set<(userId: string) => void>();
+	/** Whose credentials each Copilot account answers for, to tell them when its answer changes. */
+	readonly #accountUsers = new Map<string, Set<string>>();
+	readonly #ownerLive: NonNullable<AiCredentialsOptions["ownerLive"]>;
+	/**
+	 * The launches this process ended, or is ending: none is admitted from the moment its end is
+	 * asked, before storage has it, and one whose end storage refused stays here and is ended again.
+	 */
+	readonly #ending = new Set<string>();
+	/** The ends storage refused, tried again on a backoff and with each sweep. */
+	readonly #unended = new Map<string, number>();
+	#retrying: ReturnType<typeof setTimeout> | undefined;
+	/** Launches handed out lately, by id, with when: their owner may not have taken them up yet. */
+	readonly #handed = new Map<string, number>();
 
 	constructor(options: AiCredentialsOptions) {
 		this.#storage = options.storage;
@@ -308,6 +354,7 @@ export class AiCredentials {
 		this.#fetch = options.fetch ?? fetch;
 		this.#writer = options.writer ?? (() => true);
 		this.#lease = options.lease;
+		this.#ownerLive = options.ownerLive ?? (() => true);
 	}
 
 	/** The time by the clock deadlines are kept on, which the proxy's transport reads by default. */
@@ -399,8 +446,10 @@ export class AiCredentials {
 	}
 
 	/**
-	 * Calls `listener` with the person's id once they connected, replaced or removed a provider, so
-	 * a launch that lasts can be prepared again with what they have now. Returns how to stop.
+	 * Calls `listener` with the person's id once what a launch for them may be given changed: they
+	 * connected, replaced or removed a provider, their provider refused a key of theirs as invalid, or
+	 * GitHub's answer about their Copilot access changed. So a launch that lasts can be prepared
+	 * again with what they have now. Returns how to stop.
 	 */
 	onChanged(listener: (userId: string) => void): () => void {
 		this.#changed.add(listener);
@@ -476,7 +525,7 @@ export class AiCredentials {
 		let launchToken = LAUNCH_PREFIX + randomBytes(32).toString("base64url");
 		let launchDigest = digest(launchToken);
 		let withheld: AiWithheld[] = [];
-		let cancelled = () => ({ launchId, launchToken, grants: [], withheld });
+		let cancelled = () => ({ launchId, launchToken, grants: [], withheld, ended: true as const });
 		let generation = input.channelId === undefined
 			? undefined
 			: await this.#storage.aiPlaceholders.generation(input.channelId);
@@ -490,35 +539,34 @@ export class AiCredentials {
 				placeholder: PLACEHOLDER_PREFIX + randomBytes(32).toString("base64url"),
 				keyVariable: AI_KEY_VARIABLES[record.provider],
 			}));
-			if (
-				grants.length
-				&& !await this.#storage.aiPlaceholders.put(
-					this.#rows(launchId, launchDigest, input, generation, grants),
-				)
-			) return cancelled();
+			let rows = this.#rows(launchId, launchDigest, input, generation, grants);
+			if (grants.length && !await this.#storage.aiPlaceholders.put(rows)) return cancelled();
 			let version = this.#storage.aiCredentials.version(input.userId);
 			let cutoffs = this.#storage.aiPlaceholders.cutoffs();
 			let [current, open] = await Promise.all([
 				this.#connected(input.userId),
-				this.#prepared(input, generation),
+				this.#prepared(input, generation, rows),
 			]);
-			// An archive or a revocation that completed after the document and machine were read,
-			// while the accounts still were, moved the count: they are read again, so the grants are
-			// never published on a read it outdated.
+			// An archive, a revocation or the end of the machine's launches that completed after the
+			// document, machine and stored grants were read, while the accounts still were, moved the
+			// count: they are read again, so the grants are never published on a read it outdated.
 			for (
 				let read = 1;
 				open && read < HANDOFF_ATTEMPTS && this.#storage.aiPlaceholders.cutoffs() !== cutoffs;
 				read++
 			) {
 				cutoffs = this.#storage.aiPlaceholders.cutoffs();
-				open = await this.#prepared(input, generation);
+				open = await this.#prepared(input, generation, rows);
 			}
 			let held = this.#storage.aiCredentials.version(input.userId) === version
 				&& this.#storage.aiPlaceholders.cutoffs() === cutoffs
 				&& sameSet(admitted.connected, current)
 				&& !this.#contradicted(admitted.copilot);
 			let due = this.#clock() >= input.expiresAt;
-			if (held && open && !due) return { launchId, launchToken, grants, withheld };
+			if (held && open && !due) {
+				if (grants.length) this.#handedOut(launchId);
+				return { launchId, launchToken, grants, withheld };
+			}
 			if (grants.length) await this.#storage.aiPlaceholders.deleteLaunch(this.#lease(), launchId);
 			if (due || !open) return cancelled();
 		}
@@ -558,16 +606,25 @@ export class AiCredentials {
 	}
 
 	/**
-	 * Whether a launch can still be given what it was prepared with: its machine is not revoked, and
-	 * its document is open in the archive generation the launch began in, so a document archived
-	 * meanwhile, and restored or not, cancels it.
+	 * Whether a launch can still be given what it was prepared with: its machine is not revoked, its
+	 * document is open in the archive generation the launch began in, so a document archived
+	 * meanwhile, and restored or not, cancels it, and every grant it stored is still there, so one
+	 * whose grants went with the machine's (a machine that must be paired again, not revoked) is
+	 * never handed out without them.
 	 */
-	async #prepared(input: AiLaunch, generation: number | undefined): Promise<boolean> {
-		let [machine, open] = await Promise.all([
+	async #prepared(
+		input: AiLaunch,
+		generation: number | undefined,
+		rows: readonly AiPlaceholder[],
+	): Promise<boolean> {
+		let now = this.#clock();
+		let [machine, open, stored] = await Promise.all([
 			input.machineId ? this.#storage.machines.get(input.machineId) : undefined,
 			input.channelId ? this.#storage.aiPlaceholders.generation(input.channelId) : undefined,
+			Promise.all(rows.map(row => this.#storage.aiPlaceholders.find(row.digest, now))),
 		]);
 		if (input.machineId && (!machine || machine.revokedAt)) return false;
+		if (stored.some(row => !row)) return false;
 		return open === generation;
 	}
 
@@ -640,36 +697,141 @@ export class AiCredentials {
 			provider: grant.provider,
 			...(input.machineId ? { machineId: input.machineId } : {}),
 			...(input.channelId ? { channelId: input.channelId, generation } : {}),
+			...(input.owner ? { owner: input.owner } : {}),
 			expiresAt: input.expiresAt,
 		}));
+	}
+
+	/** Remembers a launch was just handed out, for its owner to take up; forgets old ones. */
+	#handedOut(launchId: string): void {
+		let now = this.#clock().getTime();
+		for (let [id, at] of this.#handed) if (now - at >= HANDED_MS) this.#handed.delete(id);
+		this.#handed.set(launchId, now);
 	}
 
 	/**
 	 * Records that the provider answered a request sent with `record`, the key as it was read, that
 	 * the key is invalid: no launch is given that key again, and the list says it needs connecting
-	 * again. A key replaced or removed since keeps nothing of it.
+	 * again. A key replaced or removed since keeps nothing of it. Its person's launches that last are
+	 * told, once, as when they remove it; a refusal of a key already marked, or replaced, tells no one.
 	 */
 	async rejected(record: AiCredentialRecord): Promise<void> {
 		if (record.kind !== "api-key") return;
-		await this.#storage.aiCredentials.rejected(record, this.#clock());
+		if (await this.#storage.aiCredentials.rejected(record, this.#clock())) {
+			this.#told(record.userId);
+		}
 	}
 
-	/** Ends a launch: its placeholders stop working at once. */
+	/**
+	 * Ends a launch: from the moment it is asked, this process admits nothing more for it, before
+	 * storage has the end, and its placeholders stop working everywhere once storage has it. An end
+	 * storage refuses is tried again, on a backoff and with each sweep, and nothing is admitted for
+	 * the launch meanwhile.
+	 */
 	async end(launchId: string): Promise<void> {
-		await this.#storage.aiPlaceholders.deleteLaunch(this.#lease(), launchId);
+		this.#ending.add(launchId);
+		try {
+			await this.#storage.aiPlaceholders.deleteLaunch(this.#lease(), launchId);
+		} catch (err) {
+			this.#endLater(launchId);
+			throw err;
+		}
+		this.#ended(launchId);
 	}
 
 	/**
 	 * Ends the launch `launchToken` is the credential of, for the machine it was handed out on;
-	 * false when no live launch of that machine has it. Read from storage, so any process ends it.
+	 * false when no live launch of that machine has it. Read from storage, so any process ends it,
+	 * and from the moment it is found this process admits nothing more for it.
 	 */
 	async endHeld(launchToken: string, machineId: string): Promise<boolean> {
-		let removed = await this.#storage.aiPlaceholders.deleteHeldLaunch(
-			this.#lease(),
-			digest(launchToken),
-			machineId,
-		);
+		let found = await this.#storage.aiPlaceholders.findLaunch(digest(launchToken), this.#clock());
+		if (!found || found.machineId !== machineId) return false;
+		this.#ending.add(found.launchId);
+		let removed: number;
+		try {
+			removed = await this.#storage.aiPlaceholders.deleteHeldLaunch(
+				this.#lease(),
+				digest(launchToken),
+				machineId,
+			);
+		} catch (err) {
+			this.#endLater(found.launchId);
+			throw err;
+		}
+		this.#ended(found.launchId);
 		return removed > 0;
+	}
+
+	/** Storage has a launch's end: what it says from now on is enough. */
+	#ended(launchId: string): void {
+		this.#ending.delete(launchId);
+		this.#unended.delete(launchId);
+	}
+
+	/** Storage refused a launch's end: it stays ended here, and is ended again soon. */
+	#endLater(launchId: string): void {
+		let delay = Math.min((this.#unended.get(launchId) ?? END_RETRY_MS / 2) * 2, END_RETRY_MAX_MS);
+		this.#unended.set(launchId, delay);
+		if (this.#retrying) return;
+		this.#retrying = setTimeout(() => {
+			this.#retrying = undefined;
+			void this.#endAgain();
+		}, Math.min(...this.#unended.values()));
+		this.#retrying.unref?.();
+	}
+
+	/** Ends again each launch whose end storage refused. */
+	async #endAgain(): Promise<void> {
+		await Promise.all(
+			[...this.#unended.keys()].map(launchId =>
+				this.end(launchId).catch(err =>
+					console.error("chopin: could not end an AI launch, and will try again -", err)
+				)
+			),
+		);
+	}
+
+	/**
+	 * Whether `launchToken` is the credential of a live launch: `live` while it is, `ended` once it
+	 * ended, however that was (an end, an archive, a revocation, its deadline, its run or session
+	 * ending), which a launch's runner reads, with its own credential, when the proxy refuses its
+	 * agent, to tell an ended launch from a stand-in its agent got wrong. A credential no launch has
+	 * reads as ended: only a launch's runner holds one. `restarting` from a process that no longer
+	 * holds the writer lease, which can't tell.
+	 */
+	async launchStatus(launchToken: string): Promise<"live" | "ended" | "restarting"> {
+		if (!launchToken.startsWith(LAUNCH_PREFIX)) return "ended";
+		let found = await this.#storage.aiPlaceholders.findLaunch(digest(launchToken), this.#clock());
+		if (!found || this.#ending.has(found.launchId)) return "ended";
+		let live = await this.#launchLive(found);
+		if (!this.#writer()) return "restarting";
+		return live && !this.#ending.has(found.launchId) ? "live" : "ended";
+	}
+
+	/**
+	 * Ends each launch nothing owns now (its run ended, its session gone), whichever process handed
+	 * it out and whether or not an end was asked for it: what the writer lease's holder does as it
+	 * starts and with each sweep. A launch handed out moments ago is left to its owner to take up.
+	 * Returns how many it ended.
+	 */
+	async retire(): Promise<number> {
+		await this.#endAgain();
+		let now = this.#clock();
+		let owned = await this.#storage.aiPlaceholders.owned(now);
+		let ended = 0;
+		for (let launch of owned) {
+			let handed = this.#handed.get(launch.launchId);
+			if (handed !== undefined && now.getTime() - handed < HANDED_MS) continue;
+			if (this.#ending.has(launch.launchId) || await this.#ownerLive(launch)) continue;
+			try {
+				await this.end(launch.launchId);
+				ended++;
+			} catch (err) {
+				console.error("chopin: could not end an AI launch nothing owns -", err);
+			}
+		}
+		return ended;
 	}
 
 	/** Ends every launch on a machine, as revoking it does. */
@@ -709,7 +871,9 @@ export class AiCredentials {
 			if (!await this.#launchLive(found)) return { refused: "launch-ended" };
 			if (this.#storage.aiPlaceholders.cutoffs() !== cutoffs) continue;
 			if (!this.#writer()) return { refused: "restarting" };
-			if (this.#clock() >= found.expiresAt) return { refused: "launch-ended" };
+			if (this.#ending.has(found.launchId) || this.#clock() >= found.expiresAt) {
+				return { refused: "launch-ended" };
+			}
 			return serve();
 		}
 		return { refused: "busy" };
@@ -739,7 +903,9 @@ export class AiCredentials {
 		if (!timingSafeEqual(found.launchDigest, digest(launchToken))) {
 			return { refused: "other-launch" };
 		}
-		if (!await this.#launchLive(found)) return { refused: "launch-ended" };
+		if (this.#ending.has(found.launchId) || !await this.#launchLive(found)) {
+			return { refused: "launch-ended" };
+		}
 		return this.#credential(found);
 	}
 
@@ -800,7 +966,11 @@ export class AiCredentials {
 			if (signal?.aborted) return { refused: "cancelled" };
 			if (!this.#writer()) return { refused: "restarting" };
 			let now = this.#clock();
-			if (now >= found.expiresAt) return { refused: "launch-ended" };
+			// A launch whose end was asked meanwhile, its run's or session's or its replacement's, is
+			// over from that moment, before storage has the end.
+			if (this.#ending.has(found.launchId) || now >= found.expiresAt) {
+				return { refused: "launch-ended" };
+			}
 			if (expired(current, now)) continue;
 			let admitted = enter({
 				launch: found.expiresAt.getTime(),
@@ -879,14 +1049,19 @@ export class AiCredentials {
 		return record ?? (provider === "github-copilot" ? signIn(userId) : undefined);
 	}
 
+	/**
+	 * Whether a launch is live: its machine not revoked, its document not archived, and what it is
+	 * for (its run or session) not ended.
+	 */
 	async #launchLive(placeholder: AiPlaceholder): Promise<boolean> {
-		let [machine, channel] = await Promise.all([
+		let [machine, channel, owned] = await Promise.all([
 			placeholder.machineId ? this.#storage.machines.get(placeholder.machineId) : undefined,
 			placeholder.channelId ? this.#storage.channels.get(placeholder.channelId) : undefined,
+			placeholder.owner ? this.#ownerLive(placeholder) : true,
 		]);
 		if (placeholder.machineId && (!machine || machine.revokedAt)) return false;
 		if (placeholder.channelId && (!channel || channel.archivedAt)) return false;
-		return true;
+		return owned;
 	}
 
 	async #secret(record: AiCredentialRecord): Promise<string | undefined> {
@@ -931,6 +1106,7 @@ export class AiCredentials {
 		let since = this.#completed;
 		if (!githubToken) return { access: "unknown", since };
 		let account = copilotAccount(record, githubToken);
+		this.#answersFor(account, record.userId);
 		try {
 			let answer = await this.#copilotAnswer(account, githubToken, fresh);
 			return { account, access: answer.token ? "access" : "none", since: answer.since };
@@ -944,8 +1120,16 @@ export class AiCredentials {
 		githubToken: string,
 		fresh = false,
 	): Promise<CopilotToken | undefined> {
-		return (await this.#copilotAnswer(copilotAccount(record, githubToken), githubToken, fresh))
-			.token;
+		let account = copilotAccount(record, githubToken);
+		this.#answersFor(account, record.userId);
+		return (await this.#copilotAnswer(account, githubToken, fresh)).token;
+	}
+
+	/** Remembers that `account`'s answers about Copilot access are `userId`'s, to tell them of one. */
+	#answersFor(account: string, userId: string): void {
+		let users = this.#accountUsers.get(account);
+		if (users) users.add(userId);
+		else this.#accountUsers.set(account, new Set([userId]));
 	}
 
 	/**
@@ -1034,12 +1218,20 @@ export class AiCredentials {
 	#answered(entry: HeldAnswer, access: "access" | "none"): void {
 		entry.access = access;
 		let latest = this.#answers.get(entry.account) ?? { access: 0, none: 0 };
+		// The answer GitHub gave before this one about the account, of whichever kind came last.
+		let before = latest.access > latest.none ? "access" : latest.none > latest.access ? "none" : "";
 		latest[access] = ++this.#completed;
 		this.#answers.set(entry.account, latest);
 		for (let [key, other] of this.#copilotTokens) {
 			if (other.account === entry.account && other.access && other.access !== access) {
 				this.#copilotTokens.delete(key);
 			}
+		}
+		// A seat GitHub confirms lost or regained changes what its people's launches may be given:
+		// their launches that last are told, as for a provider they connect or remove. The same answer
+		// again, and a question GitHub couldn't answer (a rate limit among them), tell no one.
+		if (before && before !== access) {
+			for (let userId of this.#accountUsers.get(entry.account) ?? []) this.#told(userId);
 		}
 	}
 }

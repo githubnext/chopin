@@ -1012,12 +1012,71 @@ test("an owner's agent directory named from the home, by a file URL or relative 
 			CODEX_HOME: "~/linked-agent",
 		}).denied;
 		for (let path of [tilde, url, relative, linked, target]) expect(denied, path).toContain(path);
-		// A variable naming the home, or a folder holding the launch's own, would hide the launch from
-		// itself, so it is left out.
-		let wide = policy({ ATOMIC_CODING_AGENT_DIR: "~", CODEX_HOME: base }).denied;
-		expect(wide).not.toContain(home);
-		expect(wide).not.toContain(base);
+		// A folder of the owner's that holds what the launch works in is hidden around it: everything
+		// in it but the launch's own.
+		mkdirSync(join(base, "runs", "another"), { recursive: true });
+		writeFileSync(join(base, "auth.json"), "OWNER_AGENT_LOGIN");
+		let around = policy({ CODEX_HOME: base }).denied;
+		expect(around).toContain(join(base, "auth.json"));
+		expect(around).toContain(join(base, "runs", "another"));
+		for (let path of [base, join(base, "runs"), worktree, agentHome]) {
+			expect(around, path).not.toContain(path);
+		}
+		// One that is the home, or holds it, can't be hidden without taking the person's tools from
+		// the agent: the launch is refused, saying which.
+		for (let value of ["~", root]) {
+			expect(() => policy({ ATOMIC_CODING_AGENT_DIR: value }), value).toThrow(SandboxRefused);
+		}
 	} finally {
 		process.chdir(before);
+	}
+});
+
+test("an owner's agent directory moved by an --env value, and Atomic's sessions kept outside it, are hidden too", () => {
+	let root = realpathSync(mkdtempSync(join(scratch, "agent-env-")));
+	let home = join(root, "home");
+	let base = join(root, "state");
+	let worktree = join(base, "runs", "mine");
+	let agentHome = `${worktree}.agent`;
+	let given = join(root, "given-agent");
+	let sessions = join(root, "sessions");
+	let artifacts = join(root, "artifacts");
+	let journal = join(root, "journal.db");
+	let config = join(root, "config");
+	for (
+		let path of [worktree, agentHome, given, sessions, artifacts, join(config, "github-copilot")]
+	) {
+		mkdirSync(path, { recursive: true });
+	}
+	writeFileSync(journal, "");
+	let temporary = join(root, "tmp");
+	mkdirSync(temporary);
+	let denied = launchPolicy(
+		"bubblewrap",
+		{
+			...systemHost({
+				HOME: home,
+				ATOMIC_CODING_AGENT_SESSION_DIR: sessions,
+				ATOMIC_WORKFLOW_ARTIFACT_DIR: artifacts,
+				ATOMIC_WORKFLOW_JOURNAL_PATH: journal,
+				XDG_CONFIG_HOME: config,
+			}),
+			platform: "linux",
+		},
+		{
+			command: ["my-agent"],
+			cwd: worktree,
+			env: { PATH: process.env.PATH },
+			stdin: "pipe",
+			own: [worktree, agentHome],
+			agentHome,
+			ownerEnv: { ATOMIC_CODING_AGENT_DIR: given },
+		},
+		{ directory: base, home },
+		"http://127.0.0.1:4000",
+		temporary,
+	).denied;
+	for (let path of [given, sessions, artifacts, journal, join(config, "github-copilot")]) {
+		expect(denied, path).toContain(path);
 	}
 });

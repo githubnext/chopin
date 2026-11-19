@@ -69,7 +69,10 @@ export class MemoryAiCredentialStore implements AiCredentialStore {
 	}
 	async rejected(record: AiCredentialRecord, at: Date) {
 		let found = this.#same(record);
-		if (found && !found.rejectedAt) found.rejectedAt = new Date(at);
+		if (!found || found.rejectedAt) return false;
+		found.rejectedAt = new Date(at);
+		this.deps.cutoffs.cut(record.userId);
+		return true;
 	}
 	/** The stored row while it is still the credential `record` was read as. */
 	#same(record: AiCredentialRecord) {
@@ -135,6 +138,26 @@ export class MemoryAiPlaceholderStore implements AiPlaceholderStore {
 	async find(digest: Uint8Array, now: Date) {
 		let found = this.#placeholders.get(hex(digest));
 		return found && found.expiresAt > now ? copyPlaceholder(found) : undefined;
+	}
+	async findLaunch(launchDigest: Uint8Array, now: Date) {
+		for (let value of this.#placeholders.values()) {
+			if (value.expiresAt > now && sameBytes(value.launchDigest, launchDigest)) {
+				return copyPlaceholder(value);
+			}
+		}
+		return undefined;
+	}
+	async owned(now: Date) {
+		let launches = new Map<string, Pick<AiPlaceholder, "launchId" | "owner" | "channelId">>();
+		for (let value of this.#placeholders.values()) {
+			if (!value.owner || value.expiresAt <= now || launches.has(value.launchId)) continue;
+			launches.set(value.launchId, {
+				launchId: value.launchId,
+				owner: value.owner,
+				...(value.channelId ? { channelId: value.channelId } : {}),
+			});
+		}
+		return [...launches.values()];
 	}
 	async deleteLaunch(lease: Lease, launchId: string) {
 		this.deps.assertLease(lease);

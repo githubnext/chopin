@@ -843,18 +843,31 @@ session is one launch, prepared before its `start` or `fork` and carried in `ai`
   agent's tools, so a stand-in copied out of them reaches nothing. `launch` and
   `expiresAt`, the launch's deadline in milliseconds since the epoch (12 hours
   after it began), are present exactly when `providers` is not empty.
-- An `ai` message replaces the session's grants whole: when the person connects,
-  replaces or removes a provider, half an hour before the launch's deadline, and
-  after a [resume](#resuming-after-a-dropped-link), because the launch a session
-  held may have ended with its link or with the server's process. The earlier
-  launch ends once the new one is sent, so use the new grants from then on. An empty
-  `providers` says the session has no grant now.
+- A session whose person has no AI account Chopin can use (no Copilot seat and no
+  key) is never started: Chopin sends no `start` or `fork` for it, and the turn that
+  needed it says why, as a message from such a person is refused. A `start` or `fork`
+  always carries at least one provider.
+- An `ai` message replaces the session's grants whole: when what a launch for the
+  person may be given changes (they connect, replace or remove a provider, a provider
+  refuses one of their keys as invalid, or GitHub confirms their Copilot seat lost or
+  back), half an hour before the launch's deadline, and after a
+  [resume](#resuming-after-a-dropped-link), because the launch a session held may have
+  ended with its link or with the server's process. A change while the session starts
+  is sent once the client answers `started`, as the accounts are then. The earlier
+  launch ends once the new one is sent, so use the new grants from then on: a request
+  still waiting at Chopin on the earlier one is refused. An empty `providers` says the
+  session has no grant now.
 - A launch ends with its session (`destroy`, or a link that closes for good), and
   when its machine is revoked or its document archived; Chopin's proxy then answers
-  `launch-ended` (401). A session a server restart keeps for a resume keeps its
-  launch: the next server replaces it when the client resumes, or ends it with the
-  session. A launch that Chopin could not prepare (the person's accounts
-  kept changing) fails the session's start with the reason, which can be tried again.
+  `launch-ended`, or `unknown-placeholder` once its placeholders are gone (401, `{
+  "error": { "type": "chopin_proxy", "code": … } }`). To tell an ended launch from a
+  stand-in sent wrong, ask `GET /api/v1/ai/launch` with `x-chopin-launch`, which
+  answers `{ "state": "live" }` or `{ "state": "ended" }` (see
+  [Handing launches to runners](hosted-agent.md#handing-launches-to-runners)). A
+  session a server restart keeps for a resume keeps its launch: the next server
+  replaces it when the client resumes, or ends it with the session. A launch that
+  Chopin could not prepare (the person's accounts kept changing) fails the session's
+  start with the reason, which can be tried again.
 
 A client that does not offer the feature is sent none of this and uses its own
 models, as before.
@@ -1659,7 +1672,7 @@ POST /api/connector/planner
 Authorization: Bearer <machine token>
 { "document": "<document id or URL>" }
 
-200 { "token": "chopin_p_…", "expiresAt": <milliseconds since the epoch>, "document": { "id": "", "url": "" } }
+200 { "token": "chopin_p_…", "expiresAt": <milliseconds since the epoch>, "document": { "id": "", "url": "" }, "ai?": "chopin" }
 ```
 
 Chopin issues it only when it runs `HARNESS=remote` with `AGENT` on and not
@@ -1696,7 +1709,15 @@ pull request (see
 - Keep any worktree of its own at `CHOPIN_WORKTREE`.
 - To run its models on its owner's AI accounts in Chopin, rather than a sign-in
   of the machine's, offer `ai-credentials` and use each session's
-  [grants](#models-through-chopin), adding the launch's credential itself.
+  [grants](#models-through-chopin), adding the launch's credential itself. When
+  Chopin hands its Planners' sessions AI launches, it says so in the Planner
+  credential's answer and in `/api/connector/version` (`"ai": "chopin"`), and the
+  connector starts the backend, cold or as a spare, with
+  `CHOPIN_AI=chopin` and nothing of its owner's agent setup: an allow-listed
+  environment, its agents' state in `<worktree>.agent`, and none of the owner's agent
+  directories in sight (see
+  [AI accounts through Chopin](chopin-cli.md#ai-accounts-through-chopin)). Such a
+  backend has no models but its grants.
 - Open `/api/v1/agent` on `CHOPIN_URL` offering the `chopin.agent.v1`
   subprotocol, with `Authorization: Bearer <CHOPIN_PLANNER_TOKEN>`, and `attach`
   to `CHOPIN_DOCUMENT`.

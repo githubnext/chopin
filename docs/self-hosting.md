@@ -273,9 +273,11 @@ remember it.
 
 `HARNESS=remote` keeps the model out of the server. Each Planner session and turn
 goes to a client attached to the document over the agent connection at
-`/api/v1/agent`, usually an agent on a member's own machine; code, model credentials, and that client's tools stay on the
-member's machine, while the document, Decisions, and every room write stay in
-this server. The server needs no `MODEL` (one that is set is passed to the
+`/api/v1/agent`, usually an agent on a member's own machine; code and that client's tools stay on the
+member's machine, and its models run on the AI accounts people connected in this server
+(see [AI credentials](hosted-agent.md#ai-credentials)), reached through its credential
+proxy, or, for a client that does not take them, on the client's own, while the document,
+Decisions, and every room write stay in this server. The server needs no `MODEL` (one that is set is passed to the
 client as the turn's requested model) and accepts no `HARNESS_AUTH`, so it may
 bind to a public interface. Startup refuses `HARNESS_AUTH`. Summary and
 research workers run as isolated sessions on the client attached to their

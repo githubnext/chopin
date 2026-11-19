@@ -42,6 +42,10 @@ export function turnFailureOf(input: Input): Wire.TurnFailure {
 	if (error instanceof PlannerReplyError || error instanceof ReplyFailedError) {
 		return { kind: "error", ...turn };
 	}
+	// The session was not started: the account its launch is for has no AI account Chopin can use.
+	if ((error as { code?: unknown }).code === "no-ai-account") {
+		return { kind: "error", detail: error.message, code: "no-ai-account", ...turn };
+	}
 	if (error.name === "TimeoutError" || TIMED_OUT.test(error.message)) {
 		return { kind: "timed-out", ...turn };
 	}

@@ -56,6 +56,10 @@ import { admitAgent } from "./endpoint";
 import type { AgentAi } from "./endpoint";
 import { remotePlanner } from "./registry";
 import { testLease } from "../../storage/contract-support";
+import { AiCredentials } from "../../ai/credentials";
+import { endLaunch, handOut, PLANNER_AI_LAUNCH_MS } from "../../ai/launches";
+import { aiProxy } from "../../ai/proxy";
+import { turnFailureOf } from "../../chat/turn-failure";
 
 import type { AgentClient, AgentHandlers, TurnContext } from "@chopin/agent-link/client";
 import type { ActiveOwnerBinding } from "../../agent/active-owner";
@@ -2770,7 +2774,8 @@ describe("Agent connection background workers", () => {
 describe("Agent connection AI launches", () => {
 	/** Launches as Chopin would hand them out, each with its own stand-in, recorded. */
 	function launches() {
-		let asked: Array<{ userId: string; machineId?: string; channelId: string }> = [];
+		let asked: Array<{ userId: string; machineId?: string; channelId: string; sessionId: string }> =
+			[];
 		let ended: string[] = [];
 		let listeners = new Set<(userId: string) => void>();
 		let ai: AgentAi = {
@@ -2827,7 +2832,11 @@ describe("Agent connection AI launches", () => {
 		let { raw, start, session, channel, asked, ended, changed, listeners } = await opened(
 			"ai-credentials",
 		);
-		expect(asked).toEqual([{ userId: "U_member", channelId: channel.id }]);
+		expect(asked).toEqual([{
+			userId: "U_member",
+			channelId: channel.id,
+			sessionId: start.session,
+		}]);
 		expect(start.ai).toEqual({
 			launch: "chopin_launch_1",
 			expiresAt: expect.any(Number),
@@ -2910,5 +2919,284 @@ describe("Agent connection AI launches", () => {
 			raw.send({ type: "detach" });
 			await raw.closed;
 		}
+	});
+});
+
+/** The providers a launch's grants name, in order. */
+function providers(grants: { providers: Array<{ provider: string }> }) {
+	return grants.providers.map(grant => grant.provider);
+}
+
+describe("Agent connection AI launches on the person's accounts in Chopin", () => {
+	/**
+	 * The member's AI accounts as Chopin keeps them, launched for sessions as `main.ts` launches
+	 * them, with GitHub answering their Copilot access as `copilot` says and a provider standing in
+	 * for OpenAI that answers each model request as `answer` says.
+	 */
+	async function accounts(storage: Parameters<typeof testLease>[0]) {
+		let lease = await testLease(storage);
+		let state = {
+			copilot: "none" as "access" | "none" | "unreachable",
+			answer: "ok" as "ok" | "invalid" | "throttled",
+		};
+		let openai = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch(request) {
+				if (new URL(request.url).pathname === "/v1/models") return Response.json({ data: [] });
+				if (state.answer === "invalid") {
+					return Response.json({ error: { code: "invalid_api_key" } }, { status: 401 });
+				}
+				if (state.answer === "throttled") return Response.json({}, { status: 429 });
+				return Response.json({ choices: [] });
+			},
+		});
+		cleanups.push(() => openai.stop(true));
+		let upstream = `http://127.0.0.1:${openai.port}`;
+		let credentials = new AiCredentials({
+			storage,
+			lease: () => lease,
+			key: new Uint8Array(32).fill(3),
+			origin: "https://chopin.test",
+			githubToken: async () => "ghu_member",
+			copilotToken: async () => {
+				if (state.copilot === "unreachable") throw new Error("GitHub answered 502");
+				return state.copilot === "access"
+					? { token: "tid=member", expiresAt: Date.now() + 1_800_000 }
+					: undefined;
+			},
+			upstreams: { openai: upstream },
+		});
+		let held = new Set<string>();
+		let ai: AgentAi = {
+			launch: ({ sessionId, ...input }) =>
+				handOut(credentials, {
+					...input,
+					owner: `session:${sessionId}`,
+					expiresAt: new Date(Date.now() + PLANNER_AI_LAUNCH_MS),
+				}),
+			end: launchId => endLaunch(credentials, launchId),
+			onChanged: listener => credentials.onChanged(listener),
+			held: (launchId, holding) => void (holding ? held.add(launchId) : held.delete(launchId)),
+		};
+		let proxy = aiProxy({ credentials, upstreams: { openai: upstream } });
+		return { credentials, state, ai, held, proxy };
+	}
+
+	/** Opens a session on a raw link offering `features`, for the planner given. */
+	async function starting(
+		features: string | undefined,
+		prepare?: (made: Awaited<ReturnType<typeof accounts>>) => Promise<void>,
+		planner: Partial<RemotePlanner> = {},
+	) {
+		let { auth, channel, storage } = await linkAuth();
+		let made = await accounts(storage);
+		await prepare?.(made);
+		let server = linkServer(auth, 2_000, undefined, 2_000, undefined, undefined, { ai: made.ai });
+		cleanups.push(server.stop);
+		let raw = await rawLink(server.url, undefined, features);
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		let opening = adapterFor(server, { channelId: channel.id, isolated: false, ...planner })
+			.doStart(
+				{ sessionId: crypto.randomUUID(), sandboxSession, sessionWorkDir: "/tmp" },
+			);
+		return { ...made, raw, opening, channel, storage };
+	}
+
+	it("starts no session, and forks none, for someone with no Copilot seat and no key, refusing it with no-ai-account", async () => {
+		for (
+			let [features, planner, sent] of [
+				["ai-credentials", {}, "start"],
+				["ai-credentials, session-forks", { forkFrom: { session: "parent" } }, "fork"],
+			] as const
+		) {
+			let { raw, opening, state } = await starting(features, undefined, planner);
+			let failed = await opening.then(() => undefined, (error: unknown) => error);
+			expect(failed).toMatchObject({
+				code: "no-ai-account",
+				message:
+					"chopin needs an AI account to answer, so it didn't start. Add one, then try again.",
+			});
+			expect(turnFailureOf({ error: failed, suspended: false })).toMatchObject({
+				kind: "error",
+				code: "no-ai-account",
+			});
+			await Bun.sleep(30);
+			expect(raw.messages.filter(message => message.type === sent)).toEqual([]);
+			expect(state.copilot).toBe("none");
+			raw.send({ type: "detach" });
+			await raw.closed;
+		}
+	});
+
+	it("says a Copilot check that couldn't finish couldn't finish, never that there is no subscription", async () => {
+		let { raw, opening } = await starting("ai-credentials", async made => {
+			made.state.copilot = "unreachable";
+		});
+		let failed = await opening.then(() => undefined, (error: unknown) => error) as Error;
+		expect(failed.message).toBe(
+			"chopin couldn't finish checking your AI accounts, so it didn't start. Try again in a moment.",
+		);
+		expect(failed.message).not.toMatch(/subscription/i);
+		expect(raw.messages.filter(message => message.type === "start")).toEqual([]);
+		raw.send({ type: "detach" });
+		await raw.closed;
+	});
+
+	it("starts a session on one key, and a client that did not offer ai-credentials as before", async () => {
+		let withKey = await starting(
+			"ai-credentials",
+			made =>
+				made.credentials.connect("U_member", "openai", {
+					kind: "api-key",
+					secret: "sk-member-openai-0123456789",
+				}).then(() => {}),
+		);
+		let start = await withKey.raw.next("start");
+		expect(start.ai.providers.map((grant: { provider: string }) => grant.provider)).toEqual([
+			"openai",
+		]);
+		withKey.raw.send({ type: "started", session: start.session });
+		await (await withKey.opening).doDestroy();
+
+		let older = await starting(undefined);
+		let plain = await older.raw.next("start");
+		expect("ai" in plain).toBe(false);
+		older.raw.send({ type: "started", session: plain.session });
+		await (await older.opening).doDestroy();
+	});
+
+	it("takes Copilot away and back as GitHub confirms a seat lost and regained, and a key its provider refuses, but not a rate limit", async () => {
+		let { raw, opening, state, credentials, proxy } = await starting(
+			"ai-credentials",
+			async made => {
+				made.state.copilot = "access";
+				await made.credentials.connect("U_member", "openai", {
+					kind: "api-key",
+					secret: "sk-member-openai-0123456789",
+				});
+			},
+		);
+		let start = await raw.next("start");
+		raw.send({ type: "started", session: start.session });
+		let session = await opening;
+		expect(providers(start.ai)).toEqual(["github-copilot", "openai"]);
+
+		state.copilot = "none";
+		await credentials.check("U_member", "ghu_member");
+		let lost = await raw.next("ai");
+		expect(providers(lost.ai)).toEqual(["openai"]);
+
+		state.copilot = "access";
+		await credentials.check("U_member", "ghu_member");
+		let back = await raw.next("ai");
+		expect(providers(back.ai)).toEqual(["github-copilot", "openai"]);
+
+		// The same answer again changes nothing.
+		await credentials.check("U_member", "ghu_member");
+		await Bun.sleep(50);
+		expect(raw.messages.filter(message => message.type === "ai")).toEqual([]);
+
+		let openai = back.ai.providers.find((grant: { provider: string }) =>
+			grant.provider === "openai"
+		);
+		let ask = () => {
+			let url = new URL("https://chopin.test/api/v1/ai/openai/v1/chat/completions");
+			return proxy(
+				new Request(url, {
+					method: "POST",
+					headers: {
+						authorization: `Bearer ${openai.placeholder}`,
+						"x-chopin-launch": back.ai.launch,
+					},
+					body: "{}",
+				}),
+				url,
+			);
+		};
+		state.answer = "throttled";
+		expect((await ask()).status).toBe(429);
+		await Bun.sleep(50);
+		expect(raw.messages.filter(message => message.type === "ai")).toEqual([]);
+
+		state.answer = "invalid";
+		expect((await ask()).status).toBe(401);
+		let refused = await raw.next("ai");
+		expect(providers(refused.ai)).toEqual(["github-copilot"]);
+
+		await session.doDestroy();
+		raw.send({ type: "detach" });
+		await raw.closed;
+	});
+
+	it("hands a session the accounts as they are once it acknowledges its start, once, however often they changed while it started", async () => {
+		let { auth, channel } = await linkAuth();
+		let listeners = new Set<(userId: string) => void>();
+		let current = ["anthropic"];
+		let count = 0;
+		let ai: AgentAi = {
+			async launch() {
+				count++;
+				return {
+					launchId: `launch-${count}`,
+					grants: {
+						launch: `chopin_launch_${count}`,
+						expiresAt: Date.now() + 60 * 60_000,
+						providers: current.map(provider => ({
+							provider: provider as "anthropic" | "openai",
+							baseUrl: `https://chopin.test/api/v1/ai/${provider}`,
+							placeholder: `chopin_ai_${provider}_${count}`,
+							keyVariable: "KEY",
+						})),
+						withheld: [],
+					},
+				};
+			},
+			end: () => {},
+			onChanged(listener) {
+				listeners.add(listener);
+				return () => listeners.delete(listener);
+			},
+		};
+		let changed = () => {
+			for (let listener of listeners) listener("U_member");
+		};
+		let server = linkServer(auth, 2_000, undefined, 2_000, undefined, undefined, { ai });
+		cleanups.push(server.stop);
+		let raw = await rawLink(server.url, undefined, "ai-credentials");
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		let opening = adapterFor(server, { channelId: channel.id, isolated: false }).doStart({
+			sessionId: "starting-while-accounts-change",
+			sandboxSession,
+			sessionWorkDir: "/tmp",
+		});
+		let start = await raw.next("start");
+		current = ["anthropic", "openai"];
+		changed();
+		current = ["openai"];
+		changed();
+		await Bun.sleep(30);
+		expect(raw.messages.filter(message => message.type === "ai")).toEqual([]);
+		raw.send({ type: "started", session: start.session });
+		let session = await opening;
+		let renewed = await raw.next("ai");
+		expect(renewed.ai.providers.map((grant: { provider: string }) => grant.provider)).toEqual([
+			"openai",
+		]);
+		await Bun.sleep(50);
+		expect(raw.messages.filter(message => message.type === "ai")).toEqual([]);
+
+		// After the acknowledgement a change reaches it at once.
+		current = ["anthropic"];
+		changed();
+		let after = await raw.next("ai");
+		expect(after.ai.providers.map((grant: { provider: string }) => grant.provider)).toEqual([
+			"anthropic",
+		]);
+		await session.doDestroy();
+		raw.send({ type: "detach" });
+		await raw.closed;
 	});
 });

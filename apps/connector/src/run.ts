@@ -1,7 +1,7 @@
 import { requestSchema } from "@chopin/experiment";
 import { activityText } from "@chopin/protocol/activity";
 import type { BuildRequest } from "@chopin/protocol/implementation";
-import { remote } from "./mcp";
+import { ConnectorError, remote } from "./mcp";
 import { ConnectorStopped, failureKind, redacted } from "./connection";
 import { errorCode } from "./machine";
 import { backoff, delay, forgottenMessage, RUN_GRACE_MS, runReports } from "./reconnect";
@@ -15,9 +15,9 @@ import {
 	withoutGitHub,
 } from "./github-token";
 import type { GitHubGrantRequest, RunAiLaunch } from "./machine";
-import { endMachineAiLaunch, machineAiLaunch } from "./machine";
+import { endMachineAiLaunch, machineAiLaunch, NoAiAccount } from "./machine";
 import { type AiRelay, type RelayedLaunch, startAiRelay } from "./ai-relay";
-import { agentAiEnvironment, withoutOwnerAgent } from "./ai-agent";
+import { agentAiEnvironment, managedEnvironment } from "./ai-agent";
 import { type McpTokenFile, mcpTokenFile } from "./mcp-token";
 import { AgentTimedOut, runAgent, timedOut } from "./acp";
 import type { AgentInfo } from "./acp";
@@ -93,14 +93,20 @@ type Options = {
 	buildLimitMs?: number;
 	/**
 	 * Asks Chopin for the run's AI launch with the run's credential, and ends it with the launch's own;
-	 * by default with `machine`. A run with neither, or that Chopin hands no grant, starts its agent
-	 * on its own models, as before.
+	 * by default with `machine`. A run with neither, or against a Chopin that hands out no launch
+	 * (undefined), starts its agent on its own models, as before. One Chopin answers has no AI account
+	 * to run on (`NoAiAccount`) starts no agent at all and ends saying so.
 	 */
 	ai?: {
 		launch(run: string, signal: AbortSignal): Promise<RunAiLaunch | undefined>;
 		end(launch: string): Promise<void>;
 	};
 };
+/** Chopin could not give a run its AI launch: the run starts no agent, and its end says why. */
+class AiLaunchFailed extends Error {
+	override name = "AiLaunchFailed";
+}
+
 /** How long the end of a run's AI launch may take before it is left to its deadline. */
 const AI_END_MS = 10_000;
 /** How long an investigation's or prototype's agent may work before it is stopped. */
@@ -375,17 +381,21 @@ export async function runWork(
 		try {
 			launched = await ai?.launch(claim.runToken, abort.signal);
 		} catch (error) {
-			if (abort.signal.aborted) throw error;
-			throw new Error(
+			// Never the machine owner's sign-ins in place of the person's accounts: no agent starts.
+			if (abort.signal.aborted || error instanceof NoAiAccount) throw error;
+			throw new AiLaunchFailed(
 				errorCode(error) === "unavailable"
 					? "Chopin couldn't give this run its AI models now. Start it again in a moment."
-					: `Chopin couldn't give this run its AI models: ${refusalMessage(error) ?? "it refused"}`,
+					: `Chopin couldn't give this run its AI models: ${
+						(error instanceof ConnectorError ? error.said : undefined) ?? refusalMessage(error)
+							?? "it refused"
+					}`,
 				{ cause: error },
 			);
 		}
 		let agentHome: string | undefined;
 		let agentAi: Record<string, string> = {};
-		if (launched?.launch && launched.providers.length) {
+		if (launched) {
 			let relay = options.sandbox?.aiRelay ?? (ownRelay = startAiRelay());
 			relayed = relay.open(launched.launch, launched.providers, () => {
 				ended ??= "Chopin ended this run's access to its AI models.";
@@ -422,12 +432,12 @@ export async function runWork(
 					own: [path, tokenFolder(path), ...agentHome ? [agentHome] : []],
 				}
 				: {}),
-			...(agentHome ? { agentHome } : {}),
+			...(agentHome ? { agentHome, ownerEnv: options.env ?? {} } : {}),
 			command: options.command,
 			cwd: path,
 			env: {
 				...(agentHome
-					? withoutOwnerAgent(withoutGitHub(options.env ?? {}))
+					? managedEnvironment({}, options.env)
 					: withoutGitHub(options.env ?? {})),
 				...agentAi,
 				// Where a build's agent adds any extra worktrees, as its prompt says.
@@ -597,8 +607,9 @@ export async function runWork(
 		// journal and in Chopin, never as an unexplained failure.
 		let late = error instanceof AgentTimedOut
 			|| error instanceof Error && error.message === timedOut(limit);
-		// Chopin gave no GitHub token, and its reason names the repository and what fixes it.
-		let refused = error instanceof GitHubRefused;
+		// Chopin gave no GitHub token, or no AI account to run on, and its reason says what fixes it.
+		let refused = error instanceof GitHubRefused || error instanceof NoAiAccount
+			|| error instanceof AiLaunchFailed;
 		let message = stopped
 			? STOPPED
 			: ended
@@ -651,7 +662,7 @@ export async function runWork(
 		}
 		relayed?.close();
 		await ownRelay?.close().catch(() => {});
-		if (launched?.launch && ai) await ai.end(launched.launch).catch(() => {});
+		if (launched && ai) await ai.end(launched.launch).catch(() => {});
 		github?.expired.removeEventListener("abort", lapsed);
 		await mcp?.stop().catch(() => {});
 		await issued?.then(value => value.stop()).catch(() => {});

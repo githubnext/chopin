@@ -48,6 +48,10 @@ afterAll(() => {
 const REAL_KEY = "sk-real-openai-key-0123456789";
 const OWNER_KEY = "sk-owner-own-openai-key-0123456789";
 const OWNER_LOGIN = "owner-atomic-login-0123456789";
+/** A provider key in the connector's own environment that no list of known names covers. */
+const UNRELATED_KEY = "sk-fake-unrelated-provider-0123456789";
+const OWNER_SESSION = "owner-session-marker-0123456789";
+const OWNER_MOVED = "owner-moved-agent-marker-0123456789";
 const MACHINE = "chopin_m_machine";
 
 function git(cwd: string, ...args: string[]) {
@@ -75,7 +79,7 @@ function provider() {
 }
 
 test.skipIf(!usable)(
-	"a sandboxed agent reaches its model through Chopin's proxy with only a stand-in, and holds no credential and none of the owner's agent setup",
+	"a sandboxed agent reaches its model through Chopin's proxy with only a stand-in, and holds no credential and none of the owner's agent setup, wherever it is kept",
 	async () => {
 		let home = join(scratch, "home");
 		let checkout = join(scratch, "checkout");
@@ -91,6 +95,14 @@ test.skipIf(!usable)(
 			JSON.stringify({ token: OWNER_LOGIN }),
 		);
 		writeFileSync(join(home, ".claude", "settings.json"), JSON.stringify({ key: OWNER_KEY }));
+		// The owner's sessions where the connector's environment moved them, and their agent
+		// directory where an `--env` value moved it.
+		let sessions = join(scratch, "owner-sessions");
+		let moved = join(scratch, "owner-agent");
+		mkdirSync(sessions, { recursive: true });
+		mkdirSync(moved, { recursive: true });
+		writeFileSync(join(sessions, "session.jsonl"), OWNER_SESSION);
+		writeFileSync(join(moved, "auth.json"), OWNER_MOVED);
 		git(checkout, "init", "-b", "main");
 		writeFileSync(join(checkout, "README.md"), "the repository\n");
 		git(checkout, "add", ".");
@@ -179,11 +191,19 @@ test.skipIf(!usable)(
 		let owned = [
 			join(home, ".atomic", "agent", "auth.json"),
 			join(home, ".claude", "settings.json"),
+			join(sessions, "session.jsonl"),
+			join(moved, "auth.json"),
 		];
 		let realHome = process.env.HOME;
-		let ownerKey = process.env.ANTHROPIC_API_KEY;
+		let saved = {
+			ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+			MISTRAL_API_KEY: process.env.MISTRAL_API_KEY,
+			ATOMIC_CODING_AGENT_SESSION_DIR: process.env.ATOMIC_CODING_AGENT_SESSION_DIR,
+		};
 		process.env.HOME = home;
 		process.env.ANTHROPIC_API_KEY = OWNER_KEY;
+		process.env.MISTRAL_API_KEY = UNRELATED_KEY;
+		process.env.ATOMIC_CODING_AGENT_SESSION_DIR = sessions;
 		let sandbox = await createSandbox({ directory: state, home, server: origin });
 		try {
 			let id = crypto.randomUUID();
@@ -235,6 +255,7 @@ test.skipIf(!usable)(
 						AI_AGENT_REPORT: "ai-report.json",
 						AI_AGENT_PEEK: owned.join(","),
 						OPENAI_API_KEY: OWNER_KEY,
+						ATOMIC_CODING_AGENT_DIR: moved,
 					},
 					github: request => testGitHubToken(request.folder),
 					sandbox,
@@ -266,7 +287,17 @@ test.skipIf(!usable)(
 			expect(report.env.OPENAI_API_KEY).toStartWith("chopin_ai_");
 			expect(report.env.ATOMIC_CODING_AGENT_DIR).toBe(join(`${worktree}.agent`, "atomic"));
 			let held = JSON.stringify({ env: report.env, state: report.state });
-			for (let secret of [REAL_KEY, OWNER_KEY, OWNER_LOGIN, launch!.launch!]) {
+			for (
+				let secret of [
+					REAL_KEY,
+					OWNER_KEY,
+					OWNER_LOGIN,
+					UNRELATED_KEY,
+					OWNER_SESSION,
+					OWNER_MOVED,
+					launch!.launch!,
+				]
+			) {
 				expect(held).not.toContain(secret);
 			}
 			let models = JSON.parse(report.state[join(`${worktree}.agent`, "atomic", "models.json")]);
@@ -292,8 +323,10 @@ test.skipIf(!usable)(
 			expect(after.status).toBe(401);
 		} finally {
 			process.env.HOME = realHome;
-			if (ownerKey === undefined) delete process.env.ANTHROPIC_API_KEY;
-			else process.env.ANTHROPIC_API_KEY = ownerKey;
+			for (let [name, value] of Object.entries(saved)) {
+				if (value === undefined) delete process.env[name];
+				else process.env[name] = value;
+			}
 			await sandbox.close();
 			await chopin.stop(true);
 			openai.stop();

@@ -294,7 +294,8 @@ export function secretPaths(platform: NodeJS.Platform, home: string): string[] {
 /**
  * Where the owner keeps their own agents' configuration, logins and sessions: Atomic's agent
  * directory and journal, and the Copilot, Claude, Codex and Gemini directories, with any of them
- * the owner's environment moved elsewhere, as the agents read that variable: `~` is a home (the
+ * the owner's environment moved elsewhere (Atomic's sessions, workflow artifacts and journal
+ * included, and Copilot's sign-in under `XDG_CONFIG_HOME`), as the agents read that variable: `~` is a home (the
  * one given and the environment's own), a `file:` URL its path, and a relative path is taken from
  * `cwd`, where the owner's agents started with that environment. A launch given an agent state
  * directory of its own (see `Launch.agentHome`) may not read any of them.
@@ -332,6 +333,10 @@ export function ownerAgentPaths(
 	let moved = [
 		"ATOMIC_CODING_AGENT_DIR",
 		"PI_CODING_AGENT_DIR",
+		// Where Atomic keeps sessions, workflow artifacts and its journal outside its directory.
+		"ATOMIC_CODING_AGENT_SESSION_DIR",
+		"ATOMIC_WORKFLOW_ARTIFACT_DIR",
+		"ATOMIC_WORKFLOW_JOURNAL_PATH",
 		"COPILOT_HOME",
 		"CLAUDE_CONFIG_DIR",
 		"CODEX_HOME",
@@ -339,6 +344,9 @@ export function ownerAgentPaths(
 		let value = env[name]?.trim();
 		return value ? located(value) : [];
 	});
+	// Copilot's editor sign-in is read from the configuration directory the environment names.
+	let config = env.XDG_CONFIG_HOME?.trim();
+	if (config) moved.push(...located(config).map(each => path.join(each, "github-copilot")));
 	return [
 		under(".atomic", "agent"),
 		under(".atomic", "workflows"),

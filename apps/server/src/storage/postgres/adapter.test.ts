@@ -1111,6 +1111,7 @@ if (url) {
 				"043_chat_thread_seq",
 				"044_ai_credentials",
 				"045_ai_usage",
+				"046_ai_placeholder_owner",
 			]);
 			expect([
 				...await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`,

@@ -233,3 +233,28 @@ test("a Retry refused for want of an AI account keeps the failed reply and its R
 		});
 	expect(refusedRetryView(banner, undefined)).toBe(banner);
 });
+
+test("a reply chopin could not start for want of an AI account points the one who asked, and only them, to AI accounts", () => {
+	let words = "chopin needs an AI account to answer, so it didn't start. Add one, then try again.";
+	let entries = [
+		ASK,
+		failed("f1", { kind: "error", detail: words, code: "no-ai-account", request: "ask" }),
+	];
+	expect(failureBanner(entries, undefined, "mona")).toMatchObject({
+		detail: words,
+		retry: true,
+		request: "ask",
+		link: { label: "Open AI accounts", href: "/ai-accounts" },
+	});
+	let other = failureBanner(entries, undefined, "ada");
+	expect(other?.detail).toBe(words);
+	expect(other).not.toHaveProperty("link");
+	// Any other failed reply offers no such link.
+	expect(
+		failureBanner(
+			[ASK, failed("f2", { kind: "error", detail: "boom", request: "ask" })],
+			undefined,
+			"mona",
+		),
+	).not.toHaveProperty("link");
+});

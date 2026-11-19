@@ -23,7 +23,8 @@ import { BUILD_LIMIT_MS, INVESTIGATION_LIMIT_MS, runWork, STOPPED } from "./run"
 import { timedOut } from "./acp";
 import { git } from "./workspace";
 import { ConnectorError, remote } from "./mcp";
-import { register } from "./machine";
+import { machineAiLaunch, register } from "./machine";
+import { AI_ACCOUNT_UNCHECKED_RUN, NO_AI_ACCOUNT_RUN } from "@chopin/protocol/ai-credentials";
 import { BOT, STARTER, testGitHubToken } from "./testing/github-grant";
 import { githubRefusal } from "./github-token";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -1681,6 +1682,201 @@ test("a run handed AI grants gives its agent stand-ins through the relay and its
 		expect(ended).toEqual(["chopin_launch_run"]);
 	} finally {
 		await chopin.stop(true);
+		await rm(folder, { recursive: true, force: true });
+	}
+});
+
+test("a run Chopin answers has no AI account to run on starts no agent, and ends in Chopin's words", async () => {
+	let answers: Array<[string, () => Response]> = [
+		[
+			NO_AI_ACCOUNT_RUN,
+			() => Response.json({ error: "no-ai-account", message: NO_AI_ACCOUNT_RUN }, { status: 409 }),
+		],
+		[
+			AI_ACCOUNT_UNCHECKED_RUN,
+			() =>
+				Response.json({ error: "no-ai-account", message: AI_ACCOUNT_UNCHECKED_RUN }, {
+					status: 409,
+				}),
+		],
+		// A Chopin that hands out a launch with no provider at all says the same, in the same words.
+		[
+			NO_AI_ACCOUNT_RUN,
+			() =>
+				Response.json({
+					providers: [],
+					withheld: [{ provider: "github-copilot", reason: "no-copilot-access" }],
+				}),
+		],
+		[
+			AI_ACCOUNT_UNCHECKED_RUN,
+			() =>
+				Response.json({
+					providers: [],
+					withheld: [{ provider: "github-copilot", reason: "copilot-unavailable" }],
+				}),
+		],
+	];
+	for (let [words, answer] of answers) {
+		let folder = await mkdtemp(join(tmpdir(), "chopin-ai-refused-"));
+		let report = join(folder, "report.json");
+		let chopin = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: answer });
+		let origin = `http://127.0.0.1:${chopin.port}`;
+		try {
+			let { calls } = await run({}, [], undefined, undefined, {
+				command: [process.execPath, new URL("./testing/ai-agent.ts", import.meta.url).pathname],
+				env: { AI_AGENT_REPORT: report, OPENAI_API_KEY: "sk-owner" },
+				ai: {
+					launch: (run, signal) => machineAiLaunch(origin, "chopin_m_machine", run, signal),
+					end: async () => {},
+				},
+			});
+			expect(existsSync(report), words).toBe(false);
+			expect(calls.filter(([name]) => name === "report_implementation_build"), words).toEqual([[
+				"report_implementation_build",
+				{ id: expect.any(String), state: "failed", error: words },
+			]]);
+		} finally {
+			await chopin.stop(true);
+			await rm(folder, { recursive: true, force: true });
+		}
+	}
+});
+
+test("a run whose AI launch can't be prepared now, or whose document ended first, starts no agent and says why", async () => {
+	for (
+		let [answer, error] of [
+			[
+				() => Response.json({ error: "unavailable" }, { status: 503 }),
+				"Chopin couldn't give this run its AI models now. Start it again in a moment.",
+			],
+			[
+				() =>
+					Response.json({
+						error: "launch-ended",
+						message: "This run's document or machine ended before it could start.",
+					}, { status: 409 }),
+				"Chopin couldn't give this run its AI models: This run's document or machine ended before it could start.",
+			],
+		] as const
+	) {
+		let folder = await mkdtemp(join(tmpdir(), "chopin-ai-busy-"));
+		let report = join(folder, "report.json");
+		let chopin = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: answer });
+		let origin = `http://127.0.0.1:${chopin.port}`;
+		try {
+			let { calls } = await run({}, [], undefined, undefined, {
+				command: [process.execPath, new URL("./testing/ai-agent.ts", import.meta.url).pathname],
+				env: { AI_AGENT_REPORT: report },
+				ai: {
+					launch: (run, signal) => machineAiLaunch(origin, "chopin_m_machine", run, signal),
+					end: async () => {},
+				},
+			});
+			expect(existsSync(report), error).toBe(false);
+			expect(calls.filter(([name]) => name === "report_implementation_build"), error).toEqual([[
+				"report_implementation_build",
+				{ id: expect.any(String), state: "failed", error },
+			]]);
+		} finally {
+			await chopin.stop(true);
+			await rm(folder, { recursive: true, force: true });
+		}
+	}
+});
+
+test("an agent that reads no provider's variables lists each granted provider's models with only the base URL and key Chopin published together, Copilot included", async () => {
+	let folder = await mkdtemp(join(tmpdir(), "chopin-ai-pairs-"));
+	let report = join(folder, "report.json");
+	// Named as Atomic's ACP command is, so the connector writes it a models.json too.
+	let atomic = join(folder, "atomic-acp");
+	await writeFile(
+		atomic,
+		`#!/bin/sh\nexec ${process.execPath} ${
+			new URL("./testing/ai-agent.ts", import.meta.url).pathname
+		}\n`,
+	);
+	await chmod(atomic, 0o755);
+	let seen: Array<{ path: string; key: string | null; launch: string | null }> = [];
+	let service = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch(request) {
+			let key = request.headers.get("x-api-key")
+				?? request.headers.get("authorization")?.replace(/^Bearer /, "") ?? null;
+			seen.push({
+				path: new URL(request.url).pathname,
+				key,
+				launch: request.headers.get("x-chopin-launch"),
+			});
+			let valid = key?.startsWith("chopin_ai_")
+				&& request.headers.get("x-chopin-launch") === "chopin_launch_pairs";
+			return valid
+				? Response.json({ data: [{ id: "model" }] })
+				: Response.json({ error: "refused" }, { status: 401 });
+		},
+	});
+	let base = `http://127.0.0.1:${service.port}/api/v1/ai`;
+	let grant = {
+		"github-copilot": {
+			provider: "github-copilot" as const,
+			baseUrl: `${base}/github-copilot`,
+			placeholder: "chopin_ai_copilot",
+			keyVariable: "COPILOT_GITHUB_TOKEN",
+		},
+		anthropic: {
+			provider: "anthropic" as const,
+			baseUrl: `${base}/anthropic`,
+			placeholder: "chopin_ai_anthropic",
+			keyVariable: "ANTHROPIC_API_KEY",
+		},
+	};
+	try {
+		for (
+			let [name, command, providers] of [
+				["generic, Copilot only", [process.execPath], [grant["github-copilot"]]],
+				["generic, with Anthropic", [process.execPath], [grant["github-copilot"], grant.anthropic]],
+				["Atomic", [atomic], [grant["github-copilot"], grant.anthropic]],
+			] as const
+		) {
+			seen.length = 0;
+			let list = providers.map(value => value.provider).join(",");
+			await run({}, [], undefined, undefined, {
+				command: command.length === 1 && command[0] === atomic
+					? [atomic]
+					: [...command, new URL("./testing/ai-agent.ts", import.meta.url).pathname],
+				env: { AI_AGENT_REPORT: report, AI_AGENT_LIST: list },
+				ai: {
+					launch: async () => ({
+						launch: "chopin_launch_pairs",
+						expiresAt: Date.now() + 60_000,
+						providers: [...providers],
+						withheld: [],
+					}),
+					end: async () => {},
+				},
+			});
+			let { listed, env } = JSON.parse(await readFile(report, "utf8"));
+			for (let provider of providers) {
+				expect(listed[provider.provider], `${name}: ${provider.provider}`).toEqual({
+					status: 200,
+					body: { data: [{ id: "model" }] },
+				});
+			}
+			expect(seen.map(value => value.path).toSorted(), name).toEqual(
+				providers.map(value =>
+					value.provider === "anthropic"
+						? "/api/v1/ai/anthropic/v1/models"
+						: "/api/v1/ai/github-copilot/models"
+				).toSorted(),
+			);
+			expect(seen.every(value => value.launch === "chopin_launch_pairs"), name).toBe(true);
+			// The launch's own credential stays in the relay: never in what the agent was given.
+			expect(JSON.stringify(env), name).not.toContain("chopin_launch_pairs");
+			await rm(report, { force: true });
+		}
+	} finally {
+		await service.stop(true);
 		await rm(folder, { recursive: true, force: true });
 	}
 });

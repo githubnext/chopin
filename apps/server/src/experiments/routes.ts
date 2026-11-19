@@ -43,7 +43,8 @@ import { launchGitHubToken, machineGitHubToken } from "./machine-github";
 import type { GitHubIdentity, LaunchRun } from "./machine-github";
 import { liveMcpLaunch, liveRun, McpTokens, mintMcpToken } from "./mcp-token";
 import { AiCredentialError } from "../ai/credentials";
-import { handOut, RUN_AI_LAUNCH_MS } from "../ai/launches";
+import { AiLaunchRefused, handOut, RUN_AI_LAUNCH_MS } from "../ai/launches";
+import { AI_ACCOUNT_UNCHECKED_RUN, NO_AI_ACCOUNT_RUN } from "@chopin/protocol/ai-credentials";
 import type { AiCredentials } from "../ai/credentials";
 import type { HostedCaller } from "../mcp/hosted";
 import type { GitHubApp } from "../github/app";
@@ -1407,7 +1408,13 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	}
 	/** What a connector should run: the protocols spoken here and the recommended release. */
 	let versions = { protocol: CONNECTOR_PROTOCOLS, version: options.connectorVersion ?? null };
-	route("GET", "/api/connector/version", async () => json(versions));
+	// `ai` says the Planners this Chopin asks machines to run take their sessions' models from
+	// people's AI accounts in it, so a connector starts its spare Planners that way from the start.
+	route("GET", "/api/connector/version", async () =>
+		json({
+			...versions,
+			...(options.ai?.() && options.planners && auth.machines.durable ? { ai: "chopin" } : {}),
+		}));
 	route("POST", "/api/connector/pairings", async request => {
 		compatible(request, auth.config.origin, options.connectorVersion);
 		let { key, ...input } = pairingSchema.parse(await body(request));
@@ -1689,7 +1696,9 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			trail.lastLaunch = auth.clock().getTime();
 			options.plannerStatus?.(channel.id);
 		}
-		// The repository says which of the machine's checkouts the Planner runs in.
+		// The repository says which of the machine's checkouts the Planner runs in. `ai` says its
+		// sessions run on people's AI accounts in Chopin, handed over the agent connection: the
+		// connector starts its backend with nothing of the owner's agent setup.
 		return json({
 			...issued,
 			document: {
@@ -1697,6 +1706,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				url,
 				repository: `${channel.repositoryOwner}/${channel.repositoryName}`,
 			},
+			...(options.ai?.() ? { ai: "chopin" } : {}),
 		});
 	});
 	/**
@@ -1820,9 +1830,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	/**
 	 * What a run on this machine is handed for the models its agent calls, in place of any key of
 	 * the machine's: a launch for the person the run acts for (whoever started it, on their own
-	 * machine or a teammate's), on this machine and the run's document. Its answer is the launch's
-	 * own credential, its deadline and one stand-in per granted provider (see `handOut`); a launch
-	 * given nothing answers an empty `providers`.
+	 * machine or a teammate's), on this machine and the run's document, owned by the run, so it ends
+	 * with the run. Its answer is the launch's own credential, its deadline and one stand-in per
+	 * granted provider (see `handOut`). A launch that would be given nothing is refused, and the run
+	 * starts no agent: `no-ai-account`, with words its end says (and never that a Copilot check that
+	 * couldn't finish means no subscription), or `launch-ended` when its document or machine ended
+	 * first; accounts changing meanwhile are `unavailable`, which may be tried again.
 	 */
 	route("POST", "/api/connector/ai-launch", async request => {
 		let credentials = options.ai?.();
@@ -1841,9 +1854,16 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				machineId: machine.id,
 				channelId: live.documentId,
 				expiresAt: new Date(expiresAt),
+				owner: `run:${live.runId}`,
 			});
 		} catch (error) {
 			if (error instanceof AiCredentialError) fail("unavailable", error.message);
+			if (error instanceof AiLaunchRefused && error.code === "no-ai-account") {
+				fail("no-ai-account", error.unchecked ? AI_ACCOUNT_UNCHECKED_RUN : NO_AI_ACCOUNT_RUN);
+			}
+			if (error instanceof AiLaunchRefused) {
+				fail("launch-ended", "This run's document or machine ended before it could start.");
+			}
 			throw error;
 		}
 		await auth.machines.seen(machine);
@@ -3258,5 +3278,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		mcpCaller,
 		/** The GitHub identity of a person a launch token was last issued for, to credit them. */
 		identity: (userId: string) => identities.get(userId),
+		/**
+		 * Whether a run on a machine still runs: a build, investigation or prototype Chopin still has
+		 * on its document. Its AI launch ends with it.
+		 */
+		runLive: async (runId: string, documentId: string | undefined) =>
+			(await launchRun(runId, documentId)) !== undefined,
 	};
 }

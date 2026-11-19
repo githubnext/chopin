@@ -144,7 +144,11 @@ async function connect(page: Page, log: string, stub?: string) {
 		"--key",
 		minted.key,
 		"--planner-command",
-		`${process.execPath} ${BACKEND}`,
+		// What the backend reports where goes in its own command: a backend for a Chopin that runs its
+		// sessions on people's AI accounts gets only an allow-list of the connector's environment.
+		`env CHOPIN_SPARE_STUB_LOG=${log}${
+			stub ? ` CHOPIN_SPARE_STUB=${stub}` : ""
+		} ${process.execPath} ${BACKEND}`,
 		"--",
 		process.execPath,
 		join(ROOT, "apps/connector/src/testing/fake-agent.ts"),
@@ -155,8 +159,6 @@ async function connect(page: Page, log: string, stub?: string) {
 			...process.env,
 			CHOPIN_URL: ORIGIN,
 			CHOPIN_CONNECTOR_STATE_DIR: state,
-			CHOPIN_SPARE_STUB_LOG: log,
-			...(stub ? { CHOPIN_SPARE_STUB: stub } : {}),
 		},
 		stdio: ["ignore", "pipe", "pipe"],
 	});

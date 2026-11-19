@@ -67,12 +67,15 @@ export type AgentSocketData = {
  * Planner credential is the machine's owner, on that machine.
  */
 export type AgentAi = {
+	/** Prepares a launch owned by the session `sessionId` (see `LinkAi.launch`). */
 	launch(
-		input: { userId: string; machineId?: string; channelId: string },
+		input: { userId: string; machineId?: string; channelId: string; sessionId: string },
 	): ReturnType<LinkAi["launch"]>;
 	end(launchId: string): void;
-	/** Calls `listener` with a person's id whenever their AI credentials change. */
+	/** Calls `listener` with a person's id whenever what a launch for them may be given changes. */
 	onChanged(listener: (userId: string) => void): () => void;
+	/** Hears that a session holds a launch now, or no longer does (see `LinkAi.held`). */
+	held?(launchId: string, holding: boolean): void;
 };
 
 export type AgentHooks = {
@@ -323,13 +326,14 @@ export function agentLink(
 		...(ai
 			? {
 				ai: {
-					launch: channelId =>
-						ai.launch({ userId, ...(machineId ? { machineId } : {}), channelId }),
+					launch: (channelId, sessionId) =>
+						ai.launch({ userId, ...(machineId ? { machineId } : {}), channelId, sessionId }),
 					end: launchId => ai.end(launchId),
 					watch: changed =>
 						ai.onChanged(person => {
 							if (person === userId) changed();
 						}),
+					...(ai.held ? { held: (launchId, holding) => ai.held!(launchId, holding) } : {}),
 				},
 			}
 			: {}),

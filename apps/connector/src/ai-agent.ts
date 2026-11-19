@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { AiProvider, AiProviderGrant } from "@chopin/protocol/ai-credentials";
 import type { RelayedLaunch } from "./ai-relay";
+import { withoutGitHub } from "./github-token";
 
 /**
  * The variables in which the owner's environment may hand an agent model credentials or the
@@ -43,6 +44,149 @@ export const OWNER_AGENT_VARIABLES = new Set([
 	"CLAUDE_CONFIG_DIR",
 	"CODEX_HOME",
 ]);
+
+/**
+ * The variables of the connector's own environment an agent that runs on Chopin's AI accounts is
+ * given, by name: where the system, the person's account and their tools are, its locale, its
+ * certificates and its proxy, none of which reaches a model. Everything else the connector was
+ * started with is left out, whatever it is called: a provider's key, an agent's configuration, a
+ * token of another service. `LC_` variables are kept by their prefix.
+ */
+const PERMITTED = new Set([
+	// The system and the person's account, as POSIX and Windows name them.
+	"PATH",
+	"HOME",
+	"USER",
+	"LOGNAME",
+	"SHELL",
+	"LANG",
+	"LANGUAGE",
+	"TERM",
+	"COLORTERM",
+	"TZ",
+	"TMPDIR",
+	"TEMP",
+	"TMP",
+	"SYSTEMROOT",
+	"SYSTEMDRIVE",
+	"WINDIR",
+	"COMSPEC",
+	"PATHEXT",
+	"USERPROFILE",
+	"USERNAME",
+	"HOMEDRIVE",
+	"HOMEPATH",
+	"APPDATA",
+	"LOCALAPPDATA",
+	"PROGRAMDATA",
+	"PROGRAMFILES",
+	"PROGRAMFILES(X86)",
+	"PROGRAMW6432",
+	"COMMONPROGRAMFILES",
+	"COMMONPROGRAMFILES(X86)",
+	"NUMBER_OF_PROCESSORS",
+	"PROCESSOR_ARCHITECTURE",
+	"OS",
+	// Where the person's tools are installed.
+	"PYTHONPATH",
+	"PYTHONHOME",
+	"PYENV_ROOT",
+	"VIRTUAL_ENV",
+	"CONDA_PREFIX",
+	"GOPATH",
+	"GOROOT",
+	"CARGO_HOME",
+	"RUSTUP_HOME",
+	"JAVA_HOME",
+	"DOTNET_ROOT",
+	"NODE_PATH",
+	"NVM_DIR",
+	"NVM_HOME",
+	"NVM_SYMLINK",
+	"BUN_INSTALL",
+	"PNPM_HOME",
+	"VOLTA_HOME",
+	"DENO_INSTALL",
+	"GEM_HOME",
+	"GEM_PATH",
+	"RBENV_ROOT",
+	"SDKMAN_DIR",
+	"ASDF_DIR",
+	"ASDF_DATA_DIR",
+	"HOMEBREW_PREFIX",
+	"HOMEBREW_CELLAR",
+	"HOMEBREW_REPOSITORY",
+	"MANPATH",
+	"INFOPATH",
+	"VCINSTALLDIR",
+	"VSINSTALLDIR",
+	"PSMODULEPATH",
+	"VCPKG_ROOT",
+	// Certificates and the network's proxy, which a sandbox replaces with its own.
+	"SSL_CERT_FILE",
+	"SSL_CERT_DIR",
+	"NODE_EXTRA_CA_CERTS",
+	"REQUESTS_CA_BUNDLE",
+	"CURL_CA_BUNDLE",
+	"GIT_SSL_CAINFO",
+	"HTTP_PROXY",
+	"HTTPS_PROXY",
+	"ALL_PROXY",
+	"NO_PROXY",
+]);
+
+/** `env` with only what `PERMITTED` names, by name in any case. */
+export function permittedEnvironment<T extends string | undefined>(
+	env: Record<string, T>,
+): Record<string, T> {
+	return Object.fromEntries(
+		Object.entries(env).filter(([name]) => {
+			let upper = name.toUpperCase();
+			return PERMITTED.has(upper) || upper.startsWith("LC_");
+		}),
+	);
+}
+
+/**
+ * Where an agent that runs on Chopin's AI accounts starts from, before what Chopin and the connector
+ * give it: the connector's own environment as `PERMITTED` allows, and the owner's `--env` values
+ * (which they chose for every agent) without their GitHub setup or anything of their agents'
+ * (`OWNER_AGENT_VARIABLES`).
+ */
+export function managedEnvironment(
+	host: Record<string, string | undefined>,
+	given: Record<string, string> = {},
+): Record<string, string> {
+	let permitted = permittedEnvironment(host);
+	return {
+		...Object.fromEntries(
+			Object.entries(permitted).filter((entry): entry is [string, string] =>
+				entry[1] !== undefined
+			),
+		),
+		...withoutOwnerAgent(withoutGitHub(given)),
+	};
+}
+
+/**
+ * Makes `home` an agent state directory of the launch's own and returns the variables that move
+ * every agent's state and configuration directory into it, so none of the owner's is read or
+ * written: Atomic's (and Pi's), Copilot's, Claude's and Codex's.
+ */
+export function privateAgentState(home: string): Record<string, string> {
+	let atomic = join(home, "atomic");
+	let places = {
+		ATOMIC_CODING_AGENT_DIR: atomic,
+		PI_CODING_AGENT_DIR: atomic,
+		COPILOT_HOME: join(home, "copilot"),
+		CLAUDE_CONFIG_DIR: join(home, "claude"),
+		CODEX_HOME: join(home, "codex"),
+	};
+	for (let directory of new Set(Object.values(places))) {
+		mkdirSync(directory, { recursive: true, mode: 0o700 });
+	}
+	return places;
+}
 
 /** `env` without anything of the owner's agent setup: their model credentials and configuration. */
 export function withoutOwnerAgent<T extends string | undefined>(
@@ -99,9 +243,19 @@ export function atomicModels(
 }
 
 /**
+ * The variable that holds, for any agent, each granted provider's base URL on the relay with the
+ * stand-in to send it as its key, together: a JSON array of `{ provider, baseUrl, apiKey,
+ * keyVariable, headers? }`, `headers` being what the provider's API expects of an agent with that
+ * key (Copilot's). An agent that reads no provider's own variables reaches each provider with its
+ * pair alone; see `docs/chopin-cli.md`.
+ */
+export const AI_PROVIDERS_VARIABLE = "CHOPIN_AI_PROVIDERS";
+
+/**
  * Prepares `home`, an agent state directory of the launch's own, and returns what the agent's
- * environment gets from the launch: each provider's key variable set to its stand-in, the base URL
- * variables the providers' own clients read pointed at the relay, and every agent's state and
+ * environment gets from the launch: each granted provider's base URL on the relay with its stand-in,
+ * together, in `CHOPIN_AI_PROVIDERS`; each provider's key variable set to its stand-in and the base
+ * URL variables the providers' own clients read pointed at the relay; and every agent's state and
  * configuration directory moved into `home`, so none of the owner's is read or written. An Atomic
  * agent also finds there a `models.json` that sends each granted provider through the relay. The
  * launch's own credential is in none of it: the relay adds it.
@@ -113,17 +267,8 @@ export function agentAiEnvironment(options: {
 	relayed: Pick<RelayedLaunch, "baseUrls" | "catalogUrl">;
 }): Record<string, string> {
 	let { home, providers, relayed } = options;
-	let atomic = join(home, "atomic");
-	let places = {
-		ATOMIC_CODING_AGENT_DIR: atomic,
-		PI_CODING_AGENT_DIR: atomic,
-		COPILOT_HOME: join(home, "copilot"),
-		CLAUDE_CONFIG_DIR: join(home, "claude"),
-		CODEX_HOME: join(home, "codex"),
-	};
-	for (let directory of new Set(Object.values(places))) {
-		mkdirSync(directory, { recursive: true, mode: 0o700 });
-	}
+	let places = privateAgentState(home);
+	let atomic = places.ATOMIC_CODING_AGENT_DIR;
 	if (atomicAgent(options.command)) {
 		writeFileSync(
 			join(atomic, "models.json"),
@@ -134,6 +279,20 @@ export function agentAiEnvironment(options: {
 	let env: Record<string, string> = {
 		...places,
 		ATOMIC_MODEL_CATALOG_URL: relayed.catalogUrl,
+		[AI_PROVIDERS_VARIABLE]: JSON.stringify(
+			providers.flatMap(grant => {
+				let baseUrl = relayed.baseUrls[grant.provider];
+				return baseUrl
+					? [{
+						provider: grant.provider,
+						baseUrl,
+						apiKey: grant.placeholder,
+						keyVariable: grant.keyVariable,
+						...(grant.provider === "github-copilot" ? { headers: COPILOT_HEADERS } : {}),
+					}]
+					: [];
+			}),
+		),
 	};
 	for (let grant of providers) {
 		let baseUrl = relayed.baseUrls[grant.provider];

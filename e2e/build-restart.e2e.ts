@@ -167,6 +167,10 @@ async function connector(env: Record<string, string>) {
 		root,
 		"--no-sandbox",
 		"--",
+		// The agent's own command names where it signals: it gets only an allow-list of the
+		// connector's environment.
+		"env",
+		...Object.entries(env).map(([name, value]) => `${name}=${value}`),
 		"bun",
 		join(ROOT, "apps/connector/src/testing/fake-implementer.ts"),
 		"--complete",
@@ -174,7 +178,7 @@ async function connector(env: Record<string, string>) {
 	], {
 		cwd: ROOT,
 		detached: true,
-		env: { ...process.env, CHOPIN_URL: ORIGIN, CHOPIN_CONNECTOR_STATE_DIR: state, ...env },
+		env: { ...process.env, CHOPIN_URL: ORIGIN, CHOPIN_CONNECTOR_STATE_DIR: state },
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 	processes.push(child);

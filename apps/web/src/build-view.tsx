@@ -10,6 +10,8 @@ import {
 	WarningIcon,
 } from "@chopin/icons";
 import { Fragment, useEffect, useId, useState } from "react";
+import { AI_ACCOUNTS_PATH, noAiAccountRun } from "@chopin/protocol/ai-credentials";
+import { navigateTo } from "./chat/navigate";
 
 import { BuildGlyph } from "./build-plan-button";
 import {
@@ -412,6 +414,28 @@ export function BuildView(
 					: <span aria-hidden="true" className="build-card-stop" />}
 				{stopping ? "Stopping" : "Stop"}
 			</button>
+		);
+	}
+	// A build that never started for want of an AI account of its starter's points its starter, and
+	// only them, to where they add one.
+	let unaccounted = [snapshot?.live?.rebuild, snapshot?.build].find(item =>
+		item?.state === "failed" && noAiAccountRun(item.error)
+	);
+	if (!action && !activeBuild && unaccounted && unaccounted.user === userId) {
+		action = (
+			<a
+				className="btn btn-sm btn-outline shrink-0"
+				href={AI_ACCOUNTS_PATH}
+				onClick={event => {
+					if (
+						event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
+					) return;
+					event.preventDefault();
+					navigateTo(AI_ACCOUNTS_PATH);
+				}}
+			>
+				Open AI accounts
+			</a>
 		);
 	}
 	// A pull request shared by several tasks lists its commits under the first of them.

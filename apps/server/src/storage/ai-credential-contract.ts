@@ -148,8 +148,12 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 					updatedAt: AT,
 				};
 				await storage.aiCredentials.put(lease, key);
-				await storage.aiCredentials.rejected(key, later(60));
-				await storage.aiCredentials.rejected(key, later(90));
+				let version = storage.aiCredentials.version(userId);
+				expect(await storage.aiCredentials.rejected(key, later(60))).toBe(true);
+				// Counted for its person, as a replacement is, so a launch reading meanwhile reads again.
+				expect(storage.aiCredentials.version(userId)).toBe(version + 1);
+				expect(await storage.aiCredentials.rejected(key, later(90))).toBe(false);
+				expect(storage.aiCredentials.version(userId)).toBe(version + 1);
 				expect(await storage.aiCredentials.get(userId, "openai")).toEqual({
 					...key,
 					rejectedAt: later(60),
@@ -157,7 +161,7 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 
 				let replaced = { ...key, ciphertext: bytes(48), suffix: "4321", updatedAt: later(120) };
 				await storage.aiCredentials.put(lease, replaced);
-				await storage.aiCredentials.rejected(key, later(150));
+				expect(await storage.aiCredentials.rejected(key, later(150))).toBe(false);
 				expect(await storage.aiCredentials.list(userId)).toEqual([replaced]);
 			} finally {
 				await storage.close();
@@ -194,6 +198,48 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 					),
 				).toBe("missing");
 				expect(await storage.aiPlaceholders.find(fresh.digest, AT)).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
+		test("finds a launch by its credential's digest, and lists each owned launch once, until they end or expire", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { placeholder, launchDigest, channelId, lease } = await launched(storage);
+				let first = placeholder({ owner: "run:run-1" });
+				let second = placeholder({ owner: "run:run-1", provider: "anthropic" });
+				let session = placeholder({
+					launchId: id("launch"),
+					launchDigest: bytes(32),
+					owner: "session:session-1",
+				});
+				delete session.channelId;
+				delete session.generation;
+				let ownerless = placeholder({ launchId: id("launch"), launchDigest: bytes(32) });
+				await storage.aiPlaceholders.put([first, second]);
+				await storage.aiPlaceholders.put([session]);
+				await storage.aiPlaceholders.put([ownerless]);
+
+				expect(await storage.aiPlaceholders.find(first.digest, AT)).toEqual(first);
+				expect(await storage.aiPlaceholders.findLaunch(launchDigest, AT)).toMatchObject({
+					launchId: first.launchId,
+					owner: "run:run-1",
+				});
+				expect(await storage.aiPlaceholders.findLaunch(bytes(32), AT)).toBeUndefined();
+				expect(await storage.aiPlaceholders.findLaunch(launchDigest, later(900))).toBeUndefined();
+				let owned = await storage.aiPlaceholders.owned(AT);
+				expect(owned.sort((left, right) => left.owner!.localeCompare(right.owner!))).toEqual([
+					{ launchId: first.launchId, owner: "run:run-1", channelId },
+					{ launchId: session.launchId, owner: "session:session-1" },
+				]);
+				expect(await storage.aiPlaceholders.owned(later(900))).toEqual([]);
+
+				await storage.aiPlaceholders.deleteLaunch(lease, first.launchId);
+				expect(await storage.aiPlaceholders.findLaunch(launchDigest, AT)).toBeUndefined();
+				expect(await storage.aiPlaceholders.owned(AT)).toEqual([
+					{ launchId: session.launchId, owner: "session:session-1" },
+				]);
 			} finally {
 				await storage.close();
 			}

@@ -69,10 +69,16 @@ export type Launch = {
 	/**
 	 * The agent's own state directory, made for this launch and among `own`, in place of the owner's:
 	 * it writes there and nowhere else of an agent's, and reads none of the owner's agents'
-	 * configuration, logins or sessions (see `ownerAgentPaths`). Without it an agent keeps its state
-	 * where the owner's agents do, as before.
+	 * configuration, logins or sessions (see `ownerAgentPaths`), wherever the owner's environment or
+	 * `ownerEnv` keeps them. Without it an agent keeps its state where the owner's agents do, as
+	 * before.
 	 */
 	agentHome?: string;
+	/**
+	 * The owner's `--env` values, which the owner's own agents may run with too: a directory of theirs
+	 * one of these moves is the owner's as much as one the connector's environment moves.
+	 */
+	ownerEnv?: Record<string, string | undefined>;
 };
 
 /** A started process: its stdout and stderr are always pipes. */
@@ -483,9 +489,24 @@ function writtenPlaces(launch: Pick<Launch, "cwd" | "writable" | "own">) {
 }
 
 /**
- * The owner's agent setup a launch with a state directory of its own may not read, by the path
- * it is named by and its real path, but for a place that is the home or holds what the launch
- * itself works in, which denying would take from the launch too.
+ * What denies `path` and keeps each of `kept` inside it: `path` itself where it holds none of them,
+ * else each entry in it but those, gone through in turn down to them. So nothing in it is read but
+ * what the launch itself works in.
+ */
+function deniedAround(path: string, kept: readonly string[], platform: NodeJS.Platform): string[] {
+	let within = kept.filter(place => inside(place, path, platform));
+	if (!within.length) return [path];
+	if (within.some(place => place === path)) return [];
+	return disk.list(path).flatMap(name => deniedAround(join(path, name), within, platform));
+}
+
+/**
+ * The owner's agent setup a launch with a state directory of its own may not read, wherever their
+ * environment keeps it (see `ownerAgentPaths`), by the path it is named by and its real path. A
+ * place of the owner's that holds what the launch works in (its worktree, its own state, its
+ * tokens, its temporary directory, the checkout it reads) is denied around them: everything else in
+ * it. One that is the home or holds it can't be, without taking the person's tools from the agent,
+ * so the launch is refused, saying which.
  */
 function ownerAgentDenials(
 	platform: NodeJS.Platform,
@@ -493,12 +514,22 @@ function ownerAgentDenials(
 	env: Record<string, string | undefined>,
 	launchPlaces: readonly string[],
 ) {
-	let kept = [home, ...launchPlaces].map(real);
-	return [
-		...new Set(
-			ownerAgentPaths(platform, home, env, process.cwd()).flatMap(path => [path, real(path)]),
-		),
-	].filter(path => !kept.some(place => inside(place, path, platform)));
+	let homes = [home, env.HOME, env.USERPROFILE]
+		.filter((value): value is string => !!value)
+		.map(real);
+	let kept = [...new Set(launchPlaces.map(real))];
+	let denied = new Set<string>();
+	for (let path of ownerAgentPaths(platform, home, env, process.cwd())) {
+		let resolved = real(path);
+		if (homes.some(place => inside(place, resolved, platform))) {
+			throw new SandboxRefused(
+				`Not run: ${path} holds your home folder, and your environment keeps an agent's settings there, so chopin can't keep your own agents' sign-ins from this agent. Give that agent a folder of its own.`,
+			);
+		}
+		if (!kept.some(place => inside(place, resolved, platform))) denied.add(path);
+		for (let each of deniedAround(resolved, kept, platform)) denied.add(each);
+	}
+	return [...denied];
 }
 
 /** The policy for one launch, from what is on the disk now. */
@@ -603,7 +634,15 @@ export function launchPolicy(
 	let readonlyInside = [...git?.readonlyInside ?? [], ...reopened];
 	let denied = [
 		...secretPaths(platform, home),
-		...launch.agentHome ? ownerAgentDenials(platform, home, host.env, [...places, ...state]) : [],
+		...launch.agentHome
+			? ownerAgentDenials(platform, home, { ...host.env, ...launch.ownerEnv }, [
+				...places,
+				...state,
+				...launch.own ?? [],
+				temporary,
+				...theirs,
+			])
+			: [],
 		...concealed,
 	].filter(path => exists(path));
 	let env: Record<string, string | undefined> = { ...launch.env };

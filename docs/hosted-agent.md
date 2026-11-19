@@ -918,7 +918,10 @@ shows the minute of the latest use and never moves back, and absent until one is
 replacing the key starts it afresh). A key whose provider answered a request with it
 that the key itself is invalid (a 401 with OpenAI's `invalid_api_key` or Anthropic's
 `authentication_error`) is listed with `rejectedAt` and needs connecting again: no
-launch is given it until it is. Only the key that was sent is marked, so a refusal
+launch is given it until it is, one whose last check is under way included: a mark
+that completes while a launch reads is counted for its person as a replacement is, and
+the launch is prepared again without the key, and the person's lasting launches are
+told. Only the key that was sent is marked, so a refusal
 that arrives after the key was replaced leaves the replacement as it is, and a rate
 limit or a refusal of one model marks nothing. GitHub Copilot is always listed and usable through the person's
 current GitHub sign-in, with nothing saved, until they connect a token instead;
@@ -948,15 +951,18 @@ document is still open in the archive generation it was in when the launch began
 takes back). Once they are written it reads the person's credentials a final
 time and publishes the grants, an empty list included, in the same step as its
 last check, only while all of this holds: that read found the very credentials
-the launch was prepared with; none of the person's credentials was connected,
-replaced or removed since (storage counts each such write in memory as it
-commits, which one process under the writer lease makes exact); GitHub has given
+the launch was prepared with, each refused as invalid or not as it was then; none of
+the person's credentials was connected, replaced, removed or refused as invalid since
+(storage counts each such write in memory as it commits, which one process under the
+writer lease makes exact); GitHub has given
 no answer of the other kind about the same Copilot account since the launch
-asked (see GitHub Copilot below); the launch's machine is not revoked and its
-document is open in the same generation; and the launch has not reached its
-deadline. A launch past its deadline, or whose machine was revoked or document
-archived while it was prepared, restored since or not, takes its placeholders
-back and is given nothing. Any other change takes them back and prepares the
+asked (see GitHub Copilot below); the launch's machine is not revoked, its
+document is open in the same generation, and every placeholder it stored is still
+there; and the launch has not reached its deadline. A launch past its deadline, whose
+machine was revoked or document archived while it was prepared, restored since or not,
+or whose placeholders went with the machine's (a machine that must be paired again,
+which ends its launches without revoking it), takes its placeholders back and is given
+nothing (`ended`), never a provider without its stored grant. Any other change takes them back and prepares the
 launch afresh, at most three times, keeping every key that is still usable: a
 seat refused meanwhile withholds Copilot alone, and a key added meanwhile is
 given. The launch's machine and document are read again when a cutoff completed
@@ -971,7 +977,8 @@ expires, and is refused once the launch's machine is revoked or its document is
 deleted. Archiving a document deletes its launches' placeholders in the same
 transaction, so restoring it brings none back. A launch also says which
 connected providers it was not given and why (`withheld`); a launch with no
-grants stores nothing and starts no runner.
+grants stores nothing and starts no runner: `handOut` refuses it (see
+[Handing launches to runners](#handing-launches-to-runners)).
 
 **No AI account.** Under `HARNESS=remote`, before a person's message to the
 Planner (or their Retry) starts a turn, Chopin reads what a launch for them
@@ -1119,7 +1126,9 @@ newer one of the other kind completes for the same account, so a seat lost in on
 session is not shown as there in another, and a seat back is shown in all once
 GitHub says so; a separately connected account keeps its own. A launch whose
 Copilot answer GitHub has contradicted since it asked, about the same account,
-asks again before it publishes.
+asks again before it publishes. An answer of the other kind than the last one GitHub
+gave about the account (a seat confirmed lost, or back) tells the person's lasting
+launches, which are prepared again; the same answer again, and no answer, tell no one.
 Each launch asks GitHub afresh and gets a Copilot placeholder only for
 `access`: `none` withholds it as `no-copilot-access`, and `unknown` as
 `copilot-unavailable`, which a later launch may not meet. A person who loses
@@ -1207,22 +1216,40 @@ Every launch is prepared by `handOut` (`apps/server/src/ai/launches.ts`), which
 calls `AiCredentials.launch()` for the person the launch runs for and turns its
 result into what the runner is handed: the launch credential, its deadline and
 one placeholder per granted provider with its base URL on the proxy and key
-variable, and what was withheld. A launch given no provider is handed out with an
-empty `providers` and no launch credential; the runner then uses its own models,
-as before. A launch Chopin could not prepare (503) fails the start.
+variable, and what was withheld. A launch that would be given no provider is never
+handed out, so no agent starts on anything but the person's own accounts in Chopin,
+and the machine owner's own sign-ins and keys are never used in their place, on a
+shared machine or the person's own: `handOut` throws `AiLaunchRefused` with
+`no-ai-account` (and, where GitHub couldn't be asked about the person's Copilot
+access and they have no key, that the check couldn't finish, never that they have no
+subscription), or with `launch-ended` when the launch's document was archived, its
+machine revoked or its grants ended with the machine's before it was handed out. A
+launch Chopin could not prepare because the person's accounts kept changing (503) fails
+the start too, as something that can be tried again. Each launch records what it is
+for (`owner`: `run:<id>` or `session:<id>`), which ends it (see below).
 
 - **A Planner session** on a client attached at `/api/v1/agent` that offers the
   `ai-credentials` feature is launched for the account that attached (for a paired
   machine's Planner credential, the machine's owner, on that machine, as its other
   work there runs), for the document, for 12 hours. `start` and `fork` carry it in
-  `ai`, and an `ai` message hands the session a new launch when the person connects,
-  replaces or removes a provider, half an hour before the deadline, and when a
-  resumed session comes back; the earlier launch ends once the new one is sent. The
-  session's end (`destroy`, or its link closing for good) ends its launch. A session
-  a restart's hold keeps keeps its launch, named in the hold (`aiLaunchId`, an id and
-  no credential): the next process ends it when the session ends or the hold does,
-  and replaces it when the client resumes. A client
-  that does not offer the feature is launched nothing. See
+  `ai`; one that would be given no provider is not sent at all, and the turn that
+  needed the session fails with `no-ai-account` in its words ("chopin needs an AI
+  account to answer, so it didn't start. Add one, then try again."), as a message from
+  someone with no AI account is refused, with a link to AI accounts for whoever asked.
+  An `ai` message hands the session a new launch when what a launch for the person may
+  be given changes (they connect, replace or remove a provider, their provider refuses
+  a key of theirs as invalid, or GitHub confirms their Copilot seat lost or regained),
+  half an hour before the deadline, and when a resumed session comes back; the earlier
+  launch ends once the new one is sent. A change while the session is starting reaches
+  it once the client acknowledges `start` or `fork`, prepared again from what the person
+  has then, once however often it changed. A renewal that finds nothing left to give
+  hands the session an empty `providers` and ends its launch. The session's end
+  (`destroy`, or its link closing for good) ends its launch. A session a restart's hold
+  keeps keeps its launch, named in the hold (`aiLaunchId`, an id and no credential):
+  from the moment the cut takes the hold no launch of its changes, and one a renewal
+  prepared meanwhile is ended unsent, so the hold names the launch its client holds. The
+  next process ends it when the session ends or the hold does, and replaces it when the
+  client resumes. A client that does not offer the feature is launched nothing. See
   [Models through Chopin](agent-connection.md#models-through-chopin).
 - **A build, investigation or prototype** on a paired machine asks with its run
   credential:
@@ -1234,20 +1261,71 @@ as before. A launch Chopin could not prepare (503) fails the start.
 
   with the machine token as its bearer. The launch is for whoever started the run,
   on their own machine or a teammate's shared one (as the run's MCP token acts for
-  them), on that machine and the run's document, for 5 hours. Only that machine can
-  end it, with the launch credential, which the connector does when the run ends.
-  Storage keeps the credential's digest and the machine with the launch, so a process
-  started since the launch ends it too; a
-  Chopin without people's AI credentials answers 404 and the run's agent uses its
-  own models. The connector keeps the launch credential and relays the agent's
-  requests (see [Sandbox](chopin-cli.md#sandbox)).
+  them), on that machine and the run's document, for 5 hours, owned by the run. One
+  that would be given no provider is refused with 409 `no-ai-account` and the words
+  the run's end says ("chopin needs an AI account to run this, so it didn't start. Add
+  one, then start it again.", or that the check couldn't finish), and the connector
+  starts no agent: the build, investigation or prototype fails with those words, and
+  its card offers its starter, and only them, Open AI accounts. One whose document or
+  machine ended first is refused with 409 `launch-ended`, and accounts that kept
+  changing with 503 `unavailable`, which says the run can be started again. Only that
+  machine can end the launch, with the launch credential, which the connector does
+  when the run ends. Storage keeps the credential's digest and the machine with the
+  launch, so a process started since the launch ends it too; a Chopin without people's
+  AI credentials answers 404 and the run's agent uses its own models, as before. The
+  connector keeps the launch credential and relays the agent's requests (see
+  [Sandbox](chopin-cli.md#sandbox)).
 
-A launch's machine revoked, its document archived or its deadline passed ends its
-placeholders (see above); the runner learns it from the proxy's `launch-ended`,
-and the connector stops a run whose launch ended. A Copilot agent sends
-`Copilot-Integration-Id: vscode-chat`, the header of an editor's sign-in, since
-Chopin sends Copilot an exchanged Copilot token. Each request a launch's
+**When a launch ends.** A launch stops working when its run or session ends, when it
+is replaced, ended or past its deadline, when its machine is revoked or its document
+archived. The proxy's checks read whether what the launch is for is still live with
+every request: the run still running, the session still held by this process (a
+restart's hold once it is rebuilt). An end asked in the process that holds the writer
+lease is in force from that moment, before storage has deleted the placeholders, so a
+request waiting at the proxy when a Planner closes, a run's machine ends its launch or a
+session's launch is replaced is never sent on it. An end storage refuses keeps the
+launch ended in that process and is tried again, on a backoff and with each sweep. The
+writer lease's holder also ends, as it starts serving and every five minutes, each
+launch nothing owns any longer (its run ended, no session holds it), whichever process
+handed it out and whether or not its end ever reached storage, as a run whose
+connector never sent its end or a process that lost the lease before writing its ends
+leave them; a launch handed out in the last two minutes is left to its owner to take
+up.
+
+**Telling a runner its launch ended.** A runner asks, with the launch's own credential,
+whether its launch is live:
+
+```text
+GET /api/v1/ai/launch     x-chopin-launch: <launch credential>
+200 { "state": "live" | "ended" }
+```
+
+It reads `ended` once the launch ended, however that was, after its placeholders are
+gone too; a credential no launch has reads as ended, which tells nothing to anyone who
+does not hold one. A process that no longer holds the writer lease answers 503. The
+connector's relay asks it when the proxy refuses its agent a request as
+`launch-ended` or `unknown-placeholder` (the proxy's own refusal, `{ "error": { "type":
+"chopin_proxy", "code": … } }`), tells the run once, which stops it, and refuses the
+launch's later requests itself. A provider's own refusal, a 401 among them, and a
+stand-in the agent got wrong on a live launch end nothing. A Chopin from before this
+route answers it 404, and the relay then takes only `launch-ended` at its word.
+
+A Copilot agent sends `Copilot-Integration-Id: vscode-chat`, the header of an editor's
+sign-in, since Chopin sends Copilot an exchanged Copilot token. Each request a launch's
 placeholder sends is recorded against that launch (see Usage above).
+
+**What the proxy guarantees, and what it does not.** The cutoffs (an end, a
+replacement, a run or session ending, a revocation, an archive, a credential replaced,
+removed or refused) protect admission at the proxy: no request is admitted after one
+completed. A request already admitted, past its last check, is not recalled, and its
+provider answers it. Every check is made under the writer lease, so a process paused
+whole (a machine asleep, a debugger) across the lease's expiry sends nothing once it
+resumes without the lease, and its successor's cutoffs bind from its start: how late a
+paused process can send is bounded by the lease. Copilot access is GitHub's last
+confirmed answer about the account, applied until the next definitive refusal (a rate
+limit is no answer); while answers about one account from two sign-ins conflict and
+Chopin asks again, the list, and what a launch may be given, show the last confirmed
+answer.
 
 ## Permission checks
 

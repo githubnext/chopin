@@ -531,9 +531,10 @@ export interface AiCredentialStore {
 	/**
 	 * Records that `record`'s provider refused it, the key as it was read, as invalid `at`. Changes
 	 * nothing once that key was replaced or removed, so a late refusal of a key never marks the one
-	 * that replaced it.
+	 * that replaced it, nor one already marked. Returns whether it marked the key; a mark is counted
+	 * for its person as `version` counts a replacement, so a launch reading meanwhile reads again.
 	 */
-	rejected(record: AiCredentialRecord, at: Date): Promise<void>;
+	rejected(record: AiCredentialRecord, at: Date): Promise<boolean>;
 	/**
 	 * How many times this process has connected, replaced or removed one of `userId`'s credentials,
 	 * each counted once its write settles and before its caller hears so; one process serves a
@@ -561,6 +562,16 @@ export interface AiPlaceholderStore {
 	generation(channelId: string): Promise<number | undefined>;
 	/** The placeholder for this digest while it has not expired at `now`. */
 	find(digest: Uint8Array, now: Date): Promise<AiPlaceholder | undefined>;
+	/**
+	 * One placeholder of the launch whose own credential has this digest, while it has not expired at
+	 * `now`; undefined once the launch ended, whatever ended it.
+	 */
+	findLaunch(launchDigest: Uint8Array, now: Date): Promise<AiPlaceholder | undefined>;
+	/**
+	 * Each launch with an owner whose placeholders have not expired at `now`, once: its id, its
+	 * owner, and its document, so the writer lease's holder can end those nothing owns now.
+	 */
+	owned(now: Date): Promise<Array<Pick<AiPlaceholder, "launchId" | "owner" | "channelId">>>;
 	/** Ends a launch: its placeholders stop working. Returns how many there were. */
 	deleteLaunch(lease: Lease, launchId: string): Promise<number>;
 	/**

@@ -45,27 +45,57 @@ export type AiRelay = {
 	/** The relay's `host:port`, which a sandbox's proxy allows. */
 	host: string;
 	/**
-	 * Relays one launch under a random path of its own. `ended` hears that Chopin said the launch
-	 * has ended (revoked machine, archived document, removed credential or deadline), once.
+	 * Relays one launch under a random path of its own. `ended` hears, once, that the launch has
+	 * ended (an end, a revoked machine, an archived document, its deadline, its run ending), which
+	 * the relay learns when Chopin's proxy refuses the agent a request as one for an ended or unknown
+	 * stand-in and Chopin, asked with the launch's own credential, says the launch is no longer live
+	 * (`GET /api/v1/ai/launch`). A provider's own refusal, and a stand-in the agent got wrong on a
+	 * live launch, end nothing. Once ended, the relay refuses the launch's requests itself.
 	 */
 	open(launch: string, providers: AiProviderGrant[], ended?: () => void): RelayedLaunch;
 	close(): Promise<void>;
 };
 
-type Held = { launch: string; providers: AiProviderGrant[]; ended?: () => void; told: boolean };
+type Held = {
+	launch: string;
+	providers: AiProviderGrant[];
+	ended?: () => void;
+	told: boolean;
+	/** Chopin being asked whether the launch is live, once for every refusal meanwhile. */
+	asking?: Promise<boolean> | undefined;
+};
 
 function refusal(status: number, code: string) {
 	return Response.json({ code }, { status, headers: { "cache-control": "no-store" } });
 }
 
-/** Whether Chopin's answer says the launch is over. */
-async function launchEnded(response: Response) {
-	if (response.status !== 401) return false;
+/** What the relay answers for a launch it knows ended, in the shape Chopin's proxy refuses in. */
+function ended() {
+	return Response.json(
+		{
+			error: {
+				message: "The launch this key was given to has ended.",
+				type: "chopin_proxy",
+				code: "launch-ended",
+			},
+		},
+		{ status: 401, headers: { "cache-control": "no-store" } },
+	);
+}
+
+/**
+ * The code of a refusal Chopin's proxy answered, in the shape it answers in (`{ error: { type:
+ * "chopin_proxy", code } }`), when it is one that may mean the launch ended: `launch-ended` or
+ * `unknown-placeholder`. A provider's own answer, a 401 among them, is none.
+ */
+async function endRefusal(response: Response) {
+	if (response.status !== 401) return undefined;
 	try {
-		let answer = await response.clone().json() as { code?: unknown };
-		return answer.code === "launch-ended";
+		let answer = await response.clone().json() as { error?: { type?: unknown; code?: unknown } };
+		let code = answer?.error?.type === "chopin_proxy" ? answer.error.code : undefined;
+		return code === "launch-ended" || code === "unknown-placeholder" ? code : undefined;
 	} catch {
-		return false;
+		return undefined;
 	}
 }
 
@@ -73,6 +103,34 @@ async function launchEnded(response: Response) {
 export function startAiRelay(options: { fetch?: typeof fetch } = {}): AiRelay {
 	let send = options.fetch ?? fetch;
 	let launches = new Map<string, Held>();
+	/**
+	 * Whether Chopin says `held`'s launch is over, asked with its own credential after its proxy
+	 * refused a request with `code`. A Chopin from before it answered this says nothing (404), and
+	 * then only its `launch-ended` is taken at its word; one that can't be asked ends nothing.
+	 */
+	let over = async (held: Held, code: string): Promise<boolean> => {
+		let first = held.providers[0];
+		if (!first) return false;
+		try {
+			let answer = await send(`${new URL(first.baseUrl).origin}${AI_PROXY_PATH}/launch`, {
+				headers: { [AI_LAUNCH_HEADER]: held.launch },
+				redirect: "manual",
+				signal: AbortSignal.timeout(10_000),
+			});
+			if (answer.status === 404) {
+				await answer.body?.cancel();
+				return code === "launch-ended";
+			}
+			if (!answer.ok) {
+				await answer.body?.cancel();
+				return false;
+			}
+			let { state } = await answer.json() as { state?: unknown };
+			return state === "ended";
+		} catch {
+			return false;
+		}
+	};
 	let server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
@@ -83,6 +141,7 @@ export function startAiRelay(options: { fetch?: typeof fetch } = {}): AiRelay {
 			let [, key = "", provider = ""] = url.pathname.split("/");
 			let held = launches.get(key);
 			if (!held) return refusal(404, "no-launch");
+			if (held.told) return ended();
 			let rest = url.pathname.slice(`/${key}/${provider}`.length);
 			if (rest && !rest.startsWith("/")) return refusal(404, "route");
 			let headers = new Headers();
@@ -116,9 +175,12 @@ export function startAiRelay(options: { fetch?: typeof fetch } = {}): AiRelay {
 			} catch {
 				return refusal(502, "chopin-unreachable");
 			}
-			if (!held.told && await launchEnded(answer)) {
-				held.told = true;
-				held.ended?.();
+			let code = held.told ? undefined : await endRefusal(answer);
+			if (code && await (held.asking ??= over(held, code).finally(() => held.asking = undefined))) {
+				if (!held.told) {
+					held.told = true;
+					held.ended?.();
+				}
 			}
 			let returned = new Headers();
 			for (let [name, value] of answer.headers) {
