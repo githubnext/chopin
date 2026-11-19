@@ -58,9 +58,17 @@ import type { MachineFix } from "../machine-fix";
 import { silencesFailedSends } from "./connection-phase";
 import { ErrorState } from "./error-state";
 import { QuietNote } from "./quiet-note";
+import { navigateTo } from "./navigate";
 import { PlannerPresenceContext } from "./presence";
 import { localRows } from "./chronology";
-import { AI_ACCOUNTS_LINK, failureBanner, sendFailureView, withoutFailure } from "./failure";
+import {
+	AI_ACCOUNTS_LINK,
+	failureBanner,
+	refusedRetryView,
+	retryRefusal,
+	sendFailureView,
+	withoutFailure,
+} from "./failure";
 import { TypingReporter } from "./typing";
 import { useSteadyCallback, useSteadyFields } from "./steady";
 import { asksChopin, asksChopinKey, withChopinMention } from "./ask-chopin";
@@ -157,6 +165,7 @@ import type { ChatCommand } from "./commands";
 import type { ReferenceRow } from "./reference-picker";
 import type { MentionCandidate } from "./mentions";
 import type { ChatSendPayload, ComposerDraft, ReferenceTarget, SendFailure } from "./references";
+import type { RetryRefusal } from "./failure";
 import type { Wire as Socket } from "../wire";
 import type { ComposerModel } from "./use-model-choice";
 
@@ -245,12 +254,6 @@ export type ChatProps = {
 	/** What the transcript tells the banner: a reply running, its size, and whether it is current. */
 	onTranscript?: (facts: TranscriptFacts) => void;
 };
-
-/** Follows a link to a page of Chopin's own, as the navigation does. */
-function navigateTo(href: string) {
-	history.pushState(null, "", href);
-	window.dispatchEvent(new PopStateEvent("popstate"));
-}
 
 /** How long a message the server turned down for a passing trouble is left before it is sent again. */
 const TROUBLE_RETRY_MS = 5_000;
@@ -563,7 +566,7 @@ export function Chat(
 		connectionNotice !== "none",
 	);
 	// The failure notice a Retry was pressed for, and the server's words when it refused one.
-	let [retried, setRetried] = useState<{ entry: string; refusal?: string }>();
+	let [retried, setRetried] = useState<{ entry: string; refusal?: RetryRefusal }>();
 	let failed = failureBanner(entries, turn, handle);
 	let sendBanner = shownSend ? sendFailureView(shownSend, shownSend.code) : undefined;
 	// Retry runs the same message's turn again: nothing new is sent, and the failed attempt leaves
@@ -577,14 +580,15 @@ export function Chat(
 					current?.entry !== entry
 						? current
 						: error instanceof WireRefusal
-						? { entry, refusal: error.message }
+						? { entry, refusal: retryRefusal(error) }
 						: undefined
 				)
 			);
 		}
 		: undefined;
 	let retrying = !!failed && retried?.entry === failed.entry && retried.refusal === undefined;
-	let retryRefusal = failed && retried?.entry === failed.entry ? retried.refusal : undefined;
+	let failedView = failed
+		&& refusedRetryView(failed, retried?.entry === failed.entry ? retried.refusal : undefined);
 	// Only a banner that says why a send could not go gives a refused message's line its quiet;
 	// a Planner's absence is another fact, and the message still says it was not sent.
 	let quietFailures = !!banner && silencesFailedSends(banner.view);
@@ -1439,17 +1443,17 @@ export function Chat(
 				title={sendBanner.title}
 			/>
 		)
-		: slot.lead === "failure" && failed
+		: slot.lead === "failure" && failedView
 		? (
 			<ErrorState
-				detail={retryRefusal ?? failed.detail}
+				detail={failedView.detail}
 				id={bannerId}
-				kind={failed.kind}
-				link={failed.link}
+				kind={failedView.kind}
+				link={failedView.link}
 				onRetry={retryTurn}
 				retryDisabled={!composerReady}
 				retrying={retrying}
-				title={failed.title}
+				title={failedView.title}
 			/>
 		)
 		: undefined;
