@@ -3,11 +3,16 @@ CREATE TABLE ai_credentials (
 	provider text NOT NULL CHECK (provider IN ('github-copilot', 'openai', 'anthropic')),
 	kind text NOT NULL CHECK (kind IN ('api-key', 'github-sign-in')),
 	ciphertext bytea,
+	suffix text CHECK (char_length(suffix) BETWEEN 1 AND 4),
 	updated_at timestamptz NOT NULL,
+	last_used_at timestamptz,
 	PRIMARY KEY (user_id, provider),
 	CONSTRAINT ai_credentials_secret CHECK (
 		(kind = 'api-key' AND ciphertext IS NOT NULL AND octet_length(ciphertext) > 29)
-		OR (kind = 'github-sign-in' AND ciphertext IS NULL AND provider = 'github-copilot')
+		OR (
+			kind = 'github-sign-in' AND ciphertext IS NULL AND suffix IS NULL
+			AND provider = 'github-copilot'
+		)
 	)
 );
 
@@ -22,5 +27,6 @@ CREATE TABLE ai_placeholders (
 	expires_at timestamptz NOT NULL
 );
 CREATE INDEX ai_placeholders_launch ON ai_placeholders(launch_id);
+CREATE INDEX ai_placeholders_launch_digest ON ai_placeholders(launch_digest);
 CREATE INDEX ai_placeholders_machine ON ai_placeholders(machine_id) WHERE machine_id IS NOT NULL;
 CREATE INDEX ai_placeholders_expiry ON ai_placeholders(expires_at);

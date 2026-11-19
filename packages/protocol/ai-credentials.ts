@@ -23,12 +23,25 @@ export type AiCredentialKind = "api-key" | "github-sign-in";
  */
 export type CopilotAccess = "access" | "none" | "unknown";
 
-/** What `GET /api/ai/credentials` says of one connected provider; never the secret. */
+/**
+ * What `GET /api/ai/credentials` says of one connected provider; never the secret. GitHub Copilot is
+ * always listed: through the person's GitHub sign-in until they connect a token instead.
+ */
 export type AiCredentialSummary = {
 	provider: AiProvider;
 	kind: AiCredentialKind;
-	/** When it was connected or last replaced, as an ISO 8601 time. */
-	updatedAt: string;
+	/**
+	 * When it was connected or last replaced, as an ISO 8601 time; absent for GitHub Copilot through
+	 * the GitHub sign-in when the person never connected anything for it.
+	 */
+	updatedAt?: string;
+	/** A key's last four characters, to tell keys apart; never more of it. */
+	suffix?: string;
+	/**
+	 * When a launch last sent a request with it, as an ISO 8601 time, to the minute; absent when none
+	 * has since it was connected.
+	 */
+	lastUsedAt?: string;
 	/** For GitHub Copilot: whether it has Copilot access, as GitHub said in the last few minutes. */
 	copilotAccess?: CopilotAccess;
 };

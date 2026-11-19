@@ -497,7 +497,7 @@ export interface PlannerCredentialStore {
 
 /** The AI providers each person connected, one row per person and provider. */
 export interface AiCredentialStore {
-	/** Connects a provider, replacing what the person connected for it before. */
+	/** Connects a provider, replacing what the person connected for it before, last use included. */
 	put(record: AiCredentialRecord): Promise<void>;
 	get(
 		userId: string,
@@ -507,6 +507,11 @@ export interface AiCredentialStore {
 	list(userId: string): Promise<AiCredentialRecord[]>;
 	/** False when the person had not connected it. */
 	delete(userId: string, provider: AiCredentialRecord["provider"]): Promise<boolean>;
+	/**
+	 * Records that `record`, the credential as it was read, was used `at`. Never moves the time back,
+	 * and changes nothing once that credential was replaced or removed.
+	 */
+	used(record: AiCredentialRecord, at: Date): Promise<void>;
 }
 
 /**
@@ -518,6 +523,8 @@ export interface AiPlaceholderStore {
 	put(placeholders: AiPlaceholder[]): Promise<void>;
 	/** The placeholder for this digest while it has not expired at `now`. */
 	find(digest: Uint8Array, now: Date): Promise<AiPlaceholder | undefined>;
+	/** One of the placeholders of the launch whose credential has this digest, unexpired at `now`. */
+	findLaunch(launchDigest: Uint8Array, now: Date): Promise<AiPlaceholder | undefined>;
 	/** Ends a launch: its placeholders stop working. Returns how many there were. */
 	deleteLaunch(launchId: string): Promise<number>;
 	/** Every launch on a machine, as revoking it does; returns how many placeholders went. */

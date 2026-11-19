@@ -1135,14 +1135,18 @@ export type PlannerCredential = {
 
 /**
  * A provider a person connected for their launches' agents. `ciphertext` holds their key, encrypted
- * by the server; a GitHub sign-in has none, as Chopin reads the sign-in it already holds.
+ * by the server, and `suffix` its last four characters, to tell keys apart; a GitHub sign-in has
+ * neither, as Chopin reads the sign-in it already holds. `lastUsedAt` is when a launch last sent a
+ * request with this credential, since it was connected.
  */
 export type AiCredentialRecord = {
 	userId: string;
 	provider: import("@chopin/protocol/ai-credentials").AiProvider;
 	kind: import("@chopin/protocol/ai-credentials").AiCredentialKind;
 	ciphertext?: Uint8Array;
+	suffix?: string;
 	updatedAt: Date;
+	lastUsedAt?: Date;
 };
 
 /**

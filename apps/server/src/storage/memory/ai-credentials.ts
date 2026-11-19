@@ -14,6 +14,7 @@ function copyCredential(value: AiCredentialRecord): AiCredentialRecord {
 		...value,
 		...(value.ciphertext ? { ciphertext: new Uint8Array(value.ciphertext) } : {}),
 		updatedAt: new Date(value.updatedAt),
+		...(value.lastUsedAt ? { lastUsedAt: new Date(value.lastUsedAt) } : {}),
 	};
 }
 
@@ -48,6 +49,16 @@ export class MemoryAiCredentialStore implements AiCredentialStore {
 	async delete(userId: string, provider: AiCredentialRecord["provider"]) {
 		return this.#records.delete(`${userId}\n${provider}`);
 	}
+	async used(record: AiCredentialRecord, at: Date) {
+		let found = this.#records.get(`${record.userId}\n${record.provider}`);
+		if (!found || found.updatedAt.getTime() !== record.updatedAt.getTime()) return;
+		if (!sameBytes(found.ciphertext, record.ciphertext)) return;
+		if (!found.lastUsedAt || found.lastUsedAt < at) found.lastUsedAt = new Date(at);
+	}
+}
+
+function sameBytes(left: Uint8Array | undefined, right: Uint8Array | undefined): boolean {
+	return left && right ? Buffer.from(left).equals(right) : !left && !right;
 }
 
 export class MemoryAiPlaceholderStore implements AiPlaceholderStore {
@@ -84,6 +95,13 @@ export class MemoryAiPlaceholderStore implements AiPlaceholderStore {
 	async find(digest: Uint8Array, now: Date) {
 		let found = this.#placeholders.get(hex(digest));
 		return found && found.expiresAt > now ? copyPlaceholder(found) : undefined;
+	}
+	async findLaunch(launchDigest: Uint8Array, now: Date) {
+		let key = hex(launchDigest);
+		for (let value of this.#placeholders.values()) {
+			if (hex(value.launchDigest) === key && value.expiresAt > now) return copyPlaceholder(value);
+		}
+		return undefined;
 	}
 	async deleteLaunch(launchId: string) {
 		return this.#deleteWhere(value => value.launchId === launchId);

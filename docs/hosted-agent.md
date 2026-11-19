@@ -911,9 +911,20 @@ DELETE /api/ai/credentials/:provider
 
 `:provider` is `github-copilot`, `openai` or `anthropic`; `github-sign-in` is
 for `github-copilot` alone. The list says which providers a person connected,
-how, and when; no route returns a secret. Connecting and disconnecting need a
+how, and when (`updatedAt`); no route returns a secret. A key is listed with its
+last four characters (`suffix`, kept beside the ciphertext) and the time a
+launch last sent a request with it (`lastUsedAt`, saved at most once a minute
+as a request is sent, and absent until one is; replacing the key starts it
+afresh). GitHub Copilot is always listed and usable through the person's
+current GitHub sign-in, with nothing saved, until they connect a token instead;
+removing that token returns them to the sign-in, and `check` asks GitHub about
+whichever is theirs. Connecting and disconnecting need a
 signed-in browser login and Chopin's own `Origin`. A key is 8 to 4096 printable
-characters with no spaces, and is stored encrypted with AES-GCM under a key
+characters with no spaces. An OpenAI or Anthropic key is first checked with one
+request to that provider (`GET /v1/models`) and saved only when the provider
+accepts it: a refusal (401 or 403) is answered 422 with the provider's name, and
+a provider that can't be asked 502, and either leaves any key already connected
+as it was. A saved key is stored encrypted with AES-GCM under a key
 derived from `SESSION_ENCRYPTION_KEY`, bound to its person and provider
 (`ai_credentials` in [Storage](storage.md)).
 
@@ -989,7 +1000,7 @@ the credential replaced by `[redacted]` wherever one of those headers or the
 body holds it, even split across chunks. A body in a content coding the proxy
 can't decode, which it could not take the credential out of, is refused with
 `upstream-encoding` (502) and none of it is passed back. Refusals are JSON with
-a `code`: `no-placeholder`, `no-launch`, `unknown-placeholder`,
+a `code`: `no-placeholder`, `no-launch`, `unknown-launch`, `unknown-placeholder`,
 `other-provider`, `other-launch` or `launch-ended` (401), `not-connected`,
 `sign-in-unavailable` or `no-copilot-access` (403), `credential-changed` (409,
 which clients send again), and `copilot-unavailable` (502).
@@ -1022,16 +1033,20 @@ Each launch asks GitHub afresh and gets a Copilot placeholder only for
 `copilot-unavailable`, which a later launch may not meet. A person who loses
 access stops getting Copilot in later launches, and a placeholder handed out
 before is refused with `no-copilot-access` once Chopin asks for its next Copilot
-token. API keys alone are enough: a person with only an OpenAI or Anthropic key
+token. A refusal withholds only Copilot: API keys alone are enough, so a person
+with only an OpenAI or Anthropic key, or whose sign-in has no Copilot access,
 gets those, and a person with nothing usable gets no placeholder at all, never
 one that would only fail.
 
 **Model lists.** A provider's model list is an ordinary request through the
 proxy (Copilot's account `GET /models`, OpenAI's and Anthropic's `/v1/models`).
-`GET /api/v1/ai/models.dev/api.json` serves the public models.dev catalog with
-no credential, fetched at most every ten minutes and answered with its `ETag`,
-for an agent's catalog base URL (Atomic's `ATOMIC_MODEL_CATALOG_URL` is
-`<origin>/api/v1/ai/models.dev`).
+`GET /api/v1/ai/models.dev/api.json` serves the public models.dev catalog to a
+live launch alone: the request needs that launch's credential in
+`x-chopin-launch`, checked before anything is fetched or served, a cached copy
+or a `304` included (`no-launch`, `unknown-launch` or `launch-ended`, 401).
+Chopin fetches the catalog with no credential, at most every ten minutes, and
+answers with its `ETag`, for an agent's catalog base URL (Atomic's
+`ATOMIC_MODEL_CATALOG_URL` is `<origin>/api/v1/ai/models.dev`).
 
 Handing placeholders and the launch credential to runners, through the agent
 connection and the connector's launch, is not wired yet; until it is, a paired machine's agents
