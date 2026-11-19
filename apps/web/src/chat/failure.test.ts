@@ -2,7 +2,14 @@ import { expect, test } from "bun:test";
 
 import { INTERNAL_IN_STATUS } from "@chopin/protocol/plain-words";
 
-import { failureBanner, failureView, sendFailureView, withoutFailure } from "./failure";
+import {
+	failureBanner,
+	failureView,
+	refusedRetryView,
+	retryRefusal,
+	sendFailureView,
+	withoutFailure,
+} from "./failure";
 import { sendFailure } from "./references";
 import { WireRefusal } from "../wire";
 
@@ -201,4 +208,28 @@ test("a message refused for want of an AI account says so as the server did, and
 			retry: false,
 			link: { label: "Open AI accounts", href: "/ai-accounts" },
 		});
+});
+
+test("a Retry refused for want of an AI account keeps the failed reply and its Retry, says why, and points to AI accounts", () => {
+	let words =
+		"chopin needs an AI account to answer, so this message wasn't sent. Add one, then send it again.";
+	let banner = failureBanner(
+		[
+			member("ask", "mona", { to: "planner" }),
+			failed("notice", { kind: "error", detail: "The provider went away.", request: "ask" }),
+		],
+		undefined,
+		"mona",
+	)!;
+	expect(refusedRetryView(banner, retryRefusal(new WireRefusal(words, "no-ai-account")))).toEqual({
+		...banner,
+		detail: words,
+		link: { label: "Open AI accounts", href: "/ai-accounts" },
+	});
+	expect(refusedRetryView(banner, retryRefusal(new WireRefusal("No machine is connected."))))
+		.toEqual({
+			...banner,
+			detail: "No machine is connected.",
+		});
+	expect(refusedRetryView(banner, undefined)).toBe(banner);
 });

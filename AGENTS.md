@@ -454,7 +454,8 @@ arrived, and only to a server that acknowledges sends. When `planner-not-attache
 typed text (with its mention, references and staged files) returns to the composer draft and
 chopin says why in a row only that person sees, placed at the time it was said
 (`chat/quiet-note.tsx`, with How to fix where the machine has something to fix, and a link to
-AI accounts for `no-ai-account`), and for
+AI accounts for `no-ai-account`; in a thread, which holds its draft until it is sent, the words
+stay in its draft and `no-ai-account` has the same row there), and for
 `planner-busy` while Chopin works the one button offers Stop so the person can stop Chopin and
 send it (`planner-starting` keeps Send, so it cannot stop the other person's turn);
 when a newer draft was already typed, or another refusal rejected the message, it says
@@ -498,7 +499,9 @@ the attempt wrote, `retryTarget` in `apps/server/src/chat/retry.ts`), saves that
 with `chat:removed`, and runs the message's turn as it began: the agent reads the message once and
 nothing of the attempt. An Atomic session branches back to its leaf before the attempt; a remote
 client that offered `retry-turn` is told `message` and `retry` to drop the attempt from what it
-keeps ([Retrying a failed turn](docs/agent-connection.md#retrying-a-failed-turn)).
+keeps ([Retrying a failed turn](docs/agent-connection.md#retrying-a-failed-turn)). A Retry the
+server refuses keeps the failure banner and its Retry, with the refusal's words in it, and a link
+to AI accounts for `no-ai-account` (`refusedRetryView` in `apps/web/src/chat/failure.ts`).
 
 `instruction()` strips the mention before model input. Recent room messages that
 did not address the Planner still enter a bounded backscroll for the next turn.

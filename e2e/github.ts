@@ -65,6 +65,8 @@ const SCORE_OUTSIDER = "score-outsider-";
 const MACHINE_SHARER = "machine-sharer-";
 // Someone GitHub gives no Copilot token: no Copilot subscription. Everyone else has Copilot.
 const NO_COPILOT = "no-copilot-";
+// An OpenAI key the fake OpenAI accepts; any other is refused.
+const OPENAI_KEY = "sk-e2e-";
 
 function sharerRepository(handle: string) {
 	let name = `relay-${handle.slice(MACHINE_SHARER.length)}`;
@@ -380,6 +382,12 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		);
 		if (repository) return json(repository);
 		return json({ message: "Not Found" }, { status: 404 });
+	}
+	if (url.origin === "https://api.openai.com" && url.pathname === "/v1/models") {
+		let key = new Headers(init?.headers).get("authorization") ?? "";
+		return key.startsWith(`Bearer ${OPENAI_KEY}`)
+			? json({ object: "list", data: [] })
+			: json({ error: { message: "Incorrect API key provided." } }, { status: 401 });
 	}
 	return network(input, init);
 };

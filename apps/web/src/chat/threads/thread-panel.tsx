@@ -8,11 +8,20 @@ import { formatForkedClock, isReplyEntry, replyCountLabel } from "@chopin/protoc
 import { WireLost, WireRefusal } from "../../wire";
 import { asksChopinKey, withChopinMention } from "../ask-chopin";
 import { ErrorState } from "../error-state";
-import { failureBanner, sendFailureView, withoutFailure } from "../failure";
+import {
+	AI_ACCOUNTS_LINK,
+	failureBanner,
+	refusedRetryView,
+	retryRefusal,
+	sendFailureView,
+	withoutFailure,
+} from "../failure";
 import { keepFormatPreference, readFormatPreference } from "../format-preference";
 import { useDocumentPeople } from "../document-people";
 import { MentionLogins } from "../message-mentions";
 import { MentionPicker } from "../mention-picker";
+import { navigateTo } from "../navigate";
+import { QuietNote } from "../quiet-note";
 import { pointerGroups, useMentionSources } from "../mention-sources";
 import {
 	chatAuthors,
@@ -59,6 +68,7 @@ import type { ReferenceRow } from "../reference-picker";
 import type { PointerOption } from "../mention-sources";
 import type { MentionCandidate } from "../mentions";
 import type { ComposerDraft, ReferenceTarget, SendFailure } from "../references";
+import type { RetryRefusal } from "../failure";
 import type { TranscriptDecisions } from "../transcript";
 import type { ComposerModel } from "../use-model-choice";
 import type { ThreadViewState } from "./thread-model";
@@ -139,7 +149,10 @@ export function ThreadPanel(
 	let [submitting, setSubmitting] = useState(false);
 	let [sendError, setSendError] = useState<SendFailure & { code?: string }>();
 	// The failure notice a Retry was pressed for, and the server's words when it refused one.
-	let [retried, setRetried] = useState<{ entry: string; refusal?: string }>();
+	let [retried, setRetried] = useState<{ entry: string; refusal?: RetryRefusal }>();
+	// chopin's ephemeral row: a reply to it refused for want of an AI account, said to this person
+	// alone, with the words kept in the draft.
+	let [note, setNote] = useState<{ text: string; ts: number }>();
 	let bannerId = useId();
 	let [formatting, setFormatting] = useState(() => readFormatPreference(handle));
 	let pendingCaret = useRef<number | { start: number; end: number } | undefined>(undefined);
@@ -376,14 +389,20 @@ export function ThreadPanel(
 		void wire.ask<Wire.Sent>("chat:send", payload).then(
 			() => {
 				clearSubmittedDraft(submitted);
+				if (payload.to === "planner" || alone) setNote(undefined);
 			},
 			(error: unknown) => {
-				if (!(error instanceof WireLost && error.restarting)) {
-					setSendError({
-						...sendFailure(error),
-						...(error instanceof WireRefusal && error.code ? { code: error.code } : {}),
-					});
+				if (error instanceof WireLost && error.restarting) return;
+				let failure = sendFailure(error);
+				if (error instanceof WireRefusal && error.code === "no-ai-account") {
+					setNote({ text: failure.text, ts: Math.floor(Date.now() / 1000) });
+					return;
 				}
+				setNote(undefined);
+				setSendError({
+					...failure,
+					...(error instanceof WireRefusal && error.code ? { code: error.code } : {}),
+				});
 			},
 		).finally(() => {
 			if (submission.current !== token) return;
@@ -431,26 +450,44 @@ export function ThreadPanel(
 						current?.entry !== entry
 							? current
 							: error instanceof WireRefusal
-							? { entry, refusal: error.message }
+							? { entry, refusal: retryRefusal(error) }
 							: undefined
 					)
 				);
 		}
 		: undefined;
-	let failureNode = failed && !sendError
+	let failedView = failed
+		&& refusedRetryView(failed, retried?.entry === failed.entry ? retried.refusal : undefined);
+	let failureNode = failedView && !sendError
 		? (
 			<ErrorState
-				detail={(retried?.entry === failed.entry ? retried.refusal : undefined) ?? failed.detail}
+				detail={failedView.detail}
 				id={bannerId}
-				kind={failed.kind}
-				link={failed.link}
+				kind={failedView.kind}
+				link={failedView.link}
 				onRetry={retryTurn}
 				retryDisabled={!composerReady}
-				retrying={retried?.entry === failed.entry && retried.refusal === undefined}
-				title={failed.title}
+				retrying={retried?.entry === failedView.entry && retried.refusal === undefined}
+				title={failedView.title}
 			/>
 		)
 		: undefined;
+	let noteRow = useMemo(
+		() =>
+			note && {
+				id: String(note.ts),
+				ts: note.ts,
+				row: (
+					<QuietNote
+						link={AI_ACCOUNTS_LINK}
+						onNavigate={navigateTo}
+						text={note.text}
+						ts={note.ts}
+					/>
+				),
+			},
+		[note],
+	);
 	let sendErrView = sendError && !offline
 		? sendFailureView(sendError, sendError.code)
 		: undefined;
@@ -545,6 +582,7 @@ export function ThreadPanel(
 					handle={handle}
 					lead={lead}
 					live={connected && view.loaded}
+					note={noteRow}
 					onReact={reactions.react}
 					reactionIntents={reactions.intents}
 					room={room}

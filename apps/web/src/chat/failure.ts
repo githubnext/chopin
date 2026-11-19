@@ -121,6 +121,30 @@ export function failureBanner(
 	return undefined;
 }
 
+/** A Retry the server refused, in its words, with the refusal's code where it gave one. */
+export type RetryRefusal = { text: string; code?: string };
+
+export function retryRefusal(error: { message: string; code?: string | undefined }): RetryRefusal {
+	return { text: error.message, ...(error.code ? { code: error.code } : {}) };
+}
+
+/**
+ * The failure banner once its Retry was refused: the failed reply still stands, with the server's
+ * words for why it could not run again. Where the person has no AI account chopin can use, the
+ * banner points to AI accounts, and Retry stays for once they have added one.
+ */
+export function refusedRetryView(
+	failed: FailureBanner,
+	refusal: RetryRefusal | undefined,
+): FailureBanner {
+	if (!refusal) return failed;
+	return {
+		...failed,
+		detail: refusal.text,
+		...(refusal.code === "no-ai-account" ? { link: AI_ACCOUNTS_LINK } : {}),
+	};
+}
+
 /** The transcript without the failed reply's own line, which the banner tells instead. */
 export function withoutFailure<T extends { id: string }>(
 	entries: T[],
