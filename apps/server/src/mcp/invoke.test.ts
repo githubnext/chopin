@@ -4,6 +4,7 @@ import * as Chat from "../chat/service";
 import { handler, TOOLS } from "../mcp";
 import { rooted } from "../testing/rooted";
 import { invokeRouted, MAX_SYSTEM_TURNS_PER_HOUR, SystemTurns } from "./invoke";
+import { testLease } from "../storage/contract-support";
 
 let cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -294,7 +295,11 @@ test("invoke_planner on a root runs on its own Chat without a focus", async () =
 
 test("invoke_planner on a child that no longer belongs to its root fails closed", async () => {
 	let { child, invoke, opened, released, root, storage } = await routed();
-	await storage.channels.archive({ id: root.channel.id, now: new Date() });
+	await storage.channels.archive({
+		id: root.channel.id,
+		now: new Date(),
+		lease: await testLease(storage),
+	});
 	expect(await invoke(child.channel.id)).toBe("document-archived");
 	await storage.channels.restore({ id: root.channel.id, now: new Date() });
 	// The caller's located repository is not the root's: ChildDocuments refuses it.

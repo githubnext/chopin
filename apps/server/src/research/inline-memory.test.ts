@@ -1,6 +1,7 @@
 import { expect, it, spyOn } from "bun:test";
 
 import { setup } from "./test-support";
+import { testLease } from "../storage/contract-support";
 
 it("recovers one durably committed reference after its placement marker fails", async () => {
 	let context = await setup();
@@ -73,7 +74,11 @@ it("does not enqueue when live authorization fails after reference placement", a
 
 it("rejects a new inline request after its parent is archived", async () => {
 	let context = await setup();
-	await context.storage.channels.archive({ id: context.channelId, now: context.advance() });
+	await context.storage.channels.archive({
+		id: context.channelId,
+		now: context.advance(),
+		lease: await testLease(context.storage),
+	});
 	let placed = false;
 	await expect(context.service.startPlannerInline({
 		channelId: context.channelId,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { contractId as id, openedStorage, userAndChannel } from "./contract-support";
+import { contractId as id, openedStorage, testLease, userAndChannel } from "./contract-support";
 
 import type { StorageFactory } from "./contract-support";
 import type { JsonValue } from "./model";
@@ -61,6 +61,7 @@ export function childChannelContract(name: string, factory: StorageFactory) {
 				await storage.channels.archive({
 					id: archived.id,
 					now: new Date("2026-01-03T06:00:00.000Z"),
+					lease: await testLease(storage),
 				});
 				let otherRoot = await storage.channels.create({
 					...fields,
@@ -252,7 +253,7 @@ export function childChannelContract(name: string, factory: StorageFactory) {
 					}]),
 				);
 				let archived = await child("Archived", sidecar([entry("archived")]));
-				await storage.channels.archive({ id: archived.id, now });
+				await storage.channels.archive({ id: archived.id, now, lease: await testLease(storage) });
 				// Never checkpointed: no snapshot row, only the current sidecar.
 				let unsnapshotted = await child("Unsnapshotted");
 				await save(unsnapshotted.id, sidecar([entry("fresh")]));

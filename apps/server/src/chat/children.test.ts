@@ -3,6 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import * as Service from "../plan/service";
 import { openPlan } from "../testing/plan";
 import { createChildDocuments } from "./children";
+import { testLease } from "../storage/contract-support";
 
 import type { Plan } from "../plan/service";
 import type { ChannelRecord } from "../storage/model";
@@ -87,7 +88,11 @@ test("open rechecks after the child's transition is held, so a racing archive wi
 		channels: opened.storage.channels,
 		server: opened.server,
 		withChildPlan: async (childId, action) => {
-			await opened.storage.channels.archive({ id: childId, now: new Date() });
+			await opened.storage.channels.archive({
+				id: childId,
+				now: new Date(),
+				lease: await testLease(opened.storage),
+			});
 			return action(opened.plan);
 		},
 	});
@@ -100,7 +105,7 @@ test("open rechecks after the child's transition is held, so a racing archive wi
 
 test("an archived root exposes no children", async () => {
 	let { children, storage, rootId, channel } = await fixture();
-	await storage.channels.archive({ id: rootId, now: new Date() });
+	await storage.channels.archive({ id: rootId, now: new Date(), lease: await testLease(storage) });
 	expect(await children.list()).toEqual([]);
 	expect(await children.resolve(channel.id)).toBeUndefined();
 });

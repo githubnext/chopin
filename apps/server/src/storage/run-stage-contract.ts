@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { contractId as id, openedStorage, userAndChannel } from "./contract-support";
+import { contractId as id, openedStorage, testLease, userAndChannel } from "./contract-support";
 import { StorageError } from "./errors";
 
 import type { StorageFactory } from "./contract-support";
@@ -116,7 +116,7 @@ export function runStageContract(name: string, factory: StorageFactory) {
 					.toBe(0);
 
 				let now = new Date("2026-01-02T03:04:05.000Z");
-				await storage.channels.archive({ id: channelId, now });
+				await storage.channels.archive({ id: channelId, now, lease: await testLease(storage) });
 				expect(await storage.channels.delete(channelId)).toBe(true);
 				expect((await storage.runStages.list(channelId, kept, { offset: 0, limit: 10 })).total)
 					.toBe(0);

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import * as Chat from "./service";
 import * as Plan from "../plan/service";
 import { hostInputRoom } from "../testing/decisions";
+import { testLease } from "../storage/contract-support";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Server } from "bun";
@@ -51,7 +52,11 @@ test("an archived document opens with its runs stopped, even if a Planner hold s
 	let live = await hostInputRoom(undefined, { ...reopen, backend });
 	expect(live.plan.chat.runs?.map(run => [run.status, run.waiting])).toEqual([["waiting", 1]]);
 	await live.close();
-	await first.storage.channels.archive({ id: first.channelId, now: new Date() });
+	await first.storage.channels.archive({
+		id: first.channelId,
+		now: new Date(),
+		lease: await testLease(first.storage),
+	});
 	let archived = await hostInputRoom(undefined, { ...reopen, backend });
 	try {
 		expect(archived.plan.chat.runs?.map(run => [run.status, run.waiting])).toEqual([[

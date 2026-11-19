@@ -262,7 +262,8 @@ export function registerChannelRoutes(
 	auth: HostedAuth,
 	options: {
 		onAgentReset?: (channelId: string) => Promise<void>;
-		onChannelArchived?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
+		/** Archives a document, under the writer lease, as every write that ends AI authority is. */
+		onChannelArchived: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
 		onChannelDeleted?: (channelId: string) => Promise<boolean>;
 		onChannelRenamed?: (channel: ChannelRecord) => void;
 		/** A person created a document. */
@@ -291,7 +292,7 @@ export function registerChannelRoutes(
 		) => Promise<"pending" | "unavailable">;
 		random?: () => number;
 		references?: GitHubReferences;
-	} = {},
+	},
 ): void {
 	router.on(
 		"GET",
@@ -751,9 +752,7 @@ export function registerChannelRoutes(
 				}
 				let now = auth.clock();
 				let result = action === "archive"
-					? await (options.onChannelArchived
-						? options.onChannelArchived(id, now)
-						: auth.storage.channels.archive({ id, now }))
+					? await options.onChannelArchived(id, now)
 					: await (options.onChannelRestored
 						? options.onChannelRestored(id, now)
 						: auth.storage.channels.restore({ id, now }));

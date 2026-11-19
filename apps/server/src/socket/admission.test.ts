@@ -7,6 +7,7 @@ import { Admission } from "../auth/admission";
 import { GitHubError } from "../github/client";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { admit, refused } from "./admission";
+import { testLease } from "../storage/contract-support";
 
 import type { HostedAuth } from "../auth/routes";
 import type {
@@ -195,7 +196,11 @@ describe("socket admission", () => {
 		if ("data" in editor) expect(editor.data).not.toHaveProperty("channelArchivedAt");
 
 		let archivedAt = new Date(now.getTime() + 1_000);
-		await storage.channels.archive({ id: channel.id, now: archivedAt });
+		await storage.channels.archive({
+			id: channel.id,
+			now: archivedAt,
+			lease: await testLease(storage),
+		});
 		let archived = await admit(request, url, auth);
 		expect("data" in archived && archived.data).toMatchObject({
 			canEdit: false,

@@ -8,6 +8,7 @@ import { openPlan } from "../testing/plan";
 import * as Service from "./service";
 
 import { repositoryTopic, topic } from "../wire";
+import { testLease } from "../storage/contract-support";
 
 import type { Server } from "bun";
 import type { Socket, SocketData } from "../wire";
@@ -228,7 +229,11 @@ test("announces the repository total when a document leaves the active catalogue
 		);
 		await Service.drain(plan);
 		await Service.persist(plan);
-		let archived = await storage.channels.archive({ id: channel.id, now });
+		let archived = await storage.channels.archive({
+			id: channel.id,
+			now,
+			lease: await testLease(storage),
+		});
 		await Service.announceCatalogueUnanswered(server, storage, archived.channel);
 
 		let frames = published.filter(entry => entry.frame.kind === "sidebar:decisions");
@@ -304,7 +309,11 @@ test("announces the repository total after a document is permanently deleted", a
 		await eventually(() => plan.persistence.committedUnanswered === 2 || undefined);
 		await Service.drain(plan);
 		await Service.persist(plan);
-		let archived = await storage.channels.archive({ id: channel.id, now });
+		let archived = await storage.channels.archive({
+			id: channel.id,
+			now,
+			lease: await testLease(storage),
+		});
 		await Service.close(plan);
 		closed = true;
 		expect(await storage.channels.delete(channel.id)).toBe(true);

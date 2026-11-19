@@ -1,7 +1,8 @@
-import type { SQL } from "bun";
+import type { SQL, TransactionSQL } from "bun";
 import { conflict, missing } from "../errors";
 import type {
 	CreateMachine,
+	Lease,
 	MachineChoice,
 	MachineCredentials,
 	MachineFavorite,
@@ -58,8 +59,10 @@ export class PostgresMachineStore implements MachineStore {
 	constructor(
 		private sql: SQL,
 		private run: <T>(action: string, execute: () => Promise<T>) => Promise<T>,
+		/** Throws unless `lease` is held, in the transaction a revocation is written in. */
+		private fence: (transaction: TransactionSQL, lease: Lease) => Promise<void>,
 		/** Told once a revocation settles, committed or not, before its caller hears so. */
-		private revoked: () => void = () => {},
+		private revoked: () => void,
 	) {}
 	create(input: CreateMachine) {
 		return this.run("pair machine", async () => {
@@ -158,9 +161,10 @@ export class PostgresMachineStore implements MachineStore {
 			return updated.length > 0;
 		});
 	}
-	revoke(id: string, userId: string, now: Date) {
+	revoke(lease: Lease, id: string, userId: string, now: Date) {
 		return this.run("revoke machine", () =>
 			this.sql.begin(async transaction => {
+				await this.fence(transaction, lease);
 				let updated = await transaction<{ id: string }[]>`
 					UPDATE machines
 					SET credential_ciphertext = NULL, credential_revision = NULL, revoked_at = ${now}

@@ -2666,7 +2666,7 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 				});
 				await Service.persist(active);
 			}
-			return storage.channels.archive({ id: channelId, now });
+			return storage.channels.archive({ id: channelId, now, lease: heldLease() });
 		});
 		// An archived document keeps no Planner, not even one whose connection dropped.
 		await plannerAttachments?.documentEnded(channelId);
@@ -3177,6 +3177,7 @@ let hostedAuth = registerAuthRoutes(router, {
 	setupAgents: config.setupAgents,
 	onSessionRevoked: sessionRevoked,
 	onCredentialsWillRotate: credentialsWillRotate,
+	lease: heldLease,
 });
 // A paired machine's Planner backend attaches with a credential from the connector routes.
 let machinePlanners = config.agent && config.harness === "remote"
@@ -3621,6 +3622,7 @@ let connectedAi = new AiCredentials({
 	githubToken: githubSignIn(hostedAuth),
 	copilotToken: copilotTokenExchange(),
 	writer: () => writerLease.holds(),
+	lease: heldLease,
 });
 aiCredentials = connectedAi;
 hostedAuth.machines.onEnded(machineId => {

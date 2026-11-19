@@ -54,6 +54,7 @@ import { plannerCatalog, plannerOffered, plannerOfferKnown } from "../harnesses"
 import { createRemoteAdapter } from "./adapter";
 import { admitAgent } from "./endpoint";
 import { remotePlanner } from "./registry";
+import { testLease } from "../../storage/contract-support";
 
 import type { AgentClient, AgentHandlers, TurnContext } from "@chopin/agent-link/client";
 import type { ActiveOwnerBinding } from "../../agent/active-owner";
@@ -241,7 +242,11 @@ describe("Agent connection admission", () => {
 		expect(await raw.next("refused")).toMatchObject({ code: "unsupported-version" });
 		expect((await raw.closed).code).toBe(LINK_CLOSE.unsupportedVersion);
 		expect(await storage.channels.get(channel.id)).toEqual(before);
-		await storage.channels.archive({ id: channel.id, now: new Date() });
+		await storage.channels.archive({
+			id: channel.id,
+			now: new Date(),
+			lease: await testLease(storage),
+		});
 		expect(await refusal(MEMBER_TOKEN, channel.id)).toBe("document-archived");
 		expect(server.links).toEqual([]);
 	});

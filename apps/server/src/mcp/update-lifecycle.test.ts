@@ -10,6 +10,7 @@ import * as Rooms from "../rooms";
 import { openPlan } from "../testing/plan";
 import { hosted } from "./hosted";
 import { prepareUpdate } from "./update";
+import { testLease } from "../storage/contract-support";
 
 import type { HostedAuth } from "../auth/routes";
 import type { HostedCallbacks } from "./hosted";
@@ -171,7 +172,11 @@ describe("hosted document rewrite lifecycle", () => {
 			let context = await openPlan("# Original\n");
 			let room = attach(context);
 			if (state === "archived") {
-				await context.storage.channels.archive({ id: context.channel.id, now: new Date() });
+				await context.storage.channels.archive({
+					id: context.channel.id,
+					now: new Date(),
+					lease: await testLease(context.storage),
+				});
 			} else if (state === "locked") context.plan.claiming = true;
 			else context.plan.revision = 1;
 			let checks = 0;
@@ -353,7 +358,11 @@ describe("hosted document rewrite lifecycle", () => {
 		await Plan.close(context.plan);
 		let api = adapter(context, {
 			serializeDocument: async (_id, action) => {
-				await context.storage.channels.archive({ id: context.channel.id, now: new Date() });
+				await context.storage.channels.archive({
+					id: context.channel.id,
+					now: new Date(),
+					lease: await testLease(context.storage),
+				});
 				return action();
 			},
 		});

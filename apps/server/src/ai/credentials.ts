@@ -12,7 +12,7 @@ import type {
 	ConnectAiCredential,
 	CopilotAccess,
 } from "@chopin/protocol/ai-credentials";
-import type { AiCredentialRecord, AiPlaceholder } from "../storage/model";
+import type { AiCredentialRecord, AiPlaceholder, Lease } from "../storage/model";
 import type { CopilotToken, CopilotTokenExchange } from "./copilot";
 import type { StorageAdapter } from "../storage/port";
 
@@ -171,9 +171,15 @@ export type AiCredentialsOptions = {
 	/**
 	 * Whether this process still holds the writer lease now: not released, not lost and not past
 	 * its deadline. Cutoffs are counted in memory by the process that commits them, so one that no
-	 * longer holds the lease may not hear of its successor's; it sends nothing.
+	 * longer holds the lease may not hear of its successor's; it sends and serves nothing.
 	 */
 	writer?: () => boolean;
+	/**
+	 * The writer lease this process holds, which every cutoff it writes (a credential connected,
+	 * replaced or removed, a launch or a machine's launches ended) is written under, checked in the
+	 * same transaction; throws when it holds none.
+	 */
+	lease: () => Lease;
 };
 
 function digest(value: string): Uint8Array {
@@ -257,6 +263,7 @@ export class AiCredentials {
 	readonly #upstreams: Partial<Record<AiProvider, string>>;
 	readonly #fetch: typeof fetch;
 	readonly #writer: () => boolean;
+	readonly #lease: () => Lease;
 	readonly #copilotTokens = new Map<string, HeldAnswer>();
 	/** How many of GitHub's answers about Copilot access have completed, numbering each as it does. */
 	#completed = 0;
@@ -278,6 +285,7 @@ export class AiCredentials {
 		this.#upstreams = options.upstreams ?? {};
 		this.#fetch = options.fetch ?? fetch;
 		this.#writer = options.writer ?? (() => true);
+		this.#lease = options.lease;
 	}
 
 	/** The time by the clock deadlines are kept on, which the proxy's transport reads by default. */
@@ -348,7 +356,7 @@ export class AiCredentials {
 				updatedAt,
 			};
 		}
-		await this.#storage.aiCredentials.put(record);
+		await this.#storage.aiCredentials.put(this.#lease(), record);
 		return summary(
 			record,
 			provider === "github-copilot"
@@ -358,8 +366,8 @@ export class AiCredentials {
 		);
 	}
 
-	disconnect(userId: string, provider: AiProvider): Promise<boolean> {
-		return this.#storage.aiCredentials.delete(userId, provider);
+	async disconnect(userId: string, provider: AiProvider): Promise<boolean> {
+		return this.#storage.aiCredentials.delete(this.#lease(), userId, provider);
 	}
 
 	/**
@@ -448,7 +456,7 @@ export class AiCredentials {
 				&& !this.#contradicted(admitted.copilot);
 			let due = this.#clock() >= input.expiresAt;
 			if (held && open && !due) return { launchId, launchToken, grants, withheld };
-			if (grants.length) await this.#storage.aiPlaceholders.deleteLaunch(launchId);
+			if (grants.length) await this.#storage.aiPlaceholders.deleteLaunch(this.#lease(), launchId);
 			if (due || !open) return cancelled();
 		}
 		// Never a launch given nothing for want of a stable read while a verified key is there.
@@ -542,12 +550,12 @@ export class AiCredentials {
 
 	/** Ends a launch: its placeholders stop working at once. */
 	async end(launchId: string): Promise<void> {
-		await this.#storage.aiPlaceholders.deleteLaunch(launchId);
+		await this.#storage.aiPlaceholders.deleteLaunch(this.#lease(), launchId);
 	}
 
 	/** Ends every launch on a machine, as revoking it does. */
 	async machineEnded(machineId: string): Promise<void> {
-		await this.#storage.aiPlaceholders.deleteForMachine(machineId);
+		await this.#storage.aiPlaceholders.deleteForMachine(this.#lease(), machineId);
 	}
 
 	sweep(): Promise<number> {
@@ -560,7 +568,9 @@ export class AiCredentials {
 	 * the launch's own credential, and the launch must be live: unexpired, on a machine not revoked
 	 * and a document not archived. The last check is made in the same step as `serve` is called,
 	 * with nothing awaited between, and is read again when a cutoff completed while it was read, so
-	 * a launch that ended before `serve` is never served.
+	 * a launch that ended before `serve` is never served. Nothing is served once this process no
+	 * longer holds the writer lease (`restarting`), as nothing is sent: its successor's cutoffs are
+	 * not counted here.
 	 */
 	async forLaunch<T>(
 		placeholder: string | undefined,
@@ -579,6 +589,7 @@ export class AiCredentials {
 			}
 			if (!await this.#launchLive(found)) return { refused: "launch-ended" };
 			if (this.#storage.aiPlaceholders.cutoffs() !== cutoffs) continue;
+			if (!this.#writer()) return { refused: "restarting" };
 			if (this.#clock() >= found.expiresAt) return { refused: "launch-ended" };
 			return serve();
 		}

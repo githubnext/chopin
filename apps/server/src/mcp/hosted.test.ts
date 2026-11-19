@@ -15,6 +15,7 @@ import { storedQuestion } from "../testing/plan";
 import { implementationGraphs } from "../tasks/plan-graphs";
 import { hosted } from "./hosted";
 import { deterministicChannelId } from "../channels/id";
+import { testLease } from "../storage/contract-support";
 
 import type { Server } from "bun";
 import type { HostedAuth } from "../auth/routes";
@@ -292,7 +293,11 @@ describe("the hosted MCP adapter", () => {
 			let snapshot = await load(channelId, now);
 			if (channelId === id && snapshot && !deleted) {
 				deleted = true;
-				await context.storage.channels.archive({ id, now });
+				await context.storage.channels.archive({
+					id,
+					now,
+					lease: await testLease(context.storage),
+				});
 				await context.storage.channels.delete(id);
 			}
 			return snapshot;
@@ -468,7 +473,11 @@ describe("the hosted MCP adapter", () => {
 			deleting = true;
 			expect(await invoke()).toEqual({ kind: "refused", code: "document-unavailable" });
 			deleting = false;
-			await context.storage.channels.archive({ id: opened.channel.id, now: context.now });
+			await context.storage.channels.archive({
+				id: opened.channel.id,
+				now: context.now,
+				lease: await testLease(context.storage),
+			});
 			expect(await invoke()).toEqual({ kind: "refused", code: "document-archived" });
 			expect(calls).toBe(0);
 		} finally {
@@ -557,7 +566,8 @@ describe("the hosted MCP adapter", () => {
 		};
 		let opened = await plan(context);
 		await Service.close(opened.plan);
-		let adapter = hosted(context.auth);
+		let lease = await testLease(context.storage);
+		let adapter = hosted(context.auth, { lease: () => lease });
 		let caller = await adapter.caller(request("Bearer allowed"));
 		if (!caller || !adapter.archive || !adapter.restore) {
 			throw new Error("hosted archive adapter is unavailable");
@@ -604,7 +614,11 @@ describe("the hosted MCP adapter", () => {
 		let adapter = hosted(context.auth, undefined, {
 			archiveChannel: async (channelId, now) => {
 				transitions.push(`archive:${channelId}`);
-				return context.storage.channels.archive({ id: channelId, now });
+				return context.storage.channels.archive({
+					id: channelId,
+					now,
+					lease: await testLease(context.storage),
+				});
 			},
 			isChannelDeleting: channelId => deleting && channelId === opened.channel.id,
 			restoreChannel: async (channelId, now) => {
@@ -751,7 +765,11 @@ describe("the hosted MCP adapter", () => {
 		expect(repeated.kind).toBe("unchanged");
 		expect(announcements).toEqual(["Launch plan"]);
 
-		await context.storage.channels.archive({ id: channel.id, now: context.now });
+		await context.storage.channels.archive({
+			id: channel.id,
+			now: context.now,
+			lease: await testLease(context.storage),
+		});
 		expect(await adapter.rename.rename(caller, { id: channel.id, title: "Archived plan" }))
 			.toEqual({ kind: "archived" });
 		expect(announcements).toEqual(["Launch plan"]);
@@ -880,7 +898,11 @@ describe("the hosted MCP adapter", () => {
 		deleting.add(channel.id);
 		expect(await adapter.upload.upload(caller, input)).toEqual({ kind: "unavailable" });
 		deleting.clear();
-		await context.storage.channels.archive({ id: channel.id, now: context.now });
+		await context.storage.channels.archive({
+			id: channel.id,
+			now: context.now,
+			lease: await testLease(context.storage),
+		});
 		expect(await adapter.upload.upload(caller, input)).toEqual({ kind: "archived" });
 		context.github.accessible = false;
 		expect(await adapter.upload.upload(caller, input)).toEqual({ kind: "unavailable" });
@@ -917,6 +939,7 @@ describe("the hosted MCP adapter", () => {
 		let archived = await context.storage.channels.archive({
 			id: first.document.id,
 			now: context.now,
+			lease: await testLease(context.storage),
 		});
 		expect(await adapter.create.create(caller, creation)).toEqual({
 			kind: "replayed",
@@ -1491,6 +1514,7 @@ describe("the hosted MCP adapter", () => {
 		let archived = await context.storage.channels.archive({
 			id: opened.channel.id,
 			now: context.now,
+			lease: await testLease(context.storage),
 		});
 		expect(await adapter.implementations.readImplementation(caller, opened.channel.id))
 			.toMatchObject({

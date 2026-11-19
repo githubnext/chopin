@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { contractId as id, openedStorage, userAndChannel } from "./contract-support";
+import { contractId as id, openedStorage, testLease, userAndChannel } from "./contract-support";
 import { StorageError } from "./errors";
 
 import type { StorageFactory } from "./contract-support";
@@ -148,7 +148,7 @@ export function plannerModelChoiceContract(name: string, factory: StorageFactory
 					userId,
 					updatedAt: AT,
 				});
-				await storage.channels.archive({ id: channelId, now: AT });
+				await storage.channels.archive({ id: channelId, now: AT, lease: await testLease(storage) });
 				await storage.channels.delete(channelId);
 				expect(await storage.plannerModelChoices.get(channelId)).toBeUndefined();
 			} finally {

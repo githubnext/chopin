@@ -4,7 +4,7 @@ import { GitHubError, GitHubTokenError } from "../github/client";
 import { decrypted, encrypted, imported } from "./session";
 
 import type { GitHubTokenGrant } from "../github/client";
-import type { MachineCredentials, MachineRepository, StoredMachine } from "../storage/model";
+import type { Lease, MachineCredentials, MachineRepository, StoredMachine } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
 
 const MACHINE_CONTEXT = "chopin:machine-credential:v1";
@@ -43,7 +43,17 @@ type Options = {
 	/** Whether the owner is still admitted, as a browser session is rechecked. */
 	authorize?: (userId: string, accessToken: string) => Promise<boolean>;
 	invalidate?: (accessToken: string) => void;
+	/**
+	 * The writer lease this process holds, which a revocation is written under: revoking ends the
+	 * machine's launches' AI authority, which only the lease's holder counts. Without it, or once the
+	 * process no longer holds it, a revocation is refused.
+	 */
+	lease?: () => Lease;
 };
+
+function noLease(): Lease {
+	throw new Error("storage writer lease is unavailable");
+}
 
 export type PairMachine = {
 	userId: string;
@@ -159,7 +169,8 @@ export class Machines {
 	}
 
 	async revoke(id: string, userId: string): Promise<boolean> {
-		let revoked = await this.#storage.machines.revoke(id, userId, this.#clock());
+		let lease = (this.#options.lease ?? noLease)();
+		let revoked = await this.#storage.machines.revoke(lease, id, userId, this.#clock());
 		if (revoked) {
 			this.#forget(id);
 			this.#end(id);

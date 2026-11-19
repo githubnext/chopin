@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { performance } from "@chopin/experiment/fixtures";
 import { Experiments } from "../experiments/service";
-import { contractId, openedStorage, userAndChannel } from "./contract-support";
+import { contractId, openedStorage, testLease, userAndChannel } from "./contract-support";
 import type { StorageFactory } from "./contract-support";
 
 export function experimentContract(name: string, factory: StorageFactory) {
@@ -68,7 +68,11 @@ export function experimentContract(name: string, factory: StorageFactory) {
 						lease,
 					),
 				).toEqual(stored!);
-				await storage.channels.archive({ id: first.childId!, now: new Date() });
+				await storage.channels.archive({
+					id: first.childId!,
+					now: new Date(),
+					lease: await testLease(storage),
+				});
 				await expect(storage.channels.delete(first.childId!)).rejects.toMatchObject({
 					failure: "conflict",
 					message: expect.stringContaining("published by an investigation"),

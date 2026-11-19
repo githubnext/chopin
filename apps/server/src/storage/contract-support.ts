@@ -55,6 +55,16 @@ export async function userAndChannel(storage: StorageAdapter): Promise<{
 	return { userId, sessionId, channelId, repositoryId, lease };
 }
 
+/**
+ * A writer lease of the test's own, for a write only the lease's holder may make: an archive, a
+ * machine revoked, an AI credential or a launch's placeholders changed.
+ */
+export async function testLease(storage: StorageAdapter): Promise<Lease> {
+	let lease = await storage.leases.acquire(contractId("writer"), contractId("instance"), 60_000);
+	if (!lease) throw new Error("test could not acquire its storage lease");
+	return lease;
+}
+
 export function backgroundJob(
 	channelId: string,
 	lease: Lease,

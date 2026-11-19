@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import * as Plan from "../plan/service";
 import { acceptedResearchMemory } from "./accepted-research.test-fixtures";
+import { testLease } from "../storage/contract-support";
 
 for (let gate of ["viewer", "archived", "closing", "unavailable"] as const) {
 	test(`refuses research consent through the ${gate} write gate`, async () => {
@@ -8,7 +9,11 @@ for (let gate of ["viewer", "archived", "closing", "unavailable"] as const) {
 		try {
 			if (gate === "viewer") h.ws.data.canEdit = false;
 			if (gate === "archived") {
-				await h.opened.storage.channels.archive({ id: h.plan.id, now: new Date() });
+				await h.opened.storage.channels.archive({
+					id: h.plan.id,
+					now: new Date(),
+					lease: await testLease(h.opened.storage),
+				});
 				h.ws.data.channelArchivedAt = new Date().toISOString();
 			}
 			if (gate === "closing") h.room.closing = Promise.resolve();

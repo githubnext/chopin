@@ -340,6 +340,12 @@ export type ChannelArchiveInput = {
 	now: Date;
 };
 
+/**
+ * An archive, which ends the AI authority of the document's launches: only the writer lease's holder
+ * counts that cutoff, so it is written under `lease`, checked in the same transaction.
+ */
+export type ChannelArchive = ChannelArchiveInput & { lease: Lease };
+
 export type ChannelArchiveResult = {
 	channel: ChannelRecord;
 	changed: boolean;

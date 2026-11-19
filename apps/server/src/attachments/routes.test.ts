@@ -8,6 +8,7 @@ import { Router } from "../http/router";
 import { fixture } from "../images/raster.test-fixtures";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { registerAttachmentRoutes } from "./routes";
+import { testLease } from "../storage/contract-support";
 
 import type { AttachmentLimits } from "@chopin/protocol/attachment";
 import type { HostedAuth } from "../auth/routes";
@@ -283,7 +284,11 @@ describe("uploading a file to a document's Chat", () => {
 
 	it("refuses an archived document and an unknown one", async () => {
 		let { upload, storage, channel, router, people } = await setup();
-		await storage.channels.archive({ id: channel.id, now: new Date("2026-10-09T13:00:00.000Z") });
+		await storage.channels.archive({
+			id: channel.id,
+			now: new Date("2026-10-09T13:00:00.000Z"),
+			lease: await testLease(storage),
+		});
 		expect((await upload("octocat", "hi"))?.status).toBe(403);
 		let unknown = await router.handle(
 			new Request(`${ORIGIN}/api/channels/${crypto.randomUUID()}/attachments?name=a.txt`, {

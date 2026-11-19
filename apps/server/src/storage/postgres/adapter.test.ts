@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { documentSlug } from "../../channels/slug";
 import { storageContract } from "../contract";
 import { ResearchProjectionConflict } from "../model";
-import { contractId, userAndChannel } from "../contract-support";
+import { contractId, testLease, userAndChannel } from "../contract-support";
 import { PostgresStorage } from "./adapter";
 import { PostgresPlannerModelChoiceStore } from "./planner-model-choices";
 import { turnModel } from "../../chat/model-choice";
@@ -281,7 +281,11 @@ if (url) {
 				lease: lease!,
 			});
 			await storage.navigation.setLastDocument(userId, channelId, new Date(now.getTime() + 7));
-			await storage.channels.archive({ id: channelId, now: new Date(now.getTime() + 8) });
+			await storage.channels.archive({
+				id: channelId,
+				now: new Date(now.getTime() + 8),
+				lease: await testLease(storage),
+			});
 			expect(await storage.channels.delete(channelId)).toBe(true);
 		} finally {
 			await storage.close();
