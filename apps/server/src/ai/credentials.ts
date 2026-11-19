@@ -1,4 +1,4 @@
-import { createHash, hkdfSync, randomBytes } from "node:crypto";
+import { createHash, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { AI_KEY_VARIABLES, AI_PROXY_PATH } from "@chopin/protocol/ai-credentials";
 
@@ -18,6 +18,7 @@ import type { StorageAdapter } from "../storage/port";
 const CREDENTIAL_CONTEXT = "chopin:ai-credential:v1";
 const PLACEHOLDER_PREFIX = "chopin_ai_";
 const PLACEHOLDER = /^chopin_ai_[A-Za-z0-9_-]{43}$/;
+const LAUNCH_PREFIX = "chopin_launch_";
 /** A key as providers issue them: printable, without spaces, so it can only ever be a header value. */
 const SECRET = /^[\x21-\x7e]{8,4096}$/;
 /** How long GitHub's answer about a GitHub token's Copilot access, and its Copilot token, is used. */
@@ -35,8 +36,10 @@ export class AiCredentialError extends Error {
 /** Why the proxy refused a request, as it tells the agent that sent it. */
 export type AiRefusal =
 	| "no-placeholder"
+	| "no-launch"
 	| "unknown-placeholder"
 	| "other-provider"
+	| "other-launch"
 	| "launch-ended"
 	| "not-connected"
 	| "sign-in-unavailable"
@@ -46,8 +49,28 @@ export type AiRefusal =
 /**
  * The credential a placeholder stands for now: `secret` goes in the provider's credential header,
  * and `origin` (for Copilot, the account's own model host) replaces the provider's default origin.
+ * A Copilot token is good until `expiresAt` (milliseconds since the epoch) and never after.
  */
-export type AiAuthorized = { placeholder: AiPlaceholder; secret: string; origin?: string };
+export type AiAuthorized = {
+	placeholder: AiPlaceholder;
+	secret: string;
+	origin?: string;
+	expiresAt?: number;
+};
+
+/** What a launch is handed: `launchToken` stays with its runner, `grants` go to its agent. */
+export type AiLaunchGrants = {
+	launchId: string;
+	/** The launch's own credential, sent by its runner in `AI_LAUNCH_HEADER`; never its agent's. */
+	launchToken: string;
+	grants: AiProviderGrant[];
+	withheld: AiWithheld[];
+};
+
+/** GitHub gave a Copilot token that had already expired by the time Chopin had it. */
+class CopilotTokenExpired extends Error {
+	override name = "CopilotTokenExpired";
+}
 
 /**
  * A provider its person connected that a launch was not given, and why: their GitHub sign-in
@@ -214,10 +237,10 @@ export class AiCredentials {
 	 * while the launch was being prepared is not given either. With no grants nothing is stored, and
 	 * the caller starts no runner.
 	 */
-	async launch(
-		input: AiLaunch,
-	): Promise<{ launchId: string; grants: AiProviderGrant[]; withheld: AiWithheld[] }> {
+	async launch(input: AiLaunch): Promise<AiLaunchGrants> {
 		let launchId = crypto.randomUUID();
+		let launchToken = LAUNCH_PREFIX + randomBytes(32).toString("base64url");
+		let launchDigest = digest(launchToken);
 		let connected = await this.#storage.aiCredentials.list(input.userId);
 		let usable: AiCredentialRecord[] = [];
 		let withheld: AiWithheld[] = [];
@@ -248,23 +271,30 @@ export class AiCredentials {
 			placeholder: PLACEHOLDER_PREFIX + randomBytes(32).toString("base64url"),
 			keyVariable: AI_KEY_VARIABLES[record.provider],
 		}));
-		if (!grants.length) return { launchId, grants, withheld };
-		await this.#storage.aiPlaceholders.put(this.#rows(launchId, input, grants));
+		if (!grants.length) return { launchId, launchToken, grants, withheld };
+		let rows = (kept: AiProviderGrant[]) => this.#rows(launchId, launchDigest, input, kept);
+		await this.#storage.aiPlaceholders.put(rows(grants));
 		let still = new Set(
 			(await this.#storage.aiCredentials.list(input.userId)).map(record => record.provider),
 		);
 		let kept = grants.filter(grant => still.has(grant.provider));
 		if (kept.length !== grants.length) {
 			await this.#storage.aiPlaceholders.deleteLaunch(launchId);
-			if (kept.length) await this.#storage.aiPlaceholders.put(this.#rows(launchId, input, kept));
+			if (kept.length) await this.#storage.aiPlaceholders.put(rows(kept));
 		}
-		return { launchId, grants: kept, withheld };
+		return { launchId, launchToken, grants: kept, withheld };
 	}
 
-	#rows(launchId: string, input: AiLaunch, grants: AiProviderGrant[]): AiPlaceholder[] {
+	#rows(
+		launchId: string,
+		launchDigest: Uint8Array,
+		input: AiLaunch,
+		grants: AiProviderGrant[],
+	): AiPlaceholder[] {
 		return grants.map(grant => ({
 			digest: digest(grant.placeholder),
 			launchId,
+			launchDigest,
 			userId: input.userId,
 			provider: grant.provider,
 			...(input.machineId ? { machineId: input.machineId } : {}),
@@ -288,57 +318,83 @@ export class AiCredentials {
 	}
 
 	/**
-	 * The real credential `placeholder` stands for on `provider`'s route, or why there is none: it
-	 * must be a live launch's, for that provider, on a machine not revoked and a document not
-	 * archived, and its person must still have the provider connected. For GitHub Copilot it is the
-	 * Copilot token GitHub gives the person's GitHub token, renewed before it expires.
+	 * The real credential `placeholder` stands for on `provider`'s route, or why there is none. The
+	 * request must come from the launch the placeholder was given to, proved by `launchToken`, the
+	 * launch's own credential that its runner holds and its agent never sees, so a placeholder copied
+	 * into another launch, the same person's or anyone else's, reaches nothing; this is checked
+	 * before any credential is read. The launch must be live, for that provider, on a machine not
+	 * revoked and a document not archived, and its person must still have the provider connected.
+	 * For GitHub Copilot it is the Copilot token GitHub gives the person's GitHub token, renewed
+	 * before it expires.
 	 */
 	async authorize(
 		placeholder: string | undefined,
 		provider: AiProvider,
+		launchToken: string | undefined,
 	): Promise<AiAuthorized | { refused: AiRefusal }> {
 		if (!placeholder) return { refused: "no-placeholder" };
+		if (!launchToken) return { refused: "no-launch" };
 		if (!PLACEHOLDER.test(placeholder)) return { refused: "unknown-placeholder" };
 		let found = await this.#storage.aiPlaceholders.find(digest(placeholder), this.#clock());
 		if (!found) return { refused: "unknown-placeholder" };
 		if (found.provider !== provider) return { refused: "other-provider" };
-		if (!await this.#launchLive(found)) return { refused: "launch-ended" };
-		let record = await this.#storage.aiCredentials.get(found.userId, provider);
-		if (!record) return { refused: "not-connected" };
-		if (provider === "github-copilot") {
-			let token = await this.#launchToken(record, found);
-			if (!token) {
-				return {
-					refused: record.kind === "github-sign-in" ? "sign-in-unavailable" : "not-connected",
-				};
-			}
-			let copilot: CopilotToken | undefined;
-			try {
-				copilot = await this.#copilotToken(token);
-			} catch {
-				return { refused: "copilot-unavailable" };
-			}
-			if (!copilot) return { refused: "no-copilot-access" };
-			return {
-				placeholder: found,
-				secret: copilot.token,
-				...(copilot.api ? { origin: copilot.api } : {}),
-			};
+		if (!timingSafeEqual(found.launchDigest, digest(launchToken))) {
+			return { refused: "other-launch" };
 		}
-		let secret = await this.#secret(record);
-		return secret ? { placeholder: found, secret } : { refused: "not-connected" };
+		if (!await this.#launchLive(found)) return { refused: "launch-ended" };
+		return this.#credential(found);
 	}
 
 	/**
-	 * Whether an authorized placeholder still stands for a credential, asked again just before the
-	 * proxy sends a request: its launch has not ended or expired, its machine is not revoked, its
-	 * document is not archived, and its person still has the provider connected.
+	 * What the proxy may send now, asked again at the final handoff once the request's body is read:
+	 * refused when its launch ended or expired, its machine was revoked, its document archived or
+	 * its person disconnected the provider meanwhile, and for a Copilot token that expired
+	 * meanwhile, the next one, or a refusal; never an expired token.
 	 */
-	async current(placeholder: AiPlaceholder): Promise<boolean> {
-		let found = await this.#storage.aiPlaceholders.find(placeholder.digest, this.#clock());
-		if (!found || found.launchId !== placeholder.launchId) return false;
-		if (!await this.#launchLive(found)) return false;
-		return !!await this.#storage.aiCredentials.get(found.userId, found.provider);
+	async handoff(authorized: AiAuthorized): Promise<AiAuthorized | { refused: AiRefusal }> {
+		let found = await this.#storage.aiPlaceholders.find(
+			authorized.placeholder.digest,
+			this.#clock(),
+		);
+		if (!found || found.launchId !== authorized.placeholder.launchId) {
+			return { refused: "launch-ended" };
+		}
+		if (!await this.#launchLive(found)) return { refused: "launch-ended" };
+		if (authorized.expiresAt !== undefined && this.#clock().getTime() >= authorized.expiresAt) {
+			return this.#credential(found);
+		}
+		if (!await this.#storage.aiCredentials.get(found.userId, found.provider)) {
+			return { refused: "not-connected" };
+		}
+		return authorized;
+	}
+
+	async #credential(found: AiPlaceholder): Promise<AiAuthorized | { refused: AiRefusal }> {
+		let record = await this.#storage.aiCredentials.get(found.userId, found.provider);
+		if (!record) return { refused: "not-connected" };
+		if (found.provider !== "github-copilot") {
+			let secret = await this.#secret(record);
+			return secret ? { placeholder: found, secret } : { refused: "not-connected" };
+		}
+		let token = await this.#launchToken(record, found);
+		if (!token) {
+			return {
+				refused: record.kind === "github-sign-in" ? "sign-in-unavailable" : "not-connected",
+			};
+		}
+		let copilot: CopilotToken | undefined;
+		try {
+			copilot = await this.#copilotToken(token);
+		} catch {
+			return { refused: "copilot-unavailable" };
+		}
+		if (!copilot) return { refused: "no-copilot-access" };
+		return {
+			placeholder: found,
+			secret: copilot.token,
+			expiresAt: copilot.expiresAt,
+			...(copilot.api ? { origin: copilot.api } : {}),
+		};
 	}
 
 	async #launchLive(placeholder: AiPlaceholder): Promise<boolean> {
@@ -398,25 +454,37 @@ export class AiCredentials {
 	/**
 	 * The Copilot token GitHub gives `githubToken`, asked once for every caller at a time and held
 	 * until a minute before it expires, or five minutes at most, so a seat GitHub removes is noticed.
-	 * A refusal is held as long; a failure is not held.
+	 * A refusal is held as long; a failure is not held. A token that has expired by the time a caller
+	 * has it, one GitHub gave already expired or one that expired while GitHub answered, is a
+	 * failure: it is never returned.
 	 */
 	async #copilotToken(githubToken: string, fresh = false): Promise<CopilotToken | undefined> {
 		let key = Buffer.from(digest(githubToken)).toString("hex");
 		let now = this.#clock().getTime();
 		let held = this.#copilotTokens.get(key);
-		if (!fresh && held && now < held.until) return held.answer;
+		let entry = !fresh && held && now < held.until ? held : this.#ask(key, githubToken, now);
+		let token = await entry.answer;
+		if (token && token.expiresAt <= this.#clock().getTime()) {
+			if (this.#copilotTokens.get(key) === entry) this.#copilotTokens.delete(key);
+			throw new CopilotTokenExpired();
+		}
+		return token;
+	}
+
+	#ask(key: string, githubToken: string, now: number) {
 		for (let [other, entry] of this.#copilotTokens) {
 			if (entry.until <= now) this.#copilotTokens.delete(other);
 		}
 		let entry = { answer: this.#exchange(githubToken), until: now + ACCESS_KNOWN_MS };
 		this.#copilotTokens.set(key, entry);
-		try {
-			let token = await entry.answer;
-			if (token) entry.until = Math.min(entry.until, token.expiresAt - RENEW_BEFORE_MS);
-			return token;
-		} catch (error) {
-			if (this.#copilotTokens.get(key) === entry) this.#copilotTokens.delete(key);
-			throw error;
-		}
+		entry.answer.then(
+			token => {
+				if (token) entry.until = Math.min(entry.until, token.expiresAt - RENEW_BEFORE_MS);
+			},
+			() => {
+				if (this.#copilotTokens.get(key) === entry) this.#copilotTokens.delete(key);
+			},
+		);
+		return entry;
 	}
 }
