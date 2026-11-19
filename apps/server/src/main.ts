@@ -275,6 +275,8 @@ let experimentTimer: ReturnType<typeof setInterval> | undefined;
 let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
 let aiCredentials: AiCredentials | undefined;
+/** Whether AI launches nothing owns are ended with each sweep: once holds and runs are back. */
+let aiRetiring = false;
 let aiUsage: AiUsage | undefined;
 /** What a remote Planner client that offered `ai-credentials` hands its sessions' models. */
 let plannerAi: AgentAi | undefined;
@@ -2489,6 +2491,9 @@ function cleanSessions(): void {
 		await storage.mcpSessions.deleteIdle(new Date(now.getTime() - MCP_SESSION_IDLE_MS));
 		await storage.plannerCredentials.deleteExpired(now);
 		await aiCredentials?.sweep();
+		// Once this process serves, so its holds are rebuilt and its runs recovered: a launch nothing
+		// owns now ends, whichever process handed it out.
+		if (aiRetiring) await aiCredentials?.retire();
 		await aiUsage?.sweep();
 	}).catch(err => {
 		console.error("chopin: could not delete idle MCP sessions or expired credentials -", err);
@@ -3275,6 +3280,7 @@ if (config.agent && config.harness === "remote") {
 			},
 		}),
 		endAi: launchId => plannerAi?.end(launchId),
+		aiHeld: (launchId, holding) => plannerAi?.held?.(launchId, holding),
 		// A question a rebuilt hold's client asks keeps its document open until it is answered.
 		openDocument: async channelId => {
 			if (deletingChannels.has(channelId) || archivingChannels.has(channelId)) {
@@ -3639,6 +3645,8 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 	},
 });
 registerNavigationRoutes(router, hostedAuth, { storage });
+/** The AI launches a Planner session of this process holds now: those its owner still owns. */
+let heldPlannerLaunches = new Set<string>();
 let connectedAi = new AiCredentials({
 	storage,
 	key: config.auth.encryptionKey,
@@ -3648,16 +3656,30 @@ let connectedAi = new AiCredentials({
 	copilotToken: copilotTokenExchange(),
 	writer: () => writerLease.holds(),
 	lease: heldLease,
+	// A run's launch lasts while Chopin still has the run; a session's while a session of this
+	// process holds it, a restart's hold included once it is rebuilt.
+	ownerLive: async ({ launchId, owner, channelId }) => {
+		if (owner?.startsWith("run:")) {
+			return await experiments?.runLive(owner.slice("run:".length), channelId) ?? false;
+		}
+		if (owner?.startsWith("session:")) return heldPlannerLaunches.has(launchId);
+		return true;
+	},
 });
 aiCredentials = connectedAi;
 plannerAi = {
-	launch: input =>
+	launch: ({ sessionId, ...input }) =>
 		handOut(connectedAi, {
 			...input,
+			owner: `session:${sessionId}`,
 			expiresAt: new Date(hostedAuth.clock().getTime() + PLANNER_AI_LAUNCH_MS),
 		}),
 	end: launchId => endLaunch(connectedAi, launchId),
 	onChanged: listener => connectedAi.onChanged(listener),
+	held: (launchId, holding) => {
+		if (holding) heldPlannerLaunches.add(launchId);
+		else heldPlannerLaunches.delete(launchId);
+	},
 };
 hostedAuth.machines.onEnded(machineId => {
 	void connectedAi.machineEnded(machineId).catch(err =>
@@ -3842,6 +3864,12 @@ try {
 		);
 		void retireAiRequests().catch(err =>
 			console.error("chopin: could not mark an earlier release's unfinished AI requests -", err)
+		);
+		// Holds are rebuilt and runs recovered: an AI launch an earlier process left with no run or
+		// session, its end lost with it, ends now, and with each sweep from here on.
+		aiRetiring = true;
+		void connectedAi.retire().catch(err =>
+			console.error("chopin: could not end the AI launches nothing owns -", err)
 		);
 		let held = requests.release();
 		console.log(

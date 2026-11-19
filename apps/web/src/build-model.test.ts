@@ -1,3 +1,4 @@
+import { AI_ACCOUNT_UNCHECKED_RUN, NO_AI_ACCOUNT_RUN } from "@chopin/protocol/ai-credentials";
 import { describe, expect, it } from "bun:test";
 
 import {
@@ -1084,6 +1085,15 @@ describe("build status", () => {
 });
 
 describe("endedReason", () => {
+	it("says in Chopin's words that a build never started for want of an AI account, never that a check that couldn't finish means none", () => {
+		expect(endedReason({ error: NO_AI_ACCOUNT_RUN })).toBe(
+			"chopin needs an AI account to run this, so it didn't start. Add one, then start it again.",
+		);
+		expect(endedReason({ error: AI_ACCOUNT_UNCHECKED_RUN })).toBe(AI_ACCOUNT_UNCHECKED_RUN);
+		expect(AI_ACCOUNT_UNCHECKED_RUN).not.toMatch(/subscription|needs an AI account/);
+		expect(endedReason({ error: "Some other failure." })).toBeUndefined();
+	});
+
 	it("names a build stopped from the connector or by its agent disconnecting", () => {
 		expect(endedReason({ error: "Stopped from the connector terminal." }))
 			.toBe("Build stopped from the connector terminal.");

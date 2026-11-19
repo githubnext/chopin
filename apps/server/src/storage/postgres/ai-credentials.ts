@@ -27,6 +27,7 @@ type PlaceholderRow = {
 	machineId: string | null;
 	channelId: string | null;
 	generation: number | null;
+	owner: string | null;
 	expiresAt: Date | string;
 };
 
@@ -35,7 +36,7 @@ const CREDENTIAL_COLUMNS = `user_id AS "userId", provider, kind, ciphertext, suf
 const PLACEHOLDER_COLUMNS = `digest, launch_id AS "launchId",
 	launch_digest AS "launchDigest", user_id AS "userId", provider,
 	machine_id AS "machineId", channel_id AS "channelId", archive_generation AS "generation",
-	expires_at AS "expiresAt"`;
+	owner, expires_at AS "expiresAt"`;
 const PROVIDER_ORDER = `CASE provider WHEN 'github-copilot' THEN 0 WHEN 'openai' THEN 1 ELSE 2 END`;
 
 function credential(row: CredentialRow): AiCredentialRecord {
@@ -61,6 +62,7 @@ function placeholder(row: PlaceholderRow): AiPlaceholder {
 		...(row.machineId ? { machineId: row.machineId } : {}),
 		...(row.channelId ? { channelId: row.channelId } : {}),
 		...(row.generation !== null ? { generation: row.generation } : {}),
+		...(row.owner !== null ? { owner: row.owner } : {}),
 		expiresAt: new Date(row.expiresAt),
 	};
 }
@@ -141,16 +143,21 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 			`;
 		});
 	}
-	rejected(record: AiCredentialRecord, at: Date) {
-		return this.run("record that an AI credential was refused", async () => {
-			await this.sql`
+	async rejected(record: AiCredentialRecord, at: Date) {
+		let marked = await this.run("record that an AI credential was refused", async () => {
+			let rows = await this.sql<{ provider: string }[]>`
 				UPDATE ai_credentials SET rejected_at = ${at}
 				WHERE user_id = ${record.userId} AND provider = ${record.provider}
 					AND updated_at = ${record.updatedAt}
 					AND ciphertext IS NOT DISTINCT FROM ${record.ciphertext ?? null}
 					AND rejected_at IS NULL
+				RETURNING provider
 			`;
+			return rows.length > 0;
 		});
+		// Counted once it committed, so a launch reading the key meanwhile reads it again.
+		if (marked) this.cutoffs.cut(record.userId);
+		return marked;
 	}
 	version(userId: string) {
 		return this.cutoffs.person(userId);
@@ -193,13 +200,14 @@ export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
 					await transaction`
 						INSERT INTO ai_placeholders (
 							digest, launch_id, launch_digest, user_id, provider, machine_id, channel_id,
-							archive_generation, expires_at
+							archive_generation, owner, expires_at
 						)
 						VALUES (
 							${value.digest}, ${value.launchId}, ${value.launchDigest}, ${value.userId},
 							${value.provider},
 							${value.machineId ?? null}, ${value.channelId ?? null},
-							${value.channelId === undefined ? null : value.generation ?? null}, ${value.expiresAt}
+							${value.channelId === undefined ? null : value.generation ?? null},
+							${value.owner ?? null}, ${value.expiresAt}
 						)
 					`;
 				}
@@ -222,6 +230,31 @@ export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
 				WHERE digest = ${digest} AND expires_at > ${now}
 			`;
 			return row && placeholder(row);
+		});
+	}
+	findLaunch(launchDigest: Uint8Array, now: Date) {
+		return this.run("read an AI launch", async () => {
+			let [row] = await this.sql<PlaceholderRow[]>`
+				SELECT ${this.sql.unsafe(PLACEHOLDER_COLUMNS)} FROM ai_placeholders
+				WHERE launch_digest = ${launchDigest} AND expires_at > ${now}
+				LIMIT 1
+			`;
+			return row && placeholder(row);
+		});
+	}
+	owned(now: Date) {
+		return this.run("list owned AI launches", async () => {
+			let rows = await this.sql<{ launchId: string; owner: string; channelId: string | null }[]>`
+				SELECT DISTINCT ON (launch_id) launch_id AS "launchId", owner, channel_id AS "channelId"
+				FROM ai_placeholders
+				WHERE owner IS NOT NULL AND expires_at > ${now}
+				ORDER BY launch_id
+			`;
+			return rows.map(row => ({
+				launchId: row.launchId,
+				owner: row.owner,
+				...(row.channelId ? { channelId: row.channelId } : {}),
+			}));
 		});
 	}
 	deleteLaunch(lease: Lease, launchId: string) {

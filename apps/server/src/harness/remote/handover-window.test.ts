@@ -124,15 +124,22 @@ async function deploy(
 	/**
 	 * What `main.ts` does at its cut, in its order, and then the second process starting. `spent`
 	 * is time the clock says went by in a step: before the hold is written, before the lease is
-	 * released, and before the second process took the lease.
+	 * released, and before the second process took the lease. `frozen` runs between taking the
+	 * hold and writing it.
 	 */
 	async function cut(
 		windowMs = WINDOW_MS,
-		spent: { beforeWrite?: number; beforeRelease?: number; beforeTakeover?: number } = {},
+		spent: {
+			beforeWrite?: number;
+			beforeRelease?: number;
+			beforeTakeover?: number;
+			frozen?: () => Promise<void>;
+		} = {},
 		takeover: { failWrites?: boolean; options?: PlannerAttachmentOptions } = {},
 	) {
 		first.attachments.shutdown();
 		let rows = first.attachments.freeze(windowMs);
+		await spent.frozen?.();
 		skew.ms += spent.beforeWrite ?? 0;
 		await first.attachments.persist(rows);
 		for (let link of first.links) link.restart(windowMs);
@@ -1016,5 +1023,67 @@ describe("a remote Planner session's AI launch across a cut", () => {
 			await until(() => ended.length === 1);
 			expect(ended, ending).toEqual(["launch-1"]);
 		}
+	});
+
+	it("names in the hold the launch its client was last sent, and ends the one a renewal prepared meanwhile unsent", async () => {
+		let ended: string[] = [];
+		let listeners = new Set<(userId: string) => void>();
+		let count = 0;
+		let renewing = Promise.withResolvers<void>();
+		let renewed = Promise.withResolvers<void>();
+		let ai: AgentAi = {
+			async launch() {
+				let n = ++count;
+				if (n === 2) {
+					renewing.resolve();
+					await renewed.promise;
+				}
+				return {
+					launchId: `launch-${n}`,
+					grants: {
+						launch: `chopin_launch_${n}`,
+						expiresAt: Date.now() + HOUR_MS,
+						providers: [{
+							provider: "anthropic",
+							baseUrl: "https://chopin.test/api/v1/ai/anthropic",
+							placeholder: `chopin_ai_${n}`,
+							keyVariable: "ANTHROPIC_API_KEY",
+						}],
+						withheld: [],
+					},
+				};
+			},
+			end: launchId => void ended.push(launchId),
+			onChanged(listener) {
+				listeners.add(listener);
+				return () => listeners.delete(listener);
+			},
+		};
+		let d = await deploy(ASK_CONFIRM, 1, { ai, offer: AI_OFFER });
+		expect(d.start.ai).toMatchObject({ launch: "chopin_launch_1" });
+		// The person's accounts change: the session's launch is being prepared again as the cut comes.
+		for (let listener of listeners) listener("U_member");
+		await renewing.promise;
+		// The renewal finishes after the hold is taken and before it is written.
+		let next = await d.cut(WINDOW_MS, {
+			frozen: async () => {
+				renewed.resolve();
+				await until(() => ended.length === 1);
+			},
+		});
+		let [row] = await d.storage.plannerHolds.list();
+		expect(d.raw.messages.filter(message => message.type === "ai")).toEqual([]);
+		expect(row!.sessions).toEqual([expect.objectContaining({ aiLaunchId: "launch-1" })]);
+		expect(ended).toEqual(["launch-2"]);
+
+		// The next process ends the session with the launch the hold names: none issued to it is left.
+		await next.browserReturns();
+		let client = await rawLink(next.second.url, MEMBER_TOKEN, AI_OFFER);
+		client.send({ type: "attach", version: 1, document: d.channel.id });
+		await client.next("attached");
+		client.send({ type: "resume", sessions: [] });
+		await client.next("resumed");
+		await until(() => ended.length === 2);
+		expect(ended.toSorted()).toEqual(["launch-1", "launch-2"]);
 	});
 });

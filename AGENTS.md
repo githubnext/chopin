@@ -202,9 +202,30 @@ durable.
   (`start`/`fork` carry `ai`, and an `ai` message replaces it when the person's
   credentials change, before its deadline and after a resume) is launched for the
   account that attached; a run on a paired machine (`/api/connector/ai-launch`)
-  for whoever started it. A launch given no provider is handed an empty list and
-  its runner uses its own models. The runner adds the launch credential itself; no
-  agent sees it. See [Hosted agent](docs/hosted-agent.md#handing-launches-to-runners).
+  for whoever started it. A launch Chopin answers with no usable account never starts
+  an agent, and the machine owner's setup is never a substitute, on a shared machine or
+  their own: `handOut` refuses it (`AiLaunchRefused`), so a Planner `start`/`fork` is
+  not sent and its turn fails with `no-ai-account`, as a message from someone with no AI
+  account is refused, and
+  `/api/connector/ai-launch` answers 409 `no-ai-account` with the words a Build, Run or
+  Retry ends with (`NO_AI_ACCOUNT_RUN`, or that a Copilot check couldn't finish, never
+  that there is no subscription), its card offering its starter alone Open AI accounts;
+  a launch whose document or machine ended first is `launch-ended`, accounts that kept
+  changing 503, and only a Chopin without launches (404) leaves a run on the machine's
+  own models. Each launch records its owner (`run:<id>`, `session:<id>`, migration 046)
+  and its final checks read that the run still runs or a session of this process holds
+  it (`ownerLive`); an end, a replacement or a session's close is in force in the
+  process the moment it is asked, before storage deletes the rows (`#ending`), an end
+  storage refuses is retried, and the writer lease's holder ends launches nothing owns
+  as it starts serving and with each sweep (`AiCredentials.retire`). A key refused as
+  invalid, or a Copilot seat GitHub confirms lost or back, tells the person's lasting
+  launches as a connected or removed key does, and a launch's last check compares
+  `rejectedAt` and that every stored grant is still there. A restart's hold freezes
+  its sessions' launches as the cut takes it (`freezeAi`), and a change while a session
+  starts is sent once after `started`. A runner reads `GET /api/v1/ai/launch` with its
+  launch credential to tell an ended launch from a stand-in its agent got wrong. The
+  runner adds the launch credential itself; no agent sees it. See
+  [Hosted agent](docs/hosted-agent.md#handing-launches-to-runners).
 - **Planner ownership is process-bound.** The first eligible Planner or
   model-backed research request supplies its GitHub App token and Copilot
   entitlement. Server-authored turns nobody typed (re-linking decisions after a
@@ -378,10 +399,17 @@ durable.
   folder of its own, not the home); egress goes only
   through a loopback allow-list proxy. A run handed AI grants (`Launch.agentHome`) gets a state
   directory of its own (`<worktree>.agent`, with a generated `models.json` for Atomic), stand-ins in
-  its providers' key variables, base URLs on the connector's loopback relay (`ai-relay.ts`), which
-  adds the launch credential the agent never holds, and none of the owner's agent configuration,
-  logins or model variables (`ownerAgentPaths`, `withoutOwnerAgent`). Other credentials in the
-  agent's environment are not hidden. A
+  its providers' key variables, each granted provider's relay base URL with its stand-in in
+  `CHOPIN_AI_PROVIDERS` for any agent, base URLs on the connector's loopback relay (`ai-relay.ts`),
+  which adds the launch credential the agent never holds, an environment built from an allow-list of
+  the connector's own (`managedEnvironment`: system, account, tool, locale, certificate and proxy
+  variables, plus `--env` without GitHub or agent setup), so no other key in the connector's
+  environment reaches it, and none of the owner's agent configuration, logins or sessions on disk
+  wherever the connector's environment or `--env` keeps them (`ownerAgentPaths`); an owner folder that
+  holds the launch's own is denied around it, and one that is or holds the home refuses the launch. A
+  Planner backend, cold or spare, is started the same way when Chopin's Planner credential answer (and,
+  for spares from the start, `/api/connector/version`) says `"ai": "chopin"` (`plannerEnvironment`,
+  `CHOPIN_AI=chopin`); a spare started otherwise is never handed such a document. A
   machine with no working sandbox runs agents unsandboxed and says so, unless its owner chose
   `--require-sandbox`. Do not start an agent process outside the seam. The one exception is the two
   ACP `initialize` start checks, `chopin service install`'s and `chopin connect --install-service`'s

@@ -3,12 +3,13 @@ import { mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from 
 import { basename, join } from "node:path";
 import { redacted } from "./connection";
 import { gitAsync } from "./git-host";
-import { githubPaths, withoutGitHub } from "./github-token";
+import { githubPaths } from "./github-token";
 import type { Output } from "./output";
-import { passMasked, stopBackend } from "./planner";
+import { passMasked, plannerEnvironment, stopBackend } from "./planner";
 import { backoff } from "./reconnect";
 import { type Sandbox, type Spawned, spawnIn } from "./sandbox";
 import {
+	agentFolder,
 	assignedSlots,
 	plannerFolder,
 	preparePlannerWorktree,
@@ -83,6 +84,11 @@ export type Spare = {
 	/** When it started (ms), and the identity of the command it runs. */
 	started: number;
 	identity: string;
+	/**
+	 * It started as a backend whose sessions run on people's AI accounts in Chopin, with nothing of
+	 * the owner's agent setup (see `plannerEnvironment`): only such a document's Planner takes it.
+	 */
+	managed: boolean;
 	/** How it ended: `exit 3`, `signal SIGTERM`, or why it couldn't start. */
 	exited: Promise<string>;
 	alive(): boolean;
@@ -103,11 +109,16 @@ export type Spare = {
 
 export type PlannerSpares = {
 	/**
-	 * The repository's spare, ready and current, taken out of the pool for one document; its
-	 * replacement starts `replaceMs` later. Undefined when there is none to take: the document
-	 * starts cold.
+	 * The repository's spare, ready and current and started as `managed` says, taken out of the pool
+	 * for one document; its replacement starts `replaceMs` later. Undefined when there is none to
+	 * take: the document starts cold.
 	 */
-	take(repository: string): Promise<Spare | undefined>;
+	take(repository: string, managed?: boolean): Promise<Spare | undefined>;
+	/**
+	 * Chopin said whether its Planners' sessions run on people's AI accounts in Chopin: spares start
+	 * so from now on, and one started otherwise is replaced.
+	 */
+	managed(value: boolean): void;
 	/** Stop every spare that has no document and remove its slot. */
 	stop(): Promise<void>;
 };
@@ -163,6 +174,7 @@ async function removeSlot(checkout: string, slot: string) {
 	await gitAsync(["worktree", "remove", "--force", slot], { cwd: checkout }).catch(() => {});
 	await rm(slot, { recursive: true, force: true });
 	await rm(tokenFolder(slot), { recursive: true, force: true });
+	await rm(agentFolder(slot), { recursive: true, force: true });
 	await gitAsync(["worktree", "prune"], { cwd: checkout }).catch(() => {});
 }
 
@@ -185,8 +197,14 @@ export function plannerSpares(options: {
 	readyMs?: number;
 	maxAgeMs?: number;
 	replaceMs?: number;
+	/**
+	 * Whether spares start as backends whose sessions run on people's AI accounts in Chopin, until
+	 * Chopin says otherwise (`managed`): not unless said.
+	 */
+	managed?: boolean;
 }): PlannerSpares {
 	let { output, directory, command } = options;
+	let managed = options.managed === true;
 	let readyMs = options.readyMs ?? READY_MS;
 	let maxAgeMs = options.maxAgeMs ?? MAX_AGE_MS;
 	let replaceMs = options.replaceMs ?? REPLACE_MS;
@@ -294,7 +312,7 @@ export function plannerSpares(options: {
 		}
 		let spare: Spare;
 		try {
-			spare = spawnSpare({ ...options, values }, entry, slot, tokens, head, identity);
+			spare = spawnSpare({ ...options, values, managed }, entry, slot, tokens, head, identity);
 		} catch (error) {
 			await removeSlot(entry.checkout, slot);
 			dim(
@@ -400,11 +418,25 @@ export function plannerSpares(options: {
 	publish();
 	if (!options.off) void cleared.then(() => entries.forEach(entry => ensure(entry)));
 
+	/** Replaces each spare that did not start as `managed` says, so the next one does. */
+	let remake = () => {
+		for (let entry of entries.values()) {
+			let spare = entry.spare;
+			if (!spare || spare.managed === managed) continue;
+			entry.spare = undefined;
+			entry.ready = false;
+			void track(spare.discard());
+			ensure(entry);
+		}
+		publish();
+	};
 	return {
-		async take(repository) {
+		async take(repository, asked = false) {
 			let entry = entries.get(repository.toLowerCase());
 			let spare = entry?.spare;
 			if (stopped || !entry || !spare || !entry.ready || !spare.alive()) return undefined;
+			// One started otherwise is never handed such a document: it has, or lacks, the owner's setup.
+			if (spare.managed !== asked) return undefined;
 			entry.spare = undefined;
 			entry.ready = false;
 			publish();
@@ -420,6 +452,11 @@ export function plannerSpares(options: {
 			return spare;
 		},
 		stop: () => stopping ??= stop(),
+		managed(value) {
+			if (value === managed) return;
+			managed = value;
+			if (!stopped) remake();
+		},
 	};
 }
 
@@ -431,6 +468,7 @@ function spawnSpare(
 		env?: Record<string, string>;
 		sandbox?: Sandbox;
 		values: string[];
+		managed: boolean;
 	},
 	entry: { repository: string; checkout: string },
 	slot: string,
@@ -438,7 +476,9 @@ function spawnSpare(
 	head: string,
 	identity: string,
 ): Spare & { ready: Promise<boolean>; printed(): boolean } {
-	let inherited = withoutGitHub({ ...process.env, ...options.env });
+	// A spare a managed document will take starts as its cold launch would: nothing of the owner's
+	// agent setup in its environment or in its sight.
+	let inherited = plannerEnvironment(options.managed, slot, options.env);
 	for (let name of HANDED) delete inherited[name];
 	let child = spawnIn(options.sandbox, {
 		command: options.command,
@@ -456,7 +496,8 @@ function spawnSpare(
 		},
 		stdin: "pipe",
 		writable: [slot],
-		own: [slot, tokens],
+		own: [slot, tokens, ...options.managed ? [agentFolder(slot)] : []],
+		...(options.managed ? { agentHome: agentFolder(slot), ownerEnv: options.env ?? {} } : {}),
 	});
 	let hooks: { secrets: () => string[]; stderr?: (text: string) => void } = {
 		secrets: () => options.values,
@@ -509,6 +550,7 @@ function spawnSpare(
 		child,
 		started: Date.now(),
 		identity,
+		managed: options.managed,
 		exited,
 		ready,
 		printed: () => printed,

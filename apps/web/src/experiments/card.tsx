@@ -4,6 +4,8 @@ import type { ExperimentStore } from "./store";
 import { ItemDecisions } from "./evidence";
 import { LocalAgentNote } from "../local-agent-note";
 import type { InvestigationChild, InvestigationState } from "@chopin/experiment/records";
+import { AI_ACCOUNTS_PATH, noAiAccountRun } from "@chopin/protocol/ai-credentials";
+import { navigateTo } from "../chat/navigate";
 
 const ACTIVE: ReadonlySet<InvestigationState> = new Set(["queued", "running", "publishing"]);
 const SETTLED: ReadonlySet<InvestigationState> = new Set(["failed", "cancelled", "interrupted"]);
@@ -121,6 +123,25 @@ export function InvestigationReference(
 							>
 								Apply findings
 							</button>
+						</div>
+					)}
+					{state === "failed" && noAiAccountRun(current?.progress)
+						&& (item?.input?.authorizer ?? item?.requester) === userId && (
+						<div>
+							<a
+								className="btn btn-xs btn-outline"
+								href={AI_ACCOUNTS_PATH}
+								onClick={event => {
+									if (
+										event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey
+										|| event.altKey
+									) return;
+									event.preventDefault();
+									navigateTo(AI_ACCOUNTS_PATH);
+								}}
+							>
+								Open AI accounts
+							</a>
 						</div>
 					)}
 					{needsAgent ? <AgentHint /> : orphaned && (

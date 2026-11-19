@@ -1185,6 +1185,11 @@ export type AiPlaceholder = {
 	 * generation, so one prepared before an archive is never stored after it, a restore included.
 	 */
 	generation?: number;
+	/**
+	 * What the launch is for, whose end ends it: `run:<id>` for a run on a paired machine, or
+	 * `session:<id>` for a Planner session. Absent on a launch prepared before owners were kept.
+	 */
+	owner?: string;
 	expiresAt: Date;
 };
 

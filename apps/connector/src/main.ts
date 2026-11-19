@@ -24,6 +24,7 @@ import {
 	machineToken,
 	pair,
 	pairingKey,
+	plannerAiManaged,
 	register,
 	reportAgent,
 	SELF,
@@ -752,6 +753,8 @@ export async function connect(
 					sandbox,
 					states: spareStatus,
 					off: spareOff,
+					// Started as the Planners Chopin asks for will run: on its AI accounts, or as before.
+					managed: await plannerAiManaged(url, abort.signal),
 				})
 				: undefined;
 			let backends = {

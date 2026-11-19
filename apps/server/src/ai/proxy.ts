@@ -573,12 +573,34 @@ export function aiProxy(options: AiProxyOptions) {
 		return served instanceof Response ? served : refused(served.refused);
 	};
 
+	/**
+	 * `GET /api/v1/ai/launch`: whether the launch whose own credential the request carries in
+	 * `AI_LAUNCH_HEADER` is live, for its runner to tell an ended launch from a stand-in its agent
+	 * got wrong when the proxy refuses one. It stays `ended` once the launch's placeholders are gone,
+	 * however they went; a credential no launch has reads as ended, which tells its holder nothing it
+	 * could use. A process that no longer holds the writer lease can't say, and answers 503.
+	 */
+	let serveLaunch = async (request: Request, path: string): Promise<Response> => {
+		if (path !== "/") {
+			return failure(404, "Only the launch's own state is served here.", "not-found");
+		}
+		if (request.method !== "GET") return failure(405, "The launch is read with GET.", "method");
+		let launchToken = request.headers.get(AI_LAUNCH_HEADER)?.trim();
+		if (!launchToken) return refused("no-launch");
+		let state = await options.credentials.launchStatus(launchToken);
+		if (state === "restarting") return refused("restarting");
+		return Response.json({ state }, {
+			headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
+		});
+	};
+
 	return async (request: Request, url: URL): Promise<Response> => {
 		let rest = url.pathname.slice(AI_PROXY_PATH.length + 1);
 		let slash = rest.indexOf("/");
 		let name = slash < 0 ? rest : rest.slice(0, slash);
 		let path = slash < 0 ? "/" : rest.slice(slash);
 		if (name === "models.dev") return serveCatalog(request, url, path);
+		if (name === "launch") return serveLaunch(request, path);
 		if (!isAiProvider(name)) {
 			return failure(404, "Chopin doesn't proxy this provider.", "not-found");
 		}

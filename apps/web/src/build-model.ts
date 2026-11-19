@@ -1,3 +1,4 @@
+import { noAiAccountRun } from "@chopin/protocol/ai-credentials";
 import { PLANNER_NAME } from "@chopin/editor/people";
 import type { BuildRequest, ImplementationSnapshot } from "@chopin/protocol/implementation";
 
@@ -180,6 +181,8 @@ export function builtDetail(snapshot: Snapshot | undefined): string | undefined 
 
 export function endedReason(build: { error?: string } | undefined): string | undefined {
 	let error = build?.error;
+	// It never started: Chopin had no AI account of its starter's to run it on, and says so.
+	if (noAiAccountRun(error)) return error;
 	if (error === "Stopped from the connector terminal.") {
 		return "Build stopped from the connector terminal.";
 	}

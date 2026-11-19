@@ -656,11 +656,17 @@ test("a running build heads Chat's run strip with its task, and Chat says when i
 	let signals = await mkdtemp(join(tmpdir(), "chopin-strip-signals-"));
 	let paused = join(signals, "paused");
 	let resume = join(signals, "resume");
-	let local = await connector(
-		baseURL!,
-		["bun", join(ROOT, "apps/connector/src/testing/fake-implementer.ts"), "--complete", "--http"],
-		{ CHOPIN_TEST_PAUSED: paused, CHOPIN_TEST_RESUME: resume },
-	);
+	// The agent's own command names where it signals: it gets only an allow-list of the
+	// connector's environment.
+	let local = await connector(baseURL!, [
+		"env",
+		`CHOPIN_TEST_PAUSED=${paused}`,
+		`CHOPIN_TEST_RESUME=${resume}`,
+		"bun",
+		join(ROOT, "apps/connector/src/testing/fake-implementer.ts"),
+		"--complete",
+		"--http",
+	]);
 	try {
 		let page = await enter(person());
 		await page.goto(await local.pairing);
@@ -735,13 +741,16 @@ test("a build's agent opens draft pull requests with a token of Chopin's GitHub 
 	);
 	await chmod(join(bin, "gh"), 0o755);
 	let handle = person();
+	// Where it records what it saw is named in its own command: the agent gets only an allow-list
+	// of the connector's environment, `PATH` among it.
 	let local = await connector(baseURL!, [
+		"env",
+		`CHOPIN_TEST_GITHUB=${join(scratch, "github.json")}`,
 		"bun",
 		join(ROOT, "apps/connector/src/testing/fake-implementer.ts"),
 		"--github",
 	], {
 		PATH: `${bin}:${process.env.PATH}`,
-		CHOPIN_TEST_GITHUB: join(scratch, "github.json"),
 	});
 	try {
 		let page = await enter(handle);
@@ -787,6 +796,14 @@ test("a build's agent opens draft pull requests with a token of Chopin's GitHub 
 
 function buildView(page: import("@playwright/test").Page) {
 	return page.getByRole("region", { name: "Build", exact: true });
+}
+
+/** The Document view's Build tab, not the capsule of the same name. */
+function buildTab(page: import("@playwright/test").Page) {
+	return page.getByRole("group", { name: "Document view" }).getByRole("button", {
+		name: "Build",
+		exact: true,
+	});
 }
 
 /** The capsule's own Build, not the Document view tab of the same name. */
@@ -1085,6 +1102,54 @@ test("a build in progress shows who started it and offers no action", async ({ s
 		await expect(view.getByRole("list", { name: "Tasks" }).locator(":scope > li")).toHaveCount(2);
 		let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
 		expect(["queued", "starting", "running"]).toContain(snapshot.build.state);
+	} finally {
+		await local.close();
+	}
+});
+
+test("a build for someone with no AI account chopin can use never starts its agent, says why, and points only its starter to AI accounts", async ({ seed, join: enter, room, baseURL }) => {
+	test.setTimeout(60_000);
+	await seed("# No AI account\n\nBuild it.\n", { graph: preparedGraph() });
+	let local = await connector(baseURL!, [
+		"bun",
+		join(ROOT, "apps/connector/src/testing/fake-implementer.ts"),
+		"--complete",
+	]);
+	try {
+		// GitHub gives this person no Copilot token, and they connected no key.
+		let page = await enter(`no-copilot-${crypto.randomUUID().slice(0, 8)}`);
+		await page.goto(await local.pairing);
+		await page.getByRole("button", { name: "Add machine", exact: true }).click();
+		await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText("Connected");
+		await page.goto(testChannelPath(room));
+		await page.getByRole("button", { name: "Build plan", exact: true }).click();
+		let words =
+			"chopin needs an AI account to run this, so it didn't start. Add one, then start it again.";
+		await expect.poll(
+			async () =>
+				(await (await page.request.get(`/api/channels/${room}/implementation`)).json()).build,
+			{ timeout: 25_000 },
+		).toMatchObject({ state: "failed", error: words });
+		// Its agent never started: no session, and no task reported.
+		let snapshot = await (await page.request.get(`/api/channels/${room}/implementation`)).json();
+		expect(snapshot.build.session).toBeUndefined();
+		await expect.poll(() => local.output(), { timeout: 10_000 }).toContain(words);
+		await buildTab(page).click();
+		let view = buildView(page);
+		await expect(view.getByText(words)).toBeVisible();
+		let link = view.getByRole("link", { name: "Open AI accounts", exact: true });
+		await expect(link).toHaveAttribute("href", "/ai-accounts");
+
+		// Someone else in the document reads why, and is offered no one else's AI accounts.
+		let other = await enter(person());
+		await other.goto(testChannelPath(room));
+		await buildTab(other).click();
+		let theirs = buildView(other);
+		await expect(theirs.getByText(words)).toBeVisible();
+		await expect(theirs.getByRole("link", { name: "Open AI accounts" })).toHaveCount(0);
+
+		await link.click();
+		await expect(page).toHaveURL(/\/ai-accounts$/);
 	} finally {
 		await local.close();
 	}

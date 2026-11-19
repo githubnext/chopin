@@ -27,6 +27,7 @@ import {
 import { type PlannerTokenFile, plannerTokenFile } from "./planner-token";
 import { type McpTokenFile, mcpTokenFile } from "./mcp-token";
 import {
+	agentFolder,
 	assignSlot,
 	type ChosenPlanners,
 	plannerWorktree,
@@ -37,6 +38,7 @@ import {
 import type { Checkouts } from "./checkouts";
 import { type Sandbox, spawnIn } from "./sandbox";
 import { type PlannerSpares, type Spare, SPARE_PROTOCOL } from "./planner-spare";
+import { managedEnvironment, privateAgentState } from "./ai-agent";
 
 /** How long a stopped Planner backend has to exit before it is killed. */
 const STOP_GRACE_MS = 5000;
@@ -378,8 +380,11 @@ async function servePlanner(options: {
 		let github: GitHubToken | undefined;
 		// A document with no worktree here yet starts on the repository's spare, which has its code
 		// loaded already; any other, or one with no spare ready, starts cold.
+		// A backend whose sessions run on people's AI accounts in Chopin starts only on a spare that
+		// started so too.
+		options.spares?.managed(credential.ai === true);
 		let spare = options.spares && !existsSync(worktree)
-			? await options.spares.take(repository)
+			? await options.spares.take(repository, credential.ai === true)
 			: undefined;
 		let handled = false;
 		if (spare) {
@@ -509,7 +514,13 @@ async function servePlanner(options: {
 				// A token that lapsed without a renewal stops the backend, which starts again with a new one.
 				let lapsed = github!.expired;
 				outcome = await launch(
-					{ ...options, document, cwd: checkout, signal: AbortSignal.any([signal, lapsed]) },
+					{
+						...options,
+						document,
+						cwd: checkout,
+						signal: AbortSignal.any([signal, lapsed]),
+						managed: credential.ai === true,
+					},
 					credential.token,
 					worktree,
 					github!,
@@ -901,10 +912,32 @@ export function passMasked(
 }
 
 /**
+ * What a backend whose sessions run on people's AI accounts in Chopin (`managed`) is started with
+ * besides what Chopin gives it: only what `managedEnvironment` permits of the connector's own
+ * environment and the owner's `--env`, its agents' state in `<worktree>.agent` (see
+ * `privateAgentState`), and `CHOPIN_AI=chopin`, which says its models come from Chopin. Otherwise,
+ * the connector's environment and `--env` without the machine's GitHub setup, as before.
+ */
+export function plannerEnvironment(
+	managed: boolean,
+	worktree: string,
+	env: Record<string, string> = {},
+): Record<string, string | undefined> {
+	if (!managed) return withoutGitHub({ ...process.env, ...env });
+	return {
+		...managedEnvironment(process.env, env),
+		...privateAgentState(agentFolder(worktree)),
+		CHOPIN_AI: "chopin",
+	};
+}
+
+/**
  * Run the backend once; resolves with how it exited, the first line of its stderr and the one that
  * says why it exited (see `startFailureReason`). Its stdout
  * and stderr still reach this process's own, masked by `passMasked`: its credential, the --env
- * values and anything token-shaped. Aborting stops it, then kills it.
+ * values and anything token-shaped. Aborting stops it, then kills it. A `managed` backend, whose
+ * sessions run on people's AI accounts in Chopin, starts with nothing of the owner's agent setup
+ * (`plannerEnvironment`) and reads none of it on disk (`Launch.agentHome`).
  */
 async function launch(
 	options: {
@@ -915,6 +948,7 @@ async function launch(
 		signal: AbortSignal;
 		env?: Record<string, string>;
 		sandbox?: Sandbox;
+		managed?: boolean;
 	},
 	token: string,
 	worktree: string,
@@ -932,7 +966,7 @@ async function launch(
 				// Nothing of the machine's GitHub setup: its own git, gh and agent reach GitHub with
 				// Chopin's token over https, and commit as Chopin's App (see `githubEnvironment`). Never
 				// spare mode, which only a spare is offered.
-				...withoutSpare(withoutGitHub({ ...process.env, ...options.env })),
+				...withoutSpare(plannerEnvironment(options.managed === true, worktree, options.env)),
 				...githubEnvironment(github, repository),
 				CHOPIN_URL: options.url,
 				CHOPIN_DOCUMENT: options.document,
@@ -949,7 +983,10 @@ async function launch(
 			// it runs in, which is the person's and read-only; it sees nothing of its siblings' or of
 			// anyone's tokens but its own.
 			writable: [worktree],
-			own: [worktree, tokenFolder(worktree)],
+			own: [worktree, tokenFolder(worktree), ...options.managed ? [agentFolder(worktree)] : []],
+			...(options.managed
+				? { agentHome: agentFolder(worktree), ownerEnv: options.env ?? {} }
+				: {}),
 		});
 	} catch (error) {
 		return { how: error instanceof Error ? error.message : String(error) };

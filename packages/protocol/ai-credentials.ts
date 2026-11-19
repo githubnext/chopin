@@ -6,6 +6,8 @@
  * proxy, which swaps the placeholder for the real credential and forwards to that provider alone.
  */
 
+import { PLANNER_NAME } from "./planner-name";
+
 export const AI_PROVIDERS = ["github-copilot", "openai", "anthropic"] as const;
 export type AiProvider = (typeof AI_PROVIDERS)[number];
 
@@ -86,6 +88,26 @@ export const AI_LAUNCH_HEADER = "x-chopin-launch";
 
 /** The page where a person connects their AI accounts, which a refusal for want of one links to. */
 export const AI_ACCOUNTS_PATH = "/ai-accounts";
+
+/**
+ * Why a build, investigation or prototype did not start: Chopin answered its launch that the person
+ * it runs for has no AI account it can use (`no-ai-account`), so its agent was never started. The
+ * run's end says so, in these words, and its starter is offered AI accounts.
+ */
+export const NO_AI_ACCOUNT_RUN =
+	`${PLANNER_NAME} needs an AI account to run this, so it didn't start. Add one, then start it again.`;
+
+/**
+ * The same, where GitHub couldn't be asked about the person's Copilot access and they have no key:
+ * the check couldn't finish, which never says they have no subscription.
+ */
+export const AI_ACCOUNT_UNCHECKED_RUN =
+	`${PLANNER_NAME} couldn't finish checking your AI accounts, so this didn't start. Start it again in a moment.`;
+
+/** Whether a run's end is one for want of an AI account, whose starter is offered AI accounts. */
+export function noAiAccountRun(error: string | undefined): boolean {
+	return error === NO_AI_ACCOUNT_RUN || error === AI_ACCOUNT_UNCHECKED_RUN;
+}
 
 /** The path under Chopin's origin each provider's proxied API is served at. */
 export const AI_PROXY_PATH = "/api/v1/ai";

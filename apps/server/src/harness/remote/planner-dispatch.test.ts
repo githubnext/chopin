@@ -45,8 +45,11 @@ afterEach(async () => {
  * choose them for the linked document, and run its Planner on them over the agent connection.
  */
 async function dispatchServer(
-	/** `planners: false` is a server that runs no Planner on machines, as with AGENT=off. */
-	{ planners: runsPlanners = true }: { planners?: boolean } = {},
+	/**
+	 * `planners: false` is a server that runs no Planner on machines, as with AGENT=off; `ai` one that
+	 * hands Planner sessions launches on people's AI accounts.
+	 */
+	{ planners: runsPlanners = true, ai = false }: { planners?: boolean; ai?: boolean } = {},
 ) {
 	let linked = await linkAuth();
 	let { auth, storage, sessions, cookies, channel } = linked;
@@ -92,6 +95,7 @@ async function dispatchServer(
 				changed: () => {},
 				context: async () => ({ source: "# Context", revision: 0 }),
 				...runsPlanners ? { planners } : {},
+				...ai ? { ai: () => ({}) as never } : {},
 				attachments: () => server.attachments,
 				documentOpen: id => open.has(id),
 				plannerStatus: id => announced.push(id),
@@ -445,6 +449,24 @@ function others(count: number, ...last: string[]) {
 function failing(document: string, attempts: number, reason = "unsafe-checkout: refused") {
 	return { document, failure: { attempts, how: "exit 1", reason, at: Date.now() } };
 }
+
+describe("a Planner whose sessions run on people's AI accounts in Chopin", () => {
+	it("is said so to its machine, in each Planner credential and in the versions a connector reads first, only where Chopin hands them launches", async () => {
+		for (let ai of [true, false]) {
+			let { machine, send, channel } = await dispatchServer({ ai });
+			let laptop = await machine("member", "U_member", "laptop");
+			let issued = await send("/api/connector/planner", {
+				bearer: laptop.token,
+				headers: { [CONNECTOR_VERSION_HEADER]: "dev", [CONNECTOR_PROTOCOL_HEADER]: "5" },
+				body: { document: channel.id },
+			});
+			expect(issued.status).toBe(200);
+			expect((await issued.json()).ai, String(ai)).toBe(ai ? "chopin" : undefined);
+			let versions = await (await send("/api/connector/version", {})).json();
+			expect(versions.ai, String(ai)).toBe(ai ? "chopin" : undefined);
+		}
+	});
+});
 
 describe("a Planner backend that keeps failing to start", () => {
 	it("is told to the document's people from the second launch in a row, and goes once the Planner attaches", async () => {

@@ -8,7 +8,7 @@ import type {
 import { PROCESSES, stopBackend } from "./planner";
 import { type Sandbox, spawnIn } from "./sandbox";
 import { withoutGitHub } from "./github-token";
-import { withoutOwnerAgent } from "./ai-agent";
+import { managedEnvironment } from "./ai-agent";
 import { VERSION } from "./version";
 
 /** How long a stopped agent's process group has to exit before it is killed. */
@@ -40,9 +40,12 @@ export type AgentOptions = {
 	own?: string[];
 	/**
 	 * The agent's own state directory, for a run handed AI grants: nothing of the owner's agent setup
-	 * reaches it, in its environment or on disk (see `Launch.agentHome`).
+	 * reaches it, in its environment or on disk (see `Launch.agentHome`). Its environment is then
+	 * only what `managedEnvironment` permits of the connector's own, and `env`.
 	 */
 	agentHome?: string;
+	/** The owner's `--env` values, which may move their agents' directories (see `Launch.ownerEnv`). */
+	ownerEnv?: Record<string, string>;
 	/** How long the agent's turn may run before it is stopped; one hour unless said. */
 	limitMs?: number;
 };
@@ -92,7 +95,7 @@ function startAgent(
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
 	stderr?: (chunk: string) => void,
-	where: Pick<AgentOptions, "sandbox" | "writable" | "own" | "agentHome"> = {},
+	where: Pick<AgentOptions, "sandbox" | "writable" | "own" | "agentHome" | "ownerEnv"> = {},
 ) {
 	let child = spawnIn(where.sandbox, {
 		command,
@@ -102,6 +105,7 @@ function startAgent(
 		...(where.writable ? { writable: where.writable } : {}),
 		...(where.own ? { own: where.own } : {}),
 		...(where.agentHome ? { agentHome: where.agentHome } : {}),
+		...(where.ownerEnv ? { ownerEnv: where.ownerEnv } : {}),
 	});
 	let kill = (signal: NodeJS.Signals = "SIGTERM") => {
 		try {
@@ -249,11 +253,10 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 		options.command,
 		options.cwd,
 		// Nothing of the machine's GitHub setup reaches a run's agent; its own comes in `env`. One
-		// with a state directory of its own gets nothing of the owner's agent setup either.
+		// with a state directory of its own, which runs on Chopin's AI accounts, gets only what is
+		// permitted of the connector's environment, and so nothing of the owner's agent setup either.
 		{
-			...(options.agentHome
-				? withoutOwnerAgent(withoutGitHub(process.env))
-				: withoutGitHub(process.env)),
+			...(options.agentHome ? managedEnvironment(process.env) : withoutGitHub(process.env)),
 			...options.env,
 		},
 		options.stderr,
@@ -262,6 +265,7 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 			...(options.writable ? { writable: options.writable } : {}),
 			...(options.own ? { own: options.own } : {}),
 			...(options.agentHome ? { agentHome: options.agentHome } : {}),
+			...(options.ownerEnv ? { ownerEnv: options.ownerEnv } : {}),
 		},
 	);
 	let { connection } = agent;

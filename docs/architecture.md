@@ -70,7 +70,9 @@ and the WebSocket intersect that identity's repository role with repositories
 selected in a GitHub App installation. The external MCP endpoint and the
 agent connection instead check their caller-supplied GitHub bearer token directly.
 Every path applies the instance admission policy. Under `HARNESS=remote` the
-server calls no model provider; the attached client does.
+server runs no model itself; the attached client does, and a client that takes
+people's AI accounts in Chopin reaches its providers through the server's AI
+credential proxy, which alone holds their keys.
 
 The application holds an exclusive database-wide writer lease and stops if it can
 no longer renew it. By default it refuses to start beside another active Chopin

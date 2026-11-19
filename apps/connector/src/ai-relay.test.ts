@@ -102,17 +102,71 @@ test("reaches no provider it was not given, no launch it does not hold, and noth
 	expect(upstream.seen).toEqual([]);
 });
 
-test("says once when Chopin answers that the launch has ended", async () => {
-	let upstream = chopin(() => Response.json({ code: "launch-ended" }, { status: 401 }));
+/** A refusal as Chopin's proxy answers one. */
+function refused(code: string) {
+	return Response.json({ error: { message: code, type: "chopin_proxy", code } }, { status: 401 });
+}
+
+test("says once that the launch ended when Chopin's proxy refuses it and Chopin says so for its credential, and then refuses it itself", async () => {
+	for (let code of ["launch-ended", "unknown-placeholder"]) {
+		let upstream = chopin(path =>
+			path === "/api/v1/ai/launch" ? Response.json({ state: "ended" }) : refused(code)
+		);
+		let ended = 0;
+		let relayed = relay().open(LAUNCH, grants(upstream.origin), () => ended++);
+		for (let attempt = 0; attempt < 2; attempt++) {
+			let answer = await fetch(`${relayed.baseUrls.anthropic}/v1/messages`, {
+				method: "POST",
+				body: "{}",
+			});
+			expect(answer.status, code).toBe(401);
+			expect(await answer.json(), code).toMatchObject({
+				error: { code: attempt ? "launch-ended" : code },
+			});
+		}
+		expect(ended, code).toBe(1);
+		let asked = upstream.seen.filter(seen => seen.path === "/api/v1/ai/launch");
+		expect(asked, code).toEqual([
+			expect.objectContaining({ headers: expect.objectContaining({ "x-chopin-launch": LAUNCH }) }),
+		]);
+		// Once it knows, it sends Chopin nothing more for the launch.
+		expect(upstream.seen.filter(seen => seen.path !== "/api/v1/ai/launch"), code).toHaveLength(1);
+	}
+});
+
+test("ends nothing for a provider's own refusal, or a stand-in its agent got wrong on a live launch", async () => {
+	let upstream = chopin(path =>
+		path === "/api/v1/ai/launch"
+			? Response.json({ state: "live" })
+			: path.startsWith("/api/v1/ai/openai")
+			? Response.json({ error: { code: "invalid_api_key", message: "no" } }, { status: 401 })
+			: refused("unknown-placeholder")
+	);
 	let ended = 0;
 	let relayed = relay().open(LAUNCH, grants(upstream.origin), () => ended++);
-	for (let attempt = 0; attempt < 2; attempt++) {
-		let answer = await fetch(`${relayed.baseUrls.anthropic}/v1/messages`, {
-			method: "POST",
-			body: "{}",
-		});
-		expect(answer.status).toBe(401);
-		expect(await answer.json()).toEqual({ code: "launch-ended" });
+	let provider = await fetch(`${relayed.baseUrls.openai}/chat/completions`, {
+		method: "POST",
+		body: "{}",
+	});
+	expect(provider.status).toBe(401);
+	expect(upstream.seen.some(seen => seen.path === "/api/v1/ai/launch")).toBe(false);
+	let wrong = await fetch(`${relayed.baseUrls.anthropic}/v1/messages`, {
+		method: "POST",
+		body: "{}",
+	});
+	expect(wrong.status).toBe(401);
+	expect(upstream.seen.filter(seen => seen.path === "/api/v1/ai/launch")).toHaveLength(1);
+	expect(ended).toBe(0);
+});
+
+test("takes an earlier Chopin's launch-ended at its word, and nothing else it can't confirm", async () => {
+	for (let [code, expected] of [["launch-ended", 1], ["unknown-placeholder", 0]] as const) {
+		let upstream = chopin(path =>
+			path === "/api/v1/ai/launch" ? new Response("not found", { status: 404 }) : refused(code)
+		);
+		let ended = 0;
+		let relayed = relay().open(LAUNCH, grants(upstream.origin), () => ended++);
+		await fetch(`${relayed.baseUrls.anthropic}/v1/messages`, { method: "POST", body: "{}" });
+		expect(ended, code).toBe(expected);
 	}
-	expect(ended).toBe(1);
 });

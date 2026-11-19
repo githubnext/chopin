@@ -30,7 +30,8 @@ import { credentialDigest } from "./mcp-token";
 import { Connections } from "./connections";
 import { testLease } from "../storage/contract-support";
 import type { ImplementationConnector } from "../tasks/connector";
-import type { AiCredentials, AiLaunch } from "../ai/credentials";
+import type { AiCredentials, AiLaunch, AiLaunchGrants } from "../ai/credentials";
+import { AI_ACCOUNT_UNCHECKED_RUN, NO_AI_ACCOUNT_RUN } from "@chopin/protocol/ai-credentials";
 
 function text(value: { result: { content: Array<{ text: string }> } }) {
 	return JSON.parse(value.result.content[0].text);
@@ -2273,6 +2274,7 @@ test("a build's AI launch is for whoever asked for it, on the build's machine an
 		machineId: connection.machine,
 		channelId: documentId,
 		expiresAt: expect.any(Date),
+		owner: `run:${id}`,
 	}]);
 	expect(launched[0]!.expiresAt.getTime()).toBeGreaterThan(Date.now() + 4 * 60 * 60_000);
 	// The runner gets its stand-ins and its own credential, never the launch's id.
@@ -2312,6 +2314,54 @@ test("a build's AI launch is for whoever asked for it, on the build's machine an
 		error: "run-unknown",
 	});
 	expect(launched).toHaveLength(1);
+});
+
+test("a build whose launch would be given no provider is refused before its agent starts, saying why, and one whose document ended is refused as ended", async () => {
+	let builds = new Map<string, { repository: string; starter: string; machineId?: string }>();
+	let answer: Pick<AiLaunchGrants, "withheld" | "ended"> = { withheld: [] };
+	let credentials = {
+		async launch() {
+			return { launchId: "launch-1", launchToken: "chopin_launch_1", grants: [], ...answer };
+		},
+	} as unknown as AiCredentials;
+	let { alice, documentId, request, pair, runtime } = await setup(undefined, {
+		ai: () => credentials,
+		implementations: () =>
+			({
+				build: async (document: string, id: string) => builds.get(`${document} ${id}`),
+			}) as unknown as ImplementationConnector,
+	});
+	let connection = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	builds.set(`${documentId} ${id}`, {
+		repository: "org/repo",
+		starter: "bob",
+		machineId: connection.machine,
+	});
+	let runToken = runtime.connections.runToken(connection.id, documentId, id, 1, "implementation");
+	let ask = async () => {
+		let response = await request(
+			"/api/connector/ai-launch",
+			{ run: runToken },
+			undefined,
+			connection.machineToken,
+		);
+		return { status: response.status, body: await response.json() };
+	};
+	answer = { withheld: [{ provider: "github-copilot", reason: "no-copilot-access" }] };
+	expect(await ask()).toEqual({
+		status: 409,
+		body: { error: "no-ai-account", message: NO_AI_ACCOUNT_RUN },
+	});
+	answer = { withheld: [{ provider: "github-copilot", reason: "copilot-unavailable" }] };
+	let unchecked = await ask();
+	expect(unchecked).toEqual({
+		status: 409,
+		body: { error: "no-ai-account", message: AI_ACCOUNT_UNCHECKED_RUN },
+	});
+	expect(unchecked.body.message).not.toMatch(/subscription/i);
+	answer = { withheld: [], ended: true };
+	expect(await ask()).toMatchObject({ status: 409, body: { error: "launch-ended" } });
 });
 
 test("a build's MCP token acts as whoever asked for it, on the build's machine, until it ends", async () => {

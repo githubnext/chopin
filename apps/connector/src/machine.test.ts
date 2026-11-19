@@ -9,7 +9,14 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { parseArgs } from "./args";
 import { updateConfig } from "./config";
-import { classifyConnectorError, connectorMessage, machineFile, pair, register } from "./machine";
+import {
+	classifyConnectorError,
+	connectorMessage,
+	machineFile,
+	pair,
+	plannerAiManaged,
+	register,
+} from "./machine";
 import { createOutput } from "./output";
 import { ConnectorError } from "./mcp";
 import { git, stateDirectory } from "./workspace";
@@ -741,4 +748,22 @@ test("connect tells Chopin whether agents run in the sandbox, and for a machine 
 		{ "chopin-connector-sandbox": "none", "chopin-connector-sandbox-fix": "sudo true" },
 		{},
 	]);
+});
+
+test("a connector starts its spare Planners on Chopin's AI accounts only where Chopin's versions say so", async () => {
+	for (
+		let [answer, managed] of [
+			[{ protocol: { min: 1, max: 9 }, version: "1", ai: "chopin" }, true],
+			[{ protocol: { min: 1, max: 9 }, version: "1" }, false],
+		] as const
+	) {
+		let server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => Response.json(answer) });
+		try {
+			expect(await plannerAiManaged(`http://127.0.0.1:${server.port}`)).toBe(managed);
+		} finally {
+			await server.stop(true);
+		}
+	}
+	// One that can't be asked is taken not to: each Planner credential says so again.
+	expect(await plannerAiManaged("http://127.0.0.1:1")).toBe(false);
 });

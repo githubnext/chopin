@@ -114,6 +114,8 @@ export function failureBanner(
 				retry: view.retry && mine,
 				entry: entry.id,
 				...(view.retry && mine ? { request: asked!.id } : {}),
+				// Where chopin had no AI account to start on, the one who asked is pointed to theirs.
+				...(entry.turnFailure.code === "no-ai-account" && mine ? { link: AI_ACCOUNTS_LINK } : {}),
 			};
 		}
 		if (entry.author.kind !== "system") return undefined;

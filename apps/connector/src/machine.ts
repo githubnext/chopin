@@ -17,7 +17,12 @@ import {
 } from "@chopin/protocol/connector";
 import { redacted } from "./connection";
 import { CONNECTOR_HEADERS, ConnectorError, jsonObject, refusal } from "./mcp";
-import { type AiProviderGrant, isAiProvider } from "@chopin/protocol/ai-credentials";
+import {
+	AI_ACCOUNT_UNCHECKED_RUN,
+	type AiProviderGrant,
+	isAiProvider,
+	NO_AI_ACCOUNT_RUN,
+} from "@chopin/protocol/ai-credentials";
 import type { Output } from "./output";
 
 /**
@@ -200,6 +205,7 @@ async function post(
 			code,
 			MESSAGES[code] ?? `Chopin refused the request (${code}).`,
 			response.status,
+			typeof value.message === "string" ? value.message : undefined,
 		);
 	}
 	return value;
@@ -373,7 +379,28 @@ export async function plannerCredential(
 		...(typeof repository === "string" && /^[\w.-]+\/[\w.-]+$/.test(repository)
 			? { repository }
 			: {}),
+		// Its sessions run on people's AI accounts in Chopin: the backend gets nothing of the owner's
+		// agent setup. A Chopin from before says nothing, and the backend starts as before.
+		...(value.ai === "chopin" ? { ai: true as const } : {}),
 	};
+}
+
+/**
+ * Whether the Planners `url`'s Chopin asks machines to run take their sessions' models from people's
+ * AI accounts in it (`ai` on `/api/connector/version`), so spares start that way from the first. A
+ * Chopin that says nothing of it, or can't be asked now, is taken not to; each Planner credential
+ * says so again.
+ */
+export async function plannerAiManaged(url: string, signal?: AbortSignal): Promise<boolean> {
+	try {
+		let response = await fetch(`${url}/api/connector/version`, {
+			headers: CONNECTOR_HEADERS,
+			signal: AbortSignal.any([AbortSignal.timeout(5_000), ...signal ? [signal] : []]),
+		});
+		return response.ok && (await jsonObject(response)).ai === "chopin";
+	} catch {
+		return false;
+	}
 }
 
 /** Why a document's Planner backend keeps failing to start, as the connector tells Chopin. */
@@ -503,15 +530,27 @@ export async function machineMcpToken(
 
 /**
  * What Chopin hands one run for the models its agent calls: the launch's own credential and
- * deadline, present exactly when `providers` is not empty, one stand-in per granted provider, and
- * the providers the person connected that the launch was not given, with why.
+ * deadline, one stand-in per granted provider, and the providers the person connected that the
+ * launch was not given, with why.
  */
 export type RunAiLaunch = {
-	launch?: string;
-	expiresAt?: number;
+	launch: string;
+	expiresAt: number;
 	providers: AiProviderGrant[];
 	withheld: Array<{ provider: string; reason: string }>;
 };
+
+/**
+ * Chopin answered a run's launch that the person it runs for has no AI account it can use: the
+ * run starts no agent, and its end says so in these words. The machine owner's own sign-ins are
+ * never used in their place.
+ */
+export class NoAiAccount extends Error {
+	override name = "NoAiAccount";
+}
+
+/** Withheld for a question nobody answered: GitHub, or the person's own sign-in, couldn't be asked. */
+const UNANSWERED = new Set(["copilot-unavailable", "sign-in-unavailable"]);
 
 const VARIABLE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
@@ -528,8 +567,11 @@ function aiGrant(value: unknown): AiProviderGrant | undefined {
 
 /**
  * Asks Chopin for a run's AI launch with the run's own credential. Undefined from a Chopin that
- * hands out none (one from before AI launches, or without people's AI credentials): the run's agent
- * then uses its own models, as before. Any other refusal rejects with the server's code.
+ * hands out none (404: one from before AI launches, or without people's AI credentials): the run's
+ * agent then uses its own models, as before. A Chopin that answers the person has no AI account it
+ * can use, refusing with `no-ai-account` or handing out no provider at all, rejects with
+ * `NoAiAccount`, in its words or, for an answer without them, in the same words chosen from what
+ * was withheld: the run starts no agent. Any other refusal rejects with the server's code.
  */
 export async function machineAiLaunch(
 	url: string,
@@ -543,6 +585,9 @@ export async function machineAiLaunch(
 	} catch (error) {
 		if (error instanceof ConnectorError && (error.code === "not-found" || error.status === 404)) {
 			return undefined;
+		}
+		if (error instanceof ConnectorError && error.code === "no-ai-account") {
+			throw new NoAiAccount(error.said ?? NO_AI_ACCOUNT_RUN, { cause: error });
 		}
 		throw error;
 	}
@@ -558,7 +603,13 @@ export async function machineAiLaunch(
 	if (!providers || providers.some(grant => !grant)) {
 		throw new Error("Chopin's answer had no usable AI grants.");
 	}
-	if (!providers.length) return { providers: [], withheld };
+	if (!providers.length) {
+		throw new NoAiAccount(
+			withheld.some(item => UNANSWERED.has(item.reason))
+				? AI_ACCOUNT_UNCHECKED_RUN
+				: NO_AI_ACCOUNT_RUN,
+		);
+	}
 	if (typeof value.launch !== "string" || typeof value.expiresAt !== "number") {
 		throw new Error("Chopin's answer had no launch credential for its AI grants.");
 	}

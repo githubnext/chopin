@@ -19,6 +19,16 @@ export const AI_ACCOUNT_UNCHECKED =
 
 const AI_ACCOUNTS_CHANGING = `${PLANNER_NAME} couldn't read your AI accounts just now.`;
 
+/**
+ * Why a Planner session was not started: the account its launch is for has no AI account Chopin can
+ * use, as a message from someone with none is refused. Its start is refused, and its turn says so.
+ */
+export const NO_AI_ACCOUNT_SESSION =
+	`${PLANNER_NAME} needs an AI account to answer, so it didn't start. Add one, then try again.`;
+
+export const AI_ACCOUNT_UNCHECKED_SESSION =
+	`${PLANNER_NAME} couldn't finish checking your AI accounts, so it didn't start. Try again in a moment.`;
+
 /** Withheld for a question nobody answered: GitHub, or the person's own sign-in, couldn't be asked. */
 const UNANSWERED = new Set<AiWithheld["reason"]>(["copilot-unavailable", "sign-in-unavailable"]);
 
