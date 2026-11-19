@@ -16,6 +16,7 @@ function copyCredential(value: AiCredentialRecord): AiCredentialRecord {
 		...(value.ciphertext ? { ciphertext: new Uint8Array(value.ciphertext) } : {}),
 		updatedAt: new Date(value.updatedAt),
 		...(value.lastUsedAt ? { lastUsedAt: new Date(value.lastUsedAt) } : {}),
+		...(value.rejectedAt ? { rejectedAt: new Date(value.rejectedAt) } : {}),
 	};
 }
 
@@ -63,10 +64,18 @@ export class MemoryAiCredentialStore implements AiCredentialStore {
 		return removed;
 	}
 	async used(record: AiCredentialRecord, at: Date) {
+		let found = this.#same(record);
+		if (found && (!found.lastUsedAt || found.lastUsedAt < at)) found.lastUsedAt = new Date(at);
+	}
+	async rejected(record: AiCredentialRecord, at: Date) {
+		let found = this.#same(record);
+		if (found && !found.rejectedAt) found.rejectedAt = new Date(at);
+	}
+	/** The stored row while it is still the credential `record` was read as. */
+	#same(record: AiCredentialRecord) {
 		let found = this.#records.get(`${record.userId}\n${record.provider}`);
-		if (!found || found.updatedAt.getTime() !== record.updatedAt.getTime()) return;
-		if (!sameBytes(found.ciphertext, record.ciphertext)) return;
-		if (!found.lastUsedAt || found.lastUsedAt < at) found.lastUsedAt = new Date(at);
+		if (!found || found.updatedAt.getTime() !== record.updatedAt.getTime()) return undefined;
+		return sameBytes(found.ciphertext, record.ciphertext) ? found : undefined;
 	}
 	version(userId: string) {
 		return this.deps.cutoffs.person(userId);

@@ -1143,7 +1143,9 @@ export type PlannerCredential = {
  * A provider a person connected for their launches' agents. `ciphertext` holds their key, encrypted
  * by the server, and `suffix` its last four characters, to tell keys apart; a GitHub sign-in has
  * neither, as Chopin reads the sign-in it already holds. `lastUsedAt` is when a launch last sent a
- * request with this credential, since it was connected.
+ * request with this credential, since it was connected, and `rejectedAt` when its provider answered
+ * a request with it that the key itself is invalid, after which no launch is given it until it is
+ * connected again.
  */
 export type AiCredentialRecord = {
 	userId: string;
@@ -1153,6 +1155,7 @@ export type AiCredentialRecord = {
 	suffix?: string;
 	updatedAt: Date;
 	lastUsedAt?: Date;
+	rejectedAt?: Date;
 };
 
 /**

@@ -42,6 +42,11 @@ export type AiCredentialSummary = {
 	 * has since it was connected.
 	 */
 	lastUsedAt?: string;
+	/**
+	 * When its provider answered a request with this key that the key is invalid, as an ISO 8601
+	 * time: no launch is given it, and it needs connecting again. Absent while none has.
+	 */
+	rejectedAt?: string;
 	/** For GitHub Copilot: whether it has Copilot access, as GitHub said in the last few minutes. */
 	copilotAccess?: CopilotAccess;
 };

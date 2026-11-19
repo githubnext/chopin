@@ -1,10 +1,35 @@
 import { AI_LAUNCH_HEADER, AI_PROXY_PATH, isAiProvider } from "@chopin/protocol/ai-credentials";
 
 import type { AiProvider } from "@chopin/protocol/ai-credentials";
+import type { AiCredentialRecord } from "../storage/model";
 import type { AiAdmitted, AiCredentials, AiDeadlines, AiRefusal } from "./credentials";
 
-/** A send the transport took: the credential it carries, and the provider's answer to come. */
-type Handed = { secret: string; upstream: Promise<Response> };
+/**
+ * A send the transport took: the credential it carries, the person's stored credential that is,
+ * as it was read, and the provider's answer to come.
+ */
+type Handed = { secret: string; record: AiCredentialRecord; upstream: Promise<Response> };
+
+/**
+ * What submits a request to its provider. It is handed the deadlines the request must come before,
+ * reads its clock as it takes the request, and takes it only before both: otherwise it says which
+ * came first (`late`), and sends nothing. A send it takes says when (`at`).
+ */
+export type AiTransport = (
+	target: URL,
+	init: RequestInit,
+	deadlines: AiDeadlines,
+) => AiAdmitted<Promise<Response>>;
+
+/** The transport that submits with `send`, deciding on `clock`'s reading as it is entered. */
+export function aiTransport(send: typeof fetch, clock: () => number): AiTransport {
+	return (target, init, deadlines) => {
+		let at = clock();
+		if (at >= deadlines.launch) return { late: "launch" };
+		if (deadlines.token !== undefined && at >= deadlines.token) return { late: "token" };
+		return { sent: (async () => send(target, init))(), at };
+	};
+}
 
 /** Each provider's own API origin, the only host the proxy sends its credential to. */
 export const AI_UPSTREAMS: Record<AiProvider, string> = {
@@ -100,6 +125,20 @@ const RETURNED_RESPONSE = new Set([
 	"openai-version",
 ]);
 const RETURNED_RESPONSE_PREFIXES = ["x-ratelimit-", "anthropic-ratelimit-"];
+/**
+ * How each provider whose key a person gives Chopin says, in a 401's body, that the key itself is
+ * invalid, which no retry changes: OpenAI's `invalid_api_key`, Anthropic's `authentication_error`.
+ * A rate limit, or a refusal of one model, says nothing about the key.
+ */
+const KEY_REFUSED: Partial<Record<AiProvider, (body: unknown) => boolean>> = {
+	openai: body =>
+		(body as { error?: { code?: unknown } } | null)?.error?.code === "invalid_api_key",
+	anthropic: body =>
+		(body as { error?: { type?: unknown } } | null)?.error?.type === "authentication_error",
+};
+/** The largest refusal body read for what it says about the key. */
+const MAX_REFUSAL = 64 * 1024;
+
 /** The content codings `fetch` decodes, so the proxy reads the body it passes back. */
 const DECODED = new Set(["identity", "gzip", "x-gzip", "deflate", "br", "zstd"]);
 
@@ -154,10 +193,12 @@ export type AiProxyOptions = {
 	upstreams?: Partial<Record<AiProvider, string>> & { catalog?: string };
 	fetch?: typeof fetch;
 	/**
-	 * The clock the transport reads as it takes a send, against a launch's and a Copilot token's
-	 * deadlines, and the catalog's age is told by; the credentials' own unless given.
+	 * The clock the default transport reads as it takes a send, against a launch's and a Copilot
+	 * token's deadlines, and the catalog's age is told by; the credentials' own unless given.
 	 */
 	clock?: () => number;
+	/** What submits a model request; `fetch` on `clock` (`aiTransport`) unless given. */
+	transport?: AiTransport;
 };
 
 function failure(status: number, message: string, code: string): Response {
@@ -244,15 +285,26 @@ function standInDropped(request: Request, discarded: (name: string) => boolean):
 	return false;
 }
 
-/** Whether a query carries a stand-in, as it came or with its escapes decoded. */
-function standInQueried(search: string): boolean {
-	let decoded = search;
-	try {
-		decoded = decodeURIComponent(search.replaceAll("+", " "));
-	} catch {
-		// An escape that doesn't decode is read as it came.
+/**
+ * What a query carries that the catalog can't be served with: a launch's stand-in in a name or a
+ * value (`stand-in`), as it came or decoded, or a name or value that can't be decoded
+ * (`unreadable`). Each is decoded on its own, so one that doesn't decode hides nothing in another.
+ */
+function queried(search: string): "stand-in" | "unreadable" | undefined {
+	let found: "stand-in" | undefined;
+	for (let field of search.replace(/^\?/, "").split("&")) {
+		let equals = field.indexOf("=");
+		for (let part of equals < 0 ? [field] : [field.slice(0, equals), field.slice(equals + 1)]) {
+			let decoded: string;
+			try {
+				decoded = decodeURIComponent(part.replaceAll("+", " "));
+			} catch {
+				return "unreadable";
+			}
+			if (STAND_IN.test(part) || STAND_IN.test(decoded)) found = "stand-in";
+		}
 	}
-	return STAND_IN.test(search) || STAND_IN.test(decoded);
+	return found;
 }
 
 function droppedStandIn(): Response {
@@ -309,6 +361,15 @@ function failedHolding(secret: string, status: number, message: string, code: st
 	for (let [name, value] of response.headers) if (holds(name, value, secret)) holding.push(name);
 	for (let name of holding) response.headers.delete(name);
 	return response;
+}
+
+/** `body` as JSON, or undefined when it isn't. */
+function parsed(body: Uint8Array): unknown {
+	try {
+		return JSON.parse(new TextDecoder().decode(body));
+	} catch {
+		return undefined;
+	}
 }
 
 /** Whether `fetch` decoded the upstream's body, so a credential in it can be found and replaced. */
@@ -414,8 +475,9 @@ type CachedCatalog = { body: Uint8Array; headers: Headers; fetchedAt: number };
  * placeholder a live launch was handed for that provider, and in `AI_LAUNCH_HEADER` the credential
  * of that same launch, which its runner adds. The proxy drops these headers, reads the body, takes
  * a fresh Copilot token for one that expired meanwhile, and at the final handoff, in the same step
- * as the send, checks the launch is still live and the person's credential unchanged; the send
- * itself checks the launch's and the token's deadlines on the clock reading it is made at. It puts
+ * as the send, checks the launch is still live and the person's credential unchanged; the
+ * transport is handed the launch's and the token's deadlines and checks them on the clock reading
+ * it takes the request at. It puts
  * the real credential of the launch's person in the one header the provider takes it in, and sends
  * the request, path, query and body unchanged, to the provider's own origin and nowhere else: a
  * request with any launch's placeholder in a header the proxy drops, in its name or its value, is
@@ -423,14 +485,16 @@ type CachedCatalog = { body: Uint8Array; headers: Headers; fetchedAt: number };
  * agent rather than being followed with the credential. The answer carries the provider's status
  * code, never its reason phrase, and only allow-listed headers; a credential the provider echoes
  * is taken out of them and the body, a body the proxy can't decode is refused, and so is an answer
- * a header Chopin adds would carry the credential in. `/api/v1/ai/models.dev/api.json` serves the
+ * a header Chopin adds would carry the credential in. A 401 that says the key itself is invalid
+ * marks that key so no later launch is given it. `/api/v1/ai/models.dev/api.json` serves the
  * public model catalog, held for ten minutes, to a request carrying a live launch's credential
- * alone, and is fetched with no credential, so a placeholder in its query or another header is
- * refused.
+ * alone, and is fetched with no credential, so a placeholder in its query or another header, and a
+ * query field that can't be decoded, is refused.
  */
 export function aiProxy(options: AiProxyOptions) {
 	let send = options.fetch ?? fetch;
 	let clock = options.clock ?? (() => options.credentials.now());
+	let transport = options.transport ?? aiTransport(send, clock);
 	let catalog: CachedCatalog | undefined;
 
 	let serveCatalog = async (request: Request, url: URL, path: string): Promise<Response> => {
@@ -443,7 +507,15 @@ export function aiProxy(options: AiProxyOptions) {
 			return failure(401, "Send one key, as Authorization: Bearer or x-api-key.", "no-placeholder");
 		}
 		// The catalog is fetched with nothing of the request: a stand-in anywhere but the key is lost.
-		if (standInQueried(url.search)) {
+		let query = queried(url.search);
+		if (query === "unreadable") {
+			return failure(
+				400,
+				"This request's query has a name or value that can't be decoded. Send the catalog request without it.",
+				"unreadable-query",
+			);
+		}
+		if (query === "stand-in") {
 			return failure(
 				400,
 				"This request carries a key Chopin gave a launch in its query, which the catalog doesn't use. Send the key only in Authorization or x-api-key.",
@@ -537,13 +609,13 @@ export function aiProxy(options: AiProxyOptions) {
 				redirect: "manual",
 				signal: request.signal,
 			};
-			// The deadlines are checked on the very clock reading the request is sent at.
+			// The transport checks the deadlines on the very clock reading it takes the request at.
 			return (deadlines: AiDeadlines): AiAdmitted<Handed> => {
-				let now = clock();
-				if (now >= deadlines.launch) return { late: "launch" };
-				if (deadlines.token !== undefined && now >= deadlines.token) return { late: "token" };
+				let admitted = transport(target, init, deadlines);
+				if ("late" in admitted) return admitted;
 				return {
-					sent: { secret: authorized.secret, upstream: (async () => send(target, init))() },
+					sent: { secret: authorized.secret, record: authorized.record, upstream: admitted.sent },
+					at: admitted.at,
 				};
 			};
 		}, request.signal);
@@ -566,6 +638,22 @@ export function aiProxy(options: AiProxyOptions) {
 				`${provider} answered in an encoding Chopin can't read to take the key out of.`,
 				"upstream-encoding",
 			);
+		}
+		let refusal = KEY_REFUSED[provider];
+		if (upstream.status === 401 && refusal) {
+			// Read whole, to learn whether it refused the key itself, and passed back as it came.
+			let body: Uint8Array<ArrayBuffer>;
+			try {
+				body = new Uint8Array(await upstream.arrayBuffer());
+			} catch {
+				return failedHolding(secret, 502, `${provider} can't be reached.`, "upstream");
+			}
+			if (body.byteLength <= MAX_REFUSAL && refusal(parsed(body))) {
+				await options.credentials.rejected(handed.record).catch(err =>
+					console.warn("[ai] couldn't record that a provider refused a key", err)
+				);
+			}
+			upstream = new Response(body, { status: upstream.status, headers: upstream.headers });
 		}
 		let headers = returnedHeaders(upstream, secret);
 		if (!headers) {
