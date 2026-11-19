@@ -1197,8 +1197,9 @@ export type AiTokenCounts = {
 
 /**
  * Where a proxied request stands: `pending` from before it is sent until its answer ends, `ok` or
- * `error` once it has, `unsent` when the proxy refused it at the send, and `unknown` when the
- * process that sent it stopped before recording how it ended.
+ * `error` once it was sent and has ended, `unsent` when the proxy refused it, or couldn't record or
+ * check it, before the send, and `unknown` when the process that recorded it stopped before
+ * recording how it ended.
  */
 export type AiAttemptOutcome = "pending" | "ok" | "error" | "unsent" | "unknown";
 
@@ -1231,14 +1232,16 @@ export type AiAttempt = AiAttemptStart & {
 };
 
 /**
- * One person's requests to one provider's model since a time: every request sent, those that
- * ended in an error, those whose end is unknown, and the tokens the providers reported.
+ * One person's requests to one provider's model since a time: those sent that ended (`ok` or
+ * `error`), those of them that ended in an error, those still pending and those whose end is
+ * unknown, which are not among the sent, and the tokens the providers reported.
  */
 export type AiModelTotals = {
 	provider: import("@chopin/protocol/ai-credentials").AiProvider;
 	model?: string;
 	requests: number;
 	errors: number;
+	pending: number;
 	unknown: number;
 	tokens: Required<AiTokenCounts>;
 };

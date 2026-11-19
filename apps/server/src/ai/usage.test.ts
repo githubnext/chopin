@@ -12,6 +12,7 @@ import { AiCredentials } from "./credentials";
 import { aiProxy } from "./proxy";
 import { githubSignIn, registerAiRoutes } from "./routes";
 import { AiUsage } from "./usage";
+import { sentRequestsContract } from "./usage-contract";
 
 import type { AiProviderGrant } from "@chopin/protocol/ai-credentials";
 import type { AiUsageSummary } from "@chopin/protocol/ai-usage";
@@ -213,6 +214,8 @@ async function setup(
 
 const SINCE = "2026-10-02T12:00:00.000Z";
 
+sentRequestsContract("memory", () => new MemoryStorage());
+
 describe("AI usage", () => {
 	it("gives each person exactly their own totals, and a completion sent again changes nothing", async () => {
 		let world = await setup([
@@ -284,6 +287,7 @@ describe("AI usage", () => {
 				model: "gpt-a",
 				requests: 2,
 				errors: 1,
+				pending: 0,
 				unknown: 0,
 				tokens: { input: 100, output: 30, cacheRead: 20, cacheWrite: 0 },
 			}],
@@ -295,6 +299,7 @@ describe("AI usage", () => {
 				model: "gpt-b",
 				requests: 1,
 				errors: 0,
+				pending: 0,
 				unknown: 0,
 				tokens: { input: 9, output: 4, cacheRead: 0, cacheWrite: 0 },
 			}],
@@ -352,8 +357,9 @@ describe("AI usage", () => {
 			models: [{
 				provider: "openai",
 				model: "gpt-a",
-				requests: 1,
+				requests: 0,
 				errors: 0,
+				pending: 0,
 				unknown: 1,
 				tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 			}],

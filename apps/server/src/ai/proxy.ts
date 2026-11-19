@@ -610,6 +610,8 @@ export function aiProxy(options: AiProxyOptions) {
 				);
 			}
 		}
+		/** Whether the transport took the request, which a final check that throws can come after. */
+		let taken = false;
 		let handed = await options.credentials.handoff(checked, authorized => {
 			let headers = forwardedHeaders(request);
 			headers.set(
@@ -631,12 +633,17 @@ export function aiProxy(options: AiProxyOptions) {
 			return (deadlines: AiDeadlines): AiAdmitted<Handed> => {
 				let admitted = transport(target, init, deadlines);
 				if ("late" in admitted) return admitted;
+				taken = true;
 				return {
 					sent: { secret: authorized.secret, record: authorized.record, upstream: admitted.sent },
 					at: admitted.at,
 				};
 			};
-		}, request.signal);
+		}, request.signal).catch((err: unknown) => {
+			// A final check that failed before the transport took the request sent nothing.
+			if (!taken) attempt?.unsent("unchecked");
+			throw err;
+		});
 		if ("refused" in handed) {
 			attempt?.unsent(handed.refused);
 			return refused(handed.refused);

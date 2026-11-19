@@ -14,7 +14,7 @@ function text(html: string) {
 	return html.replace(/<[^>]+>/g, " ").replaceAll("&#x27;", "'").replace(/\s+/g, " ").trim();
 }
 
-test("lists each model's requests, errors and tokens, most requested first", () => {
+test("lists each model's requests, errors and tokens, most requested first, with pending and unknown requests apart", () => {
 	let html = render({
 		phase: "loaded",
 		usage: {
@@ -25,6 +25,7 @@ test("lists each model's requests, errors and tokens, most requested first", () 
 					model: "claude-test",
 					requests: 1_204,
 					errors: 3,
+					pending: 1,
 					unknown: 2,
 					tokens: { input: 1_520_000, output: 48_200, cacheRead: 900, cacheWrite: 0 },
 				},
@@ -32,6 +33,7 @@ test("lists each model's requests, errors and tokens, most requested first", () 
 					provider: "openai",
 					requests: 4,
 					errors: 0,
+					pending: 0,
 					unknown: 0,
 					tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 				},
@@ -41,7 +43,7 @@ test("lists each model's requests, errors and tokens, most requested first", () 
 	expect(html).toContain("<h2");
 	expect(text(html)).toContain(
 		"Model Requests Errors Input Output Cache read Cache write "
-			+ "claude-test Anthropic 1,204 3 2 unknown 1.5M 48.2K 900 0 "
+			+ "claude-test Anthropic 1,204 1 pending 2 unknown 3 1.5M 48.2K 900 0 "
 			+ "Other requests OpenAI 4 0 0 0 0 0",
 	);
 });

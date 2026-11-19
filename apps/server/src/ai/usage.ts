@@ -46,16 +46,16 @@ export class AiUsageUnrecorded extends Error {
 
 /**
  * One request the proxy is about to send, recorded as pending with its own id. It is completed
- * once, by the first of its endings: refused at the send, failed before an answer, or answered,
- * when the answer's body has ended, errored or been cancelled, with the token counts the provider
- * reported in it.
+ * once, by the first of its endings: refused or unchecked before the send, failed before an answer,
+ * or answered, when the answer's body has ended, errored or been cancelled, with the token counts
+ * the provider reported in it.
  */
 export class AiAttemptRecord {
 	#ended = false;
 
 	constructor(readonly id: string, private readonly finish: (ending: Ending) => void) {}
 
-	/** The proxy refused the request at the send, so nothing reached the provider. */
+	/** The proxy refused the request, or couldn't check it, before the send, so nothing was sent. */
 	unsent(reason: string): void {
 		this.#end({ outcome: "unsent", error: reason, tokens: {} });
 	}
@@ -171,6 +171,9 @@ export class AiUsage {
 				startedAt: this.#clock(),
 			});
 		} catch (err) {
+			// The write may have saved the record and lost only its answer. Completing it as unsent
+			// changes nothing if it didn't, and keeps a record it did save from counting as sent.
+			if (passing(err)) this.#complete(id, { outcome: "unsent", error: "unrecorded", tokens: {} });
 			throw new AiUsageUnrecorded("the request could not be recorded", { cause: err });
 		}
 		return new AiAttemptRecord(id, ending => this.#complete(id, ending));
@@ -187,6 +190,7 @@ export class AiUsage {
 				...(total.model ? { model: total.model } : {}),
 				requests: total.requests,
 				errors: total.errors,
+				pending: total.pending,
 				unknown: total.unknown,
 				tokens: { ...total.tokens },
 			})),

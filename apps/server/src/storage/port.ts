@@ -600,7 +600,8 @@ export interface AiUsageStore {
 	get(id: string): Promise<AiAttempt | undefined>;
 	/**
 	 * One person's requests started at or after `since`, by provider and model, most requested
-	 * first. Requests refused at the send are not counted; pending ones count as requests.
+	 * first. Only requests sent and ended (`ok` or `error`) count as requests; pending and unknown
+	 * ones are counted apart, and unsent ones not at all.
 	 */
 	summary(userId: string, since: Date): Promise<AiModelTotals[]>;
 	/** Removes requests started before `before` that are no longer pending. Returns how many. */
