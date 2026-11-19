@@ -177,6 +177,23 @@ const references = new Map<string, unknown>([
 // invalidates before asking the server to recheck this identity.
 const revokedViewerRepositoryReads = new Map<string, number>();
 
+function copilotGate(handle: string): string {
+	return join(tmpdir(), "chopin-e2e-copilot", handle);
+}
+
+async function copilotToken(authorization: string): Promise<Response> {
+	let token = /^token (\S+)$/.exec(authorization)?.[1] ?? "";
+	let handle = /^ghu_e2e_(.+)_\d+$/.exec(token)?.[1];
+	let access = handle
+		? (await readFile(copilotGate(handle), "utf8").catch(() => "")).trim()
+		: token.includes("no-copilot")
+		? "none"
+		: "";
+	if (access === "none") return json({ message: "Not Found" }, { status: 404 });
+	if (access === "unknown") return json({ message: "Service Unavailable" }, { status: 503 });
+	return json({ token: `tid=e2e;${token}`, expires_at: Math.floor(Date.now() / 1000) + 1_800 });
+}
+
 function json(value: unknown, init: ResponseInit = {}): Response {
 	return Response.json(value, init);
 }
@@ -229,6 +246,7 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 	if (url.origin === "https://api.github.com") {
 		let requestHeaders = new Headers(init?.headers);
 		let authorization = requestHeaders.get("authorization") ?? "";
+		if (url.pathname === "/copilot_internal/v2/token") return copilotToken(authorization);
 		let app = await asTheApp(url, authorization, init);
 		if (app) return app;
 		let authorized = /^Bearer ghu_e2e_(.+)_\d+$/.exec(authorization);

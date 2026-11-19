@@ -26,6 +26,7 @@ let DocumentRouteSwap = lazy(() => {
 });
 // /machines, the person's machines and the pairing confirmation, loads only when visited.
 let MachinesPage = lazy(() => import("./experiments/pairing"));
+let AiAccountsPage = lazy(() => import("./ai-accounts/page"));
 // Only a failed load shows it, so it stays out of the first JavaScript a reader downloads.
 let Failure = lazy(() => import("./hosted-failure"));
 
@@ -65,6 +66,7 @@ export type HostedRoute =
 	| { page: "repositories" }
 	| { page: "repository"; owner: string; repository: string }
 	| { page: "machines" }
+	| { page: "ai-accounts" }
 	| { page: "missing" };
 
 export type ChannelSource = Extract<DocumentRouteIdentitySource, { page: "channel" }>;
@@ -82,6 +84,7 @@ export function hostedRoute(pathname: string): HostedRoute {
 	// The server redirects /connect, the page's former address; a history entry made before still
 	// opens the page.
 	if (/^\/(?:machines|connect)\/?$/.test(pathname)) return { page: "machines" };
+	if (/^\/ai-accounts\/?$/.test(pathname)) return { page: "ai-accounts" };
 	let child = parseChildDocumentPath(pathname);
 	if (child) return { page: "child", ...child };
 	let document = parseDocumentPath(pathname);
@@ -306,6 +309,13 @@ export function HostedApp(
 			workspace = (
 				<Suspense fallback={<Loading />}>
 					<MachinesPage />
+				</Suspense>
+			);
+			break;
+		case "ai-accounts":
+			workspace = (
+				<Suspense fallback={<Loading />}>
+					<AiAccountsPage />
 				</Suspense>
 			);
 			break;

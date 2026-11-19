@@ -61,14 +61,12 @@ export function ProjectSidebarLoading(
 					</div>
 				</div>
 				<div aria-hidden="true" className="project-sidebar-footer-actions pointer-events-none">
-					<div className="project-sidebar-primary-action">
-						<span className="size-4 shrink-0" />
-						<span>Archived</span>
-					</div>
-					<div className="project-sidebar-primary-action">
-						<span className="size-4 shrink-0" />
-						<span>Machines</span>
-					</div>
+					{["Archived", "Machines", "AI accounts"].map(label => (
+						<div className="project-sidebar-primary-action" key={label}>
+							<span className="size-4 shrink-0" />
+							<span>{label}</span>
+						</div>
+					))}
 				</div>
 				<div aria-hidden="true" className="project-sidebar-account-wrap pointer-events-none">
 					<div className="project-sidebar-account">

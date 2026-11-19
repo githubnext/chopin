@@ -1,3 +1,4 @@
+import { AiAccountsPlate } from "./plates/ai-accounts";
 import { AssistantUiPlate } from "./plates/assistant-ui";
 import { ChatMediaPlate } from "./plates/chat-media";
 import { EmojiPlate } from "./plates/emoji";
@@ -20,6 +21,7 @@ export function Surfaces() {
 			<DialogsPlate />
 			<ListsPlate />
 			<NavigationPlate />
+			<AiAccountsPlate />
 			<ConversationPlate />
 			<WorkflowRunsPlate />
 			<IdentityPlate />

@@ -114,6 +114,9 @@ describe("hosted routes", () => {
 		// A history entry at the page's former address still opens it.
 		expect(hostedRoute("/connect")).toEqual({ page: "machines" });
 		expect(hostedRoute("/machines/extra")).toEqual({ page: "missing" });
+		expect(hostedRoute("/ai-accounts")).toEqual({ page: "ai-accounts" });
+		expect(hostedRoute("/ai-accounts/")).toEqual({ page: "ai-accounts" });
+		expect(hostedRoute("/ai-accounts/extra")).toEqual({ page: "missing" });
 		expect(hostedRoute("/documents/octo-org/score/plan/extra"))
 			.toEqual({ page: "missing" });
 		expect(hostedRoute("/documents/octo-org/score/plan/research"))

@@ -708,17 +708,18 @@
 }
 
 /* Machines in the sidebar and the phone documents sheet: paired count, and a dot while connected. */
-.machines-entry-icon {
+.machines-entry-icon,
+.ai-accounts-entry-icon {
 	flex: none;
 	color: var(--color-text-tertiary);
 }
 
-/* On /machines the entry is the current page, marked as a current document is. */
+/* On /machines or /ai-accounts the entry is the current page, marked as a current document is. */
 .project-sidebar-primary-action[aria-current="page"] {
 	background: var(--project-sidebar-selected);
 	color: var(--color-text-primary);
 
-	& .machines-entry-icon {
+	& :is(.machines-entry-icon, .ai-accounts-entry-icon) {
 		color: var(--color-text-secondary);
 	}
 }

@@ -231,7 +231,11 @@ function sameSet(read: AiCredentialRecord[], current: AiCredentialRecord[]): boo
 		);
 }
 
-function summary(record: AiCredentialRecord, copilotAccess?: CopilotAccess): AiCredentialSummary {
+function summary(
+	record: AiCredentialRecord,
+	copilotAccess?: CopilotAccess,
+	unusable = false,
+): AiCredentialSummary {
 	return {
 		provider: record.provider,
 		kind: record.kind,
@@ -240,6 +244,7 @@ function summary(record: AiCredentialRecord, copilotAccess?: CopilotAccess): AiC
 		...(record.lastUsedAt ? { lastUsedAt: record.lastUsedAt.toISOString() } : {}),
 		...(record.rejectedAt ? { rejectedAt: record.rejectedAt.toISOString() } : {}),
 		...(record.provider === "github-copilot" && copilotAccess ? { copilotAccess } : {}),
+		...(unusable ? { unusable: true as const } : {}),
 	};
 }
 
@@ -310,6 +315,7 @@ export class AiCredentials {
 	 * A person's connected providers, never a secret, GitHub Copilot always among them. GitHub Copilot
 	 * says whether it has Copilot access, asked with the token it was connected with, or for a GitHub
 	 * sign-in `githubToken`, their own sign-in's current token. The answer may be a few minutes old.
+	 * A key or token Chopin can no longer read is `unusable`.
 	 */
 	async list(userId: string, githubToken?: string): Promise<AiCredentialSummary[]> {
 		let records = await this.#connected(userId);
@@ -320,6 +326,7 @@ export class AiCredentials {
 					? (await this.#copilotAccess(record, await this.#connectedToken(record, githubToken)))
 						.access
 					: undefined,
+				record.kind === "api-key" && !(await this.#secret(record)),
 			)
 		));
 	}
@@ -331,6 +338,7 @@ export class AiCredentials {
 			record,
 			(await this.#copilotAccess(record, await this.#connectedToken(record, githubToken), true))
 				.access,
+			record.kind === "api-key" && !(await this.#secret(record)),
 		);
 	}
 

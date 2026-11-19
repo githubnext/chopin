@@ -49,6 +49,7 @@ export type AiCredentialSummary = {
 	rejectedAt?: string;
 	/** For GitHub Copilot: whether it has Copilot access, as GitHub said in the last few minutes. */
 	copilotAccess?: CopilotAccess;
+	unusable?: true;
 };
 
 export type AiCredentialList = { credentials: AiCredentialSummary[] };

@@ -538,6 +538,7 @@ export function NavigationShell(
 		if (
 			route.page !== "channel" && route.page !== "document" && route.page !== "child"
 			&& route.page !== "machines"
+			&& route.page !== "ai-accounts"
 			&& navigation?.projects.length === 0
 		) {
 			showDialog("add");
@@ -901,7 +902,7 @@ export function NavigationShell(
 		) return;
 		if (
 			destination.pathname !== "/"
-			&& !/^\/(?:channels|connect|documents|machines|repositories)(?:\/|$)/.test(
+			&& !/^\/(?:ai-accounts|channels|connect|documents|machines|repositories)(?:\/|$)/.test(
 				destination.pathname,
 			)
 		) return;
@@ -918,6 +919,7 @@ export function NavigationShell(
 		catalogueMode,
 		currentDocumentId,
 		machinesCurrent: route.page === "machines",
+		aiAccountsCurrent: route.page === "ai-accounts",
 		onAddProject: () => showDialog("add"),
 		onCatalogueModeChange: setCatalogueMode,
 		onCreateDocument: (project: Api.NavigationProject) => void createDocument(project),
