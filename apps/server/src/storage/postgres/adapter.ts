@@ -19,6 +19,7 @@ import { PostgresDeferredTurnStore } from "./deferred-turns";
 import { PostgresMcpSessionStore } from "./mcp-sessions";
 import { PostgresPlannerCredentialStore } from "./planner-credentials";
 import { PostgresAiCredentialStore, PostgresAiPlaceholderStore } from "./ai-credentials";
+import { AiCutoffs } from "../ai-cutoffs";
 import { PostgresChatThreadStore } from "./chat-threads";
 import { PostgresPlannerLinkHoldStore } from "./planner-holds";
 import { PostgresPlannerModelChoiceStore } from "./planner-model-choices";
@@ -531,6 +532,7 @@ function leaseConnection(url: string): LeaseConnection {
 export class PostgresStorage implements StorageAdapter {
 	readonly driver = "postgres";
 	readonly #sql: SQL;
+	readonly #aiCutoffs = new AiCutoffs();
 	readonly #url: string;
 	// Renewal has its own connection so a busy pool cannot delay it past the lease.
 	#renewal: LeaseConnection;
@@ -571,6 +573,7 @@ export class PostgresStorage implements StorageAdapter {
 		this.machines = new PostgresMachineStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
+			() => this.#aiCutoffs.cut(),
 		);
 		this.plannerHolds = new PostgresPlannerLinkHoldStore(
 			this.#sql,
@@ -594,10 +597,12 @@ export class PostgresStorage implements StorageAdapter {
 		this.aiCredentials = new PostgresAiCredentialStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
+			this.#aiCutoffs,
 		);
 		this.aiPlaceholders = new PostgresAiPlaceholderStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
+			this.#aiCutoffs,
 		);
 		this.mcpSessions = new PostgresMcpSessionStore(
 			this.#sql,
@@ -832,7 +837,7 @@ export class PostgresStorage implements StorageAdapter {
 			}),
 		rename: input => this.#renameChannel(input),
 		setFullWidth: input => this.#setChannelWidth(input),
-		archive: input => this.#setChannelArchived(input, true),
+		archive: input => this.#setChannelArchived(input, true).finally(() => this.#aiCutoffs.cut()),
 		restore: input => this.#setChannelArchived(input, false),
 		delete: id => this.#deleteChannel(id),
 		publishDescription: input => this.#publishChannelDescription(input),

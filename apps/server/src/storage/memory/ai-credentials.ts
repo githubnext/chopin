@@ -2,6 +2,7 @@ import { AI_PROVIDERS } from "@chopin/protocol/ai-credentials";
 
 import { conflict, missing } from "../errors";
 
+import type { AiCutoffs } from "../ai-cutoffs";
 import type { AiCredentialRecord, AiPlaceholder } from "../model";
 import type { AiCredentialStore, AiPlaceholderStore } from "../port";
 
@@ -29,10 +30,11 @@ function copyPlaceholder(value: AiPlaceholder): AiPlaceholder {
 
 export class MemoryAiCredentialStore implements AiCredentialStore {
 	#records = new Map<string, AiCredentialRecord>();
-	constructor(private deps: { userExists: (id: string) => boolean }) {}
+	constructor(private deps: { userExists: (id: string) => boolean; cutoffs: AiCutoffs }) {}
 	async put(record: AiCredentialRecord) {
 		if (!this.deps.userExists(record.userId)) throw missing(`user ${record.userId} does not exist`);
 		this.#records.set(`${record.userId}\n${record.provider}`, copyCredential(record));
+		this.deps.cutoffs.cut(record.userId);
 	}
 	async get(userId: string, provider: AiCredentialRecord["provider"]) {
 		let found = this.#records.get(`${userId}\n${provider}`);
@@ -47,13 +49,18 @@ export class MemoryAiCredentialStore implements AiCredentialStore {
 			.map(copyCredential);
 	}
 	async delete(userId: string, provider: AiCredentialRecord["provider"]) {
-		return this.#records.delete(`${userId}\n${provider}`);
+		let removed = this.#records.delete(`${userId}\n${provider}`);
+		this.deps.cutoffs.cut(userId);
+		return removed;
 	}
 	async used(record: AiCredentialRecord, at: Date) {
 		let found = this.#records.get(`${record.userId}\n${record.provider}`);
 		if (!found || found.updatedAt.getTime() !== record.updatedAt.getTime()) return;
 		if (!sameBytes(found.ciphertext, record.ciphertext)) return;
 		if (!found.lastUsedAt || found.lastUsedAt < at) found.lastUsedAt = new Date(at);
+	}
+	version(userId: string) {
+		return this.deps.cutoffs.person(userId);
 	}
 }
 
@@ -68,6 +75,7 @@ export class MemoryAiPlaceholderStore implements AiPlaceholderStore {
 			userExists: (id: string) => boolean;
 			machineExists: (id: string) => boolean;
 			channelExists: (id: string) => boolean;
+			cutoffs: AiCutoffs;
 		},
 	) {}
 	async put(placeholders: AiPlaceholder[]) {
@@ -96,24 +104,24 @@ export class MemoryAiPlaceholderStore implements AiPlaceholderStore {
 		let found = this.#placeholders.get(hex(digest));
 		return found && found.expiresAt > now ? copyPlaceholder(found) : undefined;
 	}
-	async findLaunch(launchDigest: Uint8Array, now: Date) {
-		let key = hex(launchDigest);
-		for (let value of this.#placeholders.values()) {
-			if (hex(value.launchDigest) === key && value.expiresAt > now) return copyPlaceholder(value);
-		}
-		return undefined;
-	}
 	async deleteLaunch(launchId: string) {
-		return this.#deleteWhere(value => value.launchId === launchId);
+		return this.#cut(this.#deleteWhere(value => value.launchId === launchId));
 	}
 	async deleteForMachine(machineId: string) {
-		return this.#deleteWhere(value => value.machineId === machineId);
+		return this.#cut(this.#deleteWhere(value => value.machineId === machineId));
 	}
 	async deleteExpired(now: Date) {
 		return this.#deleteWhere(value => value.expiresAt <= now);
 	}
 	deleteChannel(channelId: string) {
-		this.#deleteWhere(value => value.channelId === channelId);
+		this.#cut(this.#deleteWhere(value => value.channelId === channelId));
+	}
+	cutoffs() {
+		return this.deps.cutoffs.all();
+	}
+	#cut(removed: number) {
+		this.deps.cutoffs.cut();
+		return removed;
 	}
 	#deleteWhere(matches: (value: AiPlaceholder) => boolean) {
 		let removed = 0;

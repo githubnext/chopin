@@ -58,6 +58,8 @@ export class PostgresMachineStore implements MachineStore {
 	constructor(
 		private sql: SQL,
 		private run: <T>(action: string, execute: () => Promise<T>) => Promise<T>,
+		/** Told once a revocation settles, committed or not, before its caller hears so. */
+		private revoked: () => void = () => {},
 	) {}
 	create(input: CreateMachine) {
 		return this.run("pair machine", async () => {
@@ -170,7 +172,7 @@ export class PostgresMachineStore implements MachineStore {
 					await transaction`DELETE FROM machine_favorites WHERE machine_id = ${id}`;
 				}
 				return updated.length > 0;
-			}));
+			})).finally(() => this.revoked());
 	}
 	share(id: string, userId: string, shared: boolean) {
 		return this.run("share machine", () =>

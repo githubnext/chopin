@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import type { AiCutoffs } from "../ai-cutoffs";
 import type { AiCredentialRecord, AiPlaceholder } from "../model";
 import type { AiCredentialStore, AiPlaceholderStore } from "../port";
 
@@ -58,10 +59,12 @@ function placeholder(row: PlaceholderRow): AiPlaceholder {
 }
 
 export class PostgresAiCredentialStore implements AiCredentialStore {
-	constructor(private sql: SQL, private run: Run) {}
+	constructor(private sql: SQL, private run: Run, private cutoffs: AiCutoffs) {}
 	put(record: AiCredentialRecord) {
-		return this.run("save an AI credential", async () => {
-			await this.sql`
+		return this.#cut(
+			record.userId,
+			this.run("save an AI credential", async () => {
+				await this.sql`
 				INSERT INTO ai_credentials (
 					user_id, provider, kind, ciphertext, suffix, updated_at, last_used_at
 				)
@@ -76,7 +79,8 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 					updated_at = EXCLUDED.updated_at,
 					last_used_at = EXCLUDED.last_used_at
 			`;
-		});
+			}),
+		);
 	}
 	get(userId: string, provider: AiCredentialRecord["provider"]) {
 		return this.run("read an AI credential", async () => {
@@ -97,13 +101,16 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 		});
 	}
 	delete(userId: string, provider: AiCredentialRecord["provider"]) {
-		return this.run("remove an AI credential", async () => {
-			let removed = await this.sql<{ provider: string }[]>`
+		return this.#cut(
+			userId,
+			this.run("remove an AI credential", async () => {
+				let removed = await this.sql<{ provider: string }[]>`
 				DELETE FROM ai_credentials WHERE user_id = ${userId} AND provider = ${provider}
 				RETURNING provider
 			`;
-			return removed.length > 0;
-		});
+				return removed.length > 0;
+			}),
+		);
 	}
 	used(record: AiCredentialRecord, at: Date) {
 		return this.run("record an AI credential's use", async () => {
@@ -116,10 +123,17 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 			`;
 		});
 	}
+	version(userId: string) {
+		return this.cutoffs.person(userId);
+	}
+	/** Counts `write` for its person once it settles, committed or not, before its caller hears. */
+	#cut<T>(userId: string, write: Promise<T>): Promise<T> {
+		return write.finally(() => this.cutoffs.cut(userId));
+	}
 }
 
 export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
-	constructor(private sql: SQL, private run: Run) {}
+	constructor(private sql: SQL, private run: Run, private counted: AiCutoffs) {}
 	put(placeholders: AiPlaceholder[]) {
 		return this.run("save AI placeholders", async () => {
 			await this.sql.begin(async transaction => {
@@ -148,16 +162,6 @@ export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
 			return row && placeholder(row);
 		});
 	}
-	findLaunch(launchDigest: Uint8Array, now: Date) {
-		return this.run("read an AI launch", async () => {
-			let [row] = await this.sql<PlaceholderRow[]>`
-				SELECT ${this.sql.unsafe(PLACEHOLDER_COLUMNS)} FROM ai_placeholders
-				WHERE launch_digest = ${launchDigest} AND expires_at > ${now}
-				LIMIT 1
-			`;
-			return row && placeholder(row);
-		});
-	}
 	deleteLaunch(launchId: string) {
 		return this.run("end a launch's AI placeholders", async () => {
 			let removed = await this.sql<{ launchId: string }[]>`
@@ -165,7 +169,7 @@ export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
 				RETURNING launch_id AS "launchId"
 			`;
 			return removed.length;
-		});
+		}).finally(() => this.counted.cut());
 	}
 	deleteForMachine(machineId: string) {
 		return this.run("end a machine's AI placeholders", async () => {
@@ -174,7 +178,7 @@ export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
 				RETURNING launch_id AS "launchId"
 			`;
 			return removed.length;
-		});
+		}).finally(() => this.counted.cut());
 	}
 	deleteExpired(now: Date) {
 		return this.run("remove expired AI placeholders", async () => {
@@ -184,5 +188,8 @@ export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
 			`;
 			return removed.length;
 		});
+	}
+	cutoffs() {
+		return this.counted.all();
 	}
 }

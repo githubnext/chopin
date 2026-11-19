@@ -109,7 +109,6 @@ const REFUSALS: Record<AiRefusal, { status: number; message: string }> = {
 		status: 401,
 		message: `Send this launch's own credential in ${AI_LAUNCH_HEADER}.`,
 	},
-	"unknown-launch": { status: 401, message: "Chopin doesn't know this launch, or it has ended." },
 	"unknown-placeholder": { status: 401, message: "Chopin doesn't know this key." },
 	"other-provider": { status: 401, message: "This key is for another provider." },
 	"other-launch": { status: 401, message: "This key was given to another launch." },
@@ -134,6 +133,10 @@ const REFUSALS: Record<AiRefusal, { status: number; message: string }> = {
 	"copilot-unavailable": {
 		status: 502,
 		message: "GitHub can't give a Copilot token now. Try again in a moment.",
+	},
+	busy: {
+		status: 503,
+		message: "Launches or credentials kept changing in Chopin while this was sent. Send it again.",
 	},
 };
 
@@ -198,13 +201,29 @@ async function boundedBody(request: Request): Promise<Uint8Array<ArrayBuffer> | 
 	return body;
 }
 
+function dropped(name: string): boolean {
+	return DROPPED_REQUEST.has(name) || name.startsWith("x-forwarded-");
+}
+
 function forwardedHeaders(request: Request): Headers {
 	let headers = new Headers();
 	for (let [name, value] of request.headers) {
-		if (DROPPED_REQUEST.has(name) || name.startsWith("x-forwarded-")) continue;
-		headers.append(name, value);
+		if (!dropped(name)) headers.append(name, value);
 	}
 	return headers;
+}
+
+/**
+ * Whether a header the proxy drops, other than the two `key` is taken from, carries it too: sent
+ * without that header, the request would not be the one its agent sent.
+ */
+function keyDropped(request: Request, key: string): boolean {
+	for (let [name, value] of request.headers) {
+		if (name !== "authorization" && name !== "x-api-key" && dropped(name) && value.includes(key)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 function routed(provider: AiProvider, method: string, path: string): boolean {
@@ -214,17 +233,22 @@ function routed(provider: AiProvider, method: string, path: string): boolean {
 /**
  * The upstream's headers to pass back: only those `RETURNED_RESPONSE` names, each with `secret`
  * replaced wherever its value holds it, and `no-store` when the provider says nothing of caching.
- * The allow-list and the replacement are the last step, so no value is set after them.
+ * What is emitted is checked, not what came: a name passed by its prefix that holds `secret`, in
+ * any case (a name is sent lowercased), and a value whose replacement forms `secret` again with
+ * the text around it, are left out. The allow-list and the check are the last step, so no value
+ * is set after them.
  */
 function returnedHeaders(upstream: Response, secret: string): Headers {
 	let headers = new Headers({ "cache-control": "no-store" });
+	let named = secret.toLowerCase();
 	for (let [name, value] of upstream.headers) {
 		if (
-			RETURNED_RESPONSE.has(name)
-			|| RETURNED_RESPONSE_PREFIXES.some(prefix => name.startsWith(prefix))
-		) {
-			headers.set(name, value.replaceAll(secret, REDACTED_TEXT));
-		}
+			!RETURNED_RESPONSE.has(name)
+			&& !RETURNED_RESPONSE_PREFIXES.some(prefix => name.startsWith(prefix))
+		) continue;
+		let emitted = value.replaceAll(secret, REDACTED_TEXT);
+		if (name.includes(named) || emitted.includes(secret)) continue;
+		headers.set(name, emitted);
 	}
 	return headers;
 }
@@ -277,11 +301,30 @@ function joined(left: Uint8Array, right: Uint8Array): Uint8Array {
 
 /**
  * `body` with every occurrence of `secret` replaced, even one split across chunks. Only an end of a
- * chunk that could begin the secret waits for the next chunk, so a stream is not held back.
+ * chunk that could begin the secret waits for the next chunk, so a stream is not held back. What is
+ * emitted is checked as well as what came, since the replacement and the text around it could form
+ * the secret again, within a chunk or across two: an emitted end that could begin it waits for the
+ * next bytes too, and a stream that would emit it ends there, erroring, with none of it emitted.
  */
 function scrubbed(body: ReadableStream<Uint8Array>, secret: string): ReadableStream<Uint8Array> {
 	let needle = new TextEncoder().encode(secret);
 	let pending: Uint8Array = new Uint8Array();
+	let held: Uint8Array = new Uint8Array();
+	let emit = (
+		bytes: Uint8Array,
+		controller: TransformStreamDefaultController<Uint8Array>,
+		last: boolean,
+	) => {
+		let out = joined(held, bytes);
+		if (indexOf(out, needle, 0) >= 0) {
+			held = new Uint8Array();
+			controller.error(new Error("the answer would have carried the credential"));
+			return;
+		}
+		let waiting = last ? 0 : partialMatch(out, needle);
+		held = out.slice(out.length - waiting);
+		if (out.length > waiting) controller.enqueue(out.subarray(0, out.length - waiting));
+	};
 	return body.pipeThrough(
 		new TransformStream<Uint8Array, Uint8Array>({
 			transform(chunk, controller) {
@@ -293,14 +336,13 @@ function scrubbed(body: ReadableStream<Uint8Array>, secret: string): ReadableStr
 					from = at + needle.length;
 				}
 				let rest = bytes.subarray(from);
-				let held = partialMatch(rest, needle);
-				parts.push(rest.subarray(0, rest.length - held));
-				pending = rest.slice(rest.length - held);
-				let out = parts.reduce(joined, new Uint8Array());
-				if (out.length) controller.enqueue(out);
+				let waiting = partialMatch(rest, needle);
+				parts.push(rest.subarray(0, rest.length - waiting));
+				pending = rest.slice(rest.length - waiting);
+				emit(parts.reduce(joined, new Uint8Array()), controller, false);
 			},
 			flush(controller) {
-				if (pending.length) controller.enqueue(pending);
+				emit(pending, controller, true);
 			},
 		}),
 	);
@@ -334,11 +376,14 @@ export function aiProxy(options: AiProxyOptions) {
 		if (request.method !== "GET" && request.method !== "HEAD") {
 			return failure(405, "The catalog is read with GET.", "method");
 		}
-		let launch = await options.credentials.authorizeLaunch(
-			request.headers.get(AI_LAUNCH_HEADER)?.trim() || undefined,
-		);
-		if (launch !== true) return refused(launch.refused);
+		let key = presented(request);
+		if (key === null) {
+			return failure(401, "Send one key, as Authorization: Bearer or x-api-key.", "no-placeholder");
+		}
+		let launchToken = request.headers.get(AI_LAUNCH_HEADER)?.trim() || undefined;
 		if (!catalog || clock() - catalog.fetchedAt >= CATALOG_FRESH_MS) {
+			let admitted = await options.credentials.forLaunch(key, launchToken, () => true as const);
+			if (admitted !== true) return refused(admitted.refused);
 			let upstream: Response;
 			try {
 				upstream = await send(upstreamUrl(options.upstreams?.catalog ?? MODEL_CATALOG, path, ""), {
@@ -366,13 +411,17 @@ export function aiProxy(options: AiProxyOptions) {
 				if (!catalog) return failure(502, "The model catalog can't be reached.", "upstream");
 			}
 		}
-		let etag = catalog.headers.get("etag");
-		let headers = new Headers(catalog.headers);
-		headers.set("cache-control", "no-cache");
-		if (etag && request.headers.get("if-none-match") === etag) {
-			return new Response(null, { status: 304, headers });
-		}
-		return new Response(request.method === "HEAD" ? null : catalog.body.slice(), { headers });
+		let held = catalog;
+		let served = await options.credentials.forLaunch(key, launchToken, () => {
+			let etag = held.headers.get("etag");
+			let headers = new Headers(held.headers);
+			headers.set("cache-control", "no-cache");
+			if (etag && request.headers.get("if-none-match") === etag) {
+				return new Response(null, { status: 304, headers });
+			}
+			return new Response(request.method === "HEAD" ? null : held.body.slice(), { headers });
+		});
+		return served instanceof Response ? served : refused(served.refused);
 	};
 
 	return async (request: Request, url: URL): Promise<Response> => {
@@ -392,6 +441,13 @@ export function aiProxy(options: AiProxyOptions) {
 		if (key === null) {
 			return failure(401, "Send one key, as Authorization: Bearer or x-api-key.", "no-placeholder");
 		}
+		if (key && keyDropped(request, key)) {
+			return failure(
+				400,
+				"This request also carries its key in a header Chopin doesn't forward. Send the key only in Authorization or x-api-key.",
+				"dropped-header",
+			);
+		}
 		let launchToken = request.headers.get(AI_LAUNCH_HEADER)?.trim() || undefined;
 		let checked = await options.credentials.authorize(key, provider, launchToken);
 		if ("refused" in checked) return refused(checked.refused);
@@ -409,15 +465,14 @@ export function aiProxy(options: AiProxyOptions) {
 			);
 			let origin = options.upstreams?.[provider] ?? authorized.origin ?? AI_UPSTREAMS[provider];
 			let target = upstreamUrl(origin, path, url.search);
-			let upstream = (async () =>
-				send(target, {
-					method: request.method,
-					headers,
-					...(body ? { body } : {}),
-					redirect: "manual",
-					signal: request.signal,
-				}))();
-			return { secret: authorized.secret, upstream };
+			let init: RequestInit = {
+				method: request.method,
+				headers,
+				...(body ? { body } : {}),
+				redirect: "manual",
+				signal: request.signal,
+			};
+			return () => ({ secret: authorized.secret, upstream: (async () => send(target, init))() });
 		});
 		if ("refused" in handed) return refused(handed.refused);
 		let upstream: Response;
