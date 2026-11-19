@@ -48,7 +48,8 @@ const ROUTES: Record<AiProvider, Array<{ methods: readonly string[]; path: RegEx
 };
 
 /** What the proxy sends back in place of the credential, should a provider echo it. */
-const REDACTED = new TextEncoder().encode("[redacted]");
+const REDACTED_TEXT = "[redacted]";
+const REDACTED = new TextEncoder().encode(REDACTED_TEXT);
 
 /** The largest request body the proxy forwards: well past any model request with images. */
 const MAX_BODY = 64 * 1024 * 1024;
@@ -75,16 +76,29 @@ const DROPPED_REQUEST = new Set([
 	"origin",
 	"referer",
 ]);
-/** Response headers never passed back: what belongs to the upstream hop or sets its cookies. */
-const DROPPED_RESPONSE = new Set([
-	"set-cookie",
-	"connection",
-	"keep-alive",
-	"transfer-encoding",
-	"content-encoding",
-	"content-length",
-	"alt-svc",
+/**
+ * The only response headers passed back, by name or by prefix: what model clients read to parse an
+ * answer, retry, follow rate limits and name a request. Every other header (cookies, the upstream
+ * hop's own, anything a provider adds) is left out.
+ */
+const RETURNED_RESPONSE = new Set([
+	"content-type",
+	"cache-control",
+	"etag",
+	"last-modified",
+	"location",
+	"retry-after",
+	"retry-after-ms",
+	"x-should-retry",
+	"x-request-id",
+	"request-id",
+	"x-github-request-id",
+	"openai-processing-ms",
+	"openai-version",
 ]);
+const RETURNED_RESPONSE_PREFIXES = ["x-ratelimit-", "anthropic-ratelimit-"];
+/** The content codings `fetch` decodes, so the proxy reads the body it passes back. */
+const DECODED = new Set(["identity", "gzip", "x-gzip", "deflate", "br", "zstd"]);
 
 const REFUSALS: Record<AiRefusal, { status: number; message: string }> = {
 	"no-placeholder": {
@@ -102,6 +116,11 @@ const REFUSALS: Record<AiRefusal, { status: number; message: string }> = {
 	"not-connected": {
 		status: 403,
 		message: "This provider is no longer connected in Chopin. Connect it again in Chopin.",
+	},
+	"credential-changed": {
+		status: 409,
+		message:
+			"This provider's credential changed in Chopin while this request was sent. Send it again.",
 	},
 	"sign-in-unavailable": {
 		status: 403,
@@ -191,14 +210,28 @@ function routed(provider: AiProvider, method: string, path: string): boolean {
 	return ROUTES[provider].some(route => route.methods.includes(method) && route.path.test(path));
 }
 
-/** The upstream's headers to pass back, without its hop's own and without any that holds `secret`. */
+/**
+ * The upstream's headers to pass back: only those `RETURNED_RESPONSE` names, each with `secret`
+ * replaced wherever its value holds it, and `no-store` when the provider says nothing of caching.
+ * The allow-list and the replacement are the last step, so no value is set after them.
+ */
 function returnedHeaders(upstream: Response, secret: string): Headers {
-	let headers = new Headers();
+	let headers = new Headers({ "cache-control": "no-store" });
 	for (let [name, value] of upstream.headers) {
-		if (!DROPPED_RESPONSE.has(name) && !value.includes(secret)) headers.append(name, value);
+		if (
+			RETURNED_RESPONSE.has(name)
+			|| RETURNED_RESPONSE_PREFIXES.some(prefix => name.startsWith(prefix))
+		) {
+			headers.set(name, value.replaceAll(secret, REDACTED_TEXT));
+		}
 	}
-	headers.set("cache-control", upstream.headers.get("cache-control") ?? "no-store");
 	return headers;
+}
+
+/** Whether `fetch` decoded the upstream's body, so a credential in it can be found and replaced. */
+function readable(upstream: Response): boolean {
+	let encoding = upstream.headers.get("content-encoding")?.trim().toLowerCase();
+	return !encoding || DECODED.has(encoding);
 }
 
 /** `origin` with `path` and `search` from the request, never another host whatever the path says. */
@@ -359,32 +392,45 @@ export function aiProxy(options: AiProxyOptions) {
 		if (body === undefined && request.method !== "GET") {
 			return failure(413, "The request is too large.", "too-large");
 		}
-		let authorized = await options.credentials.handoff(checked);
-		if ("refused" in authorized) return refused(authorized.refused);
-		let headers = forwardedHeaders(request);
-		headers.set(
-			CREDENTIAL_HEADER[provider],
-			CREDENTIAL_HEADER[provider] === "authorization"
-				? `Bearer ${authorized.secret}`
-				: authorized.secret,
-		);
-		let origin = options.upstreams?.[provider] ?? authorized.origin ?? AI_UPSTREAMS[provider];
+		let handed = await options.credentials.handoff(checked, authorized => {
+			let headers = forwardedHeaders(request);
+			headers.set(
+				CREDENTIAL_HEADER[provider],
+				CREDENTIAL_HEADER[provider] === "authorization"
+					? `Bearer ${authorized.secret}`
+					: authorized.secret,
+			);
+			let origin = options.upstreams?.[provider] ?? authorized.origin ?? AI_UPSTREAMS[provider];
+			let target = upstreamUrl(origin, path, url.search);
+			let upstream = (async () =>
+				send(target, {
+					method: request.method,
+					headers,
+					...(body ? { body } : {}),
+					redirect: "manual",
+					signal: request.signal,
+				}))();
+			return { secret: authorized.secret, upstream };
+		});
+		if ("refused" in handed) return refused(handed.refused);
 		let upstream: Response;
 		try {
-			upstream = await send(upstreamUrl(origin, path, url.search), {
-				method: request.method,
-				headers,
-				...(body ? { body } : {}),
-				redirect: "manual",
-				signal: request.signal,
-			});
+			upstream = await handed.upstream;
 		} catch {
 			if (request.signal.aborted) return failure(499, "The request was cancelled.", "cancelled");
 			return failure(502, `${provider} can't be reached.`, "upstream");
 		}
-		return new Response(upstream.body && scrubbed(upstream.body, authorized.secret), {
+		if (!readable(upstream)) {
+			await upstream.body?.cancel();
+			return failure(
+				502,
+				`${provider} answered in an encoding Chopin can't read to take the key out of.`,
+				"upstream-encoding",
+			);
+		}
+		return new Response(upstream.body && scrubbed(upstream.body, handed.secret), {
 			status: upstream.status,
-			headers: returnedHeaders(upstream, authorized.secret),
+			headers: returnedHeaders(upstream, handed.secret),
 		});
 	};
 }

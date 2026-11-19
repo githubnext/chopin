@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from "node:zlib";
 
 import { AI_KEY_VARIABLES, AI_LAUNCH_HEADER } from "@chopin/protocol/ai-credentials";
 
@@ -740,6 +741,32 @@ describe("what a launch is given", () => {
 		expect((await launch(world)).grants).toEqual([]);
 		expect(await world.storage.aiPlaceholders.deleteExpired(new Date(8.64e15))).toBe(1);
 	});
+
+	it("gives nothing when the last key goes while a launch takes back a key removed after it saved its placeholders", async () => {
+		let world = await setup();
+		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
+		await world.connect(world.mona, "anthropic", { kind: "api-key", secret: ANTHROPIC_KEY });
+		let keys = world.storage.aiCredentials;
+		let placeholders = world.storage.aiPlaceholders;
+		let put = placeholders.put.bind(placeholders);
+		let deleteLaunch = placeholders.deleteLaunch.bind(placeholders);
+		let puts = 0;
+		placeholders.put = async rows => {
+			await put(rows);
+			if (++puts === 1) await keys.delete("U_mona", "anthropic");
+		};
+		placeholders.deleteLaunch = async launchId => {
+			let removing = keys.delete("U_mona", "openai");
+			let removed = await deleteLaunch(launchId);
+			await removing;
+			return removed;
+		};
+
+		let launched = await launch(world);
+		expect(await keys.list("U_mona")).toEqual([]);
+		expect(launched.grants).toEqual([]);
+		expect(await world.storage.aiPlaceholders.deleteExpired(new Date(8.64e15))).toBe(0);
+	});
 });
 
 describe("GitHub Copilot through the proxy", () => {
@@ -954,9 +981,10 @@ describe("Copilot tokens that expire", () => {
 				return Response.json({ ok: true });
 			}) as typeof fetch,
 		});
-		let launch = () =>
+		let launch = (on: Pick<AiLaunch, "machineId" | "channelId"> = {}) =>
 			credentials.launch({
 				userId: "U_mona",
+				...on,
 				expiresAt: new Date(world.now().getTime() + 3_600_000),
 			});
 		let call = (copilot: AiProviderGrant, init: RequestInit = {}) => {
@@ -971,7 +999,7 @@ describe("Copilot tokens that expire", () => {
 				url,
 			);
 		};
-		return { world, sent, launch, call };
+		return { world, credentials, sent, launch, call };
 	}
 
 	it("never hands the provider a Copilot token GitHub gave already expired", async () => {
@@ -1043,7 +1071,65 @@ describe("Copilot tokens that expire", () => {
 		expect(issued).toBe(2);
 		expect(sent).toEqual(["Bearer tid=2"]);
 	});
+
+	it("sends nothing once the launch ended, its machine was revoked or its document archived while its Copilot token was renewed", async () => {
+		let renewal:
+			| { asked: PromiseWithResolvers<void>; answer: PromiseWithResolvers<void> }
+			| undefined;
+		let issued = 0;
+		let { world, credentials, sent, launch, call } = await copilotWorld(async () => {
+			if (renewal) {
+				renewal.asked.resolve();
+				await renewal.answer.promise;
+			}
+			return { token: `tid=${++issued}`, expiresAt: world.now().getTime() + 90_000 };
+		});
+		let cutoffs: Array<(launch: { launchId: string; machineId: string }) => Promise<unknown>> = [
+			launch => credentials.end(launch.launchId),
+			launch => world.storage.machines.revoke(launch.machineId, "U_mona", world.now()),
+			() => world.storage.channels.archive({ id: world.channel.id, now: world.now() }),
+		];
+		for (let cutoff of cutoffs) {
+			renewal = undefined;
+			let { machine } = await world.machines.pair({
+				userId: "U_mona",
+				label: "studio",
+				repositories: [],
+				autoRun: false,
+				grant: grant("ghu_machine"),
+			});
+			let launched = await launch({ machineId: machine.id, channelId: world.channel.id });
+			let paused = pausedBody();
+			let pending = call(launched.grants[0]!, { body: paused.body, duplex: "half" } as RequestInit);
+			await paused.reading;
+			world.advance(120_000);
+			renewal = { asked: Promise.withResolvers(), answer: Promise.withResolvers() };
+			paused.release();
+			await renewal.asked.promise;
+			await cutoff({ launchId: launched.launchId, machineId: machine.id });
+			renewal.answer.resolve();
+			let refused = await pending;
+			expect(refused.status).toBe(401);
+			expect(await code(refused)).toBe("launch-ended");
+		}
+		expect(sent).toEqual([]);
+	});
 });
+
+/** A request body that stops once it is first read, until it is released. */
+function pausedBody() {
+	let reading = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let body = new ReadableStream<Uint8Array>({
+		async pull(controller) {
+			reading.resolve();
+			await release.promise;
+			controller.enqueue(new TextEncoder().encode("{}"));
+			controller.close();
+		},
+	}, { highWaterMark: 0 });
+	return { body, reading: reading.promise, release: () => release.resolve() };
+}
 
 describe("the proxy's final handoff", () => {
 	it("takes a key the provider echoes out of its headers and its body, even split across chunks", async () => {
@@ -1070,7 +1156,9 @@ describe("the proxy's final handoff", () => {
 					{
 						headers: {
 							"content-type": "application/json",
+							"cache-control": `private, extension=${OPENAI_KEY}`,
 							"x-echo": `Bearer ${OPENAI_KEY}`,
+							[OPENAI_KEY]: "1",
 							"x-request-id": "req_1",
 						},
 					},
@@ -1083,11 +1171,50 @@ describe("the proxy's final handoff", () => {
 			}),
 			url,
 		);
+		for (let [name, value] of answer.headers) {
+			expect(`${name}: ${value}`).not.toContain(OPENAI_KEY);
+		}
+		expect(answer.headers.get("cache-control")).toBe("private, extension=[redacted]");
 		expect(answer.headers.get("x-echo")).toBeNull();
 		expect(answer.headers.get("x-request-id")).toBe("req_1");
 		let text = await answer.text();
 		expect(text).not.toContain(OPENAI_KEY);
 		expect(JSON.parse(text)).toEqual({ echo: "[redacted]", again: "[redacted]" });
+	});
+
+	it("refuses an answer whose body arrives in an encoding it can't read to take the key out of", async () => {
+		let world = await setup();
+		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
+		let openai = (await world.credentials.launch({
+			userId: "U_mona",
+			expiresAt: new Date(world.now().getTime() + 3_600_000),
+		})).grants[0]!;
+		let layered = brotliCompressSync(gzipSync(`{"echo":"${OPENAI_KEY}"}`));
+		let upstream = provider(() =>
+			new Response(layered, {
+				headers: { "content-type": "application/json", "content-encoding": "gzip, br" },
+			})
+		);
+		let proxied = aiProxy({ credentials: world.credentials, upstreams: { openai: upstream.url } });
+		let url = new URL(`${openai.baseUrl}/models`);
+		let answer = await proxied(
+			new Request(url, {
+				headers: { authorization: `Bearer ${openai.placeholder}`, ...runner(openai) },
+			}),
+			url,
+		);
+		let bytes = new Uint8Array(await answer.arrayBuffer());
+		let unwrapped = (() => {
+			try {
+				return gunzipSync(brotliDecompressSync(bytes)).toString();
+			} catch {
+				return new TextDecoder().decode(bytes);
+			}
+		})();
+		expect(unwrapped).not.toContain(OPENAI_KEY);
+		expect(answer.status).toBe(502);
+		expect(JSON.parse(new TextDecoder().decode(bytes)).error.code).toBe("upstream-encoding");
+		expect(upstream.seen).toHaveLength(1);
 	});
 
 	it("passes back the provider's status code without a reason phrase that echoes the key", async () => {
@@ -1164,5 +1291,48 @@ describe("the proxy's final handoff", () => {
 			expect(await code(refused)).toBe("launch-ended");
 		}
 		expect(world.upstreams.openai.seen).toEqual([]);
+	});
+
+	it("never sends a key replaced or removed while the request's body arrived", async () => {
+		let world = await setup();
+		let replacement = "sk-replacement-openai-key-0123456789";
+		let connect = (secret: string) =>
+			world.connect(world.mona, "openai", { kind: "api-key", secret });
+		let remove = () => world.api("/api/ai/credentials/openai", world.mona, { method: "DELETE" });
+		await connect(OPENAI_KEY);
+		let openai = (await launch(world)).grants[0]!;
+		let changes: Array<[change: () => Promise<unknown>, status: number, refusal: string]> = [
+			[() => connect(replacement), 409, "credential-changed"],
+			[() => remove().then(() => connect(replacement)), 409, "credential-changed"],
+			[remove, 403, "not-connected"],
+		];
+		for (let [change, status, refusal] of changes) {
+			await connect(OPENAI_KEY);
+			let paused = pausedBody();
+			let answered = world.call(openai, "/responses", {
+				method: "POST",
+				headers: { authorization: `Bearer ${openai.placeholder}` },
+				body: paused.body,
+				duplex: "half",
+			} as RequestInit);
+			await paused.reading;
+			await change();
+			paused.release();
+			let refused = await answered;
+			expect(refused.status).toBe(status);
+			expect(await code(refused)).toBe(refusal);
+		}
+		expect(world.upstreams.openai.seen).toEqual([]);
+
+		await connect(replacement);
+		let answered = await world.call(openai, "/responses", {
+			method: "POST",
+			headers: { authorization: `Bearer ${openai.placeholder}` },
+			body: "{}",
+		});
+		expect(answered.status).toBe(200);
+		expect(world.upstreams.openai.seen.map(seen => seen.headers.authorization)).toEqual([
+			`Bearer ${replacement}`,
+		]);
 	});
 });
