@@ -21,6 +21,11 @@ describe("where a link goes inside the app", () => {
 			.toEqual({ kind: "page", path: "/documents/octo-org/score/rollout?view=decisions#a" });
 	});
 
+	it("is another page for the app's own pages beside documents", () => {
+		expect(appLink("/machines", here)).toEqual({ kind: "page", path: "/machines" });
+		expect(appLink("/ai-accounts", here)).toEqual({ kind: "page", path: "/ai-accounts" });
+	});
+
 	it("is nothing for another site or a path the server answers", () => {
 		expect(appLink("https://example.com/documents/a/b/c#x", here)).toBeUndefined();
 		expect(appLink("mailto:ana@example.com", here)).toBeUndefined();

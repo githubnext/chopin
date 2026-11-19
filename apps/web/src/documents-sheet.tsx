@@ -19,6 +19,7 @@ import {
 import { ActionSheet } from "./action-sheet";
 import { unansweredDecisionsLabel } from "./decision-view-control";
 import { DocumentActionsMenu } from "./document-actions-menu";
+import { AiAccountsEntry } from "./ai-accounts/entry";
 import { MachinesEntry } from "./machines-entry";
 import {
 	browserStorage,
@@ -47,6 +48,7 @@ type Page = "documents" | "archived";
 export function DocumentsSheet(
 	{
 		activeRepositoryId,
+		aiAccountsCurrent,
 		catalogueMode,
 		currentDocumentId,
 		machinesCurrent,
@@ -65,6 +67,7 @@ export function DocumentsSheet(
 		user,
 	}: {
 		activeRepositoryId?: string;
+		aiAccountsCurrent?: boolean;
 		catalogueMode: "active" | "archived";
 		currentDocumentId?: string;
 		/** /machines is open, so the Machines row is the current page. */
@@ -394,6 +397,12 @@ export function DocumentsSheet(
 										</li>
 										<li className="documents-sheet-row" data-current={machinesCurrent || undefined}>
 											<MachinesEntry current={machinesCurrent} placement="sheet" />
+										</li>
+										<li
+											className="documents-sheet-row"
+											data-current={aiAccountsCurrent || undefined}
+										>
+											<AiAccountsEntry current={aiAccountsCurrent} placement="sheet" />
 										</li>
 										<li className="documents-sheet-row">
 											<button

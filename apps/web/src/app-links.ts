@@ -10,7 +10,7 @@
  */
 
 /** A page of the app, as the path after the origin. Every other path belongs to the server. */
-const APP_PATH = /^\/(?:channels|connect|documents|machines|repositories)(?:\/|$)/;
+const APP_PATH = /^\/(?:ai-accounts|channels|connect|documents|machines|repositories)(?:\/|$)/;
 
 /** The event the document on show listens for to note where its reader is before a jump. */
 export const LEAVING_PLACE = "chopin:leaving-place";

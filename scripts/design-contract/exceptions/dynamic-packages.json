@@ -91,6 +91,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > KeyIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > CloudIcon > <LineIcon>",
 				1
 			],
@@ -116,7 +123,7 @@
 				1
 			]
 		],
-		"sourceHash": "89fd70bb78c40ef8f00d55fb202dca85108945bca00983e7880bc44772bae190"
+		"sourceHash": "5aab9c842201b9451e4e1322d8ef16f5803e7b55310ab87eb46b9d42c375433a"
 	},
 	{
 		"file": "packages/icons/src/line.tsx",

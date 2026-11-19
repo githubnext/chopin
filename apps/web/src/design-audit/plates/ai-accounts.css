@@ -1,0 +1,10 @@
+.design-audit-ai-accounts {
+	display: grid;
+	width: min(100%, 44rem);
+	gap: 1rem;
+}
+
+.design-audit-ai-accounts > div {
+	display: grid;
+	gap: 0.5rem;
+}

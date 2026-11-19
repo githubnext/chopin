@@ -932,7 +932,10 @@ accepts it: a refusal (401 or 403) is answered 422 with the provider's name, and
 a provider that can't be asked 502, and either leaves any key already connected
 as it was. A saved key is stored encrypted with AES-GCM under a key
 derived from `SESSION_ENCRYPTION_KEY`, bound to its person and provider
-(`ai_credentials` in [Storage](storage.md)).
+(`ai_credentials` in [Storage](storage.md)). One the server can no longer open, such as
+one saved under an encryption key since replaced, is listed `unusable: true`
+until it is connected again. People manage all of this on the AI accounts page
+(`/ai-accounts`, under Machines in the sidebar).
 
 **Placeholders.** A launch (a Planner session or a build or run) is given, per
 provider its person can use, a random placeholder (`chopin_ai_` and 43

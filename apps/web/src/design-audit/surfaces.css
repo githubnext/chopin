@@ -1,6 +1,7 @@
 @import "./plates/dialogs.css";
 @import "./plates/lists.css";
 @import "./plates/navigation.css";
+@import "./plates/ai-accounts.css";
 @import "./plates/conversation.css";
 @import "./plates/workflow-runs.css";
 @import "./plates/identity.css";

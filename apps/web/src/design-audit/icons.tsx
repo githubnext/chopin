@@ -10,6 +10,7 @@ import {
 	InfoIcon,
 	InvestigationIcon,
 	KeyboardIcon,
+	KeyIcon,
 	LightbulbIcon,
 	LinkPlusIcon,
 	LoaderIcon,
@@ -90,6 +91,7 @@ const NUCLEO_ICONS: readonly IconCatalogueItem[] = [
 	{ icon: SearchIcon, name: "Search" },
 	{ icon: LoaderIcon, name: "Loader" },
 	{ icon: MachineIcon, name: "Machine" },
+	{ icon: KeyIcon, name: "Key" },
 	{ icon: ServerIcon, name: "Server" },
 	{ icon: UsersIcon, name: "Users" },
 ];

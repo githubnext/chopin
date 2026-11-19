@@ -488,6 +488,26 @@ describe("connecting AI credentials", () => {
 		expect((await world.storage.aiCredentials.get("U_mona", "openai"))!.lastUsedAt)
 			.toEqual(new Date("2026-10-09T12:01:00.000Z"));
 	});
+
+	it("says a key it can no longer read is unusable until it is connected again", async () => {
+		let world = await setup();
+		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
+		await world.connect(world.mona, "anthropic", { kind: "api-key", secret: ANTHROPIC_KEY });
+		let saved = (await world.storage.aiCredentials.get("U_mona", "openai"))!;
+		await world.storage.aiCredentials.put(world.lease, {
+			...saved,
+			ciphertext: new Uint8Array(saved.ciphertext!.length).fill(7),
+		});
+		let listed = async () =>
+			((await (await world.api("/api/ai/credentials", world.mona)).json()) as AiCredentialList)
+				.credentials;
+		let unusable = async () =>
+			(await listed()).filter(credential => credential.unusable).map(({ provider }) => provider);
+		expect(await unusable()).toEqual(["openai"]);
+
+		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
+		expect(await unusable()).toEqual([]);
+	});
 });
 
 describe("GitHub Copilot access through a GitHub sign-in", () => {

@@ -6,6 +6,7 @@ import { unansweredDecisionsLabel, useDecisionAttention } from "./decision-view-
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { addressOfHref, documentIntent, DWELL_MS } from "./document-intent";
 import { IconButton } from "./icon-button";
+import { AiAccountsEntry } from "./ai-accounts/entry";
 import { MachinesEntry } from "./machines-entry";
 import { ProjectSidebarSkeleton } from "./project-sidebar-chrome";
 import { motionContract } from "./motion-contract";
@@ -433,6 +434,7 @@ export function ProjectSidebar(
 		accountMenuId,
 		accountTriggerRef,
 		accountWrapRef,
+		aiAccountsCurrent,
 		canCreateDocument,
 		newDocumentPhase,
 		pendingCreations,
@@ -460,6 +462,7 @@ export function ProjectSidebar(
 		accountMenuId?: string;
 		accountTriggerRef?: Ref<HTMLButtonElement>;
 		accountWrapRef?: Ref<HTMLDivElement>;
+		aiAccountsCurrent?: boolean;
 		canCreateDocument: boolean;
 		catalogueMode: "active" | "archived";
 		newDocumentPhase?: DocumentCreationPhase | "loading";
@@ -642,6 +645,7 @@ export function ProjectSidebar(
 				</button>
 			)}
 			<MachinesEntry current={machinesCurrent} placement="sidebar" />
+			<AiAccountsEntry current={aiAccountsCurrent} placement="sidebar" />
 		</div>
 	);
 	return (

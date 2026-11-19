@@ -13,6 +13,7 @@ export type NavigationRoute =
 	| { page: "repositories" }
 	| { page: "repository"; owner: string; repository: string }
 	| { page: "machines" }
+	| { page: "ai-accounts" }
 	| { page: "missing" };
 
 export const NAVIGATION_INLINE_MIN = 1198;

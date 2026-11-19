@@ -61,6 +61,17 @@ export function ServerIcon(props: IconProps) {
 	);
 }
 
+export function KeyIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<circle cx="5.75" cy="12.25" r="3" />
+			<path d="M7.871 10.129L15.25 2.75" />
+			<path d="M13.25 4.75L15 6.5" />
+			<path d="M11.25 6.75L12.5 8" />
+		</LineIcon>
+	);
+}
+
 export function SearchIcon(props: IconProps) {
 	return (
 		<LineIcon viewBox="0 0 15 15" {...props}>

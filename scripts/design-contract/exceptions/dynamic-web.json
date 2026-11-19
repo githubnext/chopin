@@ -46,7 +46,7 @@
 				1
 			]
 		],
-		"sourceHash": "a3be7162fe9c4bfd722e9bdcf860eb374fe8b6b866e356507ffea97f35e690fc"
+		"sourceHash": "970d2ac30e93a0271db034bbc8903378d4f5bc538366c600bcd8ffe326e48b41"
 	},
 	{
 		"file": "apps/web/src/account-menu.tsx",
@@ -74,7 +74,7 @@
 				1
 			]
 		],
-		"sourceHash": "b3500f6c31710b46b8b954ee42ac6bdb746cfc0a327f4ca54c6d420b2fbefdb2"
+		"sourceHash": "7b68d2a27d0a5fdfe023e2783d0597dcdc90f0012d7f93e1450fe4ce1d0ba63b"
 	},
 	{
 		"file": "apps/web/src/design-audit/controls.tsx",
@@ -186,7 +186,7 @@
 				1
 			]
 		],
-		"sourceHash": "24d937f5509a78785b590828be4c562cf420d7467ef34e653fc45c85d23043b4"
+		"sourceHash": "aa43e0be34867360cd9d4c5f921cc3d85d94b8bba2d8d0f106ba59c5d976e301"
 	},
 	{
 		"file": "apps/web/src/navigation-drawer.tsx",

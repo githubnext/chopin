@@ -161,6 +161,20 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				states: ["current", "ancestor", "unanswered", "loading", "empty"],
 			},
 			{
+				id: "ai-accounts",
+				label: "AI accounts",
+				source: "apps/web/src/ai-accounts/rows.tsx",
+				states: [
+					"connected",
+					"no-access",
+					"unchecked",
+					"check-failed",
+					"unreadable",
+					"refused",
+					"missing",
+				],
+			},
+			{
 				id: "chat",
 				label: "Conversation",
 				source: "apps/web/src/chat/chat.tsx",

@@ -118,6 +118,7 @@ export {
 	ArchiveIcon,
 	CloudIcon,
 	DocumentIcon,
+	KeyIcon,
 	LoaderIcon,
 	MachineIcon,
 	SearchIcon,

@@ -735,3 +735,33 @@ export async function readDocument(port: number, id: string): Promise<{
 		return { epoch: row.epoch, source: row.source, update: new Uint8Array(row.document) };
 	});
 }
+
+export async function markAiKeyRejected(
+	port: number,
+	login: string,
+	provider: "openai" | "anthropic",
+): Promise<void> {
+	await sql(port, database =>
+		database`
+			UPDATE ai_credentials SET rejected_at = now()
+			WHERE user_id = (SELECT id FROM users WHERE login = ${login}) AND provider = ${provider}
+		`);
+}
+
+export async function seedUnreadableAiKey(
+	port: number,
+	login: string,
+	provider: "openai" | "anthropic",
+	suffix: string,
+): Promise<void> {
+	await sql(port, database =>
+		database`
+			INSERT INTO ai_credentials (user_id, provider, kind, ciphertext, suffix, updated_at)
+			VALUES (
+				(SELECT id FROM users WHERE login = ${login}), ${provider}, 'api-key',
+				${Buffer.alloc(48, 7)}, ${suffix}, now()
+			)
+			ON CONFLICT (user_id, provider) DO UPDATE SET
+				kind = EXCLUDED.kind, ciphertext = EXCLUDED.ciphertext, suffix = EXCLUDED.suffix
+		`);
+}
