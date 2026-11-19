@@ -1036,6 +1036,48 @@ describe("the AI credential proxy", () => {
 		expect(world.upstreams.openai.seen).toHaveLength(2);
 	});
 
+	it("ends a launch for the machine that holds its credential, in a process started since, and for no other machine", async () => {
+		let world = await setup();
+		await world.connect(world.mona, "openai", { kind: "api-key", secret: OPENAI_KEY });
+		let pair = (label: string) =>
+			world.machines.pair({
+				userId: "U_mona",
+				label,
+				repositories: [],
+				autoRun: false,
+				grant: grant(`ghu_${label}`),
+			}).then(paired => paired.machine);
+		let machine = await pair("studio");
+		let other = await pair("laptop");
+		let launched = await world.credentials.launch({
+			userId: "U_mona",
+			machineId: machine.id,
+			channelId: world.channel.id,
+			expiresAt: new Date(world.now().getTime() + 3_600_000),
+		});
+		let openai = launched.grants.find(isOpenai)!;
+		let status = async () =>
+			(await world.call(openai, "/models", {
+				headers: { authorization: `Bearer ${openai.placeholder}` },
+			})).status;
+		expect(await status()).toBe(200);
+		let successor = new AiCredentials({
+			storage: world.storage,
+			key: new Uint8Array(32).fill(9),
+			origin: ORIGIN,
+			clock: world.now,
+			githubToken: async () => undefined,
+			copilotToken: async () => undefined,
+			lease: () => world.lease,
+		});
+		expect(await successor.endHeld(launched.launchToken, other.id)).toBe(false);
+		expect(await successor.endHeld("chopin_launch_unknown", machine.id)).toBe(false);
+		expect(await status()).toBe(200);
+		expect(await successor.endHeld(launched.launchToken, machine.id)).toBe(true);
+		expect(await status()).toBe(401);
+		expect(await successor.endHeld(launched.launchToken, machine.id)).toBe(false);
+	});
+
 	it("sends GitHub Copilot the Copilot token GitHub gives the person's GitHub token, renewed by Chopin", async () => {
 		let world = await setup();
 		await world.connect(world.mona, "github-copilot", { kind: "github-sign-in" });

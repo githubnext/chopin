@@ -1818,15 +1818,6 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return json(minted);
 	});
 	/**
-	 * The AI launches handed to runs on paired machines, by the SHA-256 of each launch's own
-	 * credential, so the machine that holds one can end it. Each is forgotten once it is ended or
-	 * past its deadline; its deadline ends it either way.
-	 */
-	let runLaunches = new Map<string, { launchId: string; machineId: string; expiresAt: number }>();
-	function launchKey(token: string) {
-		return createHash("sha256").update(token).digest("hex");
-	}
-	/**
 	 * What a run on this machine is handed for the models its agent calls, in place of any key of
 	 * the machine's: a launch for the person the run acts for (whoever started it, on their own
 	 * machine or a teammate's), on this machine and the run's document. Its answer is the launch's
@@ -1855,19 +1846,13 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			if (error instanceof AiCredentialError) fail("unavailable", error.message);
 			throw error;
 		}
-		let now = auth.clock().getTime();
-		for (let [key, held] of runLaunches) if (held.expiresAt <= now) runLaunches.delete(key);
-		if (handed.launchId && handed.grants.launch) {
-			runLaunches.set(launchKey(handed.grants.launch), {
-				launchId: handed.launchId,
-				machineId: machine.id,
-				expiresAt,
-			});
-		}
 		await auth.machines.seen(machine);
 		return json(handed.grants);
 	});
-	/** A run's machine ends the AI launch it was handed, with the launch's own credential. */
+	/**
+	 * A run's machine ends the AI launch it was handed, with the launch's own credential. Storage
+	 * keeps which machine a launch was handed to, so a process that started since ends it too.
+	 */
 	route("POST", "/api/connector/ai-launch/end", async request => {
 		let credentials = options.ai?.();
 		if (!credentials || !auth.machines.durable) fail("not-found");
@@ -1876,12 +1861,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let { launch } = z.object({ launch: z.string().min(1).max(256) }).strict().parse(
 			await body(request),
 		);
-		let key = launchKey(launch);
-		let held = runLaunches.get(key);
-		if (!held || held.machineId !== machine.id) return json({ ended: false });
-		await credentials.end(held.launchId);
-		runLaunches.delete(key);
-		return json({ ended: true });
+		return json({ ended: await credentials.endHeld(launch, machine.id) });
 	});
 	/** The `/mcp` caller an MCP token names, while its launch and its machine are live. */
 	async function mcpCaller(token: string): Promise<HostedCaller | undefined> {

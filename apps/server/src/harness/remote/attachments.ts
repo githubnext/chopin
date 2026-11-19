@@ -115,6 +115,8 @@ export type PlannerAttachmentOptions = {
 	 * the client of a hold a restart rebuilt asks while nobody has the document open.
 	 */
 	openDocument?: (channelId: string) => Promise<() => void>;
+	/** Ends an AI launch a rebuilt hold's session kept, once nothing will take it back. */
+	endAi?: (launchId: string) => void;
 };
 
 /** What a document's members are told about its Planner: only the holder's login and state. */
@@ -575,6 +577,9 @@ export class PlannerAttachments {
 				persisted: true,
 			};
 			if (stale) {
+				for (let { aiLaunchId } of row.sessions) {
+					if (aiLaunchId) this.#options.endAi?.(aiLaunchId);
+				}
 				this.#forgetRow(hold);
 				continue;
 			}
@@ -585,6 +590,7 @@ export class PlannerAttachments {
 					ended: () => this.#runs(hold, "ended"),
 					resumed: () => this.#runs(hold, "up"),
 					...(open ? { open: () => open(row.channelId) } : {}),
+					...(this.#options.endAi ? { endAi: this.#options.endAi } : {}),
 				});
 			}
 			let length = row.handoverUntil

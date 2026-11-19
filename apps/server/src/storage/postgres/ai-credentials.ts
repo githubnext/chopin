@@ -235,6 +235,21 @@ export class PostgresAiPlaceholderStore implements AiPlaceholderStore {
 				return removed.length;
 			})).finally(() => this.counted.cut());
 	}
+	deleteHeldLaunch(lease: Lease, launchDigest: Uint8Array, machineId: string) {
+		return this.run(
+			"end a held launch's AI placeholders",
+			() =>
+				this.sql.begin(async transaction => {
+					await this.fence(transaction, lease);
+					let removed = await transaction<{ launchId: string }[]>`
+				DELETE FROM ai_placeholders
+				WHERE launch_digest = ${launchDigest} AND machine_id = ${machineId}
+				RETURNING launch_id AS "launchId"
+			`;
+					return removed.length;
+				}),
+		).finally(() => this.counted.cut());
+	}
 	deleteForMachine(lease: Lease, machineId: string) {
 		return this.run("end a machine's AI placeholders", () =>
 			this.sql.begin(async transaction => {

@@ -967,3 +967,57 @@ test("an agent given a state directory of its own writes there, and reads none o
 	expect(shared.denied).not.toContain(join(home, ".atomic", "agent"));
 	expect(shared.denied).not.toContain(join(home, ".claude"));
 });
+
+test("an owner's agent directory named from the home, by a file URL or relative to where the connector started is hidden as the agent reads it", () => {
+	let root = realpathSync(mkdtempSync(join(scratch, "agent-moved-")));
+	let home = join(root, "home");
+	let base = join(root, "state");
+	let worktree = join(base, "runs", "mine");
+	let agentHome = `${worktree}.agent`;
+	let started = join(root, "started");
+	let tilde = join(home, "custom-agent");
+	let url = join(root, "url-agent");
+	let relative = join(started, "relative-agent");
+	let linked = join(home, "linked-agent");
+	let target = join(root, "linked-target");
+	for (let path of [worktree, agentHome, tilde, url, relative, target]) {
+		mkdirSync(path, { recursive: true });
+	}
+	symlinkSync(target, linked);
+	let temporary = join(root, "tmp");
+	mkdirSync(temporary);
+	let policy = (env: Record<string, string>) =>
+		launchPolicy(
+			"bubblewrap",
+			{ ...systemHost({ HOME: home, ...env }), platform: "linux" },
+			{
+				command: ["atomic-acp"],
+				cwd: worktree,
+				env: { PATH: process.env.PATH },
+				stdin: "pipe",
+				own: [worktree, agentHome],
+				agentHome,
+			},
+			{ directory: base, home },
+			"http://127.0.0.1:4000",
+			temporary,
+		);
+	let before = process.cwd();
+	process.chdir(started);
+	try {
+		let denied = policy({
+			ATOMIC_CODING_AGENT_DIR: "~/custom-agent",
+			COPILOT_HOME: `file://${url}`,
+			CLAUDE_CONFIG_DIR: "relative-agent",
+			CODEX_HOME: "~/linked-agent",
+		}).denied;
+		for (let path of [tilde, url, relative, linked, target]) expect(denied, path).toContain(path);
+		// A variable naming the home, or a folder holding the launch's own, would hide the launch from
+		// itself, so it is left out.
+		let wide = policy({ ATOMIC_CODING_AGENT_DIR: "~", CODEX_HOME: base }).denied;
+		expect(wide).not.toContain(home);
+		expect(wide).not.toContain(base);
+	} finally {
+		process.chdir(before);
+	}
+});

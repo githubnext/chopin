@@ -659,6 +659,19 @@ export class AiCredentials {
 		await this.#storage.aiPlaceholders.deleteLaunch(this.#lease(), launchId);
 	}
 
+	/**
+	 * Ends the launch `launchToken` is the credential of, for the machine it was handed out on;
+	 * false when no live launch of that machine has it. Read from storage, so any process ends it.
+	 */
+	async endHeld(launchToken: string, machineId: string): Promise<boolean> {
+		let removed = await this.#storage.aiPlaceholders.deleteHeldLaunch(
+			this.#lease(),
+			digest(launchToken),
+			machineId,
+		);
+		return removed > 0;
+	}
+
 	/** Ends every launch on a machine, as revoking it does. */
 	async machineEnded(machineId: string): Promise<void> {
 		await this.#storage.aiPlaceholders.deleteForMachine(this.#lease(), machineId);

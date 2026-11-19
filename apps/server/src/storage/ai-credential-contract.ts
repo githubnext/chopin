@@ -42,6 +42,7 @@ async function launched(storage: StorageAdapter) {
 		machineId: input.id,
 		machineOwner: input.userId,
 		launchId,
+		launchDigest,
 		lease,
 		placeholder,
 	};
@@ -228,6 +229,40 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		test("ends a launch by its credential's digest only for the machine it was handed to", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { placeholder, machineId, launchDigest, lease } = await launched(storage);
+				let first = placeholder();
+				let second = placeholder({ provider: "anthropic" });
+				let unbound = placeholder({ launchId: id("launch") });
+				delete unbound.machineId;
+				let another = placeholder({ launchId: id("launch"), launchDigest: bytes(32) });
+				await storage.aiPlaceholders.put([first, second]);
+				await storage.aiPlaceholders.put([unbound]);
+				await storage.aiPlaceholders.put([another]);
+				let otherMachine = machine(await owner(storage));
+				await storage.machines.create(otherMachine);
+
+				expect(
+					await storage.aiPlaceholders.deleteHeldLaunch(lease, launchDigest, otherMachine.id),
+				).toBe(0);
+				expect(await storage.aiPlaceholders.find(first.digest, AT)).toEqual(first);
+				expect(await storage.aiPlaceholders.deleteHeldLaunch(lease, launchDigest, machineId)).toBe(
+					2,
+				);
+				expect(await storage.aiPlaceholders.find(first.digest, AT)).toBeUndefined();
+				expect(await storage.aiPlaceholders.find(second.digest, AT)).toBeUndefined();
+				expect(await storage.aiPlaceholders.find(unbound.digest, AT)).toEqual(unbound);
+				expect(await storage.aiPlaceholders.find(another.digest, AT)).toEqual(another);
+				expect(await storage.aiPlaceholders.deleteHeldLaunch(lease, launchDigest, machineId)).toBe(
+					0,
+				);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		test("ends a document's placeholders for good when it is archived", async () => {
 			let storage = await openedStorage(factory);
 			try {
@@ -299,8 +334,16 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 		test("refuses each write that ends AI authority under a writer lease no longer held, and changes nothing", async () => {
 			let storage = await openedStorage(factory);
 			try {
-				let { userId, channelId, machineId, machineOwner, launchId, lease, placeholder } =
-					await launched(storage);
+				let {
+					userId,
+					channelId,
+					machineId,
+					machineOwner,
+					launchId,
+					launchDigest,
+					lease,
+					placeholder,
+				} = await launched(storage);
 				let key: AiCredentialRecord = {
 					userId,
 					provider: "openai",
@@ -321,6 +364,7 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 					() => storage.aiCredentials.put(lease, { ...key, ciphertext: bytes(48) }),
 					() => storage.aiCredentials.delete(lease, userId, "openai"),
 					() => storage.aiPlaceholders.deleteLaunch(lease, launchId),
+					() => storage.aiPlaceholders.deleteHeldLaunch(lease, launchDigest, machineId),
 					() => storage.aiPlaceholders.deleteForMachine(lease, machineId),
 				];
 				for (let write of writes) expect(await failure(write)).toBe("conflict");
@@ -340,8 +384,16 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 		test("counts each write that ends AI authority by the time its caller hears it committed", async () => {
 			let storage = await openedStorage(factory);
 			try {
-				let { userId, channelId, machineId, machineOwner, launchId, lease, placeholder } =
-					await launched(storage);
+				let {
+					userId,
+					channelId,
+					machineId,
+					machineOwner,
+					launchId,
+					launchDigest,
+					lease,
+					placeholder,
+				} = await launched(storage);
 				let other = await owner(storage);
 				let counted = async (write: () => Promise<unknown>) => {
 					let before = storage.aiPlaceholders.cutoffs();
@@ -375,6 +427,11 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 				expect(storage.aiCredentials.version(other)).toBe(theirs + 1);
 
 				expect(await counted(() => storage.aiPlaceholders.deleteLaunch(lease, launchId))).toBe(1);
+				expect(
+					await counted(() =>
+						storage.aiPlaceholders.deleteHeldLaunch(lease, launchDigest, machineId)
+					),
+				).toBe(1);
 				expect(await counted(() => storage.aiPlaceholders.deleteForMachine(lease, machineId))).toBe(
 					1,
 				);

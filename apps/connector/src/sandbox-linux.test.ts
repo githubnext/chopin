@@ -26,7 +26,7 @@ import { servePlanners } from "./planner";
 import { runWork } from "./run";
 import { discardWorkspace, preparePlannerWorktree, prepareWorkspace } from "./workspace";
 import { gitAsync, gitSync, repositoryAt } from "./git-host";
-import { createSandbox, inspectSandbox } from "./sandbox";
+import { createSandbox, inspectSandbox, systemHost } from "./sandbox";
 import type { CheckPlan, CheckResult } from "./testing/sandbox-checks";
 
 /**
@@ -1724,6 +1724,56 @@ sandboxTest(
 			expect(readFileSync(join(report, "env.txt"), "utf8")).toBe(tricky);
 			expect(readFileSync(join(report, "file.txt"), "utf8")).toBe("unset");
 			expect(readFileSync(join(report, "tmp.txt"), "utf8")).toBe("");
+		} finally {
+			await sandbox.close();
+		}
+	},
+	60_000,
+);
+
+sandboxTest(
+	"a launch with a state directory of its own reads nothing of the owner's agent directory named from the home",
+	async () => {
+		let made = world("owner-agent");
+		let owners = join(home, "custom-agent");
+		mkdirSync(owners, { recursive: true });
+		writeFileSync(join(owners, "auth.json"), "OWNER_CREDENTIAL_MARKER");
+		let sandbox = await createSandbox({
+			directory: made.state,
+			home,
+			server: "http://127.0.0.1:1",
+			host: systemHost({ ...process.env, HOME: home, ATOMIC_CODING_AGENT_DIR: "~/custom-agent" }),
+		});
+		let read = async (isolated: boolean) => {
+			let work = join(made.state, "runs", isolated ? "isolated" : "shared");
+			let agentHome = `${work}.agent`;
+			mkdirSync(work, { recursive: true });
+			mkdirSync(agentHome, { recursive: true });
+			let child = sandbox.spawn({
+				command: [
+					"/bin/sh",
+					"-c",
+					`/bin/cat ${
+						join(owners, "auth.json")
+					} > "$PWD/read.txt" 2>/dev/null; echo $? > "$PWD/status.txt"`,
+				],
+				cwd: work,
+				env: { PATH: process.env.PATH, HOME: home },
+				stdin: "ignore",
+				own: [work, ...isolated ? [agentHome] : []],
+				...isolated ? { agentHome } : {},
+			});
+			await new Promise(resolve => child.once("close", resolve));
+			return {
+				status: readFileSync(join(work, "status.txt"), "utf8").trim(),
+				read: readFileSync(join(work, "read.txt"), "utf8"),
+			};
+		};
+		try {
+			expect(await read(false)).toEqual({ status: "0", read: "OWNER_CREDENTIAL_MARKER" });
+			let isolated = await read(true);
+			expect(isolated.status).not.toBe("0");
+			expect(isolated.read).not.toContain("OWNER_CREDENTIAL_MARKER");
 		} finally {
 			await sandbox.close();
 		}

@@ -1,4 +1,5 @@
 import { isAbsolute, posix, win32 } from "node:path";
+import { fileURLToPath } from "node:url";
 import { windowsArgument } from "./windows-argument";
 
 /** The process sandbox each system gives through MXC. */
@@ -293,16 +294,41 @@ export function secretPaths(platform: NodeJS.Platform, home: string): string[] {
 /**
  * Where the owner keeps their own agents' configuration, logins and sessions: Atomic's agent
  * directory and journal, and the Copilot, Claude, Codex and Gemini directories, with any of them
- * the owner's environment moved elsewhere. A launch given an agent state directory of its own (see
- * `Launch.agentHome`) may not read any of them.
+ * the owner's environment moved elsewhere, as the agents read that variable: `~` is a home (the
+ * one given and the environment's own), a `file:` URL its path, and a relative path is taken from
+ * `cwd`, where the owner's agents started with that environment. A launch given an agent state
+ * directory of its own (see `Launch.agentHome`) may not read any of them.
  */
 export function ownerAgentPaths(
 	platform: NodeJS.Platform,
 	home: string,
 	env: Record<string, string | undefined> = {},
+	cwd?: string,
 ): string[] {
 	let path = platform === "win32" ? win32 : posix;
 	let under = (...parts: string[]) => path.join(home, ...parts);
+	let homes = [
+		...new Set(
+			[home, platform === "win32" ? env.USERPROFILE : env.HOME].filter(
+				(value): value is string => !!value && path.isAbsolute(value),
+			),
+		),
+	];
+	let located = (value: string): string[] => {
+		if (value === "~") return homes;
+		if (value.startsWith("~/") || (platform === "win32" && value.startsWith("~\\"))) {
+			return homes.map(each => path.join(each, value.slice(2)));
+		}
+		if (/^file:\/\//i.test(value)) {
+			try {
+				return [fileURLToPath(value)];
+			} catch {
+				return [];
+			}
+		}
+		if (path.isAbsolute(value)) return [path.normalize(value)];
+		return cwd && path.isAbsolute(cwd) ? [path.resolve(cwd, value)] : [];
+	};
 	let moved = [
 		"ATOMIC_CODING_AGENT_DIR",
 		"PI_CODING_AGENT_DIR",
@@ -310,8 +336,8 @@ export function ownerAgentPaths(
 		"CLAUDE_CONFIG_DIR",
 		"CODEX_HOME",
 	].flatMap(name => {
-		let value = env[name];
-		return value && isAbsolute(value) ? [value] : [];
+		let value = env[name]?.trim();
+		return value ? located(value) : [];
 	});
 	return [
 		under(".atomic", "agent"),
