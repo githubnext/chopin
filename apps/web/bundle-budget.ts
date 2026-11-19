@@ -42,9 +42,11 @@ export type StylesheetBudget = { gzip: number; raw: number };
 // Every face drawing the picture the server stored for its login, with the page's one map of them,
 // the order a face tries its pictures in and what the room's frames teach the map, measures
 // 260,106 B raw and 83,267 B gzip in the container build; allow about 400 B raw and 180 B gzip above that.
+// The sidebar's AI accounts entry, under Machines, with the page loaded lazily, measures 260,298 B raw
+// and 83,456 B gzip in the container build; allow about 400 B raw and 190 B gzip above that.
 export const INITIAL_JAVASCRIPT_BUDGET: JavaScriptBudget = {
-	gzip: 83_450,
-	raw: 260_500,
+	gzip: 83_650,
+	raw: 260_700,
 };
 
 // With copied assistant-ui elements' utilities, geometry layer and animations split into their own
