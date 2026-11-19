@@ -1197,8 +1197,8 @@ provider and model, most requested first, the requests sent (pending ones
 included, those refused at the send not), how many ended in an error, how many
 are unknown, and the input, output, cache read and cache write tokens. Requests
 that named no model (a model list) are counted under no model. The _Usage by
-model_ section (`apps/web/src/ai-usage/usage-by-model.tsx`) shows them; it is not
-on any page yet, and goes on the AI accounts page once that page lands.
+model_ section (`apps/web/src/ai-usage/usage-by-model.tsx`) shows them on the AI
+accounts page, after _API keys_.
 
 ## Permission checks
 

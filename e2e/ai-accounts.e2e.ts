@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
-import { markAiKeyRejected, seedUnreadableAiKey } from "./database";
+import { markAiKeyRejected, seedAiUsage, seedUnreadableAiKey } from "./database";
 import { authenticate } from "./room";
 
 import type { Page } from "@playwright/test";
@@ -233,4 +233,37 @@ test("a key its provider refused says it needs reconnecting", async ({ baseURL, 
 		.toBeVisible();
 	await expect(openai.getByRole("button", { name: "Replace OpenAI key" })).toBeVisible();
 	await expect(openai.getByRole("button", { name: "Remove OpenAI key" })).toBeVisible();
+});
+
+test("Usage by model follows API keys and shows the person's own requests", async ({ baseURL, page }) => {
+	let handle = person();
+	await open(page, handle, baseURL!);
+	let usage = page.getByRole("region", { name: "Usage by model" });
+	await expect(usage).toBeVisible();
+	await expect(usage.getByText("No requests in the last 7 days.")).toBeVisible();
+	expect(
+		await page.getByRole("heading", { name: "API keys" }).evaluate(
+			(heading, section) =>
+				!!(heading.compareDocumentPosition(section!) & Node.DOCUMENT_POSITION_FOLLOWING),
+			await usage.elementHandle(),
+		),
+	).toBe(true);
+
+	await seedAiUsage(Number(new URL(baseURL!).port), handle, [
+		{ model: "gpt-e2e", outcome: "ok", input: 1_200, output: 300 },
+		{ model: "gpt-e2e", outcome: "error", input: 0, output: 0 },
+	]);
+	await page.reload();
+	let table = usage.getByRole("table", { name: "Usage by model" });
+	await expect(table).toBeVisible();
+	let model = table.getByRole("row").filter({ hasText: "gpt-e2e" });
+	await expect(model.getByRole("cell")).toHaveText([
+		"gpt-e2eOpenAI",
+		"2",
+		"1",
+		"1.2K",
+		"300",
+		"0",
+		"0",
+	]);
 });

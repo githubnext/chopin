@@ -765,3 +765,33 @@ export async function seedUnreadableAiKey(
 				kind = EXCLUDED.kind, ciphertext = EXCLUDED.ciphertext, suffix = EXCLUDED.suffix
 		`);
 }
+
+export async function seedAiUsage(
+	port: number,
+	login: string,
+	requests: {
+		model: string;
+		outcome: "ok" | "error";
+		input: number;
+		output: number;
+	}[],
+): Promise<void> {
+	await sql(port, async database => {
+		for (let request of requests) {
+			await database`
+				INSERT INTO ai_usage (
+					id, launch_id, user_id, provider, model, outcome, status, error,
+					input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+					started_at, completed_at, lease_name, fencing
+				)
+				VALUES (
+					${crypto.randomUUID()}, ${`e2e-launch-${login}`},
+					(SELECT id FROM users WHERE login = ${login}), 'openai', ${request.model},
+					${request.outcome}, ${request.outcome === "ok" ? 200 : 500},
+					${request.outcome === "ok" ? null : "provider"},
+					${request.input}, ${request.output}, 0, 0, now(), now(), 'e2e', 1
+				)
+			`;
+		}
+	});
+}
