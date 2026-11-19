@@ -480,10 +480,11 @@ GET  /api/ai/credentials
 PUT  /api/ai/credentials/:provider
 POST /api/ai/credentials/github-copilot/check
 DELETE /api/ai/credentials/:provider
+GET  /api/ai/usage
 POST /auth/logout
 ```
 
-The AI credential routes and the credential proxy at `/api/v1/ai/` are
+The AI credential and usage routes and the credential proxy at `/api/v1/ai/` are
 described in [Hosted agent](hosted-agent.md#ai-credentials).
 
 Local mode (`AUTH_MODE=local`) additionally registers these routes. It disables

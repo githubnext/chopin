@@ -2,7 +2,11 @@ import type {
 	AddUserProject,
 	AddUserProjectResult,
 	AgentState,
+	AiAttempt,
+	AiAttemptResult,
+	AiAttemptStart,
 	AiCredentialRecord,
+	AiModelTotals,
 	AiPlaceholder,
 	AppendBackgroundJobProgress,
 	AppendResearchAgentMessage,
@@ -575,6 +579,34 @@ export interface AiPlaceholderStore {
 	cutoffs(): number;
 }
 
+/**
+ * Each request the AI proxy sends, recorded under the writer lease before it is sent and completed
+ * once when its answer ends. A request whose process stopped first is marked unknown by the next
+ * holder of the lease, never lost or counted twice.
+ */
+export interface AiUsageStore {
+	/** Records a request about to be sent, as pending. An id already stored keeps its first record. */
+	begin(lease: Lease, attempt: AiAttemptStart): Promise<void>;
+	/**
+	 * Completes a pending request with how it ended. Changes nothing, and returns false, for one
+	 * already completed or marked unknown, so a completion sent again is never counted twice.
+	 */
+	complete(lease: Lease, id: string, result: AiAttemptResult): Promise<boolean>;
+	/**
+	 * Marks unknown, at `at`, every request an earlier holder of `lease` left pending: its process
+	 * stopped between sending it and recording how it ended. Returns how many.
+	 */
+	retire(lease: Lease, at: Date): Promise<number>;
+	get(id: string): Promise<AiAttempt | undefined>;
+	/**
+	 * One person's requests started at or after `since`, by provider and model, most requested
+	 * first. Requests refused at the send are not counted; pending ones count as requests.
+	 */
+	summary(userId: string, since: Date): Promise<AiModelTotals[]>;
+	/** Removes requests started before `before` that are no longer pending. Returns how many. */
+	deleteBefore(lease: Lease, before: Date): Promise<number>;
+}
+
 /** MCP sessions, which a restart no longer ends. Idle ones are swept. */
 export interface McpSessionStore {
 	/** Idempotent: an id already stored keeps its first record. */
@@ -631,6 +663,7 @@ export interface StorageAdapter {
 	readonly plannerCredentials: PlannerCredentialStore;
 	readonly aiCredentials: AiCredentialStore;
 	readonly aiPlaceholders: AiPlaceholderStore;
+	readonly aiUsage: AiUsageStore;
 	readonly mcpSessions: McpSessionStore;
 	readonly deferredTurns: DeferredTurnStore;
 

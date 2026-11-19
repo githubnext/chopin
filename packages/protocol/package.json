@@ -33,6 +33,10 @@
 			"types": "./ai-credentials.ts",
 			"default": "./ai-credentials.ts"
 		},
+		"./ai-usage": {
+			"types": "./ai-usage.ts",
+			"default": "./ai-usage.ts"
+		},
 		"./commands": {
 			"types": "./commands.ts",
 			"default": "./commands.ts"

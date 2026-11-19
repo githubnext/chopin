@@ -1183,6 +1183,66 @@ export type AiPlaceholder = {
 	expiresAt: Date;
 };
 
+/**
+ * The token counts a provider reported for one request: `input` is what was read without the
+ * cache, `cacheRead` what was read from it and `cacheWrite` what was written to it. A count the
+ * provider didn't report is absent.
+ */
+export type AiTokenCounts = {
+	input?: number;
+	output?: number;
+	cacheRead?: number;
+	cacheWrite?: number;
+};
+
+/**
+ * Where a proxied request stands: `pending` from before it is sent until its answer ends, `ok` or
+ * `error` once it has, `unsent` when the proxy refused it at the send, and `unknown` when the
+ * process that sent it stopped before recording how it ended.
+ */
+export type AiAttemptOutcome = "pending" | "ok" | "error" | "unsent" | "unknown";
+
+/** What a proxied request is recorded with before it is sent. */
+export type AiAttemptStart = {
+	id: string;
+	launchId: string;
+	userId: string;
+	provider: import("@chopin/protocol/ai-credentials").AiProvider;
+	/** The model the request named, when it named one. */
+	model?: string;
+	startedAt: Date;
+};
+
+/** How a proxied request ended: the provider's status, if it answered, and a short error code. */
+export type AiAttemptResult = {
+	outcome: "ok" | "error" | "unsent";
+	status?: number;
+	error?: string;
+	tokens: AiTokenCounts;
+	completedAt: Date;
+};
+
+export type AiAttempt = AiAttemptStart & {
+	outcome: AiAttemptOutcome;
+	status?: number;
+	error?: string;
+	tokens: AiTokenCounts;
+	completedAt?: Date;
+};
+
+/**
+ * One person's requests to one provider's model since a time: every request sent, those that
+ * ended in an error, those whose end is unknown, and the tokens the providers reported.
+ */
+export type AiModelTotals = {
+	provider: import("@chopin/protocol/ai-credentials").AiProvider;
+	model?: string;
+	requests: number;
+	errors: number;
+	unknown: number;
+	tokens: Required<AiTokenCounts>;
+};
+
 export type McpSession = {
 	id: string;
 	userId: string;

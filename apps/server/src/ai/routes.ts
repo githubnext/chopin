@@ -9,6 +9,7 @@ import type { HostedAuth } from "../auth/routes";
 import type { Router } from "../http/router";
 import type { AiPlaceholder } from "../storage/model";
 import type { AiCredentials } from "./credentials";
+import type { AiUsage } from "./usage";
 
 const BODY_LIMIT = 8 * 1024;
 
@@ -79,7 +80,8 @@ export function githubSignIn(auth: HostedAuth) {
  * The AI credentials a signed-in person connects, and Chopin's credential proxy. The list says
  * which providers are connected and how, never a secret; connecting and disconnecting take a
  * request from Chopin's own origin. The proxy (see `aiProxy`) takes a launch's placeholder, not a
- * sign-in.
+ * sign-in. With `usage`, a person reads the totals of their own launches' requests, and nobody
+ * else's.
  */
 export function registerAiRoutes(
 	router: Router,
@@ -87,9 +89,10 @@ export function registerAiRoutes(
 	options: {
 		credentials: AiCredentials;
 		proxy: (request: Request, url: URL) => Promise<Response>;
+		usage?: AiUsage;
 	},
 ): void {
-	let { credentials } = options;
+	let { credentials, usage } = options;
 
 	router.on("GET", "/api/ai/credentials", async request => {
 		try {
@@ -148,6 +151,18 @@ export function registerAiRoutes(
 			return failed(err);
 		}
 	});
+
+	if (usage) {
+		router.on("GET", "/api/ai/usage", async request => {
+			try {
+				let session = await auth.sessions.authenticate(request);
+				if (!session) return json({ error: "authentication required" }, 401);
+				return json(await usage.summary(session.user.id));
+			} catch (err) {
+				return failed(err);
+			}
+		});
+	}
 
 	router.prefix(`${AI_PROXY_PATH}/`, (request, url) => options.proxy(request, url));
 }

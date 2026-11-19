@@ -136,6 +136,7 @@ import { AiCredentials } from "./ai/credentials";
 import { aiProxy } from "./ai/proxy";
 import { copilotTokenExchange } from "./ai/copilot";
 import { githubSignIn, registerAiRoutes } from "./ai/routes";
+import { AiUsage } from "./ai/usage";
 import * as Edit from "./plan/edit";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
@@ -272,6 +273,7 @@ let experimentTimer: ReturnType<typeof setInterval> | undefined;
 let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
 let aiCredentials: AiCredentials | undefined;
+let aiUsage: AiUsage | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
 let plannerAttachments: PlannerAttachments | undefined;
 /** Each document's recent automatic follow-ups through `invoke_planner`, for their hourly limit. */
@@ -1082,6 +1084,17 @@ async function retireHeldMessages(): Promise<void> {
 		console.log(
 			`chopin: ${retired} message(s) an earlier release held for a Planner were left as ordinary messages`,
 		);
+	}
+}
+
+/**
+ * An AI request an earlier release sent and never recorded the end of is marked unknown: its
+ * process stopped between the send and the record. Only the holder of the writer lease does it.
+ */
+async function retireAiRequests(): Promise<void> {
+	let retired = await aiUsage?.retire() ?? 0;
+	if (retired > 0) {
+		console.log(`chopin: ${retired} AI request(s) an earlier release sent ended unrecorded`);
 	}
 }
 
@@ -2467,6 +2480,7 @@ function cleanSessions(): void {
 		await storage.mcpSessions.deleteIdle(new Date(now.getTime() - MCP_SESSION_IDLE_MS));
 		await storage.plannerCredentials.deleteExpired(now);
 		await aiCredentials?.sweep();
+		await aiUsage?.sweep();
 	}).catch(err => {
 		console.error("chopin: could not delete idle MCP sessions or expired credentials -", err);
 	}).finally(() => {
@@ -3630,9 +3644,16 @@ hostedAuth.machines.onEnded(machineId => {
 		console.error("chopin: could not end a machine's AI placeholders -", err)
 	);
 });
+let recordedAi = new AiUsage({
+	storage,
+	lease: () => writerLease.held,
+	clock: hostedAuth.clock,
+});
+aiUsage = recordedAi;
 registerAiRoutes(router, hostedAuth, {
 	credentials: connectedAi,
-	proxy: aiProxy({ credentials: connectedAi }),
+	proxy: aiProxy({ credentials: connectedAi, usage: recordedAi }),
+	usage: recordedAi,
 });
 registerImageRoutes(router, hostedAuth);
 registerAttachmentRoutes(router, hostedAuth, { limits: chatAttachmentLimits });
@@ -3798,6 +3819,9 @@ try {
 		// Off the readiness path: a message an earlier release held is left as an ordinary one.
 		void retireHeldMessages().catch(err =>
 			console.error("chopin: could not close the messages an earlier release held -", err)
+		);
+		void retireAiRequests().catch(err =>
+			console.error("chopin: could not mark an earlier release's unfinished AI requests -", err)
 		);
 		let held = requests.release();
 		console.log(

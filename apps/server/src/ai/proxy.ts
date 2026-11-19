@@ -3,6 +3,7 @@ import { AI_LAUNCH_HEADER, AI_PROXY_PATH, isAiProvider } from "@chopin/protocol/
 import type { AiProvider } from "@chopin/protocol/ai-credentials";
 import type { AiCredentialRecord } from "../storage/model";
 import type { AiAdmitted, AiCredentials, AiDeadlines, AiRefusal } from "./credentials";
+import type { AiAttemptRecord, AiUsage } from "./usage";
 
 /**
  * A send the transport took: the credential it carries, the person's stored credential that is,
@@ -199,6 +200,11 @@ export type AiProxyOptions = {
 	clock?: () => number;
 	/** What submits a model request; `fetch` on `clock` (`aiTransport`) unless given. */
 	transport?: AiTransport;
+	/**
+	 * Where each request sent to a provider is recorded before it is sent and completed when its
+	 * answer ends; without it nothing is recorded.
+	 */
+	usage?: AiUsage;
 };
 
 function failure(status: number, message: string, code: string): Response {
@@ -592,6 +598,18 @@ export function aiProxy(options: AiProxyOptions) {
 		if (body === undefined && request.method !== "GET") {
 			return failure(413, "The request is too large.", "too-large");
 		}
+		let attempt: AiAttemptRecord | undefined;
+		if (options.usage) {
+			try {
+				attempt = await options.usage.begin(checked.placeholder, body);
+			} catch {
+				return failure(
+					503,
+					"Chopin can't record this request now, so it wasn't sent. Send it again in a moment.",
+					"unrecorded",
+				);
+			}
+		}
 		let handed = await options.credentials.handoff(checked, authorized => {
 			let headers = forwardedHeaders(request);
 			headers.set(
@@ -619,18 +637,24 @@ export function aiProxy(options: AiProxyOptions) {
 				};
 			};
 		}, request.signal);
-		if ("refused" in handed) return refused(handed.refused);
+		if ("refused" in handed) {
+			attempt?.unsent(handed.refused);
+			return refused(handed.refused);
+		}
 		let { secret } = handed;
 		let upstream: Response;
 		try {
 			upstream = await handed.upstream;
 		} catch {
 			if (request.signal.aborted) {
+				attempt?.failed("cancelled");
 				return failedHolding(secret, 499, "The request was cancelled.", "cancelled");
 			}
+			attempt?.failed("unreachable");
 			return failedHolding(secret, 502, `${provider} can't be reached.`, "upstream");
 		}
 		if (!readable(upstream)) {
+			attempt?.failed("upstream-encoding", upstream.status);
 			await upstream.body?.cancel();
 			return failedHolding(
 				secret,
@@ -657,6 +681,7 @@ export function aiProxy(options: AiProxyOptions) {
 		}
 		let headers = returnedHeaders(upstream, secret);
 		if (!headers) {
+			attempt?.failed("upstream-headers", upstream.status);
 			await upstream.body?.cancel();
 			return failedHolding(
 				secret,
@@ -665,9 +690,10 @@ export function aiProxy(options: AiProxyOptions) {
 				"upstream-headers",
 			);
 		}
-		return new Response(upstream.body && scrubbed(upstream.body, secret), {
-			status: upstream.status,
-			headers,
-		});
+		let passed = upstream.body && scrubbed(upstream.body, secret);
+		return new Response(
+			attempt ? attempt.answered(upstream.status, headers.get("content-type"), passed) : passed,
+			{ status: upstream.status, headers },
+		);
 	};
 }
