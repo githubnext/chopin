@@ -169,12 +169,6 @@ export type PlannerSession = {
 	pauseRun?: (runId: string) => Promise<void | "held" | "unconfirmed">;
 	/** Resumes one paused run this session owns. */
 	resumeRun?: (runId: string) => Promise<void>;
-	/**
-	 * Whether a run that ends blocked or failed between turns starts a Planner turn
-	 * about it. A remote Planner's runs are only what its client reports, so they
-	 * never start a turn no writer asked for.
-	 */
-	followsUpRuns?: boolean;
 };
 
 /** Run control for a remote Planner: the attached client stops and resumes its own runs. */
@@ -183,7 +177,7 @@ function remoteRunControl(
 	watchRuns: NonNullable<PlannerSession["watchRuns"]>,
 ): Pick<
 	PlannerSession,
-	"runs" | "watchRuns" | "pauseRuns" | "resumeRuns" | "pauseRun" | "resumeRun" | "followsUpRuns"
+	"runs" | "watchRuns" | "pauseRuns" | "resumeRuns" | "pauseRun" | "resumeRun"
 > {
 	let control = () => {
 		if (!remote.control) throw new Error("The Planner has no attached session to control.");
@@ -196,7 +190,6 @@ function remoteRunControl(
 		resumeRuns: async () => void await control()("resume"),
 		pauseRun: async runId => control()("stop", runId),
 		resumeRun: async runId => void await control()("resume", runId),
-		followsUpRuns: false,
 	};
 }
 

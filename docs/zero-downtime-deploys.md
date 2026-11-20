@@ -212,7 +212,7 @@ one serving: stop it, fix the release, and try again. Never stop the serving slo
 | Each slot's service   | `stop_grace_period`             | `30s`                                  |
 | The image build       | `PREVIOUS_IMAGE` build argument | the image running now                  |
 | Each slot's container | Docker `HEALTHCHECK`            | `GET /api/health/live`, as the image's |
-| Both slots            | A volume at `/var/lib/chopin`   | shared, for the Atomic journal         |
+| Both slots            | A volume at `/var/lib/chopin`   | shared, for the Planner's directories  |
 
 What each does is in [Self-hosting](self-hosting.md#runtime-configuration). The turn wait, the
 unready window, the request wait and about three seconds to commit must fit inside
@@ -226,8 +226,8 @@ holds every other request. If you run the standby behind something that checks `
 that check fails until the slot takes over.
 
 Mount a volume at `/var/lib/chopin` if you run `HARNESS=atomic`: it keeps the Planner's
-per-document directories and the workflow journal across a container replacement. Without it, a
-run cannot resume after one.
+per-document directories across a container replacement. Without it, the files a Planner wrote
+there are lost with the container.
 
 ## A remote Planner and its machine
 
