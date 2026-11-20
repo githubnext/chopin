@@ -1230,15 +1230,13 @@ async function notRead(context: Room, handle: string): Promise<void> {
 	).catch(err => console.error("[chat] could not say that a message was not read:", err));
 }
 
-/** Where an MCP instruction is posted, and what must be recorded before its turn starts. */
+/** Where an MCP instruction is posted. */
 export type InvokedEntry = {
 	/**
 	 * The id its Chat entry, or system notice, takes. One Chat already holds was saved by an earlier
 	 * call whose turn never started: it is not posted again, and only its turn is started.
 	 */
 	entryId: string;
-	/** Records, durably, that the turn is starting; nothing starts unless it resolves. */
-	starting?: () => Promise<void>;
 };
 
 /**
@@ -1251,6 +1249,10 @@ export type InvokedEntry = {
  * and the text goes to the Planner alone, as for any other instruction. While a turn
  * runs, a message is given to it when its harness takes input mid-run, and an instruction
  * that needs a turn of its own is refused: nothing is held for later.
+ *
+ * It answers nothing (`undefined`) only once the instruction's turn has started, or the message
+ * has been given to the turn running or to the person's turn waiting behind a job. A turn it
+ * starts holds the Chat from before its entry is saved, so no other turn takes the Chat meanwhile.
  */
 export async function invoke(
 	context: Room,
@@ -1292,17 +1294,43 @@ export async function invoke(
 		// A process that is stopping starts no turn: its caller asks again, of the next one.
 		if (startsHeld && !chat.busy && !chat.starting) return "planner-unavailable" as const;
 		let posted = chat.entries.find(value => value.id === invoked.entryId);
+		// The turn holds the Chat from here, as a message's does, so no other turn starts while its
+		// entry is saved; one that would have waits behind it. People are told it runs once the
+		// machine has its prompt, so letting go of a turn whose entry can't be saved tells nobody.
+		let reserve = () => {
+			chat.busy = true;
+			chat.turn = begin(user.login, chat.entries.length + (posted ? 0 : 1));
+		};
+		let unreserve = () => {
+			chat.busy = false;
+			chat.turn = undefined;
+		};
 		if (notice !== undefined) {
 			// An automatic follow-up needs a turn of its own, which a running one cannot give it.
 			if (occupied(chat)) return "planner-busy" as const;
-			if (!posted) await postNotice(context, notice, undefined, invoked.entryId);
-			await invoked.starting?.();
+			reserve();
+			if (!posted) {
+				try {
+					await postNotice(context, notice, undefined, invoked.entryId);
+				} catch (error) {
+					unreserve();
+					throw error;
+				}
+			}
+			if (chat.closed) return "planner-unavailable" as const;
 			if (verified) rememberCheckout(room, verified);
-			await instruct(context, user.login, text, "", {
-				quiet: true,
-				...(focus ? { focus } : {}),
-				...(settled ? { ended: () => settled() } : {}),
-			});
+			startRun(
+				context,
+				user.login,
+				text,
+				{
+					quiet: true,
+					...(focus ? { focus } : {}),
+					...(settled ? { ended: () => settled() } : {}),
+				},
+				context.claimantSessionId,
+				true,
+			);
 			return undefined;
 		}
 		// A background job gives way to a person's instruction, as to their message.
@@ -1312,6 +1340,8 @@ export async function invoke(
 			refusedWhileRunning(context);
 			return "planner-busy" as const;
 		}
+		let reserved = !preempts && !running;
+		if (reserved) reserve();
 		let entry = posted;
 		if (!entry) {
 			let fresh: Wire.Entry = {
@@ -1325,6 +1355,7 @@ export async function invoke(
 				await context.persist();
 			} catch (error) {
 				chat.entries = chat.entries.filter(value => value !== fresh);
+				if (reserved) unreserve();
 				throw error;
 			}
 			if (chat.closed) return "planner-unavailable" as const;
@@ -1333,7 +1364,12 @@ export async function invoke(
 			announce(server, room, fresh);
 			entry = fresh;
 		}
-		await invoked.starting?.();
+		if (chat.closed) return "planner-unavailable" as const;
+		// A job that ended while the entry was saved leaves nothing to give way: a process that is
+		// stopping starts no turn, and the caller asks again, of the next one.
+		if (preempts && startsHeld && !chat.busy && !chat.starting) {
+			return "planner-unavailable" as const;
+		}
 		if (verified) rememberCheckout(room, verified);
 		if (running) {
 			let given = give(context, {
@@ -1352,7 +1388,7 @@ export async function invoke(
 				text,
 				undefined,
 				context.claimantSessionId,
-				false,
+				reserved,
 				{ entryId: entry.id, userId: user.id, ...(focus ? { focus } : {}) },
 				[],
 			];
@@ -3639,7 +3675,7 @@ async function run(
 						// Its first call is made: a message given to the turn now reaches it, and
 						// people are told the turn is running, as the machine has its prompt.
 						steered?.open(session);
-						if (reserved && member) state(chat, server, room);
+						if (reserved) state(chat, server, room);
 						return result;
 					},
 				},

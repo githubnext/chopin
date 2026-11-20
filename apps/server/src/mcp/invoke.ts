@@ -185,25 +185,26 @@ export type KeyedInvocation = {
  * again and post nothing more, and start no second turn.
  *
  * The first call claims the key before anything is posted, naming the Chat entry its instruction
- * will be and the result it answers. The claim is marked invoked after the entry is saved and
- * before its turn starts, so a turn never starts under a claim that is not; every later call with
- * the same request is given the claim's result, and a different one is refused.
+ * will be and the result it answers. The claim is marked invoked once the instruction's turn has
+ * started (or the instruction was given to the turn running), and the call answers only after
+ * that: a claim marked invoked is evidence its turn started, so every later call with the same
+ * request is given the claim's result, and a different one is refused.
  *
  * A claim not marked invoked says nothing alone: the root's Chat does. When it holds the entry, an
- * earlier call saved it and started no turn, and a retry starts that turn without posting again.
- * When it does not, nothing was kept: a retry posts it, and a different request takes the key. A
- * refusal that kept nothing frees the key, and one that could not is freed by the next call.
+ * earlier call saved it and started no turn, or started one whose start it could not record. A
+ * retry starts that turn without posting again, unless this process remembers starting it, when
+ * it only records the start. When the Chat does not hold the entry, nothing was kept: a retry posts
+ * it, and a different request takes the key. A refusal that kept nothing frees the key, and one
+ * that could not is freed by the next call.
  *
- * A claim marked invoked whose turn this process knows it did not start, because recording the
- * start failed or its answer was lost before the turn began, is recovered as one not marked: the
- * retry starts that turn without posting again. Only a process that stopped between recording the
- * start and starting the turn leaves one that no retry starts, as it leaves a turn interrupted.
+ * So a process that stops after a turn started and before its start was recorded, or after
+ * recording it failed, leaves a claim whose retry, in the next process, starts the turn again.
  * Calls with one key run one at a time in this process, the only one holding the writer lease.
  */
 export class IdempotentInvocations {
 	#running = new Map<string, Promise<unknown>>();
-	/** The entry of each key's claim whose start was recorded, or may have been, with no turn started. */
-	#unstarted = new Map<string, string>();
+	/** The entry of each key's claim whose turn this process started without recording it. */
+	#started = new Map<string, string>();
 
 	constructor(
 		private store: McpInvocationStore,
@@ -253,9 +254,10 @@ export class IdempotentInvocations {
 			if (record.fingerprint !== fingerprint) {
 				return { kind: "refused", code: "idempotency-conflict" };
 			}
-			if (this.#unstarted.get(key) !== record.entryId) {
-				return { kind: "invoked", document: record.result.document };
-			}
+			return { kind: "invoked", document: record.result.document };
+		}
+		if (record.fingerprint === fingerprint && this.#started.get(key) === record.entryId) {
+			return this.#record(key, lease, record);
 		}
 		let outcome = await deliver({
 			reconcile: async posted => {
@@ -267,38 +269,31 @@ export class IdempotentInvocations {
 						return "idempotency-conflict";
 					}
 				}
-				let claimed = record;
-				return {
-					entryId: claimed.entryId,
-					starting: () => this.#starting(key, lease, claimed),
-				};
+				return { entryId: record.entryId };
 			},
 			unused: async () => {
-				this.#unstarted.delete(key);
 				await this.store.release(lease, record).catch(err => {
 					console.error("[mcp] could not free an idempotency key after a refusal:", err);
 				});
 			},
 		});
 		if (outcome.kind !== "invoked") return outcome;
-		if (this.#unstarted.get(key) === record.entryId) this.#unstarted.delete(key);
-		return { kind: "invoked", document: record.result.document };
+		return this.#record(key, lease, record);
 	}
 
 	/**
-	 * Marks `claim` invoked, or throws so its turn does not start. A throw after the mark may have
-	 * been saved leaves the claim to be recovered by the next call with its key.
+	 * Marks `claim` invoked, its turn having started, and answers its result. When that can't be
+	 * saved the call fails, and this process remembers the turn it started, so a retry here records
+	 * it and starts none.
 	 */
-	async #starting(key: string, lease: Lease, claim: McpInvocation): Promise<void> {
-		let failure: unknown;
+	async #record(key: string, lease: Lease, claim: McpInvocation): Promise<Invoked> {
 		try {
-			if (await this.store.complete(lease, claim, this.clock())) return;
+			await this.store.complete(lease, claim, this.clock());
 		} catch (err) {
-			failure = err;
+			this.#started.set(key, claim.entryId);
+			throw err;
 		}
-		let held = await this.store.get(claim).catch(() => undefined);
-		if (held?.entryId === claim.entryId && held.invokedAt) return;
-		this.#unstarted.set(key, claim.entryId);
-		throw failure ?? new Error("the idempotency key's claim is gone");
+		if (this.#started.get(key) === claim.entryId) this.#started.delete(key);
+		return { kind: "invoked", document: claim.result.document };
 	}
 }

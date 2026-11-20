@@ -1,6 +1,6 @@
 -- `invoke_planner` calls made under an idempotency key: one row per caller, document and key,
--- claimed with the result it answers before the instruction is posted, and marked invoked before
--- its turn starts.
+-- claimed with the result it answers before the instruction is posted, and marked invoked once
+-- its turn has started.
 CREATE TABLE mcp_invocations (
 	user_id text NOT NULL CHECK (char_length(user_id) BETWEEN 1 AND 128),
 	channel_id text NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
