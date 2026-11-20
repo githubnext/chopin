@@ -5,11 +5,16 @@
  * lands or fails. The scripted Planner answers a message holding SLOW-LIVE slowly, and fails one
  * holding SLOW-FAIL after a while.
  */
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join as joinPath } from "node:path";
+
 import { chatInput } from "./chat-input";
 import { textContrast } from "./rendered-contrast";
 import { authenticate, content, expect, roomPath, test } from "./room";
 
-import type { Locator, Page } from "@playwright/test";
+import type { Chat } from "../packages/protocol/index";
+import type { Browser, Locator, Page } from "@playwright/test";
 
 const WIDE = { viewport: { width: 1600, height: 900 } };
 const ROOT = { id: "typing-root", text: "Where should the cache key live?" };
@@ -220,5 +225,151 @@ test("someone who can only read sees who is writing in Chat and on a thread's ro
 		await expect(replying(main(reader), ROOT.id)).toHaveCount(0);
 	} finally {
 		await context.close();
+	}
+});
+
+type Told = { kind: string; rid?: string; message?: string; typists?: Chat.Typist[] };
+type Listening = { socket: WebSocket; frames: Told[]; offset?: number; closed?: number };
+
+/** Somebody signed in as `handle` in a context of their own, kept in `pages` to be closed. */
+async function person(
+	browser: Browser,
+	baseURL: string,
+	handle: string,
+	pages: Page[],
+): Promise<Page> {
+	let page = await (await browser.newContext({ baseURL })).newPage();
+	pages.push(page);
+	await authenticate(page, handle, baseURL);
+	expect((await page.goto(`${baseURL}/api/session`))?.status()).toBe(200);
+	return page;
+}
+
+/** Open the room on a socket of the page's own that keeps everything it is told. */
+async function listen(page: Page, channelId: string): Promise<void> {
+	await page.evaluate(async id => {
+		let url = new URL("/ws", location.href);
+		url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+		url.searchParams.set("channel", id);
+		let socket = new WebSocket(url);
+		let state: Listening = { socket, frames: [] };
+		(window as typeof window & { __typing?: Listening }).__typing = state;
+		socket.addEventListener("message", event => {
+			if (typeof event.data !== "string") return;
+			let frame = JSON.parse(event.data) as Told & { now?: number };
+			// The server's clock, as a composer places its edits on it.
+			if (frame.kind === "session:hello") state.offset = frame.now! - Date.now();
+			state.frames.push(frame);
+		});
+		socket.addEventListener("close", event => {
+			state.closed = event.code;
+		});
+		await new Promise<void>((resolve, reject) => {
+			socket.addEventListener("open", () => resolve(), { once: true });
+			socket.addEventListener("error", () => reject(new Error("socket failed")), { once: true });
+		});
+	}, channelId);
+	expect((await ask(page, { kind: "plan:open" })).kind).toBe("plan:open");
+}
+
+/** Send `frame` on the page's socket, and the reply that names it, if one comes in time. */
+async function ask(
+	page: Page,
+	frame: Record<string, unknown>,
+	wait = 15_000,
+): Promise<Told> {
+	return page.evaluate(async ({ input, wait }) => {
+		let state = (window as typeof window & { __typing?: Listening }).__typing!;
+		let rid = crypto.randomUUID();
+		let at = state.offset === undefined ? undefined : Date.now() + state.offset;
+		let sent = input.kind === "chat:typing" && input.active ? { ...input, at } : input;
+		return await new Promise<Told>(resolve => {
+			let timeout = setTimeout(() => {
+				state.socket.removeEventListener("message", onMessage);
+				resolve({ kind: "no reply" });
+			}, wait);
+			let onMessage = (event: MessageEvent) => {
+				let reply = JSON.parse(String(event.data)) as Told;
+				if (reply.rid !== rid) return;
+				clearTimeout(timeout);
+				state.socket.removeEventListener("message", onMessage);
+				resolve(reply);
+			};
+			state.socket.addEventListener("message", onMessage);
+			state.socket.send(JSON.stringify({ ...sent, rid, ts: 0 }));
+		});
+	}, { input: frame, wait });
+}
+
+/** Who each roster the page's socket was told names, in the order they came. */
+function rosters(page: Page): Promise<string[][]> {
+	return page.evaluate(() =>
+		(window as typeof window & { __typing?: Listening }).__typing!.frames
+			.filter(frame => frame.kind === "chat:typists")
+			.map(frame =>
+				frame.typists!.map(typist =>
+					typist.author.kind === "agent" ? "chopin" : typist.author.handle
+				)
+			)
+	);
+}
+
+function closedWith(page: Page): Promise<number | undefined> {
+	return page.evaluate(() => (window as typeof window & { __typing?: Listening }).__typing!.closed);
+}
+
+test("typing goes only to someone who can still read the document, and names only someone who can still write it", async ({ baseURL, browser, room, seed }) => {
+	test.setTimeout(120_000);
+	await seed("# Typing\nThe cache lives in the router.\n", { transcript: transcript() });
+	let tag = room.slice(0, 8);
+	let reader = `gated-access-r${tag}`;
+	let writer = `gated-access-w${tag}`;
+	let gates = joinPath(tmpdir(), "chopin-e2e-access");
+	await mkdir(gates, { recursive: true });
+	await rm(joinPath(gates, reader), { force: true });
+	await writeFile(joinPath(gates, writer), "writer");
+	let pages: Page[] = [];
+	try {
+		let ana = await person(browser, baseURL!, "ana", pages);
+		let rae = await person(browser, baseURL!, reader, pages);
+		let wes = await person(browser, baseURL!, writer, pages);
+		for (let page of pages) await listen(page, room);
+		await expect.poll(() => rosters(rae)).toEqual([[]]);
+
+		// GitHub takes the document from the reader after they joined. Its answer is cached for a
+		// while, which the App's setup callback ends, as it does for a real change of access.
+		await writeFile(joinPath(gates, reader), "revoked");
+		expect((await rae.request.get("/auth/github/setup", { maxRedirects: 0 })).status())
+			.toBe(303);
+
+		await ask(wes, { kind: "chat:typing", active: true, seq: 1 }, 0);
+		await expect.poll(() => rosters(ana)).toContainEqual([writer]);
+		await expect.poll(() => closedWith(rae)).toBe(4403);
+		expect((await rosters(rae)).flat()).not.toContain(writer);
+
+		// Now the writer can only read. What they were writing is named in no roster told after,
+		// though their report has seconds left: the next roster asks whether they can still write.
+		await writeFile(joinPath(gates, writer), "");
+		expect((await wes.request.get("/auth/github/setup", { maxRedirects: 0 })).status())
+			.toBe(303);
+		let before = (await rosters(ana)).length;
+		await ask(ana, { kind: "chat:typing", active: true, seq: 1 }, 0);
+		await expect.poll(async () => (await rosters(ana)).length).toBeGreaterThan(before);
+		expect((await rosters(ana)).slice(before).flat()).not.toContain(writer);
+
+		// And a report they make since is refused as one from someone who can't write. Ana's stop,
+		// told to her after it, shows nothing was told of it meanwhile.
+		expect(await ask(wes, { kind: "chat:typing", active: true, seq: 2 })).toMatchObject({
+			kind: "session:error",
+			message: "repository write access is required",
+		});
+		let told = (await rosters(ana)).length;
+		await ask(ana, { kind: "chat:typing", active: false, seq: 2 }, 0);
+		await expect.poll(async () => (await rosters(ana)).length).toBeGreaterThan(told);
+		expect((await rosters(ana)).slice(before).flat()).not.toContain(writer);
+	} finally {
+		await rm(joinPath(gates, reader), { force: true });
+		await rm(joinPath(gates, writer), { force: true });
+		await Promise.all(pages.map(page => page.context().close()));
 	}
 });

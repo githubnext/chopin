@@ -45,10 +45,11 @@ const repositories = [
 
 const CREATOR_WRITABLE = new Set(["archive-1", "archive-8", "archive-9"]);
 
-// A reader of octo-org/score whose access is whatever the file named for it says whenever GitHub is
-// asked: "revoked" takes the repository away, "unavailable" answers as GitHub does when it cannot be
-// reached, and anything else, or no file, leaves the access as it was. The test that owns the
-// handle writes the file; the same path is made in e2e/reaction-access.e2e.ts.
+// A person of octo-org/score whose access is whatever the file named for it says whenever GitHub is
+// asked: "writer" lets them push, "revoked" takes the repository away, "unavailable" answers as
+// GitHub does when it cannot be reached, and anything else, or no file, leaves them a reader. The
+// test that owns the handle writes the file; the same path is made in e2e/reaction-access.e2e.ts
+// and e2e/chat-typing.e2e.ts.
 const ACCESS_GATED = "gated-access-";
 
 function accessGate(handle: string): string {
@@ -363,7 +364,7 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 					permissions: {
 						...value.permissions,
 						pull: gate === "revoked" ? false : value.permissions.pull,
-						push: false,
+						push: gate === "writer",
 					},
 				}));
 			}

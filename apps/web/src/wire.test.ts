@@ -1005,3 +1005,74 @@ describe("fanning a frame out", () => {
 		expect(reached).toEqual(["second"]);
 	});
 });
+
+describe("the server's clock", () => {
+	/** Says hello a moment after each connection opens, its clock `behind` this one by as much. */
+	function greeting(): { port: number; behind: number; drop: () => void } {
+		let sockets = new Set<ServerWebSocket<undefined>>();
+		let service = { port: 0, behind: 0, drop: () => {} };
+		let server = Bun.serve<undefined>({
+			port: 0,
+			hostname: "127.0.0.1",
+			fetch(req, self) {
+				if (req.headers.get("x-chopin-socket-probe") === "1") {
+					return new Response(null, { status: 204 });
+				}
+				return self.upgrade(req) ? undefined : new Response("no", { status: 400 });
+			},
+			websocket: {
+				open: socket => {
+					sockets.add(socket);
+					setTimeout(() => {
+						let now = Date.now() - service.behind;
+						socket.send(JSON.stringify({ kind: "session:hello", ts: 0, now }));
+					}, 100);
+				},
+				close: socket => {
+					sockets.delete(socket);
+				},
+				message() {},
+			},
+		});
+		servers.push(server);
+		service.port = server.port!;
+		service.drop = () => {
+			for (let socket of sockets) socket.terminate();
+		};
+		return service;
+	}
+
+	it("is read from each connection's own hello, never ahead of the server's, and unknown before it", async () => {
+		let service = greeting();
+		service.behind = 10_000;
+		globalThis.location = {
+			href: `http://127.0.0.1:${service.port}/`,
+			protocol: "http:",
+		} as Location;
+		let opened: Array<number | undefined> = [];
+		let wire: Wire | undefined;
+		wire = new Wire({
+			channelId: "019c1234-1234-4123-8123-123456789abc",
+			onStatus: status => {
+				if (status === "connected") opened.push(wire?.serverNow());
+			},
+		});
+		wires.push(wire);
+		let hellos = 0;
+		wire.on("session:hello", () => hellos++);
+		let near = (behind: number) => {
+			let read = wire.serverNow()!;
+			let server = Date.now() - behind;
+			expect(read).toBeLessThanOrEqual(server);
+			expect(read).toBeGreaterThan(server - 1_000);
+		};
+
+		await until(() => hellos === 1, "the first hello");
+		near(10_000);
+		service.behind = 20_000;
+		service.drop();
+		await until(() => hellos === 2, "the next connection's hello", 5_000);
+		near(20_000);
+		expect(opened).toEqual([undefined, undefined]);
+	});
+});

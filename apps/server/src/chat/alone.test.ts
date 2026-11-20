@@ -193,12 +193,14 @@ test("what Chat shows of typing, in Chat, a thread or chopin's, never changes wh
 	h.chat.typists = createTypingPresence({
 		threadExists: rootId => h.chat.entries.some(entry => entry.id === rootId),
 		members: () => [ana, bo],
+		reads: async () => "allowed",
+		writes: async () => "allowed",
 	});
 	h.context.people = () => people(h.chat, [ana]);
 	expect(alone(h.context, "U_ana")).toBe(true);
 
 	for (let thread of [undefined, "root", "unknown", 7]) {
-		typed(h.context, bo, { active: true, thread, seq: ++seq });
+		typed(h.context, bo, { active: true, thread, seq: ++seq, at: Date.now() });
 		expect(alone(h.context, "U_ana")).toBe(true);
 		expect(h.chat.initiative?.people() ?? new Set()).toEqual(new Set());
 	}

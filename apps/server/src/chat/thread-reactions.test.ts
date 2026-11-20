@@ -626,14 +626,24 @@ function watching(w: Awaited<ReturnType<typeof world>>) {
 	let typists = createTypingPresence({
 		threadExists: rootId => w.plan.chat.entries.some(entry => entry.id === rootId),
 		members: () => [reader.ws],
+		reads: async () => "allowed",
+		writes: async () => "allowed",
 	});
 	w.plan.chat.typists = typists;
 	w.plan.chat.composing = (turn, writing) => typists.composing(undefined, turn, writing);
-	let told = () =>
-		reader.frames.filter(frame => frame.kind === "chat:typists") as unknown as Wire.Typists[];
-	return Object.assign(() => named(told().at(-1)), {
-		every: () => told().map(named),
-		joining: () => named(typists.frame("U_cy")),
+	let rosters = (frames: Array<Record<string, unknown>>) =>
+		frames.filter(frame => frame.kind === "chat:typists") as unknown as Wire.Typists[];
+	return Object.assign(() => named(rosters(reader.frames).at(-1)), {
+		every: () => rosters(reader.frames).map(named),
+		/** Once what has changed is told, after each access check. */
+		settled: () => Bun.sleep(0),
+		/** What someone joining now is told. */
+		joining: async () => {
+			let cy = w.socket("cy");
+			typists.greet(cy.ws);
+			await Bun.sleep(0);
+			return named(rosters(cy.frames).at(-1));
+		},
 	});
 }
 
@@ -646,11 +656,13 @@ test("while chopin answers a reaction in its thread, it is shown writing there a
 
 	await w.reactInChatAs(ana.ws, root, "\u2753");
 	await until(() => shown().includes(`chopin@${root}`));
+	await shown.settled();
 	expect(shown()).toEqual([`chopin@${root}`]);
 
 	planner.release();
 	let thread = w.plan.chat.childChats!.get(root)!;
 	await until(() => agents(thread).some(entry => !entry.streaming) && !thread.busy);
+	await shown.settled();
 	expect(shown()).toEqual([]);
 });
 
@@ -669,6 +681,7 @@ test("a reaction's answer that fails stops showing chopin writing in its thread"
 	planner.release();
 	let thread = w.plan.chat.childChats!.get(root)!;
 	await until(() => !thread.busy);
+	await shown.settled();
 	expect(shown()).toEqual([]);
 });
 
@@ -680,10 +693,12 @@ test("chopin writing its reply in Chat is shown in Chat until the reply lands", 
 
 	await w.send(ana.ws, "@chopin which index?");
 	await until(() => shown().includes("chopin"));
+	await shown.settled();
 	expect(shown()).toEqual(["chopin"]);
 
 	planner.release();
 	await until(() => agents(w.plan.chat).some(entry => !entry.streaming) && !w.plan.chat.busy);
+	await shown.settled();
 	expect(shown()).toEqual([]);
 });
 
@@ -698,6 +713,7 @@ test("chopin is shown writing a reaction's answer only once its turn begins, and
 
 	await w.reactInChatAs(ana.ws, root, "\u2753");
 	await w.reactInChatAs(bo.ws, root, "\ud83d\udc4e");
+	await shown.settled();
 	expect(shown()).toEqual([]);
 	await until(() => shown().includes(`chopin@${root}`));
 
@@ -706,6 +722,7 @@ test("chopin is shown writing a reaction's answer only once its turn begins, and
 	await until(() => !thread.busy);
 	await Bun.sleep(500);
 	await until(() => !thread.busy);
+	await shown.settled();
 	expect(shown()).toEqual([]);
 	expect(shown.every().every(names => names.filter(name => name.startsWith("chopin")).length <= 1))
 		.toBe(true);
@@ -730,14 +747,16 @@ test("stopping chopin's answer to a reaction stops showing it writing at once, w
 	});
 	expect(thread.entries.some(entry => entry.text === "@ana stopped the turn.")).toBe(true);
 	expect(thread.busy).toBe(true);
+	await shown.settled();
 	expect(shown()).toEqual([]);
-	expect(shown.joining()).toEqual([]);
+	expect(await shown.joining()).toEqual([]);
 	let told = shown.every().length;
 
 	planner.release();
 	await until(() => !thread.busy);
+	await shown.settled();
 	expect(shown.every().slice(told - 1).every(names => names.length === 0)).toBe(true);
-	expect(shown.joining()).toEqual([]);
+	expect(await shown.joining()).toEqual([]);
 });
 
 test("a reaction's answer that fails stops showing chopin writing before its session has closed", async () => {
@@ -757,11 +776,13 @@ test("a reaction's answer that fails stops showing chopin writing before its ses
 	planner.release();
 	await until(() => thread.entries.some(entry => !!entry.turnFailure));
 	expect(thread.busy).toBe(true);
+	await shown.settled();
 	expect(shown()).toEqual([]);
-	expect(shown.joining()).toEqual([]);
+	expect(await shown.joining()).toEqual([]);
 
 	closing.resolve();
 	await until(() => !thread.busy);
+	await shown.settled();
 	expect(shown()).toEqual([]);
 });
 
@@ -792,11 +813,13 @@ test("once chopin's answer to a reaction is out, it is no longer shown writing, 
 	);
 	let thread = w.plan.chat.childChats!.get(root)!;
 	expect(thread.busy).toBe(true);
+	await shown.settled();
 	expect(shown()).toEqual([]);
-	expect(shown.joining()).toEqual([]);
+	expect(await shown.joining()).toEqual([]);
 	expect(shown.every().some(names => names.includes(`chopin@${root}`))).toBe(true);
 
 	checked.resolve();
 	await until(() => !thread.busy);
+	await shown.settled();
 	expect(shown()).toEqual([]);
 });

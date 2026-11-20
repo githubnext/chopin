@@ -165,6 +165,8 @@ export class Wire {
 	#disposed = false;
 	#terminal = false;
 	#connectionGeneration = 0;
+	/** The server's clock less this one's, as the open socket's hello set it. */
+	#serverOffset: number | undefined;
 
 	constructor(options: WireOptions) {
 		this.#options = options;
@@ -233,6 +235,16 @@ export class Wire {
 	}
 
 	/**
+	 * The server's clock now, in milliseconds, as the open connection's `session:hello` set it:
+	 * its `now` is taken as the server's time when the hello arrived, so this is never ahead of the
+	 * server's clock, but for this one gaining on it since, and behind it by the hello's transit at
+	 * most. Undefined until the hello of the connection open now has arrived.
+	 */
+	serverNow(): number | undefined {
+		return this.#serverOffset === undefined ? undefined : Date.now() + this.#serverOffset;
+	}
+
+	/**
 	 * Try again now, at a person's request.
 	 *
 	 * The backoff starts over: someone who asks to reconnect is saying the
@@ -268,6 +280,7 @@ export class Wire {
 		let socket = new WebSocket(endpoint(this.#options));
 		this.#socket = socket;
 		this.#announced = false;
+		this.#serverOffset = undefined;
 
 		let opened = false;
 		socket.addEventListener("open", () => {
@@ -296,6 +309,7 @@ export class Wire {
 			// A socket superseded by a reconnect must not drive status or retries.
 			if (this.#socket !== socket) return;
 			this.#socket = undefined;
+			this.#serverOffset = undefined;
 			let loss = lossOf(event.code, this.#announced);
 			this.#announced = false;
 			if (loss === "deleted") {
@@ -427,6 +441,11 @@ export class Wire {
 			return;
 		}
 
+		if (frame.kind === "session:hello") {
+			let now = (frame as { now?: unknown }).now;
+			if (typeof now === "number" && Number.isFinite(now)) this.#serverOffset = now - Date.now();
+		}
+
 		if (frame.rid) {
 			let waiting = this.#pending.get(frame.rid);
 			if (waiting) {
@@ -469,6 +488,7 @@ export class Wire {
 		this.#quietTimer = undefined;
 		let socket = this.#socket;
 		this.#socket = undefined;
+		this.#serverOffset = undefined;
 		this.#abandon("document deleted");
 		this.#set("deleted", "document deleted");
 		socket?.close();
@@ -523,6 +543,7 @@ export class Wire {
 		this.#abandon("disposed");
 		this.#socket?.close();
 		this.#socket = undefined;
+		this.#serverOffset = undefined;
 		if (!this.#terminal) this.#set("closed");
 	}
 }

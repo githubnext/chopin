@@ -69,7 +69,7 @@ import {
 	sendFailureView,
 	withoutFailure,
 } from "./failure";
-import { TypingReporter } from "./typing";
+import { typingFrame, TypingReporter } from "./typing";
 import { PacingReporter } from "./pacing";
 import { receiveTypists, threadsWithTypers, typersIn, typingWords } from "./typists";
 import { TypingAnnouncer, TypingLine } from "./typing-line";
@@ -970,7 +970,8 @@ export function Chat(
 	useEffect(() => {
 		if (!wire || !typingEnabled) return;
 		let reporter = new TypingReporter(report => {
-			if (wire.connected) wire.send("chat:typing", report);
+			let frame = typingFrame(report, wire.serverNow());
+			if (frame && wire.connected) wire.send("chat:typing", frame);
 		});
 		typing.current = reporter;
 		return () => {

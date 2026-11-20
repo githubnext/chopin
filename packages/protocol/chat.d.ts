@@ -534,18 +534,23 @@ export declare namespace Chat {
 	 * Ephemeral composer activity, with no draft content, for the person and document of the
 	 * connection it is sent on. `active` is true from an edit and false once the sender sends, clears
 	 * the draft, leaves the field or makes no edit for five seconds. While edits keep coming a report
-	 * is sent at most every two seconds, the last of them carrying the latest edit; `ago` is how many
-	 * milliseconds before the report that edit was made (at most 2000). `thread` names the thread's
-	 * root message when the composer is a thread's, and is absent for Chat. `seq` rises with each
-	 * report a tab sends: the server keeps each connection's newest per place and ignores an older or
-	 * repeated one. A report is never kept to send again on another connection. It is shown and
-	 * nothing more: automatic participation reads `Pacing`.
+	 * is sent at most every two seconds, the last of them carrying the latest edit. `at`, required
+	 * while active, is when that edit was made in the server's milliseconds: the client places it by
+	 * taking the `now` of its connection's `session:hello` as the server's time when the hello arrived,
+	 * so it is never later than the edit was on the server's clock (but for the client's clock gaining
+	 * since) and earlier by the hello's transit at most. The writer is shown until five seconds after
+	 * `at`: a report that arrives later than that shows no one and changes nothing, and so does one
+	 * whose `at` is more than a second past the server's clock (one within it counts as now).
+	 * `thread` names the thread's root message when the composer is a thread's, and is absent for
+	 * Chat. `seq` rises with each report a tab sends: the server keeps each connection's newest per
+	 * place and ignores an older or repeated one. A report is never kept to send again on another
+	 * connection. It is shown and nothing more: automatic participation reads `Pacing`.
 	 */
 	export type Typing = KIND<"chat:typing"> & {
 		active: boolean;
 		thread?: string;
 		seq?: number;
-		ago?: number;
+		at?: number;
 	};
 
 	/**
@@ -571,9 +576,10 @@ export declare namespace Chat {
 	/**
 	 * Everyone writing in Chat and its threads now, but the person it is sent to: presence, never
 	 * saved. Sent to everyone who can read the document when it changes, and on join after the
-	 * history, empty or not. Each replaces the one before. They are ordered by `generation`, which a
-	 * later opening of the document's room has larger, then by `seq`, which rises with each change:
-	 * an older one is ignored.
+	 * history, empty or not, each time once a fresh check of the recipient's access allows it; a
+	 * roster names a person only once a fresh check finds they can still write. Each replaces the one
+	 * before. They are ordered by `generation`, which a later opening of the document's room has
+	 * larger, then by `seq`, which rises with each change: an older one is ignored.
 	 */
 	export type Typists = KIND<"chat:typists"> & {
 		generation: number;

@@ -113,6 +113,8 @@ test("one edit beside a waiting reply holds it 1.5 seconds past the edit's 2.5-s
 		clock: h.clock,
 		threadExists: () => false,
 		members: () => [],
+		reads: async () => "allowed",
+		writes: async () => "allowed",
 	});
 	let bo = {
 		...h.ws,
@@ -120,7 +122,7 @@ test("one edit beside a waiting reply holds it 1.5 seconds past the edit's 2.5-s
 	} as Socket;
 	await Chat.send(h.context, h.ws, message());
 	pacing(h.context, bo, true);
-	typed(h.context, bo, { active: true, seq: 1, ago: 0 });
+	typed(h.context, bo, { active: true, seq: 1, at: h.clock.now() });
 	await h.clock.advance(2_500);
 	pacing(h.context, bo, false);
 	await h.clock.advance(1_499);
@@ -140,13 +142,15 @@ test("what Chat shows of typing never holds a waiting reply", async () => {
 		clock: h.clock,
 		threadExists: () => false,
 		members: () => [],
+		reads: async () => "allowed",
+		writes: async () => "allowed",
 	});
 	let bo = {
 		...h.ws,
 		data: { ...h.ws.data, handle: "bo", principalId: "U_bo", client: "bo-tab" },
 	} as Socket;
 	await Chat.send(h.context, h.ws, message());
-	typed(h.context, bo, { active: true, seq: 1, ago: 0 });
+	typed(h.context, bo, { active: true, seq: 1, at: h.clock.now() });
 	await h.clock.advance(1_500);
 	await until(() => h.judge.mock.calls.length === 1);
 	h.chat.typists.close();

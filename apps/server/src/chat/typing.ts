@@ -5,33 +5,43 @@
  * the connection's own `seq`, so an older, repeated or reordered report changes nothing and one tab
  * stopping never hides another still writing. The newest number is kept for as long as the
  * connection is open, even once what it reported is no longer shown, so no old report brings anyone
- * back. A report says how long ago the edit it reports was made; it is visible until five seconds
- * after that edit and a second for transit, so a client that never stops, or a report delivered
- * again, never outlasts the edit it carries. One person's reports that start or renew writing in one
- * place show them again once in 1.5 seconds at most, a little under the composer's two, so a report
- * early by jitter is not refused: one that would show a person again sooner is shown when the
- * interval is up, and every report keeps its own edit's deadline, whichever tab of the person's
- * sent it. Stopping is never limited. A connection that can no longer write stops writing
- * everywhere. The Planner is writing in a place
- * while a turn there writes its reply. Everyone in the room whose access holds, readers included,
- * is told the set when it changes, without themselves.
+ * back. A report says when the edit it reports was made, on the server's clock (`at`, which its
+ * client places by the `now` of its connection's `session:hello`: never later than the edit was, and
+ * earlier by that hello's transit at most). It is visible until five seconds after that edit, so a
+ * client that never stops, a report delivered again or one held on its way never outlasts the edit
+ * it carries: one that arrives five seconds or more after its edit shows no one and changes nothing,
+ * and so does one placed past the server's clock by more than `TYPING_SKEW_MS`. One person's reports
+ * that start or renew writing in one place show them again once in 1.5 seconds at most, a little
+ * under the composer's two, so a report early by jitter is not refused: one that would show a person
+ * again sooner is shown when the interval is up, and every report keeps its own edit's deadline,
+ * whichever tab of the person's sent it. Stopping is never limited. The Planner is writing in a place
+ * while a turn there writes its reply.
+ *
+ * Access is asked afresh, never taken from a grant held since the socket was admitted: before a
+ * roster names a person, whether their connection can still write (one that can't, or can't be
+ * confirmed, stops writing everywhere); and before a member is told a roster, on joining too,
+ * whether they can still read, readers included. A roster is told without its viewer. A member whose
+ * access can't be confirmed for now is asked again, and told the newest roster once it is.
  */
 import { tell } from "../wire";
 import { actor } from "./initiative";
 
 import type { Chat as Wire } from "@chopin/protocol";
-import type { Socket } from "../wire";
+import type { AuthorizationResult, Socket } from "../wire";
 import type { InitiativeClock } from "./initiative-schedule";
 import type { Room } from "./service";
 
 /** The fewest milliseconds between two times one person is shown again in one place. */
 export const TYPING_START_INTERVAL_MS = 1_500;
-/** How long after the edit a report carries its writer is shown, as their composer counts it. */
+/** How long after its edit, on the server's clock, a report shows its writer. */
 export const TYPING_IDLE_MS = 5_000;
-/** What a report may have spent in transit, added to its writer's time. */
-export const TYPING_TRANSIT_MS = 1_000;
-/** The most a report may say its edit preceded it by: a composer reports at least that often. */
-export const TYPING_REPORT_MS = 2_000;
+/**
+ * How far past the server's clock a report may place its edit and still be taken, as made now: the
+ * client's clock gaining on the server's since its connection's hello. Beyond it, it is refused.
+ */
+export const TYPING_SKEW_MS = 1_000;
+/** How long a member whose access couldn't be confirmed waits before it is asked again. */
+export const TYPING_RECHECK_MS = 2_000;
 const MAX_INTENTS = 64;
 const MAX_PLACE_FLOORS = 64;
 const CHAT_PLACE = "";
@@ -64,7 +74,7 @@ type Intent = {
  */
 type Floor = { base: number; places: Map<string, number> };
 
-type Shown = { actor?: string; typist: Wire.Typist };
+type Shown = { key?: string; actor?: string; typist: Wire.Typist };
 
 function intentKey(client: string, place: string): string {
 	return `${client}\n${place}`;
@@ -78,7 +88,16 @@ function visible(intent: Intent, now: number): boolean {
 	return !intent.held && intent.until > now;
 }
 
-export type TypingReport = { active: boolean; thread?: unknown; seq?: unknown; ago?: unknown };
+/** A check's answer, a check that throws being one that couldn't be confirmed. */
+async function ask(check: () => Promise<AuthorizationResult>): Promise<AuthorizationResult> {
+	try {
+		return await check();
+	} catch {
+		return "unavailable";
+	}
+}
+
+export type TypingReport = { active: boolean; thread?: unknown; seq?: unknown; at?: unknown };
 
 export type TypingPresence = {
 	/** A composer's report, from one connection of one person, bound to that connection. */
@@ -91,8 +110,8 @@ export type TypingPresence = {
 	depart(client: string): void;
 	/** Whether the Planner's `turn` is writing its reply in Chat (`thread` absent) or a thread. */
 	composing(thread: string | undefined, turn: string, writing: boolean): void;
-	/** What one person is told: everyone writing but them. */
-	frame(viewer: string): Wire.Typists;
+	/** A member who joined is told who is writing now, once their access is confirmed. */
+	greet(member: Socket): void;
 	close(): void;
 };
 
@@ -101,8 +120,10 @@ export function createTypingPresence(options: {
 	threadExists(rootId: string): boolean;
 	/** Everyone with the document open: who is told, while they can read it. */
 	members(): Iterable<Socket>;
-	/** Whether a member's access still holds as presence is told, before its next check. */
-	reads?(member: Socket): boolean;
+	/** Whether a member can read the document now, asked afresh before each roster they are told. */
+	reads(member: Socket): Promise<AuthorizationResult>;
+	/** Whether a connection can write the document now, asked afresh before a roster names it. */
+	writes(client: string): Promise<AuthorizationResult>;
 	clock?: InitiativeClock;
 }): TypingPresence {
 	let time = options.clock ?? systemClock;
@@ -112,8 +133,17 @@ export function createTypingPresence(options: {
 	let floors = new Map<string, Floor>();
 	let since = new Map<string, number>();
 	let agent = new Map<string, { turn: string; since: number }>();
+	/** The roster last told, and its number. */
+	let roster: Shown[] = [];
 	let seq = 0;
-	let told = "";
+	let told = JSON.stringify([]);
+	/** Whether what is shown may have changed since the roster last told was settled. */
+	let dirty = false;
+	let publishing = false;
+	/** Members owed the newest roster, those whose access is being asked, and those to ask again. */
+	let owed = new Set<Socket>();
+	let checking = new Set<Socket>();
+	let rechecks = new Map<Socket, unknown>();
 	let timer: unknown;
 	let closed = false;
 
@@ -133,13 +163,15 @@ export function createTypingPresence(options: {
 		}
 	}
 
-	function shown(now: number): Shown[] {
+	/** Who is writing at `now`: of the people, only those whose connection is in `writers`. */
+	function shown(now: number, writers?: ReadonlySet<string>): Shown[] {
 		let people = new Map<string, Shown>();
 		for (let intent of intents.values()) {
-			if (!visible(intent, now)) continue;
+			if (!visible(intent, now) || (writers && !writers.has(intent.client))) continue;
 			let key = personKey(intent.actor, intent.place);
 			if (people.has(key)) continue;
 			people.set(key, {
+				key,
 				actor: intent.actor,
 				typist: {
 					author: { kind: "member", handle: intent.handle },
@@ -148,8 +180,6 @@ export function createTypingPresence(options: {
 				},
 			});
 		}
-		for (let key of since.keys()) if (!people.has(key)) since.delete(key);
-		for (let [key, item] of people) if (!since.has(key)) since.set(key, item.typist.since);
 		let writing = [...people.values()];
 		for (let [where, composing] of agent) {
 			writing.push({
@@ -167,7 +197,6 @@ export function createTypingPresence(options: {
 		if (closed) return;
 		let now = time.now();
 		release(now);
-		let writing = shown(now);
 		if (timer !== undefined) time.clear(timer);
 		timer = undefined;
 		let next = Infinity;
@@ -183,24 +212,106 @@ export function createTypingPresence(options: {
 				settle();
 			}, Math.max(1, next - now));
 		}
-		let snapshot = JSON.stringify(writing);
-		if (snapshot === told) return;
-		told = snapshot;
-		seq++;
-		for (let member of options.members()) {
-			if (!member.data.closed && (options.reads?.(member) ?? true)) {
-				tell(member, frameOf(writing, actor(member)));
+		if (!publishing && JSON.stringify(shown(now)) === told) return;
+		dirty = true;
+		void publish();
+	}
+
+	/**
+	 * Tell the room who is writing once it changes: everyone shown writing is asked first whether
+	 * they still can, and whoever can't, or can't be confirmed, stops writing everywhere. A writer who
+	 * began while that was asked waits for the next round.
+	 */
+	async function publish() {
+		if (publishing) return;
+		publishing = true;
+		try {
+			while (dirty) {
+				dirty = false;
+				if (closed) return;
+				let writers = new Set<string>();
+				let now = time.now();
+				for (let intent of intents.values()) if (visible(intent, now)) writers.add(intent.client);
+				let asked = [...writers];
+				let answers = await Promise.all(asked.map(client => ask(() => options.writes(client))));
+				if (closed) return;
+				asked.forEach((client, index) => {
+					if (answers[index] === "allowed") return;
+					writers.delete(client);
+					drop(client);
+				});
+				now = time.now();
+				for (let intent of intents.values()) {
+					if (visible(intent, now) && !writers.has(intent.client)) dirty = true;
+				}
+				let writing = shown(now, writers);
+				let snapshot = JSON.stringify(writing);
+				if (snapshot === told) continue;
+				told = snapshot;
+				roster = writing;
+				since = new Map(
+					writing.flatMap(item => item.key ? [[item.key, item.typist.since] as const] : []),
+				);
+				seq++;
+				for (let member of options.members()) deliver(member);
 			}
+		} finally {
+			publishing = false;
 		}
 	}
 
-	function frameOf(writing: Shown[], viewer: string): Wire.Typists {
+	/** Owe `member` the newest roster, told once their access to read is confirmed. */
+	function deliver(member: Socket) {
+		if (closed || member.data.closed) return;
+		owed.add(member);
+		if (!checking.has(member) && !rechecks.has(member)) void confirm(member);
+	}
+
+	/**
+	 * Ask whether `member` can read, then tell them the roster as it was when that was asked. A
+	 * roster told meanwhile is owed after it, through another check.
+	 */
+	async function confirm(member: Socket) {
+		checking.add(member);
+		try {
+			while (owed.delete(member)) {
+				if (closed || member.data.closed) break;
+				let frame = frameOf(actor(member));
+				let access = await ask(() => options.reads(member));
+				if (closed || member.data.closed) break;
+				if (access === "unavailable") {
+					owed.add(member);
+					rechecks.set(
+						member,
+						time.set(() => {
+							rechecks.delete(member);
+							if (!checking.has(member)) void confirm(member);
+						}, TYPING_RECHECK_MS),
+					);
+					break;
+				}
+				if (access === "allowed") tell(member, frame);
+			}
+		} finally {
+			checking.delete(member);
+			if (closed || member.data.closed) forget(member);
+		}
+	}
+
+	function forget(member: Socket) {
+		owed.delete(member);
+		let recheck = rechecks.get(member);
+		if (recheck !== undefined) time.clear(recheck);
+		rechecks.delete(member);
+	}
+
+	function frameOf(viewer: string): Wire.Typists {
 		return {
 			kind: "chat:typists",
 			ts: 0,
 			generation,
 			seq,
-			typists: writing.filter(item => item.actor !== viewer).map(item => item.typist),
+			typists: roster.filter(item => item.actor !== viewer).map(item => item.typist),
 		};
 	}
 
@@ -220,14 +331,19 @@ export function createTypingPresence(options: {
 		floor.base = Math.max(floor.base, at);
 	}
 
-	function retire(client: string) {
+	/** End what `client` was writing everywhere, leaving its numbers; whether anything ended. */
+	function drop(client: string): boolean {
 		let ended = false;
 		for (let [key, intent] of intents) {
 			if (intent.client !== client) continue;
 			intents.delete(key);
 			ended = true;
 		}
-		if (ended) settle();
+		return ended;
+	}
+
+	function retire(client: string) {
+		if (drop(client)) settle();
 	}
 
 	function room(key: string): boolean {
@@ -248,6 +364,8 @@ export function createTypingPresence(options: {
 			let where = place(report.thread);
 			let order = report.seq;
 			if (where === undefined || typeof order !== "number" || !Number.isSafeInteger(order)) return;
+			let at = report.at;
+			if (report.active && (typeof at !== "number" || !Number.isFinite(at))) return;
 			let key = intentKey(client, where);
 			if (order <= newest(client, where)) return;
 			reported(client, where, order);
@@ -255,12 +373,13 @@ export function createTypingPresence(options: {
 				if (intents.delete(key)) settle();
 				return;
 			}
-			if (!room(key)) return;
 			let now = time.now();
-			let ago = typeof report.ago === "number" && Number.isFinite(report.ago)
-				? Math.min(Math.max(report.ago, 0), TYPING_REPORT_MS)
-				: 0;
-			let until = now - ago + TYPING_IDLE_MS + TYPING_TRANSIT_MS;
+			let edited = at as number;
+			// An edit placed past the server's clock by more than the skew can't be placed, and one
+			// five seconds old has ended: neither shows anyone nor changes what was shown.
+			if (edited > now + TYPING_SKEW_MS) return;
+			let until = Math.min(edited, now) + TYPING_IDLE_MS;
+			if (until <= now || !room(key)) return;
 			let person = personKey(actor, where);
 			let allowed = allowances.get(person);
 			let intent: Intent = {
@@ -289,6 +408,9 @@ export function createTypingPresence(options: {
 		retire,
 		depart(client) {
 			floors.delete(client);
+			for (let member of [...owed, ...rechecks.keys()]) {
+				if (member.data.client === client) forget(member);
+			}
 			retire(client);
 		},
 		composing(thread, turn, writing) {
@@ -304,13 +426,16 @@ export function createTypingPresence(options: {
 			}
 			settle();
 		},
-		frame(viewer) {
-			return frameOf(shown(time.now()), viewer);
+		greet(member) {
+			deliver(member);
 		},
 		close() {
 			closed = true;
 			if (timer !== undefined) time.clear(timer);
 			timer = undefined;
+			for (let recheck of rechecks.values()) time.clear(recheck);
+			rechecks.clear();
+			owed.clear();
 			intents.clear();
 			allowances.clear();
 			floors.clear();
