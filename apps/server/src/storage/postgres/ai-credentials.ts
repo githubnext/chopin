@@ -183,6 +183,44 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 				}),
 		);
 	}
+	signedIn(lease: Lease, record: AiCredentialRecord, replaced: AiCredentialRecord | undefined) {
+		return this.#cut(
+			record.userId,
+			this.run("save an AI sign-in", () =>
+				this.sql.begin(async transaction => {
+					await this.fence(transaction, lease);
+					let rows = replaced
+						? await transaction<{ provider: string }[]>`
+						UPDATE ai_credentials SET
+							kind = ${record.kind},
+							ciphertext = ${record.ciphertext ?? null},
+							tokens = ${record.tokens ?? null},
+							suffix = ${record.suffix ?? null},
+							updated_at = ${record.updatedAt},
+							last_used_at = ${record.lastUsedAt ?? null},
+							rejected_at = ${record.rejectedAt ?? null}
+						WHERE user_id = ${record.userId} AND provider = ${record.provider}
+							AND updated_at = ${replaced.updatedAt}
+							AND ciphertext IS NOT DISTINCT FROM ${replaced.ciphertext ?? null}
+						RETURNING provider
+					`
+						: await transaction<{ provider: string }[]>`
+						INSERT INTO ai_credentials (
+							user_id, provider, kind, ciphertext, tokens, suffix, updated_at, last_used_at,
+							rejected_at
+						)
+						VALUES (
+							${record.userId}, ${record.provider}, ${record.kind}, ${record.ciphertext ?? null},
+							${record.tokens ?? null}, ${record.suffix ?? null}, ${record.updatedAt},
+							${record.lastUsedAt ?? null}, ${record.rejectedAt ?? null}
+						)
+						ON CONFLICT (user_id, provider) DO NOTHING
+						RETURNING provider
+					`;
+					return rows.length > 0;
+				})),
+		);
+	}
 	version(userId: string) {
 		return this.cutoffs.person(userId);
 	}

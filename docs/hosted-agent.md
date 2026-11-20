@@ -963,7 +963,13 @@ exchanged, once, at the provider's token endpoint (`auth.openai.com` or
 `platform.claude.com`); a paste that isn't the sign-in's answer keeps the sign-in
 to paste again, and a refused or failed exchange spends it (`restart: true`).
 Nothing is stored until the provider returns tokens, so a sign-in that fails or is
-abandoned leaves what the person connected before as it was. The tokens are
+abandoned leaves what the person connected before as it was. Each sign-in begun is
+the person's latest attempt for that provider until a newer one begins or they
+disconnect it, through its code's exchange too: only the latest saves what its
+exchange returns, in turn with disconnects, and storage takes it only over the
+connection stored when its exchange began (`signedIn`), so a sign-in that finishes
+after a newer one, or after a disconnect, saves nothing and is told to start again
+(409, `restart: true`). The tokens are
 stored encrypted like a key, in `ciphertext`, which names the connection; a
 refresh writes the renewed pair to `tokens`, only while the stored pair is still
 the one it began from, so a refresh that lost a race never replaces a newer pair.
@@ -985,7 +991,14 @@ refresh presented, which tells the person's lasting launches, and the
 page says it needs signing in again; one that couldn't be made now refuses the
 request (`renew-unavailable`, 502), withholds the provider from a launch with the
 same reason, which counts as a check that couldn't finish, and lists the sign-in
-`unchecked`. An expired access token is never sent. ChatGPT's requests go to
+`unchecked`. An expired access token is never sent, nor one the provider refused: the
+proxy's final handoff reads the sign-in's pair with the launch and the credential,
+sends the request only with the very pair it was prepared with, checks that pair's
+expiry on the same clock reading as the launch's deadline, and reads it again when a
+refusal or a renewal changed it while it was read. So a token refused, or renewed
+past, while a request's body arrived is renewed (or the renewed pair taken) before
+the request is sent, and a sign-in whose renewal the provider refused for good in
+that time refuses it (`sign-in-ended`). ChatGPT's requests go to
 `https://api.openai.com` with the access token as a bearer, as Atomic sends a
 ChatGPT sign-in's; Claude's go to `https://api.anthropic.com` with the access token
 as a bearer and the headers Atomic sends for a Claude subscription token, set
