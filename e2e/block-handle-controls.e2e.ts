@@ -2,7 +2,8 @@
  * The block handle (⋮⋮) always stands in one place, 4px left of a block's content, and what a block
  * draws of its own sits beside it, never under it: a resolved decision's marker stands left of the
  * handle on the same line, and an image's resize corner, a table's rails and the controls of a
- * decision, research card, callout, code block, columns and tabs keep clear of it.
+ * decision, research card, callout, code block, columns and tabs keep clear of it. Under the
+ * document's last block, where the editor keeps an empty line for the caret, it stands nowhere.
  *
  * Each place is read on a wide desktop, a narrow window and a phone, where the handle stands beside
  * blocks selected as blocks rather than the block under the pointer. Geometry is the browser's, so
@@ -18,7 +19,7 @@ import {
 	markResearchPublished,
 	seedCompletedResearchWorkspace,
 } from "./research-recovery-database";
-import { content, edit, expect, ready, test } from "./room";
+import { content, edit, expect, ready, test, written } from "./room";
 import { researchReportSource } from "../apps/server/src/research/publication";
 
 import type { BrowserContextOptions, Locator, Page } from "@playwright/test";
@@ -142,10 +143,11 @@ function optionId(index: number): string {
 }
 
 /** A decision answered and linked to the paragraph it produced, drawn as a marker beside it. */
-const RESOLVED = `${PROSE}\n\n<Questionnaire id="${WIDGET}" by="ana" at="${AT}">\n`
+const DECIDED = `<Questionnaire id="${WIDGET}" by="ana" at="${AT}">\n`
 	+ `<Question id="${QUESTION}" header="Rollout" prompt="How should we roll this out?" multiple="false">\n`
 	+ LABELS.map((label, index) => `<Option id="${optionId(index)}" label="${label}" />`).join("\n")
-	+ `\n<Answer value="Team by team" />\n</Question>\n</Questionnaire>\n\nAfter the rollout.\n`;
+	+ `\n<Answer value="Team by team" />\n</Question>\n</Questionnaire>\n`;
+const RESOLVED = `${PROSE}\n\n${DECIDED}\nAfter the rollout.\n`;
 
 const RESOLVED_STATE = {
 	revision: 1,
@@ -415,5 +417,57 @@ for (let [place, options] of PLACES) {
 			expect(Math.abs(left - reading.handle!.right - 4), `${where}: the handle's place`)
 				.toBeLessThanOrEqual(1);
 		}
+	});
+}
+
+/**
+ * The editor keeps an empty line under the document's last block for the caret: after a card that
+ * ends the document, and under the prose a decided card gives its place to. It is somewhere to
+ * write, not a block, so pointing there brings no handle; a click there still writes after the
+ * last block, and what is written there is a block with a handle.
+ */
+const ENDINGS: Array<
+	[string, () => { source: string; state: SeedState }, (page: Page) => Locator]
+> = [
+	[
+		"an open decision",
+		() => deckSeed({ before: PROSE }, 1),
+		page => content(page).getByRole("article", { name: "Decision", exact: true }),
+	],
+	[
+		"a decided decision's prose",
+		() => ({ source: `${PROSE}\n\n${DECIDED}`, state: RESOLVED_STATE }),
+		page => content(page).locator("p").filter({ hasText: PROSE }),
+	],
+];
+
+for (let [ending, fixture, lastBlock] of ENDINGS) {
+	test(`with ${ending} last, nothing under it takes the handle`, async ({ join, room, seed }) => {
+		let { source, state } = fixture();
+		await seed(source, state);
+		let page = await join("ana", DESKTOP);
+		await open(page, false);
+		let last = lastBlock(page);
+		await expect(last).toBeVisible();
+		let line = content(page).locator(":scope > p:last-child");
+		await expect(line).toBeEmpty();
+		let handle = page.getByRole("button", { name: "Block options" });
+
+		let block = (await last.boundingBox())!;
+		let blank = (await line.boundingBox())!;
+		let x = block.x + 40;
+		for (let y = block.y + block.height + 2; y <= blank.y + blank.height + 12; y += 6) {
+			await page.mouse.move(x, block.y + 12, { steps: 2 });
+			await expect(handle, "the handle stands beside the last block").toBeVisible();
+			await page.mouse.move(x, y, { steps: 2 });
+			await expect(handle, `${Math.round(y - block.y - block.height)}px below the last block`)
+				.toHaveCount(0);
+		}
+
+		await page.mouse.click(x, blank.y + blank.height / 2);
+		await page.keyboard.type("Written below.");
+		await written(page, room, /<\/Questionnaire>\s+Written below\.\s*$/);
+		await content(page).getByText("Written below.").hover();
+		await expect(handle).toBeVisible();
 	});
 }
