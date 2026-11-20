@@ -178,7 +178,7 @@ function quiet(socket: Socket): Socket {
 	return Object.assign(socket, { send() {} });
 }
 
-test("typing in a thread never changes who is alone with chopin; typing in Chat counts as it always has", async () => {
+test("typing in a thread or chopin's writing never changes who is alone with chopin; typing in Chat counts as it always has", async () => {
 	let h = await setup.harness();
 	let ana = tab("U_ana", "ana-1");
 	quiet(ana);
@@ -202,6 +202,11 @@ test("typing in a thread never changes who is alone with chopin; typing in Chat 
 		expect(alone(h.context, "U_ana")).toBe(true);
 		expect(h.chat.initiative?.people() ?? new Set()).toEqual(new Set());
 	}
+
+	h.chat.typists.composing(undefined, "turn", true);
+	h.chat.typists.composing("root", "thread-turn", true);
+	expect(alone(h.context, "U_ana")).toBe(true);
+	expect(h.chat.initiative?.people() ?? new Set()).toEqual(new Set());
 
 	typed(h.context, bo, { active: true, seq: ++seq });
 	expect(alone(h.context, "U_ana")).toBe(false);

@@ -22,10 +22,12 @@ const LEASE = TYPING_IDLE_MS + TYPING_TRANSIT_MS;
 
 function room(threads: string[] = ["root-a", "root-b"], clock = new ManualClock()) {
 	let members: Tab[] = [];
+	let lapsed = new Set<string>();
 	let presence = createTypingPresence({
 		clock,
 		threadExists: rootId => threads.includes(rootId),
 		members: () => members.map(member => member.ws),
+		reads: member => !lapsed.has(member.data.client),
 	});
 	let join = (principalId: string, client = `${principalId}-tab`, canEdit = true) => {
 		let frames: Wire.Typists[] = [];
@@ -59,7 +61,7 @@ function room(threads: string[] = ["root-a", "root-b"], clock = new ManualClock(
 		(member.ws.data as { closed: boolean }).closed = true;
 		presence.depart(member.ws.data.client);
 	};
-	return { clock, presence, members, join, report, leave };
+	return { clock, presence, members, join, report, leave, lapsed };
 }
 
 let names = (frame: Wire.Typists | undefined) =>
@@ -347,6 +349,119 @@ test("at most 64 connections are shown writing at once", () => {
 	let viewer = r.join("viewer");
 	for (let index = 0; index < 70; index++) r.report(r.join(`p${index}`), true);
 	expect(viewer.frames.at(-1)!.typists).toHaveLength(64);
+});
+
+/** Fills the room with 64 connections that wrote and stopped, so what is no longer shown is reclaimed. */
+function crowd(r: ReturnType<typeof room>) {
+	for (let index = 0; index < 64; index++) {
+		let other = r.join(`p${index}`);
+		r.report(other, true);
+		r.report(other, false);
+	}
+}
+
+test("reclaiming what is no longer shown never lets an old report bring back a stopped writer or silence a newer one", async () => {
+	let r = room();
+	let viewer = r.join("viewer");
+	let ana = r.join("ana");
+
+	let started = r.report(ana, true);
+	let stopped = r.report(ana, false);
+	crowd(r);
+	await r.clock.advance(2_000);
+	r.report(ana, true, { seq: started });
+	r.report(ana, false, { seq: stopped });
+	await r.clock.advance(TYPING_START_INTERVAL_MS);
+	expect(seen(viewer)).toEqual([]);
+
+	let expired = r.report(ana, true);
+	await r.clock.advance(LEASE);
+	expect(seen(viewer)).toEqual([]);
+	crowd(r);
+	r.report(ana, true, { seq: expired });
+	r.report(ana, true, { seq: started });
+	await r.clock.advance(TYPING_START_INTERVAL_MS);
+	expect(seen(viewer)).toEqual([]);
+
+	r.report(ana, true);
+	expect(seen(viewer)).toEqual(["ana"]);
+	crowd(r);
+	r.report(ana, false, { seq: stopped });
+	r.report(ana, false, { seq: expired });
+	await r.clock.advance(LEASE - 1);
+	expect(seen(viewer)).toEqual(["ana"]);
+});
+
+test("a connection that writes in more places than are kept still refuses an old report in the first", async () => {
+	let threads = Array.from({ length: 70 }, (_, index) => `root-${index}`);
+	let r = room(threads);
+	let viewer = r.join("viewer");
+	let ana = r.join("ana");
+
+	let started = r.report(ana, true, { thread: "root-0" });
+	r.report(ana, false, { thread: "root-0" });
+	for (let thread of threads.slice(1)) r.report(ana, false, { thread });
+	crowd(r);
+	r.report(ana, true, { thread: "root-0", seq: started });
+	await r.clock.advance(TYPING_START_INTERVAL_MS);
+	expect(seen(viewer)).toEqual([]);
+
+	r.report(ana, true, { thread: "root-0" });
+	expect(seen(viewer)).toEqual(["ana@root-0"]);
+});
+
+test("a connection that closed is forgotten: its next connection is numbered afresh", async () => {
+	let r = room();
+	let viewer = r.join("viewer");
+	let ana = r.join("ana");
+	r.report(ana, true, { seq: 9 });
+	r.leave(ana);
+	let again = r.join("ana");
+	await r.clock.advance(TYPING_START_INTERVAL_MS);
+	r.report(again, true, { seq: 1 });
+	expect(seen(viewer)).toEqual(["ana"]);
+});
+
+test("a member whose access has lapsed is told nothing, while a reader whose access holds still is", () => {
+	let r = room();
+	let rae = r.join("rae", "rae-tab", false);
+	let bo = r.join("bo");
+	let ana = r.join("ana");
+	r.lapsed.add(bo.ws.data.client);
+
+	r.report(ana, true);
+	expect(seen(rae)).toEqual(["ana"]);
+	expect(bo.frames).toEqual([]);
+});
+
+test("a writer who can no longer write stops writing in every place at once, and an old report stays refused", async () => {
+	let r = room();
+	let viewer = r.join("viewer");
+	let ana = r.join("ana");
+	let phone = r.join("ana", "ana-phone");
+	let started = r.report(ana, true);
+	r.report(ana, true, { thread: "root-a" });
+	r.report(phone, true, { thread: "root-b" });
+	expect(seen(viewer)).toEqual(["ana", "ana@root-a", "ana@root-b"]);
+
+	r.presence.retire(ana.ws.data.client);
+	expect(seen(viewer)).toEqual(["ana@root-b"]);
+	r.report(ana, true, { seq: started });
+	await r.clock.advance(TYPING_START_INTERVAL_MS);
+	expect(seen(viewer)).toEqual(["ana@root-b"]);
+});
+
+test("a preempted turn's late end clears neither its replacement nor the people writing beside it", async () => {
+	let r = room();
+	let viewer = r.join("viewer");
+	let ana = r.join("ana");
+	r.report(ana, true, { thread: "root-a" });
+	r.presence.composing("root-a", "preempted", true);
+	r.presence.composing("root-a", "replacement", true);
+	r.presence.composing("root-a", "preempted", false);
+	expect(seen(viewer)).toEqual(["ana@root-a", "chopin@root-a"]);
+	r.presence.composing("root-a", "replacement", false);
+	expect(seen(viewer)).toEqual(["ana@root-a"]);
 });
 
 test("chopin is shown writing in a place for its turn; an earlier turn's end never clears a later one", () => {

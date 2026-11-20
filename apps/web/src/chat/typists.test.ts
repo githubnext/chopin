@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { receiveTypists, threadsWithTypers, typersIn, typingWords } from "./typists";
+import { announcement, receiveTypists, threadsWithTypers, typersIn, typingWords } from "./typists";
 
 import type { Chat as Wire } from "@chopin/protocol";
 
@@ -118,5 +118,44 @@ describe("who is shown writing", () => {
 		expect(typersIn(before, { viewer: "me" })).toHaveLength(1);
 		let after = receiveTypists(undefined, frame(3, [member("bo", 1)]));
 		expect(typingWords(typersIn(after, { viewer: "me" }))).toBe("@bo is typing…");
+	});
+});
+
+describe("what the live region says", () => {
+	test("it speaks when who is writing in a place changes, and is silent for a new order, a repeat or a working row", () => {
+		let ana = { kind: "member", handle: "ana" } as const;
+		let bo = { kind: "member", handle: "bo" } as const;
+		let chopin = { kind: "agent" } as const;
+		let first = announcement(undefined, [ana, chopin]);
+		expect(first.text).toBe("@ana and chopin are typing…");
+		expect(announcement(first, [chopin, ana])).toBe(first);
+		expect(announcement(first, [ana, chopin])).toBe(first);
+		let joined = announcement(first, [ana, chopin, bo]);
+		expect(joined.text).toBe("Several people are typing…");
+		let left = announcement(joined, []);
+		expect(left.text).toBe("");
+		expect(announcement(left, [])).toBe(left);
+	});
+
+	test("with a thread open beside Chat, each part names its conversation", () => {
+		let ana = { kind: "member", handle: "ana" } as const;
+		expect(announcement(undefined, [ana], "In Chat").text).toBe("In Chat, @ana is typing…");
+		expect(announcement(undefined, [ana], "In the thread").text)
+			.toBe("In the thread, @ana is typing…");
+		expect(announcement(undefined, [], "In Chat").text).toBe("");
+		let unlabelled = announcement(undefined, [ana]);
+		expect(announcement(unlabelled, [ana], "In Chat")).toBe(unlabelled);
+	});
+
+	test("a thread's row says replying for one, two, several, and people with chopin", () => {
+		let ana = { kind: "member", handle: "ana" } as const;
+		let bo = { kind: "member", handle: "bo" } as const;
+		let cy = { kind: "member", handle: "cy" } as const;
+		let chopin = { kind: "agent" } as const;
+		expect(typingWords([ana], "replying")).toBe("@ana is replying…");
+		expect(typingWords([ana, bo], "replying")).toBe("@ana and @bo are replying…");
+		expect(typingWords([ana, chopin], "replying")).toBe("@ana and chopin are replying…");
+		expect(typingWords([ana, bo, cy], "replying")).toBe("Several people are replying…");
+		expect(typingWords([ana, bo, chopin], "replying")).toBe("Several people are replying…");
 	});
 });

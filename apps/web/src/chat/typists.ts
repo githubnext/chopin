@@ -60,6 +60,26 @@ export function threadsWithTypers(
 	return threads;
 }
 
+/** What the live region last said of one place, and of whom. */
+export type Announcement = { who: string; text: string };
+
+/**
+ * What the live region says of one place once `typers` are writing there: the last announcement
+ * while the same people write, whatever their order, however often they are told and whether or not
+ * a working row draws chopin, and new words, after `label` where one names the place, once who writes
+ * there changes.
+ */
+export function announcement(
+	previous: Announcement | undefined,
+	typers: readonly Typer[],
+	label?: string,
+): Announcement {
+	let who = typers.map(nameOf).toSorted().join("\n");
+	if (previous && previous.who === who) return previous;
+	let words = typingWords(typers);
+	return { who, text: words && label ? `${label}, ${words}` : words };
+}
+
 function nameOf(author: Typer): string {
 	return author.kind === "agent" ? PLANNER_NAME : `@${author.handle}`;
 }
