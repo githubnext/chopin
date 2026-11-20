@@ -128,12 +128,15 @@ class CopilotTokenExpired extends Error {
 /**
  * What GitHub answered about the Copilot access of `account` (see `copilotAccount`), to a question
  * put once `since` answers had completed; `unknown`, with no account, when it couldn't be asked.
+ * With access, `expiresAt` is when what Copilot takes for the token stops being good (milliseconds
+ * since the epoch), as `CopilotToken`'s is.
  */
-type CopilotAnswer = { access: CopilotAccess; since: number; account?: string };
+type CopilotAnswer = { access: CopilotAccess; since: number; account?: string; expiresAt?: number };
 
 /**
- * GitHub's answer about one GitHub token, held for the next questions about it: the account it is
- * about, how many answers had completed when it was asked, and, once it has, what it answered.
+ * GitHub's answer about one GitHub token for one account, held for the next questions about both:
+ * the account it is about, how many answers had completed when it was asked, and, once it has,
+ * what it answered.
  */
 type HeldAnswer = {
 	answer: Promise<CopilotToken | undefined>;
@@ -141,6 +144,11 @@ type HeldAnswer = {
 	account: string;
 	since: number;
 	access?: "access" | "none";
+};
+
+/** What GitHub's answers about one Copilot account came to (see `AiCredentials.#answers`). */
+type AccountAnswers = Record<"access" | "none", number> & {
+	settled?: "access" | "none" | "disputed";
 };
 
 /**
@@ -327,9 +335,11 @@ export class AiCredentials {
 	#completed = 0;
 	/**
 	 * For each Copilot account (`account`), the number of the latest completed answer of each kind,
-	 * so answers are ordered by when GitHub gave them, not by when they were asked.
+	 * kept or not, so answers are ordered by when GitHub gave them, not by when they were asked; and
+	 * what the account is `settled` on: the kind of the latest answer kept, or `disputed` once an
+	 * answer of the other kind crossed it, until GitHub answers a question put since.
 	 */
-	readonly #answers = new Map<string, Record<"access" | "none", number>>();
+	readonly #answers = new Map<string, AccountAnswers>();
 	readonly #changed = new Set<(userId: string) => void>();
 	/** Whose credentials each Copilot account answers for, to tell them when its answer changes. */
 	readonly #accountUsers = new Map<string, Set<string>>();
@@ -516,16 +526,18 @@ export class AiCredentials {
 	 * replaced or removed since it began, GitHub has given no answer of the other kind about the
 	 * same Copilot account since the launch asked (a check as the AI accounts page opens, another
 	 * launch or a proxied request; answers are ordered by when they completed), its machine is not
-	 * revoked, its document is open in the same generation, and the launch has not reached its
-	 * deadline. The machine and the document are read again when a cutoff completed while the final
+	 * revoked, its document is open in the same generation, and, on one clock reading, neither the
+	 * launch's deadline nor that of the Copilot token it is given Copilot for has come. The machine
+	 * and the document are read again when a cutoff completed while the final
 	 * reads were made, so an archive or a revocation after their read and before the credentials' is
 	 * in the decision. A launch past its deadline, or whose machine was revoked or document archived
 	 * meanwhile (restored or not), takes its placeholders back and is given nothing; any other
-	 * change takes them back and prepares the launch afresh, keys and all, at most
+	 * change, a Copilot token that expired while the placeholders were stored among them, takes them
+	 * back and prepares the launch afresh, keys and all, asking GitHub again, at most
 	 * `LAUNCH_ATTEMPTS` times, and then throws a retryable `AiCredentialError` (503) rather than
 	 * give nothing. So no grant is returned for a credential that changed before it was, nor
-	 * without one that was added. With no grants nothing is stored, and the caller starts no
-	 * runner.
+	 * without one that was added, nor Copilot for a token that expired before it was. With no grants
+	 * nothing is stored, and the caller starts no runner.
 	 */
 	async launch(input: AiLaunch): Promise<AiLaunchGrants> {
 		let launchId = crypto.randomUUID();
@@ -569,8 +581,11 @@ export class AiCredentials {
 				&& this.#storage.aiPlaceholders.cutoffs() === cutoffs
 				&& sameSet(admitted.connected, current)
 				&& !this.#contradicted(admitted.copilot);
-			let due = this.#clock() >= input.expiresAt;
-			if (held && open && !due) {
+			// The launch's deadline and that of what Copilot takes for its token, on one reading.
+			let now = this.#clock();
+			let due = now >= input.expiresAt;
+			let lapsed = now.getTime() >= (admitted.copilot?.expiresAt ?? Infinity);
+			if (held && open && !due && !lapsed) {
 				if (grants.length) this.#handedOut(launchId);
 				return { launchId, launchToken, grants, withheld };
 			}
@@ -1120,7 +1135,9 @@ export class AiCredentials {
 		this.#answersFor(account, record.userId);
 		try {
 			let answer = await this.#copilotAnswer(account, githubToken, fresh);
-			return { account, access: answer.token ? "access" : "none", since: answer.since };
+			return answer.token
+				? { account, access: "access", since: answer.since, expiresAt: answer.token.expiresAt }
+				: { account, access: "none", since: answer.since };
 		} catch {
 			return { account, access: "unknown", since };
 		}
@@ -1146,17 +1163,20 @@ export class AiCredentials {
 	/**
 	 * The Copilot token GitHub gives `githubToken`, asked once for every caller at a time and held
 	 * until a minute before it expires, or five minutes at most, so a seat GitHub removes is noticed,
-	 * with how many answers had completed when it was asked. GitHub saying the account has no Copilot
-	 * subscription is held as long; a failure, any other refusal among them, is not held. A token that
-	 * has expired by the time a caller has it, one GitHub gave already expired or one that expired
-	 * while GitHub answered, is a failure: it is never returned.
+	 * with how many answers had completed when it was asked. A question is shared, and an answer
+	 * used again, only for the same token and the same account (see `copilotAccount`): a sign-in never
+	 * takes what was answered for the same token connected instead, which isn't ordered with its own
+	 * answers. GitHub saying the account has no Copilot subscription is held as long; a failure, any
+	 * other refusal among them, is not held. A token that has expired by the time a caller has it, one
+	 * GitHub gave already expired or one that expired while GitHub answered, is a failure: it is never
+	 * returned.
 	 */
 	async #copilotAnswer(
 		account: string,
 		githubToken: string,
 		fresh = false,
 	): Promise<{ token: CopilotToken | undefined; since: number }> {
-		let key = Buffer.from(digest(githubToken)).toString("hex");
+		let key = `${account} ${Buffer.from(digest(githubToken)).toString("hex")}`;
 		let now = this.#clock().getTime();
 		let held = this.#copilotTokens.get(key);
 		let entry = !fresh && held && now < held.until
@@ -1188,9 +1208,9 @@ export class AiCredentials {
 	/**
 	 * GitHub's answer for `entry`, recorded before any caller resumes with it. GitHub decides an
 	 * answer before Chopin has it, so one that crossed an answer of the other kind about the same
-	 * account (the other completed after this one was asked) may have been decided first: it is
-	 * dropped and GitHub asked again, at most `ANSWER_ATTEMPTS` times, after which it is a failure,
-	 * like one GitHub couldn't give.
+	 * account (the other completed after this one was asked) may have been decided first: neither is
+	 * settled from then on, and GitHub is asked again, at most `ANSWER_ATTEMPTS` times, after which it
+	 * is a failure, like one GitHub couldn't give.
 	 */
 	async #asked(
 		key: string,
@@ -1202,10 +1222,14 @@ export class AiCredentials {
 				if (attempt) entry.since = this.#completed;
 				let token = await this.#exchange(githubToken);
 				let access = token ? "access" as const : "none" as const;
-				if (this.#crossed(entry, access)) continue;
-				if (token) entry.until = Math.min(entry.until, token.expiresAt - RENEW_BEFORE_MS);
 				// A token already expired is no answer, as every caller takes it.
-				if (!token || token.expiresAt > this.#clock().getTime()) this.#answered(entry, access);
+				let answer = !token || token.expiresAt > this.#clock().getTime();
+				if (this.#crossed(entry, access)) {
+					if (answer) this.#answered(entry, access, false);
+					continue;
+				}
+				if (token) entry.until = Math.min(entry.until, token.expiresAt - RENEW_BEFORE_MS);
+				if (answer) this.#answered(entry, access);
 				return token;
 			}
 			throw new Error("GitHub's answers about this Copilot account kept crossing others");
@@ -1224,14 +1248,14 @@ export class AiCredentials {
 	/**
 	 * Records GitHub's answer about an account as the latest of its kind, numbered as it completes,
 	 * and stops using any answer held about the same account that says otherwise, whichever of its
-	 * tokens asked: that answer is older, and the next question about it asks GitHub again. Another
-	 * account, a token connected instead of the sign-in, keeps its own.
+	 * tokens asked: the next question about it asks GitHub again. Another account, a token connected
+	 * instead of the sign-in, keeps its own. An answer `kept` settles the account on it; one that
+	 * crossed an answer of the other kind settles nothing and disputes what the account was settled
+	 * on, if it says otherwise, so neither is used until GitHub answers a question put after it.
 	 */
-	#answered(entry: HeldAnswer, access: "access" | "none"): void {
-		entry.access = access;
+	#answered(entry: HeldAnswer, access: "access" | "none", kept = true): void {
 		let latest = this.#answers.get(entry.account) ?? { access: 0, none: 0 };
-		// The answer GitHub gave before this one about the account, of whichever kind came last.
-		let before = latest.access > latest.none ? "access" : latest.none > latest.access ? "none" : "";
+		let before = latest.settled;
 		latest[access] = ++this.#completed;
 		this.#answers.set(entry.account, latest);
 		for (let [key, other] of this.#copilotTokens) {
@@ -1239,9 +1263,16 @@ export class AiCredentials {
 				this.#copilotTokens.delete(key);
 			}
 		}
-		// A seat GitHub confirms lost or regained changes what its people's launches may be given:
-		// their launches that last are told, as for a provider they connect or remove. The same answer
-		// again, and a question GitHub couldn't answer (a rate limit among them), tell no one.
+		if (!kept) {
+			if (before && before !== access) latest.settled = "disputed";
+			return;
+		}
+		entry.access = access;
+		latest.settled = access;
+		// A seat GitHub confirms lost or regained, or confirms either way once it was disputed, changes
+		// what its people's launches may be given: their launches that last are told, as for a provider
+		// they connect or remove. The same answer again, and a question GitHub couldn't answer (a rate
+		// limit among them), tell no one.
 		if (before && before !== access) {
 			for (let userId of this.#accountUsers.get(entry.account) ?? []) this.#told(userId);
 		}

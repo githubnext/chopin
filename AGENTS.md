@@ -188,12 +188,13 @@ durable.
   neither GitHub's exchange nor Copilot's model API takes is a check that couldn't be
   done, never no subscription. Every answer GitHub gives about
   Copilot access (a launch's, the list's, the AI accounts page's check's, a proxied request's) is kept
-  against the account it concerns, ordered by when it completed, and replaces older
-  answers of the other kind held for that account; one that crossed an answer of the
-  other kind is asked again, and a refusal for GitHub's rate limit is no answer. A
+  against the account it concerns, ordered by when it completed, used again only for that account
+  and the token that asked, and replaces older answers of the other kind held for that account; one
+  that crossed an answer of the other kind settles neither, so the check is unfinished until GitHub
+  answers a question put after both, and a refusal for GitHub's rate limit is no answer. A
   launch's grants are published only while its person's credentials are those it was
   prepared with, no answer of the other kind about its Copilot account has completed since it asked, and before
-  its deadline; changes that never settle fail the launch with a retryable error,
+  its deadline and its Copilot token's, both on one clock reading; changes that never settle fail the launch with a retryable error,
   never an empty grant list. An OpenAI or Anthropic key is
   saved only once that provider accepts it, and given to no launch once it refuses it as
   invalid on a request (`rejectedAt`, until it is connected again) or while it doesn't

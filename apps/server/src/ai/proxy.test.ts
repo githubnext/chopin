@@ -794,6 +794,83 @@ describe("GitHub Copilot access through a GitHub sign-in", () => {
 		expect(await checked(second)).toBe("access");
 	});
 
+	it("settles neither of two crossing answers about a token while GitHub can't be asked again, and settles that account alone once it answers", async () => {
+		let world = await setup();
+		let exchanges = (token: string) =>
+			world.githubApi.seen.filter(seen => seen.headers.authorization === `token ${token}`).length;
+		world.entitled.set("ghu_hubot", 403);
+		let hubot = await world.api("/api/ai/credentials/github-copilot/check", world.hubot, {
+			method: "POST",
+		});
+		expect(await hubot.json()).toMatchObject({ copilotAccess: "none" });
+
+		// A check of what Mona may use is asked while she has a seat, and its answer is held back.
+		let held = world.holdReply("ghu_mona_signed_in");
+		let pending = world.credentials.available("U_mona");
+		await held.asked;
+		// The AI accounts page opens and GitHub finds no seat for the same token.
+		world.entitled.set("ghu_mona_signed_in", 403);
+		let checked = await world.api("/api/ai/credentials/github-copilot/check", world.mona, {
+			method: "POST",
+		});
+		expect(await checked.json()).toMatchObject({ copilotAccess: "none" });
+		// The seat then arrives, after the refusal; asked again, GitHub can't answer.
+		world.entitled.set("ghu_mona_signed_in", 503);
+		held.release();
+		expect(await pending).toEqual({
+			providers: [],
+			withheld: [{ provider: "github-copilot", reason: "copilot-unavailable" }],
+		});
+		expect(await access(world)).toBe("unknown");
+		expect(await aiAccountRefusal(world.credentials, "U_mona")).toEqual({
+			message: AI_ACCOUNT_UNCHECKED,
+			code: "no-ai-account",
+		});
+		expect(
+			((await (await world.api("/api/ai/credentials", world.hubot)).json()) as AiCredentialList)
+				.credentials[0]!.copilotAccess,
+		).toBe("none");
+		expect(exchanges("ghu_hubot")).toBe(1);
+
+		world.entitled.delete("ghu_mona_signed_in");
+		expect(await access(world)).toBe("access");
+		let asked = exchanges("ghu_mona_signed_in");
+		expect(await access(world)).toBe("access");
+		expect(exchanges("ghu_mona_signed_in")).toBe(asked);
+	});
+
+	it("never answers a sign-in with what GitHub said of the same token connected instead, and shows it the seat a launch on its machine confirmed", async () => {
+		let world = await setup();
+		let { machine } = await world.machines.pair({
+			userId: "U_mona",
+			label: "studio",
+			repositories: [],
+			autoRun: false,
+			grant: grant("ghu_machine", 3_600),
+		});
+		// Mona connects her sign-in's own token while her account has no seat, then removes it.
+		for (let token of ["ghu_mona_signed_in", "ghu_machine"]) world.entitled.set(token, 403);
+		let pasted = await world.connect(world.mona, "github-copilot", {
+			kind: "api-key",
+			secret: "ghu_mona_signed_in",
+		});
+		expect(await pasted.json()).toMatchObject({ kind: "api-key", copilotAccess: "none" });
+		let removed = await world.api("/api/ai/credentials/github-copilot", world.mona, {
+			method: "DELETE",
+		});
+		expect(removed.status).toBe(204);
+
+		// Her seat arrives, and a launch on her machine gets Copilot through its own token.
+		for (let token of ["ghu_mona_signed_in", "ghu_machine"]) world.entitled.delete(token);
+		let onMachine = await world.credentials.launch({
+			userId: "U_mona",
+			machineId: machine.id,
+			expiresAt: new Date(world.now().getTime() + 3_600_000),
+		});
+		expect(onMachine.grants.map(grant => grant.provider)).toEqual(["github-copilot"]);
+		expect(await access(world)).toBe("access");
+	});
+
 	it("gives a launch no Copilot placeholder without access, and an API key alone is enough", async () => {
 		let world = await setup();
 		world.entitled.set("ghu_mona_signed_in", 403);
@@ -2551,6 +2628,68 @@ describe("Copilot tokens that expire", () => {
 		expect(before.grants.map(grant => grant.provider)).toEqual(["github-copilot"]);
 		expect(await world.storage.aiPlaceholders.deleteExpired(new Date(8.64e15))).toBe(1);
 	});
+
+	for (let kind of ["exchanged", "raw"] as const) {
+		it(`renews Copilot access whose ${kind} token expired while a launch stored its placeholders before handing it out, and gives no Copilot when GitHub can't renew it`, async () => {
+			let world = await setup();
+			let token = "ghu_mona_signed_in";
+			// GitHub's Copilot token lasts a second; Copilot takes a GitHub token itself for 30 minutes.
+			let life = kind === "raw" ? 30 * 60_000 : 1_000;
+			world.copilotLifetime.seconds = 1;
+			let usable = (yes: boolean) => {
+				if (yes) world.entitled.delete(token);
+				else world.entitled.set(token, 503);
+				if (kind === "raw") world.notExchanged.add(token);
+				if (yes && kind === "raw") world.takenRaw.add(token);
+				else world.takenRaw.delete(token);
+			};
+			usable(true);
+			let storing = 0;
+			let stored: (() => void) | undefined;
+			let placeholders = world.storage.aiPlaceholders;
+			let put = placeholders.put.bind(placeholders);
+			placeholders.put = async rows => {
+				world.advance(storing);
+				storing = 0;
+				let then = stored;
+				stored = undefined;
+				then?.();
+				return put(rows);
+			};
+			/** A launch whose first placeholders take `ms` to store, after which `then` happens. */
+			let launchStoring = async (ms: number, then?: () => void) => {
+				storing = ms;
+				stored = then;
+				let asked = world.githubApi.seen.length;
+				let launched = await world.credentials.launch({
+					userId: "U_mona",
+					expiresAt: new Date(world.now().getTime() + 3_600_000),
+				});
+				return {
+					grants: launched.grants.map(grant => grant.provider),
+					asked: world.githubApi.seen.length - asked,
+					kept: await placeholders.deleteExpired(new Date(8.64e15)),
+				};
+			};
+
+			expect(await launchStoring(life - 1)).toEqual({
+				grants: ["github-copilot"],
+				asked: 1,
+				kept: 1,
+			});
+			for (let ms of [life, life + 1]) {
+				expect(await launchStoring(ms)).toEqual({ grants: ["github-copilot"], asked: 2, kept: 1 });
+			}
+			for (let ms of [life, life + 1]) {
+				expect(await launchStoring(ms, () => usable(false))).toEqual({
+					grants: [],
+					asked: 2,
+					kept: 0,
+				});
+				usable(true);
+			}
+		});
+	}
 
 	it("renews a Copilot token whose deadline came while its request was prepared, and never sends that one", async () => {
 		let issued = 0;
