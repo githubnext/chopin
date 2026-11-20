@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 import { markAiKeyRejected, seedUnreadableAiKey } from "./database";
 import { authenticate } from "./room";
 
-import type { Page } from "@playwright/test";
+import type { Page, Request } from "@playwright/test";
 
 const REFUSED_KEY = "sk-e2e-refused-openai-0000";
 
@@ -83,7 +83,7 @@ test("without a seat, Copilot says so, links to Copilot, and takes a token inste
 			.toBeVisible();
 		await expect(copilot.getByRole("link", { name: "Get Copilot" }))
 			.toHaveAttribute("href", "https://github.com/features/copilot");
-		await expect(copilot.getByRole("button", { name: "Check again" })).toBeVisible();
+		await expect(copilot.getByRole("button", { name: "Check again" })).toHaveCount(0);
 
 		await copilot.getByRole("button", { name: "Use a token instead" }).click();
 		let dialog = page.getByRole("dialog", { name: "Use a GitHub token for Copilot" });
@@ -107,23 +107,25 @@ test("without a seat, Copilot says so, links to Copilot, and takes a token inste
 	}
 });
 
-test("a check that couldn't finish offers Check again and never says there is no subscription", async ({ baseURL, page }) => {
+test("a check that couldn't finish never says there is no subscription, and is done again when the page opens", async ({ baseURL, page }) => {
 	let handle = person();
 	await copilotAccess(handle, "unknown");
 	try {
 		await open(page, handle, baseURL!);
 		let copilot = row(page, "GitHub Copilot");
 		await expect(copilot.getByText("Not checked", { exact: true })).toBeVisible();
-		await expect(copilot.getByText("Chopin couldn't finish checking for Copilot access."))
-			.toBeVisible();
+		await expect(
+			copilot.getByText(
+				"Chopin couldn't check for Copilot access through your GitHub sign-in. It checks again when you open this page.",
+			),
+		).toBeVisible();
 		await expect(copilot).not.toContainText("subscription");
 		await expect(copilot.getByRole("link", { name: "Get Copilot" })).toHaveCount(0);
 
 		await copilotAccess(handle, "access");
-		await copilot.getByRole("button", { name: "Check again" }).click();
+		await page.reload();
 		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
 		await expect(copilot.getByRole("button")).toHaveCount(0);
-		await expect(page.getByRole("heading", { name: "AI accounts", level: 1 })).toBeFocused();
 	} finally {
 		await forgetCopilotAccess(handle);
 	}
@@ -233,4 +235,112 @@ test("a key its provider refused says it needs reconnecting", async ({ baseURL, 
 		.toBeVisible();
 	await expect(openai.getByRole("button", { name: "Replace OpenAI key" })).toBeVisible();
 	await expect(openai.getByRole("button", { name: "Remove OpenAI key" })).toBeVisible();
+});
+
+const COPILOT_CHECK = "/api/ai/credentials/github-copilot/check";
+
+function isCheck(request: Request) {
+	return request.method() === "POST" && new URL(request.url()).pathname === COPILOT_CHECK;
+}
+
+/** Holds the page's Copilot check in the browser until `release`, then sends it to Chopin. */
+async function holdCheck(page: Page) {
+	let release!: () => void;
+	let held = new Promise<void>(resolve => (release = resolve));
+	let seen!: () => void;
+	let sent = new Promise<void>(resolve => (seen = resolve));
+	await page.route(`**${COPILOT_CHECK}`, async route => {
+		seen();
+		await held;
+		await route.continue();
+	});
+	return { sent, release };
+}
+
+test("opening the page checks Copilot once, and again each time it is opened in place", async ({ baseURL, page }) => {
+	let handle = person();
+	await copilotAccess(handle, "access");
+	try {
+		let checks = 0;
+		page.on("request", request => {
+			if (isCheck(request)) checks++;
+		});
+		await authenticate(page, handle, baseURL!);
+		await page.goto("/machines");
+		let entry = sidebar(page).getByRole("link", { name: "AI accounts", exact: true });
+		let copilot = row(page, "GitHub Copilot");
+
+		let answered = page.waitForResponse(response => isCheck(response.request()));
+		await entry.click();
+		expect((await answered).ok()).toBe(true);
+		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+		expect(checks).toBe(1);
+
+		await page.evaluate(() => Object.assign(window, { stillThisPage: true }));
+		await page.goBack();
+		await expect(page).toHaveURL(/\/machines$/);
+		answered = page.waitForResponse(response => isCheck(response.request()));
+		await entry.click();
+		await (await answered).finished();
+		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+		expect(await page.evaluate(() => "stillThisPage" in window)).toBe(true);
+		expect(checks).toBe(2);
+	} finally {
+		await forgetCopilotAccess(handle);
+	}
+});
+
+test("a seat lost between two visits shows on the second, the earlier answer standing while it is checked", async ({ baseURL, page }) => {
+	let handle = person();
+	await copilotAccess(handle, "access");
+	try {
+		await authenticate(page, handle, baseURL!);
+		await page.goto("/machines");
+		let entry = sidebar(page).getByRole("link", { name: "AI accounts", exact: true });
+		let copilot = row(page, "GitHub Copilot");
+		let answered = page.waitForResponse(response => isCheck(response.request()));
+		await entry.click();
+		await (await answered).finished();
+		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+
+		await page.goBack();
+		await expect(page).toHaveURL(/\/machines$/);
+		await copilotAccess(handle, "none");
+		let check = await holdCheck(page);
+		await entry.click();
+		await check.sent;
+		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+		await expect(copilot.getByText("Checking…")).toHaveCount(0);
+
+		check.release();
+		await expect(copilot.getByText("No Copilot access", { exact: true })).toBeVisible();
+		await expect(copilot.getByText("Your GitHub account has no Copilot subscription."))
+			.toBeVisible();
+		await expect(copilot.getByRole("button", { name: "Use a token instead" })).toBeVisible();
+	} finally {
+		await forgetCopilotAccess(handle);
+	}
+});
+
+test("with no earlier answer, Copilot says it is checking until the check answers", async ({ baseURL, page }) => {
+	let handle = person();
+	await copilotAccess(handle, "unknown");
+	try {
+		await authenticate(page, handle, baseURL!);
+		let check = await holdCheck(page);
+		await page.goto("/ai-accounts");
+		await check.sent;
+		let copilot = row(page, "GitHub Copilot");
+		await expect(copilot.getByText("Checking…", { exact: true })).toBeVisible();
+		await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
+		await expect(copilot.getByText("Not checked")).toHaveCount(0);
+		await expect(copilot.getByRole("button")).toHaveCount(0);
+
+		await copilotAccess(handle, "access");
+		check.release();
+		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+		await expect(copilot.getByText("Checking…")).toHaveCount(0);
+	} finally {
+		await forgetCopilotAccess(handle);
+	}
 });

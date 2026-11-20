@@ -270,12 +270,21 @@ describe("design audit specimens", () => {
 		expect(plate(markup, "lists")).toContain('class="navigation-palette-option"');
 		let accounts = plate(markup, "ai-accounts").replaceAll("&#x27;", "'");
 		for (
-			let label of ["Connected", "No Copilot access", "Not checked", "Needs reconnecting"]
+			let label of [
+				"Connected",
+				"No Copilot access",
+				"Checking…",
+				"Not checked",
+				"Needs reconnecting",
+			]
 		) {
 			expect(accounts).toContain(`>${label}</span>`);
 		}
 		expect(accounts).toContain("Your GitHub account has no Copilot subscription.");
-		expect(accounts).toContain("Chopin couldn't finish checking for Copilot access.");
+		expect(accounts).toContain(
+			"Chopin couldn't check for Copilot access through your GitHub sign-in. It checks again when you open this page.",
+		);
+		expect(accounts).not.toContain("Check again");
 		expect(accounts).toContain(">Get Copilot</a>");
 		expect(accounts).toContain("Key ending 7Qxa");
 		expect(accounts).toContain('class="btn btn-md btn-primary"');

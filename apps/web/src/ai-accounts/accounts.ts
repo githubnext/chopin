@@ -25,16 +25,10 @@ const MISSING_LINES: Record<KeyProvider, string> = {
 
 export type AccountBadge = {
 	tone: "success" | "neutral" | "warning";
-	label: "Connected" | "No Copilot access" | "Not checked" | "Needs reconnecting";
+	label: "Connected" | "No Copilot access" | "Checking…" | "Not checked" | "Needs reconnecting";
 };
 
-export type AccountAction =
-	| "add-key"
-	| "replace"
-	| "remove"
-	| "use-token"
-	| "use-sign-in"
-	| "check-again";
+export type AccountAction = "add-key" | "replace" | "remove" | "use-token" | "use-sign-in";
 
 export type AccountRow = {
 	provider: AiProvider;
@@ -47,9 +41,13 @@ export type AccountRow = {
 
 const CONNECTED: AccountBadge = { tone: "success", label: "Connected" };
 const NO_ACCESS: AccountBadge = { tone: "neutral", label: "No Copilot access" };
+const CHECKING: AccountBadge = { tone: "neutral", label: "Checking…" };
 const NOT_CHECKED: AccountBadge = { tone: "neutral", label: "Not checked" };
 const NEEDS_RECONNECTING: AccountBadge = { tone: "warning", label: "Needs reconnecting" };
-const CHECK_UNFINISHED = "Chopin couldn't finish checking for Copilot access.";
+const NOT_CHECKED_SIGN_IN =
+	"Chopin couldn't check for Copilot access through your GitHub sign-in. It checks again when you open this page.";
+const NOT_CHECKED_TOKEN =
+	"Chopin couldn't check this token for Copilot access. It checks again when you open this page.";
 
 function lastUse(summary: AiCredentialSummary, now: number): string {
 	let when = summary.lastUsedAt && ago(summary.lastUsedAt, now);
@@ -70,7 +68,15 @@ function whyReconnect(
 	return undefined;
 }
 
-function copilotRow(summary: AiCredentialSummary | undefined, now: number): AccountRow {
+/**
+ * The GitHub Copilot row. While the check the page runs as it opens is under way (`checking`), a
+ * row with an answer keeps it, and one without says it is checking.
+ */
+function copilotRow(
+	summary: AiCredentialSummary | undefined,
+	now: number,
+	checking: boolean,
+): AccountRow {
 	let name = PROVIDER_NAMES["github-copilot"];
 	let token = summary?.kind === "api-key";
 	let ending = summary?.kind === "api-key" && summary.suffix
@@ -114,18 +120,26 @@ function copilotRow(summary: AiCredentialSummary | undefined, now: number): Acco
 				? [...ending, "This token's GitHub account has no Copilot subscription."]
 				: ["Your GitHub account has no Copilot subscription."],
 			getCopilot: true,
-			actions: token
-				? ["replace", "check-again", ...switchBack]
-				: ["use-token", "check-again"],
+			actions: token ? ["replace", ...switchBack] : ["use-token"],
+		};
+	}
+	if (checking) {
+		return {
+			provider: "github-copilot",
+			name,
+			badge: CHECKING,
+			lines: token ? ending : ["Your GitHub sign-in"],
+			getCopilot: false,
+			actions: token ? ["replace", ...switchBack] : [],
 		};
 	}
 	return {
 		provider: "github-copilot",
 		name,
 		badge: NOT_CHECKED,
-		lines: token ? [...ending, CHECK_UNFINISHED] : ["Your GitHub sign-in", CHECK_UNFINISHED],
+		lines: token ? [...ending, NOT_CHECKED_TOKEN] : ["Your GitHub sign-in", NOT_CHECKED_SIGN_IN],
 		getCopilot: false,
-		actions: token ? ["check-again", "replace", ...switchBack] : ["check-again"],
+		actions: token ? ["replace", ...switchBack] : [],
 	};
 }
 
@@ -169,11 +183,12 @@ function keyRow(
 export function accountRows(
 	credentials: readonly AiCredentialSummary[],
 	now: number,
+	checking = false,
 ): { signIns: AccountRow[]; keys: AccountRow[] } {
 	let find = (provider: AiProvider) =>
 		credentials.find(credential => credential.provider === provider);
 	return {
-		signIns: [copilotRow(find("github-copilot"), now)],
+		signIns: [copilotRow(find("github-copilot"), now, checking)],
 		keys: KEY_PROVIDERS.map(provider => keyRow(provider, find(provider), now)),
 	};
 }
@@ -184,6 +199,21 @@ export function withCredential(
 ): AiCredentialSummary[] {
 	let others = credentials.filter(credential => credential.provider !== changed.provider);
 	return [...others, changed];
+}
+
+/**
+ * `credentials` with `checked`, the answer of the Copilot check the page ran as it opened, unless the
+ * GitHub Copilot listed is no longer the credential it checked: one connected or switched since keeps
+ * its own answer.
+ */
+export function withCheck(
+	credentials: AiCredentialSummary[],
+	checked: AiCredentialSummary,
+): AiCredentialSummary[] {
+	let listed = credentials.find(credential => credential.provider === "github-copilot");
+	let same = listed?.kind === checked.kind && listed.updatedAt === checked.updatedAt
+		&& listed.suffix === checked.suffix;
+	return same ? withCredential(credentials, checked) : credentials;
 }
 
 export function withoutCredential(
@@ -257,8 +287,9 @@ export async function removeCredential(provider: AiProvider): Promise<void> {
 	}
 }
 
-export async function checkCopilot(): Promise<AiCredentialSummary> {
+/** Asks GitHub again, through Chopin, whether the person's GitHub Copilot has Copilot access. */
+export async function checkCopilot(signal?: AbortSignal): Promise<AiCredentialSummary> {
 	return (await answered<AiCredentialSummary>(
-		fetch("/api/ai/credentials/github-copilot/check", { method: "POST" }),
+		fetch("/api/ai/credentials/github-copilot/check", { method: "POST", signal }),
 	))!;
 }

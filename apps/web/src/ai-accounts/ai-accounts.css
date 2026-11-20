@@ -144,6 +144,13 @@
 	gap: calc(var(--spacing) * 2);
 }
 
+/* The Checking… badge turns its loader; reduced motion keeps it still, and its word says it. */
+@media (prefers-reduced-motion: no-preference) {
+	.ai-account [data-checking] [data-slot="icon-label-icon"] {
+		animation: button-loader-spin calc(var(--duration-base) * 4) linear infinite;
+	}
+}
+
 @container ai-accounts-list (width < 32rem) {
 	.ai-account {
 		grid-template-columns: auto minmax(0, 1fr);

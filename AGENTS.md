@@ -178,7 +178,7 @@ durable.
   placeholder only when GitHub gives that token a Copilot token at launch (through
   the person's sign-in unless they connected a token instead), and no
   placeholder for a provider its person can't use. Every answer GitHub gives about
-  Copilot access (a launch's, the list's, Check again's, a proxied request's) is kept
+  Copilot access (a launch's, the list's, the AI accounts page's check's, a proxied request's) is kept
   against the account it concerns, ordered by when it completed, and replaces older
   answers of the other kind held for that account; one that crossed an answer of the
   other kind is asked again, and a refusal for GitHub's rate limit is no answer. A
