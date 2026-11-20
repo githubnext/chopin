@@ -9,6 +9,7 @@ import {
 	listCredentials,
 	PROVIDER_NAMES,
 	removeCredential,
+	withCheck,
 	withCredential,
 	withoutCredential,
 } from "./accounts";
@@ -22,10 +23,28 @@ import type { PendingAction, RowProblem } from "./rows";
 
 import "./ai-accounts.css";
 
+/**
+ * The person's AI credentials, and the check of their GitHub Copilot that the page runs once each
+ * time it opens, as soon as the list is in. The list's answer stands until the check's arrives; a
+ * check that couldn't finish leaves Copilot's access unknown.
+ */
 function useCredentials() {
 	let [credentials, setCredentials] = useState<AiCredentialSummary[]>();
 	let [problem, setProblem] = useState<string>();
+	let [checking, setChecking] = useState(true);
 	let request = useRef<AbortController>(undefined);
+	let check = useRef<AbortController>(undefined);
+	let checkOnOpen = useCallback(async (listed: AiCredentialSummary[]) => {
+		let checked = new AbortController();
+		check.current = checked;
+		let copilot = listed.find(credential => credential.provider === "github-copilot");
+		let answer = await checkCopilot(checked.signal).catch(() =>
+			copilot && { ...copilot, copilotAccess: "unknown" as const }
+		);
+		if (checked.signal.aborted) return;
+		setChecking(false);
+		if (answer) setCredentials(current => current && withCheck(current, answer));
+	}, []);
 	let load = useCallback(async () => {
 		request.current?.abort();
 		let controller = new AbortController();
@@ -33,7 +52,9 @@ function useCredentials() {
 		setProblem(undefined);
 		try {
 			let listed = await listCredentials(controller.signal);
-			if (!controller.signal.aborted) setCredentials(listed);
+			if (controller.signal.aborted) return;
+			setCredentials(listed);
+			if (!check.current) void checkOnOpen(listed);
 		} catch (error) {
 			if (controller.signal.aborted) return;
 			setProblem(
@@ -42,12 +63,16 @@ function useCredentials() {
 					: "Something went wrong. Try again in a moment.",
 			);
 		}
-	}, []);
+	}, [checkOnOpen]);
 	useEffect(() => {
 		void load();
-		return () => request.current?.abort();
+		return () => {
+			request.current?.abort();
+			check.current?.abort();
+			check.current = undefined;
+		};
 	}, [load]);
-	return { credentials, setCredentials, problem, load };
+	return { credentials, setCredentials, problem, load, checking };
 }
 
 function focusLost() {
@@ -56,7 +81,8 @@ function focusLost() {
 }
 
 export function AiAccountsView(
-	{ credentials, now, onAction, pending, problem }: {
+	{ checking, credentials, now, onAction, pending, problem }: {
+		checking: boolean;
 		credentials: readonly AiCredentialSummary[];
 		now: number;
 		onAction: (row: AccountRow, action: AccountAction) => void;
@@ -64,7 +90,7 @@ export function AiAccountsView(
 		problem?: RowProblem;
 	},
 ) {
-	let { keys, signIns } = accountRows(credentials, now);
+	let { keys, signIns } = accountRows(credentials, now, checking);
 	let shared = { busy: pending, onAction, problem };
 	return (
 		<>
@@ -78,7 +104,7 @@ export default function AiAccountsPage() {
 	let heading = useRef<HTMLHeadingElement>(null);
 	let main = useRef<HTMLElement>(null);
 	let [returnTo, setReturnTo] = useState<AiProvider>();
-	let { credentials, setCredentials, problem, load } = useCredentials();
+	let { credentials, setCredentials, problem, load, checking } = useCredentials();
 	let [keyRequest, setKeyRequest] = useState<KeyRequest>();
 	let [removing, setRemoving] = useState<{ provider: AiProvider; opened: number }>();
 	let opened = useRef(0);
@@ -133,12 +159,6 @@ export default function AiAccountsPage() {
 			case "remove":
 				setRemoving({ provider: row.provider, opened: ++opened.current });
 				return;
-			case "check-again":
-				void run(row, action, async () => {
-					changed(await checkCopilot());
-					setAnnouncement("Checked GitHub Copilot again");
-				});
-				return;
 			case "use-sign-in":
 				void run(row, action, async () => {
 					await removeCredential(row.provider);
@@ -162,6 +182,7 @@ export default function AiAccountsPage() {
 				{credentials
 					? (
 						<AiAccountsView
+							checking={checking}
 							credentials={credentials}
 							now={Date.now()}
 							onAction={act}

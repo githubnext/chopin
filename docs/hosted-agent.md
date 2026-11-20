@@ -1113,7 +1113,7 @@ rate limit included (a 429, or a 403 with `Retry-After` or
 `X-RateLimit-Remaining: 0`), which records no seat lost. The list and the
 connect answer carry it as `copilotAccess`, from an answer at most five minutes
 old; `POST /api/ai/credentials/github-copilot/check` asks GitHub again at once.
-Every answer GitHub gives, to the list, a Check again, a launch or a proxied
+Every answer GitHub gives, to the list, a check as the AI accounts page opens, a launch or a proxied
 request, is recorded against the account it is about: the person's GitHub
 sign-in, whichever of its tokens asked (a browser login's or a paired
 machine's), or a token they connected instead, which is another account. Answers

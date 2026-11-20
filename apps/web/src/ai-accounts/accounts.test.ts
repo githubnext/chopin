@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { accountRows, withCredential, withoutCredential } from "./accounts";
+import { accountRows, withCheck, withCredential, withoutCredential } from "./accounts";
 
 import type { AiCredentialSummary } from "@chopin/protocol/ai-credentials";
 
@@ -20,8 +20,8 @@ const OPENAI: AiCredentialSummary = {
 	lastUsedAt: "2026-11-19T11:58:00.000Z",
 };
 
-function copilot(summary: AiCredentialSummary) {
-	return accountRows([summary], NOW).signIns[0]!;
+function copilot(summary: AiCredentialSummary, checking = false) {
+	return accountRows([summary], NOW, checking).signIns[0]!;
 }
 
 function key(summary?: AiCredentialSummary) {
@@ -40,28 +40,48 @@ describe("GitHub Copilot through the sign-in", () => {
 		});
 	});
 
-	test("without a seat it says so in neutral words and offers a token, Get Copilot and Check again", () => {
+	test("without a seat it says so in neutral words and offers a token and Get Copilot", () => {
 		expect(copilot({ ...SIGN_IN, copilotAccess: "none" })).toEqual({
 			provider: "github-copilot",
 			name: "GitHub Copilot",
 			badge: { tone: "neutral", label: "No Copilot access" },
 			lines: ["Your GitHub account has no Copilot subscription."],
 			getCopilot: true,
-			actions: ["use-token", "check-again"],
+			actions: ["use-token"],
 		});
 	});
 
-	test("an unfinished check never says the account lacks a subscription", () => {
+	test("an unfinished check says the page checks again when it opens, never that there is no subscription", () => {
 		for (let access of ["unknown", undefined] as const) {
 			let row = copilot({ ...SIGN_IN, copilotAccess: access });
 			expect(row.badge).toEqual({ tone: "neutral", label: "Not checked" });
 			expect(row.lines).toEqual([
 				"Your GitHub sign-in",
-				"Chopin couldn't finish checking for Copilot access.",
+				"Chopin couldn't check for Copilot access through your GitHub sign-in. It checks again when you open this page.",
 			]);
 			expect(row.getCopilot).toBe(false);
-			expect(row.actions).toEqual(["check-again"]);
+			expect(row.actions).toEqual([]);
 			expect(JSON.stringify(row)).not.toContain("subscription");
+		}
+	});
+
+	test("while the page checks, a row with no answer says it is checking", () => {
+		for (let access of ["unknown", undefined] as const) {
+			expect(copilot({ ...SIGN_IN, copilotAccess: access }, true)).toEqual({
+				provider: "github-copilot",
+				name: "GitHub Copilot",
+				badge: { tone: "neutral", label: "Checking…" },
+				lines: ["Your GitHub sign-in"],
+				getCopilot: false,
+				actions: [],
+			});
+		}
+	});
+
+	test("while the page checks, an earlier answer stands", () => {
+		for (let access of ["access", "none"] as const) {
+			let summary: AiCredentialSummary = { ...SIGN_IN, copilotAccess: access };
+			expect(copilot(summary, true)).toEqual(copilot(summary));
 		}
 	});
 });
@@ -78,6 +98,26 @@ describe("GitHub Copilot through a token", () => {
 		let row = copilot(token);
 		expect(row.lines).toEqual(["Token ending f00d", "Never used"]);
 		expect(row.actions).toEqual(["replace", "use-sign-in"]);
+	});
+
+	test("an unfinished check keeps the token's ending and its way back, and says so", () => {
+		let row = copilot({ ...token, copilotAccess: "unknown" });
+		expect(row.badge).toEqual({ tone: "neutral", label: "Not checked" });
+		expect(row.lines).toEqual([
+			"Token ending f00d",
+			"Chopin couldn't check this token for Copilot access. It checks again when you open this page.",
+		]);
+		expect(row.actions).toEqual(["replace", "use-sign-in"]);
+		expect(copilot({ ...token, copilotAccess: "unknown" }, true).lines).toEqual([
+			"Token ending f00d",
+		]);
+	});
+
+	test("without a seat it offers no check, only another token or the sign-in", () => {
+		expect(copilot({ ...token, copilotAccess: "none" }).actions).toEqual([
+			"replace",
+			"use-sign-in",
+		]);
 	});
 
 	test("an unreadable token needs reconnecting", () => {
@@ -132,6 +172,31 @@ describe("API keys", () => {
 			"OpenAI no longer accepts this key. Replace it to keep using it.",
 		]);
 		expect(row.actions).toEqual(["replace", "remove"]);
+	});
+});
+
+describe("the check as the page opens", () => {
+	let token: AiCredentialSummary = {
+		provider: "github-copilot",
+		kind: "api-key",
+		updatedAt: "2026-11-19T11:00:00.000Z",
+		suffix: "f00d",
+		copilotAccess: "access",
+	};
+
+	test("its answer replaces the list's for the credential it checked", () => {
+		let checked = withCheck([OPENAI, { ...SIGN_IN, copilotAccess: "none" }], SIGN_IN);
+		expect(checked.find(credential => credential.provider === "github-copilot"))
+			.toEqual(SIGN_IN);
+		expect(withCheck([token, OPENAI], { ...token, copilotAccess: "none" })[1])
+			.toEqual({ ...token, copilotAccess: "none" });
+	});
+
+	test("a credential connected or switched since keeps its own answer", () => {
+		let replaced = { ...token, updatedAt: "2026-11-19T11:30:00.000Z", suffix: "beef" };
+		expect(withCheck([replaced], { ...token, copilotAccess: "none" })).toEqual([replaced]);
+		expect(withCheck([SIGN_IN], { ...token, copilotAccess: "none" })).toEqual([SIGN_IN]);
+		expect(withCheck([token], { ...SIGN_IN, copilotAccess: "none" })).toEqual([token]);
 	});
 });
 

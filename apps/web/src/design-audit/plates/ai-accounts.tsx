@@ -16,9 +16,14 @@ const OPENAI: AiCredentialSummary = {
 	lastUsedAt: "2026-11-19T11:58:00.000Z",
 };
 
-function copilot(copilotAccess: AiCredentialSummary["copilotAccess"]): AccountRow {
-	return accountRows([{ provider: "github-copilot", kind: "github-sign-in", copilotAccess }], NOW)
-		.signIns[0]!;
+function copilot(
+	copilotAccess: AiCredentialSummary["copilotAccess"],
+	{ checking = false, token = false } = {},
+): AccountRow {
+	let summary: AiCredentialSummary = token
+		? { provider: "github-copilot", kind: "api-key", suffix: "f00d", copilotAccess }
+		: { provider: "github-copilot", kind: "github-sign-in", copilotAccess };
+	return accountRows([summary], NOW, checking).signIns[0]!;
 }
 
 function key(summary?: AiCredentialSummary): AccountRow {
@@ -28,10 +33,11 @@ function key(summary?: AiCredentialSummary): AccountRow {
 const SPECIMENS: { label: string; row: AccountRow; problem?: string }[] = [
 	{ label: "Copilot through the sign-in", row: copilot("access") },
 	{ label: "No Copilot access", row: copilot("none") },
+	{ label: "Checking as the page opens", row: copilot(undefined, { checking: true }) },
 	{ label: "Check unfinished", row: copilot("unknown") },
 	{
-		label: "Check again failed",
-		row: copilot("unknown"),
+		label: "Switching to the sign-in failed",
+		row: copilot("access", { token: true }),
 		problem: "Couldn't reach Chopin. Check your connection, then try again.",
 	},
 	{ label: "Key connected", row: key(OPENAI) },
@@ -46,7 +52,7 @@ const SPECIMENS: { label: string; row: AccountRow; problem?: string }[] = [
 export function AiAccountsPlate() {
 	return (
 		<AuditPlate
-			description="The AI accounts page's rows: GitHub Copilot through the sign-in with and without a seat or a finished check, and an API key connected, unreadable or missing."
+			description="The AI accounts page's rows: GitHub Copilot through the sign-in with and without a seat, checking as the page opens or with a check unfinished, a token that couldn't switch back, and an API key connected, unreadable or missing."
 			item="ai-accounts"
 			title="AI accounts"
 		>

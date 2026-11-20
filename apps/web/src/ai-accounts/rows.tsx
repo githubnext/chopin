@@ -4,6 +4,7 @@ import {
 	GitHubIcon,
 	InfoIcon,
 	KeyIcon,
+	LoaderIcon,
 	WarningIcon,
 } from "@chopin/icons";
 import { Badge } from "@chopin/visuals";
@@ -17,6 +18,7 @@ import type { AccountAction, AccountBadge, AccountRow } from "./accounts";
 const BADGE_ICONS = {
 	Connected: CheckIcon,
 	"No Copilot access": CircleCloseIcon,
+	"Checking…": LoaderIcon,
 	"Not checked": InfoIcon,
 	"Needs reconnecting": WarningIcon,
 } as const satisfies Record<AccountBadge["label"], unknown>;
@@ -27,7 +29,6 @@ const ACTION_LABELS: Record<AccountAction, string> = {
 	remove: "Remove",
 	"use-token": "Use a token instead",
 	"use-sign-in": "Use GitHub sign-in",
-	"check-again": "Check again",
 };
 
 function actionName(row: AccountRow, action: AccountAction): string | undefined {
@@ -51,7 +52,6 @@ export function AccountRowView(
 		row: AccountRow;
 	},
 ) {
-	let checking = busy?.provider === row.provider && busy.action === "check-again";
 	return (
 		<li className="ai-account" data-provider={row.provider}>
 			<span aria-hidden="true" className="ai-account-mark">
@@ -71,6 +71,7 @@ export function AccountRowView(
 				<div className="ai-account-end">
 					{row.badge && (
 						<Badge
+							data-checking={row.badge.label === "Checking…" || undefined}
 							icon={BADGE_ICONS[row.badge.label]}
 							label={row.badge.label}
 							size="sm"
@@ -88,7 +89,7 @@ export function AccountRowView(
 									onClick={() => onAction(row, action)}
 									type="button"
 								>
-									{checking && action === "check-again" ? "Checking…" : ACTION_LABELS[action]}
+									{ACTION_LABELS[action]}
 								</button>
 							))}
 						</div>
