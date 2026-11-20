@@ -14,6 +14,10 @@ function later(days: number): Date {
 	return new Date(AT.getTime() + days * 86_400_000);
 }
 
+function byMachine(a: StoredMachineDatabase, b: StoredMachineDatabase): number {
+	return a.machineId < b.machineId ? -1 : a.machineId > b.machineId ? 1 : 0;
+}
+
 async function paired(storage: StorageAdapter) {
 	let userId = await owner(storage);
 	let input = machine(userId);
@@ -147,6 +151,48 @@ export function machineDatabaseContract(name: string, factory: StorageFactory) {
 					}),
 				);
 				expect(await storage.machineDatabases.settling(later(30))).toEqual([]);
+			} finally {
+				await storage.close();
+			}
+		});
+
+		test("lists the logins that may be on, of paired machines, for each sweep to check", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let ready = await paired(storage);
+				let failed = await paired(storage);
+				let pending = await paired(storage);
+				let disabled = await paired(storage);
+				let revoked = await paired(storage);
+				let readyLogin = ready.login({ state: "ready" });
+				let failedLogin = failed.login({ state: "failed", failure: "another database let it in" });
+				let pendingLogin = pending.login();
+				for (let value of [readyLogin, failedLogin, pendingLogin]) {
+					await storage.machineDatabases.claim(value);
+				}
+				await storage.machineDatabases.claim(
+					disabled.login({ state: "disabled", disabledAt: AT }),
+				);
+				await storage.machineDatabases.claim(revoked.login({ state: "ready" }));
+				await storage.machines.revoke(
+					await testLease(storage),
+					revoked.machineId,
+					revoked.userId,
+					AT,
+				);
+				// Other tests' machines may share the database.
+				let ours = new Set(
+					[ready, failed, pending, disabled, revoked].map(value => value.machineId),
+				);
+				let active = await storage.machineDatabases.active();
+				expect(active.filter(value => ours.has(value.machineId)).sort(byMachine))
+					.toEqual([readyLogin, failedLogin, pendingLogin].sort(byMachine));
+				// Settled, so no other test sharing the database finds them still to settle.
+				for (let done of [disabled, revoked]) {
+					await storage.machineDatabases.put(
+						done.login({ state: "dropped", disabledAt: AT, droppedAt: AT, updatedAt: AT }),
+					);
+				}
 			} finally {
 				await storage.close();
 			}

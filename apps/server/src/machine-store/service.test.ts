@@ -224,6 +224,101 @@ describe("machine database logins", () => {
 		expect(server.enabled.has(deskRole)).toBe(false);
 	});
 
+	test("turn off, at the next sweep, a login another database has since let in, and say which", async () => {
+		let { server, stores, paired } = await setup();
+		let laptop = await paired();
+		let desk = await paired();
+		let login = await stores.login(laptop);
+		let role = new URL(login.url).username;
+		let deskRole = machineStoreName(desk.id);
+		await stores.login(desk);
+		await stores.sweep();
+		expect(server.enabled.has(role)).toBe(true);
+
+		server.reaches.set(role, ["reports"]);
+		server.read.length = 0;
+		await stores.sweep();
+		expect([...server.read[0] ?? []].sort()).toEqual([role, deskRole].sort());
+		expect(server.enabled.has(role)).toBe(false);
+		expect(await server.accepts(role, login.password)).toBe(false);
+		expect(server.enabled.has(deskRole)).toBe(true);
+		let status = (await stores.statuses([laptop.id])).get(laptop.id);
+		expect(status).toEqual({
+			state: "failed",
+			reason: expect.stringContaining("database reports"),
+		});
+		expect((await stores.statuses([desk.id])).get(desk.id)).toEqual({ state: "ready" });
+		server.calls.length = 0;
+		await stores.sweep();
+		expect(server.calls).toEqual([]);
+
+		// Its next connect turns it on only once no such database lets it in.
+		await expect(stores.login(laptop)).rejects.toThrow("reports");
+		expect(server.enabled.has(role)).toBe(false);
+		server.reaches.delete(role);
+		let again = await stores.login(laptop);
+		expect(again).toEqual(login);
+		expect(await server.accepts(role, again.password)).toBe(true);
+		expect((await stores.statuses([laptop.id])).get(laptop.id)).toEqual({ state: "ready" });
+	});
+
+	test("leave a login on when the database that let it in is closed before its turn", async () => {
+		let { server, stores, paired } = await setup();
+		let laptop = await paired();
+		let login = await stores.login(laptop);
+		let role = new URL(login.url).username;
+		server.reaches.set(role, ["reports"]);
+		server.afterRead = () => {
+			server.reaches.delete(role);
+			delete server.afterRead;
+		};
+		await stores.sweep();
+		expect(server.read.length).toBe(2);
+		expect(server.enabled.has(role)).toBe(true);
+		expect((await stores.statuses([laptop.id])).get(laptop.id)).toEqual({ state: "ready" });
+	});
+
+	test("say a login is failing before turning it off, and turn it off at a later sweep if refused", async () => {
+		let { storage, server, stores, paired } = await setup();
+		let laptop = await paired();
+		let login = await stores.login(laptop);
+		let role = new URL(login.url).username;
+		server.reaches.set(role, ["reports"]);
+
+		let put = storage.machineDatabases.put.bind(storage.machineDatabases);
+		storage.machineDatabases.put = async () => {
+			throw new Error("storage is unavailable");
+		};
+		await stores.sweep();
+		// Nothing recorded, so nothing turned off: a ready record must have a working login.
+		expect(server.enabled.has(role)).toBe(true);
+		expect((await stores.statuses([laptop.id])).get(laptop.id)).toEqual({ state: "ready" });
+		storage.machineDatabases.put = put;
+
+		server.refuse = "Chopin couldn't reach the database server";
+		await stores.sweep();
+		expect(server.enabled.has(role)).toBe(true);
+		expect((await stores.statuses([laptop.id])).get(laptop.id)).toMatchObject({
+			state: "failed",
+		});
+		delete server.refuse;
+		await stores.sweep();
+		expect(server.enabled.has(role)).toBe(false);
+	});
+
+	test("check no revoked or turned-off machine's login, and no login at all when none is kept", async () => {
+		let { server, stores, machines, userId, paired } = await setup();
+		await stores.sweep();
+		expect(server.read).toEqual([]);
+		let laptop = await paired();
+		let desk = await paired();
+		await stores.login(laptop);
+		await stores.login(desk);
+		expect(await machines.revoke(laptop.id, userId)).toBe(true);
+		await stores.sweep();
+		expect(server.read).toEqual([[machineStoreName(desk.id)]]);
+	});
+
 	test("keep a setup problem the machine reported, across restarts, until it reports none", async () => {
 		let { storage, stores, paired } = await setup();
 		let laptop = await paired();

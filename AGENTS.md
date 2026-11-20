@@ -257,7 +257,10 @@ durable.
   has `CONNECT` on it alone and its `atomic` schema, and no other connectable database
   lets the role connect, checked with `has_database_privilege` on each before its login is
   on and by connecting to each but the machines' own after; a `REVOKE` that only warned (the
-  administrator doesn't own the database) refuses the login. The one exception is a database
+  administrator doesn't own the database) refuses the login. Each sweep checks every login
+  that is on the same way, in one catalog read, and turns off one another database has let in
+  since, recording it failed (with that database) before `NOLOGIN`, never a ready record whose
+  login is off; its next connect provisions it again. The one exception is a database
   the operator names in `MACHINE_STORE_OPEN_DATABASES`, one a managed service owns and keeps
   open to every role, never `postgres`, `template1`, the administrator's or a machine's, and
   never one where every role reads captured statements, which hold Chopin's password

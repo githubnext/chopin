@@ -13,6 +13,12 @@ export interface MachineStoreServer {
 	provision(role: string, password: string): Promise<void>;
 	setPassword(role: string, password: string): Promise<void>;
 	accepts(role: string, password: string): Promise<boolean | undefined>;
+	/**
+	 * For each of these roles Chopin made whose login is on, the connectable databases other than its
+	 * own and those named in `MACHINE_STORE_OPEN_DATABASES` it has `CONNECT` on, in one read of the
+	 * catalog. A role whose login is off, or that reaches no other database, is absent.
+	 */
+	reaching(roles: readonly string[]): Promise<Map<string, string[]>>;
 	disable(role: string): Promise<void>;
 	drop(role: string): Promise<void>;
 	close(): Promise<void>;
@@ -34,6 +40,13 @@ type ServerError = { errno?: unknown; code?: unknown; message?: unknown };
 function serverCode(error: unknown): string | undefined {
 	let errno = (error as ServerError | undefined)?.errno;
 	return typeof errno === "string" && /^[0-9A-Z]{5}$/.test(errno) ? errno : undefined;
+}
+
+/** "database a", "databases a and b", or "databases a, b and 3 more". */
+export function databasesNamed(names: readonly string[]): string {
+	return names.length > 2
+		? `databases ${names.slice(0, 2).join(", ")} and ${names.length - 2} more`
+		: `database${names.length > 1 ? "s" : ""} ${names.join(" and ")}`;
 }
 
 function shortened(text: string) {
@@ -136,6 +149,26 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 				? false
 				: undefined;
 		}
+	}
+
+	reaching(roles: readonly string[]): Promise<Map<string, string[]>> {
+		return this.#refusing(async () => {
+			let found = new Map<string, string[]>();
+			if (!roles.length) return found;
+			let rows = await this.#admin<{ role: string; database: string }[]>`
+				SELECT r.rolname AS role, d.datname AS database
+				FROM pg_roles r JOIN pg_database d ON d.datallowconn AND d.datname <> r.rolname
+				WHERE r.rolname IN ${this.#admin([...roles])} AND r.rolcanlogin
+					AND coalesce(shobj_description(r.oid, 'pg_authid') IN ${this.#admin(ROLE_MARKS)}, false)
+					AND has_database_privilege(r.oid, d.oid, 'CONNECT')
+				ORDER BY r.rolname, d.datname
+			`;
+			for (let { role, database } of rows) {
+				if (this.#open.has(database)) continue;
+				found.set(role, [...found.get(role) ?? [], database]);
+			}
+			return found;
+		});
 	}
 
 	async disable(role: string): Promise<void> {
@@ -342,12 +375,11 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 		}
 		let open = await this.#reachable(role);
 		if (open.length) {
-			let named = open.length > 2
-				? `databases ${open.slice(0, 2).join(", ")} and ${open.length - 2} more`
-				: `database${open.length > 1 ? "s" : ""} ${open.join(" and ")}`;
 			let they = open.length > 1 ? "them" : "it";
 			throw new MachineStoreRefusal(
-				`${me.name} can't revoke CONNECT from PUBLIC on the ${named}, so a machine could connect `
+				`${me.name} can't revoke CONNECT from PUBLIC on the ${
+					databasesNamed(open)
+				}, so a machine could connect `
 					+ `there; ${open.length > 1 ? "their owners" : "its owner"} must revoke it, or name `
 					+ `${they} in MACHINE_STORE_OPEN_DATABASES if the service keeps ${they} open to every role`,
 			);
@@ -495,9 +527,9 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 		`.catch(() => {});
 	}
 
-	async #refusing(action: () => Promise<void>) {
+	async #refusing<T>(action: () => Promise<T>): Promise<T> {
 		try {
-			await action();
+			return await action();
 		} catch (error) {
 			if (error instanceof MachineStoreRefusal) throw error;
 			throw new MachineStoreRefusal(this.#reason(error));

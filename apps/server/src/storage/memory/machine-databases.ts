@@ -79,4 +79,13 @@ export class MemoryMachineDatabaseStore implements MachineDatabaseStore {
 			.sort((a, b) => a.machineId < b.machineId ? -1 : a.machineId > b.machineId ? 1 : 0)
 			.map(copy);
 	}
+	async active() {
+		return [...this.#records.values()]
+			.filter(value =>
+				!this.deps.machineRevoked(value.machineId)
+				&& value.state !== "disabled" && value.state !== "dropped"
+			)
+			.sort((a, b) => a.machineId < b.machineId ? -1 : a.machineId > b.machineId ? 1 : 0)
+			.map(copy);
+	}
 }

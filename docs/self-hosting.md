@@ -897,7 +897,12 @@ For each machine Chopin keeps, under the administrator role:
   (`has_database_privilege`) before its login is turned on, and once it is, a login as
   the role must fail on `postgres`, `template1`, the administrator's own database and
   every other connectable database but the machines' own and those named in
-  `MACHINE_STORE_OPEN_DATABASES`. Give the administrator a server of its own: other
+  `MACHINE_STORE_OPEN_DATABASES`. Each cleanup pass checks every login that is on the
+  same way, with one read of the catalog for all of them: a login another connectable
+  database has let in since (`CONNECT` granted to `PUBLIC`, a new database open to
+  every role, a name taken out of `MACHINE_STORE_OPEN_DATABASES`) is turned off, the
+  Machines page names that database, and the machine's next connect turns it on again
+  once no such database lets it in. Give the administrator a server of its own: other
   applications' roles on it need `CONNECT` granted to them by name;
 - a schema `extensions` owned by the administrator, which the role may use but not
   write, holding `pg_trgm`, which the role can't add itself and Atomic indexes session
