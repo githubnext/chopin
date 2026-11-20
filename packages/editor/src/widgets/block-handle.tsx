@@ -117,6 +117,11 @@ export function $dropBlocks(
 	return true;
 }
 
+/** A line of the document's own with nothing on it. */
+function $blankLine(block: LexicalNode): boolean {
+	return $isParagraphNode(block) && block.getChildrenSize() === 0 && $isRootNode(block.getParent());
+}
+
 /** Shapes Turn into offers; a list item, a heading, a quote or text may take any of them. */
 const TURN_INTO: ReadonlyArray<{ id: Block; label: string }> = [
 	{ id: "paragraph", label: "Text" },
@@ -226,12 +231,18 @@ export function BlockHandlePlugin() {
 			}
 			// The innermost block level with the pointer: later blocks in document order are deeper.
 			let key = editor.read(() => {
-				let found: string | undefined;
+				let found: LexicalNode | undefined;
+				let last: LexicalNode | undefined;
 				for (let block of $blocks()) {
 					let rect = editor.getElementByKey(block.getKey())?.getBoundingClientRect();
-					if (rect && rect.height > 0 && y >= rect.top && y <= rect.bottom) found = block.getKey();
+					if (!rect || rect.height === 0) continue;
+					if (!$blankLine(block)) last = block.getTopLevelElementOrThrow();
+					if (y >= rect.top && y <= rect.bottom) found = block;
 				}
-				return found;
+				// An empty line under the document's last block, such as the one the editor keeps for the
+				// caret after a final card, is somewhere to write rather than a block.
+				if (found && last && $blankLine(found) && last.isBefore(found)) return undefined;
+				return found?.getKey();
 			});
 			place(key);
 		};
