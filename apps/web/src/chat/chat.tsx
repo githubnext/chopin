@@ -1572,14 +1572,16 @@ export function Chat(
 		[outbox, unanswered],
 	);
 	let canStartThread = !readonly && !archived && transcriptReady;
-	// Who is writing in each thread, said on its row in Chat; never as Chat's own typing line.
-	let replying = useMemo(() => {
+	// Who is writing in each thread, said on its row in Chat; never as Chat's own typing line. Kept
+	// while the words are the same: every roster is a new snapshot, the viewer's own typing included,
+	// and a new map here renders every message of the transcript again.
+	let replying = useSteadyFields(useMemo(() => {
 		let words: Record<string, string> = {};
 		for (let [rootId, typers] of threadsWithTypers(typists, handle)) {
 			words[rootId] = typingWords(typers, "replying");
 		}
 		return words;
-	}, [typists, handle]);
+	}, [typists, handle]));
 	let transcriptThreads = useMemo(
 		() => ({
 			summaries: threadsState.summaries,
