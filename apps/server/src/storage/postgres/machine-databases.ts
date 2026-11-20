@@ -137,4 +137,15 @@ export class PostgresMachineDatabaseStore implements MachineDatabaseStore {
 			return rows.map(record);
 		});
 	}
+	active() {
+		return this.run("list machines' database logins that may be on", async () => {
+			let rows = await this.sql<Row[]>`
+				SELECT ${this.sql.unsafe(COLUMNS)} FROM machine_databases d
+				JOIN machines m ON m.id = d.machine_id
+				WHERE m.revoked_at IS NULL AND d.state NOT IN ('disabled', 'dropped')
+				ORDER BY d.machine_id
+			`;
+			return rows.map(record);
+		});
+	}
 }

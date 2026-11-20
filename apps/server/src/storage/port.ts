@@ -503,6 +503,11 @@ export interface MachineDatabaseStore {
 	put(record: StoredMachineDatabase): Promise<boolean>;
 	report(machineId: string, problem: string | undefined): Promise<boolean>;
 	settling(dropBefore?: Date): Promise<StoredMachineDatabase[]>;
+	/**
+	 * The logins that may be on, ordered by machine: neither disabled nor dropped, of machines not
+	 * revoked (a revoked machine's are settled instead).
+	 */
+	active(): Promise<StoredMachineDatabase[]>;
 }
 
 /**

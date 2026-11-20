@@ -575,6 +575,78 @@ if (!database) {
 			}
 		});
 
+		test("turns off, at the next sweep, a login a database opened to every role since lets in", async () => {
+			let suffix = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
+			let reports = `reports_${suffix}`;
+			let storage = new MemoryStorage();
+			await storage.migrate();
+			let key = new Uint8Array(32).fill(9);
+			let stores = new MachineStores({ storage, server, key, clock: () => new Date() });
+			let named = new PostgresMachineStoreServer({ ...admin, openDatabases: [reports] });
+			let leaving = new MachineStores({ storage, server: named, key, clock: () => new Date() });
+			let userId = await owner(storage);
+			let pair = async () => {
+				let id = crypto.randomUUID();
+				await storage.machines.create(machine(userId, { id }));
+				roles.push(machineStoreName(id));
+				return (await storage.machines.get(id))!;
+			};
+			let laptop = await pair();
+			let desk = await pair();
+			try {
+				let login = await stores.login(laptop);
+				let role = new URL(login.url).username;
+				await stores.login(desk);
+				let deskRole = machineStoreName(desk.id);
+				await stores.sweep();
+				expect(await connectAs(role, login.password, role)).toBe(role);
+
+				// A database made since, open to every role as PostgreSQL makes one.
+				await sql.unsafe(`CREATE DATABASE "${reports}"`);
+				await sql.unsafe(`GRANT CONNECT ON DATABASE "${reports}" TO PUBLIC`);
+				expect(await connectAs(role, login.password, reports)).toBe(role);
+				expect(await server.reaching([role, deskRole, "m_nobody"])).toEqual(
+					new Map([[role, [reports]], [deskRole, [reports]]]),
+				);
+				expect(await named.reaching([role, deskRole])).toEqual(new Map());
+
+				// Named in MACHINE_STORE_OPEN_DATABASES, it is left to the service.
+				await leaving.sweep();
+				expect(await connectAs(role, login.password, role)).toBe(role);
+				expect(await connectAs(role, login.password, reports)).toBe(role);
+				expect((await leaving.statuses([laptop.id])).get(laptop.id)).toEqual({ state: "ready" });
+
+				// Not named, the next sweep turns both logins off and says which database let them in.
+				await stores.sweep();
+				expect(await refusedCode(connectAs(role, login.password, reports))).toBe("28000");
+				expect(await refusedCode(connectAs(role, login.password, role))).toBe("28000");
+				let logins = await sql<{ name: string }[]>`
+					SELECT rolname AS name FROM pg_roles WHERE rolname IN ${
+					sql([role, deskRole])
+				} AND rolcanlogin
+				`;
+				expect([...logins]).toEqual([]);
+				for (let id of [laptop.id, desk.id]) {
+					expect((await stores.statuses([id])).get(id)).toEqual({
+						state: "failed",
+						reason: expect.stringContaining(`database ${reports} let this machine connect`),
+					});
+				}
+				expect(await server.reaching([role, deskRole])).toEqual(new Map());
+
+				// Its next connect closes the database to PUBLIC, as this administrator may, and turns the
+				// login on again.
+				let again = await stores.login(laptop);
+				expect(again).toEqual(login);
+				expect(await connectAs(role, again.password, role)).toBe(role);
+				expect(await refusedCode(connectAs(role, again.password, reports))).toBe("42501");
+				expect((await stores.statuses([laptop.id])).get(laptop.id)).toEqual({ state: "ready" });
+			} finally {
+				await named.close();
+				await sql.unsafe(`DROP DATABASE IF EXISTS "${reports}" WITH (FORCE)`).catch(() => {});
+			}
+		});
+
 		test("turns off a login it made even after someone widened it", async () => {
 			let role = newRole();
 			let password = newStorePassword();

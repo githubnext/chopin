@@ -3,7 +3,7 @@ import { hkdfSync } from "node:crypto";
 import { MACHINE_STORE_REASON_LIMIT } from "@chopin/protocol/machine-store";
 import { decrypted, encrypted, imported } from "../auth/session";
 import { machineStoreName, newStorePassword } from "./names";
-import { MachineStoreRefusal } from "./server";
+import { databasesNamed, MachineStoreRefusal } from "./server";
 
 import type { MachineStoreLogin, MachineStoreStatus } from "@chopin/protocol/machine-store";
 import type { StoredMachine, StoredMachineDatabase } from "../storage/model";
@@ -101,6 +101,9 @@ export class MachineStores {
 				);
 			}
 		}
+		await this.#recheck().catch(error => {
+			console.error("chopin: could not check machines' database logins -", reasonOf(error));
+		});
 	}
 
 	async close(): Promise<void> {
@@ -267,6 +270,52 @@ export class MachineStores {
 		let { candidate: _, failure: __, ...rest } = record;
 		let now = this.#options.clock();
 		await this.#put({ ...rest, state: "disabled", disabledAt: now, updatedAt: now });
+	}
+
+	/**
+	 * A login is checked to reach no other database as it is turned on; a database opened to every
+	 * role since (or no longer named in `MACHINE_STORE_OPEN_DATABASES`) would let a machine in until
+	 * its next connect, so every sweep reads, once for all of them, which logins that are on reach one.
+	 */
+	async #recheck(): Promise<void> {
+		let records = await this.#options.storage.machineDatabases.active();
+		if (!records.length) return;
+		let reached = await this.#options.server.reaching(records.map(record => record.role));
+		for (let record of records) {
+			if (!reached.has(record.role)) continue;
+			await this.#serial(record.machineId, () => this.#cutOff(record.machineId)).catch(error => {
+				console.error(
+					`chopin: could not turn off the database login of machine ${record.machineId} -`,
+					reasonOf(error),
+				);
+			});
+		}
+	}
+
+	/**
+	 * Turns off a login another database lets in, read again in the machine's queue so a connect that
+	 * ran meanwhile, or a database closed meanwhile, is seen. The record says why before the login is
+	 * turned off: a ready record whose login is off would be handed out and never provisioned again.
+	 * Its next connect provisions it, which closes those databases where the administrator can and
+	 * turns the login on only once none lets it in.
+	 */
+	async #cutOff(machineId: string): Promise<void> {
+		let record = await this.#options.storage.machineDatabases.get(machineId);
+		if (!record || record.state === "disabled" || record.state === "dropped") return;
+		let databases = (await this.#options.server.reaching([record.role])).get(record.role);
+		if (!databases?.length) return;
+		let they = databases.length > 1 ? "them" : "it";
+		let failure = reasonOf(
+			new MachineStoreRefusal(
+				`the ${databasesNamed(databases)} let this machine connect after its login was on, so `
+					+ `Chopin turned the login off; revoke CONNECT on ${they} from PUBLIC, or name ${they} in `
+					+ "MACHINE_STORE_OPEN_DATABASES if the service keeps "
+					+ `${they} open to every role, and its next connect turns it on`,
+			),
+		);
+		await this.#put({ ...record, state: "failed", failure, updatedAt: this.#options.clock() });
+		await this.#options.server.disable(record.role);
+		console.warn(`chopin: turned off the database login of machine ${machineId} - ${failure}`);
 	}
 
 	async #drop(machineId: string): Promise<void> {
