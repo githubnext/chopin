@@ -431,18 +431,17 @@ and cannot change GitHub. Ground the plan in what those reading tools return.`;
 a withdrawn question is not an answer or approval. Keep consequential choices open;
 continue only independent work with explicitly provisional assumptions.`;
 	if ("remote" in workspace) {
-		let questions =
-			`\`ask_user_question\` and \`workflow\` questions appear to the document's members as
-Decisions. ${waits}`;
+		let questions = `Every question asked in your session, by you or by a run, appears to the
+document's members as a Decision. ${waits}`;
 		let surface = `The document's members use Chopin in a browser. They cannot run slash commands,
-terminal commands, or Atomic CLI commands, so never tell them to use \`/workflow connect\`,
-\`/workflow status\`, \`/tasks\`, \`atomic\`, or anything else typed into a terminal, even when a
-tool result suggests it. When you start a workflow, say in plain words what it will do and
-where to follow it: Chat shows a card for each workflow run you start, with its stages and
-status, its questions appear under Decisions, **Stop Planner** pauses it, and **Resume Planner**
-resumes it. Offer to check on or steer a workflow run yourself with your \`workflow\` and
-\`intercom\` tools when someone asks. A Build is not a workflow run, and Chat shows no card for a
-Build or its tasks: each task's state and pull request show under **Build**, beside Decisions.`;
+terminal commands, or Atomic CLI commands, so never tell them to use \`/tasks\`, \`atomic\`, or
+anything else typed into a terminal, even when a tool result suggests it. When you start work
+that your session reports to Chopin as a run, say in plain words what it will do and where to
+follow it: Chat shows a card for each run your session reports, with its stages and status, its
+questions appear under Decisions, **Stop Planner** pauses it, and **Resume Planner** resumes it.
+If your own tools can check on or steer such a run, offer to do that yourself when someone asks.
+A Build is not one of these runs, and Chat shows no card for a Build or its tasks: each task's
+state and pull request show under **Build**, beside Decisions.`;
 		let remote = `You run in a member's own session on their machine, attached to this document.
 Your own tools act on that machine and are not visible to the document's other members. The
 document changes only through this document's tools, and ${repository} is read through the
