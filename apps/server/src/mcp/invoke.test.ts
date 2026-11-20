@@ -85,6 +85,11 @@ test("invoke_planner validates strict arguments and counts instruction bytes wit
 			{ ...valid, extra: true },
 			{ ...valid, as: "member" },
 			{ ...valid, as: true },
+			{ ...valid, idempotencyKey: "" },
+			{ ...valid, idempotencyKey: " \t" },
+			{ ...valid, idempotencyKey: "k".repeat(129) },
+			{ ...valid, idempotencyKey: 7 },
+			{ ...valid, idempotencyKey: null },
 		]
 	) {
 		let result = await call(mcp, "tools/call", { name: "invoke_planner", arguments: args });
@@ -101,6 +106,11 @@ test("invoke_planner validates strict arguments and counts instruction bytes wit
 		(await call(mcp, "tools/call", { name: "invoke_planner", arguments: system })).result.isError,
 	).toBeUndefined();
 	expect(received).toEqual([exact, system]);
+	let keyed = { ...valid, idempotencyKey: "é".repeat(128) };
+	expect(
+		(await call(mcp, "tools/call", { name: "invoke_planner", arguments: keyed })).result.isError,
+	).toBeUndefined();
+	expect(received).toEqual([exact, system, keyed]);
 });
 
 test("invoke_planner exposes each refusal as an object code", async () => {
@@ -116,6 +126,7 @@ test("invoke_planner exposes each refusal as an object code", async () => {
 			"planner-busy",
 			"system-turn-forbidden",
 			"system-turn-limited",
+			"idempotency-conflict",
 		] as const
 	) {
 		let mcp = endpoint({ invoke: async () => ({ kind: "refused", code }) });

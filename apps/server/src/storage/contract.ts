@@ -16,6 +16,7 @@ import { machineDatabaseContract } from "./machine-database-contract";
 import { aiCredentialContract } from "./ai-credential-contract";
 import { aiUsageContract } from "./ai-usage-contract";
 import { deferredTurnContract } from "./deferred-turn-contract";
+import { mcpInvocationContract } from "./mcp-invocation-contract";
 import { mcpSessionContract } from "./mcp-session-contract";
 import { leasePeekContract } from "./lease-peek-contract";
 import { userContract } from "./user-contract";
@@ -70,6 +71,7 @@ export function storageContract(name: string, factory: Factory): void {
 	aiUsageContract(name, factory);
 	deferredTurnContract(name, factory);
 	mcpSessionContract(name, factory);
+	mcpInvocationContract(name, factory);
 	leasePeekContract(name, factory);
 	userContract(name, factory);
 	describe(`${name} storage`, () => {

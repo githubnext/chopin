@@ -253,6 +253,10 @@ With `as: "system"` the call is an
 system notice naming the caller instead of their message, and the instruction
 goes to the Planner alone. Only the document's creator or the account holding
 its Planner may send one, at most 10 an hour per document.
+A call with an `idempotencyKey` claims the key before its instruction is posted,
+naming the Chat entry the instruction becomes, so a retry after a lost reply returns
+the first result and posts nothing
+([Retrying safely](local-agent-mcp.md#retrying-safely)).
 Under `HARNESS=remote` only attaching claims ownership. An `@chopin` message or
 `invoke_planner` call for a document without an attached Planner is refused with
 `planner-not-attached`, and with one it runs as a turn on that Planner under its

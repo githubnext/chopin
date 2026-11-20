@@ -10,12 +10,20 @@
  * notice naming the caller instead of their message. Only the root's creator,
  * or the account whose client holds its Planner, may start one, and each root
  * takes a bounded number an hour.
+ *
+ * A call made under an idempotency key claims the key, durably, before its instruction is posted,
+ * naming the Chat entry the instruction becomes; see `IdempotentInvocations`.
  */
+import { createHash } from "node:crypto";
+
+import { ulid } from "@chopin/dialect";
+
 import { resolveChild } from "../chat/children";
 import * as Chat from "../chat/service";
 
-import type { InvokePlannerError } from "../mcp";
-import type { ChannelStore } from "../storage/port";
+import type { InvokePlanner, InvokePlannerError } from "../mcp";
+import type { Lease, McpInvocationScope } from "../storage/model";
+import type { ChannelStore, McpInvocationStore } from "../storage/port";
 import type { PlannerInvocation } from "./hosted";
 
 export type InvocationRoute = {
@@ -97,6 +105,11 @@ export async function invokeRouted(
 		let code: InvokePlannerError | undefined;
 		try {
 			let { context, release } = await route.open(rootId, input);
+			if (input.entryId && context.chat.entries.some(entry => entry.id === input.entryId)) {
+				release();
+				if (input.system) route.systemTurns.refund(rootId);
+				return undefined;
+			}
 			try {
 				// Released once the invoked turn itself ends, even when it waits behind others.
 				code = await Chat.invoke(
@@ -107,6 +120,7 @@ export async function invokeRouted(
 					focus,
 					release,
 					input.system ? `Automatic follow-up requested by @${input.user.login}.` : undefined,
+					input.entryId,
 				);
 			} catch (err) {
 				release();
@@ -123,4 +137,84 @@ export async function invokeRouted(
 		}
 		return code;
 	});
+}
+
+/** How long a caller's idempotency key keeps its first `invoke_planner` call's result. */
+export const INVOCATION_KEY_MS = 7 * 24 * 60 * 60_000;
+
+type Invoked = Awaited<ReturnType<InvokePlanner<unknown>["invoke"]>>;
+
+/** What makes two calls under one key the same request: their instruction, `as` and focus. */
+export function invocationFingerprint(
+	request: { instruction: string; as?: "system" },
+	focus: string,
+): string {
+	return createHash("sha256")
+		.update(JSON.stringify({ instruction: request.instruction, as: request.as ?? null, focus }))
+		.digest("hex");
+}
+
+/**
+ * `invoke_planner` calls made under an idempotency key, so a caller that lost a reply can ask
+ * again and post nothing more.
+ *
+ * The first call claims the key before anything is posted, naming the Chat entry its
+ * instruction will be; a crash after the post leaves the claim, and the entry, for the retry to
+ * find. A posted instruction completes the claim with its result, which every later call with
+ * the same request is given; a different request under the key is refused. A claim this call
+ * made is released when its refusal kept nothing. `planner-unavailable` can come after the
+ * entry is saved, so its claim stays for the retry, as a claim an earlier call left does.
+ * Calls with one key run one at a time in this process, the only one holding the writer lease.
+ */
+export class IdempotentInvocations {
+	#running = new Map<string, Promise<unknown>>();
+
+	constructor(
+		private store: McpInvocationStore,
+		private lease: () => Lease,
+		private clock: () => Date,
+	) {}
+
+	run(
+		scope: McpInvocationScope,
+		fingerprint: string,
+		deliver: (entryId: string) => Promise<Invoked>,
+	): Promise<Invoked> {
+		let key = JSON.stringify([scope.userId, scope.channelId, scope.key]);
+		let previous = this.#running.get(key) ?? Promise.resolve();
+		let operation = previous.then(() => this.#once(scope, fingerprint, deliver));
+		let settled = operation.then(() => {}, () => {});
+		this.#running.set(key, settled);
+		void settled.then(() => {
+			if (this.#running.get(key) === settled) this.#running.delete(key);
+		});
+		return operation;
+	}
+
+	async #once(
+		scope: McpInvocationScope,
+		fingerprint: string,
+		deliver: (entryId: string) => Promise<Invoked>,
+	): Promise<Invoked> {
+		let now = this.clock();
+		let { record, claimed } = await this.store.claim(this.lease(), {
+			...scope,
+			fingerprint,
+			entryId: ulid(),
+			createdAt: now,
+			expiresAt: new Date(now.getTime() + INVOCATION_KEY_MS),
+		});
+		if (record.fingerprint !== fingerprint) {
+			return { kind: "refused", code: "idempotency-conflict" };
+		}
+		if (record.result) return { kind: "invoked", document: record.result.document };
+		let pending = { ...scope, entryId: record.entryId };
+		let outcome = await deliver(record.entryId);
+		if (outcome.kind === "invoked") {
+			await this.store.complete(this.lease(), pending, { document: outcome.document });
+		} else if (claimed && outcome.code !== "planner-unavailable") {
+			await this.store.release(this.lease(), pending);
+		}
+		return outcome;
+	}
 }
