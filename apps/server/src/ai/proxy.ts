@@ -82,6 +82,40 @@ function claudeSignInHeaders(headers: Headers): void {
 	headers.set("x-app", "cli");
 }
 
+/** What Atomic puts first in a Claude subscription token's system prompt, as Claude Code does. */
+const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";
+
+/**
+ * A Claude sign-in's Messages body as Atomic sends it, whichever agent wrote it: the Claude Code
+ * identity as the system prompt's first block, ahead of the agent's own prompt, which is kept whole.
+ * A body already led by it, or that isn't a JSON object, goes as it came.
+ */
+export function claudeSignInBody(body: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+	let request: unknown;
+	try {
+		request = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body));
+	} catch {
+		return body;
+	}
+	if (!request || typeof request !== "object" || Array.isArray(request)) return body;
+	let system = (request as { system?: unknown }).system;
+	let identity = { type: "text", text: CLAUDE_CODE_IDENTITY };
+	let blocks: unknown[];
+	if (system === undefined) {
+		blocks = [identity];
+	} else if (typeof system === "string") {
+		if (system === CLAUDE_CODE_IDENTITY) return body;
+		blocks = system ? [identity, { type: "text", text: system }] : [identity];
+	} else if (Array.isArray(system)) {
+		let first = system[0] as { type?: unknown; text?: unknown } | undefined;
+		if (first?.type === "text" && first.text === CLAUDE_CODE_IDENTITY) return body;
+		blocks = [identity, ...system];
+	} else {
+		return body;
+	}
+	return new TextEncoder().encode(JSON.stringify({ ...request, system: blocks }));
+}
+
 const SEGMENT = "[A-Za-z0-9][A-Za-z0-9._:-]*";
 
 /**
@@ -683,6 +717,7 @@ export function aiProxy(options: AiProxyOptions) {
 				);
 			}
 		}
+		let sent = provider === "claude" && body?.byteLength ? claudeSignInBody(body) : body;
 		/** Whether the transport took the request, which a final check that throws can come after. */
 		let taken = false;
 		let handed = await options.credentials.handoff(checked, authorized => {
@@ -700,7 +735,7 @@ export function aiProxy(options: AiProxyOptions) {
 			let init: RequestInit = {
 				method: request.method,
 				headers,
-				...(body ? { body } : {}),
+				...(sent ? { body: sent } : {}),
 				redirect: "manual",
 				signal: request.signal,
 			};
@@ -756,7 +791,7 @@ export function aiProxy(options: AiProxyOptions) {
 				return failedHolding(secret, 502, `${provider} can't be reached.`, "upstream");
 			}
 			if (body.byteLength <= MAX_REFUSAL && refusal(parsed(body))) {
-				await options.credentials.rejected(handed.record).catch(err =>
+				await options.credentials.rejected(handed.record, secret).catch(err =>
 					console.warn("[ai] couldn't record that a provider refused a key", err)
 				);
 			}

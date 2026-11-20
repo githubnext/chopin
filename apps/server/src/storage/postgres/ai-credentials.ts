@@ -155,6 +155,7 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 				WHERE user_id = ${record.userId} AND provider = ${record.provider}
 					AND updated_at = ${record.updatedAt}
 					AND ciphertext IS NOT DISTINCT FROM ${record.ciphertext ?? null}
+					AND tokens IS NOT DISTINCT FROM ${record.tokens ?? null}
 					AND rejected_at IS NULL
 				RETURNING provider
 			`;

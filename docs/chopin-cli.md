@@ -813,8 +813,9 @@ the agent runs on those accounts with nothing of yours:
   `baseUrl`, `apiKey`, `keyVariable` and, for Copilot, `headers`. Send `apiKey` as the provider takes its key (`Authorization: Bearer`, or
   `x-api-key` for Anthropic) to `baseUrl` with the provider's own paths after it
   (Copilot's `/models` and `/chat/completions`, OpenAI's and ChatGPT's `/v1/…`, and
-  Anthropic's and Claude's `/v1/…`; a Claude stand-in goes as `Authorization: Bearer`),
-  with `headers` added. Each `baseUrl` is on the relay; the launch's own credential is
+  Anthropic's and Claude's `/v1/…`; a Claude stand-in goes as `Authorization: Bearer`,
+  and Chopin adds the headers and the leading system block a Claude subscription
+  needs, as Atomic sends them), with `headers` added. Each `baseUrl` is on the relay; the launch's own credential is
   in none of it. An agent that reads no provider's variables, any agent that is not
   Atomic, reaches every granted provider with its pair alone.
 - **Only what it needs of your environment.** The agent's environment is built from

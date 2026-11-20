@@ -10,7 +10,7 @@ import { Router } from "../http/router";
 import { testLease } from "../storage/contract-support";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { AiCredentials } from "./credentials";
-import { aiProxy } from "./proxy";
+import { aiProxy, claudeSignInBody } from "./proxy";
 import { githubSignIn, registerAiRoutes } from "./routes";
 
 import type {
@@ -25,6 +25,10 @@ const ORIGIN = "https://chopin.test";
 const OPENAI_KEY = "sk-real-openai-key-0123456789";
 const CHATGPT_SCOPE =
 	"openid profile email offline_access resource.invoke chatgpt.tokens.use.direct";
+const CLAUDE_CODE_IDENTITY = {
+	type: "text",
+	text: "You are Claude Code, Anthropic's official CLI for Claude.",
+};
 
 type Seen = { method: string; path: string; headers: Record<string, string>; body: string };
 
@@ -216,7 +220,12 @@ async function setup() {
 		for (let value of launched.grants) launchTokens.set(value.placeholder, launched.launchToken);
 		return Object.fromEntries(launched.grants.map(value => [value.provider, value]));
 	};
-	let call = (value: AiProviderGrant, path: string, headers: Record<string, string> = {}) =>
+	let call = (
+		value: AiProviderGrant,
+		path: string,
+		headers: Record<string, string> = {},
+		body: unknown = { model: "a-model" },
+	) =>
 		router.handle(
 			new Request(`${value.baseUrl}${path}`, {
 				method: "POST",
@@ -225,7 +234,7 @@ async function setup() {
 					"content-type": "application/json",
 					...headers,
 				},
-				body: JSON.stringify({ model: "a-model" }),
+				body: JSON.stringify(body),
 			}),
 		) as Promise<Response>;
 	let list = async () =>
@@ -253,6 +262,25 @@ async function setup() {
 			now = new Date(now.getTime() + ms);
 		},
 		now: () => now,
+	};
+}
+
+/** Answers refreshes as a provider that rotates refresh tokens does: a spent one is refused. */
+function rotating(provider: string, extra: Record<string, string> = {}): TokenReply {
+	let spent = new Set<string>();
+	let issued = 0;
+	return fields => {
+		if (spent.has(fields.refresh_token!)) {
+			return Response.json({ error: "invalid_grant" }, { status: 400 });
+		}
+		spent.add(fields.refresh_token!);
+		issued++;
+		return Response.json({
+			access_token: `${provider}-renewed-${issued}`,
+			refresh_token: `${provider}-rotated-${issued}`,
+			expires_in: 3600,
+			...extra,
+		});
 	};
 }
 
@@ -514,6 +542,10 @@ describe("a subscription's stand-ins", () => {
 		expect(toClaude!.headers["x-app"]).toBe("cli");
 		expect(toClaude!.headers["anthropic-dangerous-direct-browser-access"]).toBe("true");
 		expect(toClaude!.headers["anthropic-version"]).toBe("2023-06-01");
+		expect(JSON.parse(toClaude!.body)).toEqual({
+			model: "a-model",
+			system: [CLAUDE_CODE_IDENTITY],
+		});
 
 		expect(world.upstreams.openai.seen[0]!.headers.authorization).toBe(`Bearer ${OPENAI_KEY}`);
 		let everywhere = JSON.stringify([
@@ -644,6 +676,134 @@ describe("a subscription's stand-ins", () => {
 		});
 		expect(ended.withheld).toContainEqual({ provider: "claude", reason: "key-unusable" });
 		expect(ended.grants.map(value => value.provider)).not.toContain("claude");
+	});
+
+	it("give a caller that read the pair before another renewed it the renewed pair, never the spent refresh token", async () => {
+		let world = await setup();
+		await world.signInClaude();
+		let { claude } = await world.launch();
+		let headers = { authorization: `Bearer ${claude!.placeholder}` };
+		world.claudeReply.current = rotating("claude");
+		world.advance(3600_000);
+
+		let store = world.storage.aiCredentials;
+		let list = store.list.bind(store);
+		let reached = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		store.list = async userId => {
+			let records = await list(userId);
+			store.list = list;
+			reached.resolve();
+			await release.promise;
+			return records;
+		};
+		let listing = world.list();
+		await reached.promise;
+		expect((await world.call(claude!, "/v1/messages", headers)).status).toBe(200);
+		release.resolve();
+		let listed = (await listing).find(value => value.provider === "claude")!;
+
+		expect(listed.rejectedAt).toBeUndefined();
+		expect(listed.unchecked).toBeUndefined();
+		expect(world.claudeAuth.seen.slice(1).map(seen => JSON.parse(seen.body).refresh_token))
+			.toEqual(["claude-refresh-1"]);
+		expect((await world.call(claude!, "/v1/messages", headers)).status).toBe(200);
+		expect(world.upstreams.claude.seen.map(seen => seen.headers.authorization)).toEqual([
+			"Bearer claude-renewed-1",
+			"Bearer claude-renewed-1",
+		]);
+	});
+
+	it("mark a refused renewal only on the pair it presented, never on one renewed since", async () => {
+		let world = await setup();
+		await world.signInClaude();
+		let before = (await world.storage.aiCredentials.get("U_mona", "claude"))!;
+		let { claude } = await world.launch();
+		world.claudeReply.current = rotating("claude");
+		world.advance(3600_000);
+		expect(
+			(await world.call(claude!, "/v1/messages", {
+				authorization: `Bearer ${claude!.placeholder}`,
+			})).status,
+		).toBe(200);
+		expect(await world.storage.aiCredentials.rejected(before, world.now())).toBe(false);
+		let stored = (await world.storage.aiCredentials.get("U_mona", "claude"))!;
+		expect(stored.rejectedAt).toBeUndefined();
+	});
+
+	it("keep a renewed pair storage couldn't save, and save it before renewing again", async () => {
+		let world = await setup();
+		await world.signInChatgpt();
+		let { chatgpt } = await world.launch();
+		let headers = { authorization: `Bearer ${chatgpt!.placeholder}` };
+		world.chatgptReply.current = rotating("chatgpt", { scope: CHATGPT_SCOPE });
+		world.advance(3600_000);
+
+		let store = world.storage.aiCredentials;
+		let refreshed = store.refreshed.bind(store);
+		let failures = 2;
+		store.refreshed = async (...args) => {
+			if (failures > 0) {
+				failures--;
+				throw new Error("storage is unavailable");
+			}
+			return refreshed(...args);
+		};
+		expect((await world.call(chatgpt!, "/responses", headers)).status).toBe(200);
+		expect((await world.call(chatgpt!, "/responses", headers)).status).toBe(200);
+		expect((await store.get("U_mona", "chatgpt"))!.tokens).toBeUndefined();
+		expect((await world.call(chatgpt!, "/responses", headers)).status).toBe(200);
+		expect((await store.get("U_mona", "chatgpt"))!.tokens).toBeDefined();
+
+		world.advance(3600_000);
+		expect((await world.call(chatgpt!, "/responses", headers)).status).toBe(200);
+		expect(
+			world.chatgptAuth.seen.slice(1).map(seen =>
+				new URLSearchParams(seen.body).get("refresh_token")
+			),
+		).toEqual(["chatgpt-refresh-1", "chatgpt-rotated-1"]);
+		expect(world.upstreams.chatgpt.seen.map(seen => seen.headers.authorization)).toEqual([
+			"Bearer chatgpt-renewed-1",
+			"Bearer chatgpt-renewed-1",
+			"Bearer chatgpt-renewed-1",
+			"Bearer chatgpt-renewed-2",
+		]);
+		let listed = (await world.list()).find(value => value.provider === "chatgpt")!;
+		expect(listed.rejectedAt).toBeUndefined();
+	});
+
+	it("put the Claude Code identity first in any agent's Claude request, keeping its own system prompt", async () => {
+		let world = await setup();
+		await world.signInClaude();
+		let { claude } = await world.launch();
+		let headers = { authorization: `Bearer ${claude!.placeholder}` };
+		let prompt = { type: "text", text: "You review code.", cache_control: { type: "ephemeral" } };
+		await world.call(claude!, "/v1/messages", headers, {
+			model: "a-model",
+			system: "You review code.",
+			messages: [{ role: "user", content: "Hi" }],
+		});
+		await world.call(claude!, "/v1/messages", headers, { model: "a-model", system: [prompt] });
+		await world.call(claude!, "/v1/messages/count_tokens", headers, {
+			model: "a-model",
+			system: [CLAUDE_CODE_IDENTITY, prompt],
+		});
+		expect(world.upstreams.claude.seen.map(seen => JSON.parse(seen.body))).toEqual([
+			{
+				model: "a-model",
+				system: [CLAUDE_CODE_IDENTITY, { type: "text", text: "You review code." }],
+				messages: [{ role: "user", content: "Hi" }],
+			},
+			{ model: "a-model", system: [CLAUDE_CODE_IDENTITY, prompt] },
+			{ model: "a-model", system: [CLAUDE_CODE_IDENTITY, prompt] },
+		]);
+	});
+
+	it("leave a Claude body that isn't a JSON object as it came", () => {
+		for (let text of ["not json", "[1]", '"text"', `{"system":{"type":"text"}}`]) {
+			let body = new TextEncoder().encode(text);
+			expect(claudeSignInBody(body)).toBe(body);
+		}
 	});
 
 	it("stop at once for every launch when the subscription is disconnected", async () => {

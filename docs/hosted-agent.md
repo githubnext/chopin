@@ -969,11 +969,16 @@ refresh writes the renewed pair to `tokens`, only while the stored pair is still
 the one it began from, so a refresh that lost a race never replaces a newer pair.
 An access token is renewed when it reaches the expiry the provider gave less a
 margin (three minutes for ChatGPT, five for Claude, as Atomic's), and after the
-provider refused it (any 401 to a proxied request); one refresh runs per
-connection at a time, every caller awaiting it, and only the writer lease's holder
-refreshes. A refresh the provider refuses for good (a 401, or `invalid_grant`,
+provider refused that very token (any 401 to a proxied request); only the writer
+lease's holder refreshes. A connection's refreshes run one after another, and each
+reads the stored pair again first, so a caller that read the pair before another
+refresh saved a new one is given the new one and never sends the spent refresh
+token. A renewed pair storage couldn't save stays in the process for that
+connection, is sent meanwhile, and is saved again on its next use, before any
+further refresh. A refresh the provider refuses for good (a 401, or `invalid_grant`,
 `refresh_token_expired`, `refresh_token_reused` or `refresh_token_invalidated`)
-marks the sign-in `rejectedAt`, which tells the person's lasting launches, and the
+marks the sign-in `rejectedAt`, only while the stored pair is still the one the
+refresh presented, which tells the person's lasting launches, and the
 page says it needs signing in again; one that couldn't be made now refuses the
 request (`renew-unavailable`, 502), withholds the provider from a launch with the
 same reason, which counts as a check that couldn't finish, and lists the sign-in
@@ -984,6 +989,11 @@ as a bearer and the headers Atomic sends for a Claude subscription token, set
 whatever the agent sent: `anthropic-beta` leading with `claude-code-20250219` and
 `oauth-2025-04-20` before the agent's own betas, `user-agent: claude-cli/2.1.322`,
 `x-app: cli` and `anthropic-dangerous-direct-browser-access: true`. A Claude
+Messages request's body is given the system block Atomic puts first for a
+subscription token, `You are Claude Code, Anthropic's official CLI for Claude.`,
+ahead of the agent's own system prompt, which is kept whole (a prompt that is
+already led by it is left as it is), so an agent that is not Atomic is sent as
+Atomic is. A Claude
 stand-in reads `chopin_ai_sk-ant-oat01-` and 30 base64url characters, so an agent
 that tells a Claude subscription token from a key by that mark (Atomic does) sends
 it as one. Disconnecting deletes the row, and every launch's stand-ins for it stop
