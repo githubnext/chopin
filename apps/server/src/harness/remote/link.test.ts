@@ -57,7 +57,13 @@ import type { AgentAi } from "./endpoint";
 import { remotePlanner } from "./registry";
 import { testLease } from "../../storage/contract-support";
 import { AiCredentials } from "../../ai/credentials";
-import { endLaunch, handOut, PLANNER_AI_LAUNCH_MS } from "../../ai/launches";
+import {
+	AiLaunchRefused,
+	catalogOnly,
+	endLaunch,
+	handOut,
+	PLANNER_AI_LAUNCH_MS,
+} from "../../ai/launches";
 import { aiProxy } from "../../ai/proxy";
 import { turnFailureOf } from "../../chat/turn-failure";
 
@@ -2908,6 +2914,143 @@ describe("Agent connection AI launches", () => {
 		expect(raw.messages.some(message => message.type === "start")).toBe(false);
 	});
 
+	/** A link whose client offered `features` and attached, on launches that hand out catalog launches too. */
+	async function attachedForCatalog(features: string, made = launches()) {
+		let { auth, channel } = await linkAuth();
+		let catalogs: Array<{ userId: string; machineId?: string; channelId: string; linkId: string }> =
+			[];
+		let held: Array<[string, boolean]> = [];
+		made.ai.catalog = async input => {
+			catalogs.push(input);
+			let n = catalogs.length;
+			return {
+				launchId: `catalog-${n}`,
+				grants: {
+					launch: `chopin_launch_catalog_${n}`,
+					expiresAt: Date.now() + 60 * 60_000,
+					providers: [{
+						provider: "github-copilot",
+						baseUrl: "https://chopin.test/api/v1/ai/github-copilot",
+						placeholder: `chopin_ai_catalog_${n}`,
+						keyVariable: "COPILOT_GITHUB_TOKEN",
+					}],
+					withheld: [],
+				},
+			};
+		};
+		made.ai.held = (launchId, holding) => void held.push([launchId, holding]);
+		let server = linkServer(auth, 2_000, undefined, 2_000, undefined, undefined, { ai: made.ai });
+		cleanups.push(server.stop);
+		let raw = await rawLink(server.url, undefined, features);
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		return { ...made, raw, channel, catalogs, held };
+	}
+
+	it("hands a client that asks the link's catalog launch, owned by the link, again when the person's credentials change, and ends it with the link", async () => {
+		let { raw, channel, catalogs, held, ended, changed, listeners, asked } =
+			await attachedForCatalog(
+				"ai-credentials, ai-catalog",
+			);
+		await Bun.sleep(30);
+		expect(raw.messages.filter(message => message.type === "ai-catalog")).toEqual([]);
+		expect(catalogs).toEqual([]);
+
+		raw.send({ type: "ai-catalog" });
+		let first = await raw.next("ai-catalog");
+		expect(first.ai).toEqual({
+			launch: "chopin_launch_catalog_1",
+			expiresAt: expect.any(Number),
+			providers: [{
+				provider: "github-copilot",
+				baseUrl: "https://chopin.test/api/v1/ai/github-copilot",
+				placeholder: "chopin_ai_catalog_1",
+				keyVariable: "COPILOT_GITHUB_TOKEN",
+			}],
+			withheld: [],
+		});
+		expect(catalogs).toEqual([{
+			userId: "U_member",
+			channelId: channel.id,
+			linkId: expect.any(String),
+		}]);
+		expect(held).toEqual([["catalog-1", true]]);
+		expect(asked).toEqual([]);
+
+		// Asking again changes nothing.
+		raw.send({ type: "ai-catalog" });
+		changed("U_rival");
+		await Bun.sleep(30);
+		expect(catalogs).toHaveLength(1);
+
+		changed("U_member");
+		let renewed = await raw.next("ai-catalog");
+		expect(renewed.ai).toMatchObject({ launch: "chopin_launch_catalog_2" });
+		expect(catalogs[1]!.linkId).toBe(catalogs[0]!.linkId);
+		await until(() => ended.length === 1, 1_000);
+		expect(ended).toEqual(["catalog-1"]);
+		expect(held).toEqual([["catalog-1", true], ["catalog-2", true], ["catalog-1", false]]);
+
+		raw.send({ type: "detach" });
+		await raw.closed;
+		await until(() => ended.length === 2, 1_000);
+		expect(ended).toEqual(["catalog-1", "catalog-2"]);
+		expect(held.at(-1)).toEqual(["catalog-2", false]);
+		expect(listeners.size).toBe(0);
+	});
+
+	it("tells an account with nothing to list so in an empty catalog grant, and ends one prepared while its link closed unsent", async () => {
+		let refused = await attachedForCatalog("ai-credentials, ai-catalog");
+		refused.ai.catalog = async () => {
+			throw new AiLaunchRefused("no-ai-account", [{
+				provider: "github-copilot",
+				reason: "no-copilot-access",
+			}]);
+		};
+		refused.raw.send({ type: "ai-catalog" });
+		expect((await refused.raw.next("ai-catalog")).ai).toEqual({
+			providers: [],
+			withheld: [{ provider: "github-copilot", reason: "no-copilot-access" }],
+		});
+		refused.raw.send({ type: "detach" });
+		await refused.raw.closed;
+
+		let closing = await attachedForCatalog("ai-credentials, ai-catalog");
+		let preparing = Promise.withResolvers<void>();
+		let prepared = Promise.withResolvers<void>();
+		let catalog = closing.ai.catalog!;
+		closing.ai.catalog = async input => {
+			preparing.resolve();
+			await prepared.promise;
+			return catalog(input);
+		};
+		closing.raw.send({ type: "ai-catalog" });
+		await preparing.promise;
+		closing.raw.send({ type: "detach" });
+		await closing.raw.closed;
+		prepared.resolve();
+		await until(() => closing.ended.length === 1, 1_000);
+		expect(closing.ended).toEqual(["catalog-1"]);
+		expect(closing.held).toEqual([]);
+		expect(closing.raw.messages.filter(message => message.type === "ai-catalog")).toEqual([]);
+	});
+
+	it("hands no catalog launch to a client that did not offer ai-catalog, or ai-credentials, and takes an ask without the feature as a protocol violation", async () => {
+		let without = await attachedForCatalog("ai-credentials");
+		without.raw.send({ type: "ai-catalog" });
+		expect(await without.raw.next("error")).toMatchObject({ code: "protocol" });
+		await without.raw.closed;
+		expect(without.catalogs).toEqual([]);
+
+		let noCredentials = await attachedForCatalog("ai-catalog");
+		noCredentials.raw.send({ type: "ai-catalog" });
+		await Bun.sleep(50);
+		expect(noCredentials.raw.messages.filter(message => message.type === "ai-catalog")).toEqual([]);
+		expect(noCredentials.catalogs).toEqual([]);
+		noCredentials.raw.send({ type: "detach" });
+		await noCredentials.raw.closed;
+	});
+
 	it("leaves a client that did not offer ai-credentials as it was: no launch, and no grants", async () => {
 		for (let header of [undefined, "capability-catalog"]) {
 			let { raw, start, session, asked, changed } = await opened(header);
@@ -2939,10 +3082,14 @@ describe("Agent connection AI launches on the person's accounts in Chopin", () =
 			copilot: "none" as "access" | "none" | "unreachable",
 			answer: "ok" as "ok" | "invalid" | "throttled",
 		};
+		/** The requests that reached the provider standing in for OpenAI, by method and path. */
+		let reached: string[] = [];
 		let openai = Bun.serve({
 			hostname: "127.0.0.1",
 			port: 0,
 			fetch(request) {
+				reached.push(`${request.method} ${new URL(request.url).pathname}`);
+				if (new URL(request.url).pathname === "/api.json") return Response.json({});
 				if (new URL(request.url).pathname === "/v1/models") return Response.json({ data: [] });
 				if (state.answer === "invalid") {
 					return Response.json({ error: { code: "invalid_api_key" } }, { status: 401 });
@@ -2966,6 +3113,8 @@ describe("Agent connection AI launches on the person's accounts in Chopin", () =
 					: undefined;
 			},
 			upstreams: { openai: upstream },
+			// A link's catalog launch is owned while a link of this process holds it, as in main.ts.
+			ownerLive: ({ launchId, owner }) => !catalogOnly(owner) || held.has(launchId),
 		});
 		let held = new Set<string>();
 		let ai: AgentAi = {
@@ -2975,12 +3124,18 @@ describe("Agent connection AI launches on the person's accounts in Chopin", () =
 					owner: `session:${sessionId}`,
 					expiresAt: new Date(Date.now() + PLANNER_AI_LAUNCH_MS),
 				}),
+			catalog: ({ linkId, ...input }) =>
+				handOut(credentials, {
+					...input,
+					owner: `link:${linkId}`,
+					expiresAt: new Date(Date.now() + PLANNER_AI_LAUNCH_MS),
+				}),
 			end: launchId => endLaunch(credentials, launchId),
 			onChanged: listener => credentials.onChanged(listener),
 			held: (launchId, holding) => void (holding ? held.add(launchId) : held.delete(launchId)),
 		};
-		let proxy = aiProxy({ credentials, upstreams: { openai: upstream } });
-		return { credentials, state, ai, held, proxy };
+		let proxy = aiProxy({ credentials, upstreams: { openai: upstream, catalog: upstream } });
+		return { credentials, state, ai, held, proxy, reached };
 	}
 
 	/** Opens a session on a raw link offering `features`, for the planner given. */
@@ -3003,6 +3158,67 @@ describe("Agent connection AI launches on the person's accounts in Chopin", () =
 			);
 		return { ...made, raw, opening, channel, storage };
 	}
+
+	it("hands a client that asks a catalog launch of its account that lists its models through Chopin's proxy and runs none, and ends it with the link", async () => {
+		let { auth, channel, storage } = await linkAuth();
+		let made = await accounts(storage);
+		await made.credentials.connect("U_member", "openai", {
+			kind: "api-key",
+			secret: "sk-member-openai-0123456789",
+		});
+		let server = linkServer(auth, 2_000, undefined, 2_000, undefined, undefined, { ai: made.ai });
+		cleanups.push(server.stop);
+		let raw = await rawLink(server.url, undefined, "ai-credentials, ai-catalog");
+		raw.send({ type: "attach", version: 1, document: channel.id });
+		await raw.next("attached");
+		raw.send({ type: "ai-catalog" });
+		let { ai } = await raw.next("ai-catalog");
+		expect(providers(ai)).toEqual(["openai"]);
+		let grant = ai.providers[0];
+		let ask = (method: string, path: string) => {
+			let url = new URL(`https://chopin.test/api/v1/ai/${path}`);
+			return made.proxy(
+				new Request(url, {
+					method,
+					headers: { authorization: `Bearer ${grant.placeholder}`, "x-chopin-launch": ai.launch },
+					...(method === "POST" ? { body: "{}" } : {}),
+				}),
+				url,
+			);
+		};
+
+		expect((await ask("GET", "openai/v1/models")).status).toBe(200);
+		expect((await ask("GET", "models.dev/api.json")).status).toBe(200);
+		let reached = [...made.reached];
+		for (
+			let [method, path] of [
+				["POST", "openai/v1/chat/completions"],
+				["POST", "openai/v1/responses"],
+				["GET", "openai/v1/responses/resp_1"],
+				["POST", "openai/v1/embeddings"],
+			]
+		) {
+			let refused = await ask(method!, path!);
+			expect(refused.status).toBe(403);
+			expect((await refused.json()).error.code).toBe("catalog-only");
+		}
+		expect(made.reached).toEqual(reached);
+		expect(reached).toContain("GET /v1/models");
+		expect(reached).not.toContain("POST /v1/chat/completions");
+
+		raw.send({ type: "detach" });
+		await raw.closed;
+		let after = await ask("GET", "openai/v1/models");
+		expect(after.status).toBe(401);
+		expect(["launch-ended", "unknown-placeholder"]).toContain((await after.json()).error.code);
+		let state = new URL("https://chopin.test/api/v1/ai/launch");
+		let launch = await made.proxy(
+			new Request(state, { headers: { "x-chopin-launch": ai.launch } }),
+			state,
+		);
+		expect(await launch.json()).toEqual({ state: "ended" });
+		expect(made.reached).toEqual(reached);
+	});
 
 	it("starts no session, and forks none, for someone with no Copilot seat and no key, refusing it with no-ai-account", async () => {
 		for (

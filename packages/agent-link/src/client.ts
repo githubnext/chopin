@@ -37,6 +37,7 @@ export const WIRE = {
 	retryTurn: "retry-turn",
 	sessionChoice: "session-choice",
 	aiCredentials: "ai-credentials",
+	aiCatalog: "ai-catalog",
 	/** The header a runner sends the launch's own credential in, to Chopin's credential proxy. */
 	aiLaunchHeader: "x-chopin-launch",
 	/** How often a client retries a `resume` refused with `retry`, after a `restarting` notice. */
@@ -100,6 +101,12 @@ export type AgentHandlers = {
 	 * carried. Having it asks for `ai-credentials`: `start` and `fork` then carry `ai` too.
 	 */
 	ai?(message: ServerMessageOf<"ai">): void | Promise<void>;
+	/**
+	 * Takes the link's catalog grants, which list the person's models and run none, replacing any
+	 * earlier ones. Having it, with `ai`, asks for `ai-catalog`, and the client asks for them once
+	 * attached.
+	 */
+	aiCatalog?(message: ServerMessageOf<"ai-catalog">): void | Promise<void>;
 };
 
 export type AgentOptions = {
@@ -277,6 +284,7 @@ export function linkSocket(
 	retryTurns = false,
 	sessionChoice = false,
 	aiCredentials = false,
+	aiCatalog = false,
 ): WebSocket {
 	return new (WebSocket as unknown as HeaderWebSocket)(url, {
 		headers: {
@@ -292,6 +300,7 @@ export function linkSocket(
 				...(retryTurns ? [WIRE.retryTurn] : []),
 				...(sessionChoice ? [WIRE.sessionChoice] : []),
 				...(aiCredentials ? [WIRE.aiCredentials] : []),
+				...(aiCredentials && aiCatalog ? [WIRE.aiCatalog] : []),
 			].join(", "),
 		},
 		protocols: [WIRE.subprotocol],
@@ -500,6 +509,7 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 		options.retryTurns === true,
 		options.sessionChoice === true,
 		options.handlers.ai !== undefined,
+		options.handlers.aiCatalog !== undefined,
 	);
 	let turns = new Map<string, TurnState>();
 	let asks = new Map<string, PendingAsk>();
@@ -702,6 +712,13 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 					await options.handlers.ai?.(message);
 				} catch (error) {
 					console.error("[agent] the session's AI grants could not be applied:", reason(error));
+				}
+				return;
+			case "ai-catalog":
+				try {
+					await options.handlers.aiCatalog?.(message);
+				} catch (error) {
+					console.error("[agent] the link's catalog grants could not be applied:", reason(error));
 				}
 				return;
 			case "host-tool-result": {
@@ -926,6 +943,7 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 				}
 				// After the `resume`, which must be a resumable link's first message.
 				if (options.capabilities) client.report(options.capabilities);
+				if (features.includes(WIRE.aiCatalog)) send({ type: "ai-catalog" });
 			} else if (message.type === "refused") {
 				failAttach(
 					message.retry === true,

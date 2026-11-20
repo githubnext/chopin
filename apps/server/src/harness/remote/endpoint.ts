@@ -71,6 +71,10 @@ export type AgentAi = {
 	launch(
 		input: { userId: string; machineId?: string; channelId: string; sessionId: string },
 	): ReturnType<LinkAi["launch"]>;
+	/** Prepares a catalog launch owned by the link `linkId` (see `LinkAi.catalog`). */
+	catalog?(
+		input: { userId: string; machineId?: string; channelId: string; linkId: string },
+	): ReturnType<LinkAi["launch"]>;
 	end(launchId: string): void;
 	/** Calls `listener` with a person's id whenever what a launch for them may be given changes. */
 	onChanged(listener: (userId: string) => void): () => void;
@@ -328,6 +332,12 @@ export function agentLink(
 				ai: {
 					launch: (channelId, sessionId) =>
 						ai.launch({ userId, ...(machineId ? { machineId } : {}), channelId, sessionId }),
+					...(ai.catalog
+						? {
+							catalog: (channelId: string, linkId: string) =>
+								ai.catalog!({ userId, ...(machineId ? { machineId } : {}), channelId, linkId }),
+						}
+						: {}),
 					end: launchId => ai.end(launchId),
 					watch: changed =>
 						ai.onChanged(person => {

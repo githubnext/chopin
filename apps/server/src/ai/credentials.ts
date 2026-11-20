@@ -8,6 +8,7 @@ import {
 
 import { decrypted, encrypted, imported } from "../auth/session";
 import { COPILOT_RAW_TOKEN_HEADERS } from "./copilot";
+import { catalogOnly } from "./launches";
 import { AI_UPSTREAMS } from "./proxy";
 import {
 	beginSignIn,
@@ -101,7 +102,8 @@ export type AiRefusal =
 	| "renew-unavailable"
 	| "cancelled"
 	| "restarting"
-	| "busy";
+	| "busy"
+	| "catalog-only";
 
 /**
  * The credential a placeholder stands for now: `secret` goes in the provider's credential header,
@@ -221,8 +223,9 @@ export type AiLaunch = {
 	channelId?: string;
 	expiresAt: Date;
 	/**
-	 * What the launch is for, whose end ends it: `run:<id>` for a run on a paired machine, or
-	 * `session:<id>` for a Planner session (see `AiCredentialsOptions.ownerLive`).
+	 * What the launch is for, whose end ends it: `run:<id>` for a run on a paired machine,
+	 * `session:<id>` for a Planner session, or `link:<id>` for the catalog launch of an attached
+	 * link, which lists models and runs none (see `AiCredentialsOptions.ownerLive`, `catalogOnly`).
 	 */
 	owner?: string;
 };
@@ -1140,12 +1143,14 @@ export class AiCredentials {
 	 * before any credential is read. The launch must be live, for that provider, on a machine not
 	 * revoked and a document not archived, and its person must still have the provider connected.
 	 * For GitHub Copilot it is the Copilot token GitHub gives the person's GitHub token, renewed
-	 * before it expires.
+	 * before it expires. A catalog-only launch (`catalogOnly`) is refused every request but a model
+	 * list (`listing`), before any credential is read.
 	 */
 	async authorize(
 		placeholder: string | undefined,
 		provider: AiProvider,
 		launchToken: string | undefined,
+		listing = false,
 	): Promise<AiAuthorized | { refused: AiRefusal }> {
 		if (!placeholder) return { refused: "no-placeholder" };
 		if (!launchToken) return { refused: "no-launch" };
@@ -1159,6 +1164,7 @@ export class AiCredentials {
 		if (this.#ending.has(found.launchId) || !await this.#launchLive(found)) {
 			return { refused: "launch-ended" };
 		}
+		if (catalogOnly(found.owner) && !listing) return { refused: "catalog-only" };
 		return this.#credential(found);
 	}
 

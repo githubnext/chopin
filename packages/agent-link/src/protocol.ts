@@ -104,6 +104,15 @@ export const AGENT_FEATURES = {
 	 * client uses its own models as before.
 	 */
 	aiCredentials: "ai-credentials",
+	/**
+	 * With `ai-credentials`: a client asks once per link, with `ai-catalog`, for a launch that only
+	 * lists models, so it can report the models of the account it will run on before any session
+	 * has a launch. The server answers with an `ai-catalog` message carrying the link's catalog
+	 * grants, and sends another whenever they change; they end with the link. Chopin's credential
+	 * proxy serves them each provider's model list and the model catalog, and refuses every other
+	 * request on them. Without the feature neither message is sent.
+	 */
+	aiCatalog: "ai-catalog",
 } as const;
 
 /**
@@ -585,6 +594,11 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
 	 * still holds from a link that dropped, and the questions each still waits on.
 	 */
 	z.strictObject({ type: z.literal("resume"), sessions: heldSessions }),
+	/**
+	 * With `ai-catalog`: asks, once per link, for the link's catalog grants (after `resumed` on a
+	 * link that resumes). Asking again changes nothing.
+	 */
+	z.strictObject({ type: z.literal("ai-catalog") }),
 ]);
 
 const toolSpec = z.strictObject({
@@ -727,6 +741,11 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 	 * `providers` says the session has no grant now.
 	 */
 	z.strictObject({ type: z.literal("ai"), session: id, ai: aiGrantsSchema }),
+	/**
+	 * With `ai-catalog`, once the client asked: the link's catalog grants, which list models and run
+	 * none, replacing any earlier ones. An empty `providers` says the account has none to list now.
+	 */
+	z.strictObject({ type: z.literal("ai-catalog"), ai: aiGrantsSchema }),
 	/**
 	 * With `steer-turn`: a person's message for the turn that is running, to read at its next
 	 * step. The client answers with `control-result`, `ok: false` when the turn has ended.

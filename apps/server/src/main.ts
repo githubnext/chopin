@@ -141,7 +141,13 @@ import { aiProxy } from "./ai/proxy";
 import { copilotTokenExchange } from "./ai/copilot";
 import { githubSignIn, registerAiRoutes } from "./ai/routes";
 import { AiUsage } from "./ai/usage";
-import { endLaunch, handOut, PLANNER_AI_LAUNCH_MS } from "./ai/launches";
+import {
+	CATALOG_OWNER,
+	catalogOnly,
+	endLaunch,
+	handOut,
+	PLANNER_AI_LAUNCH_MS,
+} from "./ai/launches";
 import * as Edit from "./plan/edit";
 import * as Service from "./plan/service";
 import * as Inject from "./questions/inject";
@@ -3738,12 +3744,15 @@ let connectedAi = new AiCredentials({
 	writer: () => writerLease.holds(),
 	lease: heldLease,
 	// A run's launch lasts while Chopin still has the run; a session's while a session of this
-	// process holds it, a restart's hold included once it is rebuilt.
+	// process holds it, a restart's hold included once it is rebuilt; a link's catalog launch while
+	// that link is attached to this process.
 	ownerLive: async ({ launchId, owner, channelId }) => {
 		if (owner?.startsWith("run:")) {
 			return await experiments?.runLive(owner.slice("run:".length), channelId) ?? false;
 		}
-		if (owner?.startsWith("session:")) return heldPlannerLaunches.has(launchId);
+		if (owner?.startsWith("session:") || catalogOnly(owner)) {
+			return heldPlannerLaunches.has(launchId);
+		}
 		return true;
 	},
 });
@@ -3753,6 +3762,12 @@ plannerAi = {
 		handOut(connectedAi, {
 			...input,
 			owner: `session:${sessionId}`,
+			expiresAt: new Date(hostedAuth.clock().getTime() + PLANNER_AI_LAUNCH_MS),
+		}),
+	catalog: ({ linkId, ...input }) =>
+		handOut(connectedAi, {
+			...input,
+			owner: `${CATALOG_OWNER}${linkId}`,
 			expiresAt: new Date(hostedAuth.clock().getTime() + PLANNER_AI_LAUNCH_MS),
 		}),
 	end: launchId => endLaunch(connectedAi, launchId),

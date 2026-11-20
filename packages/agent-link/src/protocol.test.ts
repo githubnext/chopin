@@ -334,6 +334,7 @@ describe("Agent connection messages", () => {
 			retryTurn: AGENT_FEATURES.retryTurn,
 			sessionChoice: AGENT_FEATURES.sessionChoice,
 			aiCredentials: AGENT_FEATURES.aiCredentials,
+			aiCatalog: AGENT_FEATURES.aiCatalog,
 			aiLaunchHeader: AI_LAUNCH_HEADER,
 			restartResumeRetryMs: RESTART_RESUME_RETRY_MS,
 		});
@@ -425,6 +426,37 @@ describe("Agent connection messages", () => {
 		}
 		// Only the server hands out grants.
 		expect(parseClientMessage(JSON.stringify({ type: "ai", session: "s", ai }))).toMatchObject({
+			ok: false,
+		});
+	});
+
+	it("lets a client ask once for the link's catalog grants, which the server hands in `ai-catalog`", () => {
+		expect(AGENT_FEATURES.aiCatalog).toBe("ai-catalog");
+		let ai = {
+			launch: "chopin_launch_c",
+			expiresAt: 1_700_000_000_000,
+			providers: [{
+				provider: "github-copilot",
+				baseUrl: "https://chopin.example/api/v1/ai/github-copilot",
+				placeholder: "chopin_ai_c",
+				keyVariable: "COPILOT_GITHUB_TOKEN",
+			}],
+			withheld: [],
+		};
+		let ask = { type: "ai-catalog" } as const;
+		expect(parseClientMessage(encodeMessage(ask))).toEqual({ ok: true, message: ask });
+		expect(parseClientMessage(JSON.stringify({ ...ask, session: "s" }))).toMatchObject({
+			ok: false,
+		});
+		for (let grants of [ai, { providers: [], withheld: [] }]) {
+			let message = { type: "ai-catalog", ai: grants } as const;
+			expect(parseServerMessage(encodeMessage(message))).toEqual({ ok: true, message });
+		}
+		expect(parseServerMessage(JSON.stringify({ type: "ai-catalog" }))).toMatchObject({ ok: false });
+		expect(parseServerMessage(JSON.stringify({ type: "ai-catalog", session: "s", ai })))
+			.toMatchObject({ ok: false });
+		// A client never hands out grants.
+		expect(parseClientMessage(JSON.stringify({ type: "ai-catalog", ai }))).toMatchObject({
 			ok: false,
 		});
 	});

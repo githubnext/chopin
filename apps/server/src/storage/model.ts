@@ -1208,8 +1208,9 @@ export type AiPlaceholder = {
 	 */
 	generation?: number;
 	/**
-	 * What the launch is for, whose end ends it: `run:<id>` for a run on a paired machine, or
-	 * `session:<id>` for a Planner session. Absent on a launch prepared before owners were kept.
+	 * What the launch is for, whose end ends it: `run:<id>` for a run on a paired machine,
+	 * `session:<id>` for a Planner session, or `link:<id>` for an attached link's catalog launch,
+	 * which lists models and runs none. Absent on a launch prepared before owners were kept.
 	 */
 	owner?: string;
 	expiresAt: Date;
