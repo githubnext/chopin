@@ -254,8 +254,10 @@ durable.
 - **A machine's database login is its own.** With `MACHINE_STORE_URL`, pairing and
   connecting give each paired machine a role and database named from its id
   (`apps/server/src/machine-store/`): the administrator owns the database, the role
-  has `CONNECT` on it alone and its `atomic` schema, and no other database of the
-  server lets `PUBLIC` connect, checked by connecting. An existing role or database
+  has `CONNECT` on it alone and its `atomic` schema, and no other connectable database
+  lets the role connect, checked with `has_database_privilege` on each before its login is
+  on and by connecting to each but the machines' own after; a `REVOKE` that only warned (the
+  administrator doesn't own the database) refuses the login. An existing role or database
   that isn't the managed one (other roles its members, no `chopin:machine-store` comment)
   is refused, never repaired, a password is changed only while the role holds nothing but
   `CONNECT` without grant option on its database, and turning a login off or dropping it
@@ -267,7 +269,8 @@ durable.
   done; one that can't is answered 503 with the reason, and revoking again finishes it. The connector writes the login only into
   the private Atomic directories of agents on Chopin's AI accounts
   (`apps/connector/src/machine-store.ts`), never the person's `~/.atomic`. A failure
-  never fails pairing; the connector and the Machines page say it.
+  never fails pairing; the connector and the Machines page say it, a standalone `chopin pair`
+  through `POST /api/connector/machine-store` with `problem`.
 - **Planner ownership is process-bound.** The first eligible Planner or
   model-backed research request supplies its GitHub App token and Copilot
   entitlement. Server-authored turns nobody typed (re-linking decisions after a

@@ -2075,7 +2075,17 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		if (!stores) fail("not-found");
 		compatible(request, auth.config.origin, options.connectorVersion);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
-		z.object({}).strict().parse(await body(request));
+		let { problem } = z.object({ problem: z.string().max(4_000).optional() }).strict().parse(
+			await body(request),
+		);
+		// A machine that couldn't set up the login it was handed says why, as `chopin pair` does
+		// before any connection would.
+		if (problem !== undefined) {
+			let reported = plainText(problem).slice(0, MACHINE_STORE_REASON_LIMIT);
+			if (!reported) fail("invalid-request");
+			await stores.report(machine.id, reported);
+			return json({ reported: true });
+		}
 		if (!privateOrigin) {
 			return json({
 				error: "machine-store-unavailable",

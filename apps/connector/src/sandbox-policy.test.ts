@@ -14,6 +14,7 @@ import {
 	readGrantsAround,
 	sandboxPath,
 	secretPaths,
+	validAllowedEntry,
 	validHostEntry,
 	windowsReadRoots,
 } from "./sandbox-policy";
@@ -169,6 +170,34 @@ test("a host the owner adds is a name, a *. name or a name with a port, and noth
 		]
 	) {
 		expect(validHostEntry(bad)).toBe(false);
+	}
+});
+
+test("a host the connector allows as it runs may also be an IPv6 address in brackets, on a real port", () => {
+	for (
+		let good of [
+			"db.example.com:5432",
+			"10.0.0.5:5432",
+			"[2001:db8::1]:5432",
+			"[::1]:65535",
+			"[::1]",
+		]
+	) {
+		expect(validAllowedEntry(good), good).toBe(true);
+	}
+	for (
+		let bad of [
+			"[2001:db8::1:5432",
+			"[db.example.com]:5432",
+			"[1:2:3:4:5:6:7:8:9]:5432",
+			"2001:db8::1:5432",
+			"[::1]:0",
+			"[::1]:65536",
+			"db.example.com:99999",
+			"https://db.example.com:5432",
+		]
+	) {
+		expect(validAllowedEntry(bad), bad).toBe(false);
 	}
 });
 

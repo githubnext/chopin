@@ -1,3 +1,4 @@
+import { isIPv6 } from "node:net";
 import { isAbsolute, posix, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { windowsArgument } from "./windows-argument";
@@ -229,6 +230,18 @@ export function matchingEntry(
 export function validHostEntry(entry: string) {
 	return /^(\*\.)?[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:\d{1,5})?$/i.test(entry)
 		&& !/^\*\.[^.]*$/.test(entry);
+}
+
+/**
+ * An entry the connector allows as it runs, as its database's `host:port`: one an owner may add,
+ * or an IPv6 address in brackets, as a URL writes it; any port is 1 to 65535.
+ */
+export function validAllowedEntry(entry: string) {
+	let match = entry.match(/^(?:\[([0-9a-f:]+)\]|([^:[\]]+))(?::(\d{1,5}))?$/i);
+	if (!match) return false;
+	let [, address, name, port] = match;
+	if (port !== undefined && (Number(port) < 1 || Number(port) > 65_535)) return false;
+	return address === undefined ? validHostEntry(name!) : isIPv6(address);
 }
 
 /**

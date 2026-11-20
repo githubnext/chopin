@@ -36,7 +36,7 @@ import {
 	sandboxPath,
 	type SandboxSettings,
 	secretPaths,
-	validHostEntry,
+	validAllowedEntry,
 	windowsReadRoots,
 } from "./sandbox-policy";
 import { type Proxy, startProxy } from "./sandbox-proxy";
@@ -336,7 +336,7 @@ export async function createSandbox(options: SandboxOptions): Promise<Sandbox> {
 		spawn: launch => spawnConfined(executor, engine, host, proxy, options, launch),
 		aiRelay,
 		allow(entry) {
-			if (validHostEntry(entry) && !hosts.includes(entry)) hosts.push(entry);
+			if (validAllowedEntry(entry) && !hosts.includes(entry)) hosts.push(entry);
 		},
 		close: async () => {
 			await proxy.close();

@@ -24,7 +24,12 @@ import {
 	isAiProvider,
 	NO_AI_ACCOUNT_RUN,
 } from "@chopin/protocol/ai-credentials";
-import { type MachineStoreLogin, passwordlessStoreUrl } from "@chopin/protocol/machine-store";
+import {
+	MACHINE_STORE_REASON_LIMIT,
+	type MachineStoreLogin,
+	type MachineStoreReport,
+	passwordlessStoreUrl,
+} from "@chopin/protocol/machine-store";
 import type { Output } from "./output";
 
 /**
@@ -652,6 +657,20 @@ export async function machineStoreLogin(
 		throw new Error(UNUSABLE_STORE_LOGIN);
 	}
 	return { url: value.url, password: value.password };
+}
+
+/**
+ * Tell Chopin why this machine couldn't set up the database login it was handed, so its Machines
+ * page says so before the machine connects, as a standalone `chopin pair` never does.
+ */
+export async function reportMachineStoreProblem(
+	url: string,
+	token: string,
+	problem: string,
+	signal?: AbortSignal,
+): Promise<void> {
+	let report: MachineStoreReport = { problem: problem.slice(0, MACHINE_STORE_REASON_LIMIT) };
+	await post(url + "/api/connector/machine-store", report, token, signal);
 }
 
 /** Ends a run's AI launch with its own credential, so its stand-ins stop working at once. */
