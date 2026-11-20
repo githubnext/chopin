@@ -62,6 +62,23 @@ test("invoke_planner is available only with its capability and returns the docum
 	expect(received).toEqual([{ caller: "octocat", input }]);
 });
 
+test("tools/list declares invoke_planner's optional idempotencyKey, so a client can tell retries replay", async () => {
+	let mcp = endpoint({
+		async invoke() {
+			return { kind: "invoked", document: { id: "id", title: "Document", url: "/document" } };
+		},
+	});
+	let listed = (await call(mcp, "tools/list")).result.tools.find(
+		(tool: { name: string }) => tool.name === "invoke_planner",
+	);
+	expect(listed.inputSchema.properties.idempotencyKey).toMatchObject({
+		type: "string",
+		minLength: 1,
+		maxLength: 128,
+	});
+	expect(listed.inputSchema.required).not.toContain("idempotencyKey");
+});
+
 test("invoke_planner validates strict arguments and counts instruction bytes without rewriting text", async () => {
 	let received: InvokePlannerInput[] = [];
 	let mcp = endpoint({

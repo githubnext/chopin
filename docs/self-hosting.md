@@ -313,8 +313,8 @@ receives what a Planner turn sees, including repository reads made with that
 owner's token, and decides what the Planner writes during turns writers start;
 its run reports never start a turn. The server never runs the client's tools and
 gains no shell or filesystem access from this harness. Without an attached
-client, `@chopin` and `invoke_planner` are saved and wait for one, under
-`AUTH_MODE=local` as well. See
+client, `@chopin` and `invoke_planner` are refused with `planner-not-attached`
+and nothing is kept for one, under `AUTH_MODE=local` as well. See
 [Remote Planner](hosted-agent.md#remote-planner) for the behaviour and
 [Agent connection](agent-connection.md) for the wire format. The connection shares the
 application's origin and port with `/ws` and `/mcp`, so a TLS-terminating proxy

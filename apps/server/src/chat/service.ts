@@ -1230,6 +1230,17 @@ async function notRead(context: Room, handle: string): Promise<void> {
 	).catch(err => console.error("[chat] could not say that a message was not read:", err));
 }
 
+/** Where an MCP instruction is posted, and what must be recorded before its turn starts. */
+export type InvokedEntry = {
+	/**
+	 * The id its Chat entry, or system notice, takes. One Chat already holds was saved by an earlier
+	 * call whose turn never started: it is not posted again, and only its turn is started.
+	 */
+	entryId: string;
+	/** Records, durably, that the turn is starting; nothing starts unless it resolves. */
+	starting?: () => Promise<void>;
+};
+
 /**
  * Accept an MCP instruction without waiting for its Planner turn.
  *
@@ -1250,8 +1261,7 @@ export async function invoke(
 	/** Called once, when the invoked turn ends or the message has been given to the one running; never when this refuses. */
 	settled?: () => void,
 	notice?: string,
-	/** The id its Chat entry, or system notice, takes; a fresh one when absent. */
-	entryId: string = ulid(),
+	invoked: InvokedEntry = { entryId: ulid() },
 ): Promise<
 	| "planner-unavailable"
 	| "planner-not-attached"
@@ -1281,14 +1291,15 @@ export async function invoke(
 		if (chat.closed) return "planner-unavailable" as const;
 		// A process that is stopping starts no turn: its caller asks again, of the next one.
 		if (startsHeld && !chat.busy && !chat.starting) return "planner-unavailable" as const;
+		let posted = chat.entries.find(value => value.id === invoked.entryId);
 		if (notice !== undefined) {
 			// An automatic follow-up needs a turn of its own, which a running one cannot give it.
 			if (occupied(chat)) return "planner-busy" as const;
+			if (!posted) await postNotice(context, notice, undefined, invoked.entryId);
+			await invoked.starting?.();
 			if (verified) rememberCheckout(room, verified);
-			await instruct(context, user.login, text, notice, {
+			await instruct(context, user.login, text, "", {
 				quiet: true,
-				asked: true,
-				notice: entryId,
 				...(focus ? { focus } : {}),
 				...(settled ? { ended: () => settled() } : {}),
 			});
@@ -1301,24 +1312,29 @@ export async function invoke(
 			refusedWhileRunning(context);
 			return "planner-busy" as const;
 		}
-		let entry: Wire.Entry = {
-			id: entryId,
-			author: { kind: "member", handle: user.login },
-			text,
-			ts: now(),
-		};
-		appendEntries(chat, entry);
-		try {
-			await context.persist();
-		} catch (error) {
-			chat.entries = chat.entries.filter(value => value !== entry);
-			throw error;
+		let entry = posted;
+		if (!entry) {
+			let fresh: Wire.Entry = {
+				id: invoked.entryId,
+				author: { kind: "member", handle: user.login },
+				text,
+				ts: now(),
+			};
+			appendEntries(chat, fresh);
+			try {
+				await context.persist();
+			} catch (error) {
+				chat.entries = chat.entries.filter(value => value !== fresh);
+				throw error;
+			}
+			if (chat.closed) return "planner-unavailable" as const;
+			// The caller has no socket in the room, so nothing else has told it who they are.
+			introduce(server, room, { login: user.login, avatarUrl: user.avatarUrl });
+			announce(server, room, fresh);
+			entry = fresh;
 		}
-		if (chat.closed) return "planner-unavailable" as const;
+		await invoked.starting?.();
 		if (verified) rememberCheckout(room, verified);
-		// The caller has no socket in the room, so nothing else has told it who they are.
-		introduce(server, room, { login: user.login, avatarUrl: user.avatarUrl });
-		announce(server, room, entry);
 		if (running) {
 			let given = give(context, {
 				entry: entry.id,
@@ -1926,9 +1942,15 @@ function postNotice(
 		...(comment ? { comment } : {}),
 	};
 	appendEntries(chat, entry);
-	return context.persist().then(() => {
-		announce(server, room, entry);
-	});
+	return context.persist().then(
+		() => {
+			announce(server, room, entry);
+		},
+		error => {
+			chat.entries = chat.entries.filter(value => value !== entry);
+			throw error;
+		},
+	);
 }
 
 /**
