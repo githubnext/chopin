@@ -498,10 +498,11 @@ async function run(report: Record<string, unknown>, env: Record<string, string>)
 	};
 	process.on("SIGINT", stop);
 	process.on("SIGTERM", stop);
+	// The suite takes seven or eight minutes on a quiet machine; this leaves it room on a busy one.
 	let timer = setTimeout(() => {
 		report.deadline = true;
 		wake();
-	}, 600_000);
+	}, 1_200_000);
 	let failure = await Promise.race([child.exited, interrupted]).then(
 		() => undefined,
 		error => error,
