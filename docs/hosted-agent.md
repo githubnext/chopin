@@ -885,7 +885,11 @@ Planner turn that no writer asked for. A client that asks for the `run-stage-del
 feature sends only new and changed stages, so a run's stages have no count
 limit; Chopin merges them into the run's stored stages as it does an Atomic
 Planner's (see
-[Agent connection](agent-connection.md#run-stage-deltas)).
+[Agent connection](agent-connection.md#run-stage-deltas)). The Planner's
+instructions name none of the client's tools, since a client on Atomic 0.10 has
+no `workflow` tool: they say Chat shows a card for each run the client reports
+and that a Build is not one, and tell the model to offer to check on or steer such
+a run itself only if its own tools can.
 
 **Trust boundary.** The server never holds the client's model credentials and
 gains no shell or filesystem access from this harness. The client, in turn,

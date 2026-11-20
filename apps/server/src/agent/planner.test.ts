@@ -81,24 +81,36 @@ test("a remote Planner learns where it runs and that its questions become Decisi
 	let prompt = plannerInstructions("octo-org/score", "Earlier context.", { remote: true })
 		.replace(/\s+/g, " ");
 	expect(prompt).toContain("You run in a member's own session on their machine");
-	expect(prompt).toContain("questions appear to the document's members as Decisions");
+	expect(prompt).toContain(
+		"Every question asked in your session, by you or by a run, appears to the document's members as a Decision",
+	);
 	expect(prompt).toContain("**Stop Planner** pauses it");
 	expect(prompt).not.toContain("You have no shell");
 	expect(prompt).not.toContain("Your working directory");
-	expect(prompt).toContain("with your `workflow` and `intercom` tools when someone asks");
-	// The member's own Atomic decides how its `intercom` asks wait.
+	// The client decides how long its own asks of other sessions wait.
 	expect(prompt).not.toContain("budgetMs");
 	expect(prompt.endsWith("Earlier context.")).toBe(true);
 });
 
-test("a remote Planner with workflows says a Build's tasks show under Build, not as cards in Chat", () => {
+test("a remote Planner names none of its client's tools for runs or other sessions", () => {
 	let prompt = plannerInstructions("octo-org/score", undefined, { remote: true })
 		.replace(/\s+/g, " ");
-	// Chat's cards are for the workflow runs the Planner starts; a Build has none.
-	expect(prompt).toContain("Chat shows a card for each workflow run you start");
-	expect(prompt).not.toContain("Chat shows a card for each run");
+	// A client on Atomic 0.10 has no `workflow` tool, and another client may have neither.
+	expect(prompt).not.toContain("`workflow`");
+	expect(prompt).not.toContain("`intercom`");
+	expect(prompt).not.toContain("/workflow");
 	expect(prompt).toContain(
-		"A Build is not a workflow run, and Chat shows no card for a Build or its tasks",
+		"If your own tools can check on or steer such a run, offer to do that yourself when someone asks",
+	);
+});
+
+test("a remote Planner says a Build's tasks show under Build, not as cards in Chat", () => {
+	let prompt = plannerInstructions("octo-org/score", undefined, { remote: true })
+		.replace(/\s+/g, " ");
+	// Chat's cards are only for the runs the client reports; a Build has none.
+	expect(prompt).toContain("Chat shows a card for each run your session reports");
+	expect(prompt).toContain(
+		"A Build is not one of these runs, and Chat shows no card for a Build or its tasks",
 	);
 	expect(prompt).toContain("under **Build**, beside Decisions");
 });
