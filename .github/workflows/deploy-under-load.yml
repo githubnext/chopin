@@ -28,7 +28,7 @@ permissions:
 
 env:
   # Matches ci.yml: the version this is developed against.
-  BUN_VERSION: 1.4.4
+  BUN_VERSION: 1.4.5
 
 jobs:
   load:

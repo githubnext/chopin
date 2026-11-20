@@ -1,7 +1,7 @@
 {
 	"name": "chopin",
 	"private": true,
-	"packageManager": "bun@1.4.4",
+	"packageManager": "bun@1.4.5",
 	"type": "module",
 	"scripts": {
 		"dev": "bun scripts/dev.ts",
@@ -42,9 +42,6 @@
 		"postcss-value-parser": "4.2.0",
 		"yaml": "2.9.0"
 	},
-	"overrides": {
-		"bun-types": "1.4.4"
-	},
 	"patchedDependencies": {
 		"@mdxeditor/editor@4.1.0": "patches/@mdxeditor%2Feditor@4.1.0.patch",
 		"mdast-util-to-markdown@2.1.2": "patches/mdast-util-to-markdown@2.1.2.patch"
@@ -56,7 +53,7 @@
 		],
 		"catalogs": {
 			"bun": {
-				"@types/bun": "1.4.3"
+				"@types/bun": "1.4.5"
 			},
 			"copilot": {
 				"@github/copilot": "1.0.80",
