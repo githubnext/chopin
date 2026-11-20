@@ -7,7 +7,8 @@ import { sourceHash } from "./conversation-plan-worker";
 
 const OWNER = "org.chopin.conversation-plan-run";
 const COMMIT = "org.chopin.source-commit";
-const LIMIT_MS = 720_000;
+// Past the worker's own 20-minute limit on the suite, with room to start and clean up.
+const LIMIT_MS = 1_500_000;
 
 type Options = { image: string; postgresImage: string };
 type Container = { name: string; id?: string };
