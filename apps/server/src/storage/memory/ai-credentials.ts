@@ -14,6 +14,7 @@ function copyCredential(value: AiCredentialRecord): AiCredentialRecord {
 	return {
 		...value,
 		...(value.ciphertext ? { ciphertext: new Uint8Array(value.ciphertext) } : {}),
+		...(value.tokens ? { tokens: new Uint8Array(value.tokens) } : {}),
 		updatedAt: new Date(value.updatedAt),
 		...(value.lastUsedAt ? { lastUsedAt: new Date(value.lastUsedAt) } : {}),
 		...(value.rejectedAt ? { rejectedAt: new Date(value.rejectedAt) } : {}),
@@ -72,6 +73,13 @@ export class MemoryAiCredentialStore implements AiCredentialStore {
 		if (!found || found.rejectedAt) return false;
 		found.rejectedAt = new Date(at);
 		this.deps.cutoffs.cut(record.userId);
+		return true;
+	}
+	async refreshed(lease: Lease, record: AiCredentialRecord, tokens: Uint8Array) {
+		this.deps.assertLease(lease);
+		let found = this.#same(record);
+		if (!found || !sameBytes(found.tokens, record.tokens)) return false;
+		found.tokens = new Uint8Array(tokens);
 		return true;
 	}
 	/** The stored row while it is still the credential `record` was read as. */

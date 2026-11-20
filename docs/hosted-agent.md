@@ -896,8 +896,9 @@ background work.
 ## AI credentials
 
 People connect their AI credentials in Chopin once: GitHub Copilot (through the
-GitHub sign-in Chopin already holds for them, or a personal access token), an
-OpenAI API key, and an Anthropic API key. The server keeps them and serves them
+GitHub sign-in Chopin already holds for them, or a personal access token), a
+ChatGPT or Claude subscription through that provider's own sign-in, an OpenAI API
+key, and an Anthropic API key. The server keeps them and serves them
 through its credential proxy; runners receive only placeholders, with no model
 sign-in or key of their own (see [Handing launches to runners](#handing-launches-to-runners)).
 
@@ -905,11 +906,14 @@ sign-in or key of their own (see [Handing launches to runners](#handing-launches
 GET    /api/ai/credentials
 PUT    /api/ai/credentials/:provider     {"kind":"api-key","secret":"…"} or {"kind":"github-sign-in"}
 POST   /api/ai/credentials/github-copilot/check
+POST   /api/ai/sign-ins/:subscription                 → {"url":"…"}
+POST   /api/ai/sign-ins/:subscription/finish          {"input":"…"}
 DELETE /api/ai/credentials/:provider
 ```
 
-`:provider` is `github-copilot`, `openai` or `anthropic`; `github-sign-in` is
-for `github-copilot` alone. The list says which providers a person connected,
+`:provider` is `github-copilot`, `openai`, `anthropic`, `chatgpt` or `claude`;
+`github-sign-in` is for `github-copilot` alone, and `chatgpt` and `claude` take no
+key, only a sign-in (`:subscription`). The list says which providers a person connected,
 how, and when (`updatedAt`); no route returns a secret. A key is listed with its
 last four characters (`suffix`, kept beside the ciphertext) and the time a
 launch last sent a request with it (`lastUsedAt`, the time the transport took the
@@ -938,6 +942,52 @@ derived from `SESSION_ENCRYPTION_KEY`, bound to its person and provider
 one saved under an encryption key since replaced, is listed `unusable: true`
 until it is connected again. People manage all of this on the AI accounts page
 (`/ai-accounts`, under Machines in the sidebar).
+
+**Subscriptions.** ChatGPT and Claude are connected the way Atomic signs in to
+them (`packages/ai/src/auth/oauth/openai-chatgpt.ts` and `anthropic.ts` in
+bastani-inc/atomic), adapted to a server the browser is not on
+(`apps/server/src/ai/subscriptions.ts`). Starting a sign-in makes a PKCE verifier
+and state and answers the provider's authorize address, which the dialog opens in
+a new tab; the sign-in waits 15 minutes, in the process's memory, and a new start
+replaces it. Sign in with ChatGPT uses OpenAI's dynamic agent client
+(`dynamic_agent_client`, agent name _Chopin_, this deployment's own UUID as the
+agent host, derived from `SESSION_ENCRYPTION_KEY`), OpenAI's API as the resource
+and the `chatgpt.tokens.use.direct` scope; its callback goes to
+`http://127.0.0.1:1455/auth/callback`, which a hosted server can't receive, so the
+person pastes the address their browser ends on, and it is taken only with that
+origin and path, the sign-in's state and an issued `client_id`, as Atomic's manual
+path takes it. Claude uses Anthropic's copy-the-code redirect: the verifier is the
+state, and the person pastes the code Claude shows (`code#state`, a bare code or an
+address carrying them), whose state must be the sign-in's. Only then is the code
+exchanged, once, at the provider's token endpoint (`auth.openai.com` or
+`platform.claude.com`); a paste that isn't the sign-in's answer keeps the sign-in
+to paste again, and a refused or failed exchange spends it (`restart: true`).
+Nothing is stored until the provider returns tokens, so a sign-in that fails or is
+abandoned leaves what the person connected before as it was. The tokens are
+stored encrypted like a key, in `ciphertext`, which names the connection; a
+refresh writes the renewed pair to `tokens`, only while the stored pair is still
+the one it began from, so a refresh that lost a race never replaces a newer pair.
+An access token is renewed when it reaches the expiry the provider gave less a
+margin (three minutes for ChatGPT, five for Claude, as Atomic's), and after the
+provider refused it (any 401 to a proxied request); one refresh runs per
+connection at a time, every caller awaiting it, and only the writer lease's holder
+refreshes. A refresh the provider refuses for good (a 401, or `invalid_grant`,
+`refresh_token_expired`, `refresh_token_reused` or `refresh_token_invalidated`)
+marks the sign-in `rejectedAt`, which tells the person's lasting launches, and the
+page says it needs signing in again; one that couldn't be made now refuses the
+request (`renew-unavailable`, 502), withholds the provider from a launch with the
+same reason, which counts as a check that couldn't finish, and lists the sign-in
+`unchecked`. An expired access token is never sent. ChatGPT's requests go to
+`https://api.openai.com` with the access token as a bearer, as Atomic sends a
+ChatGPT sign-in's; Claude's go to `https://api.anthropic.com` with the access token
+as a bearer and the headers Atomic sends for a Claude subscription token, set
+whatever the agent sent: `anthropic-beta` leading with `claude-code-20250219` and
+`oauth-2025-04-20` before the agent's own betas, `user-agent: claude-cli/2.1.322`,
+`x-app: cli` and `anthropic-dangerous-direct-browser-access: true`. A Claude
+stand-in reads `chopin_ai_sk-ant-oat01-` and 30 base64url characters, so an agent
+that tells a Claude subscription token from a key by that mark (Atomic does) sends
+it as one. Disconnecting deletes the row, and every launch's stand-ins for it stop
+working at once, as removing a key does.
 
 **Placeholders.** A launch (a Planner session or a build or run) is given, per
 provider its person can use, a random placeholder (`chopin_ai_` and 43

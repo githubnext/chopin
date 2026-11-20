@@ -1,10 +1,19 @@
-import { AI_PROXY_PATH, isAiProvider } from "@chopin/protocol/ai-credentials";
+import {
+	AI_PROXY_PATH,
+	isAiProvider,
+	isSubscriptionProvider,
+} from "@chopin/protocol/ai-credentials";
 
 import { ownOrigin } from "../auth/config";
 import { StorageError } from "../storage/errors";
 import { AiCredentialError } from "./credentials";
 
-import type { AiCredentialList, ConnectAiCredential } from "@chopin/protocol/ai-credentials";
+import type {
+	AiCredentialList,
+	AiSignInFinish,
+	AiSignInStart,
+	ConnectAiCredential,
+} from "@chopin/protocol/ai-credentials";
 import type { HostedAuth } from "../auth/routes";
 import type { Router } from "../http/router";
 import type { AiPlaceholder } from "../storage/model";
@@ -29,14 +38,16 @@ function empty(status: number): Response {
 }
 
 function failed(err: unknown): Response {
-	if (err instanceof AiCredentialError) return json({ error: err.message }, err.status);
+	if (err instanceof AiCredentialError) {
+		return json({ error: err.message, ...(err.restart ? { restart: true } : {}) }, err.status);
+	}
 	if (err instanceof StorageError && err.failure === "unavailable") {
 		return json({ error: "storage is unavailable" }, 503);
 	}
 	return json({ error: "request failed" }, 500);
 }
 
-async function connection(request: Request): Promise<ConnectAiCredential | undefined> {
+async function jsonObject(request: Request): Promise<Record<string, unknown> | undefined> {
 	let declared = Number(request.headers.get("content-length") || "0");
 	if (Number.isFinite(declared) && declared > BODY_LIMIT) return undefined;
 	let source = await request.text();
@@ -48,7 +59,12 @@ async function connection(request: Request): Promise<ConnectAiCredential | undef
 		return undefined;
 	}
 	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-	let body = value as Record<string, unknown>;
+	return value as Record<string, unknown>;
+}
+
+async function connection(request: Request): Promise<ConnectAiCredential | undefined> {
+	let body = await jsonObject(request);
+	if (!body) return undefined;
 	if (body.kind === "github-sign-in") return { kind: "github-sign-in" };
 	if (body.kind === "api-key" && typeof body.secret === "string") {
 		return { kind: "api-key", secret: body.secret };
@@ -78,8 +94,8 @@ export function githubSignIn(auth: HostedAuth) {
 
 /**
  * The AI credentials a signed-in person connects, and Chopin's credential proxy. The list says
- * which providers are connected and how, never a secret; connecting and disconnecting take a
- * request from Chopin's own origin. The proxy (see `aiProxy`) takes a launch's placeholder, not a
+ * which providers are connected and how, never a secret; connecting, signing in to a subscription
+ * and disconnecting take a request from Chopin's own origin. The proxy (see `aiProxy`) takes a launch's placeholder, not a
  * sign-in. With `usage`, a person reads the totals of their own launches' requests, and nobody
  * else's.
  */
@@ -132,6 +148,41 @@ export function registerAiRoutes(
 			let session = await auth.sessions.authenticate(request);
 			if (!session) return json({ error: "authentication required" }, 401);
 			return json(await credentials.check(session.user.id, session.access.token));
+		} catch (err) {
+			return failed(err);
+		}
+	});
+
+	router.on("POST", "/api/ai/sign-ins/:provider", async (request, _url, params) => {
+		if (!ownOrigin(auth.config, request.headers.get("origin"))) {
+			return json({ error: "origin is not allowed" }, 403);
+		}
+		try {
+			let session = await auth.sessions.authenticate(request);
+			if (!session) return json({ error: "authentication required" }, 401);
+			let provider = params.provider;
+			if (!isSubscriptionProvider(provider)) return json({ error: "unknown sign-in" }, 404);
+			return json(credentials.startSignIn(session.user.id, provider) as AiSignInStart);
+		} catch (err) {
+			return failed(err);
+		}
+	});
+
+	router.on("POST", "/api/ai/sign-ins/:provider/finish", async (request, _url, params) => {
+		if (!ownOrigin(auth.config, request.headers.get("origin"))) {
+			return json({ error: "origin is not allowed" }, 403);
+		}
+		try {
+			let session = await auth.sessions.authenticate(request);
+			if (!session) return json({ error: "authentication required" }, 401);
+			let provider = params.provider;
+			if (!isSubscriptionProvider(provider)) return json({ error: "unknown sign-in" }, 404);
+			let body = await jsonObject(request);
+			let input = (body as Partial<AiSignInFinish> | undefined)?.input;
+			if (typeof input !== "string" || !input.trim()) {
+				return json({ error: "invalid request" }, 400);
+			}
+			return json(await credentials.completeSignIn(session.user.id, provider, input));
 		} catch (err) {
 			return failed(err);
 		}

@@ -16,8 +16,15 @@ export const AI_RENEW_BEFORE_MS = 30 * 60_000;
 /** What a runner is handed for one launch, and the id the launch is ended by. */
 export type HandedOut = { launchId: string; grants: AiGrants };
 
-/** Withheld for a question nobody answered: GitHub, or the person's own sign-in, couldn't be asked. */
-const UNANSWERED = new Set<AiWithheld["reason"]>(["copilot-unavailable", "sign-in-unavailable"]);
+/**
+ * Withheld for a question nobody answered: GitHub, or the person's own sign-in, couldn't be asked,
+ * or a subscription's sign-in couldn't be renewed.
+ */
+const UNANSWERED = new Set<AiWithheld["reason"]>([
+	"copilot-unavailable",
+	"sign-in-unavailable",
+	"renew-unavailable",
+]);
 
 /**
  * Why a launch was handed out with nothing, which starts no agent: the person it runs for has no AI

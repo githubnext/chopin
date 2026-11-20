@@ -1156,7 +1156,13 @@ export type AiCredentialRecord = {
 	userId: string;
 	provider: import("@chopin/protocol/ai-credentials").AiProvider;
 	kind: import("@chopin/protocol/ai-credentials").AiCredentialKind;
+	/**
+	 * The secret as it was connected, encrypted: a key, or a sign-in's tokens. Every connect makes it
+	 * anew, so it names the connection.
+	 */
 	ciphertext?: Uint8Array;
+	/** A sign-in's tokens as its latest refresh returned them, encrypted; absent until one has. */
+	tokens?: Uint8Array;
 	suffix?: string;
 	updatedAt: Date;
 	lastUsedAt?: Date;

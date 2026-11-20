@@ -1,4 +1,4 @@
-export { GitHubIcon } from "./brand";
+export { AnthropicIcon, GitHubIcon, OpenAIIcon } from "./brand";
 export {
 	BallIcon,
 	BotIcon,

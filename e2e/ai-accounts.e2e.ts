@@ -60,8 +60,8 @@ test("AI accounts sits in the sidebar directly under Machines and opens its page
 	await expect(page.getByRole("main")).toContainText(
 		"chopin uses these to work for you on any machine. Machines get a stand-in, never the key itself.",
 	);
-	await expect(page.getByRole("heading", { name: "Sign-ins", level: 2 })).toBeVisible();
-	await expect(page.getByRole("heading", { name: "API keys", level: 2 })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Use a subscription", level: 2 })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Use an API key", level: 2 })).toBeVisible();
 });
 
 test("GitHub Copilot through a sign-in with a seat is connected and asks for nothing", async ({ baseURL, page }) => {
@@ -359,4 +359,104 @@ test("with no earlier answer, Copilot says it is checking until the check answer
 	} finally {
 		await forgetCopilotAccess(handle);
 	}
+});
+
+test("Sign in with ChatGPT takes the address the browser ends on, then connects and disconnects", async ({ baseURL, page }) => {
+	await open(page, person(), baseURL!);
+	await expect(page.getByRole("heading", { name: "Use a subscription", level: 2 }))
+		.toBeVisible();
+	let chatgpt = row(page, "ChatGPT");
+	await expect(chatgpt.getByText("Use OpenAI models with your ChatGPT plan.")).toBeVisible();
+
+	await chatgpt.getByRole("button", { name: "Sign in to ChatGPT" }).click();
+	let dialog = page.getByRole("dialog", { name: "Sign in with ChatGPT" });
+	let opener = dialog.getByRole("link", { name: "Open ChatGPT sign-in" });
+	await expect(opener).toHaveAttribute(
+		"href",
+		/^https:\/\/auth\.openai\.com\/api\/accounts\/authorize\?/,
+	);
+	await expect(opener).toBeFocused();
+	await expect(opener).toHaveAttribute("target", "_blank");
+	let authorize = new URL((await opener.getAttribute("href"))!);
+	expect(authorize.searchParams.get("client_id")).toBe("dynamic_agent_client");
+	expect(authorize.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:1455/auth/callback");
+	expect(authorize.searchParams.get("resource")).toBe("https://api.openai.com/v1");
+	expect(authorize.searchParams.get("scope")).toContain("chatgpt.tokens.use.direct");
+	expect(authorize.searchParams.get("code_challenge_method")).toBe("S256");
+	expect(authorize.searchParams.get("ext_agent_host_id")).toMatch(/^urn:uuid:[0-9a-f-]{36}$/);
+	let state = authorize.searchParams.get("state")!;
+
+	let field = dialog.getByLabel("Address after signing in");
+	await expect(field).toHaveAccessibleDescription(/page at 127\.0\.0\.1/);
+	await field.fill("https://chatgpt.com/");
+	await dialog.getByRole("button", { name: "Connect" }).click();
+	await expect(dialog.getByRole("alert")).toHaveText(
+		"The address you paste starts with http://127.0.0.1:1455/auth/callback.",
+	);
+	await expect(field).toHaveAttribute("aria-invalid", "true");
+
+	await field.fill(
+		`http://127.0.0.1:1455/auth/callback?code=e2e-chatgpt-code&state=another&client_id=app_e2e`,
+	);
+	await dialog.getByRole("button", { name: "Connect" }).click();
+	await expect(dialog.getByRole("alert")).toContainText("from another sign-in");
+
+	await field.fill(
+		`http://127.0.0.1:1455/auth/callback?code=e2e-chatgpt-code&state=${state}&client_id=app_e2e`,
+	);
+	await dialog.getByRole("button", { name: "Connect" }).click();
+	await expect(dialog).toHaveCount(0);
+	await expect(chatgpt.getByText("Connected", { exact: true })).toBeVisible();
+	await expect(chatgpt.getByText("Your ChatGPT sign-in", { exact: true })).toBeVisible();
+	await expect(chatgpt.getByText("Never used", { exact: true })).toBeVisible();
+	await expect(chatgpt.getByRole("button", { name: "Disconnect ChatGPT" })).toBeFocused();
+	let listed = await page.evaluate(async () => await (await fetch("/api/ai/credentials")).text());
+	expect(listed).toContain('"chatgpt"');
+	expect(listed).not.toContain("e2e-chatgpt-access");
+	expect(listed).not.toContain("e2e-chatgpt-refresh");
+
+	await chatgpt.getByRole("button", { name: "Disconnect ChatGPT" }).click();
+	let disconnecting = page.getByRole("dialog", { name: "Disconnect ChatGPT?" });
+	await expect(disconnecting.getByRole("button", { name: "Cancel" })).toBeFocused();
+	await disconnecting.getByRole("button", { name: "Disconnect" }).click();
+	await expect(disconnecting).toHaveCount(0);
+	await expect(chatgpt.getByRole("button", { name: "Sign in to ChatGPT" })).toBeFocused();
+	await expect(chatgpt.getByText("Connected", { exact: true })).toHaveCount(0);
+});
+
+test("Claude's sign-in takes the code Claude shows, and a refused code starts a fresh sign-in", async ({ baseURL, page }) => {
+	await open(page, person(), baseURL!);
+	let claude = row(page, "Claude");
+	await expect(claude.getByText("Use Claude models with your Claude plan.")).toBeVisible();
+
+	await claude.getByRole("button", { name: "Sign in to Claude" }).click();
+	let dialog = page.getByRole("dialog", { name: "Sign in with Claude" });
+	let opener = dialog.getByRole("link", { name: "Open Claude sign-in" });
+	await expect(opener).toHaveAttribute("href", /^https:\/\/claude\.ai\/oauth\/authorize\?/);
+	let first = new URL((await opener.getAttribute("href"))!);
+	expect(first.searchParams.get("code")).toBe("true");
+	expect(first.searchParams.get("redirect_uri"))
+		.toBe("https://platform.claude.com/oauth/code/callback");
+	expect(first.searchParams.get("scope")).toContain("user:inference");
+	expect(first.searchParams.get("code_challenge_method")).toBe("S256");
+
+	let field = dialog.getByLabel("Code from Claude");
+	await field.fill(`e2e-claude-refused#${first.searchParams.get("state")}`);
+	await dialog.getByRole("button", { name: "Connect" }).click();
+	await expect(dialog.getByRole("alert")).toHaveText(
+		"Claude didn't accept this sign-in. Start again.",
+	);
+	await expect(field).toHaveValue("");
+	await expect(opener).not.toHaveAttribute("href", first.toString());
+	await expect(opener).toBeFocused();
+	let second = new URL((await opener.getAttribute("href"))!);
+	expect(second.searchParams.get("state")).not.toBe(first.searchParams.get("state"));
+
+	await field.fill(`e2e-claude-code#${second.searchParams.get("state")}`);
+	await dialog.getByRole("button", { name: "Connect" }).click();
+	await expect(dialog).toHaveCount(0);
+	await expect(claude.getByText("Connected", { exact: true })).toBeVisible();
+	await expect(claude.getByText("Your Claude sign-in", { exact: true })).toBeVisible();
+	await expect(row(page, "Anthropic").getByRole("button", { name: "Add key for Anthropic" }))
+		.toBeVisible();
 });

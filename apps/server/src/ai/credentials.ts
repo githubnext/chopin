@@ -1,10 +1,23 @@
 import { createHash, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
 
-import { AI_KEY_VARIABLES, AI_PROXY_PATH } from "@chopin/protocol/ai-credentials";
+import {
+	AI_KEY_VARIABLES,
+	AI_PROXY_PATH,
+	isSubscriptionProvider,
+} from "@chopin/protocol/ai-credentials";
 
 import { decrypted, encrypted, imported } from "../auth/session";
 import { COPILOT_RAW_TOKEN_HEADERS } from "./copilot";
 import { AI_UPSTREAMS } from "./proxy";
+import {
+	beginSignIn,
+	finishSignIn,
+	pastedAnswer,
+	RefreshRefused,
+	refreshSignIn,
+	SignInFailed,
+	SUBSCRIPTION_NAMES,
+} from "./subscriptions";
 
 import type {
 	AiCredentialSummary,
@@ -12,13 +25,22 @@ import type {
 	AiProviderGrant,
 	ConnectAiCredential,
 	CopilotAccess,
+	SubscriptionProvider,
 } from "@chopin/protocol/ai-credentials";
 import type { AiCredentialRecord, AiPlaceholder, Lease } from "../storage/model";
 import type { CopilotToken, CopilotTokenExchange } from "./copilot";
+import type { PendingSignIn, SignInEndpoints, SubscriptionTokens } from "./subscriptions";
 import type { StorageAdapter } from "../storage/port";
 
 const CREDENTIAL_CONTEXT = "chopin:ai-credential:v1";
 const PLACEHOLDER_PREFIX = "chopin_ai_";
+/**
+ * What a Claude sign-in's stand-in starts with after the prefix: the mark of Claude's OAuth tokens,
+ * so an agent that tells them from keys by it sends the stand-in the way a subscription token goes.
+ */
+const CLAUDE_TOKEN_MARK = "sk-ant-oat01-";
+/** How long a sign-in begun waits for the person to paste the provider's answer. */
+const SIGN_IN_MS = 15 * 60 * 1000;
 const PLACEHOLDER = /^chopin_ai_[A-Za-z0-9_-]{43}$/;
 const LAUNCH_PREFIX = "chopin_launch_";
 /** A key as providers issue them: printable, without spaces, so it can only ever be a header value. */
@@ -48,10 +70,13 @@ const END_RETRY_MAX_MS = 5 * 60_000;
 
 type Clock = () => Date;
 
-/** Why a connection was refused, said to the person who asked, with the status that says it. */
+/**
+ * Why a connection was refused, said to the person who asked, with the status that says it, and for
+ * a sign-in whether it must be started again (`restart`): the one begun ended or was spent.
+ */
 export class AiCredentialError extends Error {
 	override name = "AiCredentialError";
-	constructor(message: string, readonly status = 422) {
+	constructor(message: string, readonly status = 422, readonly restart = false) {
 		super(message);
 	}
 }
@@ -72,6 +97,8 @@ export type AiRefusal =
 	| "sign-in-unavailable"
 	| "no-copilot-access"
 	| "copilot-unavailable"
+	| "sign-in-ended"
+	| "renew-unavailable"
 	| "cancelled"
 	| "restarting"
 	| "busy";
@@ -167,8 +194,10 @@ function copilotAccount(record: AiCredentialRecord, githubToken: string): string
  * can't be read now, GitHub said the account has no Copilot subscription (`no-copilot-access`),
  * GitHub couldn't be asked or gave no answer about the account, as when neither its exchange nor
  * Copilot's model API takes the token (`copilot-unavailable`, which a later launch may not meet),
- * or Chopin knows the key won't work (`key-unusable`: its provider refused it as invalid, or this
- * deployment can't decrypt it), until it is connected again.
+ * Chopin knows the key or sign-in won't work (`key-unusable`: its provider refused it as invalid or
+ * refused to renew the sign-in, or this deployment can't decrypt it), until it is connected again,
+ * or a sign-in's expired access token couldn't be renewed now (`renew-unavailable`, which a later
+ * launch may not meet).
  */
 export type AiWithheld = {
 	provider: AiProvider;
@@ -177,7 +206,8 @@ export type AiWithheld = {
 		| "not-connected"
 		| "no-copilot-access"
 		| "copilot-unavailable"
-		| "key-unusable";
+		| "key-unusable"
+		| "renew-unavailable";
 };
 
 /** What a launch for a person would be given now: `providers` they can use, and what is `withheld`. */
@@ -213,6 +243,8 @@ export type AiCredentialsOptions = {
 	copilotToken: CopilotTokenExchange;
 	/** Each provider's origin a key is checked at before it is saved; tests point them at fakes. */
 	upstreams?: Partial<Record<AiProvider, string>>;
+	/** Where ChatGPT and Claude sign in and renew; their own unless tests point them at fakes. */
+	signIns?: SignInEndpoints;
 	fetch?: typeof fetch;
 	/**
 	 * Whether this process still holds the writer lease now: not released, not lost and not past
@@ -283,6 +315,7 @@ function summary(
 	record: AiCredentialRecord,
 	copilotAccess?: CopilotAccess,
 	unusable = false,
+	unchecked = false,
 ): AiCredentialSummary {
 	return {
 		provider: record.provider,
@@ -293,6 +326,7 @@ function summary(
 		...(record.rejectedAt ? { rejectedAt: record.rejectedAt.toISOString() } : {}),
 		...(record.provider === "github-copilot" && copilotAccess ? { copilotAccess } : {}),
 		...(unusable ? { unusable: true as const } : {}),
+		...(unchecked ? { unchecked: true as const } : {}),
 	};
 }
 
@@ -307,13 +341,36 @@ function signIn(userId: string): AiCredentialRecord {
 
 /** Chopin's base URL for a provider's API, which its proxy route serves. */
 export function aiBaseUrl(origin: string, provider: AiProvider): string {
-	return `${origin}${AI_PROXY_PATH}/${provider}${provider === "openai" ? "/v1" : ""}`;
+	let versioned = provider === "openai" || provider === "chatgpt";
+	return `${origin}${AI_PROXY_PATH}/${provider}${versioned ? "/v1" : ""}`;
 }
+
+/** The connection a credential is, across its sign-in's refreshes: its person, provider and secret. */
+function connection(record: AiCredentialRecord): string {
+	return `${record.userId}\n${record.provider}\n${record.updatedAt.getTime()}\n${
+		record.ciphertext ? Buffer.from(record.ciphertext).toString("hex") : ""
+	}`;
+}
+
+/** A UUID of this deployment's own, derived from its key, which ChatGPT takes as the agent host. */
+function deploymentUuid(key: Uint8Array): string {
+	let bytes = new Uint8Array(hkdfSync("sha256", key, "", "chopin:ai-sign-in-host:v1", 16));
+	bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+	bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+	let hex = Buffer.from(bytes).toString("hex");
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${
+		hex.slice(20)
+	}`;
+}
+
+/** What renewing a sign-in came to: its tokens, ended for good, or not possible now. */
+type Renewed = SubscriptionTokens | "ended" | "unavailable" | undefined;
 
 /**
  * The AI credentials people connect in Chopin, and the placeholders launches hold instead. A key
  * is kept encrypted under a key derived from SESSION_ENCRYPTION_KEY and is read only to answer a
- * proxied request; nothing returns it. A launch is handed a random placeholder per provider its
+ * proxied request; nothing returns it. A ChatGPT or Claude sign-in's tokens are kept the same way,
+ * and its access token is renewed before it expires, once for every caller at a time. A launch is handed a random placeholder per provider its
  * person can use, stored only as a digest, and each stands for that person's credential until
  * the launch ends, its machine is revoked or its document is archived. GitHub Copilot is reached
  * with the Copilot token GitHub exchanges the person's GitHub token for, which Chopin holds and
@@ -327,6 +384,8 @@ export class AiCredentials {
 	readonly #githubToken: AiCredentialsOptions["githubToken"];
 	readonly #exchange: CopilotTokenExchange;
 	readonly #upstreams: Partial<Record<AiProvider, string>>;
+	readonly #signInEndpoints: SignInEndpoints | undefined;
+	readonly #hostId: string;
 	readonly #fetch: typeof fetch;
 	readonly #writer: () => boolean;
 	readonly #lease: () => Lease;
@@ -354,6 +413,12 @@ export class AiCredentials {
 	#retrying: ReturnType<typeof setTimeout> | undefined;
 	/** Launches handed out lately, by id, with when: their owner may not have taken them up yet. */
 	readonly #handed = new Map<string, number>();
+	/** Sign-ins begun and not yet finished, by person and provider, with when each lapses. */
+	readonly #signIns = new Map<string, PendingSignIn & { until: number }>();
+	/** The refresh under way for each sign-in's connection, which every caller meanwhile awaits. */
+	readonly #renewing = new Map<string, Promise<Renewed>>();
+	/** Sign-ins whose access token the provider refused, renewed before their next use. */
+	readonly #stale = new Set<string>();
 
 	constructor(options: AiCredentialsOptions) {
 		this.#storage = options.storage;
@@ -365,6 +430,8 @@ export class AiCredentials {
 		this.#githubToken = options.githubToken;
 		this.#exchange = options.copilotToken;
 		this.#upstreams = options.upstreams ?? {};
+		this.#signInEndpoints = options.signIns;
+		this.#hostId = deploymentUuid(options.key);
 		this.#fetch = options.fetch ?? fetch;
 		this.#writer = options.writer ?? (() => true);
 		this.#lease = options.lease;
@@ -384,16 +451,101 @@ export class AiCredentials {
 	 */
 	async list(userId: string, githubToken?: string): Promise<AiCredentialSummary[]> {
 		let records = await this.#connected(userId);
-		return Promise.all(records.map(async record =>
-			summary(
+		return Promise.all(records.map(async record => {
+			if (record.kind === "subscription") return this.#signInSummary(record);
+			return summary(
 				record,
 				record.provider === "github-copilot"
 					? (await this.#copilotAccess(record, await this.#connectedToken(record, githubToken)))
 						.access
 					: undefined,
 				record.kind === "api-key" && !(await this.#secret(record)),
-			)
-		));
+			);
+		}));
+	}
+
+	/**
+	 * A sign-in as the list says it: renewed first when its access token expired or its provider
+	 * refused it, so it reads as connected only while the provider still renews it. One whose
+	 * renewal the provider refused for good needs signing in again; one that couldn't be renewed now
+	 * is `unchecked`.
+	 */
+	async #signInSummary(record: AiCredentialRecord): Promise<AiCredentialSummary> {
+		if (record.rejectedAt) return summary(record);
+		let renewed = await this.#signedIn(record, false);
+		if (renewed === "ended") {
+			return summary((await this.#record(record.userId, record.provider)) ?? record);
+		}
+		return summary(record, undefined, renewed === undefined, renewed === "unavailable");
+	}
+
+	/**
+	 * Begins signing `userId` in to a subscription: the provider's page they open, whose answer
+	 * `finishSignIn` takes. A sign-in begun again replaces the one before; nothing is stored, and
+	 * what they connected before is untouched until the provider gives tokens.
+	 */
+	startSignIn(userId: string, provider: SubscriptionProvider): { url: string } {
+		let now = this.#clock().getTime();
+		for (let [key, pending] of this.#signIns) {
+			if (pending.until <= now) this.#signIns.delete(key);
+		}
+		let pending = beginSignIn(provider, this.#hostId, this.#signInEndpoints);
+		this.#signIns.set(`${userId}\n${provider}`, { ...pending, until: now + SIGN_IN_MS });
+		return { url: pending.url };
+	}
+
+	/**
+	 * Finishes the sign-in `userId` began with what they pasted: checked against the sign-in before
+	 * anything is sent, then exchanged for the subscription's tokens, which are stored encrypted in
+	 * place of what they connected for it before. A paste that isn't the sign-in's answer keeps the
+	 * sign-in to paste again; once the code is sent it is spent, and a refusal stores nothing.
+	 */
+	async completeSignIn(
+		userId: string,
+		provider: SubscriptionProvider,
+		input: string,
+	): Promise<AiCredentialSummary> {
+		let key = `${userId}\n${provider}`;
+		let pending = this.#signIns.get(key);
+		if (!pending || pending.until <= this.#clock().getTime()) {
+			this.#signIns.delete(key);
+			throw new AiCredentialError(
+				`This ${SUBSCRIPTION_NAMES[provider]} sign-in has ended. Start it again.`,
+				422,
+				true,
+			);
+		}
+		let answer: ReturnType<typeof pastedAnswer>;
+		try {
+			answer = pastedAnswer(pending, input);
+		} catch (err) {
+			if (err instanceof SignInFailed) throw new AiCredentialError(err.message, err.status);
+			throw err;
+		}
+		if (this.#signIns.get(key) === pending) this.#signIns.delete(key);
+		let tokens: SubscriptionTokens;
+		try {
+			tokens = await finishSignIn(pending, answer, {
+				fetch: this.#fetch,
+				now: this.#clock().getTime(),
+				endpoints: this.#signInEndpoints,
+			});
+		} catch (err) {
+			if (err instanceof SignInFailed) {
+				throw new AiCredentialError(err.message, err.status, true);
+			}
+			throw err;
+		}
+		let record: AiCredentialRecord = {
+			userId,
+			provider,
+			kind: "subscription",
+			ciphertext: await encrypted(await this.#key, aad(userId, provider), { tokens }),
+			updatedAt: this.#clock(),
+		};
+		await this.#storage.aiCredentials.put(this.#lease(), record);
+		this.#told(userId);
+		return summary(record);
 	}
 
 	/**
@@ -423,6 +575,11 @@ export class AiCredentials {
 	): Promise<AiCredentialSummary> {
 		let updatedAt = this.#clock();
 		let record: AiCredentialRecord;
+		if (isSubscriptionProvider(provider)) {
+			throw new AiCredentialError(
+				`Sign in to connect ${SUBSCRIPTION_NAMES[provider]}; it takes no key.`,
+			);
+		}
 		if (input.kind === "github-sign-in") {
 			if (provider !== "github-copilot") {
 				throw new AiCredentialError("Only GitHub Copilot can use your GitHub sign-in.");
@@ -555,7 +712,9 @@ export class AiCredentials {
 			let grants: AiProviderGrant[] = admitted.usable.map(record => ({
 				provider: record.provider,
 				baseUrl: aiBaseUrl(this.#origin, record.provider),
-				placeholder: PLACEHOLDER_PREFIX + randomBytes(32).toString("base64url"),
+				placeholder: record.provider === "claude"
+					? PLACEHOLDER_PREFIX + CLAUDE_TOKEN_MARK + randomBytes(22).toString("base64url")
+					: PLACEHOLDER_PREFIX + randomBytes(32).toString("base64url"),
 				keyVariable: AI_KEY_VARIABLES[record.provider],
 			}));
 			let rows = this.#rows(launchId, launchDigest, input, generation, grants);
@@ -679,6 +838,20 @@ export class AiCredentials {
 					});
 					continue;
 				}
+			} else if (record.kind === "subscription") {
+				let renewed = record.rejectedAt
+					? "ended"
+					: fresh
+					? await this.#signedIn(record, false)
+					: await this.#tokens(record);
+				if (renewed === "unavailable") {
+					withheld.push({ provider: record.provider, reason: "renew-unavailable" });
+					continue;
+				}
+				if (!renewed || renewed === "ended") {
+					withheld.push({ provider: record.provider, reason: "key-unusable" });
+					continue;
+				}
 			} else if (record.rejectedAt || !await this.#secret(record)) {
 				withheld.push({ provider: record.provider, reason: "key-unusable" });
 				continue;
@@ -736,8 +909,14 @@ export class AiCredentials {
 	 * the key is invalid: no launch is given that key again, and the list says it needs connecting
 	 * again. A key replaced or removed since keeps nothing of it. Its person's launches that last are
 	 * told, once, as when they remove it; a refusal of a key already marked, or replaced, tells no one.
+	 * A sign-in's access token the provider refused is renewed before it is used again, and the
+	 * sign-in needs signing in again only once the provider refuses to renew it.
 	 */
 	async rejected(record: AiCredentialRecord): Promise<void> {
+		if (record.kind === "subscription") {
+			this.#stale.add(connection(record));
+			return;
+		}
 		if (record.kind !== "api-key") return;
 		if (await this.#storage.aiCredentials.rejected(record, this.#clock())) {
 			this.#told(record.userId);
@@ -1031,6 +1210,13 @@ export class AiCredentials {
 	): Promise<AiAuthorized | { refused: AiRefusal }> {
 		let record = await this.#record(found.userId, found.provider);
 		if (!record) return { refused: "not-connected" };
+		if (record.kind === "subscription") {
+			let renewed = record.rejectedAt ? "ended" : await this.#signedIn(record, fresh);
+			if (renewed === "ended") return { refused: "sign-in-ended" };
+			if (renewed === "unavailable") return { refused: "renew-unavailable" };
+			if (!renewed) return { refused: "not-connected" };
+			return { placeholder: found, record, secret: renewed.access, expiresAt: renewed.expires };
+		}
 		if (found.provider !== "github-copilot") {
 			let secret = await this.#secret(record);
 			return secret ? { placeholder: found, record, secret } : { refused: "not-connected" };
@@ -1101,6 +1287,89 @@ export class AiCredentials {
 		} catch {
 			return undefined;
 		}
+	}
+
+	/** A sign-in's tokens as last renewed, or as it was connected; undefined when they don't decrypt. */
+	async #tokens(record: AiCredentialRecord): Promise<SubscriptionTokens | undefined> {
+		let sealed = record.tokens ?? record.ciphertext;
+		if (!sealed) return undefined;
+		try {
+			let opened = await decrypted(await this.#key, aad(record.userId, record.provider), sealed);
+			let tokens = (opened as { tokens?: Partial<SubscriptionTokens> }).tokens;
+			return tokens && typeof tokens.access === "string" && typeof tokens.refresh === "string"
+					&& typeof tokens.expires === "number"
+				? tokens as SubscriptionTokens
+				: undefined;
+		} catch {
+			return undefined;
+		}
+	}
+
+	/**
+	 * A sign-in's tokens to send now: as they are while the access token has not reached its renewal
+	 * time and the provider has not refused it, else renewed first (always when `renew`). One refresh
+	 * runs per connection at a time and every caller meanwhile awaits it, so a rotated refresh token
+	 * is never presented twice. `ended` once the provider refused to renew it for good, which marks
+	 * the sign-in as needing signing in again and tells its person's lasting launches; `unavailable`
+	 * when it couldn't be renewed now, or this process no longer holds the writer lease; undefined
+	 * when the tokens don't decrypt or the connection changed meanwhile. An expired access token is
+	 * never returned.
+	 */
+	async #signedIn(record: AiCredentialRecord, renew: boolean): Promise<Renewed> {
+		let tokens = await this.#tokens(record);
+		if (!tokens) return undefined;
+		let identity = connection(record);
+		if (!renew && !this.#stale.has(identity) && this.#clock().getTime() < tokens.expires) {
+			return tokens;
+		}
+		let running = this.#renewing.get(identity);
+		if (!running) {
+			running = this.#renew(record, tokens, identity).finally(() => {
+				if (this.#renewing.get(identity) === running) this.#renewing.delete(identity);
+			});
+			this.#renewing.set(identity, running);
+		}
+		return running;
+	}
+
+	async #renew(
+		record: AiCredentialRecord,
+		tokens: SubscriptionTokens,
+		identity: string,
+	): Promise<Renewed> {
+		if (!this.#writer()) return "unavailable";
+		let renewed: SubscriptionTokens;
+		try {
+			renewed = await refreshSignIn(record.provider as SubscriptionProvider, tokens, {
+				fetch: this.#fetch,
+				now: () => this.#clock().getTime(),
+				endpoints: this.#signInEndpoints,
+			});
+		} catch (err) {
+			if (!(err instanceof RefreshRefused)) return "unavailable";
+			this.#stale.delete(identity);
+			if (await this.#storage.aiCredentials.rejected(record, this.#clock())) {
+				this.#told(record.userId);
+			}
+			return "ended";
+		}
+		this.#stale.delete(identity);
+		let sealed = await encrypted(await this.#key, aad(record.userId, record.provider), {
+			tokens: renewed,
+		});
+		let saved: boolean;
+		try {
+			saved = await this.#storage.aiCredentials.refreshed(this.#lease(), record, sealed);
+		} catch (err) {
+			console.warn("[ai] couldn't save a sign-in's renewed tokens", err);
+			return renewed;
+		}
+		if (saved) return renewed;
+		// Newer tokens were saved meanwhile, or the sign-in was replaced: what is stored wins.
+		let current = await this.#record(record.userId, record.provider);
+		if (!current || connection(current) !== identity) return undefined;
+		let stored = await this.#tokens(current);
+		return stored && this.#clock().getTime() < stored.expires ? stored : "unavailable";
 	}
 
 	/** The GitHub token a connected GitHub Copilot is used with: the one connected, or a sign-in's. */

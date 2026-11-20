@@ -205,3 +205,66 @@ test("a change replaces only its provider's summary", () => {
 	expect(replaced.map(credential => credential.suffix)).toEqual([undefined, "9zz9"]);
 	expect(withoutCredential(replaced, "openai")).toEqual([SIGN_IN]);
 });
+
+describe("ChatGPT and Claude sign-ins", () => {
+	function signIns(credentials: AiCredentialSummary[] = []) {
+		let [, chatgpt, claude] = accountRows(credentials, NOW).signIns;
+		return { chatgpt: chatgpt!, claude: claude! };
+	}
+
+	const CHATGPT: AiCredentialSummary = {
+		provider: "chatgpt",
+		kind: "subscription",
+		updatedAt: "2026-11-18T09:00:00.000Z",
+		lastUsedAt: "2026-11-19T11:58:00.000Z",
+	};
+
+	test("sit under Copilot, each offering its own sign-in until one is connected", () => {
+		let { chatgpt, claude } = signIns();
+		expect(chatgpt).toEqual({
+			provider: "chatgpt",
+			name: "ChatGPT",
+			lines: ["Use OpenAI models with your ChatGPT plan."],
+			getCopilot: false,
+			actions: ["sign-in"],
+		});
+		expect(claude.name).toBe("Claude");
+		expect(claude.actions).toEqual(["sign-in"]);
+		expect(accountRows([], NOW).keys.map(row => row.provider)).toEqual(["openai", "anthropic"]);
+	});
+
+	test("a connected sign-in says whose it is and when it was last used, and can be disconnected", () => {
+		expect(signIns([CHATGPT]).chatgpt).toEqual({
+			provider: "chatgpt",
+			name: "ChatGPT",
+			badge: { tone: "success", label: "Connected" },
+			lines: ["Your ChatGPT sign-in", "Last used 2m ago"],
+			getCopilot: false,
+			actions: ["disconnect"],
+		});
+	});
+
+	test("a sign-in its provider ended, or Chopin can't read, never reads as connected", () => {
+		let ended = signIns([{ ...CHATGPT, provider: "claude", rejectedAt: NOW_ISO }]).claude;
+		expect(ended.badge).toEqual({ tone: "warning", label: "Needs reconnecting" });
+		expect(ended.lines).toEqual(["Claude ended this sign-in. Sign in again to keep using it."]);
+		expect(ended.actions).toEqual(["sign-in", "disconnect"]);
+		let unreadable = signIns([{ ...CHATGPT, unusable: true }]).chatgpt;
+		expect(unreadable.badge?.label).toBe("Needs reconnecting");
+		expect(unreadable.lines).toEqual([
+			"Chopin can't read this sign-in anymore. Sign in again to keep using it.",
+		]);
+	});
+
+	test("a sign-in Chopin couldn't renew just now says the check couldn't finish", () => {
+		let row = signIns([{ ...CHATGPT, unchecked: true }]).chatgpt;
+		expect(row.badge).toEqual({ tone: "neutral", label: "Not checked" });
+		expect(row.lines).toEqual([
+			"Your ChatGPT sign-in",
+			"Chopin couldn't finish checking this sign-in.",
+		]);
+		expect(row.actions).toEqual(["disconnect"]);
+	});
+});
+
+const NOW_ISO = new Date(NOW).toISOString();

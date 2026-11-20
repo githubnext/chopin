@@ -8,15 +8,28 @@
 
 import { PLANNER_NAME } from "./planner-name";
 
-export const AI_PROVIDERS = ["github-copilot", "openai", "anthropic"] as const;
+export const AI_PROVIDERS = ["github-copilot", "openai", "anthropic", "chatgpt", "claude"] as const;
 export type AiProvider = (typeof AI_PROVIDERS)[number];
+
+/**
+ * The subscriptions a person signs in to rather than give a key for: `chatgpt` through Sign in with
+ * ChatGPT, sent to OpenAI's API, and `claude` through Claude's sign-in, sent to Anthropic's API.
+ */
+export const SUBSCRIPTION_PROVIDERS = ["chatgpt", "claude"] as const;
+export type SubscriptionProvider = (typeof SUBSCRIPTION_PROVIDERS)[number];
+
+export function isSubscriptionProvider(value: unknown): value is SubscriptionProvider {
+	return typeof value === "string"
+		&& (SUBSCRIPTION_PROVIDERS as readonly string[]).includes(value);
+}
 
 /**
  * How a person connected a provider: `api-key` is a key or token they gave Chopin, kept encrypted;
  * `github-sign-in` is GitHub Copilot through the GitHub sign-in Chopin already holds for them,
- * renewed by Chopin.
+ * renewed by Chopin; `subscription` is a ChatGPT or Claude sign-in, whose tokens Chopin keeps
+ * encrypted and refreshes.
  */
-export type AiCredentialKind = "api-key" | "github-sign-in";
+export type AiCredentialKind = "api-key" | "github-sign-in" | "subscription";
 
 /**
  * Whether a connected GitHub Copilot can be used: `access`; `none` when GitHub refused its GitHub
@@ -53,6 +66,11 @@ export type AiCredentialSummary = {
 	/** For GitHub Copilot: whether it has Copilot access, as GitHub said in the last few minutes. */
 	copilotAccess?: CopilotAccess;
 	unusable?: true;
+	/**
+	 * For a subscription whose access token had expired: Chopin couldn't renew it just now, so it
+	 * can't say whether the sign-in still works.
+	 */
+	unchecked?: true;
 };
 
 export type AiCredentialList = { credentials: AiCredentialSummary[] };
@@ -61,6 +79,18 @@ export type AiCredentialList = { credentials: AiCredentialSummary[] };
 export type ConnectAiCredential =
 	| { kind: "api-key"; secret: string }
 	| { kind: "github-sign-in" };
+
+/**
+ * What `POST /api/ai/sign-ins/:provider` answers: the provider's page where the person signs in,
+ * which ends on a page that shows what they paste back.
+ */
+export type AiSignInStart = { url: string };
+
+/**
+ * The body of `POST /api/ai/sign-ins/:provider/finish`: for ChatGPT the full address the browser
+ * was sent to after signing in, for Claude the code Claude shows.
+ */
+export type AiSignInFinish = { input: string };
 
 /**
  * One provider as a launch is given it: the agent sends `placeholder` as its key to `baseUrl`,
@@ -78,6 +108,8 @@ export const AI_KEY_VARIABLES: Record<AiProvider, string> = {
 	"github-copilot": "COPILOT_GITHUB_TOKEN",
 	openai: "OPENAI_API_KEY",
 	anthropic: "ANTHROPIC_API_KEY",
+	chatgpt: "CHATGPT_ACCESS_TOKEN",
+	claude: "CLAUDE_CODE_OAUTH_TOKEN",
 };
 
 /**

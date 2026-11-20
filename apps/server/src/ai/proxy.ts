@@ -42,6 +42,8 @@ export const AI_UPSTREAMS: Record<AiProvider, string> = {
 	"github-copilot": COPILOT_MODEL_API,
 	openai: "https://api.openai.com",
 	anthropic: "https://api.anthropic.com",
+	chatgpt: "https://api.openai.com",
+	claude: "https://api.anthropic.com",
 };
 
 /** The public model catalog agents refresh their model lists from. */
@@ -54,7 +56,31 @@ const CREDENTIAL_HEADER: Record<AiProvider, "authorization" | "x-api-key"> = {
 	"github-copilot": "authorization",
 	openai: "authorization",
 	anthropic: "x-api-key",
+	chatgpt: "authorization",
+	claude: "authorization",
 };
+
+/**
+ * The Claude Code release a Claude sign-in's requests name, as Atomic's do: Anthropic serves newer
+ * models to a subscription token only for a recent enough `claude-cli` user agent.
+ */
+const CLAUDE_CODE_VERSION = "2.1.322";
+/** The betas a Claude subscription token's requests carry, ahead of any the agent asked for. */
+const CLAUDE_SIGN_IN_BETAS = ["claude-code-20250219", "oauth-2025-04-20"];
+
+/**
+ * Sets the headers Atomic sends with a Claude subscription token, whatever the agent sent: the
+ * Claude Code identity and the OAuth betas, keeping the other betas it asked for.
+ */
+function claudeSignInHeaders(headers: Headers): void {
+	let asked = (headers.get("anthropic-beta") ?? "").split(",").map(beta => beta.trim()).filter(
+		Boolean,
+	);
+	headers.set("anthropic-beta", [...new Set([...CLAUDE_SIGN_IN_BETAS, ...asked])].join(","));
+	headers.set("anthropic-dangerous-direct-browser-access", "true");
+	headers.set("user-agent", `claude-cli/${CLAUDE_CODE_VERSION}`);
+	headers.set("x-app", "cli");
+}
 
 const SEGMENT = "[A-Za-z0-9][A-Za-z0-9._:-]*";
 
@@ -78,6 +104,15 @@ const ROUTES: Record<AiProvider, Array<{ methods: readonly string[]; path: RegEx
 	anthropic: [
 		{ methods: ["GET"], path: new RegExp(`^/v1/models(?:/${SEGMENT})?$`) },
 		{ methods: ["POST"], path: /^\/v1\/(?:messages(?:\/count_tokens)?|complete)$/ },
+	],
+	chatgpt: [
+		{ methods: ["GET"], path: new RegExp(`^/v1/models(?:/${SEGMENT})?$`) },
+		{ methods: ["GET", "POST"], path: new RegExp(`^/v1/responses(?:/${SEGMENT}){0,2}$`) },
+		{ methods: ["POST"], path: /^\/v1\/(?:chat\/completions|completions|embeddings)$/ },
+	],
+	claude: [
+		{ methods: ["GET"], path: new RegExp(`^/v1/models(?:/${SEGMENT})?$`) },
+		{ methods: ["POST"], path: /^\/v1\/messages(?:\/count_tokens)?$/ },
 	],
 };
 
@@ -134,13 +169,16 @@ const RETURNED_RESPONSE_PREFIXES = ["x-ratelimit-", "anthropic-ratelimit-"];
 /**
  * How each provider whose key a person gives Chopin says, in a 401's body, that the key itself is
  * invalid, which no retry changes: OpenAI's `invalid_api_key`, Anthropic's `authentication_error`.
- * A rate limit, or a refusal of one model, says nothing about the key.
+ * A rate limit, or a refusal of one model, says nothing about the key. Any 401 to a ChatGPT or Claude
+ * sign-in's access token has it renewed before its next use.
  */
 const KEY_REFUSED: Partial<Record<AiProvider, (body: unknown) => boolean>> = {
 	openai: body =>
 		(body as { error?: { code?: unknown } } | null)?.error?.code === "invalid_api_key",
 	anthropic: body =>
 		(body as { error?: { type?: unknown } } | null)?.error?.type === "authentication_error",
+	chatgpt: () => true,
+	claude: () => true,
 };
 /** The largest refusal body read for what it says about the key. */
 const MAX_REFUSAL = 64 * 1024;
@@ -181,6 +219,14 @@ const REFUSALS: Record<AiRefusal, { status: number; message: string }> = {
 	"copilot-unavailable": {
 		status: 502,
 		message: "GitHub can't give a Copilot token now. Try again in a moment.",
+	},
+	"sign-in-ended": {
+		status: 403,
+		message: "This sign-in has ended. Sign in again in Chopin's AI accounts.",
+	},
+	"renew-unavailable": {
+		status: 502,
+		message: "Chopin couldn't renew this sign-in now. Try again in a moment.",
 	},
 	cancelled: { status: 499, message: "The request was cancelled." },
 	restarting: {
@@ -648,6 +694,7 @@ export function aiProxy(options: AiProxyOptions) {
 					: authorized.secret,
 			);
 			for (let [name, value] of Object.entries(authorized.headers ?? {})) headers.set(name, value);
+			if (provider === "claude") claudeSignInHeaders(headers);
 			let origin = options.upstreams?.[provider] ?? authorized.origin ?? AI_UPSTREAMS[provider];
 			let target = upstreamUrl(origin, path, url.search);
 			let init: RequestInit = {

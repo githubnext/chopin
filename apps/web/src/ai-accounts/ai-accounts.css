@@ -199,6 +199,21 @@
 	gap: calc(var(--spacing) * 1.5);
 }
 
+.ai-accounts-sign-in-link {
+	align-self: flex-start;
+
+	&[aria-disabled="true"] {
+		opacity: 0.4;
+	}
+}
+
+.ai-accounts-field-hint {
+	margin: 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	text-wrap: pretty;
+}
+
 .ai-accounts-dialog-actions {
 	display: flex;
 	justify-content: flex-end;

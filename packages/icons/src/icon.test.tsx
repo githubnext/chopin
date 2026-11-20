@@ -34,6 +34,26 @@ test("GitHub reference glyphs share the 16px octicon grid and stay decorative", 
 	expect(drawn.size).toBe(glyphs.length);
 });
 
+test("provider marks are monochrome, sized as asked and decorative unless named", () => {
+	for (let Mark of [icons.OpenAIIcon, icons.AnthropicIcon]) {
+		let html = renderToStaticMarkup(<Mark size={18} />);
+		expect(html, Mark.name).toContain('viewBox="0 0 24 24"');
+		expect(html, Mark.name).toContain('width="18"');
+		expect(html, Mark.name).toContain('height="18"');
+		expect(html, Mark.name).toContain('fill="currentColor"');
+		expect(html, Mark.name).toContain('aria-hidden="true"');
+		expect(html, Mark.name).not.toMatch(/fill="#/);
+
+		let named = renderToStaticMarkup(<Mark aria-label="Provider" />);
+		expect(named, Mark.name).toContain('aria-label="Provider"');
+		expect(named, Mark.name).toContain('role="img"');
+		expect(named, Mark.name).not.toContain("aria-hidden");
+	}
+	expect(renderToStaticMarkup(<icons.OpenAIIcon />)).not.toBe(
+		renderToStaticMarkup(<icons.AnthropicIcon />),
+	);
+});
+
 test("the half-progress icon is a ring with a filled half, in the current colour", () => {
 	let html = renderToStaticMarkup(<icons.ProgressHalfIcon />);
 	expect(html).toContain('viewBox="0 0 18 18"');
