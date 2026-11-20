@@ -173,11 +173,20 @@ durable.
   placeholders, and archiving a document deletes them for good: a launch prepared
   across an archive stores and publishes nothing, restored or not
   (`channels.archive_generation`). Copilot is sent
-  only the Copilot token Chopin exchanges the person's GitHub token for and renews,
-  never the GitHub token and never one past its expiry; a launch gets a Copilot
-  placeholder only when GitHub gives that token a Copilot token at launch (through
+  the Copilot token Chopin exchanges the person's GitHub token for and renews, to the
+  account's Copilot host, never one past its expiry; GitHub exchanges only Copilot's own
+  clients' tokens, so for a GitHub token it refuses (a GitHub App's user token, as a
+  Chopin sign-in is, or a personal access token) Copilot is sent that GitHub token
+  itself, as Copilot's CLI sends one (`Authorization: Bearer` with
+  `Copilot-Integration-Id: copilot-developer-cli`), to `https://api.githubcopilot.com`
+  alone and only once that host's model list took it (`apps/server/src/ai/copilot.ts`);
+  either is taken out of what is passed back and never logged. A launch gets a Copilot
+  placeholder only when GitHub gives that token Copilot access at launch (through
   the person's sign-in unless they connected a token instead), and no
-  placeholder for a provider its person can't use. Every answer GitHub gives about
+  placeholder for a provider its person can't use. Only GitHub naming no seat
+  (`no_copilot_access`, `not_signed_up`, `subscription_ended`) is no access; a token
+  neither GitHub's exchange nor Copilot's model API takes is a check that couldn't be
+  done, never no subscription. Every answer GitHub gives about
   Copilot access (a launch's, the list's, the AI accounts page's check's, a proxied request's) is kept
   against the account it concerns, ordered by when it completed, and replaces older
   answers of the other kind held for that account; one that crossed an answer of the

@@ -139,7 +139,7 @@ function copilotRow(
 		badge: NOT_CHECKED,
 		lines: token ? [...ending, NOT_CHECKED_TOKEN] : ["Your GitHub sign-in", NOT_CHECKED_SIGN_IN],
 		getCopilot: false,
-		actions: token ? ["replace", ...switchBack] : [],
+		actions: token ? ["replace", ...switchBack] : ["use-token"],
 	};
 }
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { copilotTokenExchange } from "./copilot";
+import { COPILOT_RAW_TOKEN_HEADERS, copilotTokenExchange } from "./copilot";
 
 let servers: Array<{ stop: (force: boolean) => void }> = [];
 afterEach(() => {
@@ -8,12 +8,14 @@ afterEach(() => {
 	servers = [];
 });
 
-function github(
-	status: number,
-	body: unknown = { token: "tid=1;exp=2", expires_at: 2_000 },
-	headers: Record<string, string> = {},
-) {
-	let asked: Array<{ path: string; authorization: string | null }> = [];
+type Asked = { path: string; authorization: string | null; integration: string | null };
+
+/**
+ * A server that answers every request with `status` and `body`: JSON, or a string as the plain
+ * text GitHub and Copilot send some refusals in.
+ */
+function serve(status: number, body: unknown, headers: Record<string, string> = {}) {
+	let asked: Asked[] = [];
 	let server = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
@@ -21,27 +23,141 @@ function github(
 			asked.push({
 				path: new URL(request.url).pathname,
 				authorization: request.headers.get("authorization"),
+				integration: request.headers.get("copilot-integration-id"),
 			});
-			return Response.json(body, { status, headers });
+			return typeof body === "string"
+				? new Response(body, {
+					status,
+					headers: { "content-type": "text/plain; charset=utf-8", ...headers },
+				})
+				: Response.json(body, { status, headers });
 		},
 	});
 	servers.push(server);
-	return { api: `http://127.0.0.1:${server.port}`, asked };
+	return { url: `http://127.0.0.1:${server.port}`, asked };
+}
+
+/** GitHub's API, which exchanges a GitHub token for a Copilot token. */
+function github(
+	status: number,
+	body: unknown = { token: "tid=1;exp=2", expires_at: 2_000 },
+	headers: Record<string, string> = {},
+) {
+	let { url, asked } = serve(status, body, headers);
+	return { api: url, asked };
+}
+
+/** Copilot's model API, whose model list answers whether it takes a GitHub token itself. */
+function copilot(status: number, body: unknown = { data: [{ id: "gpt-5" }] }) {
+	let { url, asked } = serve(status, body);
+	return { copilotApi: url, asked };
+}
+
+/** GitHub's refusal for an account with no Copilot seat, named by its `notification_id`. */
+function noSeat(notificationId: string) {
+	return {
+		can_signup_for_limited: true,
+		message: "You do not have access to GitHub Copilot.",
+		error_details: {
+			notification_id: notificationId,
+			message: "No access to GitHub Copilot found.",
+			title: "Account unavailable",
+			url: "https://github.com/features/copilot",
+		},
+	};
+}
+
+/**
+ * GitHub's answers when it won't exchange a token at all, for a person with a seat: a GitHub App's
+ * user token or another app's OAuth token (the plain-text 403 page), and a personal access token
+ * (404), as observed for each.
+ */
+const NOT_EXCHANGED =
+	"403 Forbidden. For more on scraping GitHub and how it may affect your rights, "
+	+ "please review our Terms of Service (https://docs.github.com/en/site-policy/github-terms/github-terms-of-service).\n";
+const NOT_EXCHANGED_ANSWERS: Array<[number, unknown]> = [
+	[403, NOT_EXCHANGED],
+	[404, { message: "Not Found" }],
+	[401, { message: "Bad credentials" }],
+	[403, { message: "Resource not accessible by integration" }],
+	// Refused for the account, but not for want of a seat.
+	[403, noSeat("feature_flag_blocked")],
+];
+
+const NOW = Date.parse("2026-11-19T12:00:00.000Z");
+
+async function failure(answer: Promise<unknown>): Promise<Error> {
+	let failed = await answer.then(() => undefined, (err: unknown) => err);
+	expect(failed).toBeInstanceOf(Error);
+	return failed as Error;
 }
 
 describe("Copilot token exchange", () => {
-	it("is the Copilot token GitHub gives for a GitHub token, and none when GitHub refuses one", async () => {
+	it("is the Copilot token GitHub gives for a GitHub token, and asks Copilot nothing", async () => {
 		let given = github(200);
-		expect(await copilotTokenExchange({ api: given.api })("ghu_person")).toEqual({
-			token: "tid=1;exp=2",
-			expiresAt: 2_000_000,
-		});
+		let model = copilot(200);
+		expect(
+			await copilotTokenExchange({ api: given.api, copilotApi: model.copilotApi })("ghu_person"),
+		).toEqual({ token: "tid=1;exp=2", expiresAt: 2_000_000 });
 		expect(given.asked).toEqual([
-			{ path: "/copilot_internal/v2/token", authorization: "token ghu_person" },
+			{ path: "/copilot_internal/v2/token", authorization: "token ghu_person", integration: null },
 		]);
-		for (let status of [401, 403, 404]) {
-			expect(await copilotTokenExchange({ api: github(status).api })("ghu_person"))
-				.toBeUndefined();
+		expect(model.asked).toEqual([]);
+	});
+
+	it("is none only when GitHub says the account has no Copilot subscription", async () => {
+		for (let id of ["no_copilot_access", "not_signed_up", "subscription_ended"]) {
+			let model = copilot(200);
+			let exchange = copilotTokenExchange({
+				api: github(403, noSeat(id)).api,
+				copilotApi: model.copilotApi,
+			});
+			expect(await exchange("ghu_person")).toBeUndefined();
+			expect(model.asked).toEqual([]);
+		}
+	});
+
+	it("is the GitHub token itself, for Copilot's model API, when GitHub won't exchange it and Copilot takes it", async () => {
+		for (let [status, body] of NOT_EXCHANGED_ANSWERS) {
+			let model = copilot(200);
+			let exchange = copilotTokenExchange({
+				api: github(status, body).api,
+				copilotApi: model.copilotApi,
+				clock: () => NOW,
+			});
+			expect(await exchange("ghu_person")).toEqual({
+				token: "ghu_person",
+				expiresAt: NOW + 30 * 60_000,
+				raw: true,
+			});
+			expect(model.asked).toEqual([{
+				path: "/models",
+				authorization: "Bearer ghu_person",
+				integration: "copilot-developer-cli",
+			}]);
+		}
+		expect(COPILOT_RAW_TOKEN_HEADERS).toEqual({
+			"copilot-integration-id": "copilot-developer-cli",
+		});
+	});
+
+	it("can't be told, and is never none, when neither GitHub nor Copilot takes the token", async () => {
+		for (let [status, body] of NOT_EXCHANGED_ANSWERS) {
+			for (
+				let [refusal, said] of [
+					[401, "unauthorized: token authentication failed"],
+					[403, { error: { message: "Forbidden" } }],
+					[500, "upstream failure"],
+				] as Array<[number, unknown]>
+			) {
+				let exchange = copilotTokenExchange({
+					api: github(status, body).api,
+					copilotApi: copilot(refusal, said).copilotApi,
+				});
+				let failed = await failure(exchange("ghu_person"));
+				expect(failed.message).toContain(String(refusal));
+				expect(failed.message).not.toContain("ghu_person");
+			}
 		}
 	});
 
@@ -62,13 +178,23 @@ describe("Copilot token exchange", () => {
 	});
 
 	it("can't be told from an answer that says nothing about the account", async () => {
-		expect(copilotTokenExchange({ api: github(500).api })("ghu_person")).rejects.toThrow("500");
-		expect(copilotTokenExchange({ api: github(200, { message: "ok" }).api })("ghu_person"))
-			.rejects.toThrow("without a token");
-		expect(copilotTokenExchange({ api: "http://127.0.0.1:9" })("ghu_person")).rejects.toThrow();
+		let unreachable = copilot(503, "unavailable").copilotApi;
+		expect(
+			(await failure(
+				copilotTokenExchange({ api: github(500).api, copilotApi: unreachable })("ghu_person"),
+			)).message,
+		).toContain("500");
+		expect(
+			(await failure(
+				copilotTokenExchange({ api: github(200, { message: "ok" }).api })("ghu_person"),
+			)).message,
+		).toContain("without a token");
+		await failure(
+			copilotTokenExchange({ api: "http://127.0.0.1:9", copilotApi: unreachable })("ghu_person"),
+		);
 	});
 
-	it("can't be told from a refusal GitHub gives for its rate limit", async () => {
+	it("can't be told from a refusal GitHub gives for its rate limit, and asks Copilot nothing then", async () => {
 		let limited = { message: "API rate limit exceeded" };
 		for (
 			let [status, headers] of [
@@ -77,10 +203,15 @@ describe("Copilot token exchange", () => {
 				[429, {}],
 			] as Array<[number, Record<string, string>]>
 		) {
-			let exchange = copilotTokenExchange({ api: github(status, limited, headers).api });
-			await expect(exchange("ghu_person")).rejects.toThrow(String(status));
+			let model = copilot(200);
+			let exchange = copilotTokenExchange({
+				api: github(status, limited, headers).api,
+				copilotApi: model.copilotApi,
+			});
+			expect((await failure(exchange("ghu_person"))).message).toContain(String(status));
+			expect(model.asked).toEqual([]);
 		}
-		let refused = github(403, { message: "Resource not accessible" }, {
+		let refused = github(403, noSeat("no_copilot_access"), {
 			"x-ratelimit-remaining": "4999",
 		});
 		expect(await copilotTokenExchange({ api: refused.api })("ghu_person")).toBeUndefined();

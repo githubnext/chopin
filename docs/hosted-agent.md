@@ -987,7 +987,8 @@ GitHub's answer about Copilot access kept a few minutes and nothing stored). A
 person with no Copilot access and no API key is refused with `no-ai-account`
 before anything is saved, told privately that chopin needs an AI account, with
 a link to AI accounts, and their words return to the composer. Where GitHub
-couldn't be asked about their Copilot access, or their sign-in couldn't be read,
+couldn't be asked about their Copilot access or said nothing about it (`unknown`,
+see GitHub Copilot below), or their sign-in couldn't be read,
 and they have no key, the same refusal says the check couldn't finish and to
 send it again, never that they have no subscription. Accounts that keep
 changing while they are read, or storage that fails, are a passing refusal
@@ -1005,11 +1006,11 @@ launch is someone else's or the same person's, before it reads any credential.
 So a placeholder copied out of one launch, onto the same runner or elsewhere,
 reaches nothing.
 
-| Provider         | Base URL                            | Key variable           | Sent to                                                          | Credential header |
-| ---------------- | ----------------------------------- | ---------------------- | ---------------------------------------------------------------- | ----------------- |
-| `github-copilot` | `<origin>/api/v1/ai/github-copilot` | `COPILOT_GITHUB_TOKEN` | the account's Copilot host, else `https://api.githubcopilot.com` | `Authorization`   |
-| `openai`         | `<origin>/api/v1/ai/openai/v1`      | `OPENAI_API_KEY`       | `https://api.openai.com`                                         | `Authorization`   |
-| `anthropic`      | `<origin>/api/v1/ai/anthropic`      | `ANTHROPIC_API_KEY`    | `https://api.anthropic.com`                                      | `x-api-key`       |
+| Provider         | Base URL                            | Key variable           | Sent to                                                                                                                                      | Credential header |
+| ---------------- | ----------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `github-copilot` | `<origin>/api/v1/ai/github-copilot` | `COPILOT_GITHUB_TOKEN` | a Copilot token to the account's Copilot host, else `https://api.githubcopilot.com`; a GitHub token to `https://api.githubcopilot.com` alone | `Authorization`   |
+| `openai`         | `<origin>/api/v1/ai/openai/v1`      | `OPENAI_API_KEY`       | `https://api.openai.com`                                                                                                                     | `Authorization`   |
+| `anthropic`      | `<origin>/api/v1/ai/anthropic`      | `ANTHROPIC_API_KEY`    | `https://api.anthropic.com`                                                                                                                  | `x-api-key`       |
 
 **The credential proxy.** `/api/v1/ai/<provider>/…` serves each provider's model
 API and nothing else on its host (`ROUTES` in `apps/server/src/ai/proxy.ts`):
@@ -1090,15 +1091,30 @@ recorded before it was sent (see Usage below).
 
 **GitHub Copilot.** Copilot's model API takes a Copilot token, which GitHub
 exchanges a GitHub token for (`GET /copilot_internal/v2/token` on
-`api.github.com`). Chopin makes that exchange itself, with the person's current
-GitHub user token for a GitHub sign-in or the token they connected as an
-`api-key`, and sends Copilot only the Copilot token, never the GitHub token. It
+`api.github.com`), or, as Copilot's own CLI sends one, a GitHub token itself.
+Chopin asks with the person's current GitHub user token for a GitHub sign-in or
+the token they connected as an `api-key`. It makes the exchange first, and when
+GitHub gives a Copilot token it sends Copilot only that, never the GitHub token.
+GitHub exchanges only the tokens of Copilot's own clients, so it refuses a
+GitHub App's user token (a Chopin sign-in's), another app's OAuth token and a
+personal access token, a seat-holder's included: a plain-text 403 page for the
+first two, a 404 for a fine-grained token. Then Chopin asks Copilot's model API
+whether it takes the GitHub token itself (`GET https://api.githubcopilot.com/models`
+with `Authorization: Bearer` and `Copilot-Integration-Id: copilot-developer-cli`,
+the integration Copilot's CLI is), and when it does, the proxy sends that GitHub
+token, in `Authorization: Bearer` with that integration id in place of any the
+agent sent, to `https://api.githubcopilot.com` and no other host, never to one a
+Copilot token names (`COPILOT_MODEL_API` and `COPILOT_RAW_TOKEN_HEADERS` in
+`apps/server/src/ai/copilot.ts`). Whichever token is sent is taken out of what is
+passed back, as any credential is, and is never logged. It
 holds a Copilot token until a minute before it expires, and five minutes at
-most, then asks for the next. It never sends one past its expiry: a token GitHub
+most, then asks for the next; Copilot taking a GitHub token itself is relied on
+for 30 minutes, as a Copilot token's life, and held as long as one. It never
+sends one past its expiry: a token GitHub
 gives already expired, or that expires while GitHub answers, is taken as GitHub
 not answering (`copilot-unavailable`), and one that expires while a request's
 body arrives, or while the request is built, is replaced by the next before the request is sent; when GitHub names the account's own Copilot host
-(`endpoints.api`, a `githubcopilot.com` host) the proxy sends there. A GitHub
+(`endpoints.api`, a `githubcopilot.com` host) the proxy sends its Copilot token there. A GitHub
 sign-in's token comes from the paired machine's own GitHub authorization when
 the launch runs on the person's own machine, else from their live browser
 login, each refreshed by Chopin before it expires. No runner sees either token.
@@ -1106,13 +1122,21 @@ A launch whose person has no live login Chopin can read gets no Copilot
 placeholder, and a placeholder handed out before is refused with
 `sign-in-unavailable`.
 
-A GitHub sign-in is not Copilot access. A Copilot token given is `access`; a
-refusal (401, 403 or 404) is `none`, which means the account has no Copilot
-subscription and is not an error; anything else is `unknown`, a refusal for GitHub's
-rate limit included (a 429, or a 403 with `Retry-After` or
-`X-RateLimit-Remaining: 0`), which records no seat lost. The list and the
+A GitHub sign-in is not Copilot access. A Copilot token given, or the GitHub
+token taken by Copilot's model API, is `access`. `none`, which is not an error,
+is only GitHub saying the account has no Copilot subscription: an exchange
+refused with a JSON body whose `error_details.notification_id` is
+`no_copilot_access`, `not_signed_up` or `subscription_ended`, as GitHub tells
+Copilot's own clients. Anything else is `unknown`, which says nothing about the
+account and records no seat lost: GitHub or Copilot not answering, a refusal for
+GitHub's rate limit (a 429, or a 403 with `Retry-After` or
+`X-RateLimit-Remaining: 0`, after which Copilot's model API is not asked), and a
+token neither takes (any other refusal of the exchange, then any refusal by
+Copilot's model API). The AI accounts page shows `unknown` as a check that
+couldn't be done, made again when the page is next opened, with _Use a token
+instead_ for a sign-in, and never as no subscription. The list and the
 connect answer carry it as `copilotAccess`, from an answer at most five minutes
-old; `POST /api/ai/credentials/github-copilot/check` asks GitHub again at once.
+old (`unknown` is never held); `POST /api/ai/credentials/github-copilot/check` asks GitHub again at once.
 Every answer GitHub gives, to the list, a check as the AI accounts page opens, a launch or a proxied
 request, is recorded against the account it is about: the person's GitHub
 sign-in, whichever of its tokens asked (a browser login's or a paired
@@ -1308,7 +1332,9 @@ stand-in the agent got wrong on a live launch end nothing. A Chopin from before 
 route answers it 404, and the relay then takes only `launch-ended` at its word.
 
 A Copilot agent sends `Copilot-Integration-Id: vscode-chat`, the header of an editor's
-sign-in, since Chopin sends Copilot an exchanged Copilot token. Each request a launch's
+sign-in, for the exchanged Copilot token Chopin sends Copilot; when Chopin sends a GitHub
+token Copilot takes itself instead, the proxy replaces it with `copilot-developer-cli`,
+Copilot's CLI's (see GitHub Copilot above). Each request a launch's
 placeholder sends is recorded against that launch (see Usage above).
 
 **What the proxy guarantees, and what it does not.** The cutoffs (an end, a

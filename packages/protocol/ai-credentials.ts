@@ -19,9 +19,10 @@ export type AiProvider = (typeof AI_PROVIDERS)[number];
 export type AiCredentialKind = "api-key" | "github-sign-in";
 
 /**
- * Whether a connected GitHub Copilot can be used: `access`, `none` when GitHub refused its GitHub
- * token a Copilot token (the account has no Copilot subscription), or `unknown` when Chopin
- * couldn't ask.
+ * Whether a connected GitHub Copilot can be used: `access`; `none` when GitHub refused its GitHub
+ * token a Copilot token saying the account has no Copilot subscription; or `unknown` when Chopin
+ * couldn't find out: GitHub couldn't be asked, or neither GitHub's exchange nor Copilot's model API
+ * took the token, which says nothing about the subscription.
  */
 export type CopilotAccess = "access" | "none" | "unknown";
 

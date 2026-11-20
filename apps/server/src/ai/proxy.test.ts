@@ -12,6 +12,7 @@ import { testLease } from "../storage/contract-support";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { WriterLease } from "../storage/writer-lease";
 import { copilotTokenExchange } from "./copilot";
+import { AI_ACCOUNT_UNCHECKED, aiAccountRefusal } from "./account-check";
 import { AiCredentialError, AiCredentials } from "./credentials";
 import { aiProxy, aiTransport } from "./proxy";
 import { githubSignIn, registerAiRoutes } from "./routes";
@@ -145,6 +146,22 @@ async function setup() {
 	let entitled = new Map<string, number>();
 	/** The headers GitHub answers a token's refusal with, as a rate limit's are. */
 	let refusalHeaders = new Map<string, Record<string, string>>();
+	/**
+	 * Tokens GitHub won't exchange at all, whatever the account has, as it refuses a token from an app
+	 * that isn't one of Copilot's clients: a 403 page that says nothing about the account.
+	 */
+	let notExchanged = new Set<string>();
+	/**
+	 * GitHub tokens Copilot's model API takes as they are, as it takes a seat-holder's whichever app
+	 * they came from; it refuses any other as Copilot does a token it can't authenticate.
+	 */
+	let takenRaw = new Set<string>();
+	let copilotModels = provider(request => {
+		let token = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
+		return takenRaw.has(token)
+			? Response.json({ data: [{ id: "gpt-e2e" }] })
+			: new Response("unauthorized: token authentication failed", { status: 401 });
+	});
 	let copilotLifetime = { seconds: 1_800 };
 	/** Replies GitHub decides when it is asked but delivers only once released, by token. */
 	let heldReplies = new Map<
@@ -153,16 +170,33 @@ async function setup() {
 	>();
 	let githubApi = provider(async request => {
 		let token = request.headers.get("authorization")?.replace(/^token /, "") ?? "";
-		let status = entitled.get(token) ?? 200;
-		let reply = status === 200
+		let status = notExchanged.has(token) ? 403 : entitled.get(token) ?? 200;
+		let reply = notExchanged.has(token)
+			? new Response("403 Forbidden. For more on scraping GitHub, see the Terms of Service.\n", {
+				status,
+				headers: { "content-type": "text/plain; charset=utf-8" },
+			})
+			: status === 200
 			? Response.json({
 				token: `tid=copilot;for=${token}`,
 				expires_at: Math.floor(now.getTime() / 1000) + copilotLifetime.seconds,
 			})
-			: Response.json({ message: "Resource not accessible" }, {
-				status,
-				headers: refusalHeaders.get(token) ?? {},
-			});
+			// A 403 is GitHub saying the account has no Copilot subscription; any other status says
+			// nothing about it.
+			: Response.json(
+				status === 403
+					? {
+						message: "You do not have access to GitHub Copilot.",
+						error_details: {
+							notification_id: "no_copilot_access",
+							message: "No access to GitHub Copilot found.",
+							title: "Account unavailable",
+							url: "https://github.com/features/copilot",
+						},
+					}
+					: { message: "Resource not accessible" },
+				{ status, headers: refusalHeaders.get(token) ?? {} },
+			);
 		let held = heldReplies.get(token);
 		if (held) {
 			heldReplies.delete(token);
@@ -177,7 +211,11 @@ async function setup() {
 		origin: ORIGIN,
 		clock,
 		githubToken: githubSignIn(auth),
-		copilotToken: copilotTokenExchange({ api: githubApi.url }),
+		copilotToken: copilotTokenExchange({
+			api: githubApi.url,
+			copilotApi: copilotModels.url,
+			clock: () => now.getTime(),
+		}),
 		upstreams: { openai: keyChecks.openai.url, anthropic: keyChecks.anthropic.url },
 		lease: () => lease,
 	});
@@ -237,6 +275,9 @@ async function setup() {
 		sessions,
 		entitled,
 		refusalHeaders,
+		notExchanged,
+		takenRaw,
+		copilotModels,
 		copilotLifetime,
 		githubApi,
 		router,
@@ -555,9 +596,9 @@ describe("GitHub Copilot access through a GitHub sign-in", () => {
 		expect(hubot.withheld).toEqual([{ provider: "github-copilot", reason: "no-copilot-access" }]);
 	});
 
-	it("says a sign-in GitHub refuses a Copilot token has no access, and checks again when asked", async () => {
+	it("says a sign-in GitHub says has no Copilot subscription has no access, and checks again when asked", async () => {
 		let world = await setup();
-		world.entitled.set("ghu_mona_signed_in", 404);
+		world.entitled.set("ghu_mona_signed_in", 403);
 		let connected = await world.connect(world.mona, "github-copilot", { kind: "github-sign-in" });
 		expect(connected.status).toBe(200);
 		expect(await connected.json()).toMatchObject({ copilotAccess: "none" });
@@ -579,6 +620,76 @@ describe("GitHub Copilot access through a GitHub sign-in", () => {
 			method: "POST",
 		});
 		expect(await hubot.json()).toMatchObject({ copilotAccess: "access" });
+	});
+
+	it("never says a sign-in neither GitHub nor Copilot takes has no access: its check couldn't be done, nothing of it is kept, and a seat shows at once", async () => {
+		let world = await setup();
+		let checked = async () =>
+			((await (await world.api("/api/ai/credentials/github-copilot/check", world.mona, {
+				method: "POST",
+			})).json()) as AiCredentialSummary).copilotAccess;
+		// Mona has a seat, but GitHub won't exchange her sign-in's token for a Copilot token.
+		world.notExchanged.add("ghu_mona_signed_in");
+		expect(await checked()).toBe("unknown");
+		expect(await access(world)).toBe("unknown");
+		expect(await launch(world)).toMatchObject({
+			grants: [],
+			withheld: [{ provider: "github-copilot", reason: "copilot-unavailable" }],
+		});
+		expect(await aiAccountRefusal(world.credentials, "U_mona")).toEqual({
+			message: AI_ACCOUNT_UNCHECKED,
+			code: "no-ai-account",
+		});
+		world.notExchanged.delete("ghu_mona_signed_in");
+		for (let status of [401, 404]) {
+			world.entitled.set("ghu_mona_signed_in", status);
+			expect(await checked()).toBe("unknown");
+			expect(await access(world)).toBe("unknown");
+		}
+
+		world.entitled.delete("ghu_mona_signed_in");
+		expect(await access(world)).toBe("access");
+		expect((await launch(world)).grants.map(grant => grant.provider)).toEqual(["github-copilot"]);
+	});
+
+	it("reaches Copilot through a sign-in GitHub won't exchange, sending its GitHub token to Copilot's model API alone, as Copilot's CLI does", async () => {
+		let world = await setup();
+		// GitHub refuses a GitHub App's user token a Copilot token, a seat-holder's too.
+		world.notExchanged.add("ghu_mona_signed_in");
+		world.takenRaw.add("ghu_mona_signed_in");
+		expect(await access(world)).toBe("access");
+		expect(world.copilotModels.seen).toHaveLength(1);
+		expect(world.copilotModels.seen[0]).toMatchObject({ method: "GET", path: "/models" });
+		expect(world.copilotModels.seen[0]!.headers).toMatchObject({
+			authorization: "Bearer ghu_mona_signed_in",
+			"copilot-integration-id": "copilot-developer-cli",
+		});
+
+		let launched = await launch(world);
+		expect(launched.withheld).toEqual([]);
+		let copilot = launched.grants[0]!;
+		expect(copilot.provider).toBe("github-copilot");
+		let models = await world.call(copilot, "/models", {
+			headers: {
+				authorization: `Bearer ${copilot.placeholder}`,
+				"copilot-integration-id": "vscode-chat",
+			},
+		});
+		expect(models.status).toBe(200);
+		expect(world.upstreams.copilot.seen).toHaveLength(1);
+		expect(world.upstreams.copilot.seen[0]!.headers).toMatchObject({
+			authorization: "Bearer ghu_mona_signed_in",
+			"copilot-integration-id": "copilot-developer-cli",
+		});
+
+		// A seat GitHub says is gone withholds Copilot again, whatever Copilot took before.
+		world.notExchanged.delete("ghu_mona_signed_in");
+		world.entitled.set("ghu_mona_signed_in", 403);
+		world.advance(5 * 60_000);
+		expect(await launch(world)).toMatchObject({
+			grants: [],
+			withheld: [{ provider: "github-copilot", reason: "no-copilot-access" }],
+		});
 	});
 
 	it("shows every session of a person the Copilot access GitHub last confirmed for their sign-in, lost and back again", async () => {
@@ -718,7 +829,7 @@ describe("GitHub Copilot access through a GitHub sign-in", () => {
 			});
 		expect((await models()).status).toBe(200);
 
-		world.entitled.set("ghu_mona_signed_in", 401);
+		world.entitled.set("ghu_mona_signed_in", 403);
 		world.advance(5 * 60_000);
 		expect((await launch()).grants).toEqual([]);
 		let refused = await models();

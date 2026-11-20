@@ -3,6 +3,7 @@ import { createHash, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto"
 import { AI_KEY_VARIABLES, AI_PROXY_PATH } from "@chopin/protocol/ai-credentials";
 
 import { decrypted, encrypted, imported } from "../auth/session";
+import { COPILOT_RAW_TOKEN_HEADERS } from "./copilot";
 import { AI_UPSTREAMS } from "./proxy";
 
 import type {
@@ -88,6 +89,8 @@ export type AiAuthorized = {
 	secret: string;
 	origin?: string;
 	expiresAt?: number;
+	/** Headers the provider is sent with `secret`, replacing any the agent sent by those names. */
+	headers?: Record<string, string>;
 };
 
 /** What a launch is handed: `launchToken` stays with its runner, `grants` go to its agent. */
@@ -153,10 +156,11 @@ function copilotAccount(record: AiCredentialRecord, githubToken: string): string
 
 /**
  * A provider its person connected that a launch was not given, and why: their GitHub sign-in
- * can't be read now, GitHub refused a Copilot token (no Copilot access), GitHub couldn't be
- * asked (`copilot-unavailable`, which a later launch may not meet), or Chopin knows the key won't
- * work (`key-unusable`: its provider refused it as invalid, or this deployment can't decrypt it),
- * until it is connected again.
+ * can't be read now, GitHub said the account has no Copilot subscription (`no-copilot-access`),
+ * GitHub couldn't be asked or gave no answer about the account, as when neither its exchange nor
+ * Copilot's model API takes the token (`copilot-unavailable`, which a later launch may not meet),
+ * or Chopin knows the key won't work (`key-unusable`: its provider refused it as invalid, or this
+ * deployment can't decrypt it), until it is connected again.
  */
 export type AiWithheld = {
 	provider: AiProvider;
@@ -382,7 +386,10 @@ export class AiCredentials {
 		));
 	}
 
-	/** Asks GitHub again whether the person's GitHub Copilot has Copilot access, as Check again does. */
+	/**
+	 * Asks GitHub again whether the person's GitHub Copilot has Copilot access, as the AI accounts
+	 * page does when it opens.
+	 */
 	async check(userId: string, githubToken: string): Promise<AiCredentialSummary> {
 		let record = await this.#storage.aiCredentials.get(userId, "github-copilot") ?? signIn(userId);
 		return summary(
@@ -499,20 +506,20 @@ export class AiCredentials {
 
 	/**
 	 * Placeholders for one launch, one per provider its person can use now, stored before they are
-	 * returned. GitHub Copilot is given only when GitHub gives the person's GitHub token a Copilot
-	 * token at this launch; otherwise it is `withheld`, with the reason. A launch on a document is
-	 * prepared in the archive generation the document is open in when it begins, and its
+	 * returned. GitHub Copilot is given only when the person's GitHub token has Copilot access at this
+	 * launch (see `copilotTokenExchange`); otherwise it is `withheld`, with the reason. A launch on a
+	 * document is prepared in the archive generation the document is open in when it begins, and its
 	 * placeholders are stored only while the document is still open in it. Once they are stored,
 	 * the person's credentials are read a final time, and the grants are published (none included)
 	 * in the same step as the last check, with nothing awaited between, only while all of it holds:
 	 * that read found the very credentials the launch was prepared with, none was connected,
 	 * replaced or removed since it began, GitHub has given no answer of the other kind about the
-	 * same Copilot account since the launch asked (a Check again, another launch or a proxied
-	 * request; answers are ordered by when they completed), its machine is not revoked, its
-	 * document is open in the same generation, and the launch has not reached its deadline. The
-	 * machine and the document are read again when a cutoff completed while the final reads were
-	 * made, so an archive or a revocation after their read and before the credentials' is in the
-	 * decision. A launch past its deadline, or whose machine was revoked or document archived
+	 * same Copilot account since the launch asked (a check as the AI accounts page opens, another
+	 * launch or a proxied request; answers are ordered by when they completed), its machine is not
+	 * revoked, its document is open in the same generation, and the launch has not reached its
+	 * deadline. The machine and the document are read again when a cutoff completed while the final
+	 * reads were made, so an archive or a revocation after their read and before the credentials' is
+	 * in the decision. A launch past its deadline, or whose machine was revoked or document archived
 	 * meanwhile (restored or not), takes its placeholders back and is given nothing; any other
 	 * change takes them back and prepares the launch afresh, keys and all, at most
 	 * `LAUNCH_ATTEMPTS` times, and then throws a retryable `AiCredentialError` (503) rather than
@@ -1032,6 +1039,8 @@ export class AiCredentials {
 			secret: copilot.token,
 			expiresAt: copilot.expiresAt,
 			...(copilot.api ? { origin: copilot.api } : {}),
+			// A GitHub token Copilot's model API takes itself goes with the integration Copilot's CLI is.
+			...(copilot.raw ? { headers: COPILOT_RAW_TOKEN_HEADERS } : {}),
 		};
 	}
 
@@ -1095,8 +1104,10 @@ export class AiCredentials {
 	/**
 	 * Whether a GitHub token's account has Copilot access, from GitHub's answer to exchanging it,
 	 * which is used for a few minutes unless `fresh`, with how many answers had completed when it was
-	 * asked (`since`). A refusal is `none`, not an error; a token Chopin can't read, or a question
-	 * GitHub couldn't answer, is `unknown`, which no record keeps.
+	 * asked (`since`). GitHub saying the account has no Copilot subscription is `none`, not an error;
+	 * a token Chopin can't read, a question GitHub couldn't answer, or a token neither GitHub's
+	 * exchange nor Copilot's model API takes (see `copilotTokenExchange`) is `unknown`, which no
+	 * record keeps.
 	 */
 	async #copilotAccess(
 		record: AiCredentialRecord,
@@ -1135,9 +1146,10 @@ export class AiCredentials {
 	/**
 	 * The Copilot token GitHub gives `githubToken`, asked once for every caller at a time and held
 	 * until a minute before it expires, or five minutes at most, so a seat GitHub removes is noticed,
-	 * with how many answers had completed when it was asked. A refusal is held as long; a failure is
-	 * not held. A token that has expired by the time a caller has it, one GitHub gave already expired
-	 * or one that expired while GitHub answered, is a failure: it is never returned.
+	 * with how many answers had completed when it was asked. GitHub saying the account has no Copilot
+	 * subscription is held as long; a failure, any other refusal among them, is not held. A token that
+	 * has expired by the time a caller has it, one GitHub gave already expired or one that expired
+	 * while GitHub answered, is a failure: it is never returned.
 	 */
 	async #copilotAnswer(
 		account: string,
