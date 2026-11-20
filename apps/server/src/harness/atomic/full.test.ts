@@ -1,40 +1,23 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { HarnessAgent } from "@ai-sdk/harness/agent";
 import { createJustBashNetworkSandboxSession } from "@ai-sdk/sandbox-just-bash";
 import { jsonSchema, tool } from "ai";
+import { SessionManager } from "@bastani/atomic";
 import {
 	ATOMIC_DEFAULT_SYSTEM_PROMPT,
 	ATOMIC_RESULT_TOOL_NAME,
 	createAtomicAdapter,
+	entrySnapshots,
 	FULL_PLANNER_TOOLS,
 	operatorPlannerTools,
 } from "./adapter";
-import {
-	classifyRuns,
-	type FullPlanner,
-	pauseOwnedRuns,
-	type PlannerRuns,
-	registerFullPlanner,
-	resumeOwnedRuns,
-	runCards,
-	settleEndedRuns,
-	untilUnpaused,
-	workflowRuns,
-} from "./full";
+import { type FullPlanner, registerFullPlanner } from "./full";
 import { startStubModelServer } from "./model-stub";
-import * as Plan from "../../plan/service";
-import * as Store from "../../questions/store";
 import { hostInputRoom } from "../../testing/decisions";
-import type {
-	ExtensionAPI,
-	HostInput,
-	QuestionParams,
-	SessionWorkflows,
-	WorkflowActivityFrame,
-} from "@bastani/atomic";
+import type { HostInput, QuestionParams } from "@bastani/atomic";
 
 let params: QuestionParams = {
 	questions: [{
@@ -86,13 +69,13 @@ let stub = startStubModelServer((prompt, prior) =>
 			name: "codemode",
 			arguments: JSON.stringify({ code: 'return await tools.intercom({ action: "list" });' }),
 		}
-		: prompt === "workflows"
-		? { kind: "tool", name: "workflow", arguments: JSON.stringify({ action: "list" }) }
-		: prompt === "launch"
+		: prompt === "subagent"
+		? { kind: "tool", name: "subagent", arguments: JSON.stringify({ action: "status" }) }
+		: prompt === "subagent-script"
 		? {
 			kind: "tool",
-			name: "workflow",
-			arguments: JSON.stringify({ action: "run", workflow: "asking-workflow", inputs: {} }),
+			name: "codemode",
+			arguments: JSON.stringify({ code: 'return await tools.subagent({ action: "status" });' }),
 		}
 		: { kind: "text", text: "Ready." }
 );
@@ -107,12 +90,13 @@ async function run(
 		worker = false,
 		projectPackage = false,
 		operatorPackage = false,
-		askingWorkflow = false,
 		operatorSettings,
 		afterTurn,
 		during,
 		events,
-		reports,
+		sessionEntries,
+		branchLeafId,
+		saved,
 	}: {
 		host?: HostInput;
 		/** False runs the Planner in an empty directory, as a channel without a checkout does. */
@@ -123,18 +107,20 @@ async function run(
 		projectPackage?: boolean;
 		/** Load a local package through the operator's extension paths, as `HARNESS_EXTENSIONS` does. */
 		operatorPackage?: boolean;
-		/** Load a workflow whose stage calls ask_user_question, through the operator's extension paths. */
-		askingWorkflow?: boolean;
 		/** The operator's Atomic `settings.json`, as the host CLI would have written it. */
 		operatorSettings?: Record<string, unknown>;
-		/** Runs once the Planner's turn has ended, while its session and workflow runs are still live. */
+		/** Runs once the Planner's turn has ended, while its session is still live. */
 		afterTurn?: () => Promise<void>;
 		/** Runs while the turn is under way, with the session the turn runs in. */
 		during?: (session: Awaited<ReturnType<HarnessAgent["createSession"]>>) => Promise<void>;
 		/** Collects, in order, the tool reports the adapter makes and the stream parts a tool yields. */
 		events?: string[];
-		/** Collects every runs report the Planner session makes. */
-		reports?: PlannerRuns[];
+		/** Serialized Atomic entries the Planner's session starts from, as a fork or a thread restores them. */
+		sessionEntries?: unknown[];
+		/** The entry the Planner's session branches from before its turn. */
+		branchLeafId?: string | null;
+		/** Collects every snapshot of its entries the Planner's session saves. */
+		saved?: Array<{ entries: unknown[]; leafId: string | null }>;
 	} = {},
 ) {
 	let root = await mkdtemp(join(tmpdir(), "chopin-atomic-full-"));
@@ -143,12 +129,10 @@ async function run(
 	let previous = process.env.ATOMIC_CODING_AGENT_DIR;
 	let received: QuestionParams[] = [];
 	let operatorPackageDir = join(root, "operator-package");
-	let journal = join(root, "state", "workflows.sqlite");
 	let harness = createAtomicAdapter({
 		auth: "ai-gateway",
 		model: "stub/model",
-		journal,
-		extensions: operatorPackage || askingWorkflow ? [operatorPackageDir] : undefined,
+		extensions: operatorPackage ? [operatorPackageDir] : undefined,
 		providers: {
 			stub: {
 				baseUrl: stub.baseUrl,
@@ -232,32 +216,6 @@ async function run(
 				JSON.stringify({ packages: [pkg], chopin: { plannerTools: ["project_tool"] } }),
 			);
 		}
-		if (askingWorkflow) {
-			await mkdir(operatorPackageDir, { recursive: true });
-			await writeFile(
-				join(operatorPackageDir, "package.json"),
-				JSON.stringify({
-					name: "asking-package",
-					type: "module",
-					atomic: { workflows: ["./workflow.ts"] },
-				}),
-			);
-			await writeFile(
-				join(operatorPackageDir, "workflow.ts"),
-				`import { workflow } from "@bastani/atomic/workflows";
-export default workflow({
-	name: "asking-workflow",
-	description: "A stage that asks the user a question",
-	inputs: {},
-	outputs: {},
-	run: async ctx => {
-		await ctx.task("grill-me-1", { prompt: "question" });
-		return {};
-	},
-});
-`,
-			);
-		}
 		if (operatorPackage) {
 			await mkdir(join(operatorPackageDir, "skills", "operator-package-marker"), {
 				recursive: true,
@@ -267,11 +225,7 @@ export default workflow({
 				JSON.stringify({
 					name: "operator-package",
 					type: "module",
-					atomic: {
-						extensions: ["./extension.ts"],
-						skills: ["./skills"],
-						workflows: ["./workflow.ts"],
-					},
+					atomic: { extensions: ["./extension.ts"], skills: ["./skills"] },
 				}),
 			);
 			await writeFile(
@@ -281,18 +235,6 @@ export default workflow({
 			await writeFile(
 				join(operatorPackageDir, "skills", "operator-package-marker", "SKILL.md"),
 				"---\nname: operator-package-marker\ndescription: OPERATOR-PACKAGE-SKILL-MARKER\n---\nOperator package skill.\n",
-			);
-			await writeFile(
-				join(operatorPackageDir, "workflow.ts"),
-				`import { workflow } from "@bastani/atomic/workflows";
-export default workflow({
-	name: "operator-package-workflow",
-	description: "OPERATOR-PACKAGE-WORKFLOW-MARKER",
-	inputs: {},
-	outputs: {},
-	run: async () => ({}),
-});
-`,
 			);
 		}
 		process.env.ATOMIC_CODING_AGENT_DIR = agentDir;
@@ -323,7 +265,9 @@ export default workflow({
 			cwd,
 			humanInput,
 			toolReport: events && ((_id, _output, state) => events.push(`report:${state}`)),
-			onRuns: reports && (runs => reports.push(structuredClone(runs))),
+			...(sessionEntries ? { sessionEntries } : {}),
+			...(branchLeafId !== undefined ? { branchLeafId } : {}),
+			...(saved ? { onSessionEntries: (entries, leafId) => saved.push({ entries, leafId }) } : {}),
 		};
 		if (registered) release = registerFullPlanner(sessionId, planner);
 		let agent = new HarnessAgent({
@@ -358,13 +302,6 @@ export default workflow({
 			if (!worker) {
 				let files = {
 					operator: await Bun.file(join(agentDir, "settings.json")).exists(),
-					journal: await Bun.file(journal).exists(),
-					journalDirectoryMode: await stat(dirname(journal)).then(
-						info => info.mode & 0o777,
-						() => undefined,
-					),
-					defaultJournal: await Bun.file(join(root, "workflows", "journal.sqlite")).exists(),
-					environment: process.env.ATOMIC_WORKFLOW_JOURNAL_PATH,
 					project: projectPackage
 						? await Bun.file(join(cwd, ".atomic", "settings.json")).text()
 						: undefined,
@@ -413,7 +350,6 @@ const PLANNER_TOOLS = [
 	"find",
 	"search",
 	"ask_user_question",
-	"workflow",
 	"web_search",
 	"codemode",
 	"host_tool",
@@ -455,6 +391,17 @@ test("a Planner reaches no session through Atomic's intercom, from a script or n
 		let refusal = result.requests.at(-1)!.toolResults.join("\n");
 		expect(refusal, label).toContain("intercom");
 		expect(refusal, label).toMatch(/not found|not available|does not exist/);
+	}
+});
+
+test("a Planner starts no agent through Atomic's subagent tool, called directly or from a codemode script", async () => {
+	for (let prompt of ["subagent", "subagent-script"]) {
+		let result = await run(true, prompt);
+		expect(result.requests[0]!.toolNames, prompt).not.toContain("subagent");
+		expect(result.offered, prompt).not.toContain("subagent");
+		let refusal = result.requests.at(-1)!.toolResults.join("\n");
+		expect(refusal, prompt).toContain("subagent");
+		expect(refusal, prompt).toMatch(/not found|not available|does not exist/);
 	}
 });
 
@@ -572,27 +519,20 @@ test("a checkout's project settings add its packages without writing either sett
 	expect(plain.requests[0]!.system).not.toContain("PROJECT-SKILL-MARKER");
 });
 
-/** The first workflow tool call loads Atomic's workflow runtime and opens its journal. */
-const WORKFLOW_TOOL_TIMEOUT_MS = 30_000;
-
-test(
-	"operator extension paths add a package's skills and workflows to Planner sessions only, but not its tools to the Planner's turns",
-	async () => {
-		let result = await run(true, "workflows", { operatorPackage: true, worker: true });
-		let request = result.requests[0]!;
-		expect(request.toolNames).not.toContain("operator_package_tool");
-		expect(request.system).toContain("OPERATOR-PACKAGE-SKILL-MARKER");
-		expect(result.requests.at(-1)!.toolResults.join("\n")).toContain("operator-package-workflow");
-		expect(result.workerRequests[0]!.toolNames).not.toContain("operator_package_tool");
-	},
-	WORKFLOW_TOOL_TIMEOUT_MS,
-);
+test("operator extension paths add a package's skills to Planner sessions only, but not its tools to the Planner's turns", async () => {
+	let result = await run(true, "plain", { operatorPackage: true, worker: true });
+	let request = result.requests[0]!;
+	expect(request.toolNames).not.toContain("operator_package_tool");
+	expect(request.system).toContain("OPERATOR-PACKAGE-SKILL-MARKER");
+	expect(result.workerRequests[0]!.toolNames).not.toContain("operator_package_tool");
+	expect(result.workerRequests[0]!.system).not.toContain("OPERATOR-PACKAGE-SKILL-MARKER");
+});
 
 test("without operator extension paths, Planner sessions have none of that package", async () => {
-	let plain = await run(true, "workflows");
+	let plain = await run(true);
 	expect(plain.requests[0]!.toolNames).not.toContain("operator_package_tool");
-	expect(plain.requests.at(-1)!.toolResults.join("\n")).not.toContain("operator-package-workflow");
-}, WORKFLOW_TOOL_TIMEOUT_MS);
+	expect(plain.requests[0]!.system).not.toContain("OPERATOR-PACKAGE-SKILL-MARKER");
+});
 
 test("free-text Decisions answers to multi-select and preview questions reach the model", async () => {
 	let room = await hostInputRoom();
@@ -609,87 +549,6 @@ test("free-text Decisions answers to multi-select and preview questions reach th
 		await room.close();
 	}
 });
-
-test(
-	"a workflow stage keeps its own tools, and its ask_user_question reaches Decisions and its answer returns to the stage",
-	async () => {
-		let room = await hostInputRoom();
-		// Atomic gives workflow stages a canned session under a test runtime.
-		let environment = process.env.NODE_ENV;
-		delete process.env.NODE_ENV;
-		try {
-			let seen: string[] = [];
-			let result = await run(true, "launch", {
-				host: room.input,
-				askingWorkflow: true,
-				afterTurn: async () => {
-					// The stage starts after Atomic's workflow backend does.
-					let open = Store.outstanding(room.plan.questions);
-					for (let deadline = Date.now() + 30_000; !open.length && Date.now() < deadline;) {
-						await Bun.sleep(100);
-						open = Store.outstanding(room.plan.questions);
-					}
-					let [card] = open;
-					seen.push(card!.definition.questions[0].question);
-					seen.push(Plan.source(room.plan));
-					await room.answer(card!.id, [1]);
-					// The stage receives the answer and its model replies.
-					let deadline = Date.now() + 15_000;
-					while (
-						Date.now() < deadline
-						&& !stub.requests.some(request =>
-							request.toolResults.some(text => text.includes("Second"))
-						)
-					) await new Promise(resolve => setTimeout(resolve, 100));
-				},
-			});
-			expect(seen[0]).toContain("Which option?");
-			expect(seen[1]).toContain("<Questionnaire");
-			expect(
-				stub.requests.some(request => request.toolResults.some(text => text.includes("Second"))),
-			)
-				.toBe(true);
-			let stage = stub.requests.find(request =>
-				request.toolResults.some(text => text.includes("Second"))
-			)!;
-			expect(stage.toolNames).toContain("bash");
-			expect(stage.toolNames).toContain("write");
-			expect(stage.toolNames).not.toContain(ATOMIC_RESULT_TOOL_NAME);
-			expect(stage.system).not.toContain("CHOPIN-INSTRUCTIONS-MARKER");
-			// The run is journaled where Chopin chose, not in Atomic's default beside its agent directory,
-			// and through the session rather than the process-wide environment variable.
-			expect(result.files).toMatchObject({ journal: true, defaultJournal: false });
-			expect(result.files?.environment).toBeUndefined();
-			// Only the server's user can enter its directory, which also holds the worker-logs/ Atomic keeps.
-			expect(result.files?.journalDirectoryMode).toBe(0o700);
-		} finally {
-			if (environment !== undefined) process.env.NODE_ENV = environment;
-			await room.close();
-		}
-	},
-	60_000,
-);
-
-test(
-	"an operator's shared storage selection, even an adapter package, does not move a Planner's workflow journal",
-	async () => {
-		let result = await run(true, "launch", {
-			askingWorkflow: true,
-			// What `atomic storage join` writes; the adapter package is not installed here.
-			operatorSettings: {
-				storage: {
-					adapter: "@bastani/atomic-storage-libsql",
-					options: { url: "libsql://chopin-test.invalid" },
-				},
-			},
-		});
-		let launched = result.requests.at(-1)!.toolResults.join("\n");
-		expect(launched).toContain("asking-workflow");
-		expect(launched).not.toContain('"failed"');
-		expect(result.files).toMatchObject({ journal: true, defaultJournal: false });
-	},
-	WORKFLOW_TOOL_TIMEOUT_MS,
-);
 
 // Atomic starts a turn for its own notices, and since 0.9.41 for a message queued on an idle session.
 test.each(["notice", "queued"])(
@@ -718,512 +577,92 @@ test("worker sessions stay isolated, even beside a full Planner session on the s
 	expect(beside.workerRequests[0]!.system).toBe("CHOPIN-INSTRUCTIONS-MARKER");
 });
 
-test("paused roots are paused, roots whose run ended are neither, and every other root is live", () => {
-	let root = (rootRunId: string, state: "working" | "idle" | "blocked", reason: string) =>
-		({
-			rootRunId,
-			ownerSessionId: "session",
-			state,
-			reason,
-			activeExecutionCount: 0,
-			actionableBlockCount: 0,
-			needsAttention: false,
-		}) as Parameters<typeof classifyRuns>[0] extends Iterable<infer T> ? T : never;
-	expect(classifyRuns([
-		root("drafting", "working", "executing"),
-		root("asking", "blocked", "awaiting_input"),
-		root("between-steps", "idle", "quiescent"),
-		root("held", "idle", "paused"),
-		root("done", "idle", "quiescent"),
-	], new Set(["done"]))).toEqual({
-		active: ["drafting", "asking", "between-steps"],
-		paused: ["held"],
-	});
-	expect(classifyRuns([])).toEqual({ active: [], paused: [] });
-});
-
-for (let held of ["suspended", "waiting"] as const) {
-	test(`a stage that Atomic holds between turns (${held}) is shown as still running`, async () => {
-		let { foldLifecycle, runCards } = await import("./full");
-		let cards = new Map();
-		let event = (target: object, at: number) =>
-			({
-				type: "workflow_lifecycle",
-				eventId: `e${at}`,
-				cursor: { epoch: "e", revision: at },
-				runId: "run-1",
-				rootRunId: "run-1",
-				ownerSessionId: "session",
-				occurredAt: at * 1000,
-				observedAt: at * 1000,
-				delivery: "live",
-				target,
-			}) as never;
-		foldLifecycle(
-			cards,
-			event({ kind: "run", runId: "run-1", status: "running" }, 100),
-			"plan-review",
+/** A session with a turn before a compaction and one after it, as Atomic saves it. */
+async function compactedSession(): Promise<{ entries: unknown[]; ids: string[] }> {
+	let manager = SessionManager.inMemory("/");
+	let ids: string[] = [];
+	let usage = {
+		input: 1,
+		output: 1,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 2,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
+	let turn = async (text: string) => {
+		ids.push(await manager.appendMessage({ role: "user", content: text, timestamp: Date.now() }));
+		ids.push(
+			await manager.appendMessage({
+				role: "assistant",
+				content: [{ type: "text", text: `${text} answered` }],
+				api: "openai-completions",
+				provider: "stub",
+				model: "model",
+				usage,
+				stopReason: "stop",
+				timestamp: Date.now(),
+			} as never),
 		);
-		foldLifecycle(
-			cards,
-			event(
-				{ kind: "stage", runId: "run-1", stageId: "a", stageName: "draft-1", status: held },
-				101,
-			),
-		);
-		expect(runCards(cards, { active: ["run-1"], paused: [] })[0]!.stages).toEqual([
-			{ id: "run-1:a", name: "draft-1", status: "running", started: 101 },
-		]);
+	};
+	await turn("before");
+	await manager.appendCompaction("Context cleared.", null, 100, {
+		strategy: "verbatim-lines",
+		promptVersion: 7,
+		parameters: { query: "before" },
+		stats: {
+			linesBefore: 2,
+			linesDeleted: 2,
+			linesKept: 0,
+			rangeCount: 0,
+			tokensBefore: 100,
+			tokensAfter: 1,
+			percentReduction: 99,
+		},
+		form: "cleared",
 	});
+	ids.push(manager.getLeafId()!);
+	await turn("after");
+	expect(manager.hasFullHistory()).toBe(false);
+	await manager.loadFullHistory();
+	return { entries: [manager.getHeader(), ...manager.getEntries()], ids };
 }
 
-test("run cards fold lifecycle events into ordered stages, Decisions waits, and paused or finished status", async () => {
-	let { foldLifecycle, runCards } = await import("./full");
-	let cards = new Map();
-	let event = (target: object, at: number) =>
-		({
-			type: "workflow_lifecycle",
-			eventId: `e${at}`,
-			cursor: { epoch: "e", revision: at },
-			runId: "run-1",
-			rootRunId: "run-1",
-			ownerSessionId: "session",
-			occurredAt: at * 1000,
-			observedAt: at * 1000,
-			delivery: "live",
-			target,
-		}) as never;
-	foldLifecycle(
-		cards,
-		event({ kind: "run", runId: "run-1", status: "running" }, 100),
-		"plan-review",
-	);
-	foldLifecycle(
-		cards,
-		event(
-			{ kind: "stage", runId: "run-1", stageId: "a", stageName: "draft-1", status: "running" },
-			101,
-		),
-	);
-	foldLifecycle(
-		cards,
-		event({ kind: "prompt", runId: "run-1", stageId: "a", promptId: "p1", status: "opened" }, 160),
-	);
-	foldLifecycle(
-		cards,
-		event({
-			kind: "stage",
-			runId: "run-1",
-			stageId: "a",
-			stageName: "draft-1",
-			status: "awaiting_input",
-		}, 160),
-	);
-	let [waiting] = runCards(cards, { active: ["run-1"], paused: [] });
-	expect(waiting).toMatchObject({
-		id: "run-1",
-		name: "plan-review",
-		status: "waiting",
-		waiting: 1,
-		started: 100,
-		stages: [{ id: "run-1:a", name: "draft-1", status: "awaiting_input", started: 101 }],
-	});
-	expect(runCards(cards, { active: [], paused: ["run-1"] })[0]!.status).toBe("paused");
-	foldLifecycle(
-		cards,
-		event(
-			{ kind: "prompt", runId: "run-1", stageId: "a", promptId: "p1", status: "answered" },
-			200,
-		),
-	);
-	foldLifecycle(
-		cards,
-		event({
-			kind: "stage",
-			runId: "run-1",
-			stageId: "a",
-			stageName: "draft-1",
-			status: "completed",
-		}, 300),
-	);
-	foldLifecycle(
-		cards,
-		event({
-			kind: "stage",
-			runId: "run-1",
-			stageId: "b",
-			stageName: "reviewer-a-1",
-			status: "running",
-		}, 301),
-	);
-	let [running] = runCards(cards, { active: ["run-1"], paused: [] });
-	expect(running!.status).toBe("running");
-	expect(running!.waiting).toBe(0);
-	expect(running!.stages.map(stage => [stage.name, stage.status, stage.ended])).toEqual([
-		["draft-1", "completed", 300],
-		["reviewer-a-1", "running", undefined],
-	]);
-	foldLifecycle(cards, event({ kind: "run", runId: "run-1", status: "completed" }, 900));
-	expect(runCards(cards, { active: [], paused: [] })[0]).toMatchObject({
-		status: "finished",
-		ended: 900,
-	});
+function entryIds(entries: unknown[]): string[] {
+	return entries.slice(1).map(entry => (entry as { id: string }).id);
+}
+
+test("snapshots of a session's entries keep every entry after a compaction, and none replaces a fuller one", async () => {
+	let saved: number[] = [];
+	let save = entrySnapshots(entries => saved.push(entries.length - 1));
+	let { entries } = await compactedSession();
+	let manager = await SessionManager.inMemory("/", undefined, entries as never);
+	// Atomic opens a saved session at its current context window.
+	expect(manager.hasFullHistory()).toBe(false);
+	let pending = save(manager);
+	// Asked for while the whole history loads, this one waits behind it rather than saving the window.
+	let next = save(manager);
+	await Promise.all([pending, next]);
+	expect(saved).toEqual([entries.length - 1, entries.length - 1]);
+	await manager.appendMessage({ role: "user", content: "later", timestamp: Date.now() });
+	await save(manager);
+	expect(saved.at(-1)).toBe(entries.length);
+	expect(saved).toEqual([...saved].sort((a, b) => a - b));
 });
 
-test("Stop and Resume use the session's run control, and a partial pause is reported", async () => {
-	let calls: unknown[] = [];
-	let outcome = { action: "pause", runId: "--all", status: "paused", message: "Paused 1 run(s)." };
-	let workflows = {
-		pause: async (target: unknown) => {
-			calls.push(["pause", target]);
-			return outcome;
-		},
-		listRuns: async (filter: unknown) => {
-			calls.push(["listRuns", filter]);
-			return [{ runId: "run-1" }, { runId: "run-2" }];
-		},
-		resume: async (runId: string) => {
-			calls.push(["resume", runId]);
-			return { action: "resume", runId, status: "running", message: "" };
-		},
-	} as unknown as SessionWorkflows;
-	await pauseOwnedRuns(workflows);
-	await resumeOwnedRuns(workflows);
-	expect(calls).toEqual([
-		["pause", { all: true }],
-		["listRuns", { status: "paused" }],
-		["resume", "run-1"],
-		["resume", "run-2"],
-	]);
-	outcome = {
-		...outcome,
-		status: "partial",
-		failedRuns: [{ runId: "run-2", reason: "pause_failed", message: "busy" }],
-	} as typeof outcome;
-	await expect(pauseOwnedRuns(workflows)).rejects.toThrow("run-2: busy");
-});
-
-test("before a session goes, each run that ended is waited on until its ending is journaled, never a live, paused or blocked one", async () => {
-	let card = (id: string, status: PlannerRuns["cards"][number]["status"]) => ({
-		id,
-		name: id,
-		status,
-		started: 0,
-		updated: 0,
-		stages: [],
-		waiting: 0,
-	});
-	let waited: string[] = [];
-	let errors: unknown[][] = [];
-	let error = console.error;
-	console.error = (...args: unknown[]) => void errors.push(args);
-	try {
-		await settleEndedRuns({
-			waitForSettled: async runId => {
-				waited.push(runId);
-				if (runId === "failed") throw new Error("journal unavailable");
-			},
-		}, {
-			active: ["live"],
-			paused: ["paused"],
-			cards: [
-				card("finished", "finished"),
-				card("failed", "failed"),
-				card("stopped", "stopped"),
-				card("blocked", "blocked"),
-				card("live", "running"),
-				card("paused", "paused"),
-			],
-		});
-	} finally {
-		console.error = error;
+test("a Planner restored from a compacted session can branch from before the compaction and saves every entry", async () => {
+	let { entries, ids } = await compactedSession();
+	let saved: Array<{ entries: unknown[]; leafId: string | null }> = [];
+	// The first turn's answer, from before the compaction.
+	let branch = ids[1]!;
+	let result = await run(true, "plain", { sessionEntries: entries, branchLeafId: branch, saved });
+	expect(result.requests).toHaveLength(1);
+	let last = saved.at(-1)!;
+	let kept = entryIds(last.entries);
+	for (let id of ids) expect(kept).toContain(id);
+	let added = last.entries.slice(entries.length) as Array<{ parentId: string | null }>;
+	expect(added.length).toBeGreaterThan(0);
+	expect(added[0]!.parentId).toBe(branch);
+	for (let snapshot of saved) {
+		expect(entryIds(snapshot.entries)).toEqual(kept.slice(0, snapshot.entries.length - 1));
 	}
-	expect(waited.sort()).toEqual(["failed", "finished", "stopped"]);
-	expect(errors).toHaveLength(1);
-	expect(String(errors[0]!.join(" "))).toContain("failed");
-	expect(String(errors[0]!.join(" "))).toContain("journal unavailable");
-	await settleEndedRuns({ waitForSettled: async () => {} }, undefined);
-});
-
-test("an answer to a paused run's question is held until the run resumes, including child runs", async () => {
-	let planner: FullPlanner = {
-		cwd: "/",
-		humanInput: {} as HostInput,
-		runs: { active: [], paused: ["root"], cards: [] },
-		rootOf: runId => runId === "child" ? "root" : runId,
-	};
-	let released: string[] = [];
-	let controller = new AbortController();
-	let held = untilUnpaused(planner, "child", controller.signal).then(() => released.push("child"));
-	await untilUnpaused(planner, "other", controller.signal).then(() => released.push("other"));
-	await new Promise(resolve => setTimeout(resolve, 0));
-	expect(released).toEqual(["other"]);
-	planner.runs = { active: ["root"], paused: [], cards: [] };
-	for (let wake of planner.waiters ?? []) wake();
-	await held;
-	expect(released).toEqual(["other", "child"]);
-
-	planner.runs = { active: [], paused: ["root"], cards: [] };
-	let aborted = new AbortController();
-	let pending = untilUnpaused(planner, "root", aborted.signal);
-	aborted.abort();
-	await pending;
-	expect(planner.waiters?.size ?? 0).toBe(0);
-});
-
-test("a run whose stage waits on a question counts as waiting even without prompt events", () => {
-	let cards = new Map([["root", {
-		id: "root",
-		name: "plan-review",
-		status: "running" as const,
-		started: 0,
-		updated: 0,
-		stages: [{ id: "root:s", name: "draft-1", status: "awaiting_input" as const }],
-		waiting: 0,
-		stageIndex: new Map(),
-		prompts: new Set<string>(),
-	}]]);
-	expect(runCards(cards, { active: ["root"], paused: [] })[0]).toMatchObject({
-		status: "waiting",
-		waiting: 1,
-	});
-});
-
-test("a new run clears ended cards, keeps live ones, and lists every stage of a long run", async () => {
-	let { foldLifecycle } = await import("./full");
-	let cards = new Map();
-	let event = (rootRunId: string, target: object, at: number) =>
-		({
-			type: "workflow_lifecycle",
-			eventId: `${rootRunId}-${at}`,
-			cursor: { epoch: "e", revision: at },
-			runId: rootRunId,
-			rootRunId,
-			ownerSessionId: "session",
-			occurredAt: at * 1000,
-			observedAt: at * 1000,
-			delivery: "live",
-			target,
-		}) as never;
-	foldLifecycle(
-		cards,
-		event("done", { kind: "run", runId: "done", status: "running" }, 1),
-		"first",
-	);
-	foldLifecycle(cards, event("done", { kind: "run", runId: "done", status: "completed" }, 2));
-	foldLifecycle(
-		cards,
-		event("live", { kind: "run", runId: "live", status: "running" }, 3),
-		"second",
-	);
-	expect([...cards.keys()]).toEqual(["live"]);
-	foldLifecycle(
-		cards,
-		event("other", { kind: "run", runId: "other", status: "running" }, 4),
-		"third",
-	);
-	expect([...cards.keys()]).toEqual(["live", "other"]);
-
-	for (let index = 0; index < 500; index++) {
-		foldLifecycle(
-			cards,
-			event("live", {
-				kind: "stage",
-				runId: "live",
-				stageId: `s${index}`,
-				stageName: `stage-${index}`,
-				status: "completed",
-			}, 10 + index),
-		);
-	}
-	let [card] = runCards(cards, { active: ["live", "other"], paused: [] });
-	expect(card?.stages).toHaveLength(500);
-	expect(card?.stages[0]?.name).toBe("stage-0");
-	expect(card?.stages.at(-1)?.name).toBe("stage-499");
-	expect(card?.earlierStages).toBeUndefined();
-});
-
-test("run cards retain graph parent links after the root leaves the live activity snapshot", () => {
-	let cards = new Map([["root", {
-		id: "root",
-		name: "nested",
-		status: "running" as const,
-		started: 1,
-		updated: 2,
-		stages: [
-			{ id: "root:parent", name: "parent", status: "failed" as const },
-			{ id: "child:work", name: "work", status: "running" as const },
-		],
-		waiting: 0,
-		stageIndex: new Map(),
-		prompts: new Set<string>(),
-	}]]);
-	let roots = [{
-		rootRunId: "root",
-		ownerSessionId: "session",
-		state: "working" as const,
-		reason: "executing" as const,
-		activeExecutionCount: 1,
-		actionableBlockCount: 0,
-		needsAttention: false,
-		graph: {
-			nodes: [
-				{
-					id: "parent",
-					runId: "root",
-					nodeId: "parent",
-					name: "parent",
-					kind: "stage" as const,
-					status: "failed" as const,
-					parentIds: [],
-					depth: 0,
-				},
-				{
-					id: "child:work",
-					runId: "child",
-					nodeId: "work",
-					name: "work",
-					kind: "stage" as const,
-					status: "running" as const,
-					parentIds: ["parent"],
-					depth: 1,
-				},
-			],
-		},
-	}];
-	expect(runCards(cards, { active: ["root"], paused: [] }, roots)[0]!.stages[1])
-		.toMatchObject({ parentIds: ["root:parent"] });
-	expect(runCards(cards, { active: [], paused: [] })[0]!.stages[1])
-		.toMatchObject({ parentIds: ["root:parent"] });
-});
-
-test("ctx.tool steps appear among the stages, marked as tool steps", async () => {
-	let { foldLifecycle } = await import("./full");
-	let cards = new Map();
-	let event = (target: object, at: number) =>
-		({
-			type: "workflow_lifecycle",
-			eventId: `t${at}`,
-			cursor: { epoch: "e", revision: at },
-			runId: "run-1",
-			rootRunId: "run-1",
-			ownerSessionId: "session",
-			occurredAt: at * 1000,
-			observedAt: at * 1000,
-			delivery: "live",
-			target,
-		}) as never;
-	foldLifecycle(cards, event({ kind: "run", runId: "run-1", status: "running" }, 1), "demo");
-	let tool = (toolNodeId: string, toolName: string, status: string, at: number) =>
-		foldLifecycle(cards, event({ kind: "tool", runId: "run-1", toolNodeId, toolName, status }, at));
-	tool("t1", "prepare", "running", 2);
-	tool("t1", "prepare", "cached", 5);
-	tool("t2", "work", "running", 6);
-	tool("t3", "finish", "cancelled", 7);
-	let [card] = runCards(cards, { active: ["run-1"], paused: [] });
-	expect(card?.stages).toEqual([
-		{ id: "run-1:t1", name: "prepare", kind: "tool", status: "completed", started: 2, ended: 5 },
-		{ id: "run-1:t2", name: "work", kind: "tool", status: "running", started: 6 },
-		{ id: "run-1:t3", name: "finish", kind: "tool", status: "skipped", ended: 7 },
-	]);
-});
-
-test(
-	"a launched run is live in every report from its first, even before Atomic's activity reaches it",
-	async () => {
-		// Atomic gives workflow stages a canned session under a test runtime.
-		let environment = process.env.NODE_ENV;
-		delete process.env.NODE_ENV;
-		try {
-			let reports: PlannerRuns[] = [];
-			let staged = () => reports.some(report => report.cards.some(card => card.stages.length > 0));
-			await run(true, "launch", {
-				askingWorkflow: true,
-				reports,
-				afterTurn: async () => {
-					for (let deadline = Date.now() + 30_000; !staged() && Date.now() < deadline;) {
-						await Bun.sleep(50);
-					}
-				},
-			});
-			expect(staged()).toBe(true);
-			let shown = reports.filter(report => report.cards.length > 0);
-			expect(shown.length).toBeGreaterThan(0);
-			for (let report of shown) {
-				let [card] = report.cards;
-				expect([card!.status, report.active]).toEqual([
-					expect.stringMatching(/^(running|waiting)$/),
-					[card!.id],
-				]);
-			}
-		} finally {
-			if (environment !== undefined) process.env.NODE_ENV = environment;
-		}
-	},
-	60_000,
-);
-
-test("a launched run stays live from admission until its root ends, and again once it resumes", () => {
-	let runId = "0f8fdc3a-2a59-4d43-9a43-0d6c51e8e1a1";
-	let handlers = new Map<string, (event: unknown, ctx?: unknown) => void>();
-	let observe: ((frame: WorkflowActivityFrame) => void) | undefined;
-	let planner: FullPlanner = { cwd: "/", humanInput: {} as HostInput };
-	workflowRuns(planner)({
-		on: (name: string, handler: (event: unknown, ctx?: unknown) => void) =>
-			handlers.set(name, handler),
-	} as unknown as ExtensionAPI);
-	handlers.get("session_start")!({}, {
-		observeWorkflowActivity: (observer: typeof observe) => {
-			observe = observer;
-			return { dispose() {} };
-		},
-	});
-	let cursor = { epoch: "e", revision: 0 };
-	let root = (state: "working" | "idle", reason: string) =>
-		({
-			kind: "changed",
-			cursor,
-			root: {
-				rootRunId: runId,
-				ownerSessionId: "session",
-				state,
-				reason,
-				activeExecutionCount: state === "working" ? 1 : 0,
-				actionableBlockCount: 0,
-				needsAttention: false,
-			},
-		}) as unknown as WorkflowActivityFrame;
-	let lifecycle = (status: string, at: number) =>
-		handlers.get("workflow_lifecycle")!({
-			type: "workflow_lifecycle",
-			eventId: `e${at}`,
-			cursor,
-			runId,
-			rootRunId: runId,
-			ownerSessionId: "session",
-			occurredAt: at * 1000,
-			observedAt: at * 1000,
-			delivery: "live",
-			target: { kind: "run", runId, status },
-		});
-	let state = () => [planner.runs!.active, planner.runs!.cards.map(card => card.status)];
-	observe!({ kind: "snapshot", cursor, availability: "ready", roots: [] } as WorkflowActivityFrame);
-
-	handlers.get("tool_result")!({
-		toolName: "workflow",
-		input: { action: "run", workflow: "demo" },
-		content: [{ type: "text", text: JSON.stringify({ runId }) }],
-	});
-	expect(state()).toEqual([[runId], []]);
-	lifecycle("running", 1);
-	expect(state()).toEqual([[runId], ["running"]]);
-	observe!(root("working", "executing"));
-	expect(state()).toEqual([[runId], ["running"]]);
-	lifecycle("completed", 2);
-	observe!(root("idle", "quiescent"));
-	expect(state()).toEqual([[], ["finished"]]);
-	lifecycle("running", 3);
-	expect(state()).toEqual([[runId], ["running"]]);
-	lifecycle("failed", 4);
-	expect(state()).toEqual([[], ["failed"]]);
 });

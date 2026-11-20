@@ -26,7 +26,7 @@ import { withModelOutput } from "../model-output";
 import { openWorkerSession } from "../../jobs/worker-session";
 import { createHumanInput } from "../atomic/human-input";
 import { openPlannerSession } from "../session";
-import { untilUnpaused } from "../atomic/full";
+import { untilUnpaused } from "../runs";
 import { hostInputRoom, laterTimers } from "../../testing/decisions";
 import {
 	attach,

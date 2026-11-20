@@ -20,7 +20,9 @@ import { classifyConnectorError, machineStoreLogin } from "./machine";
 import { ConnectorError } from "./mcp";
 import type { Output } from "./output";
 
-export const STORE_ADAPTER_SPEC = `${MACHINE_STORE_ADAPTER}@^0.9.90`;
+/** The adapter releases agents here are given, as the Atomic they run. */
+export const STORE_ADAPTER_RANGE = "^0.10.0";
+export const STORE_ADAPTER_SPEC = `${MACHINE_STORE_ADAPTER}@${STORE_ADAPTER_RANGE}`;
 export const STORE_MAX_CONNECTIONS = 4;
 export const UNUSABLE_SAVED_STORE =
 	"The saved database settings for this machine's agents have no URL without a password, so they "
@@ -34,6 +36,18 @@ export function storeFolder(directory: string) {
 
 function adapterManifest(root: string) {
 	return join(root, "node_modules", ...MACHINE_STORE_ADAPTER.split("/"), "package.json");
+}
+
+/** Whether `root` holds an adapter release in `STORE_ADAPTER_RANGE`. */
+function adapterInRange(root: string): boolean {
+	let version: unknown;
+	try {
+		version = (JSON.parse(readFileSync(adapterManifest(root), "utf8")) as { version?: unknown })
+			.version;
+	} catch {
+		return false;
+	}
+	return typeof version === "string" && Bun.semver.satisfies(version, STORE_ADAPTER_RANGE);
 }
 
 function writePrivate(path: string, text: string) {
@@ -129,14 +143,21 @@ export async function storeAdapter(
 	signal?: AbortSignal,
 ): Promise<string> {
 	let root = join(storeFolder(directory), "npm");
-	if (existsSync(adapterManifest(root))) return root;
-	mkdirSync(root, { recursive: true, mode: 0o700 });
-	if (!existsSync(join(root, "package.json"))) {
-		writeFileSync(join(root, "package.json"), '{"private": true}\n', { mode: 0o600 });
-	}
-	await install(root, signal);
-	if (!existsSync(adapterManifest(root))) {
-		throw new Error(`the install left no ${MACHINE_STORE_ADAPTER}`);
+	if (adapterInRange(root)) return root;
+	// An install goes to a folder of its own and replaces the cached one only once it holds a
+	// release in range, so a failed install never leaves an older or broken adapter to be served.
+	let staging = `${root}.${process.pid}.${crypto.randomUUID()}`;
+	mkdirSync(staging, { recursive: true, mode: 0o700 });
+	try {
+		writeFileSync(join(staging, "package.json"), '{"private": true}\n', { mode: 0o600 });
+		await install(staging, signal);
+		if (!adapterInRange(staging)) {
+			throw new Error(`the install left no ${STORE_ADAPTER_SPEC}`);
+		}
+		rmSync(root, { recursive: true, force: true });
+		renameSync(staging, root);
+	} finally {
+		rmSync(staging, { recursive: true, force: true });
 	}
 	return root;
 }

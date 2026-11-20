@@ -104,11 +104,11 @@ The same `chat:model` carries `commands`: what `/` offers in Chat besides Chopin
 (`/research`), each with a `name`, a `kind` and a one-line `description`. Only the document's own
 Planner supplies them, read each time somebody joins or the state changes:
 
-| Harness                     | Commands                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `atomic`                    | What an Atomic session in the Planner's working directory finds: its prompt templates (`prompt`), its skills (`skill`, named `skill:name`, as Atomic invokes them) and the workflows registered for it (`workflow`). The session is built as a Planner's is, in the operator's agent directory and the checkout, and ended at once; nothing goes to a model. It is read once for 30 seconds per directory, however many people join. Atomic's own extension commands are not offered. |
-| `remote`                    | What the attached client reported in its [capability catalog](agent-connection.md#capability-catalog), as written, and nothing once that client has left. An older client, or one that reports none, offers none, and so does a machine that is away.                                                                                                                                                                                                                                 |
-| `copilot-sdk` and any other | None.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Harness                     | Commands                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `atomic`                    | What an Atomic session in the Planner's working directory finds: its prompt templates (`prompt`) and its skills (`skill`, named `skill:name`, as Atomic invokes them). The session is built as a Planner's is, in the operator's agent directory and the checkout, and ended at once; nothing goes to a model. It is read once for 30 seconds per directory, however many people join. Atomic's own extension commands are not offered. |
+| `remote`                    | What the attached client reported in its [capability catalog](agent-connection.md#capability-catalog), as written, and nothing once that client has left. An older client, or one that reports none, offers none, and so does a machine that is away.                                                                                                                                                                                   |
+| `copilot-sdk` and any other | None.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 The list is the document's Planner's alone. A remote Planner's commands are held with its attached
 link, so another person's machine, or an earlier client of the same document, never shows its own.
@@ -125,10 +125,10 @@ command.` A command goes to the Planner; sent to the room it is refused. The ref
 with the message (the same persisted shape as a document reference, so a saved request keeps
 it across a restart) and the Planner's turn is built from it:
 
-| Kind                            | The turn's prompt                                                                                                                                                                                                         |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `skill`, `prompt` and any other | Atomic's own invocation, `/name args`, alone: the room's earlier words and the focused child's line wait for the next turn (a fresh session has them in its instructions), so the prompt opens with the `/`.              |
-| `workflow`                      | A request, in the person's turn as any message is, to start the registered workflow by name with the workflow tool's run action; the words after the chip are given as its input, said to be data and not an instruction. |
+| Kind                            | The turn's prompt                                                                                                                                                                                                                                           |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `skill`, `prompt` and any other | Atomic's own invocation, `/name args`, alone: the room's earlier words and the focused child's line wait for the next turn (a fresh session has them in its instructions), so the prompt opens with the `/`.                                                |
+| `workflow`                      | Only a remote client reports one. A request, in the person's turn as any message is, to start the registered workflow by name with the workflow tool's run action; the words after the chip are given as its input, said to be data and not an instruction. |
 
 Chopin's own commands (`/research`) keep their behaviour: they are never sent to the Planner, and
 the Planner's list never replaces them. A command in a queued message is not checked again when its
@@ -396,7 +396,7 @@ against GitHub or independently inspect the coding agent's checkout.
 Under `HARNESS=atomic` the Planner is a [full Atomic session](#full-atomic-planner),
 but the summary and research workers each still own one isolated in-process
 Atomic `AgentSession`. It is built with every shipped Atomic package disabled
-(workflows, subagents, MCP, web access, and Intercom). It has no Atomic coding
+(subagents, MCP, web access, and Intercom). It has no Atomic coding
 tools, and its resource loader discovers no extensions, skills, prompt
 templates, themes, or context files. Its working and configuration directory is
 an empty private temporary directory, and its session, settings, and
@@ -410,15 +410,15 @@ model again before every model request.
 ## Full Atomic Planner
 
 Under `HARNESS=atomic` every Planner session is a full Atomic session, in local
-and hosted deployments alike, with no separate flag. The workflows it starts
-get shell and filesystem access **as the server process's user**, not a sandbox
+and hosted deployments alike, with no separate flag. The Atomic extensions, MCP
+servers and tools it loads run **as the server process's user**, not in a sandbox
 confined to a repository. Operators who do not want that should use
 `copilot-sdk`. Both `HARNESS_AUTH=auto` and `ai-gateway` work, under
 their usual [bind rules](self-hosting.md#choose-and-trust-a-harness).
 
 The Planner's own turns offer only read-only tools beside Chopin's document and
 repository tools: `read`, `find` and `search` for the working directory,
-Atomic's web research tools, `ask_user_question`, and `workflow` (in a Chat
+Atomic's web research tools, `ask_user_question` and `codemode` (in a Chat
 thread, also `tell_chat_planner`; see
 [What a thread decided reaches the Chat](#what-a-thread-decided-reaches-the-chat)),
 plus the read-only tools the operator names in `chopin.plannerTools` of the
@@ -432,15 +432,14 @@ registers:
 Only the operator's file counts: a checkout's `.atomic/settings.json` can't add
 tools to a Planner, and a name that edits files, runs commands or starts agents
 (`bash`, `edit`, `write`, `kill`, `subagent`, `todo`) stops the Planner from
-starting. It cannot edit files, run commands, or start subagents itself, so it
-never implements the plan; a workflow it starts keeps the tools its stages
-declare. Atomic's workflows, MCP, and web access run alongside Chopin's tools.
+starting. It cannot edit files, run commands, or start subagents: its turns refuse
+those tools however they are reached, a codemode script's call included, so it
+never implements the plan. Atomic has no workflows since 0.10, so a Planner starts
+none. Atomic's MCP and web access run alongside Chopin's tools.
 Atomic's `intercom` is never offered to a Planner's turns, and they refuse it
 even from a codemode script, even when the operator names it in
 `chopin.plannerTools`: its model would choose the sessions and groups it
-reaches, so one document's Planner could list or message another's. Atomic's
-Intercom package stays loaded, so the stages of a workflow a Planner starts keep
-their run's own Intercom group. The normal Atomic
+reaches, so one document's Planner could list or message another's. The normal Atomic
 agent directory (including `ATOMIC_CODING_AGENT_DIR` or the legacy
 `PI_CODING_AGENT_DIR` override) supplies extensions, skills, prompt templates,
 context files, and a read-only copy of its settings. A verified checkout's
@@ -448,14 +447,13 @@ context files, and a read-only copy of its settings. A verified checkout's
 packages installed for that project load too; the document's own directory
 has none. Paths in `HARNESS_EXTENSIONS` load in every Planner session as if
 passed to Atomic's `--extension` flag, so a package listed there adds its
-extensions, skills, and workflows without being installed in the agent
-directory. Tools those extensions register load but are not offered to the
-Planner's own turns unless they are named above; workflow stages still load
-them. Chopin's compaction, summary, and cache overrides still apply on top.
+extensions and skills without being installed in the agent directory. Tools
+those extensions register load but are not offered to the Planner's own turns
+unless they are named above. Chopin's compaction, summary, and cache overrides still apply on top.
 Chopin appends its Planner
 instructions to Atomic's assembled prompt. Session, settings, and model
-credentials remain in memory; Atomic's own enabled tools, extensions, MCP
-servers, and workflow journal can perform writes as the server process's user.
+credentials remain in memory; Atomic's own enabled tools, extensions and MCP
+servers can perform writes as the server process's user.
 Background summary and research workers still use the isolated sessions described
 above.
 
@@ -475,8 +473,8 @@ same tools in a directory Chopin keeps for that document alone under its per-use
 directory (`$XDG_STATE_HOME/chopin/planner/<document id>`, defaulting to
 `~/.local/state`; `~/Library/Application Support/Chopin/planner` on macOS;
 `%LOCALAPPDATA%\Chopin\planner` on Windows), with mode `0700`. It is never shared
-with another document, keeps what the Planner and its workflows write there
-across later sessions and server restarts, and is not placed in the shared
+with another document, keeps what is written there across later sessions and
+server restarts, and is not placed in the shared
 temporary directory. A symlink or file at that path is refused. The Planner's
 instructions state which case applies: a verified checkout, or an empty
 directory with no repository files, in which case it reads the repository through
@@ -531,8 +529,10 @@ intercom; route out: …`, says its turns refuse `intercom` and names
 `tell_chat_planner` for a thread's Planner, or `none`.
 
 Chopin implements Atomic's `HostInput`, bound through
-`extensionBindings.humanInput`; it does not intercept tools. `ask_user_question`,
-extension dialogs, and workflow-stage input become ordinary shared Decisions:
+`extensionBindings.humanInput`; it does not intercept tools. Atomic names each
+request by its session and request id alone, and the binding belongs to the one
+Planner session that asks. `ask_user_question` and extension dialogs, and a
+remote client's workflow-stage input, become ordinary shared Decisions:
 
 - Questionnaires retain question and option order, multi-selection, and the
   exact text Atomic supplied; answers return their Atomic question indices and
@@ -545,14 +545,14 @@ extension dialogs, and workflow-stage input become ordinary shared Decisions:
   Atomic's own dialog accepts typed text (single-select without previews), and
   otherwise as typed `chat`, which Atomic delivers to the model as the member's
   inline message (blank `chat` text is Atomic's plain request to talk first).
-  Chopin never reports written text as a chosen option, and Atomic workflows
-  treat `chat` as a request to keep discussing, not approval.
+  Chopin never reports written text as a chosen option, and Atomic treats
+  `chat` as a request to keep discussing, not approval.
 - Confirm uses Yes/No; only choosing Yes approves. Select returns only a supplied
   choice. Input and editor use free-text cards; hints and initial editor text
   appear verbatim in the prompt. Explicitly submitted empty text is an answer,
   not cancellation.
-- Workflow cards show their question exactly as asked, with no run or stage
-  ids; Chat's run card shows which run is waiting on Decisions. A request that
+- A remote client's workflow cards show their question exactly as asked, with
+  no run or stage ids; Chat's run card shows which run is waiting on Decisions. A request that
   names the block it concerns goes, as one adjacent batch, directly after that
   block and is linked to it (see
   [Agent connection questions](agent-connection.md#questions)). One that names
@@ -589,10 +589,8 @@ and option counts or header, question, label, description, and answer lengths.
 Only Chopin's aggregate bounds apply. A request whose cards would take the
 document past its 256 KiB source limit fails with that message before any card
 appears. A written answer is limited by one shared-draft edit (64 KiB) and the
-whole draft (256 KiB). Text is never silently truncated. Atomic keeps durable
-workflow approvals pending on withdrawal; Chopin does not automatically resume
-workflows or replay interrupted turns after a restart. A new Atomic session must
-explicitly resume a saved run.
+whole draft (256 KiB). Text is never silently truncated. Chopin does not replay
+interrupted turns after a restart.
 
 A coding agent can hand an instruction to the Planner with
 [`invoke_planner`](local-agent-mcp.md#hand-an-instruction-to-the-planner) under
@@ -1865,26 +1863,20 @@ A harness session is disposable. A process restart, credential rotation,
 logout, or ownership reset discards it. A later turn bootstraps from the
 bounded transcript and reads the current document.
 
-The one exception is an atomic Planner session that still owns Atomic workflow
-runs when its turn ends. A workflow the Planner starts outlives the turn that
-launched it, and its runs belong to that session, so Chopin keeps the session
-and its owner binding, and keeps the document loaded, until every run has
-finished. The next turn reuses that session, so the Planner can still see,
-pause and resume its runs with its `workflow` tool; it cannot message their
-stages, since it has no `intercom`. People steer through Chat and Decisions,
-never a stage directly. **Stop Planner** also pauses the session's live runs, resumably,
-through Atomic's session run control, and **Resume Planner** resumes the runs it
-paused. A run waiting on a question pauses too: Atomic withdraws the question
-from Decisions while the run is paused and presents it again on Resume, and an
-answer that arrives during the pause reaches the run only after Resume, so a
-paused run never advances. A run that ends blocked or failed while the Planner
-is between turns starts a Planner turn about it, on the kept session, so the
-Planner reports what happened and what the team needs to do; Chat records the
-run's end as that turn's reason, and the session is let go after the turn. The
-adapter stops any turn Atomic starts on its own, such as for its lifecycle
-notices or, since Atomic 0.9.41, for a message queued while the session is
-idle, because Chopin would neither show nor record it. The Planner's next turn
-still starts normally.
+The one exception is a Planner session that still owns workflow runs when its
+turn ends. Only a remote Planner's client reports runs (see
+[Runs](#remote-planner)). An Atomic Planner has none, since Atomic has no
+workflows since 0.10 and the Planner starts no subagents, so **Stop Planner** on
+one stops its turn and pauses nothing. A run outlives the turn
+that launched it, so Chopin keeps the session and its owner binding, and keeps the
+document loaded, until every run has finished. People steer through Chat and
+Decisions, never a stage directly. **Stop Planner** also pauses the session's live
+runs, resumably, and **Resume Planner** resumes the runs it paused. A run waiting on
+a question pauses too, and an answer that arrives during the pause reaches the run
+only after Resume, so a paused run never advances. The Atomic adapter stops any
+turn Atomic starts on its own, such as for its lifecycle notices or, since Atomic
+0.9.41, for a message queued while the session is idle, because Chopin would
+neither show nor record it. The Planner's next turn still starts normally.
 Chat shows the session's runs as one stack, one row
 per run: its name, status (running, waiting on Decisions, paused, or ended), and
 elapsed time. Several runs can be live at once. Runs waiting on Decisions come
@@ -1917,29 +1909,12 @@ withdraws no question. An explicit Stop still lets go a session that only waits 
 a question, but changes nothing for one whose workflows are paused: they and the
 question they hold open wait for Resume. The
 "was stopped after N min" line records how long the run had lasted when its
-session was let go, not a limit; run state is durable in Atomic's
-workflow journal, so runs interrupted that way can be resumed from a later
-session. Before disposing the session, the adapter waits, for at most 10
-seconds, on Atomic's `session.workflows.waitForSettled()` for each run that
-finished, failed or was stopped, so a session let go right after a run ends
-never leaves that run `running` in the journal; a run whose ending could not be
-recorded is logged by its ID. Chopin keeps that journal at
-`$XDG_STATE_HOME/chopin/atomic/workflows.sqlite` under the same per-user state
-directory as the documents' own directories, because a run resumes only with
-the journal and working directory it started in. Each Planner session is
-given that file through Atomic's `createAgentSession({ journal })`, so the
-server's process environment is left unchanged. An operator's non-empty
-`ATOMIC_WORKFLOW_JOURNAL_PATH` names another file instead; Atomic's
-`workflows.journal` setting and its `ATOMIC_WORKFLOWS_JOURNAL` and
-`ATOMIC_STORAGE` selections do not move a Planner session's journal, and
-neither does the shared top-level `storage` setting, including an adapter named
-by package such as the libSQL selection `atomic storage join` writes. That
-setting does reach the Intercom of the workflow stages a Planner starts: they
-use the machine's Intercom broker, which keeps its routing in the selected
-database and so can reach sessions on every machine that selects the same one. Atomic
-still checks every set `ATOMIC_STORAGE`, `ATOMIC_SESSIONS_STORAGE`, and
-`ATOMIC_WORKFLOWS_JOURNAL` when it creates a session, so an invalid value fails
-every Atomic turn with a `StorageConfigError` naming the variable. A Build is not a workflow run and has no card in Chat: its tasks, their
+session was let go, not a limit. An Atomic Planner session keeps its history in
+memory, and Chopin saves its every entry with the document for forks and threads,
+so Atomic's shared top-level `storage` setting and its `ATOMIC_STORAGE` and
+`ATOMIC_SESSIONS_STORAGE` selections do not move it. Atomic still checks every set
+`ATOMIC_STORAGE` and `ATOMIC_SESSIONS_STORAGE` when it creates a session, so an
+invalid value fails every Atomic turn with a `StorageConfigError` naming the variable. A Build is not a workflow run and has no card in Chat: its tasks, their
 state and pull requests show under **Build**, whichever machine runs it. The
 Planner's instructions say so, so it does not point people to Chat for a Build.
 

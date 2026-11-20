@@ -1,13 +1,15 @@
 import type { FullPlanner } from "../atomic/full";
+import type { RunReports } from "../runs";
 import type { HumanInput, HumanInputStatus } from "../atomic/human-input";
 import type { AgentLink, RebuiltDocument } from "./link";
 
 /**
  * What Chopin keeps for one Planner session whose model runs in an attached
- * client. Run state mirrors a full Atomic Planner's, reported by the client.
+ * client, with the workflow runs the client reports.
  */
 export type RemotePlanner =
-	& Pick<FullPlanner, "runs" | "onRuns" | "rootOf" | "waiters" | "activeTools" | "toolReport">
+	& Pick<FullPlanner, "activeTools" | "toolReport">
+	& RunReports
 	& {
 		channelId: string;
 		/** A background job's session: the client may offer only Chopin's tools and ask nothing. */

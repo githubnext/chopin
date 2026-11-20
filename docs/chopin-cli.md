@@ -900,8 +900,9 @@ environment, which it then gets only an allow-list of.
 Where the Chopin you connect to gives machines a database for their agents' Atomic
 sessions, pairing and `chopin connect` set it up with nothing more to do: the
 connector asks Chopin for this machine's own login, saves it in `agent-store/` in its
-base dir (the password apart, only you can read it), installs the
-`@bastani/atomic-storage-postgres` adapter there once with `npm`, and says so:
+base dir (the password apart, only you can read it), installs a 0.10 release of the
+`@bastani/atomic-storage-postgres` adapter there with `npm` (once, and again only to
+replace an earlier release; a failed install leaves the one there as it was), and says so:
 
 ```
 Agents here keep their sessions in this machine's own database at db.example.com:5432.

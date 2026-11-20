@@ -11,7 +11,7 @@ import {
 	RIVAL_TOKEN,
 } from "../../testing/agent-link";
 import { createHumanInput } from "../atomic/human-input";
-import { untilUnpaused } from "../atomic/full";
+import { untilUnpaused } from "../runs";
 import { createRemoteAdapter } from "./adapter";
 import { testLease } from "../../storage/contract-support";
 

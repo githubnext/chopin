@@ -25,7 +25,7 @@ import type { Server } from "bun";
 import type { DocumentRoom } from "../agent/tools";
 import type { HostedAuth } from "../auth/routes";
 import type { NewDocumentRequest, NewDocumentResult } from "../agent/new-documents";
-import type { PlannerRuns } from "../harness/atomic/full";
+import type { PlannerRuns } from "../harness/runs";
 import type { PlannerForkHooks, PlannerSession } from "../harness/session";
 import type { TellChat } from "./thread-notes";
 import type { Socket, SocketData } from "../wire";

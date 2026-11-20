@@ -486,8 +486,8 @@ describe("Planner workspaces", () => {
 			expect(registered?.humanInput.questionnaire).toBeFunction();
 			expect(instructions).toContain(`${path}, is a local checkout of owner/repo`);
 			expect(instructions).toContain("a withdrawn question is not an answer or approval");
-			expect(instructions).toContain("never tell them to use `/workflow connect`");
-			expect(instructions).toContain("Chat shows a card for each workflow run you start");
+			expect(instructions).toContain("never tell them to use `/tasks`");
+			expect(instructions).not.toContain("workflow run");
 			expect(instructions).toContain("cannot edit files, run commands or reach other\nsessions");
 			expect(instructions).not.toContain("intercom");
 			expect(instructions).not.toContain("You have no shell");
@@ -527,6 +527,10 @@ describe("Planner workspaces", () => {
 		let clock = laterTimers();
 		try {
 			await opened.value.stream("prompt", new AbortController().signal);
+			// An Atomic Planner owns no workflow runs, so there is nothing for Stop to pause.
+			expect(opened.value.runs).toBeUndefined();
+			expect(opened.value.pauseRuns).toBeUndefined();
+			expect(opened.value.resumeRun).toBeUndefined();
 			let asked = registered!.humanInput.confirm("Ship?", "Now.", room.options);
 			let [card] = await room.cards(1);
 			await clock.pass(31 * 60 * 1_000);
@@ -560,8 +564,8 @@ describe("Planner workspaces", () => {
 			expect(instructions).toContain("holds no repository files");
 			expect(instructions).toContain("`read_repository_file`");
 			expect(instructions).toContain("a withdrawn question is not an answer or approval");
-			expect(instructions).toContain("never tell them to use `/workflow connect`");
-			expect(instructions).toContain("Chat shows a card for each workflow run you start");
+			expect(instructions).toContain("never tell them to use `/tasks`");
+			expect(instructions).not.toContain("workflow run");
 			expect(instructions).not.toContain("intercom");
 		}
 		forgetWorkspaces();
