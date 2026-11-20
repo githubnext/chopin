@@ -958,12 +958,14 @@ writer lease makes exact); GitHub has given
 no answer of the other kind about the same Copilot account since the launch
 asked (see GitHub Copilot below); the launch's machine is not revoked, its
 document is open in the same generation, and every placeholder it stored is still
-there; and the launch has not reached its deadline. A launch past its deadline, whose
+there; and neither the launch's deadline nor that of the Copilot token it is given
+Copilot for has come, both read on one clock reading. A launch past its deadline, whose
 machine was revoked or document archived while it was prepared, restored since or not,
 or whose placeholders went with the machine's (a machine that must be paired again,
 which ends its launches without revoking it), takes its placeholders back and is given
-nothing (`ended`), never a provider without its stored grant. Any other change takes them back and prepares the
-launch afresh, at most three times, keeping every key that is still usable: a
+nothing (`ended`), never a provider without its stored grant. Any other change, a Copilot
+token that expired while the placeholders were written among them, takes them back and prepares the
+launch afresh, asking GitHub again, at most three times, keeping every key that is still usable: a
 seat refused meanwhile withholds Copilot alone, and a key added meanwhile is
 given. The launch's machine and document are read again when a cutoff completed
 while the final reads were made, so a machine revoked or a document archived after
@@ -1144,14 +1146,19 @@ machine's), or a token they connected instead, which is another account. Answers
 are ordered by when they completed, not when they were asked, and a failure to
 ask is no answer. GitHub decides an answer before Chopin has it, so one that
 completes after an answer of the other kind about the same account that was asked
-later (the two crossed) may have been decided first: it is dropped and GitHub asked
-again, at most three times, before anything is shown or kept. An answer held for one token of an account is dropped once a
+later (the two crossed) may have been decided first: neither is settled, an answer held
+that the late one contradicts is dropped, and GitHub is asked again, at most three times. Until
+it answers a question put after both, the check is unfinished (`unknown`), never either answer,
+so a retry GitHub can't answer never leaves a disputed refusal on the page. An answer is used
+again only for the account and the token it was asked for together, so a sign-in never takes
+what GitHub said of the same token connected instead. An answer held for one token of an account is dropped once a
 newer one of the other kind completes for the same account, so a seat lost in one
 session is not shown as there in another, and a seat back is shown in all once
 GitHub says so; a separately connected account keeps its own. A launch whose
 Copilot answer GitHub has contradicted since it asked, about the same account,
 asks again before it publishes. An answer of the other kind than the last one GitHub
-gave about the account (a seat confirmed lost, or back) tells the person's lasting
+gave about the account (a seat confirmed lost, or back), or either kind once a crossing
+disputed the last one, tells the person's lasting
 launches, which are prepared again; the same answer again, and no answer, tell no one.
 Each launch asks GitHub afresh and gets a Copilot placeholder only for
 `access`: `none` withholds it as `no-copilot-access`, and `unknown` as
