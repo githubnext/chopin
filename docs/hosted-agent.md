@@ -254,8 +254,9 @@ system notice naming the caller instead of their message, and the instruction
 goes to the Planner alone. Only the document's creator or the account holding
 its Planner may send one, at most 10 an hour per document.
 A call with an `idempotencyKey` claims the key before its instruction is posted,
-naming the Chat entry the instruction becomes, and records the delivery once its
-turn has started, before it answers. A retry returns the first result, starts the
+naming the Chat entry the instruction becomes, and records the delivery once the
+instruction reached a turn (its own turn started, or the person's turn running took
+it), before it answers; one that reached none is refused with `planner-unavailable`. A retry returns the first result, starts the
 turn of an instruction that was posted without one, and never posts it twice
 ([Retrying safely](local-agent-mcp.md#retrying-safely)).
 Under `HARNESS=remote` only attaching claims ownership. An `@chopin` message or

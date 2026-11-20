@@ -670,7 +670,7 @@ export interface McpSessionStore {
 /**
  * `invoke_planner` calls made under an idempotency key, one record per caller, document and key.
  * A call claims its key before its instruction is posted, naming the Chat entry the instruction
- * becomes and the result it answers, then marks the claim invoked once its turn has started, or
+ * becomes and the result it answers, then marks the claim invoked once it reached a turn, or
  * releases a claim under which nothing was posted. Writes are fenced by the writer lease. A record
  * past `expiresAt` counts as absent, and a document's records go with it.
  */

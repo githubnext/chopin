@@ -164,16 +164,23 @@ the same account on another document, can use the same key without meeting yours
 client that finds it there can rely on this behaviour.
 
 Chopin records the key before it posts the instruction, and records that the
-instruction was delivered only once its Planner turn has started, or once it was
-given to the turn running. A call answers with the document only after that
-record is saved, and a retry that finds the record answers the same: it never
-reports a turn that did not start. Whatever fails, retrying the same request under
-the same key posts the instruction at most once:
+instruction was delivered only once it reached a turn: its own Planner turn
+started, or the person's turn running took it. A keyed call waits for that, so it
+can take longer than a call without a key: behind a background job, until the job
+has given way. It answers with the document only after the record is saved, and a
+retry that finds the record answers the same: it never reports an instruction that
+reached no turn. Whatever fails, retrying the same request under the same key posts
+the instruction at most once:
 
 - If the instruction was never posted, the retry posts it and starts its turn.
-- If it was posted and its turn did not start (the server stopped first, or
-  refused the turn), the retry starts that turn without posting it again, or
-  returns the refusal that stops it now.
+- If it was posted and reached no turn, the call is refused with
+  `planner-unavailable`. That happens when the turn it was given to ended or was
+  stopped before taking it and another turn holds the Chat, or the server began
+  stopping before the turn waiting behind a background job could start. Chat says
+  Chopin did not read it. The retry starts its turn without posting it again, gives
+  it to the turn running, or returns the refusal that stops it now.
+- If it was posted and its turn did not start for another reason (the server
+  stopped first, or refused the turn), the retry does the same.
 - If its turn started and the start was recorded, the retry returns the first
   result. A turn that a restart interrupted is not run again, as for any other
   instruction.
@@ -206,7 +213,8 @@ neither verified, used, nor remembered.
 
 The result contains `id`, `title`, and the canonical `url` (plus any generated
 `description`). It returns after the instruction is durably posted, not after the
-Planner finishes. While a turn runs, the instruction is given to it or refused
+Planner finishes; with an `idempotencyKey`, once the instruction has reached a turn
+(see [Retrying safely](#retrying-safely)). While a turn runs, the instruction is given to it or refused
 with `planner-busy` (see below); nothing waits in a queue. Progress and results
 appear in the document and Chat; questions appear in Decisions. Under
 `atomic`, Atomic input waits in Decisions until a member answers it or it is
@@ -253,7 +261,9 @@ Refusals return an object with `code`, and `planner-not-attached` also a
   as the MCP account, or ask the owner to sign in again.
 - `checkout-unverified`: under `atomic`, correct the supplied path or its
   repository origin.
-- `planner-unavailable`: the Planner is disabled or the room is closing.
+- `planner-unavailable`: the Planner is disabled or the room is closing, or, for a
+  call with an `idempotencyKey`, its posted instruction reached no turn; call again
+  with the same key (see [Retrying safely](#retrying-safely)).
 - `planner-busy`: a turn is running and cannot be given the instruction. A message-like call is
   given to the running turn when its harness takes input mid-run, and refused with this code
   when it does not (the Copilot SDK); a background job's turn gives way to it instead, and its
