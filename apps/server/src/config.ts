@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 
 import { loadAuth } from "./auth/config";
+import { machineStoreConfig } from "./machine-store/config";
 import { setupAgents } from "./setup-agents";
 import { DEFAULT_COPILOT_MODEL } from "./harness/copilot-sdk/model";
 import {
@@ -21,6 +22,7 @@ import {
 import type { SetupAgent } from "@chopin/protocol/agents";
 import type { AttachmentLimits } from "@chopin/protocol/attachment";
 import type { AuthConfig } from "./auth/config";
+import type { MachineStoreConfig } from "./machine-store/config";
 import type { StorageConfig } from "./storage/registry";
 
 export type Config = {
@@ -130,6 +132,7 @@ export type Config = {
 	handover: Handover;
 	/** Durable service storage. */
 	storage: StorageConfig;
+	machineStore?: MachineStoreConfig;
 	/** GitHub identity and short-lived OAuth attempt encryption. */
 	auth: AuthConfig;
 };
@@ -459,6 +462,7 @@ export function load(): Config {
 		clientDir: process.env.CLIENT_DIR || undefined,
 		handover: handover(),
 		storage: storage(),
+		machineStore: machineStoreConfig(process.env),
 		auth: loadAuth(serverPort, selection.host),
 	};
 }
@@ -503,6 +507,9 @@ export function describe(config: Config): string {
 		config.liveSpikes ? "live spikes: on" : "live spikes: off",
 		admission,
 		`storage: ${config.storage.driver}`,
+		config.machineStore
+			? `machine store: ${new URL(config.machineStore.url).host}`
+			: "machine store: off",
 	];
 	// One setting per line, so the log never needs a separator glyph.
 	return [`chopin http://${config.host}:${config.port}`, ...parts.map(part => `  ${part}`)]

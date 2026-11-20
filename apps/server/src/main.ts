@@ -53,6 +53,8 @@ import { documentUrl } from "./channels/document-url";
 import { ActiveOwnerBindings } from "./agent/active-owner";
 import { registerAuthRoutes } from "./auth/routes";
 import { registerExperimentRoutes } from "./experiments/routes";
+import { PostgresMachineStoreServer } from "./machine-store/server";
+import { MachineStores } from "./machine-store/service";
 import { attachmentLimits } from "./attachments/limits";
 import { registerAttachmentRoutes } from "./attachments/routes";
 import { registerImageRoutes } from "./images/routes";
@@ -278,6 +280,17 @@ let aiCredentials: AiCredentials | undefined;
 /** Whether AI launches nothing owns are ended with each sweep: once holds and runs are back. */
 let aiRetiring = false;
 let aiUsage: AiUsage | undefined;
+let machineStores = config.machineStore
+	? new MachineStores({
+		storage,
+		server: new PostgresMachineStoreServer(config.machineStore),
+		key: config.auth.encryptionKey,
+		clock: () => new Date(),
+		...(config.machineStore.retentionMs === undefined
+			? {}
+			: { retentionMs: config.machineStore.retentionMs }),
+	})
+	: undefined;
 /** What a remote Planner client that offered `ai-credentials` hands its sessions' models. */
 let plannerAi: AgentAi | undefined;
 let ownerBindings: ActiveOwnerBindings | undefined;
@@ -2454,6 +2467,7 @@ function drain(graceful: boolean): Promise<void> {
 			})`,
 		);
 		await attempt(() => shutdownHarnesses());
+		await attempt(async () => await machineStores?.close());
 		await attempt(() => storage.close());
 		if (errors.length > 0) throw new AggregateError(errors, "Chopin shutdown failed.");
 	})();
@@ -2495,6 +2509,7 @@ function cleanSessions(): void {
 		// owns now ends, whichever process handed it out.
 		if (aiRetiring) await aiCredentials?.retire();
 		await aiUsage?.sweep();
+		await machineStores?.sweep();
 	}).catch(err => {
 		console.error("chopin: could not delete idle MCP sessions or expired credentials -", err);
 	}).finally(() => {
@@ -3206,6 +3221,7 @@ let hostedAuth = registerAuthRoutes(router, {
 	onSessionRevoked: sessionRevoked,
 	onCredentialsWillRotate: credentialsWillRotate,
 	lease: heldLease,
+	onMachineRevoked: async id => await machineStores?.disable(id),
 });
 // A paired machine's Planner backend attaches with a credential from the connector routes.
 let machinePlanners = config.agent && config.harness === "remote"
@@ -3213,6 +3229,7 @@ let machinePlanners = config.agent && config.harness === "remote"
 	: undefined;
 experiments = registerExperimentRoutes(router, hostedAuth, {
 	ai: () => aiCredentials,
+	...(machineStores ? { machineStores } : {}),
 	...(config.auth.app ? { app: new GitHubAppClient(config.auth.app) } : {}),
 	planners: machinePlanners,
 	attachments: () => plannerAttachments,

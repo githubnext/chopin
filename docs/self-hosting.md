@@ -403,6 +403,10 @@ the image.
 | `GITHUB_ALLOWED_USERS`            | empty                   | Comma-separated admitted GitHub logins.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `GITHUB_ALLOWED_ORGANIZATIONS`    | empty                   | Comma-separated organizations whose active members are admitted.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `SESSION_ENCRYPTION_KEY`          | required                | Exactly 64 hexadecimal characters. Encrypts the hosted OAuth attempt cookie and derives a separate key for session credentials in PostgreSQL. Keep stable across releases and outside the database; replacing it invalidates hosted logins. Local mode requires the configured key but uses separate unpredictable, HttpOnly attempt and browser-binding cookies.                                                                                                                                                                                                                                                                                                 |
+| `MACHINE_STORE_URL`               | empty                   | `postgres:` or `postgresql:` URL of an administrator role on a PostgreSQL 16 or later server, without a password. Turns on a database login of its own for each paired machine's agent sessions; see [Agent sessions database for machines](#agent-sessions-database-for-machines). Unset, pairing and connecting are as before.                                                                                                                                                                                                                                                                                                                                  |
+| `MACHINE_STORE_PASSWORD_FILE`     | empty                   | Path of the administrator role's password, read at startup. Not with `MACHINE_STORE_PASSWORD`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `MACHINE_STORE_PASSWORD`          | empty                   | The administrator role's password, for platforms that put secrets (a Key Vault reference, for one) in the environment.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `MACHINE_STORE_RETENTION_DAYS`    | never                   | Whole days after a machine is revoked or unpaired before its database and role are dropped. Unset keeps them, with the login turned off.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `AUTH_MODE`                       | `hosted`                | Set `local` for loopback device-flow sign-in with persisted credentials (see [Authentication](authentication.md#local-device-flow-sign-in)). Any other value fails startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `DEMO_PERSONAS`                   | `off`                   | Set `on` to enable the server-owned local demo collaborators (Lily and Felix). Requires `AUTH_MODE=local` on a loopback bind; otherwise, or for any value besides `on` and `off`, startup fails.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `CHOPIN_LOCAL_CREDENTIALS_DIR`    | platform default        | Local mode only. Overrides the plaintext-fallback credential directory (default `~/.config/chopin` on Linux, `~/Library/Application Support/Chopin` on macOS, `%APPDATA%\Chopin` on Windows). Must resolve outside the repository and process working directory.                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -889,6 +893,58 @@ for a service. An instance behind another origin needs nothing: the connector
 allows the origin it connected to. `--require-sandbox` refuses runs on a machine
 with no sandbox, which an operator may want to ask of the people who share
 machines.
+
+### Agent sessions database for machines
+
+With `MACHINE_STORE_URL` set, every paired machine gets a login of its own to one
+shared PostgreSQL server, where the agents Chopin starts on it keep their Atomic
+sessions (Atomic's `@bastani/atomic-storage-postgres` adapter). Nothing changes for
+the people who pair: pairing, `chopin connect` and the service ask for the login as
+they connect, and a machine paired earlier gets it the next time it connects. If
+Chopin can't make it, the pairing output and the Machines page say why, and the
+machine is paired and connected all the same; its agents keep their sessions on the
+machine until a later connect succeeds.
+
+For each machine Chopin keeps, under the administrator role:
+
+- a role and a database both named `m_` followed by the machine's id without its
+  dashes (`m_x` and a hash for any other id), never a name a person typed;
+- the database owned by the administrator, created with connections off, with
+  `CONNECT` granted to the machine's role alone before connections are allowed, and a
+  schema `atomic` owned by the role, where Atomic sets up its tables;
+- a role that is no superuser, can't create roles or databases, replicate or bypass
+  row security, is a member of no other role and has no privilege on any other
+  database. An existing role or database that isn't exactly this is refused, never
+  changed, and its login is never turned on;
+- `CONNECT` revoked from `PUBLIC` on every other database of the server, checked by
+  connecting as the new role to `postgres`, `template1` and the administrator's own
+  database. Give the administrator a server of its own: other applications' roles on
+  it need `CONNECT` granted to them by name.
+
+The administrator role needs `CREATEROLE` and `CREATEDB` (a managed service's
+administrator has both) and must own the server's other databases, or Chopin can't
+revoke `CONNECT` on them and refuses to hand out the login, saying which database is
+still open.
+
+The password is 32 random bytes, sent to PostgreSQL only as a SCRAM-SHA-256 verifier
+computed by Chopin, kept by Chopin as AES-GCM ciphertext under a key derived from
+`SESSION_ENCRYPTION_KEY` (`machine_databases`), and handed only to the machine
+itself, over HTTPS (or to loopback), in the body of
+`POST /api/connector/machine-store`. The URL it is handed with holds no password,
+and it is in no log, argument list or error. Asking again returns the same login.
+The machine's owner rotates it with
+`POST /api/connector/machines/<id>/store/rotate`: the new password is kept beside the
+working one until PostgreSQL has it, the old one stops working and its sessions are
+ended, and the machine takes the new one the next time it connects. Revoking or
+unpairing a machine turns its login off (`NOLOGIN`, connections to its database off,
+its sessions ended) before Chopin answers; if the server can't be reached then, each
+cleanup pass tries again. After `MACHINE_STORE_RETENTION_DAYS` the database and role
+are dropped.
+
+The URL machines get names the host and port of `MACHINE_STORE_URL` and its
+`sslmode`, so use a host name machines can reach, with a certificate that names it.
+A sandboxed agent reaches the database through the connector's proxy, which allows
+that host and port.
 
 ### Writer lease
 

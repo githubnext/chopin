@@ -251,6 +251,18 @@ durable.
   launch credential to tell an ended launch from a stand-in its agent got wrong. The
   runner adds the launch credential itself; no agent sees it. See
   [Hosted agent](docs/hosted-agent.md#handing-launches-to-runners).
+- **A machine's database login is its own.** With `MACHINE_STORE_URL`, pairing and
+  connecting give each paired machine a role and database named from its id
+  (`apps/server/src/machine-store/`): the administrator owns the database, the role
+  has `CONNECT` on it alone and its `atomic` schema, and no other database of the
+  server lets `PUBLIC` connect, checked by connecting. An existing role or database
+  that isn't the managed one is refused, never repaired. Passwords reach PostgreSQL
+  only as a SCRAM verifier, are kept encrypted (`machine_databases`), and a rotation
+  keeps the working one until PostgreSQL has the new one. Revoking or unpairing turns
+  the login off before the revoke is answered. The connector writes the login only into
+  the private Atomic directories of agents on Chopin's AI accounts
+  (`apps/connector/src/machine-store.ts`), never the person's `~/.atomic`. A failure
+  never fails pairing; the connector and the Machines page say it.
 - **Planner ownership is process-bound.** The first eligible Planner or
   model-backed research request supplies its GitHub App token and Copilot
   entitlement. Server-authored turns nobody typed (re-linking decisions after a

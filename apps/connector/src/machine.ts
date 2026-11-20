@@ -12,6 +12,7 @@ import {
 	CONNECTOR_SANDBOX_HEADER,
 	CONNECTOR_SANDBOX_REASON_HEADER,
 	CONNECTOR_SERVICE_HEADER,
+	CONNECTOR_STORE_PROBLEM_HEADER,
 	CONNECTOR_UPDATE_REQUIRED,
 	type SandboxReport,
 } from "@chopin/protocol/connector";
@@ -23,6 +24,7 @@ import {
 	isAiProvider,
 	NO_AI_ACCOUNT_RUN,
 } from "@chopin/protocol/ai-credentials";
+import { type MachineStoreLogin, passwordlessStoreUrl } from "@chopin/protocol/machine-store";
 import type { Output } from "./output";
 
 /**
@@ -299,6 +301,7 @@ export type About = {
 	agent?: { name: string; version?: string };
 	/** Whether agents run in the system's process sandbox, and if not, why and the fix. */
 	sandbox?: SandboxReport;
+	storeProblem?: string;
 };
 
 /** `about` and this machine's hostname and platform, as headers; a value headers can't carry goes. */
@@ -318,6 +321,10 @@ function aboutHeaders(about: About): Record<string, string> {
 				[CONNECTOR_SANDBOX_FIX_HEADER]: about.sandbox.fix,
 			}
 			: {}),
+		[CONNECTOR_STORE_PROBLEM_HEADER]: about.storeProblem?.replace(/[^\x20-\x7e]/g, "?").slice(
+			0,
+			300,
+		),
 	};
 	return Object.fromEntries(
 		Object.entries(headers).filter((entry): entry is [string, string] =>
@@ -622,6 +629,29 @@ export async function machineAiLaunch(
 		providers: providers as AiProviderGrant[],
 		withheld,
 	};
+}
+
+export const UNUSABLE_STORE_LOGIN =
+	"Chopin's answer wasn't a database login without a password in its URL, so it wasn't used.";
+
+export async function machineStoreLogin(
+	url: string,
+	token: string,
+	signal?: AbortSignal,
+): Promise<MachineStoreLogin | undefined> {
+	let value: Record<string, unknown>;
+	try {
+		value = await post(url + "/api/connector/machine-store", {}, token, signal);
+	} catch (error) {
+		if (error instanceof ConnectorError && (error.code === "not-found" || error.status === 404)) {
+			return undefined;
+		}
+		throw error;
+	}
+	if (!passwordlessStoreUrl(value.url) || typeof value.password !== "string" || !value.password) {
+		throw new Error(UNUSABLE_STORE_LOGIN);
+	}
+	return { url: value.url, password: value.password };
 }
 
 /** Ends a run's AI launch with its own credential, so its stand-ins stop working at once. */

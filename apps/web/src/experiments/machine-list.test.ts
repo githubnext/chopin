@@ -9,6 +9,7 @@ import {
 	platformName,
 	SHARE_DETAIL,
 	statusWords,
+	storeWords,
 	YourMachines,
 } from "./machine-list";
 
@@ -233,4 +234,23 @@ test("a teammate's machine is a Cloud machine here as it is in a document's menu
 			group.machines.map(value => value.id),
 		]),
 	).toEqual([["local", ["m1"]], ["cloud", ["t1", "c"]]]);
+});
+
+test("a machine's sessions database is named only where Chopin gives machines one", () => {
+	expect(storeWords(undefined)).toBeUndefined();
+	expect(storeWords(null)).toBeUndefined();
+	expect(storeWords({ state: "ready" })).toBe("Ready");
+	expect(storeWords({ state: "pending" })).toBe("Set up when it next connects");
+	expect(storeWords({ state: "failed", reason: "the server refused (42501)" })).toBe(
+		"Couldn't be set up: the server refused (42501)",
+	);
+	let failed = table([{
+		...base,
+		store: { state: "failed", reason: "a machine could still connect to the database template1" },
+	}], []);
+	expect(row(failed, "build-box")).toContain(
+		"Sessions database couldn&#x27;t be set up: a machine could still connect to the database template1",
+	);
+	let ready = table([{ ...base, store: { state: "ready" } }], []);
+	expect(row(ready, "build-box")).not.toContain("Sessions database");
 });

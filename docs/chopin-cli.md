@@ -674,12 +674,13 @@ greyed out.
 [Where chopin keeps its files](chopin-cli-reference.md#where-chopin-keeps-its-files)
 lists them all.
 
-| Path                                    | Holds                                            | Removed                                         |
-| --------------------------------------- | ------------------------------------------------ | ----------------------------------------------- |
-| `runs/<run id>`                         | A job's worktree, for you to inspect             | Once 15 newer runs have finished                |
-| `runs/<run id>-worktrees/`              | Extra worktrees an unsandboxed build adds        | When the run ends, uncommitted changes included |
-| `planners/<owner>/<repo>/<document id>` | A Planner command's worktree for one document    | Never                                           |
-| `repos/<owner>/<repo>`                  | A clone of a repository you named no checkout of | Never                                           |
+| Path                                    | Holds                                                             | Removed                                         |
+| --------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------- |
+| `runs/<run id>`                         | A job's worktree, for you to inspect                              | Once 15 newer runs have finished                |
+| `runs/<run id>-worktrees/`              | Extra worktrees an unsandboxed build adds                         | When the run ends, uncommitted changes included |
+| `planners/<owner>/<repo>/<document id>` | A Planner command's worktree for one document                     | Never                                           |
+| `repos/<owner>/<repo>`                  | A clone of a repository you named no checkout of                  | Never                                           |
+| `agent-store/`                          | This machine's database login for agent sessions, and the adapter | Its password with `chopin unpair`               |
 
 `--keep-runs <n>` keeps `n` finished runs instead of 15, and `--keep-runs 0`
 keeps them all. `chopin` never removes a run that is going or waiting to start.
@@ -893,6 +894,32 @@ it is handed. A spare started otherwise is replaced, never handed such a documen
 Against a Chopin that says nothing of it, a backend starts as before. Give a backend
 what it needs in its own `--planner-command` or in `--env`, not in the connector's
 environment, which it then gets only an allow-list of.
+
+### Agent sessions in Chopin's database
+
+Where the Chopin you connect to gives machines a database for their agents' Atomic
+sessions, pairing and `chopin connect` set it up with nothing more to do: the
+connector asks Chopin for this machine's own login, saves it in `agent-store/` in its
+base dir (the password apart, only you can read it), installs the
+`@bastani/atomic-storage-postgres` adapter there once with `npm`, and says so:
+
+```
+Agents here keep their sessions in this machine's own database at db.example.com:5432.
+```
+
+Each agent that runs on Chopin's AI accounts, and each such Planner, then finds in its
+own Atomic directory (`<worktree>.agent/atomic`) a copy of the adapter, its
+`storage-password` (mode `0600`) and a `settings.json` whose `storage` selects the
+database by a URL without the password. Your own `~/.atomic` is never touched, and an
+agent that runs on your own models keeps its sessions as before. The sandbox's proxy
+allows the database's host and port, which Atomic's adapter reaches through
+`HTTPS_PROXY`.
+
+If Chopin can't make the login, or the adapter can't be installed, the connector says
+why and connects anyway; the Machines page shows it too. Agents keep their sessions
+on the machine until a later connect sets it up. When Chopin can't be reached, the
+saved login is used. `chopin unpair` removes the saved password, and Chopin turns the
+login off.
 
 ### Git in the sandbox
 

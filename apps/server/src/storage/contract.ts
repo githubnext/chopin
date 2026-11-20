@@ -12,6 +12,7 @@ import { plannerHoldContract } from "./planner-hold-contract";
 import { plannerModelChoiceContract } from "./planner-model-choice-contract";
 import { chatThreadContract } from "./chat-thread-contract";
 import { plannerCredentialContract } from "./planner-credential-contract";
+import { machineDatabaseContract } from "./machine-database-contract";
 import { aiCredentialContract } from "./ai-credential-contract";
 import { aiUsageContract } from "./ai-usage-contract";
 import { deferredTurnContract } from "./deferred-turn-contract";
@@ -64,6 +65,7 @@ export function storageContract(name: string, factory: Factory): void {
 	plannerModelChoiceContract(name, factory);
 	chatThreadContract(name, factory);
 	plannerCredentialContract(name, factory);
+	machineDatabaseContract(name, factory);
 	aiCredentialContract(name, factory);
 	aiUsageContract(name, factory);
 	deferredTurnContract(name, factory);

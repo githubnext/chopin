@@ -46,6 +46,9 @@ export class MemoryMachineStore implements MachineStore {
 	has(id: string): boolean {
 		return this.#machines.has(id);
 	}
+	isRevoked(id: string): boolean {
+		return !!this.#machines.get(id)?.revokedAt;
+	}
 	async get(id: string) {
 		let found = this.#machines.get(id);
 		return found && copy(found);

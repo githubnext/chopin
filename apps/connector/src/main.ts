@@ -57,6 +57,8 @@ import { removeReplaced, update } from "./update";
 import { checkouts as machineCheckouts, registerCheckouts } from "./checkouts";
 import { VERSION } from "./version";
 import { createSandbox, inspectSandbox } from "./sandbox";
+import { forgetMachineStore, provideMachineStore, storeReport } from "./machine-store";
+import type { MachineStoreOutcome } from "./machine-store";
 import { type SandboxSettings, validHostEntry } from "./sandbox-policy";
 import { sandboxLabel } from "@chopin/protocol/connector";
 import {
@@ -180,18 +182,32 @@ async function pairCommand(args: string[]) {
 	let label = parsed.options.get("label") ?? hostname();
 	let run = interruptible();
 	try {
+		let url = await server();
 		let token = await pair({
-			url: await server(),
+			url,
 			label,
 			directory: stateDirectory(),
 			output,
 			signal: run.signal,
 			key,
 		});
-		if (token) output.say(`${output.style.green("✓ Paired.")} This machine is ${label} in Chopin.`);
+		if (token) {
+			output.say(`${output.style.green("✓ Paired.")} This machine is ${label} in Chopin.`);
+			sayStore(
+				output,
+				await provideMachineStore({ url, token, directory: stateDirectory(), signal: run.signal }),
+			);
+		}
 	} finally {
 		run.done();
 	}
+}
+
+function sayStore(output: ReturnType<typeof createOutput>, outcome: MachineStoreOutcome) {
+	let report = storeReport(outcome);
+	if (!report) return;
+	if (report.failed) output.error(report.line);
+	else output.say(output.style.dim(report.line));
 }
 
 /** `unpair`: revoke this machine's token on the server and delete it here. */
@@ -200,6 +216,7 @@ async function unpairCommand(args: string[]) {
 	if (parsed.positional.length || parsed.rest) throw new Error(`Usage: ${SELF} unpair`);
 	let url = await server();
 	let result = await unpair(url, stateDirectory());
+	forgetMachineStore(stateDirectory());
 	createOutput().say(
 		result === "unpaired"
 			? `Unpaired this machine from ${url}.`
@@ -735,6 +752,16 @@ export async function connect(
 			// A key pairs once; pairing again after a revocation goes by the browser.
 			key = undefined;
 			name = undefined;
+			let store = await provideMachineStore({
+				url,
+				token: machine,
+				directory,
+				signal: abort.signal,
+			});
+			sayStore(output, store);
+			let agentStore = store.state === "ready" ? store.store : undefined;
+			if (agentStore) sandbox.allow?.(agentStore.host);
+			let storeProblem = store.state === "failed" ? store.reason : undefined;
 			let announced = false;
 			// Planner backends run beside the work loop with this machine token and stop with it, so
 			// none outlives a revoked token and a machine paired again starts them with its new one.
@@ -751,6 +778,7 @@ export async function connect(
 					signal: AbortSignal.any([abort.signal, planners.signal]),
 					env,
 					sandbox,
+					...(agentStore ? { agentStore } : {}),
 					states: spareStatus,
 					off: spareOff,
 					// Started as the Planners Chopin asks for will run: on its AI accounts, or as before.
@@ -769,6 +797,7 @@ export async function connect(
 				failures,
 				env,
 				sandbox,
+				...(agentStore ? { agentStore } : {}),
 				...(spares ? { spares } : {}),
 			};
 			let planning = servePlanners(backends);
@@ -792,6 +821,7 @@ export async function connect(
 								plannerCommand: plannerCommand.length > 0,
 								agent: (await readConfig(directory)).agents?.[program],
 								sandbox: report,
+								...(storeProblem ? { storeProblem } : {}),
 							},
 						);
 						connectionToken = registration.token;
@@ -842,6 +872,7 @@ export async function connect(
 							env,
 							machine,
 							sandbox,
+							...(agentStore ? { agentStore } : {}),
 						}).finally(prune),
 				});
 				break;
@@ -849,6 +880,7 @@ export async function connect(
 				if (!(error instanceof ConnectorStopped && error.reason === "revoked")) throw error;
 				// Chopin no longer accepts the token, so it is forgotten and the next connect pairs.
 				await forget(url, directory, machine);
+				forgetMachineStore(directory);
 				// A stored token refused at the start pairs again at once on a terminal, as if none were
 				// stored. A service stops rather than wait on a browser, and a machine disconnected while
 				// it was connected stays stopped.

@@ -256,3 +256,16 @@ test("an address of this machine or its networks is private; a public one is not
 		expect(privateAddress(address)).toBe(false);
 	}
 });
+
+test("a host added once the proxy runs, as the machine's database is, is tunnelled from then on", async () => {
+	let port = listener("database");
+	let hosts = ["chopin.example:443"];
+	let proxy = await startProxy({ hosts });
+	proxies.push(proxy);
+	let before = await ask(proxy, `CONNECT 127.0.0.1:${port} HTTP/1.1\r\n\r\n`);
+	expect(before).toContain("403 Forbidden");
+	hosts.push(`127.0.0.1:${port}`);
+	let after = await ask(proxy, `CONNECT 127.0.0.1:${port} HTTP/1.1\r\n\r\n`, "startup");
+	expect(after).toContain("HTTP/1.1 200 Connection Established");
+	expect(after).toContain("database:startup");
+});

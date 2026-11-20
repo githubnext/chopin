@@ -74,6 +74,13 @@ export function platformName(platform: Machine["platform"]): string | undefined 
 	return platform ? `${OS[platform.os] ?? platform.os} ${platform.arch}` : undefined;
 }
 
+export function storeWords(store: Machine["store"]): string | undefined {
+	if (!store) return undefined;
+	if (store.state === "ready") return "Ready";
+	if (store.state === "pending") return "Set up when it next connects";
+	return `Couldn't be set up: ${store.reason}`;
+}
+
 function agentName(agent: Machine["agent"]): string | undefined {
 	return agent ? [agent.name, agent.version].filter(Boolean).join(" ") : undefined;
 }
@@ -447,6 +454,11 @@ function MachineTable(
 												/>
 											)}
 										</span>
+										{own?.store?.state === "failed" && (
+											<span className="machines-secondary">
+												Sessions database couldn't be set up: {own.store.reason}
+											</span>
+										)}
 									</span>
 								</TableCell>
 								<TableCell>
@@ -737,6 +749,7 @@ export function MachineDetail(
 				</span>
 			),
 		],
+		["Sessions database", storeWords(own?.store)],
 		[
 			"Runs",
 			[

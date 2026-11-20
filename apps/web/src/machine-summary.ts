@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { SandboxReport } from "@chopin/protocol/connector";
+import type { MachineStoreStatus } from "@chopin/protocol/machine-store";
 import { sameJson } from "./same-json";
 
 /** One of the signed-in person's paired machines, as `GET /api/connector/machines` lists it. */
@@ -20,6 +21,7 @@ export type Machine = {
 	agent: { name: string; version?: string } | null;
 	/** Whether its agents run in the system's process sandbox; null when it said nothing. */
 	sandbox: SandboxReport | null;
+	store?: MachineStoreStatus | null;
 	/** The background service runs it. */
 	service: boolean;
 	/** It runs Planners for documents too. */

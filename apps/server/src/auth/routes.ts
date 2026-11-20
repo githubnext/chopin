@@ -40,6 +40,7 @@ type Dependencies = {
 	onCredentialsWillRotate?: (sessionId: string, revision: number) => Promise<void>;
 	/** The writer lease this process holds, which revoking a machine is written under. */
 	lease?: () => Lease;
+	onMachineRevoked?: (machineId: string) => Promise<void>;
 };
 
 export type HostedAuth = {
@@ -253,6 +254,7 @@ export function registerAuthRoutes(
 		},
 		invalidate: token => admission.invalidate(token),
 		...(dependencies.lease ? { lease: dependencies.lease } : {}),
+		...(dependencies.onMachineRevoked ? { revoked: dependencies.onMachineRevoked } : {}),
 	});
 	let attempts = new OAuthAttempts(config.encryptionKey, secure, clock);
 	let redirectUri = `${config.origin}/auth/github/callback`;

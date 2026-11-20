@@ -8,6 +8,7 @@ import type { Output } from "./output";
 import { passMasked, plannerEnvironment, stopBackend } from "./planner";
 import { backoff } from "./reconnect";
 import { type Sandbox, type Spawned, spawnIn } from "./sandbox";
+import type { AgentStore } from "./machine-store";
 import {
 	agentFolder,
 	assignedSlots,
@@ -192,6 +193,7 @@ export function plannerSpares(options: {
 	signal: AbortSignal;
 	env?: Record<string, string>;
 	sandbox?: Sandbox;
+	agentStore?: AgentStore;
 	states?: SpareStates;
 	off?: boolean;
 	readyMs?: number;
@@ -467,6 +469,7 @@ function spawnSpare(
 		command: string[];
 		env?: Record<string, string>;
 		sandbox?: Sandbox;
+		agentStore?: AgentStore;
 		values: string[];
 		managed: boolean;
 	},
@@ -478,7 +481,7 @@ function spawnSpare(
 ): Spare & { ready: Promise<boolean>; printed(): boolean } {
 	// A spare a managed document will take starts as its cold launch would: nothing of the owner's
 	// agent setup in its environment or in its sight.
-	let inherited = plannerEnvironment(options.managed, slot, options.env);
+	let inherited = plannerEnvironment(options.managed, slot, options.env, options.agentStore);
 	for (let name of HANDED) delete inherited[name];
 	let child = spawnIn(options.sandbox, {
 		command: options.command,

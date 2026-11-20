@@ -36,6 +36,7 @@ import {
 	sandboxPath,
 	type SandboxSettings,
 	secretPaths,
+	validHostEntry,
 	windowsReadRoots,
 } from "./sandbox-policy";
 import { type Proxy, startProxy } from "./sandbox-proxy";
@@ -91,6 +92,7 @@ export type Sandbox = {
 	spawn(launch: Launch): Spawned;
 	/** The loopback relay through which its launches reach Chopin's credential proxy. */
 	aiRelay?: AiRelay;
+	allow?(entry: string): void;
 	close(): Promise<void>;
 };
 
@@ -324,14 +326,18 @@ export async function createSandbox(options: SandboxOptions): Promise<Sandbox> {
 	}
 	let engine = report.engine;
 	let aiRelay = startAiRelay();
+	let hosts = [...allowedHosts(options.server, settings.hosts), aiRelay.host];
 	let proxy: Proxy = await startProxy({
-		hosts: [...allowedHosts(options.server, settings.hosts), aiRelay.host],
+		hosts,
 		refused: (name, port) => options.refused?.(name, port),
 	});
 	return {
 		report,
 		spawn: launch => spawnConfined(executor, engine, host, proxy, options, launch),
 		aiRelay,
+		allow(entry) {
+			if (validHostEntry(entry) && !hosts.includes(entry)) hosts.push(entry);
+		},
 		close: async () => {
 			await proxy.close();
 			await aiRelay.close();
