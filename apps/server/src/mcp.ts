@@ -164,6 +164,8 @@ export type InvokePlannerInput = {
 	checkout?: string;
 	/** An automatic follow-up: Chat shows a system notice rather than the caller's message. */
 	as?: "system";
+	/** Makes a retry safe: the caller's later calls with it for the document post nothing more. */
+	idempotencyKey?: string;
 };
 
 export type InvokePlannerError =
@@ -181,7 +183,7 @@ export type InvokePlannerError =
 export type InvokePlanner<Caller> = {
 	invoke(caller: Caller, input: InvokePlannerInput): Promise<
 		| { kind: "invoked"; document: DocumentSummary & { url: string } }
-		| { kind: "refused"; code: InvokePlannerError; message?: string }
+		| { kind: "refused"; code: InvokePlannerError | "idempotency-conflict"; message?: string }
 	>;
 };
 
@@ -579,7 +581,10 @@ export const TOOLS: Tool[] = [
 			+ "client, a document with no attached Planner refuses the call with "
 			+ "planner-not-attached and a message saying how to attach one. Questions appear in "
 			+ 'Decisions. With as: "system", for an automatic follow-up, Chat shows a short '
-			+ "system notice instead of the caller's message.",
+			+ "system notice instead of the caller's message. To retry safely after a lost reply, "
+			+ "pass the same idempotencyKey: a repeat of the same request returns the first result "
+			+ "and posts nothing, and a different request under that key is refused with "
+			+ "idempotency-conflict.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -610,6 +615,13 @@ export const TOOLS: Tool[] = [
 						+ "Planner alone. Only the document's creator, or the account whose client holds "
 						+ "its Planner, may use it, at most 10 times per document per hour.",
 				},
+				idempotencyKey: {
+					type: "string",
+					minLength: 1,
+					maxLength: 128,
+					description: "Your own key for this request on this document. A refusal that posted "
+						+ "nothing leaves the key free for a corrected request.",
+				},
 			},
 			required: ["id", "instruction"],
 			additionalProperties: false,
@@ -639,6 +651,7 @@ export const TOOLS: Tool[] = [
 								"planner-busy",
 								"system-turn-forbidden",
 								"system-turn-limited",
+								"idempotency-conflict",
 							],
 						},
 						message: { type: "string" },
@@ -928,6 +941,10 @@ function isId(value: unknown): value is string {
 	return typeof value === "string"
 		&& Array.from(value).length <= MAX_DOCUMENT_ID_LENGTH
 		&& value.trim().length > 0;
+}
+
+function isIdempotencyKey(value: unknown): value is string {
+	return typeof value === "string" && Array.from(value).length <= 128 && value.trim().length > 0;
 }
 
 function isLocator(value: unknown): value is string {
@@ -1306,20 +1323,23 @@ export function handler<Caller>(
 				if (tool.name === "invoke_planner" && options.invoke) {
 					let args = tool.arguments;
 					if (
-						Object.keys(args).some(key => !["id", "instruction", "checkout", "as"].includes(key))
+						Object.keys(args).some(key =>
+							!["id", "instruction", "checkout", "as", "idempotencyKey"].includes(key)
+						)
 						|| !isLocator(args.id)
 						|| typeof args.instruction !== "string" || !args.instruction.trim()
 						|| Buffer.byteLength(args.instruction) > MAX_MESSAGE_BYTES
 						|| (Object.hasOwn(args, "checkout")
 							&& (typeof args.checkout !== "string" || !isAbsolute(args.checkout)))
 						|| (Object.hasOwn(args, "as") && args.as !== "system")
+						|| (Object.hasOwn(args, "idempotencyKey") && !isIdempotencyKey(args.idempotencyKey))
 					) {
 						return notification
 							? undefined
 							: error(
 								call.id,
 								-32602,
-								"invoke_planner requires an id or URL, instruction, optional absolute checkout, and optional as: system",
+								"invoke_planner requires an id or URL, instruction, optional absolute checkout, optional as: system, and optional idempotencyKey",
 							);
 					}
 					let result = await options.invoke.invoke(caller, args as InvokePlannerInput);

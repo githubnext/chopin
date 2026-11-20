@@ -1250,6 +1250,8 @@ export async function invoke(
 	/** Called once, when the invoked turn ends or the message has been given to the one running; never when this refuses. */
 	settled?: () => void,
 	notice?: string,
+	/** The id its Chat entry, or system notice, takes; a fresh one when absent. */
+	entryId: string = ulid(),
 ): Promise<
 	| "planner-unavailable"
 	| "planner-not-attached"
@@ -1286,6 +1288,7 @@ export async function invoke(
 			await instruct(context, user.login, text, notice, {
 				quiet: true,
 				asked: true,
+				notice: entryId,
 				...(focus ? { focus } : {}),
 				...(settled ? { ended: () => settled() } : {}),
 			});
@@ -1299,7 +1302,7 @@ export async function invoke(
 			return "planner-busy" as const;
 		}
 		let entry: Wire.Entry = {
-			id: ulid(),
+			id: entryId,
 			author: { kind: "member", handle: user.login },
 			text,
 			ts: now(),

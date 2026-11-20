@@ -2560,6 +2560,7 @@ function cleanSessions(): void {
 	}).then(async () => {
 		let now = hostedAuth.clock();
 		await storage.mcpSessions.deleteIdle(new Date(now.getTime() - MCP_SESSION_IDLE_MS));
+		await storage.mcpInvocations.deleteExpired(now);
 		await storage.plannerCredentials.deleteExpired(now);
 		await aiCredentials?.sweep();
 		// Once this process serves, so its holds are rebuilt and its runs recovered: a launch nothing
@@ -2568,7 +2569,10 @@ function cleanSessions(): void {
 		await aiUsage?.sweep();
 		await machineStores?.sweep();
 	}).catch(err => {
-		console.error("chopin: could not delete idle MCP sessions or expired credentials -", err);
+		console.error(
+			"chopin: could not delete idle MCP sessions, expired idempotency keys or credentials -",
+			err,
+		);
 	}).finally(() => {
 		cleaningSessions = undefined;
 	});

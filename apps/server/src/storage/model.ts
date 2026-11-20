@@ -1286,3 +1286,25 @@ export type McpSession = {
 	createdAt: Date;
 	lastSeenAt: Date;
 };
+
+/** One caller's idempotency key for one document's `invoke_planner` calls. */
+export type McpInvocationScope = {
+	userId: string;
+	channelId: string;
+	key: string;
+};
+
+/** What a call that posted its instruction answered, returned again to every retry. */
+export type McpInvocationResult = {
+	document: { id: string; title: string; description?: string; url: string };
+};
+
+export type McpInvocation = McpInvocationScope & {
+	fingerprint: string;
+	/** The Chat entry, or system notice, the instruction is posted as. */
+	entryId: string;
+	createdAt: Date;
+	expiresAt: Date;
+	/** Absent until the call that claimed the key finishes: its instruction may already be posted. */
+	result?: McpInvocationResult;
+};

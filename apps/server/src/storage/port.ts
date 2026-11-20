@@ -53,6 +53,9 @@ import type {
 	MachineCredentials,
 	MachineFavorite,
 	MachineRepository,
+	McpInvocation,
+	McpInvocationResult,
+	McpInvocationScope,
 	McpSession,
 	PauseBackgroundJob,
 	PlannerCredential,
@@ -666,6 +669,35 @@ export interface McpSessionStore {
 }
 
 /**
+ * `invoke_planner` calls made under an idempotency key, one record per caller, document and key.
+ * A call claims its key before its instruction is posted, naming the Chat entry the instruction
+ * becomes, then completes the claim with its result, or releases a claim under which nothing was
+ * kept. Writes are fenced by the writer lease. A record past `expiresAt` counts as absent, and a
+ * document's records go with it.
+ */
+export interface McpInvocationStore {
+	/**
+	 * Stores `invocation`, without a result, unless an unexpired record holds its scope. Returns the
+	 * record that holds the scope afterwards, and whether it is this one.
+	 */
+	claim(
+		lease: Lease,
+		invocation: Omit<McpInvocation, "result">,
+	): Promise<{ record: McpInvocation; claimed: boolean }>;
+	/** Gives the claim naming `entryId` its result; false when no such claim waits for one. */
+	complete(
+		lease: Lease,
+		scope: McpInvocationScope & { entryId: string },
+		result: McpInvocationResult,
+	): Promise<boolean>;
+	/** Removes the claim naming `entryId` if it has no result; false when there is none. */
+	release(lease: Lease, scope: McpInvocationScope & { entryId: string }): Promise<boolean>;
+	get(scope: McpInvocationScope): Promise<McpInvocation | undefined>;
+	/** Removes records that expired at or before `now`; returns how many. */
+	deleteExpired(now: Date): Promise<number>;
+}
+
+/**
  * Acknowledged Planner requests whose turn has not started, one row each. Every write is fenced
  * by the writer lease and conditional on the row's state; a write that does not apply changes
  * nothing and says why. The same changes can ride a `collaboration.commit`, which is how a row
@@ -713,6 +745,7 @@ export interface StorageAdapter {
 	readonly aiPlaceholders: AiPlaceholderStore;
 	readonly aiUsage: AiUsageStore;
 	readonly mcpSessions: McpSessionStore;
+	readonly mcpInvocations: McpInvocationStore;
 	readonly deferredTurns: DeferredTurnStore;
 
 	migrate(): Promise<void>;

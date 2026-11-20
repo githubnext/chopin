@@ -141,6 +141,36 @@ and optionally an absolute checkout path:
 The instruction must contain non-whitespace text and fit within 64 KiB in UTF-8;
 its text is preserved verbatim.
 
+### Retrying safely
+
+A caller that must deliver an instruction once, such as an automated hand-off,
+can pass an `idempotencyKey`, a nonblank string of at most 128 characters:
+
+```json
+{
+	"id": "/documents/octo-org/score/release-readiness",
+	"instruction": "Run the planning workflow and ask blocking questions in Decisions.",
+	"idempotencyKey": "release-readiness-handoff-1"
+}
+```
+
+Chopin records the key, durably, before it posts the instruction. A retry with
+the same key and the same request returns the first call's result and posts
+nothing, so a lost reply never posts the instruction twice or starts a second
+Planner turn. The request is the instruction text, `as`, and the document the
+call names, by UUID or URL. A different request under a used key is refused with
+`idempotency-conflict` and posts nothing. A key belongs to its caller and its
+document: another account, or the same account on another document, can use the
+same key without meeting yours.
+
+A refusal that kept nothing, such as `planner-not-attached`, `planner-busy` or
+`system-turn-forbidden`, leaves the key unused, so a corrected request can reuse
+it. A failure that may have posted the instruction, such as `planner-unavailable`,
+a lost connection or a server restart, keeps the key for that request. Retry the
+same request under the same key, and Chopin posts it only if it was not posted
+before. Chopin keeps a key for 7 days, and deletes a document's keys with the
+document. Calls without a key post their instruction every time.
+
 `checkout` applies only when the server runs `HARNESS=atomic`, where the Planner
 is a [full Atomic session](hosted-agent.md#full-atomic-planner) with **shell and
 filesystem access as the server process's user**. The path is on the Chopin
@@ -210,6 +240,8 @@ Refusals return an object with `code`, and `planner-not-attached` also a
   document's creator or the account holding its Planner.
 - `system-turn-limited`: the document has taken 10 automatic follow-ups in the
   past hour; try again later.
+- `idempotency-conflict`: the `idempotencyKey` was used with a different
+  request on this document; see [Retrying safely](#retrying-safely).
 - `document-unavailable`, `document-archived`, and `repository-forbidden` retain
   their ordinary document/access meanings.
 

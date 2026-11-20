@@ -23,6 +23,7 @@ import { implementationLifecycle } from "../tasks/lifecycle";
 import { unapprovedContext } from "../tasks/open-decisions";
 import { planSourceFor, withPlanSource } from "../tasks/plan-source";
 import { imagePath } from "../images/format";
+import { IdempotentInvocations, invocationFingerprint } from "./invoke";
 
 import type { Server } from "bun";
 import type { HostedAuth } from "../auth/routes";
@@ -81,6 +82,11 @@ export type PlannerInvocation = {
 	checkout?: string;
 	/** An automatic follow-up shown in Chat as a system notice rather than the caller's message. */
 	system?: boolean;
+	/**
+	 * The id the instruction's Chat entry, or system notice, takes. An entry Chat already holds
+	 * under it was posted by an earlier call with the same idempotency key, and is not posted again.
+	 */
+	entryId?: string;
 };
 
 export type ImplementationPersistence = { lease(): Lease };
@@ -473,6 +479,8 @@ export function hosted(
 	}
 
 	let silentServer = { publish() {} } as unknown as Server<SocketData>;
+	let invocations = persistence
+		&& new IdempotentInvocations(auth.storage.mcpInvocations, persistence.lease, auth.clock);
 
 	async function withPlan<T>(
 		channelId: string,
@@ -543,30 +551,42 @@ export function hosted(
 							code: "document-unavailable",
 						};
 					}
-					if (channel.archivedAt) return { kind: "refused", code: "document-archived" };
-					let code = await callbacks.invokePlanner!({
-						channel,
-						repository,
-						user: caller.user,
-						session: await auth.sessions.forUser(caller.user.id),
-						instruction: input.instruction,
-						...(input.checkout === undefined ? {} : { checkout: input.checkout }),
-						...(input.as === "system" ? { system: true } : {}),
-					});
-					let url =
-						new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
-					if (code === "planner-not-attached") {
-						let fullName = `${repository.owner}/${repository.name}`;
-						return {
-							kind: "refused",
-							code,
-							message: await callbacks.plannerNotAttached?.(channel.id, url, fullName)
-								?? notAttachedMessage(url, fullName),
-						};
-					}
-					if (code === "planner-busy") return { kind: "refused", code, message: CANNOT_STEER };
-					if (code) return { kind: "refused", code };
-					return { kind: "invoked", document: { ...summary(channel), url } };
+					let deliver = async (entryId?: string) => {
+						if (channel.archivedAt) return { kind: "refused", code: "document-archived" } as const;
+						let code = await callbacks.invokePlanner!({
+							channel,
+							repository,
+							user: caller.user,
+							session: await auth.sessions.forUser(caller.user.id),
+							instruction: input.instruction,
+							...(input.checkout === undefined ? {} : { checkout: input.checkout }),
+							...(input.as === "system" ? { system: true } : {}),
+							...(entryId === undefined ? {} : { entryId }),
+						});
+						let url =
+							new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
+						if (code === "planner-not-attached") {
+							let fullName = `${repository.owner}/${repository.name}`;
+							return {
+								kind: "refused",
+								code,
+								message: await callbacks.plannerNotAttached?.(channel.id, url, fullName)
+									?? notAttachedMessage(url, fullName),
+							} as const;
+						}
+						if (code === "planner-busy") {
+							return { kind: "refused", code, message: CANNOT_STEER } as const;
+						}
+						if (code) return { kind: "refused", code } as const;
+						return { kind: "invoked", document: { ...summary(channel), url } } as const;
+					};
+					if (input.idempotencyKey === undefined) return deliver();
+					if (!invocations) throw new Error("storage writer lease is unavailable");
+					return invocations.run(
+						{ userId: caller.user.id, channelId: channel.id, key: input.idempotencyKey },
+						invocationFingerprint(input, channel.id),
+						deliver,
+					);
 				},
 			}
 			: undefined,

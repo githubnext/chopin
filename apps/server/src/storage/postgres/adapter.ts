@@ -16,6 +16,7 @@ import { PostgresDecisionAnswerStore } from "./decision-answers";
 import { PostgresDocumentVersionStore } from "./versions";
 import { PostgresMachineStore } from "./machines";
 import { PostgresDeferredTurnStore } from "./deferred-turns";
+import { PostgresMcpInvocationStore } from "./mcp-invocations";
 import { PostgresMcpSessionStore } from "./mcp-sessions";
 import { PostgresPlannerCredentialStore } from "./planner-credentials";
 import { PostgresMachineDatabaseStore } from "./machine-databases";
@@ -622,6 +623,11 @@ export class PostgresStorage implements StorageAdapter {
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
 		);
+		this.mcpInvocations = new PostgresMcpInvocationStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+			(transaction, lease) => this.#assertLease(transaction, lease),
+		);
 		this.deferredTurns = new PostgresDeferredTurnStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
@@ -807,6 +813,7 @@ export class PostgresStorage implements StorageAdapter {
 	readonly aiPlaceholders: PostgresAiPlaceholderStore;
 	readonly aiUsage: PostgresAiUsageStore;
 	readonly mcpSessions: PostgresMcpSessionStore;
+	readonly mcpInvocations: PostgresMcpInvocationStore;
 	readonly deferredTurns: PostgresDeferredTurnStore;
 
 	readonly channels: ChannelStore = {
