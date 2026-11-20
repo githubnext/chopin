@@ -58,7 +58,6 @@ async function contract(
 
 test.each([
 	"",
-	"ordinary message",
 	"\n" + HEADING,
 	"[Background job: unknown]",
 	HEADING + "\n[Background job: refine]",
@@ -74,6 +73,15 @@ test.each([
 	await turn.done;
 	expect(h.driver.calls).toEqual([]);
 	expect(h.parts.filter(part => part.type === "error")).toHaveLength(1);
+	expect(h.parts.filter(part => part.type === "finish-step")).toHaveLength(1);
+});
+
+test("ends an ordinary Planner turn without a tool call or an error", async () => {
+	await using h = await contract();
+	let turn = await h.run("@ana: Should we ship a small pilot?");
+	await turn.done;
+	expect(h.driver.calls).toEqual([]);
+	expect(h.parts.filter(part => part.type === "error")).toHaveLength(0);
 	expect(h.parts.filter(part => part.type === "finish-step")).toHaveLength(1);
 });
 

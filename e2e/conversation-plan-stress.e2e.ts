@@ -3,7 +3,7 @@ import { resetPlannerJobs } from "./planner-jobs";
 import { SQL } from "bun";
 
 import { e2ePort } from "./ports";
-import { openJevWire, sendChat, wireState } from "./jev-wire";
+import { keepCompany, openJevWire, sendChat, wireState } from "./jev-wire";
 import { authenticate, expect, roomPath, test } from "./room";
 
 import type { ConversationPlan } from "../packages/protocol/index";
@@ -260,6 +260,7 @@ test("a chat burst preserves a new question and a reason on the existing card", 
 test("a direct alternatives question keeps both sourced options and allows another card", async ({ join, room }) => {
 	let ana = await join("ana");
 	await openJevWire(ana, room);
+	await keepCompany(ana, room);
 
 	let alternativesId = await sendChat(ana, FILES_QUESTION);
 	await stateWith(ana, "thread.opened");
@@ -412,9 +413,7 @@ test("a writer can apply a focused Copilot subspan as an option", async ({ join,
 		node.style.top = "16px";
 		node.style.width = "540px";
 	});
-	await ana.screenshot({
-		path: "docs/prototypes/conversation-plan/decision-cards/screenshots/stress-review-excerpt.png",
-	});
+	await ana.screenshot({ path: test.info().outputPath("stress-review-excerpt.png") });
 	await writerPanel.evaluate((node, style) => {
 		if (style === null) node.removeAttribute("style");
 		else node.setAttribute("style", style);

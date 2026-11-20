@@ -3,7 +3,7 @@
 import { openDecisionDocument } from "./decision-deck-fixtures";
 
 import { content, expect, test, written } from "./room";
-import { openJevWire, sendChat, wireFrames } from "./jev-wire";
+import { keepCompany, openJevWire, sendChat, wireFrames } from "./jev-wire";
 import { resetPlannerJobs, scriptJob } from "./planner-jobs";
 import * as Y from "../apps/server/node_modules/yjs";
 import * as PlanRoom from "../apps/server/src/plan/room";
@@ -54,6 +54,7 @@ async function decide(page: Page, room: string) {
 		args: { revision: "$revision", id: "$target", text: `We decided: ${OPTION}` },
 	}]);
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	await sendChat(page, QUESTION);
 	await sendChat(page, OPTION);
 	let card = page.locator('[data-document-view="plan"] article[data-plan-sidecar-questionnaire]')
@@ -268,7 +269,9 @@ test(
 		let widget = expectLinked(await latestDocumentSnapshot(editor, room));
 
 		// Create a following line, then use one Backspace to join it to the decision.
-		let trailing = content(editor).locator(":scope > p").last();
+		// The paragraph right after the hidden decided card; empty caret lines may follow it.
+		let trailing = content(editor)
+			.locator(":scope > :is([data-plan-collapsed], :has([data-plan-collapsed])) + p");
 		await trailing.click();
 		await editor.keyboard.type("Following detail.");
 		let following = content(editor).locator("p").filter({ hasText: "Following detail." });

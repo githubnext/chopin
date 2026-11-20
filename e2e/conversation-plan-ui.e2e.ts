@@ -1,8 +1,8 @@
 import { openDecisionDocument } from "./decision-deck-fixtures";
 import { resetPlannerJobs } from "./planner-jobs";
-import { openJevWire, sendChat, wireRequest, wireState } from "./jev-wire";
+import { keepCompany, openJevWire, sendChat, wireRequest, wireState } from "./jev-wire";
 import { authenticate, content, expect, roomPath, test } from "./room";
-import { seedChildChannel } from "./database";
+import { seedLinkedChildChannel } from "./database";
 
 import type { Page } from "@playwright/test";
 
@@ -34,6 +34,7 @@ test.beforeEach(async () => {
 test("Chat analysis diagnostics float without moving a bottom message", async ({ join, room }) => {
 	let page = await join("ana");
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	let messageId = await sendChat(page, "Should we ship a small pilot?");
 	await waitForEvent(page, "thread.opened");
 	let message = page.locator(`[data-chat-message-id="${messageId}"]`);
@@ -65,6 +66,7 @@ test("Chat analysis diagnostics float without moving a bottom message", async ({
 test("another message hover stays quiet and code buttons keep one analysis portal", async ({ join, room }) => {
 	let page = await join("ana");
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	let earlierId = await sendChat(page, "Maybe that?");
 	await expect.poll(async () =>
 		(await wireState(page))?.analysis.find(item => item.messageId === earlierId)?.status
@@ -97,6 +99,7 @@ test("another message hover stays quiet and code buttons keep one analysis porta
 test("analysis Escape dismisses before compact Chat and narrow split popovers stay in Chat", async ({ join, room }) => {
 	let page = await join("ana", { viewport: { width: 390, height: 900 } });
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	await page.getByRole("navigation", { name: "Workspace view" })
 		.getByRole("button", { name: /^Chat/ }).click();
 	let compactMessage = await sendChat(page, "Should we ship a small pilot?");
@@ -139,6 +142,7 @@ test("analysis Escape dismisses before compact Chat and narrow split popovers st
 test("a chat question becomes an inline decision card", async ({ join, room }) => {
 	let page = await join("ana");
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	let editor = content(page);
 	await editor.click();
 	await page.evaluate(() => {
@@ -222,7 +226,8 @@ test("a chat question becomes an inline decision card", async ({ join, room }) =
 
 test("a parent source highlight survives a child panel without creating child Chat", async ({ baseURL, join, room }) => {
 	let childTitle = `Highlighted child ${room.slice(0, 8)}`;
-	let child = await seedChildChannel(
+	// Linked from the parent's Chat: Projects lists top-level documents only.
+	let child = await seedLinkedChildChannel(
 		Number(new URL(baseURL!).port),
 		room,
 		crypto.randomUUID(),
@@ -231,6 +236,7 @@ test("a parent source highlight survives a child panel without creating child Ch
 	);
 	let page = await join("ana");
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	let parentMessageId = await sendChat(page, "Should we ship a small pilot?");
 	await waitForEvent(page, "thread.opened");
 	await waitForEvent(page, "card.linked");
@@ -248,10 +254,7 @@ test("a parent source highlight survives a child panel without creating child Ch
 			})
 		);
 	await expect.poll(highlightedRooms).toEqual([room]);
-	await page.getByRole("complementary", { name: "Projects" }).getByRole("link", {
-		name: childTitle,
-		exact: true,
-	}).click();
+	await parent.getByRole("link", { name: `#${childTitle}`, exact: true }).click();
 	let childWorkspace = page.locator(`[data-workspace-room="${child.id}"]`);
 	await expect(childWorkspace).toBeVisible();
 	await expect(childWorkspace.getByRole("complementary", { name: "Chat", exact: true }))
@@ -427,6 +430,7 @@ test("failed analysis retries in Chat while editor selection survives hiding Cha
 	await seed("# Rich document\n\nA selected sentence.\n");
 	let page = await join("ana");
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	let failureMessage = await sendChat(page, "Could we test with one team first?");
 	await expect.poll(async () =>
 		(await wireState(page))?.analysis.find(item => item.messageId === failureMessage)?.status
@@ -470,6 +474,7 @@ test("failed analysis retries in Chat while editor selection survives hiding Cha
 test("a second acknowledged retry uses a fresh action after analysis fails again", async ({ join, room }) => {
 	let page = await join("ana");
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	let messageId = await sendChat(page, "Could we retry a flaky question twice?");
 	await expect.poll(async () =>
 		(await wireState(page))?.queue.find(item => item.messageId === messageId)?.status
@@ -493,6 +498,7 @@ test("a second acknowledged retry uses a fresh action after analysis fails again
 test("scrolling a pinned message analysis out of Chat dismisses its portal", async ({ join, room }) => {
 	let page = await join("ana");
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	let messageId = await sendChat(page, "Should we ship a small pilot?");
 	await waitForEvent(page, "thread.opened");
 	let marker = page.locator(`[data-chat-message-id="${messageId}"]`);
@@ -518,6 +524,7 @@ test("scrolling a pinned message analysis out of Chat dismisses its portal", asy
 test("read-only and archived readers keep cards and diagnostics with disabled controls", async ({ baseURL, browser, join, room }) => {
 	let writer = await join("ana");
 	await openJevWire(writer, room);
+	await keepCompany(writer, room);
 	let messageId = await sendChat(writer, "Should we ship a small pilot?");
 	await waitForEvent(writer, "thread.opened");
 	await waitForEvent(writer, "card.linked");
