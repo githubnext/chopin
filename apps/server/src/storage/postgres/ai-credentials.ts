@@ -12,6 +12,7 @@ type CredentialRow = {
 	provider: AiCredentialRecord["provider"];
 	kind: AiCredentialRecord["kind"];
 	ciphertext: Uint8Array | null;
+	tokens: Uint8Array | null;
 	suffix: string | null;
 	updatedAt: Date | string;
 	lastUsedAt: Date | string | null;
@@ -31,13 +32,14 @@ type PlaceholderRow = {
 	expiresAt: Date | string;
 };
 
-const CREDENTIAL_COLUMNS = `user_id AS "userId", provider, kind, ciphertext, suffix,
+const CREDENTIAL_COLUMNS = `user_id AS "userId", provider, kind, ciphertext, tokens, suffix,
 	updated_at AS "updatedAt", last_used_at AS "lastUsedAt", rejected_at AS "rejectedAt"`;
 const PLACEHOLDER_COLUMNS = `digest, launch_id AS "launchId",
 	launch_digest AS "launchDigest", user_id AS "userId", provider,
 	machine_id AS "machineId", channel_id AS "channelId", archive_generation AS "generation",
 	owner, expires_at AS "expiresAt"`;
-const PROVIDER_ORDER = `CASE provider WHEN 'github-copilot' THEN 0 WHEN 'openai' THEN 1 ELSE 2 END`;
+const PROVIDER_ORDER = `CASE provider WHEN 'github-copilot' THEN 0 WHEN 'openai' THEN 1
+	WHEN 'anthropic' THEN 2 WHEN 'chatgpt' THEN 3 ELSE 4 END`;
 
 function credential(row: CredentialRow): AiCredentialRecord {
 	return {
@@ -45,6 +47,7 @@ function credential(row: CredentialRow): AiCredentialRecord {
 		provider: row.provider,
 		kind: row.kind,
 		...(row.ciphertext ? { ciphertext: new Uint8Array(row.ciphertext) } : {}),
+		...(row.tokens ? { tokens: new Uint8Array(row.tokens) } : {}),
 		...(row.suffix ? { suffix: row.suffix } : {}),
 		updatedAt: new Date(row.updatedAt),
 		...(row.lastUsedAt ? { lastUsedAt: new Date(row.lastUsedAt) } : {}),
@@ -82,16 +85,18 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 					await this.fence(transaction, lease);
 					await transaction`
 				INSERT INTO ai_credentials (
-					user_id, provider, kind, ciphertext, suffix, updated_at, last_used_at, rejected_at
+					user_id, provider, kind, ciphertext, tokens, suffix, updated_at, last_used_at,
+					rejected_at
 				)
 				VALUES (
 					${record.userId}, ${record.provider}, ${record.kind}, ${record.ciphertext ?? null},
-					${record.suffix ?? null}, ${record.updatedAt}, ${record.lastUsedAt ?? null},
-					${record.rejectedAt ?? null}
+					${record.tokens ?? null}, ${record.suffix ?? null}, ${record.updatedAt},
+					${record.lastUsedAt ?? null}, ${record.rejectedAt ?? null}
 				)
 				ON CONFLICT (user_id, provider) DO UPDATE SET
 					kind = EXCLUDED.kind,
 					ciphertext = EXCLUDED.ciphertext,
+					tokens = EXCLUDED.tokens,
 					suffix = EXCLUDED.suffix,
 					updated_at = EXCLUDED.updated_at,
 					last_used_at = EXCLUDED.last_used_at,
@@ -158,6 +163,24 @@ export class PostgresAiCredentialStore implements AiCredentialStore {
 		// Counted once it committed, so a launch reading the key meanwhile reads it again.
 		if (marked) this.cutoffs.cut(record.userId);
 		return marked;
+	}
+	refreshed(lease: Lease, record: AiCredentialRecord, tokens: Uint8Array) {
+		return this.run(
+			"save an AI sign-in's refreshed tokens",
+			() =>
+				this.sql.begin(async transaction => {
+					await this.fence(transaction, lease);
+					let rows = await transaction<{ provider: string }[]>`
+					UPDATE ai_credentials SET tokens = ${tokens}
+					WHERE user_id = ${record.userId} AND provider = ${record.provider}
+						AND updated_at = ${record.updatedAt}
+						AND ciphertext IS NOT DISTINCT FROM ${record.ciphertext ?? null}
+						AND tokens IS NOT DISTINCT FROM ${record.tokens ?? null}
+					RETURNING provider
+				`;
+					return rows.length > 0;
+				}),
+		);
 	}
 	version(userId: string) {
 		return this.cutoffs.person(userId);

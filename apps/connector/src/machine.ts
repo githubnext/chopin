@@ -549,8 +549,11 @@ export class NoAiAccount extends Error {
 	override name = "NoAiAccount";
 }
 
-/** Withheld for a question nobody answered: GitHub, or the person's own sign-in, couldn't be asked. */
-const UNANSWERED = new Set(["copilot-unavailable", "sign-in-unavailable"]);
+/**
+ * Withheld for a question nobody answered: GitHub, or the person's own sign-in, couldn't be asked,
+ * or a subscription's sign-in couldn't be renewed.
+ */
+const UNANSWERED = new Set(["copilot-unavailable", "sign-in-unavailable", "renew-unavailable"]);
 
 const VARIABLE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 

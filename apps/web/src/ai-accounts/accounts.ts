@@ -3,12 +3,14 @@ import { ago } from "../build-model";
 import type {
 	AiCredentialSummary,
 	AiProvider,
+	AiSignInStart,
 	ConnectAiCredential,
+	SubscriptionProvider,
 } from "@chopin/protocol/ai-credentials";
 
 export const GET_COPILOT_URL = "https://github.com/features/copilot";
 
-export type KeyProvider = Exclude<AiProvider, "github-copilot">;
+export type KeyProvider = Exclude<AiProvider, "github-copilot" | SubscriptionProvider>;
 
 export const KEY_PROVIDERS: readonly KeyProvider[] = ["openai", "anthropic"];
 
@@ -16,6 +18,15 @@ export const PROVIDER_NAMES: Record<AiProvider, string> = {
 	"github-copilot": "GitHub Copilot",
 	openai: "OpenAI",
 	anthropic: "Anthropic",
+	chatgpt: "ChatGPT",
+	claude: "Claude",
+};
+
+export const SIGN_IN_PROVIDERS: readonly SubscriptionProvider[] = ["chatgpt", "claude"];
+
+const SIGN_IN_MISSING: Record<SubscriptionProvider, string> = {
+	chatgpt: "Use OpenAI models with your ChatGPT plan.",
+	claude: "Use Claude models with your Claude plan.",
 };
 
 const MISSING_LINES: Record<KeyProvider, string> = {
@@ -28,7 +39,14 @@ export type AccountBadge = {
 	label: "Connected" | "No Copilot access" | "Checking…" | "Not checked" | "Needs reconnecting";
 };
 
-export type AccountAction = "add-key" | "replace" | "remove" | "use-token" | "use-sign-in";
+export type AccountAction =
+	| "add-key"
+	| "replace"
+	| "remove"
+	| "use-token"
+	| "use-sign-in"
+	| "sign-in"
+	| "disconnect";
 
 export type AccountRow = {
 	provider: AiProvider;
@@ -143,6 +161,56 @@ function copilotRow(
 	};
 }
 
+function signInRow(
+	provider: SubscriptionProvider,
+	summary: AiCredentialSummary | undefined,
+	now: number,
+): AccountRow {
+	let name = PROVIDER_NAMES[provider];
+	if (!summary) {
+		return {
+			provider,
+			name,
+			lines: [SIGN_IN_MISSING[provider]],
+			getCopilot: false,
+			actions: ["sign-in"],
+		};
+	}
+	let yours = `Your ${name} sign-in`;
+	if (summary.unusable || summary.rejectedAt) {
+		return {
+			provider,
+			name,
+			badge: NEEDS_RECONNECTING,
+			lines: [
+				summary.unusable
+					? "Chopin can't read this sign-in anymore. Sign in again to keep using it."
+					: `${name} ended this sign-in. Sign in again to keep using it.`,
+			],
+			getCopilot: false,
+			actions: ["sign-in", "disconnect"],
+		};
+	}
+	if (summary.unchecked) {
+		return {
+			provider,
+			name,
+			badge: NOT_CHECKED,
+			lines: [yours, "Chopin couldn't finish checking this sign-in."],
+			getCopilot: false,
+			actions: ["disconnect"],
+		};
+	}
+	return {
+		provider,
+		name,
+		badge: CONNECTED,
+		lines: [yours, lastUse(summary, now)],
+		getCopilot: false,
+		actions: ["disconnect"],
+	};
+}
+
 function keyRow(
 	provider: KeyProvider,
 	summary: AiCredentialSummary | undefined,
@@ -188,7 +256,10 @@ export function accountRows(
 	let find = (provider: AiProvider) =>
 		credentials.find(credential => credential.provider === provider);
 	return {
-		signIns: [copilotRow(find("github-copilot"), now, checking)],
+		signIns: [
+			copilotRow(find("github-copilot"), now, checking),
+			...SIGN_IN_PROVIDERS.map(provider => signInRow(provider, find(provider), now)),
+		],
 		keys: KEY_PROVIDERS.map(provider => keyRow(provider, find(provider), now)),
 	};
 }
@@ -225,7 +296,7 @@ export function withoutCredential(
 
 export class AiAccountsError extends Error {
 	override name = "AiAccountsError";
-	constructor(message: string, readonly status: number) {
+	constructor(message: string, readonly status: number, readonly restart = false) {
 		super(message);
 	}
 }
@@ -243,7 +314,9 @@ async function answered<T>(response: Promise<Response>): Promise<T | undefined> 
 		throw new AiAccountsError(UNREACHABLE, 0);
 	}
 	if (reply.status === 204) return undefined;
-	let body = await reply.json().catch(() => undefined) as { error?: unknown } | undefined;
+	let body = await reply.json().catch(() => undefined) as
+		| { error?: unknown; restart?: unknown }
+		| undefined;
 	if (!reply.ok) {
 		let said = typeof body?.error === "string" ? body.error : undefined;
 		let message = said && SAID_TO_PEOPLE.has(reply.status)
@@ -251,7 +324,7 @@ async function answered<T>(response: Promise<Response>): Promise<T | undefined> 
 			: reply.status === 401
 			? SIGNED_OUT
 			: FAILED;
-		throw new AiAccountsError(message, reply.status);
+		throw new AiAccountsError(message, reply.status, body?.restart === true);
 	}
 	return body as T;
 }
@@ -291,5 +364,24 @@ export async function removeCredential(provider: AiProvider): Promise<void> {
 export async function checkCopilot(signal?: AbortSignal): Promise<AiCredentialSummary> {
 	return (await answered<AiCredentialSummary>(
 		fetch("/api/ai/credentials/github-copilot/check", { method: "POST", signal }),
+	))!;
+}
+
+export async function startSignIn(provider: SubscriptionProvider): Promise<string> {
+	return (await answered<AiSignInStart>(
+		fetch(`/api/ai/sign-ins/${provider}`, { method: "POST" }),
+	))!.url;
+}
+
+export async function finishSignIn(
+	provider: SubscriptionProvider,
+	input: string,
+): Promise<AiCredentialSummary> {
+	return (await answered<AiCredentialSummary>(
+		fetch(`/api/ai/sign-ins/${provider}/finish`, {
+			method: "POST",
+			headers: JSON_HEADERS,
+			body: JSON.stringify({ input }),
+		}),
 	))!;
 }

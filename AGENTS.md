@@ -195,7 +195,13 @@ durable.
   launch's grants are published only while its person's credentials are those it was
   prepared with, no answer of the other kind about its Copilot account has completed since it asked, and before
   its deadline and its Copilot token's, both on one clock reading; changes that never settle fail the launch with a retryable error,
-  never an empty grant list. An OpenAI or Anthropic key is
+  never an empty grant list. A ChatGPT or Claude subscription is connected through that provider's own sign-in, as
+  Atomic signs in (`ai/subscriptions.ts`: the person pastes back ChatGPT's callback address or
+  Claude's code); nothing is stored until the provider returns tokens, which are kept encrypted
+  and renewed before they expire, one refresh per connection at a time and never over a newer
+  pair, and a renewal the provider refuses for good marks it `rejectedAt`; an expired access
+  token is never sent, and a Claude token's requests carry Atomic's Claude Code headers. An
+  OpenAI or Anthropic key is
   saved only once that provider accepts it, and given to no launch once it refuses it as
   invalid on a request (`rejectedAt`, until it is connected again) or while it doesn't
   decrypt. The model catalog route serves only a

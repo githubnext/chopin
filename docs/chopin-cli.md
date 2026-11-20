@@ -795,10 +795,14 @@ Chopin for the run's launch with the run's credential before the agent starts, a
 the agent runs on those accounts with nothing of yours:
 
 - **Stand-ins, not keys.** The agent's environment sets each granted provider's
-  key variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `COPILOT_GITHUB_TOKEN`) to a
-  random stand-in that works only through Chopin, and `OPENAI_BASE_URL` and
+  key variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `COPILOT_GITHUB_TOKEN`, and
+  for a ChatGPT or Claude sign-in `CHATGPT_ACCESS_TOKEN` or `CLAUDE_CODE_OAUTH_TOKEN`)
+  to a random stand-in that works only through Chopin, and `OPENAI_BASE_URL` and
   `ANTHROPIC_BASE_URL` to a relay in the connector on `127.0.0.1`, which the
-  sandbox's proxy allows. The relay adds the launch's own credential
+  sandbox's proxy allows. Without an OpenAI key, a ChatGPT sign-in also takes
+  `OPENAI_API_KEY` and `OPENAI_BASE_URL`; without an Anthropic key, a Claude sign-in
+  takes `ANTHROPIC_BASE_URL`. Atomic finds a sign-in as its `openai` or `anthropic`
+  provider, ahead of a key, which keeps `openai-api` or `anthropic-api`. The relay adds the launch's own credential
   (`x-chopin-launch`) to each request and forwards it to that provider's base URL
   on Chopin and nowhere else; the credential stays in the connector's memory and is
   never in the agent's environment, files or command line. A stand-in copied out of
@@ -808,7 +812,8 @@ the agent runs on those accounts with nothing of yours:
   agent needs to reach it and nothing else (an example follows the list): `provider`,
   `baseUrl`, `apiKey`, `keyVariable` and, for Copilot, `headers`. Send `apiKey` as the provider takes its key (`Authorization: Bearer`, or
   `x-api-key` for Anthropic) to `baseUrl` with the provider's own paths after it
-  (Copilot's `/models` and `/chat/completions`, OpenAI's `/v1/…`, Anthropic's `/v1/…`),
+  (Copilot's `/models` and `/chat/completions`, OpenAI's and ChatGPT's `/v1/…`, and
+  Anthropic's and Claude's `/v1/…`; a Claude stand-in goes as `Authorization: Bearer`),
   with `headers` added. Each `baseUrl` is on the relay; the launch's own credential is
   in none of it. An agent that reads no provider's variables, any agent that is not
   Atomic, reaches every granted provider with its pair alone.

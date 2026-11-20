@@ -31,9 +31,14 @@ export const AI_ACCOUNT_UNCHECKED_SESSION =
 
 /**
  * Withheld for a question with no answer about the account: GitHub couldn't be asked or answered
- * nothing about it, or the person's own sign-in couldn't be read.
+ * nothing about it, the person's own sign-in couldn't be read, or a subscription's sign-in couldn't
+ * be renewed.
  */
-const UNANSWERED = new Set<AiWithheld["reason"]>(["copilot-unavailable", "sign-in-unavailable"]);
+const UNANSWERED = new Set<AiWithheld["reason"]>([
+	"copilot-unavailable",
+	"sign-in-unavailable",
+	"renew-unavailable",
+]);
 
 /**
  * Whether a message from `userId` to the Planner must be refused because a launch for them would be

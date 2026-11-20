@@ -20,6 +20,7 @@ export const OWNER_AGENT_VARIABLES = new Set([
 	"ANTHROPIC_OAUTH_TOKEN",
 	"ANTHROPIC_BASE_URL",
 	"CLAUDE_CODE_OAUTH_TOKEN",
+	"CHATGPT_ACCESS_TOKEN",
 	"COPILOT_GITHUB_TOKEN",
 	"GH_COPILOT_TOKEN",
 	"GEMINI_API_KEY",
@@ -206,12 +207,31 @@ export function atomicAgent(command: readonly string[]): boolean {
 	return program === "atomic" || program === "atomic-acp";
 }
 
-/** Atomic's providers for each of Chopin's, the API-key-only ones included. */
+/**
+ * Atomic's providers for each of Chopin's, the API-key-only ones included. A ChatGPT or Claude
+ * sign-in is Atomic's `openai` or `anthropic`, which take a subscription, ahead of a key for the
+ * same provider, which keeps its API-key-only provider.
+ */
 const ATOMIC_PROVIDERS: Record<AiProvider, string[]> = {
 	"github-copilot": ["github-copilot"],
 	openai: ["openai", "openai-api"],
 	anthropic: ["anthropic", "anthropic-api"],
+	chatgpt: ["openai"],
+	claude: ["anthropic"],
 };
+
+/** The provider whose own clients' variables a subscription takes when no key for it is granted. */
+const SIGNED_IN_FOR: Partial<Record<AiProvider, AiProvider>> = {
+	chatgpt: "openai",
+	claude: "anthropic",
+};
+
+/** The grants with each subscription after any key, so the subscription is the one that stays. */
+function keysFirst(providers: readonly AiProviderGrant[]): AiProviderGrant[] {
+	return [...providers].sort((left, right) =>
+		Number(left.provider in SIGNED_IN_FOR) - Number(right.provider in SIGNED_IN_FOR)
+	);
+}
 
 /**
  * Copilot's model API takes the Copilot token Chopin exchanges for the person's GitHub token, as an
@@ -229,7 +249,7 @@ export function atomicModels(
 	relayed: Pick<RelayedLaunch, "baseUrls">,
 ) {
 	let entries: Record<string, Record<string, unknown>> = {};
-	for (let grant of providers) {
+	for (let grant of keysFirst(providers)) {
 		let baseUrl = relayed.baseUrls[grant.provider];
 		if (!baseUrl) continue;
 		for (let name of ATOMIC_PROVIDERS[grant.provider]) {
@@ -295,12 +315,16 @@ export function agentAiEnvironment(options: {
 			}),
 		),
 	};
+	let keyed = new Set(providers.map(grant => grant.provider));
 	for (let grant of providers) {
 		let baseUrl = relayed.baseUrls[grant.provider];
 		if (!baseUrl) continue;
 		env[grant.keyVariable] = grant.placeholder;
-		if (grant.provider === "openai") env.OPENAI_BASE_URL = baseUrl;
-		if (grant.provider === "anthropic") env.ANTHROPIC_BASE_URL = baseUrl;
+		let own = SIGNED_IN_FOR[grant.provider];
+		let as = own && keyed.has(own) ? undefined : own ?? grant.provider;
+		if (as === "openai") env.OPENAI_BASE_URL = baseUrl;
+		if (as === "anthropic") env.ANTHROPIC_BASE_URL = baseUrl;
+		if (grant.provider === "chatgpt" && as === "openai") env.OPENAI_API_KEY = grant.placeholder;
 	}
 	return env;
 }

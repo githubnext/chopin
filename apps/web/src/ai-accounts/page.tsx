@@ -1,4 +1,5 @@
 import { RestartIcon } from "@chopin/icons";
+import { isSubscriptionProvider } from "@chopin/protocol/ai-credentials";
 import { InlineNotice } from "@chopin/visuals/inline-notice";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -13,12 +14,12 @@ import {
 	withCredential,
 	withoutCredential,
 } from "./accounts";
-import { KeyDialog, RemoveKeyDialog, useDialog } from "./dialogs";
+import { KeyDialog, RemoveKeyDialog, SignInDialog, useDialog } from "./dialogs";
 import { AccountSection } from "./rows";
 
 import type { AiCredentialSummary, AiProvider } from "@chopin/protocol/ai-credentials";
 import type { AccountAction, AccountRow } from "./accounts";
-import type { KeyRequest } from "./dialogs";
+import type { KeyRequest, SignInRequest } from "./dialogs";
 import type { PendingAction, RowProblem } from "./rows";
 
 import "./ai-accounts.css";
@@ -94,8 +95,8 @@ export function AiAccountsView(
 	let shared = { busy: pending, onAction, problem };
 	return (
 		<>
-			<AccountSection {...shared} rows={signIns} title="Sign-ins" />
-			<AccountSection {...shared} rows={keys} title="API keys" />
+			<AccountSection {...shared} rows={signIns} title="Use a subscription" />
+			<AccountSection {...shared} rows={keys} title="Use an API key" />
 		</>
 	);
 }
@@ -106,14 +107,16 @@ export default function AiAccountsPage() {
 	let [returnTo, setReturnTo] = useState<AiProvider>();
 	let { credentials, setCredentials, problem, load, checking } = useCredentials();
 	let [keyRequest, setKeyRequest] = useState<KeyRequest>();
+	let [signInRequest, setSignInRequest] = useState<SignInRequest>();
 	let [removing, setRemoving] = useState<{ provider: AiProvider; opened: number }>();
 	let opened = useRef(0);
 	let [pending, setPending] = useState<PendingAction>();
 	let [rowProblem, setRowProblem] = useState<RowProblem>();
 	let [announcement, setAnnouncement] = useState("");
 	let keyDialog = useDialog(keyRequest);
+	let signInDialog = useDialog(signInRequest);
 	let removeDialog = useDialog(removing);
-	let dialogShown = [keyDialog.phase, removeDialog.phase].some(phase =>
+	let dialogShown = [keyDialog.phase, signInDialog.phase, removeDialog.phase].some(phase =>
 		phase === "opening" || phase === "open"
 	);
 	useLayoutEffect(() => {
@@ -156,7 +159,13 @@ export default function AiAccountsPage() {
 			case "replace":
 				setKeyRequest({ provider: row.provider, replacing: true, opened: ++opened.current });
 				return;
+			case "sign-in":
+				if (isSubscriptionProvider(row.provider)) {
+					setSignInRequest({ provider: row.provider, opened: ++opened.current });
+				}
+				return;
 			case "remove":
+			case "disconnect":
 				setRemoving({ provider: row.provider, opened: ++opened.current });
 				return;
 			case "use-sign-in":
@@ -223,6 +232,20 @@ export default function AiAccountsPage() {
 					request={keyDialog.value}
 				/>
 			)}
+			{signInDialog.phase !== "closed" && (
+				<SignInDialog
+					key={signInDialog.value.opened}
+					motion={signInDialog}
+					onDismiss={() => setSignInRequest(undefined)}
+					onSaved={summary => {
+						changed(summary);
+						setSignInRequest(undefined);
+						setReturnTo(summary.provider);
+						setAnnouncement(`${PROVIDER_NAMES[summary.provider]} connected`);
+					}}
+					request={signInDialog.value}
+				/>
+			)}
 			{removeDialog.phase !== "closed" && (
 				<RemoveKeyDialog
 					key={removeDialog.value.opened}
@@ -233,7 +256,11 @@ export default function AiAccountsPage() {
 						setCredentials(current => withoutCredential(current ?? [], provider));
 						setRemoving(undefined);
 						setReturnTo(provider);
-						setAnnouncement(`${PROVIDER_NAMES[provider]} key removed`);
+						setAnnouncement(
+							isSubscriptionProvider(provider)
+								? `${PROVIDER_NAMES[provider]} disconnected`
+								: `${PROVIDER_NAMES[provider]} key removed`,
+						);
 					}}
 					provider={removeDialog.value.provider}
 				/>

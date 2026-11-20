@@ -1,10 +1,11 @@
 import {
+	AnthropicIcon,
 	CheckIcon,
 	CircleCloseIcon,
 	GitHubIcon,
 	InfoIcon,
-	KeyIcon,
 	LoaderIcon,
+	OpenAIIcon,
 	WarningIcon,
 } from "@chopin/icons";
 import { Badge } from "@chopin/visuals";
@@ -13,7 +14,16 @@ import { useId } from "react";
 import { TerminalAlert } from "../terminal-alert";
 import { GET_COPILOT_URL } from "./accounts";
 
+import type { AiProvider } from "@chopin/protocol/ai-credentials";
 import type { AccountAction, AccountBadge, AccountRow } from "./accounts";
+
+const PROVIDER_MARKS = {
+	"github-copilot": GitHubIcon,
+	openai: OpenAIIcon,
+	chatgpt: OpenAIIcon,
+	anthropic: AnthropicIcon,
+	claude: AnthropicIcon,
+} as const satisfies Record<AiProvider, unknown>;
 
 const BADGE_ICONS = {
 	Connected: CheckIcon,
@@ -29,11 +39,20 @@ const ACTION_LABELS: Record<AccountAction, string> = {
 	remove: "Remove",
 	"use-token": "Use a token instead",
 	"use-sign-in": "Use GitHub sign-in",
+	"sign-in": "Sign in",
+	disconnect: "Disconnect",
 };
+
+function actionLabel(row: AccountRow, action: AccountAction): string {
+	if (action === "sign-in" && row.badge?.label === "Needs reconnecting") return "Sign in again";
+	return ACTION_LABELS[action];
+}
 
 function actionName(row: AccountRow, action: AccountAction): string | undefined {
 	let secret = row.provider === "github-copilot" ? "token" : "key";
 	if (action === "add-key") return `Add key for ${row.name}`;
+	if (action === "sign-in") return `${actionLabel(row, action)} to ${row.name}`;
+	if (action === "disconnect") return `Disconnect ${row.name}`;
 	if (action === "replace" || action === "remove") {
 		return `${ACTION_LABELS[action]} ${row.name} ${secret}`;
 	}
@@ -52,10 +71,11 @@ export function AccountRowView(
 		row: AccountRow;
 	},
 ) {
+	let Mark = PROVIDER_MARKS[row.provider];
 	return (
 		<li className="ai-account" data-provider={row.provider}>
 			<span aria-hidden="true" className="ai-account-mark">
-				{row.provider === "github-copilot" ? <GitHubIcon size={18} /> : <KeyIcon size={18} />}
+				<Mark size={18} />
 			</span>
 			<div className="ai-account-text">
 				<h3 className="ai-account-name">{row.name}</h3>
@@ -89,7 +109,7 @@ export function AccountRowView(
 									onClick={() => onAction(row, action)}
 									type="button"
 								>
-									{ACTION_LABELS[action]}
+									{actionLabel(row, action)}
 								</button>
 							))}
 						</div>

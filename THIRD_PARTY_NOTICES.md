@@ -166,3 +166,25 @@ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FO
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
+
+## Simple Icons: provider marks
+
+The OpenAI and Anthropic marks in `packages/icons/src/brand.tsx` (`OpenAIIcon` and `AnthropicIcon`),
+drawn on the AI accounts page beside the rows that connect each provider, take their path data
+unchanged from [Simple Icons](https://github.com/simple-icons/simple-icons) (`icons/openai.svg` and
+`icons/anthropic.svg`), whose SVG data is released under CC0-1.0. Each is one path on Simple Icons'
+24 by 24 grid, drawn in `currentColor` and hidden from assistive technology unless it is given a
+name.
+
+- **OpenAI:** `simple-icons@15.22.0` (<https://unpkg.com/simple-icons@15.22.0/icons/openai.svg>).
+  Simple Icons removed this icon in its next major version
+  ([simple-icons#13944](https://github.com/simple-icons/simple-icons/pull/13944)), and it is
+  OpenAI's blossom as it was drawn before OpenAI's 2025 refinement of it. OpenAI's own asset on
+  [openai.com/brand](https://openai.com/brand/) could not be fetched when this was recorded; it
+  should replace this path once obtained.
+- **Anthropic:** `simple-icons@16.38.0` (commit `32e030086fdc605196391aab28519b14dc4295b4` of
+  `simple-icons/simple-icons`; the path is the same in 15.22.0).
+- **Trademarks:** the OpenAI blossom is a trademark of OpenAI and the Anthropic mark a trademark of
+  Anthropic. CC0 covers Simple Icons' SVG data, not the marks. Chopin uses each only to identify
+  the provider a row connects, in monochrome, never as its own branding or to imply endorsement,
+  following [OpenAI's brand guidelines](https://openai.com/brand/).

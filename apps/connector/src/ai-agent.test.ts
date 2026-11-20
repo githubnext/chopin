@@ -101,6 +101,65 @@ test("gives an Atomic agent a state directory of its own, with a models.json tha
 	expect(readFileSync(join(home, "atomic", "models.json"), "utf8")).not.toContain("chopin_ai_");
 });
 
+test("gives a ChatGPT or Claude sign-in Atomic's subscription providers, ahead of a key, and the provider's own variables only without one", () => {
+	let subscriptions = [
+		{
+			provider: "chatgpt" as const,
+			baseUrl: "https://chopin.test/api/v1/ai/chatgpt/v1",
+			placeholder: "chopin_ai_chatgpt",
+			keyVariable: "CHATGPT_ACCESS_TOKEN",
+		},
+		{
+			provider: "claude" as const,
+			baseUrl: "https://chopin.test/api/v1/ai/claude",
+			placeholder: "chopin_ai_sk-ant-oat01-claude",
+			keyVariable: "CLAUDE_CODE_OAUTH_TOKEN",
+		},
+	];
+	let relayed = {
+		baseUrls: {
+			...RELAYED.baseUrls,
+			chatgpt: "http://127.0.0.1:9/k/chatgpt",
+			claude: "http://127.0.0.1:9/k/claude",
+		},
+		catalogUrl: RELAYED.catalogUrl,
+	};
+	let withKey = [...subscriptions, ...PROVIDERS];
+	expect(atomicModels(withKey, relayed).providers).toEqual({
+		openai: { baseUrl: relayed.baseUrls.chatgpt, apiKey: "$CHATGPT_ACCESS_TOKEN" },
+		"openai-api": { baseUrl: relayed.baseUrls.openai, apiKey: "$OPENAI_API_KEY" },
+		anthropic: { baseUrl: relayed.baseUrls.claude, apiKey: "$CLAUDE_CODE_OAUTH_TOKEN" },
+		"github-copilot": {
+			baseUrl: relayed.baseUrls["github-copilot"],
+			apiKey: "$COPILOT_GITHUB_TOKEN",
+			headers: { "Copilot-Integration-Id": "vscode-chat" },
+		},
+	});
+
+	let keyed = agentAiEnvironment({
+		command: ["codex"],
+		home: join(scratch, "keyed.agent"),
+		providers: withKey,
+		relayed,
+	});
+	expect(keyed.OPENAI_API_KEY).toBe("chopin_ai_openai");
+	expect(keyed.OPENAI_BASE_URL).toBe(relayed.baseUrls.openai);
+	expect(keyed.CHATGPT_ACCESS_TOKEN).toBe("chopin_ai_chatgpt");
+	expect(keyed.CLAUDE_CODE_OAUTH_TOKEN).toBe("chopin_ai_sk-ant-oat01-claude");
+	expect(keyed.ANTHROPIC_BASE_URL).toBe(relayed.baseUrls.claude);
+
+	let signedIn = agentAiEnvironment({
+		command: ["codex"],
+		home: join(scratch, "signed-in.agent"),
+		providers: subscriptions,
+		relayed,
+	});
+	expect(signedIn.OPENAI_API_KEY).toBe("chopin_ai_chatgpt");
+	expect(signedIn.OPENAI_BASE_URL).toBe(relayed.baseUrls.chatgpt);
+	expect(signedIn.ANTHROPIC_API_KEY).toBeUndefined();
+	expect(signedIn.ANTHROPIC_BASE_URL).toBe(relayed.baseUrls.claude);
+});
+
 test("writes no models.json for an agent that is not Atomic, and still moves its state", () => {
 	let home = join(scratch, "copilot-run.agent");
 	let env = agentAiEnvironment({

@@ -536,6 +536,13 @@ export interface AiCredentialStore {
 	 */
 	rejected(record: AiCredentialRecord, at: Date): Promise<boolean>;
 	/**
+	 * Saves `tokens`, a sign-in's refreshed tokens, in place of those `record` was read with, only
+	 * while the connection is still `record`'s and its tokens are still the ones it was read with, so
+	 * a refresh that lost a race never replaces newer tokens. Returns whether it saved them. It is no
+	 * cutoff: the connection is the same.
+	 */
+	refreshed(lease: Lease, record: AiCredentialRecord, tokens: Uint8Array): Promise<boolean>;
+	/**
 	 * How many times this process has connected, replaced or removed one of `userId`'s credentials,
 	 * each counted once its write settles and before its caller hears so; one process serves a
 	 * database at a time, so while it holds the writer lease a count unchanged across a read says

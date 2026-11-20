@@ -26,6 +26,11 @@ function copilot(
 	return accountRows([summary], NOW, checking).signIns[0]!;
 }
 
+function subscription(summary?: Partial<AiCredentialSummary>): AccountRow {
+	return accountRows(summary ? [{ provider: "claude", kind: "subscription", ...summary }] : [], NOW)
+		.signIns[2]!;
+}
+
 function key(summary?: AiCredentialSummary): AccountRow {
 	return accountRows(summary ? [summary] : [], NOW).keys[0]!;
 }
@@ -40,6 +45,13 @@ const SPECIMENS: { label: string; row: AccountRow; problem?: string }[] = [
 		row: copilot("access", { token: true }),
 		problem: "Couldn't reach Chopin. Check your connection, then try again.",
 	},
+	{ label: "Sign-in missing", row: subscription() },
+	{ label: "Sign-in connected", row: subscription({ lastUsedAt: "2026-11-19T11:58:00.000Z" }) },
+	{ label: "Sign-in unchecked", row: subscription({ unchecked: true }) },
+	{
+		label: "Sign-in ended by its provider",
+		row: subscription({ rejectedAt: "2026-11-19T10:00:00.000Z" }),
+	},
 	{ label: "Key connected", row: key(OPENAI) },
 	{ label: "Key unreadable", row: key({ ...OPENAI, unusable: true }) },
 	{
@@ -52,7 +64,7 @@ const SPECIMENS: { label: string; row: AccountRow; problem?: string }[] = [
 export function AiAccountsPlate() {
 	return (
 		<AuditPlate
-			description="The AI accounts page's rows: GitHub Copilot through the sign-in with and without a seat, checking as the page opens or with a check unfinished, a token that couldn't switch back, and an API key connected, unreadable or missing."
+			description="The AI accounts page's rows: GitHub Copilot through the sign-in with and without a seat, checking as the page opens or with a check unfinished, a token that couldn't switch back, a Claude sign-in missing, connected, unchecked or ended, and an API key connected, unreadable or missing."
 			item="ai-accounts"
 			title="AI accounts"
 		>

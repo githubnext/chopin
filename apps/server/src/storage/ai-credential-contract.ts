@@ -168,6 +168,41 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		test("saves a sign-in's refreshed tokens only over the tokens the refresh began from, as no cutoff", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId, lease } = await userAndChannel(storage);
+				let signIn: AiCredentialRecord = {
+					userId,
+					provider: "claude",
+					kind: "subscription",
+					ciphertext: bytes(48),
+					updatedAt: AT,
+				};
+				await storage.aiCredentials.put(lease, signIn);
+				let version = storage.aiCredentials.version(userId);
+				let first = bytes(48);
+				let second = bytes(48);
+				expect(await storage.aiCredentials.refreshed(lease, signIn, first)).toBe(true);
+				// A second refresh that began from the same tokens lost the race: the newer pair stays.
+				expect(await storage.aiCredentials.refreshed(lease, signIn, second)).toBe(false);
+				let stored = await storage.aiCredentials.get(userId, "claude");
+				expect(stored).toEqual({ ...signIn, tokens: first });
+				expect(storage.aiCredentials.version(userId)).toBe(version);
+
+				expect(await storage.aiCredentials.refreshed(lease, stored!, second)).toBe(true);
+				expect((await storage.aiCredentials.get(userId, "claude"))?.tokens).toEqual(second);
+
+				let again = { ...signIn, ciphertext: bytes(48), updatedAt: later(60) };
+				await storage.aiCredentials.put(lease, again);
+				expect(await storage.aiCredentials.refreshed(lease, { ...stored!, tokens: second }, first))
+					.toBe(false);
+				expect(await storage.aiCredentials.list(userId)).toEqual([again]);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		test("finds a placeholder by its digest until it expires, and refuses a repeated digest", async () => {
 			let storage = await openedStorage(factory);
 			try {

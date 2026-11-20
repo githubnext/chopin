@@ -1112,6 +1112,7 @@ if (url) {
 				"044_ai_credentials",
 				"045_ai_usage",
 				"046_ai_placeholder_owner",
+				"047_ai_subscriptions",
 			]);
 			expect([
 				...await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`,
