@@ -39,7 +39,7 @@ import type { Checkouts } from "./checkouts";
 import { type Sandbox, spawnIn } from "./sandbox";
 import { type PlannerSpares, type Spare, SPARE_PROTOCOL } from "./planner-spare";
 import { managedEnvironment, privateAgentState } from "./ai-agent";
-import { type AgentStore, keepSessionsIn } from "./machine-store";
+import { type AgentStore, forgetAgentStore, keepSessionsIn } from "./machine-store";
 
 /** How long a stopped Planner backend has to exit before it is killed. */
 const STOP_GRACE_MS = 5000;
@@ -932,6 +932,7 @@ export function plannerEnvironment(
 	if (!managed) return withoutGitHub({ ...process.env, ...env });
 	let places = privateAgentState(agentFolder(worktree));
 	if (store) keepSessionsIn(store, places.ATOMIC_CODING_AGENT_DIR, output);
+	else forgetAgentStore(places.ATOMIC_CODING_AGENT_DIR);
 	return {
 		...managedEnvironment(process.env, env),
 		...places,

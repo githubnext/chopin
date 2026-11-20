@@ -13,7 +13,12 @@ import { machine, owner } from "../storage/machine-contract";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { machineStoreName, newStorePassword } from "./names";
 import { MachineStores } from "./service";
-import { MachineStoreRefusal, MANAGED_ROLE_MARK, PostgresMachineStoreServer } from "./server";
+import {
+	CREATING_DATABASE_MARK,
+	MachineStoreRefusal,
+	MANAGED_ROLE_MARK,
+	PostgresMachineStoreServer,
+} from "./server";
 
 import type { AddressInfo } from "node:net";
 import type { StorageOpenContext } from "@bastani/atomic/storage";
@@ -230,7 +235,7 @@ if (!database) {
 			let otherPassword = newStorePassword();
 			await server.provision(other, otherPassword);
 			await sql.unsafe(`CREATE ROLE "${role}" NOLOGIN NOINHERIT`);
-			await sql.unsafe(`COMMENT ON ROLE "${role}" IS '${MANAGED_ROLE_MARK}'`);
+			await sql.unsafe(`COMMENT ON ROLE "${role}" IS '${CREATING_DATABASE_MARK}'`);
 			await sql.unsafe(`CREATE DATABASE "${role}" ALLOW_CONNECTIONS false`);
 			await sql.unsafe(`GRANT CONNECT ON DATABASE "${role}" TO PUBLIC`);
 			await sql.unsafe(`GRANT CONNECT ON DATABASE "${role}" TO "${other}"`);
@@ -244,6 +249,63 @@ if (!database) {
 			`;
 			expect(acl!.acl).not.toContain(other);
 			expect(acl!.acl).not.toMatch(/[{,]=/);
+			let [marks] = await sql<{ role: string; database: string }[]>`
+				SELECT shobj_description(r.oid, 'pg_authid') AS role,
+					shobj_description(d.oid, 'pg_database') AS database
+				FROM pg_roles r JOIN pg_database d ON d.datname = r.rolname WHERE r.rolname = ${role}
+			`;
+			expect(marks).toEqual({ role: MANAGED_ROLE_MARK, database: MANAGED_ROLE_MARK });
+		});
+
+		test("leaves an administrator's database it didn't make alone, even under a machine's name", async () => {
+			let role = newRole();
+			let password = newStorePassword();
+			await sql.unsafe(`CREATE ROLE "${role}" NOLOGIN NOINHERIT`);
+			await sql.unsafe(`COMMENT ON ROLE "${role}" IS '${MANAGED_ROLE_MARK}'`);
+			await sql.unsafe(`CREATE DATABASE "${role}"`);
+			let read = async () => {
+				let [found] = await sql<{ open: boolean; acl: string | null; comment: string | null }[]>`
+					SELECT datallowconn AS open, datacl::text AS acl,
+						shobj_description(oid, 'pg_database') AS comment
+					FROM pg_database WHERE datname = ${role}
+				`;
+				return found;
+			};
+			let before = await read();
+			await expect(server.provision(role, password)).rejects.toThrow("wasn't made by Chopin");
+			await expect(server.setPassword(role, password)).rejects.toThrow("wasn't made by Chopin");
+			await server.disable(role);
+			await server.drop(role);
+			expect(await read()).toEqual(before!);
+			let [login] = await sql<{ login: boolean }[]>`
+				SELECT rolcanlogin AS login FROM pg_roles WHERE rolname = ${role}
+			`;
+			expect(login?.login ?? false).toBe(false);
+		});
+
+		test("rotates no login whose database lets its role grant CONNECT onward", async () => {
+			let role = newRole();
+			let other = newRole();
+			let password = newStorePassword();
+			let otherPassword = newStorePassword();
+			await server.provision(role, password);
+			await server.provision(other, otherPassword);
+			await sql.unsafe(`GRANT CONNECT ON DATABASE "${role}" TO "${role}" WITH GRANT OPTION`);
+			let next = newStorePassword();
+			await expect(server.setPassword(role, next)).rejects.toThrow("may grant it to others");
+			expect(await server.accepts(role, next)).toBe(false);
+			await sql.unsafe(`REVOKE GRANT OPTION FOR CONNECT ON DATABASE "${role}" FROM "${role}"`);
+			await sql.unsafe(`GRANT TEMPORARY ON DATABASE "${role}" TO "${role}"`);
+			await expect(server.setPassword(role, next)).rejects.toThrow("more than CONNECT");
+			await server.provision(role, password);
+			await server.setPassword(role, next);
+			let client = asRole(role, next);
+			try {
+				await client.unsafe(`GRANT CONNECT ON DATABASE "${role}" TO "${other}"`).catch(() => {});
+			} finally {
+				await client.close();
+			}
+			expect(await refusedCode(connectAs(other, otherPassword, role))).toBe("42501");
 		});
 
 		test("refuses a role or database that isn't the managed one, and never enables its login", async () => {

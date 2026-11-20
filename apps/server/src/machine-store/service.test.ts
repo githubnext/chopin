@@ -245,5 +245,20 @@ describe("machine database logins", () => {
 		});
 		await restarted.report(laptop.id, undefined);
 		expect((await restarted.statuses([laptop.id])).get(laptop.id)).toEqual({ state: "ready" });
+
+		let desk = await paired();
+		await stores.report(desk.id, "Chopin is served over plain HTTP");
+		let again = new MachineStores({
+			storage,
+			server: new FakeServer(),
+			key: KEY,
+			clock: () => new Date(),
+		});
+		expect((await again.statuses([desk.id])).get(desk.id)).toEqual({
+			state: "failed",
+			reason: "Chopin is served over plain HTTP",
+		});
+		await again.report(desk.id, undefined);
+		expect((await again.statuses([desk.id])).get(desk.id)).toEqual({ state: "pending" });
 	});
 });

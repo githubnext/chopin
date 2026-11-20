@@ -20,6 +20,9 @@ export interface MachineStoreServer {
 
 export const ATOMIC_SCHEMA = "atomic";
 export const MANAGED_ROLE_MARK = "chopin:machine-store";
+export const MANAGED_DATABASE_MARK = MANAGED_ROLE_MARK;
+export const CREATING_DATABASE_MARK = `${MANAGED_ROLE_MARK}:creating-database`;
+const ROLE_MARKS = [MANAGED_ROLE_MARK, CREATING_DATABASE_MARK];
 const UNREACHABLE_DATABASES = ["postgres", "template1"];
 const REASON_CHARS = 280;
 
@@ -168,31 +171,61 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 	async #managedRole(role: string) {
 		let rows = await this.#admin`
 			SELECT 1 FROM pg_roles
-			WHERE rolname = ${role} AND shobj_description(oid, 'pg_authid') = ${MANAGED_ROLE_MARK}
+			WHERE rolname = ${role} AND shobj_description(oid, 'pg_authid') IN ${this.#admin(ROLE_MARKS)}
 		`;
 		return rows.length > 0;
+	}
+
+	async #databaseOf(role: string) {
+		let [found] = await this.#admin<
+			{ owner: string; open: boolean; marked: boolean; creating: boolean }[]
+		>`
+			SELECT pg_get_userbyid(d.datdba) AS owner, d.datallowconn AS open,
+				coalesce(shobj_description(d.oid, 'pg_database') = ${MANAGED_DATABASE_MARK}, false) AS marked,
+				coalesce((
+					SELECT shobj_description(r.oid, 'pg_authid') = ${CREATING_DATABASE_MARK}
+					FROM pg_roles r WHERE r.rolname = d.datname
+				), false) AS creating
+			FROM pg_database d WHERE d.datname = ${role}
+		`;
+		return found;
 	}
 
 	async #managedDatabase(database: string, me: Me) {
-		let rows = await this.#admin`
-			SELECT 1 FROM pg_database WHERE datname = ${database} AND pg_get_userbyid(datdba) = ${me.name}
-		`;
-		return rows.length > 0;
+		let found = await this.#databaseOf(database);
+		return !!found && found.owner === me.name && (found.marked || found.creating);
 	}
 
 	async #database(role: string, me: Me) {
-		let [found] = await this.#admin<{ owner: string; open: boolean }[]>`
-			SELECT pg_get_userbyid(datdba) AS owner, datallowconn AS open
-			FROM pg_database WHERE datname = ${role}
-		`;
+		let found = await this.#databaseOf(role);
 		if (!found) {
+			await this.#admin.unsafe(
+				`COMMENT ON ROLE ${id(role)} IS ${quotedLiteral(CREATING_DATABASE_MARK)}`,
+			);
 			await this.#admin.unsafe(`CREATE DATABASE ${id(role)} ALLOW_CONNECTIONS false`);
-		} else if (found.owner !== me.name) {
+			found = { owner: me.name, open: false, marked: false, creating: true };
+		}
+		if (found.owner !== me.name) {
 			throw new MachineStoreRefusal(
 				`the database ${role} belongs to ${found.owner}, not to ${me.name}, so Chopin won't use it`,
 			);
 		}
-		if (found?.open) await this.#admin.unsafe(`ALTER DATABASE ${id(role)} ALLOW_CONNECTIONS false`);
+		if (!found.marked && !found.creating) {
+			throw new MachineStoreRefusal(
+				`the existing database ${role} wasn't made by Chopin, so Chopin won't use it`,
+			);
+		}
+		if (found.open) await this.#admin.unsafe(`ALTER DATABASE ${id(role)} ALLOW_CONNECTIONS false`);
+		if (!found.marked) {
+			await this.#admin.unsafe(
+				`COMMENT ON DATABASE ${id(role)} IS ${quotedLiteral(MANAGED_DATABASE_MARK)}`,
+			);
+		}
+		if (found.creating) {
+			await this.#admin.unsafe(
+				`COMMENT ON ROLE ${id(role)} IS ${quotedLiteral(MANAGED_ROLE_MARK)}`,
+			);
+		}
 		await this.#admin.unsafe(`REVOKE ALL ON DATABASE ${id(role)} FROM PUBLIC`);
 		let grantees = await this.#admin<{ grantee: string }[]>`
 			SELECT DISTINCT pg_get_userbyid(a.grantee) AS grantee
@@ -233,11 +266,18 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 	}
 
 	async #checkDatabase(role: string, me: Me) {
-		let [found] = await this.#admin<{ owner: string; others: number }[]>`
+		let [found] = await this.#admin<
+			{ owner: string; marked: boolean; others: number; widened: number }[]
+		>`
 			SELECT pg_get_userbyid(d.datdba) AS owner,
+				coalesce(shobj_description(d.oid, 'pg_database') = ${MANAGED_DATABASE_MARK}, false) AS marked,
 				(SELECT count(*)::int FROM aclexplode(d.datacl) a
 					WHERE a.grantee <> d.datdba AND a.grantee <> (SELECT oid FROM pg_roles WHERE rolname = ${role})
-				) AS others
+				) AS others,
+				(SELECT count(*)::int FROM aclexplode(d.datacl) a
+					WHERE a.grantee = (SELECT oid FROM pg_roles WHERE rolname = ${role})
+						AND (a.privilege_type <> 'CONNECT' OR a.is_grantable)
+				) AS widened
 			FROM pg_database d WHERE d.datname = ${role}
 		`;
 		if (!found) throw new MachineStoreRefusal(`the database ${role} doesn't exist`);
@@ -246,8 +286,18 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 				`the database ${role} belongs to ${found.owner}, not to ${me.name}, so Chopin won't use it`,
 			);
 		}
+		if (!found.marked) {
+			throw new MachineStoreRefusal(
+				`the existing database ${role} wasn't made by Chopin, so Chopin won't use it`,
+			);
+		}
 		if (found.others > 0) {
 			throw new MachineStoreRefusal(`other roles have privileges on the database ${role}`);
+		}
+		if (found.widened > 0) {
+			throw new MachineStoreRefusal(
+				`the role ${role} has more than CONNECT on its database, or may grant it to others`,
+			);
 		}
 	}
 
@@ -278,7 +328,9 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 		>`
 			SELECT r.rolsuper AS superuser, r.rolcreaterole AS "createRole", r.rolcreatedb AS "createDatabase",
 				r.rolreplication AS replication, r.rolbypassrls AS "bypassRls",
-				coalesce(shobj_description(r.oid, 'pg_authid') = ${MANAGED_ROLE_MARK}, false) AS marked,
+				coalesce(shobj_description(r.oid, 'pg_authid') IN ${
+			this.#admin(ROLE_MARKS)
+		}, false) AS marked,
 				(SELECT count(*)::int FROM pg_auth_members m WHERE m.member = r.oid) AS memberships,
 				(SELECT count(*)::int FROM pg_auth_members m
 					WHERE m.roleid = r.oid AND m.member <> (SELECT oid FROM pg_roles WHERE rolname = current_user)

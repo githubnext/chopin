@@ -141,6 +141,51 @@ export async function storeAdapter(
 	return root;
 }
 
+function agentSettings(path: string): Record<string, unknown> {
+	try {
+		let parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+		return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+			? parsed as Record<string, unknown>
+			: {};
+	} catch {
+		return {};
+	}
+}
+
+function generatedStorage(storage: unknown, passwordFile: string) {
+	let settings = storage as
+		| { adapter?: unknown; secrets?: { password?: { file?: unknown } } }
+		| undefined;
+	return settings?.adapter === MACHINE_STORE_ADAPTER
+		&& settings.secrets?.password?.file === passwordFile;
+}
+
+export function forgetAgentStore(atomicDirectory: string) {
+	let password = join(atomicDirectory, "storage-password");
+	let path = join(atomicDirectory, "settings.json");
+	if (existsSync(path)) {
+		let existing = agentSettings(path);
+		if (generatedStorage(existing.storage, password)) {
+			let { storage: _, packages, ...kept } = existing;
+			let remaining = Array.isArray(packages)
+				? packages.filter(value => value !== STORE_PACKAGE)
+				: packages;
+			writePrivate(
+				path,
+				JSON.stringify(
+					{
+						...kept,
+						...(Array.isArray(remaining) && remaining.length === 0 ? {} : { packages: remaining }),
+					},
+					null,
+					"\t",
+				) + "\n",
+			);
+		}
+	}
+	rmSync(password, { force: true });
+}
+
 export class AgentStore {
 	constructor(readonly login: MachineStoreLogin, readonly adapter: string) {}
 
@@ -156,15 +201,7 @@ export class AgentStore {
 		let storage = storageSettings(this.login.url, password);
 		writePrivate(password, this.login.password);
 		let path = join(atomicDirectory, "settings.json");
-		let existing: Record<string, unknown> = {};
-		try {
-			let parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-				existing = parsed as Record<string, unknown>;
-			}
-		} catch {
-			existing = {};
-		}
+		let existing = agentSettings(path);
 		let packages = Array.isArray(existing.packages) ? existing.packages : [];
 		writePrivate(
 			path,
@@ -185,6 +222,9 @@ export function keepSessionsIn(store: AgentStore, atomicDirectory: string, outpu
 	try {
 		store.write(atomicDirectory);
 	} catch (error) {
+		try {
+			forgetAgentStore(atomicDirectory);
+		} catch {}
 		let code = (error as { code?: unknown }).code;
 		output?.say(
 			output.style.dim(

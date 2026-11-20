@@ -909,16 +909,21 @@ For each machine Chopin keeps, under the administrator role:
 
 - a role and a database both named `m_` followed by the machine's id without its
   dashes (`m_x` and a hash for any other id), never a name a person typed;
-- the database owned by the administrator, created with connections off, with
-  `CONNECT` granted to the machine's role alone before connections are allowed, and a
-  schema `atomic` owned by the role, where Atomic sets up its tables;
+- the database owned by the administrator, created with connections off and given the
+  comment `chopin:machine-store`, with `CONNECT` (without the right to grant it)
+  granted to the machine's role alone before connections are allowed, and a schema
+  `atomic` owned by the role, where Atomic sets up its tables. Until that comment is
+  set, the role's comment says the database is being made, so a retry after a crash
+  finishes it;
 - a role that is no superuser, can't create roles or databases, replicate or bypass
   row security, is a member of no other role, has no member but the administrator, has
   no privilege on any other database, and carries the comment `chopin:machine-store`
   Chopin gives it as it creates it. An existing role or database that isn't exactly
-  this is refused, never changed, and its login is never turned on. Turning a login off
-  or dropping it touches only a role with that comment and a database the
-  administrator owns, so a name another role or database already held is left alone;
+  this is refused, never changed, and its login is never turned on. A password is
+  changed only while the database's privileges are still exactly these. Turning a login
+  off or dropping it touches only a role and a database with that comment, the database
+  owned by the administrator, so a name another role or database already held is left
+  alone;
 - `CONNECT` revoked from `PUBLIC` on every other database of the server, checked by
   connecting as the new role to `postgres`, `template1` and the administrator's own
   database. Give the administrator a server of its own: other applications' roles on

@@ -257,8 +257,9 @@ durable.
   has `CONNECT` on it alone and its `atomic` schema, and no other database of the
   server lets `PUBLIC` connect, checked by connecting. An existing role or database
   that isn't the managed one (other roles its members, no `chopin:machine-store` comment)
-  is refused, never repaired, and turning a login off or dropping it touches only a marked
-  role and a database the administrator owns. Passwords reach PostgreSQL only as a SCRAM
+  is refused, never repaired, a password is changed only while the role holds nothing but
+  `CONNECT` without grant option on its database, and turning a login off or dropping it
+  touches only a marked role and a marked database the administrator owns. Passwords reach PostgreSQL only as a SCRAM
   verifier, are kept encrypted (`machine_databases`), and a rotation keeps the working one
   until PostgreSQL has the new one, refused while the last one's outcome is unknown. A
   login is never handed to a revoked machine, checked in the per-machine queue revoking
