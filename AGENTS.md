@@ -60,10 +60,12 @@ only when the existing client build is known to match the checkout.
 CI starts every job at once: format, lint and types on one runner; unit tests in
 three shards balanced by `.github/bun-test-timings.json`; the PostgreSQL contract;
 browser integration in twelve shards balanced by `e2e/shard-timings.json`; the
-design and diagram suites; a Docker image build; and the `chopin` CLI binary
-build with its bridge smoke test (whose Windows binary is then started once on
-Windows, where `install.ps1` is also tested). The required checks
-`format, lint, types, tests` and `e2e` are gates over those jobs. The timings
+design and diagram suites; a Docker image build; the conversation-plan suite in
+its sealed image (`e2e/conversation-plan.Dockerfile`); and the `chopin` CLI
+binary build with its bridge smoke test (whose Windows binary is then started
+once on Windows, where `install.ps1` is also tested). The required checks
+`format, lint, types, tests` and `e2e` are gates over all of those jobs but the
+conversation-plan suite. The timings
 files only balance shards; a missing or stale entry never drops a test. Browser
 shards reuse a client build cached on a hash of its sources. A
 documentation-only change should still pass `bun run ci`.

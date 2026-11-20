@@ -1,7 +1,7 @@
 # Jobs are split by what they wait on, so the slowest one decides the wall time
 # and nothing queues behind unrelated work. Static checks, three unit shards, the
-# PostgreSQL contract, twelve browser shards, two design suites, the container and
-# the CLI all start together. Two small gates keep the required check names,
+# PostgreSQL contract, twelve browser shards, two design suites, the container,
+# the sealed conversation-plan suite and the CLI all start together. Two small gates keep the required check names,
 # `format, lint, types, tests` and `e2e`, over the jobs they summarise.
 name: ci
 
@@ -477,6 +477,56 @@ jobs:
 
       - name: install.ps1 against a fake release
         run: bun test apps/connector/install/install.test.ts
+
+  # The conversation-plan suite in its sealed image, beside a fresh PostgreSQL with no network but
+  # loopback (scripts/conversation-plan.ts). It covers CONVERSATION_PLAN, which is off by default,
+  # and takes about as long as the slowest browser shard, so neither gate waits on it. No layer
+  # cache: the Playwright base image would crowd the application image out of the repository's.
+  conversation-plan:
+    name: conversation plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      # The image's build stamp must name the commit checked out here.
+      - name: Read the commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch PostgreSQL 17
+        run: |
+          docker pull --quiet mirror.gcr.io/library/postgres:17
+          docker tag mirror.gcr.io/library/postgres:17 postgres:17
+
+      - uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-config-inline: |
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: e2e/conversation-plan.Dockerfile
+          build-args: CHOPIN_SOURCE_COMMIT=${{ steps.commit.outputs.sha }}
+          load: true
+          push: false
+          tags: chopin-conversation-plan:ci
+
+      - name: Run the conversation-plan suite
+        run: bun scripts/conversation-plan.ts --image chopin-conversation-plan:ci --postgres-image postgres:17
+
+      - if: ${{ !cancelled() && failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: conversation-plan-report
+          path: e2e/test-results/conversation-plan
+          retention-days: 7
 
   container:
     name: container
