@@ -484,7 +484,7 @@ if (!database) {
 			let administrator = `store_admin_${suffix}`;
 			let control = `store_control_${suffix}`;
 			let provider = `provider_${suffix}`;
-			let stats = `provider_stats_${suffix}`;
+			let health = `provider_health_${suffix}`;
 			let maintenance = `provider_maintenance_${suffix}`;
 			let administratorPassword = newStorePassword();
 			await sql.unsafe(
@@ -493,11 +493,11 @@ if (!database) {
 			await sql.unsafe(`CREATE ROLE "${provider}" NOLOGIN`);
 			await sql.unsafe(`CREATE DATABASE "${control}" OWNER "${administrator}"`);
 			// The service's own databases, which every role may connect to and its operator can't close.
-			await sql.unsafe(`CREATE DATABASE "${stats}" OWNER "${provider}"`);
+			await sql.unsafe(`CREATE DATABASE "${health}" OWNER "${provider}"`);
 			await sql.unsafe(`CREATE DATABASE "${maintenance}" OWNER "${provider}"`);
 			let open = await sql<{ name: string }[]>`
 				SELECT datname AS name FROM pg_database
-				WHERE datallowconn AND datname NOT IN ${sql([control, stats, maintenance])}
+				WHERE datallowconn AND datname NOT IN ${sql([control, health, maintenance])}
 			`;
 			for (let { name } of open) {
 				await sql.unsafe(`REVOKE CONNECT ON DATABASE "${name}" FROM PUBLIC`);
@@ -514,7 +514,7 @@ if (!database) {
 					...(openDatabases ? { openDatabases } : {}),
 				});
 			let unnamed = limited();
-			let named = limited([stats, maintenance]);
+			let named = limited([health, maintenance]);
 			let role = newRole();
 			let other = newRole();
 			let password = newStorePassword();
@@ -522,14 +522,14 @@ if (!database) {
 			try {
 				let refusal = await unnamed.provision(role, password).catch((error: Error) => error);
 				expect(refusal).toBeInstanceOf(MachineStoreRefusal);
-				expect((refusal as Error).message).toContain(`${maintenance} and ${stats}`);
+				expect((refusal as Error).message).toContain(`${health} and ${maintenance}`);
 				expect((refusal as Error).message).toContain("MACHINE_STORE_OPEN_DATABASES");
 				expect(await refusedCode(connectAs(role, password, role))).not.toBe("connected");
 
 				await named.provision(role, password);
 				await named.provision(other, otherPassword);
 				expect(await connectAs(role, password, role)).toBe(role);
-				for (let name of [stats, maintenance]) {
+				for (let name of [health, maintenance]) {
 					expect(await connectAs(role, password, name)).toBe(role);
 				}
 				for (let name of ["postgres", "template1", control, other]) {
@@ -546,7 +546,7 @@ if (!database) {
 					await inside.close();
 				}
 
-				let mistaken = limited([stats, other]);
+				let mistaken = limited([health, other]);
 				try {
 					await expect(mistaken.provision(newRole(), newStorePassword())).rejects.toThrow(
 						`MACHINE_STORE_OPEN_DATABASES names ${other}`,
@@ -561,7 +561,7 @@ if (!database) {
 					await sql.unsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`).catch(() => {});
 					await sql.unsafe(`DROP ROLE IF EXISTS "${name}"`).catch(() => {});
 				}
-				for (let name of [control, stats, maintenance]) {
+				for (let name of [control, health, maintenance]) {
 					await sql.unsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`).catch(() => {});
 				}
 				for (let { name } of open) {

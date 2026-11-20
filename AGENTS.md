@@ -259,7 +259,9 @@ durable.
   on and by connecting to each but the machines' own after; a `REVOKE` that only warned (the
   administrator doesn't own the database) refuses the login. The one exception is a database
   the operator names in `MACHINE_STORE_OPEN_DATABASES`, one a managed service owns and keeps
-  open to every role, never `postgres`, `template1`, the administrator's or a machine's. An
+  open to every role, never `postgres`, `template1`, the administrator's or a machine's, and
+  never one where every role reads captured statements, which hold Chopin's password
+  verifiers. An
   existing role or database that isn't the managed one (other roles its members, no
   `chopin:machine-store` comment) is refused, never repaired, a password is changed only while the role holds nothing but
   `CONNECT` without grant option on its database, and turning a login off or dropping it

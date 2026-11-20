@@ -11,6 +11,31 @@ export type MachineStoreConfig = {
 const DAY_MS = 86_400_000;
 const MACHINE_DATABASE = /^m_(?:[0-9a-f]{32}|x[0-9a-f]{48})$/;
 
+function decoded(text: string) {
+	try {
+		return decodeURIComponent(text);
+	} catch {
+		return text;
+	}
+}
+
+/**
+ * Every name the administrator's own database could have: Bun's SQL takes `PGDATABASE`, then the
+ * URL's `dbname` (or a `database` startup parameter), then its path, then the user's name.
+ */
+function administratorDatabases(url: URL, env: Record<string, string | undefined>): string[] {
+	let query = [...url.searchParams].filter(([key]) =>
+		["dbname", "database", "user"].includes(key.toLowerCase())
+	);
+	return [
+		env.PGDATABASE,
+		env.PG_DATABASE,
+		...query.map(([, value]) => value),
+		decoded(url.pathname.slice(1)),
+		decoded(url.username),
+	].filter((name): name is string => !!name);
+}
+
 export function machineStoreConfig(
 	env: Record<string, string | undefined>,
 ): MachineStoreConfig | undefined {
@@ -64,9 +89,9 @@ export function machineStoreConfig(
 		retentionMs = days * DAY_MS;
 	}
 	let openDatabases = [...new Set(open?.split(",").map(name => name.trim()).filter(Boolean))];
-	let own = decodeURIComponent(url.pathname.slice(1)) || decodeURIComponent(url.username);
+	let own = openDatabases.length ? administratorDatabases(url, env) : [];
 	for (let name of openDatabases) {
-		if (["postgres", "template1", own].includes(name) || MACHINE_DATABASE.test(name)) {
+		if (["postgres", "template1", ...own].includes(name) || MACHINE_DATABASE.test(name)) {
 			throw new Error(
 				`MACHINE_STORE_OPEN_DATABASES can't name ${name}: only databases the service owns and `
 					+ "keeps open to every role, never postgres, template1, the administrator's own or a machine's",
