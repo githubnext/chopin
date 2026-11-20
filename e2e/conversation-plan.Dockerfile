@@ -14,7 +14,10 @@ COPY e2e ./e2e
 COPY scripts ./scripts
 COPY patches ./patches
 RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile --registry=https://registry.npmjs.org
-RUN bun run build
+# The server reads the connector release it recommends from this manifest as it starts. The
+# connector itself stays out, so the build below is only the web client's.
+COPY apps/connector/package.json ./apps/connector/package.json
+RUN bun run --filter '@chopin/web' build
 RUN <<'SH'
 bun -e '
 import { createHash } from "node:crypto";
