@@ -3,12 +3,12 @@
  * reached a turn: its own turn started, or the person's turn running took it. A hand-off that a
  * turn ending, a Stop or a stopping process leaves unread is refused, and a retry delivers it.
  */
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 import * as Chat from "../chat/service";
 import { harness, installJobCleanup, JOB, member, socket, until } from "../chat/job.test-fixtures";
 import { MemoryMcpInvocationStore } from "../storage/memory/mcp-invocations";
-import { IdempotentInvocations, invocationFingerprint } from "./invoke";
+import { IdempotentInvocations, invocationFingerprint, UNCONFIRMED } from "./invoke";
 
 import type { Lease } from "../storage/model";
 
@@ -188,4 +188,194 @@ test("an instruction given to the person's turn running is recorded once that tu
 	expect(await call.invoke()).toMatchObject({ kind: "invoked" });
 	expect(h.steered).toHaveLength(1);
 	expect(h.prompts).toHaveLength(1);
+});
+
+/**
+ * Asserts the call waits on a hand-off the Chat holds, then that `shutdown` tells it its instruction
+ * reached no turn, leaving nothing in the Chat still waiting.
+ */
+async function toldOnShutdown(
+	h: ReturnType<typeof harness>,
+	first: Promise<unknown>,
+	shutdown: () => Promise<void>,
+	answer: unknown = UNAVAILABLE,
+): Promise<void> {
+	expect(await Promise.race([first, Bun.sleep(20).then(() => "waiting")])).toBe("waiting");
+	expect(h.chat.deliveries?.size).toBe(1);
+	await shutdown();
+	expect(await first).toEqual(answer);
+	expect(h.chat.deliveries?.size ?? 0).toBe(0);
+	expect(h.chat.preempting).toBeUndefined();
+}
+
+/** Makes the next save that runs while a waiting turn is handed the Chat fail, once let go. */
+function failingHandoff(h: ReturnType<typeof harness>) {
+	let entered = Promise.withResolvers<void>();
+	let release = Promise.withResolvers<void>();
+	let persist = h.context.persist;
+	let blocked = false;
+	h.context.persist = async chat => {
+		if (h.chat.handoffJob && !blocked) {
+			blocked = true;
+			entered.resolve();
+			await release.promise;
+			throw new Error("database temporarily unavailable");
+		}
+		return persist(chat);
+	};
+	return { entered: entered.promise, fail: () => release.resolve() };
+}
+
+test("an instruction waiting behind a job whose last save fails is refused, and a retry is refused rather than kept waiting", async () => {
+	let h = harness();
+	let call = keyed(h, "Read me after the background job.");
+	let job = Chat.job(h.context, JOB, "background job", "session");
+	await until(() => h.prompts.length === 1);
+	let write = Promise.withResolvers<void>();
+	h.chat.jobWriting = write.promise;
+	let first = call.invoke();
+	await until(() => !!h.chat.preempting);
+	h.context.persist = async () => {
+		throw new Error("database temporarily unavailable");
+	};
+	write.resolve();
+	await job;
+	await h.chat.running;
+	expect(h.chat.closed).toBe(true);
+	expect(await first).toEqual(UNAVAILABLE);
+	expect(await call.invoke()).toEqual(UNAVAILABLE);
+	expect((await call.record())?.invokedAt).toBeUndefined();
+	expect(h.chat.deliveries?.size ?? 0).toBe(0);
+});
+
+describe("every way a Chat stops starting turns tells the instructions waiting on it", () => {
+	test("closing the Chat, as an archive or eviction does, with an instruction waiting behind a job", async () => {
+		let h = harness();
+		let call = keyed(h, "Wait for the job.");
+		let job = Chat.job(h.context, JOB, "background job", "session");
+		await until(() => h.prompts.length === 1);
+		let write = Promise.withResolvers<void>();
+		h.chat.jobWriting = write.promise;
+		let first = call.invoke();
+		await until(() => !!h.chat.preempting);
+		await toldOnShutdown(h, first, () => Chat.close(h.chat));
+		write.resolve();
+		await job;
+	});
+
+	test("closing the Chat with an instruction given to a turn whose session is still opening", async () => {
+		let h = harness();
+		let call = keyed(h, "Read this when you can.");
+		let opening = Promise.withResolvers<void>();
+		let open = h.context.openPlannerSession!;
+		h.context.openPlannerSession = async (...args) => {
+			await opening.promise;
+			return open(...args);
+		};
+		await Chat.send(h.context, socket(), member("@chopin first turn"));
+		await until(() => !!h.chat.steering);
+		let first = call.invoke();
+		await toldOnShutdown(h, first, async () => {
+			// Closing waits for the turn to end, which its session opening holds up.
+			let closing = Chat.close(h.chat);
+			await first;
+			opening.resolve();
+			await closing;
+		});
+	});
+
+	test("closing the Chat while the turn an instruction was steered to has not confirmed it", async () => {
+		let h = harness();
+		let call = keyed(h, "Read this now.");
+		let steering = Promise.withResolvers<void>();
+		let session = {
+			activeTools: ["read_plan"],
+			async stream() {
+				return { fullStream: (async function*() {})() };
+			},
+			// The machine never answers.
+			steer: () => {
+				steering.resolve();
+				return new Promise<void>(() => {});
+			},
+			async destroy() {},
+		};
+		let stream = Promise.withResolvers<void>();
+		session.stream = async () => ({
+			fullStream: (async function*() {
+				yield* await stream.promise.then(() => []);
+			})(),
+		});
+		h.context.openPlannerSession = async () => ({ ok: true, value: session }) as never;
+		await Chat.send(h.context, socket(), member("@chopin first turn"));
+		await until(() => h.chat.busy && !!h.chat.steering);
+		let first = call.invoke();
+		await steering.promise;
+		await toldOnShutdown(h, first, async () => {
+			let closing = Chat.close(h.chat);
+			await first;
+			stream.resolve();
+			await closing;
+		}, { kind: "refused", code: "planner-unavailable", message: UNCONFIRMED });
+		expect((await call.record())?.uncertainAt).toBeInstanceOf(Date);
+	});
+
+	test("a job's last save failing", async () => {
+		let h = harness();
+		let call = keyed(h, "Wait for the job.");
+		let job = Chat.job(h.context, JOB, "background job", "session");
+		await until(() => h.prompts.length === 1);
+		let write = Promise.withResolvers<void>();
+		h.chat.jobWriting = write.promise;
+		let first = call.invoke();
+		await until(() => !!h.chat.preempting);
+		await toldOnShutdown(h, first, async () => {
+			h.context.persist = async () => {
+				throw new Error("database temporarily unavailable");
+			};
+			write.resolve();
+			await job;
+			await h.chat.running;
+		});
+		expect(h.chat.closed).toBe(true);
+	});
+
+	test("the save handing a waiting job the Chat failing, with an instruction waiting to go ahead of it", async () => {
+		let h = harness();
+		let call = keyed(h, "Go ahead of the job.");
+		await Chat.send(h.context, socket(), member("@chopin first turn"));
+		await until(() => h.prompts.length === 1);
+		let job = Chat.job(h.context, JOB, "background job", "session");
+		let handoff = failingHandoff(h);
+		h.emit("session.idle");
+		await handoff.entered;
+		let first = call.invoke();
+		await until(() => !!h.chat.preempting);
+		await toldOnShutdown(h, first, async () => {
+			handoff.fail();
+			expect(await job).toMatchObject({ status: "failed" });
+		});
+		expect(h.chat.closed).toBe(true);
+	});
+
+	test("a stopping process letting go of the instruction waiting behind a job", async () => {
+		let h = harness();
+		let call = keyed(h, "Wait for the job.");
+		let job = Chat.job(h.context, JOB, "background job", "session");
+		await until(() => h.prompts.length === 1);
+		let write = Promise.withResolvers<void>();
+		h.chat.jobWriting = write.promise;
+		let first = call.invoke();
+		await until(() => !!h.chat.preempting);
+		Chat.holdStarts();
+		try {
+			await toldOnShutdown(h, first, async () => {
+				write.resolve();
+				await job;
+				await h.chat.running;
+			});
+		} finally {
+			Chat.holdStarts(false);
+		}
+	});
 });

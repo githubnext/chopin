@@ -175,10 +175,17 @@ the instruction at most once:
 - If the instruction was never posted, the retry posts it and starts its turn.
 - If it was posted and reached no turn, the call is refused with
   `planner-unavailable`. That happens when the turn it was given to ended or was
-  stopped before taking it and another turn holds the Chat, or the server began
-  stopping before the turn waiting behind a background job could start. Chat says
-  Chopin did not read it. The retry starts its turn without posting it again, gives
-  it to the turn running, or returns the refusal that stops it now.
+  stopped before taking it and another turn holds the Chat, when the server began
+  stopping before the turn waiting behind a background job could start, or when
+  the document's Chat closed first (the document was archived or closed, or a save
+  failed). The retry starts its turn without posting it again, gives it to the turn
+  running, or returns the refusal that stops it now.
+- If it was given to the turn running and that turn's machine did not confirm
+  taking it (the confirmation timed out, or the connection or the Chat closed
+  first), the instruction may already have been read. The call is refused with
+  `planner-unavailable` and a `message` saying so, the key records that, and every
+  retry under the key gets the same answer: the instruction is never given again,
+  to that turn or to a new one. To send it again, use a new key.
 - If it was posted and its turn did not start for another reason (the server
   stopped first, or refused the turn), the retry does the same.
 - If its turn started and the start was recorded, the retry returns the first
@@ -187,11 +194,12 @@ the instruction at most once:
 - If its turn started but recording the start failed, the call fails. A retry to
   the same server process records the start and starts no second turn.
 
-One case can start a second turn: the server process stops after the turn
-started and before its start was recorded (one storage write), or after
-recording it failed and before a retry recorded it. The next process cannot tell
-that turn from one that never started, so a retry starts the turn again. The
-turn the stopped process started was interrupted with it.
+One case can deliver it twice: the server process stops after the instruction
+reached a turn, or was given to one without a confirmation, and before that was
+recorded (one storage write), or after recording it failed and before a retry
+recorded it. The next process cannot tell that from an instruction that reached
+no turn, so a retry delivers it again. The turn the stopped process started was
+interrupted with it.
 
 A refusal that posted nothing, such as `planner-not-attached`, `planner-busy` or
 `system-turn-forbidden`, leaves the key free, so a corrected request can use it.
@@ -263,7 +271,9 @@ Refusals return an object with `code`, and `planner-not-attached` also a
   repository origin.
 - `planner-unavailable`: the Planner is disabled or the room is closing, or, for a
   call with an `idempotencyKey`, its posted instruction reached no turn; call again
-  with the same key (see [Retrying safely](#retrying-safely)).
+  with the same key. With a `message`, the running turn's machine did not confirm
+  taking it, so it may have been read and is not sent again under that key (see
+  [Retrying safely](#retrying-safely)).
 - `planner-busy`: a turn is running and cannot be given the instruction. A message-like call is
   given to the running turn when its harness takes input mid-run, and refused with this code
   when it does not (the Copilot SDK); a background job's turn gives way to it instead, and its

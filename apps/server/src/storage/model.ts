@@ -1312,4 +1312,9 @@ export type McpInvocation = McpInvocationScope & {
 	 * instruction may be posted or not, which only the document's Chat says.
 	 */
 	invokedAt?: Date;
+	/**
+	 * Set instead when the instruction was given to a running turn that did not confirm taking it:
+	 * it may have been read, so it is never delivered again under the key.
+	 */
+	uncertainAt?: Date;
 };

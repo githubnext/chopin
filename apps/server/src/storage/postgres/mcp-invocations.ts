@@ -15,6 +15,7 @@ type InvocationRow = {
 	createdAt: Date | string;
 	expiresAt: Date | string;
 	invokedAt: Date | string | null;
+	uncertainAt: Date | string | null;
 };
 
 function invocation(row: InvocationRow): McpInvocation {
@@ -28,12 +29,13 @@ function invocation(row: InvocationRow): McpInvocation {
 		createdAt: new Date(row.createdAt),
 		expiresAt: new Date(row.expiresAt),
 		...(row.invokedAt ? { invokedAt: new Date(row.invokedAt) } : {}),
+		...(row.uncertainAt ? { uncertainAt: new Date(row.uncertainAt) } : {}),
 	};
 }
 
 export class PostgresMcpInvocationStore implements McpInvocationStore {
 	constructor(private sql: SQL, private run: Run, private fence: Fence) {}
-	claim(lease: Lease, value: Omit<McpInvocation, "invokedAt">) {
+	claim(lease: Lease, value: Omit<McpInvocation, "invokedAt" | "uncertainAt">) {
 		return this.run(
 			"claim an invoke_planner idempotency key",
 			() =>
@@ -55,13 +57,13 @@ export class PostgresMcpInvocationStore implements McpInvocationStore {
 					ON CONFLICT (user_id, channel_id, key) DO NOTHING
 					RETURNING user_id AS "userId", channel_id AS "channelId", key, fingerprint,
 						entry_id AS "entryId", result, created_at AS "createdAt", expires_at AS "expiresAt",
-						invoked_at AS "invokedAt"
+						invoked_at AS "invokedAt", uncertain_at AS "uncertainAt"
 				`;
 					if (inserted) return { record: invocation(inserted), claimed: true };
 					let [held] = await transaction<InvocationRow[]>`
 					SELECT user_id AS "userId", channel_id AS "channelId", key, fingerprint,
 						entry_id AS "entryId", result, created_at AS "createdAt", expires_at AS "expiresAt",
-						invoked_at AS "invokedAt"
+						invoked_at AS "invokedAt", uncertain_at AS "uncertainAt"
 					FROM mcp_invocations
 					WHERE user_id = ${value.userId} AND channel_id = ${value.channelId}
 						AND key = ${value.key}
@@ -81,9 +83,27 @@ export class PostgresMcpInvocationStore implements McpInvocationStore {
 					UPDATE mcp_invocations SET invoked_at = ${at}
 					WHERE user_id = ${scope.userId} AND channel_id = ${scope.channelId}
 						AND key = ${scope.key} AND entry_id = ${scope.entryId} AND invoked_at IS NULL
+						AND uncertain_at IS NULL
 					RETURNING key
 				`;
 					return completed.length > 0;
+				}),
+		);
+	}
+	uncertain(lease: Lease, scope: McpInvocationScope & { entryId: string }, at: Date) {
+		return this.run(
+			"mark an invoke_planner call uncertain",
+			() =>
+				this.sql.begin(async transaction => {
+					await this.fence(transaction, lease);
+					let marked = await transaction<{ key: string }[]>`
+					UPDATE mcp_invocations SET uncertain_at = ${at}
+					WHERE user_id = ${scope.userId} AND channel_id = ${scope.channelId}
+						AND key = ${scope.key} AND entry_id = ${scope.entryId} AND invoked_at IS NULL
+						AND uncertain_at IS NULL
+					RETURNING key
+				`;
+					return marked.length > 0;
 				}),
 		);
 	}
@@ -97,6 +117,7 @@ export class PostgresMcpInvocationStore implements McpInvocationStore {
 					DELETE FROM mcp_invocations
 					WHERE user_id = ${scope.userId} AND channel_id = ${scope.channelId}
 						AND key = ${scope.key} AND entry_id = ${scope.entryId} AND invoked_at IS NULL
+						AND uncertain_at IS NULL
 					RETURNING key
 				`;
 					return released.length > 0;
@@ -108,7 +129,7 @@ export class PostgresMcpInvocationStore implements McpInvocationStore {
 			let [row] = await this.sql<InvocationRow[]>`
 				SELECT user_id AS "userId", channel_id AS "channelId", key, fingerprint,
 					entry_id AS "entryId", result, created_at AS "createdAt", expires_at AS "expiresAt",
-					invoked_at AS "invokedAt"
+					invoked_at AS "invokedAt", uncertain_at AS "uncertainAt"
 				FROM mcp_invocations
 				WHERE user_id = ${scope.userId} AND channel_id = ${scope.channelId}
 					AND key = ${scope.key}
