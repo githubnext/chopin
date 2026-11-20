@@ -22,6 +22,7 @@ import { MentionLogins } from "../message-mentions";
 import { MentionPicker } from "../mention-picker";
 import { navigateTo } from "../navigate";
 import { QuietNote } from "../quiet-note";
+import { TypingReporter } from "../typing";
 import { pointerGroups, useMentionSources } from "../mention-sources";
 import {
 	chatAuthors,
@@ -104,6 +105,8 @@ export type ThreadPanelProps = {
 	onShowDecisions?: () => void;
 	onAlsoToChatChange: (checked: boolean) => void;
 	onClose: (options?: { restoreFocus?: boolean }) => void;
+	/** Who else is writing in this thread (`typingWords`), under its composer. */
+	typing?: string;
 	wire?: Socket;
 };
 
@@ -133,6 +136,7 @@ export function ThreadPanel(
 		onShowDecisions,
 		onAlsoToChatChange,
 		onClose,
+		typing,
 		wire,
 	}: ThreadPanelProps,
 ) {
@@ -180,6 +184,19 @@ export function ThreadPanel(
 
 	let draftable = !readonly && !archived;
 	let composerReady = connected && !readonly && !archived;
+	let reporter = useRef<TypingReporter | undefined>(undefined);
+	useEffect(() => {
+		if (!wire || !composerReady) return;
+		let thread = view.rootId;
+		let lease = new TypingReporter(report => {
+			if (wire.connected) wire.send("chat:typing", { ...report, thread });
+		});
+		reporter.current = lease;
+		return () => {
+			lease.stop();
+			if (reporter.current === lease) reporter.current = undefined;
+		};
+	}, [wire, composerReady, view.rootId]);
 	// `#` and `@` both open at the caret; the one typed nearer to it is the one being written.
 	let hashed = referencesEnabled && composerReady && !submitting
 		? referenceTrigger(draft.text, selection.start, selection.end)
@@ -357,6 +374,7 @@ export function ThreadPanel(
 
 	let submit = () => {
 		if (submission.current || !draftable || !composerReady || !wire?.connected) return;
+		reporter.current?.stop();
 		let current = draftRef.current;
 		if (!current.text.trim()) return;
 		let submitted = prepareDraftSubmission(current, undefined, {
@@ -644,6 +662,10 @@ export function ThreadPanel(
 					],
 					onChange: event => {
 						let next = event.currentTarget.value;
+						if (next !== draftRef.current.text) {
+							if (next.trim()) reporter.current?.change();
+							else reporter.current?.stop();
+						}
 						setDraft(current =>
 							reviseComposerDraft(
 								current,
@@ -746,6 +768,7 @@ export function ThreadPanel(
 						event.preventDefault();
 						submit();
 					},
+					onBlur: () => reporter.current?.stop(),
 					onSelect: event =>
 						setSelection({
 							start: event.currentTarget.selectionStart,
@@ -807,6 +830,7 @@ export function ThreadPanel(
 					: undefined}
 				sendDisabled={!draftable || submitting || !draft.text.trim() || !composerReady}
 				sending={submitting}
+				typing={typing}
 				unavailable={archived ? "archived" : readonly ? "readonly" : undefined}
 			/>
 		</section>

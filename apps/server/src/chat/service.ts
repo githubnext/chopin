@@ -499,6 +499,14 @@ export type Chat = {
 	forkBootstrap?: Wire.Entry[];
 	/** Open thread `Chat` instances owned by this top-level Chat, closed when it closes. */
 	childChats?: Map<string, Chat>;
+	/** Who is writing in a root document's Chat and its threads; presence, never saved. */
+	typists?: import("./typing").TypingPresence;
+	/** Hears whether the Planner's turn is writing its reply in this Chat now, once it changes. */
+	composing?: (turn: string, writing: boolean) => void;
+	/** The turn the Planner was last said to be writing its reply in here. */
+	composedTurn?: string;
+	/** The running turn whose reply is out, until it writes another. */
+	repliedTurn?: string;
 	/** The last sequence given to an entry or a snapshot (`chronology.ts`). */
 	lastSeq?: number;
 	/** For a thread Chat: the top-level Chat an entry appended here is copied into, if it is. */
@@ -756,6 +764,24 @@ function state(chat: Chat, server: Server<SocketData>, room: string): void {
 		...(chat.turn ? { turn: chat.turn } : {}),
 		...(chat.runs ? { runs: chat.runs } : {}),
 	});
+	composed(chat);
+}
+
+/**
+ * The Planner is writing its reply from the moment a turn people watch begins, and again whenever
+ * it starts another message, until the message is out or the turn ends, fails, is stopped or gives
+ * way. A quiet turn (a background job's, or one whose words are all out) writes nothing for people.
+ */
+function composed(chat: Chat): void {
+	let writing = chat.busy && chat.turn && !chat.turn.quiet && !chat.closed
+			&& chat.repliedTurn !== chat.turn.id
+		? chat.turn.id
+		: undefined;
+	let before = chat.composedTurn;
+	if (writing === before) return;
+	chat.composedTurn = writing;
+	if (before !== undefined) chat.composing?.(before, false);
+	if (writing !== undefined) chat.composing?.(writing, true);
 }
 
 /** Only visible Planner prose ends the working projection. */
@@ -4077,6 +4103,8 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 			ids.set(part.id, id);
 			chat.writing = id;
 			chat.tooling = undefined;
+			chat.repliedTurn = undefined;
+			composed(chat);
 			return;
 		}
 		case "text-delta": {
@@ -4090,6 +4118,8 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 			if (!entry) {
 				chat.writing = id;
 				chat.tooling = undefined;
+				chat.repliedTurn = undefined;
+				composed(chat);
 				say(chat, server, room, {
 					id,
 					author: { kind: "agent" },
@@ -4112,6 +4142,10 @@ export function translate(context: Room, part: TextStreamPart<ToolSet>): void {
 			if (entry) {
 				delete entry.streaming;
 				announce(server, room, entry);
+				if (entry.text.trim()) {
+					chat.repliedTurn = chat.turn?.id;
+					composed(chat);
+				}
 			}
 			if (chat.writing === id) chat.writing = undefined;
 			return;
@@ -4581,6 +4615,8 @@ export async function close(chat: Chat): Promise<void> {
 	chat.closed = true;
 	chat.initiative?.close();
 	chat.reactions?.close();
+	chat.typists?.close();
+	composed(chat);
 	chat.job = undefined;
 	chat.jobOutput = undefined;
 	chat.lifecycle++;

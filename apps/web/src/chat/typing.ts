@@ -1,5 +1,5 @@
-let RENEW_AFTER = 2000;
-let IDLE_AFTER = 2500;
+let REPORT_EVERY = 2000;
+let IDLE_AFTER = 5000;
 
 type Clock = {
 	now: () => number;
@@ -14,35 +14,82 @@ let clock: Clock = {
 	},
 };
 
-/** A short lease renewed only by user edits, never by a stored draft. */
+/** What a composer tells the server: `ago` is how long before the report its latest edit was. */
+export type TypingReport = { active: true; seq: number; ago: number } | {
+	active: false;
+	seq: number;
+};
+
+let reports = 0;
+
+/** Every report this tab sends is numbered after the one before, whichever composer sends it. */
+function nextReport(): number {
+	return ++reports;
+}
+
+/**
+ * One composer's writing, as the server is told it: started only by a person's edit, never by a
+ * stored draft, and ended at once by `stop` (send, a cleared draft, blur, disposal) or five seconds
+ * after the last edit. At most one report that starts or renews is sent every two seconds: edits
+ * between are told by one report when the two seconds are up, carrying how long ago the last was
+ * made, so the server knows when the writing ends without hearing every key. A start soon after a
+ * stop waits for that too, so turning it on and off sends at most one of each in two seconds.
+ */
 export class TypingReporter {
-	#send: (active: boolean) => void;
+	#send: (report: TypingReport) => void;
 	#clock: Clock;
 	#active = false;
-	#renewed = 0;
-	#cancel: (() => void) | undefined;
+	#told = false;
+	#reported: number | undefined;
+	#lastEdit = 0;
+	#edits = 0;
+	#reportedEdits = 0;
+	#cancelIdle: (() => void) | undefined;
+	#cancelTrailing: (() => void) | undefined;
 
-	constructor(send: (active: boolean) => void, timing: Clock = clock) {
+	constructor(send: (report: TypingReport) => void, timing: Clock = clock) {
 		this.#send = send;
 		this.#clock = timing;
 	}
 
 	change(): void {
 		let now = this.#clock.now();
-		if (!this.#active || now - this.#renewed >= RENEW_AFTER) {
-			this.#send(true);
-			this.#renewed = now;
-		}
+		this.#lastEdit = now;
+		this.#edits++;
 		this.#active = true;
-		this.#cancel?.();
-		this.#cancel = this.#clock.after(() => this.stop(), IDLE_AFTER);
+		if (this.#reported === undefined || now - this.#reported >= REPORT_EVERY) this.#report();
+		else this.#trail();
+		this.#cancelIdle?.();
+		this.#cancelIdle = this.#clock.after(() => this.stop(), IDLE_AFTER);
 	}
 
 	stop(): void {
-		this.#cancel?.();
-		this.#cancel = undefined;
-		if (!this.#active) return;
+		this.#cancelIdle?.();
+		this.#cancelIdle = undefined;
+		this.#cancelTrailing?.();
+		this.#cancelTrailing = undefined;
 		this.#active = false;
-		this.#send(false);
+		if (!this.#told) return;
+		this.#told = false;
+		this.#send({ active: false, seq: nextReport() });
+	}
+
+	#report(): void {
+		let now = this.#clock.now();
+		this.#cancelTrailing?.();
+		this.#cancelTrailing = undefined;
+		this.#reported = now;
+		this.#reportedEdits = this.#edits;
+		this.#told = true;
+		this.#send({ active: true, seq: nextReport(), ago: Math.round(now - this.#lastEdit) });
+	}
+
+	#trail(): void {
+		if (this.#cancelTrailing) return;
+		let due = this.#reported! + REPORT_EVERY - this.#clock.now();
+		this.#cancelTrailing = this.#clock.after(() => {
+			this.#cancelTrailing = undefined;
+			if (this.#active && this.#edits > this.#reportedEdits) this.#report();
+		}, due);
 	}
 }

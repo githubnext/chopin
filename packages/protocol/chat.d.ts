@@ -46,7 +46,8 @@ export declare namespace Chat {
 		| Reactions
 		| ParticipationState
 		| ModelState
-		| ModelUnreadable;
+		| ModelUnreadable
+		| Typists;
 
 	/** Who said something. The agent is not a member, so it is named apart. */
 	export type Author =
@@ -528,8 +529,47 @@ export declare namespace Chat {
 	 */
 	export type SetModel = KIND<"chat:model"> & ModelChoice;
 
-	/** Ephemeral composer activity, with no draft content. */
-	export type Typing = KIND<"chat:typing"> & { active: boolean };
+	/**
+	 * Ephemeral composer activity, with no draft content, for the person and document of the
+	 * connection it is sent on. `active` is true from an edit and false once the sender sends, clears
+	 * the draft, leaves the field or makes no edit for five seconds. While edits keep coming a report
+	 * is sent at most every two seconds, the last of them carrying the latest edit; `ago` is how many
+	 * milliseconds before the report that edit was made (at most 2000). `thread` names the thread's
+	 * root message when the composer is a thread's, and is absent for Chat. `seq` rises with each
+	 * report a tab sends: the server keeps each connection's newest per place and ignores an older or
+	 * repeated one. A report is never kept to send again on another connection. Only Chat's reaches
+	 * automatic participation, as it always has.
+	 */
+	export type Typing = KIND<"chat:typing"> & {
+		active: boolean;
+		thread?: string;
+		seq?: number;
+		ago?: number;
+	};
+
+	/**
+	 * Someone writing in Chat (`thread` absent) or in a thread: a person whose composer says so, or
+	 * the Planner while a turn there is writing its reply. `since` is when they began, in the server's
+	 * milliseconds, and orders them.
+	 */
+	export type Typist = {
+		author: { kind: "member"; handle: string } | { kind: "agent" };
+		thread?: string;
+		since: number;
+	};
+
+	/**
+	 * Everyone writing in Chat and its threads now, but the person it is sent to: presence, never
+	 * saved. Sent to everyone who can read the document when it changes, and on join after the
+	 * history, empty or not. Each replaces the one before. They are ordered by `generation`, which a
+	 * later opening of the document's room has larger, then by `seq`, which rises with each change:
+	 * an older one is ignored.
+	 */
+	export type Typists = KIND<"chat:typists"> & {
+		generation: number;
+		seq: number;
+		typists: Typist[];
+	};
 
 	/** Everything said so far, sent on join. */
 	export type History = KIND<"chat:history"> & {

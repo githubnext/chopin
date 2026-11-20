@@ -120,6 +120,8 @@ function buildManagedThread(topChat: Chat.Chat, record: ChatThreadRecord): Manag
 	threadChat.usage = record.usage ? structuredClone(record.usage) : undefined;
 	if (record.usage?.contextWindow) threadChat.contextWindow = record.usage.contextWindow;
 	(topChat.childChats ??= new Map()).set(record.rootId, threadChat);
+	threadChat.composing = (turn, writing) =>
+		topChat.typists?.composing(record.rootId, turn, writing);
 	// What is in both transcripts is one object, so what streams into the thread streams into Chat.
 	let copied = new Set<string>();
 	topChat.entries = topChat.entries.map(entry => {
