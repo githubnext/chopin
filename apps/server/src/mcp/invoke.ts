@@ -18,6 +18,7 @@
 import { createHash } from "node:crypto";
 
 import { ulid } from "@chopin/dialect";
+import { PLANNER_NAME } from "@chopin/protocol/address";
 
 import { resolveChild } from "../chat/children";
 import * as Chat from "../chat/service";
@@ -152,6 +153,11 @@ export async function invokeRouted(
 	});
 }
 
+/** What a call is told whose instruction a running turn's session did not confirm taking. */
+export const UNCONFIRMED = `${PLANNER_NAME}'s machine did not confirm it received this `
+	+ "instruction, so it may already have been read. It is in the document's Chat, and it is not "
+	+ "sent again under this key.";
+
 /** How long a caller's idempotency key keeps its first `invoke_planner` call's result. */
 export const INVOCATION_KEY_MS = 7 * 24 * 60 * 60_000;
 
@@ -190,8 +196,11 @@ export type KeyedInvocation = {
  * the person's turn running took it. Only then is the claim marked invoked and the call answered,
  * so a claim marked invoked is evidence the instruction reached a turn, every later call with the
  * same request is given the claim's result, and a different one is refused. An instruction posted
- * that reached none (the turn it was given to ended first, or a stopping process dropped the turn
- * waiting behind a job) is refused with `planner-unavailable`, and its claim is left for a retry.
+ * that reached none (the turn it was given to ended first, or a stopping process or a closing Chat
+ * let go of the turn waiting behind a job) is refused with `planner-unavailable`, and its claim is
+ * left for a retry. One given to a running turn whose session did not confirm taking it may have
+ * been read: its claim is marked uncertain, and it and every retry are refused with
+ * `planner-unavailable` and `UNCONFIRMED`, so it is never delivered twice.
  *
  * A claim not marked invoked says nothing alone: the root's Chat does. When it holds the entry, an
  * earlier call saved it and started no turn, or started one whose start it could not record. A
@@ -200,14 +209,15 @@ export type KeyedInvocation = {
  * it, and a different request takes the key. A refusal that kept nothing frees the key, and one
  * that could not is freed by the next call.
  *
- * So a process that stops after the instruction reached a turn and before that was recorded, or
- * after recording it failed, leaves a claim whose retry, in the next process, starts a turn again.
+ * So a process that stops after the instruction reached a turn, or was given to one without a
+ * confirmation, and before that was recorded, or after recording it failed, leaves a claim whose
+ * retry, in the next process, delivers it again.
  * Calls with one key run one at a time in this process, the only one holding the writer lease.
  */
 export class IdempotentInvocations {
 	#running = new Map<string, Promise<unknown>>();
-	/** The entry of each key's claim whose instruction this process delivered without recording it. */
-	#started = new Map<string, string>();
+	/** Each key's claim whose delivery this process could not record, and how it went. */
+	#unrecorded = new Map<string, { entryId: string; outcome: "reached" | "unknown" }>();
 
 	constructor(
 		private store: McpInvocationStore,
@@ -253,16 +263,19 @@ export class IdempotentInvocations {
 			return claimed.record;
 		};
 		let record = await claim();
-		if (record.invokedAt) {
+		if (record.invokedAt || record.uncertainAt) {
 			if (record.fingerprint !== fingerprint) {
 				return { kind: "refused", code: "idempotency-conflict" };
 			}
-			return { kind: "invoked", document: record.result.document };
+			return record.invokedAt
+				? { kind: "invoked", document: record.result.document }
+				: { kind: "refused", code: "planner-unavailable", message: UNCONFIRMED };
 		}
-		if (record.fingerprint === fingerprint && this.#started.get(key) === record.entryId) {
-			return this.#record(key, lease, record);
+		let unrecorded = this.#unrecorded.get(key);
+		if (record.fingerprint === fingerprint && unrecorded?.entryId === record.entryId) {
+			return this.#record(key, lease, record, unrecorded.outcome);
 		}
-		let delivered: Promise<boolean> | undefined;
+		let delivered: Promise<Chat.Reached> | undefined;
 		let outcome = await deliver({
 			reconcile: async posted => {
 				if (record.fingerprint !== fingerprint) {
@@ -273,9 +286,9 @@ export class IdempotentInvocations {
 						return "idempotency-conflict";
 					}
 				}
-				let told = Promise.withResolvers<boolean>();
+				let told = Promise.withResolvers<Chat.Reached>();
 				delivered = told.promise;
-				return { entryId: record.entryId, delivered: yes => told.resolve(yes) };
+				return { entryId: record.entryId, delivered: outcome => told.resolve(outcome) };
 			},
 			unused: async () => {
 				await this.store.release(lease, record).catch(err => {
@@ -284,23 +297,33 @@ export class IdempotentInvocations {
 			},
 		});
 		if (outcome.kind !== "invoked") return outcome;
-		if (delivered && !await delivered) return { kind: "refused", code: "planner-unavailable" };
-		return this.#record(key, lease, record);
+		let reached = await delivered ?? "reached";
+		if (reached === "unread") return { kind: "refused", code: "planner-unavailable" };
+		return this.#record(key, lease, record, reached);
 	}
 
 	/**
-	 * Marks `claim` invoked, its instruction having reached a turn, and answers its result. When that
-	 * can't be saved the call fails, and this process remembers the delivery, so a retry here records
-	 * it and starts no turn.
+	 * Marks `claim` invoked, its instruction having reached a turn, and answers its result; or marks
+	 * it uncertain and refuses, its turn not having confirmed taking it. When that can't be saved the
+	 * call fails, and this process remembers how the delivery went, so a retry here records it and
+	 * delivers nothing.
 	 */
-	async #record(key: string, lease: Lease, claim: McpInvocation): Promise<Invoked> {
+	async #record(
+		key: string,
+		lease: Lease,
+		claim: McpInvocation,
+		outcome: "reached" | "unknown",
+	): Promise<Invoked> {
 		try {
-			await this.store.complete(lease, claim, this.clock());
+			if (outcome === "reached") await this.store.complete(lease, claim, this.clock());
+			else await this.store.uncertain(lease, claim, this.clock());
 		} catch (err) {
-			this.#started.set(key, claim.entryId);
+			this.#unrecorded.set(key, { entryId: claim.entryId, outcome });
 			throw err;
 		}
-		if (this.#started.get(key) === claim.entryId) this.#started.delete(key);
-		return { kind: "invoked", document: claim.result.document };
+		if (this.#unrecorded.get(key)?.entryId === claim.entryId) this.#unrecorded.delete(key);
+		return outcome === "reached"
+			? { kind: "invoked", document: claim.result.document }
+			: { kind: "refused", code: "planner-unavailable", message: UNCONFIRMED };
 	}
 }

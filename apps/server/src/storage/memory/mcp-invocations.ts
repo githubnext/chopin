@@ -10,6 +10,7 @@ function copy(value: McpInvocation): McpInvocation {
 		createdAt: new Date(value.createdAt),
 		expiresAt: new Date(value.expiresAt),
 		...(value.invokedAt ? { invokedAt: new Date(value.invokedAt) } : {}),
+		...(value.uncertainAt ? { uncertainAt: new Date(value.uncertainAt) } : {}),
 	};
 }
 
@@ -25,7 +26,7 @@ export class MemoryMcpInvocationStore implements McpInvocationStore {
 			assertLease: (lease: Lease) => void;
 		},
 	) {}
-	async claim(lease: Lease, invocation: Omit<McpInvocation, "invokedAt">) {
+	async claim(lease: Lease, invocation: Omit<McpInvocation, "invokedAt" | "uncertainAt">) {
 		this.deps.assertLease(lease);
 		if (!this.deps.channelExists(invocation.channelId)) {
 			throw missing(`channel ${invocation.channelId} does not exist`);
@@ -41,15 +42,22 @@ export class MemoryMcpInvocationStore implements McpInvocationStore {
 	async complete(lease: Lease, scope: McpInvocationScope & { entryId: string }, at: Date) {
 		this.deps.assertLease(lease);
 		let held = this.#records.get(scopeKey(scope));
-		if (!held || held.invokedAt || held.entryId !== scope.entryId) return false;
+		if (!held || held.invokedAt || held.uncertainAt || held.entryId !== scope.entryId) return false;
 		held.invokedAt = new Date(at);
+		return true;
+	}
+	async uncertain(lease: Lease, scope: McpInvocationScope & { entryId: string }, at: Date) {
+		this.deps.assertLease(lease);
+		let held = this.#records.get(scopeKey(scope));
+		if (!held || held.invokedAt || held.uncertainAt || held.entryId !== scope.entryId) return false;
+		held.uncertainAt = new Date(at);
 		return true;
 	}
 	async release(lease: Lease, scope: McpInvocationScope & { entryId: string }) {
 		this.deps.assertLease(lease);
 		let key = scopeKey(scope);
 		let held = this.#records.get(key);
-		if (!held || held.invokedAt || held.entryId !== scope.entryId) return false;
+		if (!held || held.invokedAt || held.uncertainAt || held.entryId !== scope.entryId) return false;
 		this.#records.delete(key);
 		return true;
 	}

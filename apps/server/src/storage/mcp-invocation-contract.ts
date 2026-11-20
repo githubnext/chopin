@@ -19,8 +19,8 @@ const RESULT = {
 
 function invocation(
 	scope: { userId: string; channelId: string },
-	overrides: Partial<Omit<McpInvocation, "invokedAt">> = {},
-): Omit<McpInvocation, "invokedAt"> {
+	overrides: Partial<Omit<McpInvocation, "invokedAt" | "uncertainAt">> = {},
+): Omit<McpInvocation, "invokedAt" | "uncertainAt"> {
 	return {
 		...scope,
 		key: "hand-off-1",
@@ -70,6 +70,43 @@ export function mcpInvocationContract(name: string, factory: StorageFactory) {
 				expect(await storage.mcpInvocations.claim(lease, rival)).toEqual({
 					record: completed,
 					claimed: false,
+				});
+			} finally {
+				await storage.close();
+			}
+		});
+
+		test("marks a claim uncertain once, which keeps it as an invoked claim is kept", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId, channelId, lease } = await userAndChannel(storage);
+				let first = invocation({ userId, channelId });
+				await storage.mcpInvocations.claim(lease, first);
+				let other = { ...first, entryId: id("other") };
+				expect(await storage.mcpInvocations.uncertain(lease, other, INVOKED_AT)).toBe(false);
+				expect(await storage.mcpInvocations.uncertain(lease, first, INVOKED_AT)).toBe(true);
+				expect(await storage.mcpInvocations.uncertain(lease, first, later(120_000))).toBe(false);
+				expect(await storage.mcpInvocations.complete(lease, first, later(120_000))).toBe(false);
+				expect(await storage.mcpInvocations.release(lease, first)).toBe(false);
+				let uncertain = { ...first, uncertainAt: INVOKED_AT };
+				expect(await storage.mcpInvocations.get(first)).toEqual(uncertain);
+				expect(
+					await storage.mcpInvocations.claim(
+						lease,
+						invocation({ userId, channelId }, {
+							fingerprint: "other",
+							entryId: id("e"),
+						}),
+					),
+				).toEqual({ record: uncertain, claimed: false });
+
+				let second = invocation({ userId, channelId }, { key: "hand-off-2" });
+				await storage.mcpInvocations.claim(lease, second);
+				expect(await storage.mcpInvocations.complete(lease, second, INVOKED_AT)).toBe(true);
+				expect(await storage.mcpInvocations.uncertain(lease, second, later(120_000))).toBe(false);
+				expect(await storage.mcpInvocations.get(second)).toEqual({
+					...second,
+					invokedAt: INVOKED_AT,
 				});
 			} finally {
 				await storage.close();
@@ -214,6 +251,7 @@ export function mcpInvocationContract(name: string, factory: StorageFactory) {
 								invocation({ userId, channelId }, { key: "new" }),
 							),
 						() => storage.mcpInvocations.complete(lease, claim, INVOKED_AT),
+						() => storage.mcpInvocations.uncertain(lease, claim, INVOKED_AT),
 						() => storage.mcpInvocations.release(lease, claim),
 					]
 				) expect((await refusal(write())).failure).toBe("conflict");

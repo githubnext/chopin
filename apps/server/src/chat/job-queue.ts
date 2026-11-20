@@ -38,8 +38,10 @@ export function safeProjection<Args extends unknown[]>(project: (...args: Args) 
 	};
 }
 
-export function createJobQueue({ state, startRun, MAX_QUEUE }: {
+export function createJobQueue({ state, startRun, shut, MAX_QUEUE }: {
 	MAX_QUEUE: number;
+	/** Closes the Chat, telling whoever waits on a turn it would have started that it will not. */
+	shut: (chat: Chat) => void;
 	state: (chat: Chat, server: Server<SocketData>, room: string) => void;
 	startRun: (
 		context: Room,
@@ -74,7 +76,7 @@ export function createJobQueue({ state, startRun, MAX_QUEUE }: {
 	}
 
 	function stopAfterPersistenceFailure(chat: Chat, server: Server<SocketData>, room: string): void {
-		chat.closed = true;
+		shut(chat);
 		chat.busy = false;
 		chat.turn = undefined;
 		chat.acting = undefined;

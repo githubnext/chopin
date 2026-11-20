@@ -391,6 +391,12 @@ export type Chat = {
 	 */
 	preempting?: Parameters<typeof run>;
 	/**
+	 * Instructions handed to a turn whose callers wait to hear whether they reached one
+	 * (`InvokedEntry.delivered`). Each is told once and leaves; a Chat that closes tells every one
+	 * still here, so none waits on a Chat that will start nothing more.
+	 */
+	deliveries?: Set<Waiter>;
+	/**
 	 * Messages posted while `preempting` waits to start, given to that turn once it can take them,
 	 * in the order they were sent.
 	 */
@@ -1137,6 +1143,9 @@ function preempt(context: Room, turn: Parameters<typeof run>): void {
 	void Promise.resolve(chat.jobWriting).catch(() => {}).then(() => controller.abort());
 }
 
+/** An instruction's caller waiting to hear whether it reached a turn; `sent` once it was steered. */
+type Waiter = { tell: (outcome: Reached) => void; sent: boolean };
+
 /** A message posted to the transcript for the Planner turn that is running to read. */
 type Given = {
 	entry: string;
@@ -1147,6 +1156,8 @@ type Given = {
 	userId: string;
 	/** An MCP caller's instruction, which reaches the model as written. */
 	invoked?: boolean;
+	/** Whoever waits to hear whether it reached a turn. */
+	waiter?: Waiter;
 };
 
 /**
@@ -1155,9 +1166,10 @@ type Given = {
  * first. The session may not be ready for it yet, so this waits for it. When the turn ends first
  * or cannot take it, the message is not lost to a queue: a Planner that is idle by then starts a
  * turn for it, and any other says plainly that it was not read. It resolves with whether the
- * message reached a turn.
+ * message reached a turn. An instruction its turn may have taken, because the turn's session did
+ * not confirm the message, is never given again, to that turn or a new one.
  */
-function give(context: Room, message: Given): Promise<boolean> {
+function give(context: Room, message: Given): Promise<Reached> {
 	let { chat } = context;
 	let way = chat.steering;
 	let given = chat.giving.then(() => deliver(context, message, way));
@@ -1166,12 +1178,17 @@ function give(context: Room, message: Given): Promise<boolean> {
 }
 
 /** Whether the message reached a turn: the running one took it, or one started for it. */
-async function deliver(context: Room, message: Given, way: Steering | undefined): Promise<boolean> {
+async function deliver(
+	context: Room,
+	message: Given,
+	way: Steering | undefined,
+): Promise<Reached> {
 	let { chat } = context;
 	let session = await way?.ready;
 	// An instruction is not given to a turn that is being stopped, which would never read it.
 	let stopping = message.invoked && !!chat.turnController?.signal.aborted;
 	if (session?.steer && chat.steering === way && !chat.closed && !stopping) {
+		let sent = false;
 		try {
 			let references = message.references ?? [];
 			retainReferences(chat, references);
@@ -1204,13 +1221,16 @@ async function deliver(context: Room, message: Given, way: Steering | undefined)
 				}
 				if (parts.length) prompt = `${prompt}\n\n${parts.join("\n\n")}`;
 			}
+			sent = true;
+			if (message.waiter) message.waiter.sent = true;
 			await session.steer(prompt);
-			return true;
+			return "reached";
 		} catch (err) {
 			console.error("[chat] a message could not be given to the running turn:", err);
+			if (sent && message.invoked) return "unknown";
 		}
 	}
-	if (chat.closed) return false;
+	if (chat.closed) return "unread";
 	if (!occupied(chat)) {
 		startRun(
 			{ ...context, ...(message.invoked ? { invokedBy: message.userId } : {}) },
@@ -1226,10 +1246,10 @@ async function deliver(context: Room, message: Given, way: Steering | undefined)
 			},
 			message.references,
 		);
-		return true;
+		return "reached";
 	}
 	await notRead(context, message.handle);
-	return false;
+	return "unread";
 }
 
 async function notRead(context: Room, handle: string): Promise<void> {
@@ -1242,6 +1262,13 @@ async function notRead(context: Room, handle: string): Promise<void> {
 	).catch(err => console.error("[chat] could not say that a message was not read:", err));
 }
 
+/**
+ * Whether an instruction reached a turn: its own turn started, or the person's turn running took
+ * it (`reached`); neither, and none will (`unread`); or it was given to the running turn, whose
+ * session did not confirm taking it (`unknown`), so it may have been read and is never given again.
+ */
+export type Reached = "reached" | "unread" | "unknown";
+
 /** Where an MCP instruction is posted, and who hears whether it reached a turn. */
 export type InvokedEntry = {
 	/**
@@ -1250,11 +1277,11 @@ export type InvokedEntry = {
 	 */
 	entryId: string;
 	/**
-	 * Told once, after `invoke` answers nothing, whether the instruction reached a turn: its own turn
-	 * started, or the person's turn running took it. A turn it waits behind can end first, and a
-	 * stopping process starts none, so either can leave it unread. Never told when `invoke` refuses.
+	 * Told once, after `invoke` answers nothing, whether the instruction reached a turn. A turn it
+	 * waits behind can end first, and a stopping process or a closing Chat starts none, so either
+	 * can leave it unread. Never told when `invoke` refuses.
 	 */
-	delivered?: (yes: boolean) => void;
+	delivered?: (outcome: Reached) => void;
 };
 
 /**
@@ -1338,6 +1365,7 @@ export async function invoke(
 			}
 			if (chat.closed) return "planner-unavailable" as const;
 			if (verified) rememberCheckout(room, verified);
+			let waiter = awaiting(chat, invoked.delivered);
 			startRun(
 				context,
 				user.login,
@@ -1350,7 +1378,7 @@ export async function invoke(
 				context.claimantSessionId,
 				true,
 			);
-			invoked.delivered?.(true);
+			waiter?.tell("reached");
 			return undefined;
 		}
 		// A background job gives way to a person's instruction, as to their message.
@@ -1391,6 +1419,7 @@ export async function invoke(
 			return "planner-unavailable" as const;
 		}
 		if (verified) rememberCheckout(room, verified);
+		let waiter = awaiting(chat, invoked.delivered);
 		if (running) {
 			let given = give(context, {
 				entry: entry.id,
@@ -1399,8 +1428,9 @@ export async function invoke(
 				...(focus ? { focus } : {}),
 				userId: user.id,
 				invoked: true,
+				...(waiter ? { waiter } : {}),
 			});
-			void given.then(yes => invoked.delivered?.(yes), () => invoked.delivered?.(false));
+			void given.then(outcome => waiter?.tell(outcome), () => waiter?.tell("unread"));
 			if (settled) void given.finally(settled).catch(() => {});
 		} else {
 			let asked: Parameters<typeof run> = [
@@ -1414,7 +1444,9 @@ export async function invoke(
 					entryId: entry.id,
 					userId: user.id,
 					...(focus ? { focus } : {}),
-					...(invoked.delivered ? { delivered: invoked.delivered } : {}),
+					...(waiter
+						? { delivered: (started: boolean) => waiter.tell(started ? "reached" : "unread") }
+						: {}),
 				},
 				[],
 			];
@@ -2210,6 +2242,7 @@ let jobState = safeProjection(state);
 let { job, cancelQueuedJobs, stopAfterPersistenceFailure } = createJobQueue({
 	state: jobState,
 	startRun,
+	shut,
 	MAX_QUEUE,
 });
 export { cancelQueuedJobs, job };
@@ -3959,6 +3992,39 @@ function dropPreempting(chat: Chat): void {
 }
 
 /**
+ * Holds `delivered` on the Chat until it is told, once, so a Chat that closes before the
+ * instruction reaches a turn tells it so.
+ */
+function awaiting(
+	chat: Chat,
+	delivered: ((outcome: Reached) => void) | undefined,
+): Waiter | undefined {
+	if (!delivered) return undefined;
+	let waiting = chat.deliveries ??= new Set();
+	let waiter: Waiter = {
+		sent: false,
+		tell: outcome => {
+			if (waiting.delete(waiter)) delivered(outcome);
+		},
+	};
+	waiting.add(waiter);
+	return waiter;
+}
+
+/**
+ * Closes the Chat: it starts no turn from now. Every way it closes comes here (`close`, and a save
+ * that failed), so the turn waiting behind another is let go of and every instruction still
+ * waiting to reach a turn hears that it did not, or, if it was steered to a turn that has not
+ * confirmed it, that it may have.
+ */
+function shut(chat: Chat): void {
+	chat.closed = true;
+	dropPreempting(chat);
+	// Each leaves the set as it is told, which a Set's iteration allows.
+	for (let waiter of chat.deliveries ?? []) waiter.tell(waiter.sent ? "unknown" : "unread");
+}
+
+/**
  * Starts the next of Chopin's own waiting turns, if one may start. Called when a turn has ended
  * (`ended` says how) and, with none running, when something that held them is over (`ended`
  * absent).
@@ -3968,7 +4034,7 @@ async function drain(
 	ended?: { job: boolean; outcome: JobOutcome | undefined },
 ): Promise<void> {
 	let { chat } = context;
-	if (chat.closed) return dropPreempting(chat);
+	if (chat.closed) return;
 	// Called with nothing running, another call is already starting the next turn.
 	if (!ended && chat.starting) return;
 	chat.starting = true;
@@ -4717,7 +4783,7 @@ export async function close(chat: Chat): Promise<void> {
 		admitted = chat.sending;
 		await admitted;
 	}
-	chat.closed = true;
+	shut(chat);
 	chat.initiative?.close();
 	chat.reactions?.close();
 	chat.typists?.close();
@@ -4737,7 +4803,6 @@ export async function close(chat: Chat): Promise<void> {
 		chat.handoffJob = undefined;
 	}
 	chat.waiting = [];
-	dropPreempting(chat);
 	chat.following = undefined;
 	chat.turnController?.abort();
 	chat.referenceCache.clear();

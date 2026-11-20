@@ -671,7 +671,8 @@ export interface McpSessionStore {
  * `invoke_planner` calls made under an idempotency key, one record per caller, document and key.
  * A call claims its key before its instruction is posted, naming the Chat entry the instruction
  * becomes and the result it answers, then marks the claim invoked once it reached a turn, or
- * releases a claim under which nothing was posted. Writes are fenced by the writer lease. A record
+ * uncertain when a running turn did not confirm taking it, or releases a claim under which
+ * nothing was posted. Writes are fenced by the writer lease. A record
  * past `expiresAt` counts as absent, and a document's records go with it.
  */
 export interface McpInvocationStore {
@@ -681,7 +682,7 @@ export interface McpInvocationStore {
 	 */
 	claim(
 		lease: Lease,
-		invocation: Omit<McpInvocation, "invokedAt">,
+		invocation: Omit<McpInvocation, "invokedAt" | "uncertainAt">,
 	): Promise<{ record: McpInvocation; claimed: boolean }>;
 	/** Marks the claim naming `entryId` invoked at `at`; false when no such claim waits for it. */
 	complete(
@@ -689,7 +690,13 @@ export interface McpInvocationStore {
 		scope: McpInvocationScope & { entryId: string },
 		at: Date,
 	): Promise<boolean>;
-	/** Removes the claim naming `entryId` unless it is invoked; false when there is none. */
+	/** Marks the claim naming `entryId` uncertain at `at`; false when no such claim waits for it. */
+	uncertain(
+		lease: Lease,
+		scope: McpInvocationScope & { entryId: string },
+		at: Date,
+	): Promise<boolean>;
+	/** Removes the claim naming `entryId` unless it is invoked or uncertain; false when there is none. */
 	release(lease: Lease, scope: McpInvocationScope & { entryId: string }): Promise<boolean>;
 	get(scope: McpInvocationScope): Promise<McpInvocation | undefined>;
 	/** Removes records that expired at or before `now`; returns how many. */
