@@ -1489,6 +1489,12 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			if (room.plan) Service.departed(room.plan, ws);
 			return;
 
+		case "chat:pacing":
+			if (!room.plan || room.plan.parentChannelId || typeof frame.active !== "boolean") return;
+			if (archivingChannels.has(room.id) || room.closing || ws.data.closed) return;
+			Initiative.pacing(chat(room, ws), ws, frame.active);
+			return;
+
 		case "chat:typing": {
 			if (!room.plan || room.plan.parentChannelId || typeof frame.active !== "boolean") return;
 			if (archivingChannels.has(room.id) || room.closing || ws.data.closed) return;

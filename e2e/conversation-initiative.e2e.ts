@@ -78,7 +78,9 @@ async function record(
 		},
 		histories: () => seen.flatMap(item => item.frame.kind === "chat:history" ? [item.frame] : []),
 		sends: () => sent.flatMap(item => item.frame.kind === "chat:send" ? [item.frame] : []),
-		typing: () => sent.filter(item => item.frame.kind === "chat:typing"),
+		pacing: () => sent.filter(item => item.frame.kind === "chat:pacing"),
+		composing: () =>
+			sent.filter(item => item.frame.kind === "chat:pacing" || item.frame.kind === "chat:typing"),
 	};
 }
 
@@ -175,20 +177,20 @@ test("two active humans get a silence window, renewed typing holds it, and blur 
 		await send(peer.page, "We are discussing export formats.");
 		await send(page, "INITIATIVE-USEFUL group: compare the export approaches.");
 		let input = chatInput(pane(peer.page));
-		let typingStart = peerFrames!.typing().length;
+		let typingStart = peerFrames!.pacing().length;
 		await input.pressSequentially("I am still considering this", { delay: 140 });
 		expect(frames.starts()).toHaveLength(0);
-		let active = peerFrames!.typing().slice(typingStart).filter(item =>
-			item.frame.kind === "chat:typing" && item.frame.active
+		let active = peerFrames!.pacing().slice(typingStart).filter(item =>
+			item.frame.kind === "chat:pacing" && item.frame.active
 		);
 		expect(active.length).toBeGreaterThanOrEqual(2);
 		for (let index = 1; index < active.length; index++) {
 			expect(active[index]!.at - active[index - 1]!.at).toBeGreaterThanOrEqual(1900);
 		}
-		expect(peerFrames!.typing().every(item => !Object.hasOwn(item.frame, "text"))).toBe(true);
+		expect(peerFrames!.composing().every(item => !Object.hasOwn(item.frame, "text"))).toBe(true);
 		await input.blur();
-		await expect.poll(() => peerFrames!.typing().at(-1)?.frame).toMatchObject({ active: false });
-		let stopped = peerFrames!.typing().at(-1)!.at;
+		await expect.poll(() => peerFrames!.pacing().at(-1)?.frame).toMatchObject({ active: false });
+		let stopped = peerFrames!.pacing().at(-1)!.at;
 		await reply(page);
 		expect(frames.starts()).toHaveLength(1);
 		expect(frames.starts()[0]!.at - stopped).toBeGreaterThanOrEqual(2850);
@@ -244,7 +246,7 @@ test("losing a send acknowledgement and retrying after reconnect never duplicate
 	expect(frames.starts().length).toBeLessThanOrEqual(1);
 	let count = frames.starts().length;
 	await chatInput(pane(page)).fill("Keep this unsent draft after reconnect.");
-	let typingBefore = frames.typing().length;
+	let typingBefore = frames.composing().length;
 	await page.reload();
 	await ready(page);
 	await expect.poll(() => frames.histories().length).toBeGreaterThanOrEqual(3);
@@ -253,8 +255,9 @@ test("losing a send acknowledgement and retrying after reconnect never duplicate
 	expect(frames.starts()).toHaveLength(count);
 	expect(frames.histories().at(-1)!.entries.filter(entry => entry.text === text)).toHaveLength(1);
 	expect(
-		frames.typing().slice(typingBefore).filter(item =>
-			item.frame.kind === "chat:typing" && item.frame.active
+		frames.composing().slice(typingBefore).filter(item =>
+			(item.frame.kind === "chat:pacing" || item.frame.kind === "chat:typing")
+			&& item.frame.active
 		),
 	).toHaveLength(0);
 });
@@ -298,7 +301,7 @@ test("losing a child send acknowledgement then returning to the root and reloadi
 	expect(frames.starts()).toHaveLength(0);
 	let count = frames.starts().length;
 	await chatInput(pane(page)).fill("Keep this unsent draft after reconnect.");
-	let typingBefore = frames.typing().length;
+	let typingBefore = frames.composing().length;
 	await page.reload();
 	await ready(page);
 	await expect.poll(() => frames.histories().length).toBeGreaterThanOrEqual(4);
@@ -307,8 +310,9 @@ test("losing a child send acknowledgement then returning to the root and reloadi
 	expect(frames.starts()).toHaveLength(count);
 	expect(frames.histories().at(-1)!.entries.filter(entry => entry.text === text)).toHaveLength(1);
 	expect(
-		frames.typing().slice(typingBefore).filter(item =>
-			item.frame.kind === "chat:typing" && item.frame.active
+		frames.composing().slice(typingBefore).filter(item =>
+			(item.frame.kind === "chat:pacing" || item.frame.kind === "chat:typing")
+			&& item.frame.active
 		),
 	).toHaveLength(0);
 });

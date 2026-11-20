@@ -51,7 +51,11 @@ The scheduler counts verified contributors since Chopin's latest reply, expiring
 after two minutes; passive viewers do not count. Two tabs for one person count once and
 local demo collaborators count separately. The judgment sees conversation history and the current
 turn phase, so multiple recent speakers alone do not require waiting. Typing sends only an
-activity flag, never an unsent draft. Its lease expires after six seconds without renewal.
+activity flag (`chat:pacing`), never an unsent draft: on an edit, at most every two seconds while
+edits continue, and off on send, blur or 2.5 seconds without an edit. Its lease expires after six
+seconds without renewal. It is apart from the typing line Chat shows (`chat:typing`), which holds a
+person for five seconds after an edit and never reaches this scheduler, so who is shown typing, in
+Chat or a thread, changes neither who is alone nor when a reply starts.
 
 Only the latest human message can start an automatic turn. If Chopin has replied since
 that message, the opportunity is consumed. Agent text never schedules another turn. The

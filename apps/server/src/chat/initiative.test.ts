@@ -1,8 +1,11 @@
 import { expect, spyOn, test } from "bun:test";
 import * as Chat from "./service";
-import { contributed, participation, setParticipation } from "./initiative";
+import { contributed, pacing, participation, setParticipation } from "./initiative";
 import { flush, installInitiativeCleanup, message, pause } from "./initiative.test-fixtures";
 import { until } from "./job.test-fixtures";
+import { createTypingPresence, typed } from "./typing";
+
+import type { Socket } from "../wire";
 
 let setup = installInitiativeCleanup();
 
@@ -102,6 +105,52 @@ test.each(["pending", "active"] as const)(
 		}
 	},
 );
+
+test("one edit beside a waiting reply holds it 1.5 seconds past the edit's 2.5-second pacing report, whatever Chat shows of typing", async () => {
+	let h = await setup.harness();
+	h.judge.mockResolvedValue("respond");
+	h.chat.typists = createTypingPresence({
+		clock: h.clock,
+		threadExists: () => false,
+		members: () => [],
+	});
+	let bo = {
+		...h.ws,
+		data: { ...h.ws.data, handle: "bo", principalId: "U_bo", client: "bo-tab" },
+	} as Socket;
+	await Chat.send(h.context, h.ws, message());
+	pacing(h.context, bo, true);
+	typed(h.context, bo, { active: true, seq: 1, ago: 0 });
+	await h.clock.advance(2_500);
+	pacing(h.context, bo, false);
+	await h.clock.advance(1_499);
+	expect(h.judge).not.toHaveBeenCalled();
+	await h.clock.advance(1);
+	await until(() => h.judge.mock.calls.length === 1);
+	await h.clock.advance(1_000);
+	typed(h.context, bo, { active: false, seq: 2 });
+	expect(h.judge).toHaveBeenCalledTimes(1);
+	h.chat.typists.close();
+});
+
+test("what Chat shows of typing never holds a waiting reply", async () => {
+	let h = await setup.harness();
+	h.judge.mockResolvedValue("respond");
+	h.chat.typists = createTypingPresence({
+		clock: h.clock,
+		threadExists: () => false,
+		members: () => [],
+	});
+	let bo = {
+		...h.ws,
+		data: { ...h.ws.data, handle: "bo", principalId: "U_bo", client: "bo-tab" },
+	} as Socket;
+	await Chat.send(h.context, h.ws, message());
+	typed(h.context, bo, { active: true, seq: 1, ago: 0 });
+	await h.clock.advance(1_500);
+	await until(() => h.judge.mock.calls.length === 1);
+	h.chat.typists.close();
+});
 
 test("a committed move starts an ordinary Planner turn and never repeats without new input", async () => {
 	let h = await setup.harness();
