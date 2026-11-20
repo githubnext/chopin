@@ -19,6 +19,8 @@ export interface MachineStoreServer {
 }
 
 export const ATOMIC_SCHEMA = "atomic";
+/** The administrator's schema for extensions: an extension's script runs with elevated rights. */
+export const EXTENSION_SCHEMA = "extensions";
 export const MANAGED_ROLE_MARK = "chopin:machine-store";
 export const MANAGED_DATABASE_MARK = MANAGED_ROLE_MARK;
 export const CREATING_DATABASE_MARK = `${MANAGED_ROLE_MARK}:creating-database`;
@@ -44,11 +46,13 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 	readonly #password: string | undefined;
 	readonly #admin: SQL;
 	readonly #unreachable: readonly string[];
+	readonly #open: ReadonlySet<string>;
 
 	constructor(config: MachineStoreConfig, unreachable: readonly string[] = UNREACHABLE_DATABASES) {
 		this.#base = new URL(config.url);
 		this.#password = config.password;
 		this.#unreachable = unreachable;
+		this.#open = new Set(config.openDatabases);
 		this.#admin = new SQL({
 			url: this.#base.href,
 			...(config.password ? { password: config.password } : {}),
@@ -80,6 +84,7 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 	async provision(role: string, password: string): Promise<void> {
 		await this.#refusing(async () => {
 			let me = await this.#me();
+			await this.#checkOpen(role, me);
 			let [existing] = await this.#admin<{ name: string }[]>`
 				SELECT rolname AS name FROM pg_roles WHERE rolname = ${role}
 			`;
@@ -125,7 +130,11 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 			await this.#connectAs(role, password, role);
 			return true;
 		} catch (error) {
-			return serverCode(error) === "28P01" ? false : undefined;
+			let code = serverCode(error);
+			let message = String((error as ServerError | undefined)?.message);
+			return code === "28P01" || (code === "28000" && message.includes("not permitted to log in"))
+				? false
+				: undefined;
 		}
 	}
 
@@ -260,6 +269,27 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 					`the schema ${ATOMIC_SCHEMA} in ${role} belongs to ${schema?.owner ?? "nobody"}`,
 				);
 			}
+			// The role can't create pg_trgm, which Atomic's session search indexes with, and its script
+			// runs with elevated rights, so only in a schema the administrator alone can write.
+			await inside.unsafe(`CREATE SCHEMA IF NOT EXISTS ${id(EXTENSION_SCHEMA)}`);
+			let [extensions] = await inside<{ ours: boolean }[]>`
+				SELECT nspowner = (SELECT oid FROM pg_roles WHERE rolname = current_user) AND NOT EXISTS (
+					SELECT 1 FROM aclexplode(nspacl) a WHERE a.privilege_type = 'CREATE' AND a.grantee <> nspowner
+				) AS ours
+				FROM pg_namespace WHERE nspname = ${EXTENSION_SCHEMA}
+			`;
+			if (extensions?.ours) {
+				await inside.unsafe(`GRANT USAGE ON SCHEMA ${id(EXTENSION_SCHEMA)} TO ${id(role)}`);
+				await inside.unsafe(
+					`CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA ${id(EXTENSION_SCHEMA)}`,
+				).catch(error => {
+					console.warn(
+						`chopin: Atomic's session search in ${role} runs without its index, as pg_trgm can't be `
+							+ "added -",
+						this.#reason(error),
+					);
+				});
+			}
 		} finally {
 			await inside.close();
 		}
@@ -315,14 +345,38 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 			let named = open.length > 2
 				? `databases ${open.slice(0, 2).join(", ")} and ${open.length - 2} more`
 				: `database${open.length > 1 ? "s" : ""} ${open.join(" and ")}`;
+			let they = open.length > 1 ? "them" : "it";
 			throw new MachineStoreRefusal(
 				`${me.name} can't revoke CONNECT from PUBLIC on the ${named}, so a machine could connect `
-					+ `there; ${open.length > 1 ? "their owners" : "its owner"} must revoke it`,
+					+ `there; ${open.length > 1 ? "their owners" : "its owner"} must revoke it, or name `
+					+ `${they} in MACHINE_STORE_OPEN_DATABASES if the service keeps ${they} open to every role`,
 			);
 		}
 	}
 
-	/** The connectable databases, other than its own, the role has `CONNECT` on. */
+	/** Refuse an open database that is a machine's or the administrator's own. */
+	async #checkOpen(role: string, me: Me) {
+		if (!this.#open.size) return;
+		let wrong = await this.#admin<{ name: string }[]>`
+			SELECT datname AS name FROM pg_database
+			WHERE datname IN ${this.#admin([...this.#open])} AND (
+				datname IN ${this.#admin([role, me.database])}
+				OR coalesce(shobj_description(oid, 'pg_database') IN ${this.#admin(ROLE_MARKS)}, false)
+			)
+			ORDER BY datname
+		`;
+		if (wrong.length) {
+			throw new MachineStoreRefusal(
+				`MACHINE_STORE_OPEN_DATABASES names ${wrong.map(row => row.name).join(" and ")}, `
+					+ "a machine's or the administrator's own database, which machines must not share",
+			);
+		}
+	}
+
+	/**
+	 * The connectable databases, other than its own and those the service keeps open to every role,
+	 * the role has `CONNECT` on.
+	 */
 	async #reachable(role: string) {
 		let rows = await this.#admin<{ name: string }[]>`
 			SELECT datname AS name FROM pg_database
@@ -331,7 +385,7 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 			)
 			ORDER BY datname
 		`;
-		return rows.map(row => row.name);
+		return rows.map(row => row.name).filter(name => !this.#open.has(name));
 	}
 
 	async #checkRole(role: string) {
@@ -407,6 +461,7 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 			ORDER BY datname
 		`;
 		let probed = new Set([...this.#unreachable, me.database, ...others.map(other => other.name)]);
+		for (let name of this.#open) probed.delete(name);
 		for (let database of probed) {
 			let reached = await this.#connectAs(role, password, database).then(() => true, () => false);
 			if (reached) {
