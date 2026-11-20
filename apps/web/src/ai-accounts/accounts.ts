@@ -88,7 +88,9 @@ function whyReconnect(
 
 /**
  * The GitHub Copilot row. While the check the page runs as it opens is under way (`checking`), a
- * row with an answer keeps it, and one without says it is checking.
+ * row with an answer keeps it, and one without says it is checking. Whatever GitHub answered, the
+ * sign-in can always give way to a token, and a token can always be replaced or give way to the
+ * sign-in.
  */
 function copilotRow(
 	summary: AiCredentialSummary | undefined,
@@ -113,7 +115,7 @@ function copilotRow(
 			actions: ["replace", "use-sign-in"],
 		};
 	}
-	let switchBack: AccountAction[] = token ? ["use-sign-in"] : [];
+	let switches: AccountAction[] = token ? ["replace", "use-sign-in"] : ["use-token"];
 	if (summary?.copilotAccess === "access") {
 		return {
 			provider: "github-copilot",
@@ -126,7 +128,7 @@ function copilotRow(
 					...(summary.lastUsedAt ? [lastUse(summary, now)] : []),
 				],
 			getCopilot: false,
-			actions: token ? ["replace", ...switchBack] : [],
+			actions: switches,
 		};
 	}
 	if (summary?.copilotAccess === "none") {
@@ -138,7 +140,7 @@ function copilotRow(
 				? [...ending, "This token's GitHub account has no Copilot subscription."]
 				: ["Your GitHub account has no Copilot subscription."],
 			getCopilot: true,
-			actions: token ? ["replace", ...switchBack] : ["use-token"],
+			actions: switches,
 		};
 	}
 	if (checking) {
@@ -148,7 +150,7 @@ function copilotRow(
 			badge: CHECKING,
 			lines: token ? ending : ["Your GitHub sign-in"],
 			getCopilot: false,
-			actions: token ? ["replace", ...switchBack] : [],
+			actions: switches,
 		};
 	}
 	return {
@@ -157,7 +159,7 @@ function copilotRow(
 		badge: NOT_CHECKED,
 		lines: token ? [...ending, NOT_CHECKED_TOKEN] : ["Your GitHub sign-in", NOT_CHECKED_SIGN_IN],
 		getCopilot: false,
-		actions: token ? ["replace", ...switchBack] : ["use-token"],
+		actions: switches,
 	};
 }
 
