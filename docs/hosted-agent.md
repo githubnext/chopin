@@ -1205,10 +1205,7 @@ ended in an error, and apart from them how many are `pending` (recorded, and
 being sent or answered now) and how many are `unknown` (Chopin can't say
 whether they were sent), and the input, output, cache read and cache write
 tokens. Requests that were never sent (`unsent`) are not counted. Requests
-that named no model (a model list) are counted under no model. The _Usage by
-model_ section (`apps/web/src/ai-usage/usage-by-model.tsx`) shows them on the AI
-accounts page, after _API keys_, with a model's pending and unknown requests
-noted quietly under its count.
+that named no model (a model list) are counted under no model.
 
 ### Handing launches to runners
 
