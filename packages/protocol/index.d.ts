@@ -122,6 +122,13 @@ export declare namespace Session {
 		 * Absent when the server serves no built client.
 		 */
 		build?: string;
+		/**
+		 * The server's clock when it sent this hello, in milliseconds since the epoch. A client takes it
+		 * as the server's time when the hello arrived, which is never later than the server's clock was
+		 * then and earlier by the hello's transit at most, to place what it reports (`Chat.Typing.at`)
+		 * on the server's clock.
+		 */
+		now: number;
 	};
 
 	/** Durable channel metadata changed while this room was open. */

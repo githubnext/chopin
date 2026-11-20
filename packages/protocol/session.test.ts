@@ -22,6 +22,7 @@ describe("session archive frames", () => {
 			webResearch: true,
 			chatReferences: true,
 			chatSendAcks: true,
+			now: 1_756_036_800_000,
 		};
 		let channel: Session.Channel = {
 			kind: "session:channel",

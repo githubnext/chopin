@@ -22,7 +22,7 @@ import { MentionLogins } from "../message-mentions";
 import { MentionPicker } from "../mention-picker";
 import { navigateTo } from "../navigate";
 import { QuietNote } from "../quiet-note";
-import { TypingReporter } from "../typing";
+import { typingFrame, TypingReporter } from "../typing";
 import { pointerGroups, useMentionSources } from "../mention-sources";
 import {
 	chatAuthors,
@@ -189,7 +189,8 @@ export function ThreadPanel(
 		if (!wire || !composerReady) return;
 		let thread = view.rootId;
 		let lease = new TypingReporter(report => {
-			if (wire.connected) wire.send("chat:typing", { ...report, thread });
+			let frame = typingFrame(report, wire.serverNow());
+			if (frame && wire.connected) wire.send("chat:typing", { ...frame, thread });
 		});
 		reporter.current = lease;
 		return () => {

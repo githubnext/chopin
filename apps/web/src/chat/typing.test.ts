@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { TypingReporter } from "./typing";
+import { typingFrame, TypingReporter } from "./typing";
 
 import type { TypingReport } from "./typing";
 
@@ -148,5 +148,18 @@ describe("composer typing reports", () => {
 		advance(2000);
 		reporter.change();
 		expect(told().at(-1)).toEqual({ active: true, ago: 0, at: 17000 });
+	});
+});
+
+describe("a typing report on the wire", () => {
+	it("places its edit on the server's clock, and is not sent active before that clock is known", () => {
+		expect(typingFrame({ active: true, seq: 3, ago: 400 }, 1_000_000)).toEqual({
+			active: true,
+			seq: 3,
+			at: 999_600,
+		});
+		expect(typingFrame({ active: true, seq: 4, ago: 0 }, undefined)).toBeUndefined();
+		expect(typingFrame({ active: false, seq: 5 }, undefined)).toEqual({ active: false, seq: 5 });
+		expect(typingFrame({ active: false, seq: 6 }, 1_000_000)).toEqual({ active: false, seq: 6 });
 	});
 });

@@ -20,6 +20,26 @@ export type TypingReport = { active: true; seq: number; ago: number } | {
 	seq: number;
 };
 
+/** A report as `chat:typing` carries it: the edit of an active one placed on the server's clock. */
+export type TypingFrame = { active: true; seq: number; at: number } | {
+	active: false;
+	seq: number;
+};
+
+/**
+ * `report` as it is sent, its edit placed on the server's clock by `serverNow` (the connection's
+ * reading of it, `Wire.serverNow`). An active report isn't sent before that clock is known: the
+ * server can't tell when its edit was, and a later report or the stop says what it would have.
+ */
+export function typingFrame(
+	report: TypingReport,
+	serverNow: number | undefined,
+): TypingFrame | undefined {
+	if (!report.active) return { active: false, seq: report.seq };
+	if (serverNow === undefined) return undefined;
+	return { active: true, seq: report.seq, at: serverNow - report.ago };
+}
+
 let reports = 0;
 
 /** Every report this tab sends is numbered after the one before, whichever composer sends it. */

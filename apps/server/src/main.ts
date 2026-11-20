@@ -774,15 +774,36 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 }
 
 /**
- * Who is writing in a document's Chat and threads, told to everyone in its room whose access has not
- * lapsed, readers included, each without themselves. A socket whose access is refused closes and
- * leaves the room, and a writer who can no longer write stops writing everywhere.
+ * Who is writing in a document's Chat and threads, told to everyone in its room who can read it,
+ * readers included, each without themselves. Access is the socket's current grant, asked of GitHub
+ * as initiative and reactions ask it (`refreshAccess(…, true)`), never the one cached since its last
+ * check: before each roster a member is told, and before a roster names a writer. A socket whose
+ * access is refused closes and leaves the room, and a writer who can no longer write stops writing
+ * everywhere.
  */
 function watchTyping(room: Rooms.Room, opened: Service.Plan): void {
+	let here = (member: Socket) =>
+		Rooms.get(room.id) === room && room.plan === opened && !room.closing
+		&& !deletingChannels.has(room.id) && !member.data.closed
+		&& room.members.get(member.data.client) === member;
 	let typists = Typing.createTypingPresence({
 		threadExists: rootId => opened.chat.entries.some(entry => entry.id === rootId),
 		members: () => Rooms.get(room.id) === room && room.plan === opened ? room.members.values() : [],
-		reads: member => member.data.authorizedUntil > Date.now(),
+		reads: async member => {
+			if (!here(member)) return "denied";
+			let access = await refreshAccess(member, true);
+			if (access === "denied" && !member.data.closed) member.close(4403, "authorization expired");
+			return access === "allowed" && !here(member) ? "denied" : access;
+		},
+		writes: async client => {
+			let member = room.members.get(client);
+			if (!member || !here(member)) return "denied";
+			let access = await refreshAccess(member, true);
+			if (access !== "allowed") return access;
+			return member.data.canEdit && here(member) && !archivingChannels.has(room.id)
+				? "allowed"
+				: "denied";
+		},
 	});
 	opened.chat.typists = typists;
 	opened.chat.composing = (turn, writing) => typists.composing(undefined, turn, writing);
@@ -1389,7 +1410,9 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		return;
 	}
 	if (!VIEWER_ALLOWED.has(frame.kind)) {
-		let access = await refreshAccess(ws);
+		// A typing report shows its writer to the room at once, so it is taken on the socket's current
+		// grant, not the one cached since its last check.
+		let access = await refreshAccess(ws, frame.kind === "chat:typing");
 		if (access === "unavailable") {
 			if (frame.rid) fail(ws, frame.rid, "authorization is temporarily unavailable", PASSING);
 			return;
@@ -1450,9 +1473,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 						console.error("chopin: could not send thread summaries -", err)
 					);
 					let typists = opened.chat.typists;
-					if (typists && !ws.data.closed && ws.data.authorizedUntil > Date.now()) {
-						tell(ws, typists.frame(Initiative.actor(ws)));
-					}
+					if (typists && !ws.data.closed) typists.greet(ws);
 				}
 				// What the Planner can be set to run, and what it is set to, for the composer.
 				if (!parent) {
@@ -1502,7 +1523,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				active: frame.active,
 				thread: frame.thread,
 				seq: frame.seq,
-				ago: frame.ago,
+				at: frame.at,
 			});
 			return;
 		}
@@ -2007,7 +2028,10 @@ function scheduleSidebarRecheck(ws: SidebarSocket): void {
 }
 
 async function refreshAccess(ws: Socket, forceGitHub = false): Promise<AuthorizationResult> {
-	return refreshAuthorization(ws.data, forceGitHub, forced => checkAccess(ws, forced));
+	let access = await refreshAuthorization(ws.data, forceGitHub, forced => checkAccess(ws, forced));
+	// A connection refused can no longer write: what it was writing ends, whoever asked.
+	if (access === "denied") Rooms.get(ws.data.room)?.plan?.chat.typists?.retire(ws.data.client);
+	return access;
 }
 
 function applyChannelAccess(
@@ -2172,6 +2196,7 @@ function openRoomSocket(ws: Socket): void {
 			? { transcription: { provider: "OpenAI", maxBytes: config.transcription.maxBytes } }
 			: {}),
 		...(CLIENT_BUILD && !config.devClient ? { build: CLIENT_BUILD } : {}),
+		now: Date.now(),
 	});
 	if (plannerAttachments) {
 		tell(ws, { kind: "session:planner", ts: 0, planner: plannerAttachments.status(room.id) });
@@ -2720,7 +2745,10 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 	}
 	archivingChannels.add(channelId);
 	let room = Rooms.get(channelId);
-	for (let ws of room?.members.values() ?? []) ws.data.canEdit = false;
+	for (let ws of room?.members.values() ?? []) {
+		ws.data.canEdit = false;
+		room?.plan?.chat.typists?.retire(ws.data.client);
+	}
 	try {
 		await summaryCoordinator?.suspend(channelId);
 		let result = await withDocumentLock(channelId, async () => {
