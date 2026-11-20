@@ -910,7 +910,10 @@ Agents here keep their sessions in this machine's own database at db.example.com
 Each agent that runs on Chopin's AI accounts, and each such Planner, then finds in its
 own Atomic directory (`<worktree>.agent/atomic`) a copy of the adapter, its
 `storage-password` (mode `0600`) and a `settings.json` whose `storage` selects the
-database by a URL without the password. Your own `~/.atomic` is never touched, and an
+database by a URL without the password. A Planner started once the machine has no
+database login (Chopin stopped giving one, or this connect couldn't set it up) finds
+that `storage` and its password taken out again, the rest of its settings kept, and
+keeps its sessions on the machine. Your own `~/.atomic` is never touched, and an
 agent that runs on your own models keeps its sessions as before. The sandbox's proxy
 allows the database's host and port, which Atomic's adapter reaches through
 `HTTPS_PROXY`.

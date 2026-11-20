@@ -15,6 +15,7 @@ import { MACHINE_STORE_ADAPTER } from "@chopin/protocol/machine-store";
 import { machineStoreLogin, UNUSABLE_STORE_LOGIN } from "./machine";
 import {
 	AgentStore,
+	forgetAgentStore,
 	forgetMachineStore,
 	provideMachineStore,
 	savedMachineStore,
@@ -179,6 +180,33 @@ describe("a machine's database login on the connector", () => {
 		let unmanaged = join(folder(), "own");
 		plannerEnvironment(false, unmanaged, {}, store);
 		expect(existsSync(`${unmanaged}.agent`)).toBe(false);
+	});
+
+	test("takes a Planner's generated database settings away once it has no store, keeping the rest", async () => {
+		let store = new AgentStore(LOGIN, await storeAdapter(folder(), fakeInstall));
+		let worktree = join(folder(), "planner");
+		let atomic = plannerEnvironment(true, worktree, {}, store).ATOMIC_CODING_AGENT_DIR!;
+		let path = join(atomic, "settings.json");
+		writeFileSync(
+			path,
+			JSON.stringify({
+				...JSON.parse(readFileSync(path, "utf8")),
+				theme: "dark",
+				packages: ["npm:x", `npm:${MACHINE_STORE_ADAPTER}`],
+			}),
+		);
+		expect(plannerEnvironment(true, worktree, {}).ATOMIC_CODING_AGENT_DIR).toBe(atomic);
+		expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ theme: "dark", packages: ["npm:x"] });
+		expect(existsSync(join(atomic, "storage-password"))).toBe(false);
+
+		let ownStorage = {
+			adapter: MACHINE_STORE_ADAPTER,
+			options: { url: LOGIN.url },
+			secrets: { password: { file: join(folder(), "elsewhere") } },
+		};
+		writeFileSync(path, JSON.stringify({ storage: ownStorage }));
+		forgetAgentStore(atomic);
+		expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ storage: ownStorage });
 	});
 
 	test("sets the machine up from Chopin's answer when it pairs or connects", async () => {

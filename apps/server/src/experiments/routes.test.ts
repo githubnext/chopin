@@ -52,8 +52,9 @@ const CURRENT = {
 
 async function setup(
 	shared?: { storage: MemoryStorage; lease: unknown },
-	{ durable = true, ...extra }: {
+	{ durable = true, origin = "https://chopin.test", ...extra }: {
 		implementations?: () => ImplementationConnector | undefined;
+		origin?: string;
 		/** Whether machines hold their own GitHub authorization, as everywhere but AUTH_MODE=local. */
 		durable?: boolean;
 		app?: GitHubApp;
@@ -135,7 +136,7 @@ async function setup(
 			(/^[a-f]/.test(name) ? name[0]! : "c").repeat(40),
 	} as unknown as GitHub;
 	let config = {
-		origin: "https://chopin.test",
+		origin,
 		appSlug: "test",
 		clientId: "test",
 		clientSecret: "secret",
@@ -2403,7 +2404,7 @@ test("a build's MCP token acts as whoever asked for it, on the build's machine, 
 	expect(await caller()).toBeUndefined();
 });
 
-async function storeSetup() {
+async function storeSetup(origin?: string) {
 	let storage = new MemoryStorage();
 	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
 	let server = new FakeMachineStoreServer();
@@ -2413,7 +2414,7 @@ async function storeSetup() {
 		key: new Uint8Array(32).fill(5),
 		clock: () => new Date(),
 	});
-	let context = await setup({ storage, lease }, { machineStores });
+	let context = await setup({ storage, lease }, { machineStores, ...(origin ? { origin } : {}) });
 	return { ...context, server, machineStores };
 }
 
@@ -2562,6 +2563,31 @@ test("a setup problem the connector reports is kept for the Machines page until 
 	expect(await listed()).toEqual({ state: "failed", reason: "Couldn't install the adapter" });
 	expect((await connect({})).status).toBe(200);
 	expect(await listed()).toEqual({ state: "ready" });
+});
+
+test("a setup problem reported before Chopin made any login is said on the Machines page", async () => {
+	let { alice, pair, request, storage, tool } = await storeSetup("http://chopin.test");
+	let laptop = await pair(alice.cookie);
+	let asked = await request("/api/connector/machine-store", {}, undefined, laptop.machineToken);
+	expect(asked.status).toBe(503);
+	let refusal = (await asked.json()).message;
+	expect(await storage.machineDatabases.get(laptop.machine)).toBeUndefined();
+	let connect = () =>
+		request(
+			"/api/connector/connections",
+			{ repository: "org/repo", commit: "a".repeat(40), label: "Laptop" },
+			undefined,
+			laptop.machineToken,
+			{ ...CURRENT, [CONNECTOR_STORE_PROBLEM_HEADER]: refusal },
+		);
+	let listed = async () =>
+		(await (await request("/api/connector/machines", undefined, alice.cookie)).json()).machines[0]
+			.store;
+	let connected = await connect();
+	expect(connected.status).toBe(200);
+	expect(await listed()).toEqual({ state: "failed", reason: refusal });
+	await tool((await connected.json()).token, "disconnect_workspace", {});
+	expect(await listed()).toEqual({ state: "failed", reason: refusal });
 });
 
 test("without MACHINE_STORE_URL a machine is told there is no database login", async () => {

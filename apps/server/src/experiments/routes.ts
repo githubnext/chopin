@@ -406,7 +406,7 @@ function machineStore(
 ): MachineStoreStatus | null {
 	if (!status) return null;
 	let problem = live.at(-1)?.about?.storeProblem;
-	return status.state === "ready" && problem ? { state: "failed", reason: problem } : status;
+	return status.state !== "failed" && problem ? { state: "failed", reason: problem } : status;
 }
 
 /** A machine's newest connection's account of it; null where none said. */

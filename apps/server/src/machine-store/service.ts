@@ -59,9 +59,13 @@ export class MachineStores {
 	async report(machineId: string, problem: string | undefined): Promise<void> {
 		let reported = problem?.slice(0, MACHINE_STORE_REASON_LIMIT) || undefined;
 		if (this.#reported.has(machineId) && this.#reported.get(machineId) === reported) return;
-		if (await this.#options.storage.machineDatabases.report(machineId, reported)) {
-			this.#reported.set(machineId, reported);
+		let storage = this.#options.storage.machineDatabases;
+		let kept = await storage.report(machineId, reported);
+		if (!kept && reported) {
+			await this.#serial(machineId, () => this.#stored(machineId));
+			kept = await storage.report(machineId, reported);
 		}
+		if (kept) this.#reported.set(machineId, reported);
 	}
 
 	async statuses(machineIds: readonly string[]): Promise<Map<string, MachineStoreStatus>> {
@@ -72,13 +76,10 @@ export class MachineStores {
 		for (let record of records) {
 			if (record.state === "failed") {
 				found.set(record.machineId, { state: "failed", reason: record.failure ?? "" });
+			} else if (record.connectorProblem && ["ready", "pending"].includes(record.state)) {
+				found.set(record.machineId, { state: "failed", reason: record.connectorProblem });
 			} else if (record.state === "ready") {
-				found.set(
-					record.machineId,
-					record.connectorProblem
-						? { state: "failed", reason: record.connectorProblem }
-						: { state: "ready" },
-				);
+				found.set(record.machineId, { state: "ready" });
 			}
 		}
 		return found;
