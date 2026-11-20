@@ -242,6 +242,10 @@ test("the built-in agents keep their state in known directories, which their own
 			"linux",
 		),
 	).toEqual(["/home/me/.atomic", "/data/agent"]);
+	// atomic-acp keeps its session map where ATOMIC_ACP_DIR says.
+	expect(
+		agentStateDirectories(["atomic-acp"], { ATOMIC_ACP_DIR: "/data/acp" }, "/home/me", "linux"),
+	).toEqual(["/home/me/.atomic", "/data/acp"]);
 	expect(agentStateDirectories(["copilot", "--acp"], {}, "/home/me", "linux")).toEqual([
 		"/home/me/.copilot",
 	]);

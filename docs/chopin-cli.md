@@ -829,13 +829,14 @@ the agent runs on those accounts with nothing of yours:
   and directories.
 - **A state directory of its own.** The agent keeps its state in
   `<worktree>.agent`, which goes with the run's worktree:
-  `ATOMIC_CODING_AGENT_DIR`, `COPILOT_HOME`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME`
-  point there. It reads none of your agents' configuration, logins or sessions:
-  `~/.atomic/agent`, `~/.atomic/workflows`, `~/.pi/agent`, `~/.copilot`,
+  `ATOMIC_CODING_AGENT_DIR`, `ATOMIC_ACP_DIR` (atomic-acp's session map),
+  `COPILOT_HOME`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME` point there. It reads none of
+  your agents' configuration, logins or sessions: `~/.atomic/agent`,
+  `~/.atomic/workflows`, `~/.atomic/atomic-acp`, `~/.pi/agent`, `~/.copilot`,
   `~/.claude`, `~/.claude.json`, `~/.codex`, `~/.gemini`,
   `~/.config/github-copilot` and the places your environment or your `--env` values
-  move them to (`ATOMIC_CODING_AGENT_DIR`, `PI_CODING_AGENT_DIR`, Atomic's sessions,
-  workflow artifacts and journal in `ATOMIC_CODING_AGENT_SESSION_DIR`,
+  move them to (`ATOMIC_CODING_AGENT_DIR`, `PI_CODING_AGENT_DIR`, `ATOMIC_ACP_DIR`,
+  Atomic's sessions, workflow artifacts and journal in `ATOMIC_CODING_AGENT_SESSION_DIR`,
   `ATOMIC_WORKFLOW_ARTIFACT_DIR` and `ATOMIC_WORKFLOW_JOURNAL_PATH`, `COPILOT_HOME`,
   `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `github-copilot` under `XDG_CONFIG_HOME`;
   `~` and `~/…` from your home, a `file:` URL, a relative path from where the
@@ -844,7 +845,9 @@ the agent runs on those accounts with nothing of yours:
   hidden around it: everything in it but the run's worktree, state and tokens. One
   that is your home, or holds it, can't be hidden without taking your tools from the
   agent, so the run is refused and says which variable to point elsewhere. Without a
-  working sandbox none of this is enforced on disk.
+  working sandbox none of this is enforced on disk. atomic-acp keeps its session map
+  where `ATOMIC_ACP_DIR` says from 0.0.18 on; an earlier one writes it in your
+  `~/.atomic`, which a sandboxed run can't, so its session doesn't start.
 - **Atomic** finds a generated `models.json` there that sends each granted
   provider (and `openai-api` and `anthropic-api`) to its base URL on the relay,
   with `apiKey` naming the provider's key variable, and reads the model catalog

@@ -984,14 +984,17 @@ test("an agent given a state directory of its own writes there, and reads none o
 	let worktree = join(base, "runs", "mine");
 	let agentHome = `${worktree}.agent`;
 	let moved = join(root, "elsewhere-atomic");
+	let movedAcp = join(root, "elsewhere-atomic-acp");
 	let owners = [
 		join(home, ".atomic", "agent"),
 		join(home, ".atomic", "workflows"),
+		join(home, ".atomic", "atomic-acp"),
 		join(home, ".copilot"),
 		join(home, ".claude"),
 		join(home, ".codex"),
 		join(home, ".config", "github-copilot"),
 		moved,
+		movedAcp,
 	];
 	for (let path of [worktree, agentHome, ...owners]) mkdirSync(path, { recursive: true });
 	writeFileSync(join(home, ".claude.json"), "{}");
@@ -1000,11 +1003,18 @@ test("an agent given a state directory of its own writes there, and reads none o
 	let policy = (own: boolean) =>
 		launchPolicy(
 			"bubblewrap",
-			{ ...systemHost({ ATOMIC_CODING_AGENT_DIR: moved }), platform: "linux" },
+			{
+				...systemHost({ ATOMIC_CODING_AGENT_DIR: moved, ATOMIC_ACP_DIR: movedAcp }),
+				platform: "linux",
+			},
 			{
 				command: ["atomic-acp"],
 				cwd: worktree,
-				env: { PATH: process.env.PATH, ATOMIC_CODING_AGENT_DIR: join(agentHome, "atomic") },
+				env: {
+					PATH: process.env.PATH,
+					ATOMIC_CODING_AGENT_DIR: join(agentHome, "atomic"),
+					ATOMIC_ACP_DIR: join(agentHome, "atomic-acp"),
+				},
 				stdin: "pipe",
 				own: [worktree, ...own ? [agentHome] : []],
 				...own ? { agentHome } : {},

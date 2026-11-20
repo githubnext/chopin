@@ -306,7 +306,8 @@ export function secretPaths(platform: NodeJS.Platform, home: string): string[] {
 
 /**
  * Where the owner keeps their own agents' configuration, logins and sessions: Atomic's agent
- * directory and journal, and the Copilot, Claude, Codex and Gemini directories, with any of them
+ * directory and journal, atomic-acp's session map, and the Copilot, Claude, Codex and Gemini
+ * directories, with any of them
  * the owner's environment moved elsewhere (Atomic's sessions, workflow artifacts and journal
  * included, and Copilot's sign-in under `XDG_CONFIG_HOME`), as the agents read that variable: `~` is a home (the
  * one given and the environment's own), a `file:` URL its path, and a relative path is taken from
@@ -346,6 +347,7 @@ export function ownerAgentPaths(
 	let moved = [
 		"ATOMIC_CODING_AGENT_DIR",
 		"PI_CODING_AGENT_DIR",
+		"ATOMIC_ACP_DIR",
 		// Where Atomic keeps sessions, workflow artifacts and its journal outside its directory.
 		"ATOMIC_CODING_AGENT_SESSION_DIR",
 		"ATOMIC_WORKFLOW_ARTIFACT_DIR",
@@ -363,6 +365,7 @@ export function ownerAgentPaths(
 	return [
 		under(".atomic", "agent"),
 		under(".atomic", "workflows"),
+		under(".atomic", "atomic-acp"),
 		under(".pi", "agent"),
 		under(".copilot"),
 		under(".claude"),
@@ -393,6 +396,7 @@ export function agentStateDirectories(
 		for (
 			let name of [
 				"ATOMIC_CODING_AGENT_DIR",
+				"ATOMIC_ACP_DIR",
 				"ATOMIC_CODING_AGENT_SESSION_DIR",
 				"ATOMIC_WORKFLOW_ARTIFACT_DIR",
 			]
