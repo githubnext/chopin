@@ -95,18 +95,18 @@ proxy that the server learns some other way, such as a system setting, set
 these variables on the server process too: otherwise the CLI connects directly,
 and a Planner turn fails with "The Planner stream failed."
 
-`HARNESS=atomic` runs Atomic 0.9.90 in the Chopin server process through its
+`HARNESS=atomic` runs Atomic 0.10.0 in the Chopin server process through its
 headless SDK (`createAgentSession()`). It does not spawn the `atomic` CLI or use
 RPC mode.
 
 **Choosing `HARNESS=atomic` gives the Planner shell and filesystem access as the
 server process's user, on hosted instances as well as local ones.** Every Planner
-session is a full Atomic session: Atomic's workflows, subagents, MCP, web access,
-and default coding tools run beside Chopin's document tools, with the
+session is a full Atomic session: Atomic's subagents, MCP, web access,
+and default coding tools load beside Chopin's document tools, with the
 operator's Atomic extensions, skills, prompt templates, and context files. Its own
 turns are never offered Atomic's `intercom`, so one document's Planner cannot list or
-message another's; the stages of a workflow it starts keep their run's Intercom. There is
-no separate flag; choosing the harness is the choice. Operators who do not want that
+message another's, and never call a tool that edits files, runs commands or starts a
+subagent, from a codemode script either. There is no separate flag; choosing the harness is the choice. Operators who do not want that
 should use `copilot-sdk`, whose Planner keeps the isolated, Chopin-tools-only
 boundary. Only the summary and research workers still run isolated Atomic sessions.
 See [The atomic Planner](#the-atomic-planner) below and
@@ -158,8 +158,8 @@ Atomic caveats:
   temporary file. For the isolated worker sessions the adapter overrides each
   default and fails closed on the ones it can observe, but a new Atomic release
   can add a default the suite does not check. Planner sessions deliberately keep
-  those capabilities, except that `intercom` is unavailable to Planner turns
-  while the Intercom package stays loaded for workflow stages.
+  those capabilities, except that `intercom` and the tools that write are
+  unavailable to Planner turns.
 - Sessions live only in memory. `doStop` returns a state the adapter refuses to
   resume, so a session never survives a restart. Chopin does not resume
   harness sessions.
@@ -181,44 +181,12 @@ Atomic caveats:
   `maxAiCredits` does not apply. Use the provider's spend limits.
 - `@bastani/atomic` adds more than 200 MB of installed dependencies on Linux
   x64, including glibc and musl native modules. Expect a larger image.
-- Atomic workflows need no database server. Their runs are journaled in a
-  SQLite file, `$XDG_STATE_HOME/chopin/atomic/workflows.sqlite`, beside the
-  documents' Planner directories, which Chopin passes to each Planner session
-  as its `journal` rather than through the process environment (see
-  [Full Atomic Planner](hosted-agent.md#full-atomic-planner)). The Docker image
-  sets `XDG_STATE_HOME=/var/lib/chopin`; mount a volume there to keep runs
-  and those directories when the container is replaced.
-- Local workflow worker pools stay off unless the operator's Atomic settings
-  set `workflows.localWorkers`. Since Atomic 0.9.44 a pool runs as one
-  coordinator process per root run, started by the Chopin server process, with
-  the worker processes under it; it uses the same journal, and if the server
-  exits, the coordinator and its workers exit with it. Atomic keeps each
-  worker's standard error in `worker-logs/` beside the journal, so under
-  `$XDG_STATE_HOME/chopin/atomic/worker-logs/<run id>/`, inside the directory
-  Chopin creates for the journal with access for the server's user only. It
-  deletes a log when its worker shuts down normally but keeps the logs of
-  workers that failed; remove them yourself. A child whose worker dies is
-  replayed on a new worker, up to three attempts; after that the run fails and
-  its card in Chat says so. The settings `workflows.localWorkers.startupTimeoutMs`
-  and `leaseMs` set how long a worker may take to start and how long an
-  unresponsive one keeps its child; Chopin sets neither. A pool runs children
-  once one worker is ready and fails to start only when none is. Since Atomic
-  0.9.45 an unset `startupTimeoutMs` is no longer a flat 30 seconds: it is 30
-  seconds times the worker count plus the one-minute load average, divided by
-  the CPU cores, at least 30 seconds and at most 10 minutes, so a large pool on
-  a busy Chopin host waits longer. A run whose workers still miss it fails with
-  `Local worker startup timed out`, and its card in Chat says so; raise the
-  setting or use fewer workers.
-- Since Atomic 0.9.44 a workflow runs up to 1000 of its stages at once unless
-  it says otherwise (`defaultConcurrency`, 3 before), nests child workflows at
-  most three levels deep (`maxDepth`, 4 before), and a stage's `subagent` tool
-  runs up to 1000 children at once (`parallel.concurrency` and
-  `parallel.runningCapacity`, 3 and 4 before). Without a pool, all of them run
-  in the Chopin server process and share its memory and the provider rate
-  limit above. To throttle a server, lower `defaultConcurrency` in
-  `extensions/workflow/config.json` and the `parallel` limits in
-  `extensions/subagent/config.json` under the Atomic agent directory, which
-  Planner sessions read; Chopin sets none of these itself.
+- Atomic 0.10 has no workflows, so a Planner starts no workflow runs and
+  Chopin keeps no workflow journal. A journal file an earlier Chopin kept at
+  `$XDG_STATE_HOME/chopin/atomic/workflows.sqlite` is no longer read; remove
+  it once no earlier release needs it. The Docker image sets
+  `XDG_STATE_HOME=/var/lib/chopin`; mount a volume there to keep the
+  documents' Planner directories when the container is replaced.
 - Atomic depends on `typebox` 1.3.27 while Chopin pins 1.3.7. Host tool schemas
   pass to Atomic as plain JSON Schema, so the two versions never meet.
 
@@ -247,23 +215,22 @@ Without a remembered checkout that still verifies, the session runs in a directo
 directory (`$XDG_STATE_HOME/chopin/planner/<document id>`, defaulting to
 `~/.local/state`; `~/Library/Application Support/Chopin/planner` on macOS;
 `%LOCALAPPDATA%\Chopin\planner` on Windows), with mode `0700`. It is never shared
-with another document, keeps what the Planner and its workflows write there
-across later sessions and server restarts, and is not placed in the shared
+with another document, keeps what is written there across later sessions and server restarts, and is not placed in the shared
 temporary directory. A symlink or file at that path is refused. The session has the
 same tools either way; the Planner is told whether it is in a checkout or in an
 empty directory without repository files, and its repository tools remain
 available.
 
-Atomic input (`ask_user_question`, extension dialogs, and workflow-stage
-questions) appears as shared Decisions instead of terminal dialogs, including
-workflow run and stage labels. Unanchored batches append at the document's end.
+Atomic input (`ask_user_question` and extension dialogs) appears as shared
+Decisions instead of terminal dialogs. Unanchored batches append at the
+document's end.
 Dialog text and written answers stay verbatim, bounded only by the document's
 256 KiB source limit and the shared-draft limits rather than the Planner's own
 question limits. A request has no time limit: it waits until a member answers it
 or it is withdrawn. Cancellation withdraws pending cards and never approves an
 action. See
 [Full Atomic Planner](hosted-agent.md#full-atomic-planner) for the mapping,
-resource loading, persistence, and workflow restart boundaries.
+resource loading, and persistence.
 
 `invoke_planner` itself is offered on every harness and in both authentication
 modes. Other harnesses ignore its `checkout`: they neither verify nor use nor
@@ -429,7 +396,7 @@ the image.
 | `HANDOVER_HOLD_MS`                | `20000`                 | How long a process in standby holds a request or WebSocket upgrade that needs the writer lease before it answers `503` with `Retry-After: 1`, in milliseconds, an integer between 0 and 120000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `CLIENT_DIR`                      | `apps/web/dist`         | Directory of the built web client. A process is ready only when `index.html` exists there, unless `DEV_CLIENT` is set.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `HARNESS_AUTH`                    | unset                   | Auth mode forwarded to the selected adapter. For `copilot-sdk`, `direct` and `ai-gateway` are allowed on any bind and `auto` requires a loopback-only `SERVER_HOST`; the adapter does not otherwise consume it. For `atomic`, it is required and must be `auto`, which requires a loopback-only `SERVER_HOST`, or `ai-gateway`; every other value is refused. For `remote`, any value is refused.                                                                                                                                                                                                                                                                 |
-| `HARNESS_EXTENSIONS`              | unset                   | Extension or package paths every atomic Planner session loads, as Atomic's `--extension` flag would, separated by the platform path delimiter (`:`, or `;` on Windows). A package's extensions, skills, and workflows all register. Each path must be absolute and exist; any other harness refuses the variable at startup. Background workers never load them. The code runs in the server process as its user.                                                                                                                                                                                                                                                 |
+| `HARNESS_EXTENSIONS`              | unset                   | Extension or package paths every atomic Planner session loads, as Atomic's `--extension` flag would, separated by the platform path delimiter (`:`, or `;` on Windows). A package's extensions and skills register. Each path must be absolute and exist; any other harness refuses the variable at startup. Background workers never load them. The code runs in the server process as its user.                                                                                                                                                                                                                                                                 |
 | `AGENT`                           | on                      | Set exactly `off` to prevent hosted agent turns, disable the entire background-job runner, and avoid Copilot CLI startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `BACKGROUND_JOBS`                 | on                      | Set exactly `off` to disable background job scheduling. `AGENT=off` disables the entire runner. Under `HARNESS=remote`, workers run on the document's attached client.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `WEB_RESEARCH`                    | on                      | Set exactly `off` to disable new public-web research while retaining durable requests, artifacts, and other jobs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |

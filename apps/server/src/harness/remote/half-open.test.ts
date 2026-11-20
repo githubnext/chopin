@@ -10,7 +10,7 @@ import {
 } from "../../testing/agent-link";
 import { hostInputRoom } from "../../testing/decisions";
 import { createHumanInput } from "../atomic/human-input";
-import { untilUnpaused } from "../atomic/full";
+import { untilUnpaused } from "../runs";
 import { createRemoteAdapter } from "./adapter";
 
 import type { AgentHandlers } from "@chopin/agent-link/client";

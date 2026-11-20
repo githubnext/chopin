@@ -19,14 +19,8 @@ import {
 } from "./agents";
 import { githubTools, type GitHubToolsError, lazyGithubTools, type Result } from "./github-tools";
 import { registerCredential } from "./harnesses";
-import {
-	type FullPlanner,
-	pauseOwnedRuns,
-	type PlannerRuns,
-	registerFullPlanner,
-	resumeOwnedRuns,
-	untilUnpaused,
-} from "./atomic/full";
+import { type FullPlanner, registerFullPlanner } from "./atomic/full";
+import { type PlannerRuns, untilUnpaused } from "./runs";
 import { createHumanInput, PendingInputs } from "./atomic/human-input";
 import { type PlannerWorkspace, plannerWorkspace } from "./atomic/workspace";
 import { registerRemotePlanner, type RemotePlanner } from "./remote/registry";
@@ -96,11 +90,6 @@ export type PlannerChannel = {
 	reader?: true;
 };
 
-/** Atomic answers an action it could not carry out with `noop` or `cancelled`; report it rather than claim success. */
-function applied(outcome: { status: string; message: string }): void {
-	if (outcome.status === "noop" || outcome.status === "cancelled") throw new Error(outcome.message);
-}
-
 export type PlannerChoice = { model?: string; thinkingLevel?: string };
 
 /**
@@ -150,7 +139,10 @@ export type PlannerSession = {
 	 * without it, as one that owns a workflow run is.
 	 */
 	inputs?: Pick<PendingInputs, "open" | "held" | "watch">;
-	/** Workflow runs this session owns; only atomic and remote Planner sessions report them. */
+	/**
+	 * Workflow runs this session owns; only a remote Planner's client reports them. An Atomic
+	 * Planner has none, so it has no run control either: Stop ends its turn.
+	 */
 	runs?: () => PlannerRuns | undefined;
 	/** Subscribes to run changes; returns the unsubscribe function. */
 	watchRuns?: (listener: (runs: PlannerRuns) => void) => () => void;
@@ -280,15 +272,8 @@ export async function openPlannerSession(
 		if (workspace) {
 			planner = {
 				cwd: workspace.cwd,
-				humanInput: createHumanInput(
-					channel.room,
-					(runId, signal) => untilUnpaused(planner!, runId, signal),
-					undefined,
-					inputs,
-				),
-				onRuns: runs => {
-					for (let listener of listeners) listener(runs);
-				},
+				// Atomic names no workflow run for a request, so no answer is held for one.
+				humanInput: createHumanInput(channel.room, undefined, undefined, inputs),
 				toolReport: (id, output, state) => {
 					let chat = channel.chat ?? channel.room.plan.chat;
 					if (state === "running") chat?.toolProgress?.(id, output);
@@ -386,28 +371,11 @@ export async function openPlannerSession(
 		if (owner.signal.aborted) throw new Error("Planner owner unavailable");
 		let active = session;
 		let stopped: Promise<void> | undefined;
-		let workflows = () => {
-			if (!planner?.workflows) {
-				throw new Error("The Planner has no live Atomic session to control.");
-			}
-			return planner.workflows;
-		};
 		let watchRuns = (listener: (runs: PlannerRuns) => void) => {
 			listeners.add(listener);
 			return () => listeners.delete(listener);
 		};
-		let runControl = planner
-			? {
-				runs: () => planner.runs,
-				watchRuns,
-				pauseRuns: () => pauseOwnedRuns(workflows()),
-				resumeRuns: () => resumeOwnedRuns(workflows()),
-				pauseRun: async (runId: string) => applied(await workflows().pause(runId)),
-				resumeRun: async (runId: string) => applied(await workflows().resume(runId)),
-			}
-			: remote && !isolated
-			? remoteRunControl(remote, watchRuns)
-			: {};
+		let runControl = remote && !isolated ? remoteRunControl(remote, watchRuns) : {};
 		let fixedTools = Object.freeze([
 			...(job
 				? BACKGROUND_TOOL_NAMES[job.kind]

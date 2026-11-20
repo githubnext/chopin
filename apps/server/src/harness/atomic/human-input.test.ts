@@ -907,7 +907,7 @@ test(
 	30_000,
 );
 
-test("a workflow question's answer is returned only after its paused run is released", async () => {
+test("a remote client's workflow question is answered only after its paused run is released, and a question naming no run at once", async () => {
 	let release!: () => void;
 	let gate = new Promise<void>(resolve => {
 		release = resolve;
@@ -933,6 +933,14 @@ test("a workflow question's answer is returned only after its paused run is rele
 	expect(settled).toBe(false);
 	release();
 	expect((await response).answers).toMatchObject([{ kind: "option", answer: " A " }]);
+
+	// What Atomic asks names only its session and request, so nothing holds its answer.
+	gate = new Promise<void>(() => {});
+	let direct = f.input.questionnaire({ questions: [params.questions[0]!] }, f.options);
+	let [next] = await f.cards(1);
+	await f.answer(next!.id, [0]);
+	expect((await direct).answers).toMatchObject([{ kind: "option", answer: " A " }]);
+	expect(held).toEqual(["run-1"]);
 });
 
 test("the room hears which Decision cards its Planner's request asked, as the request does", async () => {

@@ -26,9 +26,12 @@ export type AskedInput = { method: InputMethod; decisions: string[] };
  * A host input request's options, with the block it concerns: its `index` and `digest` from the
  * Planner's latest read of the document. Its card goes beside that block and is linked to it; a
  * changed or repeated block leaves the card unlinked at the end of the document. `asked` hears the
- * ids of the decisions the request created, once they exist.
+ * ids of the decisions the request created, once they exist. Atomic names a request by its session
+ * and request id alone; only a remote client names the workflow run and stage that asked it.
  */
 export type HumanInputOptions = HostInputOptions & {
+	workflowRunId?: string;
+	workflowStageId?: string;
 	block?: { index: number; digest: string };
 	asked?: (decisions: string[]) => void;
 };
@@ -226,8 +229,8 @@ export type HumanInput = {
  *
  * A request has no time limit: it waits until a member answers it or it is
  * withdrawn, as when its Planner stops, its run is cancelled, or its link
- * closes. An answer to a workflow
- * question is returned only once `hold` allows it, so a paused run stays stopped.
+ * closes. An answer to a remote client's workflow question is returned only once
+ * `hold` allows it, so a paused run stays stopped; an Atomic Planner's has no hold.
  * `report` learns how each request ended, which the cancelled result alone
  * cannot tell apart.
  */

@@ -20,7 +20,7 @@ async function directory(): Promise<string> {
 }
 
 it(
-	"lists a Planner's prompt templates, skills and workflows as the commands Atomic runs",
+	"lists a Planner's prompt templates and skills as the commands Atomic runs",
 	async () => {
 		let cwd = await directory();
 		let agentDir = await directory();
@@ -34,7 +34,9 @@ it(
 			join(cwd, ".atomic", "prompts", "review.md"),
 			"---\ndescription: Review the current diff\n---\nReview $ARGUMENTS\n",
 		);
+		// A workflow file an earlier Atomic loaded is no command.
 		await mkdir(join(cwd, ".atomic", "workflows"), { recursive: true });
+		await writeFile(join(cwd, ".atomic", "workflows", "old.ts"), "export default {};\n");
 		let runtime = await ModelRuntime.create({
 			credentials: AuthStorage.inMemory({}),
 			modelsPath: null,
@@ -54,18 +56,13 @@ it(
 			description: "Draft release notes from merged pull requests.",
 			kind: "skill",
 		});
-		// The workflows Atomic registers for every session are listed with theirs.
-		let workflows = commands.filter(command => command.kind === "workflow");
-		expect(workflows.length).toBeGreaterThan(0);
-		expect(workflows.every(command => command.name !== "")).toBe(true);
-		// Atomic's own extension commands, such as /workflow itself, are not offered.
-		expect(commands.some(command => command.name === "workflow" && command.kind !== "workflow"))
-			.toBe(false);
+		// Atomic's own extension commands are not offered, and it registers no workflows.
 		expect(
-			commands.map(command => command.kind).every(kind =>
-				kind === "prompt" || kind === "skill" || kind === "workflow"
-			),
-		).toBe(true);
+			commands.map(command => command.kind).every(kind => kind === "prompt" || kind === "skill"),
+		)
+			.toBe(true);
+		expect(commands.some(command => command.name === "old" || command.name === "workflow"))
+			.toBe(false);
 	},
 	60_000,
 );

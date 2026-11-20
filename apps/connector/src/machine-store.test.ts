@@ -3,6 +3,7 @@ import {
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	rmSync,
 	statSync,
@@ -21,6 +22,7 @@ import {
 	savedMachineStore,
 	saveMachineStore,
 	storageSettings,
+	STORE_ADAPTER_SPEC,
 	storeAdapter,
 	storeFolder,
 	storeReport,
@@ -51,11 +53,20 @@ function mode(path: string) {
 	return statSync(path).mode & 0o777;
 }
 
+function installing(version: string): AdapterInstaller {
+	return async root => {
+		let adapter = join(root, "node_modules", ...MACHINE_STORE_ADAPTER.split("/"));
+		mkdirSync(adapter, { recursive: true });
+		writeFileSync(
+			join(adapter, "package.json"),
+			JSON.stringify({ name: MACHINE_STORE_ADAPTER, version }),
+		);
+		writeFileSync(join(adapter, "postgres.js"), `export default {}; // ${version}\n`);
+	};
+}
+
 const fakeInstall: AdapterInstaller = async root => {
-	let adapter = join(root, "node_modules", ...MACHINE_STORE_ADAPTER.split("/"));
-	mkdirSync(adapter, { recursive: true });
-	writeFileSync(join(adapter, "package.json"), JSON.stringify({ name: MACHINE_STORE_ADAPTER }));
-	writeFileSync(join(adapter, "postgres.js"), "export default {};\n");
+	await installing("0.10.0")(root);
 	mkdirSync(join(root, "node_modules", "pg"), { recursive: true });
 	writeFileSync(join(root, "node_modules", "pg", "package.json"), "{}");
 };
@@ -129,6 +140,36 @@ describe("a machine's database login on the connector", () => {
 		expect(await storeAdapter(directory, install)).toBe(root);
 		expect(installs).toBe(1);
 		await expect(storeAdapter(folder(), async () => {})).rejects.toThrow("left no");
+	});
+
+	test("serves only an adapter release in range, replacing an older one and keeping it through a failed install", async () => {
+		let directory = folder();
+		let root = join(storeFolder(directory), "npm");
+		let manifest = join(root, "node_modules", ...MACHINE_STORE_ADAPTER.split("/"), "package.json");
+		let version = () => JSON.parse(readFileSync(manifest, "utf8")).version;
+		// What an earlier connector installed for agents on an earlier Atomic.
+		await installing("0.9.90")(root);
+		writeFileSync(join(root, "stale.txt"), "left by the earlier install");
+		// An install that leaves no release in range is refused and leaves the cache as it was.
+		await expect(storeAdapter(directory, installing("0.11.0"))).rejects.toThrow(
+			`left no ${STORE_ADAPTER_SPEC}`,
+		);
+		await expect(storeAdapter(directory, async () => {
+			throw new Error("npm install failed: network");
+		})).rejects.toThrow("network");
+		expect(version()).toBe("0.9.90");
+		expect(await storeAdapter(directory, installing("0.10.2"))).toBe(root);
+		expect(version()).toBe("0.10.2");
+		expect(existsSync(join(root, "stale.txt"))).toBe(false);
+		let installs = 0;
+		expect(
+			await storeAdapter(directory, async staging => {
+				installs++;
+				await installing("0.10.3")(staging);
+			}),
+		).toBe(root);
+		expect(installs).toBe(0);
+		expect(readdirSync(storeFolder(directory))).toEqual(["npm"]);
 	});
 
 	test("writes each agent's Atomic settings to read the database, keeping what was there", async () => {

@@ -36,7 +36,6 @@ async function drawn(pictures: Array<{ name: string; bytes: Uint8Array }>, image
 	let harness = createAtomicAdapter({
 		auth: "ai-gateway",
 		model: "stub/model",
-		journal: join(root, "state", "workflows.sqlite"),
 		providers: {
 			stub: {
 				baseUrl: stub.baseUrl,

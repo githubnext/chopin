@@ -16,7 +16,7 @@ import {
 } from "@chopin/agent-link";
 import { AI_RENEW_BEFORE_MS, AiLaunchRefused } from "../../ai/launches";
 import { AI_ACCOUNT_UNCHECKED_SESSION, NO_AI_ACCOUNT_SESSION } from "../../ai/account-check";
-import { untilUnpaused } from "../atomic/full";
+import { untilUnpaused } from "../runs";
 
 import type {
 	HarnessV1PromptControl,
@@ -38,7 +38,7 @@ import type {
 } from "@chopin/agent-link";
 import type { Chat as Wire } from "@chopin/protocol";
 import type { JsonValue, PlannerHeldSession } from "../../storage/model";
-import type { PlannerRuns } from "../atomic/full";
+import type { PlannerRuns } from "../runs";
 import { withdrawnValue } from "../atomic/human-input";
 import type { AskedInput, HumanInput, HumanInputStatus, InputMethod } from "../atomic/human-input";
 import type { PlannerTurn } from "../turn-level";

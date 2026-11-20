@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { isAbsolute } from "node:path";
 
 import { ATOMIC_AUTH_MODES, createAtomicAdapter } from "./atomic/adapter";
-import { forgetWorkspaces, workflowJournal } from "./atomic/workspace";
+import { forgetWorkspaces } from "./atomic/workspace";
 import { createCopilotSdk } from "./copilot-sdk/adapter";
 import { withModelOutput } from "./model-output";
 import { createRemoteAdapter } from "./remote/adapter";
@@ -31,11 +31,10 @@ function createAtomicHarness(
 	settings: { auth?: string; extensions?: readonly string[] },
 ): HarnessV1 & { shutdown(): Promise<void>; steers: true } {
 	// Atomic takes neither a GitHub credential nor a credit limit; only `auth` (validated by
-	// `harnessFor` below), the extensions, and the workflow journal reach the real adapter.
+	// `harnessFor` below) and the extensions reach the real adapter.
 	return createAtomicAdapter({
 		auth: settings.auth as AtomicAuthMode,
 		extensions: settings.extensions,
-		journal: workflowJournal(),
 	});
 }
 

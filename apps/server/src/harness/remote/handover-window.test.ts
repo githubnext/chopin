@@ -14,7 +14,7 @@ import {
 	rawLink,
 } from "../../testing/agent-link";
 import { createHumanInput, rejoinInput } from "../atomic/human-input";
-import { untilUnpaused } from "../atomic/full";
+import { untilUnpaused } from "../runs";
 import { createRemoteAdapter } from "./adapter";
 import { PlannerAttachments } from "./attachments";
 
