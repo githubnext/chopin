@@ -239,7 +239,13 @@ durable.
   changing 503, and only a Chopin without launches (404) leaves a run on the machine's
   own models. Each launch records its owner (`run:<id>`, `session:<id>`, migration 046)
   and its final checks read that the run still runs or a session of this process holds
-  it (`ownerLive`); an end, a replacement or a session's close is in force in the
+  it (`ownerLive`). A client offering `ai-catalog` too may ask once per link for a catalog
+  launch of the same account, owned by the link (`link:<id>`), to list that account's models
+  before any session has one: it is handed in `ai-catalog`, again when it would change, held
+  only while the link is attached to this process and ended with it, and catalog-only
+  (`catalogOnly`): the proxy serves it each provider's model list and the model catalog and
+  refuses it anything else (`catalog-only`) before reading a credential. An end, a
+  replacement or a session's close is in force in the
   process the moment it is asked, before storage deletes the rows (`#ending`), an end
   storage refuses is retried, and the writer lease's holder ends launches nothing owns
   as it starts serving and with each sweep (`AiCredentials.retire`). A key refused as

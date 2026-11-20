@@ -45,7 +45,7 @@ changes:
 | Harness                     | Catalog                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Applied by                                                                                                                                                                                                                                                                                                                     |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `atomic`                    | The models of the Atomic model runtime the adapter builds: every chat model it has credentials for that `HARNESS_AUTH` would run, as `provider/model`, in the order the runtime reports them (the picker groups them by provider, in the order each first appears, and a model it reports twice is listed twice, a choice of that id being the first entry's), with each model's thinking levels as Atomic reads them (`xhigh` and `max` only where the model maps them) and its context size as the description. `MODEL` is the default. | The turn's `model` and `thinkingLevel`, set on the session; with no level chosen the model runs its own (the level saved for it in the operator's Atomic settings, else their default level, else `medium`), never one an earlier turn set.                                                                                    |
-| `remote`                    | What the attached client reported in its [capability catalog](agent-connection.md#capability-catalog), with `MODEL` as the default when set. An older client, or one that reports no models, offers none.                                                                                                                                                                                                                                                                                                                                 | `model` and `thinkingLevel` in the `turn` message; the level only to a client that offered `capability-catalog`. With `session-choice` too, also in `start` and `fork`, so a session the client makes starts on them. Where nobody chose a model, `model` is `MODEL` when set; a field left out runs the client's own default. |
+| `remote`                    | What the attached client reported in its [capability catalog](agent-connection.md#capability-catalog), with `MODEL` as the default when set. An older client, or one that reports no models, offers none. A client on people's AI accounts that offered `ai-catalog` reports the models of the account it runs on as soon as it attaches, before any turn ([Listing models before a session](agent-connection.md#listing-models-before-a-session)).                                                                                       | `model` and `thinkingLevel` in the `turn` message; the level only to a client that offered `capability-catalog`. With `session-choice` too, also in `start` and `fork`, so a session the client makes starts on them. Where nobody chose a model, `model` is `MODEL` when set; a field left out runs the client's own default. |
 | `copilot-sdk` and any other | None: the composer offers no control, because a choice nobody honors is not offered.                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Not applicable.                                                                                                                                                                                                                                                                                                                |
 
 The thinking level is a field of the turn the harness is given, beside `model` (`PlannerTurn` in
@@ -1339,7 +1339,7 @@ subscription), or with `launch-ended` when the launch's document was archived, i
 machine revoked or its grants ended with the machine's before it was handed out. A
 launch Chopin could not prepare because the person's accounts kept changing (503) fails
 the start too, as something that can be tried again. Each launch records what it is
-for (`owner`: `run:<id>` or `session:<id>`), which ends it (see below).
+for (`owner`: `run:<id>`, `session:<id>` or `link:<id>`), which ends it (see below).
 
 - **A Planner session** on a client attached at `/api/v1/agent` that offers the
   `ai-credentials` feature is launched for the account that attached (for a paired
@@ -1364,6 +1364,20 @@ for (`owner`: `run:<id>` or `session:<id>`), which ends it (see below).
   next process ends it when the session ends or the hold does, and replaces it when the
   client resumes. A client that does not offer the feature is launched nothing. See
   [Models through Chopin](agent-connection.md#models-through-chopin).
+- **A link's catalog launch**, for a client that offers `ai-credentials` and `ai-catalog` and
+  asks for it once attached, is launched for the same account its sessions are, for the
+  document, for 12 hours, owned by the link (`link:<id>`). It is how the client lists the
+  models of the account it will run on as soon as it attaches, before any session has a launch,
+  so the composer offers them when someone opens the document: its runner reads each provider's
+  model list and the model catalog with it, and nothing else. It is catalog-only: the proxy
+  refuses every other request on it, a model call included, with `catalog-only` (403) before it
+  reads a credential. It is handed in an `ai-catalog` message, and again, replacing it, whenever
+  a session's launch would be (the person's credentials change, half an hour before its
+  deadline); the earlier one ends once the new one is sent. An account with nothing to list is
+  handed an empty `providers`. It is held only while its link is attached to this process, and
+  ends with the link however it closes (detach, a drop the link's sessions survive, a restart, a
+  refusal), with every cutoff a session's launch ends with, and at its deadline. See
+  [Listing models before a session](agent-connection.md#listing-models-before-a-session).
 - **A build, investigation or prototype** on a paired machine asks with its run
   credential:
 
@@ -1389,17 +1403,17 @@ for (`owner`: `run:<id>` or `session:<id>`), which ends it (see below).
   connector keeps the launch credential and relays the agent's requests (see
   [Sandbox](chopin-cli.md#sandbox)).
 
-**When a launch ends.** A launch stops working when its run or session ends, when it
+**When a launch ends.** A launch stops working when its run, session or link ends, when it
 is replaced, ended or past its deadline, when its machine is revoked or its document
 archived. The proxy's checks read whether what the launch is for is still live with
 every request: the run still running, the session still held by this process (a
-restart's hold once it is rebuilt). An end asked in the process that holds the writer
+restart's hold once it is rebuilt), the link still attached to it. An end asked in the process that holds the writer
 lease is in force from that moment, before storage has deleted the placeholders, so a
 request waiting at the proxy when a Planner closes, a run's machine ends its launch or a
 session's launch is replaced is never sent on it. An end storage refuses keeps the
 launch ended in that process and is tried again, on a backoff and with each sweep. The
 writer lease's holder also ends, as it starts serving and every five minutes, each
-launch nothing owns any longer (its run ended, no session holds it), whichever process
+launch nothing owns any longer (its run ended, no session or link holds it), whichever process
 handed it out and whether or not its end ever reached storage, as a run whose
 connector never sent its end or a process that lost the lease before writing its ends
 leave them; a launch handed out in the last two minutes is left to its owner to take

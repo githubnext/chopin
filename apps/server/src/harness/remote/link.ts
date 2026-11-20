@@ -105,6 +105,12 @@ export type LinkAi = {
 	 * prepared now. A launch handed out with no provider (an earlier Chopin's) is never started on.
 	 */
 	launch(channelId: string, sessionId: string): Promise<{ launchId?: string; grants: AiGrants }>;
+	/**
+	 * Prepares the link's catalog launch (`ai-catalog`), owned by the link `linkId`: the proxy lets
+	 * it list each provider's models and read the model catalog, and refuses it everything else.
+	 * Throws as `launch` does.
+	 */
+	catalog?(channelId: string, linkId: string): Promise<{ launchId?: string; grants: AiGrants }>;
 	end(launchId: string): void;
 	/** Calls `changed` whenever the person's AI credentials change; returns how to stop. */
 	watch(changed: () => void): () => void;
@@ -1364,6 +1370,20 @@ export class AgentLink {
 	#offered = Promise.withResolvers<void>();
 	/** Set on a link rebuilt after a restart: told when its sessions are given back or end. */
 	#rebuilt: { ended(): void; resumed(): void } | undefined;
+	/** What owns the link's catalog launch: `link:<this>`, whose end ends it. */
+	readonly #id = crypto.randomUUID();
+	/**
+	 * The link's catalog launch, once its client asked for one (`ai-catalog`): the launch it holds,
+	 * its renewal, how to stop watching the person's credentials, and the preparation under way.
+	 */
+	#catalogAi:
+		| {
+			launchId?: string;
+			renewal?: ReturnType<typeof setTimeout>;
+			unwatch: () => void;
+			work: Promise<void>;
+		}
+		| undefined;
 
 	constructor(socket: LinkSocket, options: LinkOptions) {
 		this.#socket = socket;
@@ -1838,6 +1858,8 @@ export class AgentLink {
 	 */
 	disconnected(): void {
 		if (this.#state === "closed" || this.#state === "suspended") return;
+		// The catalog launch is the link's: it ends with the link, whatever its sessions keep.
+		this.#endCatalog();
 		let kept = !this.#planned && this.#state === "attached"
 				&& this.#options.features?.includes(AGENT_FEATURES.resumableSessions)
 			? [...this.#sessions.values()].filter(session => this.#keeps(session))
@@ -1960,6 +1982,99 @@ export class AgentLink {
 		// The launch a resumed session held may have ended with its link, or with the process.
 		for (let { session } of resumed) this.#sessions.get(session)?.renewAi();
 		for (let { result, session, delivered } of results) this.#answer(result, session, delivered);
+	}
+
+	/**
+	 * The client asked for the link's catalog grants: they are handed out now and again whenever
+	 * the person's credentials change or the launch nears its deadline, until the link ends. A link
+	 * whose client did not offer `ai-credentials`, or a server that hands out no launches, is sent
+	 * none; asking again changes nothing.
+	 */
+	#askCatalog(): void {
+		let ai = this.#port.ai;
+		if (!ai?.catalog || this.#catalogAi || this.#state !== "attached") return;
+		this.#catalogAi = { unwatch: ai.watch(() => this.#renewCatalog()), work: Promise.resolve() };
+		this.#renewCatalog();
+	}
+
+	/**
+	 * Prepares the link's catalog launch, and in the same step as it is sent, once the link is
+	 * still attached, holds it and ends the one it replaces; a launch the link can no longer take is
+	 * ended unsent. Nothing left to give hands the client an empty `providers`. One at a time.
+	 */
+	#renewCatalog(): void {
+		let held = this.#catalogAi;
+		let ai = this.#port.ai;
+		if (!held || !ai?.catalog) return;
+		let catalog = ai.catalog.bind(ai);
+		held.work = held.work.then(async () => {
+			if (this.#catalogAi !== held || this.#state !== "attached") return;
+			let launched: { launchId?: string; grants: AiGrants };
+			try {
+				launched = await catalog(this.#channelId!, this.#id);
+			} catch (error) {
+				if (!(error instanceof AiLaunchRefused)) {
+					console.error("[agent] a link's catalog launch could not be prepared:", error);
+					this.#renewCatalogAt(AI_RETRY_MS);
+					return;
+				}
+				launched = { grants: { providers: [], withheld: error.withheld } };
+			}
+			if (launched.launchId && !launched.grants.providers.length) {
+				ai.end(launched.launchId);
+				launched = { grants: { providers: [], withheld: launched.grants.withheld } };
+			}
+			if (this.#catalogAi !== held || this.#state !== "attached") {
+				if (launched.launchId) ai.end(launched.launchId);
+				return;
+			}
+			// Held before it is sent, so the client's first request finds its owner live.
+			if (launched.launchId) ai.held?.(launched.launchId, true);
+			if (!this.#send({ type: "ai-catalog", ai: launched.grants })) {
+				if (launched.launchId) {
+					ai.held?.(launched.launchId, false);
+					ai.end(launched.launchId);
+				}
+				return;
+			}
+			let previous = held.launchId;
+			held.launchId = launched.launchId;
+			if (previous && previous !== launched.launchId) {
+				ai.held?.(previous, false);
+				ai.end(previous);
+			}
+			let { expiresAt } = launched.grants;
+			if (expiresAt !== undefined) {
+				this.#renewCatalogAt(expiresAt - AI_RENEW_BEFORE_MS - Date.now());
+			} else clearTimeout(held.renewal);
+		}).catch(error =>
+			console.error("[agent] a link's catalog launch could not be handed out:", error)
+		);
+	}
+
+	#renewCatalogAt(delay: number): void {
+		let held = this.#catalogAi;
+		if (!held) return;
+		clearTimeout(held.renewal);
+		held.renewal = setTimeout(
+			() => this.#renewCatalog(),
+			Math.min(Math.max(delay, 0), 2 ** 31 - 1),
+		);
+		held.renewal.unref?.();
+	}
+
+	/** Ends the link's catalog launch, in force the moment it is asked, and stops renewing it. */
+	#endCatalog(): void {
+		let held = this.#catalogAi;
+		if (!held) return;
+		this.#catalogAi = undefined;
+		clearTimeout(held.renewal);
+		held.unwatch();
+		let ai = this.#port.ai;
+		if (held.launchId) {
+			ai?.held?.(held.launchId, false);
+			ai?.end(held.launchId);
+		}
 	}
 
 	/** Gives `next` the sessions the client still holds; returns the answers it is still owed. */
@@ -2155,6 +2270,11 @@ export class AgentLink {
 				this.#options.catalogChanged?.();
 				return;
 			}
+			case "ai-catalog":
+				if (!this.#options.features?.includes(AGENT_FEATURES.aiCatalog)) {
+					return this.#violate("protocol", "ai-catalog needs the ai-catalog feature.");
+				}
+				return this.#askCatalog();
 			case "attach":
 				return this.#violate("protocol", "This link is already attached.");
 			case "detach":

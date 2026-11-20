@@ -122,6 +122,7 @@ client must then use none of them.
 | `retry-turn`               | A `turn`'s `message`, the Chat message it answers, and `retry` when it [runs a failed message again](#retrying-a-failed-turn)                                                 |
 | `session-choice`           | With `capability-catalog`, the document's chosen `model` and `thinkingLevel` in [`start` and `fork`](#server-to-client), so a session the client makes opens on them          |
 | `ai-credentials`           | An [AI launch](#models-through-chopin) in `start` and `fork`, and an `ai` message whenever it changes: stand-ins for the person's own AI accounts, reached through Chopin     |
+| `ai-catalog`               | With `ai-credentials`, a [catalog launch](#listing-models-before-a-session) for the link, asked for with `ai-catalog`, that lists the account's models and runs none          |
 
 ### Pings
 
@@ -426,6 +427,7 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 { "type": "start", "session": "", "mode": "planner", "model?": "", "thinkingLevel?": "", "ai?": {} }
 { "type": "fork", "session": "", "mode": "planner", "from": { "session": "", "turn?": "" }, "model?": "", "thinkingLevel?": "", "ai?": {} }
 { "type": "ai", "session": "", "ai": { "launch?": "", "expiresAt?": 0, "providers": [], "withheld": [] } }
+{ "type": "ai-catalog", "ai": { "launch?": "", "expiresAt?": 0, "providers": [], "withheld": [] } }
 { "type": "turn", "session": "", "turn": "", "prompt": "", "instructions?": "", "model?": "", "thinkingLevel?": "", "attachments?": [{ "id": "", "name": "", "kind": "image", "mediaType": "", "size": 0, "data": "" }], "message?": "", "retry?": true, "tools": [], "responseFormat?": {} }
 { "type": "abort", "session": "", "turn": "" }
 { "type": "steer", "request": "", "session": "", "turn": "", "prompt": "" }
@@ -465,6 +467,8 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
   `start` is sent for it. Run each turn on its own fields alone.
 - `ai` on `start` and `fork`, and the `ai` message, are sent only to a client that
   offered `ai-credentials`: see [Models through Chopin](#models-through-chopin).
+- `ai-catalog`, with `ai-catalog`, carries the link's catalog grants once the client asked for
+  them: see [Listing models before a session](#listing-models-before-a-session).
 - `fork`, with `session-forks`, opens a thread's Planner session branched from
   `from.session` (and `from.turn` when named), preserving the conversation,
   tool results, compaction state and session memory up to that point. Answer
@@ -558,8 +562,11 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 { "type": "resume", "sessions": [{ "session": "", "requests": [""] }] }
 { "type": "input-received", "request": "" }
 { "type": "capabilities", "catalog": {} }
+{ "type": "ai-catalog" }
 ```
 
+`ai-catalog` belongs to the `ai-catalog` feature and is defined in
+[Listing models before a session](#listing-models-before-a-session).
 `resume` and `input-received` belong to the `resumable-sessions` feature and are defined in
 [Resuming after a dropped link](#resuming-after-a-dropped-link) and below. `capabilities` belongs to
 `capability-catalog` and is defined in [Capability catalog](#capability-catalog).
@@ -871,6 +878,40 @@ session is one launch, prepared before its `start` or `fork` and carried in `ai`
 
 A client that does not offer the feature is sent none of this and uses its own
 models, as before.
+
+#### Listing models before a session
+
+A session's launch arrives only with its `start` or `fork`, so a client that lists its models
+from its launches would offer none in the document's composer until a turn has run. With
+`ai-catalog` too, the client asks for the link's catalog grants once it is attached (after
+`resumed` on a link that resumes), and Chopin answers with them:
+
+```text
+{ "type": "ai-catalog" }
+{ "type": "ai-catalog", "ai": { "launch?": "", "expiresAt?": 0, "providers": [], "withheld": [] } }
+```
+
+- They are a launch for the same account a session's would be, on the same machine and
+  document, in the same shape, with the person's providers as a session would be given them.
+  Use them only to read each provider's model list and the model catalog, so the
+  [capability catalog](#capability-catalog) reports that account's models as soon as the link
+  attaches. The proxy serves such a launch each provider's model list (`GET` of `/models` for
+  GitHub Copilot, `/v1/models` and `/v1/models/<id>` for the others) and the model catalog, and
+  refuses every other request on it, a model call included, with `catalog-only` (403) before it
+  reads any credential. Run each turn on its own session's launch.
+- A later `ai-catalog` replaces them whole, whenever a session's launch would be replaced: the
+  person connects, replaces or removes a provider, a provider refuses one of their keys as
+  invalid, GitHub confirms their Copilot seat lost or back, and half an hour before the
+  deadline. The earlier launch ends once the new one is sent. An empty `providers` says the
+  account has nothing to list now: report no models of it.
+- They end with the link, however it closes, a drop whose sessions Chopin keeps included, and
+  with every cutoff that ends a session's launch (see
+  [Handing launches to runners](hosted-agent.md#handing-launches-to-runners)). A new link asks
+  again.
+- Asking without having offered the feature is a `protocol` violation; asking again on the same
+  link changes nothing. A Chopin that hands out no launches answers nothing. Like every launch,
+  the client keeps the launch credential in its own process and adds it to each request in
+  `x-chopin-launch`.
 
 ### Stream parts
 

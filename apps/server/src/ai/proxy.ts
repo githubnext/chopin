@@ -150,6 +150,18 @@ const ROUTES: Record<AiProvider, Array<{ methods: readonly string[]; path: RegEx
 	],
 };
 
+/**
+ * Each provider's model list among its `ROUTES`: all a catalog-only launch (`catalogOnly`) is
+ * served, beside the model catalog.
+ */
+const LISTS: Record<AiProvider, RegExp> = {
+	"github-copilot": /^\/models$/,
+	openai: new RegExp(`^/v1/models(?:/${SEGMENT})?$`),
+	anthropic: new RegExp(`^/v1/models(?:/${SEGMENT})?$`),
+	chatgpt: new RegExp(`^/v1/models(?:/${SEGMENT})?$`),
+	claude: new RegExp(`^/v1/models(?:/${SEGMENT})?$`),
+};
+
 /** What the proxy sends back in place of the credential, should a provider echo it. */
 const REDACTED_TEXT = "[redacted]";
 const REDACTED = new TextEncoder().encode(REDACTED_TEXT);
@@ -270,6 +282,10 @@ const REFUSALS: Record<AiRefusal, { status: number; message: string }> = {
 	busy: {
 		status: 503,
 		message: "Launches or credentials kept changing in Chopin while this was sent. Send it again.",
+	},
+	"catalog-only": {
+		status: 403,
+		message: "This launch only lists models. Send model requests on a session's own launch.",
 	},
 };
 
@@ -564,7 +580,8 @@ type CachedCatalog = { body: Uint8Array; headers: Headers; fetchedAt: number };
  * Chopin's AI credential proxy, served at `/api/v1/ai/<provider>/...`, for the provider's model
  * API routes alone (`ROUTES`). A request must carry, in `Authorization: Bearer` or `x-api-key`, a
  * placeholder a live launch was handed for that provider, and in `AI_LAUNCH_HEADER` the credential
- * of that same launch, which its runner adds. The proxy drops these headers, reads the body, takes
+ * of that same launch, which its runner adds; a catalog-only launch's may only read the provider's
+ * model list (`LISTS`). The proxy drops these headers, reads the body, takes
  * a fresh Copilot token for one that expired meanwhile, and at the final handoff, in the same step
  * as the send, checks the launch is still live and the person's credential unchanged; the
  * transport is handed the launch's and the token's deadlines and checks them on the clock reading
@@ -699,7 +716,8 @@ export function aiProxy(options: AiProxyOptions) {
 		}
 		if (standInDropped(request, dropped)) return droppedStandIn();
 		let launchToken = request.headers.get(AI_LAUNCH_HEADER)?.trim() || undefined;
-		let checked = await options.credentials.authorize(key, provider, launchToken);
+		let listing = request.method === "GET" && LISTS[provider].test(path);
+		let checked = await options.credentials.authorize(key, provider, launchToken, listing);
 		if ("refused" in checked) return refused(checked.refused);
 		let body = request.method === "GET" ? undefined : await boundedBody(request);
 		if (body === undefined && request.method !== "GET") {

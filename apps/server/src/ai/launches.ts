@@ -13,6 +13,20 @@ export const RUN_AI_LAUNCH_MS = 5 * 60 * 60_000;
 /** How long before its deadline a lasting launch is prepared again. */
 export const AI_RENEW_BEFORE_MS = 30 * 60_000;
 
+/**
+ * The owner prefix of a link's catalog launch (`link:<id>`), which an attached remote Planner client
+ * asked for to list the models of the account it runs on before any session has a launch.
+ */
+export const CATALOG_OWNER = "link:";
+
+/**
+ * Whether a launch's owner makes it catalog-only: the proxy serves it each provider's model list
+ * and the model catalog, and refuses it every other request, a model call included.
+ */
+export function catalogOnly(owner: string | undefined): boolean {
+	return owner?.startsWith(CATALOG_OWNER) === true;
+}
+
 /** What a runner is handed for one launch, and the id the launch is ended by. */
 export type HandedOut = { launchId: string; grants: AiGrants };
 

@@ -619,6 +619,46 @@ describe("Agent connection client", () => {
 		expect(changed).toEqual([{ type: "ai", session: "s", ai: ended }]);
 	});
 
+	it("asks for ai-catalog only with ai and aiCatalog handlers, asks for the link's catalog grants once attached, and hands them over", async () => {
+		let credentialsOnly = fakeServer({ features: ["ai-credentials"] });
+		let plain = await connectAgent({
+			url: credentialsOnly.url,
+			token: "t",
+			document: "d",
+			handlers: { turn() {}, ai() {} },
+		});
+		stops.push(() => plain.detach());
+		expect(credentialsOnly.asked[0]?.split(", ")).not.toContain("ai-catalog");
+
+		let ai = {
+			launch: "chopin_launch_c",
+			expiresAt: 1_700_000_000_000,
+			providers: [{
+				provider: "github-copilot",
+				baseUrl: "https://chopin.example/api/v1/ai/github-copilot",
+				placeholder: "chopin_ai_c",
+				keyVariable: "COPILOT_GITHUB_TOKEN",
+			}],
+			withheld: [],
+		};
+		let server = fakeServer({ features: ["ai-credentials", "ai-catalog"] });
+		let handed: Array<ServerMessageOf<"ai-catalog">> = [];
+		let client = await connectAgent({
+			url: server.url,
+			token: "t",
+			document: "d",
+			handlers: { turn() {}, ai() {}, aiCatalog: message => void handed.push(message) },
+		});
+		stops.push(() => client.detach());
+		expect(server.asked[0]?.split(", ")).toContain("ai-catalog");
+		expect(await server.next("ai-catalog")).toEqual({ type: "ai-catalog" });
+		server.send({ type: "ai-catalog", ai });
+		for (let deadline = Date.now() + 2000; !handed.length; await Bun.sleep(5)) {
+			if (Date.now() > deadline) throw new Error("The catalog grants never arrived.");
+		}
+		expect(handed).toEqual([{ type: "ai-catalog", ai }]);
+	});
+
 	it("answers a steer for a turn that has ended, or that its handler refuses, with ok false", async () => {
 		let server = fakeServer({ features: ["steer-turn"] });
 		let steered: string[] = [];
