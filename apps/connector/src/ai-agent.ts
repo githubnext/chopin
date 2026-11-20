@@ -28,6 +28,7 @@ export const OWNER_AGENT_VARIABLES = new Set([
 	"OPENROUTER_API_KEY",
 	"ATOMIC_CODING_AGENT_DIR",
 	"PI_CODING_AGENT_DIR",
+	"ATOMIC_ACP_DIR",
 	"ATOMIC_CODING_AGENT_SESSION_DIR",
 	"ATOMIC_WORKFLOW_ARTIFACT_DIR",
 	"ATOMIC_WORKFLOW_JOURNAL_PATH",
@@ -172,13 +173,15 @@ export function managedEnvironment(
 /**
  * Makes `home` an agent state directory of the launch's own and returns the variables that move
  * every agent's state and configuration directory into it, so none of the owner's is read or
- * written: Atomic's (and Pi's), Copilot's, Claude's and Codex's.
+ * written: Atomic's (and Pi's), atomic-acp's (its session map, which it otherwise keeps in the
+ * owner's `~/.atomic`, out of a sandboxed launch's reach), Copilot's, Claude's and Codex's.
  */
 export function privateAgentState(home: string): Record<string, string> {
 	let atomic = join(home, "atomic");
 	let places = {
 		ATOMIC_CODING_AGENT_DIR: atomic,
 		PI_CODING_AGENT_DIR: atomic,
+		ATOMIC_ACP_DIR: join(home, "atomic-acp"),
 		COPILOT_HOME: join(home, "copilot"),
 		CLAUDE_CONFIG_DIR: join(home, "claude"),
 		CODEX_HOME: join(home, "codex"),

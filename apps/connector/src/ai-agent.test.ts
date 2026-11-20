@@ -41,6 +41,7 @@ test("leaves out the owner's model credentials and agent directories, and keeps 
 			anthropic_api_key: "sk-ant-owner",
 			COPILOT_GITHUB_TOKEN: "ghp_owner",
 			ATOMIC_CODING_AGENT_DIR: "/home/owner/.atomic/agent",
+			ATOMIC_ACP_DIR: "/home/owner/.atomic/atomic-acp",
 			CLAUDE_CONFIG_DIR: "/home/owner/.claude",
 			OPAQUE_API_KEY: "kept",
 			PATH: "/usr/bin",
@@ -59,6 +60,7 @@ test("gives an Atomic agent a state directory of its own, with a models.json tha
 	expect(env).toEqual({
 		ATOMIC_CODING_AGENT_DIR: join(home, "atomic"),
 		PI_CODING_AGENT_DIR: join(home, "atomic"),
+		ATOMIC_ACP_DIR: join(home, "atomic-acp"),
 		COPILOT_HOME: join(home, "copilot"),
 		CLAUDE_CONFIG_DIR: join(home, "claude"),
 		CODEX_HOME: join(home, "codex"),

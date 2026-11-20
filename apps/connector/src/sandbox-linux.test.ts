@@ -20,6 +20,7 @@ import {
 import { dirname, join } from "node:path";
 import { sandboxLabel } from "@chopin/protocol/connector";
 import { runAgent } from "./acp";
+import { privateAgentState } from "./ai-agent";
 import { checkouts } from "./checkouts";
 import { createOutput } from "./output";
 import { servePlanners } from "./planner";
@@ -1575,7 +1576,10 @@ for (let isolated of [false, true]) {
 			let chopin = server("chopin");
 			let worktree = join(made.state, "runs", "mine");
 			let agentHome = `${worktree}.agent`;
-			if (isolated) mkdirSync(join(agentHome, "atomic"), { recursive: true });
+			// As the connector moves a launch's agent state, atomic-acp's session map included.
+			let places = isolated ? privateAgentState(agentHome) : {};
+			let ownerMap = join(home, ".atomic", "atomic-acp", "session-map.json");
+			let ownerMapBefore = existsSync(ownerMap) ? readFileSync(ownerMap, "utf8") : undefined;
 			git(made.checkout, "worktree", "add", "--detach", worktree);
 			let script = join(made.root, "command.sh");
 			writeFileSync(
@@ -1586,7 +1590,8 @@ cat README.md > /dev/null 2>&1 && echo readRepository=ok || echo readRepository=
 (echo x > ${home}/escaped.txt) 2>/dev/null && echo writeOutside=LEAKED || echo writeOutside=blocked
 cat ${home}/.ssh/id_ed25519 > /dev/null 2>&1 && echo readSsh=LEAKED || echo readSsh=blocked
 cat ${made.state}/machine.json > /dev/null 2>&1 && echo readToken=LEAKED || echo readToken=blocked
-git add written.txt && git -c user.name=a -c user.email=a@a -c commit.gpgsign=false commit -qm scripted && git push ${made.remote} HEAD:refs/heads/scripted > /dev/null 2>&1 && echo push=ok || echo push=FAILED
+# A commit may say it couldn't lock the read-only packed-refs (git 2.53 tries); push=ok is the outcome.
+git add written.txt && git -c user.name=a -c user.email=a@a -c commit.gpgsign=false commit -qm scripted 2> /dev/null && git push ${made.remote} HEAD:refs/heads/scripted > /dev/null 2>&1 && echo push=ok || echo push=FAILED
 curl -sS -m 10 -o /dev/null https://example.org/ > /dev/null 2>&1 && echo offList=LEAKED || echo offList=blocked
 curl -sS -m 10 -o /dev/null ${chopin.url} > /dev/null 2>&1 && echo chopin=ok || echo chopin=FAILED
 } > probe.log 2>&1
@@ -1619,7 +1624,7 @@ curl -sS -m 10 -o /dev/null ${chopin.url} > /dev/null 2>&1 && echo chopin=ok || 
 							"--model",
 							"scripted-1",
 						]),
-						...isolated ? { ATOMIC_CODING_AGENT_DIR: join(agentHome, "atomic") } : {},
+						...places,
 					},
 					sandbox,
 					own: [worktree, ...isolated ? [agentHome] : []],
@@ -1644,6 +1649,13 @@ curl -sS -m 10 -o /dev/null ${chopin.url} > /dev/null 2>&1 && echo chopin=ok || 
 				);
 				expect(existsSync(join(home, "escaped.txt"))).toBe(false);
 				expect(git(made.remote, "branch", "--list", "scripted")).toContain("scripted");
+				// atomic-acp kept its session map in the launch's state, never the owner's ~/.atomic.
+				if (isolated) {
+					expect(existsSync(join(agentHome, "atomic-acp", "session-map.json"))).toBe(true);
+					expect(existsSync(ownerMap) ? readFileSync(ownerMap, "utf8") : undefined).toBe(
+						ownerMapBefore,
+					);
+				}
 			} finally {
 				await sandbox.close();
 				chopin.stop();
