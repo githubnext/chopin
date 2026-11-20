@@ -205,7 +205,7 @@ test("a refusal of a key already replaced while a launch is handed out leaves th
 	let second = launch();
 	await held.reached;
 	await credentials.connect("U_mona", "openai", { kind: "api-key", secret: NEW_OPENAI_KEY });
-	await credentials.rejected(old);
+	await credentials.rejected(old, OPENAI_KEY);
 	held.release();
 	expect((await second).grants.map(grant => grant.provider)).toEqual(["openai", "anthropic"]);
 	expect((await storage.aiCredentials.get("U_mona", "openai"))?.rejectedAt).toBeUndefined();

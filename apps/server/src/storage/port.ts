@@ -531,7 +531,8 @@ export interface AiCredentialStore {
 	/**
 	 * Records that `record`'s provider refused it, the key as it was read, as invalid `at`. Changes
 	 * nothing once that key was replaced or removed, so a late refusal of a key never marks the one
-	 * that replaced it, nor one already marked. Returns whether it marked the key; a mark is counted
+	 * that replaced it, nor one already marked, and for a sign-in nothing once a refresh saved tokens
+	 * newer than those it was read with. Returns whether it marked the key; a mark is counted
 	 * for its person as `version` counts a replacement, so a launch reading meanwhile reads again.
 	 */
 	rejected(record: AiCredentialRecord, at: Date): Promise<boolean>;

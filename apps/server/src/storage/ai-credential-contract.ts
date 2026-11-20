@@ -168,7 +168,7 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 			}
 		});
 
-		test("saves a sign-in's refreshed tokens only over the tokens the refresh began from, as no cutoff", async () => {
+		test("saves a sign-in's refreshed tokens only over the tokens the refresh began from, as no cutoff, and marks only the stored pair refused", async () => {
 			let storage = await openedStorage(factory);
 			try {
 				let { userId, lease } = await userAndChannel(storage);
@@ -192,6 +192,12 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 
 				expect(await storage.aiCredentials.refreshed(lease, stored!, second)).toBe(true);
 				expect((await storage.aiCredentials.get(userId, "claude"))?.tokens).toEqual(second);
+				// A refusal of a pair refreshed since marks nothing; one of the stored pair does.
+				expect(await storage.aiCredentials.rejected(stored!, later(30))).toBe(false);
+				let current = (await storage.aiCredentials.get(userId, "claude"))!;
+				expect(current.rejectedAt).toBeUndefined();
+				expect(await storage.aiCredentials.rejected(current, later(30))).toBe(true);
+				expect((await storage.aiCredentials.get(userId, "claude"))?.rejectedAt).toEqual(later(30));
 
 				let again = { ...signIn, ciphertext: bytes(48), updatedAt: later(60) };
 				await storage.aiCredentials.put(lease, again);

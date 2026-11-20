@@ -70,7 +70,7 @@ export class MemoryAiCredentialStore implements AiCredentialStore {
 	}
 	async rejected(record: AiCredentialRecord, at: Date) {
 		let found = this.#same(record);
-		if (!found || found.rejectedAt) return false;
+		if (!found || found.rejectedAt || !sameBytes(found.tokens, record.tokens)) return false;
 		found.rejectedAt = new Date(at);
 		this.deps.cutoffs.cut(record.userId);
 		return true;
