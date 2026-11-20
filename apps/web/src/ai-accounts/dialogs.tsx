@@ -41,6 +41,8 @@ function keyWords({ provider, replacing }: KeyRequest) {
 			lead:
 				"Copilot runs through this token's GitHub account instead of your sign-in. Machines get a stand-in, never the token.",
 			label: "GitHub token",
+			hint:
+				"A fine-grained personal access token with the Copilot Requests permission, or the GitHub CLI's (gh auth token).",
 			submit: replacing ? "Replace token" : "Use token",
 		};
 	}
@@ -48,6 +50,7 @@ function keyWords({ provider, replacing }: KeyRequest) {
 		title: replacing ? `Replace ${name} key` : `Add ${name} key`,
 		lead: `Chopin checks it with ${name} before saving it. Machines get a stand-in, never the key.`,
 		label: "API key",
+		hint: undefined,
 		submit: replacing ? "Replace key" : "Add key",
 	};
 }
@@ -62,11 +65,13 @@ export function KeyDialog(
 ) {
 	let field = useRef<HTMLInputElement>(null);
 	let fieldId = useId();
+	let hintId = useId();
 	let errorId = useId();
 	let [secret, setSecret] = useState("");
 	let [busy, setBusy] = useState(false);
 	let [error, setError] = useState<string>();
 	let words = keyWords(request);
+	let described = [...(words.hint ? [hintId] : []), ...(error ? [errorId] : [])].join(" ");
 	let dismiss = () => {
 		if (!busy) onDismiss();
 	};
@@ -108,7 +113,7 @@ export function KeyDialog(
 				<div className="ai-accounts-field">
 					<label className="font-medium text-text-primary" htmlFor={fieldId}>{words.label}</label>
 					<input
-						aria-describedby={error ? errorId : undefined}
+						aria-describedby={described || undefined}
 						aria-invalid={error ? true : undefined}
 						autoCapitalize="off"
 						autoComplete="off"
@@ -125,6 +130,7 @@ export function KeyDialog(
 						type="password"
 						value={secret}
 					/>
+					{words.hint && <p className="ai-accounts-field-hint" id={hintId}>{words.hint}</p>}
 					{error && (
 						<TerminalAlert className="text-sm text-destructive-ink">
 							<span id={errorId}>{error}</span>

@@ -64,12 +64,37 @@ test("AI accounts sits in the sidebar directly under Machines and opens its page
 	await expect(page.getByRole("heading", { name: "Use an API key", level: 2 })).toBeVisible();
 });
 
-test("GitHub Copilot through a sign-in with a seat is connected and asks for nothing", async ({ baseURL, page }) => {
+test("GitHub Copilot through a sign-in with a seat is connected, takes a token instead, and goes back to the sign-in", async ({ baseURL, page }) => {
 	await open(page, person(), baseURL!);
 	let copilot = row(page, "GitHub Copilot");
 	await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
 	await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
-	await expect(copilot.getByRole("button")).toHaveCount(0);
+	await expect(copilot.getByRole("button")).toHaveText(["Use a token instead"]);
+
+	await copilot.getByRole("button", { name: "Use a token instead" }).click();
+	let dialog = page.getByRole("dialog", { name: "Use a GitHub token for Copilot" });
+	let field = dialog.getByLabel("GitHub token");
+	await expect(field).toBeFocused();
+	await expect(field).toHaveAccessibleDescription(
+		"A fine-grained personal access token with the Copilot Requests permission, or the GitHub CLI's (gh auth token).",
+	);
+	await field.fill("github_pat_e2e_other_account_9a9a");
+	await dialog.getByRole("button", { name: "Use token" }).click();
+	await expect(dialog).toHaveCount(0);
+	await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+	await expect(copilot.getByText("Token ending 9a9a", { exact: true })).toBeVisible();
+	await expect(copilot.getByText("Your GitHub sign-in")).toHaveCount(0);
+	await expect(copilot.getByRole("button")).toHaveText(["Replace", "Use GitHub sign-in"]);
+	await expect(copilot.getByRole("button", { name: "Replace GitHub Copilot token" }))
+		.toBeFocused();
+
+	await page.reload();
+	await expect(copilot.getByText("Token ending 9a9a", { exact: true })).toBeVisible();
+	await copilot.getByRole("button", { name: "Use GitHub sign-in" }).click();
+	await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
+	await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+	await expect(copilot.getByText("Token ending 9a9a")).toHaveCount(0);
+	await expect(copilot.getByRole("button", { name: "Use a token instead" })).toBeFocused();
 });
 
 test("without a seat, Copilot says so, links to Copilot, and takes a token instead", async ({ baseURL, page }) => {
@@ -116,7 +141,7 @@ test("a seat-holder whose sign-in GitHub won't exchange is connected through Cop
 		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
 		await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
 		await expect(copilot).not.toContainText("subscription");
-		await expect(copilot.getByRole("button")).toHaveCount(0);
+		await expect(copilot.getByRole("button")).toHaveText(["Use a token instead"]);
 	} finally {
 		await forgetCopilotAccess(handle);
 	}
@@ -141,7 +166,7 @@ test("a check that couldn't finish never says there is no subscription, and is d
 		await copilotAccess(handle, "access");
 		await page.reload();
 		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
-		await expect(copilot.getByRole("button")).toHaveCount(0);
+		await expect(copilot.getByRole("button")).toHaveText(["Use a token instead"]);
 	} finally {
 		await forgetCopilotAccess(handle);
 	}
@@ -350,7 +375,7 @@ test("with no earlier answer, Copilot says it is checking until the check answer
 		await expect(copilot.getByText("Checking…", { exact: true })).toBeVisible();
 		await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
 		await expect(copilot.getByText("Not checked")).toHaveCount(0);
-		await expect(copilot.getByRole("button")).toHaveCount(0);
+		await expect(copilot.getByRole("button")).toHaveText(["Use a token instead"]);
 
 		await copilotAccess(handle, "access");
 		check.release();

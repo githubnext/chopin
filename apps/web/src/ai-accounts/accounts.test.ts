@@ -29,14 +29,14 @@ function key(summary?: AiCredentialSummary) {
 }
 
 describe("GitHub Copilot through the sign-in", () => {
-	test("with a seat it is connected and asks nothing of the person", () => {
+	test("with a seat it is connected, and still takes a token instead", () => {
 		expect(copilot(SIGN_IN)).toEqual({
 			provider: "github-copilot",
 			name: "GitHub Copilot",
 			badge: { tone: "success", label: "Connected" },
 			lines: ["Your GitHub sign-in"],
 			getCopilot: false,
-			actions: [],
+			actions: ["use-token"],
 		});
 	});
 
@@ -65,7 +65,7 @@ describe("GitHub Copilot through the sign-in", () => {
 		}
 	});
 
-	test("while the page checks, a row with no answer says it is checking", () => {
+	test("while the page checks, a row with no answer says it is checking and takes a token", () => {
 		for (let access of ["unknown", undefined] as const) {
 			expect(copilot({ ...SIGN_IN, copilotAccess: access }, true)).toEqual({
 				provider: "github-copilot",
@@ -73,7 +73,7 @@ describe("GitHub Copilot through the sign-in", () => {
 				badge: { tone: "neutral", label: "Checking…" },
 				lines: ["Your GitHub sign-in"],
 				getCopilot: false,
-				actions: [],
+				actions: ["use-token"],
 			});
 		}
 	});
@@ -125,6 +125,59 @@ describe("GitHub Copilot through a token", () => {
 		expect(row.badge).toEqual({ tone: "warning", label: "Needs reconnecting" });
 		expect(row.actions).toEqual(["replace", "use-sign-in"]);
 	});
+});
+
+describe("every state of the GitHub Copilot row", () => {
+	const CREDENTIALS = {
+		"sign-in": SIGN_IN,
+		token: { provider: "github-copilot", kind: "api-key", suffix: "f00d" },
+		"refused token": {
+			provider: "github-copilot",
+			kind: "api-key",
+			suffix: "f00d",
+			rejectedAt: "2026-11-19T10:00:00.000Z",
+		},
+		"unreadable token": {
+			provider: "github-copilot",
+			kind: "api-key",
+			suffix: "f00d",
+			unusable: true,
+		},
+	} satisfies Record<string, AiCredentialSummary>;
+	const SWITCHES = new Set(["use-token", "use-sign-in", "replace"]);
+
+	let states = Object.entries(CREDENTIALS).flatMap(([credential, base]) =>
+		(["access", "none", "unknown", undefined] as const).flatMap(copilotAccess =>
+			[false, true].map(checking => ({
+				name: `${credential}, access ${copilotAccess}, ${checking ? "" : "not "}checking`,
+				signIn: credential === "sign-in",
+				saidNone: copilotAccess === "none",
+				row: copilot({ ...base, copilotAccess }, checking),
+			}))
+		)
+	);
+
+	test("there are 32 of them", () => {
+		expect(states).toHaveLength(32);
+	});
+
+	for (let { name, signIn, saidNone, row } of states) {
+		test(name, () => {
+			if (signIn) {
+				expect(row.actions).toContain("use-token");
+			} else {
+				expect(row.actions).toContain("replace");
+				expect(row.actions).toContain("use-sign-in");
+			}
+			expect(row.actions.includes("use-token") && row.actions.includes("use-sign-in")).toBe(
+				false,
+			);
+			expect(row.actions.some(action => SWITCHES.has(action))).toBe(true);
+			let claimsNone = row.badge?.label === "No Copilot access" || row.getCopilot
+				|| row.lines.some(line => line.includes("subscription"));
+			if (claimsNone) expect(saidNone).toBe(true);
+		});
+	}
 });
 
 describe("API keys", () => {

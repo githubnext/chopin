@@ -912,9 +912,11 @@ the launch is prepared again without the key, and the person's lasting launches 
 told. Only the key that was sent is marked, so a refusal
 that arrives after the key was replaced leaves the replacement as it is, and a rate
 limit or a refusal of one model marks nothing. GitHub Copilot is always listed and usable through the person's
-current GitHub sign-in, with nothing saved, until they connect a token instead;
-removing that token returns them to the sign-in, and `check` asks GitHub about
-whichever is theirs. Connecting and disconnecting need a
+current GitHub sign-in, with nothing saved, until they connect a token instead,
+which the AI accounts page offers whatever GitHub said of the sign-in, a seat
+included (a token of another GitHub account, whose Copilot plan may offer other
+models); removing that token returns them to the sign-in, and `check` asks GitHub
+about whichever is theirs. Connecting and disconnecting need a
 signed-in browser login and Chopin's own `Origin`. A key is 8 to 4096 printable
 characters with no spaces. An OpenAI or Anthropic key is first checked with one
 request to that provider (`GET /v1/models`) and saved only when the provider
