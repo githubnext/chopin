@@ -419,6 +419,33 @@ test("no resize grip lies over a scroll lane, each still at least 12px to grab (
 	}
 });
 
+/**
+ * A thread opens at its newest line and nothing scrolls it after: its rows mount once it has, and
+ * the thumb follows them to the end of its lane all the same.
+ */
+test("a thread opened at its newest line has its thumb at the end of its lane, with no scroll after it", async ({ join, seed }) => {
+	await seed("# Busy\n\nA long conversation.\n", { transcript: messages(60) });
+	let page = await join("ana", { viewport: { width: 1440, height: 900 } });
+	await longThreads(page, 60, []);
+	await openThread(page);
+	let scroller = page.locator("[data-thread-panel] [data-chat-scroll]");
+	await scroller.hover({ position: { x: 40, y: 40 } });
+	await expect(page.locator("[data-thread-panel] .chat-scroll-track")).toHaveAttribute(
+		"data-pointed",
+		"",
+	);
+	await expect.poll(() =>
+		scroller.evaluate(node => {
+			let lane = node.parentElement!.querySelector<HTMLElement>(".chat-scroll-track")!;
+			let thumb = (lane.firstElementChild as HTMLElement).getBoundingClientRect();
+			return {
+				atEnd: node.scrollHeight - node.scrollTop - node.clientHeight < 1,
+				fromEnd: Math.round(lane.getBoundingClientRect().bottom - thumb.bottom) || 0,
+			};
+		})
+	).toEqual({ atEnd: true, fromEnd: 0 });
+});
+
 /** A finger held on a message, which brings up its toolbar on a touch screen. */
 async function longPress(page: Page, target: Locator): Promise<void> {
 	let box = (await target.boundingBox())!;
