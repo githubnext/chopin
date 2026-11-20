@@ -23,6 +23,7 @@ import {
 } from "@chopin/icons";
 import { ComposerVoice, ComposerVoiceButton } from "@/components/assistant-ui/elements/composer";
 import { FormatBar } from "./format-bar";
+import { TypingLine } from "./typing-line";
 import { LinkForm } from "./link-form";
 import { sendStop } from "./assistant-ui/send-stop";
 import { SendStopButton } from "./assistant-ui/send-stop-button";
@@ -168,6 +169,8 @@ export type ChatComposerProps = {
 	pickers?: ReactNode;
 	/** What leads the row of controls: a thread's choice to also send the reply to Chat. */
 	rowStart?: ReactNode;
+	/** Who else is writing here (`typingWords`), under the box; absent where nobody can be shown. */
+	typing?: string;
 	input: Omit<
 		DraftInputProps,
 		| "role"
@@ -205,6 +208,7 @@ export function ChatComposer(
 		run,
 		pickers,
 		rowStart,
+		typing,
 		input,
 	}: ChatComposerProps,
 ) {
@@ -657,6 +661,7 @@ export function ChatComposer(
 						</>
 					)}
 			</div>
+			{typing !== undefined && <TypingLine words={typing} />}
 		</div>
 	);
 }

@@ -88,6 +88,8 @@ export type TranscriptThreads = {
 	openRootId?: string;
 	canStart: boolean;
 	onOpen: (rootId: string) => void;
+	/** Who is writing in a thread, by its root (`typingWords`), said on the root's row. */
+	replying?: Record<string, string>;
 };
 
 type PlanMarkers = {
@@ -378,6 +380,7 @@ function MessageBody(
 	let own = message.author.kind === "member" && message.author.handle === handle;
 	let delivery = own ? deliveryOf(message) : undefined;
 	let threadSummary = markers.threads?.summaries[message.id];
+	let threadReplying = markers.threads?.replying?.[message.id];
 	let rootOpen = markers.threads?.openRootId === message.id;
 	let threads = markers.threads;
 	let canThread = !!threads
@@ -484,8 +487,13 @@ function MessageBody(
 						/>
 					)}
 					{shown.refusal && <ReactionRefusal text={shown.refusal} />}
-					{threadSummary && markers.threads && (
-						<ThreadSummaryRow onOpen={markers.threads.onOpen} summary={threadSummary} />
+					{(threadSummary || threadReplying) && markers.threads && (
+						<ThreadSummaryRow
+							onOpen={markers.threads.onOpen}
+							replying={threadReplying}
+							rootId={message.id}
+							summary={threadSummary}
+						/>
 					)}
 					<MessageToolbar
 						actions={actions}

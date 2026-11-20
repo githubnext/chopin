@@ -67,6 +67,7 @@ import * as Chat from "./chat/service";
 import { answerWake } from "./chat/wake";
 import { plannerAttachment } from "./chat/planner-attachment";
 import * as Initiative from "./chat/initiative";
+import * as Typing from "./chat/typing";
 import { copiedFrom, reactInChat, reactInThread } from "./chat/thread-reactions";
 import { createChildDocuments } from "./chat/children";
 import { createRootChat } from "./chat/root";
@@ -764,11 +765,25 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 	try {
 		let opened = await opening;
 		opened.chat.initiativeEnabled = config.agent && !opened.parentChannelId;
+		if (!opened.parentChannelId && !opened.chat.typists) watchTyping(room, opened);
 		conversationRuntime.wake(opened);
 		return opened;
 	} finally {
 		if (room.opening === opening) room.opening = undefined;
 	}
+}
+
+/**
+ * Who is writing in a document's Chat and threads, told to everyone in its room, who can all read
+ * it, each without themselves.
+ */
+function watchTyping(room: Rooms.Room, opened: Service.Plan): void {
+	let typists = Typing.createTypingPresence({
+		threadExists: rootId => opened.chat.entries.some(entry => entry.id === rootId),
+		members: () => Rooms.get(room.id) === room && room.plan === opened ? room.members.values() : [],
+	});
+	opened.chat.typists = typists;
+	opened.chat.composing = (turn, writing) => typists.composing(undefined, turn, writing);
 }
 
 /** Who is in a document's conversation now; readers are not (see `Initiative.people`). */
@@ -1432,6 +1447,8 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 					await Threads.greetThreads(chat(room, ws), ws).catch(err =>
 						console.error("chopin: could not send thread summaries -", err)
 					);
+					let typists = opened.chat.typists;
+					if (typists && !ws.data.closed) tell(ws, typists.frame(Initiative.actor(ws)));
 				}
 				// What the Planner can be set to run, and what it is set to, for the composer.
 				if (!parent) {
@@ -1471,11 +1488,12 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		case "chat:typing": {
 			if (!room.plan || room.plan.parentChannelId || typeof frame.active !== "boolean") return;
 			if (archivingChannels.has(room.id) || room.closing || ws.data.closed) return;
-			Initiative.initiative(chat(room, ws))?.typing(
-				ws.data.client,
-				Initiative.actor(ws),
-				frame.active,
-			);
+			Typing.typed(chat(room, ws), ws, {
+				active: frame.active,
+				thread: frame.thread,
+				seq: frame.seq,
+				ago: frame.ago,
+			});
 			return;
 		}
 
@@ -1534,6 +1552,7 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 		}
 
 		case "chat:send":
+			room.plan?.chat.typists?.sent(ws.data.client, frame.thread);
 			try {
 				if (!await plannerWritable(room, ws, frame.rid)) return;
 				await Threads.sendMessage(chat(room, ws), ws, frame);
@@ -2170,6 +2189,7 @@ function closeRoomSocket(ws: Socket): void {
 	if (!room) return;
 	if (room.plan) {
 		room.plan.chat.initiative?.depart(ws.data.client);
+		room.plan.chat.typists?.depart(ws.data.client);
 		if (!room.members.size) room.plan.chat.initiative?.cancel();
 		announceAlone(room);
 		Service.departed(room.plan, ws);

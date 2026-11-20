@@ -49,6 +49,7 @@ export function ThreadComposerBoundary(
 				run={props.run}
 				sendDisabled={props.sendDisabled}
 				sending={props.sending}
+				typing={props.typing}
 				unavailable={props.unavailable}
 			/>
 		</div>

@@ -70,6 +70,8 @@ import {
 	withoutFailure,
 } from "./failure";
 import { TypingReporter } from "./typing";
+import { receiveTypists, threadsWithTypers, typersIn, typingWords } from "./typists";
+import { TypingAnnouncer } from "./typing-line";
 import { useSteadyCallback, useSteadyFields } from "./steady";
 import { asksChopin, asksChopinKey, withChopinMention } from "./ask-chopin";
 import { ChatComposer } from "./composer";
@@ -168,6 +170,7 @@ import type { ChatSendPayload, ComposerDraft, ReferenceTarget, SendFailure } fro
 import type { RetryRefusal } from "./failure";
 import type { Wire as Socket } from "../wire";
 import type { ComposerModel } from "./use-model-choice";
+import type { Typists } from "./typists";
 
 export type ChatProps = {
 	/** The child document open beside this Chat, sent with a Planner message as its focus. */
@@ -451,6 +454,7 @@ export function Chat(
 	}>();
 	let [participationKey, setParticipationKey] = useState(0);
 	let typing = useRef<TypingReporter | undefined>(undefined);
+	let [typists, setTypists] = useState<Typists>();
 	let counts = runCounts(runs);
 	// What the document's agent can be set to run, and what everyone in the room has set it to.
 	let {
@@ -601,7 +605,7 @@ export function Chat(
 			&& participation.wire === wire
 		? participation.state
 		: undefined;
-	let typingEnabled = composerReady && active && agent && !!participationState?.enabled;
+	let typingEnabled = composerReady && active;
 	// Alone in the document, everything this person sends goes to chopin, as the server decides it.
 	let alone = !!agent && !!participationState?.enabled && !!participationState.alone;
 	// A message to the machine is kept in the outbox, so it needs neither the connection nor the
@@ -948,9 +952,22 @@ export function Chat(
 	}, [wire, room]);
 
 	useEffect(() => {
+		setTypists(undefined);
+		if (!wire) return;
+		return wire.on<Wire.Typists>("chat:typists", frame => {
+			setTypists(current => receiveTypists(current, frame));
+		});
+	}, [wire, room]);
+
+	// What a closed connection was told of who is writing ends with it; the next one says again.
+	useEffect(() => {
+		if (!connected) setTypists(undefined);
+	}, [connected]);
+
+	useEffect(() => {
 		if (!wire || !typingEnabled) return;
-		let reporter = new TypingReporter(active => {
-			if (wire.connected) wire.send("chat:typing", { active });
+		let reporter = new TypingReporter(report => {
+			if (wire.connected) wire.send("chat:typing", report);
 		});
 		typing.current = reporter;
 		return () => {
@@ -1467,6 +1484,20 @@ export function Chat(
 		: undefined;
 	let threadSheet = !!workspaceThread
 		&& (workspaceThread.phone || workspaceThread.mode !== "split");
+	// chopin at work is its working row's to show; a line says so only where that is not drawn.
+	let threadTyping = openThreadView
+		? typingWords(typersIn(typists, {
+			thread: openThreadView.rootId,
+			viewer: handle,
+			planner: !progressOf(
+				openThreadView.transcript,
+				transcriptReady && openThreadView.loaded,
+				false,
+			)
+				.working,
+		}))
+		: "";
+	let chatTyping = typingWords(typersIn(typists, { viewer: handle, planner: !workingTurn }));
 	let threadPanelNode = openThreadView
 		? (
 			<Suspense fallback={null}>
@@ -1500,6 +1531,7 @@ export function Chat(
 					sendAcknowledgements={sendAcknowledgements}
 					sheet={threadSheet}
 					summaryCount={threadsState.summaries[openThreadView.rootId]?.replyCount}
+					typing={threadTyping}
 					view={openThreadView}
 					wire={wire}
 				/>
@@ -1519,14 +1551,23 @@ export function Chat(
 		[outbox, unanswered],
 	);
 	let canStartThread = !readonly && !archived && transcriptReady;
+	// Who is writing in each thread, said on its row in Chat; never as Chat's own typing line.
+	let replying = useMemo(() => {
+		let words: Record<string, string> = {};
+		for (let [rootId, typers] of threadsWithTypers(typists, handle)) {
+			words[rootId] = typingWords(typers, "replying");
+		}
+		return words;
+	}, [typists, handle]);
 	let transcriptThreads = useMemo(
 		() => ({
 			summaries: threadsState.summaries,
 			openRootId: threadsState.openRootId,
 			canStart: canStartThread,
 			onOpen: openThread,
+			replying,
 		}),
-		[threadsState.summaries, threadsState.openRootId, canStartThread, openThread],
+		[threadsState.summaries, threadsState.openRootId, canStartThread, openThread, replying],
 	);
 	let hinted = !readonly && !archived;
 	let automatic = participationState?.enabled;
@@ -1617,6 +1658,7 @@ export function Chat(
 	);
 	let renderSplit = (mainColumn: React.ReactNode) => (
 		<div className="chat-split-shell">
+			<TypingAnnouncer chat={chatTyping} thread={threadPanelNode ? threadTyping : undefined} />
 			<div className="chat-split-main">
 				{mainColumn}
 			</div>
@@ -1687,6 +1729,7 @@ export function Chat(
 			<ChatComposer
 				rootRef={composerRoot}
 				inputRef={textarea}
+				typing={chatTyping}
 				agent={!!agent}
 				alone={alone}
 				model={pillModel}
@@ -1839,7 +1882,10 @@ export function Chat(
 					mentions: mentionable,
 					onChange: event => {
 						let next = event.currentTarget.value;
-						if (next !== draftRef.current.text) typing.current?.change();
+						if (next !== draftRef.current.text) {
+							if (next.trim()) typing.current?.change();
+							else typing.current?.stop();
+						}
 						setDraft(current =>
 							reviseComposerDraft(
 								current,

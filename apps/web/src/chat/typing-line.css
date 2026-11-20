@@ -1,0 +1,48 @@
+/*
+ * Who is writing, as Slack shows it under its message box: one line of the extra-small role in the
+ * tertiary ink, set in the composer's foot so the box and the transcript never move for it. Where
+ * the composer has no foot to hold it (a phone, a thread's sheet) it sits just above the box, on
+ * the transcript's own bottom space.
+ */
+.chat-typing {
+	position: absolute;
+	bottom: 100%;
+	inset-inline: calc(var(--spacing) * 2);
+	display: flex;
+	height: calc(var(--spacing) * 4);
+	align-items: center;
+	gap: var(--spacing);
+	margin: 0;
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+	line-height: 1;
+	pointer-events: none;
+}
+
+.workspace-chat-panel .chat-typing {
+	bottom: env(safe-area-inset-bottom);
+	inset-inline: calc(var(--spacing) * 4);
+}
+
+:root[data-phone] .chat-typing {
+	bottom: 100%;
+	inset-inline: calc(var(--spacing) * 2);
+}
+
+.chat-typing-words {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* The connecting dots in the ink of the words beside them, as Slack's typing dots are. */
+.chat-typing-dots {
+	--connecting-dot: calc(var(--spacing) * 0.75);
+	width: auto;
+	height: auto;
+}
+
+.chat-typing-dots .connecting-dot {
+	background: currentColor;
+}

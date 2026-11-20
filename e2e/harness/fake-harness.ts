@@ -24,6 +24,8 @@ type FakeHarnessSettings = {
 
 const SCRIPTED_TOOLS = ["read_plan", "list_pull_requests"] as const;
 const SLOW_PROMPT = "SLOW-LIVE";
+/** Works as `SLOW-LIVE` does, then fails as the model does before its reply is out. */
+const SLOW_FAIL_PROMPT = "SLOW-FAIL";
 /** A comment turn's prompt names its thread; this finds it. */
 const COMMENT_THREAD = /using thread ([0-9A-HJKMNP-TV-Z]{26})/;
 /** A comment saying this is answered only in Chat, so the server's backstop posts it. */
@@ -793,6 +795,22 @@ export function createFakeHarness(
 							} catch (err) {
 								turn.emit({ type: "error", error: err });
 								settled.reject(err);
+							} finally {
+								turn.abortSignal?.removeEventListener("abort", onAbort);
+							}
+						})();
+					} else if (prompt.includes(SLOW_FAIL_PROMPT)) {
+						void (async () => {
+							try {
+								let id = crypto.randomUUID();
+								turn.emit({ type: "text-start", id });
+								turn.emit({ type: "text-delta", id, delta: "Working it out" });
+								await pause();
+								await pause();
+								if (turn.abortSignal?.aborted) return;
+								let error = new Error("429 Too Many Requests");
+								turn.emit({ type: "error", error });
+								settled.reject(error);
 							} finally {
 								turn.abortSignal?.removeEventListener("abort", onAbort);
 							}
