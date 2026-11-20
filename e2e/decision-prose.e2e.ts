@@ -3,7 +3,7 @@
 import { openDecisionDocument } from "./decision-deck-fixtures";
 
 import { content, expect, ready, test } from "./room";
-import { openJevWire, sendChat, wireFrames, wireState } from "./jev-wire";
+import { keepCompany, noticed, openJevWire, sendChat, wireFrames, wireState } from "./jev-wire";
 import { releasePlannerJob, resetPlannerJobs, scriptJob } from "./planner-jobs";
 
 import type { Locator, Page } from "@playwright/test";
@@ -39,6 +39,13 @@ function prose(page: Page, option = OPTION) {
 	return content(page).getByText(`We decided: ${option}`, { exact: true });
 }
 
+/** The paragraph right after the hidden decided card; empty caret lines may follow it. */
+function afterHiddenCard(page: Page) {
+	return content(page).locator(
+		":scope > :is([data-plan-collapsed], :has([data-plan-collapsed])) + p",
+	);
+}
+
 function proseBlock(page: Page) {
 	return content(page).locator("p").filter({ hasText: "We decided:" });
 }
@@ -63,6 +70,7 @@ async function waitForProseJob(page: Page, status: string) {
 async function decide(page: Page, room: string, option = OPTION) {
 	await scriptProse(option);
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	let source = await sendChat(page, QUESTION);
 	await sendChat(page, OPTION);
 	await openDecisionDocument(page);
@@ -97,7 +105,9 @@ test("Save writes prose, collapses the card, marks its margin, and records activ
 
 	await expect(card(page)).toHaveCount(0);
 	await expect(marker(page)).toBeVisible();
-	await expect(page.getByText("chopin wrote up", { exact: false })).toBeVisible();
+	// The routine notice is recorded, but Chat keeps it out of view.
+	await expect.poll(() => noticed(page, "chopin wrote up")).toBe(true);
+	await expect(page.getByText("chopin wrote up", { exact: false })).toHaveCount(0);
 	let [mark, paragraph] = await Promise.all([
 		marker(page).boundingBox(),
 		prose(page).boundingBox(),
@@ -198,7 +208,7 @@ test("ordinary prose edits retain the marker; deletion orphans it for both reade
 test("Backspace after a hidden decided card moves into its prose without deleting the decision", async ({ join, room }) => {
 	let page = await join("ana");
 	await decide(page, room);
-	let trailing = content(page).locator(":scope > p").last();
+	let trailing = afterHiddenCard(page);
 	await expect(trailing).toBeEmpty();
 	await trailing.click();
 	await page.keyboard.type("Following detail.");
@@ -338,6 +348,7 @@ test("a failed prose job is visible on the opening message and Retry uses the co
 	let page = await join("ana");
 	await scriptProse(OPTION, "another-card");
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	let source = await sendChat(page, QUESTION);
 	await sendChat(page, OPTION);
 	await page.getByRole("button", { name: "Document", exact: true }).click();
@@ -358,6 +369,7 @@ test("a write-up shows one quiet line in the document; failure and Retry live in
 	let page = await join("ana");
 	await scriptProse(OPTION, "another-card");
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	await sendChat(page, QUESTION);
 	await sendChat(page, OPTION);
 	await page.getByRole("button", { name: "Document", exact: true }).click();

@@ -1,8 +1,12 @@
+/**
+ * A background job's kind and target, or undefined for an ordinary Planner turn: automatic
+ * participation's, or a person's message to chopin (alone in a document, every message is one).
+ */
 export function scriptContext(prompt: unknown): {
 	kind: "heading" | "refine" | "suggest" | "prose";
 	target: string;
 	initialQuestion?: string;
-} {
+} | undefined {
 	let text: unknown = prompt;
 	if (prompt && typeof prompt === "object" && "role" in prompt && prompt.role === "user") {
 		let content = "content" in prompt ? prompt.content : undefined;
@@ -15,8 +19,11 @@ export function scriptContext(prompt: unknown): {
 			}).join("")
 			: content;
 	}
-	if (typeof text !== "string") throw new Error("scripted Planner requires a text prompt");
+	if (typeof text !== "string" || !text.trim()) {
+		throw new Error("scripted Planner requires a text prompt");
+	}
 	let lines = text.split("\n");
+	if (!lines.some(line => line.startsWith("[Background job:"))) return undefined;
 	let header = /^\[Background job: (heading|refine|suggest|prose)\]$/.exec(lines[0] ?? "");
 	if (!header || lines.filter(line => line.startsWith("[Background job:")).length !== 1) {
 		throw new Error("scripted Planner requires one exact background job header");

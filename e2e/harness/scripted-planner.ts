@@ -114,7 +114,10 @@ export function createPromptScriptedHarness(
 					let driving = (async () => {
 						try {
 							if (finished) return;
-							let { kind, target, initialQuestion } = scriptContext(options.prompt);
+							let context = scriptContext(options.prompt);
+							// This fixture scripts background jobs; an ordinary turn ends without a word.
+							if (!context) return finish();
+							let { kind, target, initialQuestion } = context;
 							let script;
 							try {
 								script = await readScript(dir, kind);

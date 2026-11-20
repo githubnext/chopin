@@ -1,7 +1,21 @@
 import { expect } from "@playwright/test";
 
+import { openIsolatedRoom } from "./room";
+
 import type { ConversationPlan } from "../packages/protocol/index";
 import type { Page } from "@playwright/test";
+
+/**
+ * A second writer with the document open beside `page`'s, closed with `page`'s context. A person
+ * alone in a document is talking to chopin, so their room message goes to the Planner and is never
+ * analysed; with company it stays the conversation's.
+ */
+export async function keepCompany(page: Page, channelId: string, handle = "cy"): Promise<void> {
+	let browser = page.context().browser();
+	if (!browser) throw new Error("keepCompany needs a page from a launched browser");
+	let company = await openIsolatedRoom(browser, new URL(page.url()).origin, channelId, handle, {});
+	page.context().once("close", () => void company.close().catch(() => {}));
+}
 
 export type WireFrame = { kind: string; rid?: string; [key: string]: unknown };
 type BrowserWire = { socket: WebSocket; frames: WireFrame[] };
@@ -31,6 +45,16 @@ export async function openJevWire(page: Page, channelId: string): Promise<void> 
 	await expect.poll(async () =>
 		(await wireFrames(page)).some(frame => frame.kind === "conversation-plan:snapshot")
 	).toBe(true);
+}
+
+/** Whether the wire carried a system notice starting with `text` (Chat may keep it out of view). */
+export async function noticed(page: Page, text: string): Promise<boolean> {
+	return (await wireFrames(page)).some(frame => {
+		let entry = frame.kind === "chat:message"
+			? frame.entry as { author?: { kind?: string }; text?: string } | undefined
+			: undefined;
+		return entry?.author?.kind === "system" && !!entry.text?.startsWith(text);
+	});
 }
 
 export async function wireFrames(page: Page): Promise<WireFrame[]> {

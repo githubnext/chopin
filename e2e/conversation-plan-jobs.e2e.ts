@@ -1,5 +1,13 @@
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
-import { openJevWire, sendChat, wireFrames, wireRequest, wireState } from "./jev-wire";
+import {
+	keepCompany,
+	noticed,
+	openJevWire,
+	sendChat,
+	wireFrames,
+	wireRequest,
+	wireState,
+} from "./jev-wire";
 import { releasePlannerJob, resetPlannerJobs, scriptJob } from "./planner-jobs";
 
 import type { Page } from "@playwright/test";
@@ -139,7 +147,9 @@ test("both collaborators wait for a short generated question and retain options 
 				decision.getByText("A limited pilot lets the team learn before a wider release."),
 			).toBeVisible();
 			await expect(decision.getByText("chopin is refining…", { exact: true })).toHaveCount(0);
-			await expect(page.getByText(`chopin refined ${REFINED}`, { exact: true })).toBeVisible();
+			// The routine notice is recorded, but Chat keeps it out of view.
+			await expect.poll(() => noticed(page, `chopin refined ${REFINED}`)).toBe(true);
+			await expect(page.getByText(`chopin refined ${REFINED}`, { exact: true })).toHaveCount(0);
 		}
 		await waitForRefine(ana, messageId, "done");
 		await waitForRefine(bo, messageId, "done");
@@ -162,6 +172,7 @@ test("invalid generated wording leaves a retryable job beside the exact source m
 	}]);
 	let page = await join("ana");
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	let messageId = await sendChat(page, QUESTION);
 	await waitForRefine(page, messageId, "failed");
 	await expect(page.getByRole("article", { name: "Decision", exact: true })).toHaveCount(0);
@@ -176,6 +187,7 @@ test("failed jobs survive reload, keep diagnostics in place, and retry with the 
 	await refineScript({ target: "not-this-card" });
 	let page = await join("ana");
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	let messageId = await sendChat(page, QUESTION);
 	await expect(card(page)).toHaveCount(0);
 	let chatMessage = message(page, messageId);
@@ -210,6 +222,7 @@ test("an archived held job becomes interrupted and retries only after the docume
 	await refineScript({ hold: true });
 	let page = await join("ana");
 	await openJevWire(page, room);
+	await keepCompany(page, room);
 	let messageId: string | undefined;
 	try {
 		messageId = await sendChat(page, QUESTION);
@@ -241,6 +254,7 @@ test("read-only collaborators cannot retry a failed Planner job", async ({ baseU
 	await refineScript({ target: "not-this-card" });
 	let writer = await join("ana");
 	await openJevWire(writer, room);
+	await keepCompany(writer, room);
 	let messageId = await sendChat(writer, QUESTION);
 	await expect(card(writer)).toHaveCount(0);
 	await waitForRefine(writer, messageId, "failed");

@@ -3,7 +3,7 @@ import { e2ePort } from "./ports";
 import { createChannel } from "./database";
 import { releaseJev, resetJevControl } from "./jev-control";
 import { RESTART_URL, startJevProcess, stopJevProcess } from "./jev-process";
-import { openJevWire, sendChat, wireFrames, wireRequest, wireState } from "./jev-wire";
+import { keepCompany, openJevWire, sendChat, wireFrames, wireRequest, wireState } from "./jev-wire";
 import { authenticate, content, expect, ready, roomPath, test } from "./room";
 
 import type { ConversationPlan } from "../packages/protocol/index";
@@ -209,6 +209,7 @@ test("a delayed inference leaves chat live and preserves a concurrent wording ed
 test("failure retries once; refresh and restricted sockets preserve state", async ({ baseURL, browser, join, room }) => {
 	let ana = await join("ana");
 	await openJevWire(ana, room);
+	await keepCompany(ana, room);
 	let priorMessageId = await sendChat(ana, "Should we ship a small pilot?");
 	await stateWith(ana, "thread.opened");
 	let prior = await stateWith(ana, "card.linked");

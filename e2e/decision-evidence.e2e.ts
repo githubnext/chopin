@@ -3,7 +3,7 @@
 import { openDecisionDocument } from "./decision-deck-fixtures";
 
 import { expect, test } from "./room";
-import { openJevWire, sendChat, wireFrames, wireState } from "./jev-wire";
+import { keepCompany, openJevWire, sendChat, wireFrames, wireState } from "./jev-wire";
 import { resetPlannerJobs, scriptJob } from "./planner-jobs";
 
 import type { Locator, Page } from "@playwright/test";
@@ -215,6 +215,7 @@ test("an open panel updates to the room's current stance", async ({ join, room }
 test("Planner option evidence navigates to its exact saved chat source", async ({ join, room }) => {
 	let ana = await join("ana");
 	await openJevWire(ana, room);
+	await keepCompany(ana, room);
 	let sourceQuote = "Start with a small pilot.";
 	let sourceId = await sendChat(ana, sourceQuote);
 	await expect.poll(async () =>
@@ -298,8 +299,9 @@ test("Planner option evidence navigates to its exact saved chat source", async (
 });
 
 test("a long panel clamps to a short viewport and keeps its own scrollable evidence reachable", async ({ join, room }) => {
+	// As long as a rationale may be (160 characters): five of them overflow a short viewport.
 	let rationale = "This option keeps the pilot concrete while collecting useful delivery evidence. "
-		.repeat(3).trim();
+		.repeat(2).trim();
 	await scriptJob("suggest", [{
 		tool: "refine_decision",
 		args: {
@@ -313,6 +315,7 @@ test("a long panel clamps to a short viewport and keeps its own scrollable evide
 	}]);
 	let ana = await join("ana", { viewport: { width: 800, height: 360 } });
 	await openJevWire(ana, room);
+	await keepCompany(ana, room);
 	await sendChat(ana, QUESTION);
 	await openDecisionDocument(ana);
 	await expect(card(ana).getByRole("radio", { name: "Pilot cohort 5", exact: true })).toBeVisible();
