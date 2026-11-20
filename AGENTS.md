@@ -257,9 +257,11 @@ durable.
   has `CONNECT` on it alone and its `atomic` schema, and no other connectable database
   lets the role connect, checked with `has_database_privilege` on each before its login is
   on and by connecting to each but the machines' own after; a `REVOKE` that only warned (the
-  administrator doesn't own the database) refuses the login. An existing role or database
-  that isn't the managed one (other roles its members, no `chopin:machine-store` comment)
-  is refused, never repaired, a password is changed only while the role holds nothing but
+  administrator doesn't own the database) refuses the login. The one exception is a database
+  the operator names in `MACHINE_STORE_OPEN_DATABASES`, one a managed service owns and keeps
+  open to every role, never `postgres`, `template1`, the administrator's or a machine's. An
+  existing role or database that isn't the managed one (other roles its members, no
+  `chopin:machine-store` comment) is refused, never repaired, a password is changed only while the role holds nothing but
   `CONNECT` without grant option on its database, and turning a login off or dropping it
   touches only a marked role and a marked database the administrator owns. Passwords reach PostgreSQL only as a SCRAM
   verifier, are kept encrypted (`machine_databases`), and a rotation keeps the working one

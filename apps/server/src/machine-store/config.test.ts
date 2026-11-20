@@ -78,4 +78,42 @@ describe("MACHINE_STORE_URL", () => {
 			"MACHINE_STORE_RETENTION_DAYS",
 		);
 	});
+
+	test("takes the databases a service keeps open to every role, never one machines must not reach", () => {
+		let base = { MACHINE_STORE_URL: "postgresql://admin@db.example.com/control" };
+		expect(
+			machineStoreConfig({
+				...base,
+				MACHINE_STORE_OPEN_DATABASES: " provider_stats, provider_maintenance,,provider_stats ",
+			}),
+		).toEqual({
+			url: base.MACHINE_STORE_URL,
+			openDatabases: ["provider_stats", "provider_maintenance"],
+		});
+		expect(machineStoreConfig({ ...base, MACHINE_STORE_OPEN_DATABASES: " , " })).toEqual({
+			url: base.MACHINE_STORE_URL,
+		});
+		for (
+			let name of [
+				"postgres",
+				"template1",
+				"control",
+				`m_${"a".repeat(32)}`,
+				`m_x${"0".repeat(48)}`,
+			]
+		) {
+			expect(() =>
+				machineStoreConfig({ ...base, MACHINE_STORE_OPEN_DATABASES: `provider_stats,${name}` })
+			).toThrow(`MACHINE_STORE_OPEN_DATABASES can't name ${name}`);
+		}
+		expect(() =>
+			machineStoreConfig({
+				MACHINE_STORE_URL: "postgresql://admin@db.example.com",
+				MACHINE_STORE_OPEN_DATABASES: "admin",
+			})
+		).toThrow("can't name admin");
+		expect(() => machineStoreConfig({ MACHINE_STORE_OPEN_DATABASES: "provider_stats" })).toThrow(
+			"need MACHINE_STORE_URL",
+		);
+	});
 });

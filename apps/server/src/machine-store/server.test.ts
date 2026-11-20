@@ -196,6 +196,17 @@ if (!database) {
 				let tables = await client0<{ owner: string }[]>`
 					SELECT DISTINCT tableowner AS owner FROM pg_tables WHERE schemaname = 'atomic'
 				`;
+				let trigrams = await client0<{ name: string }[]>`
+					SELECT indexname AS name FROM pg_indexes
+					WHERE schemaname = 'atomic' AND indexdef LIKE '%extensions.gin_trgm_ops%'
+				`;
+				expect(trigrams.length).toBeGreaterThan(0);
+				expect(
+					await refusedCode(
+						client0.unsafe("CREATE FUNCTION extensions.f() RETURNS int AS 'SELECT 1' LANGUAGE sql"),
+					),
+				)
+					.toBe("42501");
 				await client0.close();
 				let client = asRole(role, password);
 				try {
@@ -468,6 +479,102 @@ if (!database) {
 			}
 		});
 
+		test("leaves alone the databases a service keeps open to every role, once its operator names them", async () => {
+			let suffix = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
+			let administrator = `store_admin_${suffix}`;
+			let control = `store_control_${suffix}`;
+			let provider = `provider_${suffix}`;
+			let stats = `provider_stats_${suffix}`;
+			let maintenance = `provider_maintenance_${suffix}`;
+			let administratorPassword = newStorePassword();
+			await sql.unsafe(
+				`CREATE ROLE "${administrator}" LOGIN CREATEROLE CREATEDB PASSWORD '${administratorPassword}'`,
+			);
+			await sql.unsafe(`CREATE ROLE "${provider}" NOLOGIN`);
+			await sql.unsafe(`CREATE DATABASE "${control}" OWNER "${administrator}"`);
+			// The service's own databases, which every role may connect to and its operator can't close.
+			await sql.unsafe(`CREATE DATABASE "${stats}" OWNER "${provider}"`);
+			await sql.unsafe(`CREATE DATABASE "${maintenance}" OWNER "${provider}"`);
+			let open = await sql<{ name: string }[]>`
+				SELECT datname AS name FROM pg_database
+				WHERE datallowconn AND datname NOT IN ${sql([control, stats, maintenance])}
+			`;
+			for (let { name } of open) {
+				await sql.unsafe(`REVOKE CONNECT ON DATABASE "${name}" FROM PUBLIC`);
+				await sql.unsafe(`GRANT CONNECT ON DATABASE "${name}" TO "${administrator}"`);
+			}
+			let url = new URL(database!);
+			url.username = administrator;
+			url.password = "";
+			url.pathname = `/${control}`;
+			let limited = (openDatabases?: string[]) =>
+				new PostgresMachineStoreServer({
+					url: url.href,
+					password: administratorPassword,
+					...(openDatabases ? { openDatabases } : {}),
+				});
+			let unnamed = limited();
+			let named = limited([stats, maintenance]);
+			let role = newRole();
+			let other = newRole();
+			let password = newStorePassword();
+			let otherPassword = newStorePassword();
+			try {
+				let refusal = await unnamed.provision(role, password).catch((error: Error) => error);
+				expect(refusal).toBeInstanceOf(MachineStoreRefusal);
+				expect((refusal as Error).message).toContain(`${maintenance} and ${stats}`);
+				expect((refusal as Error).message).toContain("MACHINE_STORE_OPEN_DATABASES");
+				expect(await refusedCode(connectAs(role, password, role))).not.toBe("connected");
+
+				await named.provision(role, password);
+				await named.provision(other, otherPassword);
+				expect(await connectAs(role, password, role)).toBe(role);
+				for (let name of [stats, maintenance]) {
+					expect(await connectAs(role, password, name)).toBe(role);
+				}
+				for (let name of ["postgres", "template1", control, other]) {
+					expect(await refusedCode(connectAs(role, password, name))).toBe("42501");
+				}
+				let inside = asRole(role, password);
+				try {
+					let [trigrams] = await inside<{ schema: string }[]>`
+						SELECT n.nspname AS schema FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
+						WHERE e.extname = 'pg_trgm'
+					`;
+					expect(trigrams).toEqual({ schema: "extensions" });
+				} finally {
+					await inside.close();
+				}
+
+				let mistaken = limited([stats, other]);
+				try {
+					await expect(mistaken.provision(newRole(), newStorePassword())).rejects.toThrow(
+						`MACHINE_STORE_OPEN_DATABASES names ${other}`,
+					);
+				} finally {
+					await mistaken.close();
+				}
+			} finally {
+				await unnamed.close();
+				await named.close();
+				for (let name of [role, other]) {
+					await sql.unsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`).catch(() => {});
+					await sql.unsafe(`DROP ROLE IF EXISTS "${name}"`).catch(() => {});
+				}
+				for (let name of [control, stats, maintenance]) {
+					await sql.unsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`).catch(() => {});
+				}
+				for (let { name } of open) {
+					await sql.unsafe(`REVOKE CONNECT ON DATABASE "${name}" FROM "${administrator}"`).catch(
+						() => {},
+					);
+				}
+				for (let name of [administrator, provider]) {
+					await sql.unsafe(`DROP ROLE IF EXISTS "${name}"`).catch(() => {});
+				}
+			}
+		});
+
 		test("turns off a login it made even after someone widened it", async () => {
 			let role = newRole();
 			let password = newStorePassword();
@@ -487,7 +594,8 @@ if (!database) {
 			let open = asRole(role, password);
 			await open`SELECT 1`;
 			await server.disable(role);
-			expect(await refusedCode(connectAs(role, password, role))).not.toBe("connected");
+			expect(await refusedCode(connectAs(role, password, role))).toBe("28000");
+			expect(await server.accepts(role, password)).toBe(false);
 			expect(await refusedCode(open`SELECT 1`)).not.toBe("connected");
 			await open.close().catch(() => {});
 			await server.drop(role);

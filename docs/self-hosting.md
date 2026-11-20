@@ -407,6 +407,7 @@ the image.
 | `MACHINE_STORE_PASSWORD_FILE`     | empty                   | Path of the administrator role's password, read at startup. Not with `MACHINE_STORE_PASSWORD`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `MACHINE_STORE_PASSWORD`          | empty                   | The administrator role's password, for platforms that put secrets (a Key Vault reference, for one) in the environment.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `MACHINE_STORE_RETENTION_DAYS`    | never                   | Whole days after a machine is revoked or unpaired before its database and role are dropped. Unset keeps them, with the login turned off.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `MACHINE_STORE_OPEN_DATABASES`    | empty                   | Comma-separated databases the service owns and keeps open to every role, which its administrator can't close, such as a managed service's query-store or maintenance database. Machines may connect to them; Chopin neither revokes `CONNECT` on them nor refuses a login over them. Never `postgres`, `template1`, the administrator's own or a machine's database; see [Agent sessions database for machines](#agent-sessions-database-for-machines).                                                                                                                                                                                                           |
 | `AUTH_MODE`                       | `hosted`                | Set `local` for loopback device-flow sign-in with persisted credentials (see [Authentication](authentication.md#local-device-flow-sign-in)). Any other value fails startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `DEMO_PERSONAS`                   | `off`                   | Set `on` to enable the server-owned local demo collaborators (Lily and Felix). Requires `AUTH_MODE=local` on a loopback bind; otherwise, or for any value besides `on` and `off`, startup fails.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `CHOPIN_LOCAL_CREDENTIALS_DIR`    | platform default        | Local mode only. Overrides the plaintext-fallback credential directory (default `~/.config/chopin` on Linux, `~/Library/Application Support/Chopin` on macOS, `%APPDATA%\Chopin` on Windows). Must resolve outside the repository and process working directory.                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -928,15 +929,29 @@ For each machine Chopin keeps, under the administrator role:
   then checked twice: no other connectable database may give the role `CONNECT`
   (`has_database_privilege`) before its login is turned on, and once it is, a login as
   the role must fail on `postgres`, `template1`, the administrator's own database and
-  every other connectable database but the machines' own. Give the administrator a
-  server of its own: other applications' roles on it need `CONNECT` granted to them by
-  name.
+  every other connectable database but the machines' own and those named in
+  `MACHINE_STORE_OPEN_DATABASES`. Give the administrator a server of its own: other
+  applications' roles on it need `CONNECT` granted to them by name;
+- a schema `extensions` owned by the administrator, which the role may use but not
+  write, holding `pg_trgm`, which the role can't add itself and Atomic indexes session
+  search with. Where the server doesn't allow `pg_trgm`, Chopin logs a warning and
+  Atomic searches without the index.
 
 The administrator role needs `CREATEROLE` and `CREATEDB` (a managed service's
 administrator has both) and must own the server's other databases. A `REVOKE` by a
 role that doesn't own a database only warns, so where `CONNECT` stays, Chopin refuses
 to hand out the login, and the Machines page says which database is still open and that
 its owner must revoke it.
+
+A managed PostgreSQL service gives its operator such an administrator and keeps some
+databases of its own, a query-store or maintenance database for one, open to every
+role, so every machine's login would be refused. Name those databases in
+`MACHINE_STORE_OPEN_DATABASES` (`MACHINE_STORE_OPEN_DATABASES=provider_stats,provider_maintenance`):
+Chopin leaves them as they are and doesn't count them, and a machine can connect to them
+and read what the service lets every role read there. Name only databases the service
+owns and that hold no machine's data. Chopin refuses to start with `postgres`,
+`template1`, the administrator's own database or a machine's name among them, and refuses
+a login while one of them is a database Chopin made for a machine.
 
 The password is 32 random bytes, sent to PostgreSQL only as a SCRAM-SHA-256 verifier
 computed by Chopin, kept by Chopin as AES-GCM ciphertext under a key derived from
