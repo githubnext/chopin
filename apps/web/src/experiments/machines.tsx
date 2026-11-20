@@ -21,7 +21,7 @@ import { motionImmediately } from "../motion-input";
 import { NavigationDialog } from "../navigation-dialog";
 import { TerminalAlert } from "../terminal-alert";
 import { session } from "../api";
-import { experimentRequest } from "./api";
+import { experimentRequest, ExperimentRequestError } from "./api";
 import { listProblem } from "./pairing-problems";
 
 import type { KeyboardEvent } from "react";
@@ -171,7 +171,7 @@ export function DisconnectMachineDialog(
 ) {
 	let cancel = useRef<HTMLButtonElement>(null);
 	let [busy, setBusy] = useState(false);
-	let [failed, setFailed] = useState(false);
+	let [failed, setFailed] = useState<false | { said?: string }>(false);
 	let dismiss = () => {
 		if (!busy) onDismiss();
 	};
@@ -185,8 +185,12 @@ export function DisconnectMachineDialog(
 				{},
 			);
 			onDisconnected();
-		} catch {
-			setFailed(true);
+		} catch (error) {
+			setFailed(
+				error instanceof ExperimentRequestError && error.code === "machine-store-unavailable"
+					? { said: error.message }
+					: {},
+			);
 			setBusy(false);
 		}
 	}
@@ -205,7 +209,8 @@ export function DisconnectMachineDialog(
 			</p>
 			{failed && (
 				<TerminalAlert className="mt-3 text-sm text-destructive-ink">
-					Couldn't disconnect {machine.label}. Check your connection, then try again.
+					{failed.said
+						?? `Couldn't disconnect ${machine.label}. Check your connection, then try again.`}
 				</TerminalAlert>
 			)}
 			<div className="mt-4 flex justify-end gap-2">

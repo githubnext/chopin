@@ -33,6 +33,7 @@ export class MachineStores {
 	readonly #options: Options;
 	readonly #key: Promise<CryptoKey>;
 	readonly #queues = new Map<string, Promise<unknown>>();
+	readonly #reported = new Map<string, string | undefined>();
 
 	constructor(options: Options) {
 		this.#options = options;
@@ -47,8 +48,20 @@ export class MachineStores {
 		return this.#serial(machine.id, () => this.#rotate(machine));
 	}
 
-	disable(machineId: string): Promise<void> {
-		return this.#serial(machineId, () => this.#disable(machineId));
+	async disable(machineId: string): Promise<void> {
+		try {
+			await this.#serial(machineId, () => this.#disable(machineId));
+		} catch (error) {
+			throw error instanceof MachineStoreRefusal ? error : new MachineStoreRefusal(reasonOf(error));
+		}
+	}
+
+	async report(machineId: string, problem: string | undefined): Promise<void> {
+		let reported = problem?.slice(0, MACHINE_STORE_REASON_LIMIT) || undefined;
+		if (this.#reported.has(machineId) && this.#reported.get(machineId) === reported) return;
+		if (await this.#options.storage.machineDatabases.report(machineId, reported)) {
+			this.#reported.set(machineId, reported);
+		}
 	}
 
 	async statuses(machineIds: readonly string[]): Promise<Map<string, MachineStoreStatus>> {
@@ -57,9 +70,15 @@ export class MachineStores {
 			machineIds.map(id => [id, { state: "pending" }]),
 		);
 		for (let record of records) {
-			if (record.state === "ready") found.set(record.machineId, { state: "ready" });
 			if (record.state === "failed") {
 				found.set(record.machineId, { state: "failed", reason: record.failure ?? "" });
+			} else if (record.state === "ready") {
+				found.set(
+					record.machineId,
+					record.connectorProblem
+						? { state: "failed", reason: record.connectorProblem }
+						: { state: "ready" },
+				);
 			}
 		}
 		return found;
@@ -160,18 +179,26 @@ export class MachineStores {
 		return next;
 	}
 
+	async #paired(machineId: string): Promise<void> {
+		let machine = await this.#options.storage.machines.get(machineId);
+		if (!machine || machine.revokedAt) {
+			throw new MachineStoreRefusal("this machine is no longer paired with Chopin");
+		}
+	}
+
 	async #login(machine: StoredMachine): Promise<MachineStoreLogin> {
+		await this.#paired(machine.id);
 		let record = await this.#settled(await this.#stored(machine.id));
 		if (record.state === "disabled" || record.state === "dropped") {
 			throw new MachineStoreRefusal("this machine's database login is turned off");
 		}
 		let password = await this.#open(record, record.revision, record.ciphertext);
 		if (password === undefined) {
-			let revision = record.revision + 1;
+			let revision = Math.max(record.revision, record.candidate?.revision ?? 0) + 1;
 			let sealed = await this.#seal(record, revision);
 			password = sealed.password;
-			record = { ...record, revision, ciphertext: sealed.ciphertext, state: "pending" };
-			delete record.failure;
+			let { candidate: _, failure: __, ...rest } = record;
+			record = { ...rest, revision, ciphertext: sealed.ciphertext, state: "pending" };
 			await this.#put(record);
 		}
 		if (record.state !== "ready") {
@@ -188,16 +215,23 @@ export class MachineStores {
 					? error
 					: new MachineStoreRefusal(reasonOf(error));
 			}
-			let { failure: _, ...ready } = record;
+			let { failure: _, candidate: __, ...ready } = record;
 			await this.#put({ ...ready, state: "ready", updatedAt: this.#options.clock() });
 		}
 		return { url: this.#options.server.loginUrl(record.role), password };
 	}
 
 	async #rotate(machine: StoredMachine): Promise<void> {
+		await this.#paired(machine.id);
 		let record = await this.#settled(await this.#stored(machine.id));
 		if (record.state === "disabled" || record.state === "dropped") {
 			throw new MachineStoreRefusal("this machine's database login is turned off");
+		}
+		if (record.candidate) {
+			throw new MachineStoreRefusal(
+				"the database server hasn't confirmed this machine's last password change yet; "
+					+ "try again once it answers",
+			);
 		}
 		let revision = record.revision + 1;
 		let sealed = await this.#seal(record, revision);

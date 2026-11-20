@@ -499,6 +499,7 @@ export interface MachineDatabaseStore {
 	many(machineIds: readonly string[]): Promise<StoredMachineDatabase[]>;
 	claim(record: StoredMachineDatabase): Promise<StoredMachineDatabase>;
 	put(record: StoredMachineDatabase): Promise<boolean>;
+	report(machineId: string, problem: string | undefined): Promise<boolean>;
 	settling(dropBefore?: Date): Promise<StoredMachineDatabase[]>;
 }
 

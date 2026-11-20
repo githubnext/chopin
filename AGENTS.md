@@ -256,10 +256,14 @@ durable.
   (`apps/server/src/machine-store/`): the administrator owns the database, the role
   has `CONNECT` on it alone and its `atomic` schema, and no other database of the
   server lets `PUBLIC` connect, checked by connecting. An existing role or database
-  that isn't the managed one is refused, never repaired. Passwords reach PostgreSQL
-  only as a SCRAM verifier, are kept encrypted (`machine_databases`), and a rotation
-  keeps the working one until PostgreSQL has the new one. Revoking or unpairing turns
-  the login off before the revoke is answered. The connector writes the login only into
+  that isn't the managed one (other roles its members, no `chopin:machine-store` comment)
+  is refused, never repaired, and turning a login off or dropping it touches only a marked
+  role and a database the administrator owns. Passwords reach PostgreSQL only as a SCRAM
+  verifier, are kept encrypted (`machine_databases`), and a rotation keeps the working one
+  until PostgreSQL has the new one, refused while the last one's outcome is unknown. A
+  login is never handed to a revoked machine, checked in the per-machine queue revoking
+  waits on. Revoking or unpairing turns the login off before the revoke is answered as
+  done; one that can't is answered 503 with the reason, and revoking again finishes it. The connector writes the login only into
   the private Atomic directories of agents on Chopin's AI accounts
   (`apps/connector/src/machine-store.ts`), never the person's `~/.atomic`. A failure
   never fails pairing; the connector and the Machines page say it.

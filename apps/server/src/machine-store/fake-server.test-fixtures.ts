@@ -10,11 +10,13 @@ export class FakeMachineStoreServer implements MachineStoreServer {
 	refuse?: string;
 	failAfterApplying = false;
 	unreachable = false;
+	provisioning?: Promise<void>;
 	loginUrl(role: string) {
 		return `postgresql://${role}@db.example.com:5432/${role}?sslmode=verify-full`;
 	}
 	async provision(role: string, password: string) {
 		this.calls.push(`provision ${role}`);
+		await this.provisioning;
 		if (this.refuse) throw new MachineStoreRefusal(this.refuse);
 		this.passwords.set(role, password);
 		this.enabled.add(role);

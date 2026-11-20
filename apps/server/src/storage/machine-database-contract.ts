@@ -92,6 +92,27 @@ export function machineDatabaseContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		test("keeps the setup problem a machine reported apart from the login's own changes", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { machineId, login } = await paired(storage);
+				expect(await storage.machineDatabases.report(machineId, "adapter missing")).toBe(false);
+				let ready = login({ state: "ready" });
+				await storage.machineDatabases.claim(ready);
+				expect(await storage.machineDatabases.report(machineId, "adapter missing")).toBe(true);
+				expect(await storage.machineDatabases.get(machineId))
+					.toEqual({ ...ready, connectorProblem: "adapter missing" });
+				let changed = { ...ready, revision: 2, updatedAt: later(1) };
+				expect(await storage.machineDatabases.put(changed)).toBe(true);
+				expect(await storage.machineDatabases.get(machineId))
+					.toEqual({ ...changed, connectorProblem: "adapter missing" });
+				expect(await storage.machineDatabases.report(machineId, undefined)).toBe(true);
+				expect(await storage.machineDatabases.get(machineId)).toEqual(changed);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		test("lists revoked machines' logins to disable, then disabled ones past retention", async () => {
 			let storage = await openedStorage(factory);
 			try {

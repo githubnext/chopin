@@ -24,6 +24,13 @@ export class MachineError extends Error {
 	}
 }
 
+export class MachineCutoffError extends Error {
+	constructor(readonly reason: string) {
+		super(reason);
+		this.name = "MachineCutoffError";
+	}
+}
+
 type Grant = {
 	accessToken: string;
 	accessExpiresAt: number;
@@ -175,14 +182,18 @@ export class Machines {
 		if (revoked) {
 			this.#forget(id);
 			this.#end(id);
-			await this.#options.revoked?.(id).catch((error: unknown) => {
-				console.error(
-					"[machines] turning off a revoked machine's database login failed:",
-					error instanceof Error ? error.message : "unknown error",
-				);
-			});
+		} else {
+			let found = await this.#storage.machines.get(id);
+			if (!found || found.userId !== userId || !found.revokedAt) return false;
 		}
-		return revoked;
+		try {
+			await this.#options.revoked?.(id);
+		} catch (error) {
+			throw new MachineCutoffError(
+				error instanceof Error && error.message ? error.message : "the cutoff failed",
+			);
+		}
+		return true;
 	}
 
 	/** Calls `listener` with a machine's id once it is revoked or must be authorized again. */
@@ -246,7 +257,9 @@ export class Machines {
 	async #admitted(machine: StoredMachine, grant: Grant): Promise<void> {
 		if (!this.#options.authorize) return;
 		if (await this.#options.authorize(machine.userId, grant.accessToken)) return;
-		await this.revoke(machine.id, machine.userId);
+		await this.revoke(machine.id, machine.userId).catch((error: unknown) => {
+			if (!(error instanceof MachineCutoffError)) throw error;
+		});
 		throw new MachineError("machine-revoked");
 	}
 

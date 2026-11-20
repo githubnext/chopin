@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { Machines } from "../auth/machines";
+import { MachineCutoffError, Machines } from "../auth/machines";
 import { machine, owner } from "../storage/machine-contract";
 import { testLease } from "../storage/contract-support";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { FakeMachineStoreServer as FakeServer } from "./fake-server.test-fixtures";
+import { machineStoreName } from "./names";
 import { MachineStores } from "./service";
 
 import type { StoredMachine } from "../storage/model";
@@ -123,6 +124,27 @@ describe("machine database logins", () => {
 		expect((await storage.machineDatabases.get(laptop.id))!.candidate).toBeUndefined();
 	});
 
+	test("refuse a rotation while the last one's outcome is unknown, keeping the login it set", async () => {
+		let { storage, server, stores, paired } = await setup();
+		let laptop = await paired();
+		await stores.login(laptop);
+		server.failAfterApplying = true;
+		server.unreachable = true;
+		await expect(stores.rotate(laptop)).rejects.toThrow("the connection dropped");
+		server.failAfterApplying = false;
+		let pending = (await storage.machineDatabases.get(laptop.id))!.candidate;
+		expect(pending).toBeDefined();
+		server.calls.length = 0;
+		server.refuse = "the server refused";
+		await expect(stores.rotate(laptop)).rejects.toThrow("hasn't confirmed");
+		delete server.refuse;
+		expect(server.calls).toEqual([]);
+		expect((await storage.machineDatabases.get(laptop.id))!.candidate).toEqual(pending);
+		server.unreachable = false;
+		let login = await stores.login(laptop);
+		expect(await server.accepts(new URL(login.url).username, login.password)).toBe(true);
+	});
+
 	test("serialize rotations of one machine", async () => {
 		let { server, stores, paired } = await setup();
 		let laptop = await paired();
@@ -140,7 +162,7 @@ describe("machine database logins", () => {
 		expect(await machines.revoke(laptop.id, userId)).toBe(true);
 		expect(server.enabled.has(role)).toBe(false);
 		expect(await server.accepts(role, login.password)).toBe(false);
-		await expect(stores.login(laptop)).rejects.toThrow("turned off");
+		await expect(stores.login(laptop)).rejects.toThrow("no longer paired");
 		await stores.sweep();
 		expect(server.dropped.has(role)).toBe(false);
 		advance(31 * DAY);
@@ -148,18 +170,80 @@ describe("machine database logins", () => {
 		expect(server.dropped.has(role)).toBe(true);
 	});
 
-	test("turn off a revoked machine's login at the next sweep when the server was down", async () => {
+	test("refuse to call a revocation done until the login is off, and finish it later", async () => {
 		let { server, stores, machines, userId, paired } = await setup();
 		let laptop = await paired();
+		let desk = await paired();
 		let login = await stores.login(laptop);
 		let role = new URL(login.url).username;
+		await stores.login(desk);
+		let deskRole = machineStoreName(desk.id);
 		server.refuse = "Chopin couldn't reach the database server";
-		expect(await machines.revoke(laptop.id, userId)).toBe(true);
+		let refused = await machines.revoke(laptop.id, userId).catch(error => error);
+		expect(refused).toBeInstanceOf(MachineCutoffError);
+		expect(refused.reason).toBe("Chopin couldn't reach the database server");
 		expect(server.enabled.has(role)).toBe(true);
+		await expect(machines.revoke(laptop.id, userId)).rejects.toBeInstanceOf(MachineCutoffError);
+		delete server.refuse;
+		expect(await machines.revoke(laptop.id, userId)).toBe(true);
+		expect(server.enabled.has(role)).toBe(false);
+		expect(await machines.revoke(laptop.id, "someone-else")).toBe(false);
+
+		server.refuse = "Chopin couldn't reach the database server";
+		await expect(machines.revoke(desk.id, userId)).rejects.toBeInstanceOf(MachineCutoffError);
 		delete server.refuse;
 		await stores.sweep();
-		expect(server.enabled.has(role)).toBe(false);
+		expect(server.enabled.has(deskRole)).toBe(false);
 		await stores.sweep();
-		expect(server.dropped.has(role)).toBe(false);
+		expect(server.dropped.has(deskRole)).toBe(false);
+	});
+
+	test("give a machine revoked while it asked no login", async () => {
+		let { storage, server, stores, machines, userId, paired } = await setup();
+		let laptop = await paired();
+		let role = machineStoreName(laptop.id);
+		expect(await machines.revoke(laptop.id, userId)).toBe(true);
+		await expect(stores.login(laptop)).rejects.toThrow("no longer paired");
+		await expect(stores.rotate(laptop)).rejects.toThrow("no longer paired");
+		expect(server.calls).toEqual([]);
+		expect(server.enabled.has(role)).toBe(false);
+		expect(await storage.machineDatabases.get(laptop.id)).toBeUndefined();
+
+		let desk = await paired();
+		let deskRole = machineStoreName(desk.id);
+		let release!: () => void;
+		server.provisioning = new Promise<void>(resolve => {
+			release = resolve;
+		});
+		let asked = stores.login(desk);
+		while (!server.calls.includes(`provision ${deskRole}`)) await Bun.sleep(1);
+		let revoking = machines.revoke(desk.id, userId);
+		release();
+		await asked;
+		expect(await revoking).toBe(true);
+		expect(server.enabled.has(deskRole)).toBe(false);
+	});
+
+	test("keep a setup problem the machine reported, across restarts, until it reports none", async () => {
+		let { storage, stores, paired } = await setup();
+		let laptop = await paired();
+		await stores.login(laptop);
+		await stores.report(laptop.id, "Couldn't install the storage adapter");
+		let restarted = new MachineStores({
+			storage,
+			server: new FakeServer(),
+			key: KEY,
+			clock: () => new Date(),
+		});
+		expect((await restarted.statuses([laptop.id])).get(laptop.id)).toEqual({
+			state: "failed",
+			reason: "Couldn't install the storage adapter",
+		});
+		await stores.login(laptop);
+		expect((await restarted.statuses([laptop.id])).get(laptop.id)).toMatchObject({
+			state: "failed",
+		});
+		await restarted.report(laptop.id, undefined);
+		expect((await restarted.statuses([laptop.id])).get(laptop.id)).toEqual({ state: "ready" });
 	});
 });

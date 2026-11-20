@@ -913,9 +913,12 @@ For each machine Chopin keeps, under the administrator role:
   `CONNECT` granted to the machine's role alone before connections are allowed, and a
   schema `atomic` owned by the role, where Atomic sets up its tables;
 - a role that is no superuser, can't create roles or databases, replicate or bypass
-  row security, is a member of no other role and has no privilege on any other
-  database. An existing role or database that isn't exactly this is refused, never
-  changed, and its login is never turned on;
+  row security, is a member of no other role, has no member but the administrator, has
+  no privilege on any other database, and carries the comment `chopin:machine-store`
+  Chopin gives it as it creates it. An existing role or database that isn't exactly
+  this is refused, never changed, and its login is never turned on. Turning a login off
+  or dropping it touches only a role with that comment and a database the
+  administrator owns, so a name another role or database already held is left alone;
 - `CONNECT` revoked from `PUBLIC` on every other database of the server, checked by
   connecting as the new role to `postgres`, `template1` and the administrator's own
   database. Give the administrator a server of its own: other applications' roles on
@@ -937,8 +940,11 @@ The machine's owner rotates it with
 working one until PostgreSQL has it, the old one stops working and its sessions are
 ended, and the machine takes the new one the next time it connects. Revoking or
 unpairing a machine turns its login off (`NOLOGIN`, connections to its database off,
-its sessions ended) before Chopin answers; if the server can't be reached then, each
-cleanup pass tries again. After `MACHINE_STORE_RETENTION_DAYS` the database and role
+its sessions ended) before Chopin answers that the machine is disconnected. If the
+server can't be reached then, the machine is revoked all the same, Chopin answers that
+its login is still on and why, revoking again (or `chopin unpair` again) finishes it,
+and each cleanup pass tries again. A rotation waits until PostgreSQL has confirmed or
+refused the one before it. After `MACHINE_STORE_RETENTION_DAYS` the database and role
 are dropped.
 
 The URL machines get names the host and port of `MACHINE_STORE_URL` and its
