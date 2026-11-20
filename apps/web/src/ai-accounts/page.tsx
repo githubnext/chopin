@@ -13,11 +13,9 @@ import {
 	withoutCredential,
 } from "./accounts";
 import { KeyDialog, RemoveKeyDialog, useDialog } from "./dialogs";
-import { UsageByModel } from "../ai-usage/usage-by-model";
 import { AccountSection } from "./rows";
 
 import type { AiCredentialSummary, AiProvider } from "@chopin/protocol/ai-credentials";
-import type { ReactNode } from "react";
 import type { AccountAction, AccountRow } from "./accounts";
 import type { KeyRequest } from "./dialogs";
 import type { PendingAction, RowProblem } from "./rows";
@@ -58,13 +56,12 @@ function focusLost() {
 }
 
 export function AiAccountsView(
-	{ credentials, now, onAction, pending, problem, usage }: {
+	{ credentials, now, onAction, pending, problem }: {
 		credentials: readonly AiCredentialSummary[];
 		now: number;
 		onAction: (row: AccountRow, action: AccountAction) => void;
 		pending?: PendingAction;
 		problem?: RowProblem;
-		usage?: ReactNode;
 	},
 ) {
 	let { keys, signIns } = accountRows(credentials, now);
@@ -73,7 +70,6 @@ export function AiAccountsView(
 		<>
 			<AccountSection {...shared} rows={signIns} title="Sign-ins" />
 			<AccountSection {...shared} rows={keys} title="API keys" />
-			{usage}
 		</>
 	);
 }
@@ -171,7 +167,6 @@ export default function AiAccountsPage() {
 							onAction={act}
 							pending={pending}
 							problem={rowProblem}
-							usage={<UsageByModel />}
 						/>
 					)
 					: problem
