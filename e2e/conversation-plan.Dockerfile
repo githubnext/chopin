@@ -17,7 +17,8 @@ RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lock
 # The server reads the connector release it recommends from this manifest as it starts. The
 # connector itself stays out, so the build below is only the web client's.
 COPY apps/connector/package.json ./apps/connector/package.json
-RUN bun run --filter '@chopin/web' build
+# The browser suites' client, as scripts/e2e.ts and CI build it: with message analysis.
+RUN VITE_CHILD_MOTION_TOGGLE=on VITE_MESSAGE_ANALYSIS=on bun run --filter '@chopin/web' build
 RUN <<'SH'
 bun -e '
 import { createHash } from "node:crypto";
