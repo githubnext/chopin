@@ -68,25 +68,28 @@ async function served() {
 	};
 	let delivered = 0;
 	let systemTurns = new SystemTurns();
-	let adapter = hosted(auth, { lease: () => lease }, {
-		invokePlanner: input => {
-			delivered++;
-			return invokeRouted({
-				channels: storage.channels,
-				deleting: () => false,
-				transition: (_id, action) => action(),
-				open: async () => ({ context: fixture.root.context, release: () => {} }),
-				plannerAccount: () => undefined,
-				systemTurns,
-			}, input);
-		},
-	});
+	let adapt = () =>
+		hosted(auth, { lease: () => lease }, {
+			invokePlanner: input => {
+				delivered++;
+				return invokeRouted({
+					channels: storage.channels,
+					deleting: () => false,
+					transition: (_id, action) => action(),
+					open: async () => ({ context: fixture.root.context, release: () => {} }),
+					plannerAccount: () => undefined,
+					systemTurns,
+				}, input);
+			},
+		});
+	let adapter = adapt();
 	let invoke = (input: InvokePlannerInput, user = ANA) =>
 		adapter.invoke!.invoke(caller(user), input);
 	let posted = (text = INSTRUCTION) =>
 		fixture.root.plan.chat.entries.filter(entry => entry.text === text);
 	let notices = () =>
 		fixture.root.plan.chat.entries.filter(entry => entry.author.kind === "system");
+	let scope = (key = "hand-off") => ({ userId: ANA.id, channelId: fixture.root.channel.id, key });
 	return {
 		...fixture,
 		invoke,
@@ -94,7 +97,17 @@ async function served() {
 		notices,
 		lease,
 		systemTurns,
+		scope,
 		delivered: () => delivered,
+		/**
+		 * A new process over the same storage: it keeps the claims and the saved transcript, and
+		 * nothing the keyed calls held in memory.
+		 */
+		restart: () => {
+			adapter = adapt();
+		},
+		/** Settles once `count` turns reached the model, or soon after when fewer do. */
+		reached: (count: number) => Promise.race([fixture.turns.started(count), Bun.sleep(500)]),
 	};
 }
 
@@ -143,8 +156,8 @@ test("a retry after a lost reply returns the first result, posting one message a
 for (let as of [undefined, "system" as const]) {
 	let kind = as ? "a follow-up" : "an instruction";
 
-	test(`${kind} saved without its start recorded starts its turn on the retry, posted once`, async () => {
-		let { invoke, root, storage, turns } = await served();
+	test(`${kind} whose start could not be recorded fails, and its retry records it and starts no second turn`, async () => {
+		let { invoke, reached, root, scope, storage, turns } = await served();
 		let request = {
 			id: root.channel.id,
 			instruction: INSTRUCTION,
@@ -153,14 +166,15 @@ for (let as of [undefined, "system" as const]) {
 		};
 		let restore = failing(storage.mcpInvocations, "complete");
 		await expect(invoke(request)).rejects.toThrow("storage went away");
-		await settle();
-		expect(root.plan.chat.entries).toHaveLength(1);
-		expect(turns.prompts).toEqual([]);
 		restore();
+		await reached(1);
+		expect(turns.prompts).toHaveLength(1);
+		expect(root.plan.chat.entries).toHaveLength(1);
+		expect((await storage.mcpInvocations.get(scope()))?.invokedAt).toBeUndefined();
 
 		let retried = await invoke(request);
 		expect(retried).toMatchObject({ kind: "invoked", document: { id: root.channel.id } });
-		await turns.started(1);
+		expect((await storage.mcpInvocations.get(scope()))?.invokedAt).toBeInstanceOf(Date);
 		expect(await invoke(request)).toEqual(retried);
 		await settle();
 		expect(root.plan.chat.entries).toHaveLength(1);
@@ -215,56 +229,56 @@ function losingCompletion(store: { complete: unknown; get: unknown }): () => voi
 for (let as of [undefined, "system" as const]) {
 	let kind = as ? "a follow-up" : "an instruction";
 
-	test(`${kind} whose start was saved but its answer and read-back lost starts its turn on the retry`, async () => {
-		let { invoke, root, storage, turns } = await served();
+	test(`${kind} whose start was saved but its answer lost is answered by a retry in a new process, with one turn`, async () => {
+		let { invoke, reached, restart, root, scope, storage, turns } = await served();
 		let request = {
 			id: root.channel.id,
 			instruction: INSTRUCTION,
 			idempotencyKey: "hand-off",
 			...(as ? { as } : {}),
 		};
-		let scope = { userId: ANA.id, channelId: root.channel.id, key: "hand-off" };
 		let restore = losingCompletion(storage.mcpInvocations);
 		await expect(invoke(request)).rejects.toThrow("commit reply lost");
 		restore();
-		await settle();
-		expect(await storage.mcpInvocations.get(scope)).toMatchObject({ invokedAt: expect.any(Date) });
-		expect(root.plan.chat.entries).toHaveLength(1);
-		expect(turns.prompts).toEqual([]);
+		expect(await storage.mcpInvocations.get(scope())).toMatchObject({
+			invokedAt: expect.any(Date),
+		});
 
+		restart();
 		expect(await invoke({ ...request, instruction: "Something else." })).toEqual({
 			kind: "refused",
 			code: "idempotency-conflict",
 		});
 		let retried = await invoke(request);
 		expect(retried).toMatchObject({ kind: "invoked", document: { id: root.channel.id } });
-		await turns.started(1);
 		expect(await invoke(request)).toEqual(retried);
+		// The start was recorded only once its turn had started, so the answer stands for that turn.
+		await reached(1);
 		await settle();
 		expect(root.plan.chat.entries).toHaveLength(1);
 		expect(turns.prompts).toHaveLength(1);
 	});
 }
 
-test("a start whose read-back keeps failing is recovered by the retry once storage answers", async () => {
-	let { invoke, posted, root, storage, turns } = await served();
+test("a start that keeps failing to be recorded is recorded by a later retry, with one turn", async () => {
+	let { invoke, posted, reached, root, scope, storage, turns } = await served();
 	let request = { id: root.channel.id, instruction: INSTRUCTION, idempotencyKey: "hand-off" };
-	let restore = losingCompletion(storage.mcpInvocations);
-	await expect(invoke(request)).rejects.toThrow("commit reply lost");
-	await expect(invoke(request)).rejects.toThrow("commit reply lost");
+	let restore = failing(storage.mcpInvocations, "complete");
+	await expect(invoke(request)).rejects.toThrow("storage went away");
+	await expect(invoke(request)).rejects.toThrow("storage went away");
 	restore();
-	await settle();
-	expect(turns.prompts).toEqual([]);
+	await reached(1);
+	expect(turns.prompts).toHaveLength(1);
 
 	expect(await invoke(request)).toMatchObject({ kind: "invoked" });
-	await turns.started(1);
+	expect((await storage.mcpInvocations.get(scope()))?.invokedAt).toBeInstanceOf(Date);
 	await settle();
 	expect(posted()).toHaveLength(1);
 	expect(turns.prompts).toHaveLength(1);
 });
 
-test("a tenth follow-up saved without its start recorded is started by its retry, counted once", async () => {
-	let { invoke, notices, root, storage, systemTurns, turns } = await served();
+test("a tenth follow-up whose start could not be recorded is answered by its retry, counted once", async () => {
+	let { invoke, notices, reached, root, storage, systemTurns, turns } = await served();
 	for (let count = 1; count < MAX_SYSTEM_TURNS_PER_HOUR; count++) systemTurns.take(root.channel.id);
 	let request = {
 		id: root.channel.id,
@@ -275,12 +289,12 @@ test("a tenth follow-up saved without its start recorded is started by its retry
 	let restore = failing(storage.mcpInvocations, "complete");
 	await expect(invoke(request)).rejects.toThrow("storage went away");
 	restore();
+	await reached(1);
 	expect(notices()).toHaveLength(1);
-	expect(turns.prompts).toEqual([]);
+	expect(turns.prompts).toHaveLength(1);
 
 	let retried = await invoke(request);
 	expect(retried).toMatchObject({ kind: "invoked" });
-	await turns.started(1);
 	expect(await invoke(request)).toEqual(retried);
 	await turns.finish();
 	await root.plan.chat.running;
@@ -290,6 +304,91 @@ test("a tenth follow-up saved without its start recorded is started by its retry
 	});
 	expect(notices()).toHaveLength(1);
 	expect(turns.prompts).toHaveLength(1);
+});
+
+test("a follow-up whose process stops starting turns while its notice is saved starts its turn, so a retry in the next process answers for it", async () => {
+	let { invoke, reached, restart, root, scope, storage, turns } = await served();
+	let request = {
+		id: root.channel.id,
+		instruction: INSTRUCTION,
+		as: "system" as const,
+		idempotencyKey: "hand-off",
+	};
+	let persist = root.context.persist;
+	root.context.persist = async chat => {
+		await persist(chat);
+		Chat.holdStarts();
+	};
+	let first;
+	try {
+		first = await invoke(request);
+	} finally {
+		Chat.holdStarts(false);
+		root.context.persist = persist;
+	}
+	expect(first).toMatchObject({ kind: "invoked" });
+	await reached(1);
+	expect(turns.prompts).toHaveLength(1);
+	expect(root.plan.chat.waiting).toEqual([]);
+	expect((await storage.mcpInvocations.get(scope()))?.invokedAt).toBeInstanceOf(Date);
+
+	restart();
+	expect(await invoke(request)).toEqual(first);
+	await settle();
+	expect(turns.prompts).toHaveLength(1);
+});
+
+test("a turn that would take the Chat while a follow-up's notice is saved waits behind it, so the follow-up is never queued", async () => {
+	let { invoke, notices, root, scope, storage, turns } = await served();
+	let request = {
+		id: root.channel.id,
+		instruction: INSTRUCTION,
+		as: "system" as const,
+		idempotencyKey: "hand-off",
+	};
+	let persist = root.context.persist;
+	root.context.persist = async chat => {
+		root.context.persist = persist;
+		await persist(chat);
+		await Chat.instruct(root.context, "ana", "Other work.", "");
+	};
+	expect(await invoke(request)).toMatchObject({ kind: "invoked" });
+	await turns.started(1);
+	expect(turns.prompts[0]).toContain(INSTRUCTION);
+	expect(root.plan.chat.waiting.map(waiting => waiting.text)).toEqual(["Other work."]);
+	expect((await storage.mcpInvocations.get(scope()))?.invokedAt).toBeInstanceOf(Date);
+
+	// A follow-up that meets the turn running is refused, and keeps and queues nothing.
+	let busy = { ...request, idempotencyKey: "second" };
+	expect(await invoke(busy)).toMatchObject({ kind: "refused", code: "planner-busy" });
+	expect(notices()).toHaveLength(1);
+	expect(await storage.mcpInvocations.get(scope("second"))).toBeUndefined();
+	expect(root.plan.chat.waiting.map(waiting => waiting.text)).toEqual(["Other work."]);
+
+	await turns.finish();
+	await turns.started(2);
+	expect(turns.prompts[1]).toContain("Other work.");
+});
+
+test("a turn that would take the Chat while an instruction is saved waits behind it, so only one runs", async () => {
+	let { invoke, posted, root, turns } = await served();
+	let request = { id: root.channel.id, instruction: INSTRUCTION, idempotencyKey: "hand-off" };
+	let persist = root.context.persist;
+	root.context.persist = async chat => {
+		root.context.persist = persist;
+		await persist(chat);
+		await Chat.instruct(root.context, "ana", "Other work.", "");
+	};
+	expect(await invoke(request)).toMatchObject({ kind: "invoked" });
+	await turns.started(1);
+	await settle();
+	expect(turns.prompts).toHaveLength(1);
+	expect(turns.prompts[0]).toContain(INSTRUCTION);
+	expect(posted()).toHaveLength(1);
+
+	await turns.finish();
+	await turns.started(2);
+	expect(turns.prompts[1]).toContain("Other work.");
 });
 
 test("a claim a stopped process left before posting is posted once, under the entry it named", async () => {
@@ -346,19 +445,39 @@ test("a claim a stopped process left before posting gives way to a different req
 });
 
 test("a different request under a key whose instruction is posted but not started is refused", async () => {
-	let { invoke, posted, root, storage, turns } = await served();
+	let { invoke, lease, posted, root, scope, storage, turns } = await served();
 	let request = { id: root.channel.id, instruction: INSTRUCTION, idempotencyKey: "hand-off" };
-	let restore = failing(storage.mcpInvocations, "complete");
-	await expect(invoke(request)).rejects.toThrow("storage went away");
-	restore();
+	// A process saved the instruction and stopped before its turn started.
+	let now = new Date();
+	let entryId = "01KSAVEDBYASTOPPEDPROCESS";
+	await storage.mcpInvocations.claim(lease, {
+		...scope(),
+		fingerprint: invocationFingerprint(request, root.channel.id),
+		entryId,
+		result: { document: { id: root.channel.id, title: "Root", url: "http://localhost:8795/x" } },
+		createdAt: now,
+		expiresAt: new Date(now.getTime() + 60_000),
+	});
+	root.plan.chat.entries.push({
+		id: entryId,
+		author: { kind: "member", handle: ANA.login },
+		text: INSTRUCTION,
+		ts: Math.floor(now.getTime() / 1000),
+	});
+	await root.context.persist();
+
 	expect(await invoke({ ...request, instruction: "Something else." })).toEqual({
 		kind: "refused",
 		code: "idempotency-conflict",
 	});
 	await settle();
-	expect(posted()).toHaveLength(1);
 	expect(posted("Something else.")).toEqual([]);
 	expect(turns.prompts).toEqual([]);
+
+	expect(await invoke(request)).toMatchObject({ kind: "invoked" });
+	await turns.started(1);
+	expect(posted().map(entry => entry.id)).toEqual([entryId]);
+	expect(turns.prompts).toHaveLength(1);
 });
 
 test("a different request under a used key is refused and posts nothing", async () => {

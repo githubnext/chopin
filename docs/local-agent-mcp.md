@@ -164,17 +164,27 @@ the same account on another document, can use the same key without meeting yours
 client that finds it there can rely on this behaviour.
 
 Chopin records the key before it posts the instruction, and records that the
-instruction was delivered before its Planner turn starts. So whatever fails in
-between, retrying the same request under the same key posts the instruction at
-most once and starts at most one turn:
+instruction was delivered only once its Planner turn has started, or once it was
+given to the turn running. A call answers with the document only after that
+record is saved, and a retry that finds the record answers the same: it never
+reports a turn that did not start. Whatever fails, retrying the same request under
+the same key posts the instruction at most once:
 
-- If the instruction was never posted, the retry posts it.
-- If it was posted but its turn did not start (the server stopped, or could not
-  record the start or confirm that it did), the retry starts that turn without
-  posting it again, or returns the refusal that stops it now.
-- If its turn started, the retry returns the first result. A turn that a restart
-  interrupted is not run again, as for any other instruction, and neither is one
-  whose server stopped in the moment between recording its start and starting it.
+- If the instruction was never posted, the retry posts it and starts its turn.
+- If it was posted and its turn did not start (the server stopped first, or
+  refused the turn), the retry starts that turn without posting it again, or
+  returns the refusal that stops it now.
+- If its turn started and the start was recorded, the retry returns the first
+  result. A turn that a restart interrupted is not run again, as for any other
+  instruction.
+- If its turn started but recording the start failed, the call fails. A retry to
+  the same server process records the start and starts no second turn.
+
+One case can start a second turn: the server process stops after the turn
+started and before its start was recorded (one storage write), or after
+recording it failed and before a retry recorded it. The next process cannot tell
+that turn from one that never started, so a retry starts the turn again. The
+turn the stopped process started was interrupted with it.
 
 A refusal that posted nothing, such as `planner-not-attached`, `planner-busy` or
 `system-turn-forbidden`, leaves the key free, so a corrected request can use it.
