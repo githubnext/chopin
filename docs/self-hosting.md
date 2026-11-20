@@ -407,7 +407,7 @@ the image.
 | `MACHINE_STORE_PASSWORD_FILE`     | empty                   | Path of the administrator role's password, read at startup. Not with `MACHINE_STORE_PASSWORD`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `MACHINE_STORE_PASSWORD`          | empty                   | The administrator role's password, for platforms that put secrets (a Key Vault reference, for one) in the environment.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `MACHINE_STORE_RETENTION_DAYS`    | never                   | Whole days after a machine is revoked or unpaired before its database and role are dropped. Unset keeps them, with the login turned off.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `MACHINE_STORE_OPEN_DATABASES`    | empty                   | Comma-separated databases the service owns and keeps open to every role, which its administrator can't close, such as a managed service's query-store or maintenance database. Machines may connect to them; Chopin neither revokes `CONNECT` on them nor refuses a login over them. Never `postgres`, `template1`, the administrator's own or a machine's database; see [Agent sessions database for machines](#agent-sessions-database-for-machines).                                                                                                                                                                                                           |
+| `MACHINE_STORE_OPEN_DATABASES`    | empty                   | Comma-separated databases the service owns and keeps open to every role, which its administrator can't close. Machines may connect to them; Chopin neither revokes `CONNECT` on them nor refuses a login over them. Only databases that hold no machine's data, and never one that records the statements roles run and lets every role read them unless the service's statement capture is off for the whole server; never `postgres`, `template1`, the administrator's own or a machine's database. See [Agent sessions database for machines](#agent-sessions-database-for-machines).                                                                          |
 | `AUTH_MODE`                       | `hosted`                | Set `local` for loopback device-flow sign-in with persisted credentials (see [Authentication](authentication.md#local-device-flow-sign-in)). Any other value fails startup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `DEMO_PERSONAS`                   | `off`                   | Set `on` to enable the server-owned local demo collaborators (Lily and Felix). Requires `AUTH_MODE=local` on a loopback bind; otherwise, or for any value besides `on` and `off`, startup fails.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `CHOPIN_LOCAL_CREDENTIALS_DIR`    | platform default        | Local mode only. Overrides the plaintext-fallback credential directory (default `~/.config/chopin` on Linux, `~/Library/Application Support/Chopin` on macOS, `%APPDATA%\Chopin` on Windows). Must resolve outside the repository and process working directory.                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -943,15 +943,23 @@ role that doesn't own a database only warns, so where `CONNECT` stays, Chopin re
 to hand out the login, and the Machines page says which database is still open and that
 its owner must revoke it.
 
-A managed PostgreSQL service gives its operator such an administrator and keeps some
-databases of its own, a query-store or maintenance database for one, open to every
-role, so every machine's login would be refused. Name those databases in
-`MACHINE_STORE_OPEN_DATABASES` (`MACHINE_STORE_OPEN_DATABASES=provider_stats,provider_maintenance`):
-Chopin leaves them as they are and doesn't count them, and a machine can connect to them
-and read what the service lets every role read there. Name only databases the service
-owns and that hold no machine's data. Chopin refuses to start with `postgres`,
-`template1`, the administrator's own database or a machine's name among them, and refuses
-a login while one of them is a database Chopin made for a machine.
+A managed PostgreSQL service gives its operator such an administrator and may keep
+databases of its own open to every role, so Chopin would refuse every machine's login.
+Name those databases in `MACHINE_STORE_OPEN_DATABASES`
+(`MACHINE_STORE_OPEN_DATABASES=provider_health,provider_maintenance`): Chopin leaves them
+as they are and doesn't count them, and a machine can connect to them and read what the
+service lets every role read there. Name a database only when the service owns it and it
+holds no machine's data. Never name one that records the statements roles run and lets
+every role read them, such as a query store, unless the service's statement capture is
+turned off for the whole server, with nothing captured before it, before any machine is
+given a login: a machine could read the other machines' statements and the
+administrator's, and Chopin sets each machine's password with an `ALTER ROLE` statement
+that carries its SCRAM-SHA-256 verifier, which statement capture keeps. Leave such a
+database out, and Chopin goes on refusing logins while it stays open. Chopin refuses to
+start with `postgres`, `template1`, a name the administrator's own database could have
+(from the URL, its `dbname` or `PGDATABASE`) or a machine's name among them, and refuses
+a login while one of them is a database Chopin made for a machine or the administrator's
+own.
 
 The password is 32 random bytes, sent to PostgreSQL only as a SCRAM-SHA-256 verifier
 computed by Chopin, kept by Chopin as AES-GCM ciphertext under a key derived from

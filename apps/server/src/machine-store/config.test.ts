@@ -84,11 +84,11 @@ describe("MACHINE_STORE_URL", () => {
 		expect(
 			machineStoreConfig({
 				...base,
-				MACHINE_STORE_OPEN_DATABASES: " provider_stats, provider_maintenance,,provider_stats ",
+				MACHINE_STORE_OPEN_DATABASES: " provider_health, provider_maintenance,,provider_health ",
 			}),
 		).toEqual({
 			url: base.MACHINE_STORE_URL,
-			openDatabases: ["provider_stats", "provider_maintenance"],
+			openDatabases: ["provider_health", "provider_maintenance"],
 		});
 		expect(machineStoreConfig({ ...base, MACHINE_STORE_OPEN_DATABASES: " , " })).toEqual({
 			url: base.MACHINE_STORE_URL,
@@ -103,16 +103,30 @@ describe("MACHINE_STORE_URL", () => {
 			]
 		) {
 			expect(() =>
-				machineStoreConfig({ ...base, MACHINE_STORE_OPEN_DATABASES: `provider_stats,${name}` })
+				machineStoreConfig({ ...base, MACHINE_STORE_OPEN_DATABASES: `provider_health,${name}` })
 			).toThrow(`MACHINE_STORE_OPEN_DATABASES can't name ${name}`);
 		}
-		expect(() =>
-			machineStoreConfig({
-				MACHINE_STORE_URL: "postgresql://admin@db.example.com",
-				MACHINE_STORE_OPEN_DATABASES: "admin",
-			})
-		).toThrow("can't name admin");
-		expect(() => machineStoreConfig({ MACHINE_STORE_OPEN_DATABASES: "provider_stats" })).toThrow(
+		for (
+			let [url, env] of [
+				["postgresql://admin@db.example.com", {}],
+				["postgresql://admin@db.example.com/control?dbname=admin", {}],
+				["postgresql://admin@db.example.com/control?DATABASE=admin", {}],
+				["postgresql://other@db.example.com/control?user=admin", {}],
+				["postgresql://admin@db.example.com/control", { PGDATABASE: "admin" }],
+			] as const
+		) {
+			expect(() =>
+				machineStoreConfig({
+					...env,
+					MACHINE_STORE_URL: url,
+					MACHINE_STORE_OPEN_DATABASES: "provider_health,admin",
+				})
+			).toThrow("can't name admin");
+		}
+		expect(
+			machineStoreConfig({ MACHINE_STORE_URL: "postgresql://ad%min@db.example.com/db%zz" }),
+		).toEqual({ url: "postgresql://ad%min@db.example.com/db%zz" });
+		expect(() => machineStoreConfig({ MACHINE_STORE_OPEN_DATABASES: "provider_health" })).toThrow(
 			"need MACHINE_STORE_URL",
 		);
 	});
