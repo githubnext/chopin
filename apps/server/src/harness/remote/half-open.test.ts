@@ -10,7 +10,6 @@ import {
 } from "../../testing/agent-link";
 import { hostInputRoom } from "../../testing/decisions";
 import { createHumanInput } from "../atomic/human-input";
-import { untilUnpaused } from "../runs";
 import { createRemoteAdapter } from "./adapter";
 
 import type { AgentHandlers } from "@chopin/agent-link/client";
@@ -57,8 +56,7 @@ async function waiting() {
 		handlers,
 	});
 	let planner: RemotePlanner = { channelId: channel.id, isolated: false };
-	planner.humanInput = report =>
-		createHumanInput(f.room, (runId, signal) => untilUnpaused(planner, runId, signal), report);
+	planner.humanInput = report => createHumanInput(f.room, report);
 	let sessionId = crypto.randomUUID();
 	let opening = createRemoteAdapter(() => ({ link: server.links.at(-1)!, planner })).doStart({
 		sessionId,

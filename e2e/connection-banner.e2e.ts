@@ -195,8 +195,9 @@ async function losable(page: Page) {
 /**
  * A machine whose Planner answers each message in the words `Answer <n>`. `gates[n]` holds its
  * nth turn open until it settles, so a reply is running for as long as a test says. With
- * `working`, its first message also starts a workflow run, the work a link that drops keeps for
- * its client: without it nothing is kept, and a dropped link is only held for a while.
+ * `working`, its first message also asks the document's members a question, the work a link that
+ * drops keeps for its client: without it nothing is kept, and a dropped link is only held for a
+ * while.
  */
 async function machine(
 	room: string,
@@ -224,24 +225,11 @@ async function machine(
 			prompts.push(context.message.prompt);
 			let number = prompts.length;
 			if (working && number === 1) {
-				let started = Math.floor(Date.now() / 1000) - 300;
-				client.reportRuns(context.message.session, {
-					active: ["run-1"],
-					paused: [],
-					cards: [{
-						id: "run-1",
-						name: "plan-review",
-						status: "running",
-						started,
-						updated: started + 240,
-						stages: [{
-							id: "run-1:review",
-							name: "review-draft",
-							status: "running",
-							started,
-						}],
-						waiting: 0,
-					}],
+				// Nobody answers it here: it is what the session keeps for its client.
+				void client.ask(context.message.session, {
+					method: "confirm",
+					title: "Ship it?",
+					message: "Now.",
 				});
 			}
 			await gates[number - 1];
@@ -449,7 +437,7 @@ test("a machine whose link dropped under a reply with no work to keep is held fo
 	}
 });
 
-test("a machine whose link dropped under a reply with a workflow run is disconnected, not held: a screen reader is told it is offline, nothing is drawn of it, with no failure banner and the notice once", async ({ page }) => {
+test("a machine whose link dropped under a reply with a question open is disconnected, not held: a screen reader is told it is offline, nothing is drawn of it, with no failure banner and the notice once", async ({ page }) => {
 	test.setTimeout(120_000);
 	let room = await remoteServer();
 	let hold = Promise.withResolvers<void>();
@@ -467,7 +455,7 @@ test("a machine whose link dropped under a reply with a workflow run is disconne
 		let kept = await planner.client.resumption;
 		expect(kept?.sessions.size).toBe(1);
 
-		// Its run was kept for it, with no deadline: a screen reader is told, nothing is drawn of the
+		// Its question was kept for it, with no deadline: a screen reader is told, nothing is drawn of the
 		// machine, and the failed reply's own notice says the connection dropped, quietly, once.
 		await expect(phaseVoice(page)).toHaveText(PLANNER_OFFLINE);
 		await expect(connectionBanner(page)).toHaveCount(0);
@@ -476,7 +464,7 @@ test("a machine whose link dropped under a reply with a workflow run is disconne
 		await expect(allBanners(page)).toHaveCount(0);
 		await expect(
 			chat(page).getByText(
-				"The machine's connection dropped during this reply. Its workflows and open questions are kept; ask again once it has reconnected.",
+				"The machine's connection dropped during this reply. Its open questions are kept; ask again once it has reconnected.",
 				{ exact: true },
 			),
 		).toHaveCount(1);
@@ -593,14 +581,14 @@ test("asking a machine to start the Planner is for a writer of a live document: 
 	});
 });
 
-test("asking a machine to start the Planner whose link dropped with a workflow run kept is answered disconnected, and offers no button", async ({ browser }) => {
+test("asking a machine to start the Planner whose link dropped with a question kept is answered disconnected, and offers no button", async ({ browser }) => {
 	test.setTimeout(150_000);
 	let room = await remoteServer();
 	let writer = await twoPeople(browser, room);
 	let link = watchSockets();
 	try {
 		let planner = await machine(room, [], true);
-		await say(writer, "start a workflow run");
+		await say(writer, "ask us something");
 		await expect(chat(writer).getByText("Answer 1", { exact: true })).toBeVisible();
 		// Chopin opens a session of its own for the document's upkeep after a reply, and ends it
 		// when that is done. The link held both while it ran, so cut it once only the chat's is left.

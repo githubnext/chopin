@@ -11,7 +11,6 @@ import {
 	RIVAL_TOKEN,
 } from "../../testing/agent-link";
 import { createHumanInput } from "../atomic/human-input";
-import { untilUnpaused } from "../runs";
 import { createRemoteAdapter } from "./adapter";
 import { testLease } from "../../storage/contract-support";
 
@@ -35,16 +34,6 @@ const sandboxSession = {
 	async destroy() {},
 } as never;
 
-const run = {
-	id: "run",
-	name: "plan",
-	status: "running" as const,
-	started: 1,
-	updated: 1,
-	stages: [],
-	waiting: 0,
-};
-
 async function until(check: () => boolean, ms = 4_000) {
 	for (let deadline = Date.now() + ms; Date.now() < deadline; await Bun.sleep(5)) {
 		if (check()) return;
@@ -54,7 +43,7 @@ async function until(check: () => boolean, ms = 4_000) {
 
 /**
  * A client attached as a document's Planner that offers `resumable-sessions`, with one Planner
- * session running a workflow run and waiting on one question a member has not answered.
+ * session waiting on one question a member has not answered.
  */
 async function held(
 	options: {
@@ -63,7 +52,6 @@ async function held(
 		/** The whole `Chopin-Agent-Features` header, where the test offers more than the one. */
 		offer?: string;
 		proxied?: boolean;
-		runs?: boolean;
 	} = {},
 ) {
 	let f = await hostInputRoom();
@@ -87,12 +75,7 @@ async function held(
 			heldInputs.released++;
 		};
 	};
-	planner.humanInput = report =>
-		createHumanInput(
-			f.room,
-			(runId, signal) => untilUnpaused(planner, runId, signal),
-			report,
-		);
+	planner.humanInput = report => createHumanInput(f.room, report);
 	let sessionId = crypto.randomUUID();
 	let opening = createRemoteAdapter(() => ({ link: server.links.at(-1)!, planner })).doStart({
 		sessionId,
@@ -110,10 +93,6 @@ async function held(
 		input: { method: "confirm", title: "Ship?", message: "Now." },
 	});
 	let [card] = await f.cards(1);
-	if (options.runs !== false) {
-		raw.send({ type: "runs", session: sessionId, active: ["run"], paused: [], cards: [run] });
-		await until(() => planner.runs?.active.length === 1);
-	}
 	let status = () => f.plan.records.get(card!.id)?.status;
 	return {
 		proxy,
@@ -128,7 +107,6 @@ async function held(
 		sessionId,
 		card: card!,
 		status,
-		runStatus: () => planner.runs?.cards[0]?.status,
 		signOut,
 		/** The link drops with no `detach`, as a network failure ends it. */
 		async drop() {
@@ -143,14 +121,6 @@ async function held(
 			cleanups.push(() => next.socket.close());
 			return next;
 		},
-	};
-}
-
-/** What Chat's Stop and a run's pause call on the session, as `remoteRunControl` does. */
-function controlOf(planner: RemotePlanner) {
-	return (action: "stop" | "resume", run?: string) => {
-		if (!planner.control) throw new Error("The Planner has no attached session to control.");
-		return planner.control(action, run);
 	};
 }
 
@@ -205,7 +175,7 @@ describe("a link the server closes because it is restarting", () => {
 });
 
 describe("a resumable link that drops", () => {
-	it("keeps its open question and live run however long its client is away, and gives them back to the same account", async () => {
+	it("keeps its open question however long its client is away, and gives it back to the same account", async () => {
 		// Installed first, so every timer the server arms is on this clock.
 		let clock = laterTimers();
 		try {
@@ -227,8 +197,6 @@ describe("a resumable link that drops", () => {
 			for (let passed of [31 * MINUTE, 3 * 60 * MINUTE, 25 * 60 * MINUTE]) {
 				await clock.pass(passed);
 				expect(h.status()).toBe("open");
-				expect(h.runStatus()).toBe("running");
-				expect(h.planner.runs?.active).toEqual(["run"]);
 				expect(h.planner.suspended).toBe(true);
 				expect(h.server.attachments.status(h.channel.id)).toEqual({
 					state: "disconnected",
@@ -260,14 +228,6 @@ describe("a resumable link that drops", () => {
 				status: "answered",
 				value: true,
 			});
-			next.send({
-				type: "runs",
-				session: h.sessionId,
-				active: [],
-				paused: [],
-				cards: [{ ...run, status: "finished", ended: 2 }],
-			});
-			await until(() => h.runStatus() === "finished");
 			expect(h.f.plan.records.size).toBe(1);
 		} finally {
 			clock.restore();
@@ -308,14 +268,26 @@ describe("a resumable link that drops", () => {
 		});
 		expectPlainStatus(String(refusal.message), "a refusal to a client");
 		expect(h.status()).toBe("open");
-		expect(h.runStatus()).toBe("running");
 
 		let plain = await h.reattach(MEMBER_TOKEN, false);
 		expect((await plain.next("attached")).features).toBeUndefined();
 		// It cannot claim them, so what the earlier link held ends as it always did.
 		await until(() => h.status() === "cancelled");
-		expect(h.runStatus()).toBe("stopped");
 		expect(h.planner.suspended).toBe(false);
+	});
+
+	it("keeps nothing once its question is answered and the answer acknowledged: the drop runs the grace period", async () => {
+		let h = await held();
+		await h.f.answer(h.card.id, [0]);
+		await h.raw.next("input-result");
+		h.raw.send({ type: "input-received", request: "ask-1" });
+		await until(() => h.heldInputs.open === 0);
+		await h.drop();
+		expect(h.server.attachments.status(h.channel.id)).toMatchObject({
+			state: "held",
+			login: "member",
+		});
+		expect(h.planner.suspended).not.toBe(true);
 	});
 
 	it("ends what the client does not claim, and what it no longer waits on", async () => {
@@ -326,7 +298,6 @@ describe("a resumable link that drops", () => {
 		first.send({ type: "resume", sessions: [] });
 		expect(await first.next("resumed")).toEqual({ type: "resumed", sessions: [] });
 		await until(() => omitted.status() === "cancelled");
-		expect(omitted.runStatus()).toBe("stopped");
 
 		let gaveUp = await held();
 		await gaveUp.drop();
@@ -338,10 +309,9 @@ describe("a resumable link that drops", () => {
 			sessions: [{ session: gaveUp.sessionId, requests: [] }],
 		});
 		await until(() => gaveUp.status() === "cancelled");
-		expect(gaveUp.runStatus()).toBe("running");
 	});
 
-	it("keeps an answer given before the server noticed the drop, and gives it to the client that returns, with a run", async () => {
+	it("keeps an answer given before the server noticed the drop, and gives it to the client that returns", async () => {
 		let h = await held({ proxied: true });
 		// The client's network is gone and the server has not noticed: the answer goes nowhere.
 		h.proxy!.hold();
@@ -435,7 +405,7 @@ describe("a resumable link that drops", () => {
 		await h.f.answer(h.card.id, [0]);
 		await h.raw.next("input-result");
 		// A frame that crossed the answer on the wire, or the client's last before its network died.
-		h.raw.send({ type: "runs", session: h.sessionId, active: ["run"], paused: [], cards: [run] });
+		h.raw.send({ type: "control-result", request: "unknown", ok: true });
 		await Bun.sleep(900);
 		expect(h.heldInputs.open).toBe(1);
 		expect(h.heldInputs.released).toBe(0);
@@ -481,7 +451,6 @@ describe("a resumable link that drops", () => {
 			login: "member",
 		});
 		expect(h.server.links).toHaveLength(1);
-		expect(h.runStatus()).toBe("running");
 		expect(h.planner.suspended).toBe(false);
 	});
 
@@ -493,7 +462,7 @@ describe("a resumable link that drops", () => {
 		expect(await nothing.next("refused")).toMatchObject({ code: "planner-attached" });
 		let silent = await h.reattach();
 		await silent.next("attached");
-		silent.send({ type: "runs", session: h.sessionId, active: [], paused: [], cards: [] });
+		silent.send({ type: "control-result", request: "unknown", ok: true });
 		expect(await silent.next("refused")).toMatchObject({ code: "planner-attached" });
 		let rival = await h.reattach(RIVAL_TOKEN);
 		expect(await rival.next("refused")).toMatchObject({ code: "planner-attached" });
@@ -505,7 +474,6 @@ describe("a resumable link that drops", () => {
 			login: "member",
 		});
 		expect(h.status()).toBe("open");
-		expect(h.runStatus()).toBe("running");
 		expect(h.planner.suspended).not.toBe(true);
 	});
 
@@ -534,7 +502,6 @@ describe("a resumable link that drops", () => {
 			if (order === "shutdown first") await h.drop();
 			await h.f.close();
 			expect(h.status(), order).toBe("open");
-			expect(h.runStatus(), order).toBe("running");
 			if (order === "shutdown first") expect(h.planner.suspended).not.toBe(true);
 		}
 	});
@@ -564,7 +531,6 @@ describe("a resumable link that drops", () => {
 		// Real waiting, well past the configured grace: it bounds a detached link's ownership only.
 		await Bun.sleep(500);
 		expect(h.status()).toBe("open");
-		expect(h.runStatus()).toBe("running");
 		expect(h.server.attachments.status(h.channel.id)).toEqual({
 			state: "disconnected",
 			login: "member",
@@ -591,7 +557,6 @@ describe("a resumable link that drops", () => {
 			await Bun.sleep(400);
 			await clock.pass(25 * 60 * MINUTE);
 			expect(h.status()).toBe("open");
-			expect(h.runStatus()).toBe("running");
 			expect(h.server.attachments.status(h.channel.id)).toEqual({
 				state: "disconnected",
 				login: "member",
@@ -610,7 +575,6 @@ describe("a resumable link that drops", () => {
 		await h.drop();
 		await h.server.attachments.documentEnded(h.channel.id);
 		await until(() => h.status() === "cancelled");
-		expect(h.runStatus()).toBe("stopped");
 		expect(h.server.attachments.status(h.channel.id)).toEqual({ state: "none" });
 		let next = await h.reattach();
 		await next.next("attached");
@@ -634,9 +598,6 @@ describe("a resumable link that drops", () => {
 			state: "attached",
 			login: "member",
 		});
-		// The client reports its runs again, as after any attach, for a session the server no
-		// longer has: the report is ignored, so the stored cards stay as they were restored.
-		next.send({ type: "runs", session: h.sessionId, active: ["run"], paused: [], cards: [run] });
 		await Bun.sleep(100);
 		expect(restarted.links).toHaveLength(1);
 		expect(next.messages.filter(message => message.type === "error" || message.type === "refused"))
@@ -653,7 +614,6 @@ describe("a resumable link that drops", () => {
 			await until(() => h.status() === "cancelled", 1_500).catch(() => {
 				throw new Error(`${ending}: the question stayed ${h.status()}`);
 			});
-			expect(h.runStatus()).toBe("stopped");
 			let next = await h.reattach();
 			if (ending === "sign-out") {
 				expect(await next.next("refused")).toMatchObject({ code: "sign-in-required" });
@@ -663,307 +623,5 @@ describe("a resumable link that drops", () => {
 			next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
 			expect(await next.next("resumed")).toEqual({ type: "resumed", sessions: [] });
 		}
-	});
-
-	it("holds a Stop made while the link is down and sends it to the client first, once, when it resumes", async () => {
-		let h = await held();
-		let control = controlOf(h.planner);
-		await h.drop();
-		// Stop Planner, pressed twice, and one run's pause that Stop Planner already covers.
-		await control("stop");
-		await control("stop");
-		await control("stop", "run");
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		expect(await next.next("resumed")).toEqual({
-			type: "resumed",
-			sessions: [{ session: h.sessionId, requests: ["ask-1"] }],
-		});
-		let stop = await next.next("stop");
-		expect(stop).toEqual({ type: "stop", request: expect.any(String), session: h.sessionId });
-		next.send({ type: "control-result", request: stop.request, ok: true });
-		await Bun.sleep(50);
-		expect(next.messages.filter(message => message.type === "stop")).toEqual([]);
-		// Held no longer: a Stop now goes straight to the client that is back.
-		let live = control("stop", "run");
-		let direct = await next.next("stop");
-		expect(direct).toMatchObject({ session: h.sessionId, run: "run" });
-		next.send({ type: "control-result", request: direct.request, ok: true });
-		await live;
-	});
-
-	it("holds the pause of each named run once, and refuses a Resume it cannot deliver", async () => {
-		let h = await held();
-		let control = controlOf(h.planner);
-		await h.drop();
-		await control("stop", "run");
-		await control("stop", "run");
-		await control("stop", "other");
-		await expect(control("resume")).rejects.toThrow();
-		await expect(control("resume", "run")).rejects.toThrow();
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await next.next("resumed");
-		let first = await next.next("stop");
-		let second = await next.next("stop");
-		expect([first.run, second.run]).toEqual(["run", "other"]);
-		await Bun.sleep(50);
-		expect(next.messages.filter(message => ["stop", "resume"].includes(message.type))).toEqual([]);
-	});
-
-	it("drops a held Stop with the session when the client does not take the session back", async () => {
-		let h = await held();
-		await h.drop();
-		await controlOf(h.planner)("stop");
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [] });
-		expect(await next.next("resumed")).toEqual({ type: "resumed", sessions: [] });
-		await Bun.sleep(50);
-		expect(next.messages.filter(message => message.type === "stop")).toEqual([]);
-		expect(() => controlOf(h.planner)("stop")).toThrow();
-	});
-
-	it("sends a Stop again to the next link when the client never answered it before dropping once more", async () => {
-		let h = await held();
-		await h.drop();
-		await controlOf(h.planner)("stop", "run");
-		let second = await h.reattach();
-		await second.next("attached");
-		second.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await second.next("resumed");
-		expect(await second.next("stop")).toMatchObject({ session: h.sessionId, run: "run" });
-		// The network fails again before `control-result`: the Stop is still owed.
-		second.socket.close();
-		await second.closed;
-		await until(() => h.server.links.length === 0);
-		expect(h.planner.suspended).toBe(true);
-		let third = await h.reattach();
-		await third.next("attached");
-		third.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await third.next("resumed");
-		let again = await third.next("stop");
-		expect(again).toMatchObject({ session: h.sessionId, run: "run" });
-		third.send({ type: "control-result", request: again.request, ok: true });
-		await Bun.sleep(50);
-		expect(third.messages.filter(message => message.type === "stop")).toEqual([]);
-	});
-
-	it("holds a Stop the client had not answered when the link dropped, and sends it first, once, when the client resumes", async () => {
-		let h = await held();
-		let control = controlOf(h.planner);
-		// The client has the Stop, and the network fails before it answers.
-		let stopping = control("stop").then(outcome => outcome, error => error);
-		let original = await h.raw.next("stop");
-		await h.drop();
-		// Not lost, and not reported as done: the caller learns the Stop waits for the client's return.
-		expect(await stopping).toBe("held");
-		// The same Stop pressed again while the link is down is one Stop, not two.
-		expect(await control("stop")).toBe("held");
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await next.next("resumed");
-		let again = await next.next("stop");
-		expect(again).toEqual({ type: "stop", request: expect.any(String), session: h.sessionId });
-		expect(again.request).not.toBe(original.request);
-		next.send({ type: "control-result", request: again.request, ok: true });
-		await Bun.sleep(50);
-		expect(next.messages.filter(message => message.type === "stop")).toEqual([]);
-	});
-
-	it("holds the pause of a run the client had not answered, once, with the pauses made while the link is down", async () => {
-		let h = await held();
-		let control = controlOf(h.planner);
-		let pausing = control("stop", "run").then(outcome => outcome, error => error);
-		await h.raw.next("stop");
-		await h.drop();
-		expect(await pausing).toBe("held");
-		expect(await control("stop", "run")).toBe("held");
-		expect(await control("stop", "other")).toBe("held");
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await next.next("resumed");
-		let first = await next.next("stop");
-		let second = await next.next("stop");
-		expect([first.run, second.run]).toEqual(["run", "other"]);
-		await Bun.sleep(50);
-		expect(next.messages.filter(message => message.type === "stop")).toEqual([]);
-	});
-
-	it("keeps a Stop the client did not answer in time for a link that drops after it, and sends it when the client resumes", async () => {
-		let h = await held();
-		// The link is attached and the client silent, so the wait for its answer runs out.
-		expect(await controlOf(h.planner)("stop", "run")).toBe("unconfirmed");
-		await h.raw.next("stop");
-		await h.drop();
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await next.next("resumed");
-		expect(await next.next("stop")).toMatchObject({ session: h.sessionId, run: "run" });
-	});
-
-	it("does not keep a Stop the client answered after the wait for it ended, nor send it again after a drop", async () => {
-		let h = await held();
-		let stopping = controlOf(h.planner)("stop");
-		let stop = await h.raw.next("stop");
-		expect(await stopping).toBe("unconfirmed");
-		h.raw.send({ type: "control-result", request: stop.request, ok: true });
-		await Bun.sleep(100);
-		await h.drop();
-		expect(h.planner.keptStop).toBe(false);
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await next.next("resumed");
-		await Bun.sleep(150);
-		expect(next.messages.filter(message => message.type === "stop")).toEqual([]);
-	});
-
-	it("does not keep a Stop the client refused after the wait for it ended", async () => {
-		let h = await held();
-		let stopping = controlOf(h.planner)("stop", "run");
-		let stop = await h.raw.next("stop");
-		expect(await stopping).toBe("unconfirmed");
-		h.raw.send({ type: "control-result", request: stop.request, ok: false, message: "ended" });
-		await Bun.sleep(100);
-		await h.drop();
-		expect(h.planner.keptStop).toBe(false);
-	});
-
-	it("does not keep the Stops split from a Stop of every run once the client answers it, after a Resume of another run", async () => {
-		let h = await held();
-		h.raw.send({
-			type: "runs",
-			session: h.sessionId,
-			active: ["run"],
-			paused: ["run-2"],
-			cards: [run, { ...run, id: "run-2", name: "second", status: "paused" as const }],
-		});
-		await until(() => h.planner.runs?.paused.length === 1);
-		let control = controlOf(h.planner);
-		let stopping = control("stop");
-		let stop = await h.raw.next("stop");
-		let resuming = control("resume", "run-2");
-		let resume = await h.raw.next("resume");
-		h.raw.send({ type: "control-result", request: resume.request, ok: true });
-		await resuming;
-		h.raw.send({ type: "control-result", request: stop.request, ok: true });
-		expect(await stopping).toBeUndefined();
-		await h.drop();
-		expect(h.planner.keptStop).toBe(false);
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await next.next("resumed");
-		await Bun.sleep(150);
-		expect(next.messages.filter(message => message.type === "stop")).toEqual([]);
-	});
-
-	it("does not send again a Stop the client answered, or refused because its run had ended", async () => {
-		let h = await held();
-		let control = controlOf(h.planner);
-		let answered = control("stop", "answered");
-		let sent = await h.raw.next("stop");
-		h.raw.send({ type: "control-result", request: sent.request, ok: true });
-		await answered;
-		let refused = control("stop", "refused").then(outcome => outcome, error => error);
-		sent = await h.raw.next("stop");
-		h.raw.send({ type: "control-result", request: sent.request, ok: false, message: "ended" });
-		expect(await refused).toMatchObject({ message: "ended" });
-
-		await h.drop();
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await next.next("resumed");
-		await Bun.sleep(100);
-		expect(next.messages.filter(message => message.type === "stop")).toEqual([]);
-	});
-
-	it("does not send again a Stop the client never answered once it has answered a Resume sent after it", async () => {
-		let h = await held();
-		let control = controlOf(h.planner);
-		expect(await control("stop", "undone")).toBe("unconfirmed");
-		await h.raw.next("stop");
-		let resuming = control("resume", "undone");
-		let sent = await h.raw.next("resume");
-		h.raw.send({ type: "control-result", request: sent.request, ok: true });
-		await resuming;
-
-		await h.drop();
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await next.next("resumed");
-		await Bun.sleep(100);
-		expect(next.messages.filter(message => ["stop", "resume"].includes(message.type))).toEqual([]);
-	});
-
-	it("keeps an unanswered Stop of one run when a Resume of a different run is answered", async () => {
-		let h = await held();
-		let control = controlOf(h.planner);
-		expect(await control("stop", "stopped-run")).toBe("unconfirmed");
-		await h.raw.next("stop");
-		let resuming = control("resume", "resumed-run");
-		let sent = await h.raw.next("resume");
-		h.raw.send({ type: "control-result", request: sent.request, ok: true });
-		await resuming;
-
-		await h.drop();
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await next.next("resumed");
-		expect(await next.next("stop")).toMatchObject({ session: h.sessionId, run: "stopped-run" });
-		await Bun.sleep(100);
-		expect(next.messages.filter(message => message.type === "stop")).toEqual([]);
-	});
-
-	it("keeps an unanswered Stop of every run for the runs a Resume of one run did not cover", async () => {
-		let h = await held();
-		h.raw.send({
-			type: "runs",
-			session: h.sessionId,
-			active: ["run", "other"],
-			paused: [],
-			cards: [run, { ...run, id: "other", name: "other" }],
-		});
-		await until(() => h.planner.runs?.active.length === 2);
-		let control = controlOf(h.planner);
-		expect(await control("stop")).toBe("unconfirmed");
-		await h.raw.next("stop");
-		let resuming = control("resume", "run");
-		let sent = await h.raw.next("resume");
-		h.raw.send({ type: "control-result", request: sent.request, ok: true });
-		await resuming;
-
-		await h.drop();
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await next.next("resumed");
-		// The Stop stands for the run still running, and no longer for the one a person resumed.
-		expect(await next.next("stop")).toMatchObject({ session: h.sessionId, run: "other" });
-		await Bun.sleep(100);
-		expect(next.messages.filter(message => message.type === "stop")).toEqual([]);
-	});
-
-	it("does not hold a Resume the client had not answered when the link dropped, which cannot be promised", async () => {
-		let h = await held();
-		let resuming = controlOf(h.planner)("resume").then(outcome => outcome, error => error);
-		await h.raw.next("resume");
-		await h.drop();
-		expect(await resuming).toMatchObject({ message: "The agent connection closed." });
-		let next = await h.reattach();
-		await next.next("attached");
-		next.send({ type: "resume", sessions: [{ session: h.sessionId, requests: ["ask-1"] }] });
-		await next.next("resumed");
-		await Bun.sleep(100);
-		expect(next.messages.filter(message => ["stop", "resume"].includes(message.type))).toEqual([]);
 	});
 });

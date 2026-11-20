@@ -125,10 +125,9 @@ command.` A command goes to the Planner; sent to the room it is refused. The ref
 with the message (the same persisted shape as a document reference, so a saved request keeps
 it across a restart) and the Planner's turn is built from it:
 
-| Kind                            | The turn's prompt                                                                                                                                                                                                                                           |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `skill`, `prompt` and any other | Atomic's own invocation, `/name args`, alone: the room's earlier words and the focused child's line wait for the next turn (a fresh session has them in its instructions), so the prompt opens with the `/`.                                                |
-| `workflow`                      | Only a remote client reports one. A request, in the person's turn as any message is, to start the registered workflow by name with the workflow tool's run action; the words after the chip are given as its input, said to be data and not an instruction. |
+| Kind                            | The turn's prompt                                                                                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `skill`, `prompt` and any other | Atomic's own invocation, `/name args`, alone: the room's earlier words and the focused child's line wait for the next turn (a fresh session has them in its instructions), so the prompt opens with the `/`. |
 
 Chopin's own commands (`/research`) keep their behaviour: they are never sent to the Planner, and
 the Planner's list never replaces them. A command in a queued message is not checked again when its
@@ -184,8 +183,8 @@ Saving an anchored Planner decision durably queues a scoped prose update, indepe
 conversation-analysis flags. It uses the complete saved answers affecting that passage and
 updates only its explicit target. Applied answer generations commit with the source, so an
 interrupted retry cannot write them twice. Lost or ambiguous targets refuse safely. Edits
-elsewhere in the document between the job's read of its passage and its write, such as a
-workflow run publishing its plan or another decision's update, do not refuse the write: it
+elsewhere in the document between the job's read of its passage and its write, such as an
+attached client publishing its plan or another decision's update, do not refuse the write: it
 lands when its passage, headings and saved answers are still the ones it read. A write-up that
 still fails says why on its card in plain words, beside Retry. Work waits
 for an existing authorized Planner owner; it never claims ownership from a viewer or saver.
@@ -551,8 +550,7 @@ remote client's workflow-stage input, become ordinary shared Decisions:
   choice. Input and editor use free-text cards; hints and initial editor text
   appear verbatim in the prompt. Explicitly submitted empty text is an answer,
   not cancellation.
-- A remote client's workflow cards show their question exactly as asked, with
-  no run or stage ids; Chat's run card shows which run is waiting on Decisions. A request that
+- A remote client's cards show their question exactly as asked. A request that
   names the block it concerns goes, as one adjacent batch, directly after that
   block and is linked to it (see
   [Agent connection questions](agent-connection.md#questions)). One that names
@@ -562,22 +560,19 @@ remote client's workflow-stage input, become ordinary shared Decisions:
   cancellation by `@chopin`. Member cancellations retain any answers already
   given in that batch. Late submissions cannot approve withdrawn input.
 - A request has no time limit. It waits until members answer it or it is
-  withdrawn: the Planner stops, its run is cancelled, the document is archived
+  withdrawn: the Planner stops, the document is archived
   or deleted, or the asker's link closes for good, which includes its owner's
   sign-in ending. A lost connection is never such an end. A link that dropped
-  unexpectedly and offered `resumable-sessions` keeps its open questions and live
-  runs for its account to [resume](agent-connection.md#resuming-after-a-dropped-link)
+  unexpectedly and offered `resumable-sessions` keeps its open questions for its
+  account to [resume](agent-connection.md#resuming-after-a-dropped-link)
   however long it stays away: no timer, including `PLANNER_ATTACH_GRACE_MS`, ends
-  them. While it is away Chat shows the runs with their last status, marked
-  disconnected rather than stopped, and adds no line about the connection (the machine
-  button and the cards carry it); the Decisions stay open and answerable, their answers kept
-  for the client. A Stop pressed meanwhile, or sent and still unanswered when the link
-  dropped, is held for the client's return (the line that records the Stop says so) rather
-  than lost; Stop on
+  them. While it is away Chat adds no line about the connection (the machine
+  button carries it); the Decisions stay open and answerable, their answers kept
+  for the client. Stop on
   a Planner that only waits on a question withdraws it, and Chat says that. A
   document on **Default machine**
-  keeps its Planner running while that Planner is replying or waits on a question
-  or a live or paused workflow run, a disconnected Planner's kept work included, so
+  keeps its Planner running while that Planner is replying or waits on a question,
+  a disconnected Planner's kept work included, so
   nobody viewing the document does not withdraw it or cut its work short.
 - Cards an earlier Chopin closed unanswered after a fixed time stay in the
   document and in Decisions, among the resolved cards, marked
@@ -624,7 +619,7 @@ message naming the problem.
 | `abort`                                               | `part` (text, reasoning, tool input, own tool call/result, finish-step, finish, error) |
 | `host-tool-result`                                    | `host-tool-call`                                                                       |
 | `input-result` (answered, expired, cancelled, failed) | `input-request`, `input-cancel`                                                        |
-| `stop`, `resume` (Stop and Resume Planner)            | `control-result`, `runs` (run cards for Chat)                                          |
+| `steer` (a message for the running turn)              | `control-result`                                                                       |
 | `destroy`                                             | `turn-end`, `detach`                                                                   |
 
 **Attaching.** The upgrade request offers the `chopin.agent.v1` subprotocol, or
@@ -639,7 +634,7 @@ repository it cannot write, or a missing or archived document is refused with a
 `refused` message and close code 4426, 4403, or 4404. Neither attaching nor a
 refusal posts anything to the document. The account and repository access are
 checked again before every session and every turn the connection starts, including
-turns of a session kept for its runs, and every 5 minutes while the connection stays
+turns of a session kept for its open questions, and every 5 minutes while the connection stays
 attached; losing either fails that session or turn and closes the connection with
 `access-revoked`.
 
@@ -674,14 +669,14 @@ produce, is cleared under its generation and the document is claimed again.
 One client holds a document's Planner. While it is attached, every other
 `attach` for that document is refused with `planner-attached` (4409) and a
 message naming its GitHub login. A connection that detaches, or drops with no
-workflow run or open question to keep, keeps the ownership for
+open question to keep, keeps the ownership for
 `PLANNER_ATTACH_GRACE_MS` (2 minutes by default). A connection that
 answers none of the server's [protocol pings](agent-connection.md#pings) for
 `AGENT_CONNECTION_TIMEOUT_MS` (2 minutes by default) is closed as dropped, so a
 client whose network silently went away does not keep the document attached.
 Within the grace period the same account can attach again and keeps the same
 ownership generation; anyone else is refused. A link that offered
-`resumable-sessions` and dropped unexpectedly while it had runs or open questions
+`resumable-sessions` and dropped unexpectedly while it had open questions
 instead keeps the ownership with no deadline, as the document's **disconnected**
 Planner: the same account takes back the sessions, runs and questions whenever its
 client returns, however long that takes, and nobody else can attach meanwhile.
@@ -702,11 +697,10 @@ be closed. Attachments live in the server process, so a restart does not keep a 
 but it does keep what its client holds: at the cut, and when a link drops with work
 kept, the server writes each hold to `planner_link_holds` (see
 [Storage](storage.md#postgresql-schema)): the sessions the client holds, the questions
-it waits on, the answers it has not acknowledged and the Stops it has not heard. The next
+it waits on and the answers it has not acknowledged. The next
 process rebuilds each as a suspended hold, so a client that returns and sends `resume`
 takes its sessions back. No turn of the new process opened those sessions, so they reach the
-document through its room: their run reports are Chat's run cards, shown live, not stopped, when
-the document opens after the client is back, and a question asked on one after the restart is a
+document through its room: a question asked on one after the restart is a
 Decision, for which the document is opened if nobody has it open. Startup's reset keeps the owner of a document whose hold names a
 browser sign-in that has stored credentials; a paired machine's hold names the machine
 and no login, which a restart cannot keep: the machine's backend attaches again with its
@@ -726,14 +720,13 @@ it rewrites the row without it before it shows the hold (a write that fails is l
 window is still given), so a process that starts after that one crashed, inside the window or
 after it, finds the hold of a link that had already dropped, disconnected. Until the window ends, `session:planner`, the owner's own views and
 Planner comments treat it as attached, with its login, so no member sees it disconnected or
-reconnecting; a request to it is saved as a row and starts when it resumes, and workflow
-runs Chat stored come back live, not stopped. A `resume` inside the window before the owner's
+reconnecting; a request to it is saved as a row and starts when it resumes. A `resume` inside the window before the owner's
 browser sign-in is back (it comes back with the browser's cookie) is not refused: it waits, with
 the link kept and the machine shown attached, and the sessions are handed back the moment the
 sign-in is. One still without it when the window is over is refused with `unavailable` and
 `retry`, which a client retries; it is never `sign-in-required`, which would end the link. A
 `resume` inside the window ends it. When it ends with no resume the hold is disconnected,
-as a dropped link is today, announced, with run cards marked disconnected, and the miss is
+as a dropped link is today, announced, and the miss is
 logged with its cause: the owner's sign-in or the client was not back. A hold that was already
 disconnected keeps its state and gets no window, and one in its grace period is not kept.
 A question a client waited on is not waited on again: nothing in the new process can
@@ -781,16 +774,7 @@ _Connecting_ and _No machine is connected_ are said only once they have lasted t
 list names a machine the document does not run on, a teammate's or another of the person's own,
 for a Planner their own account is starting or has lost, while it describes another account's Planner than the page's connection does, or while it was read before the connection's last word, which describes the Planner as it was (the page reads it again on every word, and a read that began after the word is the one that may name a machine), nothing is named
 until it agrees. Meanwhile the status says nothing of the machine, however long that takes (a read that fails or a hidden tab leaves it empty, never stale), and what it said of an older word does not stay. The state it last showed and said is remembered through that gap, with the live region silent meanwhile, but only so that the same state naming the same machine, such as a word that repeats it with one more attempt, is neither made to wait out its grace again nor announced twice. Any other state that arrives after the gap is drawn by its own rules, never in place of what was shown before the gap: a state that waits (_Connecting_, _No machine is connected_) draws nothing until it has lasted its grace, so a document moved from one machine to another does not read the first machine's _offline_ before it says it is connecting to the second, and a state with no grace is drawn at once. With no gap, in an ordinary transition, the last state still stays through the grace of the next, so a reconnect does not flicker. A `disconnected` Planner's work is
-kept with no deadline. Its live
-run cards carry `disconnected` beside the status they last reported: each reads
-**disconnected**, not running or stopped, with a still ring instead of the pulse and
-its clock held at the last report; an open card says what it last reported and what
-happens when the Planner returns. A card offers Pause, named as waiting for the Planner
-to reconnect, because Chopin holds it, and no Resume, which it cannot hold. While the
-page's offline bar shows, the cards say nothing of the machine: no **disconnected**, no
-note, and a plain Pause, with the status as last reported, a still neutral ring and the
-clock held; the words come back with the connection, as the state then is. Decisions
-stay where they were and stay answerable. **Build plan** says to reconnect the machine
+kept with no deadline. Decisions stay where they were and stay answerable. **Build plan** says to reconnect the machine
 (_Reconnect the machine to build_), and a new comment is not sent to Chopin by default, until
 it does. With no machine connected at all it says _Connect a machine to this document to
 build_ and offers how to connect one.
@@ -859,36 +843,27 @@ a document with no attached client; its job stays pending until one attaches. A 
 client's `turn-end`, then ends the turn anyway. A turn that ends while one of
 its host tools still runs, such as an `ask` waiting on Decisions, stops that tool
 and withdraws the cards it opened. A connection that closes mid-turn ends the turn
-with an error rather than as a stop, its open questions are withdrawn, and runs
-it reported are shown stopped; nothing waits on a client that has gone. A
+with an error rather than as a stop and its open questions are withdrawn; nothing
+waits on a client that has gone. A
 session the client refuses or does not start in time is destroyed, and any
 question it asked while starting is withdrawn.
 
 **Questions.** An `input-request` carries one Atomic `HostInput` call
 (`questionnaire`, `confirm`, `select`, `input`, or `editor`) and becomes Decisions
 through the same path as the [full Atomic Planner](#full-atomic-planner): the same
-verbatim text, the same 30-minute expiry, cancellation that withdraws open
-cards, and answers to a workflow question held while the client reports that
-run's root as paused. `input-result` returns what Atomic would have received in
+verbatim text, the same 30-minute expiry, and cancellation that withdraws open
+cards. `input-result` returns what Atomic would have received in
 process, with a status that tells an expiry from a cancellation. Stopping a turn
-withdraws the questions it asked while it ran outside any workflow run, as Stop
+withdraws the questions it asked while it ran, as Stop
 does an Atomic Planner's, and cancels at once any it asks before it ends, so a
 Decision the turn waited on never keeps its session for the next message.
 
-**Runs.** The client reports its workflow runs with `runs`; Chat shows those
-cards and keeps the session after its turn while any run is live or paused (an
-Atomic Planner has no runs; see [Session lifecycle](#session-lifecycle)).
-**Stop Planner** and **Resume Planner** send `stop` and `resume`, optionally for
-one run, and wait for `control-result`. A reported run that ends, blocked or
-failed included, gets only its Chat notice: the reports are the client's word,
-so they never start a Planner turn that no writer asked for. A client that asks
-for the `run-stage-deltas` feature sends only new and changed stages, so a run's
-stages have no count limit; Chopin merges them into the run's stored stages (see
-[Agent connection](agent-connection.md#run-stage-deltas)). The Planner's
-instructions name none of the client's tools, since a client on Atomic 0.10 has
-no `workflow` tool: they say Chat shows a card for each run the client reports
-and that a Build is not one, and tell the model to offer to check on or steer such
-a run itself only if its own tools can.
+**Work the client keeps.** Chopin keeps no workflow runs of a client's and shows no run cards: a
+client's own work that outlives its turn is the client's to report in its replies. A session is
+kept past its turn only while it waits on a question it asked or on an answer its client has not
+received (see [Session lifecycle](#session-lifecycle)). **Stop Planner** stops the running turn,
+or withdraws the question a kept session waits on. The Planner's instructions name none of the
+client's tools.
 
 **Trust boundary.** The server never holds the client's model credentials and
 gains no shell or filesystem access from this harness. The client, in turn,
@@ -1880,58 +1855,25 @@ A harness session is disposable. A process restart, credential rotation,
 logout, or ownership reset discards it. A later turn bootstraps from the
 bounded transcript and reads the current document.
 
-The one exception is a Planner session that still owns workflow runs when its
-turn ends. Only a remote Planner's client reports runs (see
-[Runs](#remote-planner)). An Atomic Planner has none, since Atomic has no
-workflows since 0.10 and the Planner starts no subagents, so **Stop Planner** on
-one stops its turn and pauses nothing. A run outlives the turn
-that launched it, so Chopin keeps the session and its owner binding, and keeps the
-document loaded, until every run has finished. People steer through Chat and
-Decisions, never a stage directly. **Stop Planner** also pauses the session's live
-runs, resumably, and **Resume Planner** resumes the runs it paused. A run waiting on
-a question pauses too, and an answer that arrives during the pause reaches the run
-only after Resume, so a paused run never advances. The Atomic adapter stops any
-turn Atomic starts on its own, such as for its lifecycle notices or, since Atomic
-0.9.41, for a message queued while the session is idle, because Chopin would
-neither show nor record it. The Planner's next turn still starts normally.
-Chat shows the session's runs as one stack, one row
-per run: its name, status (running, waiting on Decisions, paused, or ended), and
-elapsed time. Several runs can be live at once. Runs waiting on Decisions come
-first, then running, paused, and ended runs, newest first within each, and more
-than three rows fold behind "more" without ever hiding a waiting run. Only the
-first waiting run, or else the newest live one, shows its stages; any row opens
-on click to show its six most recent stages with their status and duration, and
-a waiting row links to its Decisions. Chopin stores every stage of a run, with
-no limit on how many, in `workflow_run_stages` (see
-[Storage](storage.md#postgresql-schema)); the card itself carries only the latest
-12, with an unfinished stage under an ended ancestor already shown as stopped.
-Its "+N earlier" button unfolds every stage in a list that scrolls inside the
-card, loading the stored ones 200 at a time from
-`GET /api/channels/<id>/runs/<run id>/stages?offset=&limit=` (for anyone who can
-read the document; at most 500 a page) only when someone unfolds it, and says
-how many earlier stages nobody reported; "Show fewer" folds it back and forgets
-them. Each live row can be paused, and each paused row resumed, on its own; Chat
-records who did. The stack and every stage are stored with the document, so a
-reload or restart keeps them, including for finished runs; a run that was live
-when the server stopped comes back stopped. A stored run's stages go when its
-card does. Ended rows stay until the next workflow starts in the
-document. When a run ends, Chat also records a line saying how it ended and how
-long it took. The session is let go when its runs finish, when its owner
-binding ends, or when the document closes. A session that waits on a question
-it asked, such as an `ask_user_question` with no reported run, is kept the same way
-until a member answers it or it is withdrawn. A turn whose Chat reply could not
-be verified, or moved into inline decisions, fails without letting go a session
-that still owns runs or waits on a question, so that failure ends no run and
-withdraws no question. An explicit Stop still lets go a session that only waits on
-a question, but changes nothing for one whose workflows are paused: they and the
-question they hold open wait for Resume. The
-"was stopped after N min" line records how long the run had lasted when its
-session was let go, not a limit. An Atomic Planner session keeps its history in
+The one exception is a Planner session that waits on a question it asked, such as an
+`ask_user_question`, or on an answer its client has not received, when its turn ends. Chopin
+keeps the session and its owner binding, and keeps the document loaded, until a member answers
+the question or it is withdrawn, and the next turn reuses it. The session is let go once no
+question is open and every answer has reached its client, when its owner binding ends, or when
+the document closes. A turn whose Chat reply could not be verified, or moved into inline
+decisions, fails without letting go a session that waits on a question, so that failure
+withdraws no question. **Stop Planner** stops the running turn; with no turn running, it lets go
+a session that only waits on a question, which withdraws the question, and Chat says so. Chopin
+keeps no workflow runs and shows no run cards: a remote client's own work that outlives its turn
+is the client's to report in its replies. The Atomic adapter stops any turn Atomic starts on its
+own, such as for its lifecycle notices or, since Atomic 0.9.41, for a message queued while the
+session is idle, because Chopin would neither show nor record it. The Planner's next turn still
+starts normally. An Atomic Planner session keeps its history in
 memory, and Chopin saves its every entry with the document for forks and threads,
 so Atomic's shared top-level `storage` setting and its `ATOMIC_STORAGE` and
 `ATOMIC_SESSIONS_STORAGE` selections do not move it. Atomic still checks every set
 `ATOMIC_STORAGE` and `ATOMIC_SESSIONS_STORAGE` when it creates a session, so an
-invalid value fails every Atomic turn with a `StorageConfigError` naming the variable. A Build is not a workflow run and has no card in Chat: its tasks, their
+invalid value fails every Atomic turn with a `StorageConfigError` naming the variable. A Build's tasks, their
 state and pull requests show under **Build**, whichever machine runs it. The
 Planner's instructions say so, so it does not point people to Chat for a Build.
 

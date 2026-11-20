@@ -20,7 +20,6 @@ import {
 } from "../../testing/agent-link";
 import { hostInputRoom } from "../../testing/decisions";
 import { createHumanInput } from "../atomic/human-input";
-import { untilUnpaused } from "../runs";
 import { createRemoteAdapter } from "./adapter";
 import { agentLink } from "./endpoint";
 import { MachinePlanners } from "./machine-planners";
@@ -388,6 +387,15 @@ describe("a paired machine's Planner", () => {
 		raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
 		await raw.next("attached");
 		let planner: RemotePlanner = { channelId: channel.id, isolated: false };
+		let unanswered = () => new Promise<never>(() => {});
+		planner.humanInput = () =>
+			({
+				questionnaire: unanswered,
+				confirm: unanswered,
+				select: unanswered,
+				input: unanswered,
+				editor: unanswered,
+			}) as never;
 		let sessionId = crypto.randomUUID();
 		let opening = createRemoteAdapter(() => ({ link: first.links.at(-1)!, planner })).doStart({
 			sessionId,
@@ -403,24 +411,20 @@ describe("a paired machine's Planner", () => {
 		raw.send({ type: "started", session: (await raw.next("start")).session });
 		cleanups.push(() => void opening.then(session => session.doDestroy()));
 		await opening;
+		// A question nobody answers is work the client keeps across the restart.
 		raw.send({
-			type: "runs",
+			type: "input-request",
+			request: "ask-1",
 			session: sessionId,
-			active: ["run"],
-			paused: [],
-			cards: [{
-				id: "run",
-				name: "plan",
-				status: "running",
-				started: 1,
-				updated: 1,
-				stages: [],
-				waiting: 0,
-			}],
+			input: { method: "confirm", title: "Ship?", message: "Now." },
 		});
-		for (let deadline = Date.now() + 2_000; !planner.runs && Date.now() < deadline;) {
+		for (
+			let deadline = Date.now() + 2_000;
+			!first.attachments.waiting(channel.id) && Date.now() < deadline;
+		) {
 			await Bun.sleep(5);
 		}
+		expect(first.attachments.waiting(channel.id)).toBe(true);
 		let oldLogin =
 			(await storage.channels.readAgent(channel.id, new Date()))!.agent!.ownerSessionId;
 
@@ -640,16 +644,6 @@ async function upgrade(url: string, credential: string) {
 	return (await upgradeRequest(url, { authorization: `Bearer ${credential}` })).status;
 }
 
-const run = {
-	id: "run",
-	name: "plan",
-	status: "running" as const,
-	started: 1,
-	updated: 1,
-	stages: [],
-	waiting: 0,
-};
-
 async function until(check: () => boolean, ms = 4_000) {
 	for (let deadline = Date.now() + ms; Date.now() < deadline; await Bun.sleep(5)) {
 		if (check()) return;
@@ -659,7 +653,7 @@ async function until(check: () => boolean, ms = 4_000) {
 
 /**
  * A paired machine's Planner backend, attached with its credential and offering
- * `resumable-sessions`, with a run and a question open, whose link then drops.
+ * `resumable-sessions`, with a question open, whose link then drops.
  */
 async function parkedMachine() {
 	let m = await machineServer();
@@ -671,8 +665,7 @@ async function parkedMachine() {
 	raw.send({ type: "attach", version: AGENT_VERSION, document: m.channel.id });
 	await raw.next("attached");
 	let planner: RemotePlanner = { channelId: m.channel.id, isolated: false };
-	planner.humanInput = report =>
-		createHumanInput(f.room, (runId, signal) => untilUnpaused(planner, runId, signal), report);
+	planner.humanInput = report => createHumanInput(f.room, report);
 	let sessionId = crypto.randomUUID();
 	let opening = createRemoteAdapter(() => ({ link: m.server.links.at(-1)!, planner })).doStart({
 		sessionId,
@@ -696,8 +689,6 @@ async function parkedMachine() {
 		input: { method: "confirm", title: "Ship?", message: "Now." },
 	});
 	let [card] = await f.cards(1);
-	raw.send({ type: "runs", session: sessionId, active: ["run"], paused: [], cards: [run] });
-	await until(() => planner.runs?.active.length === 1);
 	raw.socket.close();
 	await raw.closed;
 	await until(() => m.server.links.length === 0);
@@ -712,7 +703,6 @@ async function parkedMachine() {
 		sessionId,
 		card: card!,
 		status: () => f.plan.records.get(card!.id)?.status,
-		runStatus: () => planner.runs?.cards[0]?.status,
 		token: issued.body.token,
 	};
 }
@@ -738,7 +728,6 @@ describe("a paired machine's Planner whose link dropped with its work kept", () 
 			sessions: [{ session: p.sessionId, requests: ["ask-1"] }],
 		});
 		expect(await next.next("input-result")).toMatchObject({ request: "ask-1", status: "answered" });
-		expect(p.runStatus()).toBe("running");
 	});
 
 	it("ends when its owner chooses another machine for the document", async () => {
@@ -749,7 +738,6 @@ describe("a paired machine's Planner whose link dropped with its work kept", () 
 			"chose another machine",
 		);
 		await until(() => p.status() === "cancelled");
-		expect(p.runStatus()).toBe("stopped");
 		expect(p.server.attachments.status(p.channel.id)).toEqual({ state: "none" });
 	});
 
@@ -757,7 +745,6 @@ describe("a paired machine's Planner whose link dropped with its work kept", () 
 		let p = await parkedMachine();
 		await p.machines.revoke(p.member.machine.id, "U_member");
 		await until(() => p.status() === "cancelled");
-		expect(p.runStatus()).toBe("stopped");
 		expect(p.server.attachments.status(p.channel.id)).toEqual({ state: "none" });
 		expect(await upgrade(p.server.url, p.token)).toBe(401);
 		expect(await p.credential(p.member.token, p.channel.id))
@@ -771,6 +758,5 @@ describe("a paired machine's Planner whose link dropped with its work kept", () 
 		browser.send({ type: "attach", version: AGENT_VERSION, document: p.channel.id });
 		await browser.next("attached");
 		await until(() => p.status() === "cancelled");
-		expect(p.runStatus()).toBe("stopped");
 	});
 });

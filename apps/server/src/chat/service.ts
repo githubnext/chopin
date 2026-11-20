@@ -45,9 +45,7 @@ import type { TellChat } from "./thread-notes";
 import * as Service from "../plan/service";
 import { instruction, PLANNER_NAME } from "@chopin/protocol/address";
 import { checkMessageAttachments, refusalText } from "@chopin/protocol/attachment";
-import { COMMAND_KINDS } from "@chopin/protocol/commands";
 import { UNREADABLE_NOTICE } from "@chopin/protocol/model-choice";
-import { settledStages } from "@chopin/protocol/run-stages";
 
 import { attachmentLimits } from "../attachments/limits";
 import { wireAttachment } from "../attachments/wire";
@@ -81,8 +79,7 @@ import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./r
 import { withSessionContext } from "./session-context";
 import { TOOL_UNAVAILABLE, turnFailureOf } from "./turn-failure";
 import { retryTarget } from "./retry";
-import { appendEntries, snapshotSeq, stampEntries, takeOut } from "./chronology";
-import { runDuration } from "./run-duration";
+import { appendEntries, snapshotSeq, takeOut } from "./chronology";
 import { READER_INSTRUCTIONS } from "./reaction-instructions";
 import type { InitiativeSchedule } from "./initiative-schedule";
 
@@ -93,7 +90,6 @@ import type { Config } from "../config";
 import type { Decide } from "../conversation-plan/decisions";
 import type { JevRequest } from "../conversation-plan/jev";
 import type { HostedAuth } from "../auth/routes";
-import type { PutRunStages } from "../storage/model";
 import type { HostedRepository } from "../agent/repository";
 import type { JobService } from "../jobs/service";
 import type { Plan } from "../plan/service";
@@ -434,12 +430,10 @@ export type Chat = {
 	modelUnreadable?: boolean;
 	/** Per-turn owner for revocation and credential rotation fencing. */
 	openingOwner?: { sessionId: string; generation: number; revision: number };
-	/** Current session. Disposable per turn, except a full Planner session kept while it owns workflow runs. */
+	/** Current session. Disposable per turn, except one kept while it waits on a question it asked. */
 	agent?: PlannerSession;
-	/** The Planner session kept past its turn, with its owner binding, until its workflow runs finish. */
+	/** The Planner session kept past its turn, with its owner binding, until its questions end. */
 	retained?: Retained;
-	/** Live and paused workflow runs of the retained session. */
-	runs?: Wire.Runs;
 	turnController?: AbortController;
 	/** Fences a turn invalidated while opening or streaming. */
 	lifecycle: number;
@@ -542,25 +536,15 @@ export function create(): Chat {
 }
 
 /**
- * Come back with what was said before, and the workflow runs shown then.
+ * Come back with what was said before.
  *
  * An entry that was still streaming when the process went away never finished,
  * so the flag is cleared: it is as complete as it is ever going to be, and
- * leaving it set would show a spinner nothing will ever stop. Runs still live
- * then have no session now, so they come back stopped.
+ * leaving it set would show a spinner nothing will ever stop.
  */
-export function restore(
-	entries: Wire.Entry[],
-	runs?: Wire.Run[],
-	initiativePaused = false,
-	keepRuns?: "live" | "down",
-): Chat {
-	let restoredRuns = keepRuns && runs?.length
-		? runs.map(run => disconnected(run, keepRuns === "down"))
-		: restoreRuns(runs);
+export function restore(entries: Wire.Entry[], initiativePaused = false): Chat {
 	return {
 		initiativePaused,
-		...(restoredRuns ? { runs: restoredRuns } : {}),
 		entries: entries.map(entry => {
 			// A message an earlier release kept for a machine reads as an ordinary one: nothing is kept.
 			let {
@@ -774,7 +758,6 @@ function state(chat: Chat, server: Server<SocketData>, room: string): void {
 		ts: 0,
 		busy: chat.busy,
 		...(chat.turn ? { turn: chat.turn } : {}),
-		...(chat.runs ? { runs: chat.runs } : {}),
 	});
 	composed(chat);
 }
@@ -827,7 +810,6 @@ export function greet(chat: Chat, ws: Socket): void {
 		seq: snapshotSeq(chat),
 		busy: chat.busy,
 		...(chat.turn ? { turn: chat.turn } : {}),
-		...(chat.runs ? { runs: chat.runs } : {}),
 		participation: {
 			enabled: !!chat.initiativeEnabled,
 			paused: false,
@@ -882,7 +864,7 @@ export type Room = {
 	steers?: () => boolean;
 	activeOwner?: () => Promise<ActiveOwnerBinding | undefined>;
 	/** Saves the Chat. */
-	persist: (chat?: () => Pick<Chat, "entries" | "runs" | "initiativePaused">) => Promise<void>;
+	persist: (chat?: () => Pick<Chat, "entries" | "initiativePaused">) => Promise<void>;
 	initiativePresent?: (sessionId: string, actor: string) => boolean;
 	initiativeAuthorize?: (sessionId: string, actor: string) => Promise<boolean>;
 	/**
@@ -944,7 +926,7 @@ export type Room = {
 	}) => Promise<ResearchWorkspaceRequest>;
 	/** Creates a top-level document for the person whose message drives the turn. */
 	createDocument?: (request: Omit<NewDocumentRequest, "sourceId">) => Promise<NewDocumentResult>;
-	/** Keeps the room loaded while a retained Planner still owns workflow runs; returns the release. */
+	/** Keeps the room loaded while a retained Planner still waits on a question; returns the release. */
 	hold?: () => () => void;
 	/** The task draft the turn being started carries. */
 	draft?: string;
@@ -2248,80 +2230,18 @@ let { job, cancelQueuedJobs, stopAfterPersistenceFailure } = createJobQueue({
 export { cancelQueuedJobs, job };
 
 /**
- * Stop the running turn and pause the Planner's workflow runs, so both hold
- * until someone resumes them. Anyone may, and the transcript says who did.
+ * Stop the running turn, or, with none running, withdraw the question a kept Planner session
+ * waits on. Anyone may, and the transcript says who did.
  */
-type RunsSnapshot = ReturnType<NonNullable<PlannerSession["runs"]>>;
-type StoppingRuns = {
-	pause: Promise<void>;
-	targets: Set<string>;
-	pausedTargets: Set<string>;
-	reset: boolean;
-	settled: boolean;
-	paused: boolean;
-	unwatch?: () => void;
-};
-
-const stoppingRuns = new WeakMap<PlannerSession, StoppingRuns>();
-
-function observeStoppingRuns(stopping: StoppingRuns, runs: RunsSnapshot): void {
-	if (!runs) return;
-	for (let id of runs.paused) if (stopping.targets.has(id)) stopping.pausedTargets.add(id);
-	stopping.reset = runs.active.some(id =>
-		!stopping.targets.has(id) || stopping.pausedTargets.has(id)
-	);
-}
-
-function clearStoppingRuns(session: PlannerSession, stopping: StoppingRuns): void {
-	if (stoppingRuns.get(session) !== stopping) return;
-	stoppingRuns.delete(session);
-	stopping.unwatch?.();
-}
-
 export async function abort(context: Room, ws: Socket): Promise<void> {
 	let { chat, room, server } = context;
 	let turn = chat.busy && !chat.turnController?.signal.aborted
 		? chat.turnController
 		: undefined;
 	chat.initiative?.cancel();
-	let session = chat.retained?.session ?? chat.agent;
-	let runs = session?.runs?.();
-	let live = (runs?.active.length ?? 0) > 0;
-	let notice = (paused: boolean, outcome?: "held" | "unconfirmed" | "failed") =>
-		say(chat, server, room, {
-			id: ulid(),
-			author: { kind: "system" },
-			text: paused
-				? `@${ws.data.handle} stopped ${PLANNER_NAME} and paused its workflows.`
-				: outcome === "held"
-				? `@${ws.data.handle} asked ${PLANNER_NAME} to stop. Its machine is disconnected, `
-					+ "so its workflows will pause when it reconnects."
-				: outcome === "unconfirmed"
-				? `@${ws.data.handle} asked ${PLANNER_NAME} to stop its workflows. It has not confirmed `
-					+ "yet, and if its machine is disconnected they will pause when it reconnects."
-				: outcome === "failed" && !turn
-				? `@${ws.data.handle} asked ${PLANNER_NAME} to stop, but its workflows could not be paused.`
-				: `@${ws.data.handle} stopped the turn.`,
-			ts: now(),
-		});
-	let stopping = session && stoppingRuns.get(session);
-	if (stopping) observeStoppingRuns(stopping, runs);
-	if (session && stopping?.settled && stopping.paused && stopping.reset) {
-		clearStoppingRuns(session, stopping);
-		stopping = undefined;
-	}
-	if (stopping) {
-		if (turn) {
-			turn.abort();
-			notice(false);
-		}
-		await stopping.pause;
-		return;
-	}
-	if (!turn && !live) {
-		// A Planner that only waits on a question it asked has nothing to pause; Stop withdraws it.
-		// One whose workflows are paused keeps them and their question for Resume.
-		if (chat.retained && chat.retained.session.inputs?.open() && !runs?.paused.length) {
+	if (!turn) {
+		// A Planner that only waits on a question it asked has nothing else to stop: Stop withdraws it.
+		if (chat.retained && chat.retained.session.inputs?.open()) {
 			await chat.retained.release();
 			say(chat, server, room, {
 				id: ulid(),
@@ -2332,415 +2252,13 @@ export async function abort(context: Room, ws: Socket): Promise<void> {
 		}
 		return;
 	}
-	if (live && session?.pauseRuns) {
-		let pauseRuns = session.pauseRuns;
-		let stopping: StoppingRuns = {
-			pause: Promise.resolve(),
-			targets: new Set(runs?.active ?? []),
-			pausedTargets: new Set(),
-			reset: false,
-			settled: false,
-			paused: false,
-		};
-		stopping.pause = Promise.resolve().then(async () => {
-			let outcome: "held" | "unconfirmed" | "failed" | undefined;
-			try {
-				// A Planner whose link is down, or dropped before it answered, hears the Stop when it
-				// returns, not now; one that has not answered yet may or may not have heard it.
-				let result = await pauseRuns.call(session);
-				if (result) outcome = result;
-				else stopping.paused = true;
-			} catch (err) {
-				console.error("[chat] pausing workflow runs failed:", err);
-				outcome = "failed";
-			}
-			notice(stopping.paused, outcome);
-		});
-		stoppingRuns.set(session, stopping);
-		stopping.unwatch = session.watchRuns?.(next => {
-			observeStoppingRuns(stopping, next);
-			if (stopping.settled && stopping.paused && stopping.reset) {
-				clearStoppingRuns(session, stopping);
-			}
-		});
-		turn?.abort();
-		try {
-			await stopping.pause;
-		} finally {
-			stopping.settled = true;
-			observeStoppingRuns(stopping, session.runs?.());
-			if (!stopping.paused || stopping.reset) clearStoppingRuns(session, stopping);
-		}
-		return;
-	}
-	turn?.abort();
-	notice(false);
-}
-
-/** Resume the workflow runs the Planner paused. Anyone may, and the transcript says who did. */
-export async function resume(context: Room, ws: Socket): Promise<void> {
-	let { chat, room, server } = context;
-	let session = chat.retained?.session;
-	if (!session?.resumeRuns || !session.runs?.()?.paused.length) return;
-	let text = `@${ws.data.handle} resumed ${PLANNER_NAME}'s workflows.`;
-	try {
-		await session.resumeRuns();
-	} catch (err) {
-		console.error("[chat] resuming workflow runs failed:", err);
-		text = `${PLANNER_NAME}'s workflows could not be resumed.`;
-	}
-	say(chat, server, room, { id: ulid(), author: { kind: "system" }, text, ts: now() });
-}
-
-/** Pause or resume one workflow run of the retained Planner. Anyone may, and the transcript says who did. */
-export async function controlRun(
-	context: Room,
-	ws: Socket,
-	frame: { kind: "chat:pause-run" | "chat:resume-run"; runId?: unknown },
-): Promise<void> {
-	let { chat, room, server } = context;
-	let session = chat.retained?.session;
-	let run = typeof frame.runId === "string"
-		? chat.runs?.find(candidate => candidate.id === frame.runId)
-		: undefined;
-	let runs = session?.runs?.();
-	if (!session || !run) return;
-	let pausing = frame.kind === "chat:pause-run";
-	if (pausing ? !runs?.active.includes(run.id) : !runs?.paused.includes(run.id)) return;
-	let control = pausing ? session.pauseRun : session.resumeRun;
-	if (!control) return;
-	let text = `@${ws.data.handle} ${pausing ? "paused" : "resumed"} ${run.name}.`;
-	try {
-		// A Planner whose link is down, or dropped before it answered, hears a pause when it
-		// returns, not now.
-		let outcome = await control(run.id);
-		if (outcome === "held") {
-			text = `@${ws.data.handle} asked to pause ${run.name}. `
-				+ "It will pause when the machine reconnects.";
-		} else if (outcome === "unconfirmed") {
-			text = `@${ws.data.handle} asked to pause ${run.name}. ${PLANNER_NAME} has not confirmed `
-				+ "yet, and if its machine is disconnected it will pause when it reconnects.";
-		}
-	} catch (err) {
-		console.error(`[chat] ${pausing ? "pausing" : "resuming"} workflow run failed:`, err);
-		text = `${run.name} could not be ${pausing ? "paused" : "resumed"}.`;
-	}
-	say(chat, server, room, { id: ulid(), author: { kind: "system" }, text, ts: now() });
-}
-
-const ENDED_RUN: Partial<Record<Wire.Run["status"], string>> = {
-	finished: "finished",
-	blocked: "ended blocked",
-	failed: "failed",
-	stopped: "was stopped",
-};
-
-/**
- * The run cards Chat shows after the retained session reports `incoming`. Ended
- * cards stay until a new run starts in the document. With no report, the session
- * was let go, so a card still marked live becomes stopped.
- */
-export function mergeRuns(
-	previous: Wire.Run[],
-	incoming: Wire.Run[] | undefined,
-	at: number,
-): Wire.Run[] {
-	if (!incoming) return previous.map(run => ENDED_RUN[run.status] ? run : stopped(run, at));
-	let known = new Set(previous.map(run => run.id));
-	if (incoming.some(run => !known.has(run.id))) return incoming;
-	let reported = new Set(incoming.map(run => run.id));
-	return [...previous.filter(run => ENDED_RUN[run.status] && !reported.has(run.id)), ...incoming];
-}
-
-function stopped(run: Wire.Run, at: number): Wire.Run {
-	let { disconnected: _, ...rest } = run;
-	return { ...rest, status: "stopped", ended: run.ended ?? at, waiting: 0 };
-}
-
-const LIVE_STATUS = new Set<Wire.Run["status"]>(["running", "waiting", "paused"]);
-
-/**
- * A live card of a session whose Planner is disconnected says so, keeping the status it last
- * reported: the run goes on when the Planner returns. Any other card carries no such mark.
- */
-function disconnected(run: Wire.Run, down: boolean): Wire.Run {
-	let { disconnected: _, ...rest } = run;
-	return down && LIVE_STATUS.has(run.status) ? { ...rest, disconnected: true } : rest;
-}
-
-/**
- * What became of the workflow runs a hold rebuilt after a restart kept for its client, whose
- * cards Chat restored live: the client did not come back in time and the cards say its Planner is
- * disconnected (`down`), it came back and took them (`up`), or they ended with the hold. A live
- * session of the room's own reports its runs itself, so none of this applies while one is open.
- */
-export async function restoredRuns(
-	context: Pick<Room, "chat" | "room" | "server" | "persist">,
-	outcome: "down" | "up" | "ended",
-): Promise<void> {
-	let { chat, room, server } = context;
-	if (!chat.runs?.length || chat.retained || chat.closed) return;
-	let at = now();
-	let next = chat.runs.map(run =>
-		outcome === "ended"
-			? ENDED_RUN[run.status] ? run : stopped(run, at)
-			: disconnected(run, outcome === "down")
-	);
-	if (JSON.stringify(next) === JSON.stringify(chat.runs)) return;
-	await context.persist(() => ({ entries: chat.entries, runs: next }));
-	chat.runs = next;
-	state(chat, server, room);
-}
-
-/**
- * The document was archived: every run its Planner held ends with it, whether the Planner was
- * attached, disconnected with its work kept, or between two processes of a deploy, so no card is
- * left running or waiting on a question nobody can answer now. Saved with the document.
- */
-export async function endRuns(
-	context: Pick<Room, "chat" | "room" | "server" | "persist">,
-): Promise<void> {
-	let { chat, room, server } = context;
-	if (!chat.runs?.length) return;
-	let at = now();
-	let next = chat.runs.map(run => ENDED_RUN[run.status] ? run : stopped(run, at));
-	if (JSON.stringify(next) === JSON.stringify(chat.runs)) return;
-	await context.persist(() => ({ entries: chat.entries, runs: next }));
-	chat.runs = next;
-	state(chat, server, room);
-}
-
-/** Run cards restored with the document; no session survives a reload of the room, so live ones were stopped. */
-export function restoreRuns(runs: Wire.Run[] | undefined): Wire.Run[] | undefined {
-	return runs?.length ? mergeRuns(runs, undefined, now()) : undefined;
-}
-
-/** The latest stages a run card carries; every stage is stored, and Chat pages in the rest. */
-const CARD_STAGES = 12;
-
-/** What storage holds for each run reported to this chat: stage ids in order, and each as JSON. */
-const storedStages = new WeakMap<Chat, Map<string, { ids: string[]; json: Map<string, string> }>>();
-
-/**
- * Stores every stage of the reported cards before their window is shown, once a run has more
- * than its card carries. A report that only adds and changes stages writes those; one that drops
- * or reorders stages replaces the run's.
- */
-function storeStages(context: RunsRoom, cards: Wire.Run[]): Promise<void> | undefined {
-	let known = storedStages.get(context.chat)
-		?? new Map<string, { ids: string[]; json: Map<string, string> }>();
-	storedStages.set(context.chat, known);
-	let writes: Array<
-		{ card: Wire.Run; ids: string[]; json: Map<string, string>; put: PutRunStages }
-	> = [];
-	for (let card of cards) {
-		let before = known.get(card.id);
-		// The card itself keeps a run that has never outgrown it.
-		if (!before && card.stages.length <= CARD_STAGES && !card.earlierStages) continue;
-		let ids = card.stages.map(stage => stage.id);
-		let json = new Map(card.stages.map(stage => [stage.id, JSON.stringify(stage)]));
-		let appends = before !== undefined && before.ids.length <= ids.length
-			&& before.ids.every((id, index) => ids[index] === id) && json.size === ids.length;
-		let stages = appends
-			? card.stages.filter(stage => before!.json.get(stage.id) !== json.get(stage.id))
-			: card.stages;
-		if (appends && !stages.length) continue;
-		let put = {
-			channelId: context.room,
-			runId: card.id,
-			stages,
-			...(appends ? {} : { replace: true }),
-		};
-		writes.push({ card, ids, json, put });
-	}
-	// Nothing to write leaves publication on the same tick.
-	if (!writes.length) return undefined;
-	return (async () => {
-		for (let { card, ids, json, put } of writes) {
-			await context.auth.storage.runStages.put(put);
-			known.set(card.id, { ids, json });
-		}
-	})();
-}
-
-/** A card as Chat shows it: its latest stages, settled against every earlier one, and a count of the rest. */
-function cardWindow(run: Wire.Run): Wire.Run {
-	if (run.stages.length <= CARD_STAGES) return run;
-	let earlier = run.stages.length - CARD_STAGES;
-	return {
-		...run,
-		stages: settledStages(run.stages).slice(earlier),
-		earlierStages: earlier + (run.earlierStages ?? 0),
-	};
-}
-
-/** Forgets the stored stages of runs Chat no longer shows. */
-async function forgetStages(context: RunsRoom, shown: Wire.Run[] | undefined): Promise<void> {
-	let ids = (shown ?? []).map(run => run.id);
-	let known = storedStages.get(context.chat);
-	for (let id of known?.keys() ?? []) if (!ids.includes(id)) known!.delete(id);
-	try {
-		await context.auth.storage.runStages.retain(context.room, ids);
-	} catch (err) {
-		console.error("[chat] forgetting workflow run stages failed:", err);
-	}
-}
-
-const publishing = new WeakMap<Chat, Promise<void>>();
-const owners = new WeakMap<Chat, Map<string, RunsOwner>>();
-const unsaved = new WeakMap<RunsOwner, Runs>();
-const gone = new WeakSet<RunsOwner>();
-
-type Runs = { active: string[]; paused: string[]; cards?: Wire.Run[] };
-
-/** The session whose runs a card shows: a retained Planner session, or one a restart rebuilt. */
-type RunsOwner = Pick<PlannerSession, "suspended">;
-
-/** What showing and storing a session's run cards needs of the room. */
-type RunsRoom = Pick<Room, "chat" | "room" | "server" | "persist"> & {
-	auth: { storage: Pick<Room["auth"]["storage"], "runStages"> };
-};
-
-/** Stand-ins, by session id, for the sessions a restart rebuilt whose clients report runs. */
-const rebuiltOwners = new WeakMap<Chat, Map<string, { owner: RunsOwner; down: boolean }>>();
-
-/**
- * Shows the runs reported by a Planner session a restart rebuilt and its client took back, `down`
- * while its client's link has dropped again. No turn of this process opened that session, so
- * nothing here retains it and its reports reach Chat only this way, as a retained session's do.
- */
-export function rebuiltRuns(
-	context: RunsRoom,
-	session: string,
-	runs: Runs,
-	down = false,
-): Promise<void> {
-	if (context.chat.closed) return Promise.resolve();
-	let known = rebuiltOwners.get(context.chat)
-		?? new Map<string, { owner: RunsOwner; down: boolean }>();
-	rebuiltOwners.set(context.chat, known);
-	let entry = known.get(session);
-	if (!entry) {
-		let made: { owner: RunsOwner; down: boolean } = {
-			owner: { suspended: () => made.down },
-			down,
-		};
-		entry = made;
-		known.set(session, entry);
-	}
-	entry.down = down;
-	return publishRuns(context, entry.owner, runs);
-}
-
-/**
- * Show the session's runs, keeping ended ones as summary cards until the next
- * run starts, store them with the document so a reload keeps them, and say once
- * in the transcript when one ends. A card belongs to the session that reported
- * it: a report or release only changes its own session's cards.
- */
-function publishRuns(
-	context: RunsRoom,
-	session: RunsOwner,
-	runs: Runs | undefined,
-	releasing = false,
-): Promise<void> {
-	let known = owners.get(context.chat) ?? new Map<string, RunsOwner>();
-	owners.set(context.chat, known);
-	for (let run of runs?.cards ?? []) known.set(run.id, session);
-	let turn = (publishing.get(context.chat) ?? Promise.resolve()).then(() =>
-		publishReport(context, session, runs, releasing)
-	);
-	publishing.set(context.chat, turn);
-	return turn;
-}
-
-async function publishReport(
-	context: RunsRoom,
-	session: RunsOwner,
-	runs: Runs | undefined,
-	releasing: boolean,
-): Promise<void> {
-	let { chat, room, server } = context;
-	let at = now();
-	let known = owners.get(chat)!;
-	let prior = chat.runs ?? [];
-	let before = new Map(prior.map(run => [run.id, run.status]));
-	let theirs = (run: Wire.Run) => {
-		let holder = known.get(run.id);
-		return holder !== undefined && holder !== session && !gone.has(holder);
-	};
-	let others = prior.filter(theirs);
-	let mine = prior.filter(run => !theirs(run)).map(run =>
-		known.get(run.id) === session || ENDED_RUN[run.status] ? run : stopped(run, at)
-	);
-	// A card with no stages for a run Chat already shows stages of changes only the card's status
-	// and times: a reattached Planner reports an ended run without them, and they stay stored.
-	let kept = new Set<string>();
-	let incoming = runs?.cards?.map(reported => {
-		// A run has finished only once its root ended, which a finished card carries as `ended`;
-		// one reported finished without it has just started and is still live.
-		let card: Wire.Run = reported.status === "finished" && reported.ended === undefined
-			? { ...reported, status: reported.waiting > 0 ? "waiting" : "running" }
-			: reported;
-		let shown = card.stages.length ? undefined : prior.find(run => run.id === card.id);
-		if (!shown || (!shown.stages.length && !shown.earlierStages)) return card;
-		kept.add(card.id);
-		let { earlierStages: _, ...fields } = card;
-		return {
-			...fields,
-			stages: shown.stages,
-			...(shown.earlierStages ? { earlierStages: shown.earlierStages } : {}),
-		};
+	turn.abort();
+	say(chat, server, room, {
+		id: ulid(),
+		author: { kind: "system" },
+		text: `@${ws.data.handle} stopped the turn.`,
+		ts: now(),
 	});
-	let down = !releasing && session.suspended?.() === true;
-	let own = mergeRuns(mine, incoming, at).map(run =>
-		disconnected(run, down && known.get(run.id) === session)
-	);
-	if (releasing) own = mergeRuns(own, undefined, at);
-	let fresh = (runs?.cards ?? []).some(run => !before.has(run.id));
-	let cards = [...others.filter(run => fresh ? !ENDED_RUN[run.status] : true), ...own];
-	let position = (run: Wire.Run) => {
-		let index = prior.findIndex(value => value.id === run.id);
-		return index < 0 ? prior.length : index;
-	};
-	cards.sort((a, b) => position(a) - position(b));
-	// A new run replaces ended cards, including ones this report has just stopped; those still
-	// get their one finish message.
-	let shown = new Set(cards.map(run => run.id));
-	let replaced = mine.filter(run => !shown.has(run.id));
-	let finished: Wire.Entry[] = [];
-	for (let run of [...cards, ...replaced]) {
-		let ended = ENDED_RUN[run.status];
-		let previous = before.get(run.id);
-		if (!ended || (previous && ENDED_RUN[previous])) continue;
-		let said = `${run.name} ${ended} after ${
-			runDuration((run.ended ?? run.updated) - run.started)
-		}.`;
-		finished.push({ id: ulid(), author: { kind: "system" }, text: said, ts: now() });
-	}
-	let next = cards.length ? cards.map(cardWindow) : undefined;
-	try {
-		let storing = storeStages(context, (runs?.cards ?? []).filter(card => !kept.has(card.id)));
-		if (storing) await storing;
-		stampEntries(chat, ...finished);
-		await context.persist(() => ({ entries: [...chat.entries, ...finished], runs: next }));
-	} catch (err) {
-		console.error("[chat] storing workflow runs failed:", err);
-		if (releasing) unsaved.delete(session);
-		else if (runs) unsaved.set(session, runs);
-		return;
-	}
-	unsaved.delete(session);
-	chat.runs = next;
-	// Whatever Chat took while this was saved goes ahead of it, and the save follows.
-	if (appendEntries(chat, ...finished)) {
-		await context.persist().catch(err =>
-			console.error("[chat] could not save workflow notices in their place:", err)
-		);
-	}
-	for (let entry of finished) announce(server, room, entry);
-	state(chat, server, room);
-	if (prior.some(run => !shown.has(run.id))) await forgetStages(context, next);
 }
 
 /**
@@ -2754,60 +2272,34 @@ function owesInput(session: PlannerSession): boolean {
 }
 
 /**
- * Keep a Planner session that still owns workflow runs, or waits on a question
- * it asked, instead of destroying it with its turn: the runs and the question
- * belong to the session, and the next turn reuses it so the Planner can still
- * see and steer them. It is let go once every run has finished, no question
- * is open and every answer has reached its client, when its owner binding
- * ends, or when the chat closes.
+ * Keep a Planner session that waits on a question it asked instead of destroying it with its
+ * turn: the question belongs to the session, and the next turn reuses it. It is let go once no
+ * question is open and every answer has reached its client, when its owner binding ends, or when
+ * the chat closes.
  */
 function retain(
 	context: Room,
 	opened: { session: PlannerSession; binding: ActiveOwnerBinding },
 ): boolean {
 	let { chat } = context;
-	let runs = opened.session.runs?.();
-	let live = !!runs && (runs.active.length > 0 || runs.paused.length > 0);
-	// A question no member has answered is open work: its request ends with the session. So does
-	// an answer its client has not received.
-	let asking = owesInput(opened.session);
 	if (chat.retained && chat.retained.session !== opened.session) return false;
 	if (opened.binding.signal.aborted) return false;
-	if (!live && !asking) {
-		if (runs) void publishRuns(context, opened.session, runs);
-		return false;
-	}
-	let report = (next: NonNullable<typeof runs>) => publishRuns(context, opened.session, next);
+	// A question no member has answered is open work: its request ends with the session. So does
+	// an answer its client has not received.
+	if (!owesInput(opened.session)) return false;
 	if (!chat.retained) {
 		let unhold = context.hold?.();
 		let releaseWhenIdle = async () => {
-			await publishing.get(chat);
 			if (chat.busy) await chat.running;
 			if (chat.busy || chat.retained?.session !== opened.session) return;
-			let current = opened.session.runs?.();
-			if (current && (current.active.length || current.paused.length)) return;
 			if (owesInput(opened.session)) return;
 			await chat.retained.release();
 		};
-		let release = () =>
-			void releaseWhenIdle().catch(err =>
-				console.error("[chat] releasing completed workflow session failed:", err)
-			);
-		let stopWatching = opened.session.watchRuns?.(next => {
-			if (chat.retained?.session !== opened.session) return;
-			// Runs are only what the client reports, so one that ends gets its Chat notice and never
-			// starts a Planner turn no writer asked for.
-			void publishRuns(context, opened.session, next);
-			if (next.active.length || next.paused.length) return;
-			release();
-		});
 		let stopInputs = opened.session.inputs?.watch(() => {
-			if (chat.retained?.session === opened.session) release();
-		});
-		let stopLink = opened.session.watchLink?.(() => {
 			if (chat.retained?.session !== opened.session) return;
-			let current = opened.session.runs?.();
-			if (current) void publishRuns(context, opened.session, current);
+			void releaseWhenIdle().catch(err =>
+				console.error("[chat] releasing a Planner session that waited on a question failed:", err)
+			);
 		});
 		let released: Promise<void> | undefined;
 		let retained: Retained = {
@@ -2816,9 +2308,7 @@ function retain(
 			release: () =>
 				released ??= (async () => {
 					if (chat.retained === retained) chat.retained = undefined;
-					stopWatching?.();
 					stopInputs?.();
-					stopLink?.();
 					retained.binding.signal.removeEventListener("abort", ended);
 					try {
 						await opened.session.destroy();
@@ -2829,12 +2319,6 @@ function retain(
 							chat.agent = undefined;
 							if (!chat.busy) chat.owner = undefined;
 						}
-						await publishing.get(chat);
-						// A server going down stopped no run: nothing says so, and the cards stay as stored.
-						if (!opened.session.shuttingDown?.()) {
-							await publishRuns(context, opened.session, unsaved.get(opened.session), true);
-						}
-						gone.add(opened.session);
 					}
 				})(),
 		};
@@ -2848,7 +2332,6 @@ function retain(
 		opened.binding.signal.addEventListener("abort", ended, { once: true });
 		chat.retained = retained;
 	}
-	if (runs) void report(runs);
 	return true;
 }
 
@@ -3609,7 +3092,7 @@ async function run(
 			member?.entryId,
 			references,
 			!!member?.retry,
-			!jobTurn && (command === undefined || command.commandKind === COMMAND_KINDS.workflow),
+			!jobTurn && command === undefined,
 		);
 		opened = repositoryOpened;
 		// Given once, with the session's first prompt.
@@ -3638,7 +3121,7 @@ async function run(
 		} else {
 			// A skill or a prompt template is Atomic's own `/name args`, which has to open the prompt:
 			// what the room said and the focus line wait for the next turn instead of standing before it.
-			let opening = command !== undefined && command.commandKind !== COMMAND_KINDS.workflow;
+			let opening = command !== undefined;
 			// Drained rather than copied: what the agent has been told once should
 			// not arrive again on the next turn.
 			let backscroll = opening ? [] : chat.backscroll;
@@ -3752,7 +3235,7 @@ async function run(
 		if (!jobTurn?.preempted) console.error("[chat] turn failed:", err);
 		// A stop the room asked for is not a failure; an interruption is.
 		failed = !turnController.signal.aborted || !!chat.interruption;
-		// A reply the check refused ended no workflow run and answered no question.
+		// A reply the check refused answered no question.
 		replyOnly = err instanceof PlannerReplyError && !chat.interruption;
 		turnController.abort();
 		if (jobTurn) {
@@ -3781,8 +3264,8 @@ async function run(
 				id: ulid(),
 				author: { kind: "system" },
 				text: suspended
-					? "The machine's connection dropped during this reply. Its workflows and open "
-						+ "questions are kept; ask again once it has reconnected."
+					? "The machine's connection dropped during this reply. Its open questions are kept; "
+						+ "ask again once it has reconnected."
 					: failure.kind === "tool"
 					? TOOL_UNAVAILABLE
 					: err instanceof Error
@@ -3808,7 +3291,7 @@ async function run(
 		let kept = false;
 		try {
 			// A turn the Planner's link dropped under fails, but its client may come back for the
-			// runs and questions the session still holds.
+			// questions the session still holds.
 			if (
 				opened && !chat.closed && !isolated
 				&& (!failed || replyOnly || opened.session.suspended?.())

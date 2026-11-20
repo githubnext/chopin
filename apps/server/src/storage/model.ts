@@ -67,35 +67,6 @@ export type PutChatAttachment =
 /** What a person has uploaded to one document and not yet sent. */
 export type StagedChatAttachments = { count: number; bytes: number };
 
-/** One stage of a workflow run whose card Chat shows, as its run last reported it. */
-export type RunStageRecord = {
-	id: string;
-	name: string;
-	parentIds?: string[];
-	kind?: "tool";
-	status:
-		| "pending"
-		| "running"
-		| "awaiting_input"
-		| "paused"
-		| "blocked"
-		| "completed"
-		| "failed"
-		| "skipped"
-		| "stopped";
-	/** Seconds since the epoch. */
-	started?: number;
-	ended?: number;
-};
-
-export type PutRunStages = {
-	channelId: string;
-	runId: string;
-	stages: RunStageRecord[];
-	/** The run keeps only these stages, in this order, instead of adding them to its own. */
-	replace?: boolean;
-};
-
 /** A saved answer to a decision the Planner left open, waiting for a Planner turn to act on it. */
 export type DecisionAnswer = {
 	decisionId: string;
@@ -1012,7 +983,10 @@ export type PlannerHeldSession = {
 	asked?: PlannerAskedInput[];
 	/** Answers the client has not acknowledged. */
 	owed: JsonValue[];
-	/** Stops pressed while the link was down, for the client to hear first. */
+	/**
+	 * Always empty: an earlier release kept here the Stops of workflow runs pressed while the link
+	 * was down, and reads the field when it rebuilds a hold.
+	 */
 	stops: JsonValue[];
 	/**
 	 * The AI launch the client holds for the session, so the next process ends it with the session

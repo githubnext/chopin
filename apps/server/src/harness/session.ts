@@ -20,7 +20,6 @@ import {
 import { githubTools, type GitHubToolsError, lazyGithubTools, type Result } from "./github-tools";
 import { registerCredential } from "./harnesses";
 import { type FullPlanner, registerFullPlanner } from "./atomic/full";
-import { type PlannerRuns, untilUnpaused } from "./runs";
 import { createHumanInput, PendingInputs } from "./atomic/human-input";
 import { type PlannerWorkspace, plannerWorkspace } from "./atomic/workspace";
 import { registerRemotePlanner, type RemotePlanner } from "./remote/registry";
@@ -136,16 +135,9 @@ export type PlannerSession = {
 	/**
 	 * The questions this session asked that no member has answered yet, and the requests whose
 	 * result its client has not received. A session with either is kept past a turn that ended
-	 * without it, as one that owns a workflow run is.
+	 * without it.
 	 */
 	inputs?: Pick<PendingInputs, "open" | "held" | "watch">;
-	/**
-	 * Workflow runs this session owns; only a remote Planner's client reports them. An Atomic
-	 * Planner has none, so it has no run control either: Stop ends its turn.
-	 */
-	runs?: () => PlannerRuns | undefined;
-	/** Subscribes to run changes; returns the unsubscribe function. */
-	watchRuns?: (listener: (runs: PlannerRuns) => void) => () => void;
 	/**
 	 * Whether the client that runs this session lost its link unexpectedly and may still come
 	 * back: nothing it holds has ended, so the session is kept, however long that takes, until it
@@ -156,42 +148,7 @@ export type PlannerSession = {
 	shuttingDown?: () => boolean;
 	/** Takes the binding of the owner's renewed credential in place of one that ended. */
 	rebind?: (owner: ActiveOwnerBinding) => void;
-	/** Calls `listener` when `suspended` changes; returns the unsubscribe function. */
-	watchLink?: (listener: () => void) => () => void;
-	/**
-	 * Pauses every workflow run this session owns, resumably. Resolves `held` when it could not
-	 * reach the client that runs them and waits to tell it when it returns.
-	 */
-	pauseRuns?: () => Promise<void | "held" | "unconfirmed">;
-	/** Resumes the runs this session paused. */
-	resumeRuns?: () => Promise<void>;
-	/** Pauses one run this session owns; `held` as for `pauseRuns`. */
-	pauseRun?: (runId: string) => Promise<void | "held" | "unconfirmed">;
-	/** Resumes one paused run this session owns. */
-	resumeRun?: (runId: string) => Promise<void>;
 };
-
-/** Run control for a remote Planner: the attached client stops and resumes its own runs. */
-function remoteRunControl(
-	remote: RemotePlanner,
-	watchRuns: NonNullable<PlannerSession["watchRuns"]>,
-): Pick<
-	PlannerSession,
-	"runs" | "watchRuns" | "pauseRuns" | "resumeRuns" | "pauseRun" | "resumeRun"
-> {
-	let control = () => {
-		if (!remote.control) throw new Error("The Planner has no attached session to control.");
-		return remote.control;
-	};
-	return {
-		runs: () => remote.runs,
-		watchRuns,
-		pauseRuns: async () => control()("stop"),
-		resumeRuns: async () => void await control()("resume"),
-		pauseRun: async runId => control()("stop", runId),
-		resumeRun: async runId => void await control()("resume", runId),
-	};
-}
 
 export type PlannerSessionDependencies = {
 	agent?: PlannerAgent;
@@ -259,14 +216,11 @@ export async function openPlannerSession(
 			? await plannerWorkspace(channel.room.id, channel.repository)
 			: undefined;
 		let planner: FullPlanner | undefined;
-		let listeners = new Set<(runs: PlannerRuns) => void>();
-		let linkListeners = new Set<() => void>();
 		let inputs = new PendingInputs();
 		if (workspace) {
 			planner = {
 				cwd: workspace.cwd,
-				// Atomic names no workflow run for a request, so no answer is held for one.
-				humanInput: createHumanInput(channel.room, undefined, undefined, inputs),
+				humanInput: createHumanInput(channel.room, undefined, inputs),
 				toolReport: (id, output, state) => {
 					let chat = channel.chat ?? channel.room.plan.chat;
 					if (state === "running") chat?.toolProgress?.(id, output);
@@ -298,20 +252,8 @@ export async function openPlannerSession(
 				...(channel.fork?.onRemoteTurn ? { onRemoteTurn: channel.fork.onRemoteTurn } : {}),
 			};
 			if (!isolated) {
-				held.humanInput = report =>
-					createHumanInput(
-						channel.room,
-						(runId, signal) => untilUnpaused(held, runId, signal),
-						report,
-						inputs,
-					);
+				held.humanInput = report => createHumanInput(channel.room, report, inputs);
 				held.holdInput = () => inputs.hold();
-				held.linkChanged = () => {
-					for (let listener of linkListeners) listener();
-				};
-				held.onRuns = runs => {
-					for (let listener of listeners) listener(runs);
-				};
 				held.toolReport = (id, output, state) => {
 					let chat = channel.chat ?? channel.room.plan.chat;
 					if (state === "running") chat?.toolProgress?.(id, output);
@@ -364,11 +306,6 @@ export async function openPlannerSession(
 		if (owner.signal.aborted) throw new Error("Planner owner unavailable");
 		let active = session;
 		let stopped: Promise<void> | undefined;
-		let watchRuns = (listener: (runs: PlannerRuns) => void) => {
-			listeners.add(listener);
-			return () => listeners.delete(listener);
-		};
-		let runControl = remote && !isolated ? remoteRunControl(remote, watchRuns) : {};
 		let fixedTools = Object.freeze([
 			...(job
 				? BACKGROUND_TOOL_NAMES[job.kind]
@@ -385,7 +322,6 @@ export async function openPlannerSession(
 				get activeTools() {
 					return planner?.activeTools ?? remote?.activeTools ?? fixedTools;
 				},
-				...runControl,
 				...(planner || remote && !isolated ? { inputs } : {}),
 				...(remote && !isolated
 					? {
@@ -400,10 +336,6 @@ export async function openPlannerSession(
 						},
 						suspended: () => remote.suspended === true,
 						shuttingDown: () => remote.stopping === true,
-						watchLink: (listener: () => void) => {
-							linkListeners.add(listener);
-							return () => linkListeners.delete(listener);
-						},
 					}
 					: {}),
 				stream: (prompt, abortSignal, choice, files, message, context) => {

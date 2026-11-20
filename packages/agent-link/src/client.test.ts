@@ -122,78 +122,12 @@ describe("Agent connection client", () => {
 		]);
 	});
 
-	it("asks for stage deltas and splits a report too large for one frame across several", async () => {
-		let server = fakeServer({ features: ["run-stage-deltas"] });
+	it("asks for the features it knows and reports no runs", async () => {
+		let server = fakeServer({ features: ["decision-option-previews"] });
 		let client = await connect(server, { turn() {} });
-		expect(server.asked).toEqual([
-			"run-stage-deltas, decision-option-previews, resumable-sessions, restart-notice",
-		]);
-		expect(client.features).toEqual(["run-stage-deltas"]);
-		let stages = Array.from({ length: 2_000 }, (_, index) => ({
-			id: `s${index}`,
-			name: `${index} ${"é".repeat(MAX_LINK_NOTE_LENGTH - 8)}`,
-			status: "completed" as const,
-			...(index ? { parentIds: [`s${index - 1}`] } : {}),
-		}));
-		let big = {
-			id: "big",
-			name: "review",
-			status: "running" as const,
-			started: 1,
-			updated: 2,
-			waiting: 0,
-			stagesDelta: true as const,
-			stages,
-		};
-		let { stagesDelta: _, ...fields } = big;
-		let small = { ...fields, id: "small", stages: stages.slice(0, 2) };
-		let quiet = { ...big, id: "quiet", stages: [] };
-		client.reportRuns("s", { active: ["big"], paused: ["small"], cards: [small, big, quiet] });
-
-		let parts: Array<Extract<ClientMessage, { type: "runs" }>> = [];
-		let seen = 0;
-		while (seen < stages.length) {
-			let part = await server.next("runs");
-			parts.push(part);
-			seen += part.cards.find(card => card.id === "big")!.stages.length;
-		}
-		expect(parts.length).toBeGreaterThan(5);
-		for (let [index, part] of parts.entries()) {
-			expect(new TextEncoder().encode(JSON.stringify(part)).byteLength).toBeLessThanOrEqual(
-				MAX_LINK_MESSAGE_BYTES,
-			);
-			expect(part).toMatchObject({ session: "s", active: ["big"], paused: ["small"] });
-			expect(part.cards.map(card => card.id)).toEqual(["small", "big", "quiet"]);
-			let [first, , last] = part.cards;
-			if (index === 0) expect(first).toEqual(small);
-			else expect(first).toEqual({ ...big, id: "small", stages: [] });
-			expect(last).toEqual(quiet);
-		}
-		expect(parts.flatMap(part => part.cards[1]!.stages)).toEqual(stages);
-	});
-
-	it("refuses a stage delta to a server that did not offer them, which gets full cards", async () => {
-		let server = fakeServer();
-		let client = await connect(server, { turn() {} });
-		expect(client.features).toEqual([]);
-		let card = {
-			id: "run",
-			name: "review",
-			status: "running" as const,
-			started: 1,
-			updated: 2,
-			waiting: 0,
-			stages: [{ id: "a", name: "a", status: "running" as const }],
-		};
-		expect(() =>
-			client.reportRuns("s", {
-				active: ["run"],
-				paused: [],
-				cards: [{ ...card, stagesDelta: true }],
-			})
-		).toThrow("stage deltas");
-		client.reportRuns("s", { active: ["run"], paused: [], cards: [card] });
-		expect((await server.next("runs")).cards).toEqual([card]);
+		expect(server.asked).toEqual(["decision-option-previews, resumable-sessions, restart-notice"]);
+		expect(client.features).toEqual(["decision-option-previews"]);
+		expect("reportRuns" in client).toBe(false);
 	});
 
 	it("settles a host call the server aborts or destroys instead of answering", async () => {
@@ -288,7 +222,7 @@ describe("Agent connection client", () => {
 			resumable: false,
 		});
 		stops.push(() => opted.detach());
-		expect(plain.asked).toEqual(["run-stage-deltas, decision-option-previews"]);
+		expect(plain.asked).toEqual(["decision-option-previews"]);
 		plain.close();
 		expect(await opted.closed).not.toHaveProperty("reconnectWithinMs");
 	});
@@ -457,8 +391,8 @@ describe("Agent connection client", () => {
 			signal: controller.signal,
 		});
 		expect(asked).toMatchObject({ type: "input-result", status: "cancelled" });
-		client.reportRuns("s", { active: [], paused: [], cards: [] });
-		await server.next("runs");
+		client.send({ type: "detach" });
+		await server.next("detach");
 		expect(server.received.some(message => message.type === "input-request")).toBe(false);
 	});
 
@@ -473,9 +407,6 @@ describe("Agent connection client", () => {
 				context.emit({ type: "error", error: long });
 				throw new Error(long);
 			},
-			control() {
-				throw new Error(long);
-			},
 		});
 		server.send({ type: "start", session: "s", mode: "planner" });
 		expect((await server.next("start-failed")).message).toHaveLength(MAX_LINK_NOTE_LENGTH);
@@ -485,10 +416,7 @@ describe("Agent connection client", () => {
 		let ended = await server.next("turn-end");
 		expect(ended).toMatchObject({ status: "failed" });
 		expect(ended.message).toHaveLength(MAX_LINK_NOTE_LENGTH);
-		server.send({ type: "stop", request: "r", session: "s" });
-		expect((await server.next("control-result")).message).toHaveLength(MAX_LINK_NOTE_LENGTH);
-		expect(client.send({ type: "runs", session: "s", active: [], paused: [], cards: [] }))
-			.toBe(true);
+		expect(client.send({ type: "detach" })).toBe(true);
 	});
 
 	it("offers steer-turn only to a client that can steer, and gives a steer to the running turn", async () => {

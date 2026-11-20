@@ -159,8 +159,8 @@ export declare namespace Session {
 	/**
 	 * Who holds this document's remote Planner. `held` is a client that detached and
 	 * keeps the document until `until` (ISO 8601) unless it reattaches. `disconnected`
-	 * is a client whose connection dropped while it had workflow runs or open questions
-	 * Chopin keeps for it: there is no deadline, and it resumes them when it reconnects
+	 * is a client whose connection dropped while it had open questions, or answers it had not
+	 * received, that Chopin keeps for it: there is no deadline, and it resumes them when it reconnects
 	 * (see docs/agent-connection.md). `starting` is a paired machine of `login`'s asked to start it, which has yet to
 	 * attach; with `failure`, its backend has exited before attaching more than once in a
 	 * row, and with `attempt`, its backend has exited before attaching at least once, so the launch

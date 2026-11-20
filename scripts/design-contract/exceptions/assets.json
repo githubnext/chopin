@@ -65,32 +65,6 @@
 		]
 	},
 	{
-		"file": "apps/web/src/assets/icons/planner-stop.svg",
-		"reason": "Standalone imported artwork owns its embedded palette and cannot inherit page custom properties when loaded as an image; preserve the source asset.",
-		"cases": [
-			[
-				"color",
-				"fill",
-				"#212121",
-				"presentation attribute",
-				1
-			]
-		]
-	},
-	{
-		"file": "apps/web/src/assets/icons/planner-resume.svg",
-		"reason": "User-supplied Nucleo media-play asset replaces the circled play icon. Its embedded dark fill matches the adjacent stop asset; standalone SVG images cannot inherit page custom properties.",
-		"cases": [
-			[
-				"color",
-				"fill",
-				"#212121",
-				"presentation attribute",
-				1
-			]
-		]
-	},
-	{
 		"file": "apps/web/src/assets/icons/chat.svg",
 		"reason": "Standalone imported artwork owns its embedded palette and cannot inherit page custom properties when loaded as an image; preserve the source asset.",
 		"cases": [

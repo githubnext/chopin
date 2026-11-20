@@ -16,7 +16,6 @@ import {
 } from "@chopin/agent-link";
 import { AI_RENEW_BEFORE_MS, AiLaunchRefused } from "../../ai/launches";
 import { AI_ACCOUNT_UNCHECKED_SESSION, NO_AI_ACCOUNT_SESSION } from "../../ai/account-check";
-import { untilUnpaused } from "../runs";
 
 import type {
 	HarnessV1PromptControl,
@@ -36,9 +35,7 @@ import type {
 	ServerMessageOf,
 	TurnAttachment,
 } from "@chopin/agent-link";
-import type { Chat as Wire } from "@chopin/protocol";
 import type { JsonValue, PlannerHeldSession } from "../../storage/model";
-import type { PlannerRuns } from "../runs";
 import { withdrawnValue } from "../atomic/human-input";
 import type { AskedInput, HumanInput, HumanInputStatus, InputMethod } from "../atomic/human-input";
 import type { PlannerTurn } from "../turn-level";
@@ -62,9 +59,6 @@ function once(work: () => void): () => void {
 		work();
 	};
 }
-/** How many controls whose wait ran out a link remembers, to hear their late answers. */
-const MAX_LATE_CONTROLS = 64;
-const LIVE_RUN = new Set(["running", "waiting", "paused"]);
 
 export type LinkSocket = {
 	send(text: string): void;
@@ -258,15 +252,9 @@ function usage(value: LinkUsage) {
 
 type Port = {
 	send(message: ServerMessage): boolean;
-	control(
-		session: string,
-		action: "stop" | "resume",
-		runId?: string,
-		sent?: (request: string) => void,
-	): Promise<void>;
 	/** Gives the client's running `turn` a person's message; rejects when it could not take it. */
 	steer(session: string, turn: string, prompt: string): Promise<void>;
-	/** Withdraws the questions `turn` asked for itself, outside any workflow run. */
+	/** Withdraws the questions asked while `turn` ran. */
 	withdraw(session: string, turn: string): void;
 	forget(session: string): void;
 	/** Whether the client's work in `session` goes on past a restart: it is kept, not destroyed. */
@@ -311,21 +299,6 @@ type Turn = {
 
 type TurnMessage = ClientMessageOf<"tools" | "part" | "host-tool-call" | "turn-end">;
 
-/** The client answered a Stop or Resume with a refusal: it heard the request, so nothing is owed. */
-class ControlRefused extends Error {}
-
-/**
- * A Stop sent to the client and not yet answered, naming its run (none: every run). `origin` is
- * the Stop of every run this one stands for after a Resume of another run undid part of it.
- */
-type OwedStop = {
-	run: string | undefined;
-	held?: true;
-	origin?: OwedStop;
-	/** The control request that carries it, so a late answer finds it. */
-	request?: string;
-};
-
 /** An answer the client has not acknowledged, and the claim that keeps its session until it has. */
 type Owed = {
 	result: ServerMessageOf<"input-result">;
@@ -338,7 +311,7 @@ type Owed = {
 /** A request waiting on the document's members, and the decisions it asked once they exist. */
 type OpenInput = {
 	session: string;
-	/** The turn that asked it for itself; a workflow run's question belongs to its run instead. */
+	/** The turn that ran when it was asked: Chopin stopping that turn withdraws it. */
 	turn?: string;
 	controller: AbortController;
 	method: InputMethod;
@@ -370,16 +343,7 @@ export type RejoinHost = {
 	 * Asks the document's members, as Decisions, a question a rebuilt session's client asks after
 	 * the restart. No turn of this process opened that session, so nothing else can.
 	 */
-	humanInput?(
-		hold: (workflowRunId: string, signal: AbortSignal) => Promise<void>,
-		report: (status: HumanInputStatus) => void,
-	): HumanInput;
-	/**
-	 * Shows what a rebuilt session's client reports of its workflow runs as the document's run
-	 * cards, `down` while its link has dropped again. Nothing in this process retains that session,
-	 * so its reports reach Chat only this way.
-	 */
-	runs?(session: string, runs: PlannerRuns, down: boolean): void;
+	humanInput?(report: (status: HumanInputStatus) => void): HumanInput;
 };
 
 /**
@@ -400,7 +364,6 @@ const METHODS = ["questionnaire", "confirm", "select", "input", "editor"] as con
  * client asks after the restart becomes a Decision as one asked before it did.
  */
 function rebuiltInput(
-	planner: RemotePlanner,
 	document: RebuiltDocument,
 	report: (status: HumanInputStatus) => void,
 ): HumanInput {
@@ -413,9 +376,7 @@ function rebuiltInput(
 		try {
 			let host = live();
 			if (!host) throw new Error("Decisions are not available to this session.");
-			return await ask(
-				host.humanInput!((runId, signal) => untilUnpaused(planner, runId, signal), report),
-			);
+			return await ask(host.humanInput!(report));
 		} finally {
 			release?.();
 		}
@@ -439,23 +400,6 @@ class RemoteSession {
 	#acknowledged = false;
 	#current: Turn | undefined;
 	#closed = false;
-	#roots = new Map<string, string>();
-	/** Every reported stage of each run, by id, in the order first reported. */
-	#stages = new Map<string, Map<string, Wire.RunStage>>();
-	/**
-	 * Stops asked for while the link was down, each naming its run (none: every run), for the
-	 * client to hear first when it resumes. A Stop is never lost to a network failure.
-	 */
-	#held: Array<{ run: string | undefined }> = [];
-	/**
-	 * Stops sent to the client that it has not answered. The client may never have heard one, or
-	 * have applied it and lost only its answer, so a link that drops before the answer still owes
-	 * the client the Stop: `suspend` moves these to `#held`. A Stop that went unanswered for as
-	 * long as the server waits stays here too, for a link that is only noticed to be dead later.
-	 */
-	#unanswered = new Set<OwedStop>();
-	/** The Stops sent and not yet answered, by control request, for an answer that comes late. */
-	#requests = new Map<string, OwedStop>();
 	/** The session's AI launch: the one the client holds, ended when the session is. */
 	#launchId: string | undefined;
 	/** When the AI launch is next prepared again, ahead of its deadline or after a failure. */
@@ -526,8 +470,6 @@ class RemoteSession {
 			"The machine did not start the session.",
 		);
 		if (forkFrom) this.planner.forkedNatively = true;
-		this.planner.control = (action, runId) => this.#command(action, runId);
-		this.planner.rootOf = runId => this.#roots.get(runId) ?? runId;
 		return this.#session();
 	}
 
@@ -545,59 +487,6 @@ class RemoteSession {
 			);}
 	}
 
-	/** The root run a workflow question belongs to, so a paused root holds its answers. */
-	rememberRoot(runId: string, rootRunId: string): void {
-		this.#roots.set(runId, rootRunId);
-	}
-
-	/**
-	 * Takes a report: a full card's stages replace the run's, a delta card's are added by id to
-	 * them. A full card with no stages for a run that has some keeps them, as a client that
-	 * reattaches may report an ended run without its stages. The Planner always sees every stage
-	 * of each run.
-	 */
-	reportRuns(message: Pick<ClientMessageOf<"runs">, "active" | "paused" | "cards">): void {
-		if (this.#closed || this.planner.isolated) return;
-		let previous = new Map(this.planner.runs?.cards.map(card => [card.id, card]));
-		let cards = message.cards.map((card): Wire.Run => {
-			if (!("stagesDelta" in card)) {
-				let kept = this.#stages.get(card.id);
-				if (!card.stages.length && kept?.size) {
-					let { earlierStages: _, ...fields } = card;
-					let earlierStages = previous.get(card.id)?.earlierStages;
-					return {
-						...fields,
-						stages: [...kept.values()],
-						...(earlierStages ? { earlierStages } : {}),
-					};
-				}
-				this.#stages.set(card.id, new Map(card.stages.map(stage => [stage.id, stage])));
-				return card;
-			}
-			let { stagesDelta: _, stages: delta, ...fields } = card;
-			let stages = this.#stages.get(card.id) ?? new Map<string, Wire.RunStage>();
-			this.#stages.set(card.id, stages);
-			for (let stage of delta) stages.set(stage.id, stage);
-			let earlierStages = previous.get(card.id)?.earlierStages;
-			return {
-				...fields,
-				stages: [...stages.values()],
-				...(earlierStages ? { earlierStages } : {}),
-			};
-		});
-		let reported = new Set(cards.map(card => card.id));
-		for (let id of this.#stages.keys()) if (!reported.has(id)) this.#stages.delete(id);
-		this.planner.runs = { active: message.active, paused: message.paused, cards };
-		this.planner.onRuns?.(this.planner.runs);
-		for (let wake of this.planner.waiters ?? []) wake();
-	}
-
-	/** Whether the session has a live or paused run: work the client carries on while unseen. */
-	get working(): boolean {
-		let runs = this.planner.runs;
-		return !this.#closed && !!runs && (runs.active.length > 0 || runs.paused.length > 0);
-	}
-
 	/** Whether the client could take the session back: it started, and is not an isolated job. */
 	get resumable(): boolean {
 		return this.#acknowledged && !this.#closed && !this.planner.isolated;
@@ -605,18 +494,12 @@ class RemoteSession {
 
 	/**
 	 * The link dropped unexpectedly and the session waits for its client to come back. The turn
-	 * under way fails, as it always did, and its host tools stop; the session, its reported runs
-	 * and its open questions are left exactly as they were. A Stop cannot reach the client now,
-	 * so it is held for the client to hear first when it resumes: one pressed from now on, and
-	 * one already sent whose answer never came.
+	 * under way fails, as it always did, and its host tools stop; the session and its open
+	 * questions are left exactly as they were.
 	 */
 	suspend(): void {
-		// A server going down is not the client dropping: nothing is announced as disconnected.
-		if (!this.planner.stopping) {
-			this.planner.suspended = true;
-			this.planner.keptStop = this.#unanswered.size > 0;
-			this.planner.linkChanged?.();
-		}
+		// A server going down is not the client dropping: the session is not suspended.
+		if (!this.planner.stopping) this.planner.suspended = true;
 		let turn = this.#current;
 		if (turn) {
 			this.#finish(
@@ -624,89 +507,6 @@ class RemoteSession {
 				turn.stopped ? undefined : new Error("The machine disconnected during the turn."),
 			);
 		}
-		for (let owed of this.#unanswered) {
-			owed.held = true;
-			if (owed.origin) owed.origin.held = true;
-			this.#hold("stop", owed.run);
-		}
-		this.#unanswered.clear();
-		this.#requests.clear();
-	}
-
-	/**
-	 * Stops or resumes the client's runs, as Chat's Stop and a run's pause and Resume do. Resolves
-	 * `held` instead of an answer for a Stop the link's drop kept for the client's return, and
-	 * `unconfirmed` for one the client did not answer in time, which stays owed: the caller must
-	 * not report either as done. A Resume cannot be promised, so it is refused while the link is
-	 * down and rejects when unanswered.
-	 */
-	async #command(
-		action: "stop" | "resume",
-		run: string | undefined,
-	): Promise<void | "held" | "unconfirmed"> {
-		if (this.planner.suspended) {
-			this.#hold(action, run);
-			return "held";
-		}
-		let owed: OwedStop | undefined = action === "stop" ? { run } : undefined;
-		if (owed) this.#unanswered.add(owed);
-		try {
-			await this.#port.control(this.id, action, run, request => {
-				if (!owed) return;
-				owed.request = request;
-				this.#requests.set(request, owed);
-			});
-		} catch (error) {
-			if (owed?.held) return "held";
-			// A refusal is an answer. Silence is not, and keeps the Stop owed.
-			if (owed && error instanceof ControlRefused) this.#answered(owed);
-			if (owed && error instanceof Unanswered) return "unconfirmed";
-			throw error;
-		}
-		if (owed) this.#answered(owed);
-		if (action === "resume") this.#undoStops(run);
-	}
-
-	/** The client answered a Stop, in time or late: it, and the Stops split from it, are not owed. */
-	#answered(owed: OwedStop): void {
-		this.#unanswered.delete(owed);
-		if (owed.request) this.#requests.delete(owed.request);
-		for (let other of this.#unanswered) if (other.origin === owed) this.#unanswered.delete(other);
-	}
-
-	/** An answer to a Stop arrived after the wait for it ended. */
-	answeredLate(request: string): void {
-		let owed = this.#requests.get(request);
-		if (owed) this.#answered(owed);
-	}
-
-	/**
-	 * A Resume the client answered came after a Stop it never answered, so that Stop is undone for
-	 * the runs the Resume covers, and stands for the rest: sending it again must not pause a run a
-	 * person resumed, and dropping it must not lose its pause of another. A Stop of every run is
-	 * kept as a Stop of each run the client reports except the one resumed.
-	 */
-	#undoStops(resumed: string | undefined): void {
-		for (let owed of this.#unanswered) {
-			if (resumed !== undefined && owed.run !== undefined && owed.run !== resumed) continue;
-			this.#unanswered.delete(owed);
-			if (resumed === undefined || owed.run !== undefined) continue;
-			for (let card of this.planner.runs?.cards ?? []) {
-				if (card.id === resumed || !LIVE_RUN.has(card.status)) continue;
-				this.#unanswered.add({ run: card.id, origin: owed.origin ?? owed });
-			}
-		}
-	}
-
-	/** Keeps a Stop for the client's return; a Resume cannot be promised, so it is refused. */
-	#hold(action: "stop" | "resume", run: string | undefined): void {
-		if (action !== "stop") {
-			throw new Error("The machine is disconnected, so its runs cannot be resumed yet.");
-		}
-		// Stopping every run covers each one, and a run already named is not named twice.
-		if (this.#held.some(held => held.run === undefined || held.run === run)) return;
-		if (run === undefined) this.#held = [];
-		this.#held.push({ run });
 	}
 
 	/** The server is going down: nothing is reported about this session from here on. */
@@ -855,50 +655,17 @@ class RemoteSession {
 	rebind(port: Port): void {
 		this.#port = port;
 		this.planner.suspended = false;
-		this.planner.keptStop = false;
-		this.planner.linkChanged?.();
 	}
 
 	/**
 	 * A session a process that has since restarted kept for its client: the client started it, and
-	 * its link is down. The Stops it was owed are held for its return, and its AI launch is the
-	 * session's again, ended when the session ends or the client's return replaces it.
+	 * its link is down. Its AI launch is the session's again, ended when the session ends or the
+	 * client's return replaces it.
 	 */
-	restore(stops: JsonValue[], aiLaunchId?: string): void {
+	restore(aiLaunchId?: string): void {
 		this.#acknowledged = true;
 		this.#holding(aiLaunchId);
 		this.planner.suspended = true;
-		// A workflow question names its root, so a paused root holds its answer, as after `start`.
-		this.planner.rootOf = runId => this.#roots.get(runId) ?? runId;
-		for (let stop of stops) {
-			let run = (stop as { run?: string | null } | null)?.run;
-			this.#hold("stop", typeof run === "string" ? run : undefined);
-		}
-	}
-
-	/** The Stops the client has yet to hear, held or sent and unanswered, for a hold to keep. */
-	heldStops(): JsonValue[] {
-		let stops: Array<{ run: string | undefined }> = [];
-		let add = (run: string | undefined) => {
-			if (stops.some(held => held.run === undefined || held.run === run)) return;
-			if (run === undefined) stops = [];
-			stops.push({ run });
-		};
-		for (let { run } of this.#held) add(run);
-		for (let { run } of this.#unanswered) add(run);
-		return stops.map(({ run }) => ({ run: run ?? null }));
-	}
-
-	/** Gives the client each Stop held while its link was down, once. */
-	deliverHeldStops(): void {
-		for (let { run } of this.#held.splice(0)) {
-			// A link that drops again before the client answers keeps the Stop for the next one.
-			this.#command("stop", run).catch(error => {
-				if (!this.#closed && !this.planner.suspended) {
-					console.error("[agent] a held Stop failed:", error);
-				}
-			});
-		}
 	}
 
 	/** The link is gone for good: nothing more will arrive for this session. */
@@ -907,17 +674,6 @@ class RemoteSession {
 		let held = this.planner.stopping === true && this.#port.kept(this.id);
 		this.planner.suspended = false;
 		this.#started.reject(new Error("The agent connection closed."));
-		let reported = this.planner.runs;
-		// A server going down stopped nothing: its cards are left as they were reported.
-		if (reported && !this.planner.stopping) {
-			this.reportRuns({
-				active: [],
-				paused: [],
-				cards: reported.cards.map(card =>
-					LIVE_RUN.has(card.status) ? { ...card, status: "stopped" as const } : card
-				),
-			});
-		}
 		let turn = this.#current;
 		if (turn) {
 			this.#finish(
@@ -926,7 +682,6 @@ class RemoteSession {
 			);
 		}
 		this.#closed = true;
-		this.planner.control = undefined;
 		this.#releaseAi(!held);
 	}
 
@@ -1112,8 +867,8 @@ class RemoteSession {
 
 	/**
 	 * Chopin stopped the turn. A question it asked for itself ends with it, as a full Atomic
-	 * Planner's does, so neither its card nor the session stays behind waiting on it. A workflow
-	 * run's question is the run's, and a server that is restarting withdraws nothing.
+	 * Planner's does, so neither its card nor the session stays behind waiting on it. A server
+	 * that is restarting withdraws nothing.
 	 */
 	#stopped(turn: Turn): void {
 		if (!turn.stopped && !turn.ended && !this.planner.stopping) {
@@ -1262,7 +1017,6 @@ class RemoteSession {
 				this.#stop(turn);
 				this.#finish(turn);
 			}
-			this.planner.control = undefined;
 			// Its launch stays the session's, for the hold: the next process ends it, or replaces it once
 			// the client resumes.
 			this.#releaseAi(false);
@@ -1274,7 +1028,6 @@ class RemoteSession {
 			this.#stop(turn);
 			this.#finish(turn);
 		}
-		this.planner.control = undefined;
 		this.#releaseAi();
 		this.#port.send({ type: "destroy", session: this.id });
 		this.#port.forget(this.id);
@@ -1326,9 +1079,8 @@ export class AgentLink {
 	#inputs = new Map<string, OpenInput>();
 	/** Recent `input-request` ids, oldest first, so a settled one cannot be reused. */
 	#inputIds = new Set<string>();
+	/** The steers sent and not yet answered, by request. */
 	#controls = new Map<string, PromiseWithResolvers<void>>();
-	/** Controls whose wait ended unanswered, by request, with their session: an answer may still come. */
-	#late = new Map<string, string>();
 	#watch: ReturnType<typeof setInterval> | undefined;
 	#port: Port;
 	/**
@@ -1368,8 +1120,6 @@ export class AgentLink {
 	#ranWithoutCatalog = false;
 	/** Settles once nothing is pending: the client reported, a turn ran without it, or the link ended. */
 	#offered = Promise.withResolvers<void>();
-	/** Set on a link rebuilt after a restart: told when its sessions are given back or end. */
-	#rebuilt: { ended(): void; resumed(): void } | undefined;
 	/** What owns the link's catalog launch: `link:<this>`, whose end ends it. */
 	readonly #id = crypto.randomUUID();
 	/**
@@ -1390,7 +1140,6 @@ export class AgentLink {
 		this.#options = options;
 		this.#port = {
 			send: message => this.#send(message),
-			control: (session, action, runId, sent) => this.#control(session, action, runId, sent),
 			steer: (session, turn, prompt) => this.#steer(session, turn, prompt),
 			withdraw: (session, turn) => {
 				for (let [request, input] of this.#inputs) {
@@ -1432,7 +1181,7 @@ export class AgentLink {
 
 	/**
 	 * A link standing in for one a process that has since restarted lost: suspended, holding the
-	 * sessions, answers and Stops the cut wrote for its client, and no socket. A client's `resume`
+	 * sessions and answers the cut wrote for its client, and no socket. A client's `resume`
 	 * takes them from it as from any link that dropped.
 	 */
 	static rebuilt(
@@ -1440,8 +1189,6 @@ export class AgentLink {
 		held: PlannerHeldSession[],
 		hooks: {
 			lapse(): void;
-			ended(): void;
-			resumed(): void;
 			/** Opens the document for a question its client asks, until the returned function is called. */
 			open?: () => Promise<() => void>;
 			/** Ends an AI launch a held session kept, once nothing will take it back. */
@@ -1461,22 +1208,16 @@ export class AgentLink {
 		link.#channelId = channelId;
 		link.#state = "suspended";
 		link.#lapse = hooks.lapse;
-		link.#rebuilt = hooks;
 		if (hooks.endAi) link.#port.endAi = hooks.endAi;
 		if (hooks.aiHeld) link.#port.aiHeld = hooks.aiHeld;
 		for (let item of held) {
 			// No turn of this process opens the session, so it reaches its document through the room's
-			// host: what its client reports and asks after the restart is shown and asked as before.
+			// host: what its client asks after the restart is asked as before.
 			let document: RebuiltDocument = hooks.open ? { open: hooks.open } : {};
 			let planner: RemotePlanner = { channelId, isolated: false, rebuilt: document };
-			planner.humanInput = report => rebuiltInput(planner, document, report);
-			let show = () => {
-				if (planner.runs) document.host?.runs?.(item.id, planner.runs, planner.suspended === true);
-			};
-			planner.onRuns = show;
-			planner.linkChanged = show;
+			planner.humanInput = report => rebuiltInput(document, report);
 			let session = new RemoteSession(item.id, planner, link.#port);
-			session.restore(item.stops, item.aiLaunchId);
+			session.restore(item.aiLaunchId);
 			link.#sessions.set(item.id, session);
 			for (let owed of item.owed) {
 				link.#outbox.push({
@@ -1508,9 +1249,8 @@ export class AgentLink {
 	}
 
 	/**
-	 * What the client keeps in this link across a restart: each session that has a live or paused
-	 * run, a question it asked, or an answer it has not acknowledged, with those questions, answers
-	 * and Stops. A suspended link holds only such sessions already. A question is listed with the
+	 * What the client keeps in this link across a restart: each session that has a question it
+	 * asked, or an answer it has not acknowledged, with those questions and answers. A suspended link holds only such sessions already. A question is listed with the
 	 * decisions it asked, so the process that takes over can wait for their answers again.
 	 */
 	snapshot(): PlannerHeldSession[] {
@@ -1536,7 +1276,8 @@ export class AgentLink {
 					owed: owed
 						.filter(item => item.session === session.id)
 						.map(item => item.result as unknown as JsonValue),
-					stops: session.heldStops(),
+					// An earlier release reads it on a rollback; nothing is held for it now.
+					stops: [],
 					...(asked.length > 0 ? { asked } : {}),
 					...(session.aiLaunchId ? { aiLaunchId: session.aiLaunchId } : {}),
 				};
@@ -1551,13 +1292,10 @@ export class AgentLink {
 	rejoinInputs(host: RejoinHost): void {
 		if (this.#successor) return this.#successor.rejoinInputs(host);
 		if (this.#state === "closed") return;
-		// A session the restart rebuilt asks and reports through this room from now on, and its
-		// cards show what its client last reported.
+		// A session the restart rebuilt asks through this room from now on.
 		for (let session of this.#sessions.values()) {
 			let rebuilt = session.planner.rebuilt;
-			if (!rebuilt) continue;
-			rebuilt.host = host;
-			if (session.planner.runs) session.planner.onRuns?.(session.planner.runs);
+			if (rebuilt) rebuilt.host = host;
 		}
 		for (let [request, input] of this.#inputs) {
 			if (!input.restored || input.joined === host) continue;
@@ -1598,27 +1336,10 @@ export class AgentLink {
 		}
 	}
 
-	/**
-	 * Whether the link holds a session a restart rebuilt that still has work: a live or paused run,
-	 * an open question, or no report yet of what it kept. Nothing in this process retains such a
-	 * session, so the run cards Chat stored are its own, and live, when the document opens.
-	 */
-	get keepsRebuilt(): boolean {
-		if (this.#successor) return this.#successor.keepsRebuilt;
-		if (this.#state === "closed") return false;
-		for (let session of this.#sessions.values()) {
-			if (!session.planner.rebuilt) continue;
-			let runs = session.planner.runs;
-			if (!runs || runs.active.length > 0 || runs.paused.length > 0) return true;
-			if (this.#waitingOn(session.id) > 0) return true;
-		}
-		return false;
-	}
-
 	/** Whether the client's work in `session` is kept when this link drops without being ended. */
 	#keeps(session: RemoteSession): boolean {
 		return this.resumable && session.resumable
-			&& (session.working || this.#waitingOn(session.id) > 0 || this.#owedOn(session.id) > 0);
+			&& (this.#waitingOn(session.id) > 0 || this.#owedOn(session.id) > 0);
 	}
 
 	get attached(): boolean {
@@ -1687,30 +1408,20 @@ export class AgentLink {
 		for (let session of this.#sessions.values()) session.shutdown();
 	}
 
-	/**
-	 * Whether the client waits on the document's members: a question it asked is still open, or
-	 * one of its workflow runs is live or paused.
-	 */
+	/** Whether the client waits on the document's members: a question it asked is still open. */
 	get waiting(): boolean {
 		if (this.#state === "closed" || this.#state === "suspended") return false;
-		if (this.#inputs.size > 0) return true;
-		for (let session of this.#sessions.values()) {
-			let runs = session.planner.runs;
-			if (runs && (runs.active.length > 0 || runs.paused.length > 0)) return true;
-		}
-		return false;
+		return this.#inputs.size > 0;
 	}
 
 	/**
-	 * Whether the client is in the middle of work for the document's members: a reply under way,
-	 * a question still open, or a live workflow run. A paused run alone is not; it waits on people.
+	 * Whether the client is in the middle of work for the document's members: a reply under way, or
+	 * a question still open.
 	 */
 	get busy(): boolean {
 		if (this.#state === "closed" || this.#state === "suspended") return false;
 		if (this.#inputs.size > 0) return true;
-		for (let session of this.#sessions.values()) {
-			if (session.replying || (session.planner.runs?.active.length ?? 0) > 0) return true;
-		}
+		for (let session of this.#sessions.values()) if (session.replying) return true;
 		return false;
 	}
 
@@ -1882,7 +1593,6 @@ export class AgentLink {
 		this.#state = "closed";
 		this.#teardown();
 		this.#lapse?.();
-		this.#rebuilt?.ended();
 	}
 
 	/** Ends a suspended link for good: nothing will take back what it kept. */
@@ -1890,7 +1600,6 @@ export class AgentLink {
 		if (this.#state !== "suspended") return;
 		this.#state = "closed";
 		this.#teardown();
-		this.#rebuilt?.ended();
 	}
 
 	#waitingOn(session: string): number {
@@ -1922,7 +1631,6 @@ export class AgentLink {
 			control.reject(new Error("The agent connection closed."));
 		}
 		this.#controls.clear();
-		this.#late.clear();
 		// An answer written to a link that dropped may never have arrived: it is sent again to the
 		// client that returns and still waits on it.
 		for (let owed of this.#unacked.values()) {
@@ -1949,7 +1657,6 @@ export class AgentLink {
 			control.reject(new Error("The agent connection closed."));
 		}
 		this.#controls.clear();
-		this.#late.clear();
 		// The answers waiting for a client that is not coming back can never be delivered.
 		for (let { delivered, unsent } of this.#outbox.splice(0)) {
 			unsent?.();
@@ -1967,8 +1674,7 @@ export class AgentLink {
 	/**
 	 * The client resumes: it names the sessions it still holds and the questions each still waits
 	 * on. Those sessions, with the questions that are still open or were answered meanwhile, move
-	 * to this link; whatever it does not name ends. Each Stop pressed while the link was down is
-	 * the first thing the client hears after `resumed`.
+	 * to this link; whatever it does not name ends.
 	 */
 	#resume(message: ClientMessageOf<"resume">): void {
 		let earlier = this.#claim?.();
@@ -1978,7 +1684,6 @@ export class AgentLink {
 		let results: Owed[] = [];
 		if (earlier) results = earlier.#hand(this, held, resumed);
 		this.#send({ type: "resumed", sessions: resumed });
-		for (let { session } of resumed) this.#sessions.get(session)?.deliverHeldStops();
 		// The launch a resumed session held may have ended with its link, or with the process.
 		for (let { session } of resumed) this.#sessions.get(session)?.renewAi();
 		for (let { result, session, delivered } of results) this.#answer(result, session, delivered);
@@ -2123,8 +1828,6 @@ export class AgentLink {
 			answer.unsent?.();
 			answer.delivered();
 		}
-		if (resumed.length > 0) this.#rebuilt?.resumed();
-		else this.#rebuilt?.ended();
 		return delivered;
 	}
 
@@ -2299,20 +2002,11 @@ export class AgentLink {
 				});
 				return;
 			}
-			case "runs":
-				return this.#sessions.get(message.session)?.reportRuns(message);
 			case "control-result": {
 				let control = this.#controls.get(message.request);
 				this.#controls.delete(message.request);
-				let late = this.#late.get(message.request);
-				if (late !== undefined) {
-					this.#late.delete(message.request);
-					this.#sessions.get(late)?.answeredLate(message.request);
-				}
 				if (message.ok) control?.resolve();
-				else {control?.reject(
-						new ControlRefused(message.message ?? "The machine refused."),
-					);}
+				else control?.reject(new Error(message.message ?? "The machine refused."));
 				return;
 			}
 			case "input-request":
@@ -2329,37 +2023,6 @@ export class AgentLink {
 				owed.delivered();
 				return;
 			}
-		}
-	}
-
-	async #control(
-		session: string,
-		action: "stop" | "resume",
-		runId?: string,
-		sent?: (request: string) => void,
-	): Promise<void> {
-		let request = crypto.randomUUID();
-		let pending = Promise.withResolvers<void>();
-		this.#controls.set(request, pending);
-		if (!this.#send({ type: action, request, session, ...(runId ? { run: runId } : {}) })) {
-			this.#controls.delete(request);
-			throw new Error("The agent connection is closed.");
-		}
-		sent?.(request);
-		try {
-			await within(
-				pending.promise,
-				this.#port.timeoutMs,
-				`The machine did not answer ${action}.`,
-			);
-		} catch (error) {
-			if (error instanceof Unanswered) {
-				this.#late.set(request, session);
-				if (this.#late.size > MAX_LATE_CONTROLS) this.#late.delete(this.#late.keys().next().value!);
-			}
-			throw error;
-		} finally {
-			this.#controls.delete(request);
 		}
 	}
 
@@ -2413,7 +2076,7 @@ export class AgentLink {
 		if (!session || !humanInput) {
 			return void reply("failed", undefined, "Decisions are not available to this session.");
 		}
-		if (message.workflowRunId === undefined && session.withdrawing) {
+		if (session.withdrawing) {
 			return void reply("cancelled", withdrawnValue(message.input.method));
 		}
 		if (this.#inputs.size >= MAX_OPEN_INPUTS) {
@@ -2423,7 +2086,7 @@ export class AgentLink {
 		// The session outlives the question until its answer reaches the client: an answer given
 		// to a session with nothing else to keep it would otherwise find it already let go.
 		delivered = session.planner.holdInput?.() ?? delivered;
-		let asking = message.workflowRunId === undefined ? session.turn : undefined;
+		let asking = session.turn;
 		let open: OpenInput = {
 			session: message.session,
 			...(asking ? { turn: asking } : {}),
@@ -2432,9 +2095,6 @@ export class AgentLink {
 			decisions: [],
 		};
 		this.#inputs.set(message.request, open);
-		if (message.workflowRunId && message.rootRunId) {
-			session.rememberRoot(message.workflowRunId, message.rootRunId);
-		}
 		let status: HumanInputStatus = "cancelled";
 		let host = humanInput(outcome => {
 			status = outcome;
@@ -2446,8 +2106,6 @@ export class AgentLink {
 			asked: (decisions: string[]) => {
 				open.decisions = decisions;
 			},
-			...(message.workflowRunId ? { workflowRunId: message.workflowRunId } : {}),
-			...(message.workflowStageId ? { workflowStageId: message.workflowStageId } : {}),
 			...(message.block ? { block: message.block } : {}),
 		};
 		let input = message.input;

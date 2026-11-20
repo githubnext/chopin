@@ -1,99 +1,11 @@
-/** Planner-launched workflow runs: which are alive, which need someone, and how the last ones ended. */
+/** The document's running build, as Chat shows it under the transcript while it runs. */
 
-import { useEffect, useRef, useState } from "react";
-import { CheckIcon, ChevronIcon, CloseIcon, WarningIcon, WrenchIcon } from "@chopin/icons";
-
-import plannerResume from "../assets/icons/planner-resume.svg";
-import plannerStop from "../assets/icons/planner-stop.svg";
-
-import { settledStages } from "@chopin/protocol/run-stages";
+import { useEffect, useState } from "react";
+import { ChevronIcon } from "@chopin/icons";
 
 import "./run-row.css";
 
-import type { Chat as Wire } from "@chopin/protocol";
 import type { BuildRun } from "../build-model";
-
-const SHOWN_STAGES = 6;
-const SHOWN_RUNS = 3;
-
-const STATUS: Record<Wire.Run["status"], string> = {
-	running: "running",
-	waiting: "waiting on Decisions",
-	paused: "paused",
-	finished: "finished",
-	blocked: "blocked",
-	failed: "failed",
-	stopped: "stopped",
-};
-
-const STAGE: Record<Wire.RunStage["status"], string> = {
-	pending: "pending",
-	running: "running",
-	awaiting_input: "waiting on Decisions",
-	paused: "paused",
-	blocked: "blocked",
-	completed: "done",
-	failed: "failed",
-	skipped: "skipped",
-	stopped: "stopped",
-};
-
-/**
- * What a run card's status reads. A disconnected Planner's live runs keep the status they last
- * reported, but say the Planner is away: nothing is running now, and nothing has ended. While the
- * page's connection banner shows, the card says nothing of the machine and reads as last reported.
- */
-export function runStatusLabel(run: Wire.Run, offline = false): string {
-	return run.disconnected && !offline ? "disconnected" : STATUS[run.status];
-}
-
-/**
- * What a disconnected run's card says it last reported, and what happens once its machine is back.
- * It is text about the machine's connection, so a run waiting on Decisions says it waits for people.
- */
-export function disconnectedNote(run: Wire.Run): string {
-	let then = `Last reported ${
-		run.status === "waiting" ? "waiting for people" : STATUS[run.status]
-	}. `;
-	return run.status === "paused"
-		? `${then}Resume it once the machine reconnects.`
-		: run.status === "waiting"
-		? `${then}Answers reach it when the machine reconnects.`
-		: `${then}It carries on when the machine reconnects.`;
-}
-
-/**
- * Pause while a run is live, Resume while it is paused. A Planner that is away cannot take a
- * Resume, which Chopin refuses rather than keeps, so a paused run offers none until it returns.
- */
-export function runControlKind(run: Wire.Run): "pause" | "resume" | undefined {
-	if (run.status === "running" || run.status === "waiting") return "pause";
-	return run.status === "paused" && !run.disconnected ? "resume" : undefined;
-}
-
-/**
- * How many runs are still live, and how many are paused and can be resumed now. Stop reaches the
- * live runs of a disconnected Planner, which holds it for its return; a Resume it cannot hold,
- * so its paused runs are not counted as resumable.
- */
-export function runCounts(runs: Wire.Runs | undefined): { active: number; paused: number } {
-	let list = runs ?? [];
-	return {
-		active: list.filter(run => run.status === "running" || run.status === "waiting").length,
-		paused: list.filter(run => runControlKind(run) === "resume").length,
-	};
-}
-
-/** Waiting runs first, then running, paused, and ended; newest first within each. */
-const GROUP: Record<Wire.Run["status"], number> = {
-	waiting: 0,
-	running: 1,
-	paused: 2,
-	finished: 3,
-	blocked: 3,
-	failed: 3,
-	stopped: 3,
-};
 
 /** "45s", "6m", "1h 4m", "3d 4h". */
 export function elapsed(seconds: number): string {
@@ -104,116 +16,6 @@ export function elapsed(seconds: number): string {
 	let h = Math.floor(m / 60);
 	if (h < 24) return `${h}h ${m % 60}m`;
 	return `${Math.floor(h / 24)}d ${h % 24}h`;
-}
-
-export function orderRuns(runs: readonly Wire.Run[]): Wire.Run[] {
-	return [...runs].sort((a, b) => GROUP[a.status] - GROUP[b.status] || b.started - a.started);
-}
-
-/** The run whose stages show without a click: the first one waiting on people, else the newest live one. */
-export function defaultOpen(ordered: readonly Wire.Run[]): string | undefined {
-	return ordered.find(run => run.status === "waiting")?.id
-		?? ordered.find(run => run.status === "running")?.id;
-}
-
-/** The rows shown before "more": at least the first few, and never fewer than every waiting run. */
-export function visibleRuns(ordered: readonly Wire.Run[], showAll: boolean): Wire.Run[] {
-	if (showAll) return [...ordered];
-	let waiting = ordered.filter(run => run.status === "waiting").length;
-	return ordered.slice(0, Math.max(SHOWN_RUNS, waiting));
-}
-
-/** Apply ended ancestors before folding the visible rows, without changing the saved report. */
-export function displayStages(run: Wire.Run): Wire.RunStage[] {
-	return settledStages(
-		run.stages,
-		run.status === "stopped" || run.status === "failed" || run.status === "blocked",
-	);
-}
-
-/** The stages Chopin stores for a run, as far as they have loaded. */
-export type StoredStages = { stages: readonly Wire.RunStage[]; done: boolean };
-
-/**
- * The stages a row lists: the latest few, or every one once expanded, from the stored stages
- * loaded so far and the card, which is newer. `earlier` counts the stages folded away plus those
- * the card does not carry; `unreported` those nobody can list, once loading is done.
- */
-export function stageWindow(run: Wire.Run, expanded: boolean, stored?: StoredStages): {
-	stages: Wire.RunStage[];
-	earlier: number;
-	unreported: number;
-} {
-	let hidden = Math.max(0, run.stages.length - SHOWN_STAGES);
-	let earlier = hidden + (run.earlierStages ?? 0);
-	if (!expanded) {
-		return {
-			stages: displayStages(run).slice(hidden),
-			earlier,
-			unreported: run.earlierStages ?? 0,
-		};
-	}
-	let all = new Map(stored?.stages.map(stage => [stage.id, stage]));
-	for (let stage of run.stages) all.set(stage.id, stage);
-	let stages = displayStages({ ...run, stages: [...all.values()] });
-	let unreported = !stored || stored.done
-		? Math.max(0, run.stages.length + (run.earlierStages ?? 0) - stages.length)
-		: 0;
-	return { stages, earlier, unreported };
-}
-
-/** Loads one page of a run's stored stages. */
-export type LoadStages = (
-	runId: string,
-	page: { offset: number; limit: number },
-	signal: AbortSignal,
-) => Promise<{ stages: Wire.RunStage[]; total: number }>;
-
-const STAGE_PAGE = 200;
-
-type Loaded = { runId: string; stored: StoredStages; failed: boolean };
-
-/**
- * Pages in every stored stage of an expanded run, then the ones it reaches while expanded.
- * Folding forgets them, so a card stays light until someone asks again.
- */
-function useStoredStages(run: Wire.Run, active: boolean, load: LoadStages | undefined): Loaded {
-	let [state, setState] = useState<Loaded>();
-	let loaded = useRef<Wire.RunStage[]>([]);
-	let reached = run.stages.length + (run.earlierStages ?? 0);
-	let live = active && !!load;
-	useEffect(() => {
-		if (!live || !load) {
-			loaded.current = [];
-			setState(undefined);
-			return;
-		}
-		let controller = new AbortController();
-		let runId = run.id;
-		void (async () => {
-			let stages = loaded.current;
-			for (;;) {
-				let page = await load(
-					runId,
-					{ offset: stages.length, limit: STAGE_PAGE },
-					controller.signal,
-				);
-				if (controller.signal.aborted) return;
-				stages = stages.concat(page.stages);
-				loaded.current = stages;
-				let done = !page.stages.length || stages.length >= page.total;
-				setState({ runId, stored: { stages, done }, failed: false });
-				if (done) return;
-			}
-		})().catch(() => {
-			if (controller.signal.aborted) return;
-			setState({ runId, stored: { stages: loaded.current, done: true }, failed: true });
-		});
-		return () => controller.abort();
-	}, [live, load, run.id, reached]);
-	return state?.runId === run.id
-		? state
-		: { runId: run.id, stored: { stages: [], done: !live }, failed: false };
 }
 
 function useNow(live: boolean): number {
@@ -231,248 +33,9 @@ function RunPulse() {
 	return <span aria-hidden="true" className="run-pulse" data-run-pulse="" />;
 }
 
-/** A hollow ring for work that is pending, paused, or was stopped. */
-function RunRing({ told }: { told?: boolean }) {
-	return (
-		<span
-			aria-hidden="true"
-			className="run-ring"
-			{...(told ? { "data-run-disconnected": "" } : {})}
-		/>
-	);
-}
-
-function RunGlyph(
-	{ away, told, status }: { away: boolean; told: boolean; status: Wire.Run["status"] },
-) {
-	if (away && status !== "waiting") return <RunRing told={told} />;
-	if (status === "running") return <RunPulse />;
-	if (status === "waiting") {
-		return <WarningIcon aria-hidden="true" className="text-warning-ink" size={16} />;
-	}
-	if (status === "finished") {
-		return <CheckIcon aria-hidden="true" className="text-success-ink" size={16} />;
-	}
-	if (status === "failed" || status === "blocked") {
-		return <CloseIcon aria-hidden="true" className="text-destructive-ink" size={16} />;
-	}
-	return <RunRing />;
-}
-
-function StageGlyph(
-	{ away, told, status }: { away: boolean; told: boolean; status: Wire.RunStage["status"] },
-) {
-	if (status === "running") return away ? <RunRing told={told} /> : <RunPulse />;
-	if (status === "completed") {
-		return <CheckIcon aria-hidden="true" className="text-success-ink" size={16} />;
-	}
-	if (status === "failed" || status === "blocked") {
-		return <CloseIcon aria-hidden="true" className="text-destructive-ink" size={16} />;
-	}
-	if (status === "awaiting_input") {
-		return <WarningIcon aria-hidden="true" className="text-warning-ink" size={16} />;
-	}
-	return <RunRing />;
-}
-
-type RunControls = {
-	/** Pages in a run's stored stages; without it, expanding lists the stages the card carries. */
-	loadStages?: LoadStages;
-	onShowDecisions?: () => void;
-	onPause?: (runId: string) => void;
-	onResume?: (runId: string) => void;
-	/** The page's connection banner is showing, the one thing said about the connection. */
-	offline?: boolean;
-};
-
-function RunRow(
-	{ run, tag, open, onToggle, loadStages, onShowDecisions, onPause, onResume, offline }:
-		& RunControls
-		& {
-			run: Wire.Run;
-			/** Tells apart runs of the same workflow. */
-			tag?: string;
-			open: boolean;
-			onToggle: () => void;
-		},
-) {
-	let away = !!run.disconnected;
-	// The machine's state is told only while the page can hear it: through a lost connection the
-	// last frame is all there is, and the connection banner is the one thing said about the connection.
-	let told = away && !offline;
-	// A disconnected run's clock stays at its last report, as a paused run's does.
-	let live = (run.status === "running" || run.status === "waiting") && !away;
-	let now = useNow(live);
-	let [expanded, setExpanded] = useState(false);
-	let unfolded = open && expanded && stageWindow(run, false).earlier > 0;
-	let { stored, failed } = useStoredStages(run, unfolded, loadStages);
-	let { stages, earlier, unreported } = stageWindow(run, expanded, stored);
-	let all = expanded && earlier > 0;
-	let end = run.ended ?? (live ? now : run.updated);
-	let stagesId = `run-stages-${run.id}`;
-	let listId = `run-stage-list-${run.id}`;
-	let title = tag ? `${run.name} ${tag}` : run.name;
-	let kind = runControlKind(run);
-	// A Pause is held for the Planner's return, and the control says so.
-	let control = kind === "pause" && onPause
-		? {
-			label: told ? `Pause ${title} when the machine reconnects` : `Pause ${title}`,
-			icon: plannerStop,
-			act: () => onPause(run.id),
-			kind,
-		}
-		: kind === "resume" && onResume
-		? { label: `Resume ${title}`, icon: plannerResume, act: () => onResume(run.id), kind }
-		: undefined;
-
-	return (
-		<li className="run-row" data-run-status={run.status}>
-			<div className="run-head flex min-w-0 items-center gap-1">
-				<button
-					aria-controls={stagesId}
-					aria-expanded={open}
-					aria-label={`${title}, ${
-						told ? `disconnected, was ${STATUS[run.status]}` : STATUS[run.status]
-					}, ${elapsed(end - run.started)}`}
-					className="run-toggle"
-					data-run-toggle=""
-					onClick={onToggle}
-					type="button"
-				>
-					<RunGlyph away={away} told={told} status={run.status} />
-					<span className="min-w-0 truncate font-mono text-text-secondary">{run.name}</span>
-					{tag && (
-						<span className="shrink-0 font-mono text-text-quaternary tabular-nums">{tag}</span>
-					)}
-					<span
-						aria-live={away && offline ? "off" : "polite"}
-						className={`shrink-0 ${
-							run.status === "waiting" && !away ? "text-warning-ink" : "text-text-tertiary"
-						}`}
-					>
-						{runStatusLabel(run, offline)}
-					</span>
-					<span className="ml-auto shrink-0 text-text-quaternary tabular-nums">
-						{elapsed(end - run.started)}
-					</span>
-					<ChevronIcon
-						aria-hidden="true"
-						className="run-chevron shrink-0 text-text-quaternary"
-						size={16}
-					/>
-				</button>
-				{control && (
-					<button
-						aria-label={control.label}
-						className="btn btn-icon btn-secondary shrink-0"
-						data-run-control={control.kind}
-						onClick={control.act}
-						title={control.label}
-						type="button"
-					>
-						<img alt="" className="size-4" src={control.icon} />
-					</button>
-				)}
-			</div>
-			{open && (
-				<div className="pb-1 pl-[22px]" id={stagesId}>
-					{told && (
-						<p className="pb-1 text-text-tertiary" data-run-disconnected-note="">
-							{disconnectedNote(run)}
-						</p>
-					)}
-					{earlier > 0 && (
-						<button
-							aria-controls={listId}
-							aria-expanded={all}
-							className="btn btn-sm btn-ghost -ml-2 text-text-tertiary tabular-nums"
-							data-run-earlier=""
-							onClick={() => setExpanded(!all)}
-							type="button"
-						>
-							{all ? "Show fewer" : (
-								// One span, so the button's gap does not split "+" from the count.
-								<span>
-									<span aria-hidden="true">+</span>
-									<span className="sr-only">{"Show "}</span>
-									{earlier} earlier
-									<span className="sr-only">{" stages"}</span>
-								</span>
-							)}
-						</button>
-					)}
-					<ol
-						aria-label={all ? `All stages of ${title}` : undefined}
-						className={`flex flex-col gap-0.5 ${all ? "run-stages-all" : ""}`}
-						id={listId}
-						tabIndex={all ? 0 : undefined}
-					>
-						{all && !stored.done && (
-							<li className="text-text-quaternary" data-run-loading="" role="status">
-								Loading earlier stages…
-							</li>
-						)}
-						{all && failed && (
-							<li className="text-text-quaternary" data-run-load-failed="" role="status">
-								Earlier stages could not be loaded.
-							</li>
-						)}
-						{all && !failed && unreported > 0 && (
-							<li className="text-text-quaternary tabular-nums" data-run-unreported="">
-								{unreported} earlier {unreported === 1 ? "stage was" : "stages were"} not reported
-							</li>
-						)}
-						{stages.map(stage => (
-							<li
-								className={`flex min-w-0 items-center gap-2 ${
-									stage.status === "completed" || stage.status === "skipped"
-										? "text-text-quaternary"
-										: ""
-								}`}
-								data-run-stage={stage.status}
-								key={stage.id}
-							>
-								<StageGlyph away={away} told={told} status={stage.status} />
-								{stage.kind === "tool" && (
-									<WrenchIcon
-										aria-hidden="true"
-										className="shrink-0 text-text-quaternary"
-										size={16}
-									/>
-								)}
-								<span className="min-w-0 truncate font-mono">
-									{stage.kind === "tool" && <span className="sr-only">{"tool step: "}</span>}
-									{stage.name}
-								</span>
-								<span
-									className={`shrink-0 ${
-										stage.status === "awaiting_input" ? "text-warning-ink" : "text-text-tertiary"
-									}`}
-								>
-									{STAGE[stage.status]}
-								</span>
-								{stage.started !== undefined && (
-									<span className="ml-auto shrink-0 text-text-quaternary tabular-nums">
-										{elapsed((stage.ended ?? (live ? now : run.updated)) - stage.started)}
-									</span>
-								)}
-							</li>
-						))}
-					</ol>
-				</div>
-			)}
-			{run.waiting > 0 && (
-				<button
-					className="btn btn-sm btn-ghost -ml-2 mb-1 text-warning-ink"
-					data-run-waiting={run.waiting}
-					onClick={onShowDecisions}
-					type="button"
-				>
-					Waiting on {run.waiting} {run.waiting === 1 ? "Decision" : "Decisions"}
-				</button>
-			)}
-		</li>
-	);
+/** A hollow ring for work that is waiting to start. */
+function RunRing() {
+	return <span aria-hidden="true" className="run-ring" />;
 }
 
 /** `#12` for a pull request link, else nothing. */
@@ -481,9 +44,9 @@ function pullNumber(url: string): string | undefined {
 }
 
 /**
- * The document's running build, at the head of the strip: what it is on, what its agent is doing,
- * and the pull requests it has opened, with the way into Build. It goes when the build ends; Chat's
- * line about how it ended stays.
+ * The document's running build: what it is on, what its agent is doing, and the pull requests it
+ * has opened, with the way into Build. It goes when the build ends; Chat's line about how it ended
+ * stays.
  */
 function BuildRunRow(
 	{ build, open, onToggle, onShowBuild }: {
@@ -572,72 +135,25 @@ function BuildRunRow(
 	);
 }
 
-export function RunStack(
-	{ runs, build, onShowBuild, loadStages, onShowDecisions, onPause, onResume, offline }:
-		& RunControls
-		& {
-			runs: readonly Wire.Run[];
-			/** The document's running build, shown first; absent when none runs. */
-			build?: BuildRun;
-			onShowBuild?: () => void;
-		},
+/** The card of the document's running build, under Chat's transcript while it runs. */
+export function BuildCard(
+	{ build, onShowBuild }: { build: BuildRun; onShowBuild?: () => void },
 ) {
-	let [buildOpen, setBuildOpen] = useState(true);
-	let [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map());
-	let [showAll, setShowAll] = useState(false);
-	let ordered = orderRuns(runs);
-	let named = new Map<string, number>();
-	for (let run of runs) named.set(run.name, (named.get(run.name) ?? 0) + 1);
-	let fallback = defaultOpen(ordered);
-	let shown = visibleRuns(ordered, showAll);
-	let folded = ordered.length - visibleRuns(ordered, false).length;
-
+	let [open, setOpen] = useState(true);
 	return (
 		<section
-			aria-label="Workflow runs"
+			aria-label="Running build"
 			className="run-stack rounded-lg bg-page px-3 text-sm ring-hairline"
 			data-run-stack=""
 		>
 			<ol className="flex flex-col">
-				{build && (
-					<BuildRunRow
-						build={build}
-						onShowBuild={onShowBuild}
-						onToggle={() => setBuildOpen(open => !open)}
-						open={buildOpen}
-					/>
-				)}
-				{shown.map(run => {
-					// Beside a build, whose details are unfolded, only a run waiting on people unfolds itself.
-					let first = run.id === fallback && (!build || run.status === "waiting");
-					let open = chosen.get(run.id) ?? first;
-					return (
-						<RunRow
-							key={run.id}
-							loadStages={loadStages}
-							offline={offline}
-							onPause={onPause}
-							onResume={onResume}
-							onShowDecisions={onShowDecisions}
-							tag={(named.get(run.name) ?? 0) > 1 ? run.id.slice(0, 8) : undefined}
-							onToggle={() => setChosen(previous => new Map(previous).set(run.id, !open))}
-							open={open}
-							run={run}
-						/>
-					);
-				})}
+				<BuildRunRow
+					build={build}
+					onShowBuild={onShowBuild}
+					onToggle={() => setOpen(value => !value)}
+					open={open}
+				/>
 			</ol>
-			{folded > 0 && (
-				<button
-					aria-expanded={showAll}
-					className="btn btn-sm btn-ghost -ml-2 mb-1 text-text-tertiary tabular-nums"
-					data-run-more=""
-					onClick={() => setShowAll(all => !all)}
-					type="button"
-				>
-					{showAll ? "Show fewer" : `+${folded} more`}
-				</button>
-			)}
 		</section>
 	);
 }

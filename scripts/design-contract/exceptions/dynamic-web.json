@@ -74,7 +74,7 @@
 				1
 			]
 		],
-		"sourceHash": "7b68d2a27d0a5fdfe023e2783d0597dcdc90f0012d7f93e1450fe4ce1d0ba63b"
+		"sourceHash": "4fff769e5940d29424165c7c5dcfcfdbae6edbc395f08be13ac2c3889bda2adc"
 	},
 	{
 		"file": "apps/web/src/design-audit/controls.tsx",
@@ -354,7 +354,7 @@
 				1
 			]
 		],
-		"sourceHash": "ba93a07855ef184914ca1712c5e101d191feb6d46292933a4f54e1b43b473d06"
+		"sourceHash": "46135da71d21d44fc4724c051581a53a5379a167a07c554ca3a9a72c17754ef0"
 	},
 	{
 		"file": "apps/web/src/question-markdown.tsx",

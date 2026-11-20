@@ -133,11 +133,6 @@ export type Backend = {
 	/** Product documents enforce a leading title; standalone domain rooms remain generic. */
 	documentTitles?: boolean;
 	/**
-	 * Whether a rebuilt remote Planner hold still keeps the document's workflow runs for its client,
-	 * so the cards Chat stored stay live when it opens, marked disconnected once its client is away.
-	 */
-	plannerKeepsRuns?: (channelId: string) => "live" | "down" | undefined;
-	/**
 	 * A document's room has opened: a rebuilt remote Planner hold waits again, for its client, for
 	 * the answers to the questions it left open there.
 	 */
@@ -383,13 +378,12 @@ type Sidecar = {
 	conversationPlanEffects?: string[];
 	conversationPlanPendingEffects?: Effect[];
 	pendingCardActions?: PendingCardAction[];
-	workflowRuns?: NonNullable<Chat.Chat["runs"]>;
 	initiativePaused?: boolean;
 	plannerTitle?: string;
 	titleChosen?: true;
 };
 
-type ChatView = Pick<Chat.Chat, "entries" | "runs" | "initiativePaused" | "lastSeq">;
+type ChatView = Pick<Chat.Chat, "entries" | "initiativePaused" | "lastSeq">;
 
 function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 	return {
@@ -426,7 +420,6 @@ function state(plan: Plan, chat: ChatView = plan.chat): Sidecar {
 			? { conversationPlanPendingEffects: plan.conversationPlanPendingEffects }
 			: {}),
 		...(plan.pendingCardActions.length ? { pendingCardActions: plan.pendingCardActions } : {}),
-		...(chat.runs?.length ? { workflowRuns: chat.runs } : {}),
 		...((chat.initiativePaused ?? plan.chat.initiativePaused) ? { initiativePaused: true } : {}),
 		...(plan.plannerTitle !== undefined ? { plannerTitle: plan.plannerTitle } : {}),
 		...(plan.titleChosen ? { titleChosen: true as const } : {}),
@@ -630,6 +623,7 @@ function restoredState(
 		expected.push("conversationPlanPendingEffects");
 	}
 	if (Object.hasOwn(item, "pendingCardActions")) expected.push("pendingCardActions");
+	// The run cards Chat showed, which an earlier release saved: nothing reads them now.
 	if (Object.hasOwn(item, "workflowRuns")) expected.push("workflowRuns");
 	if (Object.hasOwn(item, "initiativePaused")) expected.push("initiativePaused");
 	if (Object.hasOwn(item, "plannerTitle")) expected.push("plannerTitle");
@@ -823,7 +817,6 @@ function restoredState(
 		|| conversationPlan.analysis.some(entry => !messageIds.has(entry.messageId))
 		|| conversationPlanRetries.some(entry => !messageIds.has(entry.messageId))
 	) throw new Error("hosted channel has conversation analysis without a source message");
-	let workflowRuns = restoreWorkflowRuns(item.workflowRuns);
 	return {
 		version: 1,
 		revision: item.revision,
@@ -848,7 +841,6 @@ function restoredState(
 		...(outbox.receipts.length ? { conversationPlanEffects: outbox.receipts } : {}),
 		...(outbox.pending.length ? { conversationPlanPendingEffects: outbox.pending } : {}),
 		...(pendingCardActions.length ? { pendingCardActions } : {}),
-		...(workflowRuns.length > 0 ? { workflowRuns } : {}),
 		...(item.initiativePaused === true ? { initiativePaused: true } : {}),
 		...(typeof item.plannerTitle === "string" ? { plannerTitle: item.plannerTitle } : {}),
 		...(item.titleChosen === true ? { titleChosen: true as const } : {}),
@@ -877,63 +869,6 @@ function restoreConversationPlanRetries(
 		seen.add(item.id);
 		return { id: item.id, messageId: item.messageId };
 	});
-}
-
-const RUN_STATUSES = new Set([
-	"running",
-	"waiting",
-	"paused",
-	"finished",
-	"blocked",
-	"failed",
-	"stopped",
-]);
-const RUN_STAGE_STATUSES = new Set([
-	"pending",
-	"running",
-	"awaiting_input",
-	"paused",
-	"blocked",
-	"completed",
-	"failed",
-	"skipped",
-	"stopped",
-]);
-
-function seconds(value: JsonValue | undefined, optional = false): boolean {
-	if (value === undefined) return optional;
-	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-
-/** Workflow run cards Chat showed, as `Chat.Run` values. */
-function restoreWorkflowRuns(value: JsonValue | undefined): NonNullable<Chat.Chat["runs"]> {
-	if (value === undefined) return [];
-	if (!Array.isArray(value)) throw new Error("hosted channel has invalid workflow runs");
-	let runs = objects(value, "workflow run");
-	for (let run of runs) {
-		let stages = run.stages;
-		if (
-			typeof run.name !== "string"
-			|| !RUN_STATUSES.has(run.status as string)
-			|| !seconds(run.started)
-			|| !seconds(run.updated)
-			|| !seconds(run.ended, true)
-			|| !seconds(run.earlierStages, true)
-			|| !seconds(run.waiting)
-			|| !Array.isArray(stages)
-			|| stages.some(stage =>
-				!stage || typeof stage !== "object" || Array.isArray(stage)
-				|| typeof stage.id !== "string" || typeof stage.name !== "string"
-				|| stage.kind !== undefined && stage.kind !== "tool"
-				|| stage.parentIds !== undefined && (!Array.isArray(stage.parentIds)
-						|| stage.parentIds.length > 64
-						|| stage.parentIds.some(id => typeof id !== "string" || !id || id.length > 128))
-				|| !RUN_STAGE_STATUSES.has(stage.status as string)
-				|| !seconds(stage.started, true) || !seconds(stage.ended, true)
-			)
-		) throw new Error("hosted channel has invalid workflow runs");
-	}
-	return runs as unknown as NonNullable<Chat.Chat["runs"]>;
 }
 
 function restoreMcpUpdates(value: JsonValue | undefined): McpUpdateRecord[] {
@@ -1618,13 +1553,7 @@ export async function open(
 		questions: Questions.restore(sidecar.openQuestions),
 		comments: Comments.create(),
 		chat: {
-			...Chat.restore(
-				sidecar.transcript,
-				sidecar.workflowRuns,
-				sidecar.initiativePaused,
-				// An archived document's Planner ended with it: its runs come back stopped.
-				loaded.channel.archivedAt ? undefined : backend.plannerKeepsRuns?.(id),
-			),
+			...Chat.restore(sidecar.transcript, sidecar.initiativePaused),
 			...(sidecar.transcriptSeq !== undefined ? { lastSeq: sidecar.transcriptSeq } : {}),
 		},
 		conversationPlan: sidecar.conversationPlan ?? restoreConversationPlan(undefined),

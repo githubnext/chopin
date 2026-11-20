@@ -881,7 +881,6 @@ export async function openThread(
 		...(managed ? { seq: snapshotSeq(managed.chat) } : {}),
 		busy: managed?.chat.busy ?? false,
 		...(managed?.chat.turn ? { turn: managed.chat.turn } : {}),
-		...(managed?.chat.runs ? { runs: managed.chat.runs } : {}),
 		...(managed?.chat.usage ? { usage: managed.chat.usage } : {}),
 		...(managed?.chat.compactions?.length ? { compactions: managed.chat.compactions } : {}),
 		...(managed?.chat.compacting ? { compacting: true } : {}),
@@ -979,22 +978,16 @@ export async function sendMessage(
 	}
 }
 
-/** Route turn-control frames (`abort`, `resume`, run controls) for threads or top-level Chat. */
+/** Route a Stop (`chat:abort`) to a thread or to top-level Chat. */
 export async function controlMessage(
 	topContext: Chat.Room,
 	ws: Socket,
-	frame:
-		| Request<Wire.Abort>
-		| Request<Wire.Resume>
-		| Request<Wire.PauseRun>
-		| Request<Wire.ResumeRun>,
+	frame: Request<Wire.Abort>,
 	override?: ThreadPersistence,
 ): Promise<void> {
 	let boundTop = bindTopLevel(topContext, override);
 	if (frame.thread === undefined) {
-		if (frame.kind === "chat:abort") await Chat.abort(boundTop, ws);
-		else if (frame.kind === "chat:resume") await Chat.resume(boundTop, ws);
-		else await Chat.controlRun(boundTop, ws, frame);
+		await Chat.abort(boundTop, ws);
 		return;
 	}
 	if (typeof frame.thread !== "string" || !frame.thread || frame.thread.length > 128) {
@@ -1008,9 +1001,7 @@ export async function controlMessage(
 		return;
 	}
 	let tRoom = buildThreadRoom(boundTop, managed, override);
-	if (frame.kind === "chat:abort") await Chat.abort(tRoom, ws);
-	else if (frame.kind === "chat:resume") await Chat.resume(tRoom, ws);
-	else await Chat.controlRun(tRoom, ws, frame);
+	await Chat.abort(tRoom, ws);
 }
 
 /**

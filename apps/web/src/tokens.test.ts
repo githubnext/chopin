@@ -760,12 +760,6 @@ describe("migration", () => {
 				size: "btn-sm",
 				tiers: ["btn-ghost"],
 			}],
-			["apps/web/src/chat/composer.tsx", {
-				action: "Resume Planner",
-				marker: "aria-label={`Resume ${PLANNER_NAME}`}",
-				size: "btn-icon",
-				tiers: ["btn-ghost"],
-			}],
 			["packages/editor/src/send-action.tsx", {
 				action: "shared send action",
 				marker: "aria-label={label}",

@@ -10,7 +10,7 @@
  */
 
 import { instruction } from "@chopin/protocol/address";
-import { COMMAND_KINDS, commandPrompt } from "@chopin/protocol/commands";
+import { commandPrompt } from "@chopin/protocol/commands";
 
 import type { Chat as Wire } from "@chopin/protocol";
 
@@ -145,12 +145,10 @@ export function compose(
 			readableIds,
 		);
 		current = commandPrompt({ name: command.name, kind: command.commandKind }, args);
-		// A skill or a prompt template is Atomic's own invocation, which has to open the prompt:
-		// what the room said stays for the next turn, and nothing is put before or beside it.
-		if (command.commandKind !== COMMAND_KINDS.workflow) {
-			let catalog = referenceCatalog(catalogReferences);
-			return catalog ? `${current}\n\n${catalog}` : current;
-		}
+		// A command is Atomic's own invocation, which has to open the prompt: what the room said
+		// stays for the next turn, and nothing is put before or beside it.
+		let catalog = referenceCatalog(catalogReferences);
+		return catalog ? `${current}\n\n${catalog}` : current;
 	} else {
 		let asked = verbatim || references.length > 0 ? text : instruction(text);
 		current = annotatedText(asked, references, readableIds);

@@ -123,7 +123,7 @@ describe("openPlannerSession", () => {
 		await opened.value.destroy();
 	});
 
-	it("registers a remote Planner for its document, with Decisions and run control on the client", async () => {
+	it("registers a remote Planner for its document, with Decisions on the client", async () => {
 		let { owner, channel, deps } = fixture();
 		let room = await hostInputRoom();
 		let sessionId = "";
@@ -168,19 +168,6 @@ describe("openPlannerSession", () => {
 				clock.restore();
 			}
 
-			let seen: unknown[] = [];
-			session.watchRuns!(runs => seen.push(runs));
-			let runs = { active: ["run"], paused: [], cards: [] };
-			registered.runs = runs;
-			registered.onRuns!(runs);
-			expect(seen).toEqual([runs]);
-			expect(session.runs!()).toBe(runs);
-			await expect(session.pauseRuns!()).rejects.toThrow("no attached session to control");
-			let controls: unknown[] = [];
-			registered.control = async (action, runId) => void controls.push([action, runId]);
-			await session.pauseRuns!();
-			await session.resumeRun!("run");
-			expect(controls).toEqual([["stop", undefined], ["resume", "run"]]);
 			registered.activeTools = ["read_plan", "bash"];
 			expect(session.activeTools).toEqual(["read_plan", "bash"]);
 		} finally {
@@ -190,7 +177,7 @@ describe("openPlannerSession", () => {
 		expect(remotePlanner(sessionId)).toBeUndefined();
 	});
 
-	it("keeps a remote background job isolated, without Decisions or run control", async () => {
+	it("keeps a remote background job isolated, without Decisions", async () => {
 		let { owner, channel, deps } = fixture();
 		let sessionId = "";
 		let instructions = "";
@@ -214,7 +201,6 @@ describe("openPlannerSession", () => {
 		expect(remotePlanner(sessionId)).toMatchObject({ channelId: "channel", isolated: true });
 		expect(remotePlanner(sessionId)!.humanInput).toBeUndefined();
 		expect(opened.value.inputs).toBeUndefined();
-		expect(opened.value.pauseRuns).toBeUndefined();
 		expect(opened.value.activeTools).toEqual(BACKGROUND_TOOL_NAMES.heading);
 		await opened.value.stream("prompt", new AbortController().signal);
 		expect(instructions).toContain("You have no shell");
@@ -273,7 +259,6 @@ describe("openPlannerSession", () => {
 		try {
 			expect(fullPlanner(sessionId)).toBeUndefined();
 			expect(opened.value.inputs).toBeUndefined();
-			expect(opened.value.pauseRuns).toBeUndefined();
 			expect(opened.value.activeTools).toEqual([]);
 		} finally {
 			await opened.value.destroy();
@@ -303,7 +288,6 @@ describe("openPlannerSession", () => {
 		expect(remotePlanner(sessionId)).toMatchObject({ channelId: "channel", isolated: true });
 		expect(remotePlanner(sessionId)!.humanInput).toBeUndefined();
 		expect(opened.value.inputs).toBeUndefined();
-		expect(opened.value.pauseRuns).toBeUndefined();
 		expect(opened.value.rebind).toBeUndefined();
 		expect(opened.value.activeTools).toEqual([]);
 		await opened.value.destroy();
@@ -527,10 +511,6 @@ describe("Planner workspaces", () => {
 		let clock = laterTimers();
 		try {
 			await opened.value.stream("prompt", new AbortController().signal);
-			// An Atomic Planner owns no workflow runs, so there is nothing for Stop to pause.
-			expect(opened.value.runs).toBeUndefined();
-			expect(opened.value.pauseRuns).toBeUndefined();
-			expect(opened.value.resumeRun).toBeUndefined();
 			let asked = registered!.humanInput.confirm("Ship?", "Now.", room.options);
 			let [card] = await room.cards(1);
 			await clock.pass(31 * 60 * 1_000);

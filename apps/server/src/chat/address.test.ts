@@ -323,17 +323,14 @@ describe("composing a turn that runs a command", () => {
 		expect(prompt).not.toContain("command-review");
 	});
 
-	it("asks for a workflow by name, from the person, after what the room said", () => {
+	it("runs a command of a kind it gives no meaning, `workflow` included, as the same invocation alone", () => {
 		let prompt = compose(
 			[{ handle: "bob", text: "the v2 branch is ready" }],
 			"alice",
 			"/ship the v2 branch",
 			[commandOf("ship", "workflow")],
 		);
-		expect(prompt).toContain("@bob: the v2 branch is ready");
-		expect(prompt).toContain('@alice: Start the registered workflow "ship" now');
-		expect(prompt.trimEnd().endsWith("the v2 branch")).toBe(true);
-		expect(prompt).not.toContain("/ship");
+		expect(prompt).toBe("/ship the v2 branch");
 	});
 
 	it("never lists a command among the references a turn can read", () => {

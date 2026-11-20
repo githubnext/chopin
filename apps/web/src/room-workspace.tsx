@@ -2127,7 +2127,6 @@ export function RoomWorkspace(
 									: !workspaceCanEdit
 									? "You have read-only access to this document."
 									: undefined}
-								onShowDecisions={() => selectDestination("decisions")}
 								build={runningBuild}
 								onShowBuild={() => selectDestination("build")}
 								onResearch={researchEnabled ? startResearch : undefined}

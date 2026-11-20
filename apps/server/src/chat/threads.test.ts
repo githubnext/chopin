@@ -25,7 +25,6 @@ import type { Server } from "bun";
 import type { DocumentRoom } from "../agent/tools";
 import type { HostedAuth } from "../auth/routes";
 import type { NewDocumentRequest, NewDocumentResult } from "../agent/new-documents";
-import type { PlannerRuns } from "../harness/runs";
 import type { PlannerForkHooks, PlannerSession } from "../harness/session";
 import type { TellChat } from "./thread-notes";
 import type { Socket, SocketData } from "../wire";
@@ -65,7 +64,8 @@ async function buildWorld(config: Record<string, string> = {}, extra: Partial<Ch
 	let emitExtra:
 		| ((emit: (part: Record<string, unknown>) => void) => Promise<void> | void)
 		| undefined;
-	let liveRuns: PlannerRuns | undefined;
+	/** Whether the session waits on a question it asked, which keeps it past a reply refused. */
+	let asking = false;
 
 	let fakeOpen: typeof openPlannerSession = async (_binding, options) => {
 		forks.push(options.fork);
@@ -100,7 +100,7 @@ async function buildWorld(config: Record<string, string> = {}, extra: Partial<Ch
 				return { fullStream: parts() } as never;
 			},
 			destroy: async () => {},
-			runs: () => liveRuns,
+			inputs: { open: () => asking ? 1 : 0, held: () => 0, watch: () => () => {} },
 		};
 		return { ok: true, value: session };
 	};
@@ -160,8 +160,8 @@ async function buildWorld(config: Record<string, string> = {}, extra: Partial<Ch
 		setEmitExtra: (fn: typeof emitExtra) => {
 			emitExtra = fn;
 		},
-		setRuns: (runs: PlannerRuns | undefined) => {
-			liveRuns = runs;
+		setAsking: (open: boolean) => {
+			asking = open;
 		},
 		makeSocket,
 	};
@@ -1033,7 +1033,7 @@ describe("Chat threads server", () => {
 			for (let decision of first) await tell({ decision, decidedBy: ["alice"] });
 
 			let failing = crypto.randomUUID();
-			if (failure.keepsSession) w.setRuns({ active: ["run-1"], paused: [], cards: [] });
+			if (failure.keepsSession) w.setAsking(true);
 			else {
 				w.setEmitExtra(() => {
 					throw new Error("503 Service Unavailable");

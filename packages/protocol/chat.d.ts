@@ -17,9 +17,6 @@ export declare namespace Chat {
 		| Request<Retry>
 		| Request<OpenThread>
 		| Request<Abort>
-		| Request<Resume>
-		| Request<PauseRun>
-		| Request<ResumeRun>
 		| Request<Wake>
 		| Request<React>
 		| Request<SetParticipation>
@@ -384,53 +381,6 @@ export declare namespace Chat {
 		quiet?: boolean;
 	};
 
-	/** One stage of a workflow run, in the order the run reached it. */
-	export type RunStage = {
-		id: string;
-		name: string;
-		/** IDs of parent stages in this report; absent in older or topology-free reports. */
-		parentIds?: string[];
-		/** A `ctx.tool` step rather than an agent stage. */
-		kind?: "tool";
-		status:
-			| "pending"
-			| "running"
-			| "awaiting_input"
-			| "paused"
-			| "blocked"
-			| "completed"
-			| "failed"
-			| "skipped"
-			| "stopped";
-		/** Seconds since the epoch. */
-		started?: number;
-		ended?: number;
-	};
-
-	/** An Atomic workflow run the Planner started and still carries after its turn. */
-	export type Run = {
-		id: string;
-		name: string;
-		status: "running" | "waiting" | "paused" | "finished" | "blocked" | "failed" | "stopped";
-		/** Seconds since the epoch. */
-		started: number;
-		updated: number;
-		ended?: number;
-		/** The most recent stages, in the order the run reached them. */
-		stages: RunStage[];
-		/** Stages reached before the ones listed. */
-		earlierStages?: number;
-		/** Decisions questions the run is waiting on. */
-		waiting: number;
-		/**
-		 * The Planner's connection dropped while this run was live: Chopin keeps the card as
-		 * last reported, and the run goes on when the Planner reconnects. Absent otherwise.
-		 */
-		disconnected?: true;
-	};
-
-	export type Runs = Run[];
-
 	/**
 	 * Shared automatic participation; direct Planner messages still work while paused. `alone` says
 	 * that at most one person is in the conversation (writers with the document open, whoever spoke
@@ -509,8 +459,8 @@ export declare namespace Chat {
 
 	/**
 	 * One command the document's agent offers. `kind` says what it is, as the agent defines it:
-	 * `skill`, `prompt` (a prompt template) and `workflow` are the ones Chopin knows. A command
-	 * is run as `/name args`, except a workflow, which is asked for by name.
+	 * `skill` and `prompt` (a prompt template) are the ones Chopin knows. A command of any kind is
+	 * run as `/name args`.
 	 */
 	export type CommandOption = { name: string; description?: string; kind: string };
 
@@ -600,7 +550,6 @@ export declare namespace Chat {
 		seq?: number;
 		busy: boolean;
 		turn?: Turn;
-		runs?: Runs;
 		participation?: Participation;
 	};
 
@@ -622,11 +571,10 @@ export declare namespace Chat {
 	/** A tool call starting, or finishing. */
 	export type Tool = KIND<"chat:tool"> & { entry: string; activity: Activity };
 
-	/** Whether a turn is running, and for whom, and any workflow runs outliving it. */
+	/** Whether a turn is running, and for whom. */
 	export type State = KIND<"chat:state"> & {
 		busy: boolean;
 		turn?: Turn;
-		runs?: Runs;
 	};
 
 	export type Destination = "room" | "planner";
@@ -760,7 +708,6 @@ export declare namespace Chat {
 		seq?: number;
 		busy: boolean;
 		turn?: Turn;
-		runs?: Runs;
 		usage?: ContextUsage;
 		compactions?: CompactionRecord[];
 		compacting?: boolean;
@@ -814,19 +761,10 @@ export declare namespace Chat {
 	export type Sent = KIND<"chat:send"> & { id: string };
 
 	/**
-	 * Stop the running turn and pause the Planner's workflow runs. Anyone may;
-	 * the transcript records who did.
+	 * Stop the running turn, or withdraw the question a Planner waits on. Anyone may; the
+	 * transcript records who did.
 	 */
 	export type Abort = KIND<"chat:abort"> & { thread?: string };
-
-	/** Resume the workflow runs the Planner paused. Anyone may; the transcript records who did. */
-	export type Resume = KIND<"chat:resume"> & { thread?: string };
-
-	/** Pause one workflow run. Anyone may; the transcript records who did. */
-	export type PauseRun = KIND<"chat:pause-run"> & { runId: string; thread?: string };
-
-	/** Resume one paused workflow run. Anyone may; the transcript records who did. */
-	export type ResumeRun = KIND<"chat:resume-run"> & { runId: string; thread?: string };
 
 	/**
 	 * Ask a machine to start the document's Planner now, as sending it a message does, without

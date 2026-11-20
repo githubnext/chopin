@@ -117,7 +117,6 @@ test("read-only and archived documents replace the draft and hide notices", () =
 test("shows one run control, and no connection state of its own", () => {
 	let markup = render({ run: { action: "stop", disabled: false, onClick: () => {} } });
 	expect(markup).toContain('aria-label="Stop generating"');
-	expect(markup).not.toContain('aria-label="Resume chopin"');
 	// The document says when the connection is lost, once, at the top of its content.
 	expect(markup).not.toContain("composer-connection");
 	expect(markup).not.toContain("Reconnect");
@@ -175,15 +174,6 @@ test("someone who may not stop the Planner is shown a disabled send, never a sto
 	expect(button).toContain('aria-label="Send message"');
 	expect(disabled(button)).toBe(true);
 	expect(markup).not.toContain("Stop generating");
-});
-
-test("Resume is a button of its own beside the round one", () => {
-	let markup = render({
-		run: { action: "resume", disabled: false, onClick: () => {} },
-		sendDisabled: true,
-	});
-	expect(markup).toContain('aria-label="Resume chopin"');
-	expect(roundButton(markup)).toContain('aria-label="Send message"');
 });
 
 test("a polite live region waits beside the button, empty until it changes", () => {

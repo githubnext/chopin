@@ -8,7 +8,7 @@
  * A detached link, or one that dropped with nothing to keep, keeps its ownership
  * for a grace period, so the same account can reattach without losing it; then
  * the ownership is cleared. A link that dropped unexpectedly while its client had
- * workflow runs or open questions to resume keeps its ownership with no deadline:
+ * open questions to resume keeps its ownership with no deadline:
  * the work waits for the client, however long that takes, and only something
  * explicit ends it. Ending that login, resetting the document's Planner, choosing
  * another machine for it, archiving or deleting the document, or any other
@@ -98,16 +98,8 @@ export type HoldStore = {
 	delete(channelId: string): Promise<void>;
 };
 
-/**
- * What became of the workflow runs a rebuilt hold keeps, for the cards Chat stored: their client
- * did not come back in time (`down`), came back and took them (`up`), or they ended with the hold.
- */
-export type RestoredRuns = "down" | "up" | "ended";
-
 export type PlannerAttachmentOptions = {
 	store?: HoldStore;
-	/** Heard when a rebuilt hold's runs change as `RestoredRuns` says. */
-	restoredRuns?: (channelId: string, outcome: RestoredRuns) => void;
 	/** Heard when a hand-over window ends without the client back, with what was missing. */
 	missed?: (channelId: string, cause: "login" | "client") => void;
 	/**
@@ -278,8 +270,8 @@ export class PlannerAttachments {
 	}
 
 	/**
-	 * Whether the client attached to the document waits on its members: an open question or run.
-	 * So does one that disconnected, whose work is kept for it.
+	 * Whether the client attached to the document waits on its members: an open question. So does
+	 * one that disconnected, whose work is kept for it.
 	 */
 	waiting(channelId: string): boolean {
 		let hold = this.#holds.get(channelId);
@@ -287,8 +279,8 @@ export class PlannerAttachments {
 	}
 
 	/**
-	 * Whether the client attached to the document is mid-work: replying, asking, or running. A
-	 * disconnected client's kept work is mid-work, as nothing says it ended.
+	 * Whether the client attached to the document is mid-work: replying or asking. A disconnected
+	 * client's kept work is mid-work, as nothing says it ended.
 	 */
 	busy(channelId: string): boolean {
 		let hold = this.#holds.get(channelId);
@@ -585,12 +577,18 @@ export class PlannerAttachments {
 				this.#forgetRow(hold);
 				continue;
 			}
-			if (row.sessions.length > 0) {
+			// A session is kept only for a question its client waits on or an answer it has not
+			// acknowledged. An earlier release also kept one for a workflow run, which nothing keeps now.
+			let sessions = row.sessions.filter(session =>
+				session.waiting.length > 0 || session.owed.length > 0
+			);
+			for (let { aiLaunchId } of row.sessions.filter(session => !sessions.includes(session))) {
+				if (aiLaunchId) this.#options.endAi?.(aiLaunchId);
+			}
+			if (sessions.length > 0) {
 				let open = this.#options.openDocument;
-				hold.parked = AgentLink.rebuilt(row.channelId, row.sessions, {
+				hold.parked = AgentLink.rebuilt(row.channelId, sessions, {
 					lapse: () => this.#lapsed(hold, hold.parked!),
-					ended: () => this.#runs(hold, "ended"),
-					resumed: () => this.#runs(hold, "up"),
 					...(open ? { open: () => open(row.channelId) } : {}),
 					...(this.#options.endAi ? { endAi: this.#options.endAi } : {}),
 					...(this.#options.aiHeld ? { aiHeld: this.#options.aiHeld } : {}),
@@ -604,7 +602,7 @@ export class PlannerAttachments {
 			// that fails leaves the row as it was, and the window the client was told is still given.
 			if (length !== undefined && this.#options.store) {
 				try {
-					await this.#options.store.put({ ...row, handoverUntil: undefined });
+					await this.#options.store.put({ ...row, sessions, handoverUntil: undefined });
 				} catch (error) {
 					console.error("[agent] keeping a remote Planner's link state failed:", error);
 				}
@@ -634,24 +632,6 @@ export class PlannerAttachments {
 		let hold = this.#holds.get(channelId);
 		hold?.parked?.rejoinInputs(host);
 		hold?.link?.rejoinInputs(host);
-	}
-
-	/**
-	 * Whether a hold a restart rebuilt still keeps sessions with work, so the workflow runs Chat
-	 * stored for the document are live and not stopped when its Chat opens: `live` through the
-	 * hold's window and once its client has taken them back, `down` while its client is known to be
-	 * away. A client that took them back keeps them on its link, where no turn of this process
-	 * retains them, so a document that opens after it resumed still shows its runs live.
-	 */
-	restoredWork(channelId: string): "live" | "down" | undefined {
-		let hold = this.#holds.get(channelId);
-		if (!hold) return undefined;
-		if (hold.restored && hold.parked && hold.parked.snapshot().length > 0) {
-			return this.#inWindow(hold) ? "live" : "down";
-		}
-		if (hold.link?.keepsRebuilt) return "live";
-		if (hold.parked?.keepsRebuilt) return "down";
-		return undefined;
 	}
 
 	/**
@@ -1099,16 +1079,10 @@ export class PlannerAttachments {
 				`chopin: remote Planner miss: the hand-over window of ${hold.channelId} ran out with `
 					+ `${cause === "login" ? "its owner's sign-in not back" : "its client not back"}`,
 			);
-			if (hold.parked) this.#runs(hold, "down");
-			else this.#startGrace(hold);
+			if (!hold.parked) this.#startGrace(hold);
 			this.#options.missed?.(hold.channelId, cause);
 			this.#changed(hold.channelId);
 		});
-	}
-
-	#runs(hold: Hold, outcome: RestoredRuns): void {
-		if (this.#frozen) return;
-		this.#options.restoredRuns?.(hold.channelId, outcome);
 	}
 
 	/** Keeps what a suspended link holds, for the process that takes over after a crash. */

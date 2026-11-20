@@ -81,7 +81,6 @@ function available(source: Source): "ready" | "wait" | "drop" {
 				|| (entry.author.kind === "agent" && !!entry.text.trim())
 			)?.id !== source.id
 		|| Service.implementationActive(context.plan)
-		|| chat.runs?.some(run => ["running", "waiting", "paused"].includes(run.status))
 	) return "drop";
 	return chat.busy || chat.pendingSends > 0 || chat.waiting.length > 0 ? "wait" : "ready";
 }

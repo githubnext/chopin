@@ -118,12 +118,8 @@ test("interface icons share one neutral default colour", () => {
 			if (!entry.endsWith(".svg") || entry === "chopin.svg") continue;
 			let asset = readFileSync(join(assetRoot, entry), "utf8");
 			expect(asset).not.toContain("<title");
-			if (entry === "planner-stop.svg" || entry === "planner-resume.svg") {
-				expect(asset).toContain('<g fill="#212121">');
-			} else {
-				expect(asset).toContain("#78766e");
-				expect(asset).not.toContain("#212121");
-			}
+			expect(asset).toContain("#78766e");
+			expect(asset).not.toContain("#212121");
 		}
 	}
 });

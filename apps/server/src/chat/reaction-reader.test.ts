@@ -312,7 +312,7 @@ test("a reader's turn leaves the Planner session kept for the writers, and its b
 	expect(h.readerSessions).toEqual({ opened: 1, destroyed: 1 });
 });
 
-test("a reader's session is never kept, even when it reports a workflow run, and the kept one is not replaced", async () => {
+test("a reader's session is never kept, even when it says it waits on a question, and the kept one is not replaced", async () => {
 	let h = await readerRoom();
 	let writerOpen = h.context.openPlannerSession!;
 	h.context.openPlannerSession = (async (binding: never, channel: PlannerChannel, deps: never) => {
@@ -321,7 +321,7 @@ test("a reader's session is never kept, even when it reports a workflow run, and
 			value: Record<string, unknown>;
 		}>)(binding, channel, deps);
 		if (channel.reader) {
-			opened.value.runs = () => ({ active: ["run-1"], paused: [], cards: [] });
+			opened.value.inputs = { open: () => 1, held: () => 0, watch: () => () => {} };
 		}
 		return opened;
 	}) as never;

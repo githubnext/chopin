@@ -3,7 +3,6 @@ import { childChannelContract } from "./child-channel-contract";
 import { experimentContract } from "./experiment-contract";
 import { chatAttachmentContract } from "./chat-attachment-contract";
 import { imageContract } from "./image-contract";
-import { runStageContract } from "./run-stage-contract";
 import { decisionAnswerContract } from "./decision-answer-contract";
 import { versionContract } from "./version-contract";
 import { machineContract } from "./machine-contract";
@@ -56,7 +55,6 @@ export function storageContract(name: string, factory: Factory): void {
 	experimentContract(name, factory);
 	imageContract(name, factory);
 	chatAttachmentContract(name, factory);
-	runStageContract(name, factory);
 	decisionAnswerContract(name, factory);
 	versionContract(name, factory);
 	machineContract(name, factory);
