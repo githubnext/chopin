@@ -19,6 +19,7 @@ export interface MachineStoreServer {
 }
 
 export const ATOMIC_SCHEMA = "atomic";
+export const MANAGED_ROLE_MARK = "chopin:machine-store";
 const UNREACHABLE_DATABASES = ["postgres", "template1"];
 const REASON_CHARS = 280;
 
@@ -81,10 +82,15 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 			`;
 			if (existing) await this.#checkRole(role);
 			else {
-				await this.#admin.unsafe(
-					`CREATE ROLE ${id(role)} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION `
-						+ "NOBYPASSRLS NOINHERIT",
-				);
+				await this.#admin.begin(async transaction => {
+					await transaction.unsafe(
+						`CREATE ROLE ${id(role)} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION `
+							+ "NOBYPASSRLS NOINHERIT",
+					);
+					await transaction.unsafe(
+						`COMMENT ON ROLE ${id(role)} IS ${quotedLiteral(MANAGED_ROLE_MARK)}`,
+					);
+				});
 			}
 			if (!me.superuser) {
 				await this.#admin.unsafe(`GRANT ${id(role)} TO CURRENT_USER`).catch(() => {});
@@ -122,21 +128,27 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 
 	async disable(role: string): Promise<void> {
 		await this.#refusing(async () => {
-			if (await this.#roleExists(role)) {
+			let me = await this.#me();
+			if (await this.#managedRole(role)) {
 				await this.#admin.unsafe(`ALTER ROLE ${id(role)} NOLOGIN`);
+				await this.#terminate(role);
 			}
-			if (await this.#databaseExists(role)) {
+			if (await this.#managedDatabase(role, me)) {
 				await this.#admin.unsafe(`ALTER DATABASE ${id(role)} ALLOW_CONNECTIONS false`);
 			}
-			await this.#terminate(role);
 		});
 	}
 
 	async drop(role: string): Promise<void> {
 		await this.disable(role);
 		await this.#refusing(async () => {
-			await this.#admin.unsafe(`DROP DATABASE IF EXISTS ${id(role)} WITH (FORCE)`);
-			await this.#admin.unsafe(`DROP ROLE IF EXISTS ${id(role)}`);
+			let me = await this.#me();
+			if (await this.#managedDatabase(role, me)) {
+				await this.#admin.unsafe(`DROP DATABASE IF EXISTS ${id(role)} WITH (FORCE)`);
+			}
+			if (await this.#managedRole(role)) {
+				await this.#admin.unsafe(`DROP ROLE IF EXISTS ${id(role)}`);
+			}
 		});
 	}
 
@@ -153,13 +165,18 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 		return me;
 	}
 
-	async #roleExists(role: string) {
-		let rows = await this.#admin`SELECT 1 FROM pg_roles WHERE rolname = ${role}`;
+	async #managedRole(role: string) {
+		let rows = await this.#admin`
+			SELECT 1 FROM pg_roles
+			WHERE rolname = ${role} AND shobj_description(oid, 'pg_authid') = ${MANAGED_ROLE_MARK}
+		`;
 		return rows.length > 0;
 	}
 
-	async #databaseExists(database: string) {
-		let rows = await this.#admin`SELECT 1 FROM pg_database WHERE datname = ${database}`;
+	async #managedDatabase(database: string, me: Me) {
+		let rows = await this.#admin`
+			SELECT 1 FROM pg_database WHERE datname = ${database} AND pg_get_userbyid(datdba) = ${me.name}
+		`;
 		return rows.length > 0;
 	}
 
@@ -252,14 +269,20 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 				createDatabase: boolean;
 				replication: boolean;
 				bypassRls: boolean;
+				marked: boolean;
 				memberships: number;
+				members: number;
 				owned: number;
 				granted: number;
 			}[]
 		>`
 			SELECT r.rolsuper AS superuser, r.rolcreaterole AS "createRole", r.rolcreatedb AS "createDatabase",
 				r.rolreplication AS replication, r.rolbypassrls AS "bypassRls",
+				coalesce(shobj_description(r.oid, 'pg_authid') = ${MANAGED_ROLE_MARK}, false) AS marked,
 				(SELECT count(*)::int FROM pg_auth_members m WHERE m.member = r.oid) AS memberships,
+				(SELECT count(*)::int FROM pg_auth_members m
+					WHERE m.roleid = r.oid AND m.member <> (SELECT oid FROM pg_roles WHERE rolname = current_user)
+				) AS members,
 				(SELECT count(*)::int FROM pg_database d WHERE d.datdba = r.oid) AS owned,
 				(SELECT count(*)::int FROM pg_database d, aclexplode(d.datacl) a
 					WHERE a.grantee = r.oid AND d.datname <> r.rolname) AS granted
@@ -272,7 +295,9 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 			found.createDatabase && "can create databases",
 			found.replication && "can replicate",
 			found.bypassRls && "bypasses row security",
+			!found.marked && "wasn't made by Chopin",
 			found.memberships > 0 && "is a member of another role",
+			found.members > 0 && "has other roles as members",
 			found.owned > 0 && "owns a database",
 			found.granted > 0 && "has privileges on another database",
 		].filter(Boolean);

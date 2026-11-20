@@ -7,6 +7,7 @@ CREATE TABLE machine_databases (
 	candidate_ciphertext bytea CHECK (octet_length(candidate_ciphertext) > 29),
 	state text NOT NULL CHECK (state IN ('pending', 'ready', 'failed', 'disabled', 'dropped')),
 	failure text CHECK (char_length(failure) BETWEEN 1 AND 300),
+	connector_problem text CHECK (char_length(connector_problem) BETWEEN 1 AND 300),
 	updated_at timestamptz NOT NULL,
 	disabled_at timestamptz,
 	dropped_at timestamptz,

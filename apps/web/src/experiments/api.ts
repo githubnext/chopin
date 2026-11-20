@@ -1,5 +1,12 @@
 import type { InvestigationProvenance } from "@chopin/experiment/records";
 
+export class ExperimentRequestError extends Error {
+	constructor(message: string, readonly code: string | undefined) {
+		super(message);
+		this.name = "ExperimentRequestError";
+	}
+}
+
 export async function experimentRequest<T>(
 	path: string,
 	value?: unknown,
@@ -16,9 +23,11 @@ export async function experimentRequest<T>(
 		// The machine the person chose is offline or no longer takes their work, or their choice
 		// cannot be read: the server's sentence says which. Work never moves to another machine.
 		let sentence = result.error === "machine-offline" || result.error === "machine-unavailable"
-			|| result.error === "machine-choice-unavailable";
-		throw new Error(
+			|| result.error === "machine-choice-unavailable"
+			|| result.error === "machine-store-unavailable";
+		throw new ExperimentRequestError(
 			(sentence && result.message) || result.error || "Investigation request failed",
+			typeof result.error === "string" ? result.error : undefined,
 		);
 	}
 	return result;

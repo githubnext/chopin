@@ -11,6 +11,7 @@ type Row = {
 	candidateCiphertext: Uint8Array | null;
 	state: MachineDatabaseState;
 	failure: string | null;
+	connectorProblem: string | null;
 	updatedAt: Date | string;
 	disabledAt: Date | string | null;
 	droppedAt: Date | string | null;
@@ -18,7 +19,7 @@ type Row = {
 
 const COLUMNS = `d.machine_id AS "machineId", d.role_name AS role, d.revision, d.ciphertext,
 	d.candidate_revision AS "candidateRevision", d.candidate_ciphertext AS "candidateCiphertext", d.state,
-	d.failure, d.updated_at AS "updatedAt", d.disabled_at AS "disabledAt", d.dropped_at AS "droppedAt"`;
+	d.failure, d.connector_problem AS "connectorProblem", d.updated_at AS "updatedAt", d.disabled_at AS "disabledAt", d.dropped_at AS "droppedAt"`;
 
 function record(row: Row): StoredMachineDatabase {
 	return {
@@ -36,6 +37,7 @@ function record(row: Row): StoredMachineDatabase {
 			: {}),
 		state: row.state,
 		...(row.failure ? { failure: row.failure } : {}),
+		...(row.connectorProblem ? { connectorProblem: row.connectorProblem } : {}),
 		updatedAt: new Date(row.updatedAt),
 		...(row.disabledAt ? { disabledAt: new Date(row.disabledAt) } : {}),
 		...(row.droppedAt ? { droppedAt: new Date(row.droppedAt) } : {}),
@@ -104,6 +106,16 @@ export class PostgresMachineDatabaseStore implements MachineDatabaseStore {
 					disabled_at = ${input.disabledAt ?? null},
 					dropped_at = ${input.droppedAt ?? null}
 				WHERE machine_id = ${input.machineId} AND role_name = ${input.role}
+				RETURNING machine_id AS "machineId"
+			`;
+			return rows.length > 0;
+		});
+	}
+	report(machineId: string, problem: string | undefined) {
+		return this.run("note a machine's database setup problem", async () => {
+			let rows = await this.sql<{ machineId: string }[]>`
+				UPDATE machine_databases SET connector_problem = ${problem || null}
+				WHERE machine_id = ${machineId}
 				RETURNING machine_id AS "machineId"
 			`;
 			return rows.length > 0;

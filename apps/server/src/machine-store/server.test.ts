@@ -13,7 +13,7 @@ import { machine, owner } from "../storage/machine-contract";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { machineStoreName, newStorePassword } from "./names";
 import { MachineStores } from "./service";
-import { MachineStoreRefusal, PostgresMachineStoreServer } from "./server";
+import { MachineStoreRefusal, MANAGED_ROLE_MARK, PostgresMachineStoreServer } from "./server";
 
 import type { AddressInfo } from "node:net";
 import type { StorageOpenContext } from "@bastani/atomic/storage";
@@ -90,7 +90,11 @@ if (!database) {
 	};
 
 	afterAll(async () => {
-		for (let role of roles) await server.drop(role).catch(() => {});
+		for (let role of roles) {
+			await server.drop(role).catch(() => {});
+			await sql.unsafe(`DROP DATABASE IF EXISTS "${role}" WITH (FORCE)`).catch(() => {});
+			await sql.unsafe(`DROP ROLE IF EXISTS "${role}"`).catch(() => {});
+		}
 		let [own] = await sql<{ name: string }[]>`SELECT current_database() AS name`;
 		for (let name of ["postgres", "template1", own!.name]) {
 			await sql.unsafe(`GRANT CONNECT ON DATABASE "${name}" TO PUBLIC`).catch(() => {});
@@ -226,6 +230,7 @@ if (!database) {
 			let otherPassword = newStorePassword();
 			await server.provision(other, otherPassword);
 			await sql.unsafe(`CREATE ROLE "${role}" NOLOGIN NOINHERIT`);
+			await sql.unsafe(`COMMENT ON ROLE "${role}" IS '${MANAGED_ROLE_MARK}'`);
 			await sql.unsafe(`CREATE DATABASE "${role}" ALLOW_CONNECTIONS false`);
 			await sql.unsafe(`GRANT CONNECT ON DATABASE "${role}" TO PUBLIC`);
 			await sql.unsafe(`GRANT CONNECT ON DATABASE "${role}" TO "${other}"`);
@@ -273,6 +278,58 @@ if (!database) {
 			`;
 			expect([...logins]).toEqual([]);
 			await sql.unsafe(`DROP ROLE "${group}"`).catch(() => {});
+		});
+
+		test("refuses a login other roles are members of, as they would share its access", async () => {
+			let role = newRole();
+			let reader = newRole();
+			let password = newStorePassword();
+			let readerPassword = newStorePassword();
+			await server.provision(role, password);
+			await sql.unsafe(
+				`CREATE ROLE "${reader}" LOGIN PASSWORD '${readerPassword}' IN ROLE "${role}"`,
+			);
+			await expect(server.provision(role, password)).rejects.toThrow("has other roles as members");
+			await expect(server.setPassword(role, newStorePassword())).rejects.toThrow(
+				"has other roles as members",
+			);
+			expect(await server.accepts(role, password)).toBe(true);
+		});
+
+		test("refuses an unmarked role, and leaves a foreign role and database alone when cleaning up", async () => {
+			let foreign = newRole();
+			let foreignPassword = newStorePassword();
+			await sql.unsafe(`CREATE ROLE "${foreign}" LOGIN PASSWORD '${foreignPassword}'`);
+			await sql.unsafe(`CREATE DATABASE "${foreign}" OWNER "${foreign}"`);
+			await expect(server.provision(foreign, newStorePassword())).rejects.toThrow(
+				"wasn't made by Chopin",
+			);
+			await server.disable(foreign);
+			await server.drop(foreign);
+			let [kept] = await sql<{ login: boolean; open: boolean; owner: string }[]>`
+				SELECT r.rolcanlogin AS login, d.datallowconn AS open, pg_get_userbyid(d.datdba) AS owner
+				FROM pg_roles r JOIN pg_database d ON d.datname = r.rolname WHERE r.rolname = ${foreign}
+			`;
+			expect(kept).toEqual({ login: true, open: true, owner: foreign });
+			expect(await connectAs(foreign, foreignPassword, foreign)).toBe(foreign);
+
+			let unmarked = newRole();
+			await sql.unsafe(`CREATE ROLE "${unmarked}" NOLOGIN`);
+			await expect(server.provision(unmarked, newStorePassword())).rejects.toThrow(
+				"wasn't made by Chopin",
+			);
+		});
+
+		test("turns off a login it made even after someone widened it", async () => {
+			let role = newRole();
+			let password = newStorePassword();
+			await server.provision(role, password);
+			await sql.unsafe(`ALTER ROLE "${role}" CREATEDB`);
+			await expect(server.setPassword(role, newStorePassword())).rejects.toThrow(
+				"can create databases",
+			);
+			await server.disable(role);
+			expect(await refusedCode(connectAs(role, password, role))).not.toBe("connected");
 		});
 
 		test("stops new connections once turned off, and drops the database and role", async () => {

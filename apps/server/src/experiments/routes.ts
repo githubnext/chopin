@@ -5,7 +5,7 @@ import type { Investigation, InvestigationProvenance } from "@chopin/experiment/
 import type { HostedAuth } from "../auth/routes";
 import { AdmissionDenied } from "../auth/admission";
 import { ownOrigin } from "../auth/config";
-import { MachineError } from "../auth/machines";
+import { MachineCutoffError, MachineError } from "../auth/machines";
 import type {
 	GitHubInstallation,
 	GitHubTokenGrant,
@@ -474,10 +474,20 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	/** Revoke a machine, and forget everyone's favorite of it with the revocation. */
 	function revokeMachine(machineId: string, userId: string) {
 		return changingFavorites(machineId, async () => {
-			let revoked = await auth.machines.revoke(machineId, userId);
+			let revoked = await auth.machines.revoke(machineId, userId).catch((error: unknown) => {
+				if (error instanceof MachineCutoffError) return error;
+				throw error;
+			});
 			if (revoked) connections.unfavor(machineId);
 			return revoked;
 		});
+	}
+	function cutoffIncomplete(error: MachineCutoffError, again: string) {
+		return json({
+			error: "machine-store-unavailable",
+			message: "The machine is disconnected, but Chopin couldn't turn off its database login yet ("
+				+ `${error.reason}). Chopin keeps trying; ${again} to check now.`,
+		}, 503);
 	}
 	let keys = new PairingKeys(() => auth.clock().getTime());
 	auth.pairings.authorized = (userId, sessionId, grant) => keys.authorize(userId, sessionId, grant);
@@ -1601,6 +1611,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		compatible(request, auth.config.origin, options.connectorVersion);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let input = connectionSchema.parse(await body(request));
+		let about = aboutMachine(request);
 		let protocol = protocolOf(request);
 		let anyRepository = protocol >= ANY_REPOSITORY_PROTOCOL;
 		if (!anyRepository && input.checkouts.length !== 1) fail("invalid-request");
@@ -1635,9 +1646,15 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			},
 			input.label,
 			checkouts,
-			aboutMachine(request),
+			about,
 		);
 		await auth.machines.seen(machine);
+		await options.machineStores?.report(machine.id, about.storeProblem).catch((error: unknown) => {
+			console.error(
+				`chopin: could not note the database setup of machine ${machine.id} -`,
+				error instanceof Error ? error.message : "unknown error",
+			);
+		});
 		// Remembered, so `chopin status` and the Machines page can say which checkouts it has.
 		for (let checkout of checkouts) {
 			if (machine.repositories.some(value => value.repositoryId === checkout.repositoryId)) {
@@ -2031,9 +2048,13 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let machine = await auth.storage.machines.byToken(
 			new Uint8Array(createHash("sha256").update(bearer(request)).digest()),
 		);
-		if (!machine || machine.revokedAt) fail("machine-revoked");
-		await revokeMachine(machine.id, machine.userId);
+		if (!machine) fail("machine-revoked");
+		let revoked = await revokeMachine(machine.id, machine.userId);
 		await disconnectMachine(machine.id);
+		if (revoked instanceof MachineCutoffError) {
+			return cutoffIncomplete(revoked, "run `chopin unpair` again");
+		}
+		if (machine.revokedAt) fail("machine-revoked");
 		return json({ revoked: true });
 	});
 	let privateOrigin = (() => {
@@ -2384,8 +2405,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let session = await auth.sessions.authenticate(request);
 		if (!session) fail("authentication-required");
 		z.object({}).strict().parse(await body(request));
-		if (!await revokeMachine(params.id, session.user.id)) fail("not-found");
+		let revoked = await revokeMachine(params.id, session.user.id);
+		if (!revoked) fail("not-found");
 		await disconnectMachine(params.id);
+		if (revoked instanceof MachineCutoffError) {
+			return cutoffIncomplete(revoked, "disconnect it again");
+		}
 		return json({ revoked: true });
 	});
 	/** Whether a Planner backend of the machine is attached, or was cut by a deploy and is expected back. */

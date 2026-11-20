@@ -54,7 +54,18 @@ export class MemoryMachineDatabaseStore implements MachineDatabaseStore {
 	async put(record: StoredMachineDatabase) {
 		let existing = this.#records.get(record.machineId);
 		if (!existing || existing.role !== record.role) return false;
-		this.#records.set(record.machineId, copy(record));
+		let { connectorProblem: _, ...kept } = copy(record);
+		this.#records.set(record.machineId, {
+			...kept,
+			...(existing.connectorProblem ? { connectorProblem: existing.connectorProblem } : {}),
+		});
+		return true;
+	}
+	async report(machineId: string, problem: string | undefined) {
+		let existing = this.#records.get(machineId);
+		if (!existing) return false;
+		if (problem) existing.connectorProblem = problem;
+		else delete existing.connectorProblem;
 		return true;
 	}
 	async settling(dropBefore?: Date) {

@@ -13,6 +13,7 @@ import {
 	CONNECTOR_SANDBOX_HEADER,
 	CONNECTOR_SANDBOX_REASON_HEADER,
 	CONNECTOR_SERVICE_HEADER,
+	CONNECTOR_STORE_PROBLEM_HEADER,
 	CONNECTOR_UPDATE_REQUIRED,
 	CONNECTOR_VERSION_HEADER,
 } from "@chopin/protocol/connector";
@@ -2488,6 +2489,79 @@ test("revoking or unpairing a machine turns its login off before Chopin answers"
 	let unpaired = await request("/api/connector/machine/revoke", {}, undefined, desk.machineToken);
 	expect(unpaired.status).toBe(200);
 	expect(server.enabled.has(new URL(second.url).username)).toBe(false);
+});
+
+test("a revocation whose login stays on says so, and revoking again finishes it", async () => {
+	let { alice, pair, request, server } = await storeSetup();
+	let laptop = await pair(alice.cookie);
+	let desk = await pair(alice.cookie);
+	let ask = (token: string) => request("/api/connector/machine-store", {}, undefined, token);
+	let role = new URL((await (await ask(laptop.machineToken)).json()).url).username;
+	let deskRole = new URL((await (await ask(desk.machineToken)).json()).url).username;
+	server.refuse = "Chopin couldn't reach the database server at db.example.com:5432";
+	let revoke = () => request(`/api/connector/machines/${laptop.machine}/revoke`, {}, alice.cookie);
+	let refused = await revoke();
+	expect(refused.status).toBe(503);
+	let said = await refused.json();
+	expect(said.error).toBe("machine-store-unavailable");
+	expect(said.message).toContain("couldn't turn off its database login");
+	expect(said.message).toContain("db.example.com:5432");
+	expect(server.enabled.has(role)).toBe(true);
+	expect((await ask(laptop.machineToken)).status).toBe(401);
+	let unpair = () => request("/api/connector/machine/revoke", {}, undefined, desk.machineToken);
+	expect((await unpair()).status).toBe(503);
+	delete server.refuse;
+	expect((await revoke()).status).toBe(200);
+	expect(server.enabled.has(role)).toBe(false);
+	let unpaired = await unpair();
+	expect(unpaired.status).toBe(401);
+	expect((await unpaired.json()).error).toBe("machine-revoked");
+	expect(server.enabled.has(deskRole)).toBe(false);
+});
+
+test("a machine revoked before its first login asks for one gets none", async () => {
+	let { alice, pair, request, server } = await storeSetup();
+	let laptop = await pair(alice.cookie);
+	let role = `m_${laptop.machine.replaceAll("-", "")}`;
+	let release!: () => void;
+	server.provisioning = new Promise<void>(resolve => {
+		release = resolve;
+	});
+	let asked = request("/api/connector/machine-store", {}, undefined, laptop.machineToken);
+	let revoked = request(`/api/connector/machines/${laptop.machine}/revoke`, {}, alice.cookie);
+	await Bun.sleep(5);
+	release();
+	expect((await asked).status).toBe(503);
+	expect((await revoked).status).toBe(200);
+	expect(server.calls).not.toContain(`provision ${role}`);
+	expect(server.enabled.has(role)).toBe(false);
+});
+
+test("a setup problem the connector reports is kept for the Machines page until it reports none", async () => {
+	let { alice, pair, request, storage } = await storeSetup();
+	let laptop = await pair(alice.cookie);
+	expect((await request("/api/connector/machine-store", {}, undefined, laptop.machineToken)).status)
+		.toBe(200);
+	let connect = (extra: Record<string, string>) =>
+		request(
+			"/api/connector/connections",
+			{ repository: "org/repo", commit: "a".repeat(40), label: "Laptop" },
+			undefined,
+			laptop.machineToken,
+			{ ...CURRENT, ...extra },
+		);
+	let listed = async () =>
+		(await (await request("/api/connector/machines", undefined, alice.cookie)).json()).machines[0]
+			.store;
+	expect(
+		(await connect({ [CONNECTOR_STORE_PROBLEM_HEADER]: "Couldn't install the adapter" })).status,
+	)
+		.toBe(200);
+	expect((await storage.machineDatabases.get(laptop.machine))!.connectorProblem)
+		.toBe("Couldn't install the adapter");
+	expect(await listed()).toEqual({ state: "failed", reason: "Couldn't install the adapter" });
+	expect((await connect({})).status).toBe(200);
+	expect(await listed()).toEqual({ state: "ready" });
 });
 
 test("without MACHINE_STORE_URL a machine is told there is no database login", async () => {

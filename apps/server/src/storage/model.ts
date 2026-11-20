@@ -1145,6 +1145,7 @@ export type StoredMachineDatabase = {
 	candidate?: { revision: number; ciphertext: Uint8Array };
 	state: MachineDatabaseState;
 	failure?: string;
+	connectorProblem?: string;
 	updatedAt: Date;
 	disabledAt?: Date;
 	droppedAt?: Date;
