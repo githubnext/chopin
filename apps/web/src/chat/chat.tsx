@@ -70,6 +70,7 @@ import {
 	withoutFailure,
 } from "./failure";
 import { TypingReporter } from "./typing";
+import { PacingReporter } from "./pacing";
 import { receiveTypists, threadsWithTypers, typersIn, typingWords } from "./typists";
 import { TypingAnnouncer, TypingLine } from "./typing-line";
 import { useSteadyCallback, useSteadyFields } from "./steady";
@@ -454,6 +455,7 @@ export function Chat(
 	}>();
 	let [participationKey, setParticipationKey] = useState(0);
 	let typing = useRef<TypingReporter | undefined>(undefined);
+	let pacing = useRef<PacingReporter | undefined>(undefined);
 	let [typists, setTypists] = useState<Typists>();
 	let counts = runCounts(runs);
 	// What the document's agent can be set to run, and what everyone in the room has set it to.
@@ -606,6 +608,7 @@ export function Chat(
 		? participation.state
 		: undefined;
 	let typingEnabled = composerReady && active;
+	let pacingEnabled = typingEnabled && !!agent && !!participationState?.enabled;
 	// Alone in the document, everything this person sends goes to chopin, as the server decides it.
 	let alone = !!agent && !!participationState?.enabled && !!participationState.alone;
 	// A message to the machine is kept in the outbox, so it needs neither the connection nor the
@@ -976,6 +979,18 @@ export function Chat(
 		};
 	}, [wire, room, typingEnabled, participationKey]);
 
+	useEffect(() => {
+		if (!wire || !pacingEnabled) return;
+		let reporter = new PacingReporter(active => {
+			if (wire.connected) wire.send("chat:pacing", { active });
+		});
+		pacing.current = reporter;
+		return () => {
+			reporter.stop();
+			if (pacing.current === reporter) pacing.current = undefined;
+		};
+	}, [wire, room, pacingEnabled, participationKey]);
+
 	useLayoutEffect(() => {
 		if (pendingCaret.current === undefined) return;
 		let caret = pendingCaret.current;
@@ -1029,6 +1044,7 @@ export function Chat(
 	let submit = () => {
 		if (submission.current || !draftable || awaitingFiles.current) return;
 		typing.current?.stop();
+		pacing.current?.stop();
 		// What was being said is sent as it was shown, and listening ends.
 		let spoken = dictationRef.current?.settle(draftRef.current.text);
 		if (spoken && spoken.text !== draftRef.current.text) {
@@ -1888,6 +1904,7 @@ export function Chat(
 					onChange: event => {
 						let next = event.currentTarget.value;
 						if (next !== draftRef.current.text) {
+							pacing.current?.change();
 							if (next.trim()) typing.current?.change();
 							else typing.current?.stop();
 						}
@@ -1908,7 +1925,10 @@ export function Chat(
 						});
 						dictation?.follow(event.currentTarget.selectionStart);
 					},
-					onBlur: () => typing.current?.stop(),
+					onBlur: () => {
+						typing.current?.stop();
+						pacing.current?.stop();
+					},
 					interim: dictation?.interim,
 					onKeyDown: event => {
 						let composing = event.nativeEvent.isComposing || event.keyCode === 229;

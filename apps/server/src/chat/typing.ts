@@ -8,22 +8,23 @@
  * back. A report says how long ago the edit it reports was made; it is visible until five seconds
  * after that edit and a second for transit, so a client that never stops, or a report delivered
  * again, never outlasts the edit it carries. One person's reports that start or renew writing in one
- * place are taken once in 1.5 seconds at most, a little under the composer's two, so a report early
- * by jitter is not refused: a report beyond that keeps no one longer than the last one taken, and
- * one that would show a person again is shown when the interval is up. Stopping is never limited. A
- * connection that can no longer write stops writing everywhere. The Planner is writing in a place
+ * place show them again once in 1.5 seconds at most, a little under the composer's two, so a report
+ * early by jitter is not refused: one that would show a person again sooner is shown when the
+ * interval is up, and every report keeps its own edit's deadline, whichever tab of the person's
+ * sent it. Stopping is never limited. A connection that can no longer write stops writing
+ * everywhere. The Planner is writing in a place
  * while a turn there writes its reply. Everyone in the room whose access holds, readers included,
  * is told the set when it changes, without themselves.
  */
 import { tell } from "../wire";
-import { actor, initiative } from "./initiative";
+import { actor } from "./initiative";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { Socket } from "../wire";
 import type { InitiativeClock } from "./initiative-schedule";
 import type { Room } from "./service";
 
-/** The fewest milliseconds between two reports one person makes in one place that start or renew. */
+/** The fewest milliseconds between two times one person is shown again in one place. */
 export const TYPING_START_INTERVAL_MS = 1_500;
 /** How long after the edit a report carries its writer is shown, as their composer counts it. */
 export const TYPING_IDLE_MS = 5_000;
@@ -50,7 +51,6 @@ type Intent = {
 	handle: string;
 	place: string;
 	seq: number;
-	active: boolean;
 	/** When the writing its edit evidences ends. */
 	until: number;
 	/** Taken, but not yet shown: its person may be shown again once their interval is up. */
@@ -64,9 +64,6 @@ type Intent = {
  */
 type Floor = { base: number; places: Map<string, number> };
 
-/** What one person's reports in one place were last allowed. */
-type Allowance = { at: number; until: number };
-
 type Shown = { actor?: string; typist: Wire.Typist };
 
 function intentKey(client: string, place: string): string {
@@ -78,7 +75,7 @@ function personKey(actor: string, place: string): string {
 }
 
 function visible(intent: Intent, now: number): boolean {
-	return intent.active && !intent.held && intent.until > now;
+	return !intent.held && intent.until > now;
 }
 
 export type TypingReport = { active: boolean; thread?: unknown; seq?: unknown; ago?: unknown };
@@ -111,7 +108,7 @@ export function createTypingPresence(options: {
 	let time = options.clock ?? systemClock;
 	let generation = lastGeneration = Math.max(time.now(), lastGeneration + 1);
 	let intents = new Map<string, Intent>();
-	let allowances = new Map<string, Allowance>();
+	let allowances = new Map<string, number>();
 	let floors = new Map<string, Floor>();
 	let since = new Map<string, number>();
 	let agent = new Map<string, { turn: string; since: number }>();
@@ -128,13 +125,11 @@ export function createTypingPresence(options: {
 
 	function release(now: number) {
 		for (let intent of intents.values()) {
-			if (!intent.active || !intent.held) continue;
-			let allowance = allowances.get(personKey(intent.actor, intent.place));
-			if (allowance && now - allowance.at < TYPING_START_INTERVAL_MS) continue;
+			if (!intent.held) continue;
+			let allowed = allowances.get(personKey(intent.actor, intent.place));
+			if (allowed !== undefined && now - allowed < TYPING_START_INTERVAL_MS) continue;
 			intent.held = false;
-			if (intent.until > now) {
-				allowances.set(personKey(intent.actor, intent.place), { at: now, until: intent.until });
-			}
+			if (intent.until > now) allowances.set(personKey(intent.actor, intent.place), now);
 		}
 	}
 
@@ -177,10 +172,9 @@ export function createTypingPresence(options: {
 		timer = undefined;
 		let next = Infinity;
 		for (let intent of intents.values()) {
-			if (!intent.active) continue;
 			if (intent.held) {
-				let allowance = allowances.get(personKey(intent.actor, intent.place));
-				next = Math.min(next, (allowance?.at ?? now) + TYPING_START_INTERVAL_MS);
+				let allowed = allowances.get(personKey(intent.actor, intent.place)) ?? now;
+				next = Math.min(next, allowed + TYPING_START_INTERVAL_MS);
 			} else if (intent.until > now) next = Math.min(next, intent.until);
 		}
 		if (next !== Infinity) {
@@ -240,7 +234,7 @@ export function createTypingPresence(options: {
 		if (intents.has(key) || intents.size < MAX_INTENTS) return true;
 		let now = time.now();
 		for (let [other, intent] of intents) {
-			if (!intent.active || (!intent.held && intent.until <= now)) {
+			if (intent.until <= now) {
 				intents.delete(other);
 				return true;
 			}
@@ -256,56 +250,40 @@ export function createTypingPresence(options: {
 			if (where === undefined || typeof order !== "number" || !Number.isSafeInteger(order)) return;
 			let key = intentKey(client, where);
 			if (order <= newest(client, where)) return;
-			if (!room(key)) return;
 			reported(client, where, order);
-			let now = time.now();
 			if (!report.active) {
-				intents.set(key, {
-					client,
-					actor,
-					handle,
-					place: where,
-					seq: order,
-					active: false,
-					until: now,
-					held: false,
-				});
-				return settle();
+				if (intents.delete(key)) settle();
+				return;
 			}
+			if (!room(key)) return;
+			let now = time.now();
 			let ago = typeof report.ago === "number" && Number.isFinite(report.ago)
 				? Math.min(Math.max(report.ago, 0), TYPING_REPORT_MS)
 				: 0;
 			let until = now - ago + TYPING_IDLE_MS + TYPING_TRANSIT_MS;
 			let person = personKey(actor, where);
-			let allowance = allowances.get(person);
+			let allowed = allowances.get(person);
 			let intent: Intent = {
 				client,
 				actor,
 				handle,
 				place: where,
 				seq: order,
-				active: true,
 				until,
 				held: false,
 			};
-			if (!allowance || now - allowance.at >= TYPING_START_INTERVAL_MS) {
-				allowances.set(person, { at: now, until });
-			} else {
-				let showing = [...intents.values()].some(other =>
-					other.actor === actor && other.place === where && visible(other, now)
-				);
-				if (showing) intent.until = Math.min(until, allowance.until);
-				else intent.held = true;
-			}
+			let showing = [...intents.values()].some(other =>
+				other.actor === actor && other.place === where && visible(other, now)
+			);
+			if (allowed === undefined || now - allowed >= TYPING_START_INTERVAL_MS) {
+				allowances.set(person, now);
+			} else if (!showing) intent.held = true;
 			intents.set(key, intent);
 			settle();
 		},
 		sent(client, thread) {
 			let where = place(thread);
-			let intent = where === undefined ? undefined : intents.get(intentKey(client, where));
-			if (!intent?.active) return;
-			intent.active = false;
-			intent.held = false;
+			if (where === undefined || !intents.delete(intentKey(client, where))) return;
 			settle();
 		},
 		retire,
@@ -342,13 +320,7 @@ export function createTypingPresence(options: {
 	};
 }
 
-/**
- * A composer's `chat:typing`. Chat's alone reaches automatic participation, exactly as it always
- * has, so who is alone with chopin is decided as before; a thread's never does.
- */
+/** A composer's `chat:typing`: what Chat shows of who is writing, and nothing else. */
 export function typed(context: Room, ws: Socket, report: TypingReport): void {
-	if (report.thread === undefined) {
-		initiative(context)?.typing(ws.data.client, actor(ws), report.active);
-	}
 	context.chat.typists?.type(ws.data.client, actor(ws), ws.data.handle, report);
 }

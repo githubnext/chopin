@@ -160,6 +160,24 @@ test("a person is shown once while any tab of theirs writes there; stopping or c
 	expect(seen(bo)).toEqual([]);
 });
 
+test("a tab's first edit just inside its person's interval keeps its own deadline once their other tab stops", async () => {
+	let r = room();
+	let bo = r.join("bo");
+	let phone = r.join("ana", "ana-phone");
+	let laptop = r.join("ana", "ana-laptop");
+
+	r.report(phone, true);
+	await r.clock.advance(TYPING_START_INTERVAL_MS - 1);
+	r.report(laptop, true);
+	r.report(phone, false);
+	expect(seen(bo)).toEqual(["ana"]);
+	await r.clock.advance(LEASE - 1);
+	expect(seen(bo)).toEqual(["ana"]);
+	await r.clock.advance(1);
+	expect(seen(bo)).toEqual([]);
+	expect(bo.frames).toHaveLength(2);
+});
+
 test("the newest report of a connection wins whatever order they arrive in, and a repeat says nothing", async () => {
 	let intents = [
 		{ seq: 1, active: true },
@@ -228,6 +246,20 @@ test("a later report carrying the last edit keeps its writer until five seconds 
 	await r.clock.advance(4_499);
 	expect(seen(bo)).toEqual(["ana"]);
 	r.report(ana, false);
+	expect(seen(bo)).toEqual([]);
+});
+
+test("a report early by jitter still keeps its writer five seconds after the edit it carries", async () => {
+	let r = room();
+	let bo = r.join("bo");
+	let ana = r.join("ana");
+
+	r.report(ana, true);
+	await r.clock.advance(1_400);
+	r.report(ana, true, { ago: 100 });
+	await r.clock.advance(LEASE - 101);
+	expect(seen(bo)).toEqual(["ana"]);
+	await r.clock.advance(1);
 	expect(seen(bo)).toEqual([]);
 });
 
@@ -390,6 +422,26 @@ test("reclaiming what is no longer shown never lets an old report bring back a s
 	r.report(ana, false, { seq: expired });
 	await r.clock.advance(LEASE - 1);
 	expect(seen(viewer)).toEqual(["ana"]);
+});
+
+test("with every slot shown writing, a stop's number still stands, so an older start never brings its writer back", async () => {
+	let r = room();
+	let viewer = r.join("viewer");
+	let ana = r.join("ana");
+	let others = Array.from({ length: 64 }, (_, index) => r.join(`p${index}`));
+	for (let other of others) r.report(other, true);
+
+	r.report(ana, false, { seq: 2 });
+	r.report(ana, true, { seq: 3 });
+	expect(seen(viewer)).not.toContain("ana");
+	r.leave(others[0]!);
+	r.report(ana, true, { seq: 1 });
+	r.report(ana, true, { seq: 3 });
+	await r.clock.advance(TYPING_START_INTERVAL_MS);
+	expect(seen(viewer)).not.toContain("ana");
+
+	r.report(ana, true, { seq: 4 });
+	expect(seen(viewer)).toContain("ana");
 });
 
 test("a connection that writes in more places than are kept still refuses an old report in the first", async () => {

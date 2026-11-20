@@ -24,7 +24,8 @@ export declare namespace Chat {
 		| Request<React>
 		| Request<SetParticipation>
 		| Request<SetModel>
-		| Request<Typing>;
+		| Request<Typing>
+		| Request<Pacing>;
 
 	export type Outgoing =
 		| History
@@ -537,8 +538,8 @@ export declare namespace Chat {
 	 * milliseconds before the report that edit was made (at most 2000). `thread` names the thread's
 	 * root message when the composer is a thread's, and is absent for Chat. `seq` rises with each
 	 * report a tab sends: the server keeps each connection's newest per place and ignores an older or
-	 * repeated one. A report is never kept to send again on another connection. Only Chat's reaches
-	 * automatic participation, as it always has.
+	 * repeated one. A report is never kept to send again on another connection. It is shown and
+	 * nothing more: automatic participation reads `Pacing`.
 	 */
 	export type Typing = KIND<"chat:typing"> & {
 		active: boolean;
@@ -546,6 +547,15 @@ export declare namespace Chat {
 		seq?: number;
 		ago?: number;
 	};
+
+	/**
+	 * Whether the sender is writing in Chat, for automatic participation alone: who counts as alone
+	 * with the Planner and when a reply waiting for silence starts. Sent by Chat's composer while
+	 * automatic participation is on, with no draft content: `true` on an edit, at most every two
+	 * seconds while edits keep coming, and `false` once the sender sends, leaves the field or makes
+	 * no edit for two and a half seconds. Never shown.
+	 */
+	export type Pacing = KIND<"chat:pacing"> & { active: boolean };
 
 	/**
 	 * Someone writing in Chat (`thread` absent) or in a thread: a person whose composer says so, or
