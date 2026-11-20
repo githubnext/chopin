@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG BUN_VERSION=1.4.4
+ARG BUN_VERSION=1.4.5
 # The image that runs now, so this build keeps the hashed files of the builds before it and a
 # tab left open across a deploy still finds its chunks. Without one, only this build's are served.
 ARG PREVIOUS_IMAGE=no-previous

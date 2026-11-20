@@ -97,7 +97,7 @@ export function failureCause(error: unknown) {
 			? status
 			: undefined;
 		if (name) {
-			// Bun 1.4.4's fetch also starts its message with the code; name it once.
+			// Bun's fetch, since 1.4.4, also starts its message with the code; name it once.
 			if (detail.startsWith(`${name}: `)) detail = detail.slice(name.length + 2);
 			return detail ? `${name}: ${detail}` : name;
 		}

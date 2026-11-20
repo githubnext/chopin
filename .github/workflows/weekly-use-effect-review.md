@@ -14,7 +14,7 @@ permissions:
 
 runtimes:
   bun:
-    version: "1.4.4"
+    version: "1.4.5"
 
 steps:
   - name: Install repository dependencies
