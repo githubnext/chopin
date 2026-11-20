@@ -1308,7 +1308,7 @@ export type McpInvocation = McpInvocationScope & {
 	createdAt: Date;
 	expiresAt: Date;
 	/**
-	 * Set once the instruction's turn has started, before the call answers. Until then the
+	 * Set once the instruction reached a turn, before the call answers. Until then the
 	 * instruction may be posted or not, which only the document's Chat says.
 	 */
 	invokedAt?: Date;

@@ -185,10 +185,13 @@ export type KeyedInvocation = {
  * again and post nothing more, and start no second turn.
  *
  * The first call claims the key before anything is posted, naming the Chat entry its instruction
- * will be and the result it answers. The claim is marked invoked once the instruction's turn has
- * started (or the instruction was given to the turn running), and the call answers only after
- * that: a claim marked invoked is evidence its turn started, so every later call with the same
- * request is given the claim's result, and a different one is refused.
+ * will be and the result it answers. The call waits, past the Chat's sending queue and the
+ * document's transition, to hear whether the instruction reached a turn: its own turn started, or
+ * the person's turn running took it. Only then is the claim marked invoked and the call answered,
+ * so a claim marked invoked is evidence the instruction reached a turn, every later call with the
+ * same request is given the claim's result, and a different one is refused. An instruction posted
+ * that reached none (the turn it was given to ended first, or a stopping process dropped the turn
+ * waiting behind a job) is refused with `planner-unavailable`, and its claim is left for a retry.
  *
  * A claim not marked invoked says nothing alone: the root's Chat does. When it holds the entry, an
  * earlier call saved it and started no turn, or started one whose start it could not record. A
@@ -197,13 +200,13 @@ export type KeyedInvocation = {
  * it, and a different request takes the key. A refusal that kept nothing frees the key, and one
  * that could not is freed by the next call.
  *
- * So a process that stops after a turn started and before its start was recorded, or after
- * recording it failed, leaves a claim whose retry, in the next process, starts the turn again.
+ * So a process that stops after the instruction reached a turn and before that was recorded, or
+ * after recording it failed, leaves a claim whose retry, in the next process, starts a turn again.
  * Calls with one key run one at a time in this process, the only one holding the writer lease.
  */
 export class IdempotentInvocations {
 	#running = new Map<string, Promise<unknown>>();
-	/** The entry of each key's claim whose turn this process started without recording it. */
+	/** The entry of each key's claim whose instruction this process delivered without recording it. */
 	#started = new Map<string, string>();
 
 	constructor(
@@ -259,6 +262,7 @@ export class IdempotentInvocations {
 		if (record.fingerprint === fingerprint && this.#started.get(key) === record.entryId) {
 			return this.#record(key, lease, record);
 		}
+		let delivered: Promise<boolean> | undefined;
 		let outcome = await deliver({
 			reconcile: async posted => {
 				if (record.fingerprint !== fingerprint) {
@@ -269,7 +273,9 @@ export class IdempotentInvocations {
 						return "idempotency-conflict";
 					}
 				}
-				return { entryId: record.entryId };
+				let told = Promise.withResolvers<boolean>();
+				delivered = told.promise;
+				return { entryId: record.entryId, delivered: yes => told.resolve(yes) };
 			},
 			unused: async () => {
 				await this.store.release(lease, record).catch(err => {
@@ -278,13 +284,14 @@ export class IdempotentInvocations {
 			},
 		});
 		if (outcome.kind !== "invoked") return outcome;
+		if (delivered && !await delivered) return { kind: "refused", code: "planner-unavailable" };
 		return this.#record(key, lease, record);
 	}
 
 	/**
-	 * Marks `claim` invoked, its turn having started, and answers its result. When that can't be
-	 * saved the call fails, and this process remembers the turn it started, so a retry here records
-	 * it and starts none.
+	 * Marks `claim` invoked, its instruction having reached a turn, and answers its result. When that
+	 * can't be saved the call fails, and this process remembers the delivery, so a retry here records
+	 * it and starts no turn.
 	 */
 	async #record(key: string, lease: Lease, claim: McpInvocation): Promise<Invoked> {
 		try {

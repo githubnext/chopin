@@ -189,7 +189,11 @@ export type ActiveMemberRequest = {
 };
 
 /** `retry` runs the message's turn again after it failed: the same message, once in context. */
-type MemberRequest = Pick<ActiveMemberRequest, "entryId" | "userId" | "focus"> & { retry?: true };
+type MemberRequest = Pick<ActiveMemberRequest, "entryId" | "userId" | "focus"> & {
+	retry?: true;
+	/** Told once whether the turn started, or was let go of before it could. */
+	delivered?: (started: boolean) => void;
+};
 
 /** How a turn started by an instruction finished, for whoever started it. */
 export type Ended = {
@@ -1111,10 +1115,13 @@ function windingDown(chat: Chat): boolean {
  */
 function preempt(context: Room, turn: Parameters<typeof run>): void {
 	let { chat } = context;
-	if (chat.closed) return;
+	if (chat.closed) return turn[6]?.delivered?.(false);
 	// The job ended while the message was saved: nothing is in the way.
 	if (!chat.busy && !chat.starting) {
-		if (startsHeld) return void notRead(context, turn[1]);
+		if (startsHeld) {
+			turn[6]?.delivered?.(false);
+			return void notRead(context, turn[1]);
+		}
 		return startRun(...turn);
 	}
 	chat.preempting = turn;
@@ -1147,20 +1154,24 @@ type Given = {
  * every message given before it: one with files to read never lets a later one reach the turn
  * first. The session may not be ready for it yet, so this waits for it. When the turn ends first
  * or cannot take it, the message is not lost to a queue: a Planner that is idle by then starts a
- * turn for it, and any other says plainly that it was not read.
+ * turn for it, and any other says plainly that it was not read. It resolves with whether the
+ * message reached a turn.
  */
-function give(context: Room, message: Given): Promise<void> {
+function give(context: Room, message: Given): Promise<boolean> {
 	let { chat } = context;
 	let way = chat.steering;
 	let given = chat.giving.then(() => deliver(context, message, way));
-	chat.giving = given.catch(() => {});
+	chat.giving = given.then(() => {}, () => {});
 	return given;
 }
 
-async function deliver(context: Room, message: Given, way: Steering | undefined): Promise<void> {
+/** Whether the message reached a turn: the running one took it, or one started for it. */
+async function deliver(context: Room, message: Given, way: Steering | undefined): Promise<boolean> {
 	let { chat } = context;
 	let session = await way?.ready;
-	if (session?.steer && chat.steering === way && !chat.closed) {
+	// An instruction is not given to a turn that is being stopped, which would never read it.
+	let stopping = message.invoked && !!chat.turnController?.signal.aborted;
+	if (session?.steer && chat.steering === way && !chat.closed && !stopping) {
 		try {
 			let references = message.references ?? [];
 			retainReferences(chat, references);
@@ -1194,12 +1205,12 @@ async function deliver(context: Room, message: Given, way: Steering | undefined)
 				if (parts.length) prompt = `${prompt}\n\n${parts.join("\n\n")}`;
 			}
 			await session.steer(prompt);
-			return;
+			return true;
 		} catch (err) {
 			console.error("[chat] a message could not be given to the running turn:", err);
 		}
 	}
-	if (chat.closed) return;
+	if (chat.closed) return false;
 	if (!occupied(chat)) {
 		startRun(
 			{ ...context, ...(message.invoked ? { invokedBy: message.userId } : {}) },
@@ -1215,9 +1226,10 @@ async function deliver(context: Room, message: Given, way: Steering | undefined)
 			},
 			message.references,
 		);
-		return;
+		return true;
 	}
 	await notRead(context, message.handle);
+	return false;
 }
 
 async function notRead(context: Room, handle: string): Promise<void> {
@@ -1230,13 +1242,19 @@ async function notRead(context: Room, handle: string): Promise<void> {
 	).catch(err => console.error("[chat] could not say that a message was not read:", err));
 }
 
-/** Where an MCP instruction is posted. */
+/** Where an MCP instruction is posted, and who hears whether it reached a turn. */
 export type InvokedEntry = {
 	/**
 	 * The id its Chat entry, or system notice, takes. One Chat already holds was saved by an earlier
 	 * call whose turn never started: it is not posted again, and only its turn is started.
 	 */
 	entryId: string;
+	/**
+	 * Told once, after `invoke` answers nothing, whether the instruction reached a turn: its own turn
+	 * started, or the person's turn running took it. A turn it waits behind can end first, and a
+	 * stopping process starts none, so either can leave it unread. Never told when `invoke` refuses.
+	 */
+	delivered?: (yes: boolean) => void;
 };
 
 /**
@@ -1250,9 +1268,10 @@ export type InvokedEntry = {
  * runs, a message is given to it when its harness takes input mid-run, and an instruction
  * that needs a turn of its own is refused: nothing is held for later.
  *
- * It answers nothing (`undefined`) only once the instruction's turn has started, or the message
- * has been given to the turn running or to the person's turn waiting behind a job. A turn it
- * starts holds the Chat from before its entry is saved, so no other turn takes the Chat meanwhile.
+ * It answers nothing (`undefined`) once the instruction's turn has started, or the message has been
+ * handed to the person's turn running or to its own turn waiting behind a job; `invoked.delivered`
+ * then hears whether it reached a turn. A turn it starts holds the Chat from before its entry is
+ * saved, so no other turn takes the Chat meanwhile.
  */
 export async function invoke(
 	context: Room,
@@ -1331,6 +1350,7 @@ export async function invoke(
 				context.claimantSessionId,
 				true,
 			);
+			invoked.delivered?.(true);
 			return undefined;
 		}
 		// A background job gives way to a person's instruction, as to their message.
@@ -1380,6 +1400,7 @@ export async function invoke(
 				userId: user.id,
 				invoked: true,
 			});
+			void given.then(yes => invoked.delivered?.(yes), () => invoked.delivered?.(false));
 			if (settled) void given.finally(settled).catch(() => {});
 		} else {
 			let asked: Parameters<typeof run> = [
@@ -1389,7 +1410,12 @@ export async function invoke(
 				undefined,
 				context.claimantSessionId,
 				reserved,
-				{ entryId: entry.id, userId: user.id, ...(focus ? { focus } : {}) },
+				{
+					entryId: entry.id,
+					userId: user.id,
+					...(focus ? { focus } : {}),
+					...(invoked.delivered ? { delivered: invoked.delivered } : {}),
+				},
 				[],
 			];
 			if (preempts) preempt(context, asked);
@@ -3470,6 +3496,7 @@ async function run(
 	let { chat, plan, room, server } = context;
 	if (chat.closed) {
 		if (jobTurn) finishJob(jobTurn, { status: "failed", reason: "The document closed." });
+		member?.delivered?.(false);
 		return;
 	}
 	let thread = about?.thread;
@@ -3502,6 +3529,7 @@ async function run(
 	if (steered) {
 		for (let message of chat.following?.splice(0) ?? []) void give(context, message);
 	}
+	member?.delivered?.(true);
 	try {
 		about?.started?.();
 	} catch (err) {
@@ -3923,6 +3951,13 @@ async function run(
 	return drain(context, { job: !!jobTurn, outcome });
 }
 
+/** Lets go of the person's turn waiting to start behind another, which will not start now. */
+function dropPreempting(chat: Chat): void {
+	let turn = chat.preempting;
+	chat.preempting = undefined;
+	turn?.[6]?.delivered?.(false);
+}
+
 /**
  * Starts the next of Chopin's own waiting turns, if one may start. Called when a turn has ended
  * (`ended` says how) and, with none running, when something that held them is over (`ended`
@@ -3933,7 +3968,7 @@ async function drain(
 	ended?: { job: boolean; outcome: JobOutcome | undefined },
 ): Promise<void> {
 	let { chat } = context;
-	if (chat.closed) return;
+	if (chat.closed) return dropPreempting(chat);
 	// Called with nothing running, another call is already starting the next turn.
 	if (!ended && chat.starting) return;
 	chat.starting = true;
@@ -3953,6 +3988,7 @@ async function startNext(
 	let preempting = chat.preempting;
 	chat.preempting = undefined;
 	if (preempting && startsHeld) {
+		preempting[6]?.delivered?.(false);
 		let unread = [preempting[1], ...(chat.following?.splice(0) ?? []).map(given => given.handle)];
 		for (let handle of unread) await notRead(context, handle);
 	}
@@ -4036,6 +4072,7 @@ function startRun(
 ): void {
 	if (context.chat.closed) {
 		if (jobTurn) finishJob(jobTurn, { status: "failed", reason: "The document closed." });
+		member?.delivered?.(false);
 		return;
 	}
 	let running = run(
@@ -4700,7 +4737,7 @@ export async function close(chat: Chat): Promise<void> {
 		chat.handoffJob = undefined;
 	}
 	chat.waiting = [];
-	chat.preempting = undefined;
+	dropPreempting(chat);
 	chat.following = undefined;
 	chat.turnController?.abort();
 	chat.referenceCache.clear();
