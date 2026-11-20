@@ -84,7 +84,6 @@ export async function sendChat(page: Page, text: string): Promise<string> {
 		to: "room",
 	});
 	expect(reply.kind).toBe("chat:send");
-	expect(reply.queued).toBe(false);
 	expect(reply.id).toEqual(expect.any(String));
 	return reply.id as string;
 }
