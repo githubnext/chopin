@@ -155,7 +155,7 @@ async function setup() {
 		copilot: fake(answer),
 	};
 	let keyChecks = fake(() => Response.json({ data: [] }));
-	let credentials = new AiCredentials({
+	let credentialOptions: ConstructorParameters<typeof AiCredentials>[0] = {
 		storage,
 		key: config.encryptionKey,
 		origin: ORIGIN,
@@ -168,7 +168,8 @@ async function setup() {
 			claude: { token: `${claudeAuth.url}/v1/oauth/token` },
 		},
 		lease: () => lease,
-	});
+	};
+	let credentials = new AiCredentials(credentialOptions);
 	let launchTokens = new Map<string, string>();
 	let router = new Router();
 	registerAiRoutes(router, auth, {
@@ -258,6 +259,7 @@ async function setup() {
 		launch,
 		call,
 		list,
+		restarted: () => new AiCredentials(credentialOptions),
 		advance(ms: number) {
 			now = new Date(now.getTime() + ms);
 		},
@@ -635,6 +637,64 @@ describe("a subscription's stand-ins", () => {
 		]);
 		let listed = (await world.list()).find(value => value.provider === "claude")!;
 		expect(listed.rejectedAt).toBeUndefined();
+	});
+
+	it("keep the current token refused when a refusal of an older one arrives late", async () => {
+		let world = await setup();
+		await world.signInClaude();
+		let first = (await world.storage.aiCredentials.get("U_mona", "claude"))!;
+		let { claude } = await world.launch();
+		let headers = { authorization: `Bearer ${claude!.placeholder}` };
+		world.refusals.claude = 1;
+		expect((await world.call(claude!, "/v1/messages", headers)).status).toBe(401);
+		expect((await world.call(claude!, "/v1/messages", headers)).status).toBe(200);
+		world.refusals.claude = 1;
+		expect((await world.call(claude!, "/v1/messages", headers)).status).toBe(401);
+
+		await world.credentials.rejected(first, "claude-access-1");
+		expect((await world.call(claude!, "/v1/messages", headers)).status).toBe(200);
+		expect(world.upstreams.claude.seen.map(seen => seen.headers.authorization)).toEqual([
+			"Bearer claude-access-1",
+			"Bearer claude-access-2",
+			"Bearer claude-access-2",
+			"Bearer claude-access-3",
+		]);
+		expect(world.claudeAuth.seen.slice(1).map(seen => JSON.parse(seen.body).refresh_token))
+			.toEqual(["claude-refresh-1", "claude-refresh-2"]);
+	});
+
+	it("keep a refused token refused across a restart, renewing it before it is sent or listed", async () => {
+		let world = await setup();
+		await world.signInChatgpt();
+		let { chatgpt } = await world.launch();
+		let headers = { authorization: `Bearer ${chatgpt!.placeholder}` };
+		let record = (await world.storage.aiCredentials.get("U_mona", "chatgpt"))!;
+		await world.credentials.rejected(record, "chatgpt-access-1");
+		expect(world.chatgptAuth.seen).toHaveLength(1);
+
+		let restarted = world.restarted();
+		world.chatgptReply.current = () => new Response("unavailable", { status: 503 });
+		let unchecked = (await restarted.list("U_mona")).find(value => value.provider === "chatgpt")!;
+		expect(unchecked.unchecked).toBe(true);
+		let launched = await restarted.launch({
+			userId: "U_mona",
+			expiresAt: new Date(world.now().getTime() + 60_000),
+		});
+		expect(launched.withheld).toContainEqual({ provider: "chatgpt", reason: "renew-unavailable" });
+
+		world.chatgptReply.current = undefined;
+		let listed = (await restarted.list("U_mona")).find(value => value.provider === "chatgpt")!;
+		expect(listed.unchecked).toBeUndefined();
+		expect(listed.rejectedAt).toBeUndefined();
+		expect(
+			world.chatgptAuth.seen.slice(1).map(seen =>
+				new URLSearchParams(seen.body).get("refresh_token")
+			),
+		).toEqual(["chatgpt-refresh-1", "chatgpt-refresh-1", "chatgpt-refresh-1"]);
+		expect((await world.call(chatgpt!, "/responses", headers)).status).toBe(200);
+		expect(world.upstreams.chatgpt.seen.map(seen => seen.headers.authorization)).toEqual([
+			"Bearer chatgpt-access-2",
+		]);
 	});
 
 	it("never send a stale token: a refused renewal needs signing in again, a failed one couldn't be checked", async () => {
