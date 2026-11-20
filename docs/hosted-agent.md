@@ -969,8 +969,11 @@ refresh writes the renewed pair to `tokens`, only while the stored pair is still
 the one it began from, so a refresh that lost a race never replaces a newer pair.
 An access token is renewed when it reaches the expiry the provider gave less a
 margin (three minutes for ChatGPT, five for Claude, as Atomic's), and after the
-provider refused that very token (any 401 to a proxied request); only the writer
-lease's holder refreshes. A connection's refreshes run one after another, and each
+provider refused that very token (any 401 to a proxied request): the refusal is
+written with the stored pair it belongs to, as that pair due for renewal, so no
+process sends the token again, one started after a restart included, and a refusal
+of a token renewed past since, however late it arrives, marks nothing. Only the
+writer lease's holder refreshes. A connection's refreshes run one after another, and each
 reads the stored pair again first, so a caller that read the pair before another
 refresh saved a new one is given the new one and never sends the spent refresh
 token. A renewed pair storage couldn't save stays in the process for that

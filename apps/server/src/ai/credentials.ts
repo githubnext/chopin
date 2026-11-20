@@ -369,11 +369,6 @@ type Renewed = SubscriptionTokens | "ended" | "unavailable" | undefined;
 /** A renewed pair, and as stored, that storage hasn't taken yet. */
 type UnsavedTokens = { tokens: SubscriptionTokens; sealed: Uint8Array };
 
-/** A token's fingerprint, kept in place of a token this process need only recognize again. */
-function fingerprint(value: string): string {
-	return createHash("sha256").update(value).digest("base64url");
-}
-
 /**
  * The AI credentials people connect in Chopin, and the placeholders launches hold instead. A key
  * is kept encrypted under a key derived from SESSION_ENCRYPTION_KEY and is read only to answer a
@@ -425,8 +420,6 @@ export class AiCredentials {
 	readonly #signIns = new Map<string, PendingSignIn & { until: number }>();
 	/** The last renewal queued for each sign-in's connection, which the next one waits for. */
 	readonly #renewing = new Map<string, Promise<void>>();
-	/** The digest of the access token each sign-in's provider refused, renewed before its next use. */
-	readonly #stale = new Map<string, string>();
 	/** A sign-in's renewed pair storage couldn't take yet, by connection, sent and saved until it is. */
 	readonly #unsaved = new Map<string, UnsavedTokens>();
 
@@ -927,7 +920,8 @@ export class AiCredentials {
 	 */
 	async rejected(record: AiCredentialRecord, secret: string): Promise<void> {
 		if (record.kind === "subscription") {
-			this.#stale.set(connection(record), fingerprint(secret));
+			let identity = connection(record);
+			await this.#serially(identity, () => this.#due(record, identity, secret));
 			return;
 		}
 		if (record.kind !== "api-key") return;
@@ -1332,15 +1326,36 @@ export class AiCredentials {
 		let identity = connection(record);
 		let tokens = this.#unsaved.get(identity)?.tokens ?? await this.#tokens(record);
 		if (!tokens) return undefined;
-		if (!renew && !this.#unsaved.has(identity) && this.#current(identity, tokens)) return tokens;
+		if (!renew && !this.#unsaved.has(identity) && this.#current(tokens)) return tokens;
 		let seen = renew ? tokens.access : undefined;
 		return this.#serially(identity, () => this.#renew(record, identity, seen));
 	}
 
-	/** Whether `tokens` may be sent as they are: not past their renewal time, nor refused. */
-	#current(identity: string, tokens: SubscriptionTokens): boolean {
-		return this.#stale.get(identity) !== fingerprint(tokens.access)
-			&& this.#clock().getTime() < tokens.expires;
+	/** Whether `tokens` may be sent as they are: not past their renewal time, which a refusal ends. */
+	#current(tokens: SubscriptionTokens): boolean {
+		return this.#clock().getTime() < tokens.expires;
+	}
+
+	/**
+	 * Makes the pair whose access token is `refused` due for renewal, stored with that very pair so no
+	 * process, this one after a restart included, sends the token again. A refusal of a token renewed
+	 * past since, however late it arrives, marks nothing: the pair the connection has now is not the
+	 * one refused. A mark storage couldn't take is kept for the connection, as a renewed pair is.
+	 */
+	async #due(record: AiCredentialRecord, identity: string, refused: string): Promise<void> {
+		let current = await this.#record(record.userId, record.provider);
+		if (!current || connection(current) !== identity || current.rejectedAt) return;
+		let tokens = this.#unsaved.get(identity)?.tokens ?? await this.#tokens(current);
+		if (!tokens || tokens.access !== refused || !this.#current(tokens)) return;
+		let due = { ...tokens, expires: 0 };
+		let pending: UnsavedTokens = {
+			tokens: due,
+			sealed: await encrypted(await this.#key, aad(record.userId, record.provider), {
+				tokens: due,
+			}),
+		};
+		this.#unsaved.set(identity, pending);
+		await this.#save(current, identity, pending);
 	}
 
 	/** Runs `work` once every renewal of the connection queued before it has settled. */
@@ -1376,7 +1391,7 @@ export class AiCredentials {
 		}
 		let tokens = unsaved?.tokens ?? await this.#tokens(current);
 		if (!tokens) return undefined;
-		if (seen !== tokens.access && this.#current(identity, tokens)) return tokens;
+		if (seen !== tokens.access && this.#current(tokens)) return tokens;
 		if (!this.#writer()) return "unavailable";
 		let renewed: SubscriptionTokens;
 		try {
@@ -1393,7 +1408,6 @@ export class AiCredentials {
 			}
 			return "ended";
 		}
-		this.#stale.delete(identity);
 		let pending: UnsavedTokens = {
 			tokens: renewed,
 			sealed: await encrypted(await this.#key, aad(record.userId, record.provider), {
@@ -1424,16 +1438,15 @@ export class AiCredentials {
 		return saved ? "saved" : "lost";
 	}
 
-	/** Drops what this process holds for a sign-in's connection: a pair not yet saved, a refused token. */
+	/** Drops the pair this process holds for a sign-in's connection that storage hasn't taken yet. */
 	#forget(identity: string): void {
 		this.#unsaved.delete(identity);
-		this.#stale.delete(identity);
 	}
 
 	/** Drops what this process holds for every connection of a person's provider but `kept`. */
 	#forgetReplaced(userId: string, provider: AiProvider, kept?: string): void {
 		let prefix = `${userId}\n${provider}\n`;
-		for (let identity of [...this.#unsaved.keys(), ...this.#stale.keys()]) {
+		for (let identity of this.#unsaved.keys()) {
 			if (identity.startsWith(prefix) && identity !== kept) this.#forget(identity);
 		}
 	}
