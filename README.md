@@ -1,134 +1,48 @@
 # Chopin
 
-Chopin is a GitHub Next research prototype exploring how people and
-repository-grounded agents can author durable documents together. A document
-might be an implementation plan, technical specification, RFC, proposal, or
-decision record.
+Chopin is a GitHub Next research prototype where people and a repository-grounded agent write durable documents together. A document may be an implementation plan, technical specification, RFC, proposal, or decision record.
 
-People shape the document and own its decisions. The hosted agent, currently
-named **Planner**, reads the selected repository, proposes changes, and asks the
-team when the code cannot settle a choice.
-
-To learn more about our design principles, and why we're building Chopin check out our recent blog post - https://githubnext.com/projects/chopin/
+People shape the document and own every decision. The hosted agent, called Planner, reads the selected GitHub repository, proposes document edits, and asks the team when the code cannot settle a choice. Read the [GitHub Next project post](https://githubnext.com/projects/chopin/) for our design principles and motivation.
 
 > [!IMPORTANT]
-> Chopin is experimental research software, not a supported GitHub product or a
-> production-ready service. Expect incomplete workflows, operational limits,
-> and breaking changes.
+> Chopin is experimental research software, not a supported GitHub product or a production service. Expect incomplete workflows, operational limits, and breaking changes.
+
+> [!TIP]
+> There is no public Chopin instance for general use. Run Chopin locally with the steps below, or host your own instance by following [Self-hosting](docs/self-hosting.md).
 
 https://github.com/user-attachments/assets/9ebf0901-6255-47c3-adb3-e905e8f6cab4
 
-> [!TIP]
-> We do not provide public Chopin instance for general use. If you want use Chopin on
-> your projects you can run it locally or host it on your own.
+## What Chopin does
 
-## What Chopin explores
+Each document connects to one GitHub repository and combines three parts.
 
-A channel combines one repository-connected document with its collaboration
-context:
-
-- **Chat** is shared by the team and the hosted agent. Saved messages help
-  maintain a short document title and enter the Planner's bounded context;
-  `@chopin` asks Chopin to act on the document.
-  [Automatic participation](docs/conversation-initiative.md) lets Chopin reply in
-  solo conversation and wait its turn in group discussion, with a shared pause control.
-- **Document** is a multiplayer rich-text artifact backed by readable, restricted
-  MDX. The current interface labels this view **Plan**. People and the agent edit
-  the same document, with presence, cursors, and transient markers for recent
-  agent changes.
-- **Decisions** retain attributed questionnaire answers and accepted comments
-  separately from the prose they produced, so a later rewrite cannot silently
-  change what the team decided.
+- **Document.** People and the Planner edit one multiplayer rich-text document backed by restricted MDX, with live presence, cursors, and temporary markers for recent agent edits.
+- **Chat.** The team shares a conversation beside the document. Saved messages enter the Planner's context and keep unnamed document titles current. When you are alone in a document, every message goes directly to `@chopin`. In a group discussion, [automatic participation](docs/conversation-initiative.md) waits its turn, while `@chopin` calls the Planner immediately.
+- **Decisions.** Question answers and accepted comments live in attributed records separate from the prose they produced. Later edits cannot silently overwrite what the team decided.
 
 https://github.com/user-attachments/assets/9f429bf0-762d-4d8b-871b-493dbb14c03c
 
-Typing `/research` in a document starts one durable request from the exact brief
-and leaves an inline progress card in place. Completed research publishes as an
-ordinary child document beneath its parent, with its own document,
-Chat, and Decisions. Pending, failed, and cancelled requests never
-appear as documents in navigation.
+**Research.** Type `/research` in a document to start one durable research request from your brief and place an inline progress card in the document. Completed research publishes as a child document beneath its parent, with its own Document and Decisions views. A child document has no Chat of its own; the parent's Chat and Planner reach it through child tools. Pending, failed, and cancelled requests never appear in navigation.
 
 https://github.com/user-attachments/assets/72a85be8-685f-4d60-9937-b3855b46cebe
 
-The Planner can inspect the selected GitHub repository and its pull requests
-through bounded, read-only tools, then co-author the document. Under the default
-`copilot-sdk` harness it cannot write to GitHub, edit a checkout, or implement
-code. `HARNESS=atomic` deliberately runs it as a full Atomic session
-with shell and filesystem access as the server process's user; see
-[Self-hosting](docs/self-hosting.md#choose-and-trust-a-harness). A separate coding agent can connect
-to Chopin through MCP to create or revise documents and consume an approved
-implementation graph.
+**Planner and coding agents.** Under the default `copilot-sdk` adapter, the Planner inspects the selected repository and its pull requests through bounded, read-only tools and edits only the Chopin document. It cannot write to GitHub, edit a checkout, or implement code. Setting `HARNESS=atomic` instead runs every Planner session as a full Atomic session with shell and filesystem access as the server process's user; see [Self-hosting](docs/self-hosting.md#choose-and-trust-a-harness). Setting `HARNESS=remote` runs Planner turns in an external client attached at `/api/v1/agent`; see [Agent connection](docs/agent-connection.md). A separate coding agent can also connect over `/mcp` to create or revise documents and work through an approved implementation graph.
 
-The document model supports broader artifacts, while the current Planner prompt
-and tool vocabulary remain optimized for planning.
-
-## Current boundaries
-
-- Chopin supports GitHub.com. GitHub Enterprise Server endpoints are not
-  configurable.
-- The Planner's file, tree, and history tools normally read the default branch captured
-  when its session starts; investigation evidence can supply an exact commit instead.
-  Code search is repository-scoped. Except under
-  `HARNESS=atomic`, it never reads a local checkout or uncommitted changes.
-- Every browser participant signs in, passes the instance admission policy, and
-  needs repository access through the GitHub App installation. MCP callers also
-  pass instance admission, but use their own bearer token for repository
-  authorization instead of the App installation. A public repository does not
-  make its Chopin channels public.
-- Pull access can view channels. Push or administration access is required to
-  create or change them and to invoke the Planner.
-- The first eligible person whose saved Chat message starts title maintenance,
-  who invokes the Planner, or who starts a model-backed research request supplies
-  the GitHub App user token used for that channel
-  and, under the default `copilot-sdk` harness, the Copilot entitlement. With
-  `HARNESS=atomic`, model access comes from the operator's
-  `HARNESS_AUTH` instead.
-  A server restart releases that ownership. Hosted browser logins survive
-  releases using encrypted session credentials; local device mode restores a
-  new session. Returning browsers can claim Planner ownership on a later action.
-- Document and Chat context, along with repository material selected by
-  the Planner, is sent to the harness's model provider during a turn (GitHub
-  Copilot by default; under `HARNESS=atomic`, the provider
-  chosen by `HARNESS_AUTH`). Model-backed background jobs also send job-specific private
-  material, including context loaded during execution, to isolated workers on
-  the same harness. The public research worker receives
-  only the exact submitted brief, but may derive or refine the queries it sends
-  to web search. Hosted GitHub credentials are encrypted in PostgreSQL with a
-  deployment key kept outside the database; the
-  [local device mode](docs/authentication.md#local-device-flow-sign-in) persists
-  credentials in an OS vault or an explicitly consented local file. Documents,
-  transcripts, decisions, research request staging, background-job inputs and
-  artifacts, and session records are stored in PostgreSQL.
-- Optional conversation-derived cards default to off. With `CONVERSATION_PLAN=on`,
-  current and recent Chat messages and selected decision context are sent to the
-  deployment's decisions classifier (OpenAI's Decisions API with `OPENAI_API_KEY`,
-  or TypeSafe's Jev with `JEV_API_KEY`), separately from the Planner's harness
-  credentials. It continues with `AGENT=off`.
-  Independent research analysis can propose [research offers](docs/conversation-research.md)
-  with shared editable briefs. Brief synthesis uses an isolated harness worker;
-  a writer starts the research explicitly.
-- Experimental Planner visual routing is opt-in with `PLANNER_VISUALS=on`. The
-  decisions classifier makes small possibility, comprehension, and type decisions
-  for one explanatory paragraph at a time; Planner authors the selected visual.
-  Routing applies to explicit member requests of at most 1,000 characters under
-  `copilot-sdk`. Other turns keep their ordinary authoring behavior.
-- One Chopin process may write to a database at a time. Horizontal application
-  scaling is not supported. A deploy can overlap two processes on one database so
-  nobody sees it; see [Deploys nobody can see](docs/zero-downtime-deploys.md).
-
----
+The document model supports any repository-connected technical document, while the current Planner prompt and tool names focus on planning.
 
 ## Run locally
 
-The development path requires:
+You need these prerequisites on your machine:
 
-- Bun 1.4.5;
-- Docker Engine with Docker Compose, used for PostgreSQL;
-- a GitHub App owned by the deployment; and
-- a GitHub account with push or administration access to a test repository and,
-  to use the Planner with the default harness, an active Copilot entitlement.
+- Bun 1.4.5, selected automatically by `mise.toml` if you use [mise](https://mise.jdx.dev)
+- Docker Engine with Docker Compose for PostgreSQL
+- A GitHub App owned by your local deployment
+- A GitHub account with push or administration access to a test repository, plus an active Copilot entitlement for the default Planner
+- An `OPENAI_API_KEY` or `JEV_API_KEY` for the decisions model required when `AGENT=on`
 
-Register these local URLs on the GitHub App:
+### 1. Register a GitHub App
+
+Create a GitHub App with these local URLs:
 
 ```text
 Homepage:  http://127.0.0.1:8787
@@ -136,13 +50,12 @@ Callback:  http://127.0.0.1:8787/auth/github/callback
 Setup URL: http://127.0.0.1:8787/auth/github/setup
 ```
 
-On the App:
+Configure these App settings:
 
 1. Enable expiring user authorization tokens.
 2. Disable OAuth during installation.
 3. Disable webhooks.
-4. Give it these repository permissions, which
-   [Authentication](docs/authentication.md#repository-permissions) explains:
+4. Grant these repository permissions, explained in [Authentication](docs/authentication.md#repository-permissions):
 
 ```text
 Contents:        Read and write
@@ -154,119 +67,90 @@ Issues:          Read-only
 Metadata:        Read-only (automatic)
 ```
 
-Install, configure, and start Chopin:
+### 2. Install dependencies and configure `.env`
 
 ```bash
 bun install
 cp .env.example .env
 openssl rand -hex 32
-# Fill in the GitHub App values, generated session key, and OPENAI_API_KEY or
-# JEV_API_KEY in .env.
+```
+
+Open `.env` and fill in `GITHUB_APP_SLUG`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `SESSION_ENCRYPTION_KEY` from the generated hexadecimal string, and either `OPENAI_API_KEY` or `JEV_API_KEY`.
+
+To run without the Planner, background jobs, or a decisions key, set `AGENT=off`. That setting leaves the `/mcp` endpoint enabled for external coding agents.
+
+### 3. Start PostgreSQL and Chopin
+
+```bash
 bun run db:up
 bun run migrate
 bun run dev
 ```
 
-The committed local Compose override publishes PostgreSQL on host port 5432, so
-use it only on a trusted development machine. See [Self-hosting](docs/self-hosting.md) for an internet-facing deployment.
+The committed `compose.local.yaml` override publishes PostgreSQL on host port 5432, so use it only on a trusted development machine. For an internet-facing deployment, follow [Self-hosting](docs/self-hosting.md).
 
-1. Open [http://127.0.0.1:8787](http://127.0.0.1:8787) and sign in.
-2. Install or update the GitHub App when the repository picker asks.
-3. Select a repository and create a channel, then start writing. The current
-   interface calls these planning channels.
+Press `Ctrl-C` to stop the development supervisor. Run `bun run db:down` to tear down the local Docker Compose project.
 
-Opening the channel in a second browser profile shows the multiplayer path.
+### 4. Sign in and create a document
 
-For a one-browser demo, [enable local collaborators](docs/authentication.md#rehearse-with-local-collaborators)
-to open Lily or Felix in a separate tab using your existing login.
+1. Open [http://127.0.0.1:8787](http://127.0.0.1:8787) and sign in with GitHub.
+2. Install or update the GitHub App on a test repository when the repository picker asks.
+3. Select the repository, create a new document, and start writing.
 
-Ctrl-C stops the development supervisor. `bun run db:down` tears down the local
-Compose project.
+Open the document in a second browser profile to test multiplayer editing. For a single-browser demo, [enable local collaborators](docs/authentication.md#rehearse-with-local-collaborators) to open Lily or Felix in another tab using your existing login.
 
-Set `AGENT=off` to prevent Planner turns and disable the background-job runner.
-This does not disable the `/mcp` endpoint used by external coding agents.
-
-`/research` public web search calls GitHub's Copilot MCP endpoint with the signed-in
-user's App user access token. Whether that endpoint accepts a self-registered App's
-tokens for `web_search` is unconfirmed. If it refuses, the research card and server log
-say so, and [Self-hosting](docs/self-hosting.md#troubleshooting) lists what to check.
+Public web search for `/research` calls GitHub's Copilot MCP endpoint with the signed-in user's App token. Whether that endpoint accepts a self-registered App's token for `web_search` is unconfirmed. If it refuses, the research card and server log state why, and [Self-hosting troubleshooting](docs/self-hosting.md#troubleshooting) lists what to check.
 
 ## Collaborate with the Planner
 
-The web composer treats `@chopin` as an instruction for the Planner:
+Write in Chat as a team, or address `@chopin` directly when you want the Planner to act.
 
-```text
-should we cover the export format?     -> channel chat transcript
-yes, Markdown for now                  -> channel chat transcript
-@chopin                                -> act on the recent conversation
-@chopin draft the export section       -> act on that request
-@chopin compare #Release plan          -> read another document, then respond here
-```
+| Message                              | What happens                                                                                                                                             |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `should we cover the export format?` | The server saves the message in Chat and adds it to the Planner's context. Alone in a document, `chopin` replies at once; in a group, it waits its turn. |
+| `@chopin`                            | Chopin invokes the Planner immediately to act on recent Chat messages.                                                                                   |
+| `@chopin draft the export section`   | Chopin invokes the Planner immediately with that request.                                                                                                |
+| `@chopin compare #Release plan`      | The Planner reads the referenced document at its latest revision, then responds in the current document.                                                 |
 
-The recent channel chat transcript is supplied as bounded context for the next turn,
-even when those messages did not address the Planner. Saved member messages also
-maintain the document's title independently of conversation-derived cards. Weak
-or incidental discussion leaves the title alone; topic changes may refine a blank,
-generated or Planner-drafted title, but never one a person set or renamed, and never
-while someone is renaming. This work obeys `AGENT`, ownership and implementation locks, and
-does not require Jev. A title job can seed a goal only before body prose exists.
+Type `#` in Chat to open a picker for other documents in the repository, published children, headings, Decisions, and repository files. Document references keep stable identities when titles change, and they never change which document the Planner edits. Start research with `/research` in the document rather than from Chat.
 
-The first eligible model-backed action, including title maintenance, a Planner turn
-or research request, claims the
-channel's Copilot usage until that owner's session ends or the server restarts.
-The current web interface has no control for transferring that ownership
-manually.
-
-Typing `#` in Chat opens a picker for other documents in the current
-repository, including published children. Selected references retain stable
-identities even when their titles change. The Planner reads referenced documents
-at their latest revision, and references never change which document its editing
-tools target. Research starts from `/research` in the document rather than from
-a Chat reference.
+Saved messages also keep blank, generated, or Planner-drafted titles up to date without overwriting a title a person set or renamed. Under `copilot-sdk`, the first eligible writer to trigger title maintenance, a Planner turn, or a research request supplies the document's GitHub App token and Copilot usage. That ownership lasts until their session ends or the server restarts, and the interface has no manual transfer control. See [Hosted agent](docs/hosted-agent.md#ownership) for ownership and title rules.
 
 ## Use your own machine
 
-The `chopin` CLI connects a machine you control to your Chopin server, so
-builds, investigations and Planner work run there with your own coding agent,
-for documents in any repository you can push to. Install it, then connect once
-with your server's origin in `CHOPIN_URL`, from any folder. `chopin connect`
-pairs the machine the first time and saves the server for later commands. It
-clones each repository the first time work needs it; `--checkout <path>` uses
-a checkout you already have instead.
+The `chopin` CLI connects a machine you control to your Chopin server. Builds, local investigations, and Planner work then run there with your own coding agent for any repository you can push to.
+
+Install your coding agent and sign in to it first. Then install `chopin` and connect once from any directory with your server's origin in `CHOPIN_URL`:
 
 ```bash
 curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
 CHOPIN_URL=https://your-chopin-instance.example chopin connect --agent copilot
 ```
 
-That runs in your terminal and stops when you close it. On a remote machine or
-server, add `--install-service` so a background service keeps it running after
-you close SSH.
+`chopin connect` pairs the machine on first run, saves the server URL for later commands, and clones each repository the first time work needs it. Pass `--checkout <path>` to use an existing checkout instead. The command runs in your terminal and stops when you close it. On a remote machine or server, add `--install-service` so a background service stays running after SSH closes.
 
-Install the agent and sign in to it first. `--agent` names one of the built-in
-agents:
+Pass `--agent` with one of these built-in coding agents:
 
 | Agent                                                                                               | Install                                              | Connect with      | Tested with Chopin |
 | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ----------------- | ------------------ |
 | [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                     | `--agent copilot` | Yes                |
 | [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp` | `--agent atomic`  | Yes                |
 
-Any other agent that speaks ACP works too: give its command after `--` instead,
-as in `chopin connect -- my-agent --acp`.
+For any other agent that speaks ACP, pass its command after `--`, such as `chopin connect -- my-agent --acp`.
 
-The **Machines** page, at `/machines` on your server (its former address, `/connect`, redirects there), gives one command that
-installs `chopin` and connects the machine, with your server filled in: your
-computer pairs once you approve it in the browser, and a server pairs with a
-single-use key, so it works over SSH too; see
-[Add a machine](docs/chopin-cli.md#add-a-machine). See
-[Use your own machine with Chopin](docs/chopin-cli.md) for Windows, the
-background service and every command.
+The **Machines** page at `/machines` on your server generates one install-and-connect command with your server filled in. Its former address, `/connect`, redirects there. A local computer pairs after you approve it in the browser, and a server pairs over SSH with a single-use key. See [Add a machine](docs/chopin-cli.md#add-a-machine) and [Use your own machine with Chopin](docs/chopin-cli.md) for Windows setup, background services, and every CLI command.
+
+## Current boundaries
+
+- **GitHub.com only.** GitHub Enterprise Server endpoints are not configurable.
+- **Repository reads.** Under `copilot-sdk`, the Planner reads the default branch captured when its session starts, unless investigation evidence supplies an exact commit. Code search stays within that repository. The Planner never reads a local checkout or uncommitted changes unless you use `HARNESS=atomic` or a remote Planner on a paired machine.
+- **Authentication and access.** Every browser participant signs in with GitHub, passes the optional instance admission policy, and needs repository access through the GitHub App installation. A public repository does not make its Chopin documents public. Pull access views documents; push or administration access creates documents, edits them, and invokes the Planner. MCP callers pass instance admission and authorize repositories directly with their own bearer token without an App installation. See [Authentication](docs/authentication.md) and [Repository channels](docs/channels.md).
+- **Data sent to model providers.** Document content, Chat messages, and repository excerpts selected by the Planner go to the configured model provider. That provider is GitHub Copilot under `copilot-sdk`, the `HARNESS_AUTH` provider under `HARNESS=atomic`, or the attached client under `HARNESS=remote`. Background jobs send job-specific material to isolated workers on the same adapter. Public web research sends only the submitted brief, though the worker may refine search queries.
+- **Credentials and storage.** Hosted GitHub credentials are encrypted in PostgreSQL with `SESSION_ENCRYPTION_KEY`, stored outside the database. [Local device mode](docs/authentication.md#local-device-flow-sign-in) instead stores credentials in an OS vault or a consented local file. Documents, transcripts, decisions, research staging, background jobs, and sessions live in PostgreSQL. See [Storage](docs/storage.md) and [Hosted agent](docs/hosted-agent.md).
+- **Decisions model and opt-in settings.** When `AGENT=on`, Chopin requires a decisions model set through `OPENAI_API_KEY`, `JEV_API_KEY`, or `DECISIONS_MODEL` for group turn-taking and visual checks. Conversation-derived decision cards and [research offers](docs/conversation-research.md) are off by default; `CONVERSATION_PLAN=on` enables them, even with `AGENT=off`. Legacy single-paragraph visual routing is also off by default and enabled with `PLANNER_VISUALS=on`. See [Self-hosting](docs/self-hosting.md#runtime-configuration).
+- **Single active writer.** One Chopin process may write to a database at a time, and horizontal scaling is not supported. A deploy can overlap two processes on one database with `HANDOVER=wait`; see [Deploys nobody can see](docs/zero-downtime-deploys.md).
 
 ## Documentation
-
-For owner-authorized local prototypes, measurements, and service-data investigations,
-see [Local investigations](docs/local-experiments.md). An ACP-compatible agent works
-in a local checkout and publishes captured evidence to Chopin's native views.
 
 | Topic                                      | Document                                                     |
 | ------------------------------------------ | ------------------------------------------------------------ |
@@ -274,18 +158,22 @@ in a local checkout and publishes captured evidence to Chopin's native views.
 | Deploy without anyone noticing             | [Deploys nobody can see](docs/zero-downtime-deploys.md)      |
 | Configure identity and access              | [Authentication](docs/authentication.md)                     |
 | Let machines push as Chopin's GitHub App   | [GitHub App identity](docs/github-app-identity.md)           |
+| Run Chopin's work on your own machine      | [chopin CLI](docs/chopin-cli.md)                             |
+| Run local investigations and prototypes    | [Local investigations](docs/local-experiments.md)            |
 | Connect an external coding agent           | [Local agent MCP](docs/local-agent-mcp.md)                   |
 | Run a document's Planner in your own agent | [Agent connection](docs/agent-connection.md)                 |
-| Run Chopin's work on your own machine      | [chopin CLI](docs/chopin-cli.md)                             |
 | Understand the system                      | [Architecture](docs/architecture.md)                         |
 | Understand channel identity and access     | [Repository channels](docs/channels.md)                      |
 | Understand persistence                     | [Storage](docs/storage.md)                                   |
 | Capture and record open decisions          | [Decisions](docs/decisions.md)                               |
 | Review the hosted agent boundary           | [Hosted agent](docs/hosted-agent.md)                         |
+| Understand automatic participation in Chat | [Automatic participation](docs/conversation-initiative.md)   |
+| Understand research offers from Chat       | [Research offers from Chat](docs/conversation-research.md)   |
 | Register durable background jobs           | [Background jobs](docs/background-jobs.md)                   |
 | Review experimental implementation handoff | [Implementation lifecycle](docs/implementation-lifecycle.md) |
+| Run local implementation builds            | [Local implementation](docs/local-launcher.md)               |
 | Develop on exe.dev                         | [exe.dev development](docs/exe-dev.md)                       |
-| Test an authenticated PR preview           | [PR preview testing](docs/preview-testing.md)                |
+| Test an authenticated pull request preview | [PR preview testing](docs/preview-testing.md)                |
 | Work on the repository                     | [Maintainer guide](AGENTS.md)                                |
 
 ## Development
@@ -298,11 +186,6 @@ bun run types         # TypeScript checks across the workspace
 bun run ci            # formatting, lint, and token checks
 ```
 
-Run `bun run e2e:browsers` once to install Chromium. The browser suite builds
-the client and starts disposable PostgreSQL services and application servers.
-See [AGENTS.md](AGENTS.md) for repository structure, test selection, and current
-engineering invariants.
+Run `bun run e2e:browsers` once to install Chromium. The browser suite builds the client and starts disposable PostgreSQL services and application servers. See [AGENTS.md](AGENTS.md) for repository structure, test selection, and engineering invariants.
 
-Security reports should follow [SECURITY.md](SECURITY.md). Participation is
-covered by the [Code of Conduct](CODE_OF_CONDUCT.md), and the source is available
-under the [MIT License](LICENSE.md).
+Report security issues through [SECURITY.md](SECURITY.md). Participation follows the [Code of Conduct](CODE_OF_CONDUCT.md), and the source is under the [MIT License](LICENSE.md).
