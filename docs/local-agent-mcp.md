@@ -170,10 +170,11 @@ most once and starts at most one turn:
 
 - If the instruction was never posted, the retry posts it.
 - If it was posted but its turn did not start (the server stopped, or could not
-  record the start), the retry starts that turn without posting it again, or
-  returns the refusal that stops it now.
+  record the start or confirm that it did), the retry starts that turn without
+  posting it again, or returns the refusal that stops it now.
 - If its turn started, the retry returns the first result. A turn that a restart
-  interrupted is not run again, as for any other instruction.
+  interrupted is not run again, as for any other instruction, and neither is one
+  whose server stopped in the moment between recording its start and starting it.
 
 A refusal that posted nothing, such as `planner-not-attached`, `planner-busy` or
 `system-turn-forbidden`, leaves the key free, so a corrected request can use it.

@@ -192,6 +192,77 @@ for (let as of [undefined, "system" as const]) {
 	});
 }
 
+/** Makes `complete` save its mark and lose its answer, and makes reading the claim back fail. */
+function losingCompletion(store: { complete: unknown; get: unknown }): () => void {
+	let target = store as {
+		complete: (...args: unknown[]) => Promise<boolean>;
+		get: (...args: unknown[]) => Promise<unknown>;
+	};
+	let { complete, get } = target;
+	target.complete = async (...args) => {
+		await complete.apply(store, args);
+		throw new Error("commit reply lost");
+	};
+	target.get = async () => {
+		throw new Error("storage went away");
+	};
+	return () => {
+		target.complete = complete;
+		target.get = get;
+	};
+}
+
+for (let as of [undefined, "system" as const]) {
+	let kind = as ? "a follow-up" : "an instruction";
+
+	test(`${kind} whose start was saved but its answer and read-back lost starts its turn on the retry`, async () => {
+		let { invoke, root, storage, turns } = await served();
+		let request = {
+			id: root.channel.id,
+			instruction: INSTRUCTION,
+			idempotencyKey: "hand-off",
+			...(as ? { as } : {}),
+		};
+		let scope = { userId: ANA.id, channelId: root.channel.id, key: "hand-off" };
+		let restore = losingCompletion(storage.mcpInvocations);
+		await expect(invoke(request)).rejects.toThrow("commit reply lost");
+		restore();
+		await settle();
+		expect(await storage.mcpInvocations.get(scope)).toMatchObject({ invokedAt: expect.any(Date) });
+		expect(root.plan.chat.entries).toHaveLength(1);
+		expect(turns.prompts).toEqual([]);
+
+		expect(await invoke({ ...request, instruction: "Something else." })).toEqual({
+			kind: "refused",
+			code: "idempotency-conflict",
+		});
+		let retried = await invoke(request);
+		expect(retried).toMatchObject({ kind: "invoked", document: { id: root.channel.id } });
+		await turns.started(1);
+		expect(await invoke(request)).toEqual(retried);
+		await settle();
+		expect(root.plan.chat.entries).toHaveLength(1);
+		expect(turns.prompts).toHaveLength(1);
+	});
+}
+
+test("a start whose read-back keeps failing is recovered by the retry once storage answers", async () => {
+	let { invoke, posted, root, storage, turns } = await served();
+	let request = { id: root.channel.id, instruction: INSTRUCTION, idempotencyKey: "hand-off" };
+	let restore = losingCompletion(storage.mcpInvocations);
+	await expect(invoke(request)).rejects.toThrow("commit reply lost");
+	await expect(invoke(request)).rejects.toThrow("commit reply lost");
+	restore();
+	await settle();
+	expect(turns.prompts).toEqual([]);
+
+	expect(await invoke(request)).toMatchObject({ kind: "invoked" });
+	await turns.started(1);
+	await settle();
+	expect(posted()).toHaveLength(1);
+	expect(turns.prompts).toHaveLength(1);
+});
+
 test("a tenth follow-up saved without its start recorded is started by its retry, counted once", async () => {
 	let { invoke, notices, root, storage, systemTurns, turns } = await served();
 	for (let count = 1; count < MAX_SYSTEM_TURNS_PER_HOUR; count++) systemTurns.take(root.channel.id);
