@@ -876,15 +876,14 @@ does an Atomic Planner's, and cancels at once any it asks before it ends, so a
 Decision the turn waited on never keeps its session for the next message.
 
 **Runs.** The client reports its workflow runs with `runs`; Chat shows those
-cards and keeps the session after its turn while any run is live or paused, as
-for an Atomic Planner. **Stop Planner** and **Resume Planner** send `stop` and
-`resume`, optionally for one run, and wait for `control-result`. Unlike an
-Atomic Planner's, a reported run that ends blocked or failed between turns gets
-only its Chat notice: the reports are the client's word, so they never start a
-Planner turn that no writer asked for. A client that asks for the `run-stage-deltas`
-feature sends only new and changed stages, so a run's stages have no count
-limit; Chopin merges them into the run's stored stages as it does an Atomic
-Planner's (see
+cards and keeps the session after its turn while any run is live or paused (an
+Atomic Planner has no runs; see [Session lifecycle](#session-lifecycle)).
+**Stop Planner** and **Resume Planner** send `stop` and `resume`, optionally for
+one run, and wait for `control-result`. A reported run that ends, blocked or
+failed included, gets only its Chat notice: the reports are the client's word,
+so they never start a Planner turn that no writer asked for. A client that asks
+for the `run-stage-deltas` feature sends only new and changed stages, so a run's
+stages have no count limit; Chopin merges them into the run's stored stages (see
 [Agent connection](agent-connection.md#run-stage-deltas)). The Planner's
 instructions name none of the client's tools, since a client on Atomic 0.10 has
 no `workflow` tool: they say Chat shows a card for each run the client reports
@@ -1830,7 +1829,7 @@ and which is neither saved nor shown (its turn is sent as `quiet`, which Chat dr
 all, as it does a reply whose words are all out while its after-answer check runs): background jobs
 (such as keeping a title), which also wait behind a person's turn they gave way to, and the turns the
 server writes for itself (answers to open decisions, relinking after a build, settling a prototyped
-passage, an ended workflow run, a readiness check, an initiative proposal). They start in the
+passage, a readiness check, an initiative proposal). They start in the
 order they were asked once the running turn ends, a job that is no longer worth running is dropped
 at that point, and none counts against what a person may send.
 

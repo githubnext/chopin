@@ -543,9 +543,9 @@ export function resultWithImages(result: unknown, toolName: string): NonNullable
 }
 
 /**
- * The stream parts for a tool Atomic runs itself: a builtin, extension, workflow
- * or subagent tool. Host tools report through `hostTool`, and a nested call
- * belongs to its parent's row.
+ * The stream parts for a tool Atomic runs itself: a builtin or extension tool.
+ * Host tools report through `hostTool`, and a nested call belongs to its
+ * parent's row.
  */
 export function ownToolParts(
 	event: AgentSessionEvent,

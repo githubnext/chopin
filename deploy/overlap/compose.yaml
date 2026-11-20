@@ -31,7 +31,7 @@ x-chopin: &chopin
     db:
       condition: service_healthy
   volumes:
-    # Both slots keep the Planner's per-document directories and workflow journal here.
+    # Both slots keep the Planner's per-document directories here.
     - chopin-state:/var/lib/chopin
   restart: unless-stopped
   # Longer than the turn wait, the unready window, the request wait and the commit of a cut.

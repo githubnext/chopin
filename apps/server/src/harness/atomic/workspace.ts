@@ -5,8 +5,8 @@
  * the channel's repository, and remembered for the channel until the process
  * exits. Every later Planner session for that channel re-verifies it before use.
  * Without one, the session works in a directory Chopin keeps for that channel
- * alone under its per-user state directory, so files a paused or resumed
- * workflow wrote survive server restarts instead of filling the shared tmp.
+ * alone under its per-user state directory, so files its sessions wrote
+ * survive server restarts instead of filling the shared tmp.
  */
 
 import { chmod, lstat, mkdir } from "node:fs/promises";

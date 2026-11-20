@@ -528,8 +528,8 @@ turn ends before it can read the message, an idle Chat starts a turn for it and 
 says plainly that Chopin did not read it. A comment note, an `invoke_planner as system` call
 and a task draft need a turn of their own, so a running turn refuses them before anything is
 saved. Only Chopin's own scheduling still waits for the running turn (or, for a job, a person's), in `chat.waiting`:
-background jobs and server-authored instructions nobody typed (initiative, an ended workflow
-run, readiness, decision follow-ups). `planner_deferred_turns` is no longer written or read;
+background jobs and server-authored instructions nobody typed (initiative, readiness,
+decision follow-ups). `planner_deferred_turns` is no longer written or read;
 at start the writer-lease holder closes any row an earlier release left open
 (`deferredTurns.retire`), so a message it held stays in its Chat as an ordinary one that no
 Planner took. The table and its rows are kept, and no migration was added.
