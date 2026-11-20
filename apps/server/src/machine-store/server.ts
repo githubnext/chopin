@@ -99,7 +99,7 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 				await this.#admin.unsafe(`GRANT ${id(role)} TO CURRENT_USER`).catch(() => {});
 			}
 			await this.#database(role, me);
-			await this.#closeOthers(role);
+			await this.#closeOthers(role, me);
 			await this.#checkRole(role);
 			await this.#admin.unsafe(
 				`ALTER ROLE ${id(role)} WITH LOGIN PASSWORD ${quotedLiteral(scramVerifier(password))}`,
@@ -301,14 +301,37 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 		}
 	}
 
-	async #closeOthers(role: string) {
-		let others = await this.#admin<{ name: string }[]>`
-			SELECT datname AS name FROM pg_database WHERE datallowconn AND datname <> ${role}
-			ORDER BY datname
-		`;
-		for (let { name } of others) {
+	/**
+	 * Revoke `CONNECT` from `PUBLIC` on every other database the role could connect to, and refuse
+	 * the login while any still lets it: a `REVOKE` by an administrator that may not grant `CONNECT`
+	 * there (it doesn't own the database) only warns and leaves it.
+	 */
+	async #closeOthers(role: string, me: Me) {
+		for (let name of await this.#reachable(role)) {
 			await this.#admin.unsafe(`REVOKE CONNECT ON DATABASE ${id(name)} FROM PUBLIC`);
 		}
+		let open = await this.#reachable(role);
+		if (open.length) {
+			let named = open.length > 2
+				? `databases ${open.slice(0, 2).join(", ")} and ${open.length - 2} more`
+				: `database${open.length > 1 ? "s" : ""} ${open.join(" and ")}`;
+			throw new MachineStoreRefusal(
+				`${me.name} can't revoke CONNECT from PUBLIC on the ${named}, so a machine could connect `
+					+ `there; ${open.length > 1 ? "their owners" : "its owner"} must revoke it`,
+			);
+		}
+	}
+
+	/** The connectable databases, other than its own, the role has `CONNECT` on. */
+	async #reachable(role: string) {
+		let rows = await this.#admin<{ name: string }[]>`
+			SELECT datname AS name FROM pg_database
+			WHERE datallowconn AND datname <> ${role} AND has_database_privilege(
+				(SELECT oid FROM pg_roles WHERE rolname = ${role}), oid, 'CONNECT'
+			)
+			ORDER BY datname
+		`;
+		return rows.map(row => row.name);
 	}
 
 	async #checkRole(role: string) {
@@ -373,7 +396,18 @@ export class PostgresMachineStoreServer implements MachineStoreServer {
 				`the machine couldn't connect to its own database: ${this.#reason(error)}`,
 			);
 		}
-		for (let database of new Set([...this.#unreachable, me.database])) {
+		// Every connectable database but the machines' own, which the administrator owns and closed
+		// itself: probing those would cost a connection per paired machine.
+		let others = await this.#admin<{ name: string }[]>`
+			SELECT datname AS name FROM pg_database
+			WHERE datallowconn AND datname <> ${role} AND NOT (
+				datdba = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+				AND coalesce(shobj_description(oid, 'pg_database') = ${MANAGED_DATABASE_MARK}, false)
+			)
+			ORDER BY datname
+		`;
+		let probed = new Set([...this.#unreachable, me.database, ...others.map(other => other.name)]);
+		for (let database of probed) {
 			let reached = await this.#connectAs(role, password, database).then(() => true, () => false);
 			if (reached) {
 				await this.#admin.unsafe(`ALTER ROLE ${id(role)} NOLOGIN`).catch(() => {});

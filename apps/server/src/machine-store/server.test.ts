@@ -382,6 +382,92 @@ if (!database) {
 			);
 		});
 
+		test("hands out no login while a database its administrator can't close lets machines connect", async () => {
+			let suffix = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
+			let administrator = `store_admin_${suffix}`;
+			let control = `store_control_${suffix}`;
+			let unrelated = `unrelated_database_${suffix}`;
+			let administratorPassword = newStorePassword();
+			await sql.unsafe(
+				`CREATE ROLE "${administrator}" LOGIN CREATEROLE CREATEDB PASSWORD '${administratorPassword}'`,
+			);
+			await sql.unsafe(`CREATE DATABASE "${control}" OWNER "${administrator}"`);
+			await sql.unsafe(`CREATE DATABASE "${unrelated}"`);
+			// It may connect to every database, as a managed service's administrator does, but owns only
+			// its own, and every database but the unrelated one is closed to PUBLIC.
+			let open = await sql<{ name: string }[]>`
+				SELECT datname AS name FROM pg_database
+				WHERE datallowconn AND datname NOT IN ${sql([control, unrelated])}
+			`;
+			for (let { name } of open) {
+				await sql.unsafe(`REVOKE CONNECT ON DATABASE "${name}" FROM PUBLIC`);
+				await sql.unsafe(`GRANT CONNECT ON DATABASE "${name}" TO "${administrator}"`);
+			}
+			await sql.unsafe(`GRANT CONNECT ON DATABASE "${unrelated}" TO "${administrator}"`);
+			let url = new URL(database!);
+			url.username = administrator;
+			url.password = "";
+			url.pathname = `/${control}`;
+			let limited = new PostgresMachineStoreServer({
+				url: url.href,
+				password: administratorPassword,
+			});
+			let role = newRole();
+			let password = newStorePassword();
+			let storage = new MemoryStorage();
+			await storage.migrate();
+			let stores = new MachineStores({
+				storage,
+				server: limited,
+				key: new Uint8Array(32).fill(5),
+				clock: () => new Date(),
+			});
+			let userId = await owner(storage);
+			let id = crypto.randomUUID();
+			await storage.machines.create(machine(userId, { id }));
+			let paired = (await storage.machines.get(id))!;
+			let machineRole = machineStoreName(id);
+			roles.push(machineRole);
+			try {
+				let refusal = await limited.provision(role, password).then(
+					() => undefined,
+					(error: unknown) => error,
+				);
+				expect(refusal).toBeInstanceOf(MachineStoreRefusal);
+				expect((refusal as Error).message).toContain(unrelated);
+				expect(await refusedCode(connectAs(role, password, unrelated))).not.toBe("connected");
+				expect(await refusedCode(connectAs(role, password, role))).not.toBe("connected");
+				await expect(stores.login(paired)).rejects.toThrow(unrelated);
+				expect((await stores.statuses([id])).get(id)).toEqual({
+					state: "failed",
+					reason: expect.stringContaining(unrelated),
+				});
+				// Once its owner closes it, the same administrator hands the login out.
+				await sql.unsafe(`REVOKE CONNECT ON DATABASE "${unrelated}" FROM PUBLIC`);
+				let login = await stores.login(paired);
+				expect(await connectAs(machineRole, login.password, machineRole)).toBe(machineRole);
+				expect(await refusedCode(connectAs(machineRole, login.password, unrelated))).toBe(
+					"42501",
+				);
+				expect((await stores.statuses([id])).get(id)).toEqual({ state: "ready" });
+			} finally {
+				await limited.close();
+				for (let name of [role, machineRole]) {
+					await sql.unsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`).catch(() => {});
+					await sql.unsafe(`DROP ROLE IF EXISTS "${name}"`).catch(() => {});
+				}
+				for (let name of [control, unrelated]) {
+					await sql.unsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`).catch(() => {});
+				}
+				for (let { name } of open) {
+					await sql.unsafe(`REVOKE CONNECT ON DATABASE "${name}" FROM "${administrator}"`).catch(
+						() => {},
+					);
+				}
+				await sql.unsafe(`DROP ROLE IF EXISTS "${administrator}"`).catch(() => {});
+			}
+		});
+
 		test("turns off a login it made even after someone widened it", async () => {
 			let role = newRole();
 			let password = newStorePassword();

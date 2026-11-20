@@ -2590,6 +2590,26 @@ test("a setup problem reported before Chopin made any login is said on the Machi
 	expect(await listed()).toEqual({ state: "failed", reason: refusal });
 });
 
+test("a setup problem a pairing reports is said on the Machines page before the machine connects", async () => {
+	let { alice, pair, request } = await storeSetup();
+	let laptop = await pair(alice.cookie);
+	let report = (token: string, body: unknown) =>
+		request("/api/connector/machine-store", body, undefined, token);
+	let listed = async () =>
+		(await (await request("/api/connector/machines", undefined, alice.cookie)).json()).machines[0]
+			.store;
+	expect((await report(laptop.machineToken, {})).status).toBe(200);
+	expect(await listed()).toEqual({ state: "ready" });
+	let problem = "its storage adapter couldn't be set up: EEXIST: file already exists";
+	let reported = await report(laptop.machineToken, { problem });
+	expect(reported.status).toBe(200);
+	expect(await reported.json()).toEqual({ reported: true });
+	expect(await listed()).toEqual({ state: "failed", reason: problem });
+	expect((await report("chopin_m_" + "x".repeat(43), { problem })).status).toBe(401);
+	expect((await report(laptop.machineToken, { problem: "" })).status).toBe(409);
+	expect(await listed()).toEqual({ state: "failed", reason: problem });
+});
+
 test("without MACHINE_STORE_URL a machine is told there is no database login", async () => {
 	let { alice, pair, request } = await setup();
 	let laptop = await pair(alice.cookie);

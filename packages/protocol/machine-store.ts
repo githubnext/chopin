@@ -2,6 +2,12 @@ export const MACHINE_STORE_ADAPTER = "@bastani/atomic-storage-postgres";
 
 export type MachineStoreLogin = { url: string; password: string };
 
+/**
+ * Why a machine couldn't set up the login it was handed, posted to the route that hands it out, so
+ * the Machines page says so before the machine connects. Chopin answers `{ reported: true }`.
+ */
+export type MachineStoreReport = { problem: string };
+
 export type MachineStoreStatus =
 	| { state: "ready" }
 	| { state: "pending" }

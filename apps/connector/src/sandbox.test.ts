@@ -14,6 +14,8 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { connect, createServer } from "node:net";
+import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { sandboxLabel } from "@chopin/protocol/connector";
 import type { Host } from "./sandbox-probe";
@@ -131,6 +133,63 @@ test("--no-sandbox is a sandbox that says it is off, and --require-sandbox can't
 		off.report,
 	);
 });
+
+/** What the proxy at `proxy` answers a CONNECT to `target`, with what the tunnel brings back. */
+function tunnelThrough(proxy: string, target: string) {
+	return new Promise<string>((done, fail) => {
+		let url = new URL(proxy);
+		let said = "";
+		let socket = connect(Number(url.port), url.hostname, () => {
+			socket.write(`CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n\r\n`);
+		});
+		socket.on("data", chunk => {
+			said += chunk;
+			if (said.endsWith("pong")) socket.destroy();
+		});
+		socket.once("close", () => done(said));
+		socket.once("error", fail);
+	});
+}
+
+test.skipIf(process.platform === "win32")(
+	"a host allowed as the connector runs, an IPv6 address in brackets with its port, is reached through the proxy",
+	async () => {
+		let folder = mkdtempSync(join(scratch, "allow-"));
+		let executor = join(folder, "lxc-exec");
+		// It prints the request it is given, which names the proxy, and starts nothing.
+		writeFileSync(executor, '#!/bin/sh\ncat "$2"\n', { mode: 0o755 });
+		let sandbox = await createSandbox({
+			directory: folder,
+			home: folder,
+			server: "https://chopin.example.com",
+			host: { ...bare(), find: tool => `/usr/bin/${tool}` },
+			executor,
+		});
+		let database = createServer(socket => socket.end("pong"));
+		await new Promise<void>(done => database.listen(0, "::1", done));
+		let target = `[::1]:${(database.address() as AddressInfo).port}`;
+		try {
+			expect(sandbox.report).toEqual({ engine: "bubblewrap" });
+			let started = sandbox.spawn({
+				command: ["true"],
+				cwd: folder,
+				env: { PATH: process.env.PATH },
+				stdin: "ignore",
+			});
+			let proxy = (JSON.parse((await output(started)).text) as {
+				runtimeConfig: { networkProxy: string };
+			}).runtimeConfig.networkProxy;
+			expect(await tunnelThrough(proxy, target)).toStartWith("HTTP/1.1 403 Forbidden");
+			sandbox.allow!(target);
+			expect(await tunnelThrough(proxy, target)).toBe(
+				"HTTP/1.1 200 Connection Established\r\n\r\npong",
+			);
+		} finally {
+			database.close();
+			await sandbox.close();
+		}
+	},
+);
 
 test("a chopin with no executor, such as the downloaded script, reports it rather than failing", async () => {
 	let sandbox = await createSandbox({

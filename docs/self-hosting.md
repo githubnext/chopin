@@ -924,15 +924,19 @@ For each machine Chopin keeps, under the administrator role:
   off or dropping it touches only a role and a database with that comment, the database
   owned by the administrator, so a name another role or database already held is left
   alone;
-- `CONNECT` revoked from `PUBLIC` on every other database of the server, checked by
-  connecting as the new role to `postgres`, `template1` and the administrator's own
-  database. Give the administrator a server of its own: other applications' roles on
-  it need `CONNECT` granted to them by name.
+- `CONNECT` revoked from `PUBLIC` on every other database the role could connect to,
+  then checked twice: no other connectable database may give the role `CONNECT`
+  (`has_database_privilege`) before its login is turned on, and once it is, a login as
+  the role must fail on `postgres`, `template1`, the administrator's own database and
+  every other connectable database but the machines' own. Give the administrator a
+  server of its own: other applications' roles on it need `CONNECT` granted to them by
+  name.
 
 The administrator role needs `CREATEROLE` and `CREATEDB` (a managed service's
-administrator has both) and must own the server's other databases, or Chopin can't
-revoke `CONNECT` on them and refuses to hand out the login, saying which database is
-still open.
+administrator has both) and must own the server's other databases. A `REVOKE` by a
+role that doesn't own a database only warns, so where `CONNECT` stays, Chopin refuses
+to hand out the login, and the Machines page says which database is still open and that
+its owner must revoke it.
 
 The password is 32 random bytes, sent to PostgreSQL only as a SCRAM-SHA-256 verifier
 computed by Chopin, kept by Chopin as AES-GCM ciphertext under a key derived from

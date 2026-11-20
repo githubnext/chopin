@@ -60,6 +60,8 @@ function fakeChopin(
 		{ path: string; bearer: string; body: unknown; about?: Record<string, string> }
 	> = [];
 	let stores: string[] = [];
+	/** The setup problems a machine reported on the machine-store route, with its token. */
+	let reports: Array<{ bearer: string; problem: unknown }> = [];
 	let waited = Promise.withResolvers<void>();
 	let spent = false;
 	let server = Bun.serve({
@@ -69,6 +71,11 @@ function fakeChopin(
 			let path = new URL(request.url).pathname;
 			let bearer = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
 			if (path === "/api/connector/machine-store") {
+				let asked = (await request.json().catch(() => ({}))) as { problem?: unknown };
+				if (asked.problem !== undefined) {
+					reports.push({ bearer, problem: asked.problem });
+					return Response.json({ reported: true });
+				}
 				stores.push(bearer);
 				return options.store?.() ?? Response.json({ error: "not-found" }, { status: 404 });
 			}
@@ -135,7 +142,7 @@ function fakeChopin(
 		},
 	});
 	cleanup.push(() => server.stop(true));
-	return { url: `http://127.0.0.1:${server.port}`, calls, stores, waited: waited.promise };
+	return { url: `http://127.0.0.1:${server.port}`, calls, stores, reports, waited: waited.promise };
 }
 
 /** Agents the connects below name; chopin finds them before it pairs, and they never run. */
@@ -262,6 +269,28 @@ test("a login Chopin can't make is said plainly, and the machine still pairs and
 	);
 	expect(chopin.calls.map(call => call.path)).toContain("tool:wait_for_work");
 	expect(await Bun.file(join(home, "agent-store", "password")).exists()).toBe(false);
+});
+
+test("pairing that can't save its login here tells Chopin why at once, without connecting", async () => {
+	let home = await scratch("chopin-home-");
+	// A file where the login's folder goes, so the login can't be saved.
+	await writeFile(join(home, "agent-store"), "");
+	let chopin = fakeChopin({ store: () => Response.json(STORE_LOGIN) });
+	let paired = cli(["pair", "--label", "build-box"], home, chopin.url);
+	expect(await paired.exited).toBe(0);
+	let output = await paired.output;
+	expect(output).toContain(
+		"Chopin couldn't set up this machine's database for agent sessions: its storage adapter "
+			+ "couldn't be set up: EEXIST",
+	);
+	expect(output).not.toContain(STORE_LOGIN.password);
+	expect(chopin.calls.map(call => call.path)).not.toContain("/api/connector/connections");
+	expect(chopin.stores).toEqual([MACHINE_TOKEN]);
+	expect(chopin.reports).toEqual([{
+		bearer: MACHINE_TOKEN,
+		problem: expect.stringMatching(/^its storage adapter couldn't be set up: EEXIST/),
+	}]);
+	expect(chopin.reports[0]!.problem).not.toContain(STORE_LOGIN.password);
 });
 
 test("without a machine database Chopin, pairing and connecting say nothing of one", async () => {

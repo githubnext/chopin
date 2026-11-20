@@ -27,6 +27,7 @@ import {
 	plannerAiManaged,
 	register,
 	reportAgent,
+	reportMachineStoreProblem,
 	SELF,
 	unpair,
 } from "./machine";
@@ -193,10 +194,17 @@ async function pairCommand(args: string[]) {
 		});
 		if (token) {
 			output.say(`${output.style.green("✓ Paired.")} This machine is ${label} in Chopin.`);
-			sayStore(
-				output,
-				await provideMachineStore({ url, token, directory: stateDirectory(), signal: run.signal }),
-			);
+			let store = await provideMachineStore({
+				url,
+				token,
+				directory: stateDirectory(),
+				signal: run.signal,
+			});
+			sayStore(output, store);
+			// No connection follows to tell Chopin, so the Machines page hears it now; best-effort.
+			if (store.state === "failed") {
+				await reportMachineStoreProblem(url, token, store.reason, run.signal).catch(() => {});
+			}
 		}
 	} finally {
 		run.done();

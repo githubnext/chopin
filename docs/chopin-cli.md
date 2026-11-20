@@ -920,10 +920,12 @@ allows the database's host and port, which Atomic's adapter reaches through
 
 If Chopin can't make the login, or the adapter can't be installed, the connector says
 why and connects anyway; the Machines page shows it too, until a connect reports it
-set up, even while the machine is away. Agents keep their sessions
+set up, even while the machine is away. `chopin pair` on its own, which connects
+nothing, tells Chopin at once. Agents keep their sessions
 on the machine until a later connect sets it up. When Chopin can't be reached, the
 saved login is used. `chopin unpair` removes the saved password, and Chopin turns the
-login off.
+login off. The sandbox's proxy allows the database's host and port whether the URL
+names a host, an IPv4 address or an IPv6 address in brackets (`[2001:db8::1]:5432`).
 
 ### Git in the sandbox
 
