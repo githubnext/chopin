@@ -3,14 +3,17 @@
  *
  * Each connection holds its own intent in each place (Chat, or a thread by its root), the newest by
  * the connection's own `seq`, so an older, repeated or reordered report changes nothing and one tab
- * stopping never hides another still writing. A report says how long ago the edit it reports was
- * made; it is visible until five seconds after that edit and a second for transit, so a client that
- * never stops, or a report delivered again, never outlasts the edit it carries. One person's reports
- * that start or renew writing in one place are taken once in 1.5 seconds at most, a little under the
- * composer's two, so a report early by jitter is not refused: a report beyond that
- * keeps no one longer than the last one taken, and one that would show a person again is shown when
- * the interval is up. Stopping is never limited. The Planner is writing in a place while a turn there
- * writes its reply. Everyone in the room is told the set when it changes, without themselves.
+ * stopping never hides another still writing. The newest number is kept for as long as the
+ * connection is open, even once what it reported is no longer shown, so no old report brings anyone
+ * back. A report says how long ago the edit it reports was made; it is visible until five seconds
+ * after that edit and a second for transit, so a client that never stops, or a report delivered
+ * again, never outlasts the edit it carries. One person's reports that start or renew writing in one
+ * place are taken once in 1.5 seconds at most, a little under the composer's two, so a report early
+ * by jitter is not refused: a report beyond that keeps no one longer than the last one taken, and
+ * one that would show a person again is shown when the interval is up. Stopping is never limited. A
+ * connection that can no longer write stops writing everywhere. The Planner is writing in a place
+ * while a turn there writes its reply. Everyone in the room whose access holds, readers included,
+ * is told the set when it changes, without themselves.
  */
 import { tell } from "../wire";
 import { actor, initiative } from "./initiative";
@@ -29,6 +32,7 @@ export const TYPING_TRANSIT_MS = 1_000;
 /** The most a report may say its edit preceded it by: a composer reports at least that often. */
 export const TYPING_REPORT_MS = 2_000;
 const MAX_INTENTS = 64;
+const MAX_PLACE_FLOORS = 64;
 const CHAT_PLACE = "";
 
 let lastGeneration = 0;
@@ -52,6 +56,13 @@ type Intent = {
 	/** Taken, but not yet shown: its person may be shown again once their interval is up. */
 	held: boolean;
 };
+
+/**
+ * The newest report a live connection has made, kept for as long as it is open, apart from what is
+ * shown: in each place it last reported in, and past those, the newest of the places it no longer
+ * keeps, which its single counter has already passed.
+ */
+type Floor = { base: number; places: Map<string, number> };
 
 /** What one person's reports in one place were last allowed. */
 type Allowance = { at: number; until: number };
@@ -77,6 +88,8 @@ export type TypingPresence = {
 	type(client: string, actor: string, handle: string, report: TypingReport): void;
 	/** A message sent in a place ends its connection's writing there, whatever its reports said. */
 	sent(client: string, thread: unknown): void;
+	/** A connection lost write access: what it was writing ends everywhere, and its numbers stand. */
+	retire(client: string): void;
 	/** A connection closed: what it was writing ends, and nothing else does. */
 	depart(client: string): void;
 	/** Whether the Planner's `turn` is writing its reply in Chat (`thread` absent) or a thread. */
@@ -89,14 +102,17 @@ export type TypingPresence = {
 export function createTypingPresence(options: {
 	/** Whether a thread's root is a message of this Chat. */
 	threadExists(rootId: string): boolean;
-	/** Everyone with the document open, who can all read it: who is told. */
+	/** Everyone with the document open: who is told, while they can read it. */
 	members(): Iterable<Socket>;
+	/** Whether a member's access still holds as presence is told, before its next check. */
+	reads?(member: Socket): boolean;
 	clock?: InitiativeClock;
 }): TypingPresence {
 	let time = options.clock ?? systemClock;
 	let generation = lastGeneration = Math.max(time.now(), lastGeneration + 1);
 	let intents = new Map<string, Intent>();
 	let allowances = new Map<string, Allowance>();
+	let floors = new Map<string, Floor>();
 	let since = new Map<string, number>();
 	let agent = new Map<string, { turn: string; since: number }>();
 	let seq = 0;
@@ -178,7 +194,9 @@ export function createTypingPresence(options: {
 		told = snapshot;
 		seq++;
 		for (let member of options.members()) {
-			if (!member.data.closed) tell(member, frameOf(writing, actor(member)));
+			if (!member.data.closed && (options.reads?.(member) ?? true)) {
+				tell(member, frameOf(writing, actor(member)));
+			}
 		}
 	}
 
@@ -190,6 +208,32 @@ export function createTypingPresence(options: {
 			seq,
 			typists: writing.filter(item => item.actor !== viewer).map(item => item.typist),
 		};
+	}
+
+	function newest(client: string, where: string): number {
+		let floor = floors.get(client);
+		return floor?.places.get(where) ?? floor?.base ?? -Infinity;
+	}
+
+	function reported(client: string, where: string, order: number) {
+		let floor = floors.get(client);
+		if (!floor) floors.set(client, floor = { base: -Infinity, places: new Map() });
+		floor.places.delete(where);
+		floor.places.set(where, order);
+		if (floor.places.size <= MAX_PLACE_FLOORS) return;
+		let [oldest, at] = floor.places.entries().next().value!;
+		floor.places.delete(oldest);
+		floor.base = Math.max(floor.base, at);
+	}
+
+	function retire(client: string) {
+		let ended = false;
+		for (let [key, intent] of intents) {
+			if (intent.client !== client) continue;
+			intents.delete(key);
+			ended = true;
+		}
+		if (ended) settle();
 	}
 
 	function room(key: string): boolean {
@@ -211,9 +255,9 @@ export function createTypingPresence(options: {
 			let order = report.seq;
 			if (where === undefined || typeof order !== "number" || !Number.isSafeInteger(order)) return;
 			let key = intentKey(client, where);
-			let earlier = intents.get(key);
-			if (earlier && order <= earlier.seq) return;
+			if (order <= newest(client, where)) return;
 			if (!room(key)) return;
+			reported(client, where, order);
 			let now = time.now();
 			if (!report.active) {
 				intents.set(key, {
@@ -264,14 +308,10 @@ export function createTypingPresence(options: {
 			intent.held = false;
 			settle();
 		},
+		retire,
 		depart(client) {
-			let ended = false;
-			for (let [key, intent] of intents) {
-				if (intent.client !== client) continue;
-				intents.delete(key);
-				ended = true;
-			}
-			if (ended) settle();
+			floors.delete(client);
+			retire(client);
 		},
 		composing(thread, turn, writing) {
 			if (closed) return;
@@ -295,6 +335,7 @@ export function createTypingPresence(options: {
 			timer = undefined;
 			intents.clear();
 			allowances.clear();
+			floors.clear();
 			since.clear();
 			agent.clear();
 		},

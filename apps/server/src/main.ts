@@ -774,13 +774,15 @@ async function plan(room: Rooms.Room, server: Server<SocketData>): Promise<Servi
 }
 
 /**
- * Who is writing in a document's Chat and threads, told to everyone in its room, who can all read
- * it, each without themselves.
+ * Who is writing in a document's Chat and threads, told to everyone in its room whose access has not
+ * lapsed, readers included, each without themselves. A socket whose access is refused closes and
+ * leaves the room, and a writer who can no longer write stops writing everywhere.
  */
 function watchTyping(room: Rooms.Room, opened: Service.Plan): void {
 	let typists = Typing.createTypingPresence({
 		threadExists: rootId => opened.chat.entries.some(entry => entry.id === rootId),
 		members: () => Rooms.get(room.id) === room && room.plan === opened ? room.members.values() : [],
+		reads: member => member.data.authorizedUntil > Date.now(),
 	});
 	opened.chat.typists = typists;
 	opened.chat.composing = (turn, writing) => typists.composing(undefined, turn, writing);
@@ -1448,7 +1450,9 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 						console.error("chopin: could not send thread summaries -", err)
 					);
 					let typists = opened.chat.typists;
-					if (typists && !ws.data.closed) tell(ws, typists.frame(Initiative.actor(ws)));
+					if (typists && !ws.data.closed && ws.data.authorizedUntil > Date.now()) {
+						tell(ws, typists.frame(Initiative.actor(ws)));
+					}
 				}
 				// What the Planner can be set to run, and what it is set to, for the composer.
 				if (!parent) {
@@ -2042,8 +2046,10 @@ function applyChannelAccess(
 	data.channelArchivedAt = archivedAt;
 	if (channel.fullWidth) data.channelFullWidth = true;
 	else delete data.channelFullWidth;
+	let lostWrite = data.canEdit && !canEdit;
 	data.canEdit = canEdit;
 	data.canManage = canManage;
+	if (lostWrite) Rooms.get(data.room)?.plan?.chat.typists?.retire(data.client);
 }
 
 async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<AuthorizationResult> {

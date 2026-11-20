@@ -507,6 +507,8 @@ export type Chat = {
 	composedTurn?: string;
 	/** The running turn whose reply is out, until it writes another. */
 	repliedTurn?: string;
+	/** The running turn that was stopped or failed: it writes nothing more, however long it takes to end. */
+	retiredTurn?: string;
 	/** The last sequence given to an entry or a snapshot (`chronology.ts`). */
 	lastSeq?: number;
 	/** For a thread Chat: the top-level Chat an entry appended here is copied into, if it is. */
@@ -774,7 +776,7 @@ function state(chat: Chat, server: Server<SocketData>, room: string): void {
  */
 function composed(chat: Chat): void {
 	let writing = chat.busy && chat.turn && !chat.turn.quiet && !chat.closed
-			&& chat.repliedTurn !== chat.turn.id
+			&& chat.repliedTurn !== chat.turn.id && chat.retiredTurn !== chat.turn.id
 		? chat.turn.id
 		: undefined;
 	let before = chat.composedTurn;
@@ -3487,6 +3489,11 @@ async function run(
 
 	let opened: { session: PlannerSession; binding: ActiveOwnerBinding } | undefined;
 	let turnController = new AbortController();
+	let retiring = chat.turn?.id;
+	turnController.signal.addEventListener("abort", () => {
+		chat.retiredTurn = retiring;
+		composed(chat);
+	}, { once: true });
 	let invalidate = () => turnController.abort();
 	if (about?.signal?.aborted) invalidate();
 	else about?.signal?.addEventListener("abort", invalidate, { once: true });

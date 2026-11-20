@@ -71,7 +71,7 @@ import {
 } from "./failure";
 import { TypingReporter } from "./typing";
 import { receiveTypists, threadsWithTypers, typersIn, typingWords } from "./typists";
-import { TypingAnnouncer } from "./typing-line";
+import { TypingAnnouncer, TypingLine } from "./typing-line";
 import { useSteadyCallback, useSteadyFields } from "./steady";
 import { asksChopin, asksChopinKey, withChopinMention } from "./ask-chopin";
 import { ChatComposer } from "./composer";
@@ -1498,6 +1498,10 @@ export function Chat(
 		}))
 		: "";
 	let chatTyping = typingWords(typersIn(typists, { viewer: handle, planner: !workingTurn }));
+	let chatTypers = typersIn(typists, { viewer: handle });
+	let threadTypers = openThreadView
+		? typersIn(typists, { thread: openThreadView.rootId, viewer: handle })
+		: undefined;
 	let threadPanelNode = openThreadView
 		? (
 			<Suspense fallback={null}>
@@ -1658,7 +1662,7 @@ export function Chat(
 	);
 	let renderSplit = (mainColumn: React.ReactNode) => (
 		<div className="chat-split-shell">
-			<TypingAnnouncer chat={chatTyping} thread={threadPanelNode ? threadTyping : undefined} />
+			<TypingAnnouncer chat={chatTypers} thread={threadPanelNode ? threadTypers : undefined} />
 			<div className="chat-split-main">
 				{mainColumn}
 			</div>
@@ -1699,6 +1703,7 @@ export function Chat(
 				{transcriptView}
 				<div className="chat-composer shrink-0">
 					<p className="px-4 py-3 text-sm text-text-tertiary">{notice}</p>
+					<TypingLine words={chatTyping} />
 				</div>
 			</div>,
 		);

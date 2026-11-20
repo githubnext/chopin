@@ -7,7 +7,7 @@
  */
 import { chatInput } from "./chat-input";
 import { textContrast } from "./rendered-contrast";
-import { expect, test } from "./room";
+import { authenticate, content, expect, roomPath, test } from "./room";
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -193,4 +193,32 @@ test("chopin's reaction answer that fails stops showing it replying", async ({ j
 	await expect(replying(main(bo), FAILING.id)).toHaveCount(0, { timeout: 60_000 });
 	await expect(replying(main(ana), FAILING.id)).toHaveCount(0);
 	await expect(line(main(bo))).toHaveText("");
+});
+
+test("someone who can only read sees who is writing in Chat and on a thread's row, and writes nothing", async ({ baseURL, browser, join, room, seed }) => {
+	test.setTimeout(120_000);
+	await seed("# Typing\nThe cache lives in the router.\n", { transcript: transcript() });
+	let ana = await join("ana", WIDE);
+	let context = await browser.newContext({ ...WIDE, baseURL });
+	try {
+		let reader = await context.newPage();
+		await authenticate(reader, "readonly", baseURL!);
+		await reader.goto(roomPath(room));
+		await expect(content(reader)).toHaveAttribute("contenteditable", "false");
+
+		await chatInput(main(ana)).pressSequentially("Thinking");
+		await expect(line(main(reader))).toHaveText("@ana is typing…");
+		await clear(chatInput(main(ana)));
+		await expect(line(main(reader))).toHaveText("");
+
+		let anaPanel = await openThread(ana, ROOT.id);
+		await chatInput(anaPanel).pressSequentially("Under the router");
+		await expect(replying(main(reader), ROOT.id)).toHaveText("@ana is replying…");
+		await expect(line(main(reader))).toHaveText("");
+		await expect(replying(main(ana), ROOT.id)).toHaveCount(0);
+		await clear(chatInput(anaPanel));
+		await expect(replying(main(reader), ROOT.id)).toHaveCount(0);
+	} finally {
+		await context.close();
+	}
 });
