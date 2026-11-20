@@ -238,6 +238,32 @@ async function setup() {
 				body: JSON.stringify(body),
 			}),
 		) as Promise<Response>;
+	/** Sends a request whose body stops once the proxy starts reading it, until it is released. */
+	let callPaused = (value: AiProviderGrant, path: string) => {
+		let reading = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		let body = new ReadableStream<Uint8Array>({
+			async pull(controller) {
+				reading.resolve();
+				await release.promise;
+				controller.enqueue(new TextEncoder().encode(JSON.stringify({ model: "a-model" })));
+				controller.close();
+			},
+		}, { highWaterMark: 0 });
+		let response = router.handle(
+			new Request(`${value.baseUrl}${path}`, {
+				method: "POST",
+				headers: {
+					[AI_LAUNCH_HEADER]: launchTokens.get(value.placeholder)!,
+					authorization: `Bearer ${value.placeholder}`,
+					"content-type": "application/json",
+				},
+				body,
+				duplex: "half",
+			} as RequestInit),
+		) as Promise<Response>;
+		return { response, reading: reading.promise, release: () => release.resolve() };
+	};
 	let list = async () =>
 		((await (await api("/api/ai/credentials")).json()) as { credentials: AiCredentialSummary[] })
 			.credentials;
@@ -258,6 +284,7 @@ async function setup() {
 		signInClaude,
 		launch,
 		call,
+		callPaused,
 		list,
 		restarted: () => new AiCredentials(credentialOptions),
 		advance(ms: number) {
@@ -285,6 +312,12 @@ function rotating(provider: string, extra: Record<string, string> = {}): TokenRe
 		});
 	};
 }
+
+/** Each subscription, with a model API path its stand-in is sent to. */
+const SIGNED_IN = [
+	{ provider: "chatgpt", path: "/responses" },
+	{ provider: "claude", path: "/v1/messages" },
+] as const;
 
 function challengeOf(verifier: string): string {
 	return createHash("sha256").update(verifier).digest("base64url");
@@ -425,6 +458,39 @@ describe("Sign in with ChatGPT", () => {
 		expect((await response.json() as { restart?: boolean }).restart).toBe(true);
 		expect(world.chatgptAuth.seen).toHaveLength(0);
 	});
+
+	it("saves nothing from a sign-in whose exchange finishes after ChatGPT was disconnected", async () => {
+		let world = await setup();
+		await world.signInChatgpt();
+		let reached = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		world.chatgptReply.current = async () => {
+			reached.resolve();
+			await release.promise;
+			return Response.json({
+				access_token: "chatgpt-access-late",
+				refresh_token: "chatgpt-refresh-late",
+				id_token: "chatgpt-id",
+				expires_in: 3600,
+				scope: CHATGPT_SCOPE,
+			});
+		};
+		let url = await world.start("chatgpt");
+		let finishing = world.finish("chatgpt", world.chatgptCallback(url));
+		await reached.promise;
+		expect((await world.api("/api/ai/credentials/chatgpt", { method: "DELETE" })).status).toBe(204);
+		release.resolve();
+
+		let late = await finishing;
+		expect(late.status).toBe(409);
+		expect(await late.json()).toEqual({
+			error:
+				"This ChatGPT sign-in was replaced by a newer one, or ChatGPT was disconnected, before it finished. Start it again.",
+			restart: true,
+		});
+		expect(await world.storage.aiCredentials.get("U_mona", "chatgpt")).toBeUndefined();
+		expect((await world.list()).map(value => value.provider)).not.toContain("chatgpt");
+	});
 });
 
 describe("Claude's sign-in", () => {
@@ -477,6 +543,81 @@ describe("Claude's sign-in", () => {
 			restart: true,
 		});
 		expect(await world.storage.aiCredentials.get("U_mona", "claude")).toEqual(connected);
+	});
+
+	it("never lets a sign-in whose exchange finishes after a newer one's replace it", async () => {
+		let world = await setup();
+		let reached = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		world.claudeReply.current = async fields => {
+			if (fields.code === "older") {
+				reached.resolve();
+				await release.promise;
+			}
+			return Response.json({
+				access_token: `claude-access-${fields.code}`,
+				refresh_token: `claude-refresh-${fields.code}`,
+				expires_in: 3600,
+			});
+		};
+		let older = await world.start("claude");
+		let finishing = world.finish("claude", `older#${older.searchParams.get("state")}`);
+		await reached.promise;
+		let newer = await world.start("claude");
+		expect((await world.finish("claude", `newer#${newer.searchParams.get("state")}`)).status)
+			.toBe(200);
+		let saved = await world.storage.aiCredentials.get("U_mona", "claude");
+		release.resolve();
+
+		let late = await finishing;
+		expect(late.status).toBe(409);
+		expect(await late.json()).toEqual({
+			error:
+				"This Claude sign-in was replaced by a newer one, or Claude was disconnected, before it finished. Start it again.",
+			restart: true,
+		});
+		expect(await world.storage.aiCredentials.get("U_mona", "claude")).toEqual(saved);
+		let { claude } = await world.launch();
+		expect(
+			(await world.call(claude!, "/v1/messages", {
+				authorization: `Bearer ${claude!.placeholder}`,
+			})).status,
+		).toBe(200);
+		expect(world.upstreams.claude.seen.map(seen => seen.headers.authorization)).toEqual([
+			"Bearer claude-access-newer",
+		]);
+	});
+
+	it("saves nothing from a sign-in that finishes once a newer one began, and saves the newer one", async () => {
+		let world = await setup();
+		let reached = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		world.claudeReply.current = async fields => {
+			if (fields.code === "older") {
+				reached.resolve();
+				await release.promise;
+			}
+			return Response.json({
+				access_token: `claude-access-${fields.code}`,
+				refresh_token: `claude-refresh-${fields.code}`,
+				expires_in: 3600,
+			});
+		};
+		let older = await world.start("claude");
+		let finishing = world.finish("claude", `older#${older.searchParams.get("state")}`);
+		await reached.promise;
+		let newer = await world.start("claude");
+		release.resolve();
+		expect((await finishing).status).toBe(409);
+		expect(await world.storage.aiCredentials.get("U_mona", "claude")).toBeUndefined();
+
+		expect((await world.finish("claude", `newer#${newer.searchParams.get("state")}`)).status)
+			.toBe(200);
+		let { claude } = await world.launch();
+		await world.call(claude!, "/v1/messages", { authorization: `Bearer ${claude!.placeholder}` });
+		expect(world.upstreams.claude.seen.map(seen => seen.headers.authorization)).toEqual([
+			"Bearer claude-access-newer",
+		]);
 	});
 
 	it("takes no key for a subscription", async () => {
@@ -694,6 +835,75 @@ describe("a subscription's stand-ins", () => {
 		expect((await world.call(chatgpt!, "/responses", headers)).status).toBe(200);
 		expect(world.upstreams.chatgpt.seen.map(seen => seen.headers.authorization)).toEqual([
 			"Bearer chatgpt-access-2",
+		]);
+	});
+
+	it("renew a token the provider refused while a request's body arrived, and send the request with the renewed one", async () => {
+		for (let { provider, path } of SIGNED_IN) {
+			let world = await setup();
+			await (provider === "chatgpt" ? world.signInChatgpt() : world.signInClaude());
+			let grant = (await world.launch())[provider]!;
+			let paused = world.callPaused(grant, path);
+			await paused.reading;
+			let record = (await world.storage.aiCredentials.get("U_mona", provider))!;
+			await world.credentials.rejected(record, `${provider}-access-1`);
+			paused.release();
+
+			expect((await paused.response).status).toBe(200);
+			expect(world.upstreams[provider].seen.map(seen => seen.headers.authorization)).toEqual([
+				`Bearer ${provider}-access-2`,
+			]);
+		}
+	});
+
+	it("refuse a request whose sign-in the provider stopped renewing while its body arrived, sending nothing", async () => {
+		for (let { provider, path } of SIGNED_IN) {
+			let world = await setup();
+			await (provider === "chatgpt" ? world.signInChatgpt() : world.signInClaude());
+			let grant = (await world.launch())[provider]!;
+			let paused = world.callPaused(grant, path);
+			await paused.reading;
+			let record = (await world.storage.aiCredentials.get("U_mona", provider))!;
+			await world.credentials.rejected(record, `${provider}-access-1`);
+			let reply = provider === "chatgpt" ? world.chatgptReply : world.claudeReply;
+			reply.current = () => Response.json({ error: "invalid_grant" }, { status: 400 });
+			let listed = (await world.list()).find(value => value.provider === provider)!;
+			expect(listed.rejectedAt).toBe(world.now().toISOString());
+			paused.release();
+
+			let refused = await paused.response;
+			expect(refused.status).toBe(403);
+			expect((await refused.json() as { error: { code: string } }).error.code).toBe(
+				"sign-in-ended",
+			);
+			expect(world.upstreams[provider].seen).toHaveLength(0);
+		}
+	});
+
+	it("never send a token the provider refused while the request's final check read the sign-in", async () => {
+		let world = await setup();
+		await world.signInClaude();
+		let { claude } = await world.launch();
+		let paused = world.callPaused(claude!, "/v1/messages");
+		await paused.reading;
+		let store = world.storage.aiCredentials;
+		let get = store.get.bind(store);
+		let reached = Promise.withResolvers<Awaited<ReturnType<typeof get>>>();
+		let release = Promise.withResolvers<void>();
+		store.get = async (userId, provider) => {
+			let record = await get(userId, provider);
+			store.get = get;
+			reached.resolve(record);
+			await release.promise;
+			return record;
+		};
+		paused.release();
+		await world.credentials.rejected((await reached.promise)!, "claude-access-1");
+		release.resolve();
+
+		expect((await paused.response).status).toBe(200);
+		expect(world.upstreams.claude.seen.map(seen => seen.headers.authorization)).toEqual([
+			"Bearer claude-access-2",
 		]);
 	});
 

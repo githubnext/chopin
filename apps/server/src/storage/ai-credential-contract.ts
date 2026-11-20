@@ -209,6 +209,46 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		test("connects a sign-in only over the connection stored when it began, counted as a replacement is", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId, lease } = await userAndChannel(storage);
+				let signIn = (at: Date): AiCredentialRecord => ({
+					userId,
+					provider: "chatgpt",
+					kind: "subscription",
+					ciphertext: bytes(48),
+					updatedAt: at,
+				});
+				let first = signIn(AT);
+				let version = storage.aiCredentials.version(userId);
+				expect(await storage.aiCredentials.signedIn(lease, first, undefined)).toBe(true);
+				expect(storage.aiCredentials.version(userId)).toBe(version + 1);
+				// Another that began while nothing was stored saves nothing over the one saved since.
+				expect(await storage.aiCredentials.signedIn(lease, signIn(later(10)), undefined)).toBe(
+					false,
+				);
+				expect(await storage.aiCredentials.get(userId, "chatgpt")).toEqual(first);
+
+				// Over the connection it began from, refreshed and refused since, it replaces it whole.
+				expect(await storage.aiCredentials.refreshed(lease, first, bytes(48))).toBe(true);
+				let refreshed = (await storage.aiCredentials.get(userId, "chatgpt"))!;
+				expect(await storage.aiCredentials.rejected(refreshed, later(20))).toBe(true);
+				let second = signIn(later(30));
+				expect(await storage.aiCredentials.signedIn(lease, second, first)).toBe(true);
+				expect(await storage.aiCredentials.get(userId, "chatgpt")).toEqual(second);
+
+				// One that began from a connection replaced or removed since saves nothing.
+				expect(await storage.aiCredentials.signedIn(lease, signIn(later(40)), first)).toBe(false);
+				expect(await storage.aiCredentials.get(userId, "chatgpt")).toEqual(second);
+				expect(await storage.aiCredentials.delete(lease, userId, "chatgpt")).toBe(true);
+				expect(await storage.aiCredentials.signedIn(lease, signIn(later(50)), second)).toBe(false);
+				expect(await storage.aiCredentials.get(userId, "chatgpt")).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
 		test("finds a placeholder by its digest until it expires, and refuses a repeated digest", async () => {
 			let storage = await openedStorage(factory);
 			try {
@@ -449,6 +489,7 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 					() => storage.machines.revoke(lease, machineId, machineOwner, AT),
 					() => storage.channels.archive({ id: channelId, now: AT, lease }),
 					() => storage.aiCredentials.put(lease, { ...key, ciphertext: bytes(48) }),
+					() => storage.aiCredentials.signedIn(lease, { ...key, ciphertext: bytes(48) }, key),
 					() => storage.aiCredentials.delete(lease, userId, "openai"),
 					() => storage.aiPlaceholders.deleteLaunch(lease, launchId),
 					() => storage.aiPlaceholders.deleteHeldLaunch(lease, launchDigest, machineId),

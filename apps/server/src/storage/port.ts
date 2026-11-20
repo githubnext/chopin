@@ -544,6 +544,18 @@ export interface AiCredentialStore {
 	 */
 	refreshed(lease: Lease, record: AiCredentialRecord, tokens: Uint8Array): Promise<boolean>;
 	/**
+	 * Connects a sign-in, `record`, in place of `replaced`, the connection stored for its person and
+	 * provider when the sign-in began exchanging its code (undefined when none was), only while that is
+	 * still the stored connection, refreshed or refused since or not, so a sign-in that finishes after
+	 * a newer one was saved, or after the one it began from was removed, saves nothing. Replaces it
+	 * whole, as `put` does, and is counted as `put` is. Returns whether it saved it.
+	 */
+	signedIn(
+		lease: Lease,
+		record: AiCredentialRecord,
+		replaced: AiCredentialRecord | undefined,
+	): Promise<boolean>;
+	/**
 	 * How many times this process has connected, replaced or removed one of `userId`'s credentials,
 	 * each counted once its write settles and before its caller hears so; one process serves a
 	 * database at a time, so while it holds the writer lease a count unchanged across a read says

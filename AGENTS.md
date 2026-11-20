@@ -197,13 +197,19 @@ durable.
   its deadline and its Copilot token's, both on one clock reading; changes that never settle fail the launch with a retryable error,
   never an empty grant list. A ChatGPT or Claude subscription is connected through that provider's own sign-in, as
   Atomic signs in (`ai/subscriptions.ts`: the person pastes back ChatGPT's callback address or
-  Claude's code); nothing is stored until the provider returns tokens, which are kept encrypted
+  Claude's code); nothing is stored until the provider returns tokens, and then only while that
+  sign-in is still the person's latest for the provider with no disconnect since (a newer sign-in or a
+  disconnect ends one whose code is still being exchanged), over the connection stored when its
+  exchange began; the tokens are kept encrypted
   and renewed before they expire, one refresh per connection at a time, each from the pair
   stored when it starts (or one renewed that storage couldn't save yet) and never over a newer
   pair; an access token the provider refuses makes the stored pair it belongs to due for renewal,
   in storage, and a late refusal of an older token marks nothing; a renewal the provider refuses
-  for good marks it `rejectedAt` only while the refused pair is still the stored one; an expired access
-  token is never sent, and a Claude token's requests carry Atomic's Claude Code headers and leading system block. An
+  for good marks it `rejectedAt` only while the refused pair is still the stored one; an expired or
+  refused access token is never sent: the final handoff sends a sign-in's request only with the pair
+  it has then, read with the rest and checked, with `rejectedAt`, on the clock reading the send is
+  decided on, and renews it first or refuses the request (`sign-in-ended`); a Claude token's
+  requests carry Atomic's Claude Code headers and leading system block. An
   OpenAI or Anthropic key is
   saved only once that provider accepts it, and given to no launch once it refuses it as
   invalid on a request (`rejectedAt`, until it is connected again) or while it doesn't

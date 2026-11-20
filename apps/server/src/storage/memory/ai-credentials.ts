@@ -82,6 +82,19 @@ export class MemoryAiCredentialStore implements AiCredentialStore {
 		found.tokens = new Uint8Array(tokens);
 		return true;
 	}
+	async signedIn(
+		lease: Lease,
+		record: AiCredentialRecord,
+		replaced: AiCredentialRecord | undefined,
+	) {
+		this.deps.assertLease(lease);
+		if (!this.deps.userExists(record.userId)) throw missing(`user ${record.userId} does not exist`);
+		let key = `${record.userId}\n${record.provider}`;
+		let current = replaced ? this.#same(replaced) !== undefined : !this.#records.has(key);
+		if (current) this.#records.set(key, copyCredential(record));
+		this.deps.cutoffs.cut(record.userId);
+		return current;
+	}
 	/** The stored row while it is still the credential `record` was read as. */
 	#same(record: AiCredentialRecord) {
 		let found = this.#records.get(`${record.userId}\n${record.provider}`);
