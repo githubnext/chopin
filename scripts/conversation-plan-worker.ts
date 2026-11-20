@@ -24,6 +24,7 @@ export function sourceHash(root: string): Promise<string> {
 	return treeHash(
 		root,
 		[
+			"apps/connector/package.json",
 			"apps/server",
 			"apps/web",
 			"packages",
