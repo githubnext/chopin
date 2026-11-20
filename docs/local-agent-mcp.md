@@ -154,22 +154,33 @@ can pass an `idempotencyKey`, a nonblank string of at most 128 characters:
 }
 ```
 
-Chopin records the key, durably, before it posts the instruction. A retry with
-the same key and the same request returns the first call's result and posts
-nothing, so a lost reply never posts the instruction twice or starts a second
-Planner turn. The request is the instruction text, `as`, and the document the
-call names, by UUID or URL. A different request under a used key is refused with
-`idempotency-conflict` and posts nothing. A key belongs to its caller and its
-document: another account, or the same account on another document, can use the
-same key without meeting yours.
+A retry with the same key and the same request returns the first call's result
+unchanged, even if the document was renamed since, and posts nothing. The request
+is the instruction text, `as`, and the document the call names, by UUID or URL. A
+different request under a used key is refused with `idempotency-conflict` and
+posts nothing. A key belongs to its caller and its document: another account, or
+the same account on another document, can use the same key without meeting yours.
+`invoke_planner`'s input schema in `tools/list` declares `idempotencyKey`; a
+client that finds it there can rely on this behaviour.
 
-A refusal that kept nothing, such as `planner-not-attached`, `planner-busy` or
-`system-turn-forbidden`, leaves the key unused, so a corrected request can reuse
-it. A failure that may have posted the instruction, such as `planner-unavailable`,
-a lost connection or a server restart, keeps the key for that request. Retry the
-same request under the same key, and Chopin posts it only if it was not posted
-before. Chopin keeps a key for 7 days, and deletes a document's keys with the
-document. Calls without a key post their instruction every time.
+Chopin records the key before it posts the instruction, and records that the
+instruction was delivered before its Planner turn starts. So whatever fails in
+between, retrying the same request under the same key posts the instruction at
+most once and starts at most one turn:
+
+- If the instruction was never posted, the retry posts it.
+- If it was posted but its turn did not start (the server stopped, or could not
+  record the start), the retry starts that turn without posting it again, or
+  returns the refusal that stops it now.
+- If its turn started, the retry returns the first result. A turn that a restart
+  interrupted is not run again, as for any other instruction.
+
+A refusal that posted nothing, such as `planner-not-attached`, `planner-busy` or
+`system-turn-forbidden`, leaves the key free, so a corrected request can use it.
+A different request under a key whose instruction was posted, even if its turn
+never started, is refused with `idempotency-conflict`. Chopin keeps a key for 7
+days, and deletes a document's keys with the document. Calls without a key post
+their instruction every time.
 
 `checkout` applies only when the server runs `HARNESS=atomic`, where the Planner
 is a [full Atomic session](hosted-agent.md#full-atomic-planner) with **shell and
@@ -184,12 +195,13 @@ neither verified, used, nor remembered.
 
 The result contains `id`, `title`, and the canonical `url` (plus any generated
 `description`). It returns after the instruction is durably posted, not after the
-Planner finishes. The message joins the existing Planner queue if busy. Progress
-and results appear in the document and Chat; questions appear in Decisions. Under
+Planner finishes. While a turn runs, the instruction is given to it or refused
+with `planner-busy` (see below); nothing waits in a queue. Progress and results
+appear in the document and Chat; questions appear in Decisions. Under
 `atomic`, Atomic input waits in Decisions until a member answers it or it is
 withdrawn, however long that takes. The
 browser need not already have the document open: Chopin keeps its room alive
-while the invoked turn and queue run. An interrupted turn is not replayed
+while the invoked turn runs. An interrupted turn is not replayed
 automatically on restart.
 
 ### Automatic follow-ups
@@ -208,9 +220,10 @@ its results. Add `"as": "system"` for those:
 
 Chat then shows a short system notice, `Automatic follow-up requested by
 @octocat.`, instead of a message from you. The instruction goes to the Planner
-alone and stays out of the visible queue while it waits. Ownership,
-`planner-not-attached`, the queue, `checkout`, and the result work as for any
-other instruction.
+alone. It needs a turn of its own, so it is refused with `planner-busy` while a
+turn runs. Ownership, `planner-not-attached`, `checkout`, `idempotencyKey`, and
+the result work as for any other instruction. A retry that finds its notice
+already posted is not counted against the hourly limit again.
 
 Only the document's creator, or the account whose client holds its Planner
 under `HARNESS=remote`, may send one; for a child document that means its root.

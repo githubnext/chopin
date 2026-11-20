@@ -54,7 +54,6 @@ import type {
 	MachineFavorite,
 	MachineRepository,
 	McpInvocation,
-	McpInvocationResult,
 	McpInvocationScope,
 	McpSession,
 	PauseBackgroundJob,
@@ -671,26 +670,26 @@ export interface McpSessionStore {
 /**
  * `invoke_planner` calls made under an idempotency key, one record per caller, document and key.
  * A call claims its key before its instruction is posted, naming the Chat entry the instruction
- * becomes, then completes the claim with its result, or releases a claim under which nothing was
- * kept. Writes are fenced by the writer lease. A record past `expiresAt` counts as absent, and a
- * document's records go with it.
+ * becomes and the result it answers, then marks the claim invoked before its turn starts, or
+ * releases a claim under which nothing was posted. Writes are fenced by the writer lease. A record
+ * past `expiresAt` counts as absent, and a document's records go with it.
  */
 export interface McpInvocationStore {
 	/**
-	 * Stores `invocation`, without a result, unless an unexpired record holds its scope. Returns the
+	 * Stores `invocation`, not invoked, unless an unexpired record holds its scope. Returns the
 	 * record that holds the scope afterwards, and whether it is this one.
 	 */
 	claim(
 		lease: Lease,
-		invocation: Omit<McpInvocation, "result">,
+		invocation: Omit<McpInvocation, "invokedAt">,
 	): Promise<{ record: McpInvocation; claimed: boolean }>;
-	/** Gives the claim naming `entryId` its result; false when no such claim waits for one. */
+	/** Marks the claim naming `entryId` invoked at `at`; false when no such claim waits for it. */
 	complete(
 		lease: Lease,
 		scope: McpInvocationScope & { entryId: string },
-		result: McpInvocationResult,
+		at: Date,
 	): Promise<boolean>;
-	/** Removes the claim naming `entryId` if it has no result; false when there is none. */
+	/** Removes the claim naming `entryId` unless it is invoked; false when there is none. */
 	release(lease: Lease, scope: McpInvocationScope & { entryId: string }): Promise<boolean>;
 	get(scope: McpInvocationScope): Promise<McpInvocation | undefined>;
 	/** Removes records that expired at or before `now`; returns how many. */

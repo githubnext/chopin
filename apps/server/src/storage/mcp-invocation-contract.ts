@@ -13,24 +13,27 @@ function later(ms: number): Date {
 	return new Date(AT.getTime() + ms);
 }
 
+const RESULT = {
+	document: { id: "document", title: "Release plan", url: "https://chopin.test/documents/a/b/c" },
+};
+
 function invocation(
 	scope: { userId: string; channelId: string },
-	overrides: Partial<Omit<McpInvocation, "result">> = {},
-): Omit<McpInvocation, "result"> {
+	overrides: Partial<Omit<McpInvocation, "invokedAt">> = {},
+): Omit<McpInvocation, "invokedAt"> {
 	return {
 		...scope,
 		key: "hand-off-1",
 		fingerprint: "fingerprint-1",
 		entryId: id("entry"),
+		result: RESULT,
 		createdAt: AT,
 		expiresAt: later(DAY_MS),
 		...overrides,
 	};
 }
 
-const RESULT = {
-	document: { id: "document", title: "Release plan", url: "https://chopin.test/documents/a/b/c" },
-};
+const INVOKED_AT = later(60_000);
 
 async function refusal(action: Promise<unknown>): Promise<StorageError> {
 	let error = await action.then(() => undefined, err => err);
@@ -40,7 +43,7 @@ async function refusal(action: Promise<unknown>): Promise<StorageError> {
 
 export function mcpInvocationContract(name: string, factory: StorageFactory) {
 	describe(`${name} invoke_planner idempotency keys`, () => {
-		test("keeps the first claim of a key, and its result once completed", async () => {
+		test("keeps the first claim of a key, and marks it invoked once", async () => {
 			let storage = await openedStorage(factory);
 			try {
 				let { userId, channelId, lease } = await userAndChannel(storage);
@@ -49,16 +52,20 @@ export function mcpInvocationContract(name: string, factory: StorageFactory) {
 					record: first,
 					claimed: true,
 				});
-				let rival = invocation({ userId, channelId }, { fingerprint: "other", entryId: id("e") });
+				let rival = invocation({ userId, channelId }, {
+					fingerprint: "other",
+					entryId: id("e"),
+					result: { document: { ...RESULT.document, title: "Renamed", description: "Later" } },
+				});
 				expect(await storage.mcpInvocations.claim(lease, rival)).toEqual({
 					record: first,
 					claimed: false,
 				});
-				expect(await storage.mcpInvocations.complete(lease, { ...rival }, RESULT)).toBe(false);
-				expect(await storage.mcpInvocations.complete(lease, first, RESULT)).toBe(true);
-				expect(await storage.mcpInvocations.complete(lease, first, RESULT)).toBe(false);
+				expect(await storage.mcpInvocations.complete(lease, { ...rival }, INVOKED_AT)).toBe(false);
+				expect(await storage.mcpInvocations.complete(lease, first, INVOKED_AT)).toBe(true);
+				expect(await storage.mcpInvocations.complete(lease, first, later(120_000))).toBe(false);
 				expect(await storage.mcpInvocations.release(lease, first)).toBe(false);
-				let completed = { ...first, result: RESULT };
+				let completed = { ...first, invokedAt: INVOKED_AT };
 				expect(await storage.mcpInvocations.get(first)).toEqual(completed);
 				expect(await storage.mcpInvocations.claim(lease, rival)).toEqual({
 					record: completed,
@@ -125,10 +132,10 @@ export function mcpInvocationContract(name: string, factory: StorageFactory) {
 				await storage.mcpInvocations.complete(
 					lease,
 					(await storage.mcpInvocations.get({ ...scopes[0]!, key: "hand-off-1" }))!,
-					RESULT,
+					INVOKED_AT,
 				);
 				expect(await storage.mcpInvocations.get({ ...scopes[1]!, key: "hand-off-1" }))
-					.not.toHaveProperty("result");
+					.not.toHaveProperty("invokedAt");
 				expect(await storage.mcpInvocations.get({ ...scopes[0]!, key: "hand-off-2" }))
 					.toBeUndefined();
 			} finally {
@@ -146,7 +153,7 @@ export function mcpInvocationContract(name: string, factory: StorageFactory) {
 					expiresAt: later(2 * DAY_MS),
 				});
 				await storage.mcpInvocations.claim(lease, expiring);
-				await storage.mcpInvocations.complete(lease, expiring, RESULT);
+				await storage.mcpInvocations.complete(lease, expiring, INVOKED_AT);
 				await storage.mcpInvocations.claim(lease, lasting);
 				let renewed = invocation({ userId, channelId }, {
 					fingerprint: "after-expiry",
@@ -177,10 +184,10 @@ export function mcpInvocationContract(name: string, factory: StorageFactory) {
 				let doomed = invocation({ userId, channelId });
 				let kept = invocation({ userId, channelId: other.channelId });
 				await storage.mcpInvocations.claim(lease, doomed);
-				await storage.mcpInvocations.complete(lease, doomed, RESULT);
+				await storage.mcpInvocations.complete(lease, doomed, INVOKED_AT);
 				await storage.mcpInvocations.claim(lease, kept);
 				await storage.channels.archive({ id: channelId, now: AT, lease });
-				expect(await storage.mcpInvocations.get(doomed)).toMatchObject({ result: RESULT });
+				expect(await storage.mcpInvocations.get(doomed)).toMatchObject({ invokedAt: INVOKED_AT });
 				expect(await storage.channels.delete(channelId)).toBe(true);
 				expect(await storage.mcpInvocations.get(doomed)).toBeUndefined();
 				expect(await storage.mcpInvocations.get(kept)).toEqual(kept);
@@ -206,7 +213,7 @@ export function mcpInvocationContract(name: string, factory: StorageFactory) {
 								lease,
 								invocation({ userId, channelId }, { key: "new" }),
 							),
-						() => storage.mcpInvocations.complete(lease, claim, RESULT),
+						() => storage.mcpInvocations.complete(lease, claim, INVOKED_AT),
 						() => storage.mcpInvocations.release(lease, claim),
 					]
 				) expect((await refusal(write())).failure).toBe("conflict");

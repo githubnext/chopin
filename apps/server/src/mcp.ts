@@ -178,12 +178,13 @@ export type InvokePlannerError =
 	| "planner-unavailable"
 	| "planner-busy"
 	| "system-turn-forbidden"
-	| "system-turn-limited";
+	| "system-turn-limited"
+	| "idempotency-conflict";
 
 export type InvokePlanner<Caller> = {
 	invoke(caller: Caller, input: InvokePlannerInput): Promise<
 		| { kind: "invoked"; document: DocumentSummary & { url: string } }
-		| { kind: "refused"; code: InvokePlannerError | "idempotency-conflict"; message?: string }
+		| { kind: "refused"; code: InvokePlannerError; message?: string }
 	>;
 };
 

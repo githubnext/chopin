@@ -1,14 +1,15 @@
 import { missing } from "../errors";
 
-import type { Lease, McpInvocation, McpInvocationResult, McpInvocationScope } from "../model";
+import type { Lease, McpInvocation, McpInvocationScope } from "../model";
 import type { McpInvocationStore } from "../port";
 
 function copy(value: McpInvocation): McpInvocation {
 	return {
 		...value,
+		result: structuredClone(value.result),
 		createdAt: new Date(value.createdAt),
 		expiresAt: new Date(value.expiresAt),
-		...(value.result ? { result: structuredClone(value.result) } : {}),
+		...(value.invokedAt ? { invokedAt: new Date(value.invokedAt) } : {}),
 	};
 }
 
@@ -24,7 +25,7 @@ export class MemoryMcpInvocationStore implements McpInvocationStore {
 			assertLease: (lease: Lease) => void;
 		},
 	) {}
-	async claim(lease: Lease, invocation: Omit<McpInvocation, "result">) {
+	async claim(lease: Lease, invocation: Omit<McpInvocation, "invokedAt">) {
 		this.deps.assertLease(lease);
 		if (!this.deps.channelExists(invocation.channelId)) {
 			throw missing(`channel ${invocation.channelId} does not exist`);
@@ -37,22 +38,18 @@ export class MemoryMcpInvocationStore implements McpInvocationStore {
 		this.#records.set(key, copy(invocation));
 		return { record: copy(invocation), claimed: true };
 	}
-	async complete(
-		lease: Lease,
-		scope: McpInvocationScope & { entryId: string },
-		result: McpInvocationResult,
-	) {
+	async complete(lease: Lease, scope: McpInvocationScope & { entryId: string }, at: Date) {
 		this.deps.assertLease(lease);
 		let held = this.#records.get(scopeKey(scope));
-		if (!held || held.result || held.entryId !== scope.entryId) return false;
-		held.result = structuredClone(result);
+		if (!held || held.invokedAt || held.entryId !== scope.entryId) return false;
+		held.invokedAt = new Date(at);
 		return true;
 	}
 	async release(lease: Lease, scope: McpInvocationScope & { entryId: string }) {
 		this.deps.assertLease(lease);
 		let key = scopeKey(scope);
 		let held = this.#records.get(key);
-		if (!held || held.result || held.entryId !== scope.entryId) return false;
+		if (!held || held.invokedAt || held.entryId !== scope.entryId) return false;
 		this.#records.delete(key);
 		return true;
 	}

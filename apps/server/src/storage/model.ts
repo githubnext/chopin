@@ -1294,7 +1294,7 @@ export type McpInvocationScope = {
 	key: string;
 };
 
-/** What a call that posted its instruction answered, returned again to every retry. */
+/** What a call answers once its instruction's turn starts, given again to every retry. */
 export type McpInvocationResult = {
 	document: { id: string; title: string; description?: string; url: string };
 };
@@ -1303,8 +1303,13 @@ export type McpInvocation = McpInvocationScope & {
 	fingerprint: string;
 	/** The Chat entry, or system notice, the instruction is posted as. */
 	entryId: string;
+	/** Fixed when the key is claimed, so a retry is given what the first call was. */
+	result: McpInvocationResult;
 	createdAt: Date;
 	expiresAt: Date;
-	/** Absent until the call that claimed the key finishes: its instruction may already be posted. */
-	result?: McpInvocationResult;
+	/**
+	 * Set before the instruction's turn starts. Until then the instruction may be posted or not,
+	 * which only the document's Chat says.
+	 */
+	invokedAt?: Date;
 };

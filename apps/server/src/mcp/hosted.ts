@@ -27,6 +27,7 @@ import { IdempotentInvocations, invocationFingerprint } from "./invoke";
 
 import type { Server } from "bun";
 import type { HostedAuth } from "../auth/routes";
+import type { KeyedInvocation } from "./invoke";
 import type { GitHubUser, Repository as GitHubRepository } from "../github/client";
 import type { AuthenticatedSession } from "../auth/session";
 import type { HostedRepository } from "../agent/repository";
@@ -82,11 +83,8 @@ export type PlannerInvocation = {
 	checkout?: string;
 	/** An automatic follow-up shown in Chat as a system notice rather than the caller's message. */
 	system?: boolean;
-	/**
-	 * The id the instruction's Chat entry, or system notice, takes. An entry Chat already holds
-	 * under it was posted by an earlier call with the same idempotency key, and is not posted again.
-	 */
-	entryId?: string;
+	/** The caller's idempotency key, settled against the root's Chat once the call is authorized. */
+	keyed?: KeyedInvocation;
 };
 
 export type ImplementationPersistence = { lease(): Lease };
@@ -551,7 +549,12 @@ export function hosted(
 							code: "document-unavailable",
 						};
 					}
-					let deliver = async (entryId?: string) => {
+					let document = {
+						...summary(channel),
+						url: new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin)
+							.href,
+					};
+					let deliver = async (keyed?: KeyedInvocation) => {
 						if (channel.archivedAt) return { kind: "refused", code: "document-archived" } as const;
 						let code = await callbacks.invokePlanner!({
 							channel,
@@ -561,30 +564,29 @@ export function hosted(
 							instruction: input.instruction,
 							...(input.checkout === undefined ? {} : { checkout: input.checkout }),
 							...(input.as === "system" ? { system: true } : {}),
-							...(entryId === undefined ? {} : { entryId }),
+							...(keyed ? { keyed } : {}),
 						});
-						let url =
-							new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
 						if (code === "planner-not-attached") {
 							let fullName = `${repository.owner}/${repository.name}`;
 							return {
 								kind: "refused",
 								code,
-								message: await callbacks.plannerNotAttached?.(channel.id, url, fullName)
-									?? notAttachedMessage(url, fullName),
+								message: await callbacks.plannerNotAttached?.(channel.id, document.url, fullName)
+									?? notAttachedMessage(document.url, fullName),
 							} as const;
 						}
 						if (code === "planner-busy") {
 							return { kind: "refused", code, message: CANNOT_STEER } as const;
 						}
 						if (code) return { kind: "refused", code } as const;
-						return { kind: "invoked", document: { ...summary(channel), url } } as const;
+						return { kind: "invoked", document } as const;
 					};
 					if (input.idempotencyKey === undefined) return deliver();
 					if (!invocations) throw new Error("storage writer lease is unavailable");
 					return invocations.run(
 						{ userId: caller.user.id, channelId: channel.id, key: input.idempotencyKey },
 						invocationFingerprint(input, channel.id),
+						{ document },
 						deliver,
 					);
 				},
