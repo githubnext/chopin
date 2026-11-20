@@ -215,7 +215,9 @@ durable.
   OpenAI or Anthropic key is
   saved only once that provider accepts it, and given to no launch once it refuses it as
   invalid on a request (`rejectedAt`, until it is connected again) or while it doesn't
-  decrypt. The model catalog route serves only a
+  decrypt. A Copilot token is saved only once GitHub's exchange or Copilot's model API takes
+  it, or GitHub names no seat for it; one both refuse (422) or that couldn't be asked (502)
+  leaves the sign-in or the token connected before. The model catalog route serves only a
   request carrying one of a live launch's placeholders with that launch's credential,
   while the process holds the writer lease, and none with a placeholder in its query or
   another header or a query field that can't be decoded.

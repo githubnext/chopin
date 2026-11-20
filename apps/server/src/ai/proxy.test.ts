@@ -652,6 +652,115 @@ describe("GitHub Copilot access through a GitHub sign-in", () => {
 		expect((await launch(world)).grants.map(grant => grant.provider)).toEqual(["github-copilot"]);
 	});
 
+	it("takes a token in place of a sign-in that has a seat, then gives launches the token's Copilot until the sign-in is chosen again", async () => {
+		let world = await setup();
+		let token = "github_pat_mona_other_account_beef";
+		// A fine-grained personal access token: GitHub won't exchange it, Copilot's model API takes it.
+		world.notExchanged.add(token);
+		world.takenRaw.add(token);
+		expect(await access(world)).toBe("access");
+		let sent = async () => {
+			let copilot = (await launch(world)).grants[0]!;
+			let models = await world.call(copilot, "/models", {
+				headers: { authorization: `Bearer ${copilot.placeholder}` },
+			});
+			expect(models.status).toBe(200);
+			return world.upstreams.copilot.seen.at(-1)!.headers.authorization;
+		};
+		let before = (await launch(world)).grants[0]!;
+		expect(await sent()).toBe("Bearer tid=copilot;for=ghu_mona_signed_in");
+
+		let connected = await world.connect(world.mona, "github-copilot", {
+			kind: "api-key",
+			secret: token,
+		});
+		expect(connected.status).toBe(200);
+		expect(await connected.json()).toMatchObject({
+			provider: "github-copilot",
+			kind: "api-key",
+			suffix: "beef",
+			copilotAccess: "access",
+		});
+		expect(await sent()).toBe(`Bearer ${token}`);
+		// A launch handed Copilot before the switch is sent what the person connected now.
+		let earlier = await world.call(before, "/models", {
+			headers: { authorization: `Bearer ${before.placeholder}` },
+		});
+		expect(earlier.status).toBe(200);
+		expect(world.upstreams.copilot.seen.at(-1)!.headers.authorization).toBe(`Bearer ${token}`);
+
+		let removed = await world.api("/api/ai/credentials/github-copilot", world.mona, {
+			method: "DELETE",
+		});
+		expect(removed.status).toBe(204);
+		expect(await access(world)).toBe("access");
+		expect(await sent()).toBe("Bearer tid=copilot;for=ghu_mona_signed_in");
+	});
+
+	it("saves a Copilot token only once GitHub or Copilot takes it, or GitHub says its account has no seat", async () => {
+		let world = await setup();
+		let connect = (secret: string) =>
+			world.connect(world.mona, "github-copilot", { kind: "api-key", secret });
+		let listed = async () =>
+			((await (await world.api("/api/ai/credentials", world.mona)).json()) as {
+				credentials: Array<{ kind: string; suffix?: string }>;
+			}).credentials[0]!;
+		let sent = async () => {
+			let copilot = (await launch(world)).grants[0]!;
+			expect(
+				(await world.call(copilot, "/models", {
+					headers: { authorization: `Bearer ${copilot.placeholder}` },
+				})).status,
+			).toBe(200);
+			return world.upstreams.copilot.seen.at(-1)!.headers.authorization;
+		};
+		let refusedBoth = "github_pat_mona_typo_dead";
+		world.notExchanged.add(refusedBoth);
+		let unasked = "gho_mona_while_github_fails_f00d";
+		world.entitled.set(unasked, 503);
+		let refusals = async () => {
+			let refused = await connect(refusedBoth);
+			expect(refused.status).toBe(422);
+			expect(await refused.json()).toEqual({
+				error: "GitHub refused this token for Copilot. Check it and try again.",
+			});
+			let failed = await connect(unasked);
+			expect(failed.status).toBe(502);
+			expect(await failed.json()).toEqual({
+				error: "Chopin couldn't check this token with GitHub now. Try again in a moment.",
+			});
+		};
+
+		// Neither a token nobody takes nor one GitHub couldn't be asked about replaces the sign-in.
+		await refusals();
+		expect(await world.storage.aiCredentials.list("U_mona")).toEqual([]);
+		expect(await listed()).toMatchObject({ kind: "github-sign-in" });
+		expect(await sent()).toBe("Bearer tid=copilot;for=ghu_mona_signed_in");
+
+		// A token GitHub exchanges is saved, and neither refusal replaces it either.
+		let exchanged = await connect("gho_mona_copilot_cli_c0de");
+		expect(exchanged.status).toBe(200);
+		expect(await exchanged.json()).toMatchObject({ suffix: "c0de", copilotAccess: "access" });
+		await refusals();
+		expect(await listed()).toMatchObject({ kind: "api-key", suffix: "c0de" });
+		expect(await sent()).toBe("Bearer tid=copilot;for=gho_mona_copilot_cli_c0de");
+
+		// So is one Copilot's model API takes itself, and one whose account GitHub says has no seat.
+		let raw = "github_pat_mona_copilot_requests_beef";
+		world.notExchanged.add(raw);
+		world.takenRaw.add(raw);
+		expect(await (await connect(raw)).json()).toMatchObject({
+			suffix: "beef",
+			copilotAccess: "access",
+		});
+		expect(await sent()).toBe(`Bearer ${raw}`);
+		world.entitled.set("gho_mona_no_seat_0000", 403);
+		expect(await (await connect("gho_mona_no_seat_0000")).json()).toMatchObject({
+			suffix: "0000",
+			copilotAccess: "none",
+		});
+	});
+
 	it("reaches Copilot through a sign-in GitHub won't exchange, sending its GitHub token to Copilot's model API alone, as Copilot's CLI does", async () => {
 		let world = await setup();
 		// GitHub refuses a GitHub App's user token a Copilot token, a seat-holder's too.

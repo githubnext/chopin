@@ -97,6 +97,32 @@ test("GitHub Copilot through a sign-in with a seat is connected, takes a token i
 	await expect(copilot.getByRole("button", { name: "Use a token instead" })).toBeFocused();
 });
 
+test("a token GitHub refuses for Copilot is said under the field and leaves the sign-in in place", async ({ baseURL, page }) => {
+	await open(page, person(), baseURL!);
+	let copilot = row(page, "GitHub Copilot");
+	await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+	await copilot.getByRole("button", { name: "Use a token instead" }).click();
+	let dialog = page.getByRole("dialog", { name: "Use a GitHub token for Copilot" });
+	let field = dialog.getByLabel("GitHub token");
+	await field.fill("gho_e2e_refused_token_dead");
+	await dialog.getByRole("button", { name: "Use token" }).click();
+	let refusal = "GitHub refused this token for Copilot. Check it and try again.";
+	await expect(dialog.getByRole("alert")).toHaveText(refusal);
+	await expect(field).toHaveAttribute("aria-invalid", "true");
+	await expect(field).toHaveAccessibleDescription(new RegExp(`Copilot Requests.*${refusal}`));
+	let listed = await page.evaluate(async () => await (await fetch("/api/ai/credentials")).text());
+	expect(listed).toContain('"kind":"github-sign-in"');
+	expect(listed).not.toContain("dead");
+
+	await dialog.getByRole("button", { name: "Cancel" }).click();
+	await expect(dialog).toHaveCount(0);
+	await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+	await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
+	await page.reload();
+	await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
+	await expect(copilot.getByText("Token ending dead")).toHaveCount(0);
+});
+
 test("without a seat, Copilot says so, links to Copilot, and takes a token instead", async ({ baseURL, page }) => {
 	let handle = person();
 	await copilotAccess(handle, "none");

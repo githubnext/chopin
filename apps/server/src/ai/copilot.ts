@@ -34,6 +34,16 @@ export const COPILOT_RAW_TOKEN_HEADERS = { "copilot-integration-id": "copilot-de
 const RAW_ANSWER_MS = 30 * 60_000;
 
 /**
+ * A GitHub token neither GitHub's exchange nor Copilot's model API takes: GitHub refused to exchange
+ * it (a 4xx, for a reason other than the account's subscription or its rate limit), and Copilot's
+ * model API refused it (401 or 403). It says nothing about the account, only that this token reaches
+ * no Copilot.
+ */
+export class CopilotTokenRefused extends Error {
+	override name = "CopilotTokenRefused";
+}
+
+/**
  * What Copilot's model API takes for a GitHub token, until `expiresAt` (milliseconds since the
  * epoch): the Copilot token GitHub exchanges it for, at `api` when GitHub names the account's own
  * host; or, when GitHub won't exchange it but Copilot's model API takes it (`raw`), the GitHub
@@ -91,8 +101,9 @@ async function noSeat(response: Response): Promise<boolean> {
  * refuses others whatever the account has (a GitHub App's user token, another app's OAuth token or
  * a personal access token, a seat-holder's included); then Copilot's model API is asked whether it
  * takes the GitHub token itself, as Copilot's own CLI sends one (its model list, `GET /models`), and
- * the token is used that way when it does. Throws when neither can be asked or answers anything else,
- * which says nothing about the account, a refusal for GitHub's rate limit included.
+ * the token is used that way when it does. Throws `CopilotTokenRefused` when Copilot's model API
+ * refuses it too, and another error when neither can be asked or answers anything else; neither says
+ * anything about the account, and a refusal for GitHub's rate limit is never `CopilotTokenRefused`.
  */
 export function copilotTokenExchange(
 	options: {
@@ -134,6 +145,9 @@ export function copilotTokenExchange(
 		});
 		await models.body?.cancel();
 		if (models.ok) return { token: githubToken, expiresAt: clock() + RAW_ANSWER_MS, raw: true };
-		throw new Error(`${refused}, and Copilot's model API ${models.status} to the GitHub token`);
+		let both = `${refused}, and Copilot's model API ${models.status} to the GitHub token`;
+		// GitHub failing to answer (a 5xx) doesn't say it wouldn't exchange the token.
+		let declined = response.status < 500 && (models.status === 401 || models.status === 403);
+		throw declined ? new CopilotTokenRefused(both) : new Error(both);
 	};
 }

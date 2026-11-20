@@ -922,7 +922,13 @@ characters with no spaces. An OpenAI or Anthropic key is first checked with one
 request to that provider (`GET /v1/models`) and saved only when the provider
 accepts it: a refusal (401 or 403) is answered 422 with the provider's name, and
 a provider that can't be asked 502, and either leaves any key already connected
-as it was. A saved key is stored encrypted with AES-GCM under a key
+as it was. A GitHub Copilot token is first asked of GitHub as a launch asks (see
+GitHub Copilot below) and saved when GitHub exchanges it, Copilot's model API
+takes it, or GitHub says its account has no Copilot subscription (listed with
+`copilotAccess: "none"`). One GitHub refused to exchange (a 4xx, for neither the
+account's subscription nor its rate limit) and Copilot's model API refused too
+(401 or 403) is answered 422, and one that couldn't be asked 502; either leaves
+the sign-in, or the token connected before, as it was. A saved key is stored encrypted with AES-GCM under a key
 derived from `SESSION_ENCRYPTION_KEY`, bound to its person and provider
 (`ai_credentials` in [Storage](storage.md)). One the server can no longer open, such as
 one saved under an encryption key since replaced, is listed `unusable: true`
