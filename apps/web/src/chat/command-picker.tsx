@@ -1,5 +1,5 @@
 import { COMMAND_KINDS } from "@chopin/protocol/commands";
-import { GlobeIcon, PlayIcon, SparkleIcon, TerminalIcon, WrenchIcon } from "@chopin/icons";
+import { GlobeIcon, SparkleIcon, TerminalIcon, WrenchIcon } from "@chopin/icons";
 import { useEffect } from "react";
 import { ComposerCommandItem } from "@/components/assistant-ui/elements/composer";
 import { ComposerPopover } from "./assistant-ui/composer-popover";
@@ -7,7 +7,7 @@ import { referenceOptionId } from "./reference-picker";
 
 import type { ChatCommand } from "./commands";
 
-/** The row's icon is the kind the command is: Chat's own, a skill, a prompt template, a workflow. */
+/** The row's icon is the kind the command is: Chat's own, a skill, a prompt template, another. */
 function icon(command: ChatCommand) {
 	if (command.source === "chat") return GlobeIcon;
 	switch (command.commandKind) {
@@ -15,8 +15,6 @@ function icon(command: ChatCommand) {
 			return SparkleIcon;
 		case COMMAND_KINDS.prompt:
 			return TerminalIcon;
-		case COMMAND_KINDS.workflow:
-			return PlayIcon;
 		default:
 			return WrenchIcon;
 	}

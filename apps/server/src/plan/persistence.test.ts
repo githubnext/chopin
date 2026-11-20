@@ -318,60 +318,47 @@ describe("hosted plan persistence", () => {
 			.toThrow("hosted channel has an invalid transcript image");
 	});
 
-	it("restores workflow run cards, with runs still live then stopped", async () => {
+	it("opens a document an earlier release saved with run cards, and saves it without them", async () => {
 		let context = await hosted();
 		let plan = await Service.open(context.channel.id, context.backend, context.server);
-		let stage = {
-			id: "run-1:draft",
-			name: "draft-1",
-			status: "running" as const,
-			started: 100,
-			parentIds: ["run-1:parent"],
-		};
-		plan.chat.runs = [
-			{
-				id: "run-1",
-				name: "plan-review",
-				status: "running",
-				started: 100,
-				updated: 160,
-				stages: [{ id: "run-1:parent", name: "parent", status: "stopped" }, stage],
-				waiting: 1,
-			},
-			{
-				id: "run-0",
-				name: "docs-pass",
-				status: "finished",
-				started: 10,
-				updated: 90,
-				ended: 90,
-				stages: [{ ...stage, id: "run-0:draft", status: "completed", ended: 90 }],
-				earlierStages: 3,
-				waiting: 0,
-			},
-		];
-		await Service.persist(plan);
+		let epoch = plan.document.epoch;
 		await Service.close(plan);
+		let card = {
+			id: "run-1",
+			name: "plan-review",
+			status: "running",
+			started: 100,
+			updated: 160,
+			stages: [{ id: "run-1:draft", name: "draft-1", status: "running", started: 100 }],
+			waiting: 0,
+		};
+		await context.storage.collaboration.commit({
+			channelId: context.channel.id,
+			lease: context.lease,
+			expectedRevision: 0,
+			operationId: "earlier-release-runs",
+			epoch,
+			sidecar: {
+				version: 1,
+				revision: 0,
+				documentSeq: 0,
+				questions: [],
+				openQuestions: [],
+				threads: [],
+				transcript: [],
+				workflowRuns: [card],
+			},
+			events: [],
+			now: context.now,
+		});
 
 		let restored = await Service.open(context.channel.id, context.backend, context.server);
-		expect(restored.chat.runs?.map(run => [run.id, run.status, run.waiting])).toEqual([
-			["run-1", "stopped", 0],
-			["run-0", "finished", 0],
-		]);
-		expect(restored.chat.runs?.[0]?.ended).toBeNumber();
-		expect(restored.chat.runs?.[0]?.stages).toEqual([
-			{ id: "run-1:parent", name: "parent", status: "stopped" },
-			stage,
-		]);
-		expect(restored.chat.runs?.[1]).toMatchObject({ ended: 90, earlierStages: 3 });
+		expect(Object.hasOwn(restored.chat, "runs")).toBe(false);
+		appendEntries(restored.chat, { id: ulid(), author: { kind: "agent" }, text: "Saved.", ts: 1 });
+		await Service.persist(restored);
 		await Service.close(restored);
-
-		let empty = await Service.open(context.channel.id, context.backend, context.server);
-		empty.chat.runs = undefined;
-		await Service.persist(empty);
-		await Service.close(empty);
-		expect((await Service.open(context.channel.id, context.backend, context.server)).chat.runs)
-			.toBeUndefined();
+		let stored = (await context.storage.collaboration.load(context.channel.id, context.now))!;
+		expect(Object.hasOwn(stored.sidecar as object, "workflowRuns")).toBe(false);
 	});
 
 	it("restores typed chat references with their observed target state", async () => {

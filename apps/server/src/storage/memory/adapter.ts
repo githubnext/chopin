@@ -7,7 +7,6 @@ import { MemoryBackgroundJobStore } from "./jobs";
 import { MemoryExperimentStore } from "./experiments";
 import { MemoryChatAttachmentStore } from "./chat-attachments";
 import { MemoryImageStore } from "./images";
-import { MemoryRunStageStore } from "./run-stages";
 import { MemoryDecisionAnswerStore } from "./decision-answers";
 import { MemoryDocumentVersionStore } from "./versions";
 import { MemoryMachineStore } from "./machines";
@@ -84,7 +83,6 @@ import type {
 	PlannerLinkHoldStore,
 	PlannerModelChoiceStore,
 	ResearchWorkspaceStore,
-	RunStageStore,
 	SessionStore,
 	StorageAdapter,
 	UserStore,
@@ -200,8 +198,6 @@ export class MemoryStorage implements StorageAdapter {
 		userExists: id => this.#users.has(id),
 	});
 	readonly chatAttachments: ChatAttachmentStore = this.#chatAttachments;
-	readonly #runStages = new MemoryRunStageStore(id => this.#channels.has(id));
-	readonly runStages: RunStageStore = this.#runStages;
 	readonly #decisionAnswers = new MemoryDecisionAnswerStore(id => this.#channels.has(id));
 	readonly decisionAnswers: DecisionAnswerStore = this.#decisionAnswers;
 	readonly #versions = new MemoryDocumentVersionStore({
@@ -760,7 +756,6 @@ export class MemoryStorage implements StorageAdapter {
 		this.#jobs.deleteChannel(id);
 		this.#images.deleteChannel(id);
 		this.#chatAttachments.deleteChannel(id);
-		this.#runStages.deleteChannel(id);
 		this.#decisionAnswers.deleteChannel(id);
 		this.#versions.deleteChannel(id);
 		this.#plannerHolds.deleteChannel(id);

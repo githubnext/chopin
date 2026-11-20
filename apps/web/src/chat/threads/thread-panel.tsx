@@ -54,7 +54,6 @@ import {
 	reviseComposerDraft,
 	sendFailure,
 } from "../references";
-import { runCounts, RunStack } from "../run-card";
 import { ThreadRoot, Transcript } from "../transcript";
 import { offersStop, progressOf, shownWork } from "../transcript-state";
 import { ThreadComposerBoundary } from "./composer-boundary";
@@ -97,12 +96,6 @@ export type ThreadPanelProps = {
 	modelControl?: ComposerModel;
 	modelNotice?: ComposerNotice;
 	decisions?: TranscriptDecisions;
-	loadStages: (
-		runId: string,
-		page: { offset: number; limit: number },
-		signal: AbortSignal,
-	) => Promise<{ stages: Wire.RunStage[]; total: number }>;
-	onShowDecisions?: () => void;
 	onAlsoToChatChange: (checked: boolean) => void;
 	onClose: (options?: { restoreFocus?: boolean }) => void;
 	/** Who else is writing in this thread (`typingWords`), under its composer. */
@@ -132,8 +125,6 @@ export function ThreadPanel(
 		modelControl,
 		modelNotice,
 		decisions,
-		loadStages,
-		onShowDecisions,
 		onAlsoToChatChange,
 		onClose,
 		typing,
@@ -442,7 +433,6 @@ export function ThreadPanel(
 		reactable,
 	);
 
-	let counts = runCounts(view.runs);
 	let live = connected && view.loaded;
 	let { working: workingTurn, suspended: suspendedWork, settled: settledWork } = useMemo(
 		() => progressOf(view.transcript, live, false),
@@ -609,21 +599,6 @@ export function ThreadPanel(
 					working={workingTurn}
 				/>
 			</ImagePlace.Provider>
-
-			{agent && !!view.runs?.length && (
-				<div className="chat-runs flex shrink-0 flex-col px-2.5 pb-2" data-thread-runs="">
-					<RunStack
-						loadStages={loadStages}
-						offline={offline}
-						onPause={runId =>
-							wire?.send("chat:pause-run", { runId, thread: view.rootId })}
-						onResume={runId =>
-							wire?.send("chat:resume-run", { runId, thread: view.rootId })}
-						onShowDecisions={onShowDecisions}
-						runs={view.runs}
-					/>
-				</div>
-			)}
 
 			<ThreadComposerBoundary
 				agent={agent}
@@ -816,17 +791,11 @@ export function ThreadPanel(
 					}
 					: undefined}
 				rootRef={composerRoot}
-				run={agent && (offersStop(view.busy, view.transcript.turn, false) || counts.active > 0)
+				run={agent && offersStop(view.busy, view.transcript.turn, false)
 					? {
 						action: "stop",
 						disabled: !composerReady,
 						onClick: () => wire?.send("chat:abort", { thread: view.rootId }),
-					}
-					: agent && !view.busy && !counts.active && counts.paused > 0
-					? {
-						action: "resume",
-						disabled: !composerReady,
-						onClick: () => wire?.send("chat:resume", { thread: view.rootId }),
 					}
 					: undefined}
 				sendDisabled={!draftable || submitting || !draft.text.trim() || !composerReady}

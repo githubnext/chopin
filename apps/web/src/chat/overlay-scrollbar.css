@@ -97,9 +97,9 @@
 }
 
 /*
- * The transcript's lower edge, above the run strip or the composer: its last 16px fade into the pane,
+ * The transcript's lower edge, above the build card or the composer: its last 16px fade into the pane,
  * so a line scrolled past it fades out as at the top edge instead of ending on a hard line that reads
- * as the strip covering it. Resting on the newest line the fade lies on the transcript's own bottom
+ * as the card covering it. Resting on the newest line the fade lies on the transcript's own bottom
  * space, under no text. It is drawn over the scroller rather than in it, so scrolling restyles nothing.
  */
 .workspace-root:not([data-workspace-phone]) .chat-scroll-host::after {

@@ -49,7 +49,8 @@ if (url) {
 			});
 			let owner = await first.channels.claimAgentOwner(channelId, sessionId, now);
 			let leaseA = (await first.leases.acquire(name, "first", 60_000))!;
-			// What the first process's cut persists for a link that was live, with a run under way.
+			// What the first process's cut persists for a link that was live, with a question open. An
+			// earlier release also kept a workflow run's Stop there, which this one reads past.
 			await first.plannerHolds.put(leaseA, {
 				channelId,
 				userId,
@@ -105,14 +106,12 @@ if (url) {
 						disconnected: false,
 					});
 					expect(attachments.attached(channelId)).toBe(false);
-					expect(attachments.restoredWork(channelId)).toBe("live");
 					expect(seen).toEqual([]);
 
 					// Nobody resumes: the window ends, the Planner is disconnected, and the miss is named.
 					await until(() => seen.length > 0);
 					expect(seen).toEqual([{ state: "disconnected", login: "mona" }]);
 					expect(missed).toEqual(["login"]);
-					expect(attachments.restoredWork(channelId)).toBe("down");
 					// Its row stays for a client that returns later: no deadline ends it.
 					expect(await second.plannerHolds.get(channelId)).toMatchObject({
 						sessions: [{
@@ -286,7 +285,6 @@ if (url) {
 
 					await later.restore(await second.plannerHolds.list());
 					expect(later.status(channelId)).toEqual({ state: "disconnected", login: "mona" });
-					expect(later.restoredWork(channelId)).toBe("down");
 				} finally {
 					rebuilt.close();
 					later.close();

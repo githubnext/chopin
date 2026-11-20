@@ -8,7 +8,7 @@
 export type SendStopAction = "send" | "stop";
 
 export type SendStopInput = {
-	/** The Planner has a turn or workflow runs going. */
+	/** The Planner has a turn going. */
 	running: boolean;
 	/** The draft has something in it besides white space. */
 	hasDraft: boolean;

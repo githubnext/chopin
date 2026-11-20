@@ -9,7 +9,6 @@ import type {
 	ClientMessage,
 	ClientMessageOf,
 	InputCall,
-	LinkRun,
 	RefusalCode,
 	ServerMessage,
 	ServerMessageOf,
@@ -26,7 +25,6 @@ export const WIRE = {
 	malformedClose: 4400,
 	/** The upgrade request header asking for optional features, and the ones this client knows. */
 	featuresHeader: "chopin-agent-features",
-	runStageDeltas: "run-stage-deltas",
 	decisionOptionPreviews: "decision-option-previews",
 	resumableSessions: "resumable-sessions",
 	restartNotice: "restart-notice",
@@ -88,8 +86,6 @@ export type AgentHandlers = {
 	/** Ends the turn as finished when it resolves without calling `end`, failed when it rejects. */
 	turn(context: TurnContext): void | Promise<void>;
 	destroy?(message: ServerMessageOf<"destroy">): void;
-	/** Stop or resume the session's workflow runs; throw to report that it could not. */
-	control?(message: ServerMessageOf<"stop"> | ServerMessageOf<"resume">): void | Promise<void>;
 	/**
 	 * Gives a person's message to the turn that is running, to read at its next step. Throw to say
 	 * the turn could not take it. Having it asks for `steer-turn`; a turn that has already ended is
@@ -195,9 +191,6 @@ export type LinkClosed = {
 };
 
 export type InputOptions = {
-	workflowRunId?: string;
-	workflowStageId?: string;
-	rootRunId?: string;
 	/**
 	 * The block the question concerns, from the Planner's latest read of the document; its card
 	 * goes beside that block. A block that has changed since leaves the card unlinked.
@@ -221,11 +214,6 @@ export type AgentClient = {
 		input: InputCall,
 		options?: InputOptions,
 	): Promise<ServerMessageOf<"input-result">>;
-	/**
-	 * Reports the session's runs. Delta cards need a server that offers `run-stage-deltas`; a
-	 * report too large for one frame is sent as several, splitting the delta cards' stages.
-	 */
-	reportRuns(session: string, runs: { active: string[]; paused: string[]; cards: LinkRun[] }): void;
 	/**
 	 * Reports a changed catalog, replacing the earlier one whole. False when the server did not
 	 * accept `capability-catalog` or the link is no longer open.
@@ -290,7 +278,6 @@ export function linkSocket(
 		headers: {
 			authorization: `Bearer ${token}`,
 			[WIRE.featuresHeader]: [
-				WIRE.runStageDeltas,
 				WIRE.decisionOptionPreviews,
 				...(resumable ? [WIRE.resumableSessions, WIRE.restartNotice] : []),
 				...(catalog ? [WIRE.capabilityCatalog] : []),
@@ -306,8 +293,6 @@ export function linkSocket(
 		protocols: [WIRE.subprotocol],
 	});
 }
-
-type RunsReport = { active: string[]; paused: string[]; cards: LinkRun[] };
 
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
 
@@ -421,42 +406,6 @@ export async function fitImages(
 		if (bytes(fitted) <= WIRE.maxMessageBytes) return fitted;
 	}
 	return message;
-}
-
-/**
- * `runs` messages that each fit a frame: every one a complete report, with the delta cards'
- * stages spread across them in order. Later parts carry every card as a delta, so a full card
- * replaces the run's stages only once.
- */
-export function splitRuns(session: string, runs: RunsReport): ClientMessageOf<"runs">[] {
-	let whole: ClientMessageOf<"runs"> = { type: "runs", session, ...runs };
-	if (bytes(whole) <= WIRE.maxMessageBytes) return [whole];
-	let pending = runs.cards.flatMap((card, index) =>
-		"stagesDelta" in card
-			? card.stages.map(stage => ({ index, stage, size: bytes(stage) + 1 }))
-			: []
-	);
-	let parts: ClientMessageOf<"runs">[] = [];
-	let next = 0;
-	while (next < pending.length || !parts.length) {
-		let cards: LinkRun[] = runs.cards.map(card => {
-			if (!parts.length && !("stagesDelta" in card)) return card;
-			let { earlierStages: _, ...fields } = card as Extract<LinkRun, { earlierStages?: number }>;
-			return { ...fields, stagesDelta: true, stages: [] };
-		});
-		let size = bytes({ type: "runs", session, ...runs, cards });
-		let start = next;
-		while (next < pending.length && size + pending[next]!.size <= WIRE.maxMessageBytes) {
-			let { index, stage, size: added } = pending[next++]!;
-			cards[index]!.stages.push(stage);
-			size += added;
-		}
-		if (next === start && next < pending.length) {
-			throw new Error("A run report exceeds the agent connection's size limit.");
-		}
-		parts.push({ type: "runs", session, ...runs, cards });
-	}
-	return parts;
 }
 
 const LINK_CLOSED = "The agent connection closed.";
@@ -741,21 +690,6 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 			case "restarting":
 				restartWithin = message.reconnectWithinMs;
 				return;
-			case "stop":
-			case "resume":
-				try {
-					if (!options.handlers.control) throw new Error("This Planner has no workflow runs.");
-					await options.handlers.control(message);
-					send({ type: "control-result", request: message.request, ok: true });
-				} catch (error) {
-					send({
-						type: "control-result",
-						request: message.request,
-						ok: false,
-						message: reason(error),
-					});
-				}
-				return;
 			case "destroy":
 				sessions.delete(message.session);
 				for (let [key, turn] of turns) {
@@ -806,7 +740,7 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 		},
 		ask(session, input, inputOptions = {}) {
 			let request = crypto.randomUUID();
-			let { signal, ...workflow } = inputOptions;
+			let { signal, ...placed } = inputOptions;
 			let withdrawn = (text: string) =>
 				Promise.resolve<ServerMessageOf<"input-result">>({
 					type: "input-result",
@@ -820,7 +754,7 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 			asks.set(request, pending);
 			let sent: boolean;
 			try {
-				sent = send({ type: "input-request", request, session, ...workflow, input });
+				sent = send({ type: "input-request", request, session, ...placed, input });
 			} catch (error) {
 				asks.delete(request);
 				return Promise.reject(error);
@@ -849,14 +783,6 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 			return features;
 		},
 		resumption: resumption.promise,
-		reportRuns(session, runs) {
-			if (
-				!features.includes(WIRE.runStageDeltas) && runs.cards.some(card => "stagesDelta" in card)
-			) {
-				throw new Error("This Chopin does not accept stage deltas; report full run cards.");
-			}
-			for (let part of splitRuns(session, runs)) send(part);
-		},
 		report(catalog) {
 			if (!features.includes(WIRE.capabilityCatalog)) return false;
 			return send({ type: "capabilities", catalog });

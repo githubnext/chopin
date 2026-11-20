@@ -137,9 +137,8 @@ import {
 	sendFailure,
 	shownSendFailure,
 } from "./references";
-import { runCounts, RunStack } from "./run-card";
+import { BuildCard } from "./run-card";
 import type { BuildRun } from "../build-model";
-import { runStages } from "../api";
 import { ResizeHandle } from "../resizable-pane";
 import { WorkspaceThreadContext } from "../workspace";
 import { THREAD_MIN } from "./threads/split-layout";
@@ -222,9 +221,7 @@ export type ChatProps = {
 	decisions?: TranscriptDecisions;
 	researchOffers?: ResearchOfferControls;
 	sourceDestination?: ChatDestination;
-	/** Opens Decisions, where a waiting workflow's questions are. */
-	onShowDecisions?: () => void;
-	/** The document's running build, which the run strip shows first. */
+	/** The document's running build, which Chat shows in a card under its transcript. */
 	build?: BuildRun;
 	/** Opens Build, where the running build's tasks are. */
 	onShowBuild?: () => void;
@@ -344,7 +341,6 @@ export function Chat(
 		machine,
 		plannerComing,
 		onTranscript,
-		onShowDecisions,
 		build,
 		onShowBuild,
 		onResearch,
@@ -442,12 +438,6 @@ export function Chat(
 	let [flushed, setFlushed] = useState(0);
 	let [unanswered, setUnanswered] = useState<Record<string, Wire.Entry>>({});
 	let [busy, setBusy] = useState(false);
-	let [runs, setRuns] = useState<Wire.Runs>();
-	let loadStages = useCallback(
-		(runId: string, page: { offset: number; limit: number }, signal: AbortSignal) =>
-			runStages(room, runId, page, signal),
-		[room],
-	);
 	let [participation, setParticipation] = useState<{
 		room: string;
 		wire: Socket;
@@ -457,7 +447,6 @@ export function Chat(
 	let typing = useRef<TypingReporter | undefined>(undefined);
 	let pacing = useRef<PacingReporter | undefined>(undefined);
 	let [typists, setTypists] = useState<Typists>();
-	let counts = runCounts(runs);
 	// What the document's agent can be set to run, and what everyone in the room has set it to.
 	let {
 		control: modelControl,
@@ -627,7 +616,7 @@ export function Chat(
 	let busyRefused = refusedWhileBusy(
 		askingChopin || alone,
 		sendError?.code,
-		busy || counts.active > 0,
+		busy,
 	);
 	// An image goes where people read it, and to the Planner only if its model does.
 	let imagesAllowed = !agent || !(askingChopin || alone)
@@ -832,7 +821,6 @@ export function Chat(
 				setBusy(frame.busy);
 				reportedBusy.current = frame.busy;
 				reportedWorking.current = frame.busy && !frame.turn?.quiet;
-				setRuns(frame.runs);
 				setParticipation({ room, wire, state: frame.participation });
 				setParticipationKey(current => current + 1);
 				// History is not unread, but a turn already in progress still needs
@@ -902,7 +890,6 @@ export function Chat(
 				reportedWorking.current = working;
 				setBusy(frame.busy);
 				dispatchTranscript({ kind: "turn", turn: frame.turn });
-				setRuns(frame.runs);
 			}),
 			wire.on<Wire.ParticipationState>("chat:participation", frame => {
 				if (!loaded || synchronized.current !== wire) return;
@@ -1309,9 +1296,9 @@ export function Chat(
 		dispatchIntents({ kind: "ask", id, emoji, on, seq: ++reactionSeq.current });
 	}, []);
 
-	// Stop and Resume pressed during a blip are sent once it is over, or never.
-	let heldControl = useRef<"chat:abort" | "chat:resume">(undefined);
-	let control = (kind: "chat:abort" | "chat:resume") => {
+	// Stop pressed during a blip is sent once it is over, or never.
+	let heldControl = useRef<"chat:abort">(undefined);
+	let control = (kind: "chat:abort") => {
 		if (wire?.connected) wire.send(kind);
 		else heldControl.current = kind;
 	};
@@ -1531,7 +1518,6 @@ export function Chat(
 					focus={focus}
 					handle={handle}
 					key={openThreadView.rootId}
-					loadStages={loadStages}
 					modelControl={pillModel}
 					modelNotice={modelNotice}
 					offline={offline}
@@ -1542,7 +1528,6 @@ export function Chat(
 							value,
 						})}
 					onClose={closeThread}
-					onShowDecisions={onShowDecisions}
 					people={people}
 					readonly={readonly}
 					root={entries.find(entry => entry.id === openThreadView.rootId)}
@@ -1733,20 +1718,9 @@ export function Chat(
 			{offlineBarNode && <div className="chat-offline-slot">{offlineBarNode}</div>}
 			{transcriptView}
 
-			{(agent && !!runs?.length || build) && (
+			{build && (
 				<div className="chat-runs flex shrink-0 flex-col px-2.5 pb-2" data-chat-runs="">
-					<RunStack
-						build={build}
-						onShowBuild={onShowBuild}
-						loadStages={loadStages}
-						offline={offline}
-						onPause={runId =>
-							wire?.send("chat:pause-run", { runId })}
-						onResume={runId =>
-							wire?.send("chat:resume-run", { runId })}
-						onShowDecisions={onShowDecisions}
-						runs={agent ? runs ?? [] : []}
-					/>
+					<BuildCard build={build} onShowBuild={onShowBuild} />
 				</div>
 			)}
 
@@ -1835,18 +1809,12 @@ export function Chat(
 					|| busyRefused
 					|| (connectionNotice !== "none" && !draftCommand(draft.text) && !plannerBound)}
 				onSubmit={submit}
-				run={agent && (offersStop(busy, transcript.turn, busyRefused) || counts.active > 0)
+				run={agent && offersStop(busy, transcript.turn, busyRefused)
 					? {
 						action: "stop",
 						disabled: !composerReady && connectionNotice !== "none",
 						refusedWhileBusy: busyRefused,
 						onClick: () => control("chat:abort"),
-					}
-					: agent && !busy && !counts.active && counts.paused > 0
-					? {
-						action: "resume",
-						disabled: !composerReady && connectionNotice !== "none",
-						onClick: () => control("chat:resume"),
 					}
 					: undefined}
 				pickers={

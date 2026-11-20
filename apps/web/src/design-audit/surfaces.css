@@ -3,7 +3,7 @@
 @import "./plates/navigation.css";
 @import "./plates/ai-accounts.css";
 @import "./plates/conversation.css";
-@import "./plates/workflow-runs.css";
+@import "./plates/running-build.css";
 @import "./plates/identity.css";
 @import "./plates/decisions.css";
 @import "./plates/resolved-comments.css";

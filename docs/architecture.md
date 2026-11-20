@@ -162,8 +162,7 @@ connection closes when that login ends or the document's Planner is reset.
 Turns run on the client's model; Chopin's host
 tools, Decisions, and room writes still run in the server under the document's
 Planner owner and the permission checks above. The client sees what a turn sees
-and steers its document writes during turns writers start; its run reports never
-start a turn. See [Remote Planner](hosted-agent.md#remote-planner) and
+and steers its document writes during turns writers start. See [Remote Planner](hosted-agent.md#remote-planner) and
 [Agent connection](agent-connection.md).
 
 ## State ownership

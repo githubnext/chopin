@@ -299,9 +299,9 @@ async function watch(page: Page): Promise<void> {
 						field?.hasAttribute("readonly") ? "read-only" : "writable"
 					} ${
 						[...composer.querySelectorAll("button")]
-							// Send follows what is typed, and Stop and Resume follow whether a turn is running.
+							// Send follows what is typed, and Stop follows whether a turn is running.
 							.filter(button =>
-								!/^(Send message|Stop generating|Resume chopin)$/.test(
+								!/^(Send message|Stop generating)$/.test(
 									button.getAttribute("aria-label") ?? "",
 								)
 							)

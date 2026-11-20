@@ -29,7 +29,7 @@ describe("the commands the agent reports", () => {
 			["Prompt templates", "review"],
 			["Skills", "skill:release-notes"],
 			["Skills", "skill:notes"],
-			["Workflows", "ship"],
+			["workflow", "ship"],
 			["Pipeline", "deploy"],
 		]);
 		// A repeated entry is its own row, with its own description and its own key.

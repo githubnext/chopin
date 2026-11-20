@@ -81,10 +81,6 @@
 			"types": "./restart.ts",
 			"default": "./restart.ts"
 		},
-		"./run-stages": {
-			"types": "./run-stages.ts",
-			"default": "./run-stages.ts"
-		},
 		"./threads": {
 			"types": "./threads.ts",
 			"default": "./threads.ts"

@@ -170,7 +170,6 @@ async function reactNow(
 					: (({ reactions: _reactions, ...rest }) => ({ ...rest, reactionsSeq }))(value))
 				: value
 		),
-		runs: chat.runs,
 		initiativePaused: chat.initiativePaused,
 	}));
 	if (next.reactions.length) entry.reactions = next.reactions;

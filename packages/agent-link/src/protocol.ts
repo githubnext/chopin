@@ -21,16 +21,14 @@ export const AGENT_SUBPROTOCOL = "chopin.agent.v1";
  * request carried the header, so a client that never asks never sees the field.
  */
 export const AGENT_FEATURES = {
-	/** `runs` cards may carry `stagesDelta: true` with only new and changed stages, uncounted. */
-	runStageDeltas: "run-stage-deltas",
 	/**
 	 * A question option's `preview` is its own framed Markdown visual on every card surface, and
 	 * the turn's host tools include `upload_plan_image`, which stores an image the Planner made.
 	 */
 	decisionOptionPreviews: "decision-option-previews",
 	/**
-	 * After a link drops unexpectedly, the server keeps the sessions that have a live or paused
-	 * run, an open question or an answer the client has not acknowledged, however long the client
+	 * After a link drops unexpectedly, the server keeps the sessions that have an open question or
+	 * an answer the client has not acknowledged, however long the client
 	 * stays away, and the same account's next link takes them back with `resume`. The client
 	 * acknowledges each `input-result` with `input-received`. Without the feature a closed link
 	 * ends everything it held.
@@ -160,8 +158,8 @@ const MAX_ID = 128;
 const MAX_NAME = 128;
 const MAX_NOTE = MAX_LINK_NOTE_LENGTH;
 const MAX_TOOLS = 256;
-const MAX_RUNS = 64;
-const MAX_STAGES = 64;
+/** The most sessions one link keeps across a drop. */
+const MAX_HELD_SESSIONS = 64;
 const MAX_QUESTIONS = 16;
 const MAX_OPTIONS = 32;
 const MAX_TURN_ATTACHMENTS = 20;
@@ -173,7 +171,6 @@ const name = z.string().min(1).max(MAX_NAME);
 const note = z.string().max(MAX_NOTE);
 const text = z.string().max(MAX_LINK_MESSAGE_BYTES);
 const count = z.number().int().nonnegative();
-const seconds = z.number().int().nonnegative();
 const json = z.json();
 
 const finishReason = z.strictObject({
@@ -295,7 +292,7 @@ export const catalogModelSchema = z.looseObject({
 });
 
 /**
- * One command a client offers, such as a skill, a prompt template or a workflow. `kind` says
+ * One command a client offers, such as a skill or a prompt template. `kind` says
  * which, as a string the client defines. Chopin keeps the entries it is given and shows none of
  * them yet.
  */
@@ -436,50 +433,6 @@ export const inputSchema = z.discriminatedUnion("method", [
 	z.strictObject({ method: z.literal("editor"), title: note, initial: note.optional() }),
 ]);
 
-const runStage = z.strictObject({
-	id,
-	name: z.string().max(MAX_NOTE),
-	parentIds: z.array(id).max(MAX_STAGES).optional(),
-	kind: z.literal("tool").optional(),
-	status: z.enum([
-		"pending",
-		"running",
-		"awaiting_input",
-		"paused",
-		"blocked",
-		"completed",
-		"failed",
-		"skipped",
-		"stopped",
-	]),
-	started: seconds.optional(),
-	ended: seconds.optional(),
-});
-
-const runFields = {
-	id,
-	name: z.string().max(MAX_NOTE),
-	status: z.enum(["running", "waiting", "paused", "finished", "blocked", "failed", "stopped"]),
-	started: seconds,
-	updated: seconds,
-	ended: seconds.optional(),
-	waiting: count,
-};
-
-/**
- * A workflow run card, as Chat shows it. A full card's `stages` replace the run's, at most 64,
- * with `earlierStages` counting those it leaves out. A delta card (`stagesDelta: true`) adds
- * new stages and replaces changed ones by id, keeping the rest; only the frame bounds how many.
- */
-export const runSchema = z.union([
-	z.strictObject({
-		...runFields,
-		stages: z.array(runStage).max(MAX_STAGES),
-		earlierStages: count.optional(),
-	}),
-	z.strictObject({ ...runFields, stagesDelta: z.literal(true), stages: z.array(runStage) }),
-]);
-
 const checkout = z.strictObject({
 	origin: z.string().max(2_048).optional(),
 	branch: z.string().max(256).optional(),
@@ -490,7 +443,7 @@ const checkout = z.strictObject({
 const heldSessions = z.array(z.strictObject({
 	session: id,
 	requests: z.array(id).max(MAX_OPEN_REQUESTS),
-})).max(MAX_RUNS);
+})).max(MAX_HELD_SESSIONS);
 
 /** An environment variable's name, as a runner sets a provider's key variable. */
 const variable = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/);
@@ -553,9 +506,6 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
 		type: z.literal("input-request"),
 		request: id,
 		session: id,
-		workflowRunId: id.optional(),
-		workflowStageId: id.optional(),
-		rootRunId: id.optional(),
 		/** The block the question concerns, as the Planner's latest read of the document names it. */
 		block: z.strictObject({
 			index: z.number().int().nonnegative(),
@@ -570,13 +520,6 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
 	 * session that waits to deliver it, until this arrives.
 	 */
 	z.strictObject({ type: z.literal("input-received"), request: id }),
-	z.strictObject({
-		type: z.literal("runs"),
-		session: id,
-		active: z.array(id).max(MAX_RUNS),
-		paused: z.array(id).max(MAX_RUNS),
-		cards: z.array(runSchema).max(MAX_RUNS),
-	}),
 	z.strictObject({
 		type: z.literal("control-result"),
 		request: id,
@@ -766,8 +709,6 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 		value: json.optional(),
 		message: note.optional(),
 	}),
-	z.strictObject({ type: z.literal("stop"), request: id, session: id, run: id.optional() }),
-	z.strictObject({ type: z.literal("resume"), request: id, session: id, run: id.optional() }),
 	z.strictObject({ type: z.literal("destroy"), session: id }),
 	/**
 	 * The answer to `resume`: the sessions the server kept and gave back, each with the questions
@@ -789,7 +730,6 @@ export type ToolError = z.infer<typeof toolErrorSchema>;
 export type ToolImage = z.infer<typeof toolImageSchema>;
 export type InputCall = z.infer<typeof inputSchema>;
 export type InputMethod = InputCall["method"];
-export type LinkRun = z.infer<typeof runSchema>;
 export type RefusalCode = z.infer<typeof refusalCodeSchema>;
 export type ProtocolErrorCode = Extract<ServerMessage, { type: "error" }>["code"];
 export type ClientMessageOf<T extends ClientMessage["type"]> = Extract<ClientMessage, { type: T }>;

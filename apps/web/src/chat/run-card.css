@@ -36,7 +36,7 @@
 	}
 }
 
-/* The hairline between runs is the line's own, so the pointer on it is on the line (run-row.css). */
+/* The hairline between lines is the line's own, so the pointer on it is on the line (run-row.css). */
 .run-row + .run-row > .run-head {
 	border-top: var(--edge-width) solid var(--color-edge);
 }
@@ -61,21 +61,6 @@
 	}
 }
 
-/*
- * Every reported stage scrolls in its own bounded lane, so a long run never pushes the composer
- * away. It takes focus so keys can scroll it; the padding gives the pulse room to draw without
- * moving rows.
- */
-.run-stages-all {
-	max-block-size: min(15rem, 40dvh);
-	margin: calc(var(--spacing) * -1);
-	padding: var(--spacing);
-	overflow-x: hidden;
-	overflow-y: auto;
-	overscroll-behavior: contain;
-	border-radius: var(--radius-md);
-}
-
 .run-ring {
 	display: inline-block;
 	flex-shrink: 0;
@@ -87,11 +72,6 @@
 	color: var(--color-text-quaternary);
 }
 
-/* The Planner is away: still, and not the quiet grey of work that ended, as its dot in Chat. */
-.run-ring[data-run-disconnected] {
-	color: var(--color-warning);
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.run-chevron {
 		transition: none;
@@ -99,9 +79,9 @@
 }
 
 /*
- * The runs card under Chat's transcript, however many runs are unfolded, takes at most half of
- * Chat's height and scrolls in its own lane beyond that, so it never pushes the transcript off the
- * top or the composer off the bottom.
+ * The running build's card under Chat's transcript takes at most half of Chat's height and scrolls
+ * in its own lane beyond that, so it never pushes the transcript off the top or the composer off
+ * the bottom.
  */
 .chat-runs {
 	max-block-size: 50%;

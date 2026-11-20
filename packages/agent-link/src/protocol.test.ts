@@ -64,7 +64,6 @@ describe("Agent connection messages", () => {
 				type: "input-request",
 				request: "r",
 				session: "s",
-				workflowRunId: "run",
 				input: {
 					method: "questionnaire",
 					params: {
@@ -77,7 +76,6 @@ describe("Agent connection messages", () => {
 				},
 			},
 			{ type: "input-cancel", request: "r" },
-			{ type: "runs", session: "s", active: [], paused: ["run"], cards: [] },
 			{ type: "control-result", request: "r", ok: false, message: "no" },
 			{ type: "detach" },
 		];
@@ -109,70 +107,29 @@ describe("Agent connection messages", () => {
 		}
 	});
 
-	it("accepts optional stage parents and stopped stages without changing the connection version", () => {
-		let message = {
-			type: "runs" as const,
-			session: "s",
-			active: [],
-			paused: [],
-			cards: [{
-				id: "run",
-				name: "review",
-				status: "stopped" as const,
-				started: 1,
-				updated: 2,
-				waiting: 0,
-				stages: [
-					{ id: "parent", name: "parent", status: "stopped" as const },
-					{ id: "child", name: "child", status: "running" as const, parentIds: ["parent"] },
-				],
-			}],
-		};
-		expect(parseClientMessage(JSON.stringify(message))).toEqual({ ok: true, message });
-		message.cards[0]!.stages[1]!.parentIds = Array(65).fill("parent");
-		expect(parseClientMessage(JSON.stringify(message))).toMatchObject({ ok: false });
-	});
-
-	it("accepts a delta card with any number of stages, bounded only by the frame", () => {
-		let stages = Array.from({ length: 500 }, (_, index) => ({
-			id: `s${index}`,
-			name: `stage ${index}`,
-			status: "completed" as const,
-			...(index ? { parentIds: [`s${index - 1}`] } : {}),
-		}));
-		let card = {
-			id: "run",
-			name: "review",
-			status: "running" as const,
-			started: 1,
-			updated: 2,
-			waiting: 0,
-			stagesDelta: true as const,
-			stages,
-		};
-		let message = {
-			type: "runs" as const,
-			session: "s",
-			active: ["run"],
-			paused: [],
-			cards: [card],
-		};
-		expect(parseClientMessage(JSON.stringify(message))).toEqual({ ok: true, message });
-		let { stagesDelta: _, ...full } = card;
-		expect(parseClientMessage(JSON.stringify({ ...message, cards: [full] }))).toMatchObject({
-			ok: false,
-			code: "malformed-message",
-		});
-		let short = { ...full, stages: stages.slice(0, 64) };
-		expect(parseClientMessage(JSON.stringify({ ...message, cards: [short] }))).toMatchObject({
-			ok: true,
-		});
-		for (let wrong of [{ ...card, earlierStages: 3 }, { ...card, stagesDelta: false }]) {
-			expect(parseClientMessage(JSON.stringify({ ...message, cards: [wrong] }))).toMatchObject({
+	it("knows no run reports or run control: a client's runs and a server's stop or resume are malformed", () => {
+		for (
+			let message of [
+				{ type: "runs", session: "s", active: [], paused: [], cards: [] },
+				{
+					type: "input-request",
+					request: "r",
+					session: "s",
+					workflowRunId: "run",
+					input: { method: "confirm", title: "Ship?", message: "Now." },
+				},
+			]
+		) {
+			expect(parseClientMessage(JSON.stringify(message))).toMatchObject({
 				ok: false,
 				code: "malformed-message",
 			});
 		}
+		for (let type of ["stop", "resume"]) {
+			expect(parseServerMessage(JSON.stringify({ type, request: "r", session: "s" })))
+				.toMatchObject({ ok: false });
+		}
+		expect(Object.values(AGENT_FEATURES)).not.toContain("run-stage-deltas");
 	});
 
 	it("lets attached name the features a client asked for, without changing the version", () => {
@@ -180,9 +137,8 @@ describe("Agent connection messages", () => {
 			type: "attached" as const,
 			version: AGENT_VERSION,
 			document: { id: "d", title: "T", repository: "o/r" },
-			features: [AGENT_FEATURES.runStageDeltas],
+			features: [AGENT_FEATURES.decisionOptionPreviews],
 		};
-		expect(AGENT_FEATURES.runStageDeltas).toBe("run-stage-deltas");
 		expect(AGENT_FEATURES.decisionOptionPreviews).toBe("decision-option-previews");
 		expect(AGENT_FEATURES_HEADER).toBe("chopin-agent-features");
 		expect(parseServerMessage(encodeMessage(attached))).toEqual({ ok: true, message: attached });
@@ -323,7 +279,6 @@ describe("Agent connection messages", () => {
 			maxNoteLength: MAX_LINK_NOTE_LENGTH,
 			malformedClose: 4400,
 			featuresHeader: AGENT_FEATURES_HEADER,
-			runStageDeltas: AGENT_FEATURES.runStageDeltas,
 			decisionOptionPreviews: AGENT_FEATURES.decisionOptionPreviews,
 			resumableSessions: AGENT_FEATURES.resumableSessions,
 			restartNotice: AGENT_FEATURES.restartNotice,

@@ -66,7 +66,6 @@ import type {
 	PublishInitialResearchReportResult,
 	PutChatAttachment,
 	PutImage,
-	PutRunStages,
 	PutUser,
 	RecordDocumentVersion,
 	RecordNavigationVisit,
@@ -84,7 +83,6 @@ import type {
 	ResetInitialResearchAttempt,
 	ResetInitialResearchAttemptResult,
 	ResumeBackgroundJob,
-	RunStageRecord,
 	SaveCheckpoint,
 	SaveDecisionAnswer,
 	SessionCredentials,
@@ -217,27 +215,6 @@ export interface ChatAttachmentStore {
 	discardEntry(channelId: string, entryId: string): Promise<number>;
 	/** Forgets uploads nobody sent that are older than `before`; how many it forgot. */
 	prune(before: Date): Promise<number>;
-}
-
-/**
- * Every stage of each workflow run a document's Chat shows, in the order the run first reported
- * them. Bounded per stage, not per run.
- */
-export interface RunStageStore {
-	/**
-	 * Adds stages by id: a known one is replaced whole where it stands, a new one follows the
-	 * run's others in input order; a repeated id keeps its last value. With `replace` the run keeps
-	 * exactly these. Returns how many stages the run then has.
-	 */
-	put(input: PutRunStages): Promise<number>;
-	/** The run's stages from `offset`, at most `limit`, and how many it has. */
-	list(
-		channelId: string,
-		runId: string,
-		page: { offset: number; limit: number },
-	): Promise<{ stages: RunStageRecord[]; total: number }>;
-	/** Forgets the stages of every run in the document but these. */
-	retain(channelId: string, runIds: string[]): Promise<void>;
 }
 
 /**
@@ -743,7 +720,6 @@ export interface StorageAdapter {
 	readonly research: ResearchWorkspaceStore;
 	readonly images: ImageStore;
 	readonly chatAttachments: ChatAttachmentStore;
-	readonly runStages: RunStageStore;
 	readonly decisionAnswers: DecisionAnswerStore;
 	readonly versions: DocumentVersionStore;
 	readonly machines: MachineStore;

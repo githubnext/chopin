@@ -1385,7 +1385,7 @@ describe("a document on Default machine", () => {
 		let planner: RemotePlanner = {
 			channelId: channel.id,
 			isolated: false,
-			humanInput: report => createHumanInput(room.room, undefined, report),
+			humanInput: report => createHumanInput(room.room, report),
 		};
 		let started = link.next("start").then(start => {
 			link.send({ type: "started", session: start.session });
@@ -1446,17 +1446,15 @@ describe("a document on Default machine", () => {
 	});
 
 	it("keeps a Planner whose machine went quiet, with its work, however long it stays away, and offers its document to no other machine", async () => {
-		let { link, laptop, idle, machine, channel, runtime, server, url, choice } = await unwatched(
-			true,
-		);
+		let { link, room, laptop, idle, machine, channel, runtime, server, url, choice } =
+			await unwatched(true);
 		link.send({
-			type: "runs",
+			type: "input-request",
+			request: "ship",
 			session: "planner-session",
-			active: ["root"],
-			paused: [],
-			cards: [],
+			input: { method: "confirm", title: "Ship?", message: "Now." },
 		});
-		await Bun.sleep(50);
+		await room.cards(1);
 		let desk = await machine("member", "U_member", "desk");
 		// The machine sleeps: its backend's link and its connector's connection both end.
 		link.socket.close();
@@ -1489,26 +1487,11 @@ describe("a document on Default machine", () => {
 		});
 		let back = await laptop.backend("resumable-sessions");
 		await back.next("attached");
-		back.send({ type: "resume", sessions: [{ session: "planner-session", requests: [] }] });
+		back.send({ type: "resume", sessions: [{ session: "planner-session", requests: ["ship"] }] });
 		expect(await back.next("resumed")).toEqual({
 			type: "resumed",
-			sessions: [{ session: "planner-session", requests: [] }],
+			sessions: [{ session: "planner-session", requests: ["ship"] }],
 		});
-	});
-
-	it("keeps the Planner while one of its workflow runs is live or paused", async () => {
-		let { link, idle } = await unwatched();
-		let runs = async (active: string[], paused: string[]) => {
-			link.send({ type: "runs", session: "planner-session", active, paused, cards: [] });
-			await Bun.sleep(50);
-		};
-		await runs(["root"], []);
-		expect(await idle(PLANNER_IDLE_MS + 60_000)).toBe(true);
-		await runs([], ["root"]);
-		expect(await idle(PLANNER_IDLE_MS + 60_000)).toBe(true);
-		await runs([], []);
-		expect(await idle(PLANNER_IDLE_MS - 1_000)).toBe(true);
-		expect(await idle(2_000)).toBe(false);
 	});
 });
 
@@ -1640,7 +1623,7 @@ describe("a teammate's machine shared with teammates", () => {
 		let planner: RemotePlanner = {
 			channelId: channel.id,
 			isolated: false,
-			humanInput: report => createHumanInput(room.room, undefined, report),
+			humanInput: report => createHumanInput(room.room, report),
 		};
 		let started = link.next("start").then(start => {
 			link.send({ type: "started", session: start.session });
@@ -1705,25 +1688,23 @@ describe("a teammate's machine shared with teammates", () => {
 		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
 	});
 
-	it("keeps it through a live run, not a paused one, and keeps it when shared again meanwhile", async () => {
-		let { share, box, link, stillRuns, finishing } = await sharedAndAttached();
-		let runs = async (active: string[], paused: string[]) => {
-			link.send({ type: "runs", session: "planner-session", active, paused, cards: [] });
-			await Bun.sleep(50);
-		};
-		await runs(["root"], []);
+	it("keeps it through an open question when shared again meanwhile, and stops nothing later", async () => {
+		let { share, box, link, room, stillRuns, finishing } = await sharedAndAttached();
+		link.send({
+			type: "input-request",
+			request: "ship",
+			session: "planner-session",
+			input: { method: "confirm", title: "Ship?", message: "Now." },
+		});
+		let [card] = await room.cards(1);
 		expect(await share("rival", box.id, false)).toBe(200);
 		expect(await stillRuns()).toBe(true);
 		// Shared again before it finished: nothing is stopped later.
 		expect(await share("rival", box.id)).toBe(200);
 		expect(await finishing()).toBe(0);
-		await runs([], ["root"]);
+		await room.answer(card!.id, [0]);
+		expect(await link.next("input-result")).toMatchObject({ status: "answered", value: true });
 		expect(await stillRuns()).toBe(true);
-
-		// A paused run waits on people, not on the machine: sharing off stops the Planner at once.
-		expect(await share("rival", box.id, false)).toBe(200);
-		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
-		expect(await stillRuns()).toBe(false);
 	});
 
 	it("lets only the owner share a machine", async () => {
@@ -2639,7 +2620,7 @@ describe("choosing a teammate's shared machine for a document", () => {
 		let planner: RemotePlanner = {
 			channelId: channel.id,
 			isolated: false,
-			humanInput: report => createHumanInput(room.room, undefined, report),
+			humanInput: report => createHumanInput(room.room, report),
 		};
 		let started = link.next("start").then(start => {
 			link.send({ type: "started", session: start.session });
@@ -2905,7 +2886,7 @@ describe("an editor's choice of a teammate's shared machine, on a document on De
 		let planner: RemotePlanner = {
 			channelId: channel.id,
 			isolated: false,
-			humanInput: report => createHumanInput(room.room, undefined, report),
+			humanInput: report => createHumanInput(room.room, report),
 		};
 		let started = link.next("start").then(start => {
 			link.send({ type: "started", session: start.session });

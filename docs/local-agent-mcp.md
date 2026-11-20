@@ -233,14 +233,14 @@ automatically on restart.
 
 ### Automatic follow-ups
 
-Some instructions are not something anyone said. A client that watched a
-workflow run finish, for example, wants the Planner to update the document from
-its results. Add `"as": "system"` for those:
+Some instructions are not something anyone said. A client whose own long task
+finished, for example, wants the Planner to update the document from its
+results. Add `"as": "system"` for those:
 
 ```json
 {
 	"id": "/documents/octo-org/score/release-readiness",
-	"instruction": "The workflow run finished. Read its results and update the document.",
+	"instruction": "The benchmark finished. Read its results and update the document.",
 	"as": "system"
 }
 ```

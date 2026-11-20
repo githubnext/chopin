@@ -41,7 +41,7 @@ export function OverlayScrollbar(
 		let height = 0;
 		// The thumb is drawn never shorter than its floor. It is read once, from style alone, so the
 		// thumb's travel always counts the box it is drawn in: counted from the size it is asked for, a
-		// thumb held at its floor (a long transcript, or one the runs card has shortened) was moved past
+		// thumb held at its floor (a long transcript, or one the build card has shortened) was moved past
 		// the lane's end, where the lane's paint containment cut it off.
 		let floor = Number.parseFloat(getComputedStyle(bar).minHeight) || 0;
 		let size = 0;

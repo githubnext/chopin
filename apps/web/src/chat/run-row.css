@@ -1,5 +1,5 @@
 /*
- * A run's line in the workflow card is shaded across the card's whole width under the pointer,
+ * A line of the running build's card is shaded across the card's whole width under the pointer,
  * square, as a Chat row is across Chat; the card's own corners round the first line and the last.
  * The hairline above a line is its own and the shade runs under it, so lines meet with no band
  * between them and a pointer moving down the card shades one line after the next. The toggle keeps

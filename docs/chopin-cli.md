@@ -502,8 +502,8 @@ is connected and can run Planners, else the machine that last worked on the
 document, else any of theirs that can. Chopin asks for it while someone has the
 document open, and from the moment its creator makes it with **New document**, before
 their page has loaded it, and stops it once nobody has used the document for 30 minutes.
-A Planner that is replying, or waiting on a question or on a live or paused
-workflow run, counts as use, so its work and its questions are never cut short
+A Planner that is replying, or waiting on a question, counts as use, so its work and its
+questions are never cut short
 however long nobody views the document.
 A Planner stays on its machine while that machine is connected, even when
 another comes online; it moves when the machine disconnects or the creator
@@ -647,13 +647,11 @@ running keeps going until it finishes, like a Planner mid-reply.
   ends. A document whose Planner the machine was not running, had not been asked
   to run and was not about to run, and that nobody is using, only loses the
   choice: nothing starts for it on the creator's machine. A teammate's Planner
-  that is idle, or waits only on a paused run, stops
-  at once; one that is replying, has a question open, or has a live run keeps
+  that is idle stops at once; one that is replying or has a question open keeps
   going until that work finishes, then stops within 15 seconds. A build or run
   already going finishes. Meanwhile the machine's row on **Machines** says
   **Finishing 1 teammate document**. Each stop prints why:
-  `<owner> stopped sharing <machine> with teammates`. A paused run stays on the
-  machine and resumes if its owner shares it again.
+  `<owner> stopped sharing <machine> with teammates`.
 
 Choosing another machine stops it and prints
 `Stopped the Planner for <document>: the document chose another machine.` So do

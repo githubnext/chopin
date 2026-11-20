@@ -401,7 +401,7 @@ test("host input open past half an hour is withdrawn when its Planner stops", as
 test("a session counts a request as open from its call until a member answers it or it is withdrawn", async () => {
 	let f = await fixture();
 	let pending = new PendingInputs();
-	let input = createHumanInput(f.room, undefined, undefined, pending);
+	let input = createHumanInput(f.room, undefined, pending);
 	let ended = 0;
 	pending.watch(() => ended++);
 	let confirmed = input.confirm("Confirm", "Proceed?", f.options);
@@ -421,26 +421,6 @@ test("a session counts a request as open from its call until a member answers it
 	expect(await questionnaire).toEqual({ answers: [], cancelled: true });
 	expect(pending.open()).toBe(0);
 	expect(ended).toBe(2);
-});
-
-test("a workflow card shows its question as asked, without run or stage ids", async () => {
-	let f = await fixture();
-	let response = f.input.questionnaire(params, {
-		...f.options,
-		workflowRunId: "run-123",
-		workflowStageId: "review",
-	});
-	let cards = await f.cards(3);
-	for (let card of cards) {
-		expect(params.questions.map(question => question.question)).toContain(
-			card.definition.questions[0].question,
-		);
-		expect(card.definition.questions[0].question).not.toContain("run-123");
-		await f.answer(card.id, [0]);
-	}
-	expect((await response).answers.map(answer => answer.question)).toEqual(
-		params.questions.map(question => question.question),
-	);
 });
 
 /** A document of a title and two sections, whose first section is block 1. */
@@ -599,7 +579,7 @@ test("dialogs beyond the Planner's per-field limits become verbatim cards and an
 	]);
 });
 
-test("a workflow question at the length limit is stored verbatim", async () => {
+test("a question at the length limit is stored verbatim", async () => {
 	let f = await fixture();
 	let question = "Should the review stage accept this change? ".repeat(23).slice(0, 990);
 	let long: QuestionParams = {
@@ -609,11 +589,7 @@ test("a workflow question at the length limit is stored verbatim", async () => {
 			options: [{ label: "Ship", description: "" }, { label: "Hold", description: "" }],
 		}],
 	};
-	let response = f.input.questionnaire(long, {
-		...f.options,
-		workflowRunId: "run-123",
-		workflowStageId: "review",
-	});
+	let response = f.input.questionnaire(long, f.options);
 	let [card] = await f.cards(1);
 	expect(card!.definition.questions[0].question).toBe(question);
 	expect(await documentQuestionnaires(Plan.source(f.plan))).toMatchObject([{ prompt: question }]);
@@ -906,42 +882,6 @@ test(
 	},
 	30_000,
 );
-
-test("a remote client's workflow question is answered only after its paused run is released, and a question naming no run at once", async () => {
-	let release!: () => void;
-	let gate = new Promise<void>(resolve => {
-		release = resolve;
-	});
-	let held: string[] = [];
-	let f = await hostInputRoom(async runId => {
-		held.push(runId);
-		await gate;
-	});
-	cleanups.push(f.close);
-	let settled = false;
-	let response = f.input.questionnaire(
-		{ questions: [params.questions[0]!] },
-		{ ...f.options, workflowRunId: "run-1", workflowStageId: "stage-1" },
-	).then(result => {
-		settled = true;
-		return result;
-	});
-	let [card] = await f.cards(1);
-	await f.answer(card!.id, [0]);
-	await Bun.sleep(20);
-	expect(held).toEqual(["run-1"]);
-	expect(settled).toBe(false);
-	release();
-	expect((await response).answers).toMatchObject([{ kind: "option", answer: " A " }]);
-
-	// What Atomic asks names only its session and request, so nothing holds its answer.
-	gate = new Promise<void>(() => {});
-	let direct = f.input.questionnaire({ questions: [params.questions[0]!] }, f.options);
-	let [next] = await f.cards(1);
-	await f.answer(next!.id, [0]);
-	expect((await direct).answers).toMatchObject([{ kind: "option", answer: " A " }]);
-	expect(held).toEqual(["run-1"]);
-});
 
 test("the room hears which Decision cards its Planner's request asked, as the request does", async () => {
 	let f = await fixture();

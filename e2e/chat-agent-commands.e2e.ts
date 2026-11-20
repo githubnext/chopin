@@ -315,9 +315,9 @@ test("runs each kind of command on the attached client as it understands it, wit
 	expect(turn("for today")!.prompt).toBe("/skill:notes for today");
 	await run("review", "the diff");
 	expect(turn("the diff")!.prompt).toBe("/review the diff");
+	// A kind Chopin has no meaning for, `workflow` included, is the same plain invocation.
 	await run("ship", "the v2 branch");
-	expect(turn("the v2 branch")!.prompt).toContain('Start the registered workflow "ship" now');
-	expect(turn("the v2 branch")!.prompt.endsWith("the v2 branch")).toBe(true);
+	expect(turn("the v2 branch")!.prompt).toBe("/ship the v2 branch");
 
 	// Each message shows its command as a chip, never a link, and what was typed after it.
 	let sent = chat(page).locator("[data-chat-message-id]");

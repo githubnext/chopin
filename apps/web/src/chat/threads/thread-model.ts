@@ -10,7 +10,6 @@ export type ThreadViewState = {
 	loaded: boolean;
 	transcript: TranscriptState;
 	busy: boolean;
-	runs?: Chat.Runs;
 	compactions: Chat.CompactionRecord[];
 	compacting: boolean;
 	alsoToChat: boolean;
@@ -100,7 +99,6 @@ function applyInThreadFrame(
 			return {
 				...view,
 				busy: inner.busy,
-				runs: inner.runs,
 				transcript: transcriptReducer(view.transcript, {
 					kind: "turn",
 					turn: inner.turn,
@@ -202,7 +200,6 @@ export function threadsReducer(state: ThreadsState, action: ThreadsAction): Thre
 					...(action.frame.seq === undefined ? {} : { seq: action.frame.seq }),
 				}),
 				busy: action.frame.busy,
-				runs: action.frame.runs,
 				compactions: action.frame.compactions ?? [],
 				compacting: !!action.frame.compacting,
 				alsoToChat: previous?.alsoToChat ?? false,

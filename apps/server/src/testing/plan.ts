@@ -27,10 +27,6 @@ export type SeedState = {
 	parent?: string;
 	/** Seed the sidecar marker of a decision's page. */
 	questionPage?: { recordId: string };
-	/** Workflow run cards Chat showed before the document was last stored. */
-	workflowRuns?: unknown[];
-	/** Every stored stage of those runs, by run id, in run order. */
-	runStages?: Record<string, import("../storage/model").RunStageRecord[]>;
 };
 
 export function storedQuestion(definition: Definition): number[] {

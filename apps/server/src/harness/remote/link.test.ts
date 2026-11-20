@@ -26,7 +26,6 @@ import { withModelOutput } from "../model-output";
 import { openWorkerSession } from "../../jobs/worker-session";
 import { createHumanInput } from "../atomic/human-input";
 import { openPlannerSession } from "../session";
-import { untilUnpaused } from "../runs";
 import { hostInputRoom, laterTimers } from "../../testing/decisions";
 import {
 	attach,
@@ -903,6 +902,29 @@ describe("Agent connection protocol", () => {
 		expect(server.links).toEqual([]);
 	});
 
+	it("refuses a run report, and a question naming a workflow run, as malformed: it keeps no runs", async () => {
+		let { server, channel } = await setup();
+		for (
+			let frame of [
+				{ type: "runs", session: "s", active: [], paused: [], cards: [] },
+				{
+					type: "input-request",
+					request: "r",
+					session: "s",
+					workflowRunId: "run-1",
+					input: { method: "confirm", title: "Ship?", message: "Now." },
+				},
+			]
+		) {
+			let raw = await rawLink(server.url, undefined, "resumable-sessions");
+			raw.send({ type: "attach", version: 1, document: channel.id });
+			await raw.next("attached");
+			raw.send(frame);
+			expect(await raw.next("error")).toMatchObject({ code: "malformed-message" });
+			expect((await raw.closed).code).toBe(LINK_CLOSE.malformed);
+		}
+	});
+
 	it("closes the link on an oversized message", async () => {
 		let { server } = await setup();
 		let raw = await rawLink(server.url);
@@ -931,48 +953,16 @@ describe("Agent connection protocol", () => {
 		expect(server.links).toEqual([]);
 	});
 
-	it("stops the runs a dropped link reported, so nothing waits on them", async () => {
-		let { server, channel, client } = await setup({});
-		let planner: RemotePlanner = { channelId: channel.id, isolated: false };
-		let reports: unknown[] = [];
-		planner.onRuns = runs => reports.push(runs);
-		let session = await adapterFor(server, planner).doStart({
-			sessionId: "runs",
-			sandboxSession,
-			sessionWorkDir: "/tmp",
-		});
-		cleanups.push(() => session.doDestroy());
-		let card = {
-			id: "run",
-			name: "plan",
-			status: "running" as const,
-			started: 1,
-			updated: 1,
-			stages: [],
-			waiting: 0,
-		};
-		let done = { ...card, id: "done", status: "finished" as const, ended: 2 };
-		client.reportRuns("runs", { active: ["run"], paused: [], cards: [card, done] });
-		await Bun.sleep(20);
-		expect(planner.runs?.active).toEqual(["run"]);
-		await client.detach();
-		await Bun.sleep(20);
-		expect(planner.runs).toEqual({
-			active: [],
-			paused: [],
-			cards: [{ ...card, status: "stopped" }, done],
-		});
-		expect(reports).toHaveLength(2);
-	});
-
 	it("names the features a client asked for in attached, and nothing for a client that did not ask", async () => {
 		let { server, channel } = await setup();
 		for (
 			let [header, features] of [
 				[undefined, undefined],
-				["run-stage-deltas", ["run-stage-deltas"]],
-				["future-thing, run-stage-deltas", ["run-stage-deltas"]],
+				["decision-option-previews", ["decision-option-previews"]],
+				["future-thing, decision-option-previews", ["decision-option-previews"]],
 				["future-thing", []],
+				// Run reports are gone, so a client that still asks for their feature is not given it.
+				["run-stage-deltas", []],
 				["resumable-sessions, restart-notice", ["resumable-sessions", "restart-notice"]],
 			] as const
 		) {
@@ -1000,9 +990,9 @@ describe("Agent connection protocol", () => {
 		for (
 			let [header, offered] of [
 				[undefined, ["read_plan"]],
-				["run-stage-deltas", ["read_plan"]],
+				["steer-turn", ["read_plan"]],
 				["decision-option-previews", ["read_plan", "upload_plan_image"]],
-				["run-stage-deltas, decision-option-previews", ["read_plan", "upload_plan_image"]],
+				["steer-turn, decision-option-previews", ["read_plan", "upload_plan_image"]],
 			] as const
 		) {
 			let raw = await rawLink(server.url, undefined, header);
@@ -1067,122 +1057,6 @@ describe("Agent connection protocol", () => {
 			raw.send({ type: "detach" });
 			await raw.closed;
 		}
-	});
-
-	it("merges stage deltas into a run's stages, and a full card replaces them", async () => {
-		let { server, channel, client } = await setup({});
-		expect(client.features).toEqual(["run-stage-deltas", "decision-option-previews"]);
-		let planner: RemotePlanner = { channelId: channel.id, isolated: false };
-		let session = await adapterFor(server, planner).doStart({
-			sessionId: "deltas",
-			sandboxSession,
-			sessionWorkDir: "/tmp",
-		});
-		cleanups.push(() => session.doDestroy());
-		let card = {
-			id: "run",
-			name: "plan",
-			status: "running" as const,
-			started: 1,
-			updated: 1,
-			waiting: 0,
-		};
-		let many = Array.from({ length: 500 }, (_, index) => ({
-			id: `s${index}`,
-			name: `stage ${index}`,
-			status: "completed" as const,
-		}));
-		let report = async (cards: Parameters<typeof client.reportRuns>[1]["cards"]) => {
-			client.reportRuns("deltas", { active: ["run"], paused: [], cards });
-			await Bun.sleep(30);
-			return planner.runs?.cards[0];
-		};
-		await report([{ ...card, stagesDelta: true, stages: many }]);
-		let merged = await report([{
-			...card,
-			updated: 5,
-			stagesDelta: true,
-			stages: [
-				{ id: "s1", name: "stage 1", status: "failed", ended: 4 },
-				{ id: "child", name: "child", status: "running", parentIds: ["s1", "s499"] },
-			],
-		}]);
-		expect(merged?.updated).toBe(5);
-		expect(merged?.stages).toHaveLength(501);
-		expect(merged?.stages[1]).toEqual({ id: "s1", name: "stage 1", status: "failed", ended: 4 });
-		expect(merged?.stages.at(-1)).toEqual({
-			id: "child",
-			name: "child",
-			status: "running",
-			parentIds: ["s1", "s499"],
-		});
-		expect(merged?.earlierStages).toBeUndefined();
-
-		let full = await report([{
-			...card,
-			stages: [{ id: "x", name: "x", status: "running" }],
-			earlierStages: 7,
-		}]);
-		expect(full).toMatchObject({ stages: [{ id: "x" }], earlierStages: 7 });
-		let after = await report([{
-			...card,
-			stagesDelta: true,
-			stages: [{ id: "y", name: "y", status: "pending", parentIds: ["x"] }],
-		}]);
-		expect(after?.stages.map(stage => stage.id)).toEqual(["x", "y"]);
-		expect(after?.earlierStages).toBe(7);
-	});
-
-	it("keeps a run's stages when a full card names none, and lets a full card with stages replace them", async () => {
-		let { server, channel, client } = await setup({});
-		let planner: RemotePlanner = { channelId: channel.id, isolated: false };
-		let session = await adapterFor(server, planner).doStart({
-			sessionId: "kept",
-			sandboxSession,
-			sessionWorkDir: "/tmp",
-		});
-		cleanups.push(() => session.doDestroy());
-		let card = {
-			id: "run",
-			name: "plan",
-			status: "running" as const,
-			started: 1,
-			updated: 1,
-			waiting: 0,
-		};
-		let stages = Array.from({ length: 16 }, (_, index) => ({
-			id: `s${index}`,
-			name: `stage ${index}`,
-			status: "completed" as const,
-		}));
-		let report = async (cards: Parameters<typeof client.reportRuns>[1]["cards"]) => {
-			client.reportRuns("kept", { active: [], paused: [], cards });
-			await Bun.sleep(30);
-			return planner.runs?.cards[0];
-		};
-		await report([{ ...card, stages, earlierStages: 3 }]);
-		let ended = await report([{
-			...card,
-			status: "finished",
-			updated: 9,
-			ended: 9,
-			stages: [],
-		}]);
-		expect(ended).toMatchObject({ status: "finished", updated: 9, ended: 9, earlierStages: 3 });
-		expect(ended?.stages).toEqual(stages);
-		let after = await report([{
-			...card,
-			stagesDelta: true,
-			stages: [{ id: "late", name: "late", status: "completed" }],
-		}]);
-		expect(after?.stages.map(stage => stage.id)).toEqual([
-			...stages.map(stage => stage.id),
-			"late",
-		]);
-
-		let replaced = await report([{ ...card, stages: [{ id: "x", name: "x", status: "running" }] }]);
-		expect(replaced?.stages.map(stage => stage.id)).toEqual(["x"]);
-		expect(replaced?.earlierStages).toBeUndefined();
 	});
 
 	it("runs Chopin's tools in the server and the client's own tools only once declared", async () => {
@@ -1371,32 +1245,6 @@ describe("Agent connection protocol", () => {
 		await expect(start("silent")).rejects.toThrow("did not start the session");
 		await Bun.sleep(20);
 		expect(destroyed).toEqual(["refused", "silent"]);
-	});
-
-	it("carries Stop and Resume to the client and reports a refusal", async () => {
-		let controls: unknown[] = [];
-		let { server, channel } = await setup({
-			control(message) {
-				controls.push({ type: message.type, run: message.run });
-				if (message.type === "resume") throw new Error("nothing to resume");
-			},
-		});
-		let planner: RemotePlanner = { channelId: channel.id, isolated: false };
-		let session = await adapterFor(server, planner).doStart({
-			sessionId: crypto.randomUUID(),
-			sandboxSession,
-			sessionWorkDir: "/tmp",
-		});
-		cleanups.push(() => session.doDestroy());
-		await planner.control!("stop", "run-1");
-		// Bun's pending `.rejects` matcher (1.4.4 and 1.4.5) makes Bun.serve close a valid socket
-		// as fragmented (oven-sh/bun#45805), so the refusal is awaited before it is asserted.
-		let refusal = await planner.control!("resume").catch((error: unknown) => error);
-		expect(refusal).toBeInstanceOf(Error);
-		expect((refusal as Error).message).toContain("nothing to resume");
-		expect(controls).toEqual([{ type: "stop", run: "run-1" }, { type: "resume", run: undefined }]);
-		await session.doDestroy();
-		expect(planner.control).toBeUndefined();
 	});
 
 	it("rechecks the caller's access before every session and detaches one that lost it", async () => {
@@ -2090,7 +1938,7 @@ describe("Agent connection capability catalog", () => {
 
 	it("is a protocol violation from a client that did not offer the feature", async () => {
 		let { server, channel } = await setup();
-		for (let header of [undefined, "run-stage-deltas"]) {
+		for (let header of [undefined, "steer-turn"]) {
 			let raw = await rawLink(server.url, undefined, header);
 			raw.send({ type: "attach", version: 1, document: channel.id });
 			await raw.next("attached");
@@ -2209,7 +2057,7 @@ describe("Agent connection capability catalog", () => {
 		for (
 			let [header, sent] of [
 				[undefined, false],
-				["run-stage-deltas", false],
+				["steer-turn", false],
 				["capability-catalog", true],
 			] as const
 		) {
@@ -2359,12 +2207,7 @@ describe("Agent connection questions", () => {
 		let { server, channel, client } = await setup({});
 		let planner: RemotePlanner = { channelId: channel.id, isolated: options.isolated ?? false };
 		if (!options.isolated) {
-			planner.humanInput = report =>
-				createHumanInput(
-					f.room,
-					(runId, signal) => untilUnpaused(planner, runId, signal),
-					report,
-				);
+			planner.humanInput = report => createHumanInput(f.room, report);
 		}
 		let sessionId = crypto.randomUUID();
 		let session = await adapterFor(server, planner).doStart({
@@ -2496,30 +2339,6 @@ describe("Agent connection questions", () => {
 		expect(Store.outstanding(f.plan.questions)).toHaveLength(0);
 	});
 
-	it("holds a workflow answer until the client reports its root run unpaused", async () => {
-		let { f, client, sessionId, planner } = await questions();
-		client.reportRuns(sessionId, { active: [], paused: ["root"], cards: [] });
-		await Bun.sleep(20);
-		expect(planner.runs?.paused).toEqual(["root"]);
-		let settled = false;
-		let asked = client.ask(sessionId, { method: "questionnaire", params }, {
-			workflowRunId: "stage-run",
-			rootRunId: "root",
-		}).then(result => {
-			settled = true;
-			return result;
-		});
-		let [card] = await f.cards(1);
-		await f.answer(card!.id, [1]);
-		await Bun.sleep(30);
-		expect(settled).toBe(false);
-		client.reportRuns(sessionId, { active: ["root"], paused: [], cards: [] });
-		expect(await asked).toMatchObject({
-			status: "answered",
-			value: { answers: [{ kind: "option", answer: "Memory" }] },
-		});
-	});
-
 	it("gives an isolated session no Decisions", async () => {
 		let { f, client, sessionId } = await questions({ isolated: true });
 		expect(await client.ask(sessionId, { method: "questionnaire", params })).toMatchObject({
@@ -2537,7 +2356,7 @@ describe("Agent connection questions", () => {
 		let opened = await adapterFor(server, {
 			channelId: channel.id,
 			isolated: false,
-			humanInput: report => createHumanInput(f.room, undefined, report),
+			humanInput: report => createHumanInput(f.room, report),
 		}).doStart({ sessionId: crypto.randomUUID(), sandboxSession, sessionWorkDir: "/tmp" });
 		cleanups.push(() => opened.doDestroy());
 		let request = {
@@ -2604,7 +2423,7 @@ describe("Agent connection questions", () => {
 		let planner: RemotePlanner = {
 			channelId: f.room.id,
 			isolated: false,
-			humanInput: report => createHumanInput(f.room, undefined, report),
+			humanInput: report => createHumanInput(f.room, report),
 		};
 		let harness = adapterFor(linked.server, planner);
 		let start = (sessionId: string) =>

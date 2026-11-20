@@ -36,7 +36,6 @@ import type { FileView } from "./attachments/files";
 import type { ComposerModel } from "./use-model-choice";
 import type { DraftInputHandle, DraftInputProps } from "./draft-input";
 import type { RichDraftHandle } from "./rich/rich-draft-input";
-import plannerResume from "../assets/icons/planner-resume.svg";
 import "./composer.css";
 
 const MOTION = motionContract("collapse");
@@ -156,11 +155,11 @@ export type ChatComposerProps = {
 	sendDisabled: boolean;
 	onSubmit: () => void;
 	/**
-	 * What the Planner's run offers. Stop shares the round button with Send, which stops only while
-	 * the draft is empty and `disabled` is false; Resume is a button of its own.
+	 * What the Planner's turn offers: Stop, which shares the round button with Send and stops only
+	 * while the draft is empty and `disabled` is false.
 	 */
 	run?: {
-		action: "stop" | "resume";
+		action: "stop";
 		disabled: boolean;
 		refusedWhileBusy?: boolean;
 		onClick: () => void;
@@ -639,18 +638,6 @@ export function ChatComposer(
 										: <ModelPill control={model} />)}
 								</div>
 								<div className="composer-actions">
-									{run?.action === "resume" && (
-										<button
-											aria-label={`Resume ${PLANNER_NAME}`}
-											disabled={run.disabled}
-											className="btn btn-icon btn-ghost"
-											onClick={run.onClick}
-											title={`Resume ${PLANNER_NAME}`}
-											type="button"
-										>
-											<img alt="" className="size-4" src={plannerResume} />
-										</button>
-									)}
 									<SendStopButton
 										busy={sending}
 										onClick={button.action === "stop" ? run!.onClick : onSubmit}

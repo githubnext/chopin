@@ -110,9 +110,9 @@ the Planner uses `open_decisions` for questions beside plan prose.
 person's answer. Set `options` to an empty array;
 `multiple` must be false. Omitting `response` keeps the existing choice mode.
 
-A whole-document rewrite, such as an MCP `update_document` from a workflow run, runs outside any
+A whole-document rewrite, such as an MCP `update_document` from a coding agent, runs outside any
 Planner turn, so nothing would review a link it left pending. The Planner's own cards (not a
-workflow's questions, a person's or Chat's decisions) therefore stay linked through one: a card
+person's or Chat's decisions) therefore stay linked through one: a card
 whose block survived keeps it, and one whose block was deleted or rewritten into a new block is
 linked to the nearest heading above it that survived, else the first section. Its scoped
 write-up, when the rewrite deleted that passage, is dropped instead of failing, and the answer

@@ -270,7 +270,6 @@ async function seed(
 		...(state.builds ? { builds: state.builds } : {}),
 		...(state.execution ? { execution: state.execution } : {}),
 		...(state.lifecycle ? { lifecycle: state.lifecycle } : {}),
-		...(state.workflowRuns ? { workflowRuns: state.workflowRuns } : {}),
 	};
 	await sql(port, async database => {
 		await database`
@@ -283,20 +282,6 @@ async function seed(
 					${document.update}, ${JSON.stringify(sidecar)}::jsonb, ${new Date()}
 				)
 			`;
-		for (let [runId, stages] of Object.entries(state.runStages ?? {})) {
-			let rows = stages.map((stage, position) => ({ position, ...stage }));
-			await database`
-				INSERT INTO workflow_run_stages (
-					channel_id, run_id, stage_id, position, name, kind, status, parent_ids, started, ended
-				)
-				SELECT ${id}, ${runId}, x.id, x.position, x.name, x.kind, x.status, x."parentIds",
-					x.started, x.ended
-				FROM jsonb_to_recordset(${JSON.stringify(rows)}::text::jsonb) AS x(
-					position bigint, id text, name text, kind text, status text, "parentIds" jsonb,
-					started bigint, ended bigint
-				)
-			`;
-		}
 	});
 }
 

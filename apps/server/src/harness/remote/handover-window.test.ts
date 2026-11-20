@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 
 import { Sessions } from "../../auth/session";
-import * as Chat from "../../chat/service";
-import * as Plan from "../../plan/service";
 import * as Store from "../../questions/store";
 import { hostInputRoom } from "../../testing/decisions";
 import { expectPlainStatus } from "../../testing/plain-words";
@@ -14,12 +12,11 @@ import {
 	rawLink,
 } from "../../testing/agent-link";
 import { createHumanInput, rejoinInput } from "../atomic/human-input";
-import { untilUnpaused } from "../runs";
 import { createRemoteAdapter } from "./adapter";
 import { PlannerAttachments } from "./attachments";
 
 import type { DocumentRoom } from "../../agent/tools";
-import type { Lease } from "../../storage/model";
+import type { Lease, PlannerHeldSession, PlannerLinkHold } from "../../storage/model";
 import type { PlannerAttachment, PlannerAttachmentOptions } from "./attachments";
 import type { RemotePlanner } from "./registry";
 import type { AgentAi } from "./endpoint";
@@ -41,16 +38,6 @@ const sandboxSession = {
 	async destroy() {},
 } as never;
 
-const run = {
-	id: "run",
-	name: "plan",
-	status: "running" as const,
-	started: 1,
-	updated: 1,
-	stages: [],
-	waiting: 0,
-};
-
 async function until(check: () => boolean | Promise<boolean>, ms = 4_000) {
 	for (let deadline = Date.now() + ms; Date.now() < deadline; await Bun.sleep(5)) {
 		if (await check()) return;
@@ -60,7 +47,7 @@ async function until(check: () => boolean | Promise<boolean>, ms = 4_000) {
 
 /**
  * Two processes over one database, as a deploy leaves them: the first serves a remote Planner with
- * a run under way and a question nobody has answered, and cuts; the second starts with none of its
+ * a question nobody has answered, and cuts; the second starts with none of its
  * memory, not even the owner's browser sign-in, until that browser sends its cookie.
  */
 const ASK_CONFIRM = { method: "confirm", title: "Ship?", message: "Now." } as const;
@@ -99,8 +86,7 @@ async function deploy(
 	await raw.next("attached");
 	let planner: RemotePlanner = { channelId: channel.id, isolated: false };
 	planner.holdInput = () => () => {};
-	planner.humanInput = report =>
-		createHumanInput(f.room, (runId, signal) => untilUnpaused(planner, runId, signal), report);
+	planner.humanInput = report => createHumanInput(f.room, report);
 	let sessionId = crypto.randomUUID();
 	let opening = createRemoteAdapter(() => ({ link: first.links.at(-1)!, planner })).doStart({
 		sessionId,
@@ -118,14 +104,12 @@ async function deploy(
 		input,
 	});
 	let [card, ...others] = await f.cards(asked);
-	raw.send({ type: "runs", session: sessionId, active: ["run"], paused: [], cards: [run] });
-	await until(() => planner.runs?.active.length === 1);
 
 	/**
 	 * What `main.ts` does at its cut, in its order, and then the second process starting. `spent`
 	 * is time the clock says went by in a step: before the hold is written, before the lease is
 	 * released, and before the second process took the lease. `frozen` runs between taking the
-	 * hold and writing it.
+	 * hold and writing it, with the rows taken.
 	 */
 	async function cut(
 		windowMs = WINDOW_MS,
@@ -133,13 +117,13 @@ async function deploy(
 			beforeWrite?: number;
 			beforeRelease?: number;
 			beforeTakeover?: number;
-			frozen?: () => Promise<void>;
+			frozen?: (rows: PlannerLinkHold[]) => Promise<void>;
 		} = {},
 		takeover: { failWrites?: boolean; options?: PlannerAttachmentOptions } = {},
 	) {
 		first.attachments.shutdown();
 		let rows = first.attachments.freeze(windowMs);
-		await spent.frozen?.();
+		await spent.frozen?.(rows);
 		skew.ms += spent.beforeWrite ?? 0;
 		await first.attachments.persist(rows);
 		for (let link of first.links) link.restart(windowMs);
@@ -159,7 +143,6 @@ async function deploy(
 						: storage.plannerHolds.put(leaseB, hold),
 				delete: async id => void await storage.plannerHolds.delete(leaseB, id),
 			},
-			restoredRuns: (id, outcome) => events.push([`runs:${outcome}`, id]),
 			missed: (id, cause) => events.push([`missed:${cause}`, id]),
 			...(ai ? { endAi: ai.end } : {}),
 			...takeover.options,
@@ -211,7 +194,7 @@ async function deploy(
 /**
  * The second process opens the document again from what the first stored, as the first request
  * for it does, so the questions its rebuilt hold's client left open are asked of the members again,
- * and Chat shows what the sessions it rebuilt report and ask, as `main.ts` wires them.
+ * and those the sessions it rebuilt ask are asked too, as `main.ts` wires them.
  */
 async function reopen(
 	d: Awaited<ReturnType<typeof deploy>>,
@@ -220,36 +203,21 @@ async function reopen(
 	if (!d.closed.first) await d.f.close();
 	d.closed.first = true;
 	let unsent: string[] = [];
-	let g = await hostInputRoom(undefined, {
+	let g = await hostInputRoom({
 		storage: d.f.storage,
 		channelId: d.f.channelId,
 		lease: d.f.lease,
 		backend: {
 			// The fixture's document and the link's have their own ids: this is the link's.
-			plannerKeepsRuns: () => next.attachments.restoredWork(d.channel.id),
 			rejoinPlannerQuestions: (plan, server) =>
 				next.attachments.rejoinInputs(d.channel.id, {
 					join: (asked, signal) => rejoinInput({ id: plan.id, plan, server }, asked, signal),
 					unsent: decisions => unsent.push(...decisions),
 					live: () => !plan.persistence.closing,
-					humanInput: (hold, report) =>
+					humanInput: report =>
 						createHumanInput(
 							{ id: plan.id, plan, server, anchors() {} } as DocumentRoom,
-							hold,
 							report,
-						),
-					runs: (session, runs, down) =>
-						void Chat.rebuiltRuns(
-							{
-								chat: plan.chat,
-								room: plan.id,
-								server,
-								persist: chat => Plan.persist(plan, chat),
-								auth: { storage: d.f.storage },
-							},
-							session,
-							runs,
-							down,
 						),
 				}),
 		},
@@ -314,8 +282,7 @@ describe("a remote Planner whose link a cut closed", () => {
 		// Not an attached link: nothing is started on it, and a request still waits as a saved row.
 		expect(next.attachments.attached(d.channel.id)).toBe(false);
 		expect(await next.attachments.confirmed(d.channel.id)).toBe(false);
-		// Chat's stored workflow runs stay live, not stopped, until the window is over.
-		expect(next.attachments.restoredWork(d.channel.id)).toBe("live");
+		// Nothing about the Planner changes for anyone until the window is over.
 		expect(next.changes).toEqual([]);
 	});
 
@@ -386,7 +353,6 @@ describe("a remote Planner whose link a cut closed", () => {
 					attached: true,
 					disconnected: false,
 				});
-				expect(next.attachments.restoredWork(d.channel.id)).toBe("live");
 			}
 			// The window ends a window after the next process rebuilt the hold, which was after the
 			// release, and not at all later than that.
@@ -414,7 +380,6 @@ describe("a remote Planner whose link a cut closed", () => {
 			attached: false,
 			disconnected: true,
 		});
-		expect(next.attachments.restoredWork(d.channel.id)).toBe("down");
 	});
 
 	it("turns disconnected, announced and logged as a miss, when its window ends with no resume", async () => {
@@ -424,15 +389,11 @@ describe("a remote Planner whose link a cut closed", () => {
 		await until(() => next.changes.length > 0);
 		expect(next.changes).toEqual([{ state: "disconnected", login: "member" }]);
 		// The owner's browser never came back, so that is what was missing.
-		expect(d.events).toEqual([
-			["runs:down", d.channel.id],
-			["missed:login", d.channel.id],
-		]);
+		expect(d.events).toEqual([["missed:login", d.channel.id]]);
 		expect(next.attachments.holding(d.channel.id)).toMatchObject({
 			attached: false,
 			disconnected: true,
 		});
-		expect(next.attachments.restoredWork(d.channel.id)).toBe("down");
 		// It stays disconnected, with no deadline, for its client's return.
 		await Bun.sleep(100);
 		expect(next.changes).toHaveLength(1);
@@ -446,7 +407,6 @@ describe("a remote Planner whose link a cut closed", () => {
 		let later = await afterCrash(d);
 		expect(later.status(d.channel.id)).toEqual({ state: "disconnected", login: "member" });
 		expect(later.holding(d.channel.id)).toMatchObject({ attached: false, disconnected: true });
-		expect(later.restoredWork(d.channel.id)).toBe("down");
 	});
 
 	it("gives a window to the process that rebuilds what the cut wrote and to no process after it: one that starts after the first crashed inside its window finds the hold disconnected, while the first's window carries on", async () => {
@@ -458,9 +418,7 @@ describe("a remote Planner whose link a cut closed", () => {
 		let later = await afterCrash(d);
 		expect(later.status(d.channel.id)).toEqual({ state: "disconnected", login: "member" });
 		expect(later.holding(d.channel.id)).toMatchObject({ attached: false, disconnected: true });
-		expect(later.restoredWork(d.channel.id)).toBe("down");
 		expect(next.attachments.status(d.channel.id)).toEqual({ state: "attached", login: "member" });
-		expect(next.attachments.restoredWork(d.channel.id)).toBe("live");
 	});
 
 	it("still gives its client its sessions and the question it waits on, when it resumes with a process that started after the first crashed", async () => {
@@ -490,7 +448,6 @@ describe("a remote Planner whose link a cut closed", () => {
 		let third = await afterCrash(d);
 		expect(third.status(d.channel.id)).toEqual({ state: "attached", login: "member" });
 		expect(third.holding(d.channel.id)).toMatchObject({ attached: true, disconnected: false });
-		expect(third.restoredWork(d.channel.id)).toBe("live");
 	});
 
 	it("has the whole window its client was told, and logs it, when the row it is given from cannot be rewritten", async () => {
@@ -501,7 +458,6 @@ describe("a remote Planner whose link a cut closed", () => {
 		for (let ms of [1, WINDOW_MS / 2, WINDOW_MS - 1]) {
 			next.at(ms);
 			expect(next.attachments.status(d.channel.id)).toEqual({ state: "attached", login: "member" });
-			expect(next.attachments.restoredWork(d.channel.id)).toBe("live");
 		}
 		next.at(WINDOW_MS + 1_000);
 		expect(next.attachments.status(d.channel.id)).toEqual({
@@ -519,7 +475,7 @@ describe("a remote Planner whose link a cut closed", () => {
 		let next = await d.cut(200);
 		await next.browserReturns();
 		await until(() => next.changes.length > 0);
-		expect(d.events.map(([name]) => name)).toEqual(["runs:down", "missed:client"]);
+		expect(d.events.map(([name]) => name)).toEqual(["missed:client"]);
 	});
 
 	it("holds a resume that comes inside the window before the owner's browser is back, refusing nothing and showing the machine attached, and takes the sessions back when the browser is", async () => {
@@ -549,7 +505,7 @@ describe("a remote Planner whose link a cut closed", () => {
 		expect(next.attachments.attached(d.channel.id)).toBe(true);
 		expect(next.attachments.status(d.channel.id)).toEqual({ state: "attached", login: "member" });
 		expect(next.changes.every(status => status.state === "attached")).toBe(true);
-		expect(d.events).toEqual([["runs:up", d.channel.id]]);
+		expect(d.events).toEqual([]);
 	});
 
 	it("refuses a resume held when the window ends with the owner's browser still not back, as a resume after the window is, and the hold turns disconnected", async () => {
@@ -572,7 +528,7 @@ describe("a remote Planner whose link a cut closed", () => {
 		// Never sign-in-required, which closes the link for good and ends the hold.
 		expect((await client.closed).code).toBe(1011);
 		expect(next.changes).toEqual([{ state: "disconnected", login: "member" }]);
-		expect(d.events).toEqual([["runs:down", d.channel.id], ["missed:login", d.channel.id]]);
+		expect(d.events).toEqual([["missed:login", d.channel.id]]);
 		expect(await d.storage.plannerHolds.get(d.channel.id)).toBeDefined();
 	});
 
@@ -611,7 +567,7 @@ describe("a remote Planner whose link a cut closed", () => {
 		expect(next.attachments.status(d.channel.id)).toEqual({ state: "attached", login: "member" });
 		// Resumed in time: members saw no change, and the hold's row goes while a link backs it.
 		expect(next.changes.every(status => status.state === "attached")).toBe(true);
-		expect(d.events).toEqual([["runs:up", d.channel.id]]);
+		expect(d.events).toEqual([]);
 		await until(async () => (await d.storage.plannerHolds.get(d.channel.id)) === undefined);
 		// The window is over: nothing turns it disconnected later.
 		await Bun.sleep(50);
@@ -768,7 +724,6 @@ describe("a remote Planner whose link a cut closed", () => {
 		client.send({ type: "resume", sessions: [] });
 		expect(await client.next("resumed")).toEqual({ type: "resumed", sessions: [] });
 		expect(next.attachments.attached(d.channel.id)).toBe(true);
-		expect(d.events).toEqual([["runs:ended", d.channel.id]]);
 		await until(async () => (await d.storage.plannerHolds.get(d.channel.id)) === undefined);
 	});
 
@@ -783,7 +738,6 @@ describe("a remote Planner whose link a cut closed", () => {
 			else await next.attachments.documentEnded(d.channel.id);
 			expect(next.attachments.status(d.channel.id)).toEqual({ state: "none" });
 			await until(async () => (await d.storage.plannerHolds.get(d.channel.id)) === undefined);
-			expect(d.events.at(-1)).toEqual(["runs:ended", d.channel.id]);
 		}
 	});
 
@@ -828,22 +782,64 @@ describe("a remote Planner whose link a cut closed", () => {
 	});
 });
 
-describe("a workflow run its client carries on through a restart", () => {
+describe("a hold an earlier release wrote with a session it kept only for a workflow run", () => {
+	/** What that release wrote for a session whose run was live, with no question and no answer. */
+	const RUN_ONLY: PlannerHeldSession = {
+		id: "run-only",
+		waiting: [],
+		owed: [],
+		stops: [{ run: null }],
+		aiLaunchId: "launch-run-only",
+	};
+
+	it("keeps nothing for it: the document is not busy, its AI launch ends, and the window ends in the grace period", async () => {
+		let d = await deploy();
+		let ended: string[] = [];
+		let next = await d.cut(150, {
+			frozen: async rows => {
+				rows[0]!.sessions = [RUN_ONLY];
+			},
+		}, { options: { endAi: id => ended.push(id) } });
+		expect(ended).toEqual(["launch-run-only"]);
+		expect(next.attachments.busy(d.channel.id)).toBe(false);
+		expect(next.attachments.keeping(d.channel.id)).toBe(false);
+		// Its window ends in the grace period a detached link has, never disconnected with work kept.
+		await until(() => next.changes.length > 0);
+		expect(next.attachments.status(d.channel.id)).toMatchObject({ state: "held", login: "member" });
+		expect(next.changes.map(change => change.state)).not.toContain("disconnected");
+	});
+
+	it("keeps beside it only the session whose question its client waits on", async () => {
+		let d = await deploy();
+		let ended: string[] = [];
+		let next = await d.cut(WINDOW_MS, {
+			frozen: async rows => {
+				rows[0]!.sessions.push(RUN_ONLY);
+			},
+		}, { options: { endAi: id => ended.push(id) } });
+		expect(ended).toEqual(["launch-run-only"]);
+		expect(next.attachments.keeping(d.channel.id)).toBe(true);
+		let client = await returns(d, next);
+		client.send({
+			type: "resume",
+			sessions: [
+				{ session: d.sessionId, requests: ["ask-1"] },
+				{ session: RUN_ONLY.id, requests: [] },
+			],
+		});
+		expect(await client.next("resumed")).toEqual({
+			type: "resumed",
+			sessions: [{ session: d.sessionId, requests: ["ask-1"] }],
+		});
+	});
+});
+
+describe("a session its client carries on through a restart", () => {
 	const TRUST = {
 		method: "confirm",
 		title: "Trust the toolchain?",
 		message: "Its checks pass.",
 	} as const;
-
-	/** The first process's Chat shows the run as its retained session reported it, and stores it. */
-	async function shown(d: Awaited<ReturnType<typeof deploy>>) {
-		d.f.plan.chat.runs = [run];
-		await Plan.persist(d.f.plan, () => ({
-			entries: d.f.plan.chat.entries,
-			runs: [run],
-			initiativePaused: false,
-		}));
-	}
 
 	/** The client is back a second after the restart, before any browser opens the document. */
 	async function resumed(
@@ -853,36 +849,11 @@ describe("a workflow run its client carries on through a restart", () => {
 		let client = await returns(d, next);
 		client.send({ type: "resume", sessions: [{ session: d.sessionId, requests: ["ask-1"] }] });
 		await client.next("resumed");
-		client.send({
-			type: "runs",
-			session: d.sessionId,
-			active: ["run"],
-			paused: [],
-			cards: [{
-				...run,
-				updated: 2,
-				stages: [{ id: "verify", name: "verify", status: "running" as const }],
-			}],
-		});
 		return client;
 	}
 
-	it("is shown running, not stopped, when its document opens after the client is back, with the stages it reports", async () => {
-		let d = await deploy();
-		await shown(d);
-		let next = await d.cut();
-		await resumed(d, next);
-		await Bun.sleep(50);
-		let { g } = await reopen(d, next);
-		expect(g.plan.chat.runs?.map(card => card.status)).toEqual(["running"]);
-		await until(() => g.plan.chat.runs?.[0]?.stages.some(stage => stage.id === "verify") === true);
-		expect(g.plan.chat.runs).toMatchObject([{ id: "run", status: "running", updated: 2 }]);
-		expect(g.plan.chat.runs?.[0]?.disconnected).toBeUndefined();
-	});
-
 	it("asks the question it asks after the restart as a Decision, and gives the client the answer", async () => {
 		let d = await deploy();
-		await shown(d);
 		let next = await d.cut();
 		let client = await resumed(d, next);
 		let { g } = await reopen(d, next);
@@ -890,7 +861,6 @@ describe("a workflow run its client carries on through a restart", () => {
 			type: "input-request",
 			request: "ask-2",
 			session: d.sessionId,
-			workflowRunId: "run",
 			input: TRUST,
 		});
 		let asked = (await g.cards(2)).find(card => card.id !== d.card.id);
@@ -905,7 +875,6 @@ describe("a workflow run its client carries on through a restart", () => {
 
 	it("opens its document to ask the question when nobody has it open, and keeps it open until the answer", async () => {
 		let d = await deploy();
-		await shown(d);
 		await d.f.close();
 		d.closed.first = true;
 		let opened: Array<Awaited<ReturnType<typeof reopen>>> = [];
@@ -923,7 +892,6 @@ describe("a workflow run its client carries on through a restart", () => {
 			type: "input-request",
 			request: "ask-2",
 			session: d.sessionId,
-			workflowRunId: "run",
 			input: TRUST,
 		});
 		await until(() => opened.length === 1);

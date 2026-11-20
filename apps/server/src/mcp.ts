@@ -611,7 +611,8 @@ export const TOOLS: Tool[] = [
 				as: {
 					type: "string",
 					enum: ["system"],
-					description: "An automatic follow-up nobody typed, such as a finished workflow run: "
+					description:
+						"An automatic follow-up nobody typed, such as one a client sends when its own work ends: "
 						+ "Chat shows a system notice naming the caller, and the instruction goes to the "
 						+ "Planner alone. Only the document's creator, or the account whose client holds "
 						+ "its Planner, may use it, at most 10 times per document per hour.",

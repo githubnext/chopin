@@ -227,8 +227,7 @@ export const SPIKE_DEADLINE_MS = 20 * 60_000;
 export const MAX_INVESTIGATION_IMAGES = 3;
 /**
  * A document on Default machine has its Planner run on its creator's machine while someone uses
- * it: it is open in Chopin, its Planner waits on a question or a live or paused workflow run, or
- * either was so within this long.
+ * it: it is open in Chopin, its Planner waits on a question, or either was so within this long.
  */
 export const PLANNER_IDLE_MS = 30 * 60_000;
 /**
@@ -673,7 +672,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	}
 	/**
 	 * Documents someone uses, by id, with when they last were seen in use: open in Chopin, their
-	 * Planner asked for, or their Planner waiting on a question or workflow run. On Default machine
+	 * Planner asked for, or their Planner waiting on a question. On Default machine
 	 * their creator's machine runs their Planner until one goes PLANNER_IDLE_MS unused. Forgotten
 	 * with a restart.
 	 */
@@ -1177,7 +1176,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	}
 	/**
 	 * A document stops being used once nobody has had it open, and its Planner has been replying
-	 * to nobody and waiting on no question or workflow run, for PLANNER_IDLE_MS: the machine
+	 * to nobody and waiting on no question, for PLANNER_IDLE_MS: the machine
 	 * Default machine gave its Planner stops running it. Work under way and a question never
 	 * time out by this route, however long they take.
 	 */

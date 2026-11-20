@@ -312,13 +312,13 @@ durable.
   optional `steer-turn` feature is given a message sent while its turn runs as a
   `steer` frame (`docs/agent-connection.md`); one that does not is refused such a
   message, except one sent once the turn is being stopped or finishing, which starts
-  its next turn. Signing out the owner's login, its expiry, or a Planner reset closes the link. A lost
+  its next turn. Chopin keeps no workflow runs of a client's and draws no run cards: a session
+  outlives its turn only while it waits on a question it asked or on an answer its client has not
+  received. Signing out the owner's login, its expiry, or a Planner reset closes the link. A lost
   connection never ends work by itself: a link that offered
   `resumable-sessions` and then dropped unexpectedly keeps its sessions that hold
-  a live run or an open question, however long it stays away, and holds any Stop
-  pressed meanwhile or still unanswered when it dropped for its client's return.
-  Run cards say the Planner is disconnected, not stopped; Decisions stay open and
-  answerable; answers and cancellations made meanwhile are delivered when the
+  an open question or an answer its client has not acknowledged, however long it stays away.
+  Decisions stay open and answerable; answers and cancellations made meanwhile are delivered when the
   same account's client resumes. No timer ends that, and `PLANNER_ATTACH_GRACE_MS`
   leases only a detached link's ownership. Only an explicit Stop, a sign-out or
   expiry, a Planner reset, unpairing or revoking the machine, the owner choosing
@@ -327,8 +327,8 @@ durable.
   close keeps it.
   A restart keeps what the cut writes to `planner_link_holds`: the sessions a client holds,
   the questions it waits on (with the decisions each asked, which the next process waits on
-  again so a member's answer reaches the client's own request), the answers it is owed, the
-  Stops it has not heard and each session's AI launch id, which the next process ends with the
+  again so a member's answer reaches the client's own request), the answers it is owed and
+  each session's AI launch id, which the next process ends with the
   session or replaces when its client resumes. Until its window (`HANDOVER_PLANNER_WINDOW_MS`, counted from the
   release of the lease: the next process starts it as it rebuilds the hold, so no step between
   the write and the release, however slow, and no late takeover takes anything from it; only a

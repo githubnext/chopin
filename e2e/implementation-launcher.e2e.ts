@@ -485,12 +485,12 @@ for (let mode of ["block", "complete", "startup-failure", "live"] as const) {
 				await expect(view.getByRole("link", { name: /^Pull request #\d+/ })).toHaveCount(2);
 				await expect(blocked).toHaveAttribute("aria-expanded", "false");
 				// The tasks the connector started, completed and opened pull requests for show under
-				// Build; once it has ended, Chat's run strip lets the build go.
+				// Build; once it has ended, Chat's build card lets it go.
 				await expect(view.getByRole("list", { name: "Tasks" }).locator(":scope > li"))
 					.toHaveCount(2);
 				let chat = page.getByRole("complementary", { name: "Chat", exact: true });
 				await expect(chat).toBeVisible();
-				await expect(chat.getByRole("region", { name: "Workflow runs" })).toHaveCount(0);
+				await expect(chat.getByRole("region", { name: "Running build" })).toHaveCount(0);
 			} else {
 				// The run ended with its build, blocked: the card says why, as Chat and the connector's
 				// terminal do, and the blocked task's row names it.
@@ -648,7 +648,7 @@ test("a build of a revision whose plan files the Planner pushed starts from thei
 	}
 });
 
-test("a running build heads Chat's run strip with its task, and Chat says when it opens each pull request and when it finishes", async ({ seed, join: enter, room, baseURL }) => {
+test("a running build shows in Chat's build card with its task, and Chat says when it opens each pull request and when it finishes", async ({ seed, join: enter, room, baseURL }) => {
 	test.setTimeout(90_000);
 	await seed("# Chat sees the build\n\nValidate the local agent connection.\n", {
 		graph: preparedGraph(),
@@ -674,13 +674,13 @@ test("a running build heads Chat's run strip with its task, and Chat says when i
 		await expect(page.getByRole("status").filter({ hasText: "Connected" })).toHaveText("Connected");
 		await page.goto(testChannelPath(room));
 		let chat = page.getByRole("complementary", { name: "Chat", exact: true });
-		await expect(chat.getByRole("region", { name: "Workflow runs" })).toHaveCount(0);
+		await expect(chat.getByRole("region", { name: "Running build" })).toHaveCount(0);
 		await page.getByRole("button", { name: "Build plan", exact: true }).click();
 
 		// The agent is on its first task: the build heads the strip, unfolded, with that task.
 		await expect.poll(() => access(paused).then(() => true, () => false), { timeout: 30_000 })
 			.toBe(true);
-		let strip = chat.getByRole("region", { name: "Workflow runs" });
+		let strip = chat.getByRole("region", { name: "Running build" });
 		let row = strip.getByRole("button", { name: /^Build, 0 of 2 tasks, \d+s$/ });
 		await expect(row).toBeVisible();
 		await expect(row).toHaveAttribute("aria-expanded", "true");

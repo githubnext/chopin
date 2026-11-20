@@ -1158,7 +1158,7 @@ describe("a pull request a person closed", () => {
 	});
 });
 
-describe("the running build in Chat's run strip", () => {
+describe("the running build in Chat's build card", () => {
 	let two = (state: "in_progress" | "queued") =>
 		snapshot({
 			graph: {

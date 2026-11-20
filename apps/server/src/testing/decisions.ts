@@ -53,7 +53,6 @@ export function laterTimers() {
  * stored, on the same storage and lease, with `backend` in addition to what a room needs.
  */
 export async function hostInputRoom(
-	hold?: (workflowRunId: string, signal: AbortSignal) => Promise<void>,
 	reopen?: {
 		storage: MemoryStorage;
 		channelId: string;
@@ -111,7 +110,7 @@ export async function hostInputRoom(
 		sessionId: "session",
 		signal: controller.signal,
 	};
-	let input = createHumanInput(room, hold);
+	let input = createHumanInput(room);
 	async function cards(count: number) {
 		for (let deadline = Date.now() + 4_000; Date.now() < deadline; await Bun.sleep(5)) {
 			if (Store.outstanding(plan.questions).length === count) {

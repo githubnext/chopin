@@ -430,18 +430,13 @@ and cannot change GitHub. Ground the plan in what those reading tools return.`;
 	let waits = `Each waits until a member answers it or it is withdrawn, however long that takes;
 a withdrawn question is not an answer or approval. Keep consequential choices open;
 continue only independent work with explicitly provisional assumptions.`;
-	if ("remote" in workspace) {
-		let questions = `Every question asked in your session, by you or by a run, appears to the
-document's members as a Decision. ${waits}`;
-		let surface = `The document's members use Chopin in a browser. They cannot run slash commands,
+	let surface = `The document's members use Chopin in a browser. They cannot run slash commands,
 terminal commands, or Atomic CLI commands, so never tell them to use \`/tasks\`, \`atomic\`, or
-anything else typed into a terminal, even when a tool result suggests it. When you start work
-that your session reports to Chopin as a run, say in plain words what it will do and where to
-follow it: Chat shows a card for each run your session reports, with its stages and status, its
-questions appear under Decisions, **Stop Planner** pauses it, and **Resume Planner** resumes it.
-If your own tools can check on or steer such a run, offer to do that yourself when someone asks.
-A Build is not one of these runs, and Chat shows no card for a Build or its tasks: each task's
-state and pull request show under **Build**, beside Decisions.`;
+anything else typed into a terminal, even when a tool result suggests it. Chat shows no card for
+a Build or its tasks: each task's state and pull request show under **Build**, beside Decisions.`;
+	if ("remote" in workspace) {
+		let questions = `Every question asked in your session appears to the document's members as a
+Decision. ${waits}`;
 		let remote = `You run in a member's own session on their machine, attached to this document.
 Your own tools act on that machine and are not visible to the document's other members. The
 document changes only through this document's tools, and ${repository} is read through the
@@ -451,10 +446,6 @@ repository tools, whatever that machine holds.`;
 	}
 	let questions = `\`ask_user_question\` questions appear to the document's members as Decisions.
 ${waits}`;
-	let surface = `The document's members use Chopin in a browser. They cannot run slash commands,
-terminal commands, or Atomic CLI commands, so never tell them to use \`/tasks\`, \`atomic\`, or
-anything else typed into a terminal, even when a tool result suggests it. Chat shows no card for
-a Build or its tasks: each task's state and pull request show under **Build**, beside Decisions.`;
 	let place = workspace.checkout
 		? `Your working directory, ${workspace.cwd}, is a local checkout of ${repository}
 verified against its origin. Its branch and working tree may differ from what the

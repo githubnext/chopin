@@ -453,7 +453,6 @@ function presence(server: Server<SocketData>, room: Rooms.Room): void {
 function documentBackend(): Service.Backend {
 	return {
 		documentTitles: true,
-		plannerKeepsRuns: id => plannerAttachments?.restoredWork(id),
 		rejoinPlannerQuestions: (plan, server) =>
 			plannerAttachments?.rejoinInputs(plan.id, plannerQuestions(plan, server)),
 		onChannelRenamed: announceChannel,
@@ -578,30 +577,12 @@ function plannerQuestions(plan: Service.Plan, server: Server<SocketData>): Rejoi
 	return {
 		join: (asked, signal) => rejoinInput({ id: plan.id, plan, server }, asked, signal),
 		live,
-		// A session a restart rebuilt asks and reports here as a retained session of this Chat would.
-		humanInput: (hold, report) =>
+		// A session a restart rebuilt asks here as a retained session of this Chat would.
+		humanInput: report =>
 			createHumanInput(
 				{ id: plan.id, plan, server, anchors: () => Service.anchors(plan, server, plan.id) },
-				hold,
 				report,
 			),
-		runs: (session, runs, down) => {
-			if (!live()) return;
-			void Chat.rebuiltRuns(
-				{
-					chat: plan.chat,
-					room: plan.id,
-					server,
-					persist: chat => Service.persist(plan, chat),
-					auth: hostedAuth,
-				},
-				session,
-				runs,
-				down,
-			).catch(err =>
-				console.error("chopin: could not show the workflow runs a restart kept -", err)
-			);
-		},
 		unsent: decisions => {
 			for (let id of decisions) {
 				let record = plan.records.get(id);
@@ -1682,9 +1663,6 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 			return;
 
 		case "chat:abort":
-		case "chat:resume":
-		case "chat:pause-run":
-		case "chat:resume-run":
 			if (!room.plan) return;
 			if (room.plan.parentChannelId) {
 				if (frame.rid) fail(ws, frame.rid, "this document's Chat is on its root document");
@@ -2769,14 +2747,6 @@ async function archiveChannelLocked(channelId: string, now: Date) {
 				await stopped;
 				await conversationRuntime.interrupt(active);
 				await Service.drain(active);
-				// Its runs end with it, whatever its Planner's link is doing: attached, disconnected
-				// with its work kept, or between two processes of a deploy, which report nothing.
-				await Chat.endRuns({
-					chat: active.chat,
-					room: channelId,
-					server,
-					persist: chat => Service.persist(active, chat),
-				});
 				await Service.persist(active);
 			}
 			return storage.channels.archive({ id: channelId, now, lease: heldLease() });
@@ -3386,19 +3356,6 @@ if (config.agent && config.harness === "remote") {
 				throw err;
 			}
 			return release;
-		},
-		restoredRuns: (channelId, outcome) => {
-			let room = Rooms.get(channelId);
-			let opened = room?.plan;
-			if (!room || !opened) return;
-			void Chat.restoredRuns({
-				chat: opened.chat,
-				room: channelId,
-				server,
-				persist: chat => Service.persist(opened, chat),
-			}, outcome).catch(err =>
-				console.error("chopin: could not update the workflow runs a restart kept -", err)
-			);
 		},
 	});
 	hostedAuth.machines.onEnded(machineId => {
