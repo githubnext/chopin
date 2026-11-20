@@ -172,6 +172,9 @@ async function run(
 			join(agentDir, "extensions", "marker.ts"),
 			`export default api => {
 	api.registerTool({name: "operator_tool", label: "Operator", description: "Marker", parameters: {type:"object"}, async execute() { return {content:[{type:"text",text:"marker"}], details:{}}; }});
+	api.on("session_start", (_event, ctx) => {
+		globalThis.chopinTestPlannerContext = { mode: ctx.mode, hasUI: ctx.hasUI };
+	});
 	let nudged = false;
 	api.on("agent_end", () => {
 		let how = process.env.CHOPIN_TEST_SELF_STARTED_TURN;
@@ -392,6 +395,18 @@ test("a Planner reaches no session through Atomic's intercom, from a script or n
 		expect(refusal, label).toContain("intercom");
 		expect(refusal, label).toMatch(/not found|not available|does not exist/);
 	}
+});
+
+test("a Planner's Atomic session has no terminal, so Atomic's Intercom never makes it reachable before it is used", async () => {
+	// Atomic 0.10 has an interactive terminal session join Intercom a few seconds after it starts,
+	// so other sessions can list and message it; any other session joins only when it uses Intercom,
+	// which a Planner's turns never may.
+	let context = globalThis as { chopinTestPlannerContext?: { mode: string; hasUI: boolean } };
+	delete context.chopinTestPlannerContext;
+	await run(true);
+	expect(context.chopinTestPlannerContext).toBeDefined();
+	expect(context.chopinTestPlannerContext!.mode).not.toBe("tui");
+	expect(context.chopinTestPlannerContext!.hasUI).toBe(false);
 });
 
 test("a Planner starts no agent through Atomic's subagent tool, called directly or from a codemode script", async () => {
