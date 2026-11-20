@@ -193,10 +193,17 @@ export type KeyedInvocation = {
  * earlier call saved it and started no turn, and a retry starts that turn without posting again.
  * When it does not, nothing was kept: a retry posts it, and a different request takes the key. A
  * refusal that kept nothing frees the key, and one that could not is freed by the next call.
+ *
+ * A claim marked invoked whose turn this process knows it did not start, because recording the
+ * start failed or its answer was lost before the turn began, is recovered as one not marked: the
+ * retry starts that turn without posting again. Only a process that stopped between recording the
+ * start and starting the turn leaves one that no retry starts, as it leaves a turn interrupted.
  * Calls with one key run one at a time in this process, the only one holding the writer lease.
  */
 export class IdempotentInvocations {
 	#running = new Map<string, Promise<unknown>>();
+	/** The entry of each key's claim whose start was recorded, or may have been, with no turn started. */
+	#unstarted = new Map<string, string>();
 
 	constructor(
 		private store: McpInvocationStore,
@@ -212,7 +219,7 @@ export class IdempotentInvocations {
 	): Promise<Invoked> {
 		let key = JSON.stringify([scope.userId, scope.channelId, scope.key]);
 		let previous = this.#running.get(key) ?? Promise.resolve();
-		let operation = previous.then(() => this.#once(scope, fingerprint, result, deliver));
+		let operation = previous.then(() => this.#once(key, scope, fingerprint, result, deliver));
 		let settled = operation.then(() => {}, () => {});
 		this.#running.set(key, settled);
 		void settled.then(() => {
@@ -222,6 +229,7 @@ export class IdempotentInvocations {
 	}
 
 	async #once(
+		key: string,
 		scope: McpInvocationScope,
 		fingerprint: string,
 		result: McpInvocationResult,
@@ -242,9 +250,12 @@ export class IdempotentInvocations {
 		};
 		let record = await claim();
 		if (record.invokedAt) {
-			return record.fingerprint === fingerprint
-				? { kind: "invoked", document: record.result.document }
-				: { kind: "refused", code: "idempotency-conflict" };
+			if (record.fingerprint !== fingerprint) {
+				return { kind: "refused", code: "idempotency-conflict" };
+			}
+			if (this.#unstarted.get(key) !== record.entryId) {
+				return { kind: "invoked", document: record.result.document };
+			}
 		}
 		let outcome = await deliver({
 			reconcile: async posted => {
@@ -257,21 +268,28 @@ export class IdempotentInvocations {
 					}
 				}
 				let claimed = record;
-				return { entryId: claimed.entryId, starting: () => this.#starting(lease, claimed) };
+				return {
+					entryId: claimed.entryId,
+					starting: () => this.#starting(key, lease, claimed),
+				};
 			},
 			unused: async () => {
+				this.#unstarted.delete(key);
 				await this.store.release(lease, record).catch(err => {
 					console.error("[mcp] could not free an idempotency key after a refusal:", err);
 				});
 			},
 		});
-		return outcome.kind === "invoked"
-			? { kind: "invoked", document: record.result.document }
-			: outcome;
+		if (outcome.kind !== "invoked") return outcome;
+		if (this.#unstarted.get(key) === record.entryId) this.#unstarted.delete(key);
+		return { kind: "invoked", document: record.result.document };
 	}
 
-	/** Marks `claim` invoked, or throws so its turn does not start. */
-	async #starting(lease: Lease, claim: McpInvocation): Promise<void> {
+	/**
+	 * Marks `claim` invoked, or throws so its turn does not start. A throw after the mark may have
+	 * been saved leaves the claim to be recovered by the next call with its key.
+	 */
+	async #starting(key: string, lease: Lease, claim: McpInvocation): Promise<void> {
 		let failure: unknown;
 		try {
 			if (await this.store.complete(lease, claim, this.clock())) return;
@@ -280,6 +298,7 @@ export class IdempotentInvocations {
 		}
 		let held = await this.store.get(claim).catch(() => undefined);
 		if (held?.entryId === claim.entryId && held.invokedAt) return;
+		this.#unstarted.set(key, claim.entryId);
 		throw failure ?? new Error("the idempotency key's claim is gone");
 	}
 }
