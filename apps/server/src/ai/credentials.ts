@@ -7,7 +7,7 @@ import {
 } from "@chopin/protocol/ai-credentials";
 
 import { decrypted, encrypted, imported } from "../auth/session";
-import { COPILOT_RAW_TOKEN_HEADERS } from "./copilot";
+import { COPILOT_RAW_TOKEN_HEADERS, CopilotTokenRefused } from "./copilot";
 import { catalogOnly } from "./launches";
 import { AI_UPSTREAMS } from "./proxy";
 import {
@@ -185,7 +185,10 @@ type AccountAnswers = Record<"access" | "none", number> & {
  * of its tokens asked (a browser login's or a paired machine's), or a GitHub token they connected
  * instead, which may be anyone's.
  */
-function copilotAccount(record: AiCredentialRecord, githubToken: string): string {
+function copilotAccount(
+	record: Pick<AiCredentialRecord, "kind" | "userId">,
+	githubToken: string,
+): string {
 	return record.kind === "github-sign-in"
 		? `sign-in:${record.userId}`
 		: `token:${Buffer.from(digest(githubToken)).toString("hex")}`;
@@ -608,8 +611,9 @@ export class AiCredentials {
 
 	/**
 	 * Connects `provider` for `userId`, replacing what they connected for it before. An OpenAI or
-	 * Anthropic key is first checked with one request to that provider, and saved only when it is
-	 * accepted, so a refused key never replaces one that works.
+	 * Anthropic key is first checked with one request to that provider, and a GitHub Copilot token
+	 * with GitHub (see `#checkCopilotToken`), and saved only when it is accepted, so a refused key
+	 * never replaces one that works.
 	 */
 	async connect(
 		userId: string,
@@ -636,7 +640,7 @@ export class AiCredentials {
 					"A key is 8 to 4096 printable characters, with no spaces.",
 				);
 			}
-			await this.#checkKey(provider, secret);
+			await this.#checkKey(userId, provider, secret);
 			record = {
 				userId,
 				provider,
@@ -648,10 +652,16 @@ export class AiCredentials {
 		}
 		await this.#storage.aiCredentials.put(this.#lease(), record);
 		this.#told(userId);
+		// A token's answer is the one its check just got; a sign-in is asked afresh.
+		let fresh = record.kind === "github-sign-in";
 		return summary(
 			record,
 			provider === "github-copilot"
-				? (await this.#copilotAccess(record, await this.#connectedToken(record, githubToken), true))
+				? (await this.#copilotAccess(
+					record,
+					await this.#connectedToken(record, githubToken),
+					fresh,
+				))
 					.access
 				: undefined,
 		);
@@ -697,7 +707,8 @@ export class AiCredentials {
 	 * Asks the provider, once, to list its models with `secret`, and throws unless it answers: a
 	 * refusal (401 or 403) says the key is wrong, anything else that the key couldn't be checked.
 	 */
-	async #checkKey(provider: AiProvider, secret: string): Promise<void> {
+	async #checkKey(userId: string, provider: AiProvider, secret: string): Promise<void> {
+		if (provider === "github-copilot") return this.#checkCopilotToken(userId, secret);
 		let name = CHECKED[provider];
 		if (!name) return;
 		let headers: Record<string, string> = provider === "anthropic"
@@ -722,6 +733,31 @@ export class AiCredentials {
 			`Chopin couldn't check this key with ${name} now. Try again in a moment.`,
 			502,
 		);
+	}
+
+	/**
+	 * Asks GitHub about a GitHub Copilot token before it is saved, as a launch would: a token GitHub
+	 * exchanges, or Copilot's model API takes itself, is accepted, and so is one whose account GitHub
+	 * says has no Copilot subscription, which the AI accounts page then says. One neither takes is
+	 * refused (422), and one that couldn't be asked (502) is not saved either, so neither replaces
+	 * the sign-in or a token that works. The answer is recorded for the token's account, as any is.
+	 */
+	async #checkCopilotToken(userId: string, secret: string): Promise<void> {
+		let account = copilotAccount({ kind: "api-key", userId }, secret);
+		this.#answersFor(account, userId);
+		try {
+			await this.#copilotAnswer(account, secret, true);
+		} catch (err) {
+			if (err instanceof CopilotTokenRefused) {
+				throw new AiCredentialError(
+					"GitHub refused this token for Copilot. Check it and try again.",
+				);
+			}
+			throw new AiCredentialError(
+				"Chopin couldn't check this token with GitHub now. Try again in a moment.",
+				502,
+			);
+		}
 	}
 
 	/**

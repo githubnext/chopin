@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { COPILOT_RAW_TOKEN_HEADERS, copilotTokenExchange } from "./copilot";
+import { COPILOT_RAW_TOKEN_HEADERS, copilotTokenExchange, CopilotTokenRefused } from "./copilot";
 
 let servers: Array<{ stop: (force: boolean) => void }> = [];
 afterEach(() => {
@@ -157,6 +157,8 @@ describe("Copilot token exchange", () => {
 				let failed = await failure(exchange("ghu_person"));
 				expect(failed.message).toContain(String(refusal));
 				expect(failed.message).not.toContain("ghu_person");
+				// Only Copilot refusing the token says this token reaches no Copilot.
+				expect(failed instanceof CopilotTokenRefused).toBe(refusal !== 500);
 			}
 		}
 	});
@@ -192,6 +194,12 @@ describe("Copilot token exchange", () => {
 		await failure(
 			copilotTokenExchange({ api: "http://127.0.0.1:9", copilotApi: unreachable })("ghu_person"),
 		);
+		// GitHub failing to answer says nothing of the token, whatever Copilot's model API says.
+		let failing = copilotTokenExchange({
+			api: github(500).api,
+			copilotApi: copilot(401, "unauthorized: token authentication failed").copilotApi,
+		});
+		expect(await failure(failing("ghu_person"))).not.toBeInstanceOf(CopilotTokenRefused);
 	});
 
 	it("can't be told from a refusal GitHub gives for its rate limit, and asks Copilot nothing then", async () => {
@@ -208,7 +216,9 @@ describe("Copilot token exchange", () => {
 				api: github(status, limited, headers).api,
 				copilotApi: model.copilotApi,
 			});
-			expect((await failure(exchange("ghu_person"))).message).toContain(String(status));
+			let failed = await failure(exchange("ghu_person"));
+			expect(failed.message).toContain(String(status));
+			expect(failed).not.toBeInstanceOf(CopilotTokenRefused);
 			expect(model.asked).toEqual([]);
 		}
 		let refused = github(403, noSeat("no_copilot_access"), {

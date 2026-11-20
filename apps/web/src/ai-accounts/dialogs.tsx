@@ -39,7 +39,7 @@ function keyWords({ provider, replacing }: KeyRequest) {
 		return {
 			title: replacing ? "Replace GitHub Copilot token" : "Use a GitHub token for Copilot",
 			lead:
-				"Copilot runs through this token's GitHub account instead of your sign-in. Machines get a stand-in, never the token.",
+				"Copilot runs through this token's GitHub account instead of your sign-in. Chopin checks it with GitHub before saving it. Machines get a stand-in, never the token.",
 			label: "GitHub token",
 			hint:
 				"A fine-grained personal access token with the Copilot Requests permission, or the GitHub CLI's (gh auth token).",

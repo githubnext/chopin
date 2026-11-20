@@ -199,7 +199,9 @@ function copilotGate(handle: string): string {
 /**
  * What GitHub says of a token's Copilot access, by its person's gate: `none` (no seat), `unknown`
  * (GitHub failing), `refused` (a seat-holder's sign-in GitHub won't exchange, as it refuses a GitHub
- * App's user token, which Copilot's model API takes itself), or empty, a seat.
+ * App's user token, which Copilot's model API takes itself), or empty, a seat. A token pasted in is
+ * `none` when it says `no-copilot`, and `refused` when it says `refused`, which Copilot's model API
+ * refuses too unless it is a personal access token.
  */
 async function copilotGateFor(token: string): Promise<string> {
 	let handle = /^ghu_e2e_(.+)_\d+$/.exec(token)?.[1];
@@ -209,6 +211,8 @@ async function copilotGateFor(token: string): Promise<string> {
 		? (await readFile(copilotGate(handle), "utf8").catch(() => "")).trim()
 		: token.includes("no-copilot")
 		? "none"
+		: token.includes("refused")
+		? "refused"
 		: "";
 }
 
