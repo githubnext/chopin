@@ -65,6 +65,16 @@ const SCORE_OUTSIDER = "score-outsider-";
 const MACHINE_SHARER = "machine-sharer-";
 // Someone GitHub gives no Copilot token: no Copilot subscription. Everyone else has Copilot.
 const NO_COPILOT = "no-copilot-";
+// GitHub's answer for an account with no Copilot subscription, as it tells Copilot's own clients.
+const NO_SEAT = {
+	message: "You do not have access to GitHub Copilot.",
+	error_details: {
+		notification_id: "no_copilot_access",
+		message: "No access to GitHub Copilot found.",
+		title: "Account unavailable",
+		url: "https://github.com/features/copilot",
+	},
+};
 // An OpenAI key the fake OpenAI accepts; any other is refused.
 const OPENAI_KEY = "sk-e2e-";
 
@@ -185,19 +195,48 @@ function copilotGate(handle: string): string {
 	return join(tmpdir(), "chopin-e2e-copilot", handle);
 }
 
-async function copilotToken(authorization: string): Promise<Response> {
-	let token = /^token (\S+)$/.exec(authorization)?.[1] ?? "";
+/**
+ * What GitHub says of a token's Copilot access, by its person's gate: `none` (no seat), `unknown`
+ * (GitHub failing), `refused` (a seat-holder's sign-in GitHub won't exchange, as it refuses a GitHub
+ * App's user token, which Copilot's model API takes itself), or empty, a seat.
+ */
+async function copilotGateFor(token: string): Promise<string> {
 	let handle = /^ghu_e2e_(.+)_\d+$/.exec(token)?.[1];
-	let access = handle?.startsWith(NO_COPILOT)
+	return handle?.startsWith(NO_COPILOT)
 		? "none"
 		: handle
 		? (await readFile(copilotGate(handle), "utf8").catch(() => "")).trim()
 		: token.includes("no-copilot")
 		? "none"
 		: "";
-	if (access === "none") return json({ message: "Not Found" }, { status: 404 });
+}
+
+async function copilotToken(authorization: string): Promise<Response> {
+	let token = /^token (\S+)$/.exec(authorization)?.[1] ?? "";
+	let access = await copilotGateFor(token);
+	if (access === "none") return json(NO_SEAT, { status: 403 });
+	// GitHub exchanges only Copilot's own clients' tokens. It refuses a GitHub App's user token with
+	// a page that says nothing about the account, and a personal access token as not found.
+	if (access === "refused") {
+		return new Response(
+			"403 Forbidden. For more on scraping GitHub, see the Terms of Service.\n",
+			{ status: 403, headers: { "content-type": "text/plain; charset=utf-8" } },
+		);
+	}
+	if (/^(ghp|github_pat)_/.test(token)) return json({ message: "Not Found" }, { status: 404 });
 	if (access === "unknown") return json({ message: "Service Unavailable" }, { status: 503 });
 	return json({ token: `tid=e2e;${token}`, expires_at: Math.floor(Date.now() / 1000) + 1_800 });
+}
+
+/** Copilot's model list, asked with a GitHub token itself, which it takes from a seat-holder. */
+async function copilotModels(authorization: string): Promise<Response> {
+	let token = /^Bearer (\S+)$/.exec(authorization)?.[1] ?? "";
+	let access = await copilotGateFor(token);
+	if (access === "unknown") return new Response("service unavailable", { status: 503 });
+	if (access === "none" || !/^(ghu_e2e|ghp|github_pat)_/.test(token)) {
+		return new Response("unauthorized: token authentication failed", { status: 401 });
+	}
+	return json({ data: [{ id: "gpt-e2e" }] });
 }
 
 function json(value: unknown, init: ResponseInit = {}): Response {
@@ -382,6 +421,9 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		);
 		if (repository) return json(repository);
 		return json({ message: "Not Found" }, { status: 404 });
+	}
+	if (url.origin === "https://api.githubcopilot.com" && url.pathname === "/models") {
+		return copilotModels(new Headers(init?.headers).get("authorization") ?? "");
 	}
 	if (url.origin === "https://api.openai.com" && url.pathname === "/v1/models") {
 		let key = new Headers(init?.headers).get("authorization") ?? "";

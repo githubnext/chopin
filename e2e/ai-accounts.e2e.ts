@@ -15,7 +15,7 @@ function person(prefix = "ai") {
 	return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-async function copilotAccess(handle: string, access: "none" | "unknown" | "access") {
+async function copilotAccess(handle: string, access: "none" | "unknown" | "access" | "refused") {
 	let gates = join(tmpdir(), "chopin-e2e-copilot");
 	await mkdir(gates, { recursive: true });
 	await writeFile(join(gates, handle), access);
@@ -107,6 +107,21 @@ test("without a seat, Copilot says so, links to Copilot, and takes a token inste
 	}
 });
 
+test("a seat-holder whose sign-in GitHub won't exchange is connected through Copilot's own API, never told there is no subscription", async ({ baseURL, page }) => {
+	let handle = person();
+	await copilotAccess(handle, "refused");
+	try {
+		await open(page, handle, baseURL!);
+		let copilot = row(page, "GitHub Copilot");
+		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+		await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
+		await expect(copilot).not.toContainText("subscription");
+		await expect(copilot.getByRole("button")).toHaveCount(0);
+	} finally {
+		await forgetCopilotAccess(handle);
+	}
+});
+
 test("a check that couldn't finish never says there is no subscription, and is done again when the page opens", async ({ baseURL, page }) => {
 	let handle = person();
 	await copilotAccess(handle, "unknown");
@@ -121,6 +136,7 @@ test("a check that couldn't finish never says there is no subscription, and is d
 		).toBeVisible();
 		await expect(copilot).not.toContainText("subscription");
 		await expect(copilot.getByRole("link", { name: "Get Copilot" })).toHaveCount(0);
+		await expect(copilot.getByRole("button", { name: "Use a token instead" })).toBeVisible();
 
 		await copilotAccess(handle, "access");
 		await page.reload();

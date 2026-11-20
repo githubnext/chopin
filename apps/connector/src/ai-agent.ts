@@ -215,7 +215,8 @@ const ATOMIC_PROVIDERS: Record<AiProvider, string[]> = {
 
 /**
  * Copilot's model API takes the Copilot token Chopin exchanges for the person's GitHub token, as an
- * editor's sign-in does, so the agent sends the headers of one.
+ * editor's sign-in does, so the agent sends the headers of one. Where Chopin sends a GitHub token
+ * Copilot takes itself instead, its proxy replaces them with the ones that token needs.
  */
 const COPILOT_HEADERS = { "Copilot-Integration-Id": "vscode-chat" };
 

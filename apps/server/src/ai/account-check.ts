@@ -29,7 +29,10 @@ export const NO_AI_ACCOUNT_SESSION =
 export const AI_ACCOUNT_UNCHECKED_SESSION =
 	`${PLANNER_NAME} couldn't finish checking your AI accounts, so it didn't start. Try again in a moment.`;
 
-/** Withheld for a question nobody answered: GitHub, or the person's own sign-in, couldn't be asked. */
+/**
+ * Withheld for a question with no answer about the account: GitHub couldn't be asked or answered
+ * nothing about it, or the person's own sign-in couldn't be read.
+ */
 const UNANSWERED = new Set<AiWithheld["reason"]>(["copilot-unavailable", "sign-in-unavailable"]);
 
 /**

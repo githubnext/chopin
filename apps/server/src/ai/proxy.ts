@@ -1,5 +1,7 @@
 import { AI_LAUNCH_HEADER, AI_PROXY_PATH, isAiProvider } from "@chopin/protocol/ai-credentials";
 
+import { COPILOT_MODEL_API } from "./copilot";
+
 import type { AiProvider } from "@chopin/protocol/ai-credentials";
 import type { AiCredentialRecord } from "../storage/model";
 import type { AiAdmitted, AiCredentials, AiDeadlines, AiRefusal } from "./credentials";
@@ -32,9 +34,12 @@ export function aiTransport(send: typeof fetch, clock: () => number): AiTranspor
 	};
 }
 
-/** Each provider's own API origin, the only host the proxy sends its credential to. */
+/**
+ * Each provider's own API origin, the only host the proxy sends its credential to. A GitHub token
+ * Copilot's model API takes itself is sent to Copilot's alone, never to a host a Copilot token names.
+ */
 export const AI_UPSTREAMS: Record<AiProvider, string> = {
-	"github-copilot": "https://api.githubcopilot.com",
+	"github-copilot": COPILOT_MODEL_API,
 	openai: "https://api.openai.com",
 	anthropic: "https://api.anthropic.com",
 };
@@ -642,6 +647,7 @@ export function aiProxy(options: AiProxyOptions) {
 					? `Bearer ${authorized.secret}`
 					: authorized.secret,
 			);
+			for (let [name, value] of Object.entries(authorized.headers ?? {})) headers.set(name, value);
 			let origin = options.upstreams?.[provider] ?? authorized.origin ?? AI_UPSTREAMS[provider];
 			let target = upstreamUrl(origin, path, url.search);
 			let init: RequestInit = {

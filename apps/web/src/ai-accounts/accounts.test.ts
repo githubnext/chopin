@@ -51,7 +51,7 @@ describe("GitHub Copilot through the sign-in", () => {
 		});
 	});
 
-	test("an unfinished check says the page checks again when it opens, never that there is no subscription", () => {
+	test("an unfinished check says the page checks again when it opens, never that there is no subscription, and offers a token", () => {
 		for (let access of ["unknown", undefined] as const) {
 			let row = copilot({ ...SIGN_IN, copilotAccess: access });
 			expect(row.badge).toEqual({ tone: "neutral", label: "Not checked" });
@@ -60,7 +60,7 @@ describe("GitHub Copilot through the sign-in", () => {
 				"Chopin couldn't check for Copilot access through your GitHub sign-in. It checks again when you open this page.",
 			]);
 			expect(row.getCopilot).toBe(false);
-			expect(row.actions).toEqual([]);
+			expect(row.actions).toEqual(["use-token"]);
 			expect(JSON.stringify(row)).not.toContain("subscription");
 		}
 	});
