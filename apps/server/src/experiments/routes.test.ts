@@ -32,6 +32,8 @@ import { testLease } from "../storage/contract-support";
 import type { ImplementationConnector } from "../tasks/connector";
 import type { AiCredentials, AiLaunch, AiLaunchGrants } from "../ai/credentials";
 import { AI_ACCOUNT_UNCHECKED_RUN, NO_AI_ACCOUNT_RUN } from "@chopin/protocol/ai-credentials";
+import { MachineStores } from "../machine-store/service";
+import { FakeMachineStoreServer } from "../machine-store/fake-server.test-fixtures";
 
 function text(value: { result: { content: Array<{ text: string }> } }) {
 	return JSON.parse(value.result.content[0].text);
@@ -55,6 +57,7 @@ async function setup(
 		durable?: boolean;
 		app?: GitHubApp;
 		ai?: () => AiCredentials | undefined;
+		machineStores?: MachineStores;
 	} = {},
 ) {
 	let storage = shared?.storage ?? new MemoryStorage();
@@ -156,6 +159,7 @@ async function setup(
 			};
 		},
 		lease: () => lease,
+		revoked: async id => await extra.machineStores?.disable(id),
 	});
 	let router = new Router();
 	let lock = { locked: false, documents: new Set<string>() };
@@ -2396,4 +2400,101 @@ test("a build's MCP token acts as whoever asked for it, on the build's machine, 
 	expect((await caller())?.user).toMatchObject({ id: "bob", login: "bob" });
 	builds.delete(`${documentId} ${id}`);
 	expect(await caller()).toBeUndefined();
+});
+
+async function storeSetup() {
+	let storage = new MemoryStorage();
+	let lease = (await storage.leases.acquire("writer", "test", 60_000))!;
+	let server = new FakeMachineStoreServer();
+	let machineStores = new MachineStores({
+		storage,
+		server,
+		key: new Uint8Array(32).fill(5),
+		clock: () => new Date(),
+	});
+	let context = await setup({ storage, lease }, { machineStores });
+	return { ...context, server, machineStores };
+}
+
+test("a paired machine asks for its own database login and gets the same one each time", async () => {
+	let { alice, bob, pair, request, server } = await storeSetup();
+	let laptop = await pair(alice.cookie);
+	let desk = await pair(bob.cookie);
+	let ask = (token: string) => request("/api/connector/machine-store", {}, undefined, token);
+	let first = await ask(laptop.machineToken);
+	expect(first.status).toBe(200);
+	expect(first.headers.get("cache-control")).toBe("no-store");
+	let login = await first.json();
+	let role = `m_${laptop.machine.replaceAll("-", "")}`;
+	expect(login.url).toBe(`postgresql://${role}@db.example.com:5432/${role}?sslmode=verify-full`);
+	expect(server.passwords.get(role)).toBe(login.password);
+	expect(await (await ask(laptop.machineToken)).json()).toEqual(login);
+	let theirs = await (await ask(desk.machineToken)).json();
+	expect(theirs.url).not.toBe(login.url);
+	expect(theirs.password).not.toBe(login.password);
+	expect((await ask("chopin_m_" + "x".repeat(43))).status).toBe(401);
+	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(listed.machines.find((value: { id: string }) => value.id === laptop.machine).store)
+		.toEqual({ state: "ready" });
+});
+
+test("a failed login is said on the Machines page and pairing still works", async () => {
+	let { alice, pair, request, server } = await storeSetup();
+	server.refuse = "a machine could still connect to the database template1";
+	let laptop = await pair(alice.cookie);
+	expect(laptop.token).toBeString();
+	let refused = await request("/api/connector/machine-store", {}, undefined, laptop.machineToken);
+	expect(refused.status).toBe(503);
+	expect(await refused.json()).toEqual({
+		error: "machine-store-unavailable",
+		message: "a machine could still connect to the database template1",
+	});
+	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(listed.machines[0].store).toEqual({
+		state: "failed",
+		reason: "a machine could still connect to the database template1",
+	});
+});
+
+test("only a machine's owner rotates its login, and the old password stops working", async () => {
+	let { alice, bob, pair, request, server } = await storeSetup();
+	let laptop = await pair(alice.cookie);
+	let ask = () => request("/api/connector/machine-store", {}, undefined, laptop.machineToken);
+	let before = await (await ask()).json();
+	let rotate = (cookie: string) =>
+		request(`/api/connector/machines/${laptop.machine}/store/rotate`, {}, cookie);
+	expect((await rotate(bob.cookie)).status).toBe(404);
+	expect((await request(`/api/connector/machines/${laptop.machine}/store/rotate`, {})).status)
+		.toBe(401);
+	expect(await (await rotate(alice.cookie)).json()).toEqual({ rotated: true });
+	let after = await (await ask()).json();
+	let role = new URL(after.url).username;
+	expect(after.password).not.toBe(before.password);
+	expect(await server.accepts(role, before.password)).toBe(false);
+	expect(await server.accepts(role, after.password)).toBe(true);
+});
+
+test("revoking or unpairing a machine turns its login off before Chopin answers", async () => {
+	let { alice, pair, request, server } = await storeSetup();
+	let laptop = await pair(alice.cookie);
+	let desk = await pair(alice.cookie);
+	let ask = (token: string) => request("/api/connector/machine-store", {}, undefined, token);
+	let first = await (await ask(laptop.machineToken)).json();
+	let second = await (await ask(desk.machineToken)).json();
+	let revoked = await request(`/api/connector/machines/${laptop.machine}/revoke`, {}, alice.cookie);
+	expect(revoked.status).toBe(200);
+	expect(server.enabled.has(new URL(first.url).username)).toBe(false);
+	expect((await ask(laptop.machineToken)).status).toBe(401);
+	let unpaired = await request("/api/connector/machine/revoke", {}, undefined, desk.machineToken);
+	expect(unpaired.status).toBe(200);
+	expect(server.enabled.has(new URL(second.url).username)).toBe(false);
+});
+
+test("without MACHINE_STORE_URL a machine is told there is no database login", async () => {
+	let { alice, pair, request } = await setup();
+	let laptop = await pair(alice.cookie);
+	let asked = await request("/api/connector/machine-store", {}, undefined, laptop.machineToken);
+	expect(asked.status).toBe(404);
+	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
+	expect(listed.machines[0].store).toBeNull();
 });

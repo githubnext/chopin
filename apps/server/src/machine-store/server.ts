@@ -1,0 +1,356 @@
+import { SQL } from "bun";
+
+import { quotedIdentifier as id, quotedLiteral, scramVerifier } from "./names";
+
+import type { MachineStoreConfig } from "./config";
+
+export class MachineStoreRefusal extends Error {
+	override name = "MachineStoreRefusal";
+}
+
+export interface MachineStoreServer {
+	loginUrl(role: string): string;
+	provision(role: string, password: string): Promise<void>;
+	setPassword(role: string, password: string): Promise<void>;
+	accepts(role: string, password: string): Promise<boolean | undefined>;
+	disable(role: string): Promise<void>;
+	drop(role: string): Promise<void>;
+	close(): Promise<void>;
+}
+
+export const ATOMIC_SCHEMA = "atomic";
+const UNREACHABLE_DATABASES = ["postgres", "template1"];
+const REASON_CHARS = 280;
+
+type Me = { name: string; superuser: boolean; database: string };
+type ServerError = { errno?: unknown; code?: unknown; message?: unknown };
+
+function serverCode(error: unknown): string | undefined {
+	let errno = (error as ServerError | undefined)?.errno;
+	return typeof errno === "string" && /^[0-9A-Z]{5}$/.test(errno) ? errno : undefined;
+}
+
+function shortened(text: string) {
+	let line = text.replace(/\s+/g, " ").trim();
+	return line.length > REASON_CHARS ? `${line.slice(0, REASON_CHARS - 1)}…` : line;
+}
+
+export class PostgresMachineStoreServer implements MachineStoreServer {
+	readonly #base: URL;
+	readonly #password: string | undefined;
+	readonly #admin: SQL;
+	readonly #unreachable: readonly string[];
+
+	constructor(config: MachineStoreConfig, unreachable: readonly string[] = UNREACHABLE_DATABASES) {
+		this.#base = new URL(config.url);
+		this.#password = config.password;
+		this.#unreachable = unreachable;
+		this.#admin = new SQL({
+			url: this.#base.href,
+			...(config.password ? { password: config.password } : {}),
+			max: 2,
+			idleTimeout: 30,
+			connectionTimeout: 10,
+		});
+	}
+
+	get #where() {
+		return `${this.#base.hostname}:${this.#base.port || "5432"}`;
+	}
+
+	loginUrl(role: string): string {
+		let url = new URL(`postgresql://${this.#base.host}`);
+		url.username = role;
+		url.pathname = `/${role}`;
+		let mode = this.#base.searchParams.get("sslmode");
+		if (mode) url.searchParams.set("sslmode", mode);
+		return url.href;
+	}
+
+	#urlOf(database: string) {
+		let url = new URL(this.#base.href);
+		url.pathname = `/${encodeURIComponent(database)}`;
+		return url.href;
+	}
+
+	async provision(role: string, password: string): Promise<void> {
+		await this.#refusing(async () => {
+			let me = await this.#me();
+			let [existing] = await this.#admin<{ name: string }[]>`
+				SELECT rolname AS name FROM pg_roles WHERE rolname = ${role}
+			`;
+			if (existing) await this.#checkRole(role);
+			else {
+				await this.#admin.unsafe(
+					`CREATE ROLE ${id(role)} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION `
+						+ "NOBYPASSRLS NOINHERIT",
+				);
+			}
+			if (!me.superuser) {
+				await this.#admin.unsafe(`GRANT ${id(role)} TO CURRENT_USER`).catch(() => {});
+			}
+			await this.#database(role, me);
+			await this.#closeOthers(role);
+			await this.#checkRole(role);
+			await this.#admin.unsafe(
+				`ALTER ROLE ${id(role)} WITH LOGIN PASSWORD ${quotedLiteral(scramVerifier(password))}`,
+			);
+			await this.#checkConnections(role, password, me);
+		});
+	}
+
+	async setPassword(role: string, password: string): Promise<void> {
+		await this.#refusing(async () => {
+			let me = await this.#me();
+			await this.#checkRole(role);
+			await this.#checkDatabase(role, me);
+			await this.#admin.unsafe(
+				`ALTER ROLE ${id(role)} WITH PASSWORD ${quotedLiteral(scramVerifier(password))}`,
+			);
+			await this.#terminate(role);
+		});
+	}
+
+	async accepts(role: string, password: string): Promise<boolean | undefined> {
+		try {
+			await this.#connectAs(role, password, role);
+			return true;
+		} catch (error) {
+			return serverCode(error) === "28P01" ? false : undefined;
+		}
+	}
+
+	async disable(role: string): Promise<void> {
+		await this.#refusing(async () => {
+			if (await this.#roleExists(role)) {
+				await this.#admin.unsafe(`ALTER ROLE ${id(role)} NOLOGIN`);
+			}
+			if (await this.#databaseExists(role)) {
+				await this.#admin.unsafe(`ALTER DATABASE ${id(role)} ALLOW_CONNECTIONS false`);
+			}
+			await this.#terminate(role);
+		});
+	}
+
+	async drop(role: string): Promise<void> {
+		await this.disable(role);
+		await this.#refusing(async () => {
+			await this.#admin.unsafe(`DROP DATABASE IF EXISTS ${id(role)} WITH (FORCE)`);
+			await this.#admin.unsafe(`DROP ROLE IF EXISTS ${id(role)}`);
+		});
+	}
+
+	async close(): Promise<void> {
+		await this.#admin.close();
+	}
+
+	async #me(): Promise<Me> {
+		let [me] = await this.#admin<Me[]>`
+			SELECT current_user AS name, rolsuper AS superuser, current_database() AS database
+			FROM pg_roles WHERE rolname = current_user
+		`;
+		if (!me) throw new MachineStoreRefusal("the administrator role can't read its own attributes");
+		return me;
+	}
+
+	async #roleExists(role: string) {
+		let rows = await this.#admin`SELECT 1 FROM pg_roles WHERE rolname = ${role}`;
+		return rows.length > 0;
+	}
+
+	async #databaseExists(database: string) {
+		let rows = await this.#admin`SELECT 1 FROM pg_database WHERE datname = ${database}`;
+		return rows.length > 0;
+	}
+
+	async #database(role: string, me: Me) {
+		let [found] = await this.#admin<{ owner: string; open: boolean }[]>`
+			SELECT pg_get_userbyid(datdba) AS owner, datallowconn AS open
+			FROM pg_database WHERE datname = ${role}
+		`;
+		if (!found) {
+			await this.#admin.unsafe(`CREATE DATABASE ${id(role)} ALLOW_CONNECTIONS false`);
+		} else if (found.owner !== me.name) {
+			throw new MachineStoreRefusal(
+				`the database ${role} belongs to ${found.owner}, not to ${me.name}, so Chopin won't use it`,
+			);
+		}
+		if (found?.open) await this.#admin.unsafe(`ALTER DATABASE ${id(role)} ALLOW_CONNECTIONS false`);
+		await this.#admin.unsafe(`REVOKE ALL ON DATABASE ${id(role)} FROM PUBLIC`);
+		let grantees = await this.#admin<{ grantee: string }[]>`
+			SELECT DISTINCT pg_get_userbyid(a.grantee) AS grantee
+			FROM pg_database d, aclexplode(d.datacl) a
+			WHERE d.datname = ${role} AND a.grantee <> 0 AND a.grantee <> d.datdba
+		`;
+		for (let { grantee } of grantees) {
+			if (grantee !== role) {
+				await this.#admin.unsafe(`REVOKE ALL ON DATABASE ${id(role)} FROM ${id(grantee)}`);
+			}
+		}
+		await this.#admin.unsafe(`REVOKE ALL ON DATABASE ${id(role)} FROM ${id(role)}`);
+		await this.#admin.unsafe(`GRANT CONNECT ON DATABASE ${id(role)} TO ${id(role)}`);
+		await this.#checkDatabase(role, me);
+		await this.#admin.unsafe(`ALTER DATABASE ${id(role)} ALLOW_CONNECTIONS true`);
+		let inside = new SQL({
+			url: this.#urlOf(role),
+			...(this.#password ? { password: this.#password } : {}),
+			max: 1,
+			connectionTimeout: 10,
+		});
+		try {
+			await inside.unsafe("REVOKE ALL ON SCHEMA public FROM PUBLIC");
+			await inside.unsafe(
+				`CREATE SCHEMA IF NOT EXISTS ${id(ATOMIC_SCHEMA)} AUTHORIZATION ${id(role)}`,
+			);
+			let [schema] = await inside<{ owner: string }[]>`
+				SELECT pg_get_userbyid(nspowner) AS owner FROM pg_namespace WHERE nspname = ${ATOMIC_SCHEMA}
+			`;
+			if (schema?.owner !== role) {
+				throw new MachineStoreRefusal(
+					`the schema ${ATOMIC_SCHEMA} in ${role} belongs to ${schema?.owner ?? "nobody"}`,
+				);
+			}
+		} finally {
+			await inside.close();
+		}
+	}
+
+	async #checkDatabase(role: string, me: Me) {
+		let [found] = await this.#admin<{ owner: string; others: number }[]>`
+			SELECT pg_get_userbyid(d.datdba) AS owner,
+				(SELECT count(*)::int FROM aclexplode(d.datacl) a
+					WHERE a.grantee <> d.datdba AND a.grantee <> (SELECT oid FROM pg_roles WHERE rolname = ${role})
+				) AS others
+			FROM pg_database d WHERE d.datname = ${role}
+		`;
+		if (!found) throw new MachineStoreRefusal(`the database ${role} doesn't exist`);
+		if (found.owner !== me.name) {
+			throw new MachineStoreRefusal(
+				`the database ${role} belongs to ${found.owner}, not to ${me.name}, so Chopin won't use it`,
+			);
+		}
+		if (found.others > 0) {
+			throw new MachineStoreRefusal(`other roles have privileges on the database ${role}`);
+		}
+	}
+
+	async #closeOthers(role: string) {
+		let others = await this.#admin<{ name: string }[]>`
+			SELECT datname AS name FROM pg_database WHERE datallowconn AND datname <> ${role}
+			ORDER BY datname
+		`;
+		for (let { name } of others) {
+			await this.#admin.unsafe(`REVOKE CONNECT ON DATABASE ${id(name)} FROM PUBLIC`);
+		}
+	}
+
+	async #checkRole(role: string) {
+		let [found] = await this.#admin<
+			{
+				superuser: boolean;
+				createRole: boolean;
+				createDatabase: boolean;
+				replication: boolean;
+				bypassRls: boolean;
+				memberships: number;
+				owned: number;
+				granted: number;
+			}[]
+		>`
+			SELECT r.rolsuper AS superuser, r.rolcreaterole AS "createRole", r.rolcreatedb AS "createDatabase",
+				r.rolreplication AS replication, r.rolbypassrls AS "bypassRls",
+				(SELECT count(*)::int FROM pg_auth_members m WHERE m.member = r.oid) AS memberships,
+				(SELECT count(*)::int FROM pg_database d WHERE d.datdba = r.oid) AS owned,
+				(SELECT count(*)::int FROM pg_database d, aclexplode(d.datacl) a
+					WHERE a.grantee = r.oid AND d.datname <> r.rolname) AS granted
+			FROM pg_roles r WHERE r.rolname = ${role}
+		`;
+		if (!found) throw new MachineStoreRefusal(`the role ${role} doesn't exist`);
+		let problems = [
+			found.superuser && "is a superuser",
+			found.createRole && "can create roles",
+			found.createDatabase && "can create databases",
+			found.replication && "can replicate",
+			found.bypassRls && "bypasses row security",
+			found.memberships > 0 && "is a member of another role",
+			found.owned > 0 && "owns a database",
+			found.granted > 0 && "has privileges on another database",
+		].filter(Boolean);
+		if (problems.length) {
+			throw new MachineStoreRefusal(
+				`the existing role ${role} ${problems.join(", ")}, so Chopin won't use it`,
+			);
+		}
+	}
+
+	async #checkConnections(role: string, password: string, me: Me) {
+		try {
+			let [who] = await this.#connectAs(role, password, role);
+			if (who?.name !== role) {
+				throw new MachineStoreRefusal(`a login as ${role} became ${who?.name}`);
+			}
+		} catch (error) {
+			await this.#admin.unsafe(`ALTER ROLE ${id(role)} NOLOGIN`).catch(() => {});
+			if (error instanceof MachineStoreRefusal) throw error;
+			throw new MachineStoreRefusal(
+				`the machine couldn't connect to its own database: ${this.#reason(error)}`,
+			);
+		}
+		for (let database of new Set([...this.#unreachable, me.database])) {
+			let reached = await this.#connectAs(role, password, database).then(() => true, () => false);
+			if (reached) {
+				await this.#admin.unsafe(`ALTER ROLE ${id(role)} NOLOGIN`).catch(() => {});
+				throw new MachineStoreRefusal(
+					`a machine could still connect to the database ${database}; revoke CONNECT on it `
+						+ "from PUBLIC as its owner",
+				);
+			}
+		}
+	}
+
+	async #connectAs(role: string, password: string, database: string) {
+		let sql = new SQL({
+			url: this.#urlOf(database),
+			username: role,
+			password,
+			max: 1,
+			connectionTimeout: 10,
+		});
+		try {
+			return await sql<{ name: string }[]>`SELECT current_user AS name`;
+		} finally {
+			await sql.close().catch(() => {});
+		}
+	}
+
+	async #terminate(role: string) {
+		await this.#admin`
+			SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = ${role}
+		`.catch(() => {});
+	}
+
+	async #refusing(action: () => Promise<void>) {
+		try {
+			await action();
+		} catch (error) {
+			if (error instanceof MachineStoreRefusal) throw error;
+			throw new MachineStoreRefusal(this.#reason(error));
+		}
+	}
+
+	#reason(error: unknown): string {
+		let code = serverCode(error);
+		let message = (error as ServerError | undefined)?.message;
+		if (code) {
+			return shortened(
+				`the database server at ${this.#where} refused (${code})${
+					typeof message === "string" ? `: ${message}` : ""
+				}`,
+			);
+		}
+		let kind = (error as ServerError | undefined)?.code;
+		return `Chopin couldn't reach the database server at ${this.#where}${
+			typeof kind === "string" && /^[A-Z_]+$/.test(kind) ? ` (${kind})` : ""
+		}`;
+	}
+}

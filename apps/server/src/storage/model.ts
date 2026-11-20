@@ -1135,6 +1135,21 @@ export type ChatSessionState = {
 	updatedAt: Date;
 };
 
+export type MachineDatabaseState = "pending" | "ready" | "failed" | "disabled" | "dropped";
+
+export type StoredMachineDatabase = {
+	machineId: string;
+	role: string;
+	revision: number;
+	ciphertext: Uint8Array;
+	candidate?: { revision: number; ciphertext: Uint8Array };
+	state: MachineDatabaseState;
+	failure?: string;
+	updatedAt: Date;
+	disabledAt?: Date;
+	droppedAt?: Date;
+};
+
 /** A paired machine's Planner credential, known by the digest of its token and never the token. */
 export type PlannerCredential = {
 	/** SHA-256 of the credential. */

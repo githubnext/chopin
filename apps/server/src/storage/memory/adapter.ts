@@ -14,6 +14,7 @@ import { MemoryMachineStore } from "./machines";
 import { MemoryDeferredTurnStore } from "./deferred-turns";
 import { MemoryMcpSessionStore } from "./mcp-sessions";
 import { MemoryPlannerCredentialStore } from "./planner-credentials";
+import { MemoryMachineDatabaseStore } from "./machine-databases";
 import { MemoryAiCredentialStore, MemoryAiPlaceholderStore } from "./ai-credentials";
 import { MemoryAiUsageStore } from "./ai-usage";
 import { AiCutoffs } from "../ai-cutoffs";
@@ -73,6 +74,7 @@ import type {
 	DocumentVersionStore,
 	ImageStore,
 	LeaseStore,
+	MachineDatabaseStore,
 	MachineStore,
 	McpSessionStore,
 	NavigationStore,
@@ -237,6 +239,10 @@ export class MemoryStorage implements StorageAdapter {
 		channelExists: id => this.#channels.has(id),
 	});
 	readonly plannerCredentials: PlannerCredentialStore = this.#plannerCredentials;
+	readonly machineDatabases: MachineDatabaseStore = new MemoryMachineDatabaseStore({
+		machineExists: id => this.#machines.has(id),
+		machineRevoked: id => this.#machines.isRevoked(id),
+	});
 	readonly aiCredentials: AiCredentialStore = new MemoryAiCredentialStore({
 		userExists: id => this.#users.has(id),
 		assertLease: held => this.#assertLease(held),

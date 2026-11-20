@@ -53,6 +53,10 @@
 			"types": "./connector.ts",
 			"default": "./connector.ts"
 		},
+		"./machine-store": {
+			"types": "./machine-store.ts",
+			"default": "./machine-store.ts"
+		},
 		"./document-url": {
 			"types": "./document-url.ts",
 			"default": "./document-url.ts"

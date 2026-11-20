@@ -11,7 +11,7 @@
 		"db:down": "docker compose -f compose.yaml -f compose.local.yaml down",
 		"docker:up": "docker compose -f compose.yaml -f compose.local.yaml up -d --build --wait app",
 		"docker:down": "docker compose -f compose.yaml -f compose.local.yaml down",
-		"test:postgres": "TEST_DATABASE_URL=postgresql://chopin:chopin@127.0.0.1:5432/chopin?sslmode=disable bun test apps/server/src/storage/postgres",
+		"test:postgres": "TEST_DATABASE_URL=postgresql://chopin:chopin@127.0.0.1:5432/chopin?sslmode=disable bun test apps/server/src/storage/postgres apps/server/src/machine-store",
 		"migrate": "bun apps/server/src/storage/migrate.ts",
 		"build": "bun run --filter '@chopin/web' build && bun run --filter '@chopin/connector' build",
 		"start": "bun run --filter '@chopin/server' start",
@@ -70,6 +70,7 @@
 				"@ai-sdk/mcp": "2.0.72",
 				"@ai-sdk/sandbox-just-bash": "1.0.146",
 				"@bastani/atomic": "0.9.89",
+				"@bastani/atomic-storage-postgres": "0.9.89",
 				"ai": "7.0.135",
 				"typebox": "1.3.7",
 				"zod": "4.4.3"

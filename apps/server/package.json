@@ -35,6 +35,7 @@
 		"zod": "catalog:harness"
 	},
 	"devDependencies": {
+		"@bastani/atomic-storage-postgres": "catalog:harness",
 		"@types/bun": "catalog:bun",
 		"@types/mdast": "4.0.4"
 	}

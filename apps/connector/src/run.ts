@@ -27,6 +27,7 @@ import { blockedText, endingOf } from "./ending";
 import type { Output } from "./output";
 import { ask, describePermission, permissionMemory } from "./permission";
 import type { Sandbox } from "./sandbox";
+import { type AgentStore, keepSessionsIn } from "./machine-store";
 import { stopProcessesIn } from "./processes";
 import {
 	agentFolder,
@@ -89,6 +90,7 @@ type Options = {
 	github?: (request: GitHubGrantRequest & { folder: string }) => Promise<GitHubToken>;
 	/** Where the agent starts: the machine's process sandbox, else plainly. */
 	sandbox?: Sandbox;
+	agentStore?: AgentStore;
 	/** How long a build's or rebuild's agent may work, for tests; `BUILD_LIMIT_MS` by default. */
 	buildLimitMs?: number;
 	/**
@@ -410,6 +412,9 @@ export async function runWork(
 				providers: launched.providers,
 				relayed,
 			});
+			if (options.agentStore) {
+				keepSessionsIn(options.agentStore, agentAi.ATOMIC_CODING_AGENT_DIR!, options.output);
+			}
 		}
 		output.job(
 			rebuild ? "rebuild" : implementation ? "build" : claim.spike ? "spike" : "investigation",

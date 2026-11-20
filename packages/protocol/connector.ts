@@ -53,6 +53,7 @@ export const CONNECTOR_AGENT_VERSION_HEADER = "chopin-connector-agent-version";
 export const CONNECTOR_SANDBOX_HEADER = "chopin-connector-sandbox";
 export const CONNECTOR_SANDBOX_REASON_HEADER = "chopin-connector-sandbox-reason";
 export const CONNECTOR_SANDBOX_FIX_HEADER = "chopin-connector-sandbox-fix";
+export const CONNECTOR_STORE_PROBLEM_HEADER = "chopin-connector-store-problem";
 
 /** The sandbox each system's agents run in, through MXC, and what people call it. */
 export const SANDBOX_ENGINES = {

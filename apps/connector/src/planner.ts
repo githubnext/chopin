@@ -39,6 +39,7 @@ import type { Checkouts } from "./checkouts";
 import { type Sandbox, spawnIn } from "./sandbox";
 import { type PlannerSpares, type Spare, SPARE_PROTOCOL } from "./planner-spare";
 import { managedEnvironment, privateAgentState } from "./ai-agent";
+import { type AgentStore, keepSessionsIn } from "./machine-store";
 
 /** How long a stopped Planner backend has to exit before it is killed. */
 const STOP_GRACE_MS = 5000;
@@ -113,6 +114,7 @@ export async function servePlanners(options: {
 	renewGitHubBeforeMs?: number;
 	/** Where each backend starts: the machine's process sandbox, else plainly. */
 	sandbox?: Sandbox;
+	agentStore?: AgentStore;
 	/** The machine's spare Planners, which a new document's Planner starts on. */
 	spares?: PlannerSpares;
 }) {
@@ -150,6 +152,7 @@ export function dispatchedPlanners(options: {
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
 	sandbox?: Sandbox;
+	agentStore?: AgentStore;
 	spares?: PlannerSpares;
 }) {
 	type Backend = {
@@ -296,6 +299,7 @@ async function servePlanner(options: {
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
 	sandbox?: Sandbox;
+	agentStore?: AgentStore;
 	spares?: PlannerSpares;
 	/**
 	 * For a dispatched Planner: once the backend exits by itself, whether Chopin still asks for it,
@@ -922,11 +926,15 @@ export function plannerEnvironment(
 	managed: boolean,
 	worktree: string,
 	env: Record<string, string> = {},
+	store?: AgentStore,
+	output?: Output,
 ): Record<string, string | undefined> {
 	if (!managed) return withoutGitHub({ ...process.env, ...env });
+	let places = privateAgentState(agentFolder(worktree));
+	if (store) keepSessionsIn(store, places.ATOMIC_CODING_AGENT_DIR, output);
 	return {
 		...managedEnvironment(process.env, env),
-		...privateAgentState(agentFolder(worktree)),
+		...places,
 		CHOPIN_AI: "chopin",
 	};
 }
@@ -948,6 +956,8 @@ async function launch(
 		signal: AbortSignal;
 		env?: Record<string, string>;
 		sandbox?: Sandbox;
+		agentStore?: AgentStore;
+		output?: Output;
 		managed?: boolean;
 	},
 	token: string,
@@ -966,7 +976,15 @@ async function launch(
 				// Nothing of the machine's GitHub setup: its own git, gh and agent reach GitHub with
 				// Chopin's token over https, and commit as Chopin's App (see `githubEnvironment`). Never
 				// spare mode, which only a spare is offered.
-				...withoutSpare(plannerEnvironment(options.managed === true, worktree, options.env)),
+				...withoutSpare(
+					plannerEnvironment(
+						options.managed === true,
+						worktree,
+						options.env,
+						options.agentStore,
+						options.output,
+					),
+				),
 				...githubEnvironment(github, repository),
 				CHOPIN_URL: options.url,
 				CHOPIN_DOCUMENT: options.document,

@@ -173,6 +173,7 @@ test("connect stops without retrying when the connector endpoint refuses its ver
 	expect(result.requests).toEqual([
 		["/api/connector/pairings", ...headers],
 		["/api/connector/pairings/pairing/claim", ...headers],
+		["/api/connector/machine-store", ...headers],
 		["/api/connector/connections", ...headers],
 		["/connector/mcp", ...headers],
 	]);

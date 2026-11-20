@@ -95,6 +95,7 @@ import type {
 	StoredDocumentVersion,
 	StoredImage,
 	StoredMachine,
+	StoredMachineDatabase,
 	StoredPlannerLinkHold,
 	StoredWebSession,
 	SummarizeDocumentVersion,
@@ -493,6 +494,14 @@ export interface ChatThreadStore {
 	getSessionState(channelId: string): Promise<ChatSessionState | undefined>;
 }
 
+export interface MachineDatabaseStore {
+	get(machineId: string): Promise<StoredMachineDatabase | undefined>;
+	many(machineIds: readonly string[]): Promise<StoredMachineDatabase[]>;
+	claim(record: StoredMachineDatabase): Promise<StoredMachineDatabase>;
+	put(record: StoredMachineDatabase): Promise<boolean>;
+	settling(dropBefore?: Date): Promise<StoredMachineDatabase[]>;
+}
+
 /**
  * Credentials a paired machine hands to a Planner backend, by digest. A row is written before
  * its credential is handed out, so a process that starts later accepts it while it lasts.
@@ -698,6 +707,7 @@ export interface StorageAdapter {
 	readonly plannerModelChoices: PlannerModelChoiceStore;
 	readonly chatThreads: ChatThreadStore;
 	readonly plannerCredentials: PlannerCredentialStore;
+	readonly machineDatabases: MachineDatabaseStore;
 	readonly aiCredentials: AiCredentialStore;
 	readonly aiPlaceholders: AiPlaceholderStore;
 	readonly aiUsage: AiUsageStore;

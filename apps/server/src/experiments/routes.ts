@@ -27,6 +27,7 @@ import {
 	CONNECTOR_PLATFORM_HEADER,
 	CONNECTOR_PROTOCOL_HEADER,
 	CONNECTOR_SERVICE_HEADER,
+	CONNECTOR_STORE_PROBLEM_HEADER,
 	CONNECTOR_UPDATE_REQUIRED,
 	CONNECTOR_VERSION_HEADER,
 	parseSandboxReport,
@@ -52,6 +53,12 @@ import type { About, Connection } from "./connections";
 import type { Source } from "@chopin/experiment";
 import type { PlanSource } from "@chopin/protocol/implementation";
 import { PairingKeys } from "./pairing-keys";
+import { MachineStoreRefusal } from "../machine-store/server";
+import type { MachineStores } from "../machine-store/service";
+import {
+	MACHINE_STORE_REASON_LIMIT,
+	type MachineStoreStatus,
+} from "@chopin/protocol/machine-store";
 import { Experiments, fail } from "./service";
 import { datasetCsv } from "./export";
 import { investigationSummary } from "./document";
@@ -69,6 +76,7 @@ export type ExperimentRuntime = ReturnType<typeof registerExperimentRoutes>;
 type Options = {
 	/** People's AI credentials, from which a run on a paired machine is handed stand-ins. */
 	ai?: () => AiCredentials | undefined;
+	machineStores?: MachineStores;
 	implementations?: () => ImplementationConnector | undefined;
 	lease: () => Lease;
 	context: (id: string) => Promise<{ source: string; revision: number } | undefined>;
@@ -140,6 +148,8 @@ function aboutMachine(request: Request): About {
 		version: header(CONNECTOR_AGENT_VERSION_HEADER),
 	});
 	let sandbox = parseSandboxReport(header);
+	let storeProblem = plainText(header(CONNECTOR_STORE_PROBLEM_HEADER) ?? "")
+		.slice(0, MACHINE_STORE_REASON_LIMIT);
 	return {
 		...(hostname && /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/.test(hostname) ? { hostname } : {}),
 		...(os && arch && !extra && OSES.has(os) && ARCHES.has(arch) ? { platform: { os, arch } } : {}),
@@ -148,6 +158,7 @@ function aboutMachine(request: Request): About {
 		plannerCommand: header(CONNECTOR_PLANNER_COMMAND_HEADER) === "1",
 		...(agent.success ? { agent: agent.data } : {}),
 		...(sandbox ? { sandbox } : {}),
+		...(storeProblem ? { storeProblem } : {}),
 	};
 }
 const label = z.string().trim().min(1).max(100);
@@ -387,6 +398,15 @@ function json(value: unknown, status = 200) {
 		status,
 		headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
 	});
+}
+
+function machineStore(
+	status: MachineStoreStatus | undefined,
+	live: Connection[],
+): MachineStoreStatus | null {
+	if (!status) return null;
+	let problem = live.at(-1)?.about?.storeProblem;
+	return status.state === "ready" && problem ? { state: "failed", reason: problem } : status;
 }
 
 /** A machine's newest connection's account of it; null where none said. */
@@ -2016,6 +2036,46 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		await disconnectMachine(machine.id);
 		return json({ revoked: true });
 	});
+	let privateOrigin = (() => {
+		let origin = new URL(auth.config.origin);
+		return origin.protocol === "https:"
+			|| ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);
+	})();
+	async function machineStoreAnswer(action: () => Promise<Response>) {
+		try {
+			return await action();
+		} catch (error) {
+			if (!(error instanceof MachineStoreRefusal)) throw error;
+			return json({ error: "machine-store-unavailable", message: error.message }, 503);
+		}
+	}
+	route("POST", "/api/connector/machine-store", async request => {
+		let stores = options.machineStores;
+		if (!stores) fail("not-found");
+		compatible(request, auth.config.origin, options.connectorVersion);
+		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
+		z.object({}).strict().parse(await body(request));
+		if (!privateOrigin) {
+			return json({
+				error: "machine-store-unavailable",
+				message: "Chopin is served over plain HTTP, so it sends no database password",
+			}, 503);
+		}
+		return machineStoreAnswer(async () => json(await stores.login(machine)));
+	});
+	route("POST", "/api/connector/machines/:id/store/rotate", async (request, params) => {
+		let stores = options.machineStores;
+		if (!stores) fail("not-found");
+		let session = await auth.sessions.authenticate(request);
+		if (!session) fail("authentication-required");
+		z.object({}).strict().parse(await body(request));
+		let machine = (await auth.machines.list(session.user.id)).find(value => value.id === params.id);
+		if (!machine) fail("not-found");
+		return machineStoreAnswer(async () => {
+			await stores.rotate(machine);
+			return json({ rotated: true });
+		});
+	});
 	/**
 	 * Add the repositories a token can push to among its GitHub App installations to `into`, as
 	 * the repository picker lists them, every one of them.
@@ -2157,6 +2217,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let session = await auth.sessions.authenticate(request);
 		if (!session) fail("authentication-required");
 		let machines = await auth.machines.list(session.user.id);
+		let stores = await options.machineStores?.statuses(machines.map(machine => machine.id));
 		// Teammates' machines shared with them, in the repositories both can push to.
 		let others = await sharedByOthers(session.user.id);
 		let teammates = others.length ? await listedTo(session, others) : [];
@@ -2189,6 +2250,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					version: connections.machine(machine.id).find(value => value.version)?.version ?? null,
 					...described(connections.machine(machine.id)),
 					reauthorize: !!machine.reauthorizeAt,
+					store: machineStore(stores?.get(machine.id), connections.machine(machine.id)),
 				})),
 				...await Promise.all(teammates.map(async ({ machine, repositories }) => ({
 					...await teammateFacts(machine),

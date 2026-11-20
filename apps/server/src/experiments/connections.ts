@@ -56,6 +56,7 @@ export type About = {
 	agent?: { name: string; version?: string };
 	/** Whether the connector runs agents in the system's process sandbox, and if not, why. */
 	sandbox?: SandboxReport;
+	storeProblem?: string;
 };
 /** The browser's approval of a pairing, waiting for GitHub to authorize the machine. */
 export type Approval = {

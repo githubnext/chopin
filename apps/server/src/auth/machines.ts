@@ -49,6 +49,7 @@ type Options = {
 	 * process no longer holds it, a revocation is refused.
 	 */
 	lease?: () => Lease;
+	revoked?: (machineId: string) => Promise<void>;
 };
 
 function noLease(): Lease {
@@ -174,6 +175,12 @@ export class Machines {
 		if (revoked) {
 			this.#forget(id);
 			this.#end(id);
+			await this.#options.revoked?.(id).catch((error: unknown) => {
+				console.error(
+					"[machines] turning off a revoked machine's database login failed:",
+					error instanceof Error ? error.message : "unknown error",
+				);
+			});
 		}
 		return revoked;
 	}
