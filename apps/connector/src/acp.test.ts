@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { HOST_SANDBOX } from "./testing/host-sandbox";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,6 +33,7 @@ test.skipIf(!process.env.CHOPIN_TEST_ACP_COMMAND)(
 		});
 		try {
 			let stop = await runAgent({
+				sandbox: HOST_SANDBOX,
 				command: JSON.parse(process.env.CHOPIN_TEST_ACP_COMMAND!),
 				cwd,
 				prompt: "Call read_implementation from the supplied MCP server once, then stop. "
@@ -73,6 +75,7 @@ test.skipIf(!process.env.CHOPIN_TEST_ACP_COMMAND)(
 test("a generic ACP process receives a cwd and produces protocol updates", async () => {
 	let updates: unknown[] = [];
 	let stop = await runAgent({
+		sandbox: HOST_SANDBOX,
 		command: [process.execPath, new URL("./testing/fake-agent.ts", import.meta.url).pathname],
 		cwd: process.cwd(),
 		prompt: "Investigate",
@@ -90,6 +93,7 @@ test("the agent's name and version come from its ACP initialize answer, at a che
 	let checked: unknown[] = [];
 	expect(
 		await checkAgent(command, {
+			sandbox: HOST_SANDBOX,
 			cwd: process.cwd(),
 			env: process.env,
 			onInfo: info => checked.push(info),
@@ -97,6 +101,7 @@ test("the agent's name and version come from its ACP initialize answer, at a che
 	).toBeUndefined();
 	let ran: unknown[] = [];
 	await runAgent({
+		sandbox: HOST_SANDBOX,
 		command,
 		cwd: process.cwd(),
 		prompt: "Investigate",
@@ -114,6 +119,7 @@ test("the agent's name and version come from its ACP initialize answer, at a che
 test("ACP cancellation finishes the active turn through the standard protocol", async () => {
 	let abort = new AbortController();
 	let stop = await runAgent({
+		sandbox: HOST_SANDBOX,
 		command: [
 			process.execPath,
 			new URL("./testing/fake-agent.ts", import.meta.url).pathname,
@@ -143,12 +149,14 @@ test.skipIf(process.platform === "win32")(
 			onStart: (failure?: unknown) => void starts.push(failure),
 		};
 		let failed = await runAgent({
+			sandbox: HOST_SANDBOX,
 			...options,
 			command: ["/bin/sh", "-c", "echo 'agent: no credentials' >&2; exit 127"],
 		}).catch(error => error);
 		expect(failed).toBeInstanceOf(Error);
 		expect(starts).toEqual([{ how: "exit 127", stderr: "agent: no credentials" }]);
 		await runAgent({
+			sandbox: HOST_SANDBOX,
 			...options,
 			command: [process.execPath, new URL("./testing/fake-agent.ts", import.meta.url).pathname],
 		});
@@ -162,6 +170,7 @@ test.skipIf(process.platform === "win32")(
 		let starts: unknown[] = [];
 		// The agent exits at once; a process it left behind prints after the exit.
 		let failed = await runAgent({
+			sandbox: HOST_SANDBOX,
 			command: ["/bin/sh", "-c", "(sleep 0.3; echo 'agent: no credentials' >&2) & exit 127"],
 			cwd: process.cwd(),
 			prompt: "Investigate",

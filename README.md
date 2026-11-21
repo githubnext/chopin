@@ -120,7 +120,7 @@ Saved messages also keep blank, generated, or Planner-drafted titles up to date 
 
 The `chopin` CLI connects a machine you control to your Chopin server. Builds, local investigations, and Planner work then run there with your own coding agent for any repository you can push to.
 
-Install your coding agent and sign in to it first. Then install `chopin` and connect once from any directory with your server's origin in `CHOPIN_URL`:
+The machine needs Linux on x86_64 with KVM, or Windows on x86_64 with the Windows Hypervisor Platform: `chopin` runs each agent in a microVM of its own ([NVX](https://github.com/microsoft/nvx)), installed there, so you don't install the agent or sign in to it on the machine. Install `chopin` and connect once from any directory with your server's origin in `CHOPIN_URL`:
 
 ```bash
 curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
@@ -131,10 +131,10 @@ CHOPIN_URL=https://your-chopin-instance.example chopin connect --agent copilot
 
 Pass `--agent` with one of these built-in coding agents:
 
-| Agent                                                                                               | Install                                              | Connect with      | Tested with Chopin |
-| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ----------------- | ------------------ |
-| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `npm install -g @github/copilot`                     | `--agent copilot` | Yes                |
-| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `npm install -g @bastani/atomic @bastani/atomic-acp` | `--agent atomic`  | Yes                |
+| Agent                                                                                               | In its microVMs                                        | Connect with      | Tested with Chopin |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ----------------- | ------------------ |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `@github/copilot@1.0.114`                              | `--agent copilot` | Yes                |
+| [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `@bastani/atomic@0.10.2`, `@bastani/atomic-acp@0.0.18` | `--agent atomic`  | Yes                |
 
 For any other agent that speaks ACP, pass its command after `--`, such as `chopin connect -- my-agent --acp`.
 

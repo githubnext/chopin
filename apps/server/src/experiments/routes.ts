@@ -31,6 +31,7 @@ import {
 	CONNECTOR_UPDATE_REQUIRED,
 	CONNECTOR_VERSION_HEADER,
 	parseSandboxReport,
+	SANDBOX_TEXT_LIMIT,
 } from "@chopin/protocol/connector";
 import type { Session } from "@chopin/protocol";
 import type { PlannerAssignment, PlannerControl } from "@chopin/protocol/connector";
@@ -39,7 +40,13 @@ import { documentUrl } from "../channels/document-url";
 import { isChannelId } from "../channels/id";
 import type { PlannerAttachments } from "../harness/remote/attachments";
 import type { MachinePlanners } from "../harness/remote/machine-planners";
-import { ANY_REPOSITORY_PROTOCOL, checkoutOf, Connections, serves } from "./connections";
+import {
+	ANY_REPOSITORY_PROTOCOL,
+	checkoutOf,
+	Connections,
+	NVX_PROTOCOL,
+	serves,
+} from "./connections";
 import { launchGitHubToken, machineGitHubToken } from "./machine-github";
 import type { GitHubIdentity, LaunchRun } from "./machine-github";
 import { liveMcpLaunch, liveRun, McpTokens, mintMcpToken } from "./mcp-token";
@@ -257,8 +264,10 @@ function stoppedSharing(login: string) {
  * Protocol 6 keeps the claimed document ID on build renewals and reports after assignment cleanup.
  * Protocol 7 says what each GitHub token is for, takes the App's installation token for one
  * repository and the bot and starter it names, and stops a launch Chopin gives no token.
+ * Protocol 8 runs every agent in an NVX microVM of its own, and says so as it connects; an older
+ * connector still pairs, but no connection of one is taken (see `microvmsOnly`), so it stops.
  */
-export const CONNECTOR_PROTOCOLS: { min: number; max: number } = { min: 2, max: 7 };
+export const CONNECTOR_PROTOCOLS: { min: number; max: number } = { min: 2, max: 8 };
 
 /** A document's people read why a Planner backend keeps failing from this launch in a row on. */
 export const PLANNER_FAILURE_SHOWN_AT = 2;
@@ -378,6 +387,25 @@ function compatible(
 	);
 }
 
+/**
+ * Refuse the connection of a connector that would start agents outside a microVM: one speaking a
+ * protocol before `NVX_PROTOCOL`, which ran them in the system's process sandbox, or none. It is
+ * told to update, which stops it without retrying.
+ */
+function microvmsOnly(request: Request, origin: string, recommended: string | undefined) {
+	if (protocolOf(request) >= NVX_PROTOCOL) return;
+	let release = releaseVersion(request);
+	fail(
+		CONNECTOR_UPDATE_REQUIRED,
+		`${release ? `chopin ${release}` : "This connector"} runs agents outside a microVM, and `
+			+ `${origin} runs each agent in its own NVX microVM. ${
+				recommended
+					? `Run \`chopin update ${recommended}\`, then connect again.`
+					: "Run `chopin update` to install the newest chopin, then connect again."
+			}`,
+	);
+}
+
 async function raw(request: Request, max: number) {
 	let size = 0;
 	let chunks: Uint8Array[] = [];
@@ -408,16 +436,28 @@ function machineStore(
 	return status.state !== "failed" && problem ? { state: "failed", reason: problem } : status;
 }
 
-/** A machine's newest connection's account of it; null where none said. */
-function described(live: Connection[]) {
+/**
+ * A machine's newest connection's account of it; null where none said. Where its agents run is its
+ * connection's word, else why its connector last said it can't run them, which lasts while it is
+ * away.
+ */
+function described(live: Connection[], machine?: Pick<StoredMachine, "vmProblem">) {
 	let about = live.at(-1)?.about ?? {};
+	let problem = machine?.vmProblem;
 	return {
 		hostname: about.hostname ?? null,
 		platform: about.platform ?? null,
 		agent: live.map(value => value.about?.agent).findLast(Boolean) ?? null,
 		service: live.some(value => value.about?.service),
 		planner: live.some(value => value.about?.planner),
-		sandbox: about.sandbox ?? null,
+		sandbox: about.sandbox
+			?? (problem
+				? {
+					engine: "none" as const,
+					reason: problem.reason,
+					...problem.fix ? { fix: problem.fix } : {},
+				}
+				: null),
 	};
 }
 
@@ -1608,9 +1648,28 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 */
 	route("POST", "/api/connector/connections", async request => {
 		compatible(request, auth.config.origin, options.connectorVersion);
+		let about = aboutMachine(request);
+		// Work goes only to a connector that runs it in microVMs: an older one is told to update, and
+		// one that says it can't is kept on the machine, as `/api/connector/capability` keeps it, and
+		// refused with its own words.
+		if (about.sandbox?.engine !== "nvx") {
+			microvmsOnly(request, auth.config.origin, options.connectorVersion);
+		}
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let input = connectionSchema.parse(await body(request));
-		let about = aboutMachine(request);
+		if (about.sandbox?.engine !== "nvx") {
+			let problem = about.sandbox?.engine === "none"
+				? { reason: about.sandbox.reason, ...about.sandbox.fix ? { fix: about.sandbox.fix } : {} }
+				: undefined;
+			if (problem) await auth.storage.machines.vmProblem(machine.id, problem);
+			fail(
+				"microvm-required",
+				`This machine can't run Chopin's work: Chopin runs each agent in its own microVM. ${
+					problem?.reason ?? "Its connector didn't say it runs them."
+				}`,
+			);
+		}
+		if (machine.vmProblem) await auth.storage.machines.vmProblem(machine.id);
 		let protocol = protocolOf(request);
 		let anyRepository = protocol >= ANY_REPOSITORY_PROTOCOL;
 		if (!anyRepository && input.checkouts.length !== 1) fail("invalid-request");
@@ -1750,6 +1809,25 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * attaches, or, without `failure`, that it no longer does. Only a Planner Chopin asked the
 	 * machine to run counts, since what is said here is shown to the document's people.
 	 */
+	/**
+	 * Which of the documents a machine keeps Planner disks for it may forget: each archived, or gone.
+	 * A document id is random, so it says nothing of a document the machine never ran.
+	 */
+	route("POST", "/api/connector/planner/kept", async request => {
+		compatible(request, auth.config.origin, options.connectorVersion);
+		await machineRefusal(() => auth.machines.authenticate(bearer(request)));
+		let { documents } = z.object({
+			documents: z.array(z.string().min(1).max(256)).max(500),
+		}).strict().parse(await body(request));
+		let forget: string[] = [];
+		for (let id of new Set(documents)) {
+			// A name that is no document id is the machine's own, which it keeps.
+			if (!isChannelId(id)) continue;
+			let channel = await auth.storage.channels.get(id);
+			if (!channel || channel.archivedAt) forget.push(id);
+		}
+		return json({ forget });
+	});
 	route("POST", "/api/connector/planner/failure", async request => {
 		let planners = options.planners;
 		if (!planners || !auth.machines.durable) fail("not-found");
@@ -2069,6 +2147,22 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			return json({ error: "machine-store-unavailable", message: error.message }, 503);
 		}
 	}
+	/**
+	 * A paired machine whose connector found it can't run agents in microVMs says why, with the fix,
+	 * before it exits: the Machines page shows it while the machine is away, and its next connection
+	 * that runs them clears it.
+	 */
+	route("POST", "/api/connector/capability", async request => {
+		compatible(request, auth.config.origin, options.connectorVersion);
+		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
+		let text = z.string().min(1).max(SANDBOX_TEXT_LIMIT);
+		let said = z.object({ reason: text, fix: text.optional() }).strict().parse(await body(request));
+		let reason = plainText(said.reason).slice(0, SANDBOX_TEXT_LIMIT);
+		let fix = said.fix && plainText(said.fix).slice(0, SANDBOX_TEXT_LIMIT);
+		if (!reason) fail("invalid-request");
+		await auth.storage.machines.vmProblem(machine.id, { reason, ...fix ? { fix } : {} });
+		return json({ reported: true });
+	});
 	route("POST", "/api/connector/machine-store", async request => {
 		let stores = options.machineStores;
 		if (!stores) fail("not-found");
@@ -2278,7 +2372,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 					lastSeenAt: machine.lastSeenAt.getTime(),
 					connected: connections.machine(machine.id).length > 0 || backed(machine.id),
 					version: connections.machine(machine.id).find(value => value.version)?.version ?? null,
-					...described(connections.machine(machine.id)),
+					...described(connections.machine(machine.id), machine),
 					reauthorize: !!machine.reauthorizeAt,
 					store: machineStore(stores?.get(machine.id), connections.machine(machine.id)),
 				})),

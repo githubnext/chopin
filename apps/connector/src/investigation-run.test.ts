@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { HOST_SANDBOX } from "./testing/host-sandbox";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -59,6 +60,7 @@ test("an authorized retry starts despite an older receipt and reports why its ag
 				runToken: "run-token",
 			},
 			{
+				sandbox: HOST_SANDBOX,
 				checkouts: checkouts({ directory, registered: { "org/repo": root } }),
 				directory,
 				command: [

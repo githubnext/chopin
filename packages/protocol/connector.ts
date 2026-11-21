@@ -46,52 +46,56 @@ export const CONNECTOR_AGENT_HEADER = "chopin-connector-agent";
 export const CONNECTOR_AGENT_VERSION_HEADER = "chopin-connector-agent-version";
 
 /**
- * Whether the connector runs agents inside the operating system's process sandbox, and if it
- * can't, why and the one command that fixes it. Additive: a server or connector without these
- * says nothing and is shown as saying nothing.
+ * Whether the connector runs each agent in an NVX microVM of its own, on which hypervisor, and if it
+ * can't, why and the one command that fixes it. A server takes work only from a connector that does
+ * (connector protocol 8).
  */
 export const CONNECTOR_SANDBOX_HEADER = "chopin-connector-sandbox";
+export const CONNECTOR_SANDBOX_HYPERVISOR_HEADER = "chopin-connector-sandbox-hypervisor";
 export const CONNECTOR_SANDBOX_REASON_HEADER = "chopin-connector-sandbox-reason";
 export const CONNECTOR_SANDBOX_FIX_HEADER = "chopin-connector-sandbox-fix";
 export const CONNECTOR_STORE_PROBLEM_HEADER = "chopin-connector-store-problem";
 
-/** The sandbox each system's agents run in, through MXC, and what people call it. */
-export const SANDBOX_ENGINES = {
-	seatbelt: "macOS Seatbelt",
-	bubblewrap: "Linux bubblewrap",
-	processcontainer: "Windows ProcessContainer",
+/** The hypervisors NVX boots its microVMs on, and what people call them. */
+export const HYPERVISORS = {
+	kvm: "KVM",
+	mshv: "Microsoft Hypervisor",
+	whp: "Windows Hypervisor Platform",
 } as const;
-export type SandboxEngineName = keyof typeof SANDBOX_ENGINES;
+export type HypervisorName = keyof typeof HYPERVISORS;
 
-/** What a connector says about its sandbox: the engine it uses, or `none` with why not. */
+/** What a connector says about where its agents run: NVX microVMs, or `none` with why not. */
 export type SandboxReport =
-	| { engine: SandboxEngineName }
+	| { engine: "nvx"; hypervisor: HypervisorName }
 	| { engine: "none"; reason: string; fix?: string };
 
 /** The longest reason and fix a server keeps. */
 export const SANDBOX_TEXT_LIMIT = 600;
 
-/** "Sandboxed (Linux bubblewrap)", or "Not sandboxed: <reason>". */
+/** "Each agent in its own microVM (NVX on KVM)", or "Can't run agents: <reason>". */
 export function sandboxSummary(report: SandboxReport): string {
 	return report.engine === "none"
-		? `Not sandboxed: ${report.reason}`
-		: `Sandboxed (${SANDBOX_ENGINES[report.engine]})`;
+		? `Can't run agents: ${report.reason}`
+		: `Each agent in its own microVM (NVX on ${HYPERVISORS[report.hypervisor]})`;
 }
 
-/** The summary with, for a machine that has none, the one fix after the reason. */
+/** The summary with, for a machine that can't run agents, the one fix after the reason. */
 export function sandboxLabel(report: SandboxReport): string {
 	return report.engine === "none" && report.fix
 		? `${sandboxSummary(report)} Fix: ${report.fix}`
 		: sandboxSummary(report);
 }
 
-/** The report in a request's headers, or undefined when it names none or an engine unknown here. */
+/** The report in a request's headers, or undefined when it names none or one unknown here. */
 export function parseSandboxReport(
 	header: (name: string) => string | undefined,
 ): SandboxReport | undefined {
 	let engine = header(CONNECTOR_SANDBOX_HEADER);
-	if (engine && Object.hasOwn(SANDBOX_ENGINES, engine)) {
-		return { engine: engine as SandboxEngineName };
+	if (engine === "nvx") {
+		let hypervisor = header(CONNECTOR_SANDBOX_HYPERVISOR_HEADER);
+		return hypervisor && Object.hasOwn(HYPERVISORS, hypervisor)
+			? { engine, hypervisor: hypervisor as HypervisorName }
+			: undefined;
 	}
 	if (engine !== "none") return undefined;
 	let text = (value: string | undefined) =>

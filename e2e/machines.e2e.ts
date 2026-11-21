@@ -1,6 +1,8 @@
+import { MICROVMS } from "../apps/server/src/testing/microvms";
 import { execFileSync, spawn } from "node:child_process";
+import { accessSync, constants } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { hostname, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { AGENTS, findAgent } from "../packages/protocol/agents";
 import {
@@ -9,16 +11,15 @@ import {
 	CONNECTOR_HOST_HEADER,
 	CONNECTOR_PLATFORM_HEADER,
 	CONNECTOR_PROTOCOL_HEADER,
-	CONNECTOR_SANDBOX_FIX_HEADER,
 	CONNECTOR_SANDBOX_HEADER,
-	CONNECTOR_SANDBOX_REASON_HEADER,
+	CONNECTOR_SANDBOX_HYPERVISOR_HEADER,
 	CONNECTOR_SERVICE_HEADER,
 	CONNECTOR_VERSION_HEADER,
 } from "../packages/protocol/connector";
 import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
 import { compiledChopin } from "../apps/connector/src/testing/binary";
 import { assets, fakeRelease } from "../apps/connector/src/testing/release";
-import { agentCommand, setupCommand } from "../apps/web/src/experiments/setup-commands";
+import { setupCommand } from "../apps/web/src/experiments/setup-commands";
 import { authenticate, expect, test } from "./room";
 import { RELEASE } from "./release";
 import { ROOT } from "./servers";
@@ -170,7 +171,7 @@ function keyRequests(page: Page) {
 
 const PAIRING_LINK = /http:\/\/[^\s]+\/machines\?pairing=[\w-]+/;
 
-test("your computer: one copied command installs chopin, prints a link, and pairs once approved here", async ({ baseURL, join: enter }) => {
+test("your computer: one copied command installs chopin, which pairs only a machine that can run its microVMs", async ({ baseURL, join: enter }) => {
 	test.setTimeout(240_000);
 	let handle = person();
 	let page = await enter(handle);
@@ -208,57 +209,56 @@ test("your computer: one copied command installs chopin, prints a link, and pair
 	await dialog.getByRole("button", { name: "macOS", exact: true }).click();
 	await expect.poll(command).toBe(setupCommand(origin, "sh", findAgent("copilot")));
 
-	// What the agent needs reads as one line; its install command shows on request.
-	await expect(dialog.getByText("Needs GitHub Copilot CLI, signed in, and Node.js 22 or newer."))
-		.toBeVisible();
-	await dialog.getByRole("button", { name: "Show install command", exact: true }).click();
-	await expect.poll(() => dialog.locator(".machines-needs pre code").innerText())
-		.toBe(agentCommand(findAgent("copilot"), "sh"));
-	await expect(dialog.getByText(/^If npm stops with EACCES, don't use sudo/)).toBeVisible();
-	await dialog.getByRole("button", { name: "Hide install command", exact: true }).click();
+	// What the machine needs reads as one line: chopin installs the agent in its microVMs, and a
+	// Mac can't run them.
+	await expect(dialog.locator(".machines-needs")).toHaveText(
+		"A Mac can't run Chopin's work: chopin runs each agent in a microVM of its own, which needs "
+			+ "Linux or Windows on x86_64 with hardware virtualization.",
+	);
+	await dialog.getByRole("button", { name: "Windows", exact: true }).click();
+	await expect(dialog.locator(".machines-needs")).toHaveText(
+		"Needs the Windows Hypervisor Platform turned on, on x86_64: chopin runs GitHub Copilot CLI "
+			+ "in a microVM of its own and installs it there.",
+	);
+	await dialog.getByRole("button", { name: "Linux", exact: true }).click();
+	await expect(dialog.locator(".machines-needs")).toHaveText(
+		"Needs KVM, on x86_64: chopin runs GitHub Copilot CLI in a microVM of its own and installs "
+			+ "it there.",
+	);
+	await expect(dialog.locator(".machines-needs pre")).toHaveCount(0);
 	// The dialog ends at the command, as Tailscale's does: no wait for the machine.
 	await expect(dialog.getByText("It prints a link; open it here and approve.")).toBeVisible();
 	await expect(dialog.getByText(/Waiting/)).toHaveCount(0);
 
+	// Pasted on a machine whose user can't use KVM, as a CI runner's can't: it installs chopin,
+	// which says what the machine needs and pairs nothing. Pairing a machine that runs microVMs is
+	// the connector's own tests' to show.
+	test.skip(canUseKvm(), "This machine can run microVMs, which this test pastes the command on.");
 	let laptop = await machine();
 	try {
-		// Pasted on the machine as it is: it installs chopin, which prints a link and a code.
 		let exited = laptop.run(await command());
-		await expect.poll(() => laptop.output().match(PAIRING_LINK)?.[0], { timeout: 60_000 })
-			.toBeTruthy();
-		let code = laptop.output().match(/Check the page shows:\s+([A-Z2-9]{4}-[A-Z2-9]{4})/)?.[1];
-		expect(code).toBeTruthy();
-		let approval = await page.context().newPage();
-		await approval.goto(laptop.output().match(PAIRING_LINK)![0]);
-		await expect(approval.getByText(code!, { exact: true })).toBeVisible();
-		await approval.getByRole("button", { name: "Add machine", exact: true }).click();
-		await expect(approval.getByRole("status").filter({ hasText: "Connected" }))
-			.toHaveText("Connected");
-		await approval.close();
-
-		// Approved, it connects, then installs the service and leaves it running.
-		expect(await exited, laptop.output()).toBe(0);
-		expect(laptop.output()).toContain("Installed the chopin service");
-		expect(await readFile(join(laptop.home, "systemctl.log"), "utf8"))
-			.toContain("systemctl --user enable --now chopin.service");
-
-		// Closed, the dialog leaves the table, where the machine appears as it connects.
-		await dialog.getByRole("button", { name: "Close", exact: true }).click();
-		await expect(dialog).toHaveCount(0);
-		let row = page.getByRole("table", { name: "Your machines" })
-			.getByRole("row", { name: new RegExp(hostname()) });
-		await expect(row).toContainText("Connected", { timeout: 30_000 });
-		await expect(row).not.toContainText("New");
-		await expect(page.getByText("1 machine", { exact: true })).toBeVisible();
-		await expect(page.getByRole("region", { name: "Add your first machine" })).toHaveCount(0);
-		// No key was made on the way.
+		expect(await exited, laptop.output()).not.toBe(0);
+		expect(laptop.output()).toContain(
+			"This machine can't run Chopin's work: Chopin runs each agent in its own microVM",
+		);
+		expect(laptop.output()).not.toMatch(PAIRING_LINK);
 		expect(minted).toEqual([]);
 	} finally {
 		await laptop.stop();
 	}
 });
 
-test("server or VM: a generated script pairs with its single-use key, automatic work as chosen", async ({ baseURL, page }) => {
+/** Whether this process may open /dev/kvm, as a chopin it starts would. */
+function canUseKvm() {
+	try {
+		accessSync("/dev/kvm", constants.R_OK | constants.W_OK);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+test("server or VM: a generated script with its single-use key, which pairs only a machine that can run microVMs", async ({ baseURL, page }) => {
 	test.setTimeout(240_000);
 	let { repository } = await sharer(page, baseURL!);
 	let minted = keyRequests(page);
@@ -326,32 +326,22 @@ test("server or VM: a generated script pairs with its single-use key, automatic 
 	// The page ends at the command, as Tailscale's does: no wait for the machine.
 	await expect(page.getByText(/Waiting/)).toHaveCount(0);
 
+	// Pasted on a machine whose user can't use KVM, as a CI runner's can't: chopin installs, says
+	// what the machine needs, and spends no key. Pairing one that runs microVMs is the connector's
+	// own tests' to show.
+	test.skip(canUseKvm(), "This machine can run microVMs, which this test pastes the script on.");
 	let server = await machine(repository);
 	try {
-		// Pasted on the machine as it is: it pairs at once, with nothing opened in a browser.
-		expect(await server.run(command), server.output()).toBe(0);
+		expect(await server.run(command), server.output()).not.toBe(0);
 		expect(server.output()).not.toContain(key!);
-		expect(server.output()).not.toContain("?pairing=");
-		expect(server.output()).toContain("Installed the chopin service");
-
-		await expect(page.getByText(hostname())).toHaveCount(0);
-		await expect.poll(
-			() =>
-				page.evaluate(async () => (await (await fetch("/api/connector/machines")).json()).machines),
-		).toMatchObject([{ label: "ci-runner", hostname: hostname(), autoRun: true, shared: true }]);
-
-		// Back on Machines, the machine is in the table.
-		await page.getByRole("main").getByRole("link", { name: "Machines", exact: true }).click();
-		await expect(page).toHaveURL(/\/machines$/);
-		let row = page.getByRole("table", { name: "Your machines" })
-			.getByRole("row", { name: /ci-runner/ });
-		await expect(row).toContainText("Connected", { timeout: 30_000 });
-		await expect(row).not.toContainText("New");
-
-		// The key worked once: on a machine not yet paired, the same command is refused.
-		await rm(join(server.home, ".local/state"), { recursive: true, force: true });
-		expect(await server.run(command)).toBe(1);
-		expect(server.output()).toContain("Chopin refused the pairing key");
+		expect(server.output()).toContain(
+			"This machine can't run Chopin's work: Chopin runs each agent in its own microVM",
+		);
+		expect(
+			await page.evaluate(async () =>
+				(await (await fetch("/api/connector/machines")).json()).machines
+			),
+		).toEqual([]);
 	} finally {
 		await server.stop();
 	}
@@ -366,7 +356,6 @@ test("a phone wraps every command in view", async ({ join: enter }) => {
 		.toBeVisible();
 
 	// No command scrolls sideways; each wraps inside its well and still reads as what Copy takes.
-	await dialog.getByRole("button", { name: "Show install command", exact: true }).click();
 	for (let system of ["Linux", "Windows"]) {
 		await dialog.getByRole("button", { name: system, exact: true }).click();
 		for (let { id } of AGENTS) {
@@ -382,6 +371,7 @@ test("a phone wraps every command in view", async ({ join: enter }) => {
 
 const CONNECTOR = {
 	[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL),
+	...MICROVMS,
 	[CONNECTOR_VERSION_HEADER]: RELEASE,
 };
 
@@ -421,25 +411,22 @@ async function pairedMachine(
 	}
 }
 
-/** Three machines: a Linux server running as the service, a Mac, and one never connected. */
+/** Three machines: a Linux server running as the service, a Windows PC, and one never connected. */
 async function threeMachines(page: Page, repository?: string) {
 	await pairedMachine(page, "build-box", {
 		[CONNECTOR_HOST_HEADER]: "build-box.internal",
-		[CONNECTOR_PLATFORM_HEADER]: "linux arm64",
+		[CONNECTOR_PLATFORM_HEADER]: "linux x64",
 		[CONNECTOR_SERVICE_HEADER]: "1",
 		[CONNECTOR_AGENT_HEADER]: "GitHub Copilot CLI",
 		[CONNECTOR_AGENT_VERSION_HEADER]: "1.0.97",
-		[CONNECTOR_SANDBOX_HEADER]: "bubblewrap",
 	}, repository);
 	await pairedMachine(page, "studio", {
 		[CONNECTOR_HOST_HEADER]: "studio.local",
-		[CONNECTOR_PLATFORM_HEADER]: "darwin arm64",
+		[CONNECTOR_PLATFORM_HEADER]: "win32 x64",
 		[CONNECTOR_AGENT_HEADER]: "Atomic",
 		[CONNECTOR_AGENT_VERSION_HEADER]: "0.12.3",
-		[CONNECTOR_SANDBOX_HEADER]: "none",
-		[CONNECTOR_SANDBOX_REASON_HEADER]:
-			"MXC's Seatbelt backend needs macOS 15 or later. Update macOS.",
-		[CONNECTOR_SANDBOX_FIX_HEADER]: "softwareupdate --install --all",
+		[CONNECTOR_SANDBOX_HEADER]: "nvx",
+		[CONNECTOR_SANDBOX_HYPERVISOR_HEADER]: "whp",
 	}, repository);
 	await pairedMachine(page, "old-laptop", undefined, repository);
 	await page.goto("/machines");
@@ -479,16 +466,16 @@ test("the machines table: search, Tailscale's columns, a row's menu and renaming
 	await expect(table.getByRole("rowheader", { name: "Cloud", exact: true })).toBeVisible();
 	await expect(row("build-box")).toContainText("build-box.internal");
 	await expect(row("build-box")).toContainText(`chopin ${RELEASE}`);
-	await expect(row("build-box")).toContainText("Linux arm64");
+	await expect(row("build-box")).toContainText("Linux x64");
 	await expect(row("build-box")).toContainText("GitHub Copilot CLI 1.0.97");
 	await expect(row("build-box")).toContainText("Connected");
 	// Where a machine connected from is not shown.
 	await expect(row("build-box").getByRole("button", { name: /^Copy / })).toHaveCount(0);
-	await expect(row("studio")).toContainText("macOS arm64");
+	await expect(row("studio")).toContainText("Windows x64");
 	await expect(row("old-laptop")).toContainText(/Last seen/);
-	// A person has no say in the sandbox, so the table doesn't mention it.
+	// A person has no say in where agents run, so the table doesn't mention it.
 	for (let name of ["build-box", "studio", "old-laptop"]) {
-		await expect(row(name)).not.toContainText("andboxed");
+		await expect(row(name)).not.toContainText("microVM");
 	}
 
 	// Sharing is off until its owner turns it on, from the row's switch, and stays on once saved.
@@ -572,12 +559,12 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await expect(page.locator(".machines-description")).toHaveCount(0);
 	await expect(page.getByRole("main").getByText("Connected", { exact: true })).toHaveCount(1);
 	await expect(page.getByRole("main")).toContainText("build-box.internal");
-	await expect(page.getByRole("main")).toContainText("Linux arm64");
+	await expect(page.getByRole("main")).toContainText("Linux x64");
 	await expect(page.getByRole("main")).not.toContainText("Address");
 	// Its owner, and no repository: a machine serves every repository its owner can push to.
 	await expect(page.locator(".machines-facts")).toContainText(`Owner${login}`);
 	await expect(page.locator(".machines-facts")).toContainText(
-		"SandboxSandboxed (Linux bubblewrap)",
+		"SandboxEach agent in its own microVM (NVX on KVM)",
 	);
 	await expect(page.locator(".machines-facts")).not.toContainText("Repositor");
 	await expect(page.getByRole("main")).not.toContainText("octo-org");

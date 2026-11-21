@@ -1,20 +1,15 @@
 import { afterAll, expect, test } from "bun:test";
+import { hostSandbox } from "./testing/host-sandbox";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { answerTokens, BOT } from "./testing/github-grant";
 import { checkouts } from "./checkouts";
 import { createOutput } from "./output";
 import { servePlanners } from "./planner";
 import { plannerSpares, READY_LINE } from "./planner-spare";
-import {
-	git,
-	plannerWorktree,
-	plannerWorktrees,
-	preparePlannerWorktree,
-	type SpareState,
-} from "./workspace";
+import { git, plannerDisks, plannerSlot, type SpareState } from "./workspace";
 
 /**
  * Spare Planners: one Planner command started ahead per registered checkout's repository, handed a
@@ -96,6 +91,8 @@ async function machine(options: {
 	let root = await checkout();
 	let directory = await mkdtemp(join(scratch, "base-"));
 	let log = join(directory, "backend.jsonl");
+	// Its own guests' `/work`, as each microVM has its own.
+	let sandbox = hostSandbox();
 	let said = "";
 	let capture = {
 		write: (chunk: string | Uint8Array) => {
@@ -114,6 +111,7 @@ async function machine(options: {
 	let abort = new AbortController();
 	let start = (signal = abort.signal) =>
 		plannerSpares({
+			sandbox,
 			url: options.url,
 			command,
 			registered: { [REPOSITORY]: root },
@@ -133,6 +131,7 @@ async function machine(options: {
 		});
 	let serve = (documents: string[], spares: ReturnType<typeof start>, signal = abort.signal) =>
 		servePlanners({
+			sandbox,
 			url: options.url,
 			machine: MACHINE,
 			documents,
@@ -147,6 +146,7 @@ async function machine(options: {
 	return {
 		root,
 		directory,
+		sandbox,
 		log,
 		abort,
 		start,
@@ -167,7 +167,10 @@ test.skipIf(process.platform === "win32")(
 			await until(() => it.state() === "ready", 20_000);
 			let [started] = await it.events();
 			// Nothing of a document, no credential: only where its files will be.
-			let slot = started!.env.CHOPIN_WORKTREE as string;
+			let slot = dirname(started!.env.CHOPIN_PLANNER_TOKEN_FILE as string).slice(
+				0,
+				-".tokens".length,
+			);
 			expect(slot).toMatch(/[/\\]planners[/\\]octo-org[/\\]score[/\\]spare-[0-9a-f]{12}$/);
 			expect(started).toMatchObject({
 				event: "start",
@@ -180,6 +183,7 @@ test.skipIf(process.platform === "win32")(
 					GIT_AUTHOR_NAME: null,
 					CHOPIN_PLANNER_SPARE: "1",
 					CHOPIN_CHECKOUT: it.root,
+					CHOPIN_WORKTREE: join(it.sandbox.work, "score"),
 					CHOPIN_PLANNER_TOKEN_FILE: join(`${slot}.tokens`, "planner"),
 					CHOPIN_MCP_TOKEN_FILE: join(`${slot}.tokens`, "mcp"),
 					CHOPIN_GITHUB_TOKEN_FILE: join(`${slot}.tokens`, "github"),
@@ -187,9 +191,13 @@ test.skipIf(process.platform === "win32")(
 					SOME_FLAG: "flag-value",
 				},
 			});
-			// Its worktree is a linked worktree of the checkout, made on the host, at its HEAD.
-			expect(git(slot, "rev-parse", "HEAD")).toBe(git(it.root, "rev-parse", "HEAD"));
-			expect(git(it.root, "worktree", "list")).toContain(slot);
+			// Its repository is a clone of its own, at the checkout's HEAD, on its disk; the person's
+			// repository has nothing added.
+			expect(existsSync(`${slot}.disk`)).toBe(true);
+			expect(git(join(it.sandbox.work, "score"), "rev-parse", "HEAD")).toBe(
+				git(it.root, "rev-parse", "HEAD"),
+			);
+			expect(git(it.root, "worktree", "list")).not.toContain(slot);
 			// Its ready line is the connector's, never passed on.
 			expect(it.said()).not.toContain(READY_LINE);
 
@@ -222,10 +230,10 @@ test.skipIf(process.platform === "win32")(
 			// The spare is the document's backend: nothing started cold.
 			expect(events.filter(entry => entry.event === "start")).toHaveLength(1);
 			expect(it.said()).toContain("› Planner for D_1 started.");
-			// Its slot is the document's worktree for good.
-			expect(await plannerWorktree(it.directory, REPOSITORY, "D_1")).toBe(slot);
-			expect(await plannerWorktrees(it.directory)).toEqual([
-				{ path: slot, repository: REPOSITORY, document: "D_1" },
+			// Its slot, and the disk its repository is on, are the document's for good.
+			expect(await plannerSlot(it.directory, REPOSITORY, "D_1")).toBe(slot);
+			expect(await plannerDisks(it.directory)).toEqual([
+				{ path: `${slot}.disk`, repository: REPOSITORY, document: "D_1" },
 			]);
 
 			// The replacement starts a moment later, in a slot of its own.
@@ -235,7 +243,8 @@ test.skipIf(process.platform === "win32")(
 			);
 			await until(() => it.state() === "ready", 20_000);
 			let replacement = (await it.events()).filter(entry => entry.event === "start")[1]!;
-			let second = replacement.env.CHOPIN_WORKTREE as string;
+			let second = dirname(replacement.env.CHOPIN_PLANNER_TOKEN_FILE as string)
+				.slice(0, -".tokens".length);
 			expect(second).not.toBe(slot);
 
 			// Stopping ends the document's backend and the spare; only the spare's slot goes.
@@ -245,10 +254,9 @@ test.skipIf(process.platform === "win32")(
 			let ended = await it.events();
 			expect(ended.filter(entry => entry.event === "end" || entry.event === "sigterm"))
 				.toHaveLength(2);
-			expect(existsSync(slot)).toBe(true);
-			expect(existsSync(second)).toBe(false);
+			expect(existsSync(`${slot}.disk`)).toBe(true);
+			expect(existsSync(`${second}.disk`)).toBe(false);
 			expect(existsSync(`${second}.tokens`)).toBe(false);
-			expect(git(it.root, "worktree", "list")).not.toContain(second);
 		} finally {
 			it.abort.abort();
 			await spares.stop();
@@ -274,7 +282,9 @@ test.skipIf(process.platform === "win32")(
 				expect(it.said()).toContain("didn't start as a spare");
 				// It was stopped, and its slot removed.
 				await until(
-					async () => !/spare-[0-9a-f]{12}/.test(git(it.root, "worktree", "list")),
+					async () =>
+						!(await readdir(join(it.directory, "planners", "octo-org", "score")))
+							.some(name => /^spare-[0-9a-f]{12}/.test(name)),
 					10_000,
 				);
 
@@ -418,7 +428,7 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
-	"a spare that dies before its hand-over is let go and the document starts cold; a second document at once, and one with a worktree here, start cold",
+	"a spare that dies before its hand-over is let go and the document starts cold; a second document at once, and one with a disk here, start cold",
 	async () => {
 		// The Chopin token takes long enough for the spare to crash first.
 		let slow = chopin({ mcpMs: 1_500 });
@@ -446,9 +456,9 @@ test.skipIf(process.platform === "win32")(
 		let two = await machine({ url: server.url });
 		let pool = two.start();
 		try {
-			// D_3 has a worktree here already: it never takes a spare.
-			let made = await plannerWorktree(two.directory, REPOSITORY, "D_3");
-			await mkdir(made, { recursive: true });
+			// D_3 has a disk here already: it never takes a spare.
+			let made = await plannerSlot(two.directory, REPOSITORY, "D_3");
+			await writeFile(`${made}.disk`, "");
 			await until(() => two.state() === "ready", 20_000);
 			let serving = two.serve(["D_3"], pool);
 			await until(
@@ -489,14 +499,13 @@ test.skipIf(process.platform === "win32")(
 		let it = await machine({ url: server.url });
 		let left = join(it.directory, "planners", "octo-org", "score", "spare-aaaaaaaaaaaa");
 		await mkdir(join(it.directory, "planners", "octo-org", "score"), { recursive: true });
-		expect(await preparePlannerWorktree(it.root, left)).toBe(true);
+		await writeFile(`${left}.disk`, "a spare's disk");
 		await mkdir(`${left}.tokens`);
 		let spares = it.start();
 		try {
 			await until(() => it.state() === "ready", 20_000);
-			expect(existsSync(left)).toBe(false);
+			expect(existsSync(`${left}.disk`)).toBe(false);
 			expect(existsSync(`${left}.tokens`)).toBe(false);
-			expect(git(it.root, "worktree", "list")).not.toContain(left);
 		} finally {
 			it.abort.abort();
 			await spares.stop();

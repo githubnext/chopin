@@ -1,5 +1,10 @@
 # Machine runner: one-command install, sandboxed runs and automatic updates
 
+> **Superseded for runs.** Agents no longer run in a process sandbox: every agent runs in
+> an NVX microVM of its own, and a machine that can't run one takes no work. See
+> [Agents in NVX microVMs](nvx-sandbox.md). This document is kept for its install and
+> update design and as the record of the process-sandbox decision it describes.
+
 ## Goal
 
 Adding a machine to Chopin should take one command and no decisions. Work that Chopin runs on that machine should never touch the person's own files, credentials or network beyond what the run needs. The machine should then keep itself current without anyone running a command, and without stopping work that is under way.

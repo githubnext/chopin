@@ -1,3 +1,4 @@
+import { MICROVMS } from "../apps/server/src/testing/microvms";
 import { CONNECTOR_PROTOCOL_HEADER } from "../packages/protocol/connector";
 import { ulid } from "../packages/dialect/src";
 import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
@@ -5,7 +6,7 @@ import { writtenSeed } from "./decision-deck-fixtures";
 import { testChannelPath } from "./database";
 import { expect, test } from "./room";
 
-const CONNECTOR = { [CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL) };
+const CONNECTOR = { [CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL), ...MICROVMS };
 const QUESTION = "Where should onboarding progress live?";
 
 test(

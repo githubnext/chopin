@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, utimes } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
@@ -30,14 +30,17 @@ import {
 	agentFolder,
 	assignSlot,
 	type ChosenPlanners,
-	plannerWorktree,
-	preparePlannerWorktree,
+	plannerDisk,
+	plannerSlot,
 	type StartFailures,
 	tokenFolder,
 } from "./workspace";
 import type { Checkouts } from "./checkouts";
-import { type Sandbox, spawnIn } from "./sandbox";
+import { type Sandbox, SandboxRefused, spawnIn } from "./sandbox";
+import { gitSync, repositoryAt } from "./git-host";
+import { guestRepositoryPath } from "./nvx";
 import { type PlannerSpares, type Spare, SPARE_PROTOCOL } from "./planner-spare";
+import { holdDisk } from "./planner-disks";
 import { managedEnvironment, privateAgentState } from "./ai-agent";
 import { type AgentStore, forgetAgentStore, keepSessionsIn } from "./machine-store";
 
@@ -87,10 +90,10 @@ export function commandWords(line: string): string[] {
  * Run `command` as each document's Planner backend until `signal` aborts. Every launch gets a fresh
  * Planner credential, passed only in its environment as CHOPIN_URL, CHOPIN_DOCUMENT and
  * CHOPIN_PLANNER_TOKEN, beside CHOPIN_CHECKOUT, the checkout of the document's repository it runs
- * in (registered, or cloned and fetched again before each launch; see `checkouts`), and
- * CHOPIN_WORKTREE, where the backend keeps its own worktree of it (see `plannerWorktree`). A
- * backend that exits, as
- * one whose link closed or whose credential was refused does, is started again on the reconnect
+ * reads (registered, or cloned and fetched again before each launch; see `checkouts`), and
+ * CHOPIN_WORKTREE, its own clone of it in its microVM, kept on its disk (see `plannerGuest`). A
+ * backend that exits, as one whose link closed or whose credential was refused does, is started
+ * again on the reconnect
  * backoff. A revoked machine or a document Chopin refuses stops that document's backend. One that
  * exits within `healthyMs` is recorded in `failures` for `chopin status`, until one stays up that
  * long.
@@ -113,7 +116,7 @@ export async function servePlanners(options: {
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
 	/** Where each backend starts: the machine's process sandbox, else plainly. */
-	sandbox?: Sandbox;
+	sandbox: Sandbox;
 	agentStore?: AgentStore;
 	/** The machine's spare Planners, which a new document's Planner starts on. */
 	spares?: PlannerSpares;
@@ -151,7 +154,7 @@ export function dispatchedPlanners(options: {
 	healthyMs?: number;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
-	sandbox?: Sandbox;
+	sandbox: Sandbox;
 	agentStore?: AgentStore;
 	spares?: PlannerSpares;
 }) {
@@ -298,7 +301,7 @@ async function servePlanner(options: {
 	healthyMs?: number;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
-	sandbox?: Sandbox;
+	sandbox: Sandbox;
 	agentStore?: AgentStore;
 	spares?: PlannerSpares;
 	/**
@@ -376,7 +379,7 @@ async function servePlanner(options: {
 		// Reports name the document by its id, which Chopin can check without asking GitHub.
 		let reportedAs = credential.document ?? options.id ?? document;
 		let id = credential.document ?? options.id ?? document;
-		let worktree = await plannerWorktree(options.directory, repository, id);
+		let worktree = await plannerSlot(options.directory, repository, id);
 		let launched = Date.now();
 		let tokens: PlannerTokenFile | undefined;
 		let mcp: McpTokenFile | undefined;
@@ -387,7 +390,7 @@ async function servePlanner(options: {
 		// A backend whose sessions run on people's AI accounts in Chopin starts only on a spare that
 		// started so too.
 		options.spares?.managed(credential.ai === true);
-		let spare = options.spares && !existsSync(worktree)
+		let spare = options.spares && !existsSync(plannerDisk(worktree))
 			? await options.spares.take(repository, credential.ai === true)
 			: undefined;
 		let handled = false;
@@ -440,6 +443,17 @@ async function servePlanner(options: {
 		// Chopin's GitHub token for the document's repository, which the backend needs before it
 		// starts: a refusal stops this Planner with the reason, and the machine never falls back to its
 		// own GitHub login. Chopin out of reach is retried, as a failed start is.
+		// A cold launch holds its disk until its backend exits, so no sweep removes it meanwhile (a
+		// spare holds its own from its start). Held by another process, the launch fails and is tried
+		// again.
+		let releaseDisk: (() => Promise<void>) | undefined;
+		if (!handled) {
+			releaseDisk = await holdDisk(plannerDisk(worktree)).catch((error: unknown) => {
+				outcome = { how: error instanceof Error ? error.message : String(error) };
+				handled = true;
+				return undefined;
+			});
+		}
 		if (!handled) {
 			let asked = githubToken({
 				url: options.url,
@@ -459,7 +473,7 @@ async function servePlanner(options: {
 			// waits for the token, which fetching it takes.
 			let resolved = options.checkouts.resolve(repository, () => asked).then(value => value.root);
 			let prepared = resolved.then(
-				checkout => prepareWorktree(options, document, checkout, worktree),
+				() => prepareDisk(options, document, worktree),
 				() => {},
 			);
 			let files = credentialFiles(options, document, tokenDirectory, credential);
@@ -472,6 +486,7 @@ async function servePlanner(options: {
 				let made = await files.catch(() => undefined);
 				await made?.tokens?.stop();
 				await made?.mcp.stop();
+				await releaseDisk?.();
 			};
 			try {
 				github = await asked;
@@ -543,6 +558,7 @@ async function servePlanner(options: {
 			}
 		}
 		let { how, stderr, reason } = outcome!;
+		await releaseDisk?.();
 		await github?.stop();
 		if (signal.aborted) return;
 		// Renamed while it ran: say so by its new address.
@@ -811,25 +827,26 @@ async function credentialFiles(
 }
 
 /**
- * A backend in the sandbox can't make its own worktree of the checkout (see
- * `preparePlannerWorktree`), so it is made here. Never fatal: a backend that has no use for one
- * starts all the same, and one that has says why itself.
+ * The disk a document's Planner keeps its repository on, made the first time it starts (see
+ * `Sandbox.makeDisk`), and marked used now, which the sweep of old disks counts from (see
+ * `sweepPlannerDisks`). Never fatal here: a backend whose disk couldn't be made fails to start and
+ * says why.
  */
-async function prepareWorktree(
-	options: { sandbox?: Sandbox; output: Output },
+async function prepareDisk(
+	options: { output: Output; sandbox: Sandbox },
 	document: string,
-	checkout: string,
-	worktree: string,
+	folder: string,
 ) {
-	if (!options.sandbox || options.sandbox.report.engine === "none") return;
-	await preparePlannerWorktree(checkout, worktree).catch(error =>
-		options.output.say(
-			options.output.style.dim(
-				`… Couldn't make the worktree for ${document}'s Planner: ${
-					redacted(error instanceof Error ? error.message : String(error)).split("\n")[0]
-				}`,
+	let disk = plannerDisk(folder);
+	await options.sandbox.makeDisk?.(disk).then(() => utimes(disk, new Date(), new Date())).catch(
+		error =>
+			options.output.say(
+				options.output.style.dim(
+					`… Couldn't make the disk for ${document}'s Planner: ${
+						redacted(error instanceof Error ? error.message : String(error)).split("\n")[0]
+					}`,
+				),
 			),
-		)
 	);
 }
 
@@ -956,7 +973,7 @@ async function launch(
 		cwd: string;
 		signal: AbortSignal;
 		env?: Record<string, string>;
-		sandbox?: Sandbox;
+		sandbox: Sandbox;
 		agentStore?: AgentStore;
 		output?: Output;
 		managed?: boolean;
@@ -972,7 +989,6 @@ async function launch(
 	try {
 		child = spawnIn(options.sandbox, {
 			command: options.command,
-			cwd: options.cwd,
 			env: {
 				// Nothing of the machine's GitHub setup: its own git, gh and agent reach GitHub with
 				// Chopin's token over https, and commit as Chopin's App (see `githubEnvironment`). Never
@@ -993,19 +1009,18 @@ async function launch(
 				...(tokens ? { CHOPIN_PLANNER_TOKEN_FILE: tokens.file } : {}),
 				...(mcp ? { CHOPIN_MCP_TOKEN_FILE: mcp.file } : {}),
 				CHOPIN_CHECKOUT: options.cwd,
-				CHOPIN_WORKTREE: worktree,
+				CHOPIN_WORKTREE: guestRepositoryPath(repository, options.sandbox.work),
 				CHOPIN_GITHUB_TOKEN: github.token,
 				CHOPIN_GITHUB_TOKEN_EXPIRES_AT: new Date(github.expiresAt).toISOString(),
 			},
 			stdin: "ignore",
-			// It writes its own worktree, which the connector made for it, and nothing of the checkout
-			// it runs in, which is the person's and read-only; it sees nothing of its siblings' or of
-			// anyone's tokens but its own.
-			writable: [worktree],
-			own: [worktree, tokenFolder(worktree), ...options.managed ? [agentFolder(worktree)] : []],
-			...(options.managed
-				? { agentHome: agentFolder(worktree), ownerEnv: options.env ?? {} }
-				: {}),
+			...plannerGuest(
+				worktree,
+				options.cwd,
+				repository,
+				options.managed === true,
+				options.sandbox.work,
+			),
 		});
 	} catch (error) {
 		return { how: error instanceof Error ? error.message : String(error) };
@@ -1049,6 +1064,41 @@ async function launch(
 	await Promise.race([drained, new Promise(resolve => setTimeout(resolve, 500))]);
 	let reason = startFailureReason(tail);
 	return { how, ...(first ? { stderr: first } : {}), ...(reason ? { reason } : {}) };
+}
+
+/**
+ * What a document's Planner backend is given in its microVM: the person's checkout to read, its
+ * uncommitted files included; its own repository, cloned on its disk from the checkout's git
+ * directory, which it reads and never writes, with the objects it needs copied so the clone outlives
+ * the person's garbage collection; its tokens, and its agents' state where it runs on people's AI
+ * accounts. Its disk, `<folder>.disk`, is where its repository lasts between its starts.
+ */
+export function plannerGuest(
+	folder: string,
+	checkout: string,
+	repository: string,
+	managed: boolean,
+	work: string,
+) {
+	let source = repositoryAt(checkout)?.commonDir;
+	if (!source) throw new SandboxRefused(`Not run: ${checkout} is not a git checkout.`);
+	// A new clone starts where the checkout is, which a linked worktree of the person's may be apart
+	// from the repository's own HEAD.
+	let head = gitSync(["rev-parse", "--verify", "HEAD"], { cwd: checkout }).stdout?.trim();
+	return {
+		cwd: guestRepositoryPath(repository, work),
+		reads: [checkout],
+		repository: {
+			source,
+			path: guestRepositoryPath(repository, work),
+			dissociate: true,
+			origin: `https://github.com/${repository}.git`,
+			...head && /^[0-9a-f]{40,64}$/.test(head) ? { commit: head } : {},
+		},
+		disk: plannerDisk(folder),
+		own: [tokenFolder(folder), ...managed ? [agentFolder(folder)] : []],
+		...managed ? { agentHome: agentFolder(folder) } : {},
+	};
 }
 
 /** `env` without `CHOPIN_PLANNER_SPARE`: a cold launch is never offered spare mode. */

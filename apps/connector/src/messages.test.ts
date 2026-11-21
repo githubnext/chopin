@@ -48,6 +48,8 @@ async function connect(
 		paired?: boolean;
 		url?: string;
 		origin?: string;
+		/** `denied`: a Linux machine whose user can't open /dev/kvm (see `chopin-on-host.ts`). */
+		kvm?: "denied";
 	} = {},
 ) {
 	let requests: string[] = [];
@@ -75,7 +77,7 @@ async function connect(
 	let root = options.cwd ?? await checkout(options.origin);
 	let child = Bun.spawn([
 		process.execPath,
-		join(import.meta.dir, "main.ts"),
+		join(import.meta.dir, "testing", "chopin-on-host.ts"),
 		"connect",
 		...(options.args?.(root) ?? [root, "--", "agent"]),
 	], {
@@ -87,6 +89,7 @@ async function connect(
 			CHOPIN_PAIRING_KEY: KEY,
 			NO_COLOR: "1",
 			PATH: options.path ?? await programs(),
+			...options.kvm ? { CHOPIN_TEST_KVM: options.kvm } : {},
 		},
 		stdout: "pipe",
 		stderr: "pipe",
@@ -104,143 +107,19 @@ async function connect(
 let refused = (status: number, body: Record<string, unknown>) => () =>
 	Response.json(body, { status });
 
-/** The entry script npm's shims for copilot run. */
-const ENTRY = "node_modules/@github/copilot/npm-loader.js";
-
-/**
- * The shims `npm install -g` writes for a package's program (by cmd-shim), with the node next to
- * them used first: a .cmd and a .ps1 on Windows, and an extensionless sh script beside them.
- */
-const SHIM = {
-	cmd: [
-		"@ECHO off",
-		"GOTO start",
-		":find_dp0",
-		"SET dp0=%~dp0",
-		"EXIT /b",
-		":start",
-		"SETLOCAL",
-		"CALL :find_dp0",
-		"",
-		'IF EXIST "%dp0%\\node.exe" (',
-		'  SET "_prog=%dp0%\\node.exe"',
-		") ELSE (",
-		'  SET "_prog=node"',
-		"  SET PATHEXT=%PATHEXT:;.JS;=;%",
-		")",
-		"",
-		`endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\${
-			ENTRY.replaceAll("/", "\\")
-		}" %*`,
-		"",
-	].join("\r\n"),
-	ps1: [
-		"#!/usr/bin/env pwsh",
-		"$basedir=Split-Path $MyInvocation.MyCommand.Definition -Parent",
-		"",
-		'$exe=""',
-		'if ($PSVersionTable.PSVersion -lt "6.0" -or $IsWindows) {',
-		'  $exe=".exe"',
-		"}",
-		"$ret=0",
-		'if (Test-Path "$basedir/node$exe") {',
-		`  & "$basedir/node$exe"  "$basedir/${ENTRY}" $args`,
-		"  $ret=$LASTEXITCODE",
-		"} else {",
-		`  & "node$exe"  "$basedir/${ENTRY}" $args`,
-		"  $ret=$LASTEXITCODE",
-		"}",
-		"exit $ret",
-		"",
-	].join("\n"),
-	sh: [
-		"#!/bin/sh",
-		`basedir=$(dirname "$(echo "$0" | sed -e 's,\\\\,/,g')")`,
-		"",
-		'if [ -x "$basedir/node" ]; then',
-		`  exec "$basedir/node"  "$basedir/${ENTRY}" "$@"`,
-		"else ",
-		`  exec node  "$basedir/${ENTRY}" "$@"`,
-		"fi",
-		"",
-	].join("\n"),
-};
-
-/** A node that says it is `version`. */
-let node = (version: string) => `#!/bin/sh\necho v${version}\n`;
-
 const CASES: Array<{
 	name: string;
 	run: () => ReturnType<typeof connect>;
 	says: string[];
 }> = [
 	{
-		name: "the agent isn't installed",
-		run: async () =>
-			connect({ args: root => [root, "--", "copilot", "--acp"], path: await programs() }),
+		name: "this machine can't run microVMs",
+		run: () => connect({ kvm: "denied" }),
 		says: [
-			"copilot isn't installed",
-			"needs Node.js 22 or newer",
-			"  npm install -g @github/copilot",
-			"  copilot login",
-			"Then run this command again.",
+			"This machine can't run Chopin's work: Chopin runs each agent in its own microVM",
+			"Your user can't read and write /dev/kvm.",
+			"Fix: sudo usermod -aG kvm $USER",
 		],
-	},
-	{
-		name: "the agent isn't installed, nor is npm",
-		run: async () => connect({ args: root => [root, "--", "atomic-acp"], path: await programs() }),
-		says: ["atomic-acp isn't installed", "npm comes with Node.js", "https://nodejs.org"],
-	},
-	{
-		name: "the agent's Node.js is too old",
-		run: async () =>
-			connect({
-				args: root => [root, "--", "atomic-acp"],
-				path: await programs({
-					"atomic-acp": "#!/usr/bin/env node\n",
-					node: "#!/bin/sh\necho v21.7.3\n",
-				}),
-			}),
-		says: [
-			"Atomic needs Node.js 22.19 or newer; this machine has 21.7.3",
-			"https://nodejs.org",
-			"Then run this command again.",
-		],
-	},
-	{
-		name: "npm's Windows .cmd shim runs the agent on the older node beside it",
-		run: async () => {
-			let path = await programs({ node: node("22.12.0") });
-			let npm = await programs({ "copilot.cmd": SHIM.cmd, "node.exe": node("20.11.1") });
-			return connect({
-				args: root => [root, "--", join(npm.split(delimiter)[0]!, "copilot.cmd"), "--acp"],
-				path,
-			});
-		},
-		says: [
-			"GitHub Copilot CLI needs Node.js 22 or newer; this machine has 20.11.1",
-			"npm install -g @github/copilot",
-		],
-	},
-	{
-		name: "npm's PowerShell shim runs the agent on an older node from PATH",
-		run: async () => {
-			let npm = await programs({ "copilot.ps1": SHIM.ps1, node: node("20.11.1") });
-			return connect({
-				args: root => [root, "--", join(npm.split(delimiter)[0]!, "copilot.ps1"), "--acp"],
-				path: npm,
-			});
-		},
-		says: ["GitHub Copilot CLI needs Node.js 22 or newer; this machine has 20.11.1"],
-	},
-	{
-		name: "npm's sh shim runs the agent on an older node from PATH",
-		run: async () =>
-			connect({
-				args: root => [root, "--", "copilot", "--acp"],
-				path: await programs({ copilot: SHIM.sh, node: node("20.11.1") }),
-			}),
-		says: ["GitHub Copilot CLI needs Node.js 22 or newer; this machine has 20.11.1"],
 	},
 	{
 		name: "a --checkout isn't inside a git checkout",
@@ -290,9 +169,12 @@ const CASES: Array<{
 		says: ["chopin update 0.2.0"],
 	},
 	{
-		name: "a program the Machines page doesn't offer is missing",
+		name: "chopin doesn't know how to install the agent in its microVMs",
 		run: () => connect({ args: root => [root, "--", "missing-for-sure"] }),
-		says: ["missing-for-sure isn't on your PATH", "give its full path"],
+		says: [
+			"chopin runs missing-for-sure in a microVM of its own and doesn't know how to install it",
+			"Add --install '<the command that installs it>'",
+		],
 	},
 ];
 
@@ -305,21 +187,6 @@ for (let { name, run, says } of CASES) {
 	}, 30_000);
 }
 
-test("a compiled or non-Node agent isn't held to a Node.js version", async () => {
-	for (
-		let program of [
-			"\x7fELF\x02\x01\x01\0\0\0node_modules/x/index.js node",
-			'@ECHO off\r\n"%~dp0\\copilot.exe" %*\r\n',
-		]
-	) {
-		let result = await connect({
-			args: root => [root, "--", "copilot", "--acp"],
-			path: await programs({ copilot: program, node: node("18.20.0") }),
-		});
-		expect(result.output).not.toContain("needs Node.js");
-	}
-}, 60_000);
-
 test("a machine paired already says how to pair it for the key's account instead", async () => {
 	let result = await connect({ paired: true });
 	// It connects with the stored token, which the fake refuses, so it stops; the note came first.
@@ -329,8 +196,10 @@ test("a machine paired already says how to pair it for the key's account instead
 }, 30_000);
 
 test("each case leaves the key unsent unless pairing itself refused it", async () => {
-	let missing = await connect({ args: root => [root, "--", "copilot"], path: await programs() });
-	expect(missing.requests).toEqual([]);
+	let unknown = await connect({ args: root => [root, "--", "missing-for-sure"] });
+	expect(unknown.requests).toEqual([]);
+	let unsupported = await connect({ kvm: "denied" });
+	expect(unsupported.requests).toEqual([]);
 	let notCheckout = await connect({
 		cwd: await mkdtemp(join(scratch, "plain-")),
 		args: () => [".", "--", "agent"],
@@ -343,8 +212,8 @@ test("the setup guide's troubleshooting table names each of these messages", asy
 	let table = guide.slice(guide.indexOf("| Message starts with"));
 	for (
 		let fragment of [
-			"isn't installed",
-			"needs Node.js",
+			"This machine can't run Chopin's work",
+			"in a microVM of its own",
 			"isn't inside a git checkout",
 			"isn't a github.com repository",
 			"Can't reach Chopin at",

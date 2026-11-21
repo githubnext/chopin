@@ -1,6 +1,6 @@
 import { AgentApp, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type { McpServer } from "@agentclientprotocol/sdk";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { access, writeFile } from "node:fs/promises";
 import { Readable, Writable } from "node:stream";
@@ -44,9 +44,18 @@ let app = new AgentApp()
 	.onRequest("session/prompt", async ({ params, client: ownerClient }) => {
 		if (process.env.CHOPIN_TEST_SEEN) {
 			let prompt = params.prompt.map(part => part.type === "text" ? part.text : "").join("\n");
+			let git = (...args: string[]) =>
+				spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).stdout.trim();
+			// Where it works, and the repository it was given there.
 			await writeFile(
 				process.env.CHOPIN_TEST_SEEN,
-				JSON.stringify({ prompt, worktrees: process.env.CHOPIN_RUN_WORKTREES ?? null }),
+				JSON.stringify({
+					prompt,
+					cwd,
+					head: git("rev-parse", "HEAD"),
+					branch: git("branch", "--show-current"),
+					alternates: git("rev-parse", "--git-path", "objects/info/alternates"),
+				}),
 			);
 		}
 		if (process.argv.includes("--hold")) {
@@ -115,40 +124,6 @@ let app = new AgentApp()
 			);
 			return { stopReason: "end_turn" as const };
 		}
-		if (process.argv.includes("--worktrees")) {
-			// Two pull requests at once in extra worktrees where the prompt says, one left with
-			// uncommitted changes and a dev server running in it.
-			let folder = process.env.CHOPIN_RUN_WORKTREES!;
-			for (let name of ["task-a", "task-b"]) {
-				let added = spawnSync("git", [
-					"-C",
-					cwd,
-					"worktree",
-					"add",
-					"-b",
-					`chopin/${name}`,
-					`${folder}/${name}`,
-				], { encoding: "utf8" });
-				if (added.status !== 0) throw new Error(added.stderr);
-			}
-			await writeFile(`${folder}/task-b/source.txt`, "changed, never committed");
-			await writeFile(`${folder}/task-b/new.txt`, "untracked");
-			let server = spawn("sleep", ["600"], {
-				cwd: `${folder}/task-b`,
-				detached: true,
-				stdio: "ignore",
-			});
-			server.unref();
-			await writeFile(process.env.CHOPIN_TEST_ORPHAN_PID!, String(server.pid));
-			return { stopReason: "end_turn" as const };
-		}
-		if (process.argv.includes("--orphan")) {
-			// A dev server in its own process group, as `vite &` from an agent's shell tool is.
-			let server = spawn("sleep", ["600"], { cwd, detached: true, stdio: "ignore" });
-			server.unref();
-			await writeFile(process.env.CHOPIN_TEST_ORPHAN_PID!, String(server.pid));
-			return { stopReason: "end_turn" as const };
-		}
 		// The agent's own turn interrupted, as when Ctrl-C reaches it with the connector.
 		if (process.argv.includes("--self-cancel")) return { stopReason: "cancelled" as const };
 		if (process.argv.includes("--hang")) {
@@ -165,7 +140,7 @@ let app = new AgentApp()
 				});
 				if (process.argv.includes("--command-activity")) {
 					// A shell tool titled with its raw command, as Atomic's is; its update has no kind.
-					let command = "sleep 900; git -C $CHOPIN_RUN_WORKTREES/rewire status --short";
+					let command = "sleep 900; git -C /work/rewire status --short";
 					for (let sessionUpdate of ["tool_call", "tool_call_update"] as const) {
 						await ownerClient.notify("session/update", {
 							sessionId: params.sessionId,

@@ -6,6 +6,7 @@ import type {
 	MachineChoice,
 	MachineFavorite,
 	MachineRepository,
+	MachineVmProblem,
 	StoredMachine,
 } from "../model";
 import type { MachineStore } from "../port";
@@ -98,6 +99,12 @@ export class MemoryMachineStore implements MachineStore {
 		if (!found || found.userId !== userId || found.revokedAt) return false;
 		found.label = label;
 		return true;
+	}
+	async vmProblem(id: string, problem?: MachineVmProblem) {
+		let found = this.#machines.get(id);
+		if (!found || found.revokedAt) return;
+		if (problem) found.vmProblem = { ...problem };
+		else delete found.vmProblem;
 	}
 	async share(id: string, userId: string, shared: boolean) {
 		let found = this.#machines.get(id);

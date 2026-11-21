@@ -1,8 +1,8 @@
-import { existsSync, statSync } from "node:fs";
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { statSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
+import { EMBEDDED_BRIDGE } from "../src/bridge";
 
 /**
  * Compile the connector into standalone `chopin` executables that run without Bun installed.
@@ -28,33 +28,23 @@ export function binaryName(target: string) {
 }
 
 /**
- * The MXC executor a target's binary carries, and the files beside it that it needs, from the SDK
- * package: the sandbox each system runs agents in. The executor is written out of the binary on
- * first use (see `locateExecutor`), so each is embedded under a fixed name. Intel Macs have none:
- * MXC's Seatbelt backend is built for Apple silicon.
+ * The MCP bridge a run's microVM runs on its image's Node (see `guestBridge`), bundled for Node and
+ * written to `into` under the name the binary embeds it by: no extension, so the binary carries it
+ * as a file, not as code of its own.
  */
-export function mxcExecutors(target: string): Array<{ from: string; as: string }> {
-	let [, system, arch] = target.split("-") as [string, string, string];
-	let bin = join(
-		dirname(createRequire(import.meta.url).resolve("@microsoft/mxc-sdk/package.json")),
-		"bin",
-		arch,
-	);
-	let files: Array<[string, string]> = system === "linux"
-		? [["lxc-exec", "mxc-executor"]]
-		: system === "darwin" && arch === "arm64"
-		? [["mxc-exec-mac", "mxc-executor"]]
-		: system === "windows"
-		? [["wxc-exec.exe", "mxc-executor.exe"], [
-			"winhttp-proxy-shim.exe",
-			"mxc-winhttp-proxy-shim.exe",
-		]]
-		: [];
-	return files.map(([from, as]) => {
-		let path = join(bin, from);
-		if (!existsSync(path)) throw new Error(`The MXC SDK has no ${from} for ${target}: ${path}`);
-		return { from: path, as };
+export async function bridgeBundle(into: string) {
+	let built = await Bun.build({
+		entrypoints: [join(PACKAGE, "src/guest-bridge.ts")],
+		target: "node",
+		format: "esm",
+		minify: true,
 	});
+	if (!built.success || !built.outputs[0]) {
+		throw new Error(`Couldn't bundle the guest bridge:\n${built.logs.join("\n")}`);
+	}
+	let path = join(into, EMBEDDED_BRIDGE);
+	await Bun.write(path, built.outputs[0]);
+	return path;
 }
 
 export function hostTarget() {
@@ -73,12 +63,7 @@ export async function buildBinaries(
 	try {
 		for (let target of targets) {
 			let outfile = resolve(outdir, binaryName(target));
-			let embedded: string[] = [];
-			for (let { from, as } of mxcExecutors(target)) {
-				let staged = join(scratch, as);
-				await copyFile(from, staged);
-				embedded.push(staged);
-			}
+			let embedded = [await bridgeBundle(scratch)];
 			let result = Bun.spawnSync([
 				process.execPath,
 				"build",
@@ -102,14 +87,10 @@ export async function buildBinaries(
 			if (!result.success) {
 				throw new Error(`bun build --compile failed for ${target}:\n${result.stderr}`);
 			}
-			// The binary embeds its own source map; the copy beside it would only be shipped by mistake.
+			// The binary embeds its own source map; the copy beside it would only be shipped by mistake,
+			// and so would the map the embedded bridge gets.
 			await rm(`${outfile}.map`, { force: true });
-			// Each embedded executor gets a map of its own, which is no use to anyone.
-			for (let file of embedded) {
-				await rm(join(dirname(outfile), `${basename(file).replace(/\.exe$/, "")}.js.map`), {
-					force: true,
-				});
-			}
+			await rm(join(dirname(outfile), `${EMBEDDED_BRIDGE}.js.map`), { force: true });
 			built.push(outfile);
 		}
 	} finally {

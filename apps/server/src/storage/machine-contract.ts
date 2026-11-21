@@ -129,6 +129,37 @@ export function machineContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		it("keeps why a live machine can't run agents in microVMs until it is cleared, and a revoked one keeps what it had", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let userId = await owner(storage);
+				let input = machine(userId);
+				await storage.machines.create(input);
+				expect((await storage.machines.get(input.id))?.vmProblem).toBeUndefined();
+				let problem = {
+					reason: "Your user can't read and write /dev/kvm.",
+					fix: "sudo usermod -aG kvm $USER",
+				};
+				await storage.machines.vmProblem(input.id, problem);
+				expect((await storage.machines.get(input.id))?.vmProblem).toEqual(problem);
+				expect((await storage.machines.list(userId))[0]?.vmProblem).toEqual(problem);
+				await storage.machines.vmProblem(input.id, {
+					reason: "macOS has no hypervisor NVX can use.",
+				});
+				expect((await storage.machines.get(input.id))?.vmProblem).toEqual({
+					reason: "macOS has no hypervisor NVX can use.",
+				});
+				await storage.machines.vmProblem(input.id);
+				expect((await storage.machines.get(input.id))?.vmProblem).toBeUndefined();
+				await storage.machines.vmProblem(input.id, problem);
+				await storage.machines.revoke(await testLease(storage), input.id, userId, new Date());
+				await storage.machines.vmProblem(input.id);
+				expect((await storage.machines.get(input.id))?.vmProblem).toEqual(problem);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("records when a machine was last seen, and stops once it is revoked", async () => {
 			let storage = await openedStorage(factory);
 			try {

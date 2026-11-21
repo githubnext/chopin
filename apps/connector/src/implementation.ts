@@ -77,25 +77,17 @@ export async function relay(
 }
 
 /**
- * Where a run's agent works: its own worktree, and the one folder for any extra worktrees. In the
- * machine's process sandbox it can't add one: that needs the repository's list of worktrees written,
- * which would let it alter every worktree of the person's.
+ * Where a run's agent works: its own repository, which its microVM cloned as it started, and where
+ * it may add worktrees. Everything in the microVM is gone when the run ends.
  */
-export type RunWorktrees = { root: string; extras: string; confined?: boolean };
+export type RunWorktrees = { root: string; extras: string };
 
-function worktreeLines({ root, extras, confined }: RunWorktrees) {
+function worktreeLines({ root, extras }: RunWorktrees) {
 	return [
-		`Your worktree is ${root}.`,
-		...confined
-			? [
-				"This sandbox lets git write your worktree and not add another (`git worktree add` fails):"
-				+ " for concurrent PRs, make each one from its own branch in your worktree, one after another.",
-			]
-			: [
-				`For extra worktrees, as for concurrent PRs, create them only inside ${extras} (also in `
-				+ "$CHOPIN_RUN_WORKTREES) with `git worktree add`, never beside the checkout.",
-				"They are removed when this run ends, uncommitted changes included, so push what you keep.",
-			],
+		`Your repository is ${root}, a clone of its own in this machine's microVM.`,
+		`For extra worktrees, as for concurrent PRs, add them with \`git worktree add\` inside ${extras}.`,
+		"Everything in the microVM, uncommitted changes included, is gone when this run ends, so push"
+		+ " what you keep.",
 	];
 }
 

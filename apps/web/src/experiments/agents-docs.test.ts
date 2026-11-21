@@ -20,20 +20,18 @@ function table(head: string[], rows: string[][]): string {
 
 let code = (words: string[]) => `\`${words.join(" ")}\``;
 let name = (agent: CodingAgent) => `[${agent.name}](${agent.docs})`;
-let install = (agent: CodingAgent) => agent.install.map(code).join(", then ");
-let signIn = (agent: CodingAgent) =>
-	code(agent.signIn.command) + (agent.signIn.afterward ? `, ${agent.signIn.afterward}` : "");
 let tested = (agent: CodingAgent) => agent.testedWithChopin ? "Yes" : "No";
+
+/** What each agent's microVMs install, at the versions this release pins. */
+let image = (agent: CodingAgent) => agent.image.map(spec => code([spec])).join(", ");
 
 /** The table docs/chopin-cli.md shows, from the agent list the Machines page uses. */
 function guideTable(): string {
 	return table(
-		["Agent", "Install", "Sign in", "Node.js", "Connect with", "Runs", "Tested with Chopin"],
+		["Agent", "In its microVMs", "Connect with", "Runs", "Tested with Chopin"],
 		AGENTS.map(agent => [
 			name(agent),
-			install(agent),
-			signIn(agent),
-			`${agent.node} or newer`,
+			image(agent),
 			code(agentArguments(agent)),
 			code([...agent.env, ...agent.acp]),
 			tested(agent),
@@ -44,8 +42,8 @@ function guideTable(): string {
 /** The README's shorter table. */
 function readmeTable(): string {
 	return table(
-		["Agent", "Install", "Connect with", "Tested with Chopin"],
-		AGENTS.map(agent => [name(agent), install(agent), code(agentArguments(agent)), tested(agent)]),
+		["Agent", "In its microVMs", "Connect with", "Tested with Chopin"],
+		AGENTS.map(agent => [name(agent), image(agent), code(agentArguments(agent)), tested(agent)]),
 	);
 }
 

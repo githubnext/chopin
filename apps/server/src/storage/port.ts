@@ -53,6 +53,7 @@ import type {
 	MachineCredentials,
 	MachineFavorite,
 	MachineRepository,
+	MachineVmProblem,
 	McpInvocation,
 	McpInvocationScope,
 	McpSession,
@@ -159,6 +160,11 @@ export interface MachineStore {
 	revoke(lease: Lease, id: string, userId: string, now: Date): Promise<boolean>;
 	/** Rename the owner's live machine; false for anyone else's, or a revoked one. */
 	rename(id: string, userId: string, label: string): Promise<boolean>;
+	/**
+	 * Record why a live machine can't run agents in microVMs, or with none clear it. A revoked
+	 * machine keeps what it had.
+	 */
+	vmProblem(id: string, problem?: MachineVmProblem): Promise<void>;
 	/** Add a repository the machine connected a checkout of, unless it already serves it. */
 	serve(id: string, repository: MachineRepository): Promise<void>;
 	/** The owner shares one of their machines with teammates, or stops; false when it isn't theirs. */

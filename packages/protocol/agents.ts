@@ -20,6 +20,12 @@ export interface CodingAgent {
 	 * checked by `bun run verify:agents`.
 	 */
 	node: string;
+	/**
+	 * The npm packages, each at the version this release pins, that its image installs: every agent
+	 * runs in a microVM of its own, from an image built once with these (see the connector's
+	 * `images.ts`), never from an install on the machine itself.
+	 */
+	image: string[];
 	/** The ACP command `chopin connect --agent <id>` starts. */
 	acp: string[];
 	/** Words between `acp` and extra arguments given after `--`, when the adapter wants a separator. */
@@ -72,6 +78,7 @@ export const AGENTS: readonly CodingAgent[] = [
 		name: "GitHub Copilot CLI",
 		install: [["npm", "install", "-g", "@github/copilot"]],
 		signIn: { command: ["copilot", "login"] },
+		image: ["@github/copilot@1.0.114"],
 		acp: ["copilot", "--acp", "--allow-all"],
 		env: [],
 		unattended: true,
@@ -84,6 +91,7 @@ export const AGENTS: readonly CodingAgent[] = [
 		name: "Atomic",
 		install: [["npm", "install", "-g", "@bastani/atomic", "@bastani/atomic-acp"]],
 		signIn: { command: ["atomic"], afterward: "sign in with /login, then quit" },
+		image: ["@bastani/atomic@0.10.2", "@bastani/atomic-acp@0.0.18"],
 		acp: ["atomic-acp"],
 		// atomic-acp passes the arguments after its own -- to every Atomic it starts.
 		passthrough: ["--"],

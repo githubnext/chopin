@@ -11,8 +11,8 @@ function person() {
 	return `ana-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-for (let transport of ["stdio", "http"] as const) {
-	test(`the connector executes an ACP turn and publishes through ${transport} MCP`, async ({ baseURL, join: enter, room, seed }) => {
+{
+	test("the connector executes an ACP turn and publishes through its run's MCP bridge", async ({ baseURL, join: enter, room, seed }) => {
 		await seed("# Local investigation\n\nInspect startup evidence.\n");
 		let root = await mkdtemp(join(tmpdir(), "chopin-connector-e2e-"));
 		let state = await mkdtemp(join(tmpdir(), "chopin-connector-state-"));
@@ -24,26 +24,17 @@ for (let transport of ["stdio", "http"] as const) {
 		await writeFile(join(root, "sample.txt"), "sample");
 		git("add", ".");
 		git("commit", "-m", "fixture");
-		// The stdio run uses the bundle people download, run from the checkout like the UI command;
-		// its MCP bridge re-executes that file. The HTTP run keeps the contributor source path.
-		let script = join(ROOT, "apps/connector/src/main.ts");
-		if (transport === "stdio") {
-			let download = await fetch(new URL("/connector.js", baseURL));
-			expect(download.headers.get("content-type")).toContain("text/javascript");
-			script = join(state, "connector.js");
-			await writeFile(script, await download.text());
-		}
+		// The agent starts on the host here (see `chopin-on-host.ts`), and starts the run's bridge as
+		// its microVM would, from the connector's source.
 		let connector = spawn("bun", [
-			script,
+			join(ROOT, "apps/connector/src/testing/chopin-on-host.ts"),
 			"connect",
-			transport === "stdio" ? "." : root,
-			"--no-sandbox",
+			".",
 			"--",
 			"bun",
 			join(ROOT, "apps/connector/src/testing/fake-agent.ts"),
-			...(transport === "http" ? ["--http"] : []),
 		], {
-			cwd: transport === "stdio" ? root : ROOT,
+			cwd: root,
 			env: { ...process.env, CHOPIN_URL: baseURL, CHOPIN_CONNECTOR_STATE_DIR: state },
 			stdio: ["ignore", "pipe", "pipe"],
 		});
@@ -122,10 +113,9 @@ for (let transport of ["stdio", "http"] as const) {
 /** Start `connect` for a checkout and collect its output until it exits. */
 function start(baseURL: string, root: string, state: string) {
 	let child = spawn("bun", [
-		join(ROOT, "apps/connector/src/main.ts"),
+		join(ROOT, "apps/connector/src/testing/chopin-on-host.ts"),
 		"connect",
 		root,
-		"--no-sandbox",
 		"--",
 		"bun",
 		join(ROOT, "apps/connector/src/testing/fake-agent.ts"),

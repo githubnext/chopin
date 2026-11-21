@@ -79,39 +79,33 @@ Each new investigation uses the commit of the checkout the selected machine
 named for the document's repository, or else the head of the repository's
 default branch on GitHub, which the machine clones or fetches. Retrying an
 investigation keeps its original source commit, even after the connection changes.
-Other investigations in the document do not choose its baseline. The connector creates a
-detached worktree and preserves existing local edits. Its local state defaults to
-`$XDG_STATE_HOME/chopin/connector` or `~/.local/state/chopin/connector`; override it
-with `--base-dir`, `CHOPIN_HOME` or `CHOPIN_CONNECTOR_STATE_DIR`. Worktrees are retained there for inspection.
-Remove an unwanted worktree with Git's normal `worktree remove` command.
+Other investigations in the document do not choose its baseline. The agent's microVM
+clones the repository at the run's commit and leaves your checkout and its local edits
+as they are. Its local state defaults to `$XDG_STATE_HOME/chopin/connector` or
+`~/.local/state/chopin/connector`; override it with `--base-dir`, `CHOPIN_HOME` or
+`CHOPIN_CONNECTOR_STATE_DIR`. Nothing of the run's clone is left there when it ends.
 
 Manual investigations can upload up to three distinct screenshots; one over 1 MiB is stored as a smaller copy.
-The agent saves PNG, JPEG or WebP files in its worktree and calls `upload_image_file({path})`.
-The connector refuses paths outside that worktree, including symlinks. The agent embeds the
-returned hosted paths as Markdown images in the submitted report. The run-scoped server tool
-is `upload_investigation_image`; the connector handles reading and encoding the local file.
+The agent saves PNG, JPEG or WebP files in its repository and calls
+`upload_image_file({path})`. The bridge refuses paths outside that repository, including
+symlinks. The agent embeds the returned hosted paths as Markdown images in the submitted
+report. The run-scoped server tool is `upload_investigation_image`; the bridge in the
+microVM reads and encodes the file.
 
-Local execution uses the agent's skills and configured services. Where the machine has
-one, the connector starts the agent in the operating system's process sandbox (macOS
-Seatbelt, Linux bubblewrap or Windows ProcessContainer, through MXC): it writes only
-its worktree, the places in its repository's git directory where commits and refs go and
-its own worktree's entry there (not the configuration, hooks or any other worktree's, and
-no new file in the directory that git reads) and its own state, can't read your SSH, cloud
-and GitHub credentials, and
-reaches only an allow-list of hosts. `chopin status` says whether this machine has one,
-and [Sandbox](chopin-cli.md#sandbox) describes it. Without one the agent has your
-account's ordinary permissions, and a worktree organizes edits; it is not a sandbox.
-Standard ACP permission
+Local execution runs the agent in a microVM of its own (an NVX guest): it works in a
+clone of the repository in that microVM, reads your checkout's git directory and never
+writes it, sees nothing else of your machine, and reaches only an allow-list of hosts.
+`chopin status` says whether this machine can run them, and
+[Sandbox](chopin-cli.md#sandbox) describes it. A machine that can't run them takes no
+work. Standard ACP permission
 requests appear in the connector terminal with the tool kind and the command,
 paths or input involved, and are declined when no interactive terminal is
 available. Choosing an "always allow" option skips later prompts for that tool
 kind until the connector exits. The connector does not advertise client-hosted filesystem
 or terminal tools; supported agents execute their own local tools.
 
-The connector chooses HTTP MCP when the ACP agent advertises it and otherwise
-uses its stdio bridge. Both transports expose the same investigation operations;
-HTTP also retains the connector's internal `read_experiment` and
-`submit_experiment_result` names.
+The agent reaches Chopin's tools for its run through a stdio bridge that runs beside it
+in its microVM, on the image's Node, and reaches Chopin through the proxy.
 
 The agent reads its sealed brief and output schema through `read_investigation`,
 then calls `submit_investigation_result`. The server validates the candidate,

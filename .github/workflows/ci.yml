@@ -425,7 +425,8 @@ jobs:
           retention-days: 7
 
   # The `chopin` CLI is the connector compiled into one binary that runs without Bun. The smoke
-  # test runs a fake investigation through it, so the agent starts the binary's own stdio bridge.
+  # test checks what the binary says of this machine, and that a checkout's .env and bunfig.toml
+  # don't reach it.
   cli:
     name: chopin CLI
     runs-on: ubuntu-latest
@@ -443,7 +444,7 @@ jobs:
       - run: ./dist/chopin-linux-x64 --version
         working-directory: apps/connector
 
-      - name: Bridge smoke test from the compiled binary
+      - name: Smoke test of the compiled binary
         run: bun test apps/connector/src/binary.test.ts
         env:
           CHOPIN_BINARY: apps/connector/dist/chopin-linux-x64
@@ -454,6 +455,47 @@ jobs:
           path: apps/connector/dist/chopin-windows-x64.exe
           if-no-files-found: error
           retention-days: 1
+
+  # Agents in real NVX microVMs on the runner's KVM: what a guest can reach, write and keep, the
+  # MCP bridge in a guest, and a launch's end. The NVX package is the one the connector pins, checked
+  # against its SHA-256; the agent image is built in a microVM, as on a machine. Not part of a gate:
+  # it needs KVM and downloads NVX, Node and the agent, so it reports on its own.
+  microvms:
+    name: microVMs (KVM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Give this user KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          test -r /dev/kvm -a -w /dev/kvm
+
+      - name: The pinned NVX release
+        run: |
+          set -eu
+          read -r url sha <<< "$(bun -e 'import { NVX_RELEASE } from "./apps/connector/src/nvx"; let p = NVX_RELEASE.packages["linux-kvm"]; console.log(`https://github.com/microsoft/nvx/releases/download/${NVX_RELEASE.tag}/${p.file} ${p.sha256}`)')"
+          curl -fsSL "$url" -o "$RUNNER_TEMP/nvx.tar.gz"
+          echo "$sha  $RUNNER_TEMP/nvx.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/nvx"
+          tar -xzf "$RUNNER_TEMP/nvx.tar.gz" -C "$RUNNER_TEMP/nvx"
+          echo "CHOPIN_NVX_ROOT=$(echo "$RUNNER_TEMP"/nvx/*)" >> "$GITHUB_ENV"
+
+      - name: Agents in microVMs
+        run: bun test --timeout 600000 apps/connector/src/nvx-vm.test.ts
+        env:
+          GIT_CONFIG_GLOBAL: /dev/null
+          CHOPIN_NVX_REQUIRED: "1"
 
   # Cross-compiled above; this checks that the .exe starts on Windows, and runs install.ps1
   # against a local fake release (the Linux job only sees it refuse to run outside Windows).

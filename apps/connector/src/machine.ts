@@ -10,10 +10,12 @@ import {
 	CONNECTOR_PLATFORM_HEADER,
 	CONNECTOR_SANDBOX_FIX_HEADER,
 	CONNECTOR_SANDBOX_HEADER,
+	CONNECTOR_SANDBOX_HYPERVISOR_HEADER,
 	CONNECTOR_SANDBOX_REASON_HEADER,
 	CONNECTOR_SERVICE_HEADER,
 	CONNECTOR_STORE_PROBLEM_HEADER,
 	CONNECTOR_UPDATE_REQUIRED,
+	SANDBOX_TEXT_LIMIT,
 	type SandboxReport,
 } from "@chopin/protocol/connector";
 import { redacted } from "./connection";
@@ -304,7 +306,7 @@ export type About = {
 	/** It has a Planner command, so Chopin may ask it to run the Planner of a document. */
 	plannerCommand?: boolean;
 	agent?: { name: string; version?: string };
-	/** Whether agents run in the system's process sandbox, and if not, why and the fix. */
+	/** Its agents run in NVX microVMs, on which hypervisor; or why they can't, and the fix. */
 	sandbox?: SandboxReport;
 	storeProblem?: string;
 };
@@ -320,6 +322,9 @@ function aboutHeaders(about: About): Record<string, string> {
 		[CONNECTOR_AGENT_HEADER]: about.agent?.name,
 		[CONNECTOR_AGENT_VERSION_HEADER]: about.agent?.version,
 		[CONNECTOR_SANDBOX_HEADER]: about.sandbox?.engine,
+		...(about.sandbox?.engine === "nvx"
+			? { [CONNECTOR_SANDBOX_HYPERVISOR_HEADER]: about.sandbox.hypervisor }
+			: {}),
 		...(about.sandbox?.engine === "none"
 			? {
 				[CONNECTOR_SANDBOX_REASON_HEADER]: about.sandbox.reason,
@@ -671,6 +676,43 @@ export async function reportMachineStoreProblem(
 ): Promise<void> {
 	let report: MachineStoreReport = { problem: problem.slice(0, MACHINE_STORE_REASON_LIMIT) };
 	await post(url + "/api/connector/machine-store", report, token, signal);
+}
+
+/**
+ * Tell Chopin this machine can't run agents in microVMs, and why, so its Machines page says so while
+ * the machine is away and Chopin never chooses it; one that can again says so as it connects.
+ */
+export async function reportCapability(
+	url: string,
+	token: string,
+	support: { reason: string; fix?: string },
+	signal?: AbortSignal,
+): Promise<void> {
+	await post(
+		url + "/api/connector/capability",
+		{
+			reason: support.reason.slice(0, SANDBOX_TEXT_LIMIT),
+			...support.fix ? { fix: support.fix.slice(0, SANDBOX_TEXT_LIMIT) } : {},
+		},
+		token,
+		signal,
+	);
+}
+
+/**
+ * Which of `documents`, whose Planners' disks this machine keeps, Chopin says it may forget: each
+ * archived or gone. Anything else it answers keeps them all.
+ */
+export async function forgettablePlanners(
+	url: string,
+	token: string,
+	documents: string[],
+	signal?: AbortSignal,
+): Promise<string[]> {
+	let answer = await post(url + "/api/connector/planner/kept", { documents }, token, signal);
+	return Array.isArray(answer.forget)
+		? answer.forget.filter((item): item is string => typeof item === "string")
+		: [];
 }
 
 /** Ends a run's AI launch with its own credential, so its stand-ins stop working at once. */
