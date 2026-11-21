@@ -57,6 +57,7 @@ import type {
 	McpInvocationScope,
 	McpSession,
 	PauseBackgroundJob,
+	PlannerCatalog,
 	PlannerCredential,
 	PlannerLinkHold,
 	PlannerModelChoice,
@@ -461,6 +462,15 @@ export interface PlannerModelChoiceStore {
 }
 
 /**
+ * The last models each document's remote Planner reported, kept per account. Writes are fenced by
+ * the writer lease and replace the row whole.
+ */
+export interface PlannerCatalogStore {
+	put(lease: Lease, catalog: PlannerCatalog): Promise<void>;
+	get(channelId: string, userId: string): Promise<PlannerCatalog | undefined>;
+}
+
+/**
  * Shared Chat threads and session-level fork, context-usage and compaction state, stored in
  * expand-only tables outside the document sidecar so an earlier release reads the sidecar
  * unchanged. Writes are fenced by the writer lease; rows go with their document.
@@ -725,6 +735,7 @@ export interface StorageAdapter {
 	readonly machines: MachineStore;
 	readonly plannerHolds: PlannerLinkHoldStore;
 	readonly plannerModelChoices: PlannerModelChoiceStore;
+	readonly plannerCatalogs: PlannerCatalogStore;
 	readonly chatThreads: ChatThreadStore;
 	readonly plannerCredentials: PlannerCredentialStore;
 	readonly machineDatabases: MachineDatabaseStore;

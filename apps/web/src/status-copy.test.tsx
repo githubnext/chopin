@@ -14,6 +14,7 @@ import { BuildPlanButton } from "./build-plan-button";
 import { SETUP } from "./build-connection-popover";
 import { SHARE_DETAIL, YourMachines } from "./experiments/machine-list";
 import { ChatComposer } from "./chat/composer";
+import { LAST_KNOWN_STATUS, UNAVAILABLE_STATUS } from "./chat/model-picker-state";
 import { QuietNote } from "./chat/quiet-note";
 import FixSteps from "./fix-steps";
 import { machineFix } from "./machine-fix";
@@ -379,6 +380,11 @@ test("the busy labels, the agent's face and the composer's picker hints are plai
 		let cue = destinationCue(text, [], true);
 		if (cue) expectPlainWords("a picker hint", [cue.text]);
 	}
+	// The model pill's words about the machine's list: machine status words, none of Chopin's own.
+	expectPlain("the model pill's words", [
+		...Object.values(LAST_KNOWN_STATUS),
+		...Object.values(UNAVAILABLE_STATUS),
+	]);
 	expect(destinationCue("should we ask about auth first?", [], true)?.text)
 		.toBe("Sent to people here. Type @ to ask chopin");
 	let empty = render(createElement(Transcript, {

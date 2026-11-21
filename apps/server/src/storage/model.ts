@@ -1043,6 +1043,19 @@ export type PlannerModelChoice = {
 	updatedAt: Date;
 };
 
+/**
+ * The last models a document's remote Planner reported for one account: what the composer shows,
+ * marked as the last known list, to that account alone while no Planner of the document has said
+ * what it offers now. One row per document and account; a row goes with its document or account.
+ */
+export type PlannerCatalog = {
+	channelId: string;
+	/** The account the reporting Planner ran for. */
+	userId: string;
+	catalog: import("@chopin/protocol").Chat.ModelCatalog;
+	reportedAt: Date;
+};
+
 export type EntryForkPoint = {
 	atomicLeafId?: string | null;
 	remote?: { session: string; turn?: string };

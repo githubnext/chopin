@@ -449,6 +449,15 @@ export declare namespace Chat {
 		 */
 		waiting?: { choice?: ModelChoice; modelName?: string };
 		/**
+		 * Sent to one person only, while what the harness offers is not known: the models the
+		 * document's Planner last reported for that person's own account, and when (milliseconds
+		 * since the epoch). It is not `catalog`: a composer shows it marked as the last known list
+		 * until a catalog arrives, and the server checks a choice against the catalog alone, so one
+		 * picked from this list is saved only if the Planner offers it once it reports. Absent once
+		 * the offer is known, and where no list was kept for that account.
+		 */
+		lastKnown?: { catalog: ModelCatalog; reportedAt: number };
+		/**
 		 * What `/` offers beyond Chopin's own commands: the commands the document's agent reports,
 		 * in the order, spelling and with the duplicates it reported them. Absent where it
 		 * reports none (an older client, or a harness with no commands), and the composer then

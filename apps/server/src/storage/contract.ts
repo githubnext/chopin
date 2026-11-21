@@ -9,6 +9,7 @@ import { machineContract } from "./machine-contract";
 import { plannerAttachmentContract } from "./planner-attachment-contract";
 import { plannerHoldContract } from "./planner-hold-contract";
 import { plannerModelChoiceContract } from "./planner-model-choice-contract";
+import { plannerCatalogContract } from "./planner-catalog-contract";
 import { chatThreadContract } from "./chat-thread-contract";
 import { plannerCredentialContract } from "./planner-credential-contract";
 import { machineDatabaseContract } from "./machine-database-contract";
@@ -62,6 +63,7 @@ export function storageContract(name: string, factory: Factory): void {
 	plannerAttachmentContract(name, factory);
 	plannerHoldContract(name, factory);
 	plannerModelChoiceContract(name, factory);
+	plannerCatalogContract(name, factory);
 	chatThreadContract(name, factory);
 	plannerCredentialContract(name, factory);
 	machineDatabaseContract(name, factory);

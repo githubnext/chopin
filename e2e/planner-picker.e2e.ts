@@ -3098,7 +3098,7 @@ test("the composer's model pill waits in place while the machine starts the Plan
 	await client.detach();
 });
 
-test("the waiting pill shows only while a machine is starting the Planner: none with no machine, and it ends when the machine goes or can't start it", async ({ browser }) => {
+test("the waiting pill shows only while a machine is starting the Planner: none with no machine, and it ends when the machine goes, or says so when it can't start it", async ({ browser }) => {
 	test.setTimeout(150_000);
 	let room = await remoteServer();
 	let page = await open(browser, "mona", room, DESKTOP);
@@ -3129,13 +3129,103 @@ test("the waiting pill shows only while a machine is starting the Planner: none 
 	expect((await desk.reportFailure(refused(room, 1))).status).toBe(200);
 	expect((await desk.reportFailure(refused(room, 2))).status).toBe(200);
 	await expect(machineButton(page)).toHaveAttribute("data-planner", "failing");
-	await expect(anyPill(page)).toHaveCount(0);
+	// Nothing waits on a machine that can't start it: the pill says so, with nothing to choose.
+	await expect(waitingPill(page)).toHaveCount(0);
+	let unavailable = page.locator(".chat-composer").getByRole("button", {
+		name: "Model. The machine's models can't load right now.",
+	});
+	await expect(unavailable).toBeVisible();
+	await expect(unavailable).not.toHaveAttribute("aria-busy");
+	await unavailable.click();
+	await expect(
+		page.getByRole("dialog", { name: "Model and reasoning", exact: true }).getByRole("status"),
+	).toHaveText("The machine's models can't load right now.");
+	await page.keyboard.press("Escape");
 
 	// It attaches after all, with a client that reports no models: no pill, waiting or real.
 	let client = await desk.backend(room);
 	await expectHealthy(machineButton(page));
 	await expect(anyPill(page)).toHaveCount(0);
 	await client.detach();
+});
+
+/** The pill drawn from the models listed last time, named for them and why they are not the machine's now. */
+function lastKnownPill(page: Page) {
+	return page.locator(".chat-composer").getByRole("button", {
+		name: /^Model: .*the models from last time/i,
+	});
+}
+
+const NOT_YET = "These are the models from last time, until the machine lists its own.";
+const LOADING_AGAIN =
+	"These are the models from last time. The machine's current list is still loading.";
+
+test("the models listed last time show at once while the machine has yet to list them again, marked, to their own account alone, and the machine's list takes their place", async ({ browser }) => {
+	test.setTimeout(150_000);
+	let room = await remoteServer();
+	let page = await open(browser, "mona", room, DESKTOP);
+	await createdBy(room, "mona");
+	let studio = await machine(page, "studio", true);
+	await page.reload();
+	await ready(page);
+	expect((await studio.poll([])).planners).toHaveLength(1);
+
+	// The machine's Planner lists its models once: they are kept for mona's account.
+	let first = await studio.backend(room, undefined, { capabilities: MODELS });
+	await expect(modelPill(page)).toHaveAccessibleName("Model: Small");
+	await expect(modelPill(page)).not.toHaveAttribute("data-last-known");
+	await first.detach();
+
+	// The Planner stepped away: the list from last time is there with the composer at once, marked
+	// as such, and opens, saying why it is not the machine's list now, never the machine's state.
+	await watchPill(page);
+	await page.reload();
+	await ready(page);
+	let kept = lastKnownPill(page);
+	await expect(kept).toHaveAccessibleName(`Model: Small. ${NOT_YET}`);
+	expect(await pillLag(page)).toBeLessThan(300);
+	await expect(kept).toHaveAttribute("data-last-known", "");
+	await expect(kept).not.toHaveAttribute("aria-busy");
+	await kept.click();
+	let dialog = page.getByRole("dialog", { name: "Model and reasoning", exact: true });
+	await expect(dialog.getByRole("status")).toHaveText(NOT_YET);
+	await expect(dialog.getByRole("option")).toHaveText([/^Large/, /^Small/]);
+	await shoot(page, "model-pill-last-known-desktop");
+
+	// A pick from it is not saved while no list of the machine's can check it, and says so.
+	await dialog.getByRole("option", { name: /^Large/ }).click();
+	await expect(page.locator(".chat-composer .composer-notice:not([data-banner])")).toHaveText(
+		"The machine's models are still loading, so this choice wasn't saved. Choose again once they're in.",
+	);
+	await expect(kept).toHaveAccessibleName(`Model: Small. ${NOT_YET}`);
+
+	// Someone else in the document is never shown mona's list: theirs says why there is none.
+	let teammate = await open(browser, "hubot", room, DESKTOP);
+	await expect(
+		teammate.locator(".chat-composer").getByRole("button", {
+			name: "Model. The machine's models can't load right now.",
+		}),
+	).toBeVisible();
+	await expect(lastKnownPill(teammate)).toHaveCount(0);
+
+	// The Planner comes back and has yet to list its models: the old list is still mona's, marked as
+	// loading, and the teammate waits for the machine's.
+	let late = await studio.backend(room, undefined, { capabilities: MODELS, silent: true });
+	await expect(kept).toHaveAccessibleName(`Model: Small. ${LOADING_AGAIN}`);
+	await expect(kept).toHaveAttribute("aria-busy", "true");
+	await expect(waitingPill(teammate)).toBeVisible();
+
+	// It lists them: they take the place of the old list, unmarked, for both, and a pick is saved.
+	late.report(MODELS);
+	for (let viewer of [page, teammate]) {
+		await expect(modelPill(viewer)).toHaveAccessibleName("Model: Small");
+		await expect(modelPill(viewer)).not.toHaveAttribute("data-last-known");
+	}
+	await modelPill(page).click();
+	await dialog.getByRole("option", { name: /^Large/ }).click();
+	await expect(modelPill(page)).toHaveAccessibleName("Model: Large");
+	await expect(modelPill(teammate)).toHaveAccessibleName("Model: Large");
+	await late.detach();
 });
 
 test("on a phone, the model pill waits in place while the machine starts the Planner, and becomes the real pill there", async ({ browser }) => {

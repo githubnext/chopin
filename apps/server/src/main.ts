@@ -34,6 +34,7 @@ import {
 	turnModel,
 	turnReadsImages,
 } from "./chat/model-choice";
+import { lastModels } from "./chat/last-models";
 import type { ModelChoiceDeps } from "./chat/model-choice";
 import * as Threads from "./chat/threads";
 import {
@@ -1285,6 +1286,10 @@ const modelChoices: ModelChoiceDeps = {
 	fellBack: channelId => {
 		if (plannerRanWithoutOffer(config.harness, channelId)) announceModel(channelId);
 	},
+	lastKnown: (channelId, userId) =>
+		config.agent && config.harness === "remote"
+			? storage.plannerCatalogs.get(channelId, userId)
+			: Promise.resolve(undefined),
 	storage,
 	lease: () => {
 		if (!writerLease.held) throw new Error("storage writer lease is unavailable");
@@ -1299,10 +1304,23 @@ const modelChoices: ModelChoiceDeps = {
 function announceModel(channelId: string): void {
 	let room = Rooms.get(channelId);
 	if (!room || room.parentChannelId || cutting) return;
-	void publishModelState(modelChoices, channelId, state => {
-		if (server && !cutting) broadcast(server, channelId, state);
+	void publishModelState(modelChoices, channelId, async (state, personal) => {
+		if (!server || cutting) return;
+		if (!personal) return broadcast(server, channelId, state);
+		// Each person is told the list last reported for their own account, and nobody else's.
+		for (let ws of room.members.values()) {
+			let own = await personal(ws.data.principalId);
+			if (!cutting && !ws.data.closed && room.members.get(ws.data.client) === ws) tell(ws, own);
+		}
 	}).catch(err => console.error("chopin: could not announce a document's model choice -", err));
 }
+
+/** The models each document's Planner last reported for each account, kept for its composer. */
+const keptModels = lastModels({
+	storage,
+	lease: () => writerLease.held,
+	operatorModel: config.model || undefined,
+});
 
 /** Each document's latest status announcement, so an earlier one that resolves later is dropped. */
 let plannerAnnouncements = new Map<string, number>();
@@ -1464,8 +1482,9 @@ async function receive(ws: Socket, raw: string): Promise<void> {
 				}
 				// What the Planner can be set to run, and what it is set to, for the composer.
 				if (!parent) {
-					void publishModelState(modelChoices, room.id, state => {
-						if (!ws.data.closed && room.members.get(ws.data.client) === ws) tell(ws, state);
+					void publishModelState(modelChoices, room.id, async (state, personal) => {
+						let own = personal ? await personal(ws.data.principalId) : state;
+						if (!ws.data.closed && room.members.get(ws.data.client) === ws) tell(ws, own);
 					}).catch(err => console.error("chopin: could not send a model choice -", err));
 				}
 				// A reload while the room stays open settles a finding whose event was missed.
@@ -2310,7 +2329,10 @@ function listen(): Server<SocketData> {
 						pingEveryMs: config.agentConnectionPingMs,
 						pongTimeoutMs: config.agentConnectionTimeoutMs,
 						maxSilenceMs: config.agentConnectionMaxSilenceMs,
-						catalogChanged: announceModel,
+						catalogChanged: (channelId, reported) => {
+							void keptModels.remember(channelId, reported);
+							announceModel(channelId);
+						},
 						...(plannerAi ? { ai: plannerAi } : {}),
 					});
 					return;

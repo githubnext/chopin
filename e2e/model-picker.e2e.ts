@@ -338,6 +338,16 @@ function trigger(page: Page) {
 	return chat(page).getByRole("button", { name: /^Model: / });
 }
 
+/** The pill of the list the machine reports now: not marked as the list from last time. */
+function liveTrigger(page: Page) {
+	return trigger(page).and(page.locator(":not([data-last-known])"));
+}
+
+/** The pill of the list from last time, shown while the machine has yet to list its models. */
+function keptTrigger(page: Page) {
+	return trigger(page).and(page.locator("[data-last-known]"));
+}
+
 function popover(page: Page) {
 	return page.getByRole("dialog", { name: "Model and reasoning", exact: true });
 }
@@ -443,7 +453,9 @@ test("offers a choice only while the attached client reports models", async ({ b
 	await expect(content(reader)).toHaveAttribute("contenteditable", "false");
 	await expect(trigger(reader)).toHaveCount(0);
 	await client.detach();
-	await expect(trigger(page)).toHaveCount(0);
+	// The list is now the one from last time, marked as such, to this person alone.
+	await expect(liveTrigger(page)).toHaveCount(0);
+	await expect(keptTrigger(page)).toBeVisible();
 });
 
 test("lists models by provider, filters them, and chooses with the mouse, reasoning following the model", async ({ browser }) => {
@@ -1384,7 +1396,9 @@ test("keeps each document's own model and level across switching documents, the 
 
 	// The client goes and comes back, then reports a catalog whose default has moved.
 	await clients[0]!.client.detach();
-	await expect(trigger(page)).toHaveCount(0);
+	// The list is now the one from last time, marked as such, to this person alone.
+	await expect(liveTrigger(page)).toHaveCount(0);
+	await expect(keptTrigger(page)).toBeVisible();
 	clients[0] = await attachClient(first, LEVELLED);
 	await expect(trigger(page)).toHaveAccessibleName(FIRST);
 	clients[0].client.report(MOVED);
@@ -1510,14 +1524,17 @@ test("says a saved choice has gone once a turn fell back for a client that offer
 
 	// Nobody is attached: the choice is neither gone nor honored, and nothing says it has gone.
 	await first.client.detach();
-	await expect(trigger(page)).toHaveCount(0);
+	// The list is now the one from last time, marked as such, to this person alone.
+	await expect(liveTrigger(page)).toHaveCount(0);
+	await expect(keptTrigger(page)).toBeVisible();
+	await expect(trigger(teammate)).toHaveCount(0);
 	await expect(notice(page).filter({ hasText: gone })).toHaveCount(0);
 
 	// A client that offers the catalog and has yet to report is the same: nothing is said yet.
 	let silent = await attachClient(room, CATALOG, { silent: true });
 	await expect(announced(page).filter({ hasText: NONE })).toHaveCount(0);
 	await page.waitForTimeout(500);
-	await expect(trigger(page)).toHaveCount(0);
+	await expect(liveTrigger(page)).toHaveCount(0);
 	await expect(notice(page).filter({ hasText: gone })).toHaveCount(0);
 	await expect(notice(teammate).filter({ hasText: gone })).toHaveCount(0);
 
@@ -1659,7 +1676,9 @@ test("says nothing of a model nobody chose when no model is offered, while a cli
 	await expect(trigger(page)).toHaveAccessibleName("Model: Small");
 	await expect(notice(page)).toHaveCount(0);
 	await client.detach();
-	await expect(trigger(page)).toHaveCount(0);
+	// The list is now the one from last time, marked as such, to this person alone.
+	await expect(liveTrigger(page)).toHaveCount(0);
+	await expect(keptTrigger(page)).toBeVisible();
 	await expect(notice(page).filter({ hasText: "no longer available" })).toHaveCount(0);
 });
 
