@@ -29,9 +29,11 @@ import { type AiRelay, startAiRelay } from "./ai-relay";
 import { GUEST_BRIDGE_PATH, guestBridge, guestBridgeCommand } from "./bridge";
 import {
 	type Downloader,
-	ensureImages,
 	type GuestUser,
+	type ImageBuilder,
 	type ImageRecipe,
+	type ImageStore,
+	imageStore,
 	pruneImages,
 	vmBuilder,
 } from "./images";
@@ -244,6 +246,8 @@ export type SandboxOptions = {
 	host?: SupportHost;
 	/** Stands in for `nvx` in tests: what starts the command line. */
 	start?: (program: string, words: string[], launch: StartOptions) => Spawned;
+	/** Stands in for the microVMs that make images, in tests (`vmBuilder`). */
+	builder?: ImageBuilder;
 	/**
 	 * Whether the images no recipe here names go, as a connector that holds the base dir removes
 	 * them. False for a check beside a running connector, whose images they may be.
@@ -791,6 +795,101 @@ export function startVm(
 	return launch as unknown as Spawned;
 }
 
+/**
+ * A launch whose microVM starts once `starting` gives it its start: one that arrived while its image
+ * was being made waits for that build. Until then its stdin is kept for the workload, a stop starts
+ * nothing and ends it, and a start that can't be made (the build failed) ends it with exit 1 and
+ * why on its stderr. Once started it is the microVM's launch.
+ */
+export function awaitingImage(
+	stdin: "pipe" | "ignore",
+	starting: Promise<() => Spawned>,
+): Spawned {
+	let child: Spawned | undefined;
+	let stopped: NodeJS.Signals | undefined;
+	let queue: Buffer[] = [];
+	let ending = false;
+	let input = stdin === "pipe"
+		? new Writable({
+			write(chunk: Buffer, _encoding, done) {
+				if (child) child.stdin?.write(chunk);
+				else queue.push(chunk);
+				done();
+			},
+			final(done) {
+				if (child) child.stdin?.end();
+				else ending = true;
+				done();
+			},
+		})
+		: null;
+	let launch = Object.assign(new EventEmitter(), {
+		stdin: input,
+		stdout: new PassThrough(),
+		stderr: new PassThrough(),
+		exitCode: null as number | null,
+		signalCode: null as NodeJS.Signals | null,
+		kill(signal?: NodeJS.Signals | number) {
+			if (child) return child.kill(signal);
+			stopped ??= typeof signal === "string" ? signal : "SIGTERM";
+			return true;
+		},
+	});
+	Object.defineProperty(launch, "pid", { enumerable: true, get: () => child?.pid });
+	if (process.platform === "win32") {
+		Object.assign(launch, {
+			stopMicrovm(graceMs: number) {
+				if (child) return child.stopMicrovm?.(graceMs) ?? Promise.resolve();
+				stopped ??= "SIGTERM";
+				return Promise.resolve();
+			},
+		});
+	}
+	let end = (code: number | null, signal: NodeJS.Signals | null, said?: string) => {
+		if (said) launch.stderr.write(said);
+		launch.exitCode = code;
+		launch.signalCode = signal;
+		launch.emit("exit", code, signal);
+		launch.stdout.end();
+		launch.stderr.end();
+		input?.destroy();
+		launch.emit("close", code, signal);
+	};
+	let failed = (error: unknown) =>
+		end(1, null, `${error instanceof Error ? error.message : String(error)}\n`);
+	starting.then(start => {
+		if (stopped) return end(null, stopped);
+		let started: Spawned;
+		try {
+			started = start();
+		} catch (error) {
+			return failed(error);
+		}
+		child = started;
+		// Its close comes once what it printed has passed through.
+		let flushed = Promise.all(
+			[launch.stdout, launch.stderr].map(stream =>
+				new Promise(resolve => stream.once("finish", resolve))
+			),
+		);
+		started.stdout.pipe(launch.stdout);
+		started.stderr.pipe(launch.stderr);
+		for (let chunk of queue) started.stdin?.write(chunk);
+		queue = [];
+		if (ending) started.stdin?.end();
+		started.once("exit", (code, signal) => {
+			launch.exitCode = code;
+			launch.signalCode = signal;
+			launch.emit("exit", code, signal);
+		});
+		started.once("close", (code, signal) => {
+			void flushed.then(() => launch.emit("close", code, signal));
+		});
+		started.once("error", error => launch.emit("error", error));
+	}, failed);
+	return launch as unknown as Spawned;
+}
+
 /** Runs `spec`'s microVM to its end, as an image build or the start check does. */
 export function runVm(
 	spec: VmSpec,
@@ -994,14 +1093,13 @@ export async function createSandbox(options: SandboxOptions): Promise<Sandbox> {
 		...options.unsupported ? { unsupported: options.unsupported } : {},
 		...options.host ? { host: options.host } : {},
 	};
-	let images: Map<string, AgentImage>;
+	let images: ImageStore;
 	try {
-		// Every image a launch here may need, ready before anything starts.
-		images = await ensureImages(options.recipes, {
+		images = await imageStore(options.recipes, {
 			base: directory,
 			layer: setup.artifacts.layer.uuid,
 			user: guestUser(),
-			builder: vmBuilder({
+			builder: options.builder ?? vmBuilder({
 				base: directory,
 				layer: setup.artifacts.layer,
 				user: guestUser(),
@@ -1012,12 +1110,9 @@ export async function createSandbox(options: SandboxOptions): Promise<Sandbox> {
 			...options.building ? { building: options.building } : {},
 			...options.waiting ? { waiting: options.waiting } : {},
 		});
-		if (options.prune !== false) {
-			await pruneImages(
-				directory,
-				[...images.values()].map(image => basename(image.layer.path, ".erofs")),
-			);
-		}
+		// Every image a launch here may need, ready before anything starts.
+		await images.ready();
+		if (options.prune !== false) await pruneImages(directory, images.keys());
 	} catch (error) {
 		await proxy.close();
 		await aiRelay.close();
@@ -1030,22 +1125,32 @@ export async function createSandbox(options: SandboxOptions): Promise<Sandbox> {
 				launch.command[programAt(launch.command)] ?? "",
 				process.platform,
 			);
-			let image = images.get(program);
-			if (!image) {
+			if (!images.has(program)) {
 				throw new SandboxRefused(
 					`Not run: chopin has no image with ${program || "this command"} for its microVM.`,
 				);
 			}
-			let spec = vmSpec(launch, {
-				platform: process.platform,
-				base: directory,
-				image,
-				proxyPort: proxy.port,
-				...settings.writable ? { writable: settings.writable } : {},
-				...settings.hidden ? { hidden: settings.hidden } : {},
-				files: [{ host: bridge, guest: GUEST_BRIDGE_PATH }],
-			});
-			return startVm(spec, setup, directory, launch.stdin, vm);
+			let start = (image: AgentImage) =>
+				startVm(
+					vmSpec(launch, {
+						platform: process.platform,
+						base: directory,
+						image,
+						proxyPort: proxy.port,
+						...settings.writable ? { writable: settings.writable } : {},
+						...settings.hidden ? { hidden: settings.hidden } : {},
+						files: [{ host: bridge, guest: GUEST_BRIDGE_PATH }],
+					}),
+					setup,
+					directory,
+					launch.stdin,
+					vm,
+				);
+			let image = images.found(program);
+			if (image) return start(image);
+			// Gone since it was made, or being made again: the launch waits for that one build, with
+			// every other launch that wants it meanwhile, and starts in what it made.
+			return awaitingImage(launch.stdin, images.image(program).then(made => () => start(made)));
 		},
 		aiRelay,
 		bridge: guestBridgeCommand(),

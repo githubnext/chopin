@@ -1175,7 +1175,14 @@ export async function stopBackend(
 		}
 		return;
 	}
-	if (!pid || !signalGroup(pid, "SIGTERM")) return;
+	// A launch still waiting for its image has no process yet: stopped, it starts none.
+	if (!pid) {
+		try {
+			child.kill("SIGTERM");
+		} catch { /* It has already exited. */ }
+		return;
+	}
+	if (!signalGroup(pid, "SIGTERM")) return;
 	// A microVM whose start failed just as it was stopped may be starting again, in a process group
 	// of its own (see `startVm`), so the group is read each time.
 	let group = () => child.pid ?? pid;

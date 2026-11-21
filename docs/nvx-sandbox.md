@@ -230,12 +230,21 @@ is checked again only for a program it wasn't checked for when it was built, as 
 an agent's image is found shared by a Planner command added since; that takes one
 microVM start, about a second, once.
 
-One `chopin` at a time builds or checks an image of a key. It holds
-`<base>/images/<key>.lock`, made whole by linking a file it wrote, with its process
-in it; another, such as `chopin service install`'s check beside a service starting
-on the same base dir, says it waits, waits, and finds the image built. A lock whose
-process is gone is taken over. The connector that holds the base dir prunes images
-as it starts, but never one of a key whose lock another `chopin` holds.
+One build of a key runs at a time. Within a `chopin`, everything that wants an image
+while it is being made waits on that one build. Across the `chopin`s on a base dir,
+one holds `<base>/images/<key>.lock`, made whole by linking a file it wrote, with its
+process in it; another, such as `chopin service install`'s check beside a service
+starting on the same base dir, says it waits, waits, and finds the image built. A
+lock whose process is gone is taken over. The connector that holds the base dir
+prunes images as it starts, but never one of a key whose lock another `chopin` holds.
+
+Each launch reads its image's record as it starts (`ImageStore.found`). One whose
+image is gone since it was made, removed by hand say, waits for it to be made again
+(`awaitingImage` in `sandbox.ts`): a burst of launches that want it meanwhile, as the
+Planners of the documents one turn creates, all wait on that one build and then
+start in what it made; a build that fails ends every one of them with its words, and
+the next launch asks for a build again. A launch stopped while it waits starts
+nothing, and its stdin waits with it for the workload.
 
 An image is built in a microVM too, so an install script runs no closer to the host
 than the agent will. The host downloads Node and the packages and checks their
@@ -672,7 +681,7 @@ and the user can use `/dev/kvm`, and skip elsewhere, CI included.
 | Refuse unsupported             | A machine that can't run NVX pairs, connects and starts nothing, says why, and Chopin keeps what it said.                                                                                                  | `nvx.test.ts` (which machines can run it); `main.test.ts`, `messages.test.ts` (refused before pairing, nothing sent); `routes.test.ts` (older connectors told to update, never to an older release, `microvm-required`, the capability kept and shown); `machine-contract.ts`                                                                                                                                    |
 | Lost at runtime                | A machine whose user can no longer open the hypervisor's device says why with the fix, tells Chopin, leaves, and starts nothing until it can again.                                                        | `sandbox.test.ts` (a start OpenVMM couldn't open `/dev/kvm` for says so and tells whoever started it); `nvx-vm.test.ts` (OpenVMM refused `/dev/kvm` with strace says so, and is not started again); `main.test.ts` (a machine whose user loses `/dev/kvm` tells Chopin, leaves, starts no Planner until it can, then connects again); `nvx.test.ts` (a user who joined the kvm group after chopin's login began) |
 | Images before Connected        | When `chopin connect` says Connected or `chopin service install` installs, every image a launch needs exists and holds its programs; a failed build, the Planner's too, fails them in its words.           | `images.test.ts`; `install-service.test.ts` (connect builds the agent's and the Planner's images before Chopin hears of the machine; a failed Planner build fails it, connecting nothing; install builds with `--skip-check` too); `nvx-vm.test.ts` (a real connect builds the shared image before Connected; the Planner then starts with no build)                                                             |
-| One build per key              | Requests for one image at once, in one `chopin` or several on a base dir, run one build; the others wait and find it built.                                                                                | `images.test.ts` (two at once run one build and the second waits; a lock whose process died is taken over; pruning keeps an image another `chopin` is building)                                                                                                                                                                                                                                                  |
+| One build per key              | Requests for one image at once, in one `chopin` or several on a base dir, run one build; the others wait, and start in it or fail with its words.                                                          | `images.test.ts` (two chopins at once run one build; ten asks at once share one build, and a failed one fails all ten with its words; a dead holder's lock is taken over; pruning keeps a held key's build); `sandbox.test.ts` (ten launches at a gone image: one build, ten starts; a failed build ends all ten with its words; a launch stopped while it waits starts nothing)                                 |
 | Shared recipe                  | Recipes with the same install have one key, whatever program each starts: one image, checked for every program.                                                                                            | `images.test.ts` (an agent and a Planner with the same install share one image; an image built for the agent alone is checked for the Planner's program, not built again)                                                                                                                                                                                                                                        |
 | No stale image                 | A changed recipe (an install, the `--install-from` folder) builds its own image before the next launch of that kind is handed one; the others keep theirs.                                                 | `images.test.ts` (a changed Planner install, or a changed file in the folder, builds again before the image is handed out)                                                                                                                                                                                                                                                                                       |
 
