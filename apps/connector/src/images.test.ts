@@ -18,6 +18,7 @@ import {
 	type ImageBuilder,
 	imageKey,
 	type ImageRecipe,
+	imageStore,
 	installInputs,
 	pruneImages,
 } from "./images";
@@ -354,4 +355,51 @@ describe("one build of an image at a time", () => {
 			);
 		},
 	);
+});
+
+describe("launches that ask for an image while it is made", () => {
+	test("ten that ask at once for an image that is gone share one build, and each gets the image it made", async () => {
+		let base = await state();
+		let { builder, builds, started, release } = fakeBuilder(
+			{ "npm install -g agent": ["agent", "my-planner"] },
+			{ held: true },
+		);
+		let store = await imageStore(new Map([["my-planner", PLANNER]]), options(base, builder));
+		let asked = Array.from({ length: 10 }, () => store.image("my-planner"));
+		await started;
+		expect(store.found("my-planner")).toBeUndefined();
+		release();
+		let images = await Promise.all(asked);
+		expect(builds).toHaveLength(1);
+		expect(new Set(images.map(image => image.layer.uuid)).size).toBe(1);
+		expect(store.found("my-planner")).toEqual(images[0]!);
+	});
+
+	test("a build that fails fails all ten with its words, and the next ask builds again", async () => {
+		let base = await state();
+		let attempts = 0;
+		let builder: ImageBuilder = {
+			async build(_recipe, job) {
+				if (++attempts === 1) {
+					await Bun.sleep(50);
+					throw new Error("Couldn't build my-planner's image (exit 1):\nnpm error 404 my-planner");
+				}
+				await writeFile(job.layer, JSON.stringify({ install: ["npm install -g agent"] }));
+			},
+			missing: async () => [],
+		};
+		let store = await imageStore(new Map([["my-planner", PLANNER]]), options(base, builder));
+		let failed = await Promise.all(
+			Array.from(
+				{ length: 10 },
+				() => store.image("my-planner").catch((error: Error) => error.message),
+			),
+		);
+		expect(failed).toEqual(
+			Array(10).fill("Couldn't build my-planner's image (exit 1):\nnpm error 404 my-planner"),
+		);
+		expect(attempts).toBe(1);
+		await store.image("my-planner");
+		expect(attempts).toBe(2);
+	});
 });

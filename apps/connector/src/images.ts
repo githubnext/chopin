@@ -12,6 +12,7 @@ import {
 	stat,
 	writeFile,
 } from "node:fs/promises";
+import { readFileSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
 import { AGENTS } from "@chopin/protocol/agents";
 import {
@@ -252,17 +253,17 @@ async function fetched(
 type Recorded = { image: AgentImage; programs: string[]; record: Record<string, unknown> };
 
 /** The image `<base>/images/<key>`, as its build recorded it. */
-async function recorded(base: string, key: string): Promise<Recorded | undefined> {
+function recorded(base: string, key: string): Recorded | undefined {
 	let layer = join(base, "images", `${key}.erofs`);
 	try {
-		let record = JSON.parse(await readFile(join(base, "images", `${key}.json`), "utf8")) as {
+		let record = JSON.parse(readFileSync(join(base, "images", `${key}.json`), "utf8")) as {
 			uuid?: unknown;
 			user?: GuestUser;
 			programs?: unknown;
 			recipe?: { programs?: unknown };
 		};
 		if (typeof record.uuid !== "string" || !record.user) return undefined;
-		await stat(layer);
+		statSync(layer);
 		// A record from before images were shared names the programs of its one recipe.
 		let programs = record.programs ?? record.recipe?.programs;
 		return {
@@ -320,19 +321,36 @@ export type ImagesOptions = {
 	probe?: StartProbe;
 };
 
+/** The images a machine's launches run from (see `imageStore`). */
+export type ImageStore = {
+	/** Every image, made where it isn't, by program; fails with the words of a build that failed. */
+	ready(): Promise<Map<string, AgentImage>>;
+	/** Whether a launch of `program` has an image here. */
+	has(program: string): boolean;
+	/** `program`'s image as it is on disk now, checked for its programs, or undefined if it isn't. */
+	found(program: string): AgentImage | undefined;
+	/**
+	 * `program`'s image: found, or made. Every caller that asks for an image while it is being made
+	 * waits on that one build, and a build that fails fails them all with its words.
+	 */
+	image(program: string): Promise<AgentImage>;
+	/** The images' keys, which pruning keeps. */
+	keys(): string[];
+};
+
 /**
  * The image each program of `recipes` runs from: one per key, so recipes with the same install (an
  * agent and a Planner command installed by the same commands) share one, built once and checked for
  * all their programs. An image is found where it was built before, and checked for any program it
  * wasn't checked for then; otherwise it is built, in a microVM, into `<base>/images/<key>.erofs`.
- * One chopin at a time makes or checks an image of a key (`<key>.lock`): another waits for it and
- * finds it made. Every image is ready, or this fails with the words of the build that didn't make
- * one, before anything is handed an image.
+ * One build of a key runs at a time: in this process every caller shares the one under way, and
+ * across the chopins on a base dir one holds `<key>.lock` while another waits for it and finds the
+ * image made.
  */
-export async function ensureImages(
+export async function imageStore(
 	recipes: Map<string, ImageRecipe>,
 	options: ImagesOptions,
-): Promise<Map<string, AgentImage>> {
+): Promise<ImageStore> {
 	let groups = new Map<string, { recipes: ImageRecipe[]; programs: string[]; inputs?: string }>();
 	for (let [program, recipe] of recipes) {
 		let inputs = recipe.from === undefined
@@ -350,12 +368,55 @@ export async function ensureImages(
 		group.programs.push(program);
 		groups.set(key, group);
 	}
-	let images = new Map<string, AgentImage>();
-	for (let [key, group] of groups) {
-		let image = await ensureImage(key, group.recipes, group.inputs, options);
-		for (let program of group.programs) images.set(program, image);
-	}
-	return images;
+	let keyOf = new Map(
+		[...groups].flatMap(([key, group]) => group.programs.map(program => [program, key] as const)),
+	);
+	/** The build of each key under way in this process, which every caller meanwhile waits on. */
+	let flights = new Map<string, Promise<AgentImage>>();
+	let made = (key: string) => {
+		let flight = flights.get(key);
+		if (!flight) {
+			let group = groups.get(key)!;
+			flight = ensureImage(key, group.recipes, group.inputs, options).finally(() =>
+				flights.delete(key)
+			);
+			flights.set(key, flight);
+		}
+		return flight;
+	};
+	let found = (program: string) => {
+		let key = keyOf.get(program);
+		if (key === undefined || flights.has(key)) return undefined;
+		let image = recorded(options.base, key);
+		let wanted = groups.get(key)!.recipes.flatMap(recipe => recipe.programs);
+		return image && wanted.every(item => image.programs.includes(item)) ? image.image : undefined;
+	};
+	return {
+		async ready() {
+			let images = new Map<string, AgentImage>();
+			for (let [key, group] of groups) {
+				let image = await made(key);
+				for (let program of group.programs) images.set(program, image);
+			}
+			return images;
+		},
+		has: program => keyOf.has(program),
+		found,
+		async image(program) {
+			let key = keyOf.get(program);
+			if (key === undefined) throw new Error(`No recipe makes an image with ${program}.`);
+			return found(program) ?? await made(key);
+		},
+		keys: () => [...groups.keys()],
+	};
+}
+
+/** Every image `recipes` need, made where it isn't, by program (see `imageStore`). */
+export async function ensureImages(
+	recipes: Map<string, ImageRecipe>,
+	options: ImagesOptions,
+): Promise<Map<string, AgentImage>> {
+	return (await imageStore(recipes, options)).ready();
 }
 
 async function ensureImage(
@@ -374,7 +435,7 @@ async function ensureImage(
 		options.probe ?? processStart(),
 	);
 	try {
-		let found = await recorded(options.base, key);
+		let found = recorded(options.base, key);
 		if (found) {
 			let unchecked = programs.filter(program => !found.programs.includes(program));
 			if (!unchecked.length) return found.image;

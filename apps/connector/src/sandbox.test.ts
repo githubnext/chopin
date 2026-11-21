@@ -12,8 +12,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ImageBuilder, ImageRecipe } from "./images";
 import { type NvxArtifacts, SandboxRefused, STARTED_LINE, type VmSpec } from "./nvx";
 import {
+	createSandbox,
 	endOrphans,
 	nvxTemporary,
 	runFolderOf,
@@ -523,3 +525,115 @@ describe.skipIf(process.platform !== "linux")(
 		});
 	},
 );
+
+/**
+ * A builder that stands in for the build's microVM, counting its builds: the first is made at once,
+ * as connect makes it; each after it waits for `release`, and fails with `failure` when one is set.
+ */
+function heldBuilder(failure?: string) {
+	let builds = 0;
+	let gate = Promise.withResolvers<void>();
+	let builder: ImageBuilder = {
+		async build(_recipe, job) {
+			builds++;
+			if (builds > 1) await gate.promise;
+			if (failure && builds > 1) throw new Error(failure);
+			writeFileSync(job.layer, "layer");
+		},
+		missing: async () => [],
+	};
+	return { builder, builds: () => builds, release: gate.resolve };
+}
+
+const PLANNER: ImageRecipe = {
+	name: "my-planner",
+	install: ["npm install -g my-planner"],
+	programs: ["my-planner"],
+	runs: ["planner"],
+};
+
+describe.skipIf(process.platform === "win32")("a burst of launches whose image is gone", () => {
+	async function machineWith(builder: ImageBuilder) {
+		let vm = machine(["run"]);
+		let sandbox = await createSandbox({
+			directory: vm.base,
+			server: "http://127.0.0.1:9",
+			setup: SETUP,
+			recipes: new Map([["my-planner", PLANNER]]),
+			start: vm.start,
+			builder,
+		});
+		// Gone since connect made it, as when someone removed it.
+		rmSync(join(vm.base, "images"), { recursive: true, force: true });
+		let folder = join(vm.base, "documents");
+		mkdirSync(folder);
+		let launch = () =>
+			sandbox.spawn({ command: ["my-planner"], cwd: folder, env: {}, stdin: "ignore" });
+		return { vm, sandbox, launch };
+	}
+
+	test(
+		"ten Planner launches at once wait on one build, and each starts in the image it made",
+		async () => {
+			let images = heldBuilder();
+			let { vm, sandbox, launch } = await machineWith(images.builder);
+			try {
+				let launches = Array.from({ length: 10 }, launch);
+				let ends = Promise.all(launches.map(ended));
+				await Bun.sleep(200);
+				// One build since connect's, under way, and nothing started before it is done.
+				expect(images.builds()).toBe(2);
+				expect(vm.calls).toHaveLength(0);
+				images.release();
+				expect((await ends).map(end => [end.code, end.out])).toEqual(
+					Array(10).fill([0, "the workload read: "]),
+				);
+				expect(images.builds()).toBe(2);
+				expect(vm.starts()).toBe(10);
+			} finally {
+				await sandbox.close();
+			}
+		},
+		30_000,
+	);
+
+	test(
+		"a build that fails ends every launch waiting on it with its words, and starts none",
+		async () => {
+			let words = "Couldn't build my-planner's image (exit 1):\nnpm error 404 my-planner";
+			let images = heldBuilder(words);
+			let { vm, sandbox, launch } = await machineWith(images.builder);
+			try {
+				let launches = Array.from({ length: 10 }, launch);
+				let ends = Promise.all(launches.map(ended));
+				images.release();
+				expect((await ends).map(end => [end.code, end.err])).toEqual(
+					Array(10).fill([1, `${words}\n`]),
+				);
+				expect(images.builds()).toBe(2);
+				expect(vm.calls).toHaveLength(0);
+			} finally {
+				await sandbox.close();
+			}
+		},
+		30_000,
+	);
+
+	test("a launch stopped while it waits for the image starts nothing", async () => {
+		let images = heldBuilder();
+		let { vm, sandbox, launch } = await machineWith(images.builder);
+		try {
+			let stopped = launch();
+			let other = launch();
+			let ends = Promise.all([ended(stopped), ended(other)]);
+			stopped.kill("SIGTERM");
+			images.release();
+			let [first, second] = await ends;
+			expect([first.code, first.signal]).toEqual([null, "SIGTERM"]);
+			expect([second.code, second.out]).toEqual([0, "the workload read: "]);
+			expect(vm.starts()).toBe(1);
+		} finally {
+			await sandbox.close();
+		}
+	}, 30_000);
+});
