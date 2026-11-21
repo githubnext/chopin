@@ -171,6 +171,7 @@ test("status shows each repository's spare Planner under its connector, and a sp
 		JSON.stringify([
 			{ repository: "octo-org/score", state: "ready", since, command: "pdd" },
 			{ repository: "octo-org/other", state: "unsupported", since },
+			{ repository: "octo-org/third", state: "memory", since },
 		]),
 	);
 	let folder = join(directory, "planners", "octo-org", "score");
@@ -188,6 +189,7 @@ test("status shows each repository's spare Planner under its connector, and a sp
 			command: "pdd",
 		},
 		{ repository: "octo-org/other", state: "unsupported", since: new Date(since).toISOString() },
+		{ repository: "octo-org/third", state: "memory", since: new Date(since).toISOString() },
 	]);
 	expect(report.plannerDisks).toEqual([
 		{
@@ -204,6 +206,10 @@ test("status shows each repository's spare Planner under its connector, and a sp
 		expect.stringMatching(
 			/Spare Planner for octo-org\/other: not taken: the Planner command didn't start as a spare/,
 		),
+	);
+	expect(text).toContain(
+		"              Spare Planner for octo-org/third: waiting for memory (a spare takes about 300 MB, "
+			+ "with 1 GB left free beside it; since 5 min ago)",
 	);
 });
 

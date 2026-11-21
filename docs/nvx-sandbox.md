@@ -462,6 +462,54 @@ started ahead on a disk of its own for the repository's checkout, with its token
 folder empty, and handed a document over stdin as before; its slot, disk included,
 becomes the document's.
 
+### Which repositories keep a spare
+
+The connector keeps one ready spare (`planner-spare.ts`) for each repository it
+recently ran a Planner in, the clones it made in `repos/` included, and for each
+registered checkout's:
+
+- **Recently served.** Each Planner that starts in a repository, cold or on a spare,
+  marks it served (`<base>/planner-spare.json`, which the next connector reads), and
+  a repository keeps its spare for 7 days after (`RECENT_MS`). The first new document
+  of a repository the machine never served starts cold, and its spare starts 5 seconds
+  later, once that Planner has had the machine to itself.
+- **Bounded.** At most 4 spares (`MAX_SPARES`), and no more than take a tenth of the
+  machine's memory at about 300 MB each (`spareBound`: one on a 4 GB machine, two on
+  8 GB, none under 3 GB). The most recently served repositories have them; a
+  registered checkout no Planner ran in comes after them. A spare starts only while
+  the machine has 1 GB available beside it; until then `chopin status` says it waits
+  for memory, and it tries again each minute.
+- **Only where the machine can push.** Before a spare starts, Chopin is asked whether
+  it would give the machine a token for the repository (`POST
+  /api/connector/github-token` with `purpose: "check"`, which mints none); a refusal
+  starts none, and an answer that can't be had starts none until it can. The answer
+  holds 10 minutes, and is asked again every 10 minutes while a spare is kept. A spare
+  goes, disk and all, as soon as Chopin refuses that check or the GitHub token of any
+  of the repository's Planners, and the repository is no longer served; a registered
+  checkout's is asked again every 10 minutes and gets its spare back once Chopin says
+  the machine can push there.
+
+A new document (one with no disk on the machine yet) is handed its repository's
+ready spare, and its replacement starts 5 seconds later, in a slot of its own. A
+spare is never handed a second document: once handed, its process is the
+document's Planner and its slot the document's for good, and the pool keeps nothing
+of it. A document that has run here before starts on its own disk, cold, because its
+state is on that disk and a microVM's disk is fixed when it boots.
+
+There is no spare for a repository the machine has not served yet. A spare is bound to
+its repository from its start: spare protocol 1 names the checkout and the spare's own
+repository in its environment (`CHOPIN_CHECKOUT`, `CHOPIN_WORKTREE`), and its
+microVM's shares (the checkout, the git directory its clone is made from) and the clone
+on its disk are fixed when it boots. NVX takes no share into a running microVM, so a
+spare not yet bound to a repository would need a new protocol and microVMs that take
+shares later.
+
+A spare holds nothing of a document until it is handed one. It boots with the
+repository's checkout, read-only, an empty token folder, agents' state of its own and a
+new disk; the document's Planner credential and Chopin token are written into its token
+folder, and its GitHub token after, only at the hand-over, and the document's AI launch
+reaches it over the agent connection once it attaches.
+
 A cold boot to the workload's first output took 0.73–0.80 seconds on a quiet KVM
 host and 1.9 seconds on WHP, with a 32 GiB scratch disk costing nothing extra. NVX
 snapshots would start a guest faster, but a restore accepts only a fresh scratch
@@ -563,7 +611,9 @@ count), its RAM upper at most half of its memory. An idle guest of 2 GiB costs a
 205 MB of the host's memory (330 MB with Atomic loaded) and 0.1% of a core; 24
 concurrent 1 GiB VMs ran on an 8-vCPU, 32 GiB Windows host, and 80 on the Linux test
 machine. The connector runs one job at a time as before, plus the Planners it is
-asked for and one spare per registered checkout's repository.
+asked for and its spares (see
+[Which repositories keep a spare](#which-repositories-keep-a-spare)): at most 4, and no
+more than take a tenth of the host's memory.
 
 ## What goes away
 
@@ -682,6 +732,7 @@ and the user can use `/dev/kvm`, and skip elsewhere, CI included.
 | Alternates read-only           | A guest's clone reads the person's objects only through a read-only path, and a Planner's copies them.                                                                                                     | `nvx.test.ts` (the clone and its source share); `run.test.ts` (a run's clone reads the checkout's objects and adds nothing to the person's repository); `planner.test.ts`; `nvx-vm.test.ts` (a Planner's clone has its own objects)                                                                                                                                                                              |
 | Egress exact                   | A guest's only network endpoint is the connector's proxy, and the proxy allows only its list.                                                                                                              | `nvx.test.ts` (proxy-only flags; a launch's own proxy settings dropped); `nvx-vm.test.ts` (no direct connection, no DNS, only allowed hosts through the proxy); `sandbox-proxy.test.ts`                                                                                                                                                                                                                          |
 | No real credential in a guest  | No guest gets the machine token, an AI provider key, the relay's launch credential, the owner's GitHub login or agent logins, or the connector's environment.                                              | `nvx.test.ts` (the environment is the launch's, in a file, never on a command line); `nvx-vm.test.ts` (no secret on any host command line); `launch-handoff.test.ts` (an agent holds only stand-ins)                                                                                                                                                                                                             |
+| Warm spares                    | A spare is kept only for a repository Chopin says the machine can push to, within the cap and memory bound; it holds nothing of a document before its hand-over and is never handed a second one.          | `planner-spare.test.ts` (a clone a Planner ran in keeps a spare, across restarts; refused, none starts and a kept one goes; the cap, memory and most recent first; never handed twice; a disk here starts cold); `nvx-vm.test.ts` (a clone's spare boots with an empty token folder and attaches a new document sooner than a cold start)                                                                        |
 | Snapshot clean                 | No snapshot holds anything of a launch.                                                                                                                                                                    | Holds trivially: this release takes no snapshots                                                                                                                                                                                                                                                                                                                                                                 |
 | Teardown                       | A launch that ended, was revoked or unpaired has no microVM left, and nothing of `nvx`'s in the temporary directory.                                                                                       | `nvx-vm.test.ts` (ending a launch ends OpenVMM, its record and `nvx`'s folder; a server the agent left running ends with it); `sandbox.test.ts` (a launch ended by force leaves no folder; a dead connector's records take theirs; the sweep keeps a live launch's, its own base dir's or another's, and removes a stale one); `sandbox.ts` `endOrphans`, `sweepRunFolders`                                      |
 | One start                      | An agent sees one start of its workload: a microVM is started again only after OpenVMM's io_uring failure, and only before its workload started, with nothing of its stdin given to the start that failed. | `sandbox.test.ts` (a fake `nvx` that fails once with that log line and then starts; no new start for another failure or once the workload started; three at most; a stop while waiting starts nothing); `nvx-vm.test.ts` (a start refused io_uring with strace starts again and its workload reads its input once)                                                                                               |
@@ -706,6 +757,20 @@ host cache:
 | `npm install express`, warm npm cache              | 1.7 s                     | 0.84 s (memory)            | 0.91 s      |
 | Cold boot to the first output                      |                           | 0.73–0.80 s (1.9 s on WHP) |             |
 | Build of the Copilot CLI's image                   |                           | 39 s, once                 |             |
+
+A new document's Planner, from the moment the document was made to its backend attaching,
+on a machine with no checkout of the repository (so its clone in `repos/`), a local Chopin
+and a backend that attaches as soon as it starts, measured from Chopin's own log on the same
+KVM host:
+
+| Connector                                | New document → Planner attached                                  |
+| ---------------------------------------- | ---------------------------------------------------------------- |
+| Before: no spare for a cloned repository | 2.35–6.2 s cold, median 2.7 s (8 documents)                      |
+| Now: the repository's spare              | 56–185 ms, median 74 ms (11 documents, 4 after a restart)        |
+| Now: a second new document within 8 s    | Cold, about 2.5 s: its repository's next spare is still starting |
+
+The backend's own start (Atomic loads in 1.6–2.5 s, above) comes on top of a cold start, and a
+spare has done it before it is handed the document.
 
 One failure to know: OpenVMM sometimes failed to start a microVM under heavy host
 load with "driver does not support io-uring" in its log (3 of about 25 starts during

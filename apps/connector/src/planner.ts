@@ -417,6 +417,8 @@ async function servePlanner(options: {
 			);
 			if (signal.aborted && ran.kind !== "ran") return;
 			if (ran.kind === "refused") {
+				// The machine can't push there: no spare is kept for the repository either.
+				options.spares?.refused(repository);
 				output.error(`Stopped the Planner for ${document}: ${ran.error.message}`);
 				await options.failures?.failed({
 					kind: "planner",
@@ -500,6 +502,7 @@ async function servePlanner(options: {
 				await abandon();
 				if (signal.aborted) return;
 				if (error instanceof GitHubRefused) {
+					options.spares?.refused(repository);
 					output.error(`Stopped the Planner for ${document}: ${error.message}`);
 					await options.failures?.failed({
 						kind: "planner",
@@ -526,6 +529,8 @@ async function servePlanner(options: {
 			if (github && !checkout) await abandon();
 			if (checkout) {
 				output.say(`› Planner for ${document} started.`);
+				// Its repository, cloned or registered, keeps a spare for the next new document.
+				options.spares?.served(repository);
 				let healthy = setTimeout(() => {
 					void options.failures?.started(document);
 					// Once it stays up, what was told to Chopin about its failing is no longer true.

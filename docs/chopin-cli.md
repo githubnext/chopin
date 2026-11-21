@@ -535,6 +535,45 @@ machine button's dot is three petrol dots that brighten in turn and its name say
 studio** (the machine's name), and an `@chopin` message sent meanwhile waits for
 it. Once it has attached the button says nothing more about it.
 
+### Spare Planners
+
+A Planner's microVM takes a few seconds to boot and start its backend. So `chopin
+connect` keeps a spare Planner ready for each repository this machine recently ran a
+Planner in, the ones it cloned as well as your checkouts', and hands a new document's
+Planner to it: the Planner attaches in a fraction of a second instead (see
+[Measurements](nvx-sandbox.md#measurements)). Another spare starts a few seconds
+later.
+
+- **Which repositories.** One where a Planner started in the last 7 days, and each
+  checkout you gave with `--checkout`. The first new document of a repository this
+  machine never ran a Planner in starts cold, and its spare follows. A document whose
+  Planner ran here before starts on its own disk, as before.
+- **How many.** At most 4, and no more than take a tenth of the machine's memory at
+  about 300 MB each, so one on a 4 GB machine and two on 8 GB. The repositories used
+  most recently come first. One starts only while the machine has about 1 GB free
+  beside it.
+- **Only where this machine can push.** Before a spare starts, and every 10 minutes
+  while it waits, `chopin` asks Chopin whether it would give this machine a token for
+  the repository. Once it wouldn't, or refuses one of the repository's Planners its
+  GitHub token, the spare stops and its disk goes.
+- **Nothing of a document until it gets one.** A spare starts with your checkout,
+  read-only, and nothing else of the document's: no credential, an empty token folder
+  and a disk of its own. It gets the document's credentials when it is handed the
+  document, and is never handed another.
+
+The Planner command has to take spare mode (`CHOPIN_PLANNER_SPARE`, see
+`apps/connector/src/planner-spare.ts`); one that doesn't is noticed and started cold.
+`chopin status` shows each spare under the connector:
+
+```text
+Connector:  running (pid 4242, chopin 0.0.34, the service)
+              Spare Planner for octo-org/score: ready (since 3 min ago, my-planner)
+              Spare Planner for octo-org/site: waiting for memory (a spare takes about 300 MB, with 1 GB left free beside it; since 1 min ago)
+```
+
+`--no-planner-spare`, or `CHOPIN_PLANNER_SPARE=0` in `chopin`'s environment, starts
+no spares, and every Planner starts when it is asked for.
+
 ### Can't connect to a machine
 
 Chopin asked a machine to run a document's Planner, and the Planner's backend
@@ -1173,6 +1212,7 @@ pairs again. To remove the service as well, run `chopin service uninstall`.
 | `chopin connect … --name <label>`                           | Names the machine in Chopin as it pairs. A machine paired already keeps its name; rename it on the Machines page.            |
 | `chopin connect … --install-service`                        | Connects once, then installs the service with what it ran.                                                                   |
 | `chopin connect … --keep-runs <n>`                          | Keeps the `n` most recently finished runs (default 15, 0 for all).                                                           |
+| `chopin connect … --no-planner-spare`                       | Keeps no [spare Planners](#spare-planners): each Planner starts when it is asked for.                                        |
 | `chopin connect … --install <command>`                      | How to install an agent `chopin` has no recipe for in its [microVMs](#sandbox)' image. Repeat it.                            |
 | `chopin connect … --planner-install <command>`              | The same for the Planner command.                                                                                            |
 | `chopin connect … --install-from <dir>`                     | A folder those commands read in the image's build, at `/install-from`, such as packages fetched with your sign-in.           |

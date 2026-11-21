@@ -84,10 +84,11 @@ export type StatusReport = {
 			Omit<StartFailure, "at" | "retryAt"> & { at: string; retryAt?: string }
 		>;
 		/**
-		 * Its spare Planners, one per registered checkout's repository: `state` is `starting`,
-		 * `ready` (since it printed ready), `unsupported` (the Planner command never took spare
-		 * mode, since then) or `off` (`--no-planner-spare`); `command` names the Planner command's
-		 * program. `since` is ISO 8601.
+		 * Its spare Planners, one per repository it recently ran a Planner in or has a registered
+		 * checkout of, as many as it keeps: `state` is `starting`, `ready` (since it printed ready),
+		 * `memory` (too little memory free to start one, since it first tried), `unsupported` (the
+		 * Planner command never took spare mode, since then) or `off` (`--no-planner-spare`);
+		 * `command` names the Planner command's program. `since` is ISO 8601.
 		 */
 		spares?: Array<Omit<SpareState, "since"> & { since: string }>;
 	}>;
@@ -326,6 +327,8 @@ function spareLine(spare: Omit<SpareState, "since"> & { since: string }, now: nu
 	let state = {
 		starting: "starting",
 		ready: `ready (since ${ago}${spare.command ? `, ${spare.command}` : ""})`,
+		memory: "waiting for memory (a spare takes about 300 MB, with 1 GB left free beside it; "
+			+ `since ${ago})`,
 		unsupported: `not taken: the Planner command didn't start as a spare (found ${ago}); `
 			+ "new documents' Planners start as before",
 		off: "off (--no-planner-spare)",
