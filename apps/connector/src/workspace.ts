@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import {
 	mkdir,
 	open,
@@ -12,7 +12,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join, sep, win32 } from "node:path";
+import { basename, dirname, join, sep, win32 } from "node:path";
 import type { RunInput } from "@chopin/experiment";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -79,14 +79,30 @@ export async function workspace(path: string) {
 	};
 }
 
-/** Where the machine token, locks and worktrees live: `--base-dir`, CHOPIN_HOME, or the default. */
+/**
+ * Where the machine token, locks and worktrees live: `--base-dir`, CHOPIN_HOME, or the default, where
+ * it really is. A link in its path (a home folder whose `~/.local` is a link to another disk) is
+ * followed, so every path under it, which its microVMs are given, is one they have.
+ */
 export function stateDirectory() {
-	return process.env.CHOPIN_HOME || process.env.CHOPIN_CONNECTOR_STATE_DIR
-		|| join(
-			process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"),
-			"chopin",
-			"connector",
-		);
+	return realFolder(
+		process.env.CHOPIN_HOME || process.env.CHOPIN_CONNECTOR_STATE_DIR
+			|| join(
+				process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"),
+				"chopin",
+				"connector",
+			),
+	);
+}
+
+/** `path` where it really is: the links among the folders of it that exist followed. */
+function realFolder(path: string): string {
+	try {
+		return realpathSync(path);
+	} catch {
+		let parent = dirname(path);
+		return parent === path ? path : join(realFolder(parent), basename(path));
+	}
 }
 
 /**

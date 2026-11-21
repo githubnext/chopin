@@ -8,8 +8,10 @@ import {
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
+	realpathSync,
 	rmSync,
 	statSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,11 +19,19 @@ import { join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { privateAgentState } from "./ai-agent";
 import { builtInRecipe, INSTALL_FROM } from "./images";
-import { artifactsAt } from "./nvx";
+import { artifactsAt, UNSUPPORTED_LEAD } from "./nvx";
 import { AgentStore } from "./machine-store";
 import { plannerEnvironment } from "./planner";
-import { createSandbox, type Launch, type Sandbox, startNvx, type StartOptions } from "./sandbox";
+import {
+	createSandbox,
+	type Launch,
+	type Sandbox,
+	startNvx,
+	type StartOptions,
+	type Unsupported,
+} from "./sandbox";
 
 /**
  * Real microVMs, on this machine's KVM: what a guest can reach, write and keep. They run where
@@ -67,9 +77,34 @@ let repository = join(scratch, "repo");
 /** How many of the next starts of a microVM fail as OpenVMM's did under heavy load. */
 let failing = 0;
 let retried: string[] = [];
+/** Whether the next start's OpenVMM may not open /dev/kvm, as when logind took back the access. */
+let denying = false;
+let unsupported: Unsupported[] = [];
 
-/** `nvx`, or `nvx` under strace with io_uring refused, as OpenVMM is refused it under heavy load. */
+/**
+ * `nvx`, or `nvx` under strace with io_uring refused, as OpenVMM is refused it under heavy load, or
+ * with /dev/kvm refused, as when this user's access to it was taken back.
+ */
 function start(program: string, words: string[], launch: StartOptions) {
+	if (denying && strace) {
+		denying = false;
+		return startNvx(
+			strace,
+			[
+				"-f",
+				"-qq",
+				"-o",
+				"/dev/null",
+				"-P",
+				"/dev/kvm",
+				"-e",
+				"inject=openat:error=EACCES",
+				program,
+				...words,
+			],
+			launch,
+		);
+	}
 	if (failing <= 0 || !strace) return startNvx(program, words, launch);
 	failing--;
 	return startNvx(
@@ -166,6 +201,7 @@ beforeAll(async () => {
 		]),
 		start,
 		retrying: detail => retried.push(detail),
+		unsupported: problem => unsupported.push(problem),
 	});
 }, 600_000);
 
@@ -300,6 +336,59 @@ describe.skipIf(!usable)("an agent in its microVM", () => {
 			expect(readFileSync(join(home, "atomic", "storage-password"), "utf8")).toBe(
 				"the-database-password",
 			);
+		},
+		120_000,
+	);
+
+	test(
+		"a launch whose base dir is reached through a link writes its agent state where the host has it",
+		async () => {
+			// As on a machine whose ~/.local is a link to another disk: the launch names its paths
+			// through the link, and its guest has only where they really are.
+			let linked = join(scratch, "linked-state");
+			symlinkSync(base, linked);
+			let home = join(linked, "runs", "vm-linked.agent");
+			let tokens = join(linked, "runs", "vm-linked.tokens");
+			mkdirSync(tokens, { recursive: true });
+			let { code, err } = await run({
+				command: [
+					"bash",
+					"-c",
+					'mkdir -p "$ATOMIC_CODING_AGENT_DIR/sessions" && echo kept > "$ATOMIC_CODING_AGENT_DIR/sessions/one" && echo copilot > "$COPILOT_HOME/state"',
+				],
+				cwd: home,
+				env: privateAgentState(home),
+				stdin: "ignore",
+				own: [tokens, home],
+				agentHome: home,
+			});
+			expect({ code, err: err.replace(/^>>.*\n/gm, "") }).toEqual({ code: 0, err: "" });
+			let real = join(realpathSync(base), "runs", "vm-linked.agent");
+			expect(readFileSync(join(real, "atomic", "sessions", "one"), "utf8")).toBe("kept\n");
+			expect(readFileSync(join(real, "copilot", "state"), "utf8")).toBe("copilot\n");
+		},
+		120_000,
+	);
+
+	test(
+		"a command named by a host path that is gone runs its image's program by its name",
+		async () => {
+			// As the agent `chopin connect` found installed on the host, and saved by its path, once it
+			// was removed from the host.
+			let gone = join(scratch, "uninstalled", "bin", "bash");
+			mkdirSync(join(scratch, "uninstalled", "bin"), { recursive: true });
+			writeFileSync(gone, "#!/bin/sh\necho the host's\n", { mode: 0o755 });
+			rmSync(join(scratch, "uninstalled"), { recursive: true, force: true });
+			let tokens = join(base, "runs", "vm-gone.tokens");
+			mkdirSync(tokens, { recursive: true });
+			let { code, out } = await run({
+				command: [gone, "-c", "echo ran in the image"],
+				cwd: tokens,
+				env: {},
+				stdin: "ignore",
+				own: [tokens],
+			});
+			expect({ code, out }).toEqual({ code: 0, out: "ran in the image\n" });
 		},
 		120_000,
 	);
@@ -514,6 +603,37 @@ describe.skipIf(!usable)("an agent in its microVM", () => {
 				"4: driver does not support io-uring (nvx: error[exited]: OpenVMM exited during startup: vmm-failure status 1)",
 			);
 			expect(failing).toBe(0);
+		},
+		120_000,
+	);
+
+	test.skipIf(!strace)(
+		"a microVM whose user may not open /dev/kvm says this machine can't run microVMs, and tells the connector",
+		async () => {
+			let tokens = join(base, "runs", "vm-denied.tokens");
+			mkdirSync(tokens, { recursive: true });
+			unsupported = [];
+			retried = [];
+			denying = true;
+			let { code, out, err } = await run({
+				command: ["bash", "-c", "echo ran"],
+				cwd: tokens,
+				env: {},
+				stdin: "ignore",
+				own: [tokens],
+			});
+			expect({ code, out }).toEqual({ code: 1, out: "" });
+			// The words depend on whether this user joined the kvm group since this login began.
+			expect(err).toStartWith(UNSUPPORTED_LEAD);
+			expect(err).toContain("/dev/kvm");
+			expect(err).toContain("Fix: ");
+			expect(err).toEndWith(
+				"(OpenVMM: failed to open file `/dev/kvm`: Permission denied (os error 13))\n",
+			);
+			expect(unsupported).toHaveLength(1);
+			expect(unsupported[0]!.reason).toContain("/dev/kvm");
+			// Never started again: it isn't the load's failure.
+			expect(retried).toEqual([]);
 		},
 		120_000,
 	);

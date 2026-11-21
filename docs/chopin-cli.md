@@ -742,6 +742,12 @@ Agents:     Can't run here: <why>
 A machine paired before it could run microVMs tells Chopin why it can't as it
 stops, and the Machines page shows it while the machine is away.
 
+A machine that loses what microVMs need while it is connected, as when logind
+takes back the access to `/dev/kvm` a desktop login gave your user, finds out at
+its next launch. That launch fails with the words above, `chopin` tells Chopin
+why, leaves, and starts no agent or Planner until it can run microVMs again. It
+checks every 30 seconds, and connects again by itself once it can.
+
 The first `chopin connect` downloads NVX (about 275 MB on Linux, 150 MB on
 Windows, checked against the SHA-256 this `chopin` pins) and builds the agent's
 image, once, which takes a minute or two and says so. A microVM then starts in
@@ -1003,7 +1009,10 @@ token Chopin issued for that one repository (see
 **Linux** on x86_64, with read and write access to `/dev/kvm` for your user (or
 `/dev/mshv` under the Microsoft Hypervisor). Most distributions give it to the `kvm`
 group: `sudo usermod -aG kvm $USER`, then log out and in again. A systemd user service
-gets the new group only once `user@$(id -u).service` restarts or the machine reboots.
+gets the new group only once `user@$(id -u).service` restarts or the machine reboots;
+until then `chopin` says you are in the `kvm` group but it runs in a login that
+began before you joined. Access a desktop login gives you without the group (logind's
+ACL on `/dev/kvm`) ends with that login, so the service can't rely on it.
 On a cloud VM choose a size with nested virtualization. Nothing else needs
 installing: `chopin` downloads the NVX release it pins from NVX's own GitHub
 release as it first connects, and builds the agent's image with Node.js and git.
@@ -1145,7 +1154,9 @@ pairs again. To remove the service as well, run `chopin service uninstall`.
 | `chopin unpair`                                             | Revokes this machine in Chopin and deletes its token.                                                                        |
 
 Every command takes `--base-dir <dir>`, or `CHOPIN_HOME`, to keep its files
-somewhere other than the default folder.
+somewhere other than the default folder. A link in its path, such as a `~/.local`
+that is a link to another disk, is followed: `chopin` uses the folder where it
+really is.
 
 ## Troubleshooting
 
@@ -1155,28 +1166,28 @@ see
 
 Each message says what to run next. The first line of each:
 
-| Message starts with                                 | Do this                                                                                                                                                                                                                                                                |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `curl or wget is required`                          | Install curl, for example `sudo apt install curl`, then run the command again.                                                                                                                                                                                         |
-| `could not download`                                | Check your connection and any proxy (`HTTPS_PROXY`), then run the command again.                                                                                                                                                                                       |
-| `… isn't writable by you`                           | Run `sudo chown -R "$(id -un)" "$HOME/.local"`, then run the command again.                                                                                                                                                                                            |
-| `… is not on your PATH`                             | Add the line the installer prints to your shell profile. The setup command runs `chopin` by its full path.                                                                                                                                                             |
-| `This machine can't run Chopin's work`              | Do what its `Fix:` line says, such as joining the `kvm` group, then run the command again. A Mac or an Arm machine can't be one of Chopin's machines; use a Linux or Windows x86_64 machine.                                                                           |
-| `chopin runs … in a microVM of its own`             | Add `--install '<the command that installs it>'` (or `--planner-install` for a Planner command), then run the command again.                                                                                                                                           |
-| `… isn't inside a git checkout`                     | Give `--checkout` the folder of a clone from GitHub, or leave it out and `chopin` clones each repository as work needs it.                                                                                                                                             |
-| `… isn't a github.com repository`                   | Check `git remote -v`; Chopin connects clones of GitHub repositories.                                                                                                                                                                                                  |
-| `Can't reach Chopin at …`                           | Check `CHOPIN_URL`, your network and any proxy, then run the command again.                                                                                                                                                                                            |
-| `Chopin refused the pairing key`                    | Generate a new script from **Machines** → **Add machine** → **Cloud**, then run it.                                                                                                                                                                                    |
-| `… pairing key isn't allowed to use this Chopin`    | Ask whoever runs Chopin to let your GitHub account or organization in, then generate a new script.                                                                                                                                                                     |
-| `You can't push to … on GitHub`                     | Chopin won't run that repository's work on this machine. Ask an owner for write access, or drop that `--checkout`.                                                                                                                                                     |
-| `This machine has no checkout of …`                 | Your server gives machines no GitHub token to clone with. Run `chopin connect --checkout <path>` with a clone of that repository, then start the work again.                                                                                                           |
-| `… speaks connector protocol …`                     | Run the `chopin update` command the message names.                                                                                                                                                                                                                     |
-| `… didn't answer ACP initialize`                    | The agent didn't start in its microVM. Check its `--install` commands, or what the message shows it printed, then run the command again.                                                                                                                               |
-| `The microVM didn't start`                          | OpenVMM couldn't start the agent's microVM; the rest of the message is the end of OpenVMM's log. Fix what it names, such as `/dev/kvm` access or the Windows Hypervisor Platform, then start the work again. `after 3 tries` means the machine was too busy each time. |
-| `… asks for permission in the terminal`             | Run the command without `--install-service` and keep the terminal open.                                                                                                                                                                                                |
-| `This machine is already paired with …`             | To pair it for another account, run `chopin unpair`, then the command again.                                                                                                                                                                                           |
-| `This machine is no longer paired with Chopin`      | Run `chopin pair`, then connect again.                                                                                                                                                                                                                                 |
-| `The service has to keep running after you log out` | Have an administrator run `sudo loginctl enable-linger "$(id -un)"`, then run the command again.                                                                                                                                                                       |
+| Message starts with                                 | Do this                                                                                                                                                                                                                                           |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `curl or wget is required`                          | Install curl, for example `sudo apt install curl`, then run the command again.                                                                                                                                                                    |
+| `could not download`                                | Check your connection and any proxy (`HTTPS_PROXY`), then run the command again.                                                                                                                                                                  |
+| `… isn't writable by you`                           | Run `sudo chown -R "$(id -un)" "$HOME/.local"`, then run the command again.                                                                                                                                                                       |
+| `… is not on your PATH`                             | Add the line the installer prints to your shell profile. The setup command runs `chopin` by its full path.                                                                                                                                        |
+| `This machine can't run Chopin's work`              | Do what its `Fix:` line says, such as joining the `kvm` group, then run the command again. A Mac or an Arm machine can't be one of Chopin's machines; use a Linux or Windows x86_64 machine.                                                      |
+| `chopin runs … in a microVM of its own`             | Add `--install '<the command that installs it>'` (or `--planner-install` for a Planner command), then run the command again.                                                                                                                      |
+| `… isn't inside a git checkout`                     | Give `--checkout` the folder of a clone from GitHub, or leave it out and `chopin` clones each repository as work needs it.                                                                                                                        |
+| `… isn't a github.com repository`                   | Check `git remote -v`; Chopin connects clones of GitHub repositories.                                                                                                                                                                             |
+| `Can't reach Chopin at …`                           | Check `CHOPIN_URL`, your network and any proxy, then run the command again.                                                                                                                                                                       |
+| `Chopin refused the pairing key`                    | Generate a new script from **Machines** → **Add machine** → **Cloud**, then run it.                                                                                                                                                               |
+| `… pairing key isn't allowed to use this Chopin`    | Ask whoever runs Chopin to let your GitHub account or organization in, then generate a new script.                                                                                                                                                |
+| `You can't push to … on GitHub`                     | Chopin won't run that repository's work on this machine. Ask an owner for write access, or drop that `--checkout`.                                                                                                                                |
+| `This machine has no checkout of …`                 | Your server gives machines no GitHub token to clone with. Run `chopin connect --checkout <path>` with a clone of that repository, then start the work again.                                                                                      |
+| `… speaks connector protocol …`                     | Run the `chopin update` command the message names.                                                                                                                                                                                                |
+| `… didn't answer ACP initialize`                    | The agent didn't start in its microVM. Check its `--install` commands, or what the message shows it printed, then run the command again.                                                                                                          |
+| `The microVM didn't start`                          | OpenVMM couldn't start the agent's microVM; the rest of the message is the end of OpenVMM's log. Fix what it names, such as the Windows Hypervisor Platform, then start the work again. `after 3 tries` means the machine was too busy each time. |
+| `… asks for permission in the terminal`             | Run the command without `--install-service` and keep the terminal open.                                                                                                                                                                           |
+| `This machine is already paired with …`             | To pair it for another account, run `chopin unpair`, then the command again.                                                                                                                                                                      |
+| `This machine is no longer paired with Chopin`      | Run `chopin pair`, then connect again.                                                                                                                                                                                                            |
+| `The service has to keep running after you log out` | Have an administrator run `sudo loginctl enable-linger "$(id -un)"`, then run the command again.                                                                                                                                                  |
 
 **"CHOPIN_URL is …, but chopin connect saved …"** Install uses the server
 `chopin connect` saved. Run `chopin connect` again with the server you want in

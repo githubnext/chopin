@@ -157,10 +157,22 @@ const IO_URING_LOG = [
 	"    4: driver does not support io-uring",
 	"",
 ].join("\n");
+/** What OpenVMM's log ends with when its user may no longer open /dev/kvm, as it said. */
 const KVM_LOG = [
 	'   0.000766448s  INFO openvmm_entry:  version="0.5.0+g51e9af75d"',
 	"fatal error: KVM is not available",
+	"",
+	"Caused by:",
 	"    failed to open file `/dev/kvm`: Permission denied (os error 13)",
+	"",
+].join("\n");
+/** What OpenVMM's log ends with when it can't have the guest's memory. */
+const MEMORY_LOG = [
+	'   0.000766448s  INFO openvmm_entry:  version="0.5.0+g51e9af75d"',
+	"fatal error: failed to launch vm worker",
+	"",
+	"Caused by:",
+	"    0: failed to allocate guest memory",
 	"",
 ].join("\n");
 const NVX_FAILED = "error[exited]: OpenVMM exited during startup: vmm-failure status 1";
@@ -192,6 +204,7 @@ let fail = (text) => {
 };
 if (mode === "uring") fail(${JSON.stringify(IO_URING_LOG)});
 if (mode === "kvm") fail(${JSON.stringify(KVM_LOG)});
+if (mode === "memory") fail(${JSON.stringify(MEMORY_LOG)});
 appendFileSync(starts, "started\\n");
 process.stdout.write(${JSON.stringify(STARTED_LINE)} + "\\n");
 if (mode === "started-then-uring") {
@@ -281,17 +294,61 @@ describe.skipIf(process.platform === "win32")("starting a launch's microVM", () 
 	test(
 		"another failure to start is not tried again, and says the end of OpenVMM's log",
 		async () => {
-			let vm = machine(["kvm", "run"]);
-			let child = startVm(SPEC, SETUP, vm.base, "ignore", { start: vm.start });
+			let vm = machine(["memory", "run"]);
+			let unsupported: unknown[] = [];
+			let child = startVm(SPEC, SETUP, vm.base, "ignore", {
+				start: vm.start,
+				unsupported: problem => unsupported.push(problem),
+			});
 			expect(await ended(child)).toEqual({
 				code: 1,
 				signal: null,
 				out: "",
-				err: "The microVM didn't start: fatal error: KVM is not available / failed to open file "
-					+ "`/dev/kvm`: Permission denied (os error 13) (nvx: " + NVX_FAILED + ")\n",
+				err: "The microVM didn't start: fatal error: failed to launch vm worker / Caused by: / 0: "
+					+ "failed to allocate guest memory (nvx: " + NVX_FAILED + ")\n",
 			});
 			expect(vm.calls).toHaveLength(1);
 			expect(vm.starts()).toBe(0);
+			expect(unsupported).toEqual([]);
+		},
+		20_000,
+	);
+
+	test(
+		"a start OpenVMM couldn't open /dev/kvm for says this machine can't run microVMs, with the fix, and tells whoever started it",
+		async () => {
+			let vm = machine(["kvm", "run"]);
+			let unsupported: unknown[] = [];
+			let words: string[] = [];
+			let child = startVm(SPEC, SETUP, vm.base, "ignore", {
+				start: vm.start,
+				// Its user joined the kvm group after the service's user manager began.
+				host: { joinedLater: path => path === "/dev/kvm" },
+				unsupported: problem => {
+					unsupported.push(problem);
+					// Heard before the launch ends, so nothing starts again meanwhile.
+					words.push(child.exitCode === null ? "before its end" : "after its end");
+				},
+			});
+			let reason = "Your user is in the kvm group, but chopin runs in a login that began before "
+				+ "you joined it, so it can't read and write /dev/kvm yet.";
+			let fix = "log out and in again, then run chopin there (for the chopin service, whose "
+				+ "systemd user manager began before you joined, restart the machine or run: sudo "
+				+ "systemctl restart user@$(id -u))";
+			expect(await ended(child)).toEqual({
+				code: 1,
+				signal: null,
+				out: "",
+				err: "This machine can't run Chopin's work: Chopin runs each agent in its own microVM, "
+					+ `which needs Linux or Windows on x86_64 with hardware virtualization. ${reason} `
+					+ `Fix: ${fix} (OpenVMM: failed to open file \`/dev/kvm\`: Permission denied (os `
+					+ "error 13))\n",
+			});
+			expect(unsupported).toEqual([{ supported: false, reason, fix }]);
+			expect(words).toEqual(["before its end"]);
+			expect(vm.calls).toHaveLength(1);
+			expect(vm.starts()).toBe(0);
+			expect(vm.launches()).toEqual([]);
 		},
 		20_000,
 	);

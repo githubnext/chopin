@@ -434,7 +434,13 @@ durable.
   no launch record or running process names (`sweepRunFolders`); its own files stay in the state
   directory. A start OpenVMM failed for io_uring, as it does under heavy load, is tried again, three
   starts at most, and only before the guest says its workload starts (`STARTED_LINE`): until then
-  no stdin reaches the guest, so an agent never sees two starts. The run's MCP bridge runs in the guest
+  no stdin reaches the guest, so an agent never sees two starts. A start OpenVMM wasn't allowed to
+  open `/dev/kvm` or `/dev/mshv` for says the machine can't run microVMs, with the fix: the
+  connector tells Chopin (`/api/connector/capability`), leaves and starts nothing until the support
+  check passes again. The base dir is where it really is (`stateDirectory` follows links), and every
+  host path a guest's environment, command or working directory names is where its share has it
+  (`inGuest` in `vmSpec`). A refusal of an older connector never names a release before
+  `NVX_RELEASE`. The run's MCP bridge runs in the guest
   on the image's Node and reads an investigation's images in the guest's repository. Windows (WHP)
   is designed but not yet run end to end. See [Agents in NVX microVMs](docs/nvx-sandbox.md) and
   [Sandbox](docs/chopin-cli.md#sandbox).

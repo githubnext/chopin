@@ -18,6 +18,7 @@ import {
 	MachineUnsupported,
 	type Sandbox,
 	systemSupportHost,
+	type Unsupported,
 } from "./sandbox";
 import type { SandboxSettings } from "./sandbox-policy";
 
@@ -121,6 +122,8 @@ export async function openMachineSandbox(options: {
 	recipes: Map<string, ImageRecipe>;
 	output: Output;
 	refused?: (host: string, port: number) => void;
+	/** Hears that this machine can't run microVMs any more, and why (see `VmOptions`). */
+	unsupported?: (problem: Unsupported) => void;
 	host?: SupportHost;
 	/** False to keep the images no recipe here names (see `SandboxOptions.prune`). */
 	prune?: boolean;
@@ -164,6 +167,8 @@ export async function openMachineSandbox(options: {
 				),
 			),
 		...options.refused ? { refused: options.refused } : {},
+		...options.unsupported ? { unsupported: options.unsupported } : {},
+		...options.host ? { host: options.host } : {},
 		...options.prune === false ? { prune: false } : {},
 		wedged: detail => output.error(detail),
 		retrying: detail => output.say(output.style.dim(`… ${detail}`)),

@@ -605,7 +605,8 @@ test("a machine that can't run work says why and the fix while it is away, on a 
 	await expect(row).toContainText("Your user can't read and write /dev/kvm.");
 	await expect(row.locator("code")).toHaveText("sudo usermod -aG kvm $USER");
 
-	// An older chopin is told to update, and the page says so.
+	// An older chopin is told to update, and the page says so, naming the release this Chopin
+	// recommends (the connector built beside it).
 	let older = await connect({
 		[CONNECTOR_PROTOCOL_HEADER]: "7",
 		[CONNECTOR_SANDBOX_HEADER]: "bubblewrap",
@@ -613,7 +614,7 @@ test("a machine that can't run work says why and the fix while it is away, on a 
 	expect(older.status).toBe(409);
 	await page.reload();
 	await expect(row).toContainText(`Its chopin ${RELEASE} runs agents outside a microVM.`);
-	await expect(row.locator("code")).toHaveText("chopin update");
+	await expect(row.locator("code")).toHaveText(`chopin update ${RELEASE}`);
 });
 
 test("on a phone, a machine that can't run work says why in its own view", async ({ join: enter }) => {

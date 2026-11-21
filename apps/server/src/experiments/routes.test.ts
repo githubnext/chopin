@@ -65,6 +65,8 @@ async function setup(
 		app?: GitHubApp;
 		ai?: () => AiCredentials | undefined;
 		machineStores?: MachineStores;
+		/** The chopin release this server recommends; `0.1.3` unless said. */
+		connectorVersion?: string | undefined;
 	} = {},
 ) {
 	let storage = shared?.storage ?? new MemoryStorage();
@@ -905,11 +907,11 @@ test("only a connector whose agents run in microVMs connects, and one that can't
 		expect(body.message).toContain("runs agents outside a microVM");
 		expect(body.message).toContain("chopin update");
 	}
-	// Kept on the machine, so the Machines page says why while it is away.
+	// Kept on the machine, so the Machines page says why while it is away, and what to install.
 	expect((await listed())[0].sandbox).toEqual({
 		engine: "none",
 		reason: "Its chopin runs agents outside a microVM.",
-		fix: "chopin update",
+		fix: "chopin update 0.1.3",
 	});
 	// A current one that says it can't run them is refused, and what it said is kept.
 	let unable = await connect({
@@ -954,6 +956,67 @@ test("only a connector whose agents run in microVMs connects, and one that can't
 
 	async function storageOf(id: string) {
 		return await context.storage.machines.get(id);
+	}
+});
+
+test("an older connector is told to install a release that runs agents in microVMs, never an older one this server recommends", async () => {
+	for (
+		let [recommended, named] of [
+			// What this server recommends speaks only protocol 7: the first that speaks 8 is named.
+			["0.0.31", "0.0.32"],
+			["0.0.31-rc.1", "0.0.32"],
+			// A release that speaks 8, the first or a later one, is named as it is.
+			["0.0.32", "0.0.32"],
+			["0.1.3", "0.1.3"],
+			// None recommended: `chopin update` installs the newest release.
+			[undefined, undefined],
+		] as const
+	) {
+		let context = await setup(undefined, { connectorVersion: recommended });
+		let { alice, router, request, pair, tool } = context;
+		let paired = await pair(alice.cookie);
+		await tool(paired.token, "disconnect_workspace", {});
+		let headers = (version: string, protocol: number) => ({
+			"content-type": "application/json",
+			authorization: `Bearer ${paired.machineToken}`,
+			[CONNECTOR_VERSION_HEADER]: version,
+			[CONNECTOR_PROTOCOL_HEADER]: String(protocol),
+			...MICROVMS,
+		});
+		let ask = async (path: string, version: string, protocol: number) => {
+			let asked = new Request(`https://chopin.test${path}`, {
+				method: "POST",
+				headers: headers(version, protocol),
+				body: JSON.stringify({ repository: "org/repo", commit: "a".repeat(40), label: "Laptop" }),
+			});
+			return (await router.handle(asked, new URL(asked.url)))!;
+		};
+		let fix = named
+			? `Run \`chopin update ${named}\`, then connect again.`
+			: "Run `chopin update` to install the newest chopin, then connect again.";
+		// chopin 0.0.31 speaks protocol 7, which this server takes no work from.
+		let older = await ask("/api/connector/connections", "0.0.31", 7);
+		expect(older.status).toBe(409);
+		expect(await older.json()).toEqual({
+			error: CONNECTOR_UPDATE_REQUIRED,
+			message: "chopin 0.0.31 runs agents outside a microVM, and https://chopin.test runs each "
+				+ `agent in its own NVX microVM. ${fix}`,
+			protocol: CONNECTOR_PROTOCOLS,
+			version: named ?? null,
+		});
+		// One older than the protocols this server speaks at all.
+		let oldest = await ask("/api/connector/connections", "0.0.1", CONNECTOR_PROTOCOLS.min - 1);
+		expect((await oldest.json()).message).toEndWith(fix);
+		// The Machines page says the same while it is away.
+		let [machine] = (await (await request("/api/connector/machines", undefined, alice.cookie))
+			.json()).machines;
+		expect(machine.sandbox).toEqual({
+			engine: "none",
+			reason: "Its chopin 0.0.31 runs agents outside a microVM.",
+			fix: named ? `chopin update ${named}` : "chopin update",
+		});
+		// And `chopin update` without a version, which asks this server, installs it.
+		expect((await (await request("/api/connector/version")).json()).version).toBe(named ?? null);
 	}
 });
 

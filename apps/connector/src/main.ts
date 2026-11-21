@@ -30,6 +30,7 @@ import { permissionMemory } from "./permission";
 import { commandWords, dispatchedPlanners, servePlanners } from "./planner";
 import { plannerSpares } from "./planner-spare";
 import { PLANNER_DISK_SWEEP_MS, sweepPlannerDisks } from "./planner-disks";
+import { delay } from "./reconnect";
 import { runWork } from "./run";
 import { type ConnectSettings, readConfig, updateConfig } from "./config";
 import {
@@ -57,9 +58,11 @@ import {
 	MachineUnsupported,
 	requireSupport,
 	type Sandbox,
+	systemSupportHost,
+	type Unsupported,
 } from "./sandbox";
 import { machineRecipes, openMachineSandbox } from "./machine-sandbox";
-import type { SupportHost } from "./nvx";
+import { nvxSupport, type SupportHost, unsupportedWords } from "./nvx";
 import { forgetMachineStore, provideMachineStore, storeReport } from "./machine-store";
 import type { MachineStoreOutcome } from "./machine-store";
 import { type SandboxSettings, validHostEntry } from "./sandbox-policy";
@@ -116,7 +119,12 @@ export type Injected = {
 	/** What images the agents' microVMs need, which a stand-in has without building any. */
 	recipes?: typeof machineRecipes;
 	openSandbox?: typeof openMachineSandbox;
+	/** How often a machine that can't run microVMs any more checks whether it can again. */
+	runsAgainMs?: number;
 };
+
+/** How often a machine that can't run microVMs any more checks whether it can again. */
+const RUNS_AGAIN_MS = 30_000;
 
 /** `status [--json]`: this machine's chopin, pairing, connectors, service and log. */
 async function statusCommand(args: string[], injected: Injected = {}) {
@@ -531,6 +539,16 @@ export async function connect(args: string[], injected: Injected = {}) {
 	 * Chopin when it is paired already, and pairs, connects and starts nothing.
 	 */
 	let told = new Set<string>();
+	/**
+	 * Why this machine can't run microVMs any more, once a launch found it out (its user lost
+	 * /dev/kvm, as when logind takes back a login's access): Chopin is told, the connection ends with
+	 * its Planners, and nothing starts until the machine can run them again, when it connects again.
+	 */
+	let lost: Unsupported | undefined;
+	/** Ends the connection that is up, and its Planners, when that happens. */
+	let away: AbortController | undefined;
+	/** The machine token, once it is paired, with which Chopin is told. */
+	let paired: string | undefined;
 	let sandbox: Sandbox;
 	let release: (() => Promise<void>) | undefined;
 	try {
@@ -551,6 +569,16 @@ export async function connect(args: string[], injected: Injected = {}) {
 			recipes,
 			output,
 			...(injected.support ? { host: injected.support } : {}),
+			unsupported(problem) {
+				if (lost) return;
+				lost = problem;
+				output.error(
+					`${unsupportedWords(problem).join("\n")}\nchopin starts nothing more and leaves Chopin `
+						+ "until this machine can run microVMs again.",
+				);
+				if (paired) void reportCapability(url, paired, problem).catch(() => {});
+				away?.abort();
+			},
 			refused(host, port) {
 				let entry = `${host}:${port}`;
 				if (told.has(entry)) return;
@@ -673,6 +701,15 @@ export async function connect(args: string[], injected: Injected = {}) {
 	try {
 		if (report.engine === "nvx") runAgentsIn(report.hypervisor);
 		for (;;) {
+			if (lost) {
+				// Checked again until its user can use the hypervisor's device, then it connects again.
+				while (!abort.signal.aborted && lost) {
+					await delay(injected.runsAgainMs ?? RUNS_AGAIN_MS, abort.signal);
+					if (nvxSupport(injected.support ?? systemSupportHost()).supported) lost = undefined;
+				}
+				if (abort.signal.aborted) break;
+				output.say("This machine can run microVMs again, so chopin connects to Chopin again.");
+			}
 			// A machine paired once reconnects with its stored token; an unpaired one pairs first.
 			let stored = await machineToken(directory, url);
 			// The service has no terminal to pair on, so it stops rather than wait on a browser.
@@ -723,6 +760,9 @@ export async function connect(args: string[], injected: Injected = {}) {
 			// Planner backends run beside the work loop with this machine token and stop with it, so
 			// none outlives a revoked token and a machine paired again starts them with its new one.
 			let planners = new AbortController();
+			paired = machine;
+			away = planners;
+			let sweeping: ReturnType<typeof setInterval> | undefined;
 			// One spare Planner per registered checkout's repository, with its code loaded, so a new
 			// document's Planner starts at once; it holds no credential until it is handed one.
 			let spares = plannerCommand.length
@@ -797,9 +837,8 @@ export async function connect(args: string[], injected: Injected = {}) {
 									ask: documents => forgettablePlanners(url, machine, documents, abort.signal),
 								}).catch(() => {});
 							sweep();
-							let sweeping = setInterval(sweep, PLANNER_DISK_SWEEP_MS);
+							sweeping = setInterval(sweep, PLANNER_DISK_SWEEP_MS);
 							sweeping.unref();
-							abort.signal.addEventListener("abort", () => clearInterval(sweeping));
 							for (let repository of registration.refused) {
 								output.error(
 									`You can't push to ${repository} on GitHub, so Chopin won't run its work here.`,
@@ -816,7 +855,8 @@ export async function connect(args: string[], injected: Injected = {}) {
 						announced = true;
 						return api;
 					},
-					signal: abort.signal,
+					// A machine that can't run microVMs any more leaves, once its runs have ended.
+					signal: AbortSignal.any([abort.signal, planners.signal]),
 					output,
 					...(dispatched ? { planners: dispatched } : {}),
 					run: (api, kind, claim) =>
@@ -837,7 +877,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 							...(agentStore ? { agentStore } : {}),
 						}).finally(prune),
 				});
-				break;
+				if (!lost || abort.signal.aborted) break;
 			} catch (error) {
 				if (!(error instanceof ConnectorStopped && error.reason === "revoked")) throw error;
 				// Chopin no longer accepts the token, so it is forgotten and the next connect pairs.
@@ -851,6 +891,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 				output.say("This machine needs pairing with Chopin again.");
 			} finally {
 				planners.abort();
+				clearInterval(sweeping);
 				await Promise.all([planning, dispatched?.stop(), spares?.stop()]);
 				// A revoked machine's Planners' disks go once nothing runs on them.
 				if (revoked) {

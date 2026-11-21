@@ -45,6 +45,7 @@ import {
 	checkoutOf,
 	Connections,
 	NVX_PROTOCOL,
+	NVX_RELEASE,
 	serves,
 } from "./connections";
 import { launchGitHubToken, machineGitHubToken } from "./machine-github";
@@ -312,6 +313,15 @@ function olderThan(version: string | undefined, minimum: string): boolean {
 }
 
 /**
+ * The release a connector is told to install: the one this server recommends, or, where that one
+ * is older than `NVX_RELEASE`, that one, since this server takes no work from a connector before it.
+ * Undefined where it recommends none, and `chopin update` then installs the newest release.
+ */
+function releaseToInstall(recommended: string | undefined): string | undefined {
+	return recommended && olderThan(recommended, NVX_RELEASE) ? NVX_RELEASE : recommended;
+}
+
+/**
  * Why a machine asked to run a Planner has not attached one, from what Chopin itself saw: `launches`
  * is how many times it asked for a credential to start a backend with. A connector that cannot say
  * why a backend exited (releases before `PLANNER_REPORTS_FROM`) is named with what to update.
@@ -474,6 +484,8 @@ function described(live: Connection[], machine?: Pick<StoredMachine, "vmProblem"
 
 export function registerExperimentRoutes(router: Router, auth: HostedAuth, options: Options) {
 	let connections = new Connections(undefined, auth.config.encryptionKey);
+	/** What every refusal, the Machines page and `chopin update` name: never a release too old. */
+	let recommended = releaseToInstall(options.connectorVersion);
 	/**
 	 * The stored machine choices, read before any work is routed. A read that fails is retried a
 	 * few times, then refuses the work with `machine-choice-unavailable`; it is never taken to mean
@@ -1487,7 +1499,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		});
 	}
 	/** What a connector should run: the protocols spoken here and the recommended release. */
-	let versions = { protocol: CONNECTOR_PROTOCOLS, version: options.connectorVersion ?? null };
+	let versions = { protocol: CONNECTOR_PROTOCOLS, version: recommended ?? null };
 	// `ai` says the Planners this Chopin asks machines to run take their sessions' models from
 	// people's AI accounts in it, so a connector starts its spare Planners that way from the start.
 	route("GET", "/api/connector/version", async () =>
@@ -1496,7 +1508,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			...(options.ai?.() && options.planners && auth.machines.durable ? { ai: "chopin" } : {}),
 		}));
 	route("POST", "/api/connector/pairings", async request => {
-		compatible(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
 		let { key, ...input } = pairingSchema.parse(await body(request));
 		if (key !== undefined) return json(await keyed(key, input));
 		let created = connections.create(input);
@@ -1645,7 +1657,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		return json({ url: landing(pending.input) });
 	});
 	route("POST", "/api/connector/pairings/:id/claim", async (request, params) => {
-		compatible(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
 		let { secret } = z.object({ secret: z.string().min(32).max(100) }).strict().parse(
 			await body(request),
 		);
@@ -1658,7 +1670,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * only repository it serves, is refused.
 	 */
 	route("POST", "/api/connector/connections", async request => {
-		compatible(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
 		let about = aboutMachine(request);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		// Work goes only to a connector that runs it in microVMs. An older one is told to update,
@@ -1671,13 +1683,13 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			let problem = older
 				? {
 					reason: `Its chopin${release ? ` ${release}` : ""} runs agents outside a microVM.`,
-					fix: "chopin update",
+					fix: recommended ? `chopin update ${recommended}` : "chopin update",
 				}
 				: about.sandbox?.engine === "none"
 				? { reason: about.sandbox.reason, ...about.sandbox.fix ? { fix: about.sandbox.fix } : {} }
 				: undefined;
 			if (problem) await auth.storage.machines.vmProblem(machine.id, problem);
-			microvmsOnly(request, auth.config.origin, options.connectorVersion);
+			microvmsOnly(request, auth.config.origin, recommended);
 		}
 		let input = connectionSchema.parse(await body(request));
 		if (machine.vmProblem) await auth.storage.machines.vmProblem(machine.id);
@@ -1760,7 +1772,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	/** The coding agent a connection runs, as it answered ACP initialize at its first job. */
 	route("POST", "/api/connector/agent", async request => {
-		compatible(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
 		let { connection } = connections.lookup(bearer(request));
 		connection.about = { ...connection.about, agent: agentSchema.parse(await body(request)) };
 		return json({ ok: true });
@@ -1773,8 +1785,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("POST", "/api/connector/planner", async request => {
 		let planners = options.planners;
 		if (!planners || !auth.machines.durable) fail("not-found");
-		compatible(request, auth.config.origin, options.connectorVersion);
-		microvmsOnly(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
+		microvmsOnly(request, auth.config.origin, recommended);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let { document } = z.object({ document: z.string().min(1).max(2048) }).strict().parse(
 			await body(request),
@@ -1826,7 +1838,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * never ran.
 	 */
 	route("POST", "/api/connector/planner/kept", async request => {
-		compatible(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
 		await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let { documents } = z.object({
 			documents: z.array(
@@ -1859,7 +1871,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("POST", "/api/connector/planner/failure", async request => {
 		let planners = options.planners;
 		if (!planners || !auth.machines.durable) fail("not-found");
-		compatible(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let { document, failure } = z.object({
 			document: z.string().min(1).max(2048),
@@ -1958,8 +1970,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 */
 	route("POST", "/api/connector/mcp-token", async request => {
 		if (!auth.machines.durable) fail("not-found");
-		compatible(request, auth.config.origin, options.connectorVersion);
-		microvmsOnly(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
+		microvmsOnly(request, auth.config.origin, recommended);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let credential = z.string().min(1).max(1024);
 		let from = z.union([
@@ -1983,8 +1995,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("POST", "/api/connector/ai-launch", async request => {
 		let credentials = options.ai?.();
 		if (!credentials || !auth.machines.durable) fail("not-found");
-		compatible(request, auth.config.origin, options.connectorVersion);
-		microvmsOnly(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
+		microvmsOnly(request, auth.config.origin, recommended);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let { run } = z.object({ run: z.string().min(1).max(1024) }).strict().parse(
 			await body(request),
@@ -2020,7 +2032,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("POST", "/api/connector/ai-launch/end", async request => {
 		let credentials = options.ai?.();
 		if (!credentials || !auth.machines.durable) fail("not-found");
-		compatible(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let { launch } = z.object({ launch: z.string().min(1).max(256) }).strict().parse(
 			await body(request),
@@ -2090,8 +2102,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 */
 	route("POST", "/api/connector/github-token", async request => {
 		if (!auth.machines.durable) fail("not-found");
-		compatible(request, auth.config.origin, options.connectorVersion);
-		microvmsOnly(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
+		microvmsOnly(request, auth.config.origin, recommended);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let id = z.string().min(1).max(2048);
 		let asked = z.object({
@@ -2145,14 +2157,14 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * connection or asking GitHub anything.
 	 */
 	route("GET", "/api/connector/machine", async request => {
-		compatible(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let user = await auth.storage.users.get(machine.userId);
 		return json({ id: machine.id, label: machine.label, login: user?.login ?? null });
 	});
 	/** `chopin unpair`: the machine revokes itself with its own token. */
 	route("POST", "/api/connector/machine/revoke", async request => {
-		compatible(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
 		let machine = await auth.storage.machines.byToken(
 			new Uint8Array(createHash("sha256").update(bearer(request)).digest()),
 		);
@@ -2184,7 +2196,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	 * that runs them clears it.
 	 */
 	route("POST", "/api/connector/capability", async request => {
-		compatible(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let text = z.string().min(1).max(SANDBOX_TEXT_LIMIT);
 		let said = z.object({ reason: text, fix: text.optional() }).strict().parse(await body(request));
@@ -2197,7 +2209,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("POST", "/api/connector/machine-store", async request => {
 		let stores = options.machineStores;
 		if (!stores) fail("not-found");
-		compatible(request, auth.config.origin, options.connectorVersion);
+		compatible(request, auth.config.origin, recommended);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let { problem } = z.object({ problem: z.string().max(4_000).optional() }).strict().parse(
 			await body(request),
@@ -2210,7 +2222,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			await stores.report(machine.id, reported);
 			return json({ reported: true });
 		}
-		microvmsOnly(request, auth.config.origin, options.connectorVersion);
+		microvmsOnly(request, auth.config.origin, recommended);
 		if (!privateOrigin) {
 			return json({
 				error: "machine-store-unavailable",
@@ -3087,7 +3099,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		compatible(
 			request,
 			auth.config.origin,
-			options.connectorVersion,
+			recommended,
 			connections.run(bearer(request)),
 		);
 		let { connection, grant } = await connector(bearer(request));
@@ -3096,7 +3108,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	});
 	route("POST", "/connector/mcp", async request => {
 		let token = bearer(request);
-		compatible(request, auth.config.origin, options.connectorVersion, connections.run(token));
+		compatible(request, auth.config.origin, recommended, connections.run(token));
 		let { connection, grant, caller } = await connector(token);
 		let implementation = options.implementations?.();
 		let implementationRun = grant.run?.kind === "implementation" || grant.run?.kind === "rebuild";

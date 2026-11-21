@@ -105,6 +105,11 @@ export const APP_TOKEN_PROTOCOL = 7;
  * NVX microVM of its own. Chopin gives work, Planner credentials and AI launches to no other.
  */
 export const NVX_PROTOCOL = 8;
+/**
+ * The first chopin release whose connector speaks `NVX_PROTOCOL`. A connector told to update is
+ * never named an older one, which this server would refuse as it refused the one it runs.
+ */
+export const NVX_RELEASE = "0.0.32";
 
 /** A build's run, as its durable credential names it. */
 export type DurableRun = { id: string; documentId: string; kind: "implementation" | "rebuild" };
