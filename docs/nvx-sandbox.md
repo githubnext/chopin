@@ -343,7 +343,10 @@ a launch on Chopin's AI accounts, the agent's own variables and `--env` otherwis
 and the image's. A run Chopin hands no AI launch (a Chopin without launches) gets no
 models of the owner's either: its agent runs with what `--env` gives it. A Planner
 backend Chopin hands no AI accounts (an older server) is started with the
-connector's environment but its GitHub credentials, as before.
+connector's environment but its GitHub credentials, as before. Whatever the host, no
+variable only Windows sets (`APPDATA`, `USERPROFILE`, `PSModulePath` and the like)
+reaches a guest, and on a Windows host neither does its `Path` or `SHELL`: they name
+nothing a Linux guest has but the host user's profile.
 
 A guest reads what it is shared, though: a Planner's checkout whole and the git
 directory a run clones from, `config` included, so a token kept in a remote URL or
