@@ -1119,6 +1119,21 @@ describe("choosing a machine for a document", () => {
 		expect(await plain.poll([])).toEqual({ waiting: true });
 	});
 
+	it("says in each Planner credential when a writer last reset the Planner, so its disk from before goes", async () => {
+		let { machine, send, channel, storage } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		let asked = async () =>
+			(await send("/api/connector/planner", {
+				bearer: laptop.token,
+				headers: CONNECTOR,
+				body: { document: channel.id },
+			})).json();
+		expect((await asked()).reset).toBeUndefined();
+		let at = new Date("2026-03-04T05:06:07.008Z");
+		await storage.channels.markPlannerReset(channel.id, at);
+		expect((await asked()).reset).toBe(at.getTime());
+	});
+
 	it("issues no Planner credential to a connector that would run its backend outside a microVM", async () => {
 		let dispatch = await dispatchServer();
 		let { send, channel } = dispatch;

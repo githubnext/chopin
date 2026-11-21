@@ -302,6 +302,13 @@ export interface ChannelStore {
 	/** Sets Full width. Refused for an archived document, as a rename is. */
 	setFullWidth(input: ChannelWidthInput): Promise<RenameResult>;
 	/**
+	 * Records that a writer reset the document's Planner at `now`, or a moment after the last reset,
+	 * so each reset reads as a new one. A machine removes its Planner's disk made before it.
+	 */
+	markPlannerReset(id: string, now: Date): Promise<void>;
+	/** When the document's Planner was last reset, if ever. */
+	plannerReset(id: string): Promise<Date | undefined>;
+	/**
 	 * Archives a document and ends, for good, the AI placeholders of every launch on it, moving its
 	 * archive generation on (see `AiPlaceholderStore.generation`). Written under `input.lease`, as
 	 * every cutoff is (see `AiPlaceholderStore.cutoffs`).

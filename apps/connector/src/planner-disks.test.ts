@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { holdDisk, sweepPlannerDisks } from "./planner-disks";
+import { forgetResetDisk, holdDisk, stampPlannerReset, sweepPlannerDisks } from "./planner-disks";
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-planner-disks-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
@@ -55,8 +55,8 @@ test("a Planner's disk goes once Chopin no longer has its document, its tokens a
 		server: A,
 		output,
 		ask: async documents => {
-			asked.push(documents.sort());
-			return [D(1), D(3)];
+			asked.push(documents.map(item => item.id).sort());
+			return { forget: [D(1), D(3)], reset: [] };
 		},
 	});
 	// The disk a microVM runs on is never asked about, nor removed.
@@ -69,10 +69,10 @@ test("a Planner's disk goes once Chopin no longer has its document, its tokens a
 	expect(said).toContain("Any commits on it that were never pushed went with it.");
 	// Let go, it goes at the next sweep.
 	await release();
-	expect(await sweepPlannerDisks({ directory: it.directory, server: A, ask: async () => [D(3)] }))
-		.toEqual([
-			D(3),
-		]);
+	let gone = async () => ({ forget: [D(3)], reset: [] });
+	expect(await sweepPlannerDisks({ directory: it.directory, server: A, ask: gone })).toEqual([
+		D(3),
+	]);
 });
 
 test("a disk another chopin holds is left, one a chopin that is gone held is taken over, and no launch starts on one another holds", async () => {
@@ -85,7 +85,7 @@ test("a disk another chopin holds is left, one a chopin that is gone held is tak
 		let removed = await sweepPlannerDisks({
 			directory: it.directory,
 			server: A,
-			ask: async () => [D(1), D(2)],
+			ask: async () => ({ forget: [D(1), D(2)], reset: [] }),
 		});
 		expect(removed).toEqual([D(2)]);
 		expect(it.kept(D(1))).toEqual([true, true, true]);
@@ -140,7 +140,7 @@ test("an unpaired or revoked machine's disks all go, a spare's too, but one a la
 		everything: "unpaired",
 		ask: async () => {
 			asked = true;
-			return [];
+			return { forget: [], reset: [] };
 		},
 	});
 	expect(asked).toBe(false);
@@ -152,7 +152,11 @@ test("an unpaired or revoked machine's disks all go, a spare's too, but one a la
 test("only the server a disk's document is on may say it is gone, or unpair it away; age goes for any", async () => {
 	let it = await machine([D(1), D(2)], { [D(2)]: B });
 	// B answers that it has neither, as it has never had A's document.
-	expect(await sweepPlannerDisks({ directory: it.directory, server: B, ask: async ids => ids }))
+	let neither = async (ids: Array<{ id: string }>) => ({
+		forget: ids.map(item => item.id),
+		reset: [],
+	});
+	expect(await sweepPlannerDisks({ directory: it.directory, server: B, ask: neither }))
 		.toEqual([D(2)]);
 	expect(it.kept(D(1))).toEqual([true, true, true]);
 	let more = await machine([D(1), D(2)], { [D(2)]: B });
@@ -162,4 +166,52 @@ test("only the server a disk's document is on may say it is gone, or unpair it a
 	let now = Date.now();
 	await utimes(`${more.slot(D(1))}.disk`, new Date(now - 31 * DAY), new Date(now - 31 * DAY));
 	expect(await sweepPlannerDisks({ directory: more.directory, server: B, now })).toEqual([D(1)]);
+});
+
+test("a disk made before a writer last reset its Planner goes, at a sweep or before its next launch, and one made after stays", async () => {
+	let it = await machine([D(1), D(2), D(3)]);
+	await stampPlannerReset(it.slot(D(2)), 1_000);
+	await stampPlannerReset(it.slot(D(3)), 2_000);
+	let asked: Array<{ id: string; reset?: number }> = [];
+	let said = "";
+	let output = {
+		say: (...lines: string[]) => void (said += lines.join("\n")),
+		style: { dim: (text: string) => text },
+	} as unknown as Parameters<typeof sweepPlannerDisks>[0]["output"];
+	// Chopin says D(1), made after no reset, and D(2), made after one before its last, were reset.
+	let removed = await sweepPlannerDisks({
+		directory: it.directory,
+		server: A,
+		output,
+		ask: async documents => {
+			asked.push(...documents);
+			return { forget: [], reset: [D(1), D(2)] };
+		},
+	});
+	expect(asked.sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+		{ id: D(1) },
+		{ id: D(2), reset: 1_000 },
+		{ id: D(3), reset: 2_000 },
+	]);
+	expect(removed.sort()).toEqual([D(1), D(2)]);
+	expect(it.kept(D(3))).toEqual([true, true, true]);
+	expect(said).toContain("its Planner was reset in Chopin");
+	expect(said).toContain("Any commits on it that were never pushed went with it.");
+
+	// Its next launch: the credential names the reset Chopin has. Equal keeps it; later removes it.
+	let item = { document: D(3), repository: "octo-org/score" };
+	expect(await forgetResetDisk(it.slot(D(3)), 2_000, item)).toBe(false);
+	expect(it.kept(D(3))).toEqual([true, true, true]);
+	// One a launch of this process still holds is left for it.
+	let release = await it.running(D(3));
+	expect(await forgetResetDisk(it.slot(D(3)), 3_000, item)).toBe(false);
+	await release();
+	expect(await forgetResetDisk(it.slot(D(3)), 3_000, item)).toBe(true);
+	expect(it.kept(D(3))).toEqual([false, false, false]);
+	expect(existsSync(`${it.slot(D(3))}.reset`)).toBe(false);
+	expect(existsSync(`${it.slot(D(3))}.disk.held`)).toBe(false);
+	// A disk from before any reset, with none Chopin names, stays.
+	let fresh = await machine([D(4)]);
+	expect(await forgetResetDisk(fresh.slot(D(4)), undefined, item)).toBe(false);
+	expect(fresh.kept(D(4))).toEqual([true, true, true]);
 });

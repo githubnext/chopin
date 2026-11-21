@@ -179,6 +179,8 @@ export class MemoryStorage implements StorageAdapter {
 	#projects = new Map<string, UserProject[]>();
 	#navigation = new Map<string, UserNavigation>();
 	#channels = new Map<string, ChannelRecord>();
+	/** When each document's Planner was last reset. */
+	#plannerResets = new Map<string, Date>();
 	#channelSlugs = new Map<string, Map<string, string>>();
 	#snapshots = new Map<string, ChannelSnapshot>();
 	#sequences = new Map<string, number>();
@@ -463,6 +465,11 @@ export class MemoryStorage implements StorageAdapter {
 		},
 		rename: input => this.#renameChannel(input),
 		setFullWidth: input => this.#setChannelWidth(input),
+		markPlannerReset: (id, now) => this.#markPlannerReset(id, now),
+		plannerReset: async id => {
+			let at = this.#plannerResets.get(id);
+			return at && new Date(at);
+		},
 		archive: async input => {
 			this.#assertLease(input.lease);
 			return this.#setChannelArchived(input, true);
@@ -720,6 +727,12 @@ export class MemoryStorage implements StorageAdapter {
 		return { channel: channel(saved), changed: true };
 	}
 
+	async #markPlannerReset(id: string, now: Date): Promise<void> {
+		if (!this.#channels.has(id)) throw missing(`channel ${id} does not exist`);
+		let last = this.#plannerResets.get(id);
+		this.#plannerResets.set(id, last && now <= last ? new Date(last.getTime() + 1) : new Date(now));
+	}
+
 	async #setChannelArchived(
 		input: ChannelArchiveInput,
 		archived: boolean,
@@ -760,6 +773,7 @@ export class MemoryStorage implements StorageAdapter {
 		}
 
 		this.#channels.delete(id);
+		this.#plannerResets.delete(id);
 		await this.#research.deleteChannel(id);
 		this.#jobs.deleteChannel(id);
 		this.#images.deleteChannel(id);

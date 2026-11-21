@@ -671,14 +671,14 @@ greyed out.
 [Where chopin keeps its files](chopin-cli-reference.md#where-chopin-keeps-its-files)
 lists them all.
 
-| Path                                         | Holds                                                                      | Removed                                                                                                  |
-| -------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `runs/<run id>.json`, `runs/<run id>.agent/` | A job's record, and its agent's state where it ran on Chopin's AI accounts | Once 15 newer runs have finished                                                                         |
-| `planners/<owner>/<repo>/<document id>.disk` | A Planner's disk, with its own clone of the repository                     | When Chopin says its document is archived or gone, after 30 days unused, or when the machine is unpaired |
-| `repos/<owner>/<repo>`                       | A clone of a repository you named no checkout of                           | Never                                                                                                    |
-| `images/`                                    | The agents' images, built once each                                        | When no recipe names one any more                                                                        |
-| `nvx/`                                       | The NVX release this `chopin` pins, and its microVMs' records              | An NVX release `chopin` no longer pins                                                                   |
-| `agent-store/`                               | This machine's database login for agent sessions, and the adapter          | Its password with `chopin unpair`                                                                        |
+| Path                                         | Holds                                                                      | Removed                                                                                                                           |
+| -------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `runs/<run id>.json`, `runs/<run id>.agent/` | A job's record, and its agent's state where it ran on Chopin's AI accounts | Once 15 newer runs have finished                                                                                                  |
+| `planners/<owner>/<repo>/<document id>.disk` | A Planner's disk, with its own clone of the repository                     | When Chopin says its document is archived or gone or its Planner was reset, after 30 days unused, or when the machine is unpaired |
+| `repos/<owner>/<repo>`                       | A clone of a repository you named no checkout of                           | Never                                                                                                                             |
+| `images/`                                    | The agents' images, built once each                                        | When no recipe names one any more                                                                                                 |
+| `nvx/`                                       | The NVX release this `chopin` pins, and its microVMs' records              | An NVX release `chopin` no longer pins                                                                                            |
+| `agent-store/`                               | This machine's database login for agent sessions, and the adapter          | Its password with `chopin unpair`                                                                                                 |
 
 A run leaves no worktree: its agent worked in its microVM, and pushed what it kept.
 
@@ -962,7 +962,8 @@ What this changes for you:
   runs no git in a tree an agent wrote.
 - **A Planner's unpushed commits live on its disk.** The disk goes when Chopin says its
   document is archived or gone (asked as `chopin connect` connects and every hour),
-  when no Planner has run on it for 30 days, or when this machine is unpaired or
+  when someone resets the document's Planner in Chopin (as it next starts here, or at
+  the next hourly check), when no Planner has run on it for 30 days, or when this machine is unpaired or
   revoked, never while a microVM runs on it. Its unpushed commits go with it, and the
   connector says so.
 - **Your checkout over the share is slow to walk.** Reading a whole large checkout from

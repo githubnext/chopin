@@ -1304,6 +1304,8 @@ describe("channel routes", () => {
 		expect(reset).toEqual([channel.id]);
 		expect((await storage.collaboration.load(channel.id, now))!.agent!.ownerSessionId)
 			.toBeUndefined();
+		// Kept, so a machine's Planner of it starts afresh on a new disk.
+		expect(await storage.channels.plannerReset(channel.id)).toBeInstanceOf(Date);
 	});
 
 	describe("GitHub references", () => {

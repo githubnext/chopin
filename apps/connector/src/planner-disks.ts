@@ -1,7 +1,16 @@
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import { link, readFile, rm, stat, writeFile } from "node:fs/promises";
 import type { Output } from "./output";
-import { agentFolder, plannerDisks, plannerServer, tokenFolder } from "./workspace";
+import {
+	agentFolder,
+	plannerDisk,
+	plannerDisks,
+	plannerReset,
+	plannerServer,
+	readPlannerReset,
+	tokenFolder,
+} from "./workspace";
 
 /** How long a Planner's disk is kept after its Planner last ran, when Chopin says nothing of it. */
 export const PLANNER_DISK_DAYS = 30;
@@ -10,10 +19,16 @@ export const PLANNER_DISK_DAYS = 30;
 export const PLANNER_DISK_SWEEP_MS = 60 * 60_000;
 
 /**
- * Asks Chopin which of `documents` this machine may forget the Planners of: a document archived or
- * gone. A document it can't say for is kept.
+ * Asks Chopin which of the documents this machine keeps Planner disks for, each with the reset its
+ * disk was made after, it may forget: `forget`, each archived or gone, and `reset`, each whose
+ * Planner a writer reset since. A document it can't say for is kept.
  */
-export type ForgetAsk = (documents: string[]) => Promise<string[]>;
+export type ForgetAsk = (
+	disks: Array<{ id: string; reset?: number }>,
+) => Promise<{ forget: string[]; reset: string[] }>;
+
+/** Why a disk Chopin said its document's Planner was reset since goes. */
+const RESET = "its Planner was reset in Chopin";
 
 /** The holds this process has on disks, by lock file, each counted once per holder. */
 const held = new Map<string, number>();
@@ -94,6 +109,7 @@ export async function holdDisk(disk: string, waitMs = 10_000): Promise<() => Pro
 export async function removePlannerSlot(slot: string) {
 	await rm(`${slot}.disk`, { force: true });
 	await rm(plannerServer(slot), { force: true });
+	await rm(plannerReset(slot), { force: true });
 	await rm(tokenFolder(slot), { recursive: true, force: true });
 	await rm(agentFolder(slot), { recursive: true, force: true });
 }
@@ -124,18 +140,24 @@ export async function sweepPlannerDisks(options: {
 	// Another server's documents are never this one's to forget.
 	let ours = disks.filter(item => item.server === options.server);
 	let forget = options.everything ? new Set(ours.map(item => item.document)) : new Set<string>();
+	let reset = new Set<string>();
 	if (!options.everything && options.ask && ours.length) {
-		let asked = await options.ask([...new Set(ours.map(item => item.document))]).catch(() => []);
-		for (let document of asked) forget.add(document);
+		let named = new Map(ours.map(item => [item.document, item.reset]));
+		let asked = await options.ask(
+			[...named].map(([id, at]) => at === undefined ? { id } : { id, reset: at }),
+		).catch(() => ({ forget: [], reset: [] }));
+		for (let document of asked.forget) forget.add(document);
+		for (let document of asked.reset) reset.add(document);
 	}
 	let forgotten = (item: (typeof disks)[number]) =>
-		item.server === options.server && forget.has(item.document);
+		item.server === options.server && (forget.has(item.document) || reset.has(item.document));
 	let now = options.now ?? Date.now();
 	let oldest = now - (options.days ?? PLANNER_DISK_DAYS) * 24 * 60 * 60_000;
 	let removed: string[] = [];
 	for (let item of disks) {
 		let why = forgotten(item)
-			? options.everything ?? "Chopin no longer has its document"
+			? options.everything
+				?? (forget.has(item.document) ? "Chopin no longer has its document" : RESET)
 			: ((await stat(item.path).catch(() => undefined))?.mtimeMs ?? now) < oldest
 			? `no Planner ran on it for ${options.days ?? PLANNER_DISK_DAYS} days`
 			: undefined;
@@ -157,12 +179,51 @@ export async function sweepPlannerDisks(options: {
 			await rm(path, { force: true });
 		}
 		removed.push(item.document);
-		options.output?.say(
-			options.output.style.dim(
-				`… Removed the disk of ${item.document}'s Planner (${item.repository}): ${why}. `
-					+ "Any commits on it that were never pushed went with it.",
-			),
-		);
+		sayRemoved(options.output, item, why);
 	}
 	return removed;
+}
+
+function sayRemoved(
+	output: Output | undefined,
+	item: { document: string; repository: string },
+	why: string,
+) {
+	output?.say(
+		output.style.dim(
+			`… Removed the disk of ${item.document}'s Planner (${item.repository}): ${why}. `
+				+ "Any commits on it that were never pushed went with it.",
+		),
+	);
+}
+
+/**
+ * Before a launch of a document's Planner in `slot`: removes its disk where it was made before the
+ * reset Chopin names with the Planner's credential (`reset`, or none), so the Planner starts afresh
+ * as Chopin's did. Taken as a launch takes it, so no other launch or sweep has it meanwhile. True
+ * once it went.
+ */
+export async function forgetResetDisk(
+	slot: string,
+	reset: number | undefined,
+	item: { document: string; repository: string; output?: Output },
+): Promise<boolean> {
+	let disk = plannerDisk(slot);
+	if (!existsSync(disk) || await readPlannerReset(slot) === reset) return false;
+	// One this process's launch still has is left for it.
+	if ((held.get(`${disk}.held`) ?? 0) > 0) return false;
+	let release = await holdDisk(disk);
+	try {
+		await removePlannerSlot(slot);
+	} finally {
+		await release();
+	}
+	sayRemoved(item.output, item, RESET);
+	return true;
+}
+
+/** Records that the disk in `slot` was made after the reset Chopin named, or none. */
+export async function stampPlannerReset(slot: string, reset: number | undefined) {
+	if (reset === undefined) await rm(plannerReset(slot), { force: true });
+	else await writeFile(plannerReset(slot), `${reset}\n`, { mode: 0o600 });
 }

@@ -861,6 +861,8 @@ export class PostgresStorage implements StorageAdapter {
 			}),
 		rename: input => this.#renameChannel(input),
 		setFullWidth: input => this.#setChannelWidth(input),
+		markPlannerReset: (id, now) => this.#markPlannerReset(id, now),
+		plannerReset: id => this.#plannerReset(id),
 		archive: input =>
 			this.#setChannelArchived(input, true, input.lease).finally(() => this.#aiCutoffs.cut()),
 		restore: input => this.#setChannelArchived(input, false),
@@ -1088,6 +1090,27 @@ export class PostgresStorage implements StorageAdapter {
 				if (!saved) throw corrupt("setting a channel's width returned no record");
 				return { channel: channel({ ...saved, slug: existing.slug }), changed: true };
 			}));
+	}
+
+	#markPlannerReset(id: string, now: Date): Promise<void> {
+		return this.#run("mark planner reset", async () => {
+			let [saved] = await this.#sql<{ id: string }[]>`
+				UPDATE channels
+				SET planner_reset_at = GREATEST(${now}, planner_reset_at + interval '1 millisecond')
+				WHERE id = ${id}
+				RETURNING id
+			`;
+			if (!saved) throw missing(`channel ${id} does not exist`);
+		});
+	}
+
+	#plannerReset(id: string): Promise<Date | undefined> {
+		return this.#run("read planner reset", async () => {
+			let [row] = await this.#sql<{ at: Date | null }[]>`
+				SELECT planner_reset_at AS at FROM channels WHERE id = ${id}
+			`;
+			return row?.at ?? undefined;
+		});
 	}
 
 	#setChannelArchived(
