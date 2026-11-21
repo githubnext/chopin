@@ -1,14 +1,16 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { MICROVMS } from "../../testing/microvms";
 import { AGENT_VERSION, LINK_CLOSE } from "@chopin/agent-link";
 import {
 	CONNECTOR_PLANNER_COMMAND_HEADER,
 	CONNECTOR_PROTOCOL_HEADER,
+	CONNECTOR_UPDATE_REQUIRED,
 	CONNECTOR_VERSION_HEADER,
 } from "@chopin/protocol/connector";
 
 import { Machines } from "../../auth/machines";
 import {
+	CONNECTOR_PROTOCOLS,
 	offlineMessage,
 	PLANNER_IDLE_MS,
 	PLANNER_PATIENCE_MS,
@@ -35,6 +37,13 @@ import { MachinePlanners } from "./machine-planners";
 
 import type { RepositoryPage } from "../../github/client";
 import type { RemotePlanner } from "./registry";
+
+/** What a current connector, whose agents run in microVMs, sends with each request. */
+const CONNECTOR = {
+	[CONNECTOR_VERSION_HEADER]: "dev",
+	[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOLS.max),
+	...MICROVMS,
+};
 
 let cleanups: Array<() => unknown> = [];
 afterEach(async () => {
@@ -150,10 +159,9 @@ async function dispatchServer(
 		userId: string,
 		label: string,
 		connector: {
-			protocol?: number;
 			plannerCommand?: boolean;
 			shared?: boolean;
-			/** Connect with no checkout, as a protocol 5 connector does where it clones what it needs. */
+			/** Connect with no checkout, as a connector does where it clones what it needs. */
 			bare?: boolean;
 			/** The chopin release it says it runs. */
 			version?: string;
@@ -172,7 +180,6 @@ async function dispatchServer(
 				refreshExpiresIn: 15_897_600,
 			},
 		});
-		let protocol = connector.protocol ?? (connector.bare ? 5 : 4);
 		/** `chopin connect` on the machine: a connection of its own, as after a restart. */
 		async function connect() {
 			let opened = await send("/api/connector/connections", {
@@ -181,9 +188,8 @@ async function dispatchServer(
 					? { label: "score", checkouts: [] }
 					: { repository: "octo-org/score", commit: "a".repeat(40), label: "score" },
 				headers: {
+					...CONNECTOR,
 					[CONNECTOR_VERSION_HEADER]: connector.version ?? "dev",
-					[CONNECTOR_PROTOCOL_HEADER]: String(protocol),
-					...MICROVMS,
 					...(connector.plannerCommand ?? true ? { [CONNECTOR_PLANNER_COMMAND_HEADER]: "1" } : {}),
 				},
 			});
@@ -199,10 +205,7 @@ async function dispatchServer(
 		async function poll(planners?: string[], waitMs = 300) {
 			let response = await send("/connector/mcp", {
 				bearer: connection,
-				headers: {
-					[CONNECTOR_VERSION_HEADER]: "dev",
-					[CONNECTOR_PROTOCOL_HEADER]: String(protocol),
-				},
+				headers: CONNECTOR,
 				body: {
 					jsonrpc: "2.0",
 					id: 1,
@@ -221,10 +224,7 @@ async function dispatchServer(
 		async function credential() {
 			let issued = await send("/api/connector/planner", {
 				bearer: token,
-				headers: {
-					[CONNECTOR_VERSION_HEADER]: "dev",
-					[CONNECTOR_PROTOCOL_HEADER]: String(protocol),
-				},
+				headers: CONNECTOR,
 				body: { document: channel.id },
 			});
 			expect(issued.status).toBe(200);
@@ -240,20 +240,14 @@ async function dispatchServer(
 		async function report(body: unknown) {
 			return send("/api/connector/planner/failure", {
 				bearer: token,
-				headers: {
-					[CONNECTOR_VERSION_HEADER]: "dev",
-					[CONNECTOR_PROTOCOL_HEADER]: String(protocol),
-				},
+				headers: CONNECTOR,
 				body,
 			});
 		}
 		let disconnect = () =>
 			send("/connector/mcp", {
 				bearer: connection,
-				headers: {
-					[CONNECTOR_VERSION_HEADER]: "dev",
-					[CONNECTOR_PROTOCOL_HEADER]: String(protocol),
-				},
+				headers: CONNECTOR,
 				body: {
 					jsonrpc: "2.0",
 					id: 2,
@@ -459,7 +453,7 @@ describe("a Planner whose sessions run on people's AI accounts in Chopin", () =>
 			let laptop = await machine("member", "U_member", "laptop");
 			let issued = await send("/api/connector/planner", {
 				bearer: laptop.token,
-				headers: { [CONNECTOR_VERSION_HEADER]: "dev", [CONNECTOR_PROTOCOL_HEADER]: "5" },
+				headers: CONNECTOR,
 				body: { document: channel.id },
 			});
 			expect(issued.status).toBe(200);
@@ -567,7 +561,7 @@ describe("a Planner backend that keeps failing to start", () => {
 		// Nor anyone who is not a paired machine.
 		let stranger = await send("/api/connector/planner/failure", {
 			bearer: `chopin_m_${"x".repeat(43)}`,
-			headers: { [CONNECTOR_VERSION_HEADER]: "dev", [CONNECTOR_PROTOCOL_HEADER]: "4" },
+			headers: CONNECTOR,
 			body: failing(channel.id, 2),
 		});
 		expect(stranger.status).toBe(401);
@@ -1080,9 +1074,8 @@ describe("choosing a machine for a document", () => {
 			createdBy: "U_member",
 			now: new Date(),
 		});
-		// Both connected with a checkout of octo-org/score only.
-		let laptop = await machine("member", "U_member", "laptop", { protocol: 5 });
-		let older = await machine("member", "U_member", "older", { protocol: 4 });
+		// Connected with a checkout of octo-org/score only.
+		let laptop = await machine("member", "U_member", "laptop");
 		let chooseNotes = async (machineId: string) => {
 			let response = await send(`/api/documents/${notes.id}/machine`, {
 				login: "member",
@@ -1102,10 +1095,7 @@ describe("choosing a machine for a document", () => {
 		// Its credential says which repository's checkout the Planner runs in.
 		let issued = await send("/api/connector/planner", {
 			bearer: laptop.token,
-			headers: {
-				[CONNECTOR_VERSION_HEADER]: "dev",
-				[CONNECTOR_PROTOCOL_HEADER]: "5",
-			},
+			headers: CONNECTOR,
 			body: { document: notes.id },
 		});
 		expect(issued.status).toBe(200);
@@ -1113,31 +1103,56 @@ describe("choosing a machine for a document", () => {
 			id: notes.id,
 			repository: "octo-org/notes",
 		});
-		// An older connector connected for octo-org/score is never asked for octo-org/notes.
-		expect((await chooseNotes(older.id)).planner)
-			.toEqual({ state: "none", login: null, machine: null });
-		expect(await older.poll([])).toEqual({ waiting: true });
 	});
 
-	it("never asks a machine without a Planner command or an older connector", async () => {
+	it("never asks a machine without a Planner command", async () => {
 		let { machine, choose } = await dispatchServer();
 		let plain = await machine("member", "U_member", "plain", { plannerCommand: false });
-		let older = await machine("member", "U_member", "older", { protocol: 3 });
 		let chosen = await choose("member", plain.id);
 		expect(chosen.planner).toEqual({ state: "none", login: null, machine: null });
 		expect(
 			chosen.machines.map((item: { label: string; runsPlanners: boolean }) => [
 				item.label,
 				item.runsPlanners,
-			]).sort(),
-		).toEqual([["older", false], ["plain", false]]);
+			]),
+		).toEqual([["plain", false]]);
 		expect(await plain.poll([])).toEqual({ waiting: true });
-		await choose("member", older.id);
-		// An older connector's poll for work never carries the message.
-		expect(await older.poll()).toEqual({ waiting: true });
 	});
 
-	it("stops the Planner when the chosen machine disconnects, is revoked, or loses push access", async () => {
+	it("issues no Planner credential to a connector that would run its backend outside a microVM", async () => {
+		let dispatch = await dispatchServer();
+		let { send, channel } = dispatch;
+		let laptop = await dispatch.machine("member", "U_member", "laptop");
+		let issue = spyOn(dispatch.planners, "issue");
+		let ask = (headers: Record<string, string>) =>
+			send("/api/connector/planner", {
+				bearer: laptop.token,
+				headers,
+				body: { document: channel.id },
+			});
+		// chopin 0.0.30, from before microVMs, is told to update, whatever it says of its agents.
+		let older = await ask({
+			...CONNECTOR,
+			[CONNECTOR_VERSION_HEADER]: "0.0.30",
+			[CONNECTOR_PROTOCOL_HEADER]: "7",
+		});
+		expect(older.status).toBe(409);
+		let told = await older.json();
+		expect(told.error).toBe(CONNECTOR_UPDATE_REQUIRED);
+		expect(told.message).toStartWith("chopin 0.0.30 runs agents outside a microVM");
+		// A current one that doesn't say its agents run in microVMs is refused.
+		let unsaid = await ask({
+			[CONNECTOR_VERSION_HEADER]: "dev",
+			[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOLS.max),
+		});
+		expect(unsaid.status).toBe(409);
+		expect((await unsaid.json()).error).toBe("microvm-required");
+		expect(issue).not.toHaveBeenCalled();
+		expect((await ask(CONNECTOR)).status).toBe(200);
+		expect(issue).toHaveBeenCalledTimes(1);
+	});
+
+	it("stops the Planner when the chosen machine disconnects or is revoked, and gives it no credential once its owner can't push", async () => {
 		let { machine, choose, choice, channel, server, send, auth } = await dispatchServer();
 		let laptop = await machine("member", "U_member", "laptop");
 		await choose("member", laptop.id);
@@ -1164,8 +1179,6 @@ describe("choosing a machine for a document", () => {
 		let tower = await machine("member", "U_member", "tower");
 		await choose("member", tower.id);
 		expect((await tower.poll([])).planners).toHaveLength(1);
-		link = await tower.backend();
-		await link.next("attached");
 		let access = auth.github.repositoryAccess;
 		auth.github.repositoryAccess = async (token, owner, name) => {
 			let repository = await access(token, owner, name);
@@ -1173,9 +1186,14 @@ describe("choosing a machine for a document", () => {
 				? { ...repository, permissions: { ...repository.permissions, push: false } }
 				: repository;
 		};
-		expect((await tower.poll([channel.id])).error).toStartWith("repository-forbidden");
-		expect(await link.next("refused")).toMatchObject({ code: "access-revoked" });
-		expect(server.attachments.attached(channel.id)).toBe(false);
+		// Its backend's next credential, which it asks for before it attaches or as one runs out.
+		let renewed = await send("/api/connector/planner", {
+			bearer: tower.token,
+			headers: CONNECTOR,
+			body: { document: channel.id },
+		});
+		expect(renewed.status).toBe(403);
+		expect(await renewed.json()).toEqual({ error: "repository-forbidden" });
 	});
 });
 
@@ -1602,8 +1620,8 @@ describe("a teammate's machine shared with teammates", () => {
 
 	it("passes over a shared machine whose owner can't push to the repository", async () => {
 		let { machine, share, visit, choice } = await dispatchServer();
-		// A protocol 5 machine connects for any repository, whatever its owner can push to.
-		let box = await machine("viewer", "U_viewer", "viewer-box", { protocol: 5 });
+		// A machine connects for any repository, whatever its owner can push to.
+		let box = await machine("viewer", "U_viewer", "viewer-box");
 		expect(await share("viewer", box.id)).toBe(200);
 		await visit();
 		expect(await box.poll([])).toEqual({ waiting: true });
@@ -3096,7 +3114,7 @@ describe("a machine's GitHub token", () => {
 		let ask = (bearer: string, repository: string) =>
 			send("/api/connector/github-token", {
 				bearer,
-				headers: { [CONNECTOR_VERSION_HEADER]: "dev", [CONNECTOR_PROTOCOL_HEADER]: "4" },
+				headers: CONNECTOR,
 				body: { repository },
 			});
 		let member = await machine("member", "U_member", "box");

@@ -84,30 +84,32 @@ export function shellPlace(shell: SetupShell) {
 }
 
 /**
- * What the agent needs on the machine, with its install and sign-in commands on request. Where
- * npm's global folder belongs to root, `npm install -g` stops with EACCES; the fix that needs no
- * sudo is a global folder of the person's own.
- */
-/**
  * What a machine of `system` needs to run Chopin's work, which runs each agent in a microVM of its
- * own: a Mac can't, and Linux or Windows on x86_64 needs its hypervisor.
+ * own: a Mac can't, and Linux or Windows on x86_64 needs its hypervisor. chopin installs a built-in
+ * agent there itself; a setup agent's own steps say how it is installed.
  */
-function platformNeeds(system: SetupSystem, agent: string): string {
+function platformNeeds(system: SetupSystem, agent: string, installs: boolean): string {
 	return system === "macos"
 		? "A Mac can't run Chopin's work: chopin runs each agent in a microVM of its own, which "
 			+ "needs Linux or Windows on x86_64 with hardware virtualization."
 		: `Needs ${
 			system === "windows" ? "the Windows Hypervisor Platform turned on" : "KVM"
-		}, on x86_64: chopin runs ${agent} in a microVM of its own and installs it there.`;
+		}, on x86_64: chopin runs ${agent} in a microVM of its own${
+			installs ? " and installs it there" : ""
+		}.`;
 }
 
+/**
+ * What the machine needs to run the agent, first; for a setup agent, its install steps on
+ * request.
+ */
 export function Needs({ agent, system }: { agent: AgentOption; system: SetupSystem }) {
 	let install = useUnfold();
 	let shell = shellFor(system);
 	if (isSetupAgent(agent)) {
 		return (
 			<div className="machines-needs">
-				<p>{platformNeeds(system, agent.name)}</p>
+				<p>{platformNeeds(system, agent.name, false)}</p>
 				<p>
 					Install {agent.name} first.{" "}
 					<UnfoldToggle className="machines-needs-toggle" unfold={install}>
@@ -129,7 +131,7 @@ export function Needs({ agent, system }: { agent: AgentOption; system: SetupSyst
 	// chopin installs the agent in each of its microVMs, so the machine needs only to run them.
 	return (
 		<div className="machines-needs">
-			<p>{platformNeeds(system, agent.name)}</p>
+			<p>{platformNeeds(system, agent.name, true)}</p>
 		</div>
 	);
 }

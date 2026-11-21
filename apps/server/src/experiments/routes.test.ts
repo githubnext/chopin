@@ -251,11 +251,7 @@ async function setup(
 	 * Register a checkout with a paired machine's token, as `chopin connect` does, speaking
 	 * `protocol`: 5 and up connects the machine for any repository, an older one that checkout's.
 	 */
-	async function open(
-		machineToken: string,
-		repository = "org/repo",
-		protocol = CONNECTOR_PROTOCOLS.max,
-	) {
+	async function open(machineToken: string, repository = "org/repo") {
 		return request(
 			"/api/connector/connections",
 			{
@@ -265,14 +261,12 @@ async function setup(
 			},
 			undefined,
 			machineToken,
-			{ ...CURRENT, [CONNECTOR_PROTOCOL_HEADER]: String(protocol) },
 		);
 	}
 	async function pair(
 		cookie: string,
 		repository = "org/repo",
 		user = cookie === bob.cookie ? "bob" : "alice",
-		protocol = CONNECTOR_PROTOCOLS.max,
 	) {
 		let pending = await (await request("/api/connector/pairings", {
 			repository,
@@ -284,7 +278,7 @@ async function setup(
 		let claimed = await (await request(`/api/connector/pairings/${pending.id}/claim`, {
 			secret: pending.secret,
 		})).json();
-		let opened = await (await open(claimed.token, repository, protocol)).json();
+		let opened = await (await open(claimed.token, repository)).json();
 		return { ...pending, machineToken: claimed.token as string, ...opened };
 	}
 	return {
@@ -468,47 +462,6 @@ test("a machine runs work in a repository it has no checkout of, from its defaul
 	});
 });
 
-test("an older chopin's connection serves every document in its checkout's repository only", async () => {
-	let { alice, bob, document, documentId, request, tool, pair } = await setup();
-	let second = await document();
-	let elsewhere = await document("other");
-	let connection = await pair(alice.cookie, "org/repo", "alice", 4);
-	for (let target of [documentId, second]) {
-		let id = crypto.randomUUID();
-		await request(`/api/documents/${target}/experiments`, { id, brief: "Measure" }, alice.cookie);
-		let run = await request(`/api/documents/${target}/experiments/${id}/run`, {}, alice.cookie);
-		expect((await run.json()).connectionId).toBe(connection.connection.id);
-		expect(text(await tool(connection.token, "wait_for_experiment", {}))).toEqual({ id });
-		let claim = text(await tool(connection.token, "claim_experiment", { id }));
-		expect(claim.input.documentId).toBe(target);
-		let read = text(await tool(claim.runToken, "read_experiment", {}));
-		expect(read.input.documentId).toBe(target);
-		await tool(connection.token, "fail_experiment", {
-			id,
-			generation: claim.generation,
-			error: "Stopped",
-		});
-	}
-	let id = crypto.randomUUID();
-	await request(`/api/documents/${elsewhere}/experiments`, { id, brief: "Measure" }, alice.cookie);
-	let refused = await request(
-		`/api/documents/${elsewhere}/experiments/${id}/run`,
-		{},
-		alice.cookie,
-	);
-	expect(refused.status).toBe(409);
-	expect((await refused.json()).error).toBe("no-workspace");
-	let foreign = crypto.randomUUID();
-	await request(`/api/documents/${second}/experiments`, { id: foreign, brief: "Bob" }, bob.cookie);
-	expect(
-		(await request(`/api/documents/${second}/experiments/${foreign}/run`, {}, bob.cookie))
-			.status,
-	).toBe(409);
-	let claimed = await tool(connection.token, "claim_experiment", { id: foreign });
-	expect(claimed.result.isError).toBe(true);
-	expect(claimed.result.content[0].text).toStartWith("connection-forbidden");
-});
-
 test("a failure report retried after its answer was lost lands once, and another is still refused", async () => {
 	let { alice, documentId, request, tool, pair } = await setup();
 	let connection = await pair(alice.cookie);
@@ -619,7 +572,6 @@ test("a failure report delayed past a retry leaves the next attempt running", as
 test("a machine claims work in any repository its owner can push to, and no other", async () => {
 	let { alice, document, tool, pair, runtime } = await setup();
 	let machine = await pair(alice.cookie);
-	let older = await pair(alice.cookie, "org/repo", "alice", 4);
 	let authorize = async (target: string, repository: string, connectionId: string) => {
 		let id = crypto.randomUUID();
 		await runtime.service.create(target, "alice", "Elsewhere", id);
@@ -644,16 +596,11 @@ test("a machine claims work in any repository its owner can push to, and no othe
 	expect(error(await tool(machine.token, "claim_experiment", { id: readonly })))
 		.toStartWith("repository-forbidden");
 	await runtime.service.stop(readonly, "cancelled");
-	// An older chopin's connection serves only its checkout's repository.
-	let foreign = await authorize(await document("third"), "third", older.connection.id);
-	expect(error(await tool(older.token, "claim_experiment", { id: foreign })))
-		.toStartWith("repository-forbidden");
 });
 
-test("a claim refuses a document in another repository and interrupts archived or locked ones", async () => {
+test("a claim interrupts the work of an archived or locked document", async () => {
 	let { alice, document, documentId, request, tool, pair, lock, runtime, storage } = await setup();
-	// An older chopin's connection, which serves only its checkout's repository.
-	let connection = await pair(alice.cookie, "org/repo", "alice", 4);
+	let connection = await pair(alice.cookie);
 	async function queued(target: string) {
 		let id = crypto.randomUUID();
 		await request(`/api/documents/${target}/experiments`, { id, brief: "Measure" }, alice.cookie);
@@ -663,23 +610,6 @@ test("a claim refuses a document in another repository and interrupts archived o
 		).toBe(200);
 		return id;
 	}
-
-	// A record bound to this connection in another repository is never claimable through it.
-	let elsewhere = await document("other");
-	let foreign = crypto.randomUUID();
-	await runtime.service.create(elsewhere, "alice", "Foreign", foreign);
-	await runtime.service.authorize(foreign, connection.connection.id, {
-		id: foreign,
-		documentId: elsewhere,
-		requester: "alice",
-		authorizer: "alice",
-		brief: "Foreign",
-		source: { repositoryId: "other", repository: "org/other", commit: "a".repeat(40) },
-		context: "Document revision 0",
-	});
-	expect(error(await tool(connection.token, "claim_experiment", { id: foreign })))
-		.toStartWith("repository-forbidden");
-	await runtime.service.stop(foreign, "cancelled");
 
 	let locked = await queued(documentId);
 	lock.locked = true;
@@ -959,11 +889,13 @@ test("only a connector whose agents run in microVMs connects, and one that can't
 		return (await router.handle(opened, new URL(opened.url)))!;
 	};
 	let current = { [CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOLS.max) };
-	// A connector from before microVMs ran agents in a process sandbox: it is told to update.
+	// A connector from before microVMs ran agents in a process sandbox: it is told to update,
+	// whatever it says of them.
 	for (
 		let older of [
 			{ [CONNECTOR_PROTOCOL_HEADER]: "7", [CONNECTOR_SANDBOX_HEADER]: "bubblewrap" },
 			{ [CONNECTOR_PROTOCOL_HEADER]: "7" },
+			{ [CONNECTOR_PROTOCOL_HEADER]: "7", ...MICROVMS },
 		] as Array<Record<string, string>>
 	) {
 		let refused = await connect(older);
@@ -1708,7 +1640,7 @@ test("a connector outside the supported protocol range is refused with the comma
 	}
 
 	// In range: pairing, claiming and connector calls all go through.
-	let current = { ...headers("0.2.0", 6), ...MICROVMS };
+	let current = { ...headers("0.2.0", max), ...MICROVMS };
 	let created = await request("/api/connector/pairings", source, undefined, undefined, current);
 	expect(created.status).toBe(200);
 	let pending = await created.json();
@@ -1841,19 +1773,16 @@ test("a person chooses which of their machines runs a document's work, and back 
 		"build-box",
 	]);
 	expect(shown.machines.every((item: { connected: boolean }) => item.connected)).toBe(true);
-	// Only the caller's own machines, every one whatever repository its checkouts are of. One an
-	// older chopin connected for another repository's checkout can't take this document's work.
+	// Only the caller's own machines, every one whatever repository its checkouts are of.
 	let bobs = await pair(bob.cookie);
 	expect((await request(path, { machine: bobs.machine }, alice.cookie)).status).toBe(404);
 	let elsewhere = await pair(alice.cookie, "org/other");
-	let older = await pair(alice.cookie, "org/other", "alice", 4);
 	let everyone = await (await request(path, undefined, alice.cookie)).json();
 	expect(
 		everyone.machines.map((item: { id: string; connected: boolean }) => [item.id, item.connected]),
-	).toEqual(expect.arrayContaining([[elsewhere.machine, true], [older.machine, false]]));
+	).toEqual(expect.arrayContaining([[elsewhere.machine, true]]));
 	expect((await request(path, { machine: elsewhere.machine }, alice.cookie)).status).toBe(200);
 	await tool(elsewhere.token, "disconnect_workspace", {});
-	await tool(older.token, "disconnect_workspace", {});
 	expect((await request(path, { machine: buildBox.machine }, alice.cookie)).status).toBe(200);
 	let chosen = await (await request(path, undefined, alice.cookie)).json();
 	expect(chosen.choice).toBe(buildBox.machine);
@@ -2018,11 +1947,7 @@ test("Automatic prefers the person's favorite machine where it serves the docume
 	expect((await (await request(path, undefined, alice.cookie)).json()).automatic)
 		.toMatchObject({ id: laptop.machine, favorite: false });
 
-	// A favorite an older chopin connected for another repository's checkout is passed over here;
-	// one that serves any repository takes the document's work, whatever its checkouts.
-	let older = await pair(alice.cookie, "org/other", "alice", 4);
-	expect((await favor(older.machine, true)).status).toBe(200);
-	expect(await ranOn(await run())).toBe(laptop.connection.id);
+	// A favorite takes the document's work, whatever repository its checkouts are of.
 	let elsewhere = await pair(alice.cookie, "org/other");
 	expect((await favor(elsewhere.machine, true)).status).toBe(200);
 	expect(await ranOn(await run())).toBe(elsewhere.connection.id);
@@ -2689,4 +2614,130 @@ test("without MACHINE_STORE_URL a machine is told there is no database login", a
 	expect(asked.status).toBe(404);
 	let listed = await (await request("/api/connector/machines", undefined, alice.cookie)).json();
 	expect(listed.machines[0].store).toBeNull();
+});
+
+/** chopin 0.0.30, from before microVMs, saying of its agents what a current one says. */
+const OLDER = {
+	[CONNECTOR_VERSION_HEADER]: "0.0.30",
+	[CONNECTOR_PROTOCOL_HEADER]: "7",
+	...MICROVMS,
+};
+/** A current connector that doesn't say where its agents run. */
+const UNSAID = {
+	[CONNECTOR_VERSION_HEADER]: "dev",
+	[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOLS.max),
+};
+
+/** `ask` from an older connector is told to update, and from one that doesn't say, refused. */
+async function refusedOutsideMicrovms(ask: (headers: Record<string, string>) => Promise<Response>) {
+	let older = await ask(OLDER);
+	expect(older.status).toBe(409);
+	let told = await older.json();
+	expect(told).toEqual({
+		error: CONNECTOR_UPDATE_REQUIRED,
+		message: "chopin 0.0.30 runs agents outside a microVM, and https://chopin.test runs each "
+			+ "agent in its own NVX microVM. Run `chopin update 0.1.3`, then connect again.",
+		protocol: CONNECTOR_PROTOCOLS,
+		version: "0.1.3",
+	});
+	let unsaid = await ask(UNSAID);
+	expect(unsaid.status).toBe(409);
+	expect(await unsaid.json()).toEqual({
+		error: "microvm-required",
+		message: "This machine can't run Chopin's work: Chopin runs each agent in its own microVM. "
+			+ "Its connector didn't say it runs them.",
+	});
+}
+
+test("a connector that would run agents outside a microVM gets no GitHub token", async () => {
+	let { app, minted } = fakeApp();
+	let { alice, documentId, request, tool, pair } = await setup(undefined, { app });
+	let connection = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	await request(`/api/documents/${documentId}/experiments`, { id, brief: "Measure" }, alice.cookie);
+	await request(`/api/documents/${documentId}/experiments/${id}/run`, {}, alice.cookie);
+	text(await tool(connection.token, "claim_experiment", { id }));
+	let ask = (body: unknown) => (headers: Record<string, string>) =>
+		request("/api/connector/github-token", body, undefined, connection.machineToken, headers);
+	await refusedOutsideMicrovms(ask({ repository: "org/repo", purpose: "run", run: id }));
+	// Nor its owner's own token, which a connector naming no purpose is given.
+	await refusedOutsideMicrovms(ask({ repository: "org/repo" }));
+	expect(minted).toEqual([]);
+	expect((await ask({ repository: "org/repo", purpose: "run", run: id })(CURRENT)).status)
+		.toBe(200);
+	expect(minted).toHaveLength(1);
+});
+
+test("a connector that would run agents outside a microVM gets no MCP token", async () => {
+	let { alice, documentId, request, pair, storage } = await setup();
+	let connection = await pair(alice.cookie);
+	let credential = "chopin_p_" + "c".repeat(43);
+	await storage.plannerCredentials.put({
+		digest: credentialDigest(credential),
+		machineId: connection.machine,
+		channelId: documentId,
+		expiresAt: new Date(Date.now() + 900_000),
+	});
+	let ask = (headers: Record<string, string>) =>
+		request(
+			"/api/connector/mcp-token",
+			{ planner: credential },
+			undefined,
+			connection.machineToken,
+			headers,
+		);
+	await refusedOutsideMicrovms(ask);
+	expect((await (await ask(CURRENT)).json()).token).toStartWith("chopin_mcp_");
+});
+
+test("a connector that would run agents outside a microVM is handed no AI launch", async () => {
+	let launched: AiLaunch[] = [];
+	let credentials = {
+		async launch(input: AiLaunch) {
+			launched.push(input);
+			return { launchId: "launch-1", launchToken: "chopin_launch_1", grants: [], withheld: [] };
+		},
+	} as unknown as AiCredentials;
+	let builds = new Map<string, { repository: string; starter: string; machineId?: string }>();
+	let { alice, documentId, request, pair, runtime } = await setup(undefined, {
+		ai: () => credentials,
+		implementations: () =>
+			({
+				build: async (document: string, id: string) => builds.get(`${document} ${id}`),
+			}) as unknown as ImplementationConnector,
+	});
+	let connection = await pair(alice.cookie);
+	let id = crypto.randomUUID();
+	builds.set(`${documentId} ${id}`, {
+		repository: "org/repo",
+		starter: "alice",
+		machineId: connection.machine,
+	});
+	let run = runtime.connections.runToken(connection.id, documentId, id, 1, "implementation");
+	let ask = (headers: Record<string, string>) =>
+		request("/api/connector/ai-launch", { run }, undefined, connection.machineToken, headers);
+	await refusedOutsideMicrovms(ask);
+	expect(launched).toEqual([]);
+	await ask(CURRENT);
+	expect(launched).toHaveLength(1);
+});
+
+test("a connector that would run agents outside a microVM is handed no database login", async () => {
+	let { alice, pair, request, server } = await storeSetup();
+	let laptop = await pair(alice.cookie);
+	let ask = (headers: Record<string, string>) =>
+		request("/api/connector/machine-store", {}, undefined, laptop.machineToken, headers);
+	await refusedOutsideMicrovms(ask);
+	expect(server.passwords.size).toBe(0);
+	// Saying why its login couldn't be set up hands it nothing, so it may.
+	let problem = await request(
+		"/api/connector/machine-store",
+		{ problem: "no room" },
+		undefined,
+		laptop.machineToken,
+		UNSAID,
+	);
+	expect(problem.status).toBe(200);
+	expect((await ask(CURRENT)).status).toBe(200);
+	expect(server.passwords.size).toBe(1);
 });

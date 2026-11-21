@@ -1,9 +1,10 @@
 import { afterAll, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { endOrphans } from "./sandbox";
+import { SandboxRefused, type VmSpec } from "./nvx";
+import { endOrphans, startVm } from "./sandbox";
 import { processStart } from "./workspace";
 
 let scratch = mkdtempSync(join(tmpdir(), "chopin-orphans-"));
@@ -77,3 +78,32 @@ test.skipIf(process.platform !== "linux")(
 		}
 	},
 );
+
+test("a launch that never starts leaves nothing of its environment, its tokens, behind", () => {
+	let base = mkdtempSync(join(scratch, "state-"));
+	let spec: VmSpec = {
+		shares: [],
+		proxyPort: 1,
+		environment: { CHOPIN_TOKEN: "secret" },
+		command: ["agent"],
+		cwd: "/work",
+		memoryMib: 256,
+		processors: 1,
+		hostname: "launch",
+	};
+	let artifacts = {
+		root: base,
+		nvx: join(base, "nvx.exe"),
+		layer: {
+			path: join(base, "ubuntu-distro.erofs"),
+			uuid: "0".repeat(8) + "-0000-0000-0000-" + "0".repeat(12),
+		},
+	};
+	// As on Windows when its kill-on-close job object can't be made.
+	let refuse = () => {
+		throw new SandboxRefused("Not run: Windows couldn't make the job that ends this microVM.");
+	};
+	expect(() => startVm(spec, { artifacts, hypervisor: "whp" }, base, "pipe", refuse))
+		.toThrow(SandboxRefused);
+	expect(readdirSync(join(base, "nvx", "launches"))).toEqual([]);
+});

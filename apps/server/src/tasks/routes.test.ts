@@ -305,7 +305,6 @@ async function paired(
 	context: Awaited<ReturnType<typeof setup>>,
 	cookie?: string,
 	autoRun?: boolean,
-	protocol?: number,
 ) {
 	let pairing =
 		await (await context.call("/api/connector/pairings", { ...checkout, label: "Laptop" })).json();
@@ -320,7 +319,7 @@ async function paired(
 		secret: pairing.secret,
 	})).json();
 	// `chopin connect` registers the checkout with the machine token.
-	let connection = await reconnect(context, machine.token, cookie, protocol);
+	let connection = await reconnect(context, machine.token, cookie);
 	return { ...connection, machineToken: machine.token as string };
 }
 /** The paired machine registers again with its machine token, as the connector does after a drop. */
@@ -328,7 +327,6 @@ async function reconnect(
 	context: Awaited<ReturnType<typeof setup>>,
 	machine: string,
 	cookie?: string,
-	protocol?: number,
 ) {
 	return (await context.call(
 		"/api/connector/connections",
@@ -336,7 +334,6 @@ async function reconnect(
 		machine,
 		undefined,
 		cookie,
-		protocol,
 	)).json();
 }
 async function tool(
@@ -1197,9 +1194,9 @@ function clockFor(context: Awaited<ReturnType<typeof setup>>, start = Date.now()
 	};
 }
 
-/** A build claimed and running on a newly paired machine whose connector speaks `protocol`. */
-async function running(context: Awaited<ReturnType<typeof setup>>, protocol?: number) {
-	let connection = await paired(context, undefined, undefined, protocol);
+/** A build claimed and running on a newly paired machine. */
+async function running(context: Awaited<ReturnType<typeof setup>>) {
+	let connection = await paired(context);
 	let built = await (await context.call(context.path, {
 		planRevision: 0,
 		graphVersion: 1,
@@ -1210,41 +1207,14 @@ async function running(context: Awaited<ReturnType<typeof setup>>, protocol?: nu
 		connection.token,
 		"claim_implementation_build",
 		{ id: built.id },
-		protocol,
 	);
 	await tool(context, connection.token, "report_implementation_build", {
 		id: built.id,
 		state: "running",
 		session: "acp-session",
-	}, protocol);
+	});
 	return { connection, built, claim };
 }
-
-test("an older connector's build still ends at a restart, saying so", async () => {
-	let context = await setup();
-	try {
-		// Protocol 5 names no document on its heartbeat, so Chopin cannot find the build again.
-		let { connection, built } = await running(context, 5);
-		context.restart();
-		// Its connection is forgotten, so the connector registers the machine again.
-		let forgotten = await tool(context, connection.token, "renew_implementation_build", {
-			id: built.id,
-		}, 5);
-		expect(forgotten.error).toBe("connection-unavailable");
-		let second = await reconnect(context, connection.machineToken, undefined, 5);
-		let ended = "Chopin restarted, so this build ended.";
-		expect(
-			(await tool(context, second.token, "renew_implementation_build", { id: built.id }, 5))
-				.content[0].text,
-		).toBe(`server-restarted: ${ended}`);
-		// Opening the document tracks its build again, and the sweep ends it with the same reason.
-		await context.call(context.path);
-		await context.implementations.sweep();
-		expect(context.plan.builds.at(-1)).toMatchObject({ state: "failed", error: ended });
-	} finally {
-		await Plan.close(context.plan);
-	}
-});
 
 test("a build carries on across a server restart once its machine comes back", async () => {
 	let context = await setup();
@@ -2897,11 +2867,9 @@ async function shared(
 	own = false,
 	/** Its owner also let Chopin start work on it by itself. */
 	autoRun = false,
-	/** The connector protocol the shared machine speaks. */
-	protocol?: number,
 ) {
 	let mine = own ? await paired(context) : undefined;
-	let theirs = await paired(context, context.otherCookie, autoRun, protocol);
+	let theirs = await paired(context, context.otherCookie, autoRun);
 	let owner = (url: string, value: unknown) =>
 		context.call(url, value, undefined, undefined, context.otherCookie);
 	await owner(`/api/connector/machines/${theirs.machine}/label`, { label: "desk" });
@@ -2918,25 +2886,6 @@ async function shared(
 	return { mine, theirs, choose, owner };
 }
 let review = { planRevision: 0, graphVersion: 1, graphRevision: 1 };
-
-test("an older connector's build on a shared machine says it pushes with the owner's account", async () => {
-	let context = await setup();
-	try {
-		let { theirs } = await shared(context, false, false, 6);
-		let built = await (await context.call(context.path, review)).json();
-		let claim = await tool(context, theirs.token, "claim_implementation_build", { id: built.id });
-		await tool(context, theirs.token, "report_implementation_build", {
-			id: built.id,
-			state: "running",
-			session: "acp-session",
-		});
-		let read = await tool(context, claim.runToken, "read_implementation");
-		expect(read.requestedBy.pullRequestNote).toContain("Requested by test in https://chopin.test/");
-		expect(read.requestedBy.pullRequestNote).toContain("other's shared machine");
-	} finally {
-		await Plan.close(context.plan);
-	}
-});
 
 test("Build goes to the teammate's shared machine the person chose, and runs there on their behalf", async () => {
 	let context = await setup();

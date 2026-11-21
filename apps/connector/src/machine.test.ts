@@ -12,10 +12,16 @@ import { updateConfig } from "./config";
 import {
 	classifyConnectorError,
 	connectorMessage,
+	machineAiLaunch,
 	machineFile,
+	machineGitHubToken,
+	machineMcpToken,
+	machineStoreLogin,
 	pair,
 	plannerAiManaged,
+	plannerCredential,
 	register,
+	runAgentsIn,
 } from "./machine";
 import { createOutput } from "./output";
 import { ConnectorError } from "./mcp";
@@ -888,4 +894,39 @@ test("a connector starts its spare Planners on Chopin's AI accounts only where C
 	}
 	// One that can't be asked is taken not to: each Planner credential says so again.
 	expect(await plannerAiManaged("http://127.0.0.1:1")).toBe(false);
+});
+
+test("while its agents run in microVMs here, every request for a credential or work says so", async () => {
+	let seen = new Map<string, Record<string, string>>();
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch(request) {
+			seen.set(new URL(request.url).pathname, sandboxHeaders(request.headers));
+			return Response.json({});
+		},
+	});
+	cleanup.push(() => server.stop(true));
+	let url = `http://127.0.0.1:${server.port}`;
+	runAgentsIn("kvm");
+	cleanup.push(() => runAgentsIn(undefined));
+	let asks = [
+		() => plannerCredential(url, MACHINE_TOKEN, "document"),
+		() => machineGitHubToken(url, MACHINE_TOKEN, { repository: "octo/repo", purpose: "run" }),
+		() => machineMcpToken(url, MACHINE_TOKEN, { run: "run" }),
+		() => machineAiLaunch(url, MACHINE_TOKEN, "run"),
+		() => machineStoreLogin(url, MACHINE_TOKEN),
+		() => register(url, MACHINE_TOKEN, { label: "box", checkouts: [] }),
+	];
+	// Chopin's empty answers are refused here; only what was asked matters.
+	for (let ask of asks) await ask().catch(() => {});
+	let said = { "chopin-connector-sandbox": "nvx", "chopin-connector-sandbox-hypervisor": "kvm" };
+	expect(Object.fromEntries(seen)).toEqual({
+		"/api/connector/planner": said,
+		"/api/connector/github-token": said,
+		"/api/connector/mcp-token": said,
+		"/api/connector/ai-launch": said,
+		"/api/connector/machine-store": said,
+		"/api/connector/connections": said,
+	});
 });
