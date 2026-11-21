@@ -17,6 +17,8 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { builtInRecipe } from "./images";
 import { artifactsAt } from "./nvx";
+import { AgentStore } from "./machine-store";
+import { plannerEnvironment } from "./planner";
 import { createSandbox, type Launch, type Sandbox } from "./sandbox";
 
 /**
@@ -203,6 +205,37 @@ describe.skipIf(!usable)("an agent in its microVM", () => {
 			expect(second.out).toBe("kept\nown-objects\n");
 		},
 		180_000,
+	);
+
+	test(
+		"a link a Planner's guest leaves in its agent state is never followed at its next start",
+		async () => {
+			let slot = join(base, "planners", "octo-org", "repo", "doc-links");
+			let home = `${slot}.agent`;
+			mkdirSync(home, { recursive: true });
+			let victim = join(scratch, "victim");
+			mkdirSync(victim);
+			let { code } = await run({
+				command: ["bash", "-c", `rm -rf ${home}/atomic; ln -s ${victim} ${home}/atomic`],
+				cwd: home,
+				env: {},
+				stdin: "ignore",
+				own: [home],
+				agentHome: home,
+			});
+			expect(code).toBe(0);
+			let store = new AgentStore(
+				{ url: "postgresql://m_1@db.example.com:5432/m_1", password: "the-database-password" },
+				join(scratch, "adapter"),
+			);
+			mkdirSync(join(scratch, "adapter"), { recursive: true });
+			plannerEnvironment(true, slot, {}, store);
+			expect(readdirSync(victim)).toEqual([]);
+			expect(readFileSync(join(home, "atomic", "storage-password"), "utf8")).toBe(
+				"the-database-password",
+			);
+		},
+		120_000,
 	);
 
 	test("reaches Chopin through the proxy and nothing else", async () => {

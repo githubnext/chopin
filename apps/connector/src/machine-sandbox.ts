@@ -149,5 +149,6 @@ export async function openMachineSandbox(options: {
 				),
 			),
 		...options.refused ? { refused: options.refused } : {},
+		wedged: detail => output.error(detail),
 	});
 }

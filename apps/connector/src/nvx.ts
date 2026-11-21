@@ -42,6 +42,10 @@ export type NvxSupport =
 export type SupportHost = {
 	platform: NodeJS.Platform;
 	arch: string;
+	/** The user it runs as; a root one can't be a microVM's workload user. */
+	uid?: number;
+	/** Windows' own folder (`%SystemRoot%`), where the Windows Hypervisor Platform's library is. */
+	systemRoot?: string;
 	exists(path: string): boolean;
 	/** Whether this process may read and write the device at `path`. */
 	readWrite(path: string): boolean;
@@ -75,7 +79,24 @@ export function nvxSupport(host: SupportHost): NvxSupport {
 		};
 	}
 	if (host.platform === "win32") {
+		// The library is there only with the Windows Hypervisor Platform turned on.
+		let library = `${host.systemRoot ?? "C:\\Windows"}\\System32\\WinHvPlatform.dll`;
+		if (!host.exists(library)) {
+			return {
+				supported: false,
+				reason: "The Windows Hypervisor Platform is off.",
+				fix: "In an administrator PowerShell: Enable-WindowsOptionalFeature -Online -FeatureName "
+					+ "HypervisorPlatform -All, then restart",
+			};
+		}
 		return { supported: true, hypervisor: "whp", package: "windows-whp" };
+	}
+	if (host.uid === 0) {
+		return {
+			supported: false,
+			reason: "chopin runs as root here, and a microVM's agent can't run as root.",
+			fix: "Run chopin as your own user",
+		};
 	}
 	let device: Extract<NvxSupport, { supported: true }> | undefined;
 	if (host.exists("/dev/kvm") && host.readWrite("/dev/kvm")) {
@@ -372,8 +393,11 @@ export function guestPath(host: string, platform: NodeJS.Platform): string {
 	return posix.join("/mnt", match[1]!.toLowerCase(), ...rest);
 }
 
-/** Guest paths NVX keeps for itself, which no share may be at or under. */
-const RESERVED = ["/etc", "/run", "/proc", "/sys", "/dev", "/.nvx-agent"];
+/**
+ * Guest paths no share may be at or under: NVX's own, where the guest clones its repositories, and
+ * where its image has the agent and the bridge.
+ */
+const RESERVED = ["/etc", "/run", "/proc", "/sys", "/dev", "/.nvx-agent", "/work", "/opt/chopin"];
 
 /**
  * Refuses a guest path NVX can't mount a share at: `/`, the guest's own trees, and names with
@@ -444,6 +468,23 @@ export function vmSpec(launch: VmLaunch, context: VmContext): VmSpec {
 		// The git directory a guest repository is cloned from: read whole, never written.
 		...repository ? [real(repository.source)] : [],
 	];
+	// Never written through a folder it writes: what it may only read (the person's checkout, the git
+	// directory its repository is cloned from, its tokens, a working directory not its own) at or
+	// inside a folder it writes is refused, as a share can't be read-only inside a writable one.
+	let readOnly = [
+		...(launch.reads ?? []).map(real),
+		...repository ? [real(repository.source)] : [],
+		...[...owned].filter(path => !writes.includes(path)),
+		...cwd && !owned.has(cwd) ? [cwd] : [],
+	];
+	for (let path of readOnly) {
+		let writable = [...writes, ...added].find(other => within(path, other, platform));
+		if (writable) {
+			throw new SandboxRefused(
+				`Not run: ${writable} would be shared writable and holds ${path}, which a microVM may only read. Leave it out of --sandbox-write.`,
+			);
+		}
+	}
 	let places: Array<{ host: string; mode: "ro" | "rw" }> = [];
 	let add = (host: string, mode: "ro" | "rw") => {
 		let same = places.find(place => place.host === host);
@@ -455,7 +496,8 @@ export function vmSpec(launch: VmLaunch, context: VmContext): VmSpec {
 	};
 	for (let path of [...writes, ...added]) add(path, "rw");
 	for (let path of reads) add(path, "ro");
-	// A folder it only reads inside another it is given (a checkout's own `.git`) is in that one.
+	// A folder it only reads inside another it is given (a checkout's own `.git`) is in that one,
+	// which, as above, is never one it writes but where it is its own.
 	places = places.filter(place =>
 		place.mode === "rw"
 		|| !places.some(other => other !== place && within(place.host, other.host, platform))

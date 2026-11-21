@@ -4,7 +4,7 @@
 	"version": "0.0.31",
 	"type": "module",
 	"scripts": {
-		"build": "bun build src/main.ts --target=bun --outfile dist/connector.js",
+		"build": "bun scripts/build-connector.ts",
 		"build:binaries": "bun scripts/build-binaries.ts",
 		"types": "tsgo --noEmit --skipLibCheck",
 		"start": "bun src/main.ts"

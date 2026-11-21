@@ -421,24 +421,33 @@ What differs on a Windows host:
   can be. A run shares the git directory itself, which works. A Planner shares the
   checkout and clones from the `.git` in it, which the guest can't read while it is
   hidden, and NVX refuses to share the checkout and its `.git` as two shares. So on
-  Windows the connector has to clear the Hidden attribute of a Planner's checkout's
-  `.git` first. Not built yet.
+  Windows the connector clears the Hidden attribute of a Planner's checkout's `.git`
+  before it starts (`unhide` in `windows-host.ts`); that attribute only says how
+  Explorer shows the folder, and nothing in it changes.
 - **Disks.** A file a guest grows on NTFS isn't sparse: making a 32 GiB disk that way
-  wrote 32 GiB and took 220 seconds. On Windows the connector must create the file
-  sparse on the host (`fsutil sparse setflag`) before a guest formats it. Not built
-  yet.
+  wrote 32 GiB and took 220 seconds. So the connector makes every disk's file sparse
+  on the host first (`FSCTL_SET_SPARSE` and `SetEndOfFile`, `sparseFile`), on Linux by
+  truncating it, and a guest formats it without discards, which NTFS doesn't take.
+  Space a Planner frees inside its disk isn't given back to NTFS, so a disk only grows,
+  to its 32 GiB at most, until it is removed.
 - **Ending.** Killing `nvx.exe` leaves `openvmm.exe` running, and so does an `nvx` that
-  reaches its own `--timeout` while the guest is busy (`error[still-running]`). The
-  connector gives `nvx` a timeout of a year, so its own deadlines decide, and ends a
-  launch with `taskkill /T /F`, which ends the tree. A Job Object that kills on close is
-  the sturdier way and is the next step. A forcibly killed VM's memory was seen to
-  linger for over a minute, so the host's memory isn't free at once after one.
+  reaches its own `--timeout` while the guest is busy (`error[still-running]`); and a VM
+  killed in the middle of heavy share I/O was seen to wedge, holding its memory until
+  Windows restarted. So the connector gives `nvx` a timeout of a year, so its own
+  deadlines decide; puts each `nvx.exe` in a job object that kills what is in it when
+  closed (`killJob`); stops a launch by ending its stdin and waiting for the workload,
+  and so the VM, to end by itself; kills the job only after that grace; and, where a
+  process of the job is still running 10 seconds later, says the VM didn't end and
+  Windows may need a restart, rather than take it for gone. A `nvx sandbox run` has no
+  `nvx sandbox stop`; ending its workload is its graceful stop. A Planner backend has no
+  stdin to end, so it gets only the grace and then the job.
 - **Service.** The Task Scheduler service runs as the user, who must be allowed to
   use WHP; that needs no administrator.
 
 The Linux/KVM engine is the one that has run end to end. On WHP the same agent image
-booted unchanged, shares, restores and stdio were measured, and the points above are
-what is left before Windows machines can run work.
+booted unchanged, shares, restores and stdio were measured, the `chopin` binary ran,
+and `windows-host.test.ts` ran on a Windows host (sparse files, unhiding, jobs). A
+Windows machine running a Build and a Planner end to end is the next check.
 
 ## Shipping NVX
 

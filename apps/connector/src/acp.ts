@@ -111,7 +111,10 @@ function startAgent(
 	let kill = (signal: NodeJS.Signals = "SIGTERM") => {
 		try {
 			if (process.platform !== "win32" && child.pid) process.kill(-child.pid, signal);
-			else child.kill(signal);
+			// Killing nvx.exe alone would leave its OpenVMM running.
+			else if (child.stopMicrovm) {
+				void child.stopMicrovm(signal === "SIGKILL" ? 0 : AGENT_STOP.graceMs);
+			} else child.kill(signal);
 		} catch { /* Process may have already exited. */ }
 	};
 	let head = "";

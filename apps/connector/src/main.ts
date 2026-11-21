@@ -219,8 +219,9 @@ async function unpairCommand(args: string[]) {
 	// Its Planners' disks go with it; one a running microVM has goes when that connector stops.
 	await sweepPlannerDisks({
 		directory: stateDirectory(),
+		server: url,
 		output: createOutput(),
-		everything: true,
+		everything: "this machine was unpaired from Chopin",
 	});
 	createOutput().say(
 		result === "unpaired"
@@ -754,6 +755,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 							let sweep = () =>
 								void sweepPlannerDisks({
 									directory,
+									server: url,
 									output,
 									ask: documents => forgettablePlanners(url, machine, documents, abort.signal),
 								}).catch(() => {});
@@ -816,7 +818,13 @@ export async function connect(args: string[], injected: Injected = {}) {
 				// A revoked machine's Planners' disks go once nothing runs on them.
 				if (revoked) {
 					revoked = false;
-					await sweepPlannerDisks({ directory, output, everything: true }).catch(() => {});
+					await sweepPlannerDisks({
+						directory,
+						server: url,
+						output,
+						everything: "Chopin no longer accepts this machine",
+					})
+						.catch(() => {});
 				}
 			}
 		}

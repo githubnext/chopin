@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, utimes } from "node:fs/promises";
+import { mkdir, utimes, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
@@ -31,6 +31,7 @@ import {
 	assignSlot,
 	type ChosenPlanners,
 	plannerDisk,
+	plannerServer,
 	plannerSlot,
 	type StartFailures,
 	tokenFolder,
@@ -38,6 +39,7 @@ import {
 import type { Checkouts } from "./checkouts";
 import { type Sandbox, SandboxRefused, spawnIn } from "./sandbox";
 import { gitSync, repositoryAt } from "./git-host";
+import { unhide } from "./windows-host";
 import { guestRepositoryPath } from "./nvx";
 import { type PlannerSpares, type Spare, SPARE_PROTOCOL } from "./planner-spare";
 import { holdDisk } from "./planner-disks";
@@ -833,11 +835,13 @@ async function credentialFiles(
  * says why.
  */
 async function prepareDisk(
-	options: { output: Output; sandbox: Sandbox },
+	options: { output: Output; sandbox: Sandbox; url: string },
 	document: string,
 	folder: string,
 ) {
 	let disk = plannerDisk(folder);
+	// Which server's document it is, so only that server's word removes it (see `sweepPlannerDisks`).
+	await writeFile(plannerServer(folder), `${options.url}\n`, { mode: 0o600 }).catch(() => {});
 	await options.sandbox.makeDisk?.(disk).then(() => utimes(disk, new Date(), new Date())).catch(
 		error =>
 			options.output.say(
@@ -1082,6 +1086,14 @@ export function plannerGuest(
 ) {
 	let source = repositoryAt(checkout)?.commonDir;
 	if (!source) throw new SandboxRefused(`Not run: ${checkout} is not a git checkout.`);
+	// Shared inside the checkout, a `.git` Git for Windows hid can't be read in the guest.
+	if (process.platform === "win32" && !unhide(join(checkout, ".git"))) {
+		throw new SandboxRefused(
+			`Not run: ${
+				join(checkout, ".git")
+			} is hidden, which a microVM can't read, and its Hidden attribute couldn't be cleared.`,
+		);
+	}
 	// A new clone starts where the checkout is, which a linked worktree of the person's may be apart
 	// from the repository's own HEAD.
 	let head = gitSync(["rev-parse", "--verify", "HEAD"], { cwd: checkout }).stdout?.trim();
@@ -1134,10 +1146,18 @@ export const PROCESSES: Processes = {
  * `taskkill /T /F` ends its process tree, or the backend alone when taskkill cannot.
  */
 export async function stopBackend(
-	child: { pid?: number | undefined; kill(signal?: NodeJS.Signals): boolean },
+	child: {
+		pid?: number | undefined;
+		kill(signal?: NodeJS.Signals): boolean;
+		stopMicrovm?: (graceMs: number) => Promise<void>;
+	},
 	processes: Processes = PROCESSES,
 ): Promise<void> {
 	let pid = child.pid;
+	// A microVM on Windows ends as `startNvx` arranged: gracefully, then with its job.
+	if (processes.platform === "win32" && child.stopMicrovm) {
+		return child.stopMicrovm(processes.graceMs);
+	}
 	if (processes.platform === "win32") {
 		let code = pid ? await processes.run(["taskkill", "/T", "/F", "/PID", String(pid)]) : null;
 		if (code !== 0) {

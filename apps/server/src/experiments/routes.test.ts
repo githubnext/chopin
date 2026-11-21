@@ -973,6 +973,12 @@ test("only a connector whose agents run in microVMs connects, and one that can't
 		expect(body.message).toContain("runs agents outside a microVM");
 		expect(body.message).toContain("chopin update");
 	}
+	// Kept on the machine, so the Machines page says why while it is away.
+	expect((await listed())[0].sandbox).toEqual({
+		engine: "none",
+		reason: "Its chopin runs agents outside a microVM.",
+		fix: "chopin update",
+	});
 	// A current one that says it can't run them is refused, and what it said is kept.
 	let unable = await connect({
 		...current,

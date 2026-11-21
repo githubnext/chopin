@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+
+/** The bridge's bundle, defined in `connector.js` by its build (see `build-connector.ts`). */
+declare const CHOPIN_GUEST_BRIDGE: string | undefined;
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -10,7 +13,8 @@ export const EMBEDDED_BRIDGE = "chopin-guest-bridge";
 
 /**
  * The bridge's bundle for Node, as a file in `<base>/nvx/bridge/`, named by its SHA-256: the one the
- * `chopin` binary carries, or, run from source, one built from `guest-bridge.ts` now.
+ * `chopin` binary carries, or `connector.js` defines, or, run from source, one built from
+ * `guest-bridge.ts` now.
  */
 export async function guestBridge(base: string): Promise<string> {
 	let bundle: Uint8Array;
@@ -19,6 +23,8 @@ export async function guestBridge(base: string): Promise<string> {
 		let found = files.find(file => file.name.startsWith(EMBEDDED_BRIDGE));
 		if (!found) throw new Error("This chopin has no MCP bridge for its microVMs.");
 		bundle = new Uint8Array(await found.arrayBuffer());
+	} else if (typeof CHOPIN_GUEST_BRIDGE === "string") {
+		bundle = new TextEncoder().encode(CHOPIN_GUEST_BRIDGE);
 	} else {
 		let built = await Bun.build({
 			entrypoints: [join(import.meta.dir, "guest-bridge.ts")],

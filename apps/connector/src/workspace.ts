@@ -213,6 +213,14 @@ export function plannerDisk(folder: string) {
 	return `${folder}.disk`;
 }
 
+/**
+ * The Chopin server a Planner's disk is for, `<folder>.server`: one state directory may be paired
+ * with several, and only the one a disk's document is on may say it is gone.
+ */
+export function plannerServer(folder: string) {
+	return `${folder}.server`;
+}
+
 /** When a process started: `id` differs for each process that held a pid, `at` is in ms. */
 export type ProcessStart = { id: string; at: number };
 
@@ -893,8 +901,10 @@ export async function pruneRuns(
  * earlier release made there for a Planner, with `earlier`: nothing uses or removes it now, and its
  * commits are its owner's to keep or remove.
  */
-export async function plannerDisks(directory: string) {
-	let found: Array<{ path: string; repository: string; document: string; earlier?: true }> = [];
+export async function plannerDisks(directory: string, options: { spares?: boolean } = {}) {
+	let found: Array<
+		{ path: string; repository: string; document: string; server?: string; earlier?: true }
+	> = [];
 	let entries = async (path: string) =>
 		(await readdir(path, { withFileTypes: true }).catch(() => []))
 			.sort((a, b) => a.name.localeCompare(b.name));
@@ -909,12 +919,19 @@ export async function plannerDisks(directory: string) {
 				let disk = entry.isFile() && entry.name.endsWith(".disk");
 				if (!disk && (!entry.isDirectory() || isTokenFolder(entry.name))) continue;
 				let slot = disk ? entry.name.slice(0, -".disk".length) : entry.name;
-				let document = SPARE_SLOT.test(slot) ? slots.get(slot) : slot;
+				// A spare's slot that never got a document is listed only when asked, by its own name.
+				let document = SPARE_SLOT.test(slot)
+					? slots.get(slot) ?? (options.spares && disk ? slot : undefined)
+					: slot;
 				if (document === undefined) continue;
+				let server = disk
+					? (await readFile(plannerServer(join(parent, slot)), "utf8").catch(() => "")).trim()
+					: "";
 				found.push({
 					path: join(parent, entry.name),
 					repository: `${owner}/${name}`,
 					document,
+					...server ? { server } : {},
 					...disk ? {} : { earlier: true as const },
 				});
 			}
