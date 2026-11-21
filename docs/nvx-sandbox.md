@@ -162,12 +162,15 @@ round trip, so loading Atomic's 34,000 files from a share took 36–46 seconds a
   this release pins (`AGENT_PACKAGES`: `@github/copilot` 1.0.114, `@bastani/atomic`
   0.10.2, `@bastani/atomic-acp` 0.0.18), or the commands the owner gives for another
   agent with `--install` and for a Planner command with `--planner-install`;
+- what is in the folder the owner names with `--install-from` for those commands, if
+  any: each file's path in it, content and whether it is executable;
 - an account for the connector's own user and group, and a system git configuration
   with `safe.directory = *` (below).
 
 The image's key is the SHA-256 of all of that. It is built once into
 `<base>/images/<key>.erofs` and rebuilt only when the key changes: another NVX
-release, Node, package, agent version, install command or user. Images no recipe
+release, Node, package, agent version, install command, file in the
+`--install-from` folder, or user. Images no recipe
 names any more are removed as the connector starts. A command chopin has no recipe
 for is refused before anything is paired, naming the option to add.
 
@@ -180,6 +183,15 @@ the proxy, and writes the new layer with `mkfs.erofs`. A microVM of the new imag
 then started to find the recipe's programs before the image is recorded. A build that
 fails leaves no image and says why. The first build of the Copilot CLI's image took
 39 seconds on the test machine.
+
+The build's guest has no credentials: none of the owner's, and not the machine's.
+An install that needs a sign-in, such as a package from a private registry, reads
+what the host fetched with it instead. The owner fetches it into a folder and names
+the folder with `--install-from`. The connector copies the folder for each build
+(files and folders only; a link is refused rather than followed), checks the copy is
+what the key was made of, and shares the copy read-only at `/install-from` with the
+build's guest alone. No agent's guest gets it: an image holds only what its install
+made of it.
 
 **The workload's user.** On a Linux host OpenVMM does every operation on a share as
 the connector's user, and the guest checks permissions against the owner the host
@@ -418,8 +430,8 @@ asked for and one spare per registered checkout's repository.
 - macOS and Arm64 machines.
 
 `--sandbox-host` stays (the proxy's allow-list). `--sandbox-write` stays, as a
-writable share. `--sandbox-hide` stays, inside a share. `--install` and
-`--planner-install` are new.
+writable share. `--sandbox-hide` stays, inside a share. `--install`,
+`--planner-install` and `--install-from` are new.
 
 ## Windows
 

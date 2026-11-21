@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
 	chmod,
 	copyFile,
+	lstat,
 	mkdir,
 	readdir,
 	readFile,
@@ -10,7 +11,7 @@ import {
 	stat,
 	writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { AGENTS } from "@chopin/protocol/agents";
 import {
 	BUILD_PACKAGES,
@@ -35,7 +36,15 @@ export type ImageRecipe = {
 	install: string[];
 	/** The programs the image must have once built, which a microVM of it is started to find. */
 	programs: string[];
+	/**
+	 * A host folder the install reads (`--install-from`): copied for the build and shared with its
+	 * microVM alone, read-only, at `INSTALL_FROM`. Its files are part of the image's key.
+	 */
+	from?: string;
 };
+
+/** Where an image's build reads the folder `--install-from` names. */
+export const INSTALL_FROM = "/install-from";
 
 /** A word as a POSIX shell reads it back, quoted only when it has to be. */
 export function shellWord(value: string) {
@@ -82,9 +91,15 @@ export type GuestUser = { uid: number; gid: number };
 
 /**
  * An image's key: what it is made from, which a change of any part of changes. Its NVX release and
- * layer, its Node.js, its Ubuntu packages, its install commands and the user it runs as.
+ * layer, its Node.js, its Ubuntu packages, its install commands, what the folder they read holds
+ * (`from`, its `installInputs` digest) and the user it runs as.
  */
-export function imageKey(recipe: ImageRecipe, layer: string, user: GuestUser): string {
+export function imageKey(
+	recipe: ImageRecipe,
+	layer: string,
+	user: GuestUser,
+	from?: string,
+): string {
 	return createHash("sha256")
 		.update(JSON.stringify({
 			nvx: NVX_RELEASE.version,
@@ -92,11 +107,54 @@ export function imageKey(recipe: ImageRecipe, layer: string, user: GuestUser): s
 			node: NODE_RELEASE.sha256,
 			packages: [...GUEST_PACKAGES, ...BUILD_PACKAGES].map(item => item.sha256),
 			install: recipe.install,
+			...from === undefined ? {} : { from },
 			user,
 			build: buildScript(recipe, user, "00000000-0000-4000-8000-000000000000"),
 		}))
 		.digest("hex")
 		.slice(0, 32);
+}
+
+/**
+ * The digest of what the folder `from` holds: each file's path in it, content and whether it is
+ * executable, and each folder's path, but not where the folder is or who owns what. With `into`,
+ * also copies it there, readable by the build's `nobody` whatever the folder's own modes, so the
+ * build reads exactly what was digested. Anything but a file or a folder is refused: a link would
+ * lead the build to whatever it names on the host.
+ */
+export async function installInputs(from: string, into?: string): Promise<string> {
+	let digest = createHash("sha256");
+	let writable = process.platform !== "win32";
+	let walk = async (relative: string) => {
+		for (let name of (await readdir(join(from, relative))).sort()) {
+			let path = join(relative, name);
+			let info = await lstat(join(from, path));
+			let shown = JSON.stringify(path.split(sep).join("/"));
+			if (info.isDirectory()) {
+				digest.update(`folder ${shown}\n`);
+				if (into) {
+					await mkdir(join(into, path));
+					if (writable) await chmod(join(into, path), 0o755);
+				}
+				await walk(path);
+			} else if (info.isFile()) {
+				let content = await readFile(join(from, path));
+				let executable = (info.mode & 0o111) !== 0;
+				let hash = createHash("sha256").update(content).digest("hex");
+				digest.update(`file ${shown} ${executable ? "executable" : "plain"} ${hash}\n`);
+				if (into) {
+					await writeFile(join(into, path), content);
+					if (writable) await chmod(join(into, path), executable ? 0o755 : 0o644);
+				}
+			} else {
+				throw new Error(
+					`${join(from, path)} isn't a file or a folder, and an image's build is given only those.`,
+				);
+			}
+		}
+	};
+	await walk("");
+	return digest.digest("hex");
 }
 
 /**
@@ -223,10 +281,23 @@ export type ImageOptions = {
  * request at a time. The host downloads Node and the packages, checks them, and shares them with the
  * build's guest, which unpacks them over the release's layer, runs the install (npm's install
  * scripts included, no closer to the host than the agent will run) and writes the new layer. A
- * microVM of it is then started to find the recipe's programs. A build that fails leaves no image.
+ * recipe's `from` folder is copied and shared with the build alone, read-only, so an install can
+ * use files the host fetched with credentials no guest gets. A microVM of the image is then started
+ * to find the recipe's programs. A build that fails leaves no image.
  */
 export async function ensureImage(recipe: ImageRecipe, options: ImageOptions): Promise<AgentImage> {
-	let key = imageKey(recipe, options.layer.uuid, options.user);
+	let unreadable = (error: unknown) =>
+		new Error(
+			`Couldn't read ${recipe.from}, the folder --install-from names for ${recipe.name}'s image: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+	let from = recipe.from === undefined
+		? undefined
+		: await installInputs(recipe.from).catch(error => {
+			throw unreadable(error);
+		});
+	let key = imageKey(recipe, options.layer.uuid, options.user, from);
 	let found = await recorded(options.base, key);
 	if (found) return found;
 	options.building?.(recipe);
@@ -251,12 +322,28 @@ export async function ensureImage(recipe: ImageRecipe, options: ImageOptions): P
 		await fetched(options.base, join(inputs, "sys"), GUEST_PACKAGES, options.download);
 		await fetched(options.base, join(inputs, "tools"), BUILD_PACKAGES, options.download);
 		await writeFile(join(inputs, "build.sh"), buildScript(recipe, options.user, uuid));
+		let shares: VmSpec["shares"] = [
+			{ host: inputs, guest: "/in", mode: "ro" },
+			{ host: output, guest: "/out", mode: "rw" },
+		];
+		if (recipe.from !== undefined) {
+			// A copy, so the build reads what the key was made of, whatever happens to the folder.
+			let copy = join(building, "from");
+			await mkdir(copy);
+			if (process.platform !== "win32") await chmod(copy, 0o755);
+			let copied = await installInputs(recipe.from, copy).catch(error => {
+				throw unreadable(error);
+			});
+			if (copied !== from) {
+				throw new Error(
+					`${recipe.from} changed while chopin copied it for ${recipe.name}'s image. Run this command again once it is done changing.`,
+				);
+			}
+			shares.push({ host: copy, guest: INSTALL_FROM, mode: "ro" });
+		}
 		let proxy = `http://10.0.0.1:${options.proxyPort}`;
 		let result = await options.run({
-			shares: [
-				{ host: inputs, guest: "/in", mode: "ro" },
-				{ host: output, guest: "/out", mode: "rw" },
-			],
+			shares,
 			proxyPort: options.proxyPort,
 			environment: {
 				PATH: "/usr/sbin:/usr/bin:/sbin:/bin",

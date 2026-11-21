@@ -28,15 +28,19 @@ export class NoRecipe extends Error {
 
 /**
  * The recipe of the image `command`'s program runs from: a built-in agent's, or the commands the
- * owner gave (`--install`, `--planner-install`). One with neither is refused, naming the option.
+ * owner gave (`--install`, `--planner-install`), which read the folder `from` (`--install-from`).
+ * One with neither is refused, naming the option.
  */
 export function recipeFor(
 	command: string[],
 	install: string[] | undefined,
 	option: string,
+	from?: string,
 ): [string, ImageRecipe] {
 	let program = guestProgram(command[programAt(command)] ?? "", process.platform);
-	if (install?.length) return [program, { name: program, install, programs: [program] }];
+	if (install?.length) {
+		return [program, { name: program, install, programs: [program], ...from ? { from } : {} }];
+	}
 	let recipe = builtInRecipe(program);
 	if (recipe) return [program, recipe];
 	throw new NoRecipe(
@@ -53,12 +57,21 @@ export function machineRecipes(options: {
 	plannerCommand?: string[];
 	install?: string[];
 	plannerInstall?: string[];
+	/** `--install-from`: the folder the install commands read. */
+	installFrom?: string;
 }): Map<string, ImageRecipe> {
 	let recipes = new Map<string, ImageRecipe>([
-		recipeFor(options.command, options.install, "--install"),
+		recipeFor(options.command, options.install, "--install", options.installFrom),
 	]);
 	if (options.plannerCommand?.length) {
-		recipes.set(...recipeFor(options.plannerCommand, options.plannerInstall, "--planner-install"));
+		recipes.set(
+			...recipeFor(
+				options.plannerCommand,
+				options.plannerInstall,
+				"--planner-install",
+				options.installFrom,
+			),
+		);
 	}
 	return recipes;
 }

@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { builtInRecipe } from "./images";
+import { builtInRecipe, INSTALL_FROM } from "./images";
 import { artifactsAt } from "./nvx";
 import { AgentStore } from "./machine-store";
 import { plannerEnvironment } from "./planner";
@@ -120,11 +120,28 @@ beforeAll(async () => {
 	});
 	other = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("other\n") });
 	let recipe = builtInRecipe("copilot")!;
+	// What an install reads from the host (--install-from), in a folder only its owner may read.
+	let inputs = join(scratch, "inputs");
+	mkdirSync(inputs, { mode: 0o700 });
+	writeFileSync(join(inputs, "tool"), "#!/bin/sh\necho installed from the host folder\n", {
+		mode: 0o700,
+	});
 	sandbox = await createSandbox({
 		directory: base,
 		server: `http://127.0.0.1:${chopin.port}`,
 		setup: { artifacts: artifacts!, hypervisor: "kvm" },
-		recipes: new Map([["bash", { ...recipe, programs: ["bash"] }]]),
+		recipes: new Map([
+			["bash", { ...recipe, programs: ["bash"] }],
+			[
+				"from-tool",
+				{
+					name: "from-tool",
+					install: [`cp ${INSTALL_FROM}/tool "$npm_config_prefix/bin/from-tool"`],
+					programs: ["from-tool"],
+					from: inputs,
+				},
+			],
+		]),
 	});
 }, 600_000);
 
@@ -261,6 +278,28 @@ describe.skipIf(!usable)("an agent in its microVM", () => {
 			);
 		},
 		120_000,
+	);
+
+	test(
+		"an image's install reads its folder from the host, which no agent's guest has",
+		async () => {
+			let cwd = mkdtempSync(join(scratch, "cwd-"));
+			let installed = await run({
+				command: ["from-tool"],
+				cwd,
+				env: {},
+				stdin: "ignore",
+			});
+			expect(installed).toMatchObject({ code: 0, out: "installed from the host folder\n" });
+			let agent = await run({
+				command: ["bash", "-c", `test -e ${INSTALL_FROM} && echo there || echo absent`],
+				cwd,
+				env: {},
+				stdin: "ignore",
+			});
+			expect(agent.out).toBe("absent\n");
+		},
+		60_000,
 	);
 
 	test("reaches Chopin through the proxy and nothing else", async () => {

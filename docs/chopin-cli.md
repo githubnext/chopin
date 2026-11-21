@@ -312,6 +312,24 @@ chopin connect --install 'npm install -g my-agent' -- my-agent --acp
 A Planner command is installed the same way with `--planner-install`. An agent
 `chopin` has no recipe for is refused before anything is paired, naming the option.
 
+The build reaches the network only through the [proxy](#sandbox), with no credentials
+of yours, and runs whatever install scripts the packages have. To install something
+that needs a sign-in, such as a package from a private registry, fetch it on this
+machine yourself and name its folder with `--install-from`. The build gets a copy
+of that folder, read-only, at `/install-from`; no agent's microVM gets it:
+
+```sh
+npm pack @my-org/my-agent@1.2.3 --pack-destination ~/agent-packages
+chopin connect --install-from ~/agent-packages \
+  --install 'npm install -g /install-from/my-org-my-agent-1.2.3.tgz' -- my-agent --acp
+```
+
+What the folder holds is part of the image, so a changed file builds the image
+again. Keep the folder: the service reads it each time it starts. It may hold only
+files and folders, not links. npm installs into `/opt/chopin/agent`, so a package
+installed with `npm install -g` is at `/opt/chopin/agent/lib/node_modules/<name>`
+in the agent's microVM, and its programs are on the agent's `PATH`.
+
 ## Keep it running
 
 `chopin service install` runs your connection in the background, so it starts
@@ -802,6 +820,7 @@ corporate registry is.
 | `--sandbox-hide <path>`       | Hides one file or folder inside what agents are given, even inside a `--sandbox-write` directory, such as a tool's own sign-in. Repeat it. |
 | `--install <command>`         | How to install an agent `chopin` has no recipe for in its microVMs' image. Repeat it for several commands.                                 |
 | `--planner-install <command>` | The same for the Planner command.                                                                                                          |
+| `--install-from <dir>`        | A folder those commands read, copied read-only to `/install-from` in the image's build and in no agent's microVM.                          |
 
 `--require-sandbox` and `--no-sandbox` are gone: there is nothing to require and
 nothing to turn off. Settings an earlier `chopin connect` saved with them work, without
@@ -1104,6 +1123,7 @@ pairs again. To remove the service as well, run `chopin service uninstall`.
 | `chopin connect … --keep-runs <n>`                          | Keeps the `n` most recently finished runs (default 15, 0 for all).                                                           |
 | `chopin connect … --install <command>`                      | How to install an agent `chopin` has no recipe for in its [microVMs](#sandbox)' image. Repeat it.                            |
 | `chopin connect … --planner-install <command>`              | The same for the Planner command.                                                                                            |
+| `chopin connect … --install-from <dir>`                     | A folder those commands read in the image's build, at `/install-from`, such as packages fetched with your sign-in.           |
 | `chopin connect … --sandbox-host <host>`                    | Lets agents reach one more host through the proxy. Repeat it.                                                                |
 | `chopin connect … --sandbox-write <dir>`                    | Shares one more directory, writable, with every agent's microVM. Repeat it.                                                  |
 | `chopin connect … --sandbox-hide <path>`                    | Hides one file or folder inside what agents are given. Repeat it.                                                            |

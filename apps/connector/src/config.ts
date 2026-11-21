@@ -40,6 +40,8 @@ export type ConnectSettings = {
 	install?: string[];
 	/** `--planner-install`: the commands that install the Planner command in its image. */
 	plannerInstall?: string[];
+	/** `--install-from`: the folder, by absolute path, those install commands read in the build. */
+	installFrom?: string;
 	/** `--no-planner-spare`: false, and no spare Planners start; absent runs them. */
 	plannerSpare?: false;
 };
