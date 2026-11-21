@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { githubPaths } from "./github-token";
 import {
 	type AgentImage,
 	guestPath,
@@ -417,5 +418,23 @@ describe("paths in a guest on Windows", () => {
 		expect(spec.environment.CHOPIN_GUEST_SOURCE).toBe("/mnt/c/src/app/.git");
 		expect(spec.environment.OTHER).toBe("C:\\elsewhere");
 		expect(spec.command.slice(3)).toEqual(["chopin-launch", "copilot", "--acp"]);
+	});
+
+	test("a run's git credential helper reads its token where the guest has it", () => {
+		let base = "C:\\Users\\mona\\.local\\state\\chopin\\connector";
+		let tokens = `${base}\\runs\\r1.tokens`;
+		let spec = vmSpec({
+			command: ["copilot", "--acp"],
+			cwd: "/work/app",
+			env: githubPaths(`${tokens}\\github`, `${tokens}\\gh`, "octo-org/app"),
+			own: [tokens],
+			repository: { source: "C:\\src\\app\\.git", path: "/work/app" },
+		}, { ...CONTEXT, platform: "win32", base });
+		expect(spec.environment.CHOPIN_GITHUB_TOKEN_FILE).toBe(
+			"/mnt/c/Users/mona/.local/state/chopin/connector/runs/r1.tokens/github",
+		);
+		// No host path is left in the guest's environment, its git configuration included.
+		expect(Object.entries(spec.environment).filter(([, value]) => value.includes("C:\\")))
+			.toEqual([]);
 	});
 });
