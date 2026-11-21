@@ -2,7 +2,6 @@ import { afterAll, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
 	chmodSync,
-	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
@@ -19,7 +18,7 @@ import { checkouts } from "../../../connector/src/checkouts";
 import { endMachineAiLaunch, machineAiLaunch } from "../../../connector/src/machine";
 import { createOutput } from "../../../connector/src/output";
 import { runWork } from "../../../connector/src/run";
-import { createSandbox, inspectSandbox } from "../../../connector/src/sandbox";
+import { hostSandbox } from "../../../connector/src/testing/host-sandbox";
 import { testGitHubToken } from "../../../connector/src/testing/github-grant";
 import { Router } from "../http/router";
 import { testLease } from "../storage/contract-support";
@@ -29,18 +28,13 @@ import { handOut, RUN_AI_LAUNCH_MS } from "./launches";
 import { aiProxy } from "./proxy";
 
 /**
- * A run on a paired machine handed its AI launch, end to end on a real Linux sandbox: Chopin's own
- * credential store and proxy, the connector's request for the launch, its relay and its sandbox,
- * and an agent that calls its model as a coding agent does. Skips, saying why, where the machine
- * has no working sandbox. Everything lives under /var/tmp, because /tmp is private to each sandbox.
+ * A run on a paired machine handed its AI launch, end to end: Chopin's own credential store and
+ * proxy, the connector's request for the launch and its relay, and an agent that calls its model
+ * as a coding agent does. The agent starts on the host (see `hostSandbox`): what its microVM keeps
+ * from its sight is the connector's microVM tests' to show.
  */
-let linux = process.platform === "linux";
-let scratch = linux ? realpathSync(mkdtempSync("/var/tmp/chopin-ai-handoff-")) : "";
-let inspected = linux ? await inspectSandbox({ directory: join(scratch, "inspect") }) : undefined;
-let usable = inspected?.report.engine === "bubblewrap";
-if (!usable) {
-	console.warn("Skipping the AI launch handoff test: this machine has no working sandbox.");
-}
+let usable = process.platform !== "win32";
+let scratch = usable ? realpathSync(mkdtempSync("/var/tmp/chopin-ai-handoff-")) : "";
 afterAll(() => {
 	if (scratch) rmSync(scratch, { recursive: true, force: true });
 });
@@ -79,7 +73,7 @@ function provider() {
 }
 
 test.skipIf(!usable)(
-	"a sandboxed agent reaches its model through Chopin's proxy with only a stand-in, and holds no credential and none of the owner's agent setup, wherever it is kept",
+	"an agent reaches its model through Chopin's proxy with only a stand-in, and holds no credential in its environment or its state",
 	async () => {
 		let home = join(scratch, "home");
 		let checkout = join(scratch, "checkout");
@@ -188,12 +182,6 @@ test.skipIf(!usable)(
 		);
 		await credentials.connect("U_mona", "openai", { kind: "api-key", secret: REAL_KEY });
 
-		let owned = [
-			join(home, ".atomic", "agent", "auth.json"),
-			join(home, ".claude", "settings.json"),
-			join(sessions, "session.jsonl"),
-			join(moved, "auth.json"),
-		];
 		let realHome = process.env.HOME;
 		let saved = {
 			ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
@@ -204,7 +192,7 @@ test.skipIf(!usable)(
 		process.env.ANTHROPIC_API_KEY = OWNER_KEY;
 		process.env.MISTRAL_API_KEY = UNRELATED_KEY;
 		process.env.ATOMIC_CODING_AGENT_SESSION_DIR = sessions;
-		let sandbox = await createSandbox({ directory: state, home, server: origin });
+		let sandbox = hostSandbox();
 		try {
 			let id = crypto.randomUUID();
 			let source = {
@@ -253,7 +241,6 @@ test.skipIf(!usable)(
 					heartbeatMs: 60_000,
 					env: {
 						AI_AGENT_REPORT: "ai-report.json",
-						AI_AGENT_PEEK: owned.join(","),
 						OPENAI_API_KEY: OWNER_KEY,
 						ATOMIC_CODING_AGENT_DIR: moved,
 					},
@@ -267,10 +254,12 @@ test.skipIf(!usable)(
 			);
 			expect(calls, said).toContain("complete_experiment");
 			let runs = join(state, "runs");
-			let worktree = readdirSync(runs).map(name => join(runs, name)).find(path =>
-				existsSync(join(path, "ai-report.json"))
+			// The run's own folder, which its agent's state is named from.
+			let worktree = readdirSync(runs).filter(name => name.endsWith(".agent"))
+				.map(name => join(runs, name.slice(0, -".agent".length)))[0];
+			let report = JSON.parse(
+				readFileSync(join(sandbox.work, "score", "ai-report.json"), "utf8"),
 			);
-			let report = JSON.parse(readFileSync(join(worktree!, "ai-report.json"), "utf8"));
 
 			// The agent's model answered, through Chopin's proxy, which alone sent the real key.
 			expect(report.answer).toMatchObject({
@@ -305,11 +294,6 @@ test.skipIf(!usable)(
 				baseUrl: report.env.OPENAI_BASE_URL,
 				apiKey: "$OPENAI_API_KEY",
 			});
-			// The owner's own agents' logins and settings are out of its sight.
-			for (let path of owned) {
-				expect(report.peeked[path], path).toHaveProperty("error");
-				expect(report.peeked[path], path).not.toHaveProperty("text");
-			}
 			// The run's end ended its launch: the stand-in reaches nothing now.
 			expect(ended).toEqual([launch!.launchId!]);
 			let after = await fetch(`${origin}${AI_PROXY_PATH}/openai/v1/chat/completions`, {

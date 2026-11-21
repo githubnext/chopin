@@ -6,6 +6,7 @@
  * state the Planner is in. `HARNESS=remote` needs a server of its own, started here against a
  * database of its own.
  */
+import { MICROVMS } from "../apps/server/src/testing/microvms";
 import { spawn } from "node:child_process";
 
 import { SQL } from "bun";
@@ -642,6 +643,7 @@ async function pairedMachine(page: Page, label: string) {
 			headers: {
 				"content-type": "application/json",
 				[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL),
+				...MICROVMS,
 				[CONNECTOR_VERSION_HEADER]: RELEASE,
 				...extra,
 			},

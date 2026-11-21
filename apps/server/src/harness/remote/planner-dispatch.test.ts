@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { MICROVMS } from "../../testing/microvms";
 import { AGENT_VERSION, LINK_CLOSE } from "@chopin/agent-link";
 import {
 	CONNECTOR_PLANNER_COMMAND_HEADER,
@@ -182,6 +183,7 @@ async function dispatchServer(
 				headers: {
 					[CONNECTOR_VERSION_HEADER]: connector.version ?? "dev",
 					[CONNECTOR_PROTOCOL_HEADER]: String(protocol),
+					...MICROVMS,
 					...(connector.plannerCommand ?? true ? { [CONNECTOR_PLANNER_COMMAND_HEADER]: "1" } : {}),
 				},
 			});

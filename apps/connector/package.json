@@ -13,7 +13,6 @@
 		"@agentclientprotocol/sdk": "1.6.0",
 		"@chopin/experiment": "workspace:*",
 		"@chopin/protocol": "workspace:*",
-		"@microsoft/mxc-sdk": "1.0.1",
 		"@modelcontextprotocol/sdk": "1.32.1"
 	},
 	"devDependencies": {

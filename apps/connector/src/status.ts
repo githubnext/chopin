@@ -6,12 +6,11 @@ import { CONNECTOR_HEADERS, jsonObject, refusal } from "./mcp";
 import { logPath, type ServiceHost, type ServiceStatus, serviceStatus } from "./service";
 import { githubRefusal } from "./github-token";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
-import { join } from "node:path";
 import { clones } from "./checkouts";
 import {
 	connectors,
 	diskUsage,
-	plannerWorktrees,
+	plannerDisks,
 	processStart,
 	runs,
 	type SpareState,
@@ -102,12 +101,16 @@ export type StatusReport = {
 	/** What the last `chopin connect` that connected ran, which the next install copies. */
 	lastConnect: ConnectSettings | null;
 	/**
-	 * The runs in `<base>/runs`: how many finished runs' worktrees are `kept`, how many are
-	 * `running` or queued, and the kept worktrees' size in `bytes`, absent where it can't be read.
+	 * The runs in `<base>/runs`: how many finished runs are `kept` with something on disk (their
+	 * agent's state), how many are `running` or queued, and what is kept's size in `bytes`, absent
+	 * where it can't be read.
 	 */
 	runs: { kept: number; running: number; bytes?: number };
-	/** The worktrees Planner commands made in `<base>/planners`, with their repository and document. */
-	plannerWorktrees: Array<{ path: string; repository: string; document: string }>;
+	/**
+	 * The Planners' disks in `<base>/planners`, with their repository and document, and any worktree an
+	 * earlier release made there for one (`earlier`).
+	 */
+	plannerDisks: Array<{ path: string; repository: string; document: string; earlier?: true }>;
 	/**
 	 * The checkouts work in their repositories runs from, by repository (`owner/name`) to their
 	 * root: what the running connector registered, else what the next one runs with.
@@ -196,8 +199,8 @@ export async function collectStatus(options: {
 	}
 	let config = await readConfig(directory);
 	let found = await runs(directory, processStart(host.platform, host.run));
-	let kept = found.filter(run => !run.active && run.worktree);
-	let bytes = await diskUsage(kept.map(run => join(directory, "runs", run.attempt)));
+	let kept = found.filter(run => !run.active && run.stored.length);
+	let bytes = await diskUsage(kept.flatMap(run => run.stored));
 	let checkouts = held.find(item => item.running && item.checkouts)?.checkouts
 		?? registered(config.service?.settings ?? config.connect);
 	return {
@@ -245,7 +248,7 @@ export async function collectStatus(options: {
 			running: found.filter(run => run.active).length,
 			...(bytes === undefined ? {} : { bytes }),
 		},
-		plannerWorktrees: await plannerWorktrees(directory),
+		plannerDisks: await plannerDisks(directory),
 		checkouts,
 		clones: await clones(directory),
 		github: Object.fromEntries(
@@ -336,14 +339,11 @@ function size(bytes: number) {
 	return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
-/** The sandbox's line, with what a run does without one and the fix on its own line. */
-function sandboxRows(report: SandboxReport, settings: ConnectSettings | null) {
-	if (report.engine !== "none") return [row("Sandbox", sandboxLabel(report))];
-	let consequence = settings?.sandbox?.require
-		? "Runs are refused (--require-sandbox is on)."
-		: "Runs go on without it.";
+/** Where agents run: each in its own microVM, or why this machine can't, with the fix on its own line. */
+function sandboxRows(report: SandboxReport) {
+	if (report.engine !== "none") return [row("Agents", sandboxLabel(report))];
 	return [
-		row("Sandbox", `Not sandboxed: ${report.reason} ${consequence}`),
+		row("Agents", `Can't run here: ${report.reason}`),
 		...(report.fix ? [more(`Fix: ${report.fix}`)] : []),
 	];
 }
@@ -401,8 +401,10 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 		: `${service.state} (${service.manager}${service.pid ? `, pid ${service.pid}` : ""})`;
 	let { serviceRuns: runs, lastConnect: last } = report;
 	let kept = report.runs;
-	let worktrees = report.plannerWorktrees.map(item =>
-		`${item.path} (${item.repository}, document ${item.document})`
+	let worktrees = report.plannerDisks.map(item =>
+		`${item.path} (${item.repository}, document ${item.document}${
+			item.earlier ? "; an earlier chopin's worktree, which nothing uses now" : ""
+		})`
 	);
 	let checkouts = Object.entries(report.checkouts).map(([repository, path]) => {
 		let github = report.github?.[repository];
@@ -435,7 +437,7 @@ export function formatStatus(report: StatusReport, now = Date.now()) {
 					: []),
 				...service.notes.map(more),
 			]),
-		...(report.sandbox ? sandboxRows(report.sandbox, runs ?? last) : []),
+		...(report.sandbox ? sandboxRows(report.sandbox) : []),
 		...(kept.kept || kept.running
 			? [
 				row(

@@ -1396,7 +1396,8 @@ for (`owner`: `run:<id>`, `session:<id>` or `link:<id>`), which ends it (see bel
   machine can end the launch, with the launch credential, which the connector does
   when the run ends. Storage keeps the credential's digest and the machine with the
   launch, so a process started since the launch ends it too; a Chopin without people's
-  AI credentials answers 404 and the run's agent uses its own models, as before. The
+  AI credentials answers 404, and the run's agent has no models but what the machine's
+  `--env` passes, since none of the machine's own setup is in its microVM. The
   connector keeps the launch credential and relays the agent's requests (see
   [Sandbox](chopin-cli.md#sandbox)).
 

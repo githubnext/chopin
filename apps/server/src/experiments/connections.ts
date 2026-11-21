@@ -100,6 +100,11 @@ export const RESUME_PROTOCOL = 6;
  * as the App's bot and credit the person who asked.
  */
 export const APP_TOKEN_PROTOCOL = 7;
+/**
+ * A connector from this protocol on runs every agent, coding agent and Planner backend alike, in an
+ * NVX microVM of its own. Chopin gives work, Planner credentials and AI launches to no other.
+ */
+export const NVX_PROTOCOL = 8;
 
 /** A build's run, as its durable credential names it. */
 export type DurableRun = { id: string; documentId: string; kind: "implementation" | "rebuild" };

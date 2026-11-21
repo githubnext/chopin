@@ -268,10 +268,9 @@ async function connector(baseURL: string, command: string[], env: Record<string,
 	git("commit", "-m", "fixture");
 	await writeFile(join(root, "sample.txt"), "uncommitted local edit");
 	let child = spawn("bun", [
-		join(ROOT, "apps/connector/src/main.ts"),
+		join(ROOT, "apps/connector/src/testing/chopin-on-host.ts"),
 		"connect",
 		root,
-		"--no-sandbox",
 		"--",
 		...command,
 	], {
@@ -622,8 +621,9 @@ test("a build of a revision whose plan files the Planner pushed starts from thei
 			commit,
 		});
 		expect(snapshot.build.planSource).toEqual({ revision, branch: "plans/e2e", commit });
-		// The build's own worktree is that commit, with the plan's files in it.
-		let worktree = join(local.state, "runs", snapshot.build.id);
+		// The build's own repository, cloned in its microVM (here the stand-in's `work`), is that
+		// commit, with the plan's files in it.
+		let worktree = join(local.state, "work", "score");
 		expect(execFileSync("git", ["-C", worktree, "rev-parse", "HEAD"]).toString().trim())
 			.toBe(commit);
 		expect(await readFile(join(worktree, "plan.md"), "utf8")).toBe("# The plan's files\n");

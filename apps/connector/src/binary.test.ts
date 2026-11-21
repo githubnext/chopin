@@ -3,11 +3,8 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { compiledChopin } from "./testing/binary";
-import { answerTokens } from "./testing/github-grant";
+import { machineReport } from "./sandbox";
 import { git } from "./workspace";
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-binary-"));
@@ -31,41 +28,21 @@ async function checkout() {
 	return root;
 }
 
-/** Whether MXC ships an executor for this system and architecture, so the binary carries one. */
-let hasExecutor = (["linux", "win32"].includes(process.platform)
-	|| process.platform === "darwin" && process.arch === "arm64")
-	&& (process.arch === "x64" || process.arch === "arm64");
-
-test.skipIf(!binary || !hasExecutor)(
-	"the compiled binary carries MXC's executor, writes it out once and runs its sandbox probe with it",
-	async () => {
-		let directory = await mkdtemp(join(scratch, "state-"));
-		let status = () => {
-			let result = Bun.spawnSync([binary!, "status", "--json"], {
-				env: {
-					...process.env,
-					CHOPIN_CONNECTOR_STATE_DIR: directory,
-					CHOPIN_URL: "http://127.0.0.1:9",
-				},
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			expect(result.stderr.toString()).toBe("");
-			return JSON.parse(result.stdout.toString()) as {
-				sandbox: { engine: string; reason?: string };
-			};
-		};
-		let report = status().sandbox;
-		// Whatever this machine lacks, the binary had the executor to try: it is never "no executor".
-		if (report.engine === "none") expect(report.reason).not.toContain("no MXC executor");
-		else expect(["seatbelt", "bubblewrap", "processcontainer"]).toContain(report.engine);
-		let written = [...new Bun.Glob("*/*").scanSync({ cwd: join(directory, "sandbox") })];
-		expect(written).toHaveLength(1);
-		expect(written[0]).toMatch(/^[0-9a-f]{16}\/(lxc-exec|mxc-exec-mac|wxc-exec\.exe)$/);
-		// The second run finds it where it was written.
-		let again = status().sandbox;
-		expect(again).toEqual(report);
-		expect([...new Bun.Glob("*/*").scanSync({ cwd: join(directory, "sandbox") })]).toEqual(written);
+test.skipIf(!binary)(
+	"the compiled binary says where this machine's agents run: each in its own microVM, or why it can't",
+	() => {
+		let result = Bun.spawnSync([binary!, "status", "--json"], {
+			env: {
+				...process.env,
+				CHOPIN_CONNECTOR_STATE_DIR: scratch,
+				CHOPIN_URL: "http://127.0.0.1:9",
+			},
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		expect(result.stderr.toString()).toBe("");
+		// It reads this machine as this process does: the same user, the same hypervisor device.
+		expect(JSON.parse(result.stdout.toString()).sandbox).toEqual(machineReport());
 	},
 );
 
@@ -129,137 +106,6 @@ test.skipIf(!binary)(
 );
 
 test.skipIf(!binary)(
-	"the compiled binary runs an investigation through its own stdio bridge",
-	async () => {
-		let root = await checkout();
-		let state = await mkdtemp(join(scratch, "state-"));
-		let input = {
-			id: crypto.randomUUID(),
-			documentId: crypto.randomUUID(),
-			brief: "Produce the captured startup fixture",
-			source: {
-				repositoryId: "R_repo",
-				repository: "octo-org/score",
-				commit: git(root, "rev-parse", "HEAD"),
-			},
-			context: "",
-			requester: "a",
-			authorizer: "a",
-		};
-		// Who called which connector tool: the connection's token, or the run token the bridge holds.
-		let calls: Array<[string, string]> = [];
-		let offered = false;
-		let finished = Promise.withResolvers<string>();
-		let results: Record<string, () => unknown> = {
-			wait_for_work: async () => {
-				if (offered) return await Bun.sleep(100), {};
-				offered = true;
-				return { id: input.id, kind: "experiment" };
-			},
-			claim_experiment: () => ({ input, generation: 1, runToken: "run-token" }),
-			read_experiment: () => ({ input }),
-			read_investigation: () => ({ input }),
-			upload_investigation_image: () => ({ path: `/images/${"a".repeat(64)}.png` }),
-			complete_experiment: () => finished.resolve("complete_experiment"),
-			fail_experiment: () => finished.resolve("fail_experiment"),
-		};
-		let chopin = Bun.serve({
-			hostname: "127.0.0.1",
-			port: 0,
-			async fetch(request): Promise<Response> {
-				let path = new URL(request.url).pathname;
-				if (path === "/api/connector/pairings") {
-					return Response.json({
-						id: "pairing",
-						secret: "secret",
-						url: `http://127.0.0.1:${chopin.port}/connect?pairing=pairing`,
-						code: "ABCD-EFGH",
-					});
-				}
-				if (path === "/api/connector/pairings/pairing/claim") {
-					return Response.json({ token: `chopin_m_${"M".repeat(43)}` });
-				}
-				if (path === "/api/connector/connections") {
-					return Response.json({ token: "connection-token" });
-				}
-				// A Chopin that hands runs no AI launch: the agent uses its own models.
-				if (path === "/api/connector/ai-launch") return new Response(null, { status: 404 });
-				// The run's GitHub token, which the binary asks for before anything starts.
-				let issued = await answerTokens(request);
-				if (issued) return issued;
-				let token = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
-				if (path !== "/connector/mcp" || !["connection-token", "run-token"].includes(token)) {
-					return new Response(null, { status: 401 });
-				}
-				let server = new Server({ name: "fake-chopin", version: "1" }, {
-					capabilities: { tools: {} },
-				});
-				server.setRequestHandler(ListToolsRequestSchema, () => ({
-					tools: [
-						"read_investigation",
-						"upload_investigation_image",
-						"submit_investigation_result",
-					].map(name => ({ name, inputSchema: { type: "object" as const } })),
-				}));
-				server.setRequestHandler(CallToolRequestSchema, async request => {
-					calls.push([token, request.params.name]);
-					let result = await results[request.params.name]?.();
-					return { content: [{ type: "text", text: JSON.stringify(result ?? {}) }] };
-				});
-				let transport = new WebStandardStreamableHTTPServerTransport({
-					sessionIdGenerator: undefined,
-					enableJsonResponse: true,
-				});
-				await server.connect(transport);
-				return transport.handleRequest(request);
-			},
-		});
-		// The agent is the stdio fixture: it starts whatever bridge command the connector offers.
-		let connector = Bun.spawn([
-			binary!,
-			"connect",
-			root,
-			"--no-sandbox",
-			"--",
-			process.execPath,
-			join(import.meta.dir, "testing/fake-agent.ts"),
-			"--stdio-images",
-		], {
-			env: {
-				...process.env,
-				CHOPIN_URL: `http://127.0.0.1:${chopin.port}`,
-				CHOPIN_CONNECTOR_STATE_DIR: state,
-			},
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		try {
-			let outcome = await Promise.race([
-				finished.promise,
-				connector.exited.then(code => `connector exited ${code}`),
-				Bun.sleep(30_000).then(() => "timed out"),
-			]);
-			connector.kill("SIGINT");
-			let code = await connector.exited;
-			let output = await new Response(connector.stdout).text()
-				+ await new Response(connector.stderr).text();
-			expect(outcome, output).toBe("complete_experiment");
-			expect(calls.filter(([token]) => token === "run-token")).toEqual([
-				["run-token", "read_investigation"],
-				["run-token", "upload_investigation_image"],
-				["run-token", "submit_investigation_result"],
-			]);
-			expect(calls.at(-1)).toEqual(["connection-token", "disconnect_workspace"]);
-			expect(code, output).toBe(0);
-		} finally {
-			connector.kill("SIGKILL");
-			await chopin.stop(true);
-		}
-	},
-	60_000,
-);
-
-test.skipIf(!binary)(
 	"the compiled binary ignores the .env and bunfig.toml of the checkout it runs in",
 	async () => {
 		let root = await checkout();
@@ -300,7 +146,8 @@ test.skipIf(!binary)(
 		};
 		let proxies = ["HTTP_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"];
 		for (let name of ["CHOPIN_URL", "NO_PROXY", "no_proxy", ...proxies]) delete env[name];
-		let connector = Bun.spawn([binary!, "connect", ".", "--", process.execPath], {
+		// `update` asks the server which chopin to install before anything else, wherever it runs.
+		let connector = Bun.spawn([binary!, "update", "--yes"], {
 			cwd: root,
 			env,
 			stdout: "pipe",
@@ -310,9 +157,10 @@ test.skipIf(!binary)(
 			let code = await Promise.race([connector.exited, Bun.sleep(30_000).then(() => "timed out")]);
 			let output = await new Response(connector.stdout).text()
 				+ await new Response(connector.stderr).text();
-			expect(code, output).toBe(1);
+			expect(code, output).not.toBe(0);
 			expect(captured).toEqual([]);
-			expect(proxied).toEqual(["CONNECT chopin.githubnext.com:443 HTTP/1.1"]);
+			// It asks the default server first, never the one the checkout's .env names.
+			expect(proxied[0]).toBe("CONNECT chopin.githubnext.com:443 HTTP/1.1");
 			expect(existsSync(marker)).toBe(false);
 		} finally {
 			connector.kill("SIGKILL");

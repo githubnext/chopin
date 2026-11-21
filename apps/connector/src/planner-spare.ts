@@ -5,15 +5,17 @@ import { redacted } from "./connection";
 import { gitAsync } from "./git-host";
 import { githubPaths } from "./github-token";
 import type { Output } from "./output";
-import { passMasked, plannerEnvironment, stopBackend } from "./planner";
+import { passMasked, plannerEnvironment, plannerGuest, stopBackend } from "./planner";
+import { guestRepositoryPath } from "./nvx";
+import { holdDisk } from "./planner-disks";
 import { backoff } from "./reconnect";
 import { type Sandbox, type Spawned, spawnIn } from "./sandbox";
 import type { AgentStore } from "./machine-store";
 import {
 	agentFolder,
 	assignedSlots,
+	plannerDisk,
 	plannerFolder,
-	preparePlannerWorktree,
 	SPARE_SLOT,
 	type SpareState,
 	type SpareStates,
@@ -100,7 +102,7 @@ export type Spare = {
 	listen(hooks: { secrets: () => string[]; stderr?: (text: string) => void }): Promise<unknown>;
 	/** Write one line to its stdin; false when it can't be written. */
 	send(message: Record<string, unknown>): boolean;
-	/** Detach its slot at the checkout's HEAD, on the host, when HEAD moved since it started. */
+	/** Throws when the checkout's HEAD moved since it started, so the document starts cold. */
 	refresh(): Promise<void>;
 	/** End its stdin and stop its processes; its slot stays. */
 	stop(): Promise<void>;
@@ -170,13 +172,12 @@ async function writeRecord(directory: string, value: SpareRecord) {
 	await rename(temporary, path);
 }
 
-/** Remove a slot that never got a document: its linked worktree, its entry and its token folder. */
-async function removeSlot(checkout: string, slot: string) {
-	await gitAsync(["worktree", "remove", "--force", slot], { cwd: checkout }).catch(() => {});
+/** Remove a slot that never got a document: its disk, its token folder and its agents' state. */
+async function removeSlot(slot: string) {
+	await rm(plannerDisk(slot), { force: true });
 	await rm(slot, { recursive: true, force: true });
 	await rm(tokenFolder(slot), { recursive: true, force: true });
 	await rm(agentFolder(slot), { recursive: true, force: true });
-	await gitAsync(["worktree", "prune"], { cwd: checkout }).catch(() => {});
 }
 
 /**
@@ -192,7 +193,7 @@ export function plannerSpares(options: {
 	output: Output;
 	signal: AbortSignal;
 	env?: Record<string, string>;
-	sandbox?: Sandbox;
+	sandbox: Sandbox;
 	agentStore?: AgentStore;
 	states?: SpareStates;
 	off?: boolean;
@@ -292,16 +293,18 @@ export function plannerSpares(options: {
 		let slot = join(parent, `spare-${randomBytes(6).toString("hex")}`);
 		let tokens = tokenFolder(slot);
 		let head: string;
+		// Its disk is held from its making until the spare stops, so no sweep removes it under it.
+		let releaseDisk: () => Promise<void> = async () => {};
 		try {
+			releaseDisk = await holdDisk(plannerDisk(slot));
 			await mkdir(tokens, { recursive: true, mode: 0o700 });
-			if (!await preparePlannerWorktree(entry.checkout, slot)) {
-				throw new Error(`${slot} holds files that are no worktree`);
-			}
+			await options.sandbox.makeDisk?.(plannerDisk(slot));
 			head = String((await gitAsync(["rev-parse", "HEAD"], { cwd: entry.checkout })).stdout).trim();
 		} catch (error) {
-			await removeSlot(entry.checkout, slot);
+			await removeSlot(slot);
+			await releaseDisk();
 			dim(
-				`… Couldn't make a spare Planner's worktree for ${entry.repository} (${
+				`… Couldn't make a spare Planner's disk for ${entry.repository} (${
 					redacted(error instanceof Error ? error.message : String(error)).split("\n")[0]
 				}); new documents' Planners start as before.`,
 			);
@@ -309,14 +312,24 @@ export function plannerSpares(options: {
 			return;
 		}
 		if (stopped) {
-			await removeSlot(entry.checkout, slot);
+			await removeSlot(slot);
+			await releaseDisk();
 			return;
 		}
 		let spare: Spare;
 		try {
-			spare = spawnSpare({ ...options, values, managed }, entry, slot, tokens, head, identity);
+			spare = spawnSpare(
+				{ ...options, values, managed },
+				entry,
+				slot,
+				tokens,
+				head,
+				identity,
+				releaseDisk,
+			);
 		} catch (error) {
-			await removeSlot(entry.checkout, slot);
+			await removeSlot(slot);
+			await releaseDisk();
 			dim(
 				`… Couldn't start a spare Planner for ${entry.repository} (${
 					error instanceof Error ? error.message : String(error)
@@ -392,11 +405,13 @@ export function plannerSpares(options: {
 			for (let entry of entries.values()) {
 				let parent = await plannerFolder(directory, entry.repository);
 				let assigned = await assignedSlots(parent);
-				for (let name of await readdir(parent).catch(() => [] as string[])) {
-					if (SPARE_SLOT.test(name) && !assigned.has(name)) {
-						await removeSlot(entry.checkout, join(parent, name));
-					}
-				}
+				// A slot is its disk, token folder and agents' state, whichever are there.
+				let slots = new Set(
+					(await readdir(parent).catch(() => [] as string[]))
+						.map(name => name.replace(/\.(disk|tokens|agent)$/, ""))
+						.filter(name => SPARE_SLOT.test(name) && !assigned.has(name)),
+				);
+				for (let name of slots) await removeSlot(join(parent, name));
 			}
 		})().catch(() => {}),
 	);
@@ -468,7 +483,7 @@ function spawnSpare(
 		url: string;
 		command: string[];
 		env?: Record<string, string>;
-		sandbox?: Sandbox;
+		sandbox: Sandbox;
 		agentStore?: AgentStore;
 		values: string[];
 		managed: boolean;
@@ -478,6 +493,8 @@ function spawnSpare(
 	tokens: string,
 	head: string,
 	identity: string,
+	/** Lets go of its disk once it has stopped (see `holdDisk`). */
+	releaseDisk: () => Promise<void>,
 ): Spare & { ready: Promise<boolean>; printed(): boolean } {
 	// A spare a managed document will take starts as its cold launch would: nothing of the owner's
 	// agent setup in its environment or in its sight.
@@ -485,22 +502,19 @@ function spawnSpare(
 	for (let name of HANDED) delete inherited[name];
 	let child = spawnIn(options.sandbox, {
 		command: options.command,
-		cwd: entry.checkout,
 		env: {
 			...inherited,
 			// Where its credentials will be: the files appear with its hand-over, never before.
 			...githubPaths(join(tokens, "github"), join(tokens, "gh"), entry.repository),
 			CHOPIN_URL: options.url,
 			CHOPIN_CHECKOUT: entry.checkout,
-			CHOPIN_WORKTREE: slot,
+			CHOPIN_WORKTREE: guestRepositoryPath(entry.repository, options.sandbox.work),
 			CHOPIN_PLANNER_TOKEN_FILE: join(tokens, "planner"),
 			CHOPIN_MCP_TOKEN_FILE: join(tokens, "mcp"),
 			CHOPIN_PLANNER_SPARE: String(SPARE_PROTOCOL),
 		},
 		stdin: "pipe",
-		writable: [slot],
-		own: [slot, tokens, ...options.managed ? [agentFolder(slot)] : []],
-		...(options.managed ? { agentHome: agentFolder(slot), ownerEnv: options.env ?? {} } : {}),
+		...plannerGuest(slot, entry.checkout, entry.repository, options.managed, options.sandbox.work),
 	});
 	let hooks: { secrets: () => string[]; stderr?: (text: string) => void } = {
 		secrets: () => options.values,
@@ -526,6 +540,8 @@ function spawnSpare(
 	void exited.then(() => {
 		living = false;
 		isReady(false);
+		// `nvx` exits once its microVM has.
+		void releaseDisk();
 	});
 	let writable = true;
 	child.stdin?.on("error", () => {
@@ -544,6 +560,7 @@ function spawnSpare(
 		}
 		// Its children go with it, as a backend's do.
 		if (living || process.platform !== "win32") await stopBackend(child);
+		await releaseDisk();
 	};
 	return {
 		repository: entry.repository,
@@ -572,15 +589,14 @@ function spawnSpare(
 		async refresh() {
 			let now = String((await gitAsync(["rev-parse", "HEAD"], { cwd: entry.checkout })).stdout)
 				.trim();
-			if (now === head) return;
-			// Its worktree is untouched: detached at the checkout's HEAD now, files and all.
-			await gitAsync(["checkout", "--quiet", "--detach", now], { cwd: slot, noFilters: true });
-			head = now;
+			// Its repository is in its microVM, which the host never runs git in: a spare whose checkout
+			// moved since it started is let go, and the document starts cold at the checkout's HEAD.
+			if (now !== head) throw new Error("its checkout moved since it started");
 		},
 		stop,
 		async discard() {
 			await stop();
-			await removeSlot(entry.checkout, slot);
+			await removeSlot(slot);
 		},
 	};
 }

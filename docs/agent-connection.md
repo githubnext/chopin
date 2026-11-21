@@ -1527,38 +1527,24 @@ Each launch gets the connector's environment, your `--env` values, and these:
 | `CHOPIN_PLANNER_TOKEN`           | This launch's [credential](#credential).                                                           |
 | `CHOPIN_PLANNER_TOKEN_FILE`      | A file (mode `0600`) that always holds a current credential, replaced before it expires.           |
 | `CHOPIN_CHECKOUT`                | The absolute root of the document's repository's checkout or clone.                                |
-| `CHOPIN_WORKTREE`                | The command's own worktree path, `<base dir>/planners/<owner>/<repo>/<document id>`.               |
+| `CHOPIN_WORKTREE`                | The command's own clone of the repository, in its microVM: `/work/<repository name>`.              |
 | `CHOPIN_GITHUB_TOKEN`            | A token of Chopin's GitHub App for the document's repository, for pushing and draft pull requests. |
 | `CHOPIN_GITHUB_TOKEN_EXPIRES_AT` | When that token expires, in ISO 8601.                                                              |
 | `CHOPIN_GITHUB_TOKEN_FILE`       | A file (mode `0600`) that always holds the current token.                                          |
 | `CHOPIN_MCP_TOKEN_FILE`          | A file (mode `0600`) holding the token for Chopin's tools at `/mcp`, renewed with the credential.  |
 
-`CHOPIN_WORKTREE` stays the same across launches. The connector makes its
-parent folders but never removes the worktree itself. Whether the backend or the
-connector makes it depends on the [sandbox](chopin-cli.md#sandbox):
-
-- **Without a sandbox** (none works on the machine, or `--no-sandbox`), the folder is
-  not there on the first launch and the command makes the worktree, for example:
-
-  ```sh
-  git -C "$CHOPIN_CHECKOUT" worktree add "$CHOPIN_WORKTREE" -b <branch>
-  ```
-
-- **In the sandbox** the worktree already exists on every launch, the first too: the
-  connector makes it on the host before the backend starts, as a linked worktree of
-  `CHOPIN_CHECKOUT` detached at its `HEAD`, and leaves it as it finds it on later
-  launches. The backend must use it, as it must after its first launch anyway:
-  `git -C "$CHOPIN_WORKTREE" checkout -b <branch>` starts a branch, and it can commit
-  and push from there. `git worktree add` fails in the sandbox, because the sandbox
-  lets the backend write that one worktree's git directory and not the list of
-  worktrees in the checkout's. **`CHOPIN_CHECKOUT` is read-only**: it is the
-  person's own checkout, and the sandbox never lets an agent write its files, its
-  submodules, its `.git`, its index or `HEAD`, whether it is a regular checkout or a
-  linked worktree of theirs, and no path its owner adds with `--sandbox-write` changes
-  that. A backend reads it, and does its work and its edits in
-  `CHOPIN_WORKTREE`, from where its changes reach the person as commits and a
-  pushed branch. See [Git in the sandbox](chopin-cli.md#git-in-the-sandbox). A
-  folder at `CHOPIN_WORKTREE` that holds something and is no worktree is left as it is.
+`CHOPIN_WORKTREE` stays the same across launches. The backend runs in a microVM of its
+own (see [Sandbox](chopin-cli.md#sandbox)), and `CHOPIN_WORKTREE` is its own clone of the
+repository there, on a disk that lasts between its launches: its first launch clones
+`CHOPIN_CHECKOUT`'s repository at its `HEAD` before the backend starts, and later
+launches find the clone as the backend left it. The backend works, commits and pushes
+there; `git -C "$CHOPIN_WORKTREE" checkout -b <branch>` starts a branch.
+**`CHOPIN_CHECKOUT` is read-only**: it is the person's own checkout, shared with the
+microVM read-only, uncommitted files included, and nothing writes it. A backend reads
+it, and does its work and its edits in `CHOPIN_WORKTREE`, from where its changes reach
+the person as commits and a pushed branch. The disk goes when Chopin says its document
+is archived or gone, when no Planner has run on it for 30 days, or when the machine is
+unpaired or revoked; commits never pushed go with it.
 
 The connector renews the Planner credential in `CHOPIN_PLANNER_TOKEN_FILE` 5 minutes
 before it expires, for as long as the backend runs and Chopin still lets the machine run

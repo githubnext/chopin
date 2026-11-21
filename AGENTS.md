@@ -240,8 +240,8 @@ durable.
   Retry ends with (`NO_AI_ACCOUNT_RUN`, or that a Copilot check couldn't finish, never
   that there is no subscription), its card offering its starter alone Open AI accounts;
   a launch whose document or machine ended first is `launch-ended`, accounts that kept
-  changing 503, and only a Chopin without launches (404) leaves a run on the machine's
-  own models. Each launch records its owner (`run:<id>`, `session:<id>`, migration 046)
+  changing 503, and a Chopin without launches (404) gives a run no models but what its
+  `--env` passes, since nothing of the machine's own setup is in its microVM. Each launch records its owner (`run:<id>`, `session:<id>`, migration 046)
   and its final checks read that the run still runs or a session of this process holds
   it (`ownerLive`). A client offering `ai-catalog` too may ask once per link for a catalog
   launch of the same account, owned by the link (`link:<id>`), to list that account's models
@@ -386,99 +386,46 @@ durable.
   teammates' choices and favorites of the machine and hands a document to Default machine only where the machine ran its Planner,
   had been asked to, was placing it, or someone uses the document; any other just loses
   the choice.
-- **Agents on a machine run in its process sandbox.** The connector starts the ACP
-  agent and each Planner backend through one `Sandbox` seam (`apps/connector/src/sandbox.ts`):
-  MXC's Seatbelt, bubblewrap or ProcessContainer, in one policy. Writes go to the run's
-  worktree or the Planner's own worktree, the agent's state, a private temporary directory and what
-  the owner adds. A sandboxed agent never writes the person's own checkout: a Planner runs in it
-  (`CHOPIN_CHECKOUT`, whether a regular checkout, a linked worktree of the person's or a clone
-  Chopin made) and reads it, whole, so its files, its submodules (whose `.git` files the person's
-  `git status` and `git diff` follow), its `.git`, index and `HEAD` are never writable, and no path
-  the owner adds with `--sandbox-write` changes that: one that is the checkout or inside it (a
-  submodule's folder) or its git directory is not granted, and one that holds it is granted with
-  the checkout held read-only. The working directory is written only where the connector made it for the launch (`Launch.own`). A
-  Planner's changes reach the person as commits and a pushed branch from its own worktree
-  (`CHOPIN_WORKTREE`), never by in-place edits. Git on the host runs what a repository's configuration names, and finds that
-  configuration through files (a worktree's or a submodule's `.git`, a `commondir`) that name another
-  directory, and a sandbox can only hold back paths that exist. So the policy is an allow-list: the repository's
-  git directory is read-only whole, which also stops its entries being renamed or made again, with
-  only `objects`, `refs`, `logs` and `lfs` written in it (data git reads, not programs or
-  pointers), and only by a launch with a worktree of its own: for a linked worktree the connector
-  made for the launch (a run's, or a Planner's own), that worktree's one entry in `worktrees/` with
-  `commondir`, `gitdir`, `config.worktree` and the directories `hooks`, `info` and `modules` read-only
-  inside it (made empty where there is none). A name made at the top of that entry can't be refused:
-  git takes the lock of its `HEAD` and index by creating a file beside each, which a sandbox can't grant
-  for those names and refuse for the others (measured: `git add` and `git commit` fail with `Unable to
-  create 'index.lock'` when the entry is read-only), so that directory stays writable and a
-  new name in it (`future-pointer`, `rebase-merge/`, `locked`, a file named like a hook) is made. Such a
-  name is never a pointer, configuration, hook or program for the person's git in their checkout, which
-  stays read-only with the rest of the git directory (it reads the entry to list, prune and remove the
-  worktree, to see which branch it has checked out or is rebasing, which a planted name can make refuse
-  a checkout or delete of that branch, and `gc` reads its `HEAD` and index), and it makes no hardened connector git run anything
-  (tested: status, fetch, the removal of the worktree and retention with such names planted, an unfinished
-  rebase's `exec` line among them, run nothing; git run inside the worktree itself would, as the next
-  sentences say). Which entry is the launch's own
-  is the connector's record of what it made for it (`Launch.own`), never what a folder is called or
-  what is in it. Its `config`, `hooks`, `info`, `HEAD`, `index`, `packed-refs`, submodules' git
-  directories, `worktrees` and every worktree's entry but the launch's own, the person's included,
-  are read-only, and no file can be added at its top level. The guarantee is that nothing a
-  sandboxed agent writes is in a tree the person's own git reads in their checkout, but `objects`,
-  `refs`, `logs` and `lfs` (an agent can add commits and move branches there) and the launch's own
-  entry, whose names are no pointer, configuration or program there; the worktree an agent works in
-  is its own, and git run inside it by a person runs what the agent left. Paths are real
-  paths: `repositoryAt` resolves a symbolic `.git` (and a `.git` file that leads through a link)
-  once, and the policy names that directory, never the link. A Planner's own worktree is made by
-  the connector on the host before a sandboxed backend starts (`preparePlannerWorktree`), because
-  `git worktree add` would need `worktrees/` written, and with no filter run (`noFilters`: every
-  filter any configuration defines is given no command); an unsandboxed backend makes it itself. The
-  limit, said plainly: in the sandbox anything written in a Planner's checkout, `git add`, `commit`
-  and `checkout` included, fails (it is read-only whole), and works in the launch's own worktree.
-  A Planner backend that edits `CHOPIN_CHECKOUT` in place must edit its worktree instead; nothing
-  in this repository does. `git worktree add/remove`, `git config` without `-c`, `git remote add`, `branch -D`, `tag -d` and `gc` fail
-  everywhere; `push -u` can't record an upstream (see [Git in the sandbox](docs/chopin-cli.md#git-in-the-sandbox)). Every git command the connector runs on the host
-  goes through `apps/connector/src/git-host.ts`, which is told where the repository is
-  (`GIT_DIR`, `GIT_COMMON_DIR`, `GIT_WORK_TREE`, recorded by `repositoryAt` the first time the
-  connector sees a working tree and never read from the files an agent can write), reads a copy of
-  the person's configuration of the settings a fetch and a checkout need (`GIT_CONFIG_NOSYSTEM`,
-  `GIT_CONFIG_GLOBAL`), and replaces what a repository may set for hooks, the file-system monitor, the
-  ssh command, attributes, `ext::` remotes, credential helpers (reset, and none of the person's
-  named again; a command's caller gives the credentials it needs in the environment) and the
-  local transport (never allowed; `GIT_ALLOW_PROTOCOL` in the connector's own environment is the
-  person's way to a mirror on disk). Not guaranteed: what an agent writes
-  in its own worktree and its own entry (an unfinished rebase's `exec` lines, a repository it
-  `git init`s, a submodule it adds to its own index with a `.git` it wrote, which the connector's
-  git doesn't open) is the agent's, and git run there by a person runs what is there; a repository's
-  own configuration is still read by the connector's git (filters, proxies), which the policy keeps
-  an agent from writing. `removePlantedRedirects` remains as a cheap detector of a `commondir` an
-  earlier release's agent left, and is not the defense. The rest of the disk reads except credentials (on Windows only what a
-  ProcessContainer is given: the profile, MXC's baseline of tool directories, per-user programs, the
-  working directory and worktree and the repository's git directory, whole, see `windowsReadRoots` and `launchPolicy`; not run on Windows), and the connector's state
-  directory is left out of the read grants, so an agent sees there only its own worktree and the
-  folder of its own tokens (`<worktree>.tokens`) and nothing made later (Seatbelt lets a denial
-  win over a grant inside it, so a denial can't give an agent its own paths back; a working directory or
-  an owner's `--sandbox-write` path that holds the state directory, a home or a dotfiles checkout, is read
-  and written around it too, and the connected start check with no registered checkout runs in an empty
-  folder of its own, not the home); egress goes only
-  through a loopback allow-list proxy. A run handed AI grants (`Launch.agentHome`) gets a state
-  directory of its own (`<worktree>.agent`, with a generated `models.json` for Atomic), stand-ins in
-  its providers' key variables, each granted provider's relay base URL with its stand-in in
-  `CHOPIN_AI_PROVIDERS` for any agent, base URLs on the connector's loopback relay (`ai-relay.ts`),
-  which adds the launch credential the agent never holds, an environment built from an allow-list of
-  the connector's own (`managedEnvironment`: system, account, tool, locale, certificate and proxy
-  variables, plus `--env` without GitHub or agent setup), so no other key in the connector's
-  environment reaches it, and none of the owner's agent configuration, logins or sessions on disk
-  wherever the connector's environment or `--env` keeps them (`ownerAgentPaths`); an owner folder that
-  holds the launch's own is denied around it, and one that is or holds the home refuses the launch. A
-  Planner backend, cold or spare, is started the same way when Chopin's Planner credential answer (and,
-  for spares from the start, `/api/connector/version`) says `"ai": "chopin"` (`plannerEnvironment`,
-  `CHOPIN_AI=chopin`); a spare started otherwise is never handed such a document. A
-  machine with no working sandbox runs agents unsandboxed and says so, unless its owner chose
-  `--require-sandbox`. Do not start an agent process outside the seam. The one exception is the two
-  ACP `initialize` start checks, `chopin service install`'s and `chopin connect --install-service`'s
-  before the machine is paired (`checkAgent`): they are not runs, send the agent nothing from Chopin
-  (no document, prompt or instruction), last 10 seconds at most, and are not sandboxed, even with
-  `--require-sandbox`; `--skip-check` leaves them out. The check that names the agent to Chopin
-  once connected goes through the seam. See [Sandbox](docs/chopin-cli.md#sandbox).
+- **Agents on a machine run in NVX microVMs.** The connector starts every agent process, each
+  ACP agent of a run, each Planner backend cold or spare, the agent checks and the builds of agent
+  images, in an [NVX](https://github.com/microsoft/nvx) microVM of its own, through one seam
+  (`Sandbox.spawn` in `apps/connector/src/sandbox.ts`); `vmSpec` in `apps/connector/src/nvx.ts` is
+  the one place that decides what a guest is given. There is no process sandbox, no fallback and
+  no unsandboxed mode: a machine that can't run NVX (not Linux or Windows on x86_64, or its user
+  can't read and write `/dev/kvm` or `/dev/mshv`) is refused by `chopin pair` and `chopin connect`
+  before anything is paired or a key spent, with words that say what it needs and the fix; one
+  already paired tells Chopin (`/api/connector/capability`, kept as `machines.vm_problem` and shown
+  on the Machines page while it is away); and Chopin takes a connection only from connector
+  protocol 8 saying its agents run in microVMs (`chopin-connector-sandbox: nvx`), telling an older
+  connector to update. Do not start an agent process outside the seam; tests of what the
+  connector does around an agent use the host stand-in in `testing/host-sandbox.ts` and
+  `testing/chopin-on-host.ts`, never built into `chopin`. A guest boots its agent's image, an EROFS
+  layer built once per recipe in a microVM (Node, pinned git packages, the agent at the version
+  this release pins or the owner's `--install` commands, and an account for the connector's own
+  user, which every guest runs as so shared files are its own), and is given exactly: the git
+  directory its repository is cloned from, read-only; for a Planner, the person's checkout,
+  read-only, uncommitted files included; its token folder, read-only; its agents' state, written,
+  on Chopin's AI accounts; the MCP bridge, one read-only file; and what the owner adds with
+  `--sandbox-write`. Nothing else of the host: no home, credentials, other launches' files, the
+  state directory or the owner's agent logins. Shares never hold one another, and a guest writes
+  nothing of the person's: every share of a checkout or git directory is read-only, which NVX
+  enforces on the host. An agent never works in a host folder: its guest clones the repository
+  into its own file system before the agent starts (`PREPARE`), a run with `git clone --shared` into
+  memory at the run's commit and branch, a Planner with `--reference --dissociate` onto a sparse
+  32 GiB disk of its own (`<slot>.disk`) that lasts between its starts. The host never runs git in a
+  tree an agent wrote, and a run leaves no worktree; what an agent keeps, it pushes. A Planner's
+  disk goes when Chopin says its document is archived or gone (`/api/connector/planner/kept`, asked
+  as the connector connects and hourly), after 30 days unused, or when the machine is unpaired or
+  revoked, never while a launch's record names it as running; commits never pushed go with it. A
+  guest's only way out is the connector's allow-list proxy through NVX's proxy-only network
+  (`--network-egress=deny --host-loopback=deny --network-proxy`), its environment is the launch's,
+  in a `0600` file and never on a command line, and it holds only its own launch's credentials:
+  AI stand-ins, never a real key or the relay's launch credential. Each launch's `nvx` runs in a
+  process group the connector ends with it, and a connector that died has its orphans killed by
+  the next one (launch records under `<base>/nvx/launches`). The run's MCP bridge runs in the guest
+  on the image's Node and reads an investigation's images in the guest's repository. Windows (WHP)
+  is designed but not yet run end to end. See [Agents in NVX microVMs](docs/nvx-sandbox.md) and
+  [Sandbox](docs/chopin-cli.md#sandbox).
 - **Persistence should precede publication.** Do not acknowledge or broadcast a
   domain mutation before its fenced durable commit.
 

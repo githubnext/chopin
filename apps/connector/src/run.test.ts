@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
+import { HOST_SANDBOX } from "./testing/host-sandbox";
 import * as Permission from "./permission";
 import {
 	chmod,
@@ -8,7 +9,6 @@ import {
 	readFile,
 	realpath,
 	rm,
-	stat,
 	writeFile,
 } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
@@ -78,6 +78,7 @@ async function run(
 			title: "Margin landing page",
 			runToken: "token",
 		}, {
+			sandbox: HOST_SANDBOX,
 			checkouts: checkouts({ directory: state, registered: { "org/repo": root } }),
 			directory: state,
 			command: [
@@ -193,7 +194,7 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.each([true, false])(
-	"an investigation (spike=%s) serves image tools through an authenticated local bridge",
+	"an investigation (spike=%s) uploads an image from its own repository through its run's bridge, and none from outside it",
 	async spike => {
 		let root = await mkdtemp(join(tmpdir(), "chopin-spike-"));
 		let state = await mkdtemp(join(tmpdir(), "chopin-spike-state-"));
@@ -265,12 +266,12 @@ test.each([true, false])(
 					authorizer: "a",
 				},
 			}, {
+				sandbox: HOST_SANDBOX,
 				checkouts: checkouts({ directory: state, registered: { "org/repo": root } }),
 				directory: state,
 				command: [
 					process.execPath,
 					new URL("./testing/fake-agent.ts", import.meta.url).pathname,
-					"--http",
 					spike ? "--spike" : "--images",
 				],
 				url: `http://127.0.0.1:${chopin.port}`,
@@ -291,12 +292,6 @@ test.each([true, false])(
 				spike ? "submit_spike_result" : "submit_investigation_result",
 			]);
 			expect(received[0][1]).toEqual({ data: "iVBORw0KGgo=", mimeType: "image/png" });
-			// The bridge closes with the run.
-			let submitted = received[1][1];
-			let bridgeUrl = spike
-				? submitted.url
-				: (submitted.result as { provenance: { environment: string } }).provenance.environment;
-			await expect(fetch(bridgeUrl as string, { method: "POST" })).rejects.toThrow();
 		} finally {
 			await chopin.stop(true);
 			await rm(root, { recursive: true, force: true });
@@ -496,22 +491,11 @@ test("an agent that cancelled its own turn reads as stopped, not as a failure", 
 	expect(terminal.err()).not.toContain("Agent stopped: cancelled");
 });
 
-test("servers the agent left running in its worktree end with the run", async () => {
-	let file = join(await mkdtemp(join(tmpdir(), "chopin-orphan-")), "pid");
-	process.env.CHOPIN_TEST_ORPHAN_PID = file;
-	try {
-		await run({}, ["--orphan"]);
-		let pid = Number(await readFile(file, "utf8"));
-		expect(pid).toBeGreaterThan(0);
-		expect(() => process.kill(pid, 0)).toThrow();
-	} finally {
-		delete process.env.CHOPIN_TEST_ORPHAN_PID;
-		await rm(dirname(file), { recursive: true, force: true });
-	}
-});
+/** What the fake implementer saw as its turn began, recorded in a file. */
+type Seen = { prompt: string; cwd: string; head: string; branch: string; alternates: string };
 
-/** Records the prompt and CHOPIN_RUN_WORKTREES the fake implementer saw, through a file. */
-async function seeing<T>(body: (seen: () => Promise<{ prompt: string; worktrees: string }>) => T) {
+/** Records what the fake implementer saw (see `Seen`), through a file. */
+async function seeing<T>(body: (seen: () => Promise<Seen>) => T) {
 	let file = join(await mkdtemp(join(tmpdir(), "chopin-seen-")), "seen.json");
 	process.env.CHOPIN_TEST_SEEN = file;
 	try {
@@ -523,23 +507,26 @@ async function seeing<T>(body: (seen: () => Promise<{ prompt: string; worktrees:
 }
 
 test.each([
-	["a build", {}, ["--http"]],
+	["a build", {}, [] as string[]],
 	["a living document's first build", { live: true }, ["--live"]],
 	["a rebuild", { kind: "rebuild" as const }, ["--rebuild"]],
 ])(
-	"%s tells the agent its worktree and the one folder for any extra worktrees",
+	"%s tells the agent its repository, a clone of its own in its microVM, and where to add worktrees",
 	async (_name, build, flags) => {
 		await seeing(async seen => {
-			await run(build, flags, undefined, undefined, {}, async ({ state, id }) => {
-				let { prompt, worktrees } = await seen();
-				let runs = join(state, "runs");
-				expect(worktrees).toBe(join(runs, `${id}-worktrees`));
-				expect(prompt).toContain(`Your worktree is ${join(runs, id)}.`);
+			await run(build, flags, undefined, undefined, {}, async () => {
+				let { prompt, cwd } = await seen();
+				let work = HOST_SANDBOX.work;
+				expect(cwd).toBe(join(work, "repo"));
 				expect(prompt).toContain(
-					`create them only inside ${worktrees} (also in $CHOPIN_RUN_WORKTREES) with `
-						+ "`git worktree add`",
+					`Your repository is ${join(work, "repo")}, a clone of its own in this machine's microVM.`,
 				);
-				expect(prompt).not.toContain("sub-worktree");
+				expect(prompt).toContain(
+					`For extra worktrees, as for concurrent PRs, add them with \`git worktree add\` inside ${work}.`,
+				);
+				expect(prompt).toContain(
+					"Everything in the microVM, uncommitted changes included, is gone",
+				);
 				// Pull requests it opens are drafts; it never merges.
 				expect(prompt).toContain(
 					flags.includes("--rebuild")
@@ -559,35 +546,25 @@ test.each([
 );
 
 test.skipIf(process.platform === "win32")(
-	"extra worktrees end with the run, uncommitted changes and their servers too, and the run's own worktree stays",
+	"a build's agent works in a clone of its own at the run's commit, on its branch, reading the checkout's objects, and leaves nothing in the person's repository",
 	async () => {
-		let file = join(await mkdtemp(join(tmpdir(), "chopin-extra-")), "pid");
-		process.env.CHOPIN_TEST_ORPHAN_PID = file;
-		try {
-			await seeing(seen =>
-				run({}, ["--worktrees"], undefined, undefined, {}, async ({ root, state, id }) => {
-					let { worktrees } = await seen();
-					let runs = join(state, "runs");
-					let listed = git(root, "worktree", "list", "--porcelain").split("\n")
-						.filter(line => line.startsWith("worktree "))
-						.map(line => line.slice("worktree ".length));
-					expect(await Promise.all(listed.map(path => realpath(path).catch(() => path)))).toEqual([
-						await realpath(root),
-						await realpath(join(runs, id)),
-					]);
-					expect(await stat(worktrees).catch(() => "missing")).toBe("missing");
-					expect((await stat(join(runs, id))).isDirectory()).toBe(true);
-					// Their branches, pushed for their pull requests, stay.
-					expect(git(root, "branch", "--list", "chopin/task-*")).toContain("chopin/task-b");
-				})
-			);
-			let pid = Number(await readFile(file, "utf8"));
-			expect(pid).toBeGreaterThan(0);
-			expect(() => process.kill(pid, 0)).toThrow();
-		} finally {
-			delete process.env.CHOPIN_TEST_ORPHAN_PID;
-			await rm(dirname(file), { recursive: true, force: true });
-		}
+		await seeing(seen =>
+			run({}, [], undefined, undefined, {}, async ({ root, id }) => {
+				let { cwd, head, branch, alternates } = await seen();
+				expect(cwd).not.toBe(root);
+				expect(head).toBe(git(root, "rev-parse", "HEAD"));
+				expect(branch).toBe(`chopin/implement-${id.slice(0, 8)}`);
+				// Its objects are the checkout's, read where they are; nothing is copied or written there.
+				expect(await realpath((await readFile(join(cwd, alternates), "utf8")).trim())).toBe(
+					await realpath(join(root, ".git", "objects")),
+				);
+				expect(
+					git(root, "worktree", "list", "--porcelain").split("\n")
+						.filter(line => line.startsWith("worktree ")),
+				).toHaveLength(1);
+				expect(git(root, "branch", "--list", "chopin/*")).toBe("");
+			})
+		);
 	},
 );
 
@@ -803,6 +780,7 @@ async function connected(options: {
 			random: () => 0.01,
 			run: (api, kind, claim) =>
 				runWork(api, kind, claim, {
+					sandbox: HOST_SANDBOX,
 					checkouts: checkouts({ directory: state, registered: { "org/repo": root } }),
 					directory: state,
 					command: [
@@ -1196,6 +1174,7 @@ test("a run whose connection a restarted server forgot stops its agent and the c
 			random: () => 0.01,
 			run: (api, kind, claim) =>
 				runWork(api, kind, claim, {
+					sandbox: HOST_SANDBOX,
 					checkouts: checkouts({ directory: state, registered: { "org/repo": root } }),
 					directory: state,
 					command: [
@@ -1560,6 +1539,7 @@ exec "${real}" "$@"
 					authorizer: "a",
 				},
 			}, {
+				sandbox: HOST_SANDBOX,
 				checkouts: checkouts({ directory: state, registered: { "org/repo": root } }),
 				directory: state,
 				// What the agent has when it starts: its environment, and the folder its tokens are in.

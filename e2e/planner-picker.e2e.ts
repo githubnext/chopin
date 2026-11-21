@@ -3,6 +3,7 @@
  * chosen under `HARNESS=remote`.
  * `HARNESS=remote` needs its own server, so this file starts one against a database of its own.
  */
+import { MICROVMS } from "../apps/server/src/testing/microvms";
 import { spawn } from "node:child_process";
 import AxeBuilder from "@axe-core/playwright";
 import { mkdir } from "node:fs/promises";
@@ -218,6 +219,7 @@ async function machine(
 			headers: {
 				"content-type": "application/json",
 				[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL),
+				...MICROVMS,
 				[CONNECTOR_VERSION_HEADER]: version,
 				...extra,
 			},

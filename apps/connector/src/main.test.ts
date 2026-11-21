@@ -121,7 +121,7 @@ async function connect(
 	let connector = Bun.spawn([
 		process.execPath,
 		"--no-env-file",
-		join(import.meta.dir, "main.ts"),
+		join(import.meta.dir, "testing", "chopin-on-host.ts"),
 		"connect",
 		...args ?? [await checkout(), "--", "agent"],
 	], {
@@ -358,7 +358,7 @@ test("connect --keep-runs saves how many finished runs to keep, and removes olde
 });
 
 test.skipIf(process.platform === "win32")(
-	"the start check that names the agent once connected runs in an empty folder of its own where no checkout is registered, not the home directory, and in the checkout where one is",
+	"the start check that names the agent once connected runs in an empty folder of its own, never the home directory or a checkout",
 	async () => {
 		let record = join(scratch, "check-cwd");
 		await writeFile(
@@ -368,7 +368,8 @@ test.skipIf(process.platform === "win32")(
 		);
 		let asked = async (args: string[]) => {
 			await rm(record, { force: true });
-			let result = await connect("nothing", args, undefined, { PROBE_CWD: record });
+			// Only --env reaches an agent: nothing of the connector's own environment does.
+			let result = await connect("nothing", [`--env=PROBE_CWD=${record}`, ...args]);
 			expect(result.code).toBe(0);
 			for (let wait = 0; wait < 100 && !(await Bun.file(record).exists()); wait++) {
 				await Bun.sleep(50);
@@ -376,24 +377,23 @@ test.skipIf(process.platform === "win32")(
 			let [where = "", ...names] = (await readFile(record, "utf8")).trim().split("\n");
 			return { where, names };
 		};
-		let alone = await asked(["--no-sandbox", "--", "probe-cwd"]);
+		let alone = await asked(["--", "probe-cwd"]);
 		expect(alone.where).not.toBe(homedir());
 		expect(await realpath(dirname(alone.where))).toBe(await realpath(tmpdir()));
 		// Nothing in it to read, and it is gone with the connector.
 		expect(alone.names).toEqual([]);
 		await expect(stat(alone.where)).rejects.toThrow();
-		let root = await checkout();
-		let registered = await asked([root, "--no-sandbox", "--", "probe-cwd"]);
-		expect(registered.where).toBe(await realpath(root));
+		let registered = await asked([await checkout(), "--", "probe-cwd"]);
+		expect(await realpath(dirname(registered.where))).toBe(await realpath(tmpdir()));
+		expect(registered.names).toEqual([]);
 	},
 );
 
-test("connect saves the sandbox options for service install, says what the sandbox is, and refuses nonsense before it pairs", async () => {
+test("connect saves the sandbox options for service install, says where agents run, and refuses nonsense before it pairs", async () => {
 	let root = await checkout();
 	let write = join(scratch, "extra-writable");
 	let started = await connect("nothing", [
 		root,
-		"--require-sandbox",
 		"--sandbox-host",
 		"store.example.com:8443",
 		"--sandbox-host=*.corp.test",
@@ -405,39 +405,44 @@ test("connect saves the sandbox options for service install, says what the sandb
 		"agent",
 	]);
 	expect(started.code).toBe(0);
-	// Where this machine has no sandbox it says so, and that runs are refused.
-	expect(started.stdout).toMatch(
-		/Sandboxed \((macOS Seatbelt|Linux bubblewrap|Windows ProcessContainer)\)|Not sandboxed: .* Runs are refused \(--require-sandbox is on\)\./,
-	);
+	expect(started.stdout).toContain("Each agent in its own microVM (NVX on KVM)");
 	expect(JSON.parse(await readFile(join(started.directory, "config.json"), "utf8")).connect.sandbox)
 		.toEqual({
-			require: true,
 			hosts: ["store.example.com:8443", "*.corp.test"],
 			writable: [write],
 			hidden: [join(write, "sign-in")],
 		});
-	let off = await connect("nothing", [root, "--no-sandbox", "--", "agent"]);
-	expect(off.code).toBe(0);
-	expect(off.stdout).toContain(
-		"Not sandboxed: It is turned off with --no-sandbox. Runs go on without it.",
-	);
-	expect(JSON.parse(await readFile(join(off.directory, "config.json"), "utf8")).connect.sandbox)
-		.toEqual({ off: true });
 	for (
 		let [args, message] of [
-			[
-				["--require-sandbox", "--no-sandbox"],
-				"--require-sandbox and --no-sandbox can't be used together.",
-			],
+			// There is no process sandbox to require or turn off: every agent runs in a microVM.
+			[["--require-sandbox"], "Unknown option: --require-sandbox"],
+			[["--no-sandbox"], "Unknown option: --no-sandbox"],
 			[["--sandbox-host", "https://example.com"], "--sandbox-host takes a host like example.com"],
 			[["--sandbox-host", "*"], "--sandbox-host takes a host like example.com"],
 		] as const
 	) {
 		let refused = await connect("pairing", [root, ...args, "--", "agent"]);
-		expect(refused.code).toBe(1);
+		expect(refused.code).not.toBe(0);
 		expect(refused.stderr).toContain(message);
 		expect(refused.requests).toEqual([]);
 	}
+});
+
+test("a machine that can't run microVMs is told what it needs and the fix, and pairs nothing", async () => {
+	let root = await checkout();
+	let refused = await connect("pairing", [root, "--", "agent"], undefined, {
+		CHOPIN_TEST_KVM: "denied",
+	});
+	expect(refused.code).toBe(1);
+	expect(refused.stderr).toContain(
+		"This machine can't run Chopin's work: Chopin runs each agent in its own microVM, which needs "
+			+ "Linux or Windows on x86_64 with hardware virtualization. Your user can't read and write "
+			+ "/dev/kvm.",
+	);
+	expect(refused.stderr).toContain("Fix: sudo usermod -aG kvm $USER");
+	// Nothing reached Chopin: no pairing key was spent and no browser opened.
+	expect(refused.requests).toEqual([]);
+	expect(await Bun.file(join(refused.directory, "config.json")).exists()).toBe(false);
 });
 
 test("connect refuses a --keep-runs that isn't a whole number, before it pairs", async () => {
@@ -518,7 +523,15 @@ test.skipIf(process.platform === "win32")(
  * an older chopin saved them.
  */
 function installed(directory: string, server: string, checkout: string) {
-	let settings = { server, checkout, command: ["old-agent"], planners: [], plannerCommand: [] };
+	let settings = {
+		server,
+		checkout,
+		command: ["old-agent"],
+		// How its microVMs' image gets it.
+		install: ["npm install -g old-agent"],
+		planners: [],
+		plannerCommand: [],
+	};
 	let service = {
 		executable: "/opt/chopin",
 		directory,
@@ -680,62 +693,59 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
-	"connect stops before it pairs when the agent or Planner isn't installed, saying how to get it",
+	"an agent runs from its microVM's own install, and one chopin can't install there is refused before it pairs",
 	async () => {
 		let root = await checkout();
-		// A PATH with git and nothing else, so no coding agent installed here is found.
+		// A PATH with git and nothing else: no coding agent is installed on this machine itself.
 		let tools = join(scratch, "tools");
 		await mkdir(tools, { recursive: true });
 		await symlink(Bun.which("git")!, join(tools, "git")).catch(() => {});
+		await symlink(Bun.which("env")!, join(tools, "env")).catch(() => {});
 		let only = { PATH: tools };
+		// A built-in agent needs no install here: its image has it.
 		let copilot = await connect(
 			"nothing",
 			[root, "--", "copilot", "--acp", "--allow-all"],
 			undefined,
 			only,
 		);
-		expect(copilot.code).toBe(1);
-		expect(copilot.stderr).toBe(
-			[
-				"copilot isn't installed, so nothing was paired or connected. Install GitHub Copilot CLI "
-				+ "(it needs Node.js 22 or newer) and sign in to it:",
-				"  (npm comes with Node.js: install Node.js 22 or newer from https://nodejs.org first)",
-				"  npm install -g @github/copilot",
-				"  copilot login",
-				"Then run this command again.",
-				"",
-			].join("\n"),
-		);
-		expect(copilot.requests).toEqual([]);
-
-		// Behind env, the program env starts is the one looked for.
+		expect(copilot.stdout).toContain("✓ Connected.");
+		// Behind env, the program env starts is the one its image is made for.
 		let atomic = await connect(
 			"nothing",
 			[root, "--", "env", "ATOMIC_ACP_HEADLESS=1", "atomic-acp"],
 			undefined,
-			{ PATH: [tools, dirname(Bun.which("env")!)].join(delimiter) },
+			only,
 		);
-		expect(atomic.code).toBe(1);
-		expect(atomic.stderr).toContain("atomic-acp isn't installed");
-		expect(atomic.stderr).toContain("  npm install -g @bastani/atomic @bastani/atomic-acp\n");
-		expect(atomic.requests).toEqual([]);
+		expect(atomic.stdout).toContain("✓ Connected.");
 
-		let unknown = await connect("nothing", [root, "--", "my-agent"], undefined, only);
+		let unknown = await connect("pairing", [root, "--", "my-agent"], undefined, only);
 		expect(unknown.code).toBe(1);
 		expect(unknown.stderr).toBe(
-			"my-agent isn't on your PATH, so nothing was paired or connected. Install it or give its "
-				+ "full path, then run this command again.\n",
+			"chopin runs my-agent in a microVM of its own and doesn't know how to install it there. "
+				+ "Add --install '<the command that installs it>', such as --install 'npm install -g "
+				+ "my-agent', then run this command again.\n",
 		);
 		expect(unknown.requests).toEqual([]);
+		let installed = await connect(
+			"nothing",
+			[root, "--install", "npm install -g my-agent", "--", "my-agent"],
+			undefined,
+			only,
+		);
+		expect(installed.stdout).toContain("✓ Connected.");
+		expect(JSON.parse(await readFile(join(installed.directory, "config.json"), "utf8")).connect)
+			.toMatchObject({ command: ["my-agent"], install: ["npm install -g my-agent"] });
 
 		let planner = await connect(
-			"nothing",
-			[root, "--planner", "https://x/d/1", "--planner-command", "my-planner --x", "--", "agent"],
+			"pairing",
+			[root, "--planner", "https://x/d/1", "--planner-command", "my-planner --x", "--", "copilot"],
 			undefined,
 			only,
 		);
 		expect(planner.code).toBe(1);
-		expect(planner.stderr).toContain("my-planner isn't on your PATH");
+		expect(planner.stderr).toContain("chopin runs my-planner in a microVM of its own");
+		expect(planner.stderr).toContain("--planner-install");
 		expect(planner.requests).toEqual([]);
 	},
 	60_000,

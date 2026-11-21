@@ -54,23 +54,32 @@ let app = new AgentApp()
 			return { stopReason: "end_turn" as const };
 		}
 		let config = servers.find(server => server.name === "chopin-investigation");
+		let connectBridge = async (client: Client) => {
+			if (!config) throw new Error("Expected Chopin's bridge");
+			await client.connect(
+				"command" in config
+					? new StdioClientTransport({
+						command: config.command,
+						args: config.args,
+						env: Object.fromEntries(config.env.map(item => [item.name, item.value])),
+					})
+					: "url" in config
+					? new StreamableHTTPClientTransport(new URL(config.url), {
+						requestInit: {
+							headers: Object.fromEntries(config.headers.map(item => [item.name, item.value])),
+						},
+					})
+					: (() => {
+						throw new Error("Expected a command or HTTP bridge");
+					})(),
+			);
+		};
 		if (process.argv.includes("--spike") || process.argv.includes("--images")) {
-			if (!config || !("url" in config) || !config.url.startsWith("http://127.0.0.1:")) {
-				throw new Error("Expected a loopback HTTP bridge");
-			}
-			let anonymous = await fetch(config.url, { method: "POST", body: "{}" });
-			if (anonymous.status !== 401) throw new Error(`Unauthenticated bridge: ${anonymous.status}`);
 			let png = Buffer.from("89504e470d0a1a0a", "hex");
 			await writeFile(join(cwd, "shot.png"), png);
 			await writeFile(join(cwd, "..", "outside.png"), png);
 			let bridge = new Client({ name: "fake-spiker", version: "1" });
-			await bridge.connect(
-				new StreamableHTTPClientTransport(new URL(config.url), {
-					requestInit: {
-						headers: Object.fromEntries(config.headers.map(item => [item.name, item.value])),
-					},
-				}),
-			);
+			await connectBridge(bridge);
 			try {
 				let shot = await bridge.callTool({
 					name: "upload_image_file",
@@ -81,19 +90,11 @@ let app = new AgentApp()
 					name: "upload_image_file",
 					arguments: { path: "../outside.png" },
 				});
-				if (!escape.isError) throw new Error("Uploaded a file outside the worktree");
+				if (!escape.isError) throw new Error("Uploaded a file outside the repository");
 				await bridge.callTool(
 					process.argv.includes("--spike")
-						? { name: "submit_spike_result", arguments: { url: config.url } }
-						: {
-							name: "submit_investigation_result",
-							arguments: {
-								result: {
-									...performance,
-									provenance: { ...performance.provenance, environment: config.url },
-								},
-							},
-						},
+						? { name: "submit_spike_result", arguments: { url: "http://localhost:5173/" } }
+						: { name: "submit_investigation_result", arguments: { result: performance } },
 				);
 			} finally {
 				await bridge.close();
@@ -102,19 +103,7 @@ let app = new AgentApp()
 		}
 		if (config && ("command" in config || "url" in config)) {
 			let bridge = new Client({ name: "fake-investigator", version: "1" });
-			await bridge.connect(
-				"command" in config
-					? new StdioClientTransport({
-						command: config.command,
-						args: config.args,
-						env: Object.fromEntries(config.env.map(item => [item.name, item.value])),
-					})
-					: new StreamableHTTPClientTransport(new URL(config.url), {
-						requestInit: {
-							headers: Object.fromEntries(config.headers.map(item => [item.name, item.value])),
-						},
-					}),
-			);
+			await connectBridge(bridge);
 			try {
 				await bridge.callTool({ name: "read_investigation", arguments: {} });
 				if (process.argv.includes("--stdio-images")) {

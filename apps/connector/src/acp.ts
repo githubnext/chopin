@@ -6,6 +6,7 @@ import type {
 	SessionNotification,
 } from "@agentclientprotocol/sdk";
 import { PROCESSES, stopBackend } from "./planner";
+import type { GuestRepository } from "./nvx";
 import { type Sandbox, spawnIn } from "./sandbox";
 import { withoutGitHub } from "./github-token";
 import { managedEnvironment } from "./ai-agent";
@@ -33,8 +34,8 @@ export type AgentOptions = {
 	onStart?: (failure?: AgentFailure) => void;
 	/** Called with the agent's name and version once it has answered initialize with them. */
 	onInfo?: (info: AgentInfo) => void;
-	/** Where the agent starts: the machine's process sandbox, else plainly. */
-	sandbox?: Sandbox;
+	/** Where the agent starts: a microVM of its own. */
+	sandbox: Sandbox;
 	/** What it may write beside its worktree, and its own files in the connector's state directory. */
 	writable?: string[];
 	own?: string[];
@@ -44,8 +45,8 @@ export type AgentOptions = {
 	 * only what `managedEnvironment` permits of the connector's own, and `env`.
 	 */
 	agentHome?: string;
-	/** The owner's `--env` values, which may move their agents' directories (see `Launch.ownerEnv`). */
-	ownerEnv?: Record<string, string>;
+	/** The repository its guest clones and works in (see `Launch.repository`). */
+	repository?: GuestRepository;
 	/** How long the agent's turn may run before it is stopped; one hour unless said. */
 	limitMs?: number;
 };
@@ -94,8 +95,8 @@ function startAgent(
 	command: string[],
 	cwd: string,
 	env: NodeJS.ProcessEnv | undefined,
-	stderr?: (chunk: string) => void,
-	where: Pick<AgentOptions, "sandbox" | "writable" | "own" | "agentHome" | "ownerEnv"> = {},
+	stderr: ((chunk: string) => void) | undefined,
+	where: Pick<AgentOptions, "sandbox" | "writable" | "own" | "agentHome" | "repository">,
 ) {
 	let child = spawnIn(where.sandbox, {
 		command,
@@ -105,7 +106,7 @@ function startAgent(
 		...(where.writable ? { writable: where.writable } : {}),
 		...(where.own ? { own: where.own } : {}),
 		...(where.agentHome ? { agentHome: where.agentHome } : {}),
-		...(where.ownerEnv ? { ownerEnv: where.ownerEnv } : {}),
+		...(where.repository ? { repository: where.repository } : {}),
 	});
 	let kill = (signal: NodeJS.Signals = "SIGTERM") => {
 		try {
@@ -192,7 +193,7 @@ export async function checkAgent(
 		onInfo?: (info: AgentInfo) => void;
 		/** Stops the agent at once, as a failure. */
 		signal?: AbortSignal;
-		sandbox?: Sandbox;
+		sandbox: Sandbox;
 	},
 ): Promise<AgentFailure | undefined> {
 	let timeoutMs = options.timeoutMs ?? 10_000;
@@ -204,7 +205,7 @@ export async function checkAgent(
 			options.cwd,
 			options.env,
 			undefined,
-			options.sandbox ? { sandbox: options.sandbox } : {},
+			{ sandbox: options.sandbox },
 		);
 	} catch (error) {
 		return { how: error instanceof Error ? error.message : String(error) };
@@ -261,11 +262,11 @@ export async function runAgent(options: AgentOptions): Promise<string> {
 		},
 		options.stderr,
 		{
-			...(options.sandbox ? { sandbox: options.sandbox } : {}),
+			sandbox: options.sandbox,
 			...(options.writable ? { writable: options.writable } : {}),
 			...(options.own ? { own: options.own } : {}),
 			...(options.agentHome ? { agentHome: options.agentHome } : {}),
-			...(options.ownerEnv ? { ownerEnv: options.ownerEnv } : {}),
+			...(options.repository ? { repository: options.repository } : {}),
 		},
 	);
 	let { connection } = agent;

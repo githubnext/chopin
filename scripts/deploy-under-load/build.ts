@@ -98,7 +98,7 @@ export async function startBuild(env: Environment): Promise<Build> {
 	let paused = join(signals, "paused");
 	let resume = join(signals, "resume");
 	let connector: ChildProcess = spawn("bun", [
-		join(ROOT, "apps/connector/src/main.ts"),
+		join(ROOT, "apps/connector/src/testing/chopin-on-host.ts"),
 		"connect",
 		checkout,
 		"--key",

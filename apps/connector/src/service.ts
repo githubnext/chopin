@@ -3,12 +3,14 @@ import { lstat, mkdir, readFile, readlink, rm, writeFile } from "node:fs/promise
 import { homedir, userInfo } from "node:os";
 import { join, posix, win32 } from "node:path";
 import { execFile } from "node:child_process";
-import { checkAgent } from "./acp";
+import type { AgentFailure } from "./acp";
 import { type ConnectSettings, readConfig, updateConfig } from "./config";
 import { redacted } from "./connection";
 import { VERSION } from "./version";
 import { windowsArgument } from "./windows-argument";
 import { connectors, processStart } from "./workspace";
+import { programAt } from "./nvx";
+export { programAt };
 
 /**
  * `chopin service`: run `chopin connect` as this user's background service, so the machine keeps
@@ -462,114 +464,6 @@ function pathVariable(host: ServiceHost) {
 }
 
 /**
- * The interpreter a script's `#!` line names: a name `#!/usr/bin/env [-S]` finds on the PATH,
- * or an absolute path. Refuses a `#!` line the system would misread: one ending in a carriage
- * return, or one that names neither an absolute path nor `/usr/bin/env [-S] <name>`.
- */
-async function interpreter(file: string) {
-	let head = await Bun.file(file).slice(0, 256).text().catch(() => "");
-	if (!head.startsWith("#!")) return undefined;
-	let line = head.split("\n")[0]!;
-	if (line.endsWith("\r")) {
-		throw new ServiceError(
-			`${file} has Windows line endings in its first line; convert it with dos2unix. Nothing `
-				+ "was installed.",
-		);
-	}
-	let viaEnv = line.match(/^#!\s*\/(?:\S*\/)?env\s+(?:-S\s+)?([^\s-]\S*)/)?.[1];
-	let absolute = line.match(/^#!\s*(\/\S+)/)?.[1];
-	let named = viaEnv ?? (absolute && posix.basename(absolute) !== "env" ? absolute : undefined);
-	if (!named) {
-		throw new ServiceError(
-			`${file}'s #! line must name an absolute path or use /usr/bin/env [-S] <name>. Nothing `
-				+ "was installed.",
-		);
-	}
-	return named;
-}
-
-/**
- * Where `command` names the program it runs: after `env` and its VAR=VALUE assignments, when it
- * starts with `env` or an absolute path to it, else its first word.
- */
-export function programAt(command: string[]) {
-	let first = command[0] ?? "";
-	if (first !== "env" && !(posix.isAbsolute(first) && posix.basename(first) === "env")) return 0;
-	let at = 1;
-	while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(command[at] ?? "")) at++;
-	return command[at] && !command[at]!.startsWith("-") ? at : 0;
-}
-
-function finder(host: ServiceHost) {
-	return host.which ?? ((name: string, PATH: string) => Bun.which(name, { PATH }));
-}
-
-/** How many `#!` interpreters install follows from a script before it refuses the chain. */
-const MAX_INTERPRETERS = 5;
-
-/**
- * `servicePath` with the stable directory of the interpreter `file`'s `#!` line names, and of
- * each interpreter that one names in turn while it is a script too, wherever the service would
- * not find them yet. One found only through a directory gone after a reboot is refused, as is a
- * chain longer than `MAX_INTERPRETERS` or one that loops.
- */
-async function withInterpreters(
-	host: ServiceHost,
-	file: string,
-	what: string,
-	servicePath: string,
-) {
-	if (host.platform === "win32") return servicePath;
-	let which = finder(host);
-	let chain = [file];
-	for (;;) {
-		let named = await interpreter(file);
-		if (!named) return servicePath;
-		if (chain.length > MAX_INTERPRETERS) {
-			throw new ServiceError(
-				`${chain[0]} runs through more than ${MAX_INTERPRETERS} #! interpreters (`
-					+ `${[...chain, named].join(" → ")}). Nothing was installed. Point its #! line at `
-					+ "the program that finally runs it.",
-			);
-		}
-		let absolute = posix.isAbsolute(named);
-		let found = absolute
-			? which(named, servicePath)
-			: which(named, servicePath) ?? which(named, pathVariable(host));
-		if (!found) {
-			throw new ServiceError(
-				[
-					`The service would not find ${named}, which ${what} runs with, under the PATH it runs `
-					+ "with:",
-					`  ${servicePath}`,
-					`Nothing was installed. Install ${named} somewhere stable and make sure it is on your PATH.`,
-				].join("\n"),
-			);
-		}
-		let passed = await links(host.platform, found);
-		refuseFleeting(
-			host,
-			passed,
-			`${named}, which ${what} runs with,`,
-			`Install ${named} somewhere stable, or link it into a directory on the service's PATH:\n`
-				+ `  ${servicePath}`,
-		);
-		if (chain.includes(passed[0]!)) {
-			throw new ServiceError(
-				`${chain[0]}'s #! interpreters loop (${[...chain, passed[0]].join(" → ")}), so it never `
-					+ "reaches a program to run. Nothing was installed. Fix the #! lines.",
-			);
-		}
-		if (!absolute && !which(named, servicePath)) {
-			servicePath += posix.delimiter + posix.dirname(passed[0]!);
-		}
-		chain.push(passed[0]!);
-		file = passed[0]!;
-		what = named;
-	}
-}
-
-/**
  * What the service would make of the program at `found`: undefined when it lies in no directory
  * that lasts only as long as a login or a shell; its stable path when it reaches one only
  * through such a directory, as a version manager's per-shell link does; else the path that
@@ -636,101 +530,6 @@ async function links(platform: NodeJS.Platform, file: string) {
 	return [first, ...hops, end];
 }
 
-/** Refuses a program that is, or links through, a path gone after a reboot. */
-function refuseFleeting(host: ServiceHost, passed: string[], what: string, fix: string) {
-	let fleeting = passed.find(temporaryPath(host.platform, host.env));
-	if (fleeting === undefined) return;
-	throw new ServiceError(
-		[
-			`${what} is, or links through, ${fleeting}, which lies in a directory that lasts only as `
-			+ "long as this login or shell, so the service would not find it after a reboot. Nothing "
-			+ "was installed.",
-			fix,
-		].join("\n"),
-	);
-}
-
-/**
- * The program `chopin connect` saved, by the full path it found it at, so install never finds
- * another one by name on its own PATH; refused when it was saved without one or is gone since.
- */
-function savedProgram(host: ServiceHost, word: string, what: "agent" | "Planner command") {
-	let again = `Nothing was installed. Run \`chopin connect\` again so chopin saves the ${what}'s `
-		+ "full path.";
-	if (!paths(host.platform).isAbsolute(word)) {
-		throw new ServiceError(`The ${what} ${word} was saved without its full path. ${again}`);
-	}
-	let found = finder(host)(word, pathVariable(host));
-	if (!found) {
-		throw new ServiceError(
-			`The ${what} ${word}, which chopin connect found, is no longer there. ${again}`,
-		);
-	}
-	return found;
-}
-
-/**
- * The agent's command with stable absolute paths, and the PATH the service runs with, once the
- * agent (the program behind `env` when it is wrapped in one) is where connect found it, and it,
- * the interpreters its script names and git all resolve under that PATH to paths that outlast
- * this login and shell; otherwise a refusal, before anything is written.
- */
-async function agentPath(host: ServiceHost, settings: ConnectSettings) {
-	let which = finder(host);
-	let path = paths(host.platform);
-	let command = settings.command;
-	let at = programAt(command);
-	let resolved = [...command];
-	for (let index of new Set([0, at])) {
-		let word = command[index]!;
-		let found = index === at
-			? savedProgram(host, word, "agent")
-			: which(word, pathVariable(host));
-		if (!found) {
-			throw new ServiceError(
-				`The agent command ${word} is not on your PATH. Nothing was installed. `
-					+ "Run chopin connect again with the agent's absolute path after --.",
-			);
-		}
-		// A per-shell directory is often a link into a version manager's stable one.
-		let passed = await links(host.platform, found);
-		refuseFleeting(
-			host,
-			passed,
-			`The agent command ${word}`,
-			"Install the agent somewhere stable, or run chopin connect again with a stable absolute "
-				+ "path to it after --.",
-		);
-		resolved[index] = passed[0]!;
-	}
-	let agent = command[at]!;
-	let stable = resolved[at]!;
-	let service = await withInterpreters(
-		host,
-		stable,
-		agent,
-		servicePath(host.platform, host.env, path.dirname(stable)),
-	);
-	let git = which("git", service);
-	if (!git) {
-		throw new ServiceError(
-			[
-				"The service would not find git under the PATH it runs with:",
-				`  ${service}`,
-				"Nothing was installed. That PATH leaves out directories that last only as long as "
-				+ "this login or shell. Install git outside them.",
-			].join("\n"),
-		);
-	}
-	refuseFleeting(
-		host,
-		await links(host.platform, git),
-		"git",
-		"Install git somewhere stable, outside those directories.",
-	);
-	return { path: service, command: resolved };
-}
-
 function release(version: string) {
 	return /^\d+\.\d+\.\d+/.test(version);
 }
@@ -758,26 +557,6 @@ export type Installed = {
 	log: string;
 	notes: string[];
 };
-
-/**
- * The PATH the service runs with, once the Planner backend (the program behind `env` when it is
- * wrapped in one) is where connect found it and the interpreters its script names resolve under
- * that PATH, adding their stable directories where needed; otherwise a refusal.
- */
-async function checkPlanners(host: ServiceHost, settings: ConnectSettings, servicePath: string) {
-	let command = settings.plannerCommand;
-	let planner = command[programAt(command)];
-	if (!settings.planners.length || !planner) return servicePath;
-	let found = savedProgram(host, planner, "Planner command");
-	let passed = await links(host.platform, found);
-	refuseFleeting(
-		host,
-		passed,
-		`The Planner command ${planner}`,
-		"Install it somewhere stable, or give a stable absolute path to it in --planner-command.",
-	);
-	return withInterpreters(host, passed[0]!, `the Planner command ${planner}`, servicePath);
-}
 
 /** What Windows needs in the environment to start a process and find a user's folders. */
 const WINDOWS_START = new Set([
@@ -811,12 +590,11 @@ export function startEnvironment(host: ServiceHost, env: Env | undefined, path: 
 }
 
 /**
- * Refuses an agent that doesn't answer ACP initialize within 10 seconds when started as the
- * service starts it, with `startEnvironment` and nothing else from this shell.
+ * Refuses an agent that doesn't answer ACP initialize when started as the service starts it: in a
+ * microVM of its image, with the service's own settings (`check`).
  */
-async function checkStart(host: ServiceHost, settings: ConnectSettings, path: string) {
-	let env = startEnvironment(host, settings.env, path);
-	let failed = await checkAgent(settings.command, { cwd: host.home, env });
+async function checkStart(settings: ConnectSettings, check: StartCheck) {
+	let failed = await check(settings);
 	if (!failed) return;
 	let agent = settings.command[programAt(settings.command)];
 	let secrets = Object.values(settings.env ?? {});
@@ -832,6 +610,9 @@ async function checkStart(host: ServiceHost, settings: ConnectSettings, path: st
 	);
 }
 
+/** Starts the agent the service would start, in a microVM, and says how it failed if it did. */
+export type StartCheck = (settings: ConnectSettings) => Promise<AgentFailure | undefined>;
+
 /**
  * Install `program` as this user's service and start it, so it starts again by itself. It copies
  * what the last `chopin connect` ran, checked here first, server included, into config.json as
@@ -842,26 +623,25 @@ async function checkStart(host: ServiceHost, settings: ConnectSettings, path: st
 export async function installService(
 	host: ServiceHost,
 	program: ServiceProgram,
-	options: { allowDowngrade?: boolean; version?: string; check?: boolean } = {},
+	options: { allowDowngrade?: boolean; version?: string; check?: StartCheck } = {},
 ): Promise<Installed> {
 	let manager = serviceManager(host.platform);
 	let version = options.version ?? VERSION;
 	let config = await readConfig(program.directory);
 	let settings = config.connect;
 	if (!settings) throw new ServiceError(CONNECT_FIRST);
-	let resolved = await agentPath(host, settings);
-	// The service runs the agent by its stable path, not one through a shell's own links.
-	settings = { ...settings, command: resolved.command };
 	let unusable = unsupportedPath(host.platform, program);
 	if (unusable) throw new ServiceError(unusable);
-	let path = await checkPlanners(host, settings, resolved.path);
+	// The agent and the Planner command run from their images in microVMs, never from this machine's
+	// PATH; the service's PATH finds what the connector itself runs, as git and tar.
+	let path = pathVariable(host);
 	if (manager === "launchd" && hasControl(path)) {
 		throw new ServiceError(
 			"The PATH holds a control character, which a LaunchAgent cannot hold. Nothing was "
 				+ "installed.",
 		);
 	}
-	if (options.check) await checkStart(host, settings, path);
+	if (options.check) await checkStart(settings, options.check);
 	let previous = config.service?.version;
 	if (
 		!options.allowDowngrade && previous && release(previous) && release(version)

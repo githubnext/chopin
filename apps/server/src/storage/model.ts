@@ -219,8 +219,15 @@ export type StoredMachine = {
 	/** GitHub refused its stored authorization; the owner must pair it again. */
 	reauthorizeAt?: Date;
 	revokedAt?: Date;
+	/**
+	 * Why its connector said it can't run agents in microVMs, and the fix where there is one, until a
+	 * connection that runs them clears it.
+	 */
+	vmProblem?: MachineVmProblem;
 };
-export type CreateMachine = Omit<StoredMachine, "reauthorizeAt" | "revokedAt">;
+export type CreateMachine = Omit<StoredMachine, "reauthorizeAt" | "revokedAt" | "vmProblem">;
+/** What a connector said a machine lacks to run agents in microVMs, in its own words. */
+export type MachineVmProblem = { reason: string; fix?: string };
 
 /**
  * Which of a person's machines works on one document for them. No row is the automatic choice:

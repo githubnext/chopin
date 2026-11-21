@@ -36,19 +36,15 @@ test.each([
 	["a build", implementationPrompt],
 	["a living document's first build", liveImplementationPrompt],
 	["a rebuild", rebuildPrompt],
-])(
-	"%s in the sandbox is told it can't add worktrees, rather than to make them",
-	(_name, prompt) => {
-		let open = prompt(worktrees);
-		expect(open).toContain("create them only inside /work/run-worktrees");
-		let confined = prompt({ ...worktrees, confined: true });
-		expect(confined).toContain("Your worktree is /work/run.");
-		expect(confined).toContain("`git worktree add` fails");
-		expect(confined).toContain("each one from its own branch in your worktree");
-		expect(confined).not.toContain("create them only inside");
-		expect(confined).not.toContain("CHOPIN_RUN_WORKTREES");
-	},
-);
+])("%s is told its repository is its microVM's own, and to push what it keeps", (_name, prompt) => {
+	let text = prompt(worktrees);
+	expect(text).toContain(
+		"Your repository is /work/run, a clone of its own in this machine's microVM.",
+	);
+	expect(text).toContain("add them with `git worktree add` inside /work/run-worktrees");
+	expect(text).toContain("gone when this run ends, so push what you keep");
+	expect(text).not.toContain("CHOPIN_RUN_WORKTREES");
+});
 
 test("a rebuild never pushes to, reopens or recreates a pull request a person closed", () => {
 	let text = rebuildPrompt(worktrees);

@@ -23,7 +23,7 @@ import { git, stateDirectory } from "./workspace";
 
 const MACHINE_TOKEN = `chopin_m_${"T".repeat(43)}`;
 const PAIRING_KEY = `chopin_k_${"K".repeat(43)}`;
-const MAIN = join(import.meta.dir, "main.ts");
+const MAIN = join(import.meta.dir, "testing", "chopin-on-host.ts");
 
 let cleanup: Array<() => Promise<unknown> | unknown> = [];
 afterEach(async () => {
@@ -426,7 +426,7 @@ test.skipIf(process.platform === "win32")(
 		let chopin = fakeChopin();
 		expect(await cli(["pair"], home, chopin.url).exited).toBe(0);
 		chopin.calls.length = 0;
-		let connected = cli(["connect", root, "--no-sandbox", "--", "fake-acp"], home, chopin.url, {
+		let connected = cli(["connect", root, "--", "fake-acp"], home, chopin.url, {
 			PATH: [bin, process.env.PATH].join(delimiter),
 		});
 		let reported = async () => chopin.calls.find(call => call.path === "/api/connector/agent");
@@ -619,7 +619,7 @@ test("connect --name on a machine already paired keeps its name and says where t
 		.toBe("old-name");
 });
 
-test("a key given to connect with an agent that isn't installed is never sent, so it still works", async () => {
+test("a key given to connect with an agent chopin can't install in its microVMs is never sent, so it still works", async () => {
 	let home = await scratch("chopin-home-");
 	let root = await checkout();
 	let chopin = fakeChopin();
@@ -629,7 +629,9 @@ test("a key given to connect with an agent that isn't installed is never sent, s
 		chopin.url,
 	);
 	expect(await missing.exited).toBe(1);
-	expect(await missing.output).toContain("no-such-agent isn't on your PATH");
+	expect(await missing.output).toContain(
+		"chopin runs no-such-agent in a microVM of its own and doesn't know how to install it there.",
+	);
 	expect(chopin.calls).toEqual([]);
 	// The same key pairs once the agent is there.
 	expect(await cli(["pair", "--key", PAIRING_KEY], home, chopin.url).exited).toBe(0);
@@ -843,12 +845,14 @@ test("connect tells Chopin whether agents run in the sandbox, and for a machine 
 	cleanup.push(() => server.stop(true));
 	let url = `http://127.0.0.1:${server.port}`;
 	let machine = { label: "box", checkouts: [] };
-	await register(url, MACHINE_TOKEN, machine, undefined, { sandbox: { engine: "bubblewrap" } });
+	await register(url, MACHINE_TOKEN, machine, undefined, {
+		sandbox: { engine: "nvx", hypervisor: "kvm" },
+	});
 	await register(url, MACHINE_TOKEN, machine, undefined, {
 		sandbox: {
 			engine: "none",
-			reason: "slirp4netns isn't installed.",
-			fix: "sudo apt-get install -y slirp4netns",
+			reason: "Your user can't read and write /dev/kvm.",
+			fix: "sudo usermod -aG kvm $USER",
 		},
 	});
 	// A reason that headers can't carry is left out, not sent mangled.
@@ -857,11 +861,11 @@ test("connect tells Chopin whether agents run in the sandbox, and for a machine 
 	});
 	await register(url, MACHINE_TOKEN, machine, undefined, {});
 	expect(seen.map(sandboxHeaders)).toEqual([
-		{ "chopin-connector-sandbox": "bubblewrap" },
+		{ "chopin-connector-sandbox": "nvx", "chopin-connector-sandbox-hypervisor": "kvm" },
 		{
 			"chopin-connector-sandbox": "none",
-			"chopin-connector-sandbox-reason": "slirp4netns isn't installed.",
-			"chopin-connector-sandbox-fix": "sudo apt-get install -y slirp4netns",
+			"chopin-connector-sandbox-reason": "Your user can't read and write /dev/kvm.",
+			"chopin-connector-sandbox-fix": "sudo usermod -aG kvm $USER",
 		},
 		{ "chopin-connector-sandbox": "none", "chopin-connector-sandbox-fix": "sudo true" },
 		{},

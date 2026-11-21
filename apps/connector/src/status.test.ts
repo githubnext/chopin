@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { CONNECTOR_UPDATE_REQUIRED, type SandboxReport } from "@chopin/protocol/connector";
 import { SELF } from "./machine";
 import type { ServiceHost } from "./service";
@@ -131,7 +131,7 @@ test("status reports a paired machine Chopin accepts, its connectors, a stale lo
 		serviceRuns: null,
 		lastConnect: null,
 		runs: { kept: 0, running: 0, bytes: 0 },
-		plannerWorktrees: [],
+		plannerDisks: [],
 		checkouts: {},
 		clones: [],
 		github: {},
@@ -174,10 +174,11 @@ test("status shows each repository's spare Planner under its connector, and a sp
 		]),
 	);
 	let folder = join(directory, "planners", "octo-org", "score");
-	await mkdir(join(folder, "spare-0123456789ab"), { recursive: true });
+	await mkdir(folder, { recursive: true });
+	await writeFile(join(folder, "spare-0123456789ab.disk"), "");
 	await writeFile(join(folder, "D_1.worktree"), "spare-0123456789ab\n");
-	// A spare still waiting for a document is no document's worktree.
-	await mkdir(join(folder, "spare-ba9876543210"), { recursive: true });
+	// A spare still waiting for a document is no document's Planner.
+	await writeFile(join(folder, "spare-ba9876543210.disk"), "");
 	let report = await collectStatus({ directory, server: "https://x", source: "config", host });
 	expect(report.connectors[0]?.spares).toEqual([
 		{
@@ -188,8 +189,12 @@ test("status shows each repository's spare Planner under its connector, and a sp
 		},
 		{ repository: "octo-org/other", state: "unsupported", since: new Date(since).toISOString() },
 	]);
-	expect(report.plannerWorktrees).toEqual([
-		{ path: join(folder, "spare-0123456789ab"), repository: "octo-org/score", document: "D_1" },
+	expect(report.plannerDisks).toEqual([
+		{
+			path: join(folder, "spare-0123456789ab.disk"),
+			repository: "octo-org/score",
+			document: "D_1",
+		},
 	]);
 	let text = formatStatus(report);
 	expect(text).toContain(
@@ -409,13 +414,14 @@ test("status names a built-in agent by its --agent id, with the command it runs"
 	);
 });
 
-test("status lists the Planners' worktrees and the finished runs kept, with their size", async () => {
+test("status lists the Planners' disks and the finished runs kept, with their size", async () => {
 	let { directory, host } = await machine();
 	let runs = join(directory, "runs");
 	await mkdir(runs, { recursive: true });
-	for (let id of ["a", "b"]) {
-		await mkdir(join(runs, id));
-		await writeFile(join(runs, id, "file.txt"), "x".repeat(64 * 1024));
+	// One run's agent's state, and the worktree an earlier release made for another.
+	for (let [id, kept] of [["a", "a.agent"], ["b", "b"]]) {
+		await mkdir(join(runs, kept!));
+		await writeFile(join(runs, kept!, "file.txt"), "x".repeat(64 * 1024));
 		await writeFile(
 			join(runs, `${id}.json`),
 			JSON.stringify({ id, state: "finished", finished: 1 }),
@@ -434,15 +440,20 @@ test("status lists the Planners' worktrees and the finished runs kept, with thei
 	);
 	await writeFile(join(runs, "spike.json"), JSON.stringify({ id: "spike", state: "finished" }));
 	let planner = join(directory, "planners", "octo-org", "score", "D_1");
-	await mkdir(planner, { recursive: true });
+	await mkdir(dirname(planner), { recursive: true });
+	await writeFile(`${planner}.disk`, "");
 	// Its token folder, beside it, is no Planner of its own.
 	await mkdir(tokenFolder(planner), { recursive: true });
-	// The folder for a Planner that has yet to make its worktree.
+	// A worktree an earlier release made for a Planner, which nothing uses now.
+	let earlier = join(directory, "planners", "octo-org", "score", "D_0");
+	await mkdir(earlier, { recursive: true });
+	// The folder for a Planner that has yet to make its disk.
 	await mkdir(join(directory, "planners", "octo-org", "other"), { recursive: true });
 
 	let report = await collectStatus({ directory, server: "https://x", source: "config", host });
-	expect(report.plannerWorktrees).toEqual([
-		{ path: planner, repository: "octo-org/score", document: "D_1" },
+	expect(report.plannerDisks).toEqual([
+		{ path: earlier, repository: "octo-org/score", document: "D_0", earlier: true },
+		{ path: `${planner}.disk`, repository: "octo-org/score", document: "D_1" },
 	]);
 	expect(report.runs).toEqual({ kept: 2, running: 1, bytes: expect.any(Number) });
 	expect(report.runs.bytes).toBeGreaterThanOrEqual(2 * 64 * 1024);
@@ -450,7 +461,11 @@ test("status lists the Planners' worktrees and the finished runs kept, with thei
 	expect(text).toContainEqual(
 		expect.stringMatching(/^Runs: {7}2 finished runs kept \(\d+(\.\d)? (kB|MB)\), 1 running$/),
 	);
-	expect(text).toContain(`Planners:   ${planner} (octo-org/score, document D_1)`);
+	expect(text).toContain(
+		`Planners:   ${earlier} (octo-org/score, document D_0; an earlier chopin's worktree, which `
+			+ "nothing uses now)",
+	);
+	expect(text).toContain(`            ${planner}.disk (octo-org/score, document D_1)`);
 });
 
 test("status of an unpaired machine asks Chopin nothing", async () => {
@@ -539,7 +554,7 @@ test.skipIf(process.platform === "win32")(
 		let child = Bun.spawn([
 			process.execPath,
 			"--no-env-file",
-			join(import.meta.dir, "main.ts"),
+			join(import.meta.dir, "testing", "chopin-on-host.ts"),
 			"status",
 			"--json",
 			"--base-dir",
@@ -581,7 +596,7 @@ test.skipIf(process.platform === "win32")(
 		let child = Bun.spawn([
 			process.execPath,
 			"--no-env-file",
-			join(import.meta.dir, "main.ts"),
+			join(import.meta.dir, "testing", "chopin-on-host.ts"),
 			"status",
 			"--base-dir",
 			directory,
@@ -593,24 +608,10 @@ test.skipIf(process.platform === "win32")(
 	},
 );
 
-test("status says whether agents run in the system's sandbox, and for a machine with none why and the one fix", async () => {
+test("status says where agents run, and for a machine that can't run them why and the one fix", async () => {
 	using server = chopin(() => Response.json({ id: "m1", label: "build-box", login: "ada" }));
 	let { directory, host } = await machine(server.url);
-	let sandbox = async (value: SandboxReport, settings?: { require?: boolean }) => {
-		if (settings) {
-			await writeFile(
-				join(directory, "config.json"),
-				JSON.stringify({
-					connect: {
-						server: server.url,
-						command: ["agent"],
-						planners: [],
-						plannerCommand: [],
-						sandbox: settings,
-					},
-				}),
-			);
-		}
+	let status = async (value: SandboxReport) => {
 		let report = await collectStatus({
 			directory,
 			server: server.url,
@@ -620,29 +621,22 @@ test("status says whether agents run in the system's sandbox, and for a machine 
 		});
 		return { report, text: formatStatus(report).join("\n") };
 	};
-	let sandboxed = await sandbox({ engine: "bubblewrap" });
-	expect(sandboxed.report.sandbox).toEqual({ engine: "bubblewrap" });
-	expect(sandboxed.text).toContain("Sandbox:    Sandboxed (Linux bubblewrap)");
+	let running = await status({ engine: "nvx", hypervisor: "kvm" });
+	expect(running.report.sandbox).toEqual({ engine: "nvx", hypervisor: "kvm" });
+	expect(running.text).toContain("Agents:     Each agent in its own microVM (NVX on KVM)");
 	let none: SandboxReport = {
 		engine: "none",
-		reason: "The Linux sandbox can't run: slirp4netns isn't installed.",
-		fix: "sudo sh -c 'apt-get install -y slirp4netns'",
+		reason: "Your user can't read and write /dev/kvm.",
+		fix: "sudo usermod -aG kvm $USER",
 	};
-	let unsandboxed = await sandbox(none);
-	expect(unsandboxed.report.sandbox).toEqual(none);
-	expect(unsandboxed.text).toContain(
-		"Sandbox:    Not sandboxed: The Linux sandbox can't run: slirp4netns isn't installed. "
-			+ "Runs go on without it.",
+	let refused = await status(none);
+	expect(refused.report.sandbox).toEqual(none);
+	expect(refused.text).toContain(
+		"Agents:     Can't run here: Your user can't read and write /dev/kvm.",
 	);
-	expect(unsandboxed.text).toContain(
-		"            Fix: sudo sh -c 'apt-get install -y slirp4netns'",
-	);
-	// With --require-sandbox saved, it says the runs are refused instead.
-	let required = await sandbox(none, { require: true });
-	expect(required.text).toContain("Runs are refused (--require-sandbox is on).");
-	expect(required.text).not.toContain("Runs go on without it.");
-	// A status that wasn't asked about the sandbox says nothing of it.
+	expect(refused.text).toContain("            Fix: sudo usermod -aG kvm $USER");
+	// A status that wasn't asked where agents run says nothing of it.
 	let silent = await collectStatus({ directory, server: server.url, source: "CHOPIN_URL", host });
 	expect(silent).not.toHaveProperty("sandbox");
-	expect(formatStatus(silent).join("\n")).not.toContain("Sandbox:");
+	expect(formatStatus(silent).join("\n")).not.toContain("Agents:");
 });

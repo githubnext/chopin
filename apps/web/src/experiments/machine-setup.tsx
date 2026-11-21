@@ -12,7 +12,6 @@ import { NavigationDialog } from "../navigation-dialog";
 import { session } from "../api";
 import { useLogin } from "./machines";
 import {
-	agentCommand,
 	agentOptions,
 	chosenAgent,
 	guessSystem,
@@ -113,33 +112,17 @@ export function Needs({ agent, system }: { agent: AgentOption; system: SetupSyst
 			</div>
 		);
 	}
+	// chopin installs the agent in each of its microVMs, so the machine needs only to run them.
 	return (
 		<div className="machines-needs">
 			<p>
-				Needs {agent.name}, signed in, and Node.js {agent.node} or newer.{" "}
-				<UnfoldToggle className="machines-needs-toggle" unfold={install}>
-					{install.open ? "Hide install command" : "Show install command"}
-				</UnfoldToggle>
+				{system === "macos"
+					? "A Mac can't run Chopin's work: chopin runs each agent in a microVM of its own, which "
+						+ "needs Linux or Windows on x86_64 with hardware virtualization."
+					: `Needs ${
+						system === "windows" ? "the Windows Hypervisor Platform turned on" : "KVM"
+					}, on x86_64: chopin runs ${agent.name} in a microVM of its own and installs it there.`}
 			</p>
-			<UnfoldPanel unfold={install}>
-				<div className="machines-needs-command">
-					<Command
-						label="install command"
-						place={shellPlace(shell)}
-						text={agentCommand(agent, shell)}
-					/>
-					{shell === "sh" && (
-						<p className="machines-detail mt-2">
-							If npm stops with EACCES, don't use sudo: run{" "}
-							<code className="font-mono text-text-primary">
-								npm config set prefix ~/.npm-global
-							</code>, add <code className="font-mono text-text-primary">~/.npm-global/bin</code>
-							{" "}
-							to your PATH, then install again.
-						</p>
-					)}
-				</div>
-			</UnfoldPanel>
 		</div>
 	);
 }

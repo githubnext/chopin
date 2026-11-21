@@ -1,4 +1,5 @@
 import { expect, setSystemTime, test } from "bun:test";
+import { MICROVMS } from "../testing/microvms";
 import { Machines } from "../auth/machines";
 import { Sessions } from "../auth/session";
 import { Admission } from "../auth/admission";
@@ -270,6 +271,7 @@ async function setup(
 					...(token ? { authorization: `Bearer ${token}` } : {}),
 					// What a current connector sends; browser routes ignore it.
 					...(protocol === null ? {} : { [CONNECTOR_PROTOCOL_HEADER]: String(protocol) }),
+					...MICROVMS,
 				},
 				...(value ? { body: JSON.stringify(value) } : {}),
 			}),

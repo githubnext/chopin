@@ -7,6 +7,7 @@ import type {
 	MachineCredentials,
 	MachineFavorite,
 	MachineRepository,
+	MachineVmProblem,
 	StoredMachine,
 } from "../model";
 import type { MachineStore } from "../port";
@@ -25,12 +26,13 @@ type MachineRow = {
 	lastSeenAt: Date | string;
 	reauthorizeAt: Date | string | null;
 	revokedAt: Date | string | null;
+	vmProblem: MachineVmProblem | string | null;
 };
 
 const COLUMNS = `id, user_id AS "userId", label, repositories, auto_run AS "autoRun", shared,
 	token_hash AS "tokenHash", credential_ciphertext AS ciphertext, credential_revision AS revision,
 	created_at AS "createdAt", last_seen_at AS "lastSeenAt", reauthorize_at AS "reauthorizeAt",
-	revoked_at AS "revokedAt"`;
+	revoked_at AS "revokedAt", vm_problem AS "vmProblem"`;
 
 function machine(row: MachineRow): StoredMachine {
 	return {
@@ -52,6 +54,9 @@ function machine(row: MachineRow): StoredMachine {
 		lastSeenAt: new Date(row.lastSeenAt),
 		...(row.reauthorizeAt ? { reauthorizeAt: new Date(row.reauthorizeAt) } : {}),
 		...(row.revokedAt ? { revokedAt: new Date(row.revokedAt) } : {}),
+		...(row.vmProblem
+			? { vmProblem: typeof row.vmProblem === "string" ? JSON.parse(row.vmProblem) : row.vmProblem }
+			: {}),
 	};
 }
 
@@ -159,6 +164,14 @@ export class PostgresMachineStore implements MachineStore {
 				RETURNING id
 			`;
 			return updated.length > 0;
+		});
+	}
+	vmProblem(id: string, problem?: MachineVmProblem) {
+		return this.run("record machine capability", async () => {
+			await this.sql`
+				UPDATE machines SET vm_problem = ${problem ? JSON.stringify(problem) : null}::text::jsonb
+				WHERE id = ${id} AND revoked_at IS NULL
+			`;
 		});
 	}
 	revoke(lease: Lease, id: string, userId: string, now: Date) {

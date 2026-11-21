@@ -1,17 +1,7 @@
-import {
-	appendFileSync,
-	closeSync,
-	existsSync,
-	mkdtempSync,
-	openSync,
-	readSync,
-	rmSync,
-} from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { acpCommand, AGENTS, nodeMajor, nodeOlder } from "@chopin/protocol/agents";
-import type { CodingAgent } from "@chopin/protocol/agents";
+import { basename, join, resolve } from "node:path";
+import { acpCommand, AGENTS } from "@chopin/protocol/agents";
 import { checkAgent } from "./acp";
 import { withoutGitHub } from "./github-token";
 import type { AgentInfo } from "./acp";
@@ -21,12 +11,14 @@ import { parseArgs } from "./args";
 import {
 	connectorMessage,
 	forget,
+	forgettablePlanners,
 	machineToken,
 	pair,
 	pairingKey,
 	plannerAiManaged,
 	register,
 	reportAgent,
+	reportCapability,
 	reportMachineStoreProblem,
 	SELF,
 	unpair,
@@ -35,9 +27,9 @@ import { createOutput } from "./output";
 import { permissionMemory } from "./permission";
 import { commandWords, dispatchedPlanners, servePlanners } from "./planner";
 import { plannerSpares } from "./planner-spare";
+import { PLANNER_DISK_SWEEP_MS, sweepPlannerDisks } from "./planner-disks";
 import { runWork } from "./run";
-import { implementationBridge } from "./implementation";
-import { readConfig, updateConfig } from "./config";
+import { type ConnectSettings, readConfig, updateConfig } from "./config";
 import {
 	CONNECT_FIRST,
 	installService,
@@ -57,7 +49,9 @@ import { collectStatus, formatStatus, type ServerSource } from "./status";
 import { removeReplaced, update } from "./update";
 import { checkouts as machineCheckouts, registerCheckouts } from "./checkouts";
 import { VERSION } from "./version";
-import { createSandbox, inspectSandbox } from "./sandbox";
+import { machineReport, MachineUnsupported, requireSupport, type Sandbox } from "./sandbox";
+import { machineRecipes, openMachineSandbox } from "./machine-sandbox";
+import type { SupportHost } from "./nvx";
 import { forgetMachineStore, provideMachineStore, storeReport } from "./machine-store";
 import type { MachineStoreOutcome } from "./machine-store";
 import { type SandboxSettings, validHostEntry } from "./sandbox-policy";
@@ -87,21 +81,6 @@ function origin(value: string) {
 	return url.origin;
 }
 
-async function bridge() {
-	let api = await remote(
-		origin(process.env.CHOPIN_BRIDGE_ORIGIN!),
-		process.env.CHOPIN_BRIDGE_TOKEN!,
-	);
-	let server = await implementationBridge(api, process.env.CHOPIN_BRIDGE_ROOT);
-	await server.connect(new StdioServerTransport());
-	let close = async () => {
-		await server.close();
-		await api.close();
-	};
-	process.once("SIGTERM", () => void close());
-	process.once("SIGINT", () => void close());
-}
-
 /** CHOPIN_URL, else the server `chopin connect` saved, else Chopin's own. */
 async function chosenServer(): Promise<{ origin: string; source: ServerSource }> {
 	if (process.env.CHOPIN_URL) {
@@ -117,22 +96,32 @@ async function server() {
 	return (await chosenServer()).origin;
 }
 
+/**
+ * What stands in for this machine in tests: its service manager and installed chopin, how the
+ * microVM support check reads it, and its microVMs, for tests of what the connector does around
+ * agents. A `chopin` never has any of them: it reads the machine itself and starts NVX.
+ */
+export type Injected = {
+	host?: ServiceHost;
+	executable?: string;
+	support?: SupportHost;
+	/** What images the agents' microVMs need, which a stand-in has without building any. */
+	recipes?: typeof machineRecipes;
+	openSandbox?: typeof openMachineSandbox;
+};
+
 /** `status [--json]`: this machine's chopin, pairing, connectors, service and log. */
-async function statusCommand(args: string[]) {
+async function statusCommand(args: string[], injected: Injected = {}) {
 	let parsed = parseArgs(args, { flags: ["json"] });
 	if (parsed.positional.length || parsed.rest) throw new Error(`Usage: ${SELF} status [--json]`);
 	let chosen = await chosenServer();
 	let directory = stateDirectory();
-	let config = await readConfig(directory);
 	let report = await collectStatus({
 		directory,
 		server: chosen.origin,
 		source: chosen.source,
 		host: systemHost(),
-		sandbox: (await inspectSandbox({
-			directory,
-			settings: (config.service?.settings ?? config.connect)?.sandbox,
-		})).report,
+		sandbox: machineReport(injected.support),
 	});
 	if (parsed.flags.has("json")) console.log(JSON.stringify(report, null, 2));
 	else createOutput().say(...formatStatus(report));
@@ -173,11 +162,13 @@ function interruptible() {
  * `pair [--label <name>] [--key <key>]`: pair this machine and store its token, replacing any
  * earlier one. With a pairing key (or CHOPIN_PAIRING_KEY) it needs no browser.
  */
-async function pairCommand(args: string[]) {
+async function pairCommand(args: string[], injected: Injected = {}) {
 	let parsed = parseArgs(args, { options: ["label", "key"] });
 	if (parsed.positional.length || parsed.rest) {
 		throw new Error(`Usage: ${SELF} pair [--label <name>] [--key <pairing key>]`);
 	}
+	// A machine that can't run agents in microVMs is never paired: it could run no work.
+	requireSupport(injected.support);
 	let key = pairingKey(parsed.options.get("key"));
 	let output = createOutput();
 	let label = parsed.options.get("label") ?? hostname();
@@ -225,6 +216,12 @@ async function unpairCommand(args: string[]) {
 	let url = await server();
 	let result = await unpair(url, stateDirectory());
 	forgetMachineStore(stateDirectory());
+	// Its Planners' disks go with it; one a running microVM has goes when that connector stops.
+	await sweepPlannerDisks({
+		directory: stateDirectory(),
+		output: createOutput(),
+		everything: true,
+	});
 	createOutput().say(
 		result === "unpaired"
 			? `Unpaired this machine from ${url}.`
@@ -262,97 +259,6 @@ async function savedCommand(command: string[], base: string) {
 /** The PATH as it is now, which a process (or a test) may have changed since it started. */
 function which(program: string) {
 	return Bun.which(program, { PATH: process.env.PATH ?? "" });
-}
-
-/**
- * Stop before anything is paired or connected when `command`'s program, or the one behind `env`,
- * isn't installed, so a pairing key is never spent on a machine that can't run work. A coding
- * agent from the Machines page's list is named with its install and sign-in commands, and one
- * that runs on a Node.js older than it needs is refused too.
- */
-function requireProgram(command: string[], base: string) {
-	let word = command[programAt(command)];
-	if (!word) return;
-	let found = /[\\/]/.test(word)
-		? (existsSync(resolve(base, word)) ? resolve(base, word) : null)
-		: which(word);
-	let name = basename(word).replace(/\.(exe|cmd|bat|ps1)$/i, "");
-	let agent = AGENTS.find(item => item.acp[0] === name);
-	if (found) {
-		if (agent) requireNode(agent, found);
-		return;
-	}
-	if (!agent) {
-		throw new Error(
-			`${word} isn't on your PATH, so nothing was paired or connected. Install it or give its `
-				+ "full path, then run this command again.",
-		);
-	}
-	let { command: signIn, afterward } = agent.signIn;
-	throw new Error(
-		[
-			`${word} isn't installed, so nothing was paired or connected. Install ${agent.name} (it `
-			+ `needs Node.js ${agent.node} or newer) and sign in to it:`,
-			...(which("npm")
-				? []
-				: [
-					`  (npm comes with Node.js: install Node.js ${agent.node} or newer from https://nodejs.org first)`,
-				]),
-			...agent.install.map(install => `  ${install.join(" ")}`),
-			`  ${signIn.join(" ")}${afterward ? `  (${afterward})` : ""}`,
-			"Then run this command again.",
-		].join("\n"),
-	);
-}
-
-/**
- * Refuse an agent whose program runs on Node.js when that Node.js is older than the agent needs,
- * which otherwise fails later with an unreadable stack trace. A program runs on Node.js when its
- * `#!` line names node, or when it is one of the shims `npm install -g` writes (a .cmd and a .ps1
- * on Windows, a sh script elsewhere), which start node with the package's script and prefer a
- * node beside them to the one on PATH. Compiled and other programs are left alone.
- */
-function requireNode(agent: CodingAgent, program: string) {
-	let head = Buffer.alloc(4096);
-	try {
-		let file = openSync(program, "r");
-		try {
-			head = head.subarray(0, readSync(file, head, 0, head.length, 0));
-		} finally {
-			closeSync(file);
-		}
-	} catch {
-		return;
-	}
-	if (head.includes(0)) return;
-	let text = head.toString("latin1");
-	let node: string | null;
-	if (/^#!.*\bnode\b/.test(text.split("\n")[0]!)) {
-		node = which("node");
-	} else if (
-		/\bnode(\.exe|\$exe)?\b/i.test(text) && /node_modules[\\/][^"'\s]+\.[cm]?js\b/.test(text)
-	) {
-		node = ["node.exe", "node"].map(name => join(dirname(program), name)).find(existsSync)
-			?? which("node");
-	} else {
-		return;
-	}
-	let version = node
-		? Bun.spawnSync([node, "--version"], { stdout: "pipe" }).stdout.toString().trim()
-		: "";
-	if (version && !nodeOlder(version, agent.node)) return;
-	throw new Error(
-		[
-			`${agent.name} needs Node.js ${agent.node} or newer; this machine has ${
-				version ? version.replace(/^v/, "") : "none on its PATH"
-			}, so nothing was paired or connected.`,
-			`Install Node.js ${agent.node} or newer from https://nodejs.org (or \`nvm install ${
-				nodeMajor(agent.node)
-			}\`), then reinstall the agent:`,
-			...agent.install.map(install => `  ${install.join(" ")}`),
-			"Then run this command again.",
-		].join("\n"),
-	);
 }
 
 /**
@@ -405,19 +311,16 @@ function runsToKeep(value: string | undefined) {
 }
 
 /**
- * What the sandbox flags choose: `--require-sandbox` and `--no-sandbox` are opposites, each
- * `--sandbox-host` is a host (`host`, `*.host` or `host:port`) agents may reach beyond the
- * built-in list, each `--sandbox-write` an absolute directory they may write, and each
- * `--sandbox-hide` a file or folder they may neither read nor write, wherever it is.
+ * What the microVM flags choose: each `--sandbox-host` is a host (`host`, `*.host` or `host:port`)
+ * agents may reach beyond the built-in list, each `--sandbox-write` an absolute directory every
+ * microVM is given to write, and each `--sandbox-hide` a file or folder inside what one is given
+ * that it may neither read nor write.
  */
 function sandboxChoice(
-	require: boolean,
-	off: boolean,
 	hosts: string[],
 	writable: string[],
 	hidden: string[] = [],
 ): SandboxSettings {
-	if (require && off) throw new Error("--require-sandbox and --no-sandbox can't be used together.");
 	for (let host of hosts) {
 		if (!validHostEntry(host)) {
 			throw new Error(
@@ -428,8 +331,6 @@ function sandboxChoice(
 	let directories = writable.map(path => resolve(path));
 	let concealed = hidden.map(path => resolve(path));
 	return {
-		...(require ? { require } : {}),
-		...(off ? { off } : {}),
 		...(hosts.length ? { hosts } : {}),
 		...(directories.length ? { writable: directories } : {}),
 		...(concealed.length ? { hidden: concealed } : {}),
@@ -437,25 +338,33 @@ function sandboxChoice(
 }
 
 /**
+ * Settings an earlier `chopin connect` saved, without what this release no longer has: whether a
+ * process sandbox was required or turned off. Every agent runs in its own microVM now.
+ */
+function sandboxSaved(saved: (SandboxSettings & { require?: unknown; off?: unknown }) | undefined) {
+	let { require: _require, off: _off, ...rest } = saved ?? {};
+	return rest;
+}
+
+/**
  * `connect`. `--service` marks the connector the installed service runs, which runs what install
  * copied. `--install-service` installs the service once connected, then stops; `injected` stands
  * in for this machine's service manager and chopin in tests.
  */
-export async function connect(
-	args: string[],
-	injected: { host?: ServiceHost; executable?: string } = {},
-) {
+export async function connect(args: string[], injected: Injected = {}) {
 	let parsed = parseArgs(args, {
-		flags: [
-			"service",
-			"install-service",
-			"skip-check",
-			"require-sandbox",
-			"no-sandbox",
-			"no-planner-spare",
-		],
+		flags: ["service", "install-service", "skip-check", "no-planner-spare"],
 		options: ["planner-command", "key", "name", "keep-runs", "agent"],
-		lists: ["planner", "env", "checkout", "sandbox-host", "sandbox-write", "sandbox-hide"],
+		lists: [
+			"planner",
+			"env",
+			"checkout",
+			"sandbox-host",
+			"sandbox-write",
+			"sandbox-hide",
+			"install",
+			"planner-install",
+		],
 	});
 	let service = parsed.flags.has("service");
 	let directory = stateDirectory();
@@ -466,8 +375,7 @@ export async function connect(
 			|| parsed.options.has("planner-command") || parsed.options.has("key")
 			|| parsed.options.has("name") || parsed.options.has("keep-runs")
 			|| parsed.options.has("agent") || parsed.flags.has("install-service")
-			|| parsed.flags.has("skip-check") || parsed.flags.has("require-sandbox")
-			|| parsed.flags.has("no-sandbox") || parsed.flags.has("no-planner-spare"))
+			|| parsed.flags.has("skip-check") || parsed.flags.has("no-planner-spare"))
 	) {
 		throw new Error(
 			`${SELF} connect --service takes no other arguments; it runs what ${SELF} service install saved.`,
@@ -516,18 +424,22 @@ export async function connect(
 	let spareOff = (saved ? saved.plannerSpare === false : parsed.flags.has("no-planner-spare"))
 		|| process.env.CHOPIN_PLANNER_SPARE === "0";
 	let sandboxSettings: SandboxSettings = saved
-		? saved.sandbox ?? {}
+		? sandboxSaved(saved.sandbox)
 		: sandboxChoice(
-			parsed.flags.has("require-sandbox"),
-			parsed.flags.has("no-sandbox"),
 			parsed.lists.get("sandbox-host") ?? [],
 			parsed.lists.get("sandbox-write") ?? [],
 			parsed.lists.get("sandbox-hide") ?? [],
 		);
-	if (!service) {
-		requireProgram(command, process.cwd());
-		if (plannerCommand.length) requireProgram(plannerCommand, process.cwd());
-	}
+	let agentInstall = saved?.install ?? parsed.lists.get("install");
+	let plannerInstall = saved?.plannerInstall ?? parsed.lists.get("planner-install");
+	// What each agent's microVMs run from, refused here, before anything is paired, when chopin
+	// can't make an image of it.
+	let recipes = (injected.recipes ?? machineRecipes)({
+		command,
+		plannerCommand,
+		...(agentInstall ? { install: agentInstall } : {}),
+		...(plannerInstall ? { plannerInstall } : {}),
+	});
 	if (service && process.platform === "win32") appendOutput(logPath("win32", directory));
 	let url = saved?.server ?? await server();
 	// The checkouts its work in their repositories runs from: `--checkout` and any positional path,
@@ -545,14 +457,12 @@ export async function connect(
 		}),
 	);
 	/**
-	 * Where the agent's start check runs: a registered checkout, else an empty folder of its own,
-	 * made when first asked for and removed when the connector exits. Not the home folder, which
-	 * holds the state directory and everything a person keeps.
+	 * Where the agent's start check runs in its microVM: an empty folder of its own, made when first
+	 * asked for and removed when the connector exits. It needs nothing of a checkout, and never the
+	 * home folder, which holds the state directory and everything a person keeps.
 	 */
 	let neutral: string | undefined;
 	let checkDirectory = () => {
-		let first = Object.values(registered)[0];
-		if (first) return first;
 		if (!neutral) {
 			let made = neutral = mkdtempSync(join(tmpdir(), "chopin-check-"));
 			process.once("exit", () => rmSync(made, { recursive: true, force: true }));
@@ -578,6 +488,8 @@ export async function connect(
 				...(Object.keys(env).length ? { env } : {}),
 				...(keepRuns === undefined ? {} : { keepRuns }),
 				...(Object.keys(sandboxSettings).length ? { sandbox: sandboxSettings } : {}),
+				...(agentInstall?.length ? { install: agentInstall } : {}),
+				...(plannerInstall?.length ? { plannerInstall } : {}),
 				...(parsed.flags.has("no-planner-spare") ? { plannerSpare: false as const } : {}),
 			};
 		});
@@ -593,8 +505,42 @@ export async function connect(
 	let known = AGENTS.find(item => item.acp[0] === program);
 	/** This connection's token, once it has registered, to tell Chopin about the agent later. */
 	let connectionToken: string | undefined;
-	/** Where agents run, once the sandbox has been probed; checks before it start plainly. */
-	let sandbox: Awaited<ReturnType<typeof createSandbox>> | undefined;
+	let output = createOutput();
+	/**
+	 * Where every agent runs: a microVM of its own. A machine that can't run one says why, tells
+	 * Chopin when it is paired already, and pairs, connects and starts nothing.
+	 */
+	let told = new Set<string>();
+	let sandbox: Sandbox;
+	try {
+		requireSupport(injected.support);
+		sandbox = await (injected.openSandbox ?? openMachineSandbox)({
+			directory,
+			server: url,
+			settings: sandboxSettings,
+			recipes,
+			output,
+			...(injected.support ? { host: injected.support } : {}),
+			refused(host, port) {
+				let entry = `${host}:${port}`;
+				if (told.has(entry)) return;
+				told.add(entry);
+				output.say(
+					output.style.dim(
+						`  An agent's microVM was kept from reaching ${entry}. To allow it: ${SELF} connect `
+							+ `--sandbox-host ${host}${port === 443 || port === 80 ? "" : `:${port}`}`
+							+ ", then service install again if it runs as a service.",
+					),
+				);
+			},
+		});
+	} catch (error) {
+		if (error instanceof MachineUnsupported) {
+			let paired = await machineToken(directory, url);
+			if (paired) await reportCapability(url, paired, error.support).catch(() => {});
+		}
+		throw error;
+	}
 	/**
 	 * Keep the agent's name and version, as it answered ACP initialize, for the next connection to
 	 * send; told to Chopin at once when this one is connected, as at its first job.
@@ -613,16 +559,13 @@ export async function connect(
 	 * doesn't answer within 10 seconds is left unnamed until a job or the next connection.
 	 */
 	let probeAgent = (token: string, signal: AbortSignal) => {
-		let started = [...saving.command];
-		let at = programAt(started);
-		started[at] = which(started[at]!) ?? started[at]!;
-		void checkAgent(started, {
+		void checkAgent(command, {
 			cwd: checkDirectory(),
-			// Through the seam, as a run's agent starts: with nothing of the machine's GitHub setup.
-			env: withoutGitHub({ ...process.env, ...env }),
-			timeoutMs: 10_000,
+			// In a microVM, as a run's agent starts: with nothing of the machine's GitHub setup.
+			env: withoutGitHub({ ...env }),
+			timeoutMs: 30_000,
 			signal,
-			...(sandbox ? { sandbox } : {}),
+			sandbox,
 			onInfo: agent => void rememberAgent(agent, token),
 		}).catch(() => {});
 	};
@@ -637,19 +580,15 @@ export async function connect(
 	// The service install check runs only once connected; a machine about to pair checks first, so
 	// a pairing key isn't spent on an agent that can't start or isn't signed in.
 	if (installing && !parsed.flags.has("skip-check") && !await machineToken(directory, url)) {
-		// By the path this shell finds it on, as the PATH may have changed since chopin started.
-		let started = [...saving.command];
-		let at = programAt(started);
-		started[at] = which(started[at]!) ?? started[at]!;
-		let failed = await checkAgent(started, {
+		let failed = await checkAgent(command, {
 			cwd: checkDirectory(),
-			env: { ...process.env, ...env },
-			timeoutMs: 10_000,
+			env: withoutGitHub({ ...env }),
+			timeoutMs: 30_000,
+			sandbox,
 			onInfo: agent => void rememberAgent(agent),
 		});
 		if (failed) {
 			let secrets = Object.values(env);
-			let signIn = known ? `, sign in with \`${known.signIn.command.join(" ")}\`` : "";
 			throw new Error(
 				[
 					`${command[programAt(command)]} didn't answer ACP initialize (${
@@ -659,8 +598,9 @@ export async function connect(
 							? `: ${redacted(failed.stderr, secrets).split("\n")[0]!.slice(0, 200)}`
 							: ""
 					}), so nothing was paired.`,
-					`Check that it starts${signIn}, then run this command again. For an agent that can't `
-					+ "start without a terminal, add --skip-check.",
+					"Check that it starts in its microVM (with your --install commands, for an agent that "
+					+ "isn't built in), then run this command again. For an agent that can't start without "
+					+ "a terminal, add --skip-check.",
 				].join("\n"),
 			);
 		}
@@ -691,38 +631,7 @@ export async function connect(
 	process.once("SIGTERM", stop);
 	// Task Scheduler ends a task without a signal, so `service restart` asks through a file.
 	let unwatch = service ? onStopRequest(directory, stop) : () => {};
-	let output = createOutput();
 	let permissions = permissionMemory();
-	// Probed once, here: agents start in the system's process sandbox where one works, else plainly,
-	// and the line says which. Chopin hears it with every connection.
-	let told = new Set<string>();
-	sandbox = await createSandbox({
-		directory,
-		server: url,
-		settings: sandboxSettings,
-		refused(host, port) {
-			let entry = `${host}:${port}`;
-			if (told.has(entry)) return;
-			told.add(entry);
-			output.say(
-				output.style.dim(
-					`  The sandbox kept an agent from reaching ${entry}. To allow it: ${SELF} connect `
-						+ `--sandbox-host ${host}${port === 443 || port === 80 ? "" : `:${port}`}`
-						+ ", then service install again if it runs as a service.",
-				),
-			);
-		},
-		planted(files) {
-			output.say(
-				output.style.dim(
-					`  Removed ${files.join(", ")}: an agent made ${
-						files.length === 1 ? "it" : "them"
-					} in a checkout's git directory, where only a linked worktree has one, `
-						+ "and it would have sent git there to configuration the agent wrote.",
-				),
-			);
-		},
-	});
 	let report = sandbox.report;
 	try {
 		for (;;) {
@@ -771,6 +680,8 @@ export async function connect(
 			if (agentStore) sandbox.allow?.(agentStore.host);
 			let storeProblem = store.state === "failed" ? store.reason : undefined;
 			let announced = false;
+			/** Chopin refused the machine token: its Planners' disks go once its launches stopped. */
+			let revoked = false;
 			// Planner backends run beside the work loop with this machine token and stop with it, so
 			// none outlives a revoked token and a machine paired again starts them with its new one.
 			let planners = new AbortController();
@@ -837,15 +748,19 @@ export async function connect(
 						probeAgent(connectionToken, AbortSignal.any([abort.signal, signal]));
 						if (!announced) {
 							output.connected(Object.keys(registered));
-							output.say(
-								report.engine === "none"
-									? `${sandboxLabel(report)} ${
-										sandboxSettings.require
-											? "Runs are refused (--require-sandbox is on)."
-											: "Runs go on without it."
-									}`
-									: output.style.dim(sandboxLabel(report)),
-							);
+							output.say(output.style.dim(sandboxLabel(report)));
+							// Planner disks of documents Chopin no longer has, or no Planner ran on for long,
+							// go now and every hour, never one a running microVM has.
+							let sweep = () =>
+								void sweepPlannerDisks({
+									directory,
+									output,
+									ask: documents => forgettablePlanners(url, machine, documents, abort.signal),
+								}).catch(() => {});
+							sweep();
+							let sweeping = setInterval(sweep, PLANNER_DISK_SWEEP_MS);
+							sweeping.unref();
+							abort.signal.addEventListener("abort", () => clearInterval(sweeping));
 							for (let repository of registration.refused) {
 								output.error(
 									`You can't push to ${repository} on GitHub, so Chopin won't run its work here.`,
@@ -889,6 +804,7 @@ export async function connect(
 				// Chopin no longer accepts the token, so it is forgotten and the next connect pairs.
 				await forget(url, directory, machine);
 				forgetMachineStore(directory);
+				revoked = true;
 				// A stored token refused at the start pairs again at once on a terminal, as if none were
 				// stored. A service stops rather than wait on a browser, and a machine disconnected while
 				// it was connected stays stopped.
@@ -897,6 +813,11 @@ export async function connect(
 			} finally {
 				planners.abort();
 				await Promise.all([planning, dispatched?.stop(), spares?.stop()]);
+				// A revoked machine's Planners' disks go once nothing runs on them.
+				if (revoked) {
+					revoked = false;
+					await sweepPlannerDisks({ directory, output, everything: true }).catch(() => {});
+				}
 			}
 		}
 	} catch (error) {
@@ -913,6 +834,9 @@ export async function connect(
 			host: injected.host,
 			executable,
 			check: !parsed.flags.has("skip-check"),
+			support: injected.support,
+			recipes: injected.recipes,
+			openSandbox: injected.openSandbox,
 		});
 	}
 }
@@ -933,6 +857,9 @@ async function installCommand(options: {
 	check?: boolean;
 	host?: ServiceHost | undefined;
 	executable?: string | undefined;
+	support?: SupportHost | undefined;
+	recipes?: typeof machineRecipes | undefined;
+	openSandbox?: typeof openMachineSandbox | undefined;
 }) {
 	let directory = stateDirectory();
 	let host = options.host ?? systemHost();
@@ -954,9 +881,39 @@ async function installCommand(options: {
 				+ "service.",
 		);
 	}
+	// The check starts the agent as the service will: in a microVM of its image, built if it isn't.
+	let check = options.check
+		? async (settings: ConnectSettings) => {
+			let sandbox = await (options.openSandbox ?? openMachineSandbox)({
+				directory,
+				server: url,
+				...(options.support ? { host: options.support } : {}),
+				settings: sandboxSaved(settings.sandbox),
+				recipes: (options.recipes ?? machineRecipes)({
+					command: settings.command,
+					plannerCommand: settings.plannerCommand,
+					...(settings.install ? { install: settings.install } : {}),
+					...(settings.plannerInstall ? { plannerInstall: settings.plannerInstall } : {}),
+				}),
+				output,
+			});
+			let empty = mkdtempSync(join(directory, "check-"));
+			try {
+				return await checkAgent(settings.command, {
+					cwd: empty,
+					env: withoutGitHub({ ...settings.env }),
+					timeoutMs: 30_000,
+					sandbox,
+				});
+			} finally {
+				await sandbox.close();
+				rmSync(empty, { recursive: true, force: true });
+			}
+		}
+		: undefined;
 	let installed = await installService(host, { executable: options.executable, directory }, {
 		allowDowngrade: !!options.allowDowngrade,
-		check: !!options.check,
+		...(check ? { check } : {}),
 	});
 	output.say(
 		`${output.style.green("✓ Installed the chopin service")} (${installed.manager}). `
@@ -975,7 +932,7 @@ const SERVICE_USAGE = `Usage: ${SELF} service install [--allow-downgrade] [--ski
 	+ `${SELF} service status | restart | uninstall`;
 
 /** `service install|status|restart|uninstall`: run `connect` as this user's background service. */
-async function serviceCommand(args: string[]) {
+async function serviceCommand(args: string[], injected: Injected = {}) {
 	let [action, ...rest] = args;
 	let parsed = parseArgs(
 		rest,
@@ -983,14 +940,17 @@ async function serviceCommand(args: string[]) {
 	);
 	if (parsed.positional.length || parsed.rest) throw new Error(SERVICE_USAGE);
 	let directory = stateDirectory();
-	let host = systemHost();
+	let host = injected.host ?? systemHost();
 	let output = createOutput();
 	let lines = (notes: string[]) => notes.map(note => output.style.dim(`  ${note}`));
 	if (action === "install") {
 		await installCommand({
 			allowDowngrade: parsed.flags.has("allow-downgrade"),
 			check: !parsed.flags.has("skip-check"),
-			executable: installedChopin(),
+			executable: injected.executable ?? installedChopin(),
+			support: injected.support,
+			recipes: injected.recipes,
+			openSandbox: injected.openSandbox,
 		});
 		return;
 	}
@@ -1091,12 +1051,12 @@ const HELP = [
 	`and the service (default: ${DEFAULT_URL}).`,
 ].join("\n");
 
-if (import.meta.main) {
-	let [mode, ...args] = process.argv.slice(2);
+/** Runs the `chopin` command `argv` names; `injected` stands in for this machine in tests. */
+export async function runCli(argv: string[], injected: Injected = {}) {
+	let [mode, ...args] = argv;
 	await removeReplaced();
 	try {
-		if (mode === "bridge") await bridge();
-		else if (mode === "update") {
+		if (mode === "update") {
 			let parsed = parseArgs(args, { flags: ["allow-downgrade", "yes"] });
 			if (parsed.positional.length > 1 || parsed.rest) {
 				throw new Error(`Usage: ${SELF} update [version] [--allow-downgrade] [--yes]`);
@@ -1108,10 +1068,10 @@ if (import.meta.main) {
 				server: await server(),
 				afterUpdate: target => restartAfterUpdate(systemHost(), stateDirectory(), target),
 			});
-		} else if (mode === "connect") await connect(args);
-		else if (mode === "service") await serviceCommand(args);
-		else if (mode === "status") await statusCommand(args);
-		else if (mode === "pair") await pairCommand(args);
+		} else if (mode === "connect") await connect(args, injected);
+		else if (mode === "service") await serviceCommand(args, injected);
+		else if (mode === "status") await statusCommand(args, injected);
+		else if (mode === "pair") await pairCommand(args, injected);
 		else if (mode === "unpair") await unpairCommand(args);
 		else if (mode === "version" || mode === "--version" || mode === "-v") {
 			console.log(`chopin ${VERSION}`);
@@ -1126,3 +1086,5 @@ if (import.meta.main) {
 		}
 	}
 }
+
+if (import.meta.main) await runCli(process.argv.slice(2));

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { MICROVMS } from "../testing/microvms";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,10 +45,14 @@ function error(value: { result: { isError?: boolean; content: Array<{ text: stri
 	return value.result.isError ? value.result.content[0].text : "";
 }
 
-/** What a current connector sends with every request; browser routes ignore it. */
+/**
+ * What a current connector sends with every request, and as it connects, that its agents run in
+ * microVMs; browser routes ignore it.
+ */
 const CURRENT = {
 	[CONNECTOR_VERSION_HEADER]: "dev",
 	[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOLS.max),
+	...MICROVMS,
 };
 
 async function setup(
@@ -793,7 +798,7 @@ test(
 		let connector = Bun.spawn([
 			process.execPath,
 			"--no-env-file",
-			join(import.meta.dir, "../../../connector/src/main.ts"),
+			join(import.meta.dir, "../../../connector/src/testing/chopin-on-host.ts"),
 			"connect",
 			root,
 			"--",
@@ -932,44 +937,105 @@ test("a connection tells the owner its machine's host, platform and agent", asyn
 	expect(config).toBeDefined();
 });
 
-test("a connection tells the owner whether its agents run in the system's sandbox, and why not", async () => {
-	let { alice, router, request, pair } = await setup();
+test("only a connector whose agents run in microVMs connects, and one that can't run them says why on the Machines page while it is away", async () => {
+	let context = await setup();
+	let { alice, bob, router, request, pair, tool } = context;
 	let paired = await pair(alice.cookie);
-	let listed = async () =>
-		(await (await request("/api/connector/machines", undefined, alice.cookie)).json()).machines;
+	// It is away: what it says as it connects again is all Chopin hears of it.
+	await tool(paired.token, "disconnect_workspace", {});
+	let listed = async (cookie = alice.cookie) =>
+		(await (await request("/api/connector/machines", undefined, cookie)).json()).machines;
 	let connect = async (extra: Record<string, string>) => {
 		let opened = new Request("https://chopin.test/api/connector/connections", {
 			method: "POST",
 			headers: {
 				"content-type": "application/json",
 				authorization: `Bearer ${paired.machineToken}`,
-				...CURRENT,
+				[CONNECTOR_VERSION_HEADER]: "dev",
 				...extra,
 			},
 			body: JSON.stringify({ repository: "org/repo", commit: "a".repeat(40), label: "Laptop" }),
 		});
-		await router.handle(opened, new URL(opened.url));
-		return (await listed())[0].sandbox;
+		return (await router.handle(opened, new URL(opened.url)))!;
 	};
-	// A connector from before the sandbox says nothing, and is shown as saying nothing.
-	expect(await connect({})).toBeNull();
-	expect(await connect({ [CONNECTOR_SANDBOX_HEADER]: "bubblewrap" })).toEqual({
-		engine: "bubblewrap",
+	let current = { [CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOLS.max) };
+	// A connector from before microVMs ran agents in a process sandbox: it is told to update.
+	for (
+		let older of [
+			{ [CONNECTOR_PROTOCOL_HEADER]: "7", [CONNECTOR_SANDBOX_HEADER]: "bubblewrap" },
+			{ [CONNECTOR_PROTOCOL_HEADER]: "7" },
+		] as Array<Record<string, string>>
+	) {
+		let refused = await connect(older);
+		expect(refused.status).toBe(409);
+		let body = await refused.json();
+		expect(body.error).toBe(CONNECTOR_UPDATE_REQUIRED);
+		expect(body.message).toContain("runs agents outside a microVM");
+		expect(body.message).toContain("chopin update");
+	}
+	// A current one that says it can't run them is refused, and what it said is kept.
+	let unable = await connect({
+		...current,
+		[CONNECTOR_SANDBOX_HEADER]: "none",
+		[CONNECTOR_SANDBOX_REASON_HEADER]: "Your user can't read and write /dev/kvm.",
+		[CONNECTOR_SANDBOX_FIX_HEADER]: "sudo usermod -aG kvm $USER",
 	});
-	expect(
-		await connect({
-			[CONNECTOR_SANDBOX_HEADER]: "none",
-			[CONNECTOR_SANDBOX_REASON_HEADER]: "slirp4netns isn't installed.",
-			[CONNECTOR_SANDBOX_FIX_HEADER]: "sudo apt-get install -y slirp4netns",
-		}),
-	).toEqual({
+	expect(unable.status).toBe(409);
+	expect((await unable.json()).error).toBe("microvm-required");
+	let [away] = await listed();
+	expect(away.sandbox).toEqual({
 		engine: "none",
-		reason: "slirp4netns isn't installed.",
-		fix: "sudo apt-get install -y slirp4netns",
+		reason: "Your user can't read and write /dev/kvm.",
+		fix: "sudo usermod -aG kvm $USER",
 	});
-	// An engine this server doesn't know, or a refusal with no reason, is dropped.
-	expect(await connect({ [CONNECTOR_SANDBOX_HEADER]: "firecracker" })).toBeNull();
-	expect(await connect({ [CONNECTOR_SANDBOX_HEADER]: "none" })).toBeNull();
+	// One that runs them connects, says on which hypervisor, and clears what was kept.
+	expect((await connect({ ...current, ...MICROVMS })).status).toBe(200);
+	let [running] = await listed();
+	expect(running.sandbox).toEqual({ engine: "nvx", hypervisor: "kvm" });
+	expect((await storageOf(paired.machine))?.vmProblem).toBeUndefined();
+
+	// A paired machine whose connector finds it can't run them tells Chopin before it exits.
+	let capability = (body: unknown, token = paired.machineToken) =>
+		request("/api/connector/capability", body, undefined, token, CURRENT);
+	expect((await capability({ reason: "" })).status).toBe(409);
+	expect((await capability({ reason: "x", extra: true })).status).toBe(409);
+	expect(
+		(await capability({ reason: "macOS has no hypervisor NVX can use." }, "chopin_m_nobody"))
+			.status,
+	)
+		.toBe(401);
+	let told = await capability({
+		reason: "macOS has no hypervisor NVX can use.\u001b[31m",
+	});
+	expect(await told.json()).toEqual({ reported: true });
+	expect((await storageOf(paired.machine))?.vmProblem).toEqual({
+		reason: "macOS has no hypervisor NVX can use.",
+	});
+	// Nobody else sees any of it.
+	expect(await listed(bob.cookie)).toEqual([]);
+
+	async function storageOf(id: string) {
+		return await context.storage.machines.get(id);
+	}
+});
+
+test("a machine may forget the Planner disk of a document archived or gone, and keeps every other", async () => {
+	let { alice, storage, document, documentId, request, pair } = await setup();
+	let paired = await pair(alice.cookie);
+	let archived = await document();
+	await storage.channels.archive({
+		id: archived,
+		now: new Date(),
+		lease: await testLease(storage),
+	});
+	let gone = crypto.randomUUID();
+	let kept = (documents: unknown, token = paired.machineToken) =>
+		request("/api/connector/planner/kept", { documents }, undefined, token, CURRENT);
+	let answer = await kept([documentId, archived, gone, "octo-org_score_plan", archived]);
+	expect(answer.status).toBe(200);
+	expect(await answer.json()).toEqual({ forget: [archived, gone] });
+	expect((await kept([documentId], "chopin_m_nobody")).status).toBe(401);
+	expect((await kept("all")).status).toBe(409);
 });
 
 test("an owner renames a paired machine, which chopin status then reads", async () => {
@@ -1636,7 +1702,7 @@ test("a connector outside the supported protocol range is refused with the comma
 	}
 
 	// In range: pairing, claiming and connector calls all go through.
-	let current = headers("0.2.0", 6);
+	let current = { ...headers("0.2.0", 6), ...MICROVMS };
 	let created = await request("/api/connector/pairings", source, undefined, undefined, current);
 	expect(created.status).toBe(200);
 	let pending = await created.json();

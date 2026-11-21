@@ -1,3 +1,4 @@
+import { MICROVMS } from "../apps/server/src/testing/microvms";
 import { performance } from "../packages/experiment/src/fixtures";
 import { CONNECTOR_PROTOCOL_HEADER } from "../packages/protocol/connector";
 import { CONNECTOR_PROTOCOL } from "../apps/connector/src/version";
@@ -10,7 +11,7 @@ const CHART_MODULE = /\/assets\/diagram-[^/]+\.js$/;
 const RENDER_MODULE = /\/assets\/render-[^/]+\.js$/;
 
 /** What the current connector sends with each request. */
-const CONNECTOR = { [CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL) };
+const CONNECTOR = { [CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL), ...MICROVMS };
 
 /** A connection serves every document in its repository, so each pairing test is its own person. */
 function person() {

@@ -1,3 +1,4 @@
+import { MICROVMS } from "../apps/server/src/testing/microvms";
 import { mkdir } from "node:fs/promises";
 import {
 	CONNECTOR_PLATFORM_HEADER,
@@ -69,6 +70,7 @@ async function connected(page: Page, label: string, headers: Record<string, stri
 			headers: {
 				"content-type": "application/json",
 				[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL),
+				...MICROVMS,
 				[CONNECTOR_VERSION_HEADER]: RELEASE,
 				...extra,
 			},
@@ -396,6 +398,7 @@ async function machines(page: Page, count: number) {
 				headers: {
 					"content-type": "application/json",
 					[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOL),
+					...MICROVMS,
 					[CONNECTOR_VERSION_HEADER]: RELEASE,
 					...extra,
 				},

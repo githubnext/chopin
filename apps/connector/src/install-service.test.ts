@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
+import { hostRecipes, hostSandbox, SUPPORTED_HOST } from "./testing/host-sandbox";
 import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -116,12 +117,18 @@ async function setup(
 			connect([root, "--install-service", ...flags, "--", "agent", "--acp"], {
 				host,
 				executable: "/opt/chopin/bin/chopin",
+				support: SUPPORTED_HOST,
+				recipes: hostRecipes,
+				openSandbox: async () => hostSandbox(),
 			}),
 		/** As `run`, with `agent` as the ACP command instead. */
 		runAgent: (...agent: string[]) =>
 			connect([root, "--install-service", "--", ...agent], {
 				host,
 				executable: "/opt/chopin/bin/chopin",
+				support: SUPPORTED_HOST,
+				recipes: hostRecipes,
+				openSandbox: async () => hostSandbox(),
 			}),
 		async [Symbol.asyncDispose]() {
 			for (let [name, value] of Object.entries(saved)) {
@@ -232,7 +239,7 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
-	"a known agent that won't start is named with its sign-in command, before the key is spent",
+	"a known agent that won't start in its microVM says so, before the key is spent",
 	async () => {
 		await using machine = await setup(systemd, { paired: false });
 		await writeFile(
@@ -245,7 +252,7 @@ test.skipIf(process.platform === "win32")(
 		expect(refused.message).toContain(
 			"copilot didn't answer ACP initialize (exit 1: Error: not logged in)",
 		);
-		expect(refused.message).toContain("sign in with `copilot login`, then run this command again");
+		expect(refused.message).toContain("Check that it starts in its microVM");
 		expect(machine.requests).toEqual([]);
 	},
 	30_000,
