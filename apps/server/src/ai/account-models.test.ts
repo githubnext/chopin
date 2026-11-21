@@ -196,13 +196,25 @@ describe("the list held for each person", () => {
 	});
 
 	it("is dropped when the person's accounts change, and whoever shows it hears so", async () => {
-		let world = held();
+		// The list after the change is computed only once the test lets it, so a read that doesn't wait
+		// finds nothing however quickly a computation could end.
+		let asked: string[] = [];
+		let computed: PromiseWithResolvers<void> | undefined;
+		let world = held({
+			sources: async userId => {
+				asked.push(userId);
+				await computed?.promise;
+				return copilot();
+			},
+		});
 		await world.models.read("U_mona", 5_000);
+		computed = Promise.withResolvers();
 		world.models.forget("U_mona");
 		expect(world.changed).toEqual(["U_mona"]);
 		expect(await world.models.read("U_mona")).toBeUndefined();
+		computed.resolve();
 		expect((await world.models.read("U_mona", 5_000))?.models).toHaveLength(2);
-		expect(world.asked).toEqual(["U_mona", "U_mona"]);
+		expect(asked).toEqual(["U_mona", "U_mona"]);
 	});
 
 	it("is nobody else's, and tells whose list changed once one computed differs", async () => {
