@@ -397,7 +397,9 @@ export const DISK_GIB = 32;
  * Makes a sparse ext4 image at `path`: the file made sparse on the host, which takes on disk only
  * what is written to it (on Windows NTFS fills a file a guest grows), then formatted in a microVM of
  * the release's own layer, whose `mkfs.ext4` needs nothing of the host's, without discards, which
- * NTFS doesn't take. One that is there already is kept.
+ * NTFS doesn't take. A new sparse file reads as zeros, which `mkfs.ext4` is told, so the guest's
+ * kernel never writes zeros over its inode tables (half a GiB at 32 GiB). One that is there already
+ * is kept.
  */
 export async function makeDisk(
 	path: string,
@@ -432,7 +434,7 @@ export async function makeDisk(
 					"-m",
 					"0",
 					"-E",
-					"lazy_itable_init=1,lazy_journal_init=1,nodiscard",
+					"lazy_itable_init=1,lazy_journal_init=1,assume_storage_prezeroed=1,nodiscard",
 					"/out/disk.ext4",
 				],
 				cwd: "/tmp",
