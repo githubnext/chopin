@@ -20,7 +20,7 @@ import {
 	usableCatalog,
 } from "./protocol";
 
-import type { ServerMessage, ServerMessageOf } from "./protocol";
+import type { ClientMessage, ServerMessage, ServerMessageOf } from "./protocol";
 
 describe("Agent connection messages", () => {
 	it("accepts each client message the protocol declares", () => {
@@ -419,17 +419,17 @@ describe("Agent connection messages", () => {
 
 	it("names a catalog launch in `ai-catalog`, and the one a `capabilities` report was listed through", () => {
 		expect(AGENT_FEATURES.catalogLaunches).toBe("catalog-launches");
-		let handed = {
+		let handed: ServerMessage = {
 			type: "ai-catalog",
 			ai: { providers: [], withheld: [] },
 			catalogLaunch: "c-1",
-		} as const;
+		};
 		expect(parseServerMessage(encodeMessage(handed))).toEqual({ ok: true, message: handed });
-		let report = {
+		let report: ClientMessage = {
 			type: "capabilities",
 			catalog: { models: { available: [{ id: "acme/large", name: "Large" }] } },
 			catalogLaunch: "c-1",
-		} as const;
+		};
 		expect(parseClientMessage(encodeMessage(report))).toEqual({ ok: true, message: report });
 		for (let wrong of ["", "c".repeat(129), 1]) {
 			expect(parseServerMessage(JSON.stringify({ ...handed, catalogLaunch: wrong })))
