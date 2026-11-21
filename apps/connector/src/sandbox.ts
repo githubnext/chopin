@@ -29,10 +29,11 @@ import { type AiRelay, startAiRelay } from "./ai-relay";
 import { GUEST_BRIDGE_PATH, guestBridge, guestBridgeCommand } from "./bridge";
 import {
 	type Downloader,
-	ensureImage,
+	ensureImages,
 	type GuestUser,
 	type ImageRecipe,
 	pruneImages,
+	vmBuilder,
 } from "./images";
 import {
 	type AgentImage,
@@ -227,8 +228,10 @@ export type SandboxOptions = {
 	recipes: Map<string, ImageRecipe>;
 	/** Fetches what images are made from; `fetch` by default. */
 	download?: Downloader;
-	/** Hears that an image is being built, which takes minutes the first time. */
-	building?: (recipe: ImageRecipe) => void;
+	/** Hears that an image is being built, which takes minutes the first time: whose it is. */
+	building?: (recipes: ImageRecipe[]) => void;
+	/** Hears that another chopin on the base dir is building an image this one needs, and waits. */
+	waiting?: (recipes: ImageRecipe[]) => void;
 	/** Hears each host the proxy refuses, once. */
 	refused?: (host: string, port: number) => void;
 	/** Hears of a microVM that outlived its stop (on Windows), which a restart may be needed to end. */
@@ -991,22 +994,24 @@ export async function createSandbox(options: SandboxOptions): Promise<Sandbox> {
 		...options.unsupported ? { unsupported: options.unsupported } : {},
 		...options.host ? { host: options.host } : {},
 	};
-	let images = new Map<string, AgentImage>();
+	let images: Map<string, AgentImage>;
 	try {
-		for (let [program, recipe] of options.recipes) {
-			images.set(
-				program,
-				await ensureImage(recipe, {
-					base: directory,
-					layer: setup.artifacts.layer,
-					user: guestUser(),
-					run: spec => runVm(spec, setup, directory, vm),
-					download: options.download ?? fetchTo,
-					proxyPort: proxy.port,
-					...options.building ? { building: options.building } : {},
-				}),
-			);
-		}
+		// Every image a launch here may need, ready before anything starts.
+		images = await ensureImages(options.recipes, {
+			base: directory,
+			layer: setup.artifacts.layer.uuid,
+			user: guestUser(),
+			builder: vmBuilder({
+				base: directory,
+				layer: setup.artifacts.layer,
+				user: guestUser(),
+				run: spec => runVm(spec, setup, directory, vm),
+				download: options.download ?? fetchTo,
+				proxyPort: proxy.port,
+			}),
+			...options.building ? { building: options.building } : {},
+			...options.waiting ? { waiting: options.waiting } : {},
+		});
 		if (options.prune !== false) {
 			await pruneImages(
 				directory,

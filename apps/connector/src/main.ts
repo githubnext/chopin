@@ -970,40 +970,42 @@ async function installCommand(options: {
 	}
 	// A service on a machine that can't run its microVMs would run nothing, --skip-check or not.
 	requireSupport(options.support);
-	// The check starts the agent as the service will: in a microVM of its image, built if it isn't.
-	// It holds no base dir, so it removes no image: the running service's may be another's.
-	let check = options.check
-		? async (settings: ConnectSettings) => {
-			let sandbox = await (options.openSandbox ?? openMachineSandbox)({
-				directory,
-				server: url,
-				prune: false,
-				...(options.support ? { host: options.support } : {}),
-				settings: sandboxSaved(settings.sandbox),
-				recipes: (options.recipes ?? machineRecipes)({
-					command: settings.command,
-					plannerCommand: settings.plannerCommand,
-					...(settings.install ? { install: settings.install } : {}),
-					...(settings.plannerInstall ? { plannerInstall: settings.plannerInstall } : {}),
-					...(settings.installFrom ? { installFrom: settings.installFrom } : {}),
-				}),
-				output,
-			});
-			try {
-				return await checkAgent(settings.command, {
+	// Every image the saved settings need is built before the service is installed, so the service
+	// starts at once and the first document's Planner with it; --skip-check leaves out only the
+	// agent's start, in a microVM of its image, as the service will start it. It holds no base dir,
+	// so it removes no image: the running service's may be another's.
+	let check = async (settings: ConnectSettings) => {
+		let sandbox = await (options.openSandbox ?? openMachineSandbox)({
+			directory,
+			server: url,
+			prune: false,
+			...(options.support ? { host: options.support } : {}),
+			settings: sandboxSaved(settings.sandbox),
+			recipes: (options.recipes ?? machineRecipes)({
+				command: settings.command,
+				plannerCommand: settings.plannerCommand,
+				...(settings.install ? { install: settings.install } : {}),
+				...(settings.plannerInstall ? { plannerInstall: settings.plannerInstall } : {}),
+				...(settings.installFrom ? { installFrom: settings.installFrom } : {}),
+			}),
+			output,
+		});
+		try {
+			return options.check
+				? await checkAgent(settings.command, {
 					cwd: checkFolder(directory),
 					env: withoutGitHub({ ...settings.env }),
 					timeoutMs: 30_000,
 					sandbox,
-				});
-			} finally {
-				await sandbox.close();
-			}
+				})
+				: undefined;
+		} finally {
+			await sandbox.close();
 		}
-		: undefined;
+	};
 	let installed = await installService(host, { executable: options.executable, directory }, {
 		allowDowngrade: !!options.allowDowngrade,
-		...(check ? { check } : {}),
+		check,
 	});
 	output.say(
 		`${output.style.green("✓ Installed the chopin service")} (${installed.manager}). `

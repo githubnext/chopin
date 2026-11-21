@@ -610,14 +610,17 @@ async function checkStart(settings: ConnectSettings, check: StartCheck) {
 	);
 }
 
-/** Starts the agent the service would start, in a microVM, and says how it failed if it did. */
+/**
+ * Readies the microVMs the service will run, building any image they lack, and starts the agent the
+ * service would start in one unless told not to, saying how it failed if it did.
+ */
 export type StartCheck = (settings: ConnectSettings) => Promise<AgentFailure | undefined>;
 
 /**
  * Install `program` as this user's service and start it, so it starts again by itself. It copies
  * what the last `chopin connect` ran, checked here first, server included, into config.json as
- * the service's own settings, which a later connect leaves alone. With `check`, it first starts
- * the agent as the service would and refuses one that doesn't answer ACP initialize. A service
+ * the service's own settings, which a later connect leaves alone. With `check`, it first readies
+ * the service's microVMs, and refuses an agent that doesn't answer ACP initialize. A service
  * an older chopin than one already installed is refused without `allowDowngrade`.
  */
 export async function installService(

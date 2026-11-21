@@ -311,6 +311,10 @@ chopin connect --install 'npm install -g my-agent' -- my-agent --acp
 
 A Planner command is installed the same way with `--planner-install`. An agent
 `chopin` has no recipe for is refused before anything is paired, naming the option.
+`chopin connect` builds the Planner command's image with the agent's as it starts,
+before it says Connected, so the first document's Planner starts at once; when
+`--install` and `--planner-install` give the same commands, one image holds both
+programs. A build that fails stops `chopin connect` with the build's own output.
 
 The build reaches the network only through the [proxy](#sandbox), with no credentials
 of yours, and runs whatever install scripts the packages have. To install something
@@ -356,11 +360,13 @@ You can also do it in two steps:
    chopin service install
    ```
 
-Before installing, `chopin` starts your agent once the way the service will,
-with the service's `PATH` and your `--env` values, and waits up to 10 seconds
-for it to answer. If it doesn't, nothing is installed, and the message shows
-the first line your agent printed. For an agent that can't start without a
-terminal, pass `--skip-check`.
+Before installing, `chopin` builds any image your settings need that isn't built
+yet, the Planner's included, so the service starts at once. Then it starts your
+agent once the way the service will, with the service's `PATH` and your `--env`
+values, and waits up to 10 seconds for it to answer. If it doesn't, nothing is
+installed, and the message shows the first line your agent printed. For an agent
+that can't start without a terminal, pass `--skip-check`, which leaves out only that
+start.
 
 The service can't answer permission prompts. The built-in agents already
 approve their own tools; give any other agent its approval flag.
@@ -694,7 +700,7 @@ lists them all.
 | `runs/<run id>.json`, `runs/<run id>.agent/` | A job's record, and its agent's state where it ran on Chopin's AI accounts                                                         | Once 15 newer runs have finished                                                                                                  |
 | `planners/<owner>/<repo>/<document id>.disk` | A Planner's disk, with its own clone of the repository                                                                             | When Chopin says its document is archived or gone or its Planner was reset, after 30 days unused, or when the machine is unpaired |
 | `repos/<owner>/<repo>`                       | A clone of a repository you named no checkout of                                                                                   | Never                                                                                                                             |
-| `images/`                                    | The agents' images, built once each                                                                                                | When the connector that holds the base dir starts and no recipe names one any more                                                |
+| `images/`                                    | The images agents and Planners run from, built once each                                                                           | When the connector that holds the base dir starts and no recipe names one any more                                                |
 | `nvx/`                                       | The NVX release this `chopin` pins, and its microVMs' records                                                                      | An NVX release `chopin` no longer pins                                                                                            |
 | `git/<process>/`                             | A copy of the settings of your git configuration that `chopin`'s own git commands use (where to fetch from, proxies, line endings) | As that `chopin` exits, or by the next `chopin connect` once it is gone                                                           |
 | `agent-store/`                               | This machine's database login for agent sessions, and the adapter                                                                  | Its password with `chopin unpair`                                                                                                 |
@@ -751,8 +757,20 @@ why, leaves, and starts no agent or Planner until it can run microVMs again. It
 checks every 30 seconds, and connects again by itself once it can.
 
 The first `chopin connect` downloads NVX (about 275 MB on Linux, 150 MB on
-Windows, checked against the SHA-256 this `chopin` pins) and builds the agent's
-image, once, which takes a minute or two and says so. A microVM then starts in
+Windows, checked against the SHA-256 this `chopin` pins) and builds the images
+agents run from, once, before it says Connected: the agent's, and with
+`--planner-command` the Planner's, or one image for both when their install
+commands are the same. Each takes a minute or two and says so on its own line:
+
+```text
+… Building one image for atomic-acp and the Planner (my-planner), whose installs are the same, for their microVMs (a minute or two, once, so the first document's Planner starts at once).
+✓ Connected.
+```
+
+So the first document you open starts its Planner at once. A build that fails stops
+`chopin connect` there, with the build's own output. The service builds any image it
+lacks as it starts, as after an update that changes what an image holds, before it
+connects, so the machine shows as away until it is done. A microVM then starts in
 under a second.
 
 ### What an agent can and can't do
@@ -1030,7 +1048,8 @@ and Chopin's own CI does.
 
 On a cloud VM choose a size with nested virtualization. Nothing else needs
 installing: `chopin` downloads the NVX release it pins from NVX's own GitHub
-release as it first connects, and builds the agent's image with Node.js and git.
+release as it first connects, and builds the agent's and the Planner's images with
+Node.js and git.
 
 **Windows** on x86_64, with the Windows Hypervisor Platform turned on
 (`Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform`, then
@@ -1043,9 +1062,10 @@ says so when it would pair or connect.
 
 ### Things to know
 
-- **The first connect** downloads NVX and builds the agent's image, which can take a
-  few minutes; later ones start at once. A new `chopin` that pins another NVX or agent
-  version builds the image again.
+- **The first connect** downloads NVX and builds the agent's image, and the Planner's
+  with `--planner-command`, which can take a few minutes; later ones start at once. A
+  new `chopin` that pins another NVX or agent version builds them again, as the service
+  starts and before it connects.
 - **Caches.** A microVM starts with none of your package caches. Add
   `--sandbox-write ~/.npm` (or another tool's cache) to share one, writable, with
   every agent.
@@ -1199,6 +1219,8 @@ Each message says what to run next. The first line of each:
 | `… speaks connector protocol …`                     | Run the `chopin update` command the message names.                                                                                                                                                                                                |
 | `… didn't answer ACP initialize`                    | The agent didn't start in its microVM. Check its `--install` commands, or what the message shows it printed, then run the command again.                                                                                                          |
 | `The microVM didn't start`                          | OpenVMM couldn't start the agent's microVM; the rest of the message is the end of OpenVMM's log. Fix what it names, such as the Windows Hypervisor Platform, then start the work again. `after 3 tries` means the machine was too busy each time. |
+| `Couldn't build …`                                  | The image's install commands failed in its build; the lines after are the end of its output. Fix the `--install` or `--planner-install` commands, or the `--install-from` folder, then run the command again.                                     |
+| `… has no …`                                        | The install commands didn't put that program on the image's `PATH`. Check that `--install` (or `--planner-install` for a Planner command) installs it, then run the command again.                                                                |
 | `… asks for permission in the terminal`             | Run the command without `--install-service` and keep the terminal open.                                                                                                                                                                           |
 | `This machine is already paired with …`             | To pair it for another account, run `chopin unpair`, then the command again.                                                                                                                                                                      |
 | `This machine is no longer paired with Chopin`      | Run `chopin pair`, then connect again.                                                                                                                                                                                                            |

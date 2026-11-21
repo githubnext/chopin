@@ -193,9 +193,49 @@ round trip, so loading Atomic's 34,000 files from a share took 36–46 seconds a
 The image's key is the SHA-256 of all of that. It is built once into
 `<base>/images/<key>.erofs` and rebuilt only when the key changes: another NVX
 release, Node, package, agent version, install command, file in the
-`--install-from` folder, or user. Images no recipe
+`--install-from` folder, or user. Which program a launch starts is no part of the
+key, so an agent and a Planner command whose installs are the same share one image,
+built once and checked for both programs. Images no recipe
 names any more are removed as the connector starts. A command chopin has no recipe
 for is refused before anything is paired, naming the option to add.
+
+### When images are built
+
+Every image a launch on the machine may need is built before anything starts
+(`ensureImages` in `images.ts`): the agent's, and with `--planner-command` the
+Planner's, one for both where their installs are the same. That happens as the
+microVMs open, which is before:
+
+- `chopin connect` says Connected, or tells Chopin anything of the machine;
+- `chopin service install` installs the service, with `--skip-check` too (which leaves
+  out only the agent's start);
+- the service connects as it starts, as after `chopin update` with a recipe that
+  changed. A service building has not connected yet, so Chopin shows the machine as
+  away until it has; the connector protocol has no state that says a machine is
+  preparing, and none was added.
+
+`chopin connect` says each build on its own line, and why the Planner's is built
+then:
+
+```text
+… Building atomic-acp's image for its microVMs (a minute or two, once).
+… Building the Planner's image (my-planner) for its microVMs (a minute or two, once, so the first document's Planner starts at once).
+… Building one image for atomic-acp and the Planner (my-planner), whose installs are the same, for their microVMs (a minute or two, once, so the first document's Planner starts at once).
+```
+
+A build that fails, the Planner's included, fails `chopin connect` or
+`chopin service install` with the build's own words, before anything is paired,
+connected or installed, rather than a document's Planner later. An image found built
+is checked again only for a program it wasn't checked for when it was built, as when
+an agent's image is found shared by a Planner command added since; that takes one
+microVM start, about a second, once.
+
+One `chopin` at a time builds or checks an image of a key. It holds
+`<base>/images/<key>.lock`, made whole by linking a file it wrote, with its process
+in it; another, such as `chopin service install`'s check beside a service starting
+on the same base dir, says it waits, waits, and finds the image built. A lock whose
+process is gone is taken over. The connector that holds the base dir prunes images
+as it starts, but never one of a key whose lock another `chopin` holds.
 
 An image is built in a microVM too, so an install script runs no closer to the host
 than the agent will. The host downloads Node and the packages and checks their
@@ -597,7 +637,8 @@ carrying the packages in Chopin's own releases, and having `install.sh` and
 ## Migration
 
 - A machine updates `chopin` (connector protocol 8). Its first connect checks the
-  machine, downloads NVX, and builds its agent's image (once; it says how long).
+  machine, downloads NVX, and builds its agent's image, and its Planner command's
+  where it has one (once; it says how long).
 - Chopin's server takes connections and hands credentials to protocol 8 only, once it
   is deployed; older connectors are told to update.
 - Settings saved by an earlier `chopin connect` keep working. A saved
@@ -630,6 +671,10 @@ and the user can use `/dev/kvm`, and skip elsewhere, CI included.
 | Disk in use is kept            | A Planner's disk is never removed while a microVM runs on it; a removed disk takes its tokens and state with it.                                                                                           | `planner-disks.test.ts`                                                                                                                                                                                                                                                                                                                                                                                          |
 | Refuse unsupported             | A machine that can't run NVX pairs, connects and starts nothing, says why, and Chopin keeps what it said.                                                                                                  | `nvx.test.ts` (which machines can run it); `main.test.ts`, `messages.test.ts` (refused before pairing, nothing sent); `routes.test.ts` (older connectors told to update, never to an older release, `microvm-required`, the capability kept and shown); `machine-contract.ts`                                                                                                                                    |
 | Lost at runtime                | A machine whose user can no longer open the hypervisor's device says why with the fix, tells Chopin, leaves, and starts nothing until it can again.                                                        | `sandbox.test.ts` (a start OpenVMM couldn't open `/dev/kvm` for says so and tells whoever started it); `nvx-vm.test.ts` (OpenVMM refused `/dev/kvm` with strace says so, and is not started again); `main.test.ts` (a machine whose user loses `/dev/kvm` tells Chopin, leaves, starts no Planner until it can, then connects again); `nvx.test.ts` (a user who joined the kvm group after chopin's login began) |
+| Images before Connected        | When `chopin connect` says Connected or `chopin service install` installs, every image a launch needs exists and holds its programs; a failed build, the Planner's too, fails them in its words.           | `images.test.ts`; `install-service.test.ts` (connect builds the agent's and the Planner's images before Chopin hears of the machine; a failed Planner build fails it, connecting nothing; install builds with `--skip-check` too); `nvx-vm.test.ts` (a real connect builds the shared image before Connected; the Planner then starts with no build)                                                             |
+| One build per key              | Requests for one image at once, in one `chopin` or several on a base dir, run one build; the others wait and find it built.                                                                                | `images.test.ts` (two at once run one build and the second waits; a lock whose process died is taken over; pruning keeps an image another `chopin` is building)                                                                                                                                                                                                                                                  |
+| Shared recipe                  | Recipes with the same install have one key, whatever program each starts: one image, checked for every program.                                                                                            | `images.test.ts` (an agent and a Planner with the same install share one image; an image built for the agent alone is checked for the Planner's program, not built again)                                                                                                                                                                                                                                        |
+| No stale image                 | A changed recipe (an install, the `--install-from` folder) builds its own image before the next launch of that kind is handed one; the others keep theirs.                                                 | `images.test.ts` (a changed Planner install, or a changed file in the folder, builds again before the image is handed out)                                                                                                                                                                                                                                                                                       |
 
 ## Measurements
 
