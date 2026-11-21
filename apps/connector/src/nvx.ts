@@ -242,6 +242,63 @@ export type AgentImage = {
 /** The guest's own PATH, after the image's directories. */
 const GUEST_PATH = ["/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin"];
 
+/** The variables only Windows sets, upper-cased: they name nothing a Linux guest has. */
+const WINDOWS_ONLY = new Set([
+	"ALLUSERSPROFILE",
+	"APPDATA",
+	"COMMONPROGRAMFILES",
+	"COMMONPROGRAMFILES(ARM)",
+	"COMMONPROGRAMFILES(X86)",
+	"COMMONPROGRAMW6432",
+	"COMPUTERNAME",
+	"COMSPEC",
+	"DRIVERDATA",
+	"HOMEDRIVE",
+	"HOMEPATH",
+	"LOCALAPPDATA",
+	"LOGONSERVER",
+	"NUMBER_OF_PROCESSORS",
+	"NVM_HOME",
+	"NVM_SYMLINK",
+	"ONEDRIVE",
+	"ONEDRIVECOMMERCIAL",
+	"ONEDRIVECONSUMER",
+	"OS",
+	"PATHEXT",
+	"PROCESSOR_ARCHITECTURE",
+	"PROCESSOR_IDENTIFIER",
+	"PROCESSOR_LEVEL",
+	"PROCESSOR_REVISION",
+	"PROGRAMDATA",
+	"PROGRAMFILES",
+	"PROGRAMFILES(ARM)",
+	"PROGRAMFILES(X86)",
+	"PROGRAMW6432",
+	"PSMODULEPATH",
+	"PUBLIC",
+	"SESSIONNAME",
+	"SYSTEMDRIVE",
+	"SYSTEMROOT",
+	"USERDOMAIN",
+	"USERDOMAIN_ROAMINGPROFILE",
+	"USERNAME",
+	"USERPROFILE",
+	"VCINSTALLDIR",
+	"VSINSTALLDIR",
+	"WINDIR",
+]);
+
+/**
+ * Whether `name` is the host's alone, which a guest is never given: a variable only Windows sets,
+ * in any case, and on a Windows host its PATH and SHELL, which name Windows programs. Each would
+ * name the host user's profile to a guest that has none of it.
+ */
+function hostOnly(name: string, platform: NodeJS.Platform) {
+	let upper = name.toUpperCase();
+	return WINDOWS_ONLY.has(upper)
+		|| platform === "win32" && (upper === "PATH" || upper === "SHELL");
+}
+
 /** What the guest of one launch is: its shares, network, environment and command. */
 export type VmSpec = {
 	/** The layer and user it boots; the release's own Ubuntu layer and `nobody` without one. */
@@ -543,6 +600,7 @@ export function vmSpec(launch: VmLaunch, context: VmContext): VmSpec {
 	let environment: Record<string, string> = {};
 	for (let [name, value] of Object.entries(launch.env)) {
 		if (value === undefined || /^(https?|all|no)_proxy$/i.test(name)) continue;
+		if (hostOnly(name, platform)) continue;
 		environment[name] = translated(value, shares, platform);
 	}
 	let home = launch.agentHome ? guestPath(real(launch.agentHome), platform) : "/tmp/home";

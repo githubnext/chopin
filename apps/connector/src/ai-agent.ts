@@ -52,10 +52,11 @@ export const OWNER_AGENT_VARIABLES = new Set([
  * given, by name: where the system, the person's account and their tools are, its locale, its
  * certificates and its proxy, none of which reaches a model. Everything else the connector was
  * started with is left out, whatever it is called: a provider's key, an agent's configuration, a
- * token of another service. `LC_` variables are kept by their prefix.
+ * token of another service. `LC_` variables are kept by their prefix. Only Linux's names: every
+ * agent runs in a Linux microVM, whatever the host (see `vmSpec`).
  */
 const PERMITTED = new Set([
-	// The system and the person's account, as POSIX and Windows name them.
+	// The system and the person's account.
 	"PATH",
 	"HOME",
 	"USER",
@@ -69,26 +70,6 @@ const PERMITTED = new Set([
 	"TMPDIR",
 	"TEMP",
 	"TMP",
-	"SYSTEMROOT",
-	"SYSTEMDRIVE",
-	"WINDIR",
-	"COMSPEC",
-	"PATHEXT",
-	"USERPROFILE",
-	"USERNAME",
-	"HOMEDRIVE",
-	"HOMEPATH",
-	"APPDATA",
-	"LOCALAPPDATA",
-	"PROGRAMDATA",
-	"PROGRAMFILES",
-	"PROGRAMFILES(X86)",
-	"PROGRAMW6432",
-	"COMMONPROGRAMFILES",
-	"COMMONPROGRAMFILES(X86)",
-	"NUMBER_OF_PROCESSORS",
-	"PROCESSOR_ARCHITECTURE",
-	"OS",
 	// Where the person's tools are installed.
 	"PYTHONPATH",
 	"PYTHONHOME",
@@ -103,8 +84,6 @@ const PERMITTED = new Set([
 	"DOTNET_ROOT",
 	"NODE_PATH",
 	"NVM_DIR",
-	"NVM_HOME",
-	"NVM_SYMLINK",
 	"BUN_INSTALL",
 	"PNPM_HOME",
 	"VOLTA_HOME",
@@ -120,9 +99,6 @@ const PERMITTED = new Set([
 	"HOMEBREW_REPOSITORY",
 	"MANPATH",
 	"INFOPATH",
-	"VCINSTALLDIR",
-	"VSINSTALLDIR",
-	"PSMODULEPATH",
 	"VCPKG_ROOT",
 	// Certificates and the network's proxy, which a sandbox replaces with its own.
 	"SSL_CERT_FILE",

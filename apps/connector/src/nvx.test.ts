@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { managedEnvironment } from "./ai-agent";
 import { githubPaths } from "./github-token";
 import {
 	type AgentImage,
@@ -436,5 +437,74 @@ describe("paths in a guest on Windows", () => {
 		// No host path is left in the guest's environment, its git configuration included.
 		expect(Object.entries(spec.environment).filter(([, value]) => value.includes("C:\\")))
 			.toEqual([]);
+	});
+
+	test("no variable only Windows has reaches a guest, from the connector's environment or one a launch is given", () => {
+		// What a Windows connector's own environment holds, as an agent's launch passes it on.
+		let windows = {
+			Path: "C:\\Windows\\system32;C:\\Program Files\\nodejs",
+			PATHEXT: ".COM;.EXE;.BAT;.CMD",
+			APPDATA: "C:\\Users\\mona\\AppData\\Roaming",
+			LOCALAPPDATA: "C:\\Users\\mona\\AppData\\Local",
+			USERPROFILE: "C:\\Users\\mona",
+			HOMEDRIVE: "C:",
+			HOMEPATH: "\\Users\\mona",
+			USERNAME: "mona",
+			ComSpec: "C:\\Windows\\system32\\cmd.exe",
+			SystemRoot: "C:\\Windows",
+			SystemDrive: "C:",
+			windir: "C:\\Windows",
+			PSModulePath: "C:\\Program Files\\WindowsPowerShell\\Modules",
+			ProgramData: "C:\\ProgramData",
+			ProgramFiles: "C:\\Program Files",
+			"ProgramFiles(x86)": "C:\\Program Files (x86)",
+			ProgramW6432: "C:\\Program Files",
+			CommonProgramFiles: "C:\\Program Files\\Common Files",
+			"CommonProgramFiles(x86)": "C:\\Program Files (x86)\\Common Files",
+			CommonProgramW6432: "C:\\Program Files\\Common Files",
+			ALLUSERSPROFILE: "C:\\ProgramData",
+			PUBLIC: "C:\\Users\\Public",
+			COMPUTERNAME: "MONA-PC",
+			USERDOMAIN: "MONA-PC",
+			USERDOMAIN_ROAMINGPROFILE: "MONA-PC",
+			LOGONSERVER: "\\\\MONA-PC",
+			SESSIONNAME: "Console",
+			OneDrive: "C:\\Users\\mona\\OneDrive",
+			NUMBER_OF_PROCESSORS: "8",
+			OS: "Windows_NT",
+			PROCESSOR_ARCHITECTURE: "AMD64",
+			PROCESSOR_IDENTIFIER: "Intel64 Family 6",
+			PROCESSOR_LEVEL: "6",
+			PROCESSOR_REVISION: "9e0a",
+			DriverData: "C:\\Windows\\System32\\Drivers\\DriverData",
+			NVM_HOME: "C:\\Users\\mona\\AppData\\Roaming\\nvm",
+			NVM_SYMLINK: "C:\\Program Files\\nodejs",
+			SHELL: "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+		};
+		for (let env of [windows, managedEnvironment(windows)]) {
+			let spec = vmSpec({
+				command: ["copilot", "--acp"],
+				cwd: "/work/app",
+				env: { ...env, FOO: "1" },
+				repository: { source: "C:\\src\\app\\.git", path: "/work/app" },
+			}, {
+				...CONTEXT,
+				platform: "win32",
+				base: "C:\\Users\\mona\\.local\\state\\chopin\\connector",
+			});
+			let names = Object.keys(spec.environment);
+			expect(names.filter(name => Object.hasOwn(windows, name))).toEqual([]);
+			expect(Object.values(spec.environment).filter(value => /[A-Z]:\\|\\\\/.test(value)))
+				.toEqual([]);
+			expect(spec.environment.PATH).toStartWith("/");
+		}
+		// The owner's own variable is kept, and a Linux connector's SHELL too.
+		let linux = vmSpec({
+			command: ["copilot"],
+			cwd: "/work/app",
+			env: { FOO: "1", SHELL: "/bin/bash" },
+			repository: { source: "/src/app/.git", path: "/work/app" },
+		}, CONTEXT);
+		expect(linux.environment).toMatchObject({ FOO: "1", SHELL: "/bin/bash" });
 	});
 });
