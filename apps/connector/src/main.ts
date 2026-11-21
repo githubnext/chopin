@@ -1,4 +1,4 @@
-import { appendFileSync, mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { acpCommand, AGENTS } from "@chopin/protocol/agents";
@@ -341,6 +341,18 @@ function sandboxChoice(
 	};
 }
 
+/** `--install-from <folder>` by its absolute path, which the service reads later; a folder there. */
+function installFolder(value: string | undefined) {
+	if (value === undefined) return undefined;
+	let path = resolve(value);
+	let folder = false;
+	try {
+		folder = statSync(path).isDirectory();
+	} catch {}
+	if (!folder) throw new Error(`--install-from ${value}: there is no folder at ${path}.`);
+	return path;
+}
+
 /**
  * Settings an earlier `chopin connect` saved, without what this release no longer has: whether a
  * process sandbox was required or turned off. Every agent runs in its own microVM now.
@@ -358,7 +370,7 @@ function sandboxSaved(saved: (SandboxSettings & { require?: unknown; off?: unkno
 export async function connect(args: string[], injected: Injected = {}) {
 	let parsed = parseArgs(args, {
 		flags: ["service", "install-service", "skip-check", "no-planner-spare"],
-		options: ["planner-command", "key", "name", "keep-runs", "agent"],
+		options: ["planner-command", "key", "name", "keep-runs", "agent", "install-from"],
 		lists: [
 			"planner",
 			"env",
@@ -378,7 +390,8 @@ export async function connect(args: string[], injected: Injected = {}) {
 		&& (parsed.positional.length || parsed.rest || parsed.lists.size
 			|| parsed.options.has("planner-command") || parsed.options.has("key")
 			|| parsed.options.has("name") || parsed.options.has("keep-runs")
-			|| parsed.options.has("agent") || parsed.flags.has("install-service")
+			|| parsed.options.has("agent") || parsed.options.has("install-from")
+			|| parsed.flags.has("install-service")
 			|| parsed.flags.has("skip-check") || parsed.flags.has("no-planner-spare"))
 	) {
 		throw new Error(
@@ -436,6 +449,13 @@ export async function connect(args: string[], injected: Injected = {}) {
 		);
 	let agentInstall = saved?.install ?? parsed.lists.get("install");
 	let plannerInstall = saved?.plannerInstall ?? parsed.lists.get("planner-install");
+	let installFrom = saved ? saved.installFrom : installFolder(parsed.options.get("install-from"));
+	if (installFrom !== undefined && !agentInstall?.length && !plannerInstall?.length) {
+		throw new Error(
+			"--install-from names a folder for the commands of --install and --planner-install to read, "
+				+ "and this connect has neither.",
+		);
+	}
 	// What each agent's microVMs run from, refused here, before anything is paired, when chopin
 	// can't make an image of it.
 	let recipes = (injected.recipes ?? machineRecipes)({
@@ -443,6 +463,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 		plannerCommand,
 		...(agentInstall ? { install: agentInstall } : {}),
 		...(plannerInstall ? { plannerInstall } : {}),
+		...(installFrom === undefined ? {} : { installFrom }),
 	});
 	if (service && process.platform === "win32") appendOutput(logPath("win32", directory));
 	let url = saved?.server ?? await server();
@@ -494,6 +515,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 				...(Object.keys(sandboxSettings).length ? { sandbox: sandboxSettings } : {}),
 				...(agentInstall?.length ? { install: agentInstall } : {}),
 				...(plannerInstall?.length ? { plannerInstall } : {}),
+				...(installFrom === undefined ? {} : { installFrom }),
 				...(parsed.flags.has("no-planner-spare") ? { plannerSpare: false as const } : {}),
 			};
 		});
@@ -927,6 +949,7 @@ async function installCommand(options: {
 					plannerCommand: settings.plannerCommand,
 					...(settings.install ? { install: settings.install } : {}),
 					...(settings.plannerInstall ? { plannerInstall: settings.plannerInstall } : {}),
+					...(settings.installFrom ? { installFrom: settings.installFrom } : {}),
 				}),
 				output,
 			});
@@ -1051,6 +1074,11 @@ const HELP = [
 	"      in config.json, so keep secrets in the agent's own login. CHOPIN_* and PATH are refused.",
 	"      --keep-runs <n> keeps the worktrees of the n most recently finished runs (default 15, 0",
 	"      for all) and removes older ones as it starts and after each run.",
+	"      --install <command> (repeatable) installs an agent chopin has no recipe for in its",
+	"      microVMs' image, and --planner-install <command> the Planner command; they run in the",
+	"      image's build, with Node.js and npm. --install-from <folder> gives that build a",
+	"      read-only copy of a folder at /install-from, such as packages fetched with your",
+	"      sign-in; what it holds is part of the image, so a change to it builds the image again.",
 	"      With a Planner command, a spare Planner runs for each registered checkout's repository,",
 	"      started ahead and waiting, so a new document's Planner is ready in about a second;",
 	"      --no-planner-spare (or CHOPIN_PLANNER_SPARE=0) starts every Planner when it is asked for.",

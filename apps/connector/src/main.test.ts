@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { basename, delimiter, dirname, join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -749,6 +749,63 @@ test.skipIf(process.platform === "win32")(
 		expect(planner.stderr).toContain("chopin runs my-planner in a microVM of its own");
 		expect(planner.stderr).toContain("--planner-install");
 		expect(planner.requests).toEqual([]);
+	},
+	60_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"--install-from saves its folder by full path, and is refused without a folder or a command to read it",
+	async () => {
+		let root = await checkout();
+		let inputs = await mkdtemp(join(scratch, "inputs-"));
+		let named = basename(inputs);
+		let install = "npm install -g /install-from/my-agent.tgz";
+		let installed = await connect("nothing", [
+			root,
+			"--install",
+			install,
+			"--planner-command",
+			"my-planner",
+			"--planner-install",
+			install,
+			// Relative to where connect runs; the service reads it from anywhere.
+			"--install-from",
+			named,
+			"--",
+			"my-agent",
+		]);
+		expect(installed.stdout).toContain("✓ Connected.");
+		expect(JSON.parse(await readFile(join(installed.directory, "config.json"), "utf8")).connect)
+			.toMatchObject({
+				install: [install],
+				plannerInstall: [install],
+				installFrom: await realpath(inputs),
+			});
+
+		let missing = await connect("pairing", [
+			root,
+			"--install",
+			install,
+			"--install-from",
+			"no-such-folder",
+			"--",
+			"my-agent",
+		]);
+		expect(missing.code).toBe(1);
+		expect(missing.stderr).toBe(
+			`--install-from no-such-folder: there is no folder at ${
+				join(await realpath(scratch), "no-such-folder")
+			}.\n`,
+		);
+		expect(missing.requests).toEqual([]);
+
+		let unread = await connect("pairing", [root, "--install-from", named, "--agent", "copilot"]);
+		expect(unread.code).toBe(1);
+		expect(unread.stderr).toBe(
+			"--install-from names a folder for the commands of --install and --planner-install to read, "
+				+ "and this connect has neither.\n",
+		);
+		expect(unread.requests).toEqual([]);
 	},
 	60_000,
 );
