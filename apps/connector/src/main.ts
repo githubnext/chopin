@@ -516,8 +516,17 @@ export async function connect(args: string[], injected: Injected = {}) {
 	 */
 	let told = new Set<string>();
 	let sandbox: Sandbox;
+	let release: (() => Promise<void>) | undefined;
 	try {
 		requireSupport(injected.support);
+		// One connector runs for a base dir: it is the machine, serving every repository. It holds the
+		// base dir before it opens the microVMs, whose images it builds and prunes there.
+		release = await lockWorkspace(directory, directory, {
+			service,
+			planners: plannerDocuments,
+			plannerCommand: plannerCommand.length > 0,
+			checkouts: registered,
+		});
 		sandbox = await (injected.openSandbox ?? openMachineSandbox)({
 			directory,
 			server: url,
@@ -539,6 +548,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 			},
 		});
 	} catch (error) {
+		await release?.();
 		if (error instanceof MachineUnsupported) {
 			let paired = await machineToken(directory, url);
 			if (paired) await reportCapability(url, paired, error.support).catch(() => {});
@@ -588,40 +598,40 @@ export async function connect(args: string[], injected: Injected = {}) {
 		);
 	}
 	// The service install check runs only once connected; a machine about to pair checks first, so
-	// a pairing key isn't spent on an agent that can't start or isn't signed in.
-	if (installing && !parsed.flags.has("skip-check") && !await machineToken(directory, url)) {
-		let failed = await checkAgent(command, {
-			cwd: checkDirectory(),
-			env: withoutGitHub({ ...env }),
-			timeoutMs: 30_000,
-			sandbox,
-			onInfo: agent => void rememberAgent(agent),
-		});
-		if (failed) {
-			let secrets = Object.values(env);
-			throw new Error(
-				[
-					`${command[programAt(command)]} didn't answer ACP initialize (${
-						redacted(failed.how, secrets)
-					}${
-						failed.stderr
-							? `: ${redacted(failed.stderr, secrets).split("\n")[0]!.slice(0, 200)}`
-							: ""
-					}), so nothing was paired.`,
-					"Check that it starts in its microVM (with your --install commands, for an agent that "
-					+ "isn't built in), then run this command again. For an agent that can't start without "
-					+ "a terminal, add --skip-check.",
-				].join("\n"),
-			);
+	// a pairing key isn't spent on an agent that can't start or isn't signed in. One that fails lets
+	// go of the microVMs and the base dir before it says so.
+	try {
+		if (installing && !parsed.flags.has("skip-check") && !await machineToken(directory, url)) {
+			let failed = await checkAgent(command, {
+				cwd: checkDirectory(),
+				env: withoutGitHub({ ...env }),
+				timeoutMs: 30_000,
+				sandbox,
+				onInfo: agent => void rememberAgent(agent),
+			});
+			if (failed) {
+				let secrets = Object.values(env);
+				throw new Error(
+					[
+						`${command[programAt(command)]} didn't answer ACP initialize (${
+							redacted(failed.how, secrets)
+						}${
+							failed.stderr
+								? `: ${redacted(failed.stderr, secrets).split("\n")[0]!.slice(0, 200)}`
+								: ""
+						}), so nothing was paired.`,
+						"Check that it starts in its microVM (with your --install commands, for an agent that "
+						+ "isn't built in), then run this command again. For an agent that can't start "
+						+ "without a terminal, add --skip-check.",
+					].join("\n"),
+				);
+			}
 		}
+	} catch (error) {
+		await sandbox.close();
+		await release();
+		throw error;
 	}
-	// One connector runs for a base dir: it is the machine, serving every repository.
-	let release = await lockWorkspace(directory, directory, {
-		service,
-		planners: plannerDocuments,
-		plannerCommand: plannerCommand.length > 0,
-		checkouts: registered,
-	});
 	let failures = startFailures(directory, directory);
 	let keep = keepRuns ?? KEEP_RUNS;
 	// Older finished runs go as the connector starts and after each run; never one still going.
@@ -903,11 +913,13 @@ async function installCommand(options: {
 	// A service on a machine that can't run its microVMs would run nothing, --skip-check or not.
 	requireSupport(options.support);
 	// The check starts the agent as the service will: in a microVM of its image, built if it isn't.
+	// It holds no base dir, so it removes no image: the running service's may be another's.
 	let check = options.check
 		? async (settings: ConnectSettings) => {
 			let sandbox = await (options.openSandbox ?? openMachineSandbox)({
 				directory,
 				server: url,
+				prune: false,
 				...(options.support ? { host: options.support } : {}),
 				settings: sandboxSaved(settings.sandbox),
 				recipes: (options.recipes ?? machineRecipes)({

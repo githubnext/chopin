@@ -109,6 +109,8 @@ export async function openMachineSandbox(options: {
 	output: Output;
 	refused?: (host: string, port: number) => void;
 	host?: SupportHost;
+	/** False to keep the images no recipe here names (see `SandboxOptions.prune`). */
+	prune?: boolean;
 }): Promise<Sandbox> {
 	let support = nvxSupport(options.host ?? systemSupportHost());
 	if (!support.supported) throw new MachineUnsupported(support);
@@ -149,6 +151,7 @@ export async function openMachineSandbox(options: {
 				),
 			),
 		...options.refused ? { refused: options.refused } : {},
+		...options.prune === false ? { prune: false } : {},
 		wedged: detail => output.error(detail),
 	});
 }

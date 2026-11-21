@@ -26,6 +26,8 @@ async function setup(
 ) {
 	let tools: string[] = [];
 	let requests: string[] = [];
+	/** Whether each microVM sandbox opened, the connect's and the service check's, prunes images. */
+	let pruning: Array<boolean | undefined> = [];
 	let chopin = Bun.serve({
 		hostname: "127.0.0.1",
 		port: 0,
@@ -110,6 +112,7 @@ async function setup(
 		calls,
 		tools,
 		requests,
+		pruning,
 		home,
 		directory,
 		bin,
@@ -119,7 +122,10 @@ async function setup(
 				executable: "/opt/chopin/bin/chopin",
 				support: SUPPORTED_HOST,
 				recipes: hostRecipes,
-				openSandbox: async () => hostSandbox(),
+				openSandbox: async options => {
+					pruning.push(options.prune);
+					return hostSandbox();
+				},
 			}),
 		/** As `run`, with `agent` as the ACP command instead. */
 		runAgent: (...agent: string[]) =>
@@ -128,7 +134,10 @@ async function setup(
 				executable: "/opt/chopin/bin/chopin",
 				support: SUPPORTED_HOST,
 				recipes: hostRecipes,
-				openSandbox: async () => hostSandbox(),
+				openSandbox: async options => {
+					pruning.push(options.prune);
+					return hostSandbox();
+				},
 			}),
 		async [Symbol.asyncDispose]() {
 			for (let [name, value] of Object.entries(saved)) {
@@ -160,6 +169,9 @@ test.skipIf(process.platform === "win32")(
 		expect(config.service?.executable).toBe("/opt/chopin/bin/chopin");
 		// Its own connection let go of the checkout before the service took it.
 		expect((await readdir(machine.directory)).filter(name => name.endsWith(".lock"))).toEqual([]);
+		// The connect, which held the base dir, pruned images; the service's check, beside a service
+		// that may run another agent's, removed none.
+		expect(machine.pruning).toEqual([undefined, false]);
 	},
 	20_000,
 );
