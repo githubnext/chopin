@@ -246,7 +246,9 @@ export function accountModels(options: {
 		forget(userId) {
 			generations.set(userId, (generations.get(userId) ?? 0) + 1);
 			computing.delete(userId);
-			if (held.delete(userId)) options.changed?.(userId);
+			// Whoever shows the list, or stopped waiting for one now dropped, reads it again.
+			let had = held.delete(userId);
+			if (had || owed.has(userId)) options.changed?.(userId);
 		},
 	};
 }

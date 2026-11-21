@@ -236,6 +236,23 @@ describe("the list held for each person", () => {
 		expect((await world.models.read("U_mona"))?.models).toHaveLength(2);
 	});
 
+	it("tells a reader that stopped waiting once the person's accounts change during the first computation", async () => {
+		let release = Promise.withResolvers<void>();
+		let calls = 0;
+		let world = held({
+			sources: async () => {
+				if (++calls === 1) await release.promise;
+				return copilot();
+			},
+		});
+		expect(await world.models.read("U_mona", 0)).toBeUndefined();
+		world.models.forget("U_mona");
+		release.resolve();
+		await Bun.sleep(5);
+		expect(world.changed).toEqual(["U_mona"]);
+		expect((await world.models.read("U_mona", 5_000))?.models).toHaveLength(2);
+	});
+
 	it("is none, and kept as none, where the person can use nothing Chopin can list", async () => {
 		let world = held({ sources: async () => ({ providers: [] }) });
 		expect(await world.models.read("U_mona", 5_000)).toBeUndefined();
