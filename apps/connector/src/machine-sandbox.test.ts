@@ -22,6 +22,20 @@ test("connect says each image it builds, and that the Planner's is built now so 
 		"Building the Planner's image (my-planner) for its microVMs (a minute or two, once, so the "
 			+ "first document's Planner starts at once).",
 	);
+	// A Planner command that starts the agent's own program runs from the agent's image.
+	expect(
+		buildingWords([
+			...machineRecipes({
+				command: ["node", "agent.mjs"],
+				install: ["true"],
+				plannerCommand: ["node", "planner.mjs"],
+				plannerInstall: ["true"],
+			}).values(),
+		]),
+	).toBe(
+		"Building one image for node and the Planner (node), whose installs are the same, for their "
+			+ "microVMs (a minute or two, once, so the first document's Planner starts at once).",
+	);
 	expect(buildingWords(recipes("npm install -g my-agent"))).toBe(
 		"Building one image for my-agent and the Planner (my-planner), whose installs are the same, "
 			+ "for their microVMs (a minute or two, once, so the first document's Planner starts at "

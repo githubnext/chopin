@@ -44,10 +44,11 @@ export type ImageRecipe = {
 	 */
 	from?: string;
 	/**
-	 * The Planner command's: its image is built as chopin connects, so the first document's Planner
-	 * starts at once.
+	 * What runs from it, for the words that say it is built: the agent, the Planner command (whose
+	 * image is built as chopin connects, so the first document's Planner starts at once), or both.
+	 * The agent's unless said.
 	 */
-	planner?: true;
+	runs?: Array<"agent" | "planner">;
 };
 
 /** Where an image's build reads the folder `--install-from` names. */
