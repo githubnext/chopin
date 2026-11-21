@@ -726,8 +726,10 @@ connected, and `chopin` says why and what fixes it:
 This machine can't run Chopin's work: Chopin runs each agent in its own microVM,
 which needs Linux or Windows on x86_64 with hardware virtualization. Your user can't
 read and write /dev/kvm.
-Fix: sudo usermod -aG kvm $USER, then log out and in again (for the chopin service,
-restart the machine or run: sudo systemctl restart user@$(id -u))
+Fix: sudo usermod -aG kvm $USER, then log out and back in (for the chopin service,
+restart the machine). Or have an administrator add a udev rule, such as
+KERNEL=="kvm", GROUP="kvm", MODE="0660", RUN+="/usr/bin/setfacl -m u:<user>:rw /dev/kvm"
+(logind may drop that ACL)
 ```
 
 `chopin status`, the line `chopin connect` prints once connected, and the
@@ -1008,11 +1010,24 @@ token Chopin issued for that one repository (see
 
 **Linux** on x86_64, with read and write access to `/dev/kvm` for your user (or
 `/dev/mshv` under the Microsoft Hypervisor). Most distributions give it to the `kvm`
-group: `sudo usermod -aG kvm $USER`, then log out and in again. A systemd user service
-gets the new group only once `user@$(id -u).service` restarts or the machine reboots;
-until then `chopin` says you are in the `kvm` group but it runs in a login that
-began before you joined. Access a desktop login gives you without the group (logind's
-ACL on `/dev/kvm`) ends with that login, so the service can't rely on it.
+group: `sudo usermod -aG kvm $USER`, then log out and back in. The chopin service keeps
+running while you're logged out, so it gets the group when the machine restarts; until
+then `chopin` says you're in the `kvm` group but it runs in a login that began before
+you joined. Don't restart `user@$(id -u).service` for this: that ends every session and
+service you have.
+
+An administrator can grant `/dev/kvm` with a udev rule instead:
+
+```text
+KERNEL=="kvm", GROUP="kvm", MODE="0660", RUN+="/usr/bin/setfacl -m u:<user>:rw /dev/kvm"
+```
+
+logind may drop that ACL, as it drops the one a desktop login gives you without the
+group when that login ends, so the group is what lasts. CI runners, which have one
+user, use `MODE="0666"`, as
+[GitHub documents for its hosted runners](https://github.blog/changelog/2024-04-02-github-actions-hardware-accelerated-android-virtualization-now-available/)
+and Chopin's own CI does.
+
 On a cloud VM choose a size with nested virtualization. Nothing else needs
 installing: `chopin` downloads the NVX release it pins from NVX's own GitHub
 release as it first connects, and builds the agent's image with Node.js and git.

@@ -1015,8 +1015,10 @@ test.skipIf(process.platform === "win32")(
 			let stderr = await new Response(connector.stderr).text();
 			expect(code, `${seen.join(" ")}\n${stderr}`).toBe(0);
 			let reason = "Your user can't read and write /dev/kvm.";
-			let fix = "sudo usermod -aG kvm $USER, then log out and in again (for the chopin service, "
-				+ "restart the machine or run: sudo systemctl restart user@$(id -u))";
+			let fix = "sudo usermod -aG kvm $USER, then log out and back in (for the chopin service, "
+				+ 'restart the machine). Or have an administrator add a udev rule, such as KERNEL=="kvm", '
+				+ 'GROUP="kvm", MODE="0660", RUN+="/usr/bin/setfacl -m u:<user>:rw /dev/kvm" (logind '
+				+ "may drop that ACL)";
 			// Chopin keeps why, for its Machines page, and chopin says it.
 			expect(told).toEqual({ reason, fix });
 			expect(stderr).toContain(

@@ -332,9 +332,9 @@ describe.skipIf(process.platform === "win32")("starting a launch's microVM", () 
 			});
 			let reason = "Your user is in the kvm group, but chopin runs in a login that began before "
 				+ "you joined it, so it can't read and write /dev/kvm yet.";
-			let fix = "log out and in again, then run chopin there (for the chopin service, whose "
-				+ "systemd user manager began before you joined, restart the machine or run: sudo "
-				+ "systemctl restart user@$(id -u))";
+			let fix = "Log out and back in (for the chopin service, restart the machine). Or have an "
+				+ 'administrator add a udev rule, such as KERNEL=="kvm", GROUP="kvm", MODE="0660", '
+				+ 'RUN+="/usr/bin/setfacl -m u:<user>:rw /dev/kvm" (logind may drop that ACL)';
 			expect(await ended(child)).toEqual({
 				code: 1,
 				signal: null,
