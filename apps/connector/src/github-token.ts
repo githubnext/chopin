@@ -326,26 +326,30 @@ export function githubUrlRules(repository: string): Array<[string, string]> {
 /**
  * Git configuration, through the environment, whose only credential helper for github.com reads
  * the token in `file`, so a renewed token is used as soon as it is written and the token itself is
- * never on a command line or in a repository's configuration. With `repository`, its URLs also
- * stay on https whatever `url.<base>.insteadOf` the person has (see `githubUrlRules`). The rest of
- * the person's Git configuration applies as it is.
+ * never on a command line or in a repository's configuration. The helper names the file by
+ * `CHOPIN_GITHUB_TOKEN_FILE`, set here too: a microVM's environment gives that the path its guest
+ * has the file at, which on Windows is not the host's. With `repository`, its URLs also stay on
+ * https whatever `url.<base>.insteadOf` the person has (see `githubUrlRules`). The rest of the
+ * person's Git configuration applies as it is.
  */
 export function gitCredentials(
 	file: string,
 	repository?: string,
 	more: Array<[string, string]> = [],
 ): Record<string, string> {
-	let quoted = `'${file.replaceAll("'", "'\\''")}'`;
 	let entries: Array<[string, string]> = [
 		["credential.https://github.com.helper", ""],
 		[
 			"credential.https://github.com.helper",
-			`!f() { test "$1" = get || exit 0; echo username=x-access-token; printf password=; cat ${quoted}; }; f`,
+			'!f() { test "$1" = get || exit 0; echo username=x-access-token; printf password=; cat "$CHOPIN_GITHUB_TOKEN_FILE"; }; f',
 		],
 		...repository ? githubUrlRules(repository) : [],
 		...more,
 	];
-	let env: Record<string, string> = { GIT_CONFIG_COUNT: String(entries.length) };
+	let env: Record<string, string> = {
+		CHOPIN_GITHUB_TOKEN_FILE: file,
+		GIT_CONFIG_COUNT: String(entries.length),
+	};
 	entries.forEach(([key, value], index) => {
 		env[`GIT_CONFIG_KEY_${index}`] = key;
 		env[`GIT_CONFIG_VALUE_${index}`] = value;
