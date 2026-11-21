@@ -101,7 +101,8 @@ export type Launch = {
 /**
  * A started process: its stdout and stderr are always pipes. A microVM's is its launch, which may
  * start `nvx` more than once (see `startVm`): its `pid` is its current start's, and its process
- * group. On Windows it carries `stopMicrovm`, which ends it as `nvx` and OpenVMM need there (see
+ * group. It emits `workload` once its guest has booted and starts the agent (`STARTED_LINE`). On
+ * Windows it carries `stopMicrovm`, which ends it as `nvx` and OpenVMM need there (see
  * `startNvx`).
  */
 export type Spawned = ChildProcess & {
@@ -621,6 +622,7 @@ export function startVm(
 	};
 	let started = (attempt: Attempt) => {
 		attempt.started = true;
+		launch.emit("workload");
 		for (let chunk of attempt.said) launch.stderr.write(chunk);
 		attempt.said = [];
 		for (let chunk of queue) attempt.child.stdin?.write(chunk);
@@ -886,6 +888,7 @@ export function awaitingImage(
 			void flushed.then(() => launch.emit("close", code, signal));
 		});
 		started.once("error", error => launch.emit("error", error));
+		started.once("workload", () => launch.emit("workload"));
 	}, failed);
 	return launch as unknown as Spawned;
 }

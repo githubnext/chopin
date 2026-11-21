@@ -496,6 +496,8 @@ export type SpareState = {
 	state: "starting" | "ready" | "memory" | "unsupported" | "off";
 	since: number;
 	command?: string;
+	/** How many are ready, where more than one is: a repository whose documents came in a burst. */
+	count?: number;
 };
 
 /**

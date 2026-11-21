@@ -34,9 +34,17 @@ import {
 	startingMessage,
 } from "./attachments";
 import { MachinePlanners } from "./machine-planners";
+import { createDocument } from "../../mcp/hosted";
+import {
+	createNewDocument,
+	MAX_DOCUMENTS_PER_TURN,
+	NewDocumentLimits,
+} from "../../agent/new-documents";
 
 import type { RepositoryPage } from "../../github/client";
 import type { RemotePlanner } from "./registry";
+import type { AuthenticatedSession } from "../../auth/session";
+import type { NewDocumentDeps } from "../../agent/new-documents";
 
 /** What a current connector, whose agents run in microVMs, sends with each request. */
 const CONNECTOR = {
@@ -221,19 +229,19 @@ async function dispatchServer(
 			return result.isError ? { error: text } : JSON.parse(text);
 		}
 		/** The Planner credential the connector asks for before it starts a backend. */
-		async function credential() {
+		async function credential(document = channel.id) {
 			let issued = await send("/api/connector/planner", {
 				bearer: token,
 				headers: CONNECTOR,
-				body: { document: channel.id },
+				body: { document },
 			});
 			expect(issued.status).toBe(200);
 			return (await issued.json()).token as string;
 		}
 		/** The backend the connector starts: a credential for the document, then a link that attaches. */
-		async function backend(feature?: string) {
-			let raw = await rawLink(server.url, await credential(), feature);
-			raw.send({ type: "attach", version: AGENT_VERSION, document: channel.id });
+		async function backend(feature?: string, document = channel.id) {
+			let raw = await rawLink(server.url, await credential(document), feature);
+			raw.send({ type: "attach", version: AGENT_VERSION, document });
 			return raw;
 		}
 		/** What the connector tells Chopin about its Planner backend's failing to start. */
@@ -3214,5 +3222,95 @@ describe("a person asking for a Planner that is not there", () => {
 		// A machine that was not the one asked is told nothing.
 		await runtime.plannerUsed(channel.id, true);
 		expect(await desk.poll([], 400)).not.toHaveProperty("retry");
+	});
+});
+
+describe("a burst of documents a Planner turn makes", () => {
+	it("every document create_document makes with an instruction in one turn is asked of its creator's machine at once, and each one's backend attaches", async () => {
+		let dispatch = await dispatchServer();
+		let { machine, favor, storage, runtime, channel: source } = dispatch;
+		let desk = await machine("member", "U_member", "desk", { bare: true });
+		await favor("member", desk.id);
+		let session = {
+			session: { id: "session-U_member", userId: "U_member" },
+			user: { id: "U_member", login: "member", avatarUrl: "" },
+		} as unknown as AuthenticatedSession;
+		let deps: NewDocumentDeps = {
+			channel: id => storage.channels.get(id),
+			deleting: () => false,
+			login: async () => session,
+			repository: async () => ({
+				id: "R_score",
+				owner: "octo-org",
+				name: "score",
+				fullName: "octo-org/score",
+				private: true,
+				url: "https://github.test/octo-org/score",
+				defaultBranch: "main",
+				permissions: { pull: true, push: true, admin: false },
+			}),
+			branchHead: async () => "0123456789abcdef0123456789abcdef01234567",
+			origin: async () => undefined,
+			created: async () => undefined,
+			// As the server wires it: a document made with an instruction is in use at once, so its
+			// Planner is asked for as New document's is.
+			create: (creator, input, instructed) =>
+				createDocument(
+					{ storage, clock: () => new Date() },
+					{
+						onChannelCreated: channel => {
+							if (instructed) void runtime.plannerUsed(channel.id);
+						},
+					},
+					creator,
+					input,
+				),
+			modelChoice: async () => undefined,
+			invoke: async () => undefined,
+			appOrigin: "https://chopin.test",
+			limits: new NewDocumentLimits(() => Date.now()),
+		};
+		let turn = { created: 0 };
+		// The turn's fan-out: as many documents as one turn may make, all at once.
+		let made = await Promise.all(
+			Array.from({ length: MAX_DOCUMENTS_PER_TURN }, (_, index) =>
+				createNewDocument(deps, {
+					sourceId: source.id,
+					turn,
+					creator: {
+						userId: "U_member",
+						handle: "member",
+						claimantSessionId: "session-U_member",
+					},
+					arguments: {
+						idempotencyKey: `part-${index + 1}`,
+						title: `Part ${index + 1}`,
+						brief: {
+							goal: `Part ${index + 1} of the work.`,
+							constraints: [],
+							settledDecisions: [],
+							openQuestions: [],
+							repositoryFindings: [],
+						},
+						document: `# Part ${index + 1}\n\nOne part of the work.\n`,
+						instruction: `Draft part ${index + 1}.`,
+					},
+					announce: async () => {},
+				})),
+		);
+		let ids = made.map(result => {
+			if (!result.ok) throw new Error(JSON.stringify(result));
+			return result.document.id;
+		});
+		expect(new Set(ids).size).toBe(MAX_DOCUMENTS_PER_TURN);
+		// Chopin asks the creator's machine for all of them in one answer.
+		let asked = await desk.poll([]);
+		expect(asked.kind).toBe("planners");
+		expect((asked.planners as Array<{ id: string }>).map(planner => planner.id).sort())
+			.toEqual([...ids].sort());
+		// Each one's backend attaches, all at once, and none is left starting.
+		let links = await Promise.all(ids.map(id => desk.backend(undefined, id)));
+		await Promise.all(links.map(link => link.next("attached")));
+		for (let id of ids) expect(await runtime.plannerStarting(id)).toBeUndefined();
 	});
 });

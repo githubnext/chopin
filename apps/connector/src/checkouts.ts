@@ -102,6 +102,8 @@ const REPOSITORY = /^[\w.-]+\/[\w.-]+$/;
  */
 export function checkouts(options: { directory: string; registered: Registered }) {
 	let locks = new Map<string, Promise<unknown>>();
+	/** Each clone's clone or fetch under way, by its path: work that arrives meanwhile takes it. */
+	let underway = new Map<string, Promise<string>>();
 	let locked = async <T>(key: string, action: () => Promise<T>): Promise<T> => {
 		let next = (locks.get(key) ?? Promise.resolve()).catch(() => {}).then(action);
 		locks.set(key, next);
@@ -130,7 +132,27 @@ export function checkouts(options: { directory: string; registered: Registered }
 				throw new Error(`Chopin named an invalid repository, ${repository}.`);
 			}
 			let path = clonePath(options.directory, repository);
-			return locked(path, async () => {
+			// A burst of new documents asks at once: one fetch serves them all, each with its own token.
+			let joined = underway.get(path);
+			if (joined) {
+				let github = await token?.();
+				if (!github) throw new Error(noCheckout(repository));
+				return { root: await joined, env: gitCredentials(github.file, repository) };
+			}
+			let flight: { root?: Promise<string> } = {};
+			let work = locked(path, async () => {
+				try {
+					return await fetched();
+				} finally {
+					// Gone before its callers hear of it: work that arrives after it fetches anew.
+					if (underway.get(path) === flight.root) underway.delete(path);
+				}
+			});
+			flight.root = work.then(value => value.root);
+			flight.root.catch(() => {});
+			underway.set(path, flight.root);
+			return work;
+			async function fetched() {
 				let github = await token?.();
 				if (!github) throw new Error(noCheckout(repository));
 				let env = gitCredentials(github.file, repository);
@@ -179,7 +201,7 @@ export function checkouts(options: { directory: string; registered: Registered }
 					}
 				}
 				return { root: await realpath(path), env };
-			});
+			}
 		},
 	};
 }
