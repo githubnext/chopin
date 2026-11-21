@@ -487,12 +487,13 @@ export type ChosenPlanners = ReturnType<typeof chosenPlanners>;
 
 /**
  * A repository's spare Planner, as `chopin status` shows it: `starting`, `ready` (`since` it
- * printed ready), `unsupported` when the Planner command never took spare mode (`since` it was
+ * printed ready), `memory` while the machine has too little memory free to start one (`since` it
+ * first tried), `unsupported` when the Planner command never took spare mode (`since` it was
  * found so), or `off` (`--no-planner-spare`). `command` names the Planner command's program.
  */
 export type SpareState = {
 	repository: string;
-	state: "starting" | "ready" | "unsupported" | "off";
+	state: "starting" | "ready" | "memory" | "unsupported" | "off";
 	since: number;
 	command?: string;
 };

@@ -20,13 +20,15 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { privateAgentState } from "./ai-agent";
+import { clonePath } from "./checkouts";
 import { readConfig } from "./config";
 import { builtInRecipe, INSTALL_FROM } from "./images";
 import { artifactsAt, UNSUPPORTED_LEAD } from "./nvx";
 import { AgentStore } from "./machine-store";
 import { machineRecipes, openMachineSandbox } from "./machine-sandbox";
 import { createOutput } from "./output";
-import { plannerEnvironment } from "./planner";
+import { plannerEnvironment, servePlanners } from "./planner";
+import { plannerSpares } from "./planner-spare";
 import {
 	createSandbox,
 	type Launch,
@@ -35,6 +37,8 @@ import {
 	type StartOptions,
 	type Unsupported,
 } from "./sandbox";
+import { answerTokens } from "./testing/github-grant";
+import type { SpareState } from "./workspace";
 
 /**
  * Real microVMs, on this machine's KVM: what a guest can reach, write and keep. They run where
@@ -802,5 +806,157 @@ describe.skipIf(!usable)("chopin connect with a Planner command", () => {
 			}
 		},
 		600_000,
+	);
+});
+
+/**
+ * A Planner backend in its microVM that takes spare mode, written for Node in the image: started as
+ * a spare it notes what it was started with, prints the ready line and, when its stdin hands it a
+ * document, reads its Planner credential from its file and tells the fake Chopin, through the
+ * proxy, what it saw; started cold it tells it at once.
+ */
+const SPARE_BACKEND = `
+const fs = require("node:fs");
+const { dirname } = require("node:path");
+const { execFileSync } = require("node:child_process");
+const tell = body => fetch(process.env.CHOPIN_URL + "/attached", { method: "POST", body: JSON.stringify(body) });
+const head = () => execFileSync("git", ["rev-parse", "HEAD"], { cwd: process.env.CHOPIN_WORKTREE }).toString().trim();
+if (process.env.CHOPIN_PLANNER_SPARE === "1" && !process.env.CHOPIN_DOCUMENT) {
+	const started = { document: process.env.CHOPIN_DOCUMENT ?? null, token: process.env.CHOPIN_PLANNER_TOKEN ?? null,
+		tokens: fs.readdirSync(dirname(process.env.CHOPIN_PLANNER_TOKEN_FILE)) };
+	process.stdout.write('chopin-planner-spare: ready {"protocol":1}\\n');
+	require("node:readline").createInterface({ input: process.stdin }).on("line", line => {
+		const message = JSON.parse(line);
+		if (message.type !== "assign") return;
+		const token = fs.readFileSync(process.env.CHOPIN_PLANNER_TOKEN_FILE, "utf8").trim().split("\\n")[0];
+		void tell({ how: "spare", document: message.document, token, started, head: head() });
+	});
+} else {
+	void tell({ how: "cold", document: process.env.CHOPIN_DOCUMENT, token: process.env.CHOPIN_PLANNER_TOKEN, head: head() });
+}
+setInterval(() => {}, 1000);
+`;
+
+describe.skipIf(!usable)("spare Planners in microVMs", () => {
+	test(
+		"a repository the machine cloned keeps a spare in a microVM of its own, which holds nothing of a document until one is handed to it and attaches it sooner than a cold start",
+		async () => {
+			let name = `octo-org/spare-${Math.random().toString(36).slice(2, 8)}`;
+			// The machine's clone of a repository it has no checkout of, as `chopin connect` makes one.
+			let clone = clonePath(base, name);
+			mkdirSync(clone, { recursive: true });
+			git(clone, "init", "-q", "-b", "main");
+			git(clone, "remote", "add", "origin", `https://github.com/${name}.git`);
+			writeFileSync(join(clone, "README.md"), "the clone\n");
+			git(clone, "add", ".");
+			git(clone, "commit", "-qm", "initial");
+			let commit = git(clone, "rev-parse", "HEAD");
+			let attached: Array<Record<string, any> & { at: number }> = [];
+			let states: SpareState[] = [];
+			let fake = Bun.serve({
+				hostname: "127.0.0.1",
+				port: 0,
+				async fetch(request) {
+					let path = new URL(request.url).pathname;
+					if (path === "/attached") {
+						attached.push({ ...await request.json() as Record<string, any>, at: Date.now() });
+						return new Response("ok");
+					}
+					let answered = await answerTokens(request);
+					if (answered) return answered;
+					if (path === "/api/connector/planner") {
+						let { document } = await request.json() as { document: string };
+						return Response.json({
+							token: `chopin_p_${document.padEnd(43, "P")}`,
+							expiresAt: Date.now() + 15 * 60_000,
+							document: { id: document, repository: name },
+						});
+					}
+					return Response.json({});
+				},
+			});
+			sandbox.allow?.(`127.0.0.1:${fake.port}`);
+			let url = `http://127.0.0.1:${fake.port}`;
+			let quiet = { write: () => true };
+			let output = createOutput(quiet, quiet, {});
+			let abort = new AbortController();
+			let command = ["bash", "-c", `exec node -e '${SPARE_BACKEND.replaceAll("'", "'\\''")}'`];
+			let spares = plannerSpares({
+				url,
+				command,
+				registered: {},
+				directory: base,
+				output,
+				signal: abort.signal,
+				sandbox,
+				replaceMs: 200,
+				states: {
+					record(next) {
+						states = next;
+						return Promise.resolve();
+					},
+				},
+			});
+			let resolved = { root: realpathSync(clone), env: {} };
+			let serve = (document: string) =>
+				servePlanners({
+					url,
+					machine: `chopin_m_${"M".repeat(43)}`,
+					documents: [document],
+					command,
+					checkouts: { registered: {}, resolve: async () => resolved },
+					directory: base,
+					output,
+					signal: abort.signal,
+					sandbox,
+					spares,
+				});
+			let until = async (condition: () => boolean, ms: number) => {
+				for (let deadline = Date.now() + ms; !condition(); await Bun.sleep(20)) {
+					if (Date.now() > deadline) throw new Error("timed out");
+				}
+			};
+			try {
+				// The first document of the repository starts cold: no Planner ran in it here yet.
+				let asked = Date.now();
+				let first = serve("D_cold");
+				await until(() => attached.some(entry => entry.document === "D_cold"), 120_000);
+				let cold = attached.find(entry => entry.document === "D_cold")!;
+				expect(cold).toMatchObject({ how: "cold", head: commit });
+				let coldMs = cold.at - asked;
+
+				// Its repository keeps a spare from then on: a microVM booted on a disk of its own, its
+				// backend waiting, with no document, no credential and an empty token folder.
+				let ready = Date.now();
+				await until(() => states.some(state => state.state === "ready"), 120_000);
+				let second = Date.now();
+				let next = serve("D_new");
+				await until(() => attached.some(entry => entry.document === "D_new"), 120_000);
+				let warm = attached.find(entry => entry.document === "D_new")!;
+				let spareMs = warm.at - second;
+				expect(warm).toMatchObject({
+					how: "spare",
+					token: `chopin_p_${"D_new".padEnd(43, "P")}`,
+					head: commit,
+					started: { document: null, token: null, tokens: [] },
+				});
+				console.log(
+					`A new document's Planner attached ${coldMs} ms after it was asked for, cold; `
+						+ `${spareMs} ms on the repository's spare (ready ${
+							second - ready
+						} ms after the cold one attached)`,
+				);
+				expect(spareMs).toBeLessThan(coldMs);
+				abort.abort();
+				await Promise.all([first, next]);
+			} finally {
+				abort.abort();
+				await spares.stop();
+				fake.stop(true);
+				rmSync(join(base, "planners", ...name.split("/")), { recursive: true, force: true });
+				rmSync(clone, { recursive: true, force: true });
+			}
+		},
+		300_000,
 	);
 });

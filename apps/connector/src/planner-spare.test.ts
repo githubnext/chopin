@@ -1,14 +1,23 @@
 import { afterAll, expect, test } from "bun:test";
 import { hostSandbox } from "./testing/host-sandbox";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+	copyFile,
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	realpath,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { answerTokens, BOT } from "./testing/github-grant";
-import { checkouts } from "./checkouts";
+import { checkouts, clonePath } from "./checkouts";
 import { createOutput } from "./output";
 import { servePlanners } from "./planner";
-import { plannerSpares, READY_LINE } from "./planner-spare";
+import { type Memory, plannerSpares, READY_LINE, SPARE_BYTES } from "./planner-spare";
 import { git, plannerDisks, plannerSlot, type SpareState } from "./workspace";
 
 /**
@@ -25,8 +34,9 @@ const CREDENTIAL = `chopin_p_${"P".repeat(43)}`;
 const SPARE = join(import.meta.dir, "testing", "spare-planner.ts");
 const REPOSITORY = "octo-org/score";
 
-async function checkout() {
-	let root = await mkdtemp(join(scratch, "checkout-"));
+async function checkout(at?: string) {
+	let root = at ?? await mkdtemp(join(scratch, "checkout-"));
+	await mkdir(root, { recursive: true });
 	git(root, "init");
 	git(root, "config", "user.name", "Fixture");
 	git(root, "config", "user.email", "fixture@example.test");
@@ -79,7 +89,11 @@ function chopin(options: { github?: (asked: number) => Response; mcpMs?: number 
 	return { url: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) };
 }
 
-/** Everything one test runs: a checkout, a base dir, the spares, and what they said. */
+/**
+ * Everything one test runs: a checkout, a base dir, the spares, and what they said. With `clone`,
+ * no checkout is registered: the repository is the clone the machine made of it in its base dir, as
+ * a machine without --checkout has, and finding it does what a fetch leaves.
+ */
 async function machine(options: {
 	url: string;
 	mode?: string;
@@ -87,9 +101,20 @@ async function machine(options: {
 	readyMs?: number;
 	replaceMs?: number;
 	off?: boolean;
+	clone?: boolean;
+	directory?: string;
+	/** Chopin's answer to whether the machine can push to a repository, as asked. */
+	check?: (repository: string) => Promise<string>;
+	checkMs?: number;
+	memory?: Memory;
+	cap?: number;
 }) {
-	let root = await checkout();
-	let directory = await mkdtemp(join(scratch, "base-"));
+	let directory = options.directory ?? await mkdtemp(join(scratch, "base-"));
+	let root = options.clone
+		? clonePath(directory, REPOSITORY)
+		: await checkout();
+	if (options.clone && !existsSync(join(root, ".git"))) await checkout(root);
+	let registered: Record<string, string> = options.clone ? {} : { [REPOSITORY]: root };
 	let log = join(directory, "backend.jsonl");
 	// Its own guests' `/work`, as each microVM has its own.
 	let sandbox = hostSandbox();
@@ -114,7 +139,7 @@ async function machine(options: {
 			sandbox,
 			url: options.url,
 			command,
-			registered: { [REPOSITORY]: root },
+			registered,
 			directory,
 			output,
 			signal,
@@ -128,6 +153,10 @@ async function machine(options: {
 			...(options.readyMs === undefined ? {} : { readyMs: options.readyMs }),
 			replaceMs: options.replaceMs ?? 60_000,
 			...(options.off ? { off: true } : {}),
+			...(options.check ? { check: options.check } : {}),
+			...(options.checkMs === undefined ? {} : { checkMs: options.checkMs }),
+			...(options.memory ? { memory: options.memory } : {}),
+			...(options.cap === undefined ? {} : { cap: options.cap }),
 		});
 	let serve = (documents: string[], spares: ReturnType<typeof start>, signal = abort.signal) =>
 		servePlanners({
@@ -136,7 +165,9 @@ async function machine(options: {
 			machine: MACHINE,
 			documents,
 			command,
-			checkouts: checkouts({ directory, registered: { [REPOSITORY]: root } }),
+			checkouts: options.clone
+				? { registered, resolve: async () => ({ root: await realpath(root), env: {} }) }
+				: checkouts({ directory, registered }),
 			directory,
 			output,
 			signal,
@@ -152,7 +183,9 @@ async function machine(options: {
 		start,
 		serve,
 		said: () => said,
-		state: () => states[0]?.state,
+		state: (repository = REPOSITORY) =>
+			states.find(state => state.repository.toLowerCase() === repository.toLowerCase())?.state,
+		states: () => states,
 		events: () => entries(log),
 	};
 }
@@ -519,6 +552,275 @@ test.skipIf(process.platform === "win32")(
 		off.abort.abort();
 		await none.stop();
 		await server.stop();
+	},
+	60_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"a repository the machine cloned keeps a spare once a Planner ran in it: the next new document starts on it, and so does the next connector",
+	async () => {
+		let server = chopin();
+		let it = await machine({ url: server.url, clone: true, replaceMs: 300 });
+		let spares = it.start();
+		let clone = await realpath(it.root);
+		try {
+			// No Planner ran in it yet, so nothing is kept for it.
+			await Bun.sleep(500);
+			expect(await it.events()).toEqual([]);
+
+			// D_1 starts cold; its repository is served from then on, and its spare follows.
+			let first = it.serve(["D_1"], spares);
+			await until(() => it.state() === "ready", 20_000);
+			let started = (await it.events()).filter(entry => entry.event === "start");
+			expect(started.map(entry => entry.spare)).toEqual([false, true]);
+			// The spare holds nothing of D_1, or of any document: no credential, an empty token folder.
+			let spare = started[1]!;
+			expect(spare.env).toMatchObject({
+				CHOPIN_CHECKOUT: clone,
+				CHOPIN_DOCUMENT: null,
+				CHOPIN_PLANNER_TOKEN: null,
+				CHOPIN_GITHUB_TOKEN: null,
+			});
+			let slot = dirname(spare.env.CHOPIN_PLANNER_TOKEN_FILE as string).slice(0, -".tokens".length);
+			expect(await readdir(`${slot}.tokens`)).toEqual([]);
+			expect(slot).not.toBe(await plannerSlot(it.directory, REPOSITORY, "D_1"));
+
+			// D_2, a new document, is handed that spare at once.
+			let second = it.serve(["D_2"], spares);
+			await until(async () => (await it.events()).some(entry => entry.event === "assign"), 20_000);
+			let assign = (await it.events()).find(entry => entry.event === "assign")!;
+			expect(JSON.parse(assign.line).document).toBe("D_2");
+			expect(assign.pid).toBe(spare.pid);
+			expect(await plannerSlot(it.directory, REPOSITORY, "D_2")).toBe(slot);
+
+			// Its replacement is a spare of its own, in a slot of its own.
+			await until(
+				async () =>
+					(await it.events()).filter(entry => entry.event === "start" && entry.spare).length === 2,
+				20_000,
+			);
+			await until(() => it.state() === "ready", 20_000);
+			it.abort.abort();
+			await Promise.all([first, second]);
+			await spares.stop();
+
+			// The next connector, before any document: the repository it served gets its spare again.
+			let again = new AbortController();
+			let before = (await it.events()).length;
+			let next = it.start(again.signal);
+			await until(() => it.state() === "ready", 20_000);
+			let restarted = (await it.events()).slice(before).filter(entry => entry.event === "start");
+			expect(restarted).toHaveLength(1);
+			expect(restarted[0]).toMatchObject({ spare: true, env: { CHOPIN_CHECKOUT: clone } });
+			again.abort();
+			await next.stop();
+		} finally {
+			it.abort.abort();
+			await spares.stop();
+			await server.stop();
+		}
+	},
+	60_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"a repository Chopin says this machine can't push to keeps no spare: none starts, and one kept goes once Chopin refuses, then comes back when it can push again",
+	async () => {
+		let server = chopin();
+		let answer = "starter-cannot-push";
+		let asked: string[] = [];
+		let it = await machine({
+			url: server.url,
+			checkMs: 300,
+			check: async repository => {
+				asked.push(repository);
+				return answer;
+			},
+		});
+		let spares = it.start();
+		try {
+			// Refused before it starts: nothing starts, and status lists no spare for it.
+			await until(() => asked.length >= 1, 10_000);
+			await Bun.sleep(500);
+			expect(await it.events()).toEqual([]);
+			expect(it.state()).toBeUndefined();
+
+			// Asked again a moment later, it can push there now: its spare starts.
+			answer = "ok";
+			await until(() => it.state() === "ready", 20_000);
+			let [started] = await it.events();
+			let slot = dirname(started!.env.CHOPIN_PLANNER_TOKEN_FILE as string).slice(
+				0,
+				-".tokens".length,
+			);
+
+			// The owner loses push access: the next check lets the spare go, slot and all.
+			answer = "app-cannot-push";
+			await until(
+				async () => (await it.events()).some(entry => entry.event === "end"),
+				10_000,
+			);
+			await until(() => !existsSync(`${slot}.disk`) && !existsSync(`${slot}.tokens`), 10_000);
+			expect(it.state()).toBeUndefined();
+			// And no new one starts while Chopin refuses.
+			await Bun.sleep(800);
+			expect((await it.events()).filter(entry => entry.event === "start")).toHaveLength(1);
+		} finally {
+			it.abort.abort();
+			await spares.stop();
+		}
+
+		// A Planner's own GitHub token refused: the repository's spare goes at once, and no
+		// replacement follows the document it was handed.
+		let refusing = chopin({
+			github: () => Response.json({ error: "starter-cannot-push" }, { status: 403 }),
+		});
+		let other = await machine({ url: refusing.url, replaceMs: 200, checkMs: 60_000 });
+		let pool = other.start();
+		try {
+			await until(() => other.state() === "ready", 20_000);
+			await other.serve(["D_1"], pool);
+			await Bun.sleep(1_000);
+			expect((await other.events()).filter(entry => entry.event === "start")).toHaveLength(1);
+			expect(other.state()).toBeUndefined();
+		} finally {
+			other.abort.abort();
+			await pool.stop();
+			await refusing.stop();
+			await server.stop();
+		}
+	},
+	60_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"spares are kept for the repositories served most recently, as many as the cap and the machine's memory allow, and none start while memory is short",
+	async () => {
+		let server = chopin();
+		// A tenth of the machine's memory holds two spares.
+		let it = await machine({
+			url: server.url,
+			clone: true,
+			replaceMs: 50,
+			memory: () => ({ total: 20 * SPARE_BYTES, available: 64 * SPARE_BYTES }),
+		});
+		for (let name of ["octo-org/alpha", "octo-org/beta"]) {
+			await checkout(clonePath(it.directory, name));
+		}
+		let spares = it.start();
+		let started = async () =>
+			(await it.events()).filter(entry => entry.event === "start").map(entry =>
+				basename(entry.env.CHOPIN_CHECKOUT as string)
+			);
+		try {
+			spares.served("octo-org/alpha");
+			await Bun.sleep(5);
+			spares.served("octo-org/beta");
+			await Bun.sleep(5);
+			spares.served(REPOSITORY);
+			await until(() => it.state() === "ready" && it.state("octo-org/beta") === "ready", 20_000);
+			expect(it.states().map(state => state.repository).sort()).toEqual([
+				"octo-org/beta",
+				REPOSITORY,
+			]);
+			expect((await started()).sort()).toEqual(["beta", "score"]);
+			// Each repository's spare is its own: one with none is handed nothing.
+			expect(await spares.take("octo-org/alpha")).toBeUndefined();
+
+			// alpha is served again: it and score are the two most recent, and beta's spare goes.
+			spares.served("octo-org/alpha");
+			await until(() => it.state("octo-org/alpha") === "ready", 20_000);
+			await until(
+				async () => (await it.events()).filter(entry => entry.event === "end").length === 1,
+				10_000,
+			);
+			expect(it.state("octo-org/beta")).toBeUndefined();
+			expect((await started()).sort()).toEqual(["alpha", "beta", "score"]);
+		} finally {
+			it.abort.abort();
+			await spares.stop();
+		}
+
+		// A cap of one: only the most recent repository's.
+		let capped = await machine({ url: server.url, clone: true, replaceMs: 50, cap: 1 });
+		await checkout(clonePath(capped.directory, "octo-org/alpha"));
+		let one = capped.start();
+		try {
+			one.served(REPOSITORY);
+			await Bun.sleep(5);
+			one.served("octo-org/alpha");
+			await until(() => capped.state("octo-org/alpha") === "ready", 20_000);
+			await Bun.sleep(300);
+			expect(capped.states().map(state => state.repository)).toEqual(["octo-org/alpha"]);
+			expect((await capped.events()).filter(entry => entry.event === "start")).toHaveLength(1);
+		} finally {
+			capped.abort.abort();
+			await one.stop();
+		}
+
+		// Too little memory available beside one: none starts, and status says it waits for memory.
+		let short = await machine({
+			url: server.url,
+			memory: () => ({ total: 64 * SPARE_BYTES, available: 2 * SPARE_BYTES }),
+		});
+		let none = short.start();
+		try {
+			await until(() => short.state() === "memory", 10_000);
+			await Bun.sleep(300);
+			expect(await short.events()).toEqual([]);
+		} finally {
+			short.abort.abort();
+			await none.stop();
+			await server.stop();
+		}
+	},
+	60_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"a spare that served a document is never handed another: the next document gets the replacement, and the first starts again cold in its own slot",
+	async () => {
+		let server = chopin();
+		let it = await machine({ url: server.url, replaceMs: 100 });
+		let spares = it.start();
+		try {
+			await until(() => it.state() === "ready", 20_000);
+			let one = new AbortController();
+			let first = it.serve(["D_1"], spares, AbortSignal.any([it.abort.signal, one.signal]));
+			await until(async () => (await it.events()).some(entry => entry.event === "assign"), 20_000);
+			let handed = (await it.events()).find(entry => entry.event === "assign")!;
+			// D_1's Planner stops; its spare's process ends with it.
+			one.abort();
+			await first;
+			await until(() => it.state() === "ready", 20_000);
+
+			let second = it.serve(["D_2"], spares);
+			await until(
+				async () => (await it.events()).filter(entry => entry.event === "assign").length === 2,
+				20_000,
+			);
+			let next = (await it.events()).filter(entry => entry.event === "assign")[1]!;
+			expect(JSON.parse(next.line).document).toBe("D_2");
+			expect(next.pid).not.toBe(handed.pid);
+			let slot = await plannerSlot(it.directory, REPOSITORY, "D_1");
+			expect(await plannerSlot(it.directory, REPOSITORY, "D_2")).not.toBe(slot);
+
+			// D_1 again: cold, in the slot its spare left it, which no other document has.
+			let again = it.serve(["D_1"], spares);
+			await until(
+				async () => (await it.events()).some(entry => entry.env?.CHOPIN_DOCUMENT === "D_1"),
+				20_000,
+			);
+			let cold = (await it.events()).find(entry => entry.env?.CHOPIN_DOCUMENT === "D_1")!;
+			expect(cold.spare).toBe(false);
+			expect(dirname(cold.env.CHOPIN_PLANNER_TOKEN_FILE as string)).toBe(`${slot}.tokens`);
+			it.abort.abort();
+			await Promise.all([second, again]);
+		} finally {
+			it.abort.abort();
+			await spares.stop();
+			await server.stop();
+		}
 	},
 	60_000,
 );

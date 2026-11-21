@@ -13,6 +13,7 @@ import {
 	connectorMessage,
 	forget,
 	forgettablePlanners,
+	machineGitHubCheck,
 	machineToken,
 	pair,
 	pairingKey,
@@ -763,8 +764,11 @@ export async function connect(args: string[], injected: Injected = {}) {
 			paired = machine;
 			away = planners;
 			let sweeping: ReturnType<typeof setInterval> | undefined;
-			// One spare Planner per registered checkout's repository, with its code loaded, so a new
-			// document's Planner starts at once; it holds no credential until it is handed one.
+			// One spare Planner for each repository this machine recently ran a Planner in, its clones
+			// included, and each registered checkout's, with its code loaded, so a new document's
+			// Planner starts at once; it holds no credential until it is handed one, and none is kept
+			// for a repository Chopin says the machine can't push to.
+			let sparing = AbortSignal.any([abort.signal, planners.signal]);
 			let spares = plannerCommand.length
 				? plannerSpares({
 					url,
@@ -772,7 +776,8 @@ export async function connect(args: string[], injected: Injected = {}) {
 					registered,
 					directory,
 					output,
-					signal: AbortSignal.any([abort.signal, planners.signal]),
+					signal: sparing,
+					check: repository => machineGitHubCheck(url, machine, repository, sparing),
 					env,
 					sandbox,
 					...(agentStore ? { agentStore } : {}),
@@ -1115,9 +1120,11 @@ const HELP = [
 	"      image's build, with Node.js and npm. --install-from <folder> gives that build a",
 	"      read-only copy of a folder at /install-from, such as packages fetched with your",
 	"      sign-in; what it holds is part of the image, so a change to it builds the image again.",
-	"      With a Planner command, a spare Planner runs for each registered checkout's repository,",
-	"      started ahead and waiting, so a new document's Planner is ready in about a second;",
-	"      --no-planner-spare (or CHOPIN_PLANNER_SPARE=0) starts every Planner when it is asked for.",
+	"      With a Planner command, a spare Planner runs for each repository this machine recently",
+	"      ran a Planner in (its clones too) and each registered checkout's, as many as its memory",
+	"      allows, up to 4, started ahead and waiting, so a new document's Planner is ready in about",
+	"      a second; --no-planner-spare (or CHOPIN_PLANNER_SPARE=0) starts every Planner when it is",
+	"      asked for.",
 	"      --install-service connects once, then stops and runs service install, so one command",
 	"      sets up the service. --skip-check passes on to it.",
 	"  status [--json]",
