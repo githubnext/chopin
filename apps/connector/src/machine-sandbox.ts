@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { builtInRecipe, type ImageRecipe } from "./images";
+import { builtInRecipe, imageName, type ImageRecipe } from "./images";
 import {
 	guestProgram,
 	installNvx,
@@ -65,16 +65,30 @@ export function machineRecipes(options: {
 		recipeFor(options.command, options.install, "--install", options.installFrom),
 	]);
 	if (options.plannerCommand?.length) {
-		recipes.set(
-			...recipeFor(
-				options.plannerCommand,
-				options.plannerInstall,
-				"--planner-install",
-				options.installFrom,
-			),
+		let [program, recipe] = recipeFor(
+			options.plannerCommand,
+			options.plannerInstall,
+			"--planner-install",
+			options.installFrom,
 		);
+		recipes.set(program, { ...recipe, planner: true });
 	}
 	return recipes;
+}
+
+/**
+ * What `chopin connect` says as it builds an image, which takes a minute or two once: whose it is,
+ * and for the Planner's, that it is built now so the first document's Planner starts at once.
+ */
+export function buildingWords(recipes: ImageRecipe[]): string {
+	let agents = [...new Set(recipes.filter(item => !item.planner).map(item => item.name))];
+	let planner = recipes.find(item => item.planner)?.name;
+	if (!planner) return `Building ${imageName(recipes)} for its microVMs (a minute or two, once).`;
+	let why = "(a minute or two, once, so the first document's Planner starts at once)";
+	return agents.length
+		? `Building one image for ${agents.join(" and ")} and the Planner (${planner}), whose installs `
+			+ `are the same, for their microVMs ${why}.`
+		: `Building the Planner's image (${planner}) for its microVMs ${why}.`;
 }
 
 /** Fetches `url` into `path`, saying how much is in as it goes. */
@@ -110,9 +124,10 @@ function unpack(archive: string, into: string) {
 }
 
 /**
- * The machine's microVMs, ready to start agents: NVX checked and installed, and the image of the
- * agent and of the Planner command built. A machine that can't run NVX throws `MachineUnsupported`
- * before anything is downloaded.
+ * The machine's microVMs, ready to start agents: NVX checked and installed, and every image a
+ * launch here needs built, the agent's and the Planner command's, one for both where their installs
+ * are the same. It says each build as it starts. A machine that can't run NVX throws
+ * `MachineUnsupported` before anything is downloaded; a build that fails throws its own words.
  */
 export async function openMachineSandbox(options: {
 	directory: string;
@@ -160,10 +175,11 @@ export async function openMachineSandbox(options: {
 		...options.settings ? { settings: options.settings } : {},
 		setup: { artifacts, hypervisor: support.hypervisor },
 		recipes,
-		building: recipe =>
+		building: recipes => output.say(output.style.dim(`… ${buildingWords(recipes)}`)),
+		waiting: recipes =>
 			output.say(
 				output.style.dim(
-					`… Building ${recipe.name}'s image for its microVMs (a minute or two, once).`,
+					`… Waiting for another chopin on this machine to finish building ${imageName(recipes)}.`,
 				),
 			),
 		...options.refused ? { refused: options.refused } : {},

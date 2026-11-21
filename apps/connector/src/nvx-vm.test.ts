@@ -18,11 +18,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { privateAgentState } from "./ai-agent";
+import { readConfig } from "./config";
 import { builtInRecipe, INSTALL_FROM } from "./images";
 import { artifactsAt, UNSUPPORTED_LEAD } from "./nvx";
 import { AgentStore } from "./machine-store";
+import { machineRecipes, openMachineSandbox } from "./machine-sandbox";
+import { createOutput } from "./output";
 import { plannerEnvironment } from "./planner";
 import {
 	createSandbox,
@@ -658,4 +661,139 @@ describe.skipIf(!usable)("an agent in its microVM", () => {
 		expect(out.trim()).toBe(secret);
 		expect(readFileSync("/proc/self/status", "utf8")).toBeTruthy();
 	}, 120_000);
+});
+
+describe.skipIf(!usable)("chopin connect with a Planner command", () => {
+	test(
+		"builds the one image its agent and Planner share before it says Connected, and the Planner then starts with no build",
+		async () => {
+			let state = join(scratch, "connect-state");
+			mkdirSync(state, { mode: 0o700 });
+			/** What `images/` held when Chopin first heard of the machine. */
+			let atConnection: string[] | undefined;
+			let interrupted = false;
+			let fake = Bun.serve({
+				hostname: "127.0.0.1",
+				port: 0,
+				async fetch(request) {
+					let path = new URL(request.url).pathname;
+					if (path === "/api/connector/connections") {
+						atConnection ??= readdirSync(join(state, "images")).filter(name => name !== "cache");
+						return Response.json({ token: "connection" });
+					}
+					if (path !== "/connector/mcp") return new Response(null, { status: 404 });
+					let server = new Server({ name: "fake-chopin", version: "1" }, {
+						capabilities: { tools: {} },
+					});
+					server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+					server.setRequestHandler(CallToolRequestSchema, async call => {
+						if (call.params.name === "wait_for_work") {
+							if (!interrupted) {
+								interrupted = true;
+								connector.kill("SIGINT");
+							}
+							await Bun.sleep(500);
+						}
+						return { content: [{ type: "text", text: "{}" }] };
+					});
+					let transport = new WebStandardStreamableHTTPServerTransport({
+						sessionIdGenerator: undefined,
+						enableJsonResponse: true,
+					});
+					await server.connect(transport);
+					return transport.handleRequest(request);
+				},
+			});
+			let url = `http://127.0.0.1:${fake.port}`;
+			writeFileSync(
+				join(state, "machine.json"),
+				JSON.stringify({
+					servers: { [url]: { token: `chopin_m_${"M".repeat(43)}`, label: "vm" } },
+				}),
+			);
+			let started = Date.now();
+			let connector = Bun.spawn([
+				process.execPath,
+				"--no-env-file",
+				join(import.meta.dir, "main.ts"),
+				"connect",
+				"--install",
+				"true",
+				"--planner-command",
+				"git --version",
+				"--planner-install",
+				"true",
+				"--no-planner-spare",
+				"--",
+				"node",
+				"--version",
+			], {
+				cwd: scratch,
+				env: { ...process.env, CHOPIN_HOME: state, CHOPIN_URL: url },
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			let [stdout, stderr] = await Promise.all([
+				new Response(connector.stdout).text(),
+				new Response(connector.stderr).text(),
+				connector.exited,
+			]);
+			fake.stop(true);
+			let connected = Date.now() - started;
+			let lines = stdout.split("\n");
+			let building = lines.filter(line => line.startsWith("… Building"));
+			expect(building, `${stdout}${stderr}`).toEqual([
+				"… Building one image for node and the Planner (git), whose installs are the same, for "
+				+ "their microVMs (a minute or two, once, so the first document's Planner starts at once).",
+			]);
+			expect(lines.indexOf(building[0]!)).toBeLessThan(lines.indexOf("✓ Connected."));
+			// Chopin heard of the machine once its one image was there, checked for both programs.
+			let key = atConnection!.find(name => name.endsWith(".erofs"))!.slice(0, -".erofs".length);
+			expect(atConnection!.sort()).toEqual([`${key}.erofs`, `${key}.json`]);
+			let record = JSON.parse(readFileSync(join(state, "images", `${key}.json`), "utf8"));
+			expect(record.programs).toEqual(["node", "git"]);
+
+			// The service starts on what connect saved, finds the image, and the Planner starts in it.
+			let settings = (await readConfig(state)).connect!;
+			let said = "";
+			let opening = Date.now();
+			let machine = await openMachineSandbox({
+				directory: state,
+				server: url,
+				recipes: machineRecipes({
+					command: settings.command,
+					plannerCommand: settings.plannerCommand,
+					install: settings.install!,
+					plannerInstall: settings.plannerInstall!,
+				}),
+				output: createOutput({ write: text => said += text }, { write: text => said += text }),
+			});
+			let opened = Date.now() - opening;
+			try {
+				let launching = Date.now();
+				let child = machine.spawn({
+					command: settings.plannerCommand,
+					cwd: "/tmp",
+					env: {},
+					stdin: "ignore",
+				});
+				let out = "";
+				child.stdout.on("data", chunk => out += chunk);
+				let code = await new Promise(resolve => child.once("close", resolve));
+				let launched = Date.now() - launching;
+				expect({ code, out: out.trim().split(" ").slice(0, 2).join(" ") }).toEqual({
+					code: 0,
+					out: "git version",
+				});
+				expect(said).not.toContain("Building");
+				console.log(
+					`connect to Connected (one build): ${connected} ms; the service's start with the image `
+						+ `built: ${opened} ms; the Planner's microVM to its exit: ${launched} ms`,
+				);
+			} finally {
+				await machine.close();
+			}
+		},
+		600_000,
+	);
 });

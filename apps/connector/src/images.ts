@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
 	chmod,
 	copyFile,
+	link,
 	lstat,
 	mkdir,
 	readdir,
@@ -20,6 +21,7 @@ import {
 	UBUNTU_ARCHIVE,
 } from "./guest-packages";
 import { type AgentImage, IMAGE_GUEST_PATH, NVX_RELEASE, type VmSpec } from "./nvx";
+import { processStart, staleLock, type StartProbe } from "./workspace";
 
 /** The Node.js every image runs its agent on: the 24 line, pinned by version and SHA-256. */
 export const NODE_RELEASE = {
@@ -41,6 +43,11 @@ export type ImageRecipe = {
 	 * microVM alone, read-only, at `INSTALL_FROM`. Its files are part of the image's key.
 	 */
 	from?: string;
+	/**
+	 * The Planner command's: its image is built as chopin connects, so the first document's Planner
+	 * starts at once.
+	 */
+	planner?: true;
 };
 
 /** Where an image's build reads the folder `--install-from` names. */
@@ -240,27 +247,239 @@ async function fetched(
 	}
 }
 
+/** What a build recorded of the image `<base>/images/<key>`: it, and the programs found in it. */
+type Recorded = { image: AgentImage; programs: string[]; record: Record<string, unknown> };
+
 /** The image `<base>/images/<key>`, as its build recorded it. */
-async function recorded(base: string, key: string): Promise<AgentImage | undefined> {
+async function recorded(base: string, key: string): Promise<Recorded | undefined> {
 	let layer = join(base, "images", `${key}.erofs`);
 	try {
 		let record = JSON.parse(await readFile(join(base, "images", `${key}.json`), "utf8")) as {
 			uuid?: unknown;
 			user?: GuestUser;
+			programs?: unknown;
+			recipe?: { programs?: unknown };
 		};
 		if (typeof record.uuid !== "string" || !record.user) return undefined;
 		await stat(layer);
+		// A record from before images were shared names the programs of its one recipe.
+		let programs = record.programs ?? record.recipe?.programs;
 		return {
-			layer: { path: layer, uuid: record.uuid },
-			user: `${record.user.uid}:${record.user.gid}`,
-			...imageEnvironment(),
+			image: {
+				layer: { path: layer, uuid: record.uuid },
+				user: `${record.user.uid}:${record.user.gid}`,
+				...imageEnvironment(),
+			},
+			programs: Array.isArray(programs) ? programs.filter(item => typeof item === "string") : [],
+			record,
 		};
 	} catch {
 		return undefined;
 	}
 }
 
-export type ImageOptions = {
+/** What makes images and finds programs in them: microVMs (`vmBuilder`), or a stand-in in tests. */
+export type ImageBuilder = {
+	/**
+	 * Makes `recipe`'s image at `job.layer`, its root file system's UUID `job.uuid`, from the folder
+	 * `recipe.from` holding what `job.inputs` digests; it leaves nothing at `job.layer` if it fails.
+	 */
+	build(
+		recipe: ImageRecipe,
+		job: { key: string; layer: string; uuid: string; inputs?: string; name: string },
+	): Promise<void>;
+	/** Which of `programs` a microVM of `image` doesn't find; throws when it can't start one. */
+	missing(image: AgentImage, programs: string[]): Promise<string[]>;
+};
+
+/** "atomic-acp's image", or "the image atomic-acp and my-planner share". */
+export function imageName(recipes: ImageRecipe[]) {
+	let names = [...new Set(recipes.map(item => item.name))];
+	return names.length === 1
+		? `${names[0]}'s image`
+		: `the image ${names.slice(0, -1).join(", ")} and ${names.at(-1)} share`;
+}
+
+function sentence(text: string) {
+	return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+export type ImagesOptions = {
+	/** The connector's state directory. */
+	base: string;
+	/** The UUID of the release's Ubuntu layer, which every image is made from: part of each key. */
+	layer: string;
+	user: GuestUser;
+	builder: ImageBuilder;
+	/** Hears that an image is being built, which takes minutes: the recipes it is for. */
+	building?: (recipes: ImageRecipe[]) => void;
+	/** Hears that another chopin on this base dir is building or checking one, and waits for it. */
+	waiting?: (recipes: ImageRecipe[]) => void;
+	/** How a lock's process is read, to tell a lock a chopin that died left (`processStart`). */
+	probe?: StartProbe;
+};
+
+/**
+ * The image each program of `recipes` runs from: one per key, so recipes with the same install (an
+ * agent and a Planner command installed by the same commands) share one, built once and checked for
+ * all their programs. An image is found where it was built before, and checked for any program it
+ * wasn't checked for then; otherwise it is built, in a microVM, into `<base>/images/<key>.erofs`.
+ * One chopin at a time makes or checks an image of a key (`<key>.lock`): another waits for it and
+ * finds it made. Every image is ready, or this fails with the words of the build that didn't make
+ * one, before anything is handed an image.
+ */
+export async function ensureImages(
+	recipes: Map<string, ImageRecipe>,
+	options: ImagesOptions,
+): Promise<Map<string, AgentImage>> {
+	let groups = new Map<string, { recipes: ImageRecipe[]; programs: string[]; inputs?: string }>();
+	for (let [program, recipe] of recipes) {
+		let inputs = recipe.from === undefined
+			? undefined
+			: await installInputs(recipe.from).catch(error => {
+				throw new Error(
+					`Couldn't read ${recipe.from}, the folder --install-from names for ${recipe.name}'s image: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				);
+			});
+		let key = imageKey(recipe, options.layer, options.user, inputs);
+		let group = groups.get(key) ?? { recipes: [], programs: [], ...inputs ? { inputs } : {} };
+		group.recipes.push(recipe);
+		group.programs.push(program);
+		groups.set(key, group);
+	}
+	let images = new Map<string, AgentImage>();
+	for (let [key, group] of groups) {
+		let image = await ensureImage(key, group.recipes, group.inputs, options);
+		for (let program of group.programs) images.set(program, image);
+	}
+	return images;
+}
+
+async function ensureImage(
+	key: string,
+	recipes: ImageRecipe[],
+	inputs: string | undefined,
+	options: ImagesOptions,
+): Promise<AgentImage> {
+	let programs = [...new Set(recipes.flatMap(recipe => recipe.programs))];
+	let name = imageName(recipes);
+	let images = join(options.base, "images");
+	await mkdir(images, { recursive: true, mode: 0o700 });
+	let release = await lockImage(
+		join(images, `${key}.lock`),
+		() => options.waiting?.(recipes),
+		options.probe ?? processStart(),
+	);
+	try {
+		let found = await recorded(options.base, key);
+		if (found) {
+			let unchecked = programs.filter(program => !found.programs.includes(program));
+			if (!unchecked.length) return found.image;
+			let missing = await options.builder.missing(found.image, unchecked);
+			if (missing.length) {
+				throw new Error(
+					`${sentence(name)} has no ${missing.join(" or ")}: check its install commands.`,
+				);
+			}
+			await writeFile(
+				join(images, `${key}.json`),
+				JSON.stringify({ ...found.record, programs: [...found.programs, ...unchecked] }),
+			);
+			return found.image;
+		}
+		options.building?.(recipes);
+		let layer = join(images, `${key}.erofs`);
+		let uuid = randomUUID();
+		await options.builder.build(recipes[0]!, {
+			key,
+			layer,
+			uuid,
+			name,
+			...inputs ? { inputs } : {},
+		});
+		let image: AgentImage = {
+			layer: { path: layer, uuid },
+			user: `${options.user.uid}:${options.user.gid}`,
+			...imageEnvironment(),
+		};
+		let missing = await options.builder.missing(image, programs).catch(async error => {
+			await rm(layer, { force: true });
+			throw error;
+		});
+		if (missing.length) {
+			await rm(layer, { force: true });
+			throw new Error(
+				`${sentence(name)} was built, but has no ${
+					missing.join(" or ")
+				}: check its install commands.`,
+			);
+		}
+		await writeFile(
+			join(images, `${key}.json`),
+			JSON.stringify({
+				key,
+				uuid,
+				recipes,
+				programs,
+				user: options.user,
+				node: NODE_RELEASE.version,
+				nvx: NVX_RELEASE.version,
+			}),
+		);
+		return image;
+	} finally {
+		await release();
+	}
+}
+
+/**
+ * Takes the lock at `path` for this process, waiting while another chopin holds it (`waiting` hears
+ * that once) and taking over one whose process is gone, or whose number a process started since
+ * has. The lock is made whole, its holder in it, by linking a file already written, so no chopin
+ * ever reads it half made.
+ */
+async function lockImage(path: string, waiting: () => void, probe: StartProbe) {
+	let holder = `${path}-${process.pid}-${randomBytes(4).toString("hex")}`;
+	await writeFile(holder, JSON.stringify({ pid: process.pid, started: Date.now() }), {
+		mode: 0o600,
+	});
+	let said = false;
+	try {
+		for (let wait = 50;; wait = Math.min(wait * 2, 1000)) {
+			try {
+				await link(holder, path);
+				return () => rm(path, { force: true });
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+			}
+			if (await staleLock(path, probe)) {
+				await rm(path, { force: true });
+				continue;
+			}
+			if (!said) {
+				said = true;
+				waiting();
+			}
+			await Bun.sleep(wait);
+		}
+	} finally {
+		await rm(holder, { force: true });
+	}
+}
+
+/**
+ * Makes images in microVMs: the image `recipe` makes, as a layer of its own. An agent's runtime is
+ * in its layer, not a share: Node reads tens of thousands of files as it starts, which a share
+ * would answer one host request at a time. The host downloads Node and the packages, checks them,
+ * and shares them with the build's guest, which unpacks them over the release's layer, runs the
+ * install (npm's install scripts included, no closer to the host than the agent will run) and
+ * writes the new layer. A recipe's `from` folder is copied and shared with the build alone,
+ * read-only, so an install can use files the host fetched with credentials no guest gets. A microVM
+ * of the image is started to find programs.
+ */
+export function vmBuilder(options: {
 	/** The connector's state directory. */
 	base: string;
 	/** The release's Ubuntu layer, which every image is made from. */
@@ -270,162 +489,143 @@ export type ImageOptions = {
 	download: Downloader;
 	/** The guest's proxy port, for the build's npm. */
 	proxyPort: number;
-	/** Hears that a build starts, which takes minutes. */
-	building?: (recipe: ImageRecipe) => void;
-};
-
-/**
- * The image `recipe` makes, as a layer of its own: built once, in a microVM, into
- * `<base>/images/<key>.erofs`, and found there afterwards. An agent's runtime is in its layer, not
- * a share: Node reads tens of thousands of files as it starts, which a share would answer one host
- * request at a time. The host downloads Node and the packages, checks them, and shares them with the
- * build's guest, which unpacks them over the release's layer, runs the install (npm's install
- * scripts included, no closer to the host than the agent will run) and writes the new layer. A
- * recipe's `from` folder is copied and shared with the build alone, read-only, so an install can
- * use files the host fetched with credentials no guest gets. A microVM of the image is then started
- * to find the recipe's programs. A build that fails leaves no image.
- */
-export async function ensureImage(recipe: ImageRecipe, options: ImageOptions): Promise<AgentImage> {
-	let unreadable = (error: unknown) =>
-		new Error(
-			`Couldn't read ${recipe.from}, the folder --install-from names for ${recipe.name}'s image: ${
-				error instanceof Error ? error.message : String(error)
-			}`,
-		);
-	let from = recipe.from === undefined
-		? undefined
-		: await installInputs(recipe.from).catch(error => {
-			throw unreadable(error);
-		});
-	let key = imageKey(recipe, options.layer.uuid, options.user, from);
-	let found = await recorded(options.base, key);
-	if (found) return found;
-	options.building?.(recipe);
-	let images = join(options.base, "images");
-	let building = join(images, `${key}.building-${randomBytes(4).toString("hex")}`);
-	let inputs = join(building, "in");
-	let output = join(building, "out");
-	await mkdir(inputs, { recursive: true });
-	await mkdir(output, { recursive: true });
-	// The build's guest is the layer's `nobody`, which owns nothing shared: it may write here alone.
-	if (process.platform !== "win32") await chmod(output, 0o777);
-	let uuid = randomUUID();
-	try {
-		let node = await cached(
-			options.base,
-			`https://nodejs.org/dist/v${NODE_RELEASE.version}/${NODE_RELEASE.file}`,
-			NODE_RELEASE.sha256,
-			options.download,
-		);
-		await copyFile(node, join(inputs, "node.tar.gz"));
-		await copyFile(options.layer.path, join(inputs, "base.erofs"));
-		await fetched(options.base, join(inputs, "sys"), GUEST_PACKAGES, options.download);
-		await fetched(options.base, join(inputs, "tools"), BUILD_PACKAGES, options.download);
-		await writeFile(join(inputs, "build.sh"), buildScript(recipe, options.user, uuid));
-		let shares: VmSpec["shares"] = [
-			{ host: inputs, guest: "/in", mode: "ro" },
-			{ host: output, guest: "/out", mode: "rw" },
-		];
-		if (recipe.from !== undefined) {
-			// A copy, so the build reads what the key was made of, whatever happens to the folder.
-			let copy = join(building, "from");
-			await mkdir(copy);
-			if (process.platform !== "win32") await chmod(copy, 0o755);
-			let copied = await installInputs(recipe.from, copy).catch(error => {
-				throw unreadable(error);
+}): ImageBuilder {
+	return {
+		async build(recipe, job) {
+			let building = join(
+				options.base,
+				"images",
+				`${job.key}.building-${randomBytes(4).toString("hex")}`,
+			);
+			let inputs = join(building, "in");
+			let output = join(building, "out");
+			await mkdir(inputs, { recursive: true });
+			await mkdir(output, { recursive: true });
+			// The build's guest is the layer's `nobody`, which owns nothing shared: it may write here
+			// alone.
+			if (process.platform !== "win32") await chmod(output, 0o777);
+			try {
+				let node = await cached(
+					options.base,
+					`https://nodejs.org/dist/v${NODE_RELEASE.version}/${NODE_RELEASE.file}`,
+					NODE_RELEASE.sha256,
+					options.download,
+				);
+				await copyFile(node, join(inputs, "node.tar.gz"));
+				await copyFile(options.layer.path, join(inputs, "base.erofs"));
+				await fetched(options.base, join(inputs, "sys"), GUEST_PACKAGES, options.download);
+				await fetched(options.base, join(inputs, "tools"), BUILD_PACKAGES, options.download);
+				await writeFile(join(inputs, "build.sh"), buildScript(recipe, options.user, job.uuid));
+				let shares: VmSpec["shares"] = [
+					{ host: inputs, guest: "/in", mode: "ro" },
+					{ host: output, guest: "/out", mode: "rw" },
+				];
+				if (recipe.from !== undefined) {
+					// A copy, so the build reads what the key was made of, whatever happens to the
+					// folder.
+					let copy = join(building, "from");
+					await mkdir(copy);
+					if (process.platform !== "win32") await chmod(copy, 0o755);
+					let copied = await installInputs(recipe.from, copy).catch(error => {
+						throw new Error(
+							`Couldn't read ${recipe.from}, the folder --install-from names for ${job.name}: ${
+								error instanceof Error ? error.message : String(error)
+							}`,
+						);
+					});
+					if (copied !== job.inputs) {
+						throw new Error(
+							`${recipe.from} changed while chopin copied it for ${job.name}. Run this command again once it is done changing.`,
+						);
+					}
+					shares.push({ host: copy, guest: INSTALL_FROM, mode: "ro" });
+				}
+				let proxy = `http://10.0.0.1:${options.proxyPort}`;
+				let result = await options.run({
+					shares,
+					proxyPort: options.proxyPort,
+					environment: {
+						PATH: "/usr/sbin:/usr/bin:/sbin:/bin",
+						HOME: "/tmp",
+						TMPDIR: "/tmp",
+						HTTPS_PROXY: proxy,
+						HTTP_PROXY: proxy,
+						https_proxy: proxy,
+						http_proxy: proxy,
+						NO_PROXY: "",
+						NODE_USE_ENV_PROXY: "1",
+						npm_config_update_notifier: "false",
+						npm_config_fund: "false",
+						npm_config_audit: "false",
+					},
+					command: ["/bin/sh", "/in/build.sh"],
+					cwd: "/tmp",
+					memoryMib: 4096,
+					ramUpperPercent: 85,
+					processors: 1,
+					hostname: "chopin-image",
+				});
+				let layer = join(output, "image.erofs");
+				if (result.code !== 0 || !await stat(layer).then(() => true, () => false)) {
+					throw new Error(
+						`Couldn't build ${job.name} (exit ${result.code}):\n${
+							result.output.trim().split("\n").slice(-12).join("\n")
+						}`,
+					);
+				}
+				await rename(layer, job.layer);
+			} finally {
+				await rm(building, { recursive: true, force: true });
+			}
+		},
+		async missing(image, programs) {
+			let check = await options.run({
+				shares: [],
+				proxyPort: options.proxyPort,
+				environment: {
+					...image.environment,
+					PATH: [...image.path, "/usr/sbin", "/usr/bin", "/sbin", "/bin"].join(":"),
+					HOME: "/tmp",
+				},
+				command: [
+					"/bin/sh",
+					"-c",
+					'for program in "$@"; do command -v "$program" >/dev/null || echo "chopin-missing: $program"; done',
+					"chopin-check",
+					...programs,
+				],
+				cwd: "/tmp",
+				memoryMib: 1024,
+				processors: 1,
+				hostname: "chopin-image",
+				image,
 			});
-			if (copied !== from) {
+			if (check.code !== 0) {
 				throw new Error(
-					`${recipe.from} changed while chopin copied it for ${recipe.name}'s image. Run this command again once it is done changing.`,
+					`Couldn't start a microVM of the image to find ${
+						programs.join(" and ")
+					} in it (exit ${check.code}):\n${check.output.trim().split("\n").slice(-12).join("\n")}`,
 				);
 			}
-			shares.push({ host: copy, guest: INSTALL_FROM, mode: "ro" });
-		}
-		let proxy = `http://10.0.0.1:${options.proxyPort}`;
-		let result = await options.run({
-			shares,
-			proxyPort: options.proxyPort,
-			environment: {
-				PATH: "/usr/sbin:/usr/bin:/sbin:/bin",
-				HOME: "/tmp",
-				TMPDIR: "/tmp",
-				HTTPS_PROXY: proxy,
-				HTTP_PROXY: proxy,
-				https_proxy: proxy,
-				http_proxy: proxy,
-				NO_PROXY: "",
-				NODE_USE_ENV_PROXY: "1",
-				npm_config_update_notifier: "false",
-				npm_config_fund: "false",
-				npm_config_audit: "false",
-			},
-			command: ["/bin/sh", "/in/build.sh"],
-			cwd: "/tmp",
-			memoryMib: 4096,
-			ramUpperPercent: 85,
-			processors: 1,
-			hostname: "chopin-image",
-		});
-		let layer = join(output, "image.erofs");
-		if (result.code !== 0 || !await stat(layer).then(() => true, () => false)) {
-			throw new Error(
-				`Couldn't build ${recipe.name}'s image (exit ${result.code}):\n${
-					result.output.trim().split("\n").slice(-12).join("\n")
-				}`,
+			let missing = new Set(
+				check.output.split("\n").filter(line => line.startsWith("chopin-missing: ")).map(line =>
+					line.slice("chopin-missing: ".length).trim()
+				),
 			);
-		}
-		await rename(layer, join(images, `${key}.erofs`));
-		let image: AgentImage = {
-			layer: { path: join(images, `${key}.erofs`), uuid },
-			user: `${options.user.uid}:${options.user.gid}`,
-			...imageEnvironment(),
-		};
-		let check = await options.run({
-			shares: [],
-			proxyPort: options.proxyPort,
-			environment: {
-				...image.environment,
-				PATH: [...image.path, "/usr/sbin", "/usr/bin", "/sbin", "/bin"].join(":"),
-				HOME: "/tmp",
-			},
-			command: [
-				"/bin/sh",
-				"-c",
-				recipe.programs.map(program => `command -v ${shellWord(program)}`).join(" && "),
-			],
-			cwd: "/tmp",
-			memoryMib: 1024,
-			processors: 1,
-			hostname: "chopin-image",
-			image,
-		});
-		if (check.code !== 0) {
-			await rm(join(images, `${key}.erofs`), { force: true });
-			throw new Error(
-				`${recipe.name}'s image was built, but has no ${
-					recipe.programs.join(" or ")
-				}: check its install commands.`,
-			);
-		}
-		await writeFile(
-			join(images, `${key}.json`),
-			JSON.stringify({
-				key,
-				uuid,
-				recipe,
-				user: options.user,
-				node: NODE_RELEASE.version,
-				nvx: NVX_RELEASE.version,
-			}),
-		);
-		return image;
-	} finally {
-		await rm(building, { recursive: true, force: true });
-	}
+			return programs.filter(program => missing.has(program));
+		},
+	};
 }
 
-/** Removes images and unfinished builds that no recipe's key in `keep` names. */
-export async function pruneImages(base: string, keep: readonly string[]) {
+/**
+ * Removes images and unfinished builds that no recipe's key in `keep` names, but not those of a key
+ * another chopin holds the lock of now: an image it is building or checking, beside this one.
+ */
+export async function pruneImages(
+	base: string,
+	keep: readonly string[],
+	probe: StartProbe = processStart(),
+) {
 	let folder = join(base, "images");
 	let names: string[];
 	try {
@@ -433,9 +633,19 @@ export async function pruneImages(base: string, keep: readonly string[]) {
 	} catch {
 		return;
 	}
+	let held = new Set<string>();
 	for (let name of names) {
-		if (name === "cache" || keep.some(key => name === `${key}.erofs` || name === `${key}.json`)) {
-			continue;
+		if (name.endsWith(".lock") && !await staleLock(join(folder, name), probe)) {
+			held.add(name.slice(0, -".lock".length));
+		}
+	}
+	for (let name of names) {
+		let key = name.split(".")[0]!;
+		if (name === "cache" || keep.includes(key) || held.has(key)) continue;
+		// A lock being taken: its holder's file, linked to `<key>.lock` a moment later.
+		if (name.includes(".lock-")) {
+			let made = await stat(join(folder, name)).then(info => info.mtimeMs, () => 0);
+			if (Date.now() - made < 60_000) continue;
 		}
 		await rm(join(folder, name), { recursive: true, force: true });
 	}

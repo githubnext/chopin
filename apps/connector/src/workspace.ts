@@ -546,7 +546,7 @@ async function holds(held: Record<string, unknown>, probe: StartProbe) {
 }
 
 /** Only a lock naming a process that no longer runs is stale; unreadable locks are kept. */
-async function staleLock(path: string, probe: StartProbe): Promise<boolean> {
+export async function staleLock(path: string, probe: StartProbe): Promise<boolean> {
 	let held: Record<string, unknown>;
 	try {
 		held = JSON.parse(await readFile(path, "utf8"));
