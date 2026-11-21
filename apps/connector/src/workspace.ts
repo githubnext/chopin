@@ -536,7 +536,7 @@ const START_SLACK_MS = 2000;
  * lock says. A lock without a start time that can be compared is held while its pid exists,
  * unless it was written before the process now holding that pid started.
  */
-async function holds(held: Record<string, unknown>, probe: StartProbe) {
+export async function holds(held: Record<string, unknown>, probe: StartProbe) {
 	let pid = held.pid as number;
 	if (gone(pid)) return false;
 	let now = await probe(pid);
