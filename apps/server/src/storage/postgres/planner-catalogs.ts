@@ -38,13 +38,26 @@ export class PostgresPlannerCatalogStore implements PlannerCatalogStore {
 				SELECT channel_id AS "channelId", user_id AS "userId", catalog, reported_at AS "reportedAt"
 				FROM planner_catalogs WHERE channel_id = ${channelId} AND user_id = ${userId}
 			`;
-			if (!row) return undefined;
-			return {
-				channelId: row.channelId,
-				userId: row.userId,
-				catalog: typeof row.catalog === "string" ? JSON.parse(row.catalog) : row.catalog,
-				reportedAt: new Date(row.reportedAt),
-			};
+			return row && catalog(row);
 		});
 	}
+	latest(userId: string) {
+		return this.run("read an account's last model list", async () => {
+			let [row] = await this.sql<Row[]>`
+				SELECT channel_id AS "channelId", user_id AS "userId", catalog, reported_at AS "reportedAt"
+				FROM planner_catalogs WHERE user_id = ${userId}
+				ORDER BY reported_at DESC, channel_id LIMIT 1
+			`;
+			return row && catalog(row);
+		});
+	}
+}
+
+function catalog(row: Row): PlannerCatalog {
+	return {
+		channelId: row.channelId,
+		userId: row.userId,
+		catalog: typeof row.catalog === "string" ? JSON.parse(row.catalog) : row.catalog,
+		reportedAt: new Date(row.reportedAt),
+	};
 }

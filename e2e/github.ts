@@ -78,6 +78,59 @@ const NO_SEAT = {
 };
 // An OpenAI key the fake OpenAI accepts; any other is refused.
 const OPENAI_KEY = "sk-e2e-";
+// Someone whose Copilot account lists models a picker offers (see `listedModels`); everyone
+// else's list offers none, so no list is drawn from their accounts.
+const COPILOT_LISTER = "copilot-lister-";
+
+/** One entry of Copilot's model list, as it lists a chat model with tool calls. */
+function listedModel(id: string, name: string, picker: boolean, efforts: string[] = []) {
+	return {
+		id,
+		name,
+		model_picker_enabled: picker,
+		policy: { state: "enabled" },
+		supported_endpoints: ["/chat/completions"],
+		capabilities: {
+			type: "chat",
+			family: id,
+			limits: { max_context_window_tokens: 128_000, max_output_tokens: 16_000 },
+			supports: { tool_calls: true, ...(efforts.length ? { reasoning_effort: efforts } : {}) },
+		},
+	};
+}
+
+/** The lister's Copilot models: one the public catalog names, one only its list has, one hidden. */
+const LISTED_MODELS = {
+	data: [
+		listedModel("e2e-large", "E2E Large (account)", true),
+		listedModel("e2e-own", "E2E Own", true, ["low", "high"]),
+		listedModel("e2e-hidden", "E2E Hidden", false),
+	],
+};
+
+/** The public model catalog (models.dev's `api.json`), with the one Copilot model it describes. */
+const MODEL_CATALOG = {
+	"github-copilot": {
+		id: "github-copilot",
+		name: "GitHub Copilot",
+		api: "https://api.githubcopilot.com",
+		npm: "@ai-sdk/openai-compatible",
+		models: {
+			"e2e-large": {
+				id: "e2e-large",
+				name: "E2E Large",
+				attachment: true,
+				reasoning: true,
+				reasoning_options: [{ type: "effort", values: ["low", "medium", "high"] }],
+				tool_call: true,
+				modalities: { input: ["text", "image"], output: ["text"] },
+				limit: { context: 400_000, output: 64_000 },
+				cost: { input: 1, output: 2 },
+				provider: { npm: "@ai-sdk/openai" },
+			},
+		},
+	},
+};
 
 function sharerRepository(handle: string) {
 	let name = `relay-${handle.slice(MACHINE_SHARER.length)}`;
@@ -235,13 +288,15 @@ async function copilotToken(authorization: string): Promise<Response> {
 
 /** Copilot's model list, asked with a GitHub token itself, which it takes from a seat-holder. */
 async function copilotModels(authorization: string): Promise<Response> {
-	let token = /^Bearer (\S+)$/.exec(authorization)?.[1] ?? "";
+	// A GitHub token Copilot takes itself, or the Copilot token GitHub exchanged one for.
+	let token = (/^Bearer (\S+)$/.exec(authorization)?.[1] ?? "").replace(/^tid=e2e;/, "");
 	let access = await copilotGateFor(token);
 	if (access === "unknown") return new Response("service unavailable", { status: 503 });
 	if (access === "none" || !/^(ghu_e2e|ghp|github_pat)_/.test(token)) {
 		return new Response("unauthorized: token authentication failed", { status: 401 });
 	}
-	return json({ data: [{ id: "gpt-e2e" }] });
+	let handle = /^ghu_e2e_(.+)_\d+$/.exec(token)?.[1];
+	return json(handle?.startsWith(COPILOT_LISTER) ? LISTED_MODELS : { data: [{ id: "gpt-e2e" }] });
 }
 
 function json(value: unknown, init: ResponseInit = {}): Response {
@@ -426,6 +481,9 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 		);
 		if (repository) return json(repository);
 		return json({ message: "Not Found" }, { status: 404 });
+	}
+	if (url.origin === "https://models.dev" && url.pathname === "/api.json") {
+		return json(MODEL_CATALOG);
 	}
 	if (url.origin === "https://api.githubcopilot.com" && url.pathname === "/models") {
 		return copilotModels(new Headers(init?.headers).get("authorization") ?? "");

@@ -89,13 +89,32 @@ another client, starts again from what it reports. A person who can only read th
 none of it.
 
 While what a remote Planner offers is unknown, each person is sent, in their own `chat:model`
-only, `lastKnown`: the models a Planner of the document last reported for that person's own
-account and when (`planner_catalogs`, one row per document and account, saved under the writer
-lease whenever an attached client reports models that differ from the last saved). No one else is
-sent another account's list, and nothing is sent once the offer is known, whatever it is. The
-composer shows the list at once, marked as the list from last time, so its model pill does not wait
-on a machine that starts the Planner, often after its 30 idle minutes, or on one that can't. The
-server checks a choice against the catalog alone, never against `lastKnown`: a choice made while
+only, the models of their own AI accounts, `accounts`, or where Chopin can list none of them,
+`lastKnown`. `accounts` is what an Atomic agent on a launch for them would list, computed by Chopin
+itself with no agent and no machine (`ai/account-models.ts`): Atomic's own model runtime, run in the
+server with no network, given the public model catalog Chopin serves agents (held for ten minutes,
+one copy for the proxy and these lists), Copilot's model list for their account and a stand-in in
+place of every key, exactly as a Planner's runtime is given them through the proxy, so it keeps
+Copilot's models to those the account's list enables and adds the ones only its list has.
+Copilot's list is the body of the `GET /models` the access check already reads for a GitHub token
+Copilot takes itself (read with the headers Atomic reads it with), kept with GitHub's answer and
+never sent to the browser; for a Copilot token GitHub gave, it is read from the account's own
+Copilot host with that token, under the same rules as the proxy's sends, and a body that carries
+the token is dropped. Copilot is left out of the list until its list has been read, as a Planner
+leaves it out. The list is computed when someone opens a document, held per person for two
+minutes, computed again behind the one held for half an hour after that, and dropped when their
+credentials change; a composer that would wait more than 400 ms for it is told it once it is
+ready. Its default is the model of their list from last time, where it offers that model. The
+composer shows it at once with a light note that the models are from their AI accounts.
+`lastKnown` is the models a Planner of the document last reported for that person's own account,
+else the last any Planner reported for that account on any document, and when (`planner_catalogs`,
+one row per document and account, saved under the writer lease whenever an attached client
+reports models that differ from the last saved). No one else is sent another account's list, and
+nothing is sent once the offer is known, whatever it is. The composer shows that list at once,
+marked as the list from last time, so its model pill does not wait on a machine that starts the
+Planner, often after its 30 idle minutes, or on one that can't. The live catalog replaces either,
+unmarked, as soon as it arrives. The server checks a choice against the catalog alone, never
+against `accounts` or `lastKnown`: a choice made while
 the offer is unknown waits for an attached client to report (as a turn does, at most ten
 seconds), is saved only if what it reports offers it, and with nothing attached to
 wait for is refused (_The machine's models are still loading, so this choice wasn't saved. Choose
@@ -1242,7 +1261,8 @@ asks again before it publishes. An answer of the other kind than the last one Gi
 gave about the account (a seat confirmed lost, or back), or either kind once a crossing
 disputed the last one, tells the person's lasting
 launches, which are prepared again; the same answer again, and no answer, tell no one.
-Each launch asks GitHub afresh and gets a Copilot placeholder only for
+Each launch that runs models asks GitHub afresh (a catalog launch takes an answer held for the
+same account and token, as the proxy does) and gets a Copilot placeholder only for
 `access`: `none` withholds it as `no-copilot-access`, and `unknown` as
 `copilot-unavailable`, which a later launch may not meet. A person who loses
 access stops getting Copilot in later launches, and a placeholder handed out
@@ -1368,7 +1388,14 @@ for (`owner`: `run:<id>`, `session:<id>` or `link:<id>`), which ends it (see bel
   so the composer offers them when someone opens the document: its runner reads each provider's
   model list and the model catalog with it, and nothing else. It is catalog-only: the proxy
   refuses every other request on it, a model call included, with `catalog-only` (403) before it
-  reads a credential. It is handed in an `ai-catalog` message, and again, replacing it, whenever
+  reads a credential. Unlike a session's, it takes GitHub's answer about the account's Copilot
+  access held for the same account and token, as the proxy's own requests do, instead of asking
+  GitHub again, under the same checks before its grants are published; it asks again when it is
+  prepared again for a change. Chopin asks that question itself as a machine starts the document's
+  Planner (with the machine's own token, its owner admitted again), so the answer is held by the
+  time the Planner attaches and asks. The log says how long each catalog launch took and which step took
+  it (the document, the accounts, the GitHub token, Copilot's answer, held or asked, storing and the
+  final checks). It is handed in an `ai-catalog` message, and again, replacing it, whenever
   a session's launch would be (the person's credentials change, half an hour before its
   deadline); the earlier one ends once the new one is sent. An account with nothing to list is
   handed an empty `providers`. It is held only while its link is attached to this process, and

@@ -124,8 +124,9 @@ export function ModelPill({ control }: { control: ModelControl }) {
 	}, [open]);
 	let { groups, value, effort, modelOf, levelOf } = modelSelection(catalog, choice);
 	let { name, level } = triggerText(catalog, choice);
-	// A list from last time says why it is not the machine's list now; what is gone from it is for the
-	// machine's own list to say.
+	// A list from last time, or from the person's accounts, says why it is not the machine's list now;
+	// what is gone from it is for the machine's own list to say. Only the list from last time is drawn
+	// in the waiting pill's ink: the accounts' list is current, with a light note.
 	let notice = lastKnown ? lastKnown.status : fallbackNotice(catalog, choice, modelName);
 	let label = triggerLabel(catalog, choice, modelName);
 	let title = triggerTitle(catalog, choice);
@@ -147,10 +148,11 @@ export function ModelPill({ control }: { control: ModelControl }) {
 				render={
 					<button
 						ref={pill}
-						aria-busy={lastKnown?.loading ? "true" : undefined}
+						aria-busy={lastKnown?.loading && !lastKnown.accounts ? "true" : undefined}
 						aria-label={lastKnown ? `${label}. ${lastKnown.status}` : label}
 						className="btn btn-sm btn-ghost composer-model-pill"
-						data-last-known={lastKnown ? "" : undefined}
+						data-from-accounts={lastKnown?.accounts ? "" : undefined}
+						data-last-known={lastKnown && !lastKnown.accounts ? "" : undefined}
 						data-press="none"
 						title={lastKnown ? `${title}. ${lastKnown.status}` : title}
 						type="button"

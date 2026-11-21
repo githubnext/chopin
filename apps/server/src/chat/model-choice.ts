@@ -62,6 +62,12 @@ export type ModelChoiceDeps = {
 		channelId: string,
 		userId: string,
 	) => Promise<{ catalog: Wire.ModelCatalog; reportedAt: Date } | undefined>;
+	/**
+	 * The models `userId`'s own AI accounts offer, as Chopin lists them with no agent: told to that
+	 * person alone while what the harness offers is not known, ahead of `lastKnown`. Absent, or
+	 * undefined, means none.
+	 */
+	accounts?: (userId: string) => Promise<Wire.ModelCatalog | undefined>;
 	storage: Pick<StorageAdapter, "plannerModelChoices">;
 	lease: () => Lease;
 	now?: () => Date;
@@ -133,10 +139,17 @@ async function roomState(
 	return { state, known };
 }
 
+/** Whether the room's state may differ by person: while what the harness offers is not known. */
+function personal(deps: ModelChoiceDeps, room: { known: boolean }): boolean {
+	return !room.known && (!!deps.lastKnown || !!deps.accounts);
+}
+
 /**
  * The state one person is told: the room's, and, while what the harness offers is not known, the
- * list the document's Planner last reported for that person's own account (`lastKnown`), which no
- * one else is told. A list that can't be read is left out; the room's state still goes.
+ * models that person's own AI accounts offer (`accounts`), else the list the document's Planner last
+ * reported for their own account (`lastKnown`), neither of which anyone else is told. The accounts'
+ * list takes the default of the list from last time where it offers that model, since only the
+ * Planner knows its own. A list that can't be read is left out; the room's state still goes.
  */
 async function viewerState(
 	deps: ModelChoiceDeps,
@@ -144,11 +157,27 @@ async function viewerState(
 	room: { state: Wire.ModelState; known: boolean },
 	viewer: string,
 ): Promise<Wire.ModelState> {
-	if (room.known || !deps.lastKnown) return room.state;
-	let saved = await deps.lastKnown(channelId, viewer).catch((error): undefined => {
-		console.error("[chat] could not read the document's last model list:", error);
-		return undefined;
-	});
+	if (!personal(deps, room)) return room.state;
+	let [accounts, saved] = await Promise.all([
+		deps.accounts?.(viewer).catch((error): undefined => {
+			console.error("[chat] could not list a person's models from their AI accounts:", error);
+			return undefined;
+		}),
+		deps.lastKnown?.(channelId, viewer).catch((error): undefined => {
+			console.error("[chat] could not read the document's last model list:", error);
+			return undefined;
+		}),
+	]);
+	if (accounts?.models.length) {
+		let fallback = accounts.default ?? saved?.catalog.default;
+		let offered = fallback && accounts.models.some(model => model.id === fallback.model);
+		return {
+			...room.state,
+			accounts: {
+				catalog: offered && !accounts.default ? { ...accounts, default: fallback } : accounts,
+			},
+		};
+	}
 	if (!saved?.catalog.models.length) return room.state;
 	return {
 		...room.state,
@@ -283,7 +312,7 @@ export function publishModelState(
 ): Promise<void> {
 	return inOrder(channelId, async () => {
 		let room = await roomState(deps, channelId);
-		if (room.known || !deps.lastKnown) return deliver(room.state);
+		if (!personal(deps, room)) return deliver(room.state);
 		let told = new Map<string, Promise<Wire.ModelState>>();
 		return deliver(room.state, viewer => {
 			let state = told.get(viewer) ?? viewerState(deps, channelId, room, viewer);

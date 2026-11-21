@@ -1,10 +1,12 @@
 import { AI_LAUNCH_HEADER, AI_PROXY_PATH, isAiProvider } from "@chopin/protocol/ai-credentials";
 
 import { COPILOT_MODEL_API } from "./copilot";
+import { modelCatalog } from "./model-catalog";
 
 import type { AiProvider } from "@chopin/protocol/ai-credentials";
 import type { AiCredentialRecord } from "../storage/model";
 import type { AiAdmitted, AiCredentials, AiDeadlines, AiRefusal } from "./credentials";
+import type { ModelCatalog } from "./model-catalog";
 import type { AiAttemptRecord, AiUsage } from "./usage";
 
 /**
@@ -46,8 +48,6 @@ export const AI_UPSTREAMS: Record<AiProvider, string> = {
 	claude: "https://api.anthropic.com",
 };
 
-/** The public model catalog agents refresh their model lists from. */
-export const MODEL_CATALOG = "https://models.dev";
 /** The catalog's route under the proxy, for an agent's catalog base URL. */
 export const MODEL_CATALOG_PATH = `${AI_PROXY_PATH}/models.dev`;
 
@@ -168,7 +168,6 @@ const REDACTED = new TextEncoder().encode(REDACTED_TEXT);
 
 /** The largest request body the proxy forwards: well past any model request with images. */
 const MAX_BODY = 64 * 1024 * 1024;
-const CATALOG_FRESH_MS = 10 * 60 * 1000;
 
 /** Request headers never forwarded: a credential, the hop's own, and what names the caller. */
 const DROPPED_REQUEST = new Set([
@@ -301,6 +300,11 @@ export type AiProxyOptions = {
 	clock?: () => number;
 	/** What submits a model request; `fetch` on `clock` (`aiTransport`) unless given. */
 	transport?: AiTransport;
+	/**
+	 * The public model catalog the process holds, which other readers share; one of the proxy's own,
+	 * fetched with `fetch` from `upstreams.catalog`, unless given.
+	 */
+	catalog?: ModelCatalog;
 	/**
 	 * Where each request sent to a provider is recorded before it is sent and completed when its
 	 * answer ends; without it nothing is recorded.
@@ -574,8 +578,6 @@ function scrubbed(body: ReadableStream<Uint8Array>, secret: string): ReadableStr
 	);
 }
 
-type CachedCatalog = { body: Uint8Array; headers: Headers; fetchedAt: number };
-
 /**
  * Chopin's AI credential proxy, served at `/api/v1/ai/<provider>/...`, for the provider's model
  * API routes alone (`ROUTES`). A request must carry, in `Authorization: Bearer` or `x-api-key`, a
@@ -603,7 +605,8 @@ export function aiProxy(options: AiProxyOptions) {
 	let send = options.fetch ?? fetch;
 	let clock = options.clock ?? (() => options.credentials.now());
 	let transport = options.transport ?? aiTransport(send, clock);
-	let catalog: CachedCatalog | undefined;
+	let catalogs = options.catalog
+		?? modelCatalog({ upstream: options.upstreams?.catalog, fetch: send, clock });
 
 	let serveCatalog = async (request: Request, url: URL, path: string): Promise<Response> => {
 		if (path !== "/api.json") return failure(404, "Only the catalog is served here.", "not-found");
@@ -632,37 +635,19 @@ export function aiProxy(options: AiProxyOptions) {
 		}
 		if (standInDropped(request, () => true)) return droppedStandIn();
 		let launchToken = request.headers.get(AI_LAUNCH_HEADER)?.trim() || undefined;
-		if (!catalog || clock() - catalog.fetchedAt >= CATALOG_FRESH_MS) {
+		if (!catalogs.fresh()) {
 			let admitted = await options.credentials.forLaunch(key, launchToken, () => true as const);
 			if (admitted !== true) return refused(admitted.refused);
-			let upstream: Response;
-			try {
-				upstream = await send(upstreamUrl(options.upstreams?.catalog ?? MODEL_CATALOG, path, ""), {
-					headers: { accept: "application/json" },
-					redirect: "manual",
-					signal: AbortSignal.any([request.signal, AbortSignal.timeout(30_000)]),
-				});
-			} catch {
-				if (!catalog) return failure(502, "The model catalog can't be reached.", "upstream");
-				upstream = new Response(null, { status: 502 });
-			}
-			if (upstream.ok) {
-				let headers = new Headers({ "content-type": "application/json" });
-				for (let name of ["etag", "last-modified"]) {
-					let value = upstream.headers.get(name);
-					if (value) headers.set(name, value);
-				}
-				catalog = {
-					body: new Uint8Array(await upstream.arrayBuffer()),
-					headers,
-					fetchedAt: clock(),
-				};
-			} else {
-				await upstream.body?.cancel();
-				if (!catalog) return failure(502, "The model catalog can't be reached.", "upstream");
-			}
 		}
-		let held = catalog;
+		// Fetched for every reader at once: a request that is abandoned stops waiting for it.
+		let held = await Promise.race([
+			catalogs.read(),
+			new Promise<undefined>(resolve => {
+				if (request.signal.aborted) resolve(undefined);
+				request.signal.addEventListener("abort", () => resolve(undefined), { once: true });
+			}),
+		]);
+		if (!held) return failure(502, "The model catalog can't be reached.", "upstream");
 		let served = await options.credentials.forLaunch(key, launchToken, () => {
 			let etag = held.headers.get("etag");
 			let headers = new Headers(held.headers);

@@ -481,6 +481,8 @@ export interface PlannerModelChoiceStore {
 export interface PlannerCatalogStore {
 	put(lease: Lease, catalog: PlannerCatalog): Promise<void>;
 	get(channelId: string, userId: string): Promise<PlannerCatalog | undefined>;
+	/** The list last reported for `userId`, on any of the documents their Planner ran for. */
+	latest(userId: string): Promise<PlannerCatalog | undefined>;
 }
 
 /**

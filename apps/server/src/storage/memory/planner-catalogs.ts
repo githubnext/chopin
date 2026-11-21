@@ -28,6 +28,14 @@ export class MemoryPlannerCatalogStore implements PlannerCatalogStore {
 		let found = this.#catalogs.get(JSON.stringify([channelId, userId]));
 		return found && copy(found);
 	}
+	async latest(userId: string) {
+		let found: PlannerCatalog | undefined;
+		for (let value of this.#catalogs.values()) {
+			if (value.userId !== userId) continue;
+			if (!found || value.reportedAt.getTime() > found.reportedAt.getTime()) found = value;
+		}
+		return found && copy(found);
+	}
 	deleteChannel(channelId: string) {
 		for (let [key, value] of this.#catalogs) {
 			if (value.channelId === channelId) this.#catalogs.delete(key);

@@ -7,7 +7,7 @@ import {
 } from "@chopin/protocol/ai-credentials";
 
 import { decrypted, encrypted, imported } from "../auth/session";
-import { COPILOT_RAW_TOKEN_HEADERS, CopilotTokenRefused } from "./copilot";
+import { COPILOT_RAW_TOKEN_HEADERS, copilotModels, CopilotTokenRefused } from "./copilot";
 import { catalogOnly } from "./launches";
 import { AI_UPSTREAMS } from "./proxy";
 import {
@@ -29,7 +29,7 @@ import type {
 	SubscriptionProvider,
 } from "@chopin/protocol/ai-credentials";
 import type { AiCredentialRecord, AiPlaceholder, Lease } from "../storage/model";
-import type { CopilotToken, CopilotTokenExchange } from "./copilot";
+import type { CopilotModelList, CopilotToken, CopilotTokenExchange } from "./copilot";
 import type { PendingSignIn, SignInEndpoints, SubscriptionTokens } from "./subscriptions";
 import type { StorageAdapter } from "../storage/port";
 
@@ -160,7 +160,14 @@ class CopilotTokenExpired extends Error {
  * With access, `expiresAt` is when what Copilot takes for the token stops being good (milliseconds
  * since the epoch), as `CopilotToken`'s is.
  */
-type CopilotAnswer = { access: CopilotAccess; since: number; account?: string; expiresAt?: number };
+type CopilotAnswer = {
+	access: CopilotAccess;
+	since: number;
+	account?: string;
+	expiresAt?: number;
+	/** GitHub was asked for this answer, rather than one held for the same account and token. */
+	asked?: boolean;
+};
 
 /**
  * GitHub's answer about one GitHub token for one account, held for the next questions about both:
@@ -218,6 +225,40 @@ export type AiWithheld = {
 /** What a launch for a person would be given now: `providers` they can use, and what is `withheld`. */
 export type AiAvailable = { providers: AiProvider[]; withheld: AiWithheld[] };
 
+/**
+ * How long each step of preparing one launch took, in milliseconds, summed over its attempts: what
+ * a slow launch's log line says, never anything of a credential.
+ */
+export type LaunchSteps = {
+	/** Reading the document's archive generation. */
+	document: number;
+	/** Reading the person's connected providers and keys, beside the two steps below. */
+	accounts: number;
+	/** Reading their GitHub token: a paired machine's own, renewed when due, or their sign-in's. */
+	signIn: number;
+	/** GitHub's answer about their Copilot access, whether asked (`copilotAsked`) or held. */
+	copilot: number;
+	copilotAsked: boolean;
+	/** Storing the placeholders. */
+	stored: number;
+	/** The final reads before the grants are published. */
+	checked: number;
+	attempts: number;
+};
+
+export function launchSteps(): LaunchSteps {
+	return {
+		document: 0,
+		accounts: 0,
+		signIn: 0,
+		copilot: 0,
+		copilotAsked: false,
+		stored: 0,
+		checked: 0,
+		attempts: 0,
+	};
+}
+
 export type AiLaunch = {
 	userId: string;
 	/** The paired machine the launch runs on; revoking it ends the launch. */
@@ -247,6 +288,8 @@ export type AiCredentialsOptions = {
 	githubToken: (launch: Pick<AiPlaceholder, "userId" | "machineId">) => Promise<string | undefined>;
 	/** Exchanges a GitHub token for the Copilot token Copilot's model API takes. */
 	copilotToken: CopilotTokenExchange;
+	/** Reads the account's Copilot model list with what Copilot's model API takes; see `copilotModels`. */
+	copilotModels?: (token: CopilotToken) => Promise<CopilotModelList | undefined>;
 	/** Each provider's origin a key is checked at before it is saved; tests point them at fakes. */
 	upstreams?: Partial<Record<AiProvider, string>>;
 	/** Where ChatGPT and Claude sign in and renew; their own unless tests point them at fakes. */
@@ -392,6 +435,7 @@ export class AiCredentials {
 	readonly #clock: Clock;
 	readonly #githubToken: AiCredentialsOptions["githubToken"];
 	readonly #exchange: CopilotTokenExchange;
+	readonly #copilotModels: (token: CopilotToken) => Promise<CopilotModelList | undefined>;
 	readonly #upstreams: Partial<Record<AiProvider, string>>;
 	readonly #signInEndpoints: SignInEndpoints | undefined;
 	readonly #hostId: string;
@@ -454,6 +498,8 @@ export class AiCredentials {
 		this.#clock = options.clock ?? (() => new Date());
 		this.#githubToken = options.githubToken;
 		this.#exchange = options.copilotToken;
+		this.#copilotModels = options.copilotModels
+			?? (token => copilotModels(token, { clock: () => this.#clock().getTime() }));
 		this.#upstreams = options.upstreams ?? {};
 		this.#signInEndpoints = options.signIns;
 		this.#hostId = deploymentUuid(options.key);
@@ -763,7 +809,10 @@ export class AiCredentials {
 	/**
 	 * Placeholders for one launch, one per provider its person can use now, stored before they are
 	 * returned. GitHub Copilot is given only when the person's GitHub token has Copilot access at this
-	 * launch (see `copilotTokenExchange`); otherwise it is `withheld`, with the reason. A launch on a
+	 * launch (see `copilotTokenExchange`); otherwise it is `withheld`, with the reason. A launch that
+	 * runs models asks GitHub afresh; a catalog-only launch (`catalogOnly`), which lists models and
+	 * runs none, takes GitHub's answer held for the same account and token, as the proxy's own requests
+	 * do, and asks afresh when it prepares itself again. A launch on a
 	 * document is prepared in the archive generation the document is open in when it begins, and its
 	 * placeholders are stored only while the document is still open in it. Once they are stored,
 	 * the person's credentials are read a final time, and the grants are published (none included)
@@ -785,7 +834,14 @@ export class AiCredentials {
 	 * without one that was added, nor Copilot for a token that expired before it was. With no grants
 	 * nothing is stored, and the caller starts no runner.
 	 */
-	async launch(input: AiLaunch): Promise<AiLaunchGrants> {
+	async launch(input: AiLaunch, steps?: LaunchSteps): Promise<AiLaunchGrants> {
+		let mark = performance.now();
+		/** Adds the time since the last mark to `step`, when the launch's steps are timed. */
+		let took = (step: "document" | "stored" | "checked") => {
+			let now = performance.now();
+			if (steps) steps[step] += now - mark;
+			mark = now;
+		};
 		let launchId = crypto.randomUUID();
 		let launchToken = LAUNCH_PREFIX + randomBytes(32).toString("base64url");
 		let launchDigest = digest(launchToken);
@@ -794,9 +850,17 @@ export class AiCredentials {
 		let generation = input.channelId === undefined
 			? undefined
 			: await this.#storage.aiPlaceholders.generation(input.channelId);
+		took("document");
 		if (input.channelId !== undefined && generation === undefined) return cancelled();
 		for (let attempt = 0; attempt < LAUNCH_ATTEMPTS; attempt++) {
-			let admitted = await this.#admitted(input, true);
+			if (steps) steps.attempts++;
+			let admitted = await this.#admitted(
+				input,
+				true,
+				attempt > 0 || !catalogOnly(input.owner),
+				steps,
+			);
+			mark = performance.now();
 			withheld = admitted.withheld;
 			let grants: AiProviderGrant[] = admitted.usable.map(record => ({
 				provider: record.provider,
@@ -808,6 +872,7 @@ export class AiCredentials {
 			}));
 			let rows = this.#rows(launchId, launchDigest, input, generation, grants);
 			if (grants.length && !await this.#storage.aiPlaceholders.put(rows)) return cancelled();
+			took("stored");
 			let version = this.#storage.aiCredentials.version(input.userId);
 			let cutoffs = this.#storage.aiPlaceholders.cutoffs();
 			let [current, open] = await Promise.all([
@@ -825,6 +890,7 @@ export class AiCredentials {
 				cutoffs = this.#storage.aiPlaceholders.cutoffs();
 				open = await this.#prepared(input, generation, rows);
 			}
+			took("checked");
 			let held = this.#storage.aiCredentials.version(input.userId) === version
 				&& this.#storage.aiPlaceholders.cutoffs() === cutoffs
 				&& sameSet(admitted.connected, current)
@@ -850,15 +916,17 @@ export class AiCredentials {
 	/**
 	 * What a launch for `userId` would be given now, without preparing one: nothing is stored. The
 	 * providers they can use, and those they connected that a launch would not be given, with why.
+	 * With `machineId`, as a launch on that paired machine would be: Copilot is asked about with the
+	 * machine's own GitHub token where it is theirs, so its answer is held for that machine's launches.
 	 * GitHub's answer about Copilot access may be a few minutes old, as the list's is. A read during
 	 * which their credentials change, or GitHub says otherwise about their Copilot account, is read
 	 * again, at most `LAUNCH_ATTEMPTS` times, and then it throws the retryable `AiCredentialError`
 	 * (503) `launch` throws, rather than say they have nothing.
 	 */
-	async available(userId: string): Promise<AiAvailable> {
+	async available(userId: string, machineId?: string): Promise<AiAvailable> {
 		for (let attempt = 0; attempt < LAUNCH_ATTEMPTS; attempt++) {
 			let version = this.#storage.aiCredentials.version(userId);
-			let admitted = await this.#admitted({ userId }, false);
+			let admitted = await this.#admitted({ userId, ...(machineId ? { machineId } : {}) }, false);
 			if (
 				this.#storage.aiCredentials.version(userId) === version
 				&& !this.#contradicted(admitted.copilot)
@@ -873,6 +941,25 @@ export class AiCredentials {
 			"Your AI accounts kept changing while Chopin read them. Try again.",
 			503,
 		);
+	}
+
+	/**
+	 * What a person's model list is computed from, never a credential: the providers a launch for
+	 * them would be given now, read as `available` reads them, and Copilot's own model list for their
+	 * account, read with GitHub's answer held for their sign-in or connected token (asked if none is
+	 * held), as the proxy's requests take it. The list is left out where it can't be read now; a read
+	 * during which their credentials kept changing throws as `available` does.
+	 */
+	async modelSources(userId: string): Promise<AiAvailable & { copilot?: CopilotModelList }> {
+		let available = await this.available(userId);
+		if (!available.providers.includes("github-copilot")) return available;
+		let record = await this.#record(userId, "github-copilot");
+		let token = record && await this.#launchToken(record, { userId });
+		if (!record || !token) return available;
+		let list = await this.#copilotToken(record, token)
+			.then(copilot => copilot && this.#copilotModels(copilot))
+			.catch((): undefined => undefined);
+		return list ? { ...available, copilot: list } : available;
 	}
 
 	/**
@@ -901,17 +988,27 @@ export class AiCredentials {
 	/**
 	 * The person's connected providers (`connected`), those a launch can be given now, and those it
 	 * can't, with why. `copilot` is what GitHub answered about Copilot access, asked again when
-	 * `fresh`, as every launch does. A key is given only when it decrypts and its provider hasn't
-	 * refused it as invalid.
+	 * `copilotFresh`, as every launch that runs models does; a sign-in is renewed first when `fresh`.
+	 * A key is given only when it decrypts and its provider hasn't refused it as invalid.
 	 */
-	async #admitted(input: Pick<AiLaunch, "userId" | "machineId">, fresh: boolean) {
+	async #admitted(
+		input: Pick<AiLaunch, "userId" | "machineId">,
+		fresh: boolean,
+		copilotFresh = fresh,
+		steps?: LaunchSteps,
+	) {
+		let started = performance.now();
+		let signIn = 0;
+		let asking = 0;
 		let copilot: CopilotAnswer | undefined;
 		let connected = await this.#connected(input.userId);
 		let usable: AiCredentialRecord[] = [];
 		let withheld: AiWithheld[] = [];
 		for (let record of connected) {
 			if (record.provider === "github-copilot") {
+				let reading = performance.now();
 				let token = await this.#launchToken(record, input);
+				signIn += performance.now() - reading;
 				if (!token) {
 					withheld.push({
 						provider: record.provider,
@@ -919,7 +1016,10 @@ export class AiCredentials {
 					});
 					continue;
 				}
-				copilot = await this.#copilotAccess(record, token, fresh);
+				reading = performance.now();
+				copilot = await this.#copilotAccess(record, token, copilotFresh);
+				asking += performance.now() - reading;
+				if (steps && copilot.asked) steps.copilotAsked = true;
 				if (copilot.access !== "access") {
 					withheld.push({
 						provider: record.provider,
@@ -946,6 +1046,11 @@ export class AiCredentials {
 				continue;
 			}
 			usable.push(record);
+		}
+		if (steps) {
+			steps.signIn += signIn;
+			steps.copilot += asking;
+			steps.accounts += performance.now() - started - signIn - asking;
 		}
 		return { connected, usable, withheld, copilot };
 	}
@@ -1608,8 +1713,14 @@ export class AiCredentials {
 		try {
 			let answer = await this.#copilotAnswer(account, githubToken, fresh);
 			return answer.token
-				? { account, access: "access", since: answer.since, expiresAt: answer.token.expiresAt }
-				: { account, access: "none", since: answer.since };
+				? {
+					account,
+					access: "access",
+					since: answer.since,
+					expiresAt: answer.token.expiresAt,
+					asked: answer.asked,
+				}
+				: { account, access: "none", since: answer.since, asked: answer.asked };
 		} catch {
 			return { account, access: "unknown", since };
 		}
@@ -1647,7 +1758,7 @@ export class AiCredentials {
 		account: string,
 		githubToken: string,
 		fresh = false,
-	): Promise<{ token: CopilotToken | undefined; since: number }> {
+	): Promise<{ token: CopilotToken | undefined; since: number; asked: boolean }> {
 		let key = `${account} ${Buffer.from(digest(githubToken)).toString("hex")}`;
 		let now = this.#clock().getTime();
 		let held = this.#copilotTokens.get(key);
@@ -1659,7 +1770,7 @@ export class AiCredentials {
 			if (this.#copilotTokens.get(key) === entry) this.#copilotTokens.delete(key);
 			throw new CopilotTokenExpired();
 		}
-		return { token, since: entry.since };
+		return { token, since: entry.since, asked: entry !== held };
 	}
 
 	#ask(key: string, account: string, githubToken: string, now: number) {

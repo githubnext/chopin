@@ -184,8 +184,14 @@ durable.
   alone and only once that host's model list took it (`apps/server/src/ai/copilot.ts`);
   either is taken out of what is passed back and never logged. A launch gets a Copilot
   placeholder only when GitHub gives that token Copilot access at launch (through
-  the person's sign-in unless they connected a token instead), and no
-  placeholder for a provider its person can't use. Only GitHub naming no seat
+  the person's sign-in unless they connected a token instead; a catalog launch, which runs no
+  model, takes the answer held for that account and token, as the proxy's requests do), and no
+  placeholder for a provider its person can't use. Copilot's model list for an account (the
+  body of the access check's `GET /models`, or one read from the account's Copilot host with its
+  Copilot token under the same sending rules) is kept with that answer, a body carrying the token
+  dropped, and only read by Chopin to list that person's own models for their composer
+  (`ai/account-models.ts`, Atomic's runtime run with no network and a stand-in for every key);
+  it is never returned or logged. Only GitHub naming no seat
   (`no_copilot_access`, `not_signed_up`, `subscription_ended`) is no access; a token
   neither GitHub's exchange nor Copilot's model API takes is a check that couldn't be
   done, never no subscription. Every answer GitHub gives about
