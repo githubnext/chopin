@@ -166,5 +166,6 @@ export async function openMachineSandbox(options: {
 		...options.refused ? { refused: options.refused } : {},
 		...options.prune === false ? { prune: false } : {},
 		wedged: detail => output.error(detail),
+		retrying: detail => output.say(output.style.dim(`… ${detail}`)),
 	});
 }

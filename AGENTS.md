@@ -429,7 +429,12 @@ durable.
   in a `0600` file and never on a command line, and it holds only its own launch's credentials:
   AI stand-ins, never a real key or the relay's launch credential. Each launch's `nvx` runs in a
   process group the connector ends with it, and a connector that died has its orphans killed by
-  the next one (launch records under `<base>/nvx/launches`). The run's MCP bridge runs in the guest
+  the next one (launch records under `<base>/nvx/launches`). A launch takes the folder `nvx` keeps
+  in the temporary directory with it however it ends, and a connector removes, as it starts, those
+  no launch record or running process names (`sweepRunFolders`); its own files stay in the state
+  directory. A start OpenVMM failed for io_uring, as it does under heavy load, is tried again, three
+  starts at most, and only before the guest says its workload starts (`STARTED_LINE`): until then
+  no stdin reaches the guest, so an agent never sees two starts. The run's MCP bridge runs in the guest
   on the image's Node and reads an investigation's images in the guest's repository. Windows (WHP)
   is designed but not yet run end to end. See [Agents in NVX microVMs](docs/nvx-sandbox.md) and
   [Sandbox](docs/chopin-cli.md#sandbox).

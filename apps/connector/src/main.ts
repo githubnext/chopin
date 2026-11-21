@@ -1,8 +1,9 @@
-import { appendFileSync, mkdtempSync, rmSync, statSync } from "node:fs";
-import { hostname, tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { appendFileSync, statSync } from "node:fs";
+import { hostname } from "node:os";
+import { basename, resolve } from "node:path";
 import { acpCommand, AGENTS } from "@chopin/protocol/agents";
 import { checkAgent } from "./acp";
+import { sweepGitFolders } from "./git-host";
 import { withoutGitHub } from "./github-token";
 import type { AgentInfo } from "./acp";
 import { ConnectorStopped, redacted, serveWork } from "./connection";
@@ -50,7 +51,13 @@ import { collectStatus, formatStatus, type ServerSource } from "./status";
 import { removeReplaced, update } from "./update";
 import { checkouts as machineCheckouts, registerCheckouts } from "./checkouts";
 import { VERSION } from "./version";
-import { machineReport, MachineUnsupported, requireSupport, type Sandbox } from "./sandbox";
+import {
+	checkFolder,
+	machineReport,
+	MachineUnsupported,
+	requireSupport,
+	type Sandbox,
+} from "./sandbox";
 import { machineRecipes, openMachineSandbox } from "./machine-sandbox";
 import type { SupportHost } from "./nvx";
 import { forgetMachineStore, provideMachineStore, storeReport } from "./machine-store";
@@ -481,19 +488,6 @@ export async function connect(args: string[], injected: Injected = {}) {
 			return checkout;
 		}),
 	);
-	/**
-	 * Where the agent's start check runs in its microVM: an empty folder of its own, made when first
-	 * asked for and removed when the connector exits. It needs nothing of a checkout, and never the
-	 * home folder, which holds the state directory and everything a person keeps.
-	 */
-	let neutral: string | undefined;
-	let checkDirectory = () => {
-		if (!neutral) {
-			let made = neutral = mkdtempSync(join(tmpdir(), "chopin-check-"));
-			process.once("exit", () => rmSync(made, { recursive: true, force: true }));
-		}
-		return neutral;
-	};
 	// The service runs what a terminal's connect saves, by the full paths this shell found.
 	let saving = service ? { command, plannerCommand } : {
 		command: await savedCommand(command, process.cwd()),
@@ -549,6 +543,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 			plannerCommand: plannerCommand.length > 0,
 			checkouts: registered,
 		});
+		sweepGitFolders(directory);
 		sandbox = await (injected.openSandbox ?? openMachineSandbox)({
 			directory,
 			server: url,
@@ -602,7 +597,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 	 */
 	let probeAgent = (token: string, signal: AbortSignal) => {
 		void checkAgent(command, {
-			cwd: checkDirectory(),
+			cwd: checkFolder(directory),
 			// In a microVM, as a run's agent starts: with nothing of the machine's GitHub setup.
 			env: withoutGitHub({ ...env }),
 			timeoutMs: 30_000,
@@ -625,7 +620,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 	try {
 		if (installing && !parsed.flags.has("skip-check") && !await machineToken(directory, url)) {
 			let failed = await checkAgent(command, {
-				cwd: checkDirectory(),
+				cwd: checkFolder(directory),
 				env: withoutGitHub({ ...env }),
 				timeoutMs: 30_000,
 				sandbox,
@@ -953,17 +948,15 @@ async function installCommand(options: {
 				}),
 				output,
 			});
-			let empty = mkdtempSync(join(directory, "check-"));
 			try {
 				return await checkAgent(settings.command, {
-					cwd: empty,
+					cwd: checkFolder(directory),
 					env: withoutGitHub({ ...settings.env }),
 					timeoutMs: 30_000,
 					sandbox,
 				});
 			} finally {
 				await sandbox.close();
-				rmSync(empty, { recursive: true, force: true });
 			}
 		}
 		: undefined;
