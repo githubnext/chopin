@@ -11,6 +11,7 @@ import {
 	renameSync,
 	rmSync,
 	statSync,
+	truncateSync,
 	writeFileSync,
 } from "node:fs";
 import { arch } from "node:os";
@@ -49,6 +50,8 @@ import {
 } from "./nvx";
 import { allowedHosts, type SandboxSettings, validAllowedEntry } from "./sandbox-policy";
 import { type Proxy, startProxy } from "./sandbox-proxy";
+import { killJob, sparseFile } from "./windows-host";
+import { processStart, type StartProbe } from "./workspace";
 
 export { SandboxRefused } from "./nvx";
 
@@ -82,8 +85,15 @@ export type Launch = {
 	disk?: string;
 };
 
-/** A started process: its stdout and stderr are always pipes. */
-export type Spawned = ChildProcess & { stdout: Readable; stderr: Readable };
+/**
+ * A started process: its stdout and stderr are always pipes. On Windows a microVM's carries
+ * `stopMicrovm`, which ends it as `nvx` and OpenVMM need there (see `startNvx`).
+ */
+export type Spawned = ChildProcess & {
+	stdout: Readable;
+	stderr: Readable;
+	stopMicrovm?: (graceMs: number) => Promise<void>;
+};
 
 /** Where agents are started: each in a microVM of its own. */
 export type Sandbox = {
@@ -125,6 +135,8 @@ export function systemSupportHost(): SupportHost {
 	return {
 		platform: process.platform,
 		arch: arch(),
+		...process.getuid ? { uid: process.getuid() } : {},
+		...process.env.SystemRoot ? { systemRoot: process.env.SystemRoot } : {},
 		exists: existsSync,
 		readWrite(path) {
 			try {
@@ -137,8 +149,15 @@ export function systemSupportHost(): SupportHost {
 	};
 }
 
-/** How `nvx` is started: with a stdin or not, and for a guest that owns nothing shared. */
-export type StartOptions = { stdin: "pipe" | "ignore"; open?: boolean };
+/**
+ * How `nvx` is started: with a stdin or not, for a guest that owns nothing shared, and who hears of
+ * a microVM that outlived its stop (on Windows).
+ */
+export type StartOptions = {
+	stdin: "pipe" | "ignore";
+	open?: boolean;
+	wedged?: (detail: string) => void;
+};
 
 /** What a microVM is built from: NVX and the hypervisor. */
 export type NvxSetup = {
@@ -161,6 +180,8 @@ export type SandboxOptions = {
 	building?: (recipe: ImageRecipe) => void;
 	/** Hears each host the proxy refuses, once. */
 	refused?: (host: string, port: number) => void;
+	/** Hears of a microVM that outlived its stop (on Windows), which a restart may be needed to end. */
+	wedged?: (detail: string) => void;
 	/** Stands in for `nvx` in tests: what starts the command line. */
 	start?: (program: string, words: string[], launch: StartOptions) => Spawned;
 };
@@ -172,11 +193,14 @@ function launchesFolder(base: string) {
 
 /**
  * Ends what a connector that died left running: each recorded `nvx` process group, OpenVMM in it,
- * whose connector is gone, and removes the records. A launch of a chopin still running beside this
- * one on the state directory (the service, while a terminal's `service install` checks the agent)
- * is left alone.
+ * whose connector is gone, and removes the records. A process is ended only while it is still the
+ * one recorded (`processStart`'s id, recorded as it started): a number reused since, after a
+ * restart or days later, is never signalled, and a record without one ends nothing. A launch of a
+ * chopin still running beside this one on the state directory (the service, while a terminal's
+ * `service install` checks the agent) is left alone. On Windows a connector's job objects ended its
+ * microVMs as it died (see `windowsStop`), so only the records go.
  */
-export function endOrphans(base: string) {
+export async function endOrphans(base: string, probe: StartProbe = processStart()) {
 	let folder = launchesFolder(base);
 	let names: string[];
 	try {
@@ -184,27 +208,39 @@ export function endOrphans(base: string) {
 	} catch {
 		return;
 	}
+	let same = async (pid: unknown, start: unknown) =>
+		typeof pid === "number" && pid > 1 && typeof start === "string"
+		&& (await probe(pid).catch(() => undefined))?.id === start;
 	for (let name of names) {
 		let record = join(folder, name, "launch.json");
+		let launch: { pid?: unknown; start?: unknown; owner?: unknown; ownerStart?: unknown };
 		try {
-			let { pid, owner } = JSON.parse(readFileSync(record, "utf8")) as {
-				pid?: unknown;
-				owner?: unknown;
-			};
-			if (typeof owner === "number" && owner !== process.pid && alive(owner)) continue;
-			if (typeof pid === "number" && pid > 1 && process.platform !== "win32") {
-				try {
-					process.kill(-pid, "SIGKILL");
-				} catch { /* Gone already. */ }
-			}
+			launch = JSON.parse(readFileSync(record, "utf8"));
 		} catch {
 			// No record: an interrupted start, or one of another chopin's still being made.
 			let made = statSync(join(folder, name), { throwIfNoEntry: false })?.mtimeMs ?? 0;
 			if (Date.now() - made < 60_000) continue;
+			rmSync(join(folder, name), { recursive: true, force: true });
+			continue;
+		}
+		let { owner } = launch;
+		if (typeof owner === "number" && owner !== process.pid) {
+			// Its chopin still runs: by its recorded start where there is one, else by its number.
+			if (launch.ownerStart === undefined ? alive(owner) : await same(owner, launch.ownerStart)) {
+				continue;
+			}
+		}
+		if (process.platform !== "win32" && await same(launch.pid, launch.start)) {
+			try {
+				process.kill(-(launch.pid as number), "SIGKILL");
+			} catch { /* Gone already. */ }
 		}
 		rmSync(join(folder, name), { recursive: true, force: true });
 	}
 }
+
+/** This process's start, as `processStart` reads it, asked once. */
+let ownStart: Promise<string | undefined> | undefined;
 
 function alive(pid: number) {
 	try {
@@ -272,6 +308,7 @@ export function startVm(
 	base: string,
 	stdin: "pipe" | "ignore",
 	start: (program: string, words: string[], launch: StartOptions) => Spawned = startNvx,
+	wedged?: (detail: string) => void,
 ): Spawned {
 	makeWritable(spec);
 	let folder = join(launchesFolder(base), randomBytes(8).toString("hex"));
@@ -284,14 +321,29 @@ export function startVm(
 		{
 			stdin,
 			open: !spec.image,
+			...wedged ? { wedged } : {},
 		},
 	);
 	if (child.pid) {
-		writeFileSync(
-			join(folder, "launch.json"),
-			JSON.stringify({ pid: child.pid, owner: process.pid }),
-			{ mode: 0o600 },
-		);
+		let pid = child.pid;
+		let record = join(folder, "launch.json");
+		writeFileSync(record, JSON.stringify({ pid, owner: process.pid }), { mode: 0o600 });
+		// What identifies it and this process, so a later connector ends only this process.
+		let probe = processStart();
+		ownStart ??= probe(process.pid).then(found => found?.id, () => undefined);
+		void Promise.all([probe(pid).catch(() => undefined), ownStart]).then(([start, owner]) => {
+			if (!start || !existsSync(folder)) return;
+			writeFileSync(
+				record,
+				JSON.stringify({
+					pid,
+					start: start.id,
+					owner: process.pid,
+					...owner ? { ownerStart: owner } : {},
+				}),
+				{ mode: 0o600 },
+			);
+		}).catch(() => {});
 	}
 	let removed = false;
 	let remove = () => {
@@ -335,8 +387,10 @@ export function guestUser(): GuestUser {
 export const DISK_GIB = 32;
 
 /**
- * Makes a sparse ext4 image at `path` in a microVM of the release's own layer, whose `mkfs.ext4`
- * needs nothing of the host's. One that is there already is kept.
+ * Makes a sparse ext4 image at `path`: the file made sparse on the host, which takes on disk only
+ * what is written to it (on Windows NTFS fills a file a guest grows), then formatted in a microVM of
+ * the release's own layer, whose `mkfs.ext4` needs nothing of the host's, without discards, which
+ * NTFS doesn't take. One that is there already is kept.
  */
 export async function makeDisk(
 	path: string,
@@ -348,17 +402,31 @@ export async function makeDisk(
 	if (existsSync(path)) return;
 	let work = join(base, "nvx", "disks", randomBytes(6).toString("hex"));
 	mkdirSync(work, { recursive: true });
-	if (process.platform !== "win32") chmodSync(work, 0o777);
+	let made = join(work, "disk.ext4");
 	try {
+		let bytes = DISK_GIB * 1024 ** 3;
+		if (process.platform === "win32") sparseFile(made, bytes);
+		else {
+			writeFileSync(made, "");
+			truncateSync(made, bytes);
+			// The guest that formats it is the layer's own `nobody`.
+			chmodSync(work, 0o777);
+			chmodSync(made, 0o666);
+		}
 		let result = await runVm(
 			{
 				shares: [{ host: work, guest: "/out", mode: "rw" }],
 				proxyPort,
 				environment: { PATH: "/usr/sbin:/usr/bin:/sbin:/bin" },
 				command: [
-					"/bin/sh",
-					"-c",
-					`truncate -s ${DISK_GIB}G /out/disk.ext4 && mkfs.ext4 -q -F -m 0 -E lazy_itable_init=1,lazy_journal_init=1 /out/disk.ext4`,
+					"mkfs.ext4",
+					"-q",
+					"-F",
+					"-m",
+					"0",
+					"-E",
+					"lazy_itable_init=1,lazy_journal_init=1,nodiscard",
+					"/out/disk.ext4",
 				],
 				cwd: "/tmp",
 				memoryMib: 512,
@@ -369,8 +437,7 @@ export async function makeDisk(
 			base,
 			start,
 		);
-		let made = join(work, "disk.ext4");
-		if (result.code !== 0 || !existsSync(made)) {
+		if (result.code !== 0) {
 			throw new Error(
 				`Couldn't make a disk for a microVM (exit ${result.code}): ${
 					result.output.trim().split("\n").at(-1) ?? ""
@@ -405,7 +472,39 @@ function startNvx(program: string, words: string[], launch: StartOptions): Spawn
 		windowsHide: true,
 	}) as Spawned;
 	Object.defineProperty(child, "stdout", { value: withoutLaunchLine(child.stdout) });
+	if (process.platform === "win32" && child.pid) windowsStop(child, launch.wedged);
 	return child;
+}
+
+/**
+ * How a microVM ends on Windows, where killing `nvx.exe` leaves OpenVMM running and a VM killed in
+ * the middle of share I/O can wedge until Windows restarts. `nvx.exe` goes in a job that ends
+ * OpenVMM with it. Stopping first ends its stdin and waits `graceMs` for the workload, and so the
+ * VM, to end by itself; only then is the job killed. A VM still running 10 seconds after that is
+ * reported as wedged rather than taken for gone.
+ */
+function windowsStop(child: Spawned, wedged?: (detail: string) => void) {
+	let job = killJob(child.pid!);
+	let exited = new Promise<void>(resolve => child.once("exit", () => resolve()));
+	let ended = (ms: number) =>
+		Promise.race([exited.then(() => true), Bun.sleep(ms).then(() => false)]);
+	child.once("close", () => job?.close());
+	let stopping: Promise<void> | undefined;
+	child.stopMicrovm = graceMs =>
+		stopping ??= (async () => {
+			if (child.exitCode !== null || child.signalCode !== null) return;
+			try {
+				child.stdin?.end();
+			} catch { /* Already closed. */ }
+			if (await ended(graceMs)) return;
+			if (job) job.kill();
+			else child.kill();
+			if (await ended(10_000) && !job?.active()) return;
+			wedged?.(
+				`A microVM (nvx.exe ${child.pid}) didn't end when it was stopped, so OpenVMM may still `
+					+ "hold its memory until Windows restarts.",
+			);
+		})();
 }
 
 /**
@@ -418,7 +517,9 @@ export async function createSandbox(options: SandboxOptions): Promise<Sandbox> {
 	mkdirSync(directory, { recursive: true, mode: 0o700 });
 	// The state directory keeps what guests may write from the host's other users.
 	if (process.platform !== "win32") chmodSync(directory, statSync(directory).mode & 0o700);
-	endOrphans(directory);
+	await endOrphans(directory);
+	// Before anything is started that would have to be stopped again were it to fail.
+	let bridge = await guestBridge(directory);
 	let aiRelay = startAiRelay();
 	let hosts = [...allowedHosts(options.server, settings.hosts), aiRelay.host];
 	let proxy: Proxy = await startProxy({
@@ -426,7 +527,6 @@ export async function createSandbox(options: SandboxOptions): Promise<Sandbox> {
 		refused: (name, port) => options.refused?.(name, port),
 	});
 	let start = options.start ?? startNvx;
-	let bridge = await guestBridge(directory);
 	let images = new Map<string, AgentImage>();
 	try {
 		for (let [program, recipe] of options.recipes) {
@@ -474,7 +574,7 @@ export async function createSandbox(options: SandboxOptions): Promise<Sandbox> {
 				...settings.hidden ? { hidden: settings.hidden } : {},
 				files: [{ host: bridge, guest: GUEST_BRIDGE_PATH }],
 			});
-			return startVm(spec, setup, directory, launch.stdin, start);
+			return startVm(spec, setup, directory, launch.stdin, start, options.wedged);
 		},
 		aiRelay,
 		bridge: guestBridgeCommand(),

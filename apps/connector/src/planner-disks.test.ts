@@ -10,13 +10,21 @@ afterAll(() => rm(scratch, { recursive: true, force: true }));
 
 const DAY = 24 * 60 * 60_000;
 
-/** A state directory with a Planner slot for each of `documents`: its disk, tokens and agent state. */
-async function machine(documents: string[]) {
+/** The Chopin server the disks are for, and another the same state directory is paired with. */
+const A = "https://a.example";
+const B = "https://b.example";
+
+/**
+ * A state directory with a Planner slot for each of `documents`: its disk, tokens and agent state,
+ * on server A unless `servers` names another.
+ */
+async function machine(documents: string[], servers: Record<string, string> = {}) {
 	let directory = await mkdtemp(join(scratch, "state-"));
 	let folder = join(directory, "planners", "octo-org", "score");
 	await mkdir(folder, { recursive: true });
 	for (let document of documents) {
 		await writeFile(join(folder, `${document}.disk`), "");
+		await writeFile(join(folder, `${document}.server`), `${servers[document] ?? A}\n`);
 		await mkdir(join(folder, `${document}.tokens`));
 		await mkdir(join(folder, `${document}.agent`));
 	}
@@ -44,6 +52,7 @@ test("a Planner's disk goes once Chopin no longer has its document, its tokens a
 	} as unknown as Parameters<typeof sweepPlannerDisks>[0]["output"];
 	let removed = await sweepPlannerDisks({
 		directory: it.directory,
+		server: A,
 		output,
 		ask: async documents => {
 			asked.push(documents.sort());
@@ -57,12 +66,13 @@ test("a Planner's disk goes once Chopin no longer has its document, its tokens a
 	expect(it.kept(D(2))).toEqual([true, true, true]);
 	expect(it.kept(D(3))).toEqual([true, true, true]);
 	expect(said).toContain("Chopin no longer has its document");
-	expect(said).toContain("Commits on it that were never pushed went with it.");
+	expect(said).toContain("Any commits on it that were never pushed went with it.");
 	// Let go, it goes at the next sweep.
 	await release();
-	expect(await sweepPlannerDisks({ directory: it.directory, ask: async () => [D(3)] })).toEqual([
-		D(3),
-	]);
+	expect(await sweepPlannerDisks({ directory: it.directory, server: A, ask: async () => [D(3)] }))
+		.toEqual([
+			D(3),
+		]);
 });
 
 test("a disk another chopin holds is left, one a chopin that is gone held is taken over, and no launch starts on one another holds", async () => {
@@ -74,6 +84,7 @@ test("a disk another chopin holds is left, one a chopin that is gone held is tak
 		await writeFile(`${it.slot(D(2))}.disk.held`, "999999999");
 		let removed = await sweepPlannerDisks({
 			directory: it.directory,
+			server: A,
 			ask: async () => [D(1), D(2)],
 		});
 		expect(removed).toEqual([D(2)]);
@@ -86,6 +97,24 @@ test("a disk another chopin holds is left, one a chopin that is gone held is tak
 	}
 });
 
+test("a launch that asks for a disk while this process's sweep has it waits, then makes its own, which the sweep leaves", async () => {
+	let it = await machine([D(1)]);
+	let disk = `${it.slot(D(1))}.disk`;
+	let old = new Date(Date.now() - 40 * DAY);
+	await utimes(disk, old, old);
+	let sweep = sweepPlannerDisks({ directory: it.directory, server: A });
+	for (let wait = 0; wait < 200 && !existsSync(`${disk}.held`); wait++) await Bun.sleep(1);
+	let release = await holdDisk(disk, 5_000);
+	// The sweep took it before the launch could; the launch makes a new one, which stays its own.
+	expect(existsSync(disk)).toBe(false);
+	await writeFile(disk, "");
+	expect(await sweep).toEqual([D(1)]);
+	expect(existsSync(disk)).toBe(true);
+	expect(existsSync(`${disk}.held`)).toBe(true);
+	await release();
+	expect(existsSync(`${disk}.held`)).toBe(false);
+});
+
 test("a disk no Planner ran on for 30 days goes, a newer one stays, and Chopin out of reach keeps the rest", async () => {
 	let it = await machine([D(1), D(2)]);
 	let now = Date.now();
@@ -93,6 +122,7 @@ test("a disk no Planner ran on for 30 days goes, a newer one stays, and Chopin o
 	await utimes(`${it.slot(D(2))}.disk`, new Date(now - 29 * DAY), new Date(now - 29 * DAY));
 	let removed = await sweepPlannerDisks({
 		directory: it.directory,
+		server: A,
 		now,
 		ask: () => Promise.reject(new Error("Chopin is out of reach")),
 	});
@@ -100,19 +130,36 @@ test("a disk no Planner ran on for 30 days goes, a newer one stays, and Chopin o
 	expect(it.kept(D(2))).toEqual([true, true, true]);
 });
 
-test("an unpaired or revoked machine's disks all go, but one a launch still holds", async () => {
-	let it = await machine([D(1), D(2)]);
+test("an unpaired or revoked machine's disks all go, a spare's too, but one a launch still holds", async () => {
+	let it = await machine([D(1), D(2), "spare-0123456789ab"]);
 	await it.running(D(2));
 	let asked = false;
 	let removed = await sweepPlannerDisks({
 		directory: it.directory,
-		everything: true,
+		server: A,
+		everything: "unpaired",
 		ask: async () => {
 			asked = true;
 			return [];
 		},
 	});
 	expect(asked).toBe(false);
-	expect(removed).toEqual([D(1)]);
+	expect(removed.sort()).toEqual([D(1), "spare-0123456789ab"]);
 	expect(it.kept(D(2))).toEqual([true, true, true]);
+	expect(it.kept("spare-0123456789ab")).toEqual([false, false, false]);
+});
+
+test("only the server a disk's document is on may say it is gone, or unpair it away; age goes for any", async () => {
+	let it = await machine([D(1), D(2)], { [D(2)]: B });
+	// B answers that it has neither, as it has never had A's document.
+	expect(await sweepPlannerDisks({ directory: it.directory, server: B, ask: async ids => ids }))
+		.toEqual([D(2)]);
+	expect(it.kept(D(1))).toEqual([true, true, true]);
+	let more = await machine([D(1), D(2)], { [D(2)]: B });
+	expect(await sweepPlannerDisks({ directory: more.directory, server: B, everything: "unpaired" }))
+		.toEqual([D(2)]);
+	expect(more.kept(D(1))).toEqual([true, true, true]);
+	let now = Date.now();
+	await utimes(`${more.slot(D(1))}.disk`, new Date(now - 31 * DAY), new Date(now - 31 * DAY));
+	expect(await sweepPlannerDisks({ directory: more.directory, server: B, now })).toEqual([D(1)]);
 });

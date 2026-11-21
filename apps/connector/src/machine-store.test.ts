@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
 	existsSync,
+	lstatSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
 	rmSync,
 	statSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -222,6 +224,40 @@ describe("a machine's database login on the connector", () => {
 		plannerEnvironment(false, unmanaged, {}, store);
 		expect(existsSync(`${unmanaged}.agent`)).toBe(false);
 	});
+
+	test.skipIf(process.platform === "win32")(
+		"writes a Planner's settings through no link its microVM left in its agent state, and reads none",
+		async () => {
+			let store = new AgentStore(LOGIN, await storeAdapter(folder(), fakeInstall));
+			let outside = folder();
+			let victim = join(outside, "victim.json");
+			writeFileSync(victim, JSON.stringify({ token: "the person's own" }));
+			let slot = join(folder(), "doc-1");
+			let atomic = join(`${slot}.agent`, "atomic");
+			mkdirSync(atomic, { recursive: true });
+			// Its guest left the temporary file as a link out, and a settings.json of its own.
+			symlinkSync(victim, join(atomic, `settings.json.${process.pid}.tmp`));
+			writeFileSync(join(atomic, "settings.json"), JSON.stringify({ planted: "$(touch x)" }));
+			plannerEnvironment(true, slot, {}, store);
+			expect(JSON.parse(readFileSync(victim, "utf8"))).toEqual({ token: "the person's own" });
+			expect(lstatSync(join(atomic, "storage-password")).isFile()).toBe(true);
+			expect(readFileSync(join(atomic, "storage-password"), "utf8")).toBe(LOGIN.password);
+
+			// Or the whole Atomic directory as a link to a folder of the person's, or settings.json as a
+			// link to a file of theirs, read for what it holds.
+			rmSync(atomic, { recursive: true });
+			let theirs = folder();
+			symlinkSync(theirs, atomic);
+			plannerEnvironment(true, slot, {}, store);
+			expect(readdirSync(theirs)).toEqual([]);
+			expect(lstatSync(atomic).isDirectory()).toBe(true);
+			rmSync(join(atomic, "settings.json"));
+			symlinkSync(victim, join(atomic, "settings.json"));
+			plannerEnvironment(true, slot, {}, store);
+			expect(readFileSync(join(atomic, "settings.json"), "utf8")).not.toContain("the person's own");
+			expect(JSON.parse(readFileSync(victim, "utf8"))).toEqual({ token: "the person's own" });
+		},
+	);
 
 	test("takes a Planner's generated database settings away once it has no store, keeping the rest", async () => {
 		let store = new AgentStore(LOGIN, await storeAdapter(folder(), fakeInstall));

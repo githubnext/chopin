@@ -1649,19 +1649,23 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("POST", "/api/connector/connections", async request => {
 		compatible(request, auth.config.origin, options.connectorVersion);
 		let about = aboutMachine(request);
-		// Work goes only to a connector that runs it in microVMs: an older one is told to update, and
-		// one that says it can't is kept on the machine, as `/api/connector/capability` keeps it, and
-		// refused with its own words.
-		if (about.sandbox?.engine !== "nvx") {
-			microvmsOnly(request, auth.config.origin, options.connectorVersion);
-		}
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
-		let input = connectionSchema.parse(await body(request));
+		// Work goes only to a connector that runs it in microVMs. An older one is told to update, and
+		// one that says it can't is refused with its own words; either is kept on the machine, as
+		// `/api/connector/capability` keeps it, so the Machines page says why while it is away.
 		if (about.sandbox?.engine !== "nvx") {
-			let problem = about.sandbox?.engine === "none"
+			let older = protocolOf(request) < NVX_PROTOCOL;
+			let release = releaseVersion(request);
+			let problem = older
+				? {
+					reason: `Its chopin${release ? ` ${release}` : ""} runs agents outside a microVM.`,
+					fix: "chopin update",
+				}
+				: about.sandbox?.engine === "none"
 				? { reason: about.sandbox.reason, ...about.sandbox.fix ? { fix: about.sandbox.fix } : {} }
 				: undefined;
 			if (problem) await auth.storage.machines.vmProblem(machine.id, problem);
+			if (older) microvmsOnly(request, auth.config.origin, options.connectorVersion);
 			fail(
 				"microvm-required",
 				`This machine can't run Chopin's work: Chopin runs each agent in its own microVM. ${
@@ -1669,6 +1673,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				}`,
 			);
 		}
+		let input = connectionSchema.parse(await body(request));
 		if (machine.vmProblem) await auth.storage.machines.vmProblem(machine.id);
 		let protocol = protocolOf(request);
 		let anyRepository = protocol >= ANY_REPOSITORY_PROTOCOL;

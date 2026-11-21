@@ -1,6 +1,6 @@
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import type { Output } from "./output";
-import { agentFolder, plannerDisks, tokenFolder } from "./workspace";
+import { agentFolder, plannerDisks, plannerServer, tokenFolder } from "./workspace";
 
 /** How long a Planner's disk is kept after its Planner last ran, when Chopin says nothing of it. */
 export const PLANNER_DISK_DAYS = 30;
@@ -16,6 +16,8 @@ export type ForgetAsk = (documents: string[]) => Promise<string[]>;
 
 /** The holds this process has on disks, by lock file, each counted once per holder. */
 const held = new Map<string, number>();
+/** The lock files this process's sweeps hold while they look at a disk and remove it. */
+const sweeping = new Set<string>();
 
 function alive(pid: number) {
 	try {
@@ -40,6 +42,8 @@ async function lock(path: string): Promise<boolean> {
 		}
 		let owner = Number((await readFile(path, "utf8").catch(() => "")).trim());
 		if (owner > 0 && owner !== process.pid && alive(owner)) return false;
+		// This process's own: a sweep of it, or a launch, has it.
+		if (owner === process.pid && (sweeping.has(path) || held.has(path))) return false;
 		// Left by a process that is gone, or one this process no longer holds: taken over.
 		await rm(path, { force: true });
 	}
@@ -82,6 +86,7 @@ export async function holdDisk(disk: string, waitMs = 10_000): Promise<() => Pro
 /** Removes a Planner's slot: its disk, its token folder and its agents' state. */
 export async function removePlannerSlot(slot: string) {
 	await rm(`${slot}.disk`, { force: true });
+	await rm(plannerServer(slot), { force: true });
 	await rm(tokenFolder(slot), { recursive: true, force: true });
 	await rm(agentFolder(slot), { recursive: true, force: true });
 }
@@ -91,35 +96,39 @@ export async function removePlannerSlot(slot: string) {
  * `holdDisk`): each of a document Chopin says is archived or gone, and each no Planner has run on
  * for `days`. Each is taken as a launch takes it before it is looked at, so no launch can start on
  * it while it goes. A disk holds the Planner's own clone, so commits on it that were never pushed go
- * with it; the words say so. With `everything`, as when the machine is unpaired or revoked, every
- * disk not held goes.
+ * with it; the words say so. With `everything`, why the machine is unpaired or revoked, every disk of
+ * that server's not held goes, a spare's that never got a document too.
  */
 export async function sweepPlannerDisks(options: {
 	directory: string;
+	/** The Chopin server asked, or unpaired from: only its documents' disks go but by age. */
+	server: string;
 	output?: Output;
 	ask?: ForgetAsk;
 	now?: number;
 	days?: number;
-	everything?: boolean;
+	everything?: string;
 }): Promise<string[]> {
 	let busy = (path: string) => (held.get(`${path}.held`) ?? 0) > 0;
-	let disks = (await plannerDisks(options.directory)).filter(item =>
-		!item.earlier && !busy(item.path)
+	let disks = (await plannerDisks(options.directory, { spares: !!options.everything })).filter(
+		item => !item.earlier && !busy(item.path),
 	);
 	if (!disks.length) return [];
-	let forget = options.everything ? new Set(disks.map(item => item.document)) : new Set<string>();
-	if (!options.everything && options.ask) {
-		let asked = await options.ask([...new Set(disks.map(item => item.document))]).catch(() => []);
+	// Another server's documents are never this one's to forget.
+	let ours = disks.filter(item => item.server === options.server);
+	let forget = options.everything ? new Set(ours.map(item => item.document)) : new Set<string>();
+	if (!options.everything && options.ask && ours.length) {
+		let asked = await options.ask([...new Set(ours.map(item => item.document))]).catch(() => []);
 		for (let document of asked) forget.add(document);
 	}
+	let forgotten = (item: (typeof disks)[number]) =>
+		item.server === options.server && forget.has(item.document);
 	let now = options.now ?? Date.now();
 	let oldest = now - (options.days ?? PLANNER_DISK_DAYS) * 24 * 60 * 60_000;
 	let removed: string[] = [];
 	for (let item of disks) {
-		let why = forget.has(item.document)
-			? options.everything
-				? "this machine was unpaired from Chopin"
-				: "Chopin no longer has its document"
+		let why = forgotten(item)
+			? options.everything ?? "Chopin no longer has its document"
 			: ((await stat(item.path).catch(() => undefined))?.mtimeMs ?? now) < oldest
 			? `no Planner ran on it for ${options.days ?? PLANNER_DISK_DAYS} days`
 			: undefined;
@@ -128,21 +137,23 @@ export async function sweepPlannerDisks(options: {
 		// holds is left.
 		let path = `${item.path}.held`;
 		if (busy(item.path) || !await lock(path)) continue;
+		sweeping.add(path);
 		try {
 			// Its age read again, now that no launch can touch it.
-			if (!forget.has(item.document)) {
+			if (!forgotten(item)) {
 				let used = (await stat(item.path).catch(() => undefined))?.mtimeMs ?? now;
 				if (used >= oldest) continue;
 			}
 			await removePlannerSlot(item.path.slice(0, -".disk".length));
 		} finally {
+			sweeping.delete(path);
 			await rm(path, { force: true });
 		}
 		removed.push(item.document);
 		options.output?.say(
 			options.output.style.dim(
 				`… Removed the disk of ${item.document}'s Planner (${item.repository}): ${why}. `
-					+ "Commits on it that were never pushed went with it.",
+					+ "Any commits on it that were never pushed went with it.",
 			),
 		);
 	}

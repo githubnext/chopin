@@ -57,14 +57,29 @@ export function machineState(
 	return machine.reauthorize ? "reauthorize" : machine.connected ? "connected" : "offline";
 }
 
+/**
+ * Why a machine away from Chopin can't run its work, as its connector last said (it can't run
+ * agents in microVMs, or its chopin is too old to), with the fix; undefined for any other.
+ */
+export function cannotRun(
+	machine: Pick<Machine, "connected"> & { sandbox?: Machine["sandbox"] },
+): { reason: string; fix?: string } | undefined {
+	let report = machine.sandbox;
+	return !machine.connected && report?.engine === "none" ? report : undefined;
+}
+
 /** What the dot means, in words: the status line beside it, and the dot's own name where alone. */
 export function statusWords(
-	machine: Pick<Machine, "connected" | "lastSeenAt"> & { reauthorize?: boolean },
+	machine: Pick<Machine, "connected" | "lastSeenAt"> & {
+		reauthorize?: boolean;
+		sandbox?: Machine["sandbox"];
+	},
 	now: number,
 ): string {
 	let state = machineState(machine);
 	if (state === "reauthorize") return "Needs reconnecting";
 	if (state === "connected") return "Connected";
+	if (cannotRun(machine)) return "Can't run work";
 	return `Last seen ${ago(new Date(machine.lastSeenAt).toISOString(), now) ?? "a while ago"}`;
 }
 
@@ -155,17 +170,30 @@ export function StatusDot({ label, state }: { label?: string; state: MachineStat
 		: <span aria-hidden="true" className="status-dot" data-state={state} />;
 }
 
-/** The dot, then the state in quiet words, as the Last seen column shows it. */
+/**
+ * The dot, then the state in quiet words, as the Last seen column shows it; for a machine that
+ * can't run work, why and the fix, where its owner reads it to put it right.
+ */
 function Status(
 	{ machine, now }: {
-		machine: Pick<Machine, "connected" | "lastSeenAt"> & { reauthorize?: boolean };
+		machine: Pick<Machine, "connected" | "lastSeenAt"> & {
+			reauthorize?: boolean;
+			sandbox?: Machine["sandbox"];
+		};
 		now: number;
 	},
 ) {
+	let unable = cannotRun(machine);
 	return (
 		<span className="machines-status">
 			<StatusDot state={machineState(machine)} />
 			{statusWords(machine, now)}
+			{unable && (
+				<span className="machines-secondary">
+					{unable.reason}
+					{unable.fix && <code>{unable.fix}</code>}
+				</span>
+			)}
 		</span>
 	);
 }

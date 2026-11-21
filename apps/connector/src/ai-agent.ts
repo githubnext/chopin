@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { AiProvider, AiProviderGrant } from "@chopin/protocol/ai-credentials";
 import type { RelayedLaunch } from "./ai-relay";
@@ -177,6 +177,7 @@ export function managedEnvironment(
  * owner's `~/.atomic`, out of a sandboxed launch's reach), Copilot's, Claude's and Codex's.
  */
 export function privateAgentState(home: string): Record<string, string> {
+	realDirectory(home);
 	let atomic = join(home, "atomic");
 	let places = {
 		ATOMIC_CODING_AGENT_DIR: atomic,
@@ -186,10 +187,37 @@ export function privateAgentState(home: string): Record<string, string> {
 		CLAUDE_CONFIG_DIR: join(home, "claude"),
 		CODEX_HOME: join(home, "codex"),
 	};
-	for (let directory of new Set(Object.values(places))) {
-		mkdirSync(directory, { recursive: true, mode: 0o700 });
-	}
+	for (let directory of new Set(Object.values(places))) realDirectory(directory);
 	return places;
+}
+
+/**
+ * Makes `path` a directory of the connector's own where a guest may have left something else: a
+ * folder shared writable with a microVM is the guest's, and a link it makes there is a real link on
+ * the host, which the connector's writes would follow out of it. Whatever is there that is not a
+ * directory goes (removing a link removes the link, never what it names), and the directory is made.
+ */
+export function realDirectory(path: string) {
+	let found = lstatSync(path, { throwIfNoEntry: false });
+	if (found && !found.isDirectory()) rmSync(path, { force: true });
+	mkdirSync(path, { recursive: true, mode: 0o700 });
+}
+
+/**
+ * Writes `text` to `path` in a folder a guest writes too: never through a link the guest left, at
+ * `path` or the temporary beside it, which is made new (`wx`) and renamed over whatever `path` was.
+ */
+export function writeOwn(path: string, text: string) {
+	let temporary = `${path}.${process.pid}.tmp`;
+	rmSync(temporary, { force: true });
+	writeFileSync(temporary, text, { mode: 0o600, flag: "wx" });
+	renameSync(temporary, path);
+}
+
+/** What `path` holds where it is a file of its own, never what a link a guest left there names. */
+export function readOwn(path: string): string | undefined {
+	if (!lstatSync(path, { throwIfNoEntry: false })?.isFile()) return undefined;
+	return readFileSync(path, "utf8");
 }
 
 /** `env` without anything of the owner's agent setup: their model credentials and configuration. */
@@ -294,10 +322,9 @@ export function agentAiEnvironment(options: {
 	let places = privateAgentState(home);
 	let atomic = places.ATOMIC_CODING_AGENT_DIR;
 	if (atomicAgent(options.command)) {
-		writeFileSync(
+		writeOwn(
 			join(atomic, "models.json"),
 			JSON.stringify(atomicModels(providers, relayed), null, "\t") + "\n",
-			{ mode: 0o600 },
 		);
 	}
 	let env: Record<string, string> = {

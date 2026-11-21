@@ -12,6 +12,7 @@ import {
 	type VmContext,
 	type VmLaunch,
 	vmSpec,
+	within,
 } from "./nvx";
 
 function host(values: Partial<SupportHost> & { devices?: Record<string, boolean> }): SupportHost {
@@ -19,10 +20,13 @@ function host(values: Partial<SupportHost> & { devices?: Record<string, boolean>
 	return {
 		platform: values.platform ?? "linux",
 		arch: values.arch ?? "x64",
+		...values.uid === undefined ? {} : { uid: values.uid },
 		exists: path => path in devices,
 		readWrite: path => devices[path] === true,
 	};
 }
+
+const WHP = "C:\\Windows\\System32\\WinHvPlatform.dll";
 
 describe("which machines can run NVX", () => {
 	test("Linux on x86_64 with read and write access to /dev/kvm runs it on KVM", () => {
@@ -41,11 +45,25 @@ describe("which machines can run NVX", () => {
 		});
 	});
 
-	test("Windows on x86_64 is checked by starting a microVM, so it passes here", () => {
-		expect(nvxSupport(host({ platform: "win32" }))).toEqual({
+	test("Windows on x86_64 with the Windows Hypervisor Platform runs it, and without it is told how to turn it on", () => {
+		expect(nvxSupport(host({ platform: "win32", devices: { [WHP]: false } }))).toEqual({
 			supported: true,
 			hypervisor: "whp",
 			package: "windows-whp",
+		});
+		expect(nvxSupport(host({ platform: "win32" }))).toEqual({
+			supported: false,
+			reason: "The Windows Hypervisor Platform is off.",
+			fix: "In an administrator PowerShell: Enable-WindowsOptionalFeature -Online -FeatureName "
+				+ "HypervisorPlatform -All, then restart",
+		});
+	});
+
+	test("chopin running as root is refused, as a microVM's agent can't run as root", () => {
+		expect(nvxSupport(host({ uid: 0, devices: { "/dev/kvm": true } }))).toEqual({
+			supported: false,
+			reason: "chopin runs as root here, and a microVM's agent can't run as root.",
+			fix: "Run chopin as your own user",
 		});
 	});
 
@@ -171,7 +189,12 @@ describe("what a launch's microVM is given", () => {
 	});
 
 	test("what the owner adds is shared too, and what they hide is denied inside the share holding it", () => {
-		let spec = vmSpec({ ...launch, reads: ["/home/mona/src/app"], repository: undefined }, {
+		let spec = vmSpec({
+			...launch,
+			cwd: "/home/mona/src/app",
+			reads: ["/home/mona/src/app"],
+			repository: undefined,
+		}, {
 			...CONTEXT,
 			writable: ["/home/mona/.npm"],
 			hidden: ["/home/mona/src/app/.env", "/home/mona/.ssh"],
@@ -199,12 +222,65 @@ describe("what a launch's microVM is given", () => {
 		);
 	});
 
+	test("a folder the owner lets agents write never makes what a launch only reads writable", () => {
+		let code = "/home/mona/src";
+		let checkout = `${code}/app`;
+		// A run whose clone's source is inside it, and a Planner whose checkout it is or holds.
+		for (
+			let [writable, given] of [
+				[[code], launch],
+				[[checkout], {
+					...launch,
+					reads: [checkout],
+					repository: { source: `${checkout}/.git`, path: "/work/app", dissociate: true },
+				}],
+				[[`${checkout}/.git`], launch],
+				[[`${run}.tokens`], launch],
+			] as Array<[string[], VmLaunch]>
+		) {
+			expect(() => vmSpec(given, { ...CONTEXT, writable })).toThrow(
+				/would be shared writable and holds .*, which a microVM may only read/,
+			);
+		}
+	});
+
+	test("no share a guest writes holds anything it may only read", () => {
+		let shapes: Array<[VmLaunch, readonly string[]]> = [
+			[launch, []],
+			[launch, ["/home/mona/.npm"]],
+			[{ ...launch, reads: ["/home/mona/src/app"] }, ["/home/mona/.cache"]],
+			[{ ...launch, repository: undefined, cwd: `${run}.agent` }, ["/home/mona/scratch"]],
+		];
+		for (let [given, writable] of shapes) {
+			let spec = vmSpec(given, { ...CONTEXT, writable });
+			let readOnly = [
+				...given.reads ?? [],
+				...given.repository ? [given.repository.source] : [],
+				...(given.own ?? []).filter(path => path !== given.agentHome),
+			];
+			for (let share of spec.shares.filter(share => share.mode === "rw")) {
+				for (let path of readOnly) expect(within(path, share.host, "linux")).toBe(false);
+			}
+		}
+	});
+
 	test("no share holds another or chopin's state directory", () => {
 		// A folder it writes inside one it only reads would be written through the one it reads.
 		expect(() => vmSpec({ ...launch, writable: [`${run}.tokens/sub`] }, CONTEXT)).toThrow(/holds/);
-		// One it only reads inside another it is given is given with that one.
-		expect(vmSpec({ ...launch, reads: [`${run}.agent/sub`] }, CONTEXT).shares).toHaveLength(3);
+		// One it only reads inside another it only reads is given with that one.
+		let nested = vmSpec(
+			{ ...launch, reads: ["/home/mona/src/app", "/home/mona/src/app/docs"] },
+			CONTEXT,
+		).shares.map(share => `${share.host} ${share.mode}`);
+		expect(nested).toContain("/home/mona/src/app ro");
+		expect(nested.some(share => share.startsWith("/home/mona/src/app/"))).toBe(false);
 		expect(() => vmSpec({ ...launch, reads: ["/home/mona"] }, CONTEXT)).toThrow(/state directory/);
+	});
+
+	test("a checkout where the guest clones repositories, or keeps its agent, is refused", () => {
+		for (let checkout of ["/work/chopin", "/opt/chopin/agent"]) {
+			expect(() => vmSpec({ ...launch, reads: [checkout] }, CONTEXT)).toThrow(SandboxRefused);
+		}
 	});
 
 	test("a path the guest can't be given is refused before anything starts", () => {

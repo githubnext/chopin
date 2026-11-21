@@ -233,7 +233,7 @@ test.skipIf(process.platform === "win32")(
 			// Its slot, and the disk its repository is on, are the document's for good.
 			expect(await plannerSlot(it.directory, REPOSITORY, "D_1")).toBe(slot);
 			expect(await plannerDisks(it.directory)).toEqual([
-				{ path: `${slot}.disk`, repository: REPOSITORY, document: "D_1" },
+				{ path: `${slot}.disk`, repository: REPOSITORY, document: "D_1", server: server.url },
 			]);
 
 			// The replacement starts a moment later, in a slot of its own.

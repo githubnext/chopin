@@ -16,6 +16,7 @@ import {
 	assignedSlots,
 	plannerDisk,
 	plannerFolder,
+	plannerServer,
 	SPARE_SLOT,
 	type SpareState,
 	type SpareStates,
@@ -175,6 +176,7 @@ async function writeRecord(directory: string, value: SpareRecord) {
 /** Remove a slot that never got a document: its disk, its token folder and its agents' state. */
 async function removeSlot(slot: string) {
 	await rm(plannerDisk(slot), { force: true });
+	await rm(plannerServer(slot), { force: true });
 	await rm(slot, { recursive: true, force: true });
 	await rm(tokenFolder(slot), { recursive: true, force: true });
 	await rm(agentFolder(slot), { recursive: true, force: true });
@@ -298,6 +300,7 @@ export function plannerSpares(options: {
 		try {
 			releaseDisk = await holdDisk(plannerDisk(slot));
 			await mkdir(tokens, { recursive: true, mode: 0o700 });
+			await writeFile(plannerServer(slot), `${options.url}\n`, { mode: 0o600 });
 			await options.sandbox.makeDisk?.(plannerDisk(slot));
 			head = String((await gitAsync(["rev-parse", "HEAD"], { cwd: entry.checkout })).stdout).trim();
 		} catch (error) {

@@ -1,5 +1,4 @@
 import {
-	chmodSync,
 	cpSync,
 	existsSync,
 	mkdirSync,
@@ -19,6 +18,7 @@ import { failureCause, redacted } from "./connection";
 import { classifyConnectorError, machineStoreLogin } from "./machine";
 import { ConnectorError } from "./mcp";
 import type { Output } from "./output";
+import { readOwn, realDirectory, writeOwn } from "./ai-agent";
 
 /** The adapter releases agents here are given, as the Atomic they run. */
 export const STORE_ADAPTER_RANGE = "^0.10.0";
@@ -50,11 +50,9 @@ function adapterInRange(root: string): boolean {
 	return typeof version === "string" && Bun.semver.satisfies(version, STORE_ADAPTER_RANGE);
 }
 
+/** An agent's Atomic directory is shared writable with its microVM, so nothing a link names is written. */
 function writePrivate(path: string, text: string) {
-	let temporary = `${path}.${process.pid}.tmp`;
-	writeFileSync(temporary, text, { mode: 0o600 });
-	chmodSync(temporary, 0o600);
-	renameSync(temporary, path);
+	writeOwn(path, text);
 }
 
 export function storageSettings(url: string, passwordFile: string) {
@@ -164,7 +162,8 @@ export async function storeAdapter(
 
 function agentSettings(path: string): Record<string, unknown> {
 	try {
-		let parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+		// Never what a link a guest left there names: that could be any of the person's files.
+		let parsed: unknown = JSON.parse(readOwn(path) ?? "");
 		return parsed && typeof parsed === "object" && !Array.isArray(parsed)
 			? parsed as Record<string, unknown>
 			: {};
@@ -216,7 +215,9 @@ export class AgentStore {
 	}
 
 	write(atomicDirectory: string) {
-		mkdirSync(atomicDirectory, { recursive: true, mode: 0o700 });
+		realDirectory(atomicDirectory);
+		// Made new, as a link a guest left in its place would send the copy elsewhere.
+		rmSync(join(atomicDirectory, "npm"), { recursive: true, force: true });
 		cpSync(this.adapter, join(atomicDirectory, "npm"), { recursive: true });
 		let password = join(atomicDirectory, "storage-password");
 		let storage = storageSettings(this.login.url, password);
