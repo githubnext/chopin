@@ -290,6 +290,7 @@ describe("Agent connection messages", () => {
 			sessionChoice: AGENT_FEATURES.sessionChoice,
 			aiCredentials: AGENT_FEATURES.aiCredentials,
 			aiCatalog: AGENT_FEATURES.aiCatalog,
+			catalogLaunches: AGENT_FEATURES.catalogLaunches,
 			aiLaunchHeader: AI_LAUNCH_HEADER,
 			restartResumeRetryMs: RESTART_RESUME_RETRY_MS,
 		});
@@ -414,6 +415,28 @@ describe("Agent connection messages", () => {
 		expect(parseClientMessage(JSON.stringify({ type: "ai-catalog", ai }))).toMatchObject({
 			ok: false,
 		});
+	});
+
+	it("names a catalog launch in `ai-catalog`, and the one a `capabilities` report was listed through", () => {
+		expect(AGENT_FEATURES.catalogLaunches).toBe("catalog-launches");
+		let handed = {
+			type: "ai-catalog",
+			ai: { providers: [], withheld: [] },
+			catalogLaunch: "c-1",
+		} as const;
+		expect(parseServerMessage(encodeMessage(handed))).toEqual({ ok: true, message: handed });
+		let report = {
+			type: "capabilities",
+			catalog: { models: { available: [{ id: "acme/large", name: "Large" }] } },
+			catalogLaunch: "c-1",
+		} as const;
+		expect(parseClientMessage(encodeMessage(report))).toEqual({ ok: true, message: report });
+		for (let wrong of ["", "c".repeat(129), 1]) {
+			expect(parseServerMessage(JSON.stringify({ ...handed, catalogLaunch: wrong })))
+				.toMatchObject({ ok: false });
+			expect(parseClientMessage(JSON.stringify({ ...report, catalogLaunch: wrong })))
+				.toMatchObject({ ok: false });
+		}
 	});
 
 	it("names the Chat message a turn answers, and a retry of it as `true` or nothing", () => {

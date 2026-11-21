@@ -111,6 +111,20 @@ export const AGENT_FEATURES = {
 	 * request on them. Without the feature neither message is sent.
 	 */
 	aiCatalog: "ai-catalog",
+	/**
+	 * With `ai-catalog`: each `ai-catalog` names its launch in `catalogLaunch`, an opaque id that is
+	 * no credential, new with every `ai-catalog`, renewals and one with no providers included. A
+	 * `capabilities` report names, in `catalogLaunch`, the `ai-catalog` whose grants its models were
+	 * listed through, read with them, never a list saved or read under another. The server takes a
+	 * report as what the client offers only while the launch it names was handed for the person's
+	 * AI accounts as they are now: a report naming none, or one handed before the person connected,
+	 * replaced or removed an account, is no report, so a client lists its models again through each
+	 * new `catalogLaunch` and reports them naming it, even when they are the same. Without the
+	 * feature, a report counts for the latest catalog launch handed when it arrives, and for none
+	 * before the first is handed or between a change of the person's accounts and the launch
+	 * handed for them.
+	 */
+	catalogLaunches: "catalog-launches",
 } as const;
 
 /**
@@ -529,9 +543,15 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
 	z.strictObject({ type: z.literal("detach") }),
 	/**
 	 * With `capability-catalog`: what the client offers now, sent right after `attached` (and
-	 * after any `resume`, which stays the first message) and again whenever it changes.
+	 * after any `resume`, which stays the first message) and again whenever it changes. With
+	 * `catalog-launches`, `catalogLaunch` names the `ai-catalog` its models were listed through.
 	 */
-	z.strictObject({ type: z.literal("capabilities"), catalog: capabilityCatalogSchema }),
+	z.strictObject({
+		type: z.literal("capabilities"),
+		catalog: capabilityCatalogSchema,
+		/** With `catalog-launches`. */
+		catalogLaunch: id.optional(),
+	}),
 	/**
 	 * With `resumable-sessions`, the first message after `attached`: the sessions this client
 	 * still holds from a link that dropped, and the questions each still waits on.
@@ -687,8 +707,14 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
 	/**
 	 * With `ai-catalog`, once the client asked: the link's catalog grants, which list models and run
 	 * none, replacing any earlier ones. An empty `providers` says the account has none to list now.
+	 * With `catalog-launches`, `catalogLaunch` names this launch, and every one is new.
 	 */
-	z.strictObject({ type: z.literal("ai-catalog"), ai: aiGrantsSchema }),
+	z.strictObject({
+		type: z.literal("ai-catalog"),
+		ai: aiGrantsSchema,
+		/** With `catalog-launches`. */
+		catalogLaunch: id.optional(),
+	}),
 	/**
 	 * With `steer-turn`: a person's message for the turn that is running, to read at its next
 	 * step. The client answers with `control-result`, `ok: false` when the turn has ended.

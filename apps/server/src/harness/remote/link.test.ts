@@ -52,7 +52,7 @@ import { remoteCatalog } from "../catalog";
 import { plannerCatalog, plannerOffered, plannerOfferKnown } from "../harnesses";
 import { createRemoteAdapter } from "./adapter";
 import { admitAgent } from "./endpoint";
-import type { AgentAi } from "./endpoint";
+import type { AgentAi, AgentHooks } from "./endpoint";
 import { remotePlanner } from "./registry";
 import { testLease } from "../../storage/contract-support";
 import { AiCredentials } from "../../ai/credentials";
@@ -2744,7 +2744,11 @@ describe("Agent connection AI launches", () => {
 	});
 
 	/** A link whose client offered `features` and attached, on launches that hand out catalog launches too. */
-	async function attachedForCatalog(features: string, made = launches()) {
+	async function attachedForCatalog(
+		features: string,
+		made = launches(),
+		hooks: { catalogChanged?: AgentHooks["catalogChanged"] } = {},
+	) {
 		let { auth, channel } = await linkAuth();
 		let catalogs: Array<{ userId: string; machineId?: string; channelId: string; linkId: string }> =
 			[];
@@ -2768,12 +2772,15 @@ describe("Agent connection AI launches", () => {
 			};
 		};
 		made.ai.held = (launchId, holding) => void held.push([launchId, holding]);
-		let server = linkServer(auth, 2_000, undefined, 2_000, undefined, undefined, { ai: made.ai });
+		let server = linkServer(auth, 2_000, undefined, 2_000, undefined, undefined, {
+			ai: made.ai,
+			...hooks,
+		});
 		cleanups.push(server.stop);
 		let raw = await rawLink(server.url, undefined, features);
 		raw.send({ type: "attach", version: 1, document: channel.id });
 		await raw.next("attached");
-		return { ...made, raw, channel, catalogs, held };
+		return { ...made, raw, channel, catalogs, held, server, link: server.links.at(-1)! };
 	}
 
 	it("hands a client that asks the link's catalog launch, owned by the link, again when the person's credentials change, and ends it with the link", async () => {
@@ -2926,6 +2933,143 @@ describe("Agent connection AI launches", () => {
 		expect(noCredentials.catalogs).toEqual([]);
 		noCredentials.raw.send({ type: "detach" });
 		await noCredentials.raw.closed;
+	});
+
+	/** What the old account's Copilot offers, and what the token connected in its place offers. */
+	const OLD = {
+		models: { available: [{ id: "github-copilot/gpt-old", name: "GPT Old" }] },
+		commands: [{ name: "release-notes", kind: "skill" }],
+	};
+	const NEW = {
+		models: { available: [{ id: "github-copilot/gemini-4-neon", name: "Gemini 4 Neon" }] },
+		commands: [{ name: "release-notes", kind: "skill" }],
+	};
+
+	it("counts a report only through a catalog launch of the person's accounts as they are now, with catalog-launches", async () => {
+		let told: unknown[] = [];
+		let { raw, link, changed, ai } = await attachedForCatalog(
+			"capability-catalog, ai-credentials, ai-catalog, catalog-launches",
+			launches(),
+			{ catalogChanged: (_id, reported) => void told.push(reported.catalog) },
+		);
+		// A list told on attach names no launch: kept from accounts nobody can name now.
+		raw.send({ type: "capabilities", catalog: OLD });
+		raw.send({ type: "ai-catalog" });
+		let first = await raw.next("ai-catalog");
+		expect(first.catalogLaunch).toEqual(expect.any(String));
+		expect(link.catalog).toBeUndefined();
+		expect(link.catalogPending).toBe(true);
+		raw.send({ type: "capabilities", catalog: OLD, catalogLaunch: first.catalogLaunch });
+		await until(() => link.catalog !== undefined, 1_000);
+		expect(link.catalog).toEqual(OLD);
+		expect(link.catalogPending).toBe(false);
+
+		// Someone else's accounts changing changes nothing here.
+		changed("U_rival");
+		expect(link.catalog).toEqual(OLD);
+
+		// The person connects a token of another account: the next launch waits, so the old one's
+		// report can arrive before it is handed.
+		let preparing = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		let catalog = ai.catalog!;
+		ai.catalog = async input => {
+			preparing.resolve();
+			await release.promise;
+			return catalog(input);
+		};
+		changed("U_member");
+		// At once, before any new launch is handed: the old list is no longer what the client offers.
+		expect(link.catalog).toBeUndefined();
+		expect(link.catalogPending).toBe(true);
+		expect(told).toEqual([OLD, undefined]);
+		// Its commands are the client's own, and stay.
+		expect(link.lastReport).toEqual(OLD);
+		let offered = false;
+		void link.offered.then(() => offered = true);
+		await preparing.promise;
+		raw.send({ type: "capabilities", catalog: OLD, catalogLaunch: first.catalogLaunch });
+		raw.send({ type: "capabilities", catalog: OLD });
+		await Bun.sleep(50);
+		expect(link.catalog).toBeUndefined();
+		expect(offered).toBe(false);
+
+		release.resolve();
+		let second = await raw.next("ai-catalog");
+		expect(second.catalogLaunch).toEqual(expect.any(String));
+		expect(second.catalogLaunch).not.toBe(first.catalogLaunch);
+		// A computation through the old launch that ends late still counts for nobody.
+		raw.send({ type: "capabilities", catalog: OLD, catalogLaunch: first.catalogLaunch });
+		raw.send({ type: "capabilities", catalog: NEW, catalogLaunch: second.catalogLaunch });
+		await until(() => link.catalog !== undefined, 1_000);
+		expect(link.catalog).toEqual(NEW);
+		expect(offered).toBe(true);
+		expect(told).toEqual([OLD, undefined, NEW]);
+		raw.send({ type: "capabilities", catalog: OLD, catalogLaunch: first.catalogLaunch });
+		await Bun.sleep(50);
+		expect(link.catalog).toEqual(NEW);
+		raw.send({ type: "detach" });
+		await raw.closed;
+	});
+
+	it("counts a report of a client that names no launch only while the latest catalog launch handed is for the person's accounts as they are now", async () => {
+		let { raw, link, changed, ai } = await attachedForCatalog(
+			"capability-catalog, ai-credentials, ai-catalog",
+		);
+		// Before any launch is handed, a report can only be a list kept from earlier accounts.
+		raw.send({ type: "capabilities", catalog: OLD });
+		raw.send({ type: "ai-catalog" });
+		let first = await raw.next("ai-catalog");
+		expect("catalogLaunch" in first).toBe(false);
+		expect(link.catalog).toBeUndefined();
+		raw.send({ type: "capabilities", catalog: OLD });
+		await until(() => link.catalog !== undefined, 1_000);
+		expect(link.catalog).toEqual(OLD);
+
+		let preparing = Promise.withResolvers<void>();
+		let release = Promise.withResolvers<void>();
+		let catalog = ai.catalog!;
+		ai.catalog = async input => {
+			preparing.resolve();
+			await release.promise;
+			return catalog(input);
+		};
+		changed("U_member");
+		expect(link.catalog).toBeUndefined();
+		await preparing.promise;
+		// Between the change and the launch for the new accounts, nothing counts.
+		raw.send({ type: "capabilities", catalog: OLD });
+		await Bun.sleep(50);
+		expect(link.catalog).toBeUndefined();
+		release.resolve();
+		await raw.next("ai-catalog");
+		raw.send({ type: "capabilities", catalog: NEW });
+		await until(() => link.catalog !== undefined, 1_000);
+		expect(link.catalog).toEqual(NEW);
+
+		// Naming a launch is the feature's alone.
+		raw.send({ type: "capabilities", catalog: NEW, catalogLaunch: "c-1" });
+		expect(await raw.next("error")).toMatchObject({ code: "protocol" });
+		await raw.closed;
+	});
+
+	it("names even an empty catalog grant, and counts the report that answers it", async () => {
+		let { raw, link, ai } = await attachedForCatalog(
+			"capability-catalog, ai-credentials, ai-catalog, catalog-launches",
+		);
+		ai.catalog = async () => {
+			throw new AiLaunchRefused("no-ai-account", []);
+		};
+		raw.send({ type: "ai-catalog" });
+		let empty = await raw.next("ai-catalog");
+		expect(empty.ai).toEqual({ providers: [], withheld: [] });
+		expect(empty.catalogLaunch).toEqual(expect.any(String));
+		raw.send({ type: "capabilities", catalog: {}, catalogLaunch: empty.catalogLaunch });
+		await until(() => link.catalog !== undefined, 1_000);
+		expect(link.catalog).toEqual({});
+		expect(link.catalogPending).toBe(false);
+		raw.send({ type: "detach" });
+		await raw.closed;
 	});
 
 	it("leaves a client that did not offer ai-credentials as it was: no launch, and no grants", async () => {

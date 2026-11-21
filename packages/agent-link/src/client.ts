@@ -36,6 +36,7 @@ export const WIRE = {
 	sessionChoice: "session-choice",
 	aiCredentials: "ai-credentials",
 	aiCatalog: "ai-catalog",
+	catalogLaunches: "catalog-launches",
 	/** The header a runner sends the launch's own credential in, to Chopin's credential proxy. */
 	aiLaunchHeader: "x-chopin-launch",
 	/** How often a client retries a `resume` refused with `retry`, after a `restarting` notice. */
@@ -100,7 +101,7 @@ export type AgentHandlers = {
 	/**
 	 * Takes the link's catalog grants, which list the person's models and run none, replacing any
 	 * earlier ones. Having it, with `ai`, asks for `ai-catalog`, and the client asks for them once
-	 * attached.
+	 * attached. With `AgentOptions.catalogLaunches`, each names its launch in `catalogLaunch`.
 	 */
 	aiCatalog?(message: ServerMessageOf<"ai-catalog">): void | Promise<void>;
 };
@@ -154,6 +155,14 @@ export type AgentOptions = {
 	 * what it runs, and a turn without them runs the client's defaults.
 	 */
 	sessionChoice?: boolean;
+	/**
+	 * Asks for `catalog-launches`, which takes effect only with `handlers.aiCatalog`: each
+	 * `ai-catalog` then names its launch (`catalogLaunch`), and Chopin takes a report as what this
+	 * client offers only once `AgentClient.report` names the launch its models were listed through,
+	 * while that launch is for the person's accounts as they are now. A report naming none, the
+	 * `capabilities` sent on attach among them, is no report.
+	 */
+	catalogLaunches?: boolean;
 };
 
 /** A question this client asked and still waits on, which a later link may carry on. */
@@ -215,10 +224,12 @@ export type AgentClient = {
 		options?: InputOptions,
 	): Promise<ServerMessageOf<"input-result">>;
 	/**
-	 * Reports a changed catalog, replacing the earlier one whole. False when the server did not
-	 * accept `capability-catalog` or the link is no longer open.
+	 * Reports a changed catalog, replacing the earlier one whole. With `catalog-launches`,
+	 * `catalogLaunch` names the `ai-catalog` its models were listed through; it is left out for a
+	 * server that did not accept the feature. False when the server did not accept
+	 * `capability-catalog` or the link is no longer open.
 	 */
-	report(catalog: CapabilityCatalog): boolean;
+	report(catalog: CapabilityCatalog, catalogLaunch?: string): boolean;
 	/** Sends one message; false when the link is no longer open. */
 	send(message: ClientMessage): boolean;
 	detach(): Promise<LinkClosed>;
@@ -273,6 +284,7 @@ export function linkSocket(
 	sessionChoice = false,
 	aiCredentials = false,
 	aiCatalog = false,
+	catalogLaunches = false,
 ): WebSocket {
 	return new (WebSocket as unknown as HeaderWebSocket)(url, {
 		headers: {
@@ -288,6 +300,7 @@ export function linkSocket(
 				...(sessionChoice ? [WIRE.sessionChoice] : []),
 				...(aiCredentials ? [WIRE.aiCredentials] : []),
 				...(aiCredentials && aiCatalog ? [WIRE.aiCatalog] : []),
+				...(aiCredentials && aiCatalog && catalogLaunches ? [WIRE.catalogLaunches] : []),
 			].join(", "),
 		},
 		protocols: [WIRE.subprotocol],
@@ -459,6 +472,7 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 		options.sessionChoice === true,
 		options.handlers.ai !== undefined,
 		options.handlers.aiCatalog !== undefined,
+		options.catalogLaunches === true,
 	);
 	let turns = new Map<string, TurnState>();
 	let asks = new Map<string, PendingAsk>();
@@ -783,9 +797,10 @@ export function connectAgent(options: AgentOptions): Promise<AgentClient> {
 			return features;
 		},
 		resumption: resumption.promise,
-		report(catalog) {
+		report(catalog, catalogLaunch) {
 			if (!features.includes(WIRE.capabilityCatalog)) return false;
-			return send({ type: "capabilities", catalog });
+			let named = catalogLaunch !== undefined && features.includes(WIRE.catalogLaunches);
+			return send({ type: "capabilities", catalog, ...(named ? { catalogLaunch } : {}) });
 		},
 		send,
 		detach() {

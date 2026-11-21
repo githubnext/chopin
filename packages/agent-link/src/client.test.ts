@@ -587,6 +587,47 @@ describe("Agent connection client", () => {
 		expect(handed).toEqual([{ type: "ai-catalog", ai }]);
 	});
 
+	it("asks for catalog-launches only when told to, with ai-catalog, and names a report's launch only to a server that accepted it", async () => {
+		let catalog = { models: { available: [{ id: "acme/large", name: "Large" }] } };
+		let handlers = { turn() {}, ai() {}, aiCatalog() {} };
+		let unasked = fakeServer({ features: ["capability-catalog", "ai-credentials", "ai-catalog"] });
+		let plain = await connectAgent({
+			url: unasked.url,
+			token: "t",
+			document: "d",
+			capabilities: catalog,
+			handlers,
+		});
+		stops.push(() => plain.detach());
+		expect(unasked.asked[0]?.split(", ")).not.toContain("catalog-launches");
+		await unasked.next("capabilities");
+		// A server that did not accept the feature is never sent the field.
+		expect(plain.report(catalog, "c-1")).toBe(true);
+		expect(await unasked.next("capabilities")).toEqual({ type: "capabilities", catalog });
+
+		let server = fakeServer({
+			features: ["capability-catalog", "ai-credentials", "ai-catalog", "catalog-launches"],
+		});
+		let client = await connectAgent({
+			url: server.url,
+			token: "t",
+			document: "d",
+			capabilities: catalog,
+			catalogLaunches: true,
+			handlers,
+		});
+		stops.push(() => client.detach());
+		expect(server.asked[0]?.split(", ")).toContain("catalog-launches");
+		// The report sent on attach names no launch: nothing was listed through one yet.
+		expect(await server.next("capabilities")).toEqual({ type: "capabilities", catalog });
+		expect(client.report(catalog, "c-1")).toBe(true);
+		expect(await server.next("capabilities")).toEqual({
+			type: "capabilities",
+			catalog,
+			catalogLaunch: "c-1",
+		});
+	});
+
 	it("answers a steer for a turn that has ended, or that its handler refuses, with ok false", async () => {
 		let server = fakeServer({ features: ["steer-turn"] });
 		let steered: string[] = [];
