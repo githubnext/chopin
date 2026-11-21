@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+	ACCOUNTS_STATUS,
 	chooseLevel,
 	chooseModel,
 	composerModelNotice,
@@ -572,20 +573,31 @@ describe("what the pill draws while the machine has yet to say which models it r
 	];
 	let waits = [undefined, {}, { choice: { model: "acme/large" }, modelName: "Large" }];
 	let lists = [undefined, { catalog: before }, { catalog: { models: [] } }];
+	let theirs: Chat.ModelCatalog = {
+		models: [{ id: "acme/large", name: "Large" }, { id: "acme/new", name: "New" }],
+	};
+	let fromAccounts = [undefined, { catalog: theirs }, { catalog: { models: [] } }];
 
-	/** Every state the pill can be asked about: the live list or none, a kept list or none, ... */
+	/**
+	 * Every state the pill can be asked about: the live list or none, the list from the person's
+	 * accounts or none, a kept list or none, ...
+	 */
 	function* states() {
 		for (let catalog of [undefined, live]) {
-			for (let lastKnown of lists) {
-				for (let waiting of waits) {
-					for (let place of places) yield { catalog, lastKnown, waiting, place };
+			for (let accounts of fromAccounts) {
+				for (let lastKnown of lists) {
+					for (let waiting of waits) {
+						for (let place of places) yield { catalog, accounts, lastKnown, waiting, place };
+					}
 				}
 			}
 		}
 	}
 
 	function listOf(view: PickerView | undefined): Chat.ModelCatalog | undefined {
-		return view && (view.kind === "live" || view.kind === "last-known") ? view.catalog : undefined;
+		return view && (view.kind === "live" || view.kind === "last-known" || view.kind === "accounts")
+			? view.catalog
+			: undefined;
 	}
 
 	test("a list drawn unmarked is always the live one, and a kept list is always marked with why", () => {
@@ -603,10 +615,25 @@ describe("what the pill draws while the machine has yet to say which models it r
 		}
 	});
 
-	test("a kept list is drawn at once wherever there is no live one", () => {
+	test("a kept list is drawn at once wherever there is no live one nor one from the person's accounts", () => {
 		for (let state of states()) {
 			if (state.catalog || !state.lastKnown?.catalog.models.length || !state.place) continue;
+			if (state.accounts?.catalog.models.length) continue;
 			expect(listOf(pickerView(state)), JSON.stringify(state)).toBe(before);
+		}
+	});
+
+	test("the list from the person's accounts is drawn at once wherever there is no live one, ahead of a kept list, and marked so", () => {
+		for (let state of states()) {
+			let view = pickerView(state);
+			let label = JSON.stringify(state);
+			if (view?.kind === "accounts") {
+				expect(state.catalog, label).toBeUndefined();
+				expect(view.catalog, label).toBe(theirs);
+				expect(view.status, label).toBe(ACCOUNTS_STATUS[state.place!]);
+			}
+			if (state.catalog || !state.accounts?.catalog.models.length || !state.place) continue;
+			expect(view, label).toMatchObject({ kind: "accounts", catalog: theirs });
 		}
 	});
 
@@ -617,8 +644,10 @@ describe("what the pill draws while the machine has yet to say which models it r
 			let coming = state.place === "starting" || state.place === "attached";
 			if (view?.kind === "loading") expect(coming, label).toBe(true);
 			if (view?.kind === "last-known") expect(view.loading, label).toBe(coming);
+			if (view?.kind === "accounts") expect(view.loading, label).toBe(coming);
 			if (
 				!state.catalog && !state.lastKnown?.catalog.models.length
+				&& !state.accounts?.catalog.models.length
 				&& (state.place === "failed" || state.place === "held" || state.place === "away")
 			) {
 				expect(view, label).toMatchObject({
@@ -656,7 +685,13 @@ describe("what the pill draws while the machine has yet to say which models it r
 	});
 
 	test("its words name the machine, never the agent or its internals, nor the machine's state", () => {
-		for (let text of [...Object.values(LAST_KNOWN_STATUS), ...Object.values(UNAVAILABLE_STATUS)]) {
+		for (
+			let text of [
+				...Object.values(LAST_KNOWN_STATUS),
+				...Object.values(ACCOUNTS_STATUS),
+				...Object.values(UNAVAILABLE_STATUS),
+			]
+		) {
 			expect(text).not.toMatch(/planner|attach|chopin|decision/i);
 			// The machine's state is its button's to say: Chat never draws it.
 			expect(text).not.toMatch(

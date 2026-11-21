@@ -113,6 +113,20 @@ export const AI_KEY_VARIABLES: Record<AiProvider, string> = {
 };
 
 /**
+ * Atomic's providers for each of Chopin's, the API-key-only ones included: what an Atomic agent on a
+ * launch is configured with for each grant, and what Chopin lists a person's models from. A ChatGPT
+ * or Claude sign-in is Atomic's `openai` or `anthropic`, which take a subscription, ahead of a key for
+ * the same provider, which keeps its API-key-only provider.
+ */
+export const ATOMIC_AI_PROVIDERS: Record<AiProvider, readonly string[]> = {
+	"github-copilot": ["github-copilot"],
+	openai: ["openai", "openai-api"],
+	anthropic: ["anthropic", "anthropic-api"],
+	chatgpt: ["openai"],
+	claude: ["anthropic"],
+};
+
+/**
  * The header in which a launch's runner presents the launch's own credential with every proxied
  * request. The runner adds it on its way out and never hands it to the agent, so a placeholder
  * alone, copied out of one launch, reaches nothing from another.

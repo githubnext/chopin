@@ -17,10 +17,11 @@ export type ModelControl = {
 	refusal: string | undefined;
 	choose: (next: Wire.ModelChoice) => void;
 	/**
-	 * Present where `catalog` is the list last reported for this person's account, not the
-	 * machine's list now: why (`status`), and whether the machine is on its way (`loading`).
+	 * Present where `catalog` is not the machine's list now: why (`status`), whether the machine is
+	 * on its way (`loading`), and whether it is what this person's own AI accounts offer
+	 * (`accounts`) rather than the list last reported for their account.
 	 */
-	lastKnown?: { status: string; loading: boolean };
+	lastKnown?: { status: string; loading: boolean; accounts?: true };
 };
 
 /**
@@ -46,6 +47,8 @@ type Held = {
 	modelName?: string;
 	/** The offer is not known yet: the stored choice to show while the models are on their way. */
 	waiting?: Wire.ModelState["waiting"];
+	/** The offer is not known yet: what this person's own AI accounts offer. */
+	accounts?: Wire.ModelState["accounts"];
 	/** The offer is not known yet: the list last reported for this person's account. */
 	lastKnown?: Wire.ModelState["lastKnown"];
 	/** What the document's agent offers `/` beyond Chat's own commands. */
@@ -112,6 +115,7 @@ export function useModelChoice(
 					choice: frame.choice,
 					modelName: frame.modelName,
 					waiting: frame.waiting,
+					accounts: frame.accounts,
 					lastKnown: frame.lastKnown,
 					commands: frame.commands,
 				}));
@@ -169,6 +173,7 @@ export function useModelChoice(
 		: undefined;
 	let view = shown && pickerView({
 		catalog: shown.catalog,
+		accounts: shown.accounts,
 		lastKnown: shown.lastKnown,
 		waiting: shown.waiting,
 		place,
@@ -177,14 +182,18 @@ export function useModelChoice(
 		? undefined
 		: view.kind === "live"
 		? control
-		: view.kind === "last-known"
+		: view.kind === "last-known" || view.kind === "accounts"
 		? {
 			catalog: view.catalog,
 			choice,
 			modelName,
 			refusal,
 			choose,
-			lastKnown: { status: view.status, loading: view.loading },
+			lastKnown: {
+				status: view.status,
+				loading: view.loading,
+				...(view.kind === "accounts" ? { accounts: true as const } : {}),
+			},
 		}
 		: view.kind === "loading"
 		? { pending: true, name: view.name, ...(view.level ? { level: view.level } : {}) }

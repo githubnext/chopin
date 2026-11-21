@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { COPILOT_RAW_TOKEN_HEADERS, copilotTokenExchange, CopilotTokenRefused } from "./copilot";
+import {
+	COPILOT_RAW_TOKEN_HEADERS,
+	copilotModels,
+	copilotTokenExchange,
+	CopilotTokenRefused,
+} from "./copilot";
 
 let servers: Array<{ stop: (force: boolean) => void }> = [];
 afterEach(() => {
@@ -8,7 +13,12 @@ afterEach(() => {
 	servers = [];
 });
 
-type Asked = { path: string; authorization: string | null; integration: string | null };
+type Asked = {
+	path: string;
+	authorization: string | null;
+	integration: string | null;
+	version?: string | null;
+};
 
 /**
  * A server that answers every request with `status` and `body`: JSON, or a string as the plain
@@ -24,6 +34,9 @@ function serve(status: number, body: unknown, headers: Record<string, string> = 
 				path: new URL(request.url).pathname,
 				authorization: request.headers.get("authorization"),
 				integration: request.headers.get("copilot-integration-id"),
+				...(request.headers.has("x-github-api-version")
+					? { version: request.headers.get("x-github-api-version") }
+					: {}),
 			});
 			return typeof body === "string"
 				? new Response(body, {
@@ -100,7 +113,12 @@ describe("Copilot token exchange", () => {
 			await copilotTokenExchange({ api: given.api, copilotApi: model.copilotApi })("ghu_person"),
 		).toEqual({ token: "tid=1;exp=2", expiresAt: 2_000_000 });
 		expect(given.asked).toEqual([
-			{ path: "/copilot_internal/v2/token", authorization: "token ghu_person", integration: null },
+			{
+				path: "/copilot_internal/v2/token",
+				authorization: "token ghu_person",
+				integration: null,
+				version: "2022-11-28",
+			},
 		]);
 		expect(model.asked).toEqual([]);
 	});
@@ -129,16 +147,33 @@ describe("Copilot token exchange", () => {
 				token: "ghu_person",
 				expiresAt: NOW + 30 * 60_000,
 				raw: true,
+				models: { list: { data: [{ id: "gpt-5" }] }, baseUrl: model.copilotApi },
 			});
 			expect(model.asked).toEqual([{
 				path: "/models",
 				authorization: "Bearer ghu_person",
 				integration: "copilot-developer-cli",
+				version: "2026-06-01",
 			}]);
 		}
 		expect(COPILOT_RAW_TOKEN_HEADERS).toEqual({
 			"copilot-integration-id": "copilot-developer-cli",
 		});
+	});
+
+	it("keeps no model list that can't be read or carries the token, and the access stands", async () => {
+		for (let body of ["not json", { data: [{ id: "gpt-5", name: "for ghu_person" }] }]) {
+			let exchange = copilotTokenExchange({
+				api: github(403, NOT_EXCHANGED).api,
+				copilotApi: copilot(200, body).copilotApi,
+				clock: () => NOW,
+			});
+			expect(await exchange("ghu_person")).toEqual({
+				token: "ghu_person",
+				expiresAt: NOW + 30 * 60_000,
+				raw: true,
+			});
+		}
 	});
 
 	it("can't be told, and is never none, when neither GitHub nor Copilot takes the token", async () => {
@@ -225,5 +260,70 @@ describe("Copilot token exchange", () => {
 			"x-ratelimit-remaining": "4999",
 		});
 		expect(await copilotTokenExchange({ api: refused.api })("ghu_person")).toBeUndefined();
+	});
+});
+
+describe("an account's Copilot model list", () => {
+	it("is read from the account's own Copilot host with the Copilot token, as Atomic reads it", async () => {
+		let host = copilot(200, { data: [{ id: "gpt-6" }] });
+		let other = copilot(200);
+		let read = await copilotModels(
+			{ token: "tid=1;exp=2", expiresAt: NOW + 60_000, api: host.copilotApi },
+			{ copilotApi: other.copilotApi, clock: () => NOW },
+		);
+		expect(read).toEqual({ list: { data: [{ id: "gpt-6" }] }, baseUrl: host.copilotApi });
+		expect(host.asked).toEqual([{
+			path: "/models",
+			authorization: "Bearer tid=1;exp=2",
+			integration: "vscode-chat",
+			version: "2026-06-01",
+		}]);
+		expect(other.asked).toEqual([]);
+	});
+
+	it("is the list a GitHub token's answer kept, asking nothing, else read from Copilot's model API alone", async () => {
+		let model = copilot(200, { data: [{ id: "gpt-6" }] });
+		let kept = { list: { data: [] }, baseUrl: "https://api.githubcopilot.com" };
+		expect(
+			await copilotModels(
+				{ token: "ghu_person", expiresAt: NOW + 60_000, raw: true, models: kept },
+				{ copilotApi: model.copilotApi, clock: () => NOW },
+			),
+		).toBe(kept);
+		expect(model.asked).toEqual([]);
+		expect(
+			await copilotModels(
+				{ token: "ghu_person", expiresAt: NOW + 60_000, raw: true, api: "https://elsewhere.test" },
+				{ copilotApi: model.copilotApi, clock: () => NOW },
+			),
+		).toEqual({ list: { data: [{ id: "gpt-6" }] }, baseUrl: model.copilotApi });
+		expect(model.asked).toEqual([{
+			path: "/models",
+			authorization: "Bearer ghu_person",
+			integration: "copilot-developer-cli",
+			version: "2026-06-01",
+		}]);
+	});
+
+	it("is nothing, and sends nothing, once the token has expired, and nothing Copilot refuses or that carries the token", async () => {
+		let model = copilot(200);
+		let token = { token: "tid=1;exp=2", expiresAt: NOW, api: model.copilotApi };
+		expect(await copilotModels(token, { clock: () => NOW })).toBeUndefined();
+		expect(model.asked).toEqual([]);
+		for (
+			let [status, body] of [[401, "unauthorized"], [200, {
+				data: [{ id: "tid=1;exp=2" }],
+			}]] as Array<
+				[number, unknown]
+			>
+		) {
+			let refusing = copilot(status, body);
+			expect(
+				await copilotModels(
+					{ token: "tid=1;exp=2", expiresAt: NOW + 1, api: refusing.copilotApi },
+					{ clock: () => NOW },
+				),
+			).toBeUndefined();
+		}
 	});
 });

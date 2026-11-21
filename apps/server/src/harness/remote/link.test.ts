@@ -2828,6 +2828,54 @@ describe("Agent connection AI launches", () => {
 		expect(listeners.size).toBe(0);
 	});
 
+	it("prepares the catalog launches of many documents attached at once side by side, none waiting on another", async () => {
+		let { auth, channel } = await linkAuth();
+		let documents = [channel.id];
+		for (let index = 1; index < 10; index++) {
+			let created = await auth.storage.channels.create({
+				id: crypto.randomUUID(),
+				repositoryId: "R_score",
+				repositoryOwner: "octo-org",
+				repositoryName: "score",
+				title: `Created document ${index}`,
+				createdBy: "U_member",
+				now: new Date(),
+			});
+			documents.push(created.id);
+		}
+		let made = launches();
+		let asked: string[] = [];
+		let answer = Promise.withResolvers<void>();
+		made.ai.catalog = async input => {
+			asked.push(input.channelId);
+			// Every launch waits on the one answer, as they all wait on GitHub's held question.
+			await answer.promise;
+			return {
+				launchId: `catalog-${input.channelId}`,
+				grants: { launch: "chopin_launch_catalog", providers: [], withheld: [] },
+			};
+		};
+		let server = linkServer(auth, 2_000, undefined, 2_000, undefined, undefined, { ai: made.ai });
+		cleanups.push(server.stop);
+		let links = await Promise.all(documents.map(async document => {
+			let raw = await rawLink(server.url, undefined, "ai-credentials, ai-catalog");
+			raw.send({ type: "attach", version: 1, document });
+			await raw.next("attached");
+			return raw;
+		}));
+		for (let raw of links) raw.send({ type: "ai-catalog" });
+		// Each link asked for its launch before any was handed out: none waits on another's.
+		await until(() => asked.length === documents.length, 2_000);
+		expect(new Set(asked)).toEqual(new Set(documents));
+		expect(links.flatMap(raw => raw.messages.filter(message => message.type === "ai-catalog")))
+			.toEqual([]);
+		answer.resolve();
+		for (let raw of links) {
+			expect((await raw.next("ai-catalog")).ai).toMatchObject({ providers: [] });
+		}
+		for (let raw of links) raw.send({ type: "detach" });
+	});
+
 	it("tells an account with nothing to list so in an empty catalog grant, and ends one prepared while its link closed unsent", async () => {
 		let refused = await attachedForCatalog("ai-credentials, ai-catalog");
 		refused.ai.catalog = async () => {

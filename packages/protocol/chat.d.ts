@@ -458,6 +458,16 @@ export declare namespace Chat {
 		 */
 		lastKnown?: { catalog: ModelCatalog; reportedAt: number };
 		/**
+		 * Sent to one person only, while what the harness offers is not known, ahead of `lastKnown`
+		 * and in its place: the models that person's own AI accounts offer, as Chopin lists them
+		 * itself, with no agent, the way an agent on a launch for them lists its own. Its default is
+		 * the one of their list from last time, where it offers that model. It is not `catalog`
+		 * either: a composer shows it marked as the models from their accounts until a catalog
+		 * arrives, and a choice picked from it is checked against the catalog alone. Absent once the
+		 * offer is known, and where Chopin can list nothing of their accounts.
+		 */
+		accounts?: { catalog: ModelCatalog };
+		/**
 		 * What `/` offers beyond Chopin's own commands: the commands the document's agent reports,
 		 * in the order, spelling and with the duplicates it reported them. Absent where it
 		 * reports none (an older client, or a harness with no commands), and the composer then

@@ -1,3 +1,8 @@
+import {
+	COPILOT_API_VERSION,
+	copilotClientHeaders,
+} from "@bastani/atomic-ai/api/github-copilot-headers";
+
 /** GitHub's API origin, which exchanges a GitHub token for a Copilot token. */
 export const GITHUB_API = "https://api.github.com";
 
@@ -43,13 +48,59 @@ export class CopilotTokenRefused extends Error {
 	override name = "CopilotTokenRefused";
 }
 
+/** The most of a model list's answer that is read: Copilot's is some tens of kilobytes. */
+const MODEL_LIST_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Copilot's model list for an account, the body of its `GET /models` as JSON, and the host that
+ * answered it (`baseUrl`, which Atomic's reading of the list depends on). Model metadata only.
+ */
+export type CopilotModelList = { list: unknown; baseUrl: string };
+
 /**
  * What Copilot's model API takes for a GitHub token, until `expiresAt` (milliseconds since the
  * epoch): the Copilot token GitHub exchanges it for, at `api` when GitHub names the account's own
  * host; or, when GitHub won't exchange it but Copilot's model API takes it (`raw`), the GitHub
- * token itself, sent to `COPILOT_MODEL_API` alone with `COPILOT_RAW_TOKEN_HEADERS`.
+ * token itself, sent to `COPILOT_MODEL_API` alone with `COPILOT_RAW_TOKEN_HEADERS`, and then the
+ * account's model list that model API answered with (`models`), where it could be read.
  */
-export type CopilotToken = { token: string; expiresAt: number; api?: string; raw?: true };
+export type CopilotToken = {
+	token: string;
+	expiresAt: number;
+	api?: string;
+	raw?: true;
+	models?: CopilotModelList;
+};
+
+/**
+ * The headers a model list is read with, as Atomic reads the account's list (its client's headers
+ * and Copilot's API version, which decide what the list holds), with `token` as the bearer and,
+ * for a GitHub token itself, the integration Copilot's CLI is.
+ */
+function listHeaders(token: string, raw: boolean): Headers {
+	let headers = new Headers(copilotClientHeaders(token));
+	headers.set("accept", "application/json");
+	headers.set("authorization", `Bearer ${token}`);
+	headers.set("x-github-api-version", COPILOT_API_VERSION);
+	if (raw) {
+		for (let [name, value] of Object.entries(COPILOT_RAW_TOKEN_HEADERS)) headers.set(name, value);
+	}
+	return headers;
+}
+
+/**
+ * A model list's answer as JSON; undefined when it can't be read, is too long, or holds `secret`,
+ * the token it was asked with, which nothing derived from it may carry.
+ */
+async function listed(response: Response, secret: string): Promise<unknown> {
+	try {
+		let text = await response.text();
+		if (text.length > MODEL_LIST_BYTES || text.includes(secret)) return undefined;
+		return JSON.parse(text);
+	} catch {
+		return undefined;
+	}
+}
 
 /**
  * What Copilot's model API takes for a GitHub token; undefined when GitHub refuses a Copilot token
@@ -95,6 +146,33 @@ async function noSeat(response: Response): Promise<boolean> {
 }
 
 /**
+ * Copilot's model list for the account `token` is for: the one its answer kept, else read from
+ * the account's own Copilot host with the Copilot token (a GitHub token Copilot takes itself, only
+ * from `COPILOT_MODEL_API`), as Atomic reads it, never once the token has expired and following no
+ * redirect. Undefined when Copilot refuses it or the answer can't be read; nothing is logged.
+ */
+export async function copilotModels(
+	token: CopilotToken,
+	options: { copilotApi?: string; fetch?: typeof fetch; clock?: () => number } = {},
+): Promise<CopilotModelList | undefined> {
+	if (token.models) return token.models;
+	let copilotApi = options.copilotApi ?? COPILOT_MODEL_API;
+	let baseUrl = token.raw ? copilotApi : token.api ?? copilotApi;
+	if (token.expiresAt <= (options.clock ?? Date.now)()) return undefined;
+	let response = await (options.fetch ?? fetch)(`${baseUrl}/models`, {
+		headers: listHeaders(token.token, token.raw === true),
+		redirect: "manual",
+		signal: AbortSignal.timeout(10_000),
+	});
+	if (!response.ok) {
+		await response.body?.cancel();
+		return undefined;
+	}
+	let list = await listed(response, token.token);
+	return list === undefined ? undefined : { list, baseUrl };
+}
+
+/**
  * Asks GitHub for a Copilot token with `githubToken`, the person's GitHub sign-in or the token
  * they connected: the token when GitHub gives one, undefined when it refuses one saying the account
  * has no Copilot subscription. GitHub exchanges only the tokens of Copilot's own clients, so it
@@ -135,16 +213,21 @@ export function copilotTokenExchange(
 		}
 		if (await noSeat(response)) return undefined;
 		let models = await send(`${copilotApi}/models`, {
-			headers: {
-				accept: "application/json",
-				authorization: `Bearer ${githubToken}`,
-				...COPILOT_RAW_TOKEN_HEADERS,
-			},
+			headers: listHeaders(githubToken, true),
 			redirect: "manual",
 			signal: AbortSignal.timeout(10_000),
 		});
+		if (models.ok) {
+			// The account's own model list, kept with the answer for its model picker.
+			let list = await listed(models, githubToken);
+			return {
+				token: githubToken,
+				expiresAt: clock() + RAW_ANSWER_MS,
+				raw: true,
+				...(list === undefined ? {} : { models: { list, baseUrl: copilotApi } }),
+			};
+		}
 		await models.body?.cancel();
-		if (models.ok) return { token: githubToken, expiresAt: clock() + RAW_ANSWER_MS, raw: true };
 		let both = `${refused}, and Copilot's model API ${models.status} to the GitHub token`;
 		// GitHub failing to answer (a 5xx) doesn't say it wouldn't exchange the token.
 		let declined = response.status < 500 && (models.status === 401 || models.status === 403);

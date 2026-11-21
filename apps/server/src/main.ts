@@ -136,13 +136,16 @@ import { CANNOT_STEER } from "./chat/steering";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerNavigationRoutes } from "./navigation/routes";
 import { AI_PROXY_PATH } from "@chopin/protocol/ai-credentials";
-import { AiCredentials } from "./ai/credentials";
+import { AiCredentials, launchSteps } from "./ai/credentials";
 import { aiAccountRefusal } from "./ai/account-check";
+import { accountModels } from "./ai/account-models";
+import { modelCatalog } from "./ai/model-catalog";
 import { aiProxy } from "./ai/proxy";
 import { copilotTokenExchange } from "./ai/copilot";
 import { githubSignIn, registerAiRoutes } from "./ai/routes";
 import { AiUsage } from "./ai/usage";
 import {
+	AiLaunchRefused,
 	CATALOG_OWNER,
 	catalogOnly,
 	endLaunch,
@@ -207,6 +210,8 @@ import { SERVICE_RESTART } from "@chopin/protocol/restart";
 import { PLANNER_NAME } from "@chopin/protocol/address";
 
 import type { Server, ServerWebSocket } from "bun";
+import type { AccountModels } from "./ai/account-models";
+import type { LaunchSteps } from "./ai/credentials";
 import type { AgentAi, AgentSocketData } from "./harness/remote/endpoint";
 import type { RepositoryAuthorizer, WatchTopics } from "./socket/decision-watch";
 import type { DocumentSummaryInput } from "./jobs/document-summary";
@@ -285,6 +290,16 @@ let experimentTimer: ReturnType<typeof setInterval> | undefined;
 let sessionCleanup: ReturnType<typeof setInterval> | undefined;
 let cleaningSessions: Promise<void> | undefined;
 let aiCredentials: AiCredentials | undefined;
+/**
+ * The public model catalog the process holds, which the AI proxy serves launches and each person's
+ * list of models from their AI accounts is read from.
+ */
+let modelCatalogs = modelCatalog();
+/**
+ * Each person's models from their own AI accounts, listed by Chopin for their composer while a
+ * remote Planner has yet to say what it offers.
+ */
+let accountLists: AccountModels | undefined;
 /** Whether AI launches nothing owns are ended with each sweep: once holds and runs are back. */
 let aiRetiring = false;
 let aiUsage: AiUsage | undefined;
@@ -1248,7 +1263,25 @@ async function plannerStarting(channelId: string): Promise<void> {
 	if (plannerAttachments.status(channelId).state === "attached") return;
 	await experiments.plannerUsed(channelId);
 	if (await experiments.plannerStarting(channelId)) {
+		void plannerAiReady(channelId);
 		await plannerAttachments.attachedWithin(channelId, PLANNER_START_MS);
+	}
+}
+
+/**
+ * A machine is starting a document's Planner: GitHub is asked now, while it starts, about the Copilot
+ * access of the machine's own token (and its owner admitted again), as the launches the Planner asks
+ * for once attached would ask, so the catalog launch that lists its models finds the answer held
+ * instead of waiting on GitHub. A failure here is the launch's to meet and say.
+ */
+async function plannerAiReady(channelId: string): Promise<void> {
+	try {
+		let starting = await experiments?.plannerStarting(channelId);
+		if (!starting || !aiCredentials) return;
+		let machine = await storage.machines.get(starting.machineId);
+		if (machine && !machine.revokedAt) await aiCredentials.available(machine.userId, machine.id);
+	} catch {
+		// Nothing is kept from a question that failed; the launch asks again.
 	}
 }
 
@@ -1286,10 +1319,13 @@ const modelChoices: ModelChoiceDeps = {
 	fellBack: channelId => {
 		if (plannerRanWithoutOffer(config.harness, channelId)) announceModel(channelId);
 	},
-	lastKnown: (channelId, userId) =>
+	// The document's own list for the account, else the account's last on any document.
+	lastKnown: async (channelId, userId) =>
 		config.agent && config.harness === "remote"
-			? storage.plannerCatalogs.get(channelId, userId)
-			: Promise.resolve(undefined),
+			? await storage.plannerCatalogs.get(channelId, userId)
+				?? await storage.plannerCatalogs.latest(userId)
+			: undefined,
+	accounts: async userId => accountLists?.read(userId, ACCOUNT_LIST_WAIT_MS),
 	storage,
 	lease: () => {
 		if (!writerLease.held) throw new Error("storage writer lease is unavailable");
@@ -1313,6 +1349,21 @@ function announceModel(channelId: string): void {
 			if (!cutting && !ws.data.closed && room.members.get(ws.data.client) === ws) tell(ws, own);
 		}
 	}).catch(err => console.error("chopin: could not announce a document's model choice -", err));
+}
+
+/**
+ * How long a composer's model state waits for a person's list from their accounts that is being
+ * computed; one that takes longer is told when it is ready (`announceModels`).
+ */
+const ACCOUNT_LIST_WAIT_MS = 400;
+
+/** Tell each document a person has open what its Planner can be set to run, as they see it now. */
+function announceModels(userId: string): void {
+	for (let room of Rooms.all()) {
+		if ([...room.members.values()].some(ws => ws.data.principalId === userId)) {
+			announceModel(room.id);
+		}
+	}
 }
 
 /** The models each document's Planner last reported for each account, kept for its composer. */
@@ -2174,6 +2225,8 @@ function openRoomSocket(ws: Socket): void {
 		&& !deletingChannels.has(ws.data.room);
 	ws.subscribe(topic(ws.data.room));
 	let room = Rooms.join(ws);
+	// The person's list from their accounts is computed now, so it is ready when the composer is.
+	accountLists?.warm(ws.data.principalId);
 	tell(ws, {
 		kind: "session:hello",
 		ts: 0,
@@ -2207,6 +2260,7 @@ function openRoomSocket(ws: Socket): void {
 		void (async () => {
 			await experiments?.plannerUsed(room.id);
 			let planner = await plannerStatus(room.id);
+			if (planner.state === "starting") void plannerAiReady(room.id);
 			if (!ws.data.closed && planner.state === "starting") {
 				tell(ws, { kind: "session:planner", ts: 0, planner });
 			}
@@ -3711,6 +3765,28 @@ registerResearchWorkspaceRoutes(router, hostedAuth, {
 	},
 });
 registerNavigationRoutes(router, hostedAuth, { storage });
+/**
+ * The log line of one catalog launch: its document and machine, what came of it and how long it
+ * took, by step. Ids and durations only, never anything of a credential.
+ */
+function catalogLaunchLine(
+	input: { channelId: string; machineId?: string },
+	outcome: string,
+	ms: number,
+	steps: LaunchSteps,
+): string {
+	return `chopin: catalog launch for document ${input.channelId}`
+		+ `${input.machineId ? ` on machine ${input.machineId}` : ""} ${outcome} in ${
+			Math.round(ms)
+		} ms`
+		+ ` (document ${Math.round(steps.document)} ms, accounts ${Math.round(steps.accounts)} ms,`
+		+ ` GitHub token ${Math.round(steps.signIn)} ms, Copilot access ${Math.round(steps.copilot)} ms`
+		+ ` ${steps.copilotAsked ? "asked" : "held"}, stored ${Math.round(steps.stored)} ms,`
+		+ ` checked ${Math.round(steps.checked)} ms, ${steps.attempts} attempt${
+			steps.attempts === 1 ? "" : "s"
+		})`;
+}
+
 /** The AI launches a Planner session of this process holds now: those its owner still owns. */
 let heldPlannerLaunches = new Set<string>();
 let connectedAi = new AiCredentials({
@@ -3736,6 +3812,15 @@ let connectedAi = new AiCredentials({
 	},
 });
 aiCredentials = connectedAi;
+if (config.agent && config.harness === "remote") {
+	let lists = accountModels({
+		sources: userId => connectedAi.modelSources(userId),
+		catalog: () => modelCatalogs.read(),
+		changed: announceModels,
+	});
+	accountLists = lists;
+	connectedAi.onChanged(userId => lists.forget(userId));
+}
 plannerAi = {
 	launch: ({ sessionId, ...input }) =>
 		handOut(connectedAi, {
@@ -3743,12 +3828,24 @@ plannerAi = {
 			owner: `session:${sessionId}`,
 			expiresAt: new Date(hostedAuth.clock().getTime() + PLANNER_AI_LAUNCH_MS),
 		}),
-	catalog: ({ linkId, ...input }) =>
-		handOut(connectedAi, {
-			...input,
-			owner: `${CATALOG_OWNER}${linkId}`,
-			expiresAt: new Date(hostedAuth.clock().getTime() + PLANNER_AI_LAUNCH_MS),
-		}),
+	// Each catalog launch says in the log how long it took and which step took it.
+	catalog: async ({ linkId, ...input }) => {
+		let steps = launchSteps();
+		let started = performance.now();
+		let outcome = "handed out";
+		try {
+			return await handOut(connectedAi, {
+				...input,
+				owner: `${CATALOG_OWNER}${linkId}`,
+				expiresAt: new Date(hostedAuth.clock().getTime() + PLANNER_AI_LAUNCH_MS),
+			}, steps);
+		} catch (error) {
+			outcome = error instanceof AiLaunchRefused ? `refused (${error.code})` : "failed";
+			throw error;
+		} finally {
+			console.info(catalogLaunchLine(input, outcome, performance.now() - started, steps));
+		}
+	},
 	end: launchId => endLaunch(connectedAi, launchId),
 	onChanged: listener => connectedAi.onChanged(listener),
 	held: (launchId, holding) => {
@@ -3769,7 +3866,7 @@ let recordedAi = new AiUsage({
 aiUsage = recordedAi;
 registerAiRoutes(router, hostedAuth, {
 	credentials: connectedAi,
-	proxy: aiProxy({ credentials: connectedAi, usage: recordedAi }),
+	proxy: aiProxy({ credentials: connectedAi, usage: recordedAi, catalog: modelCatalogs }),
 	usage: recordedAi,
 });
 registerImageRoutes(router, hostedAuth);

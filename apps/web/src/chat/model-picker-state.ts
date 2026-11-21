@@ -317,6 +317,24 @@ export const LAST_KNOWN_STATUS: Record<PlannerPlace, string> = {
 };
 
 /**
+ * The light note on the models listed from the person's own AI accounts, saying they are not the
+ * machine's list yet, without what state the machine is in.
+ */
+export const ACCOUNTS_LOADING =
+	"These models are from your AI accounts. The machine's own list is still loading.";
+export const ACCOUNTS_WAITING =
+	"These models are from your AI accounts, until the machine lists its own.";
+
+export const ACCOUNTS_STATUS: Record<PlannerPlace, string> = {
+	starting: ACCOUNTS_LOADING,
+	attached: ACCOUNTS_LOADING,
+	failed: ACCOUNTS_WAITING,
+	held: ACCOUNTS_WAITING,
+	away: ACCOUNTS_WAITING,
+	none: ACCOUNTS_WAITING,
+};
+
+/**
  * The words on a pill with no list to show, where the machine can't give one now (it couldn't
  * start the Planner, stepped away or is offline), without saying which: its button says that.
  */
@@ -331,8 +349,12 @@ export const UNAVAILABLE_STATUS: Partial<Record<PlannerPlace, string>> = {
 /**
  * What the composer's model pill draws:
  * - `live`: the list the machine reports now, which is the only list drawn unmarked;
+ * - `accounts`: the models this person's own AI accounts offer, as Chopin lists them, with a light
+ *   note (`status`), while the machine has yet to say which models it runs (`loading` while it is
+ *   on its way), ahead of a list from last time;
  * - `last-known`: the list last reported for this person's own account, marked with `status`,
- *   while the machine has yet to say which models it runs (`loading` while it is on its way);
+ *   while the machine has yet to say which models it runs and nothing is listed from their
+ *   accounts;
  * - `loading`: no list yet and the machine on its way, the saved choice's words waiting in place;
  * - `unavailable`: no list, and a machine that can't give one (it couldn't start, stepped away or
  *   is offline), which says so (`status`), with the saved choice's words where the server sent
@@ -342,6 +364,7 @@ export const UNAVAILABLE_STATUS: Partial<Record<PlannerPlace, string>> = {
  */
 export type PickerView =
 	| { kind: "live"; catalog: Catalog }
+	| { kind: "accounts"; catalog: Catalog; status: string; loading: boolean }
 	| { kind: "last-known"; catalog: Catalog; status: string; loading: boolean }
 	| { kind: "loading"; name: string; level?: string }
 	| { kind: "unavailable"; name: string; level?: string; status: string };
@@ -349,6 +372,8 @@ export type PickerView =
 export function pickerView(input: {
 	/** The list the machine reports now. */
 	catalog?: Catalog;
+	/** The models this person's own AI accounts offer, sent only while the offer is unknown. */
+	accounts?: { catalog: Catalog };
 	/** The list last reported for this person's account, sent only while the offer is unknown. */
 	lastKnown?: { catalog: Catalog };
 	/** The server's word that the offer is unknown, with the stored choice to wait with. */
@@ -359,6 +384,14 @@ export function pickerView(input: {
 	let place = input.place;
 	if (!place) return undefined;
 	let coming = place === "starting" || place === "attached";
+	if (input.accounts?.catalog.models.length) {
+		return {
+			kind: "accounts",
+			catalog: input.accounts.catalog,
+			status: ACCOUNTS_STATUS[place],
+			loading: coming,
+		};
+	}
 	if (input.lastKnown?.catalog.models.length) {
 		return {
 			kind: "last-known",

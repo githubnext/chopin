@@ -1,5 +1,6 @@
 import { lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { ATOMIC_AI_PROVIDERS } from "@chopin/protocol/ai-credentials";
 import type { AiProvider, AiProviderGrant } from "@chopin/protocol/ai-credentials";
 import type { RelayedLaunch } from "./ai-relay";
 import { withoutGitHub } from "./github-token";
@@ -214,19 +215,6 @@ export function atomicAgent(command: readonly string[]): boolean {
 	return program === "atomic" || program === "atomic-acp";
 }
 
-/**
- * Atomic's providers for each of Chopin's, the API-key-only ones included. A ChatGPT or Claude
- * sign-in is Atomic's `openai` or `anthropic`, which take a subscription, ahead of a key for the
- * same provider, which keeps its API-key-only provider.
- */
-const ATOMIC_PROVIDERS: Record<AiProvider, string[]> = {
-	"github-copilot": ["github-copilot"],
-	openai: ["openai", "openai-api"],
-	anthropic: ["anthropic", "anthropic-api"],
-	chatgpt: ["openai"],
-	claude: ["anthropic"],
-};
-
 /** The provider whose own clients' variables a subscription takes when no key for it is granted. */
 const SIGNED_IN_FOR: Partial<Record<AiProvider, AiProvider>> = {
 	chatgpt: "openai",
@@ -259,7 +247,7 @@ export function atomicModels(
 	for (let grant of keysFirst(providers)) {
 		let baseUrl = relayed.baseUrls[grant.provider];
 		if (!baseUrl) continue;
-		for (let name of ATOMIC_PROVIDERS[grant.provider]) {
+		for (let name of ATOMIC_AI_PROVIDERS[grant.provider]) {
 			entries[name] = {
 				baseUrl,
 				apiKey: `$${grant.keyVariable}`,

@@ -1,5 +1,5 @@
 import type { AiGrants } from "@chopin/agent-link";
-import type { AiCredentials, AiLaunch, AiWithheld } from "./credentials";
+import type { AiCredentials, AiLaunch, AiWithheld, LaunchSteps } from "./credentials";
 
 /**
  * How long a Planner session's launch lasts. The agent connection launches it again before then,
@@ -71,10 +71,15 @@ export class AiLaunchRefused extends Error {
  * one stand-in per granted provider, never a credential of the person's. This is where a launch's
  * result is decided on: one that would be given no provider is never handed out, so no runner
  * starts an agent on anything but the person's own accounts in Chopin, and it throws why
- * (`AiLaunchRefused`); a retryable failure to prepare it throws (`AiCredentialError`).
+ * (`AiLaunchRefused`); a retryable failure to prepare it throws (`AiCredentialError`). With
+ * `steps`, how long each step took is added to it.
  */
-export async function handOut(credentials: AiCredentials, input: AiLaunch): Promise<HandedOut> {
-	let launched = await credentials.launch(input);
+export async function handOut(
+	credentials: AiCredentials,
+	input: AiLaunch,
+	steps?: LaunchSteps,
+): Promise<HandedOut> {
+	let launched = await credentials.launch(input, steps);
 	let withheld = launched.withheld.map(({ provider, reason }) => ({ provider, reason }));
 	if (launched.ended) throw new AiLaunchRefused("launch-ended", withheld);
 	if (!launched.grants.length) {

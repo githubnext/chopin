@@ -68,6 +68,61 @@ export function plannerCatalogContract(name: string, factory: StorageFactory) {
 			}
 		});
 
+		test("finds the list last reported for an account on any of its documents, and never another account's", async () => {
+			let storage = await openedStorage(factory);
+			try {
+				let { userId, channelId, lease } = await userAndChannel(storage);
+				let other = id("user");
+				await storage.users.put({ id: other, login: "hubot", avatarUrl: "", now: AT });
+				let second = id("channel");
+				await storage.channels.create({
+					id: second,
+					repositoryId: "R_other",
+					repositoryOwner: "octo-org",
+					repositoryName: "other",
+					title: "Another repository's document",
+					createdBy: userId,
+					now: AT,
+				});
+				expect(await storage.plannerCatalogs.latest(userId)).toBeUndefined();
+				await storage.plannerCatalogs.put(lease, {
+					channelId,
+					userId,
+					catalog: SMALL,
+					reportedAt: AT,
+				});
+				await storage.plannerCatalogs.put(lease, {
+					channelId: second,
+					userId,
+					catalog: LARGE,
+					reportedAt: LATER,
+				});
+				// Hubot's list is the newest of all, and Mona never finds it.
+				await storage.plannerCatalogs.put(lease, {
+					channelId,
+					userId: other,
+					catalog: SMALL,
+					reportedAt: new Date("2026-01-04T00:00:00.000Z"),
+				});
+				expect(await storage.plannerCatalogs.latest(userId)).toEqual({
+					channelId: second,
+					userId,
+					catalog: LARGE,
+					reportedAt: LATER,
+				});
+				await storage.plannerCatalogs.put(lease, {
+					channelId,
+					userId,
+					catalog: SMALL,
+					reportedAt: new Date("2026-01-05T00:00:00.000Z"),
+				});
+				expect((await storage.plannerCatalogs.latest(userId))?.channelId).toBe(channelId);
+				expect((await storage.plannerCatalogs.latest(other))?.userId).toBe(other);
+			} finally {
+				await storage.close();
+			}
+		});
+
 		test("refuses an unknown document or account, and a writer that lost the lease", async () => {
 			let storage = await openedStorage(factory);
 			try {

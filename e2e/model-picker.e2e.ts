@@ -21,6 +21,7 @@ import { authenticate, content, expect, ready, roomPath, test } from "./room";
 import { HOST, ROOT } from "./servers";
 
 import type { Browser, Locator, Page, WebSocketRoute } from "@playwright/test";
+import type { TurnContext } from "../packages/agent-link/src/client";
 import type { CapabilityCatalog } from "../packages/agent-link/src/protocol";
 
 const PORT = e2ePort(8799);
@@ -233,18 +234,20 @@ function dropFirstReport(): () => void {
 async function attachClient(
 	room: string,
 	capabilities?: CapabilityCatalog,
-	options: { silent?: boolean } = {},
+	options: { silent?: boolean; turn?: (context: TurnContext) => Promise<void>; handle?: string } =
+		{},
 ) {
 	let asked: Asked[] = [];
 	let restore = options.silent ? dropFirstReport() : undefined;
 	let connecting = connectAgent({
 		url: ORIGIN,
-		token: `ghu_e2e_${HANDLE}_1`,
+		token: `ghu_e2e_${options.handle ?? HANDLE}_1`,
 		document: room,
 		resumable: false,
 		...(capabilities ? { capabilities } : {}),
 		handlers: {
 			async turn(context) {
+				if (options.turn) return options.turn(context);
 				asked.push({
 					prompt: context.message.prompt,
 					...(context.message.model ? { model: context.message.model } : {}),
@@ -414,6 +417,119 @@ async function expectAccessible(page: Page) {
 		.analyze();
 	expect(result.violations.map(violation => `${violation.id}: ${violation.help}`)).toEqual([]);
 }
+
+test("shows a brand-new document's models from the person's AI accounts within 300 ms of the composer, with no Planner attached", async ({ browser }) => {
+	test.setTimeout(60_000);
+	let room = await newRoom();
+	let context = await browser.newContext(DESKTOP);
+	let page = await context.newPage();
+	page.on("pageerror", error => thrown.push(error.message));
+	// When the composer is first drawn, and when its pill first lists the person's own models.
+	await page.addInitScript(() => {
+		let seen: Record<string, number> = {};
+		(window as unknown as { seen: typeof seen }).seen = seen;
+		let look = () => {
+			if (!seen.composer && document.querySelector(".chat-composer")) {
+				seen.composer = performance.now();
+			}
+			if (!seen.models && document.querySelector(".composer-model-pill[data-from-accounts]")) {
+				seen.models = performance.now();
+			}
+		};
+		new MutationObserver(look).observe(document, {
+			childList: true,
+			subtree: true,
+			attributes: true,
+		});
+	});
+	await authenticate(page, "copilot-lister-new", ORIGIN);
+	await page.goto(`${ORIGIN}${roomPath(room)}`);
+	await ready(page);
+	let pill = chat(page).getByRole("button", { name: /^Model: / }).and(
+		page.locator("[data-from-accounts]"),
+	);
+	await expect(pill).toBeVisible();
+	let seen = await page.evaluate(() =>
+		(window as unknown as { seen: Record<string, number> }).seen
+	);
+	expect(seen.models! - seen.composer!).toBeLessThanOrEqual(300);
+	// Marked as the person's accounts' list, never as the machine's own or one from last time.
+	await expect(pill).toHaveAccessibleName(
+		"Model: Choose a model. These models are from your AI accounts, until the machine lists its own.",
+	);
+	await expect(page.locator(".composer-model-pill[data-last-known]")).toHaveCount(0);
+	await pill.click();
+	await expect(popover(page)).toBeVisible();
+	await expect(
+		popover(page).getByText(
+			"These models are from your AI accounts, until the machine lists its own.",
+		),
+	).toBeVisible();
+	// The catalog's name for the model it describes, the account's own for the one only its list has,
+	// and never the one the account's list hides.
+	await expect(option(page, "E2E Large")).toBeVisible();
+	await expect(option(page, "E2E Own")).toBeVisible();
+	await expect(popover(page).getByRole("option")).toHaveCount(2);
+	// A pick from it waits for the machine's own list, which nobody is attached to give.
+	await option(page, "E2E Own").click();
+	await expect(notice(page)).toHaveText(
+		"The machine's models are still loading, so this choice wasn't saved. Choose again once they're in.",
+	);
+	await shoot(page, "accounts-models");
+	await context.close();
+});
+
+test("shows the person's models from their AI accounts on each of the ten documents a Planner turn creates, opened at once, none with a Planner", async ({ browser }) => {
+	test.setTimeout(180_000);
+	let room = await newRoom();
+	let page = await open(browser, "copilot-lister-burst", room, DESKTOP);
+	let made: string[] = [];
+	await attachClient(room, CATALOG, {
+		handle: "copilot-lister-burst",
+		async turn(context) {
+			let key = crypto.randomUUID().slice(0, 8);
+			for (let index = 0; index < 10; index++) {
+				let result = await context.callHostTool("create_document", {
+					idempotencyKey: `burst-${key}-${index}`,
+					title: `Burst ${key} ${index}`,
+					brief: {
+						goal: `Part ${index} of the work`,
+						constraints: [],
+						settledDecisions: [],
+						openQuestions: [],
+						repositoryFindings: [],
+					},
+					document: `# Burst ${index}\n\nOne part of the work.\n`,
+				});
+				let output = typeof result.output === "string"
+					? JSON.parse(result.output)
+					: result.output as { document?: { url?: string } };
+				if (output?.document?.url) made.push(output.document.url);
+			}
+			context.emit({ type: "stream-start", modelId: "scripted" });
+			context.emit({ type: "text-start", id: "reply" });
+			context.emit({ type: "text-delta", id: "reply", delta: "Done." });
+			context.emit({ type: "text-end", id: "reply" });
+			finishTurn(context);
+		},
+	});
+	await ask(page, "split this into ten documents", 1);
+	expect(made).toHaveLength(10);
+	// All ten opened at once, each in a tab of its own, as a person opening them from the Chat does.
+	let tabs = await Promise.all(made.map(async url => {
+		let tab = await page.context().newPage();
+		tab.on("pageerror", error => thrown.push(error.message));
+		await tab.goto(url);
+		return tab;
+	}));
+	for (let tab of tabs) {
+		await expect(
+			chat(tab).getByRole("button", { name: /^Model: / }).and(tab.locator("[data-from-accounts]")),
+		).toBeVisible({ timeout: 20_000 });
+		await expect(tab.locator(".composer-model-pill[data-last-known]")).toHaveCount(0);
+	}
+	await page.context().close();
+});
 
 test("offers a choice only while the attached client reports models", async ({ browser }) => {
 	test.setTimeout(120_000);

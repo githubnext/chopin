@@ -11,9 +11,11 @@ import { Router } from "../http/router";
 import { testLease } from "../storage/contract-support";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { WriterLease } from "../storage/writer-lease";
-import { copilotTokenExchange } from "./copilot";
+import { copilotModels as readCopilotModels, copilotTokenExchange } from "./copilot";
 import { AI_ACCOUNT_UNCHECKED, aiAccountRefusal } from "./account-check";
-import { AiCredentialError, AiCredentials } from "./credentials";
+import { accountModels } from "./account-models";
+import { CATALOG_OWNER } from "./launches";
+import { AiCredentialError, AiCredentials, launchSteps } from "./credentials";
 import { aiProxy, aiTransport } from "./proxy";
 import { githubSignIn, registerAiRoutes } from "./routes";
 
@@ -23,7 +25,7 @@ import type {
 	AiProviderGrant,
 } from "@chopin/protocol/ai-credentials";
 import type { CopilotToken } from "./copilot";
-import type { AiDeadlines, AiLaunch } from "./credentials";
+import type { AiDeadlines, AiLaunch, LaunchSteps } from "./credentials";
 import type { AiTransport } from "./proxy";
 import type { HostedAuth } from "../auth/routes";
 import type { GitHub, GitHubTokenGrant } from "../github/client";
@@ -38,8 +40,8 @@ const OTHER_OPENAI_KEY = "sk-someone-elses-openai-key-0123456789";
 const LAUNCH_TOKENS = new Map<string, string>();
 
 class RunnerCredentials extends AiCredentials {
-	override async launch(input: AiLaunch) {
-		let launched = await super.launch(input);
+	override async launch(input: AiLaunch, steps?: LaunchSteps) {
+		let launched = await super.launch(input, steps);
 		for (let grant of launched.grants) LAUNCH_TOKENS.set(grant.placeholder, launched.launchToken);
 		return launched;
 	}
@@ -156,10 +158,14 @@ async function setup() {
 	 * they came from; it refuses any other as Copilot does a token it can't authenticate.
 	 */
 	let takenRaw = new Set<string>();
+	/** What Copilot's model list holds for every account that may read it. */
+	let copilotList: { data: unknown[] } = { data: [{ id: "gpt-e2e" }] };
 	let copilotModels = provider(request => {
 		let token = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
-		return takenRaw.has(token)
-			? Response.json({ data: [{ id: "gpt-e2e" }] })
+		// A Copilot token GitHub gave (see `githubApi`), or a GitHub token Copilot takes itself.
+		let exchanged = /^tid=copilot;for=(.+)$/.exec(token)?.[1];
+		return takenRaw.has(token) || exchanged && (entitled.get(exchanged) ?? 200) === 200
+			? Response.json(copilotList)
 			: new Response("unauthorized: token authentication failed", { status: 401 });
 	});
 	let copilotLifetime = { seconds: 1_800 };
@@ -216,6 +222,8 @@ async function setup() {
 			copilotApi: copilotModels.url,
 			clock: () => now.getTime(),
 		}),
+		copilotModels: token =>
+			readCopilotModels(token, { copilotApi: copilotModels.url, clock: () => now.getTime() }),
 		upstreams: { openai: keyChecks.openai.url, anthropic: keyChecks.anthropic.url },
 		lease: () => lease,
 	});
@@ -278,6 +286,9 @@ async function setup() {
 		notExchanged,
 		takenRaw,
 		copilotModels,
+		listCopilot(list: { data: unknown[] }) {
+			copilotList = list;
+		},
 		copilotLifetime,
 		githubApi,
 		router,
@@ -312,6 +323,11 @@ async function setup() {
 		},
 		now: () => now,
 	};
+}
+
+/** The providers a launch was given, in order. */
+function providers(launched: { grants: Array<{ provider: string }> }) {
+	return launched.grants.map(grant => grant.provider);
 }
 
 function byProvider(grants: AiProviderGrant[]) {
@@ -1805,6 +1821,191 @@ describe("what a launch is given", () => {
 				headers: { authorization: `Bearer ${grants[0]!.placeholder}` },
 			})).status,
 		).toBe(200);
+	});
+
+	it("hands a catalog launch the answer GitHub gave about the same account and token, while a session's launch asks afresh", async () => {
+		let world = await setup();
+		let asked = () =>
+			world.githubApi.seen.filter(seen => seen.headers.authorization === "token ghu_mona_signed_in")
+				.length;
+		let expiresAt = new Date(world.now().getTime() + 3_600_000);
+		expect(
+			providers(
+				await world.credentials.launch({ userId: "U_mona", expiresAt, owner: "session:one" }),
+			),
+		)
+			.toEqual(["github-copilot"]);
+		expect(asked()).toBe(1);
+
+		// Listing models asks GitHub nothing more than the session's launch did, and its steps say so.
+		let catalog = { userId: "U_mona", expiresAt, owner: `${CATALOG_OWNER}link-one` };
+		let steps = launchSteps();
+		expect(providers(await world.credentials.launch(catalog, steps))).toEqual(["github-copilot"]);
+		expect(asked()).toBe(1);
+		expect(steps).toMatchObject({ copilotAsked: false, attempts: 1 });
+		expect(
+			providers(
+				await world.credentials.launch({ userId: "U_mona", expiresAt, owner: "session:two" }),
+			),
+		)
+			.toEqual(["github-copilot"]);
+		expect(asked()).toBe(2);
+
+		// An answer of the other kind about the account ends what was held: the next one asks again.
+		world.entitled.set("ghu_mona_signed_in", 403);
+		let checked = await world.api("/api/ai/credentials/github-copilot/check", world.mona, {
+			method: "POST",
+		});
+		expect(await checked.json()).toMatchObject({ copilotAccess: "none" });
+		expect(asked()).toBe(3);
+		world.entitled.delete("ghu_mona_signed_in");
+		expect(await world.credentials.launch(catalog)).toMatchObject({
+			grants: [],
+			withheld: [{ provider: "github-copilot", reason: "no-copilot-access" }],
+		});
+		expect(asked()).toBe(3);
+		// Held no longer than any answer: five minutes on, a catalog launch asks GitHub again.
+		world.advance(5 * 60_000);
+		steps = launchSteps();
+		expect(providers(await world.credentials.launch(catalog, steps))).toEqual(["github-copilot"]);
+		expect(asked()).toBe(4);
+		expect(steps).toMatchObject({ copilotAsked: true, attempts: 1 });
+	});
+
+	it("tells what a person's models are listed from: the providers a launch would be given and Copilot's own list, with no question GitHub isn't asked anyway", async () => {
+		let world = await setup();
+		let asked = () => world.copilotModels.seen.length;
+		await world.credentials.connect("U_mona", "openai", { kind: "api-key", secret: OPENAI_KEY });
+		// Mona's sign-in is a token GitHub won't exchange and Copilot takes itself: its check's list.
+		world.notExchanged.add("ghu_mona_signed_in");
+		world.takenRaw.add("ghu_mona_signed_in");
+		let list = { list: { data: [{ id: "gpt-e2e" }] }, baseUrl: world.copilotModels.url };
+		expect(await world.credentials.modelSources("U_mona")).toEqual({
+			providers: ["github-copilot", "openai"],
+			withheld: [],
+			copilot: list,
+		});
+		expect(asked()).toBe(1);
+		expect(await world.credentials.modelSources("U_mona")).toMatchObject({ copilot: list });
+		expect(asked()).toBe(1);
+
+		// Hubot's is exchanged: the list is read from Copilot with the Copilot token.
+		expect(await world.credentials.modelSources("U_hubot")).toEqual({
+			providers: ["github-copilot"],
+			withheld: [],
+			copilot: list,
+		});
+		expect(world.copilotModels.seen.at(-1)?.headers.authorization).toBe(
+			"Bearer tid=copilot;for=ghu_hubot",
+		);
+		// Without a seat there is nothing of Copilot's to list.
+		world.entitled.set("ghu_hubot", 403);
+		world.advance(5 * 60_000);
+		expect(await world.credentials.modelSources("U_hubot")).toEqual({
+			providers: [],
+			withheld: [{ provider: "github-copilot", reason: "no-copilot-access" }],
+		});
+	});
+
+	it("lists one person's models for ten composers opened at once with one question to GitHub and one read of Copilot's list", async () => {
+		let world = await setup();
+		world.listCopilot({
+			data: [{
+				id: "chopin-burst",
+				name: "Chopin Burst",
+				model_picker_enabled: true,
+				policy: { state: "enabled" },
+				supported_endpoints: ["/chat/completions"],
+				capabilities: { type: "chat", family: "chopin-burst", supports: { tool_calls: true } },
+			}],
+		});
+		let catalogs = 0;
+		let lists = accountModels({
+			sources: userId => world.credentials.modelSources(userId),
+			catalog: async () => {
+				catalogs++;
+				return undefined;
+			},
+		});
+		// The documents' sockets open at once, each warming the list, and each composer reads it.
+		for (let index = 0; index < 10; index++) lists.warm("U_hubot");
+		let read = await Promise.all(Array.from({ length: 10 }, () => lists.read("U_hubot", 5_000)));
+		expect(read.map(list => list?.models.map(model => model.id))).toEqual(
+			Array.from({ length: 10 }, () => ["github-copilot/chopin-burst"]),
+		);
+		expect(world.githubApi.seen.filter(seen => seen.headers.authorization === "token ghu_hubot"))
+			.toHaveLength(1);
+		expect(world.copilotModels.seen).toHaveLength(1);
+		expect(catalogs).toBe(1);
+		// Ten more opened later read what is held, asking nothing.
+		await Promise.all(Array.from({ length: 10 }, () => lists.read("U_hubot", 5_000)));
+		expect(world.copilotModels.seen).toHaveLength(1);
+	});
+
+	it("prepares the catalog launches of ten documents attached at once on one question to GitHub, none waiting on another", async () => {
+		let world = await setup();
+		let asked = () =>
+			world.githubApi.seen.filter(seen => seen.headers.authorization === "token ghu_mona_signed_in")
+				.length;
+		let documents = [world.channel.id];
+		for (let index = 1; index < 10; index++) {
+			let created = await world.storage.channels.create({
+				id: crypto.randomUUID(),
+				repositoryId: "R_score",
+				repositoryOwner: "octo-org",
+				repositoryName: "score",
+				title: `Created ${index}`,
+				createdBy: "U_mona",
+				now: world.now(),
+			});
+			documents.push(created.id);
+		}
+		// GitHub decides as it is asked, and answers only once released.
+		let held = world.holdReply("ghu_mona_signed_in");
+		let launching = documents.map(channelId =>
+			world.credentials.launch({
+				userId: "U_mona",
+				channelId,
+				expiresAt: new Date(world.now().getTime() + 3_600_000),
+				owner: `${CATALOG_OWNER}link-${channelId}`,
+			})
+		);
+		await held.asked;
+		await Bun.sleep(20);
+		expect(asked()).toBe(1);
+		held.release();
+		let launched = await Promise.all(launching);
+		expect(launched.map(providers)).toEqual(documents.map(() => ["github-copilot"]));
+		expect(new Set(launched.map(each => each.launchId)).size).toBe(documents.length);
+		expect(asked()).toBe(1);
+	});
+
+	it("holds what GitHub says of a machine's token, asked as its Planner starts, for the catalog launch it asks for once attached", async () => {
+		let world = await setup();
+		let { machine } = await world.machines.pair({
+			userId: "U_mona",
+			label: "studio",
+			repositories: [],
+			autoRun: false,
+			grant: grant("ghu_machine", 3_600),
+		});
+		let asked = (token: string) =>
+			world.githubApi.seen.filter(seen => seen.headers.authorization === `token ${token}`).length;
+		expect(await world.credentials.available("U_mona", machine.id)).toEqual({
+			providers: ["github-copilot"],
+			withheld: [],
+		});
+		expect([asked("ghu_machine"), asked("ghu_mona_signed_in")]).toEqual([1, 0]);
+		let steps = launchSteps();
+		let launched = await world.credentials.launch({
+			userId: "U_mona",
+			machineId: machine.id,
+			expiresAt: new Date(world.now().getTime() + 3_600_000),
+			owner: `${CATALOG_OWNER}link-studio`,
+		}, steps);
+		expect(providers(launched)).toEqual(["github-copilot"]);
+		expect(asked("ghu_machine")).toBe(1);
+		expect(steps.copilotAsked).toBe(false);
 	});
 
 	it("asks GitHub afresh at each launch, and gives no Copilot placeholder when it can't say", async () => {
