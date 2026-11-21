@@ -251,6 +251,14 @@ export function plannerOfferIncoming(harness: string, channelId: string, held: b
 }
 
 /**
+ * Whether the document's remote Planner can't list the models of the AI accounts it runs on as they
+ * are now, for want of an update (see `AgentLink.outdated`). Never for any other harness.
+ */
+export function plannerOutdated(harness: string, channelId: string): boolean {
+	return harness === "remote" && attachedLink(channelId)?.outdated === true;
+}
+
+/**
  * A turn has fallen back on a saved choice for want of a catalog its remote Planner's client
  * offered and never reported. The wait is over for that client (`plannerOfferKnown` is then true
  * until it leaves), so what the turn did can be told. False where no client is attached, and for

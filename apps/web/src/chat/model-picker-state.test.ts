@@ -1,14 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+	ACCOUNTS_OUTDATED,
 	ACCOUNTS_STATUS,
 	chooseLevel,
 	chooseModel,
 	composerModelNotice,
 	fallbackNotice,
+	LAST_KNOWN_OUTDATED,
 	LAST_KNOWN_STATUS,
 	levelSteps,
 	matchesQuery,
+	MODELS_OUTDATED,
 	pendingLabel,
 	pendingTrigger,
 	pickerGroups,
@@ -571,7 +574,13 @@ describe("what the pill draws while the machine has yet to say which models it r
 		"none",
 		undefined,
 	];
-	let waits = [undefined, {}, { choice: { model: "acme/large" }, modelName: "Large" }];
+	let waits: Array<Chat.ModelState["waiting"]> = [
+		undefined,
+		{},
+		{ choice: { model: "acme/large" }, modelName: "Large" },
+		{ outdated: true },
+		{ choice: { model: "acme/large" }, modelName: "Large", outdated: true },
+	];
 	let lists = [undefined, { catalog: before }, { catalog: { models: [] } }];
 	let theirs: Chat.ModelCatalog = {
 		models: [{ id: "acme/large", name: "Large" }, { id: "acme/new", name: "New" }],
@@ -608,7 +617,9 @@ describe("what the pill draws while the machine has yet to say which models it r
 			if (view?.kind === "last-known") {
 				expect(state.catalog, label).toBeUndefined();
 				expect(view.catalog, label).toBe(state.lastKnown!.catalog);
-				expect(view.status, label).toBe(LAST_KNOWN_STATUS[state.place!]);
+				expect(view.status, label).toBe(
+					state.waiting?.outdated ? LAST_KNOWN_OUTDATED : LAST_KNOWN_STATUS[state.place!],
+				);
 			}
 			// The live list, whenever there is one, is what is drawn.
 			if (state.catalog) expect(view, label).toEqual({ kind: "live", catalog: live });
@@ -630,7 +641,9 @@ describe("what the pill draws while the machine has yet to say which models it r
 			if (view?.kind === "accounts") {
 				expect(state.catalog, label).toBeUndefined();
 				expect(view.catalog, label).toBe(theirs);
-				expect(view.status, label).toBe(ACCOUNTS_STATUS[state.place!]);
+				expect(view.status, label).toBe(
+					state.waiting?.outdated ? ACCOUNTS_OUTDATED : ACCOUNTS_STATUS[state.place!],
+				);
 			}
 			if (state.catalog || !state.accounts?.catalog.models.length || !state.place) continue;
 			expect(view, label).toMatchObject({ kind: "accounts", catalog: theirs });
@@ -641,14 +654,18 @@ describe("what the pill draws while the machine has yet to say which models it r
 		for (let state of states()) {
 			let view = pickerView(state);
 			let label = JSON.stringify(state);
-			let coming = state.place === "starting" || state.place === "attached";
+			let outdated = state.waiting?.outdated === true;
+			let coming = !outdated && (state.place === "starting" || state.place === "attached");
 			if (view?.kind === "loading") expect(coming, label).toBe(true);
 			if (view?.kind === "last-known") expect(view.loading, label).toBe(coming);
 			if (view?.kind === "accounts") expect(view.loading, label).toBe(coming);
-			if (
-				!state.catalog && !state.lastKnown?.catalog.models.length
-				&& !state.accounts?.catalog.models.length
-				&& (state.place === "failed" || state.place === "held" || state.place === "away")
+			let listless = !state.catalog && !state.lastKnown?.catalog.models.length
+				&& !state.accounts?.catalog.models.length;
+			// A machine that needs an update to list the accounts' models says so wherever it is.
+			if (listless && outdated && state.place) {
+				expect(view, label).toMatchObject({ kind: "unavailable", status: MODELS_OUTDATED });
+			} else if (
+				listless && (state.place === "failed" || state.place === "held" || state.place === "away")
 			) {
 				expect(view, label).toMatchObject({
 					kind: "unavailable",
@@ -656,6 +673,22 @@ describe("what the pill draws while the machine has yet to say which models it r
 				});
 			}
 		}
+	});
+
+	test("says the machine needs an update, and waits for nothing, while its list can't follow a change of AI accounts", () => {
+		let waiting = { choice: { model: "acme/large" }, modelName: "Large", outdated: true as const };
+		expect(pickerView({ waiting, place: "attached" })).toEqual({
+			kind: "unavailable",
+			name: "Large",
+			status: "The machine needs an update to switch AI accounts.",
+		});
+		expect(pickerView({ waiting, accounts: { catalog: theirs }, place: "attached" })).toEqual({
+			kind: "accounts",
+			catalog: theirs,
+			status:
+				"These models are from your AI accounts. The machine needs an update to switch AI accounts.",
+			loading: false,
+		});
 	});
 
 	test("keeps the saved choice's words on a pill with no list", () => {
@@ -690,6 +723,9 @@ describe("what the pill draws while the machine has yet to say which models it r
 				...Object.values(LAST_KNOWN_STATUS),
 				...Object.values(ACCOUNTS_STATUS),
 				...Object.values(UNAVAILABLE_STATUS),
+				MODELS_OUTDATED,
+				ACCOUNTS_OUTDATED,
+				LAST_KNOWN_OUTDATED,
 			]
 		) {
 			expect(text).not.toMatch(/planner|attach|chopin|decision/i);

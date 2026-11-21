@@ -121,6 +121,21 @@ wait for is refused (_The machine's models are still loading, so this choice was
 again once they're in._). A turn checks the stored choice against the catalog it runs with, as it
 always has.
 
+A client on people's AI accounts lists its models through the link's catalog launch, so what it
+reports is of the accounts that launch was prepared for. The moment its person's AI accounts change
+(they connect, replace or remove a provider, a key is refused, GitHub confirms their Copilot seat lost
+or back), the link stops counting it (`AgentLink.catalog`): what the client offers is unknown again,
+each person is told their own accounts' list as above, the account's list is computed afresh for
+the new credentials (never the one held for the old) and told to their open composers, a list kept
+from before the change is not their `lastKnown` (in this process), and a choice waits for the
+client's report as on attach. Its commands stay. Only a report made through a catalog launch
+prepared since the change counts again: a client that offers `catalog-launches` names the launch
+each report was listed through, and a late one through the old launch, or one naming none, changes
+nothing; for a client that doesn't, a report counts once the new launch has been handed, and the
+room is told it needs an update (`waiting.outdated`: _The machine needs an update to switch AI
+accounts._), with picks refused in those words and nothing waiting for it. See
+[When the person's accounts change](agent-connection.md#when-the-persons-accounts-change).
+
 A turn that cannot read the choice at all (the catalog or the stored choice fails to load) never
 runs the default silently. It runs the default, Chat says once, while that holds, that the
 document's model choice couldn't be read, and the server tells the room with `chat:model-unreadable`

@@ -166,13 +166,17 @@ it("offers a remote Planner's commands only from the client attached to that doc
 			{ name: "review", kind: "prompt" },
 		],
 	};
+	// What each client last reported: its commands are its own, whatever accounts its models were of.
 	let machineA = {
 		get catalog() {
+			return undefined;
+		},
+		get lastReport() {
 			return reportedByA;
 		},
 	} as unknown as AgentLink;
 	let machineB = {
-		get catalog() {
+		get lastReport() {
 			return { models: { available: [] } };
 		},
 	} as unknown as AgentLink;
@@ -193,7 +197,7 @@ it("offers a remote Planner's commands only from the client attached to that doc
 	expect(await plannerCommands("remote", "doc-a", repository)).toBeUndefined();
 	detachB();
 	// An older client reports no commands at all.
-	let older = attachLink("doc-a", { catalog: undefined } as unknown as AgentLink);
+	let older = attachLink("doc-a", { lastReport: undefined } as unknown as AgentLink);
 	expect(await plannerCommands("remote", "doc-a", repository)).toBeUndefined();
 	older();
 	// A harness that reports none offers none.

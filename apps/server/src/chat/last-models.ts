@@ -31,19 +31,27 @@ export async function keptList(
 
 /**
  * Saves what a document's Planner reported for the account it attached for, under the writer lease,
- * when it lists models and differs from what was last saved for that document and account. A report
- * with no models keeps the last list, and so does a process without the lease. Saves of one list
- * run in the order they were reported; one that fails is said in the log and tried with the next
- * report.
+ * when it lists models and differs from what was last saved for that document and account, or the
+ * account's AI accounts changed since (`changed`), so the list is saved as of the accounts they have
+ * now. A report with no models keeps the last list, and so does a process without the lease. Saves
+ * of one list run in the order they were reported; one that fails is said in the log and tried with
+ * the next report.
  */
 export function lastModels(options: {
 	storage: Pick<StorageAdapter, "plannerCatalogs">;
 	lease: () => Lease | undefined;
 	operatorModel?: string;
 	now?: () => Date;
-}): { remember(channelId: string, reported: ReportedCatalog): Promise<void> } {
-	let saved = new Map<string, { hash: bigint | number; saving: Promise<void> }>();
+}): {
+	remember(channelId: string, reported: ReportedCatalog): Promise<void>;
+	changed(userId: string): void;
+} {
+	let saved = new Map<string, { hash?: bigint | number; userId: string; saving: Promise<void> }>();
 	return {
+		changed(userId) {
+			// The next report is saved even if it lists the same: it is of the accounts they have now.
+			for (let entry of saved.values()) if (entry.userId === userId) entry.hash = undefined;
+		},
 		remember(channelId, reported) {
 			let catalog = remoteCatalog(reported.catalog, options.operatorModel);
 			let lease = options.lease();
@@ -53,8 +61,9 @@ export function lastModels(options: {
 			let last = saved.get(key);
 			if (last?.hash === hash) return last.saving;
 			let reportedAt = (options.now ?? (() => new Date()))();
-			let entry = {
+			let entry: { hash?: bigint | number; userId: string; saving: Promise<void> } = {
 				hash,
+				userId: reported.userId,
 				saving: Promise.resolve(),
 			};
 			entry.saving = (last?.saving ?? Promise.resolve()).then(() =>

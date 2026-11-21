@@ -108,6 +108,18 @@ const LISTED_MODELS = {
 	],
 };
 
+// A personal access token of another account than the person's sign-in, whose Copilot list has a
+// preview model the lister's lacks (see `PREVIEW_MODELS`).
+const PREVIEW_ACCOUNT = /^github_pat_e2e_preview_/;
+
+/** The other account's Copilot models: the one the catalog names, and a preview of its own. */
+const PREVIEW_MODELS = {
+	data: [
+		listedModel("e2e-large", "E2E Large (account)", true),
+		{ ...listedModel("e2e-neon", "E2E Neon", true, ["low", "high"]), preview: true },
+	],
+};
+
 /** The public model catalog (models.dev's `api.json`), with the one Copilot model it describes. */
 const MODEL_CATALOG = {
 	"github-copilot": {
@@ -296,6 +308,7 @@ async function copilotModels(authorization: string): Promise<Response> {
 		return new Response("unauthorized: token authentication failed", { status: 401 });
 	}
 	let handle = /^ghu_e2e_(.+)_\d+$/.exec(token)?.[1];
+	if (PREVIEW_ACCOUNT.test(token)) return json(PREVIEW_MODELS);
 	return json(handle?.startsWith(COPILOT_LISTER) ? LISTED_MODELS : { data: [{ id: "gpt-e2e" }] });
 }
 

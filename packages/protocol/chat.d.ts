@@ -445,9 +445,11 @@ export declare namespace Chat {
 		 * attached, or one that offered its models and has yet to report them), with the stored
 		 * choice and its name, if any: what a composer shows while it waits for the models. It is
 		 * not `choice`, which says only what a known offer honours or not. Absent once the offer is
-		 * known, though it may be nothing, and for every harness that always knows.
+		 * known, though it may be nothing, and for every harness that always knows. `outdated` says
+		 * the document's Planner can't list the models of the AI accounts it runs on as they are now
+		 * without an update, so they are not on their way.
 		 */
-		waiting?: { choice?: ModelChoice; modelName?: string };
+		waiting?: { choice?: ModelChoice; modelName?: string; outdated?: true };
 		/**
 		 * Sent to one person only, while what the harness offers is not known: the models the
 		 * document's Planner last reported for that person's own account, and when (milliseconds

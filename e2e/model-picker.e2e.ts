@@ -589,6 +589,138 @@ test("shows the person's models from their AI accounts on each of the ten docume
 	await page.context().close();
 });
 
+/**
+ * Connects, in another tab of the page's person, a GitHub token of another account for Copilot,
+ * whose list has a preview model the lister's sign-in lacks (`E2E Neon`).
+ */
+async function connectPreviewToken(page: Page) {
+	let accounts = await page.context().newPage();
+	accounts.on("pageerror", error => thrown.push(error.message));
+	await accounts.goto(`${ORIGIN}/ai-accounts`);
+	let copilot = accounts.getByRole("main").getByRole("listitem").filter({
+		has: accounts.getByRole("heading", { name: "GitHub Copilot", exact: true }),
+	});
+	await copilot.getByRole("button", { name: "Use a token instead" }).click();
+	let dialog = accounts.getByRole("dialog", { name: "Use a GitHub token for Copilot" });
+	await dialog.getByLabel("GitHub token").fill("github_pat_e2e_preview_account_9b9b");
+	await dialog.getByRole("button", { name: "Use token" }).click();
+	await expect(copilot.getByText("Token ending 9b9b", { exact: true })).toBeVisible();
+	await accounts.close();
+}
+
+test("follows a token of another account the person connects while their document's Planner is attached, without a reload", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await newRoom();
+	// Their own person, so a retry starts on their sign-in again.
+	let handle = `copilot-lister-switch-${crypto.randomUUID().slice(0, 8)}`;
+	let page = await open(browser, handle, room, DESKTOP);
+	// A Planner on the person's accounts: it lists its models through each catalog launch Chopin
+	// hands it and names that launch in its report. What it tells on attach names none.
+	let launches: string[] = [];
+	let client = await connectAgent({
+		url: ORIGIN,
+		token: `ghu_e2e_${handle}_1`,
+		document: room,
+		resumable: false,
+		capabilities: CATALOG,
+		catalogLaunches: true,
+		handlers: {
+			turn: finishTurn,
+			ai() {},
+			aiCatalog(message) {
+				if (message.catalogLaunch) launches.push(message.catalogLaunch);
+			},
+		},
+	});
+	expect(client.features).toContain("catalog-launches");
+	await expect.poll(() => launches.length).toBe(1);
+	client.report(CATALOG, launches[0]);
+	await expect(liveTrigger(page)).toHaveAccessibleName("Model: Small");
+	await expect(page.locator(".composer-model-pill[data-from-accounts]")).toHaveCount(0);
+	// Marks the page, which a reload would lose.
+	await page.evaluate(() => (window as unknown as { kept: boolean }).kept = true);
+
+	// In another tab, the person connects a GitHub token of another account, whose Copilot list
+	// has a preview model their sign-in's lacks.
+	await connectPreviewToken(page);
+
+	// The document's picker follows at once: the Planner's list was of the sign-in's account, so
+	// it shows the token's account's models, marked as from their accounts, preview included.
+	let fromAccounts = trigger(page).and(page.locator("[data-from-accounts]"));
+	await expect(fromAccounts).toHaveAccessibleName(
+		"Model: Choose a model. These models are from your AI accounts. The machine's own list is still loading.",
+	);
+	await fromAccounts.click();
+	await expect(option(page, "E2E Neon")).toBeVisible();
+	await expect(option(page, "E2E Large")).toBeVisible();
+	await expect(popover(page).getByRole("option")).toHaveCount(2);
+	await page.keyboard.press("Escape");
+	expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
+
+	// A late report through the sign-in's launch changes nothing; one through the token's wins.
+	await expect.poll(() => launches.length).toBe(2);
+	client.report(CATALOG, launches[0]);
+	await page.waitForTimeout(500);
+	await expect(fromAccounts).toBeVisible();
+	let neon: CapabilityCatalog = {
+		models: {
+			available: [
+				{ id: "github-copilot/e2e-neon", name: "Neon", thinkingLevels: ["low", "high"] },
+				SMALL,
+			],
+			default: { id: "github-copilot/e2e-neon" },
+		},
+	};
+	client.report(neon, launches[1]);
+	await expect(liveTrigger(page)).toHaveAccessibleName("Model: Neon");
+	await expect(page.locator(".composer-model-pill[data-from-accounts]")).toHaveCount(0);
+	expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
+	await client.detach();
+	await page.context().close();
+});
+
+test("says the machine needs an update when the person switches accounts under a Planner that doesn't name its catalog launches", async ({ browser }) => {
+	test.setTimeout(120_000);
+	let room = await newRoom();
+	let handle = `copilot-lister-older-${crypto.randomUUID().slice(0, 8)}`;
+	let page = await open(browser, handle, room, DESKTOP);
+	// A Planner on the person's accounts from before catalog launches were named: it lists its
+	// models through the first one and never again.
+	let handed = 0;
+	let client = await connectAgent({
+		url: ORIGIN,
+		token: `ghu_e2e_${handle}_1`,
+		document: room,
+		resumable: false,
+		capabilities: CATALOG,
+		handlers: {
+			turn: finishTurn,
+			ai() {},
+			aiCatalog() {
+				handed++;
+			},
+		},
+	});
+	expect(client.features).not.toContain("catalog-launches");
+	await expect.poll(() => handed).toBe(1);
+	client.report(CATALOG);
+	await expect(liveTrigger(page)).toHaveAccessibleName("Model: Small");
+
+	await connectPreviewToken(page);
+	// The person's new accounts' list, and the truth about the machine: never an endless wait.
+	let fromAccounts = trigger(page).and(page.locator("[data-from-accounts]"));
+	await expect(fromAccounts).toHaveAccessibleName(
+		"Model: Choose a model. These models are from your AI accounts. The machine needs an update to switch AI accounts.",
+	);
+	await fromAccounts.click();
+	await option(page, "E2E Neon").click();
+	await expect(notice(page)).toHaveText(
+		"The machine needs an update to switch AI accounts, so this choice wasn't saved.",
+	);
+	await client.detach();
+	await page.context().close();
+});
+
 test("offers a choice only while the attached client reports models", async ({ browser }) => {
 	test.setTimeout(120_000);
 	let room = await newRoom();
