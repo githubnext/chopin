@@ -24,6 +24,7 @@ import { PostgresAiUsageStore } from "./ai-usage";
 import { AiCutoffs } from "../ai-cutoffs";
 import { PostgresChatThreadStore } from "./chat-threads";
 import { PostgresPlannerLinkHoldStore } from "./planner-holds";
+import { PostgresPlannerCatalogStore } from "./planner-catalogs";
 import { PostgresPlannerModelChoiceStore } from "./planner-model-choices";
 import { PostgresResearchWorkspaceStore } from "./research";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../model";
@@ -584,6 +585,11 @@ export class PostgresStorage implements StorageAdapter {
 			(action, execute) => this.#run(action, execute),
 			(transaction, lease) => this.#assertLease(transaction, lease),
 		);
+		this.plannerCatalogs = new PostgresPlannerCatalogStore(
+			this.#sql,
+			(action, execute) => this.#run(action, execute),
+			(transaction, lease) => this.#assertLease(transaction, lease),
+		);
 		this.chatThreads = new PostgresChatThreadStore(
 			this.#sql,
 			(action, execute) => this.#run(action, execute),
@@ -800,6 +806,7 @@ export class PostgresStorage implements StorageAdapter {
 	readonly machines: PostgresMachineStore;
 	readonly plannerHolds: PostgresPlannerLinkHoldStore;
 	readonly plannerModelChoices: PostgresPlannerModelChoiceStore;
+	readonly plannerCatalogs: PostgresPlannerCatalogStore;
 	readonly chatThreads: PostgresChatThreadStore;
 	readonly plannerCredentials: PostgresPlannerCredentialStore;
 	readonly machineDatabases: PostgresMachineDatabaseStore;

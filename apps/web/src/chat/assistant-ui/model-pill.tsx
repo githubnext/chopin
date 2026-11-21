@@ -18,7 +18,7 @@ import {
 	ModelSelectorRoot,
 	ModelSelectorSearch,
 } from "@/components/assistant-ui/elements/model-selector";
-import { Popover, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
 	chooseLevel,
 	chooseModel,
@@ -31,7 +31,7 @@ import {
 import { modelSelection } from "./model-options";
 import { ScrollThumb } from "./scroll-thumb";
 
-import type { ModelControl, PendingModel } from "../use-model-choice";
+import type { ModelControl, PendingModel, UnavailableModel } from "../use-model-choice";
 
 /**
  * The pill while the document's machine starts its Planner and has yet to say which models it runs:
@@ -69,8 +69,47 @@ export function ModelPillPending({ model }: { model: PendingModel }) {
 	);
 }
 
+/**
+ * The pill where the machine can't give its models (it couldn't start, or is offline) and no list
+ * was kept from last time: the saved choice's words in quieter ink, and a click that says why in
+ * one sentence, with nothing to choose from.
+ */
+export function ModelPillUnavailable({ model }: { model: UnavailableModel }) {
+	let [open, setOpen] = useState(false);
+	let saved = [model.name === "Model" ? undefined : model.name, model.level].filter(Boolean)
+		.join(", ");
+	let label = saved ? `Model: ${saved}. ${model.status}` : `Model. ${model.status}`;
+	return (
+		<Popover onOpenChange={setOpen} open={open}>
+			<PopoverTrigger
+				render={
+					<button
+						aria-label={label}
+						className="btn btn-sm btn-ghost composer-model-pill"
+						data-last-known=""
+						data-press="none"
+						title={model.status}
+						type="button"
+					>
+						<span className="composer-model-name">{model.name}</span>
+						{model.level && <span className="composer-model-level">{model.level}</span>}
+						<ChevronIcon aria-hidden="true" className="composer-model-chevron" size={12} />
+					</button>
+				}
+			/>
+			<PopoverContent
+				aria-label="Model and reasoning"
+				className="composer-model-selector"
+				side="top"
+			>
+				<p className="text-xs text-text-secondary" role="status">{model.status}</p>
+			</PopoverContent>
+		</Popover>
+	);
+}
+
 export function ModelPill({ control }: { control: ModelControl }) {
-	let { catalog, choice, choose, modelName } = control;
+	let { catalog, choice, choose, modelName, lastKnown } = control;
 	let [open, setOpen] = useState(false);
 	// The selector is 288px wide and opens level with the pill, which a phone's row can put near the
 	// right edge: it is moved along the pill's edge, as far as it needs, to stay inside the screen.
@@ -85,7 +124,11 @@ export function ModelPill({ control }: { control: ModelControl }) {
 	}, [open]);
 	let { groups, value, effort, modelOf, levelOf } = modelSelection(catalog, choice);
 	let { name, level } = triggerText(catalog, choice);
-	let notice = fallbackNotice(catalog, choice, modelName);
+	// A list from last time says why it is not the machine's list now; what is gone from it is for the
+	// machine's own list to say.
+	let notice = lastKnown ? lastKnown.status : fallbackNotice(catalog, choice, modelName);
+	let label = triggerLabel(catalog, choice, modelName);
+	let title = triggerTitle(catalog, choice);
 	let levels = useLevelLane(value, effort);
 	return (
 		<ModelSelectorRoot
@@ -104,10 +147,12 @@ export function ModelPill({ control }: { control: ModelControl }) {
 				render={
 					<button
 						ref={pill}
-						aria-label={triggerLabel(catalog, choice, modelName)}
+						aria-busy={lastKnown?.loading ? "true" : undefined}
+						aria-label={lastKnown ? `${label}. ${lastKnown.status}` : label}
 						className="btn btn-sm btn-ghost composer-model-pill"
+						data-last-known={lastKnown ? "" : undefined}
 						data-press="none"
-						title={triggerTitle(catalog, choice)}
+						title={lastKnown ? `${title}. ${lastKnown.status}` : title}
 						type="button"
 					>
 						<span className="composer-model-name">{name}</span>

@@ -30,7 +30,7 @@ import { SendStopButton } from "./assistant-ui/send-stop-button";
 import { motionContract } from "../motion-contract";
 import { currentShortcutPlatform, shortcutLabel } from "../shortcuts";
 import { draftPlaceholder } from "./ask-chopin";
-import { ModelPill, ModelPillPending } from "./assistant-ui/model-pill";
+import { ModelPill, ModelPillPending, ModelPillUnavailable } from "./assistant-ui/model-pill";
 import type { Format } from "./format";
 import type { FileView } from "./attachments/files";
 import type { ComposerModel } from "./use-model-choice";
@@ -635,6 +635,8 @@ export function ChatComposer(
 									)}
 									{model && ("pending" in model
 										? <ModelPillPending model={model} />
+										: "unavailable" in model
+										? <ModelPillUnavailable model={model} />
 										: <ModelPill control={model} />)}
 								</div>
 								<div className="composer-actions">

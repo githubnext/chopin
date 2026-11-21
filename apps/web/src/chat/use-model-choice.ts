@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { WireRefusal } from "../wire";
-import { pendingTrigger, sameChoice } from "./model-picker-state";
+import { pickerView, sameChoice } from "./model-picker-state";
 
 import type { Chat as Wire } from "@chopin/protocol";
+import type { PlannerPlace } from "./model-picker-state";
 import type { Wire as Socket } from "../wire";
 
 export type ModelControl = {
@@ -15,6 +16,11 @@ export type ModelControl = {
 	/** Why the server refused the last choice, until the next one. */
 	refusal: string | undefined;
 	choose: (next: Wire.ModelChoice) => void;
+	/**
+	 * Present where `catalog` is the list last reported for this person's account, not the
+	 * machine's list now: why (`status`), and whether the machine is on its way (`loading`).
+	 */
+	lastKnown?: { status: string; loading: boolean };
 };
 
 /**
@@ -23,8 +29,14 @@ export type ModelControl = {
  */
 export type PendingModel = { pending: true; name: string; level?: string };
 
+/**
+ * The pill drawn where the machine can't give its models (it couldn't start, or is offline) and no
+ * list was kept: the saved choice's words, and why, with nothing to choose from.
+ */
+export type UnavailableModel = { unavailable: true; name: string; level?: string; status: string };
+
 /** What the composer's model pill draws: the real control, or the pill waiting for it. */
-export type ComposerModel = ModelControl | PendingModel;
+export type ComposerModel = ModelControl | PendingModel | UnavailableModel;
 
 type Held = {
 	room: string;
@@ -34,6 +46,8 @@ type Held = {
 	modelName?: string;
 	/** The offer is not known yet: the stored choice to show while the models are on their way. */
 	waiting?: Wire.ModelState["waiting"];
+	/** The offer is not known yet: the list last reported for this person's account. */
+	lastKnown?: Wire.ModelState["lastKnown"];
 	/** What the document's agent offers `/` beyond Chat's own commands. */
 	commands?: Wire.CommandOption[];
 	/** The server ran the harness's default because a turn could not read the choice. */
@@ -54,14 +68,21 @@ type Asked = { sequence: number; choice: Wire.ModelChoice };
  * again if it still holds.
  */
 export function useModelChoice(
-	{ wire, room, connected, enabled }: {
+	{ wire, room, connected, enabled, place }: {
 		wire: Socket | undefined;
 		room: string;
 		connected: boolean;
 		enabled: boolean;
+		/** Where the document's Planner is, as the room last said (see `pickerView`). */
+		place?: PlannerPlace;
 	},
 ): {
+	/** The control over the machine's list now; none while only a kept list is known. */
 	control: ModelControl | undefined;
+	/** What the composer's model pill draws: see `pickerView`. */
+	pill: ComposerModel | undefined;
+	/** Why the server refused the last choice, until the next one. */
+	refusal: string | undefined;
 	saved: Wire.ModelChoice | undefined;
 	savedName: string | undefined;
 	unreadable: boolean;
@@ -91,6 +112,7 @@ export function useModelChoice(
 					choice: frame.choice,
 					modelName: frame.modelName,
 					waiting: frame.waiting,
+					lastKnown: frame.lastKnown,
 					commands: frame.commands,
 				}));
 			}),
@@ -135,31 +157,51 @@ export function useModelChoice(
 	let savedName = enabled ? current?.modelName : undefined;
 	let commands = enabled ? current?.commands : undefined;
 	let waiting = enabled ? current?.waiting : undefined;
-	if (!enabled || !wire || !current?.catalog) {
-		return { control: undefined, saved, savedName, unreadable, commands, waiting };
-	}
-	let choice = asked && !sameChoice(asked.choice, current.choice) ? asked.choice : current.choice;
-	let modelName = choice?.model === current.choice?.model ? savedName : undefined;
+	let shown = enabled && wire ? current : undefined;
+	// The choice the room holds is told with the live list; while the offer is unknown, only as what
+	// the pill waits with.
+	let roomChoice = shown?.catalog ? shown.choice : shown?.waiting?.choice;
+	let choice = asked && !sameChoice(asked.choice, roomChoice) ? asked.choice : roomChoice;
+	let roomName = shown?.catalog ? shown.modelName : shown?.waiting?.modelName;
+	let modelName = choice?.model === roomChoice?.model ? roomName : undefined;
+	let control: ModelControl | undefined = shown?.catalog
+		? { catalog: shown.catalog, choice, modelName, refusal, choose }
+		: undefined;
+	let view = shown && pickerView({
+		catalog: shown.catalog,
+		lastKnown: shown.lastKnown,
+		waiting: shown.waiting,
+		place,
+	});
+	let pill: ComposerModel | undefined = !view
+		? undefined
+		: view.kind === "live"
+		? control
+		: view.kind === "last-known"
+		? {
+			catalog: view.catalog,
+			choice,
+			modelName,
+			refusal,
+			choose,
+			lastKnown: { status: view.status, loading: view.loading },
+		}
+		: view.kind === "loading"
+		? { pending: true, name: view.name, ...(view.level ? { level: view.level } : {}) }
+		: {
+			unavailable: true,
+			name: view.name,
+			...(view.level ? { level: view.level } : {}),
+			status: view.status,
+		};
 	return {
-		control: { catalog: current.catalog, choice, modelName, refusal, choose },
+		control,
+		pill,
+		refusal: enabled ? refusal : undefined,
 		saved,
 		savedName,
 		unreadable,
 		commands,
 		waiting,
 	};
-}
-
-/**
- * The pill the composer draws before the real one: while the document's machine is `coming`
- * (starting its Planner, or attached and yet to report) and the server says the offer is not known
- * yet (`waiting`), a pill that waits for the models in the real one's place, with the stored
- * choice's words. A Planner that cannot start, a machine that went away or none chosen, and a
- * client that reported nothing, end the wait: the composer is then as it was without a pill.
- */
-export function pendingModel(
-	waiting: Wire.ModelState["waiting"],
-	coming: "starting" | "attached" | undefined,
-): PendingModel | undefined {
-	return coming && waiting ? pendingTrigger(waiting.choice, waiting.modelName) : undefined;
 }

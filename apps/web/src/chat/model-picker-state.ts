@@ -289,3 +289,88 @@ export function chooseLevel(catalog: Catalog, choice: Choice | undefined, level:
 export function sameChoice(left: Choice | undefined, right: Choice | undefined): boolean {
 	return left?.model === right?.model && left?.thinkingLevel === right?.thinkingLevel;
 }
+
+/**
+ * Where the document's Planner is, as the room last said, for the model pill: on its way
+ * (`starting`, or `attached` and yet to say which models it runs), or not coming: its machine
+ * couldn't start it (`failed`), stepped away and keeps its work for a while (`held`), is offline
+ * (`away`), or there is none (`none`).
+ */
+export type PlannerPlace = "starting" | "attached" | "failed" | "held" | "away" | "none";
+
+/**
+ * The words over a list from last time, saying why it is not the machine's list now. They never
+ * say what state the machine is in, which its own button says, and Chat never does.
+ */
+export const LAST_KNOWN_LOADING =
+	"These are the models from last time. The machine's current list is still loading.";
+export const LAST_KNOWN_WAITING =
+	"These are the models from last time, until the machine lists its own.";
+
+export const LAST_KNOWN_STATUS: Record<PlannerPlace, string> = {
+	starting: LAST_KNOWN_LOADING,
+	attached: LAST_KNOWN_LOADING,
+	failed: LAST_KNOWN_WAITING,
+	held: LAST_KNOWN_WAITING,
+	away: LAST_KNOWN_WAITING,
+	none: LAST_KNOWN_WAITING,
+};
+
+/**
+ * The words on a pill with no list to show, where the machine can't give one now (it couldn't
+ * start the Planner, stepped away or is offline), without saying which: its button says that.
+ */
+export const MODELS_UNAVAILABLE = "The machine's models can't load right now.";
+
+export const UNAVAILABLE_STATUS: Partial<Record<PlannerPlace, string>> = {
+	failed: MODELS_UNAVAILABLE,
+	held: MODELS_UNAVAILABLE,
+	away: MODELS_UNAVAILABLE,
+};
+
+/**
+ * What the composer's model pill draws:
+ * - `live`: the list the machine reports now, which is the only list drawn unmarked;
+ * - `last-known`: the list last reported for this person's own account, marked with `status`,
+ *   while the machine has yet to say which models it runs (`loading` while it is on its way);
+ * - `loading`: no list yet and the machine on its way, the saved choice's words waiting in place;
+ * - `unavailable`: no list, and a machine that can't give one (it couldn't start, stepped away or
+ *   is offline), which says so (`status`), with the saved choice's words where the server sent
+ *   them.
+ * Nothing is drawn where the harness offers no choice (no `place`, or a machine that is there and
+ * says the models are not coming), nor where no machine is chosen and no list was kept.
+ */
+export type PickerView =
+	| { kind: "live"; catalog: Catalog }
+	| { kind: "last-known"; catalog: Catalog; status: string; loading: boolean }
+	| { kind: "loading"; name: string; level?: string }
+	| { kind: "unavailable"; name: string; level?: string; status: string };
+
+export function pickerView(input: {
+	/** The list the machine reports now. */
+	catalog?: Catalog;
+	/** The list last reported for this person's account, sent only while the offer is unknown. */
+	lastKnown?: { catalog: Catalog };
+	/** The server's word that the offer is unknown, with the stored choice to wait with. */
+	waiting?: { choice?: Choice; modelName?: string };
+	place: PlannerPlace | undefined;
+}): PickerView | undefined {
+	if (input.catalog) return { kind: "live", catalog: input.catalog };
+	let place = input.place;
+	if (!place) return undefined;
+	let coming = place === "starting" || place === "attached";
+	if (input.lastKnown?.catalog.models.length) {
+		return {
+			kind: "last-known",
+			catalog: input.lastKnown.catalog,
+			status: LAST_KNOWN_STATUS[place],
+			loading: coming,
+		};
+	}
+	let words = pendingTrigger(input.waiting?.choice, input.waiting?.modelName);
+	let saved = { name: words.name, ...(words.level ? { level: words.level } : {}) };
+	// A machine on its way is waited for only while the server says the models are coming.
+	if (coming) return input.waiting ? { kind: "loading", ...saved } : undefined;
+	let status = UNAVAILABLE_STATUS[place];
+	return status ? { kind: "unavailable", ...saved, status } : undefined;
+}

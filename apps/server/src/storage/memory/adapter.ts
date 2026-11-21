@@ -20,6 +20,7 @@ import { MemoryAiUsageStore } from "./ai-usage";
 import { AiCutoffs } from "../ai-cutoffs";
 import { MemoryChatThreadStore } from "./chat-threads";
 import { MemoryPlannerLinkHoldStore } from "./planner-holds";
+import { MemoryPlannerCatalogStore } from "./planner-catalogs";
 import { MemoryPlannerModelChoiceStore } from "./planner-model-choices";
 import { MemoryResearchWorkspaceStore } from "./research";
 import { researchProjectionAllowed, ResearchProjectionConflict } from "../model";
@@ -79,6 +80,7 @@ import type {
 	McpInvocationStore,
 	McpSessionStore,
 	NavigationStore,
+	PlannerCatalogStore,
 	PlannerCredentialStore,
 	PlannerLinkHoldStore,
 	PlannerModelChoiceStore,
@@ -227,6 +229,12 @@ export class MemoryStorage implements StorageAdapter {
 		assertLease: held => this.#assertLease(held),
 	});
 	readonly plannerModelChoices: PlannerModelChoiceStore = this.#plannerModelChoices;
+	readonly #plannerCatalogs = new MemoryPlannerCatalogStore({
+		channelExists: id => this.#channels.has(id),
+		userExists: id => this.#users.has(id),
+		assertLease: held => this.#assertLease(held),
+	});
+	readonly plannerCatalogs: PlannerCatalogStore = this.#plannerCatalogs;
 	readonly #chatThreads = new MemoryChatThreadStore({
 		channelExists: id => this.#channels.has(id),
 		assertLease: held => this.#assertLease(held),
@@ -760,6 +768,7 @@ export class MemoryStorage implements StorageAdapter {
 		this.#versions.deleteChannel(id);
 		this.#plannerHolds.deleteChannel(id);
 		this.#plannerModelChoices.deleteChannel(id);
+		this.#plannerCatalogs.deleteChannel(id);
 		this.#chatThreads.deleteChannel(id);
 		this.#plannerCredentials.deleteChannel(id);
 		this.#aiPlaceholders.deleteChannel(id);

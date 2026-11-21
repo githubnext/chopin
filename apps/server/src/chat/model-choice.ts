@@ -53,10 +53,26 @@ export type ModelChoiceDeps = {
 	 * and runs it from its first turn, instead of its own default. Absent means no wait.
 	 */
 	offered?: (channelId: string) => Promise<void>;
+	/**
+	 * The models the document's Planner last reported for `userId`'s account, if any: told to that
+	 * person alone, as the last known list, while what the harness offers is not known. Absent means
+	 * none is kept.
+	 */
+	lastKnown?: (
+		channelId: string,
+		userId: string,
+	) => Promise<{ catalog: Wire.ModelCatalog; reportedAt: Date } | undefined>;
 	storage: Pick<StorageAdapter, "plannerModelChoices">;
 	lease: () => Lease;
 	now?: () => Date;
 };
+
+/**
+ * Why a choice wasn't saved while the document's Planner has yet to say which models it runs: a
+ * list shown from before can't be checked against what it runs now.
+ */
+export const MODELS_LOADING =
+	"The machine's models are still loading, so this choice wasn't saved. Choose again once they're in.";
 
 /** What a turn runs, and the words for a choice it could not honour. */
 export type TurnModel = { model?: string; thinkingLevel?: string; notice?: string };
@@ -82,10 +98,10 @@ async function stored(
  * to the default, but not while what the harness offers is unknown (`known`): it is then told as
  * `waiting`, which a composer shows while the models are on their way (`incoming`).
  */
-export async function modelState(
+async function roomState(
 	deps: ModelChoiceDeps,
 	channelId: string,
-): Promise<Wire.ModelState> {
+): Promise<{ state: Wire.ModelState; known: boolean }> {
 	let [catalog, saved, commands] = await Promise.all([
 		deps.catalog(channelId),
 		stored(deps, channelId),
@@ -97,7 +113,7 @@ export async function modelState(
 	]);
 	let known = !!catalog || (deps.known?.(channelId) ?? true);
 	let told = saved.choice && known;
-	return {
+	let state: Wire.ModelState = {
 		kind: "chat:model",
 		ts: 0,
 		...(catalog ? { catalog } : {}),
@@ -114,6 +130,43 @@ export async function modelState(
 			}),
 		...(commands?.length ? { commands } : {}),
 	};
+	return { state, known };
+}
+
+/**
+ * The state one person is told: the room's, and, while what the harness offers is not known, the
+ * list the document's Planner last reported for that person's own account (`lastKnown`), which no
+ * one else is told. A list that can't be read is left out; the room's state still goes.
+ */
+async function viewerState(
+	deps: ModelChoiceDeps,
+	channelId: string,
+	room: { state: Wire.ModelState; known: boolean },
+	viewer: string,
+): Promise<Wire.ModelState> {
+	if (room.known || !deps.lastKnown) return room.state;
+	let saved = await deps.lastKnown(channelId, viewer).catch((error): undefined => {
+		console.error("[chat] could not read the document's last model list:", error);
+		return undefined;
+	});
+	if (!saved?.catalog.models.length) return room.state;
+	return {
+		...room.state,
+		lastKnown: { catalog: saved.catalog, reportedAt: saved.reportedAt.getTime() },
+	};
+}
+
+/**
+ * The model state `viewer` is told, or the room's where no viewer is named: see `roomState` and
+ * `viewerState`.
+ */
+export async function modelState(
+	deps: ModelChoiceDeps,
+	channelId: string,
+	viewer?: string,
+): Promise<Wire.ModelState> {
+	let room = await roomState(deps, channelId);
+	return viewer === undefined ? room.state : viewerState(deps, channelId, room, viewer);
 }
 
 /**
@@ -216,14 +269,28 @@ function inOrder<T>(channelId: string, run: () => Promise<T>): Promise<T> {
 
 /**
  * Reads the document's model state when it is this call's turn and gives it to `deliver`, which
- * tells the room, or the one person who joined. Rejects if the state cannot be read.
+ * tells the room, or the one person who joined. While what the harness offers is not known, each
+ * person may be told a state of their own (see `viewerState`): `personal` then gives it, and the
+ * room's state is not to be broadcast as it is. Rejects if the state cannot be read.
  */
 export function publishModelState(
 	deps: ModelChoiceDeps,
 	channelId: string,
-	deliver: (state: Wire.ModelState) => void,
+	deliver: (
+		state: Wire.ModelState,
+		personal?: (viewer: string) => Promise<Wire.ModelState>,
+	) => void | Promise<void>,
 ): Promise<void> {
-	return inOrder(channelId, async () => deliver(await modelState(deps, channelId)));
+	return inOrder(channelId, async () => {
+		let room = await roomState(deps, channelId);
+		if (room.known || !deps.lastKnown) return deliver(room.state);
+		let told = new Map<string, Promise<Wire.ModelState>>();
+		return deliver(room.state, viewer => {
+			let state = told.get(viewer) ?? viewerState(deps, channelId, room, viewer);
+			told.set(viewer, state);
+			return state;
+		});
+	});
 }
 
 /**
@@ -248,7 +315,13 @@ export function chooseModel(
 			let choice = requested(frame);
 			if (!choice) return fail(ws, frame.rid, "That is not a model choice.");
 			if (context.child) return fail(ws, frame.rid, "A child document uses its parent's model.");
+			// A choice is checked against what the Planner offers now, never a list it reported
+			// before: a client that has yet to report is waited for, as a turn waits for it.
+			if (deps.known?.(channelId) === false) await deps.offered?.(channelId);
 			let catalog = await deps.catalog(channelId);
+			if (!catalog && deps.known?.(channelId) === false) {
+				return fail(ws, frame.rid, MODELS_LOADING);
+			}
 			let refusal = refusedChoice(catalog, choice);
 			if (refusal) return fail(ws, frame.rid, refusal);
 			let modelName = catalogModel(catalog, choice.model)?.name;

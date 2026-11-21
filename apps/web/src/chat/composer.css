@@ -584,9 +584,12 @@
  * motion. Only colour moves: opacity would lay its text out on a layer of its own, a pixel off the
  * real pill's. Nothing opens, so nothing shades under the pointer.
  */
+.chat-composer .composer-model-pill[aria-busy="true"],
+.chat-composer .composer-model-pill[data-last-known] {
+	color: var(--color-text-tertiary);
+}
 .chat-composer .composer-model-pill[aria-busy="true"] {
 	background-color: transparent;
-	color: var(--color-text-tertiary);
 }
 @keyframes composer-model-waiting {
 	50% {

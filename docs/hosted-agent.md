@@ -88,6 +88,20 @@ same fallback above the composer. A report that comes later, or
 another client, starts again from what it reports. A person who can only read the document sees
 none of it.
 
+While what a remote Planner offers is unknown, each person is sent, in their own `chat:model`
+only, `lastKnown`: the models a Planner of the document last reported for that person's own
+account and when (`planner_catalogs`, one row per document and account, saved under the writer
+lease whenever an attached client reports models that differ from the last saved). No one else is
+sent another account's list, and nothing is sent once the offer is known, whatever it is. The
+composer shows the list at once, marked as the list from last time, so its model pill does not wait
+on a machine that starts the Planner, often after its 30 idle minutes, or on one that can't. The
+server checks a choice against the catalog alone, never against `lastKnown`: a choice made while
+the offer is unknown waits for an attached client to report (as a turn does, at most ten
+seconds), is saved only if what it reports offers it, and with nothing attached to
+wait for is refused (_The machine's models are still loading, so this choice wasn't saved. Choose
+again once they're in._). A turn checks the stored choice against the catalog it runs with, as it
+always has.
+
 A turn that cannot read the choice at all (the catalog or the stored choice fails to load) never
 runs the default silently. It runs the default, Chat says once, while that holds, that the
 document's model choice couldn't be read, and the server tells the room with `chat:model-unreadable`

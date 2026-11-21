@@ -99,6 +99,7 @@ import { ChildPhoneChromeContext, sameEditState } from "./child-phone-chrome";
 import { ChildProvenance } from "./child-provenance";
 import { ChildTitleContext } from "./child-title";
 import { shouldShowResearchActionError, useResearchOfferLinks } from "./chat/research-offer";
+import type { PlannerPlace } from "./chat/model-picker-state";
 import type { PlannerView } from "./chat/planner-settle";
 import type { ResearchDraftController } from "./chat/research-draft-controller";
 import { useDocumentEditing } from "./document-editing";
@@ -1453,18 +1454,24 @@ export function RoomWorkspace(
 		choose: hasMachineButton,
 		place: "note",
 	});
-	// Whether the Planner is on its way, for the composer's model pill to wait for its models: read
-	// from the room's word alone, so it holds before the machine is named, and over once the machine
-	// can't start it, went away, or none was chosen.
-	let plannerComing: "starting" | "attached" | undefined = !agent
+	// Where the Planner is, for the composer's model pill to wait for its models or say why it can't:
+	// read from the room's word alone, so it holds before the machine is named, and says nothing
+	// before the room's first word.
+	let plannerPlace: PlannerPlace | undefined = !agent
 		? undefined
 		: midSwitch
 		? "starting"
-		: attachment?.state === "attached"
+		: !attachment
+		? undefined
+		: attachment.state === "attached"
 		? "attached"
-		: attachment?.state === "starting" && !attachment.failure
-		? "starting"
-		: undefined;
+		: attachment.state === "starting"
+		? attachment.failure ? "failed" : "starting"
+		: attachment.state === "held"
+		? "held"
+		: attachment.state === "disconnected"
+		? "away"
+		: "none";
 	// Mid-switch the old machine's attachment is not chopin's state: it is connecting to the new one.
 	let presence = agent
 		? plannerPresence(midSwitch ? undefined : attachment, plannerNote)
@@ -2111,7 +2118,7 @@ export function RoomWorkspace(
 									fix: noteFix,
 									...(hasMachineButton ? { choose: openMachinePicker } : {}),
 								}}
-								plannerComing={plannerComing}
+								plannerPlace={plannerPlace}
 								onTranscript={setTranscriptFacts}
 								focus={presentation.type === "parent-with-child" ? presentation.childId : undefined}
 								onOpenChild={presentation.onChildOpen}

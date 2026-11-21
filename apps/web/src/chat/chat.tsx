@@ -100,7 +100,7 @@ import { useFiles } from "./attachments/use-files";
 import { dictationSource, useDictation } from "./dictation/use-dictation";
 import { currentShortcutPlatform, shortcutLabel } from "../shortcuts";
 import { composerModelNotice } from "./model-picker-state";
-import { pendingModel, useModelChoice } from "./use-model-choice";
+import { useModelChoice } from "./use-model-choice";
 import {
 	chatAuthors,
 	filterMentions,
@@ -170,6 +170,7 @@ import type { ChatSendPayload, ComposerDraft, ReferenceTarget, SendFailure } fro
 import type { RetryRefusal } from "./failure";
 import type { Wire as Socket } from "../wire";
 import type { ComposerModel } from "./use-model-choice";
+import type { PlannerPlace } from "./model-picker-state";
 import type { Typists } from "./typists";
 
 export type ChatProps = {
@@ -247,11 +248,12 @@ export type ChatProps = {
 	 */
 	machine?: { presence?: PlannerPresence; fix?: MachineFix; choose?: () => void };
 	/**
-	 * Where the document's Planner is coming from its machine, as the room last said, whether or not
-	 * the machine is named yet: `starting` while the machine starts it (and has not said it can't),
-	 * `attached` once it is there. The composer's model pill waits for its models meanwhile.
+	 * Where the document's Planner is, as the room last said, whether or not the machine is named
+	 * yet: `starting` while the machine starts it (and has not said it can't), `attached` once it is
+	 * there, `failed` where it can't start it, `held` while the machine stepped away, `away` while it
+	 * is offline, `none` with no machine. The composer's model pill waits for its models, or says why it can't, meanwhile.
 	 */
-	plannerComing?: "starting" | "attached";
+	plannerPlace?: PlannerPlace;
 	/** What the transcript tells the banner: a reply running, its size, and whether it is current. */
 	onTranscript?: (facts: TranscriptFacts) => void;
 };
@@ -339,7 +341,7 @@ export function Chat(
 		emptyNotice,
 		banner,
 		machine,
-		plannerComing,
+		plannerPlace,
 		onTranscript,
 		build,
 		onShowBuild,
@@ -454,37 +456,45 @@ export function Chat(
 		savedName: modelSavedName,
 		unreadable: modelUnreadable,
 		commands: agentCommands,
-		waiting: modelWaiting,
+		pill: modelPill,
+		refusal: modelRefusal,
 	} = useModelChoice({
 		wire,
 		room,
 		connected,
 		enabled: agent && !readonly && !archived,
+		place: plannerPlace,
 	});
-	// The pill from the moment the document opens: it waits in place while the machine starts the
-	// Planner, and becomes the real pill when the models arrive.
-	let waitingWith = modelControl ? undefined : pendingModel(modelWaiting, plannerComing);
-	let waitingName = waitingWith?.name;
-	let waitingLevel = waitingWith?.level;
+	// The pill from the moment the document opens: the machine's list, or the list from last time
+	// marked as such, or the saved choice's words waiting in place while the machine starts the
+	// Planner, or why it can't give its models. A pill with no list keeps one object while its words
+	// stand, so the composer's transition stays stable.
+	let still = modelPill && !("catalog" in modelPill) ? modelPill : undefined;
+	let stillName = still?.name;
+	let stillLevel = still?.level;
+	let stillStatus = still && "status" in still ? still.status : undefined;
 	let pillModel = useMemo<ComposerModel | undefined>(
 		() =>
-			modelControl
-				?? (waitingName === undefined ? undefined : {
-					pending: true,
-					name: waitingName,
-					...(waitingLevel ? { level: waitingLevel } : {}),
-				}),
-		[modelControl, waitingName, waitingLevel],
+			modelPill && "catalog" in modelPill
+				? modelPill
+				: stillName === undefined
+				? undefined
+				: stillStatus === undefined
+				? { pending: true, name: stillName, ...(stillLevel ? { level: stillLevel } : {}) }
+				: {
+					unavailable: true,
+					name: stillName,
+					...(stillLevel ? { level: stillLevel } : {}),
+					status: stillStatus,
+				},
+		[modelPill, stillName, stillLevel, stillStatus],
 	);
 	// A refused or unreadable choice has its own notice. A fallback is shown only until the
 	// transcript records it. One object while its words stand keeps the composer's transition stable.
-	let modelShown = composerModelNotice(
-		modelControl,
-		modelUnreadable,
-		modelSaved,
-		entries,
-		modelSavedName,
-	);
+	// A pick from the list from last time can be refused before the machine's list is in.
+	let modelShown = !modelControl && modelRefusal
+		? { tone: "warning" as const, text: modelRefusal }
+		: composerModelNotice(modelControl, modelUnreadable, modelSaved, entries, modelSavedName);
 	let modelWords = modelShown?.text;
 	let modelTone = modelShown?.tone ?? "info";
 	let modelNotice = useMemo<ComposerNotice | undefined>(

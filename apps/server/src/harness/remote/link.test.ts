@@ -1532,8 +1532,12 @@ describe("Agent connection capability catalog", () => {
 	it("holds what the client last reported and tells the document each time, replacing it whole", async () => {
 		let { auth, channel } = await linkAuth();
 		let changed: string[] = [];
+		let reports: unknown[] = [];
 		let server = linkServer(auth, 300, undefined, undefined, undefined, undefined, {
-			catalogChanged: id => changed.push(id),
+			catalogChanged: (id, reported) => {
+				changed.push(id);
+				reports.push(reported);
+			},
 		});
 		cleanups.push(server.stop);
 		let raw = await rawLink(server.url, undefined, "capability-catalog");
@@ -1552,6 +1556,12 @@ describe("Agent connection capability catalog", () => {
 		await until(() => link.catalog?.models === undefined, 1_000);
 		expect(link.catalog).toEqual({});
 		expect(changed).toEqual([channel.id, channel.id, channel.id]);
+		// Each report names the account the client attached for, so its list is kept for it alone.
+		expect(reports).toEqual([
+			{ userId: "U_member", catalog },
+			{ userId: "U_member", catalog: next },
+			{ userId: "U_member", catalog: {} },
+		]);
 		raw.send({ type: "detach" });
 		await raw.closed;
 	});

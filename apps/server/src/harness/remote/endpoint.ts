@@ -36,6 +36,7 @@ import { forbiddenMessage } from "./attachments";
 import { AgentLink } from "./link";
 import { MachinePlanners } from "./machine-planners";
 
+import type { CapabilityCatalog } from "@chopin/agent-link";
 import type { ServerWebSocket } from "bun";
 import type { HostedAuth } from "../../auth/routes";
 import type { HostedCaller } from "../../mcp/hosted";
@@ -89,8 +90,14 @@ export type AgentHooks = {
 	unavailable?: (channelId: string) => boolean;
 	/** Observes attached links. */
 	register?: LinkOptions["register"];
-	/** A document's attached client reported what it offers, which may be nothing now. */
-	catalogChanged?: (channelId: string) => void;
+	/**
+	 * A document's attached client reported what it offers, which may be nothing now: `reported` is
+	 * what it reported and the account it attached for.
+	 */
+	catalogChanged?: (
+		channelId: string,
+		reported: { userId: string; catalog: CapabilityCatalog | undefined },
+	) => void;
 	timeoutMs?: number;
 	revalidateEveryMs?: number;
 	/** How often the link is sent a protocol ping. */
@@ -352,7 +359,7 @@ export function agentLink(
 		revalidateEveryMs: hooks.revalidateEveryMs,
 		features,
 		catalogChanged: () => {
-			if (channelId) hooks.catalogChanged?.(channelId);
+			if (channelId) hooks.catalogChanged?.(channelId, { userId, catalog: link.catalog });
 		},
 	});
 	return link;
