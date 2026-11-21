@@ -264,8 +264,9 @@ function stoppedSharing(login: string) {
  * Protocol 6 keeps the claimed document ID on build renewals and reports after assignment cleanup.
  * Protocol 7 says what each GitHub token is for, takes the App's installation token for one
  * repository and the bot and starter it names, and stops a launch Chopin gives no token.
- * Protocol 8 runs every agent in an NVX microVM of its own, and says so as it connects; an older
- * connector still pairs, but no connection of one is taken (see `microvmsOnly`), so it stops.
+ * Protocol 8 runs every agent in an NVX microVM of its own, and says so on each request. An older
+ * connector still pairs, but no connection of one is taken and it is handed no credential (see
+ * `microvmsOnly`), so it stops.
  */
 export const CONNECTOR_PROTOCOLS: { min: number; max: number } = { min: 2, max: 8 };
 
@@ -388,12 +389,22 @@ function compatible(
 }
 
 /**
- * Refuse the connection of a connector that would start agents outside a microVM: one speaking a
- * protocol before `NVX_PROTOCOL`, which ran them in the system's process sandbox, or none. It is
- * told to update, which stops it without retrying.
+ * Refuse a connection, a launch's credential or a machine's login to a connector that would start
+ * agents outside a microVM. One speaking a protocol before `NVX_PROTOCOL` ran them in the system's
+ * process sandbox, or none, whatever it says of them: it is told to update, which stops it without
+ * retrying. A current one must say its agents run in NVX microVMs.
  */
 function microvmsOnly(request: Request, origin: string, recommended: string | undefined) {
-	if (protocolOf(request) >= NVX_PROTOCOL) return;
+	if (protocolOf(request) >= NVX_PROTOCOL) {
+		let sandbox = parseSandboxReport(name => request.headers.get(name) ?? undefined);
+		if (sandbox?.engine === "nvx") return;
+		fail(
+			"microvm-required",
+			`This machine can't run Chopin's work: Chopin runs each agent in its own microVM. ${
+				sandbox?.engine === "none" ? sandbox.reason : "Its connector didn't say it runs them."
+			}`,
+		);
+	}
 	let release = releaseVersion(request);
 	fail(
 		CONNECTOR_UPDATE_REQUIRED,
@@ -1650,11 +1661,12 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		compatible(request, auth.config.origin, options.connectorVersion);
 		let about = aboutMachine(request);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
-		// Work goes only to a connector that runs it in microVMs. An older one is told to update, and
-		// one that says it can't is refused with its own words; either is kept on the machine, as
-		// `/api/connector/capability` keeps it, so the Machines page says why while it is away.
-		if (about.sandbox?.engine !== "nvx") {
-			let older = protocolOf(request) < NVX_PROTOCOL;
+		// Work goes only to a connector that runs it in microVMs. An older one is told to update,
+		// whatever it says of its agents, and one that says it can't is refused with its own words;
+		// either is kept on the machine, as `/api/connector/capability` keeps it, so the Machines page
+		// says why while it is away.
+		let older = protocolOf(request) < NVX_PROTOCOL;
+		if (older || about.sandbox?.engine !== "nvx") {
 			let release = releaseVersion(request);
 			let problem = older
 				? {
@@ -1665,13 +1677,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				? { reason: about.sandbox.reason, ...about.sandbox.fix ? { fix: about.sandbox.fix } : {} }
 				: undefined;
 			if (problem) await auth.storage.machines.vmProblem(machine.id, problem);
-			if (older) microvmsOnly(request, auth.config.origin, options.connectorVersion);
-			fail(
-				"microvm-required",
-				`This machine can't run Chopin's work: Chopin runs each agent in its own microVM. ${
-					problem?.reason ?? "Its connector didn't say it runs them."
-				}`,
-			);
+			microvmsOnly(request, auth.config.origin, options.connectorVersion);
 		}
 		let input = connectionSchema.parse(await body(request));
 		if (machine.vmProblem) await auth.storage.machines.vmProblem(machine.id);
@@ -1768,6 +1774,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let planners = options.planners;
 		if (!planners || !auth.machines.durable) fail("not-found");
 		compatible(request, auth.config.origin, options.connectorVersion);
+		microvmsOnly(request, auth.config.origin, options.connectorVersion);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let { document } = z.object({ document: z.string().min(1).max(2048) }).strict().parse(
 			await body(request),
@@ -1936,6 +1943,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("POST", "/api/connector/mcp-token", async request => {
 		if (!auth.machines.durable) fail("not-found");
 		compatible(request, auth.config.origin, options.connectorVersion);
+		microvmsOnly(request, auth.config.origin, options.connectorVersion);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let credential = z.string().min(1).max(1024);
 		let from = z.union([
@@ -1960,6 +1968,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		let credentials = options.ai?.();
 		if (!credentials || !auth.machines.durable) fail("not-found");
 		compatible(request, auth.config.origin, options.connectorVersion);
+		microvmsOnly(request, auth.config.origin, options.connectorVersion);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let { run } = z.object({ run: z.string().min(1).max(1024) }).strict().parse(
 			await body(request),
@@ -2066,6 +2075,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 	route("POST", "/api/connector/github-token", async request => {
 		if (!auth.machines.durable) fail("not-found");
 		compatible(request, auth.config.origin, options.connectorVersion);
+		microvmsOnly(request, auth.config.origin, options.connectorVersion);
 		let machine = await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let id = z.string().min(1).max(2048);
 		let asked = z.object({
@@ -2184,6 +2194,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			await stores.report(machine.id, reported);
 			return json({ reported: true });
 		}
+		microvmsOnly(request, auth.config.origin, options.connectorVersion);
 		if (!privateOrigin) {
 			return json({
 				error: "machine-store-unavailable",

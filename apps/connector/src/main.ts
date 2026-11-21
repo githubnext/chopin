@@ -20,6 +20,7 @@ import {
 	reportAgent,
 	reportCapability,
 	reportMachineStoreProblem,
+	runAgentsIn,
 	SELF,
 	unpair,
 } from "./machine";
@@ -168,12 +169,13 @@ async function pairCommand(args: string[], injected: Injected = {}) {
 		throw new Error(`Usage: ${SELF} pair [--label <name>] [--key <pairing key>]`);
 	}
 	// A machine that can't run agents in microVMs is never paired: it could run no work.
-	requireSupport(injected.support);
+	let support = requireSupport(injected.support);
 	let key = pairingKey(parsed.options.get("key"));
 	let output = createOutput();
 	let label = parsed.options.get("label") ?? hostname();
 	let run = interruptible();
 	try {
+		runAgentsIn(support.hypervisor);
 		let url = await server();
 		let token = await pair({
 			url,
@@ -198,6 +200,7 @@ async function pairCommand(args: string[], injected: Injected = {}) {
 			}
 		}
 	} finally {
+		runAgentsIn(undefined);
 		run.done();
 	}
 }
@@ -641,6 +644,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 	let permissions = permissionMemory();
 	let report = sandbox.report;
 	try {
+		if (report.engine === "nvx") runAgentsIn(report.hypervisor);
 		for (;;) {
 			// A machine paired once reconnects with its stored token; an unpaired one pairs first.
 			let stored = await machineToken(directory, url);
@@ -837,6 +841,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 	} catch (error) {
 		if (!abort.signal.aborted) throw error;
 	} finally {
+		runAgentsIn(undefined);
 		process.removeListener("SIGINT", stop);
 		process.removeListener("SIGTERM", stop);
 		unwatch();

@@ -858,9 +858,10 @@ What this means for an operator:
 - **Machines need hardware virtualization.** Linux on x86_64 with KVM (or MSHV),
   or Windows on x86_64 with the Windows Hypervisor Platform. A Mac or an Arm
   machine can't be one of your machines.
-- **Older connectors are refused once you deploy.** Chopin takes a connection
-  only from connector protocol 8, which runs agents in microVMs, and tells an older
-  `chopin` to update (`connector-update-required`); people run `chopin update`.
+- **Older connectors are refused once you deploy.** Chopin takes a connection and
+  hands a credential only to connector protocol 8, which runs agents in microVMs, and
+  tells an older `chopin` to update (`connector-update-required`); people run
+  `chopin update`.
   The Machines page says so for a machine that tried, and why a machine that can't
   run microVMs can't, with the fix, while it is away. Migration 051 adds where that
   is kept (`machines.vm_problem`).

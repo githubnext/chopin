@@ -395,9 +395,10 @@ durable.
   can't read and write `/dev/kvm` or `/dev/mshv`) is refused by `chopin pair` and `chopin connect`
   before anything is paired or a key spent, with words that say what it needs and the fix; one
   already paired tells Chopin (`/api/connector/capability`, kept as `machines.vm_problem` and shown
-  on the Machines page while it is away); and Chopin takes a connection only from connector
-  protocol 8 saying its agents run in microVMs (`chopin-connector-sandbox: nvx`), telling an older
-  connector to update. Do not start an agent process outside the seam; tests of what the
+  on the Machines page while it is away); and Chopin takes a connection, and hands a Planner
+  credential, GitHub or MCP token, AI launch or database login, only to connector protocol 8 saying
+  its agents run in microVMs (`chopin-connector-sandbox: nvx`, `microvmsOnly` in
+  `experiments/routes.ts`), telling an older connector to update whatever it says. Do not start an agent process outside the seam; tests of what the
   connector does around an agent use the host stand-in in `testing/host-sandbox.ts` and
   `testing/chopin-on-host.ts`, never built into `chopin`. A guest boots its agent's image, an EROFS
   layer built once per recipe in a microVM (Node, pinned git packages, the agent at the version

@@ -66,14 +66,17 @@ whose WHP is off fails its first microVM, which says so.
   token and the same words). Chopin keeps them on the machine (`machines.vm_problem`,
   migration 051). The Machines page shows them in the machine's Sandbox row while it
   is away. A later connection that runs microVMs clears them.
-- **Chopin takes connections only from connectors that run microVMs.** Connector
-  protocol 8 means "every agent runs in its own NVX microVM", and its registration
-  says so (`chopin-connector-sandbox: nvx` and the hypervisor). A connection from an
-  older connector is refused with `connector-update-required` and words that say to
-  run `chopin update`; an older connector stops on that without retrying. A protocol 8
-  registration that says its machine can't run them is refused with
-  `microvm-required`, and what it said is kept as above. Pairing and the other
-  connector routes still answer older connectors, so they can update.
+- **Chopin hands work and credentials only to connectors that run microVMs.**
+  Connector protocol 8 means "every agent runs in its own NVX microVM", and each of its
+  requests says so (`chopin-connector-sandbox: nvx` and the hypervisor) once it has
+  checked the machine. A connection, a Planner credential, a GitHub token, an MCP
+  token, an AI launch or a machine's database login asked for by an older connector is
+  refused with `connector-update-required` and words that say to run `chopin update`,
+  whatever it says of its agents; an older connector stops on that without retrying. A
+  protocol 8 request that doesn't say its agents run in microVMs is refused with
+  `microvm-required`, and a registration that says its machine can't run them keeps
+  what it said, as above. Pairing and the routes that hand out nothing still answer
+  older connectors, so they can update.
 - **Add machine** on the Machines page says what a machine needs (KVM, or the
   Windows Hypervisor Platform, on x86_64) instead of the agent's host install, and
   that a Mac can't run Chopin's work.
@@ -477,8 +480,8 @@ carrying the packages in Chopin's own releases, and having `install.sh` and
 
 - A machine updates `chopin` (connector protocol 8). Its first connect checks the
   machine, downloads NVX, and builds its agent's image (once; it says how long).
-- Chopin's server takes connections from protocol 8 only, once it is deployed; older
-  connectors are told to update.
+- Chopin's server takes connections and hands credentials to protocol 8 only, once it
+  is deployed; older connectors are told to update.
 - Settings saved by an earlier `chopin connect` keep working. A saved
   `--require-sandbox` or `--no-sandbox` is dropped. An agent other than the built-in
   ones needs `--install` once.

@@ -315,15 +315,22 @@ export function startVm(
 	mkdirSync(folder, { recursive: true, mode: 0o700 });
 	let file = join(folder, "environment.json");
 	writeFileSync(file, environmentFile(spec.environment), { mode: 0o600 });
-	let child = start(
-		setup.artifacts.nvx,
-		nvxArguments(spec, setup.artifacts, setup.hypervisor, file),
-		{
-			stdin,
-			open: !spec.image,
-			...wedged ? { wedged } : {},
-		},
-	);
+	let child: Spawned;
+	try {
+		child = start(
+			setup.artifacts.nvx,
+			nvxArguments(spec, setup.artifacts, setup.hypervisor, file),
+			{
+				stdin,
+				open: !spec.image,
+				...wedged ? { wedged } : {},
+			},
+		);
+	} catch (error) {
+		// A launch that never started, as on Windows without its job object, leaves no tokens.
+		rmSync(folder, { recursive: true, force: true });
+		throw error;
+	}
 	if (child.pid) {
 		let pid = child.pid;
 		let record = join(folder, "launch.json");

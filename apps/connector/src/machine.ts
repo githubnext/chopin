@@ -15,6 +15,7 @@ import {
 	CONNECTOR_SERVICE_HEADER,
 	CONNECTOR_STORE_PROBLEM_HEADER,
 	CONNECTOR_UPDATE_REQUIRED,
+	type HypervisorName,
 	SANDBOX_TEXT_LIMIT,
 	type SandboxReport,
 } from "@chopin/protocol/connector";
@@ -187,6 +188,20 @@ export async function machineToken(directory: string, origin: string) {
 	return (await stored(directory)).servers[origin]?.token;
 }
 
+/**
+ * What this process says of its agents on every request: nothing but while a `chopin pair` or
+ * `connect` that found they run in NVX microVMs here goes on, for Chopin hands its work and
+ * credentials only to a connector that says they do.
+ */
+let agentsRun: Record<string, string> = {};
+
+/** Say on every request that this process runs its agents in NVX on `hypervisor`, or no longer. */
+export function runAgentsIn(hypervisor: HypervisorName | undefined) {
+	agentsRun = hypervisor
+		? { [CONNECTOR_SANDBOX_HEADER]: "nvx", [CONNECTOR_SANDBOX_HYPERVISOR_HEADER]: hypervisor }
+		: {};
+}
+
 async function post(
 	url: string,
 	body: unknown,
@@ -198,6 +213,7 @@ async function post(
 		method: "POST",
 		headers: {
 			"content-type": "application/json",
+			...agentsRun,
 			...headers,
 			...CONNECTOR_HEADERS,
 			...(token ? { authorization: `Bearer ${token}` } : {}),

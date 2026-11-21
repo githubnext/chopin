@@ -71,8 +71,8 @@ for (let [device, use] of [["desktop", DESKTOP], ["phone", PHONE]] as const) {
 		await page.getByRole("button", { name: "macOS", exact: true }).click();
 		await expect(page.locator(".machines-needs")).toContainText("A Mac can't run Chopin's work");
 		await page.getByRole("button", { name: "Linux", exact: true }).click();
-		await expect(page.locator(".machines-needs")).toContainText(
-			"Needs KVM, on x86_64: chopin runs Acme Planner in a microVM of its own",
+		await expect(page.locator(".machines-needs p").first()).toHaveText(
+			"Needs KVM, on x86_64: chopin runs Acme Planner in a microVM of its own.",
 		);
 		await page.getByRole("button", { name: "Show install steps", exact: true }).click();
 		await expect(

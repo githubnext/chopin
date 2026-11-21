@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { AGENT_VERSION, LINK_CLOSE } from "@chopin/agent-link";
 import { CONNECTOR_PROTOCOL_HEADER, CONNECTOR_VERSION_HEADER } from "@chopin/protocol/connector";
+import { MICROVMS } from "../../testing/microvms";
 
 import { ActiveOwnerBindings } from "../../agent/active-owner";
 import { Machines } from "../../auth/machines";
@@ -92,6 +93,7 @@ async function machineServer(options: { revalidateEveryMs?: number; local?: bool
 					authorization: `Bearer ${token}`,
 					[CONNECTOR_VERSION_HEADER]: "dev",
 					[CONNECTOR_PROTOCOL_HEADER]: String(CONNECTOR_PROTOCOLS.max),
+					...MICROVMS,
 				},
 				body: JSON.stringify({ document }),
 			}),
