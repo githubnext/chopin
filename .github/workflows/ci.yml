@@ -473,12 +473,17 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # GitHub's Linux runners have /dev/kvm for root and the kvm group; this opens it to the runner's
+      # user, as joining the group would on a machine.
       - name: Give this user KVM
         run: |
+          ls -l /dev/kvm
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          sudo chmod 666 /dev/kvm
           test -r /dev/kvm -a -w /dev/kvm
 
       - name: The pinned NVX release
