@@ -94,7 +94,8 @@ the server needs a newer script, download it again.
 
 `chopin update` asks the saved server which release it wants. If it can't reach
 the server, it installs the newest release instead. `chopin update 0.2.0`
-installs that release.
+installs that release. A server never names a release older than the first one
+that runs agents in microVMs (0.0.32), which it would refuse too.
 
 Moving to an older release needs `--allow-downgrade`. Without it,
 `chopin update` prints the command with the flag and changes nothing. On a

@@ -1,5 +1,14 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	realpath,
+	rm,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { existsSync, writeFileSync as writeFileSyncNow } from "node:fs";
@@ -11,9 +20,45 @@ import {
 	prepareWorkspace,
 	processStart,
 	pruneRuns,
+	stateDirectory,
 	workspace,
 } from "./workspace";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
+
+test.skipIf(process.platform === "win32")(
+	"the state directory is where it really is when a link is in its path, whether it is there yet or not",
+	async () => {
+		// As on a machine whose ~/.local is a link to another disk.
+		let scratch = await realpath(await mkdtemp(join(tmpdir(), "chopin-linked-state-")));
+		let saved = Object.fromEntries(
+			["CHOPIN_HOME", "CHOPIN_CONNECTOR_STATE_DIR", "XDG_STATE_HOME"].map(name => [
+				name,
+				process.env[name],
+			]),
+		);
+		try {
+			await mkdir(join(scratch, "disk", ".local", "state"), { recursive: true });
+			await mkdir(join(scratch, "home"));
+			await symlink(join(scratch, "disk", ".local"), join(scratch, "home", ".local"));
+			let real = join(scratch, "disk", ".local", "state", "chopin", "connector");
+			// The default, under XDG_STATE_HOME, before the connector made it.
+			delete process.env.CHOPIN_HOME;
+			delete process.env.CHOPIN_CONNECTOR_STATE_DIR;
+			process.env.XDG_STATE_HOME = join(scratch, "home", ".local", "state");
+			expect(stateDirectory()).toBe(real);
+			// --base-dir, once it is there.
+			process.env.CHOPIN_HOME = join(scratch, "home", ".local", "state", "chopin", "connector");
+			await mkdir(process.env.CHOPIN_HOME, { recursive: true });
+			expect(stateDirectory()).toBe(real);
+		} finally {
+			for (let [name, value] of Object.entries(saved)) {
+				if (value === undefined) delete process.env[name];
+				else process.env[name] = value;
+			}
+			await rm(scratch, { recursive: true, force: true });
+		}
+	},
+);
 
 test("isolates exact source and allows an authorized retry without executing an attempt twice", async () => {
 	let root = await mkdtemp(join(tmpdir(), "chopin-workspace-"));

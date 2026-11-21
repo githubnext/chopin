@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
+import { rmSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, delimiter, join } from "node:path";
@@ -14,6 +15,7 @@ import { installService, type ServiceHost } from "./service";
 import { collectStatus, formatStatus } from "./status";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
 import { runCli } from "./main";
+import { answerTokens } from "./testing/github-grant";
 import { hostRecipes, hostSandbox, SUPPORTED_HOST } from "./testing/host-sandbox";
 import { git, lockWorkspace } from "./workspace";
 
@@ -901,3 +903,138 @@ test("a connect whose agent fails its start check lets go of its microVMs and th
 		}
 	}
 });
+
+test.skipIf(process.platform === "win32")(
+	"a machine whose user loses /dev/kvm tells Chopin why, leaves, starts no Planner until it can run microVMs again, then connects again",
+	async () => {
+		let root = await realpath(await checkout());
+		let directory = await mkdtemp(join(scratch, "state-"));
+		// While it is there, this machine's user can't open /dev/kvm (see chopin-on-host).
+		let lost = join(scratch, `kvm-lost-${basename(directory)}`);
+		/** What Chopin saw, in order. */
+		let seen: string[] = [];
+		let told: unknown;
+		let interrupted = false;
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			async fetch(request) {
+				let path = new URL(request.url).pathname;
+				let tokens = await answerTokens(request);
+				if (tokens) return tokens;
+				if (path === "/api/connector/pairings") {
+					return Response.json({ id: "pairing", secret: "secret", url: "http://x", code: "AB" });
+				}
+				if (path === "/api/connector/pairings/pairing/claim") {
+					return Response.json({ token: `chopin_m_${"M".repeat(43)}` });
+				}
+				if (path === "/api/connector/connections") {
+					seen.push("connected");
+					return Response.json({ token: "connection-token" });
+				}
+				if (path === "/api/connector/planner") {
+					seen.push("planner");
+					return Response.json({
+						token: `chopin_p_${"P".repeat(43)}`,
+						expiresAt: Date.now() + 15 * 60_000,
+						document: {
+							id: "D_1",
+							repository: "octo-org/score",
+							url: "https://chopin.example/d/one",
+						},
+					});
+				}
+				if (path === "/api/connector/capability") {
+					told = await request.json();
+					seen.push("told");
+					// Someone fixes the machine a while later, longer than a Planner's first waits.
+					setTimeout(() => {
+						seen.push("fixed");
+						rmSync(lost, { force: true });
+					}, 4_000);
+					return Response.json({ reported: true });
+				}
+				if (path === "/connector/mcp") {
+					let server = new Server({ name: "fake-chopin", version: "1" }, {
+						capabilities: { tools: {} },
+					});
+					server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [] }));
+					server.setRequestHandler(CallToolRequestSchema, async request => {
+						let { name } = request.params;
+						if (name === "disconnect_workspace") seen.push("left");
+						if (name === "wait_for_work") {
+							let connections = seen.filter(event => event === "connected").length;
+							// Its user loses /dev/kvm once it is connected; once it is back, Ctrl-C.
+							if (connections === 1 && !seen.includes("told")) writeFileSync(lost, "");
+							if (seen.includes("fixed") && connections > 1 && !interrupted) {
+								interrupted = true;
+								connector.kill("SIGINT");
+							}
+							await Bun.sleep(200);
+						}
+						return { content: [{ type: "text", text: "{}" }] };
+					});
+					let transport = new WebStandardStreamableHTTPServerTransport({
+						sessionIdGenerator: undefined,
+						enableJsonResponse: true,
+					});
+					await server.connect(transport);
+					return transport.handleRequest(request);
+				}
+				return new Response(null, { status: 404 });
+			},
+		});
+		let connector = Bun.spawn([
+			process.execPath,
+			"--no-env-file",
+			join(import.meta.dir, "testing", "chopin-on-host.ts"),
+			"connect",
+			root,
+			"--planner",
+			"https://chopin.example/d/one",
+			"--planner-command",
+			"planner",
+			"--no-planner-spare",
+			"--",
+			"agent",
+		], {
+			cwd: scratch,
+			env: {
+				...process.env,
+				CHOPIN_URL: `http://127.0.0.1:${chopin.port}`,
+				CHOPIN_CONNECTOR_STATE_DIR: directory,
+				CHOPIN_TEST_KVM_LOST: lost,
+				PATH: [process.env.PATH, programs].join(delimiter),
+			},
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		try {
+			let code = await Promise.race([connector.exited, Bun.sleep(45_000).then(() => "timed out")]);
+			if (code === "timed out") connector.kill("SIGKILL");
+			let stderr = await new Response(connector.stderr).text();
+			expect(code, `${seen.join(" ")}\n${stderr}`).toBe(0);
+			let reason = "Your user can't read and write /dev/kvm.";
+			let fix = "sudo usermod -aG kvm $USER, then log out and in again (for the chopin service, "
+				+ "restart the machine or run: sudo systemctl restart user@$(id -u))";
+			// Chopin keeps why, for its Machines page, and chopin says it.
+			expect(told).toEqual({ reason, fix });
+			expect(stderr).toContain(
+				`Chopin runs each agent in its own microVM, which needs Linux or Windows on x86_64 with hardware virtualization. ${reason}\nFix: ${fix}`,
+			);
+			// It left, and started no Planner nor connected again until its user could open /dev/kvm.
+			let from = seen.indexOf("told");
+			let until = seen.indexOf("fixed");
+			expect(from).toBeGreaterThan(seen.indexOf("connected"));
+			expect(seen.slice(from + 1, until)).toEqual(["left"]);
+			// Then it connected again, and its Planner started again.
+			expect(seen.slice(until + 1)).toContain("connected");
+			expect(seen.slice(until + 1)).toContain("planner");
+		} finally {
+			connector.kill("SIGKILL");
+			await chopin.stop(true);
+			rmSync(lost, { force: true });
+		}
+	},
+	60_000,
+);

@@ -1,4 +1,4 @@
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { type ChildProcess, execFile, spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
 import {
@@ -21,7 +21,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { readdir, readFile, rm } from "node:fs/promises";
-import { arch } from "node:os";
+import { arch, userInfo } from "node:os";
 import { basename, join, posix, win32 } from "node:path";
 import { PassThrough, type Readable, Writable } from "node:stream";
 import type { SandboxReport } from "@chopin/protocol/connector";
@@ -37,11 +37,13 @@ import {
 import {
 	type AgentImage,
 	artifactsAt,
+	deviceDenied,
 	environmentFile,
 	GUEST_WORK,
 	guestProgram,
 	type GuestRepository,
 	type Hypervisor,
+	type HypervisorDevice,
 	makeWritable,
 	nvxArguments,
 	type NvxArtifacts,
@@ -156,6 +158,23 @@ export function systemSupportHost(): SupportHost {
 				return false;
 			}
 		},
+		joinedLater(path) {
+			try {
+				let group = statSync(path).gid;
+				if (group === 0 || process.getgid?.() === group) return false;
+				if (process.getgroups?.().includes(group)) return false;
+				// The group database as it is now, which `id` reads, where this process's groups are
+				// those its login began with.
+				let listed = spawnSync("id", ["-G", userInfo().username], {
+					encoding: "utf8",
+					timeout: 5_000,
+				});
+				return listed.status === 0
+					&& listed.stdout.trim().split(/\s+/).map(Number).includes(group);
+			} catch {
+				return false;
+			}
+		},
 	};
 }
 
@@ -170,6 +189,9 @@ export type StartOptions = {
 	delayMs?: number;
 };
 
+/** Why this machine can't run microVMs, with the fix where there is one. */
+export type Unsupported = Extract<NvxSupport, { supported: false }>;
+
 /** How `startVm` starts `nvx`, and who hears what happens to its microVM. */
 export type VmOptions = {
 	/** Stands in for `nvx` in tests: what starts the command line. */
@@ -178,6 +200,14 @@ export type VmOptions = {
 	wedged?: (detail: string) => void;
 	/** Hears of a microVM that didn't start and is started again. */
 	retrying?: (detail: string) => void;
+	/**
+	 * Hears, before the launch ends, that this machine can't run microVMs any more: OpenVMM wasn't
+	 * allowed to open the hypervisor's device, as when logind took back a login's access to
+	 * /dev/kvm. Nothing more starts until it can (see `connect`).
+	 */
+	unsupported?: (problem: Unsupported) => void;
+	/** What those words read of the machine (`joinedLater`); the machine itself unless said. */
+	host?: Pick<SupportHost, "joinedLater">;
 };
 
 /** What a microVM is built from: NVX and the hypervisor. */
@@ -205,6 +235,10 @@ export type SandboxOptions = {
 	wedged?: (detail: string) => void;
 	/** Hears of a microVM that didn't start and is started again. */
 	retrying?: (detail: string) => void;
+	/** Hears that this machine can't run microVMs any more, and why (see `VmOptions`). */
+	unsupported?: (problem: Unsupported) => void;
+	/** The machine as the support check reads it; the machine itself unless said. */
+	host?: SupportHost;
 	/** Stands in for `nvx` in tests: what starts the command line. */
 	start?: (program: string, words: string[], launch: StartOptions) => Spawned;
 	/**
@@ -430,6 +464,10 @@ export const OPEN_NVX_LAUNCHER = `umask 000; ${NVX_LAUNCHER}`;
 /** What OpenVMM's log says when it couldn't set up a microVM's disk, as under heavy load it can't. */
 export const IO_URING_FAILURE = "driver does not support io-uring";
 
+/** What OpenVMM's log says when this machine's user may not open the hypervisor's device. */
+export const DEVICE_DENIED =
+	/failed to open file `(\/dev\/(?:kvm|mshv))`: Permission denied(?: \(os error \d+\))?/;
+
 /** How many times one launch's microVM is started at most: once, and twice more after that. */
 export const VM_STARTS = 3;
 
@@ -454,6 +492,8 @@ type Attempt = {
 	said: Buffer[];
 	/** The end of OpenVMM's log, read as a start that never started its workload exits. */
 	tail: string;
+	/** Why it didn't start, where that is that this machine can't run microVMs any more. */
+	unsupported?: Unsupported;
 	/** How it exited. */
 	code: number | null;
 	signal: NodeJS.Signals | null;
@@ -591,7 +631,13 @@ export function startVm(
 		if (!attempt.started) {
 			let said = Buffer.concat(attempt.said).toString("utf8").trim();
 			let log = attempt.tail || logTail(attempt.log);
-			if (attempt.code !== null && attempt.code !== 0 && log) {
+			if (attempt.unsupported) {
+				launch.stderr.write(
+					`${unsupportedWords(attempt.unsupported).join(" ")} (OpenVMM: ${
+						DEVICE_DENIED.exec(log)?.[0]
+					})\n`,
+				);
+			} else if (attempt.code !== null && attempt.code !== 0 && log) {
 				launch.stderr.write(
 					`The microVM didn't start${starts > 1 ? ` after ${starts} tries` : ""}: ${log}${
 						said ? ` (nvx: ${said.split(/\s*\n\s*/).join(" ")})` : ""
@@ -691,6 +737,12 @@ export function startVm(
 			attempt.signal = signal;
 			if (attempt !== current) return;
 			if (!attempt.started) attempt.tail = logTail(attempt.log);
+			let denied = !attempt.started && code !== 0 && DEVICE_DENIED.exec(attempt.tail)?.[1];
+			if (denied) {
+				let device = denied as HypervisorDevice;
+				attempt.unsupported = deviceDenied(device, options.host ?? systemSupportHost());
+				options.unsupported?.(attempt.unsupported);
+			}
 			let again = !attempt.started && !stopped && code !== null && code !== 0
 				&& starts < VM_STARTS && attempt.tail.includes(IO_URING_FAILURE);
 			if (!again) {
@@ -936,6 +988,8 @@ export async function createSandbox(options: SandboxOptions): Promise<Sandbox> {
 		...options.start ? { start: options.start } : {},
 		...options.wedged ? { wedged: options.wedged } : {},
 		...options.retrying ? { retrying: options.retrying } : {},
+		...options.unsupported ? { unsupported: options.unsupported } : {},
+		...options.host ? { host: options.host } : {},
 	};
 	let images = new Map<string, AgentImage>();
 	try {

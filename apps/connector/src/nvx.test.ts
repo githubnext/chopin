@@ -1,6 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { managedEnvironment } from "./ai-agent";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { managedEnvironment, privateAgentState } from "./ai-agent";
 import { githubPaths } from "./github-token";
 import {
 	type AgentImage,
@@ -79,6 +82,22 @@ describe("which machines can run NVX", () => {
 			reason: expect.stringContaining("/dev/kvm"),
 		});
 		expect(support.supported === false && support.fix).toContain("usermod -aG kvm");
+	});
+
+	test("a user who joined the kvm group after chopin's login began is told to log in again, or to restart the service's user manager", () => {
+		let support = nvxSupport({
+			...host({ devices: { "/dev/kvm": false } }),
+			joinedLater: path => path === "/dev/kvm",
+		});
+		expect(support).toEqual({
+			supported: false,
+			reason: "Your user is in the kvm group, but chopin runs in a login that began before you "
+				+ "joined it, so it can't read and write /dev/kvm yet.",
+			fix:
+				"log out and in again, then run chopin there (for the chopin service, whose systemd user "
+				+ "manager began before you joined, restart the machine or run: sudo systemctl restart "
+				+ "user@$(id -u))",
+		});
 	});
 
 	test("a machine without virtualization, a Mac and an Arm machine have nothing to fix", () => {
@@ -407,6 +426,95 @@ describe("what a launch's microVM is given", () => {
 		expect(spec.environment.GIT_CONFIG_KEY_1).toBe("safe.directory");
 		expect(spec.environment.GIT_CONFIG_VALUE_1).toBe("*");
 		expect(spec.environment.GIT_CONFIG_KEY_0).toBe("push.default");
+	});
+});
+
+describe.skipIf(process.platform === "win32")("a base dir reached through a link", () => {
+	// As on a machine whose ~/.local is a link to another disk: the home folder's path names it, and
+	// the guest has only where it really is.
+	let scratch = realpathSync(mkdtempSync(join(tmpdir(), "chopin-linked-")));
+	afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+	let disk = join(scratch, "disk", "home", ".local");
+	let home = join(scratch, "home", "mona");
+	mkdirSync(join(disk, "state", "chopin", "connector"), { recursive: true });
+	mkdirSync(join(disk, "share", "pnpm"), { recursive: true });
+	mkdirSync(home, { recursive: true });
+	symlinkSync(disk, join(home, ".local"));
+	let linked = join(home, ".local");
+	let base = join(linked, "state", "chopin", "connector");
+	let real = join(disk, "state", "chopin", "connector");
+	let source = join(scratch, "src", "app", ".git");
+	mkdirSync(source, { recursive: true });
+
+	test("every path a launch's environment, command and working directory name is where its guest has it", () => {
+		let folder = join(base, "planners", "octo-org", "app", "doc-1");
+		let tokens = `${folder}.tokens`;
+		let agent = `${folder}.agent`;
+		mkdirSync(tokens, { recursive: true });
+		let spec = vmSpec({
+			command: ["atomic", "--settings", join(agent, "atomic", "settings.json")],
+			cwd: "/work/app",
+			env: {
+				...privateAgentState(agent),
+				...githubPaths(join(tokens, "github"), join(tokens, "gh"), "octo-org/app"),
+				CHOPIN_PLANNER_TOKEN_FILE: join(tokens, "planner"),
+				CHOPIN_MCP_TOKEN_FILE: join(tokens, "mcp"),
+				PNPM_HOME: join(linked, "share", "pnpm"),
+			},
+			own: [tokens, agent],
+			agentHome: agent,
+			repository: { source, path: "/work/app", dissociate: true },
+		}, {
+			platform: "linux",
+			base,
+			image: IMAGE,
+			proxyPort: 41234,
+			writable: [join(linked, "share", "pnpm")],
+		});
+		let at = join(real, "planners", "octo-org", "app", "doc-1");
+		expect(spec.shares.map(share => [share.host, share.guest, share.mode])).toEqual([
+			[`${at}.agent`, `${at}.agent`, "rw"],
+			[join(disk, "share", "pnpm"), join(disk, "share", "pnpm"), "rw"],
+			[`${at}.tokens`, `${at}.tokens`, "ro"],
+			[source, source, "ro"],
+		]);
+		expect(spec.environment).toMatchObject({
+			ATOMIC_CODING_AGENT_DIR: `${at}.agent/atomic`,
+			PI_CODING_AGENT_DIR: `${at}.agent/atomic`,
+			ATOMIC_ACP_DIR: `${at}.agent/atomic-acp`,
+			COPILOT_HOME: `${at}.agent/copilot`,
+			CLAUDE_CONFIG_DIR: `${at}.agent/claude`,
+			CODEX_HOME: `${at}.agent/codex`,
+			HOME: `${at}.agent`,
+			CHOPIN_GITHUB_TOKEN_FILE: `${at}.tokens/github`,
+			GH_CONFIG_DIR: `${at}.tokens/gh`,
+			CHOPIN_PLANNER_TOKEN_FILE: `${at}.tokens/planner`,
+			CHOPIN_MCP_TOKEN_FILE: `${at}.tokens/mcp`,
+			PNPM_HOME: join(disk, "share", "pnpm"),
+			CHOPIN_GUEST_SOURCE: source,
+		});
+		expect(spec.command.slice(3)).toEqual([
+			"chopin-launch",
+			"atomic",
+			"--settings",
+			`${at}.agent/atomic/settings.json`,
+		]);
+		// Nothing names the link, which the guest doesn't have.
+		let named = [...Object.values(spec.environment), ...spec.command, spec.cwd];
+		expect(named.filter(value => value.includes(linked))).toEqual([]);
+	});
+
+	test("a working directory named through the link is where the guest has it", () => {
+		let check = join(base, "nvx", "check");
+		mkdirSync(check, { recursive: true });
+		let spec = vmSpec({ command: ["atomic-acp"], cwd: check, env: {} }, {
+			platform: "linux",
+			base,
+			image: IMAGE,
+			proxyPort: 41234,
+		});
+		expect(spec.shares.map(share => share.host)).toEqual([join(real, "nvx", "check")]);
+		expect(spec.cwd).toBe(join(real, "nvx", "check"));
 	});
 });
 

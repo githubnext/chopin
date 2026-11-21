@@ -49,6 +49,12 @@ export type SupportHost = {
 	exists(path: string): boolean;
 	/** Whether this process may read and write the device at `path`. */
 	readWrite(path: string): boolean;
+	/**
+	 * Whether the user is in the group that owns the device at `path`, as the system's group
+	 * database has it now, though this process doesn't hold that group: whatever started it (a login,
+	 * or the systemd user manager that runs the chopin service) began before the user joined it.
+	 */
+	joinedLater?(path: string): boolean;
 };
 
 /** The words for a machine that can't run NVX, as `chopin pair`, `connect` and status say them. */
@@ -105,26 +111,51 @@ export function nvxSupport(host: SupportHost): NvxSupport {
 		device = { supported: true, hypervisor: "mshv", package: "linux-mshv" };
 	}
 	if (device) return device;
-	if (host.exists("/dev/kvm")) {
-		return {
-			supported: false,
-			reason: "Your user can't read and write /dev/kvm.",
-			fix: "sudo usermod -aG kvm $USER, then log out and in again (for the chopin service, "
-				+ "restart the machine or run: sudo systemctl restart user@$(id -u))",
-		};
-	}
-	if (host.exists("/dev/mshv")) {
+	if (host.exists("/dev/kvm")) return deviceDenied("/dev/kvm", host);
+	if (host.exists("/dev/mshv")) return deviceDenied("/dev/mshv", host);
+	return {
+		supported: false,
+		reason: "It has no /dev/kvm: hardware virtualization is off or unavailable. On a cloud VM, "
+			+ "choose a size with nested virtualization; on your own computer, turn on VT-x or AMD-V "
+			+ "in its firmware.",
+	};
+}
+
+/** The hypervisors' devices on Linux. */
+export type HypervisorDevice = "/dev/kvm" | "/dev/mshv";
+
+/**
+ * Why a Linux user can't use the hypervisor's `device`, which is there, with the fix: join the kvm
+ * group, or, for one who has since chopin's login began, start that login again (for the service,
+ * its systemd user manager, which a logout leaves running).
+ */
+export function deviceDenied(
+	device: HypervisorDevice,
+	host: Pick<SupportHost, "joinedLater">,
+): Extract<NvxSupport, { supported: false }> {
+	if (device === "/dev/mshv") {
 		return {
 			supported: false,
 			reason: "Your user can't read and write /dev/mshv.",
 			fix: "Give your user read and write access to /dev/mshv, then connect again.",
 		};
 	}
+	if (host.joinedLater?.(device)) {
+		return {
+			supported: false,
+			reason: "Your user is in the kvm group, but chopin runs in a login that began before you "
+				+ "joined it, so it can't read and write /dev/kvm yet.",
+			fix:
+				"log out and in again, then run chopin there (for the chopin service, whose systemd user "
+				+ "manager began before you joined, restart the machine or run: sudo systemctl restart "
+				+ "user@$(id -u))",
+		};
+	}
 	return {
 		supported: false,
-		reason: "It has no /dev/kvm: hardware virtualization is off or unavailable. On a cloud VM, "
-			+ "choose a size with nested virtualization; on your own computer, turn on VT-x or AMD-V "
-			+ "in its firmware.",
+		reason: "Your user can't read and write /dev/kvm.",
+		fix: "sudo usermod -aG kvm $USER, then log out and in again (for the chopin service, "
+			+ "restart the machine or run: sudo systemctl restart user@$(id -u))",
 	};
 }
 
@@ -476,16 +507,33 @@ export function checkGuestPath(guest: string, host: string) {
 	}
 }
 
-/** `value` with each shared host path in it as the guest sees it; on Linux, as it is. */
-function translated(value: string, shares: readonly Share[], platform: NodeJS.Platform) {
-	if (platform !== "win32") return value;
-	for (let share of shares) {
-		if (within(value, share.host, platform)) {
-			let rest = win32.relative(share.host, value).split(win32.sep).filter(Boolean);
-			return posix.join(share.guest, ...rest);
+/**
+ * Where the guest has the host path `value`: in the share that holds it, named as the launch named
+ * it or as it really is. A path named through a link (`named`: as named, and where it really is),
+ * as a base dir under a home folder whose `~/.local` is a link to another disk is, is where it really
+ * is, which is all the guest has. Undefined for anything else: not a path, or none a share holds.
+ */
+function inGuest(
+	value: string,
+	shares: readonly Share[],
+	named: ReadonlyMap<string, string>,
+	platform: NodeJS.Platform,
+): string | undefined {
+	let paths = platform === "win32" ? win32 : posix;
+	if (!paths.isAbsolute(value)) return undefined;
+	// The innermost link it was named through, where there are several (a base dir and a folder in it).
+	let link: [string, string] | undefined;
+	for (let [given, found] of named) {
+		if (within(value, given, platform) && given.length > (link?.[0].length ?? -1)) {
+			link = [given, found];
 		}
 	}
-	return value;
+	let host = link ? paths.join(link[1], paths.relative(link[0], value)) : value;
+	// Shares never hold one another, so one holds it at most.
+	let share = shares.find(share => within(host, share.host, platform));
+	if (!share) return undefined;
+	let rest = paths.relative(share.host, host).split(paths.sep).filter(Boolean);
+	return posix.join(share.guest, ...rest);
 }
 
 /**
@@ -501,7 +549,14 @@ function translated(value: string, shares: readonly Share[], platform: NodeJS.Pl
  */
 export function vmSpec(launch: VmLaunch, context: VmContext): VmSpec {
 	let { platform } = context;
-	let real = context.real ?? realPath;
+	let resolve = context.real ?? realPath;
+	/** Each host path named through a link, and where it really is (see `inGuest`). */
+	let named = new Map<string, string>();
+	let real = (path: string) => {
+		let found = resolve(path);
+		if (found !== path) named.set(path, found);
+		return found;
+	};
 	let base = real(context.base);
 	let owned = new Set((launch.own ?? []).map(real));
 	let repository = launch.repository;
@@ -596,12 +651,15 @@ export function vmSpec(launch: VmLaunch, context: VmContext): VmSpec {
 	for (let file of context.files ?? []) {
 		shares.push({ host: real(file.host), guest: file.guest, mode: "ro" });
 	}
+	// Every host path the guest is told of, in its environment, its command or as its working
+	// directory, is named where the guest has it: no value names a path it doesn't have.
+	let guest = (value: string) => inGuest(value, shares, named, platform) ?? value;
 	let proxy = `http://10.0.0.1:${context.proxyPort}`;
 	let environment: Record<string, string> = {};
 	for (let [name, value] of Object.entries(launch.env)) {
 		if (value === undefined || /^(https?|all|no)_proxy$/i.test(name)) continue;
 		if (hostOnly(name, platform)) continue;
-		environment[name] = translated(value, shares, platform);
+		environment[name] = guest(value);
 	}
 	let home = launch.agentHome ? guestPath(real(launch.agentHome), platform) : "/tmp/home";
 	if (repository) {
@@ -639,7 +697,7 @@ export function vmSpec(launch: VmLaunch, context: VmContext): VmSpec {
 	// The program, and `env` before it, by the names the guest finds them by on its PATH.
 	let at = programAt(launch.command);
 	let command = launch.command.map((word, index) =>
-		index === 0 || index === at ? guestProgram(word, platform) : word
+		index === 0 || index === at ? guestProgram(word, platform) : guest(word)
 	);
 	return {
 		image: context.image,
@@ -649,7 +707,7 @@ export function vmSpec(launch: VmLaunch, context: VmContext): VmSpec {
 		// The image's directories come first on the guest's PATH: a program by any host path runs
 		// as the image installed it.
 		command: repository ? ["/bin/sh", "-c", PREPARE, "chopin-launch", ...command] : command,
-		cwd: cwd ? guestPath(cwd, platform) : "/",
+		cwd: cwd ? inGuest(cwd, shares, named, platform) ?? guestPath(cwd, platform) : "/",
 		...launch.disk ? { disk: real(launch.disk) } : {},
 		memoryMib: context.memoryMib ?? 2048,
 		processors: context.processors ?? 2,
