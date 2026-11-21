@@ -61,9 +61,13 @@ export function machineRecipes(options: {
 	/** `--install-from`: the folder the install commands read. */
 	installFrom?: string;
 }): Map<string, ImageRecipe> {
-	let recipes = new Map<string, ImageRecipe>([
-		recipeFor(options.command, options.install, "--install", options.installFrom),
-	]);
+	let [agent, recipe] = recipeFor(
+		options.command,
+		options.install,
+		"--install",
+		options.installFrom,
+	);
+	let recipes = new Map<string, ImageRecipe>([[agent, { ...recipe, runs: ["agent"] }]]);
 	if (options.plannerCommand?.length) {
 		let [program, recipe] = recipeFor(
 			options.plannerCommand,
@@ -71,7 +75,12 @@ export function machineRecipes(options: {
 			"--planner-install",
 			options.installFrom,
 		);
-		recipes.set(program, { ...recipe, planner: true });
+		// A launch finds its image by its program, so a Planner command that starts the agent's
+		// program runs from the one image the agent does.
+		recipes.set(program, {
+			...recipe,
+			runs: program === agent ? ["agent", "planner"] : ["planner"],
+		});
 	}
 	return recipes;
 }
@@ -81,8 +90,12 @@ export function machineRecipes(options: {
  * and for the Planner's, that it is built now so the first document's Planner starts at once.
  */
 export function buildingWords(recipes: ImageRecipe[]): string {
-	let agents = [...new Set(recipes.filter(item => !item.planner).map(item => item.name))];
-	let planner = recipes.find(item => item.planner)?.name;
+	let agents = [
+		...new Set(
+			recipes.filter(item => !item.runs || item.runs.includes("agent")).map(item => item.name),
+		),
+	];
+	let planner = recipes.find(item => item.runs?.includes("planner"))?.name;
 	if (!planner) return `Building ${imageName(recipes)} for its microVMs (a minute or two, once).`;
 	let why = "(a minute or two, once, so the first document's Planner starts at once)";
 	return agents.length

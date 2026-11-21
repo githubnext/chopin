@@ -105,7 +105,7 @@ const PLANNER: ImageRecipe = {
 	name: "my-planner",
 	install: ["npm install -g agent"],
 	programs: ["my-planner"],
-	planner: true,
+	runs: ["planner"],
 };
 
 describe("the folder --install-from names", () => {

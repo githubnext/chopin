@@ -770,10 +770,13 @@ describe.skipIf(!usable)("chopin connect with a Planner command", () => {
 			});
 			let opened = Date.now() - opening;
 			try {
+				// A folder of the launch's own, as a Planner's are: never one that holds the state directory.
+				let folder = join(state, "planner-check");
+				mkdirSync(folder);
 				let launching = Date.now();
 				let child = machine.spawn({
 					command: settings.plannerCommand,
-					cwd: "/tmp",
+					cwd: folder,
 					env: {},
 					stdin: "ignore",
 				});
