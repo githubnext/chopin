@@ -330,13 +330,18 @@ A guest gets the credentials of its own launch and nothing else:
 - on a machine with a database login for agents' sessions, that login, in its
   agents' state.
 
-Never: the machine token, the owner's GitHub login, an AI provider key, the relay's
-launch credentials, another launch's tokens, the owner's own agent logins, or
-anything of the connector's environment. The guest's environment is the launch's
-(`managedEnvironment` for a launch on Chopin's AI accounts, the agent's own
-variables and `--env` otherwise) and the image's, nothing more. A run Chopin hands
-no AI launch (a Chopin without launches) gets no models of the owner's either: its
-agent runs with what `--env` gives it.
+Never: the machine token, the owner's GitHub login as `chopin` holds it, an AI
+provider key, the relay's launch credentials, another launch's tokens or the owner's
+own agent logins. The guest's environment is the launch's (`managedEnvironment` for
+a launch on Chopin's AI accounts, the agent's own variables and `--env` otherwise)
+and the image's. A run Chopin hands no AI launch (a Chopin without launches) gets no
+models of the owner's either: its agent runs with what `--env` gives it. A Planner
+backend Chopin hands no AI accounts (an older server) is started with the
+connector's environment but its GitHub credentials, as before.
+
+A guest reads what it is shared, though: a Planner's checkout whole and the git
+directory a run clones from, `config` included, so a token kept in a remote URL or
+a credential file inside `.git` is readable to the agent.
 
 ## Planner backends, cold and spare
 
@@ -430,6 +435,11 @@ What differs on a Windows host:
   truncating it, and a guest formats it without discards, which NTFS doesn't take.
   Space a Planner frees inside its disk isn't given back to NTFS, so a disk only grows,
   to its 32 GiB at most, until it is removed.
+- **Leftovers.** `nvx sandbox run` keeps its own folder in the system's temporary
+  directory (`nvx-sandbox-run-*`, private), which a launch ended by force leaves behind,
+  on Linux too; sweeping it is still to do. A launch's environment file stays in its
+  `0700` record folder until the launch ends, or until the next connector starts after a
+  crash.
 - **Ending.** Killing `nvx.exe` leaves `openvmm.exe` running, and so does an `nvx` that
   reaches its own `--timeout` while the guest is busy (`error[still-running]`); and a VM
   killed in the middle of heavy share I/O was seen to wedge, holding its memory until

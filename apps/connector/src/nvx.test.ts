@@ -235,11 +235,18 @@ describe("what a launch's microVM is given", () => {
 					repository: { source: `${checkout}/.git`, path: "/work/app", dissociate: true },
 				}],
 				[[`${checkout}/.git`], launch],
-				[[`${run}.tokens`], launch],
 			] as Array<[string[], VmLaunch]>
 		) {
 			expect(() => vmSpec(given, { ...CONTEXT, writable })).toThrow(
 				/would be shared writable and holds .*, which a microVM may only read/,
+			);
+		}
+	});
+
+	test("a folder the owner lets agents write is never inside chopin's state directory", () => {
+		for (let inside of [`${BASE}/nvx`, `${BASE}/images`, `${BASE}/runs`]) {
+			expect(() => vmSpec(launch, { ...CONTEXT, writable: [inside] })).toThrow(
+				/can't name .*, which is inside chopin's state directory/,
 			);
 		}
 	});

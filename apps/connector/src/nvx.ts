@@ -4,8 +4,8 @@ import { join, posix, win32 } from "node:path";
 
 /**
  * The NVX release this connector runs every agent in: its version and, for each host, the package
- * Chopin's release carries a copy of, with its SHA-256. NVX publishes development releases only,
- * several a day, so the pin moves only with a `chopin` release that was tested on it.
+ * downloaded from NVX's own GitHub release, with its SHA-256. NVX publishes development releases
+ * only, several a day, so the pin moves only with a `chopin` release that was tested on it.
  */
 export const NVX_RELEASE = {
 	version: "0.1.0-dev.c753e7b4c288",
@@ -454,6 +454,14 @@ export function vmSpec(launch: VmLaunch, context: VmContext): VmSpec {
 		...launch.agentHome ? [real(launch.agentHome)] : [],
 	];
 	let added = (context.writable ?? []).map(real);
+	// The state directory holds NVX itself, the images, the bridge and every launch's files.
+	for (let path of added) {
+		if (within(path, base, platform)) {
+			throw new SandboxRefused(
+				`Not run: --sandbox-write can't name ${path}, which is inside chopin's state directory.`,
+			);
+		}
+	}
 	for (let path of writes) {
 		if (!within(path, base, platform)) {
 			throw new SandboxRefused(

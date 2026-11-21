@@ -19,7 +19,7 @@ export type Machine = {
 	hostname: string | null;
 	platform: { os: string; arch: string } | null;
 	agent: { name: string; version?: string } | null;
-	/** Whether its agents run in the system's process sandbox; null when it said nothing. */
+	/** Whether its agents run in NVX microVMs, or why it can't; null when it said nothing. */
 	sandbox: SandboxReport | null;
 	store?: MachineStoreStatus | null;
 	/** The background service runs it. */

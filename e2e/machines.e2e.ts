@@ -11,8 +11,10 @@ import {
 	CONNECTOR_HOST_HEADER,
 	CONNECTOR_PLATFORM_HEADER,
 	CONNECTOR_PROTOCOL_HEADER,
+	CONNECTOR_SANDBOX_FIX_HEADER,
 	CONNECTOR_SANDBOX_HEADER,
 	CONNECTOR_SANDBOX_HYPERVISOR_HEADER,
+	CONNECTOR_SANDBOX_REASON_HEADER,
 	CONNECTOR_SERVICE_HEADER,
 	CONNECTOR_VERSION_HEADER,
 } from "../packages/protocol/connector";
@@ -409,6 +411,12 @@ async function pairedMachine(
 		});
 		expect(opened.status, await opened.text()).toBe(200);
 	}
+	/** Connect again, as its connector would, with `headers`; Chopin's answer. */
+	return (headers: Record<string, string>) =>
+		post("/api/connector/connections", checkout, {
+			...headers,
+			authorization: `Bearer ${paired.token}`,
+		});
 }
 
 /** Three machines: a Linux server running as the service, a Windows PC, and one never connected. */
@@ -578,6 +586,51 @@ test("on a phone, machines are rows that open their own view, where they rename"
 	await page.getByRole("button", { name: "Machines", exact: true }).click();
 	await expect(page).toHaveURL(/\/machines$/);
 	await expect(rows.locator(".machines-row").filter({ hasText: "Build box" })).toBeVisible();
+});
+
+test("a machine that can't run work says why and the fix while it is away, on a desktop and a phone", async ({ join: enter }) => {
+	let page = await enter(person());
+	let connect = await pairedMachine(page, "old-mac");
+	// Its chopin can't run microVMs here, and says why: refused, and kept for the page.
+	let refused = await connect({
+		[CONNECTOR_SANDBOX_HEADER]: "none",
+		[CONNECTOR_SANDBOX_REASON_HEADER]: "Your user can't read and write /dev/kvm.",
+		[CONNECTOR_SANDBOX_FIX_HEADER]: "sudo usermod -aG kvm $USER",
+	});
+	expect(refused.status).toBe(409);
+	await page.goto("/machines");
+	let row = page.getByRole("table", { name: "Your machines" })
+		.getByRole("row", { name: /old-mac/ });
+	await expect(row).toContainText("Can't run work");
+	await expect(row).toContainText("Your user can't read and write /dev/kvm.");
+	await expect(row.locator("code")).toHaveText("sudo usermod -aG kvm $USER");
+
+	// An older chopin is told to update, and the page says so.
+	let older = await connect({
+		[CONNECTOR_PROTOCOL_HEADER]: "7",
+		[CONNECTOR_SANDBOX_HEADER]: "bubblewrap",
+	});
+	expect(older.status).toBe(409);
+	await page.reload();
+	await expect(row).toContainText(`Its chopin ${RELEASE} runs agents outside a microVM.`);
+	await expect(row.locator("code")).toHaveText("chopin update");
+});
+
+test("on a phone, a machine that can't run work says why in its own view", async ({ join: enter }) => {
+	let page = await enter(person(), PHONE);
+	let connect = await pairedMachine(page, "old-mac");
+	await connect({
+		[CONNECTOR_SANDBOX_HEADER]: "none",
+		[CONNECTOR_SANDBOX_REASON_HEADER]: "macOS has no hypervisor NVX can use.",
+	});
+	await page.goto("/machines");
+	let rows = page.getByRole("region", { name: /^@mia-/ });
+	await expect(rows.getByRole("img", { name: "Can't run work" })).toHaveCount(1);
+	await rows.locator(".machines-row").filter({ hasText: "old-mac" }).click();
+	await expect(page.locator(".machines-facts")).toContainText(
+		"SandboxCan't run agents: macOS has no hypervisor NVX can use.",
+	);
+	await expect(page.getByRole("main")).toContainText("Can't run work");
 });
 
 test("a favorite machine: its star in the table and the row menu, one at a time", async ({ join: enter }) => {

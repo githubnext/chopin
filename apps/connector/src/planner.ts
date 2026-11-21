@@ -117,7 +117,7 @@ export async function servePlanners(options: {
 	healthyMs?: number;
 	/** How long before it expires the GitHub token is replaced; for tests. */
 	renewGitHubBeforeMs?: number;
-	/** Where each backend starts: the machine's process sandbox, else plainly. */
+	/** Where each backend starts: a microVM of its own. */
 	sandbox: Sandbox;
 	agentStore?: AgentStore;
 	/** The machine's spare Planners, which a new document's Planner starts on. */

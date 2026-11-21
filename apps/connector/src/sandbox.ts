@@ -485,10 +485,17 @@ function startNvx(program: string, words: string[], launch: StartOptions): Spawn
  */
 function windowsStop(child: Spawned, wedged?: (detail: string) => void) {
 	let job = killJob(child.pid!);
+	// Without its job a VM would outlive its stop and chopin itself: it never runs.
+	if (!job) {
+		child.kill();
+		throw new SandboxRefused(
+			"Not run: chopin couldn't put the microVM in a job object, which ends it with chopin.",
+		);
+	}
 	let exited = new Promise<void>(resolve => child.once("exit", () => resolve()));
 	let ended = (ms: number) =>
 		Promise.race([exited.then(() => true), Bun.sleep(ms).then(() => false)]);
-	child.once("close", () => job?.close());
+	child.once("close", () => job.close());
 	let stopping: Promise<void> | undefined;
 	child.stopMicrovm = graceMs =>
 		stopping ??= (async () => {
@@ -497,9 +504,8 @@ function windowsStop(child: Spawned, wedged?: (detail: string) => void) {
 				child.stdin?.end();
 			} catch { /* Already closed. */ }
 			if (await ended(graceMs)) return;
-			if (job) job.kill();
-			else child.kill();
-			if (await ended(10_000) && !job?.active()) return;
+			job.kill();
+			if (await ended(10_000) && !job.active()) return;
 			wedged?.(
 				`A microVM (nvx.exe ${child.pid}) didn't end when it was stopped, so OpenVMM may still `
 					+ "hold its memory until Windows restarts.",

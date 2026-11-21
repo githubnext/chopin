@@ -539,6 +539,12 @@ export async function connect(args: string[], injected: Injected = {}) {
 		if (error instanceof MachineUnsupported) {
 			let paired = await machineToken(directory, url);
 			if (paired) await reportCapability(url, paired, error.support).catch(() => {});
+			// The service would be started again at once, and tell Chopin again: it says so once and
+			// waits to be stopped.
+			if (service) {
+				output.error(error.message);
+				await new Promise(() => {});
+			}
 		}
 		throw error;
 	}
@@ -889,6 +895,8 @@ async function installCommand(options: {
 				+ "service.",
 		);
 	}
+	// A service on a machine that can't run its microVMs would run nothing, --skip-check or not.
+	requireSupport(options.support);
 	// The check starts the agent as the service will: in a microVM of its image, built if it isn't.
 	let check = options.check
 		? async (settings: ConnectSettings) => {

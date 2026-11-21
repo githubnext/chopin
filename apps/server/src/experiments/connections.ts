@@ -54,7 +54,7 @@ export type About = {
 	/** It has a Planner command, so it can run the Planner of a document it is chosen for. */
 	plannerCommand?: boolean;
 	agent?: { name: string; version?: string };
-	/** Whether the connector runs agents in the system's process sandbox, and if not, why. */
+	/** Whether the connector runs each agent in an NVX microVM, and if not, why. */
 	sandbox?: SandboxReport;
 	storeProblem?: string;
 };
