@@ -327,9 +327,63 @@ describe("one build of an image at a time", () => {
 			let { builder, builds } = fakeBuilder({ "npm install -g agent": ["agent"] });
 			await ensureImages(new Map([["agent", AGENT]]), options(base, builder));
 			expect(builds).toHaveLength(1);
-			expect(await readdir(join(base, "images"))).toEqual([`${key}.erofs`, `${key}.json`]);
+			let names = await readdir(join(base, "images"));
+			expect(names).toHaveLength(2);
+			expect(names).toContain(`${key}.json`);
+			expect(names.find(name => name.endsWith(".erofs"))).toStartWith(`${key}.`);
 		},
 	);
+
+	test("two chopins that both find a dead chopin's lock build the image once, and its record names its layer", async () => {
+		let base = await state();
+		let key = imageKey(AGENT, LAYER, USER);
+		await mkdir(join(base, "images"), { recursive: true });
+		// This process's number, from a start long gone: the chopin that held it died.
+		await writeFile(
+			join(base, "images", `${key}.lock`),
+			JSON.stringify({ pid: process.pid, processStart: "a start long gone" }),
+		);
+		// Both read the dead chopin's lock; the first takes it over, and the second decides it is
+		// stale once the first holds it.
+		let lock = join(base, "images", `${key}.lock`);
+		let asked = 0;
+		let second = Promise.withResolvers<void>();
+		let probe = async () => {
+			let call = ++asked;
+			if (call === 1) {
+				await second.promise;
+				return { id: "now", at: Date.now() };
+			}
+			if (call === 2) {
+				second.resolve();
+				while ((await readFile(lock, "utf8").catch(() => "")).includes("long gone")) {
+					await Bun.sleep(5);
+				}
+				return { id: "now", at: Date.now() };
+			}
+			return { id: "now", at: 0 };
+		};
+		let { builder, builds, release } = fakeBuilder(
+			{ "npm install -g agent": ["agent"] },
+			{ held: true },
+		);
+		let recipes = new Map([["agent", AGENT]]);
+		let images = Promise.all([
+			ensureImages(recipes, { ...options(base, builder), probe }),
+			ensureImages(recipes, { ...options(base, builder), probe }),
+		]);
+		await second.promise;
+		await Bun.sleep(200);
+		release();
+		let made = await images;
+		expect(builds).toHaveLength(1);
+		let record = JSON.parse(await readFile(join(base, "images", `${key}.json`), "utf8"));
+		for (let image of made) {
+			expect(image.get("agent")!.layer.uuid).toBe(record.uuid);
+			let made = JSON.parse(await readFile(image.get("agent")!.layer.path, "utf8"));
+			expect(made.uuid).toBe(record.uuid);
+		}
+	});
 
 	test.skipIf(process.platform === "win32")(
 		"pruning keeps an image another chopin is building, and removes what a chopin that died left",
@@ -339,6 +393,7 @@ describe("one build of an image at a time", () => {
 			await mkdir(join(images, "cache"), { recursive: true });
 			let names = {
 				kept: ["a1.erofs", "a1.json"],
+				left: ["a1.11111111-2222-4333-8444-555555555555.erofs", "a1.building-9"],
 				building: ["b2.lock", "b2.building-1234"],
 				unused: ["c3.erofs", "c3.json"],
 				abandoned: ["d4.lock", "d4.building-5678"],
@@ -347,6 +402,8 @@ describe("one build of an image at a time", () => {
 				if (name.includes(".building-")) await mkdir(join(images, name));
 				else await writeFile(join(images, name), "");
 			}
+			// A record from before records named their layer: its layer is `<key>.erofs`.
+			await writeFile(join(images, "a1.json"), "{}");
 			await writeFile(join(images, "b2.lock"), JSON.stringify({ pid: process.pid }));
 			await writeFile(join(images, "d4.lock"), JSON.stringify({ pid: spawnSync("true").pid }));
 			await pruneImages(base, ["a1"]);

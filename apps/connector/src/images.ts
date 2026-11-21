@@ -13,7 +13,7 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { readFileSync, statSync } from "node:fs";
-import { join, sep } from "node:path";
+import { basename, join, sep } from "node:path";
 import { AGENTS } from "@chopin/protocol/agents";
 import {
 	BUILD_PACKAGES,
@@ -22,7 +22,7 @@ import {
 	UBUNTU_ARCHIVE,
 } from "./guest-packages";
 import { type AgentImage, IMAGE_GUEST_PATH, NVX_RELEASE, type VmSpec } from "./nvx";
-import { processStart, staleLock, type StartProbe } from "./workspace";
+import { holds, processStart, staleLock, type StartProbe } from "./workspace";
 
 /** The Node.js every image runs its agent on: the 24 line, pinned by version and SHA-256. */
 export const NODE_RELEASE = {
@@ -252,17 +252,30 @@ async function fetched(
 /** What a build recorded of the image `<base>/images/<key>`: it, and the programs found in it. */
 type Recorded = { image: AgentImage; programs: string[]; record: Record<string, unknown> };
 
+/** The file of the layer a record names: its own, or `<key>.erofs` for one from before. */
+function layerName(key: string, record: { layer?: unknown }) {
+	return typeof record.layer === "string" ? basename(record.layer) : `${key}.erofs`;
+}
+
+/** Writes `<key>.json` whole: a chopin reads the record before it or after it, never half. */
+async function writeRecord(images: string, key: string, record: Record<string, unknown>) {
+	let temporary = join(images, `${key}.json-${process.pid}-${randomBytes(4).toString("hex")}`);
+	await writeFile(temporary, JSON.stringify(record));
+	await rename(temporary, join(images, `${key}.json`));
+}
+
 /** The image `<base>/images/<key>`, as its build recorded it. */
 function recorded(base: string, key: string): Recorded | undefined {
-	let layer = join(base, "images", `${key}.erofs`);
 	try {
 		let record = JSON.parse(readFileSync(join(base, "images", `${key}.json`), "utf8")) as {
 			uuid?: unknown;
 			user?: GuestUser;
+			layer?: unknown;
 			programs?: unknown;
 			recipe?: { programs?: unknown };
 		};
 		if (typeof record.uuid !== "string" || !record.user) return undefined;
+		let layer = join(base, "images", layerName(key, record));
 		statSync(layer);
 		// A record from before images were shared names the programs of its one recipe.
 		let programs = record.programs ?? record.recipe?.programs;
@@ -342,7 +355,8 @@ export type ImageStore = {
  * The image each program of `recipes` runs from: one per key, so recipes with the same install (an
  * agent and a Planner command installed by the same commands) share one, built once and checked for
  * all their programs. An image is found where it was built before, and checked for any program it
- * wasn't checked for then; otherwise it is built, in a microVM, into `<base>/images/<key>.erofs`.
+ * wasn't checked for then; otherwise it is built, in a microVM, into `<base>/images/<key>.<uuid>.erofs`,
+ * which its record `<key>.json` names.
  * One build of a key runs at a time: in this process every caller shares the one under way, and
  * across the chopins on a base dir one holds `<key>.lock` while another waits for it and finds the
  * image made.
@@ -445,15 +459,16 @@ async function ensureImage(
 					`${sentence(name)} has no ${missing.join(" or ")}: check its install commands.`,
 				);
 			}
-			await writeFile(
-				join(images, `${key}.json`),
-				JSON.stringify({ ...found.record, programs: [...found.programs, ...unchecked] }),
-			);
+			await writeRecord(images, key, {
+				...found.record,
+				programs: [...found.programs, ...unchecked],
+			});
 			return found.image;
 		}
 		options.building?.(recipes);
-		let layer = join(images, `${key}.erofs`);
 		let uuid = randomUUID();
+		// A layer of its own name, which its record names: no other build's layer is ever under it.
+		let layer = join(images, `${key}.${uuid}.erofs`);
 		await options.builder.build(recipes[0]!, {
 			key,
 			layer,
@@ -478,48 +493,82 @@ async function ensureImage(
 				}: check its install commands.`,
 			);
 		}
-		await writeFile(
-			join(images, `${key}.json`),
-			JSON.stringify({
-				key,
-				uuid,
-				recipes,
-				programs,
-				user: options.user,
-				node: NODE_RELEASE.version,
-				nvx: NVX_RELEASE.version,
-			}),
-		);
+		await writeRecord(images, key, {
+			key,
+			uuid,
+			layer: basename(layer),
+			recipes,
+			programs,
+			user: options.user,
+			node: NODE_RELEASE.version,
+			nvx: NVX_RELEASE.version,
+		});
 		return image;
 	} finally {
 		await release();
 	}
 }
 
+/** Whether the lock `text` was written by a process that is gone, or whose number another has. */
+async function abandoned(text: string | undefined, probe: StartProbe) {
+	let held: Record<string, unknown>;
+	try {
+		held = JSON.parse(text ?? "");
+	} catch {
+		return false;
+	}
+	return Number.isSafeInteger(held?.pid) && (held.pid as number) > 0 && !await holds(held, probe);
+}
+
+function read(path: string) {
+	return readFile(path, "utf8").catch(() => undefined);
+}
+
 /**
  * Takes the lock at `path` for this process, waiting while another chopin holds it (`waiting` hears
  * that once) and taking over one whose process is gone, or whose number a process started since
  * has. The lock is made whole, its holder in it, by linking a file already written, so no chopin
- * ever reads it half made.
+ * ever reads it half made. A lock is taken over only under `<path>.takeover`, and only while it is
+ * still the one found abandoned: two chopins that found it so never both take it, nor one take a
+ * lock another took meanwhile. Letting go removes the lock only while it is this one's.
  */
 async function lockImage(path: string, waiting: () => void, probe: StartProbe) {
 	let holder = `${path}-${process.pid}-${randomBytes(4).toString("hex")}`;
-	await writeFile(holder, JSON.stringify({ pid: process.pid, started: Date.now() }), {
-		mode: 0o600,
-	});
+	let mine = JSON.stringify({ pid: process.pid, started: Date.now() });
+	await writeFile(holder, mine, { mode: 0o600 });
 	let said = false;
+	let take = async (seen: string) => {
+		let guard = `${path}.takeover`;
+		try {
+			await link(holder, guard);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+			// Another is taking it over; one that died in its few steps doing so leaves its guard.
+			let left = await read(guard);
+			if (await abandoned(left, probe) && await read(guard) === left) {
+				await rm(guard, { force: true });
+			}
+			return false;
+		}
+		try {
+			if (await read(path) === seen) await rm(path, { force: true });
+		} finally {
+			await rm(guard, { force: true });
+		}
+		return true;
+	};
 	try {
 		for (let wait = 50;; wait = Math.min(wait * 2, 1000)) {
 			try {
 				await link(holder, path);
-				return () => rm(path, { force: true });
+				return async () => {
+					if (await read(path) === mine) await rm(path, { force: true });
+				};
 			} catch (error) {
 				if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
 			}
-			if (await staleLock(path, probe)) {
-				await rm(path, { force: true });
-				continue;
-			}
+			let seen = await read(path);
+			if (seen !== undefined && await abandoned(seen, probe) && await take(seen)) continue;
 			if (!said) {
 				said = true;
 				waiting();
@@ -680,7 +729,8 @@ export function vmBuilder(options: {
 }
 
 /**
- * Removes images and unfinished builds that no recipe's key in `keep` names, but not those of a key
+ * Removes images and unfinished builds that no recipe's key in `keep` names, and of those it does,
+ * every layer but the one its record names and every build left unfinished. It leaves alone a key
  * another chopin holds the lock of now: an image it is building or checking, beside this one.
  */
 export async function pruneImages(
@@ -701,14 +751,23 @@ export async function pruneImages(
 			held.add(name.slice(0, -".lock".length));
 		}
 	}
+	let kept = new Set<string>();
+	for (let key of keep) {
+		let record = await read(join(folder, `${key}.json`));
+		kept.add(`${key}.json`);
+		try {
+			kept.add(layerName(key, JSON.parse(record ?? "")));
+		} catch { /* No record: nothing of it is kept. */ }
+	}
 	for (let name of names) {
 		let key = name.split(".")[0]!;
-		if (name === "cache" || keep.includes(key) || held.has(key)) continue;
-		// A lock being taken: its holder's file, linked to `<key>.lock` a moment later.
-		if (name.includes(".lock-")) {
+		if (name === "cache" || kept.has(name) || held.has(key)) continue;
+		// A lock or a record being written: its holder's file, renamed or linked a moment later.
+		if (name.includes(".lock-") || name.includes(".json-")) {
 			let made = await stat(join(folder, name)).then(info => info.mtimeMs, () => 0);
 			if (Date.now() - made < 60_000) continue;
 		}
-		await rm(join(folder, name), { recursive: true, force: true });
+		// A layer a microVM of another chopin still runs may not go yet on Windows: it goes later.
+		await rm(join(folder, name), { recursive: true, force: true }).catch(() => {});
 	}
 }

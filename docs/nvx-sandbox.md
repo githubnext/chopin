@@ -191,7 +191,9 @@ round trip, so loading Atomic's 34,000 files from a share took 36–46 seconds a
   with `safe.directory = *` (below).
 
 The image's key is the SHA-256 of all of that. It is built once into
-`<base>/images/<key>.erofs` and rebuilt only when the key changes: another NVX
+`<base>/images/<key>.<uuid>.erofs`, a layer of its own name that its record
+`<key>.json` names (an image built before this names none, and is `<key>.erofs`), and
+rebuilt only when the key changes: another NVX
 release, Node, package, agent version, install command, file in the
 `--install-from` folder, or user. Which program a launch starts is no part of the
 key, so an agent and a Planner command whose installs are the same share one image,
@@ -235,8 +237,14 @@ while it is being made waits on that one build. Across the `chopin`s on a base d
 one holds `<base>/images/<key>.lock`, made whole by linking a file it wrote, with its
 process in it; another, such as `chopin service install`'s check beside a service
 starting on the same base dir, says it waits, waits, and finds the image built. A
-lock whose process is gone is taken over. The connector that holds the base dir
-prunes images as it starts, but never one of a key whose lock another `chopin` holds.
+lock whose process is gone is taken over, only under `<key>.lock.takeover` and only
+while it is still the lock found abandoned, so two `chopin`s that find a dead one's
+lock never both build; and a `chopin` lets go of a lock only while it is its own. A
+record is written whole (a file renamed over it), and each build's layer has its own
+name, so a record never names a layer another build made. The connector that holds
+the base dir prunes images as it starts, but never one of a key whose lock another
+`chopin` holds; of an image it keeps, it removes the layers its record doesn't name
+and builds left unfinished.
 
 Each launch reads its image's record as it starts (`ImageStore.found`). One whose
 image is gone since it was made, removed by hand say, waits for it to be made again

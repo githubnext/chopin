@@ -748,10 +748,14 @@ describe.skipIf(!usable)("chopin connect with a Planner command", () => {
 			]);
 			expect(lines.indexOf(building[0]!)).toBeLessThan(lines.indexOf("✓ Connected."));
 			// Chopin heard of the machine once its one image was there, checked for both programs.
-			let key = atConnection!.find(name => name.endsWith(".erofs"))!.slice(0, -".erofs".length);
-			expect(atConnection!.sort()).toEqual([`${key}.erofs`, `${key}.json`]);
+			let layer = atConnection!.find(name => name.endsWith(".erofs"))!;
+			let key = layer.split(".")[0]!;
+			expect(atConnection!.sort()).toEqual([layer, `${key}.json`]);
 			let record = JSON.parse(readFileSync(join(state, "images", `${key}.json`), "utf8"));
-			expect(record.programs).toEqual(["node", "git"]);
+			expect({ layer: record.layer, programs: record.programs }).toEqual({
+				layer,
+				programs: ["node", "git"],
+			});
 
 			// The service starts on what connect saved, finds the image, and the Planner starts in it.
 			let settings = (await readConfig(state)).connect!;
