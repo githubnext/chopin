@@ -52,6 +52,8 @@ let freeText: Record<string, QuestionParams> = {
 		}],
 	},
 };
+/** A forked subagent receives its launcher's conversation, project context and skills. */
+let FORKED_LAUNCH = { agent: "worker", task: "Summarize the document.", context: "fork" };
 let stub = startStubModelServer((prompt, prior) =>
 	prior
 		? { kind: "text", text: "Answered." }
@@ -70,12 +72,14 @@ let stub = startStubModelServer((prompt, prior) =>
 			arguments: JSON.stringify({ code: 'return await tools.intercom({ action: "list" });' }),
 		}
 		: prompt === "subagent"
-		? { kind: "tool", name: "subagent", arguments: JSON.stringify({ action: "status" }) }
+		? { kind: "tool", name: "subagent", arguments: JSON.stringify(FORKED_LAUNCH) }
 		: prompt === "subagent-script"
 		? {
 			kind: "tool",
 			name: "codemode",
-			arguments: JSON.stringify({ code: 'return await tools.subagent({ action: "status" });' }),
+			arguments: JSON.stringify({
+				code: `return await tools.subagent(${JSON.stringify(FORKED_LAUNCH)});`,
+			}),
 		}
 		: { kind: "text", text: "Ready." }
 );
@@ -409,7 +413,7 @@ test("a Planner's Atomic session has no terminal, so Atomic's Intercom never mak
 	expect(context.chopinTestPlannerContext!.hasUI).toBe(false);
 });
 
-test("a Planner starts no agent through Atomic's subagent tool, called directly or from a codemode script", async () => {
+test("a Planner forks no agent through Atomic's subagent tool, called directly or from a codemode script", async () => {
 	for (let prompt of ["subagent", "subagent-script"]) {
 		let result = await run(true, prompt);
 		expect(result.requests[0]!.toolNames, prompt).not.toContain("subagent");
