@@ -8,6 +8,7 @@ import {
 	readdirSync,
 	readFileSync,
 	rmSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -203,6 +204,30 @@ describe.skipIf(!usable)("an agent in its microVM", () => {
 				planner("cat state.txt; test ! -e .git/objects/info/alternates && echo own-objects"),
 			);
 			expect(second.out).toBe("kept\nown-objects\n");
+		},
+		180_000,
+	);
+
+	test(
+		"a Planner's new disk takes on the host only what its guest writes, not ext4's tables",
+		async () => {
+			let folder = join(base, "planners", "octo-org", "repo", "doc-sparse");
+			mkdirSync(`${folder}.tokens`, { recursive: true });
+			await sandbox.makeDisk!(`${folder}.disk`);
+			// ext4 zeroes its inode tables a while after a first mount unless it was told they are.
+			let { code } = await run({
+				command: ["bash", "-c", "sleep 40"],
+				cwd: "/work/repo",
+				env: {},
+				stdin: "ignore",
+				own: [`${folder}.tokens`],
+				reads: [repository],
+				repository: { source: join(repository, ".git"), path: "/work/repo", dissociate: true },
+				disk: `${folder}.disk`,
+			});
+			expect(code).toBe(0);
+			// Allocated, in MiB: the clone of a one-commit repository and ext4's own few, not 512.
+			expect(statSync(`${folder}.disk`).blocks * 512 / 1024 ** 2).toBeLessThan(64);
 		},
 		180_000,
 	);

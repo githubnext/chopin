@@ -255,7 +255,10 @@ inside the guest, or reads nothing of it:
 
 - **Size.** A disk is a sparse 32 GiB ext4 image, made in a microVM of the release's
   own layer (`truncate` and `mkfs.ext4` with lazy initialization), so it takes on the
-  host only what its Planner writes. 32 GiB is the most it can hold.
+  host only what its Planner writes. A new sparse file reads as zeros, which
+  `mkfs.ext4` is told (`assume_storage_prezeroed=1`); otherwise the guest's kernel
+  writes zeros over its inode tables after the first mount, about 512 MiB on the host.
+  32 GiB is the most it can hold.
 - **Life.** It lasts across the Planner's starts, the machine's restarts and the
   connector's updates. A spare Planner's slot that takes a document is that
   document's from then on, disk included.
