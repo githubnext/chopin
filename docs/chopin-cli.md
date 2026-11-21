@@ -676,7 +676,7 @@ lists them all.
 | `runs/<run id>.json`, `runs/<run id>.agent/` | A job's record, and its agent's state where it ran on Chopin's AI accounts | Once 15 newer runs have finished                                                                                                  |
 | `planners/<owner>/<repo>/<document id>.disk` | A Planner's disk, with its own clone of the repository                     | When Chopin says its document is archived or gone or its Planner was reset, after 30 days unused, or when the machine is unpaired |
 | `repos/<owner>/<repo>`                       | A clone of a repository you named no checkout of                           | Never                                                                                                                             |
-| `images/`                                    | The agents' images, built once each                                        | When no recipe names one any more                                                                                                 |
+| `images/`                                    | The agents' images, built once each                                        | When the connector that holds the base dir starts and no recipe names one any more                                                |
 | `nvx/`                                       | The NVX release this `chopin` pins, and its microVMs' records              | An NVX release `chopin` no longer pins                                                                                            |
 | `agent-store/`                               | This machine's database login for agent sessions, and the adapter          | Its password with `chopin unpair`                                                                                                 |
 
@@ -1174,8 +1174,9 @@ session as the user who owns the service, not through `su` or `sudo -u`.
 
 **"… is already locked by a running connector"** Another `chopin connect`, or
 the service, is already connected with this base dir, and one connection serves
-every repository. Stop it, or if `chopin status` shows nothing running, delete
-the `.lock` file the message names.
+every repository. The second `chopin connect` stops before it builds or removes any
+image. Stop the other one, or if `chopin status` shows nothing running, delete the
+`.lock` file the message names.
 
 For files, versions, the server rules, service internals, starting the Windows
 task at boot and status JSON, see the [chopin CLI reference](chopin-cli-reference.md).

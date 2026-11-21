@@ -13,7 +13,9 @@ import {
 import { installService, type ServiceHost } from "./service";
 import { collectStatus, formatStatus } from "./status";
 import { CONNECTOR_PROTOCOL, VERSION } from "./version";
-import { git } from "./workspace";
+import { runCli } from "./main";
+import { hostRecipes, hostSandbox, SUPPORTED_HOST } from "./testing/host-sandbox";
+import { git, lockWorkspace } from "./workspace";
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-main-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
@@ -763,4 +765,85 @@ test("connect refuses --planner without a Planner command, before it pairs", asy
 	expect(refused.code).toBe(1);
 	expect(refused.stderr).toContain("--planner <document URL> needs --planner-command <command>.");
 	expect(refused.requests).toEqual([]);
+});
+
+test("a connect another connector's base dir is locked by opens no microVMs, so it builds and prunes no image and exits", async () => {
+	let root = await realpath(await checkout());
+	let directory = await mkdtemp(join(scratch, "state-"));
+	let before = { state: process.env.CHOPIN_CONNECTOR_STATE_DIR, url: process.env.CHOPIN_URL };
+	process.env.CHOPIN_CONNECTOR_STATE_DIR = directory;
+	process.env.CHOPIN_URL = "http://127.0.0.1:9";
+	// The running connector.
+	let release = await lockWorkspace(directory, directory);
+	let opened = 0;
+	let closed = 0;
+	try {
+		await runCli(["connect", root, "--install", "true", "--", "agent"], {
+			support: SUPPORTED_HOST,
+			recipes: hostRecipes,
+			openSandbox: async options => {
+				opened++;
+				return hostSandbox({
+					work: join(options.directory, "work"),
+					close: async () => void closed++,
+				});
+			},
+		});
+		expect(process.exitCode).toBe(1);
+		expect({ opened, closed }).toEqual({ opened: 0, closed: 0 });
+	} finally {
+		process.exitCode = 0;
+		await release();
+		for (
+			let [name, value] of [["CHOPIN_CONNECTOR_STATE_DIR", before.state], [
+				"CHOPIN_URL",
+				before.url,
+			]]
+		) {
+			if (value === undefined) delete process.env[name!];
+			else process.env[name!] = value;
+		}
+	}
+});
+
+test("a connect whose agent fails its start check lets go of its microVMs and the base dir", async () => {
+	let root = await realpath(await checkout());
+	let directory = await mkdtemp(join(scratch, "state-"));
+	let before = { state: process.env.CHOPIN_CONNECTOR_STATE_DIR, url: process.env.CHOPIN_URL };
+	process.env.CHOPIN_CONNECTOR_STATE_DIR = directory;
+	process.env.CHOPIN_URL = "http://127.0.0.1:9";
+	let opened = 0;
+	let closed = 0;
+	try {
+		await runCli(
+			["connect", root, "--install-service", "--install", "true", "--", "no-such-agent"],
+			{
+				executable: process.execPath,
+				support: SUPPORTED_HOST,
+				recipes: hostRecipes,
+				openSandbox: async options => {
+					opened++;
+					return hostSandbox({
+						work: join(options.directory, "work"),
+						close: async () => void closed++,
+					});
+				},
+			},
+		);
+		expect(process.exitCode).toBe(1);
+		expect({ opened, closed }).toEqual({ opened: 1, closed: 1 });
+		// Nothing holds the base dir: another connector takes it.
+		await (await lockWorkspace(directory, directory))();
+	} finally {
+		process.exitCode = 0;
+		for (
+			let [name, value] of [["CHOPIN_CONNECTOR_STATE_DIR", before.state], [
+				"CHOPIN_URL",
+				before.url,
+			]]
+		) {
+			if (value === undefined) delete process.env[name!];
+			else process.env[name!] = value;
+		}
+	}
 });

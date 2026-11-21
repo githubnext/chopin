@@ -184,6 +184,11 @@ export type SandboxOptions = {
 	wedged?: (detail: string) => void;
 	/** Stands in for `nvx` in tests: what starts the command line. */
 	start?: (program: string, words: string[], launch: StartOptions) => Spawned;
+	/**
+	 * Whether the images no recipe here names go, as a connector that holds the base dir removes
+	 * them. False for a check beside a running connector, whose images they may be.
+	 */
+	prune?: boolean;
 };
 
 /** The connector's records of the microVMs it started, which a connector that died left behind. */
@@ -558,10 +563,12 @@ export async function createSandbox(options: SandboxOptions): Promise<Sandbox> {
 				}),
 			);
 		}
-		await pruneImages(
-			directory,
-			[...images.values()].map(image => basename(image.layer.path, ".erofs")),
-		);
+		if (options.prune !== false) {
+			await pruneImages(
+				directory,
+				[...images.values()].map(image => basename(image.layer.path, ".erofs")),
+			);
+		}
 	} catch (error) {
 		await proxy.close();
 		await aiRelay.close();
