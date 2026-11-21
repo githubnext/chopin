@@ -11,11 +11,12 @@ import {
 	plannerOffered,
 	plannerOfferIncoming,
 	plannerOfferKnown,
+	plannerOutdated,
 } from "../harness/harnesses";
 import { testLease } from "../storage/contract-support";
 import { linkAuth, linkServer, rawLink } from "../testing/agent-link";
 import { keptList, lastModels } from "./last-models";
-import { chooseModel, MODELS_LOADING, modelState } from "./model-choice";
+import { chooseModel, MODELS_LOADING, modelState, PLANNER_OUTDATED } from "./model-choice";
 
 import type { Chat as Wire } from "@chopin/protocol";
 import type { AccountModelSources } from "../ai/account-models";
@@ -122,7 +123,9 @@ function ids(catalog: Wire.ModelCatalog | undefined) {
  * wired as Chopin's process wires it: the member's list of their accounts' models is dropped as
  * their accounts change, before the link hears it.
  */
-async function switching(options: { accountsWaitMs?: number } = {}) {
+async function switching(
+	options: { accountsWaitMs?: number; features?: string; offeredWaitMs?: number } = {},
+) {
 	let { auth, channel } = await linkAuth();
 	let connected: "sign-in" | "token" = "sign-in";
 	/** Holds the computation of the token's list until it is resolved. */
@@ -184,7 +187,8 @@ async function switching(options: { accountsWaitMs?: number } = {}) {
 		catalog: async id => plannerCatalog("remote", id, undefined),
 		known: id => plannerOfferKnown("remote", id),
 		incoming: id => plannerOfferIncoming("remote", id, true),
-		offered: id => plannerOffered("remote", id, 300),
+		offered: id => plannerOffered("remote", id, options.offeredWaitMs ?? 300),
+		outdated: id => plannerOutdated("remote", id),
 		accounts: userId => lists.read(userId, options.accountsWaitMs ?? 5_000),
 		lastKnown: (channelId, userId) =>
 			keptList(auth.storage, channelId, userId, changedAt.get(userId)),
@@ -194,7 +198,7 @@ async function switching(options: { accountsWaitMs?: number } = {}) {
 	let raw = await rawLink(
 		server.url,
 		undefined,
-		"capability-catalog, ai-credentials, ai-catalog, catalog-launches",
+		options.features ?? "capability-catalog, ai-credentials, ai-catalog, catalog-launches",
 	);
 	cleanups.push(async () => {
 		raw.send({ type: "detach" });
@@ -350,5 +354,36 @@ describe("a person's AI accounts changing under an attached Planner", () => {
 			"github-copilot/chopin-large",
 			"github-copilot/gemini-4-neon",
 		]);
+	});
+
+	it("says at once that a Planner that doesn't name its catalog launches needs an update to switch, and refuses a pick in those words without waiting", async () => {
+		let { auth, channel, raw, link, connectToken, state, replies, choose } = await switching({
+			features: "capability-catalog, ai-credentials, ai-catalog",
+			offeredWaitMs: 10_000,
+		});
+		raw.send({ type: "ai-catalog" });
+		await raw.next("ai-catalog");
+		raw.send({ type: "capabilities", catalog: OLD });
+		await until(() => link.catalog !== undefined);
+		connectToken();
+		// The member is shown their new accounts' list, and everyone is told the machine needs an
+		// update rather than that its models are on their way.
+		let switched = await state();
+		expect(switched.catalog).toBeUndefined();
+		expect(ids(switched.accounts?.catalog)).toContain("github-copilot/gemini-4-neon");
+		expect(switched.waiting).toEqual({ outdated: true });
+		let started = performance.now();
+		await choose("github-copilot/chopin-large");
+		expect(performance.now() - started).toBeLessThan(1_000);
+		expect(replies.map(reply => reply.message)).toEqual([PLANNER_OUTDATED]);
+		expect(await auth.storage.plannerModelChoices.get(channel.id)).toBeUndefined();
+
+		// A report once the new launch is handed is taken, as from any client that doesn't name them.
+		await raw.next("ai-catalog");
+		raw.send({ type: "capabilities", catalog: NEW });
+		await until(() => link.catalog !== undefined);
+		let after = await state();
+		expect(ids(after.catalog)).toContain("github-copilot/gemini-4-neon");
+		expect(after.waiting).toBeUndefined();
 	});
 });

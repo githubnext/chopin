@@ -41,6 +41,13 @@ export type ModelChoiceDeps = {
 	 */
 	incoming?: (channelId: string) => boolean;
 	/**
+	 * Whether, while the offer is not `known`, the document's Planner can't list the models of the
+	 * AI accounts it runs on as they are now without an update (a remote client that lists them
+	 * without naming the launch it listed through, after its person's accounts changed), so the room
+	 * is told that rather than that the models are on their way. Absent means it can.
+	 */
+	outdated?: (channelId: string) => boolean;
+	/**
 	 * A session or turn fell back on a saved choice with no catalog to check it against while `known`
 	 * was false: the harness is to treat what it offers as known (nothing), and the room is to be
 	 * told the choice, since what it did is now a fact. Called once each time that happens.
@@ -79,6 +86,13 @@ export type ModelChoiceDeps = {
  */
 export const MODELS_LOADING =
 	"The machine's models are still loading, so this choice wasn't saved. Choose again once they're in.";
+
+/**
+ * Why a choice wasn't saved while the document's Planner can't list the models of the AI accounts it
+ * runs on as they are now (`ModelChoiceDeps.outdated`).
+ */
+export const PLANNER_OUTDATED =
+	"The machine needs an update to switch AI accounts, so this choice wasn't saved.";
 
 /** What a turn runs, and the words for a choice it could not honour. */
 export type TurnModel = { model?: string; thinkingLevel?: string; notice?: string };
@@ -132,6 +146,7 @@ async function roomState(
 				waiting: {
 					...(saved.choice ? { choice: saved.choice } : {}),
 					...(saved.modelName ? { modelName: saved.modelName } : {}),
+					...(deps.outdated?.(channelId) ? { outdated: true as const } : {}),
 				},
 			}),
 		...(commands?.length ? { commands } : {}),
@@ -349,7 +364,7 @@ export function chooseModel(
 			if (deps.known?.(channelId) === false) await deps.offered?.(channelId);
 			let catalog = await deps.catalog(channelId);
 			if (!catalog && deps.known?.(channelId) === false) {
-				return fail(ws, frame.rid, MODELS_LOADING);
+				return fail(ws, frame.rid, deps.outdated?.(channelId) ? PLANNER_OUTDATED : MODELS_LOADING);
 			}
 			let refusal = refusedChoice(catalog, choice);
 			if (refusal) return fail(ws, frame.rid, refusal);

@@ -340,6 +340,15 @@ export const ACCOUNTS_STATUS: Record<PlannerPlace, string> = {
  */
 export const MODELS_UNAVAILABLE = "The machine's models can't load right now.";
 
+/**
+ * The words while the machine can't list the models of the AI accounts its Planner runs on as they
+ * are now without an update, since they changed: true of every state the machine may be in, and
+ * what would fix it. Its list is not on its way.
+ */
+export const MODELS_OUTDATED = "The machine needs an update to switch AI accounts.";
+export const ACCOUNTS_OUTDATED = `These models are from your AI accounts. ${MODELS_OUTDATED}`;
+export const LAST_KNOWN_OUTDATED = `These are the models from last time. ${MODELS_OUTDATED}`;
+
 export const UNAVAILABLE_STATUS: Partial<Record<PlannerPlace, string>> = {
 	failed: MODELS_UNAVAILABLE,
 	held: MODELS_UNAVAILABLE,
@@ -357,8 +366,9 @@ export const UNAVAILABLE_STATUS: Partial<Record<PlannerPlace, string>> = {
  *   accounts;
  * - `loading`: no list yet and the machine on its way, the saved choice's words waiting in place;
  * - `unavailable`: no list, and a machine that can't give one (it couldn't start, stepped away or
- *   is offline), which says so (`status`), with the saved choice's words where the server sent
- *   them.
+ *   is offline, or needs an update to list the models of accounts that changed), which says so
+ *   (`status`), with the saved choice's words where the server sent them.
+ * A machine that needs an update (`waiting.outdated`) is never waited for, and every list says so.
  * Nothing is drawn where the harness offers no choice (no `place`, or a machine that is there and
  * says the models are not coming), nor where no machine is chosen and no list was kept.
  */
@@ -376,19 +386,23 @@ export function pickerView(input: {
 	accounts?: { catalog: Catalog };
 	/** The list last reported for this person's account, sent only while the offer is unknown. */
 	lastKnown?: { catalog: Catalog };
-	/** The server's word that the offer is unknown, with the stored choice to wait with. */
-	waiting?: { choice?: Choice; modelName?: string };
+	/**
+	 * The server's word that the offer is unknown, with the stored choice to wait with, and whether
+	 * the machine needs an update to list it.
+	 */
+	waiting?: Chat.ModelState["waiting"];
 	place: PlannerPlace | undefined;
 }): PickerView | undefined {
 	if (input.catalog) return { kind: "live", catalog: input.catalog };
 	let place = input.place;
 	if (!place) return undefined;
-	let coming = place === "starting" || place === "attached";
+	let outdated = input.waiting?.outdated === true;
+	let coming = !outdated && (place === "starting" || place === "attached");
 	if (input.accounts?.catalog.models.length) {
 		return {
 			kind: "accounts",
 			catalog: input.accounts.catalog,
-			status: ACCOUNTS_STATUS[place],
+			status: outdated ? ACCOUNTS_OUTDATED : ACCOUNTS_STATUS[place],
 			loading: coming,
 		};
 	}
@@ -396,12 +410,13 @@ export function pickerView(input: {
 		return {
 			kind: "last-known",
 			catalog: input.lastKnown.catalog,
-			status: LAST_KNOWN_STATUS[place],
+			status: outdated ? LAST_KNOWN_OUTDATED : LAST_KNOWN_STATUS[place],
 			loading: coming,
 		};
 	}
 	let words = pendingTrigger(input.waiting?.choice, input.waiting?.modelName);
 	let saved = { name: words.name, ...(words.level ? { level: words.level } : {}) };
+	if (outdated) return { kind: "unavailable", ...saved, status: MODELS_OUTDATED };
 	// A machine on its way is waited for only while the server says the models are coming.
 	if (coming) return input.waiting ? { kind: "loading", ...saved } : undefined;
 	let status = UNAVAILABLE_STATUS[place];

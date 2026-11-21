@@ -14,7 +14,14 @@ import { BuildPlanButton } from "./build-plan-button";
 import { SETUP } from "./build-connection-popover";
 import { SHARE_DETAIL, YourMachines } from "./experiments/machine-list";
 import { ChatComposer } from "./chat/composer";
-import { ACCOUNTS_STATUS, LAST_KNOWN_STATUS, UNAVAILABLE_STATUS } from "./chat/model-picker-state";
+import {
+	ACCOUNTS_OUTDATED,
+	ACCOUNTS_STATUS,
+	LAST_KNOWN_OUTDATED,
+	LAST_KNOWN_STATUS,
+	MODELS_OUTDATED,
+	UNAVAILABLE_STATUS,
+} from "./chat/model-picker-state";
 import { QuietNote } from "./chat/quiet-note";
 import FixSteps from "./fix-steps";
 import { machineFix } from "./machine-fix";
@@ -385,6 +392,9 @@ test("the busy labels, the agent's face and the composer's picker hints are plai
 		...Object.values(LAST_KNOWN_STATUS),
 		...Object.values(ACCOUNTS_STATUS),
 		...Object.values(UNAVAILABLE_STATUS),
+		MODELS_OUTDATED,
+		ACCOUNTS_OUTDATED,
+		LAST_KNOWN_OUTDATED,
 	]);
 	expect(destinationCue("should we ask about auth first?", [], true)?.text)
 		.toBe("Sent to people here. Type @ to ask chopin");

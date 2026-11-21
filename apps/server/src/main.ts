@@ -23,6 +23,7 @@ import {
 	plannerOffered,
 	plannerOfferIncoming,
 	plannerOfferKnown,
+	plannerOutdated,
 	plannerRanWithoutOffer,
 	plannerSteers,
 	shutdownHarnesses,
@@ -1314,6 +1315,7 @@ const modelChoices: ModelChoiceDeps = {
 		});
 	},
 	known: channelId => plannerOfferKnown(config.harness, channelId),
+	outdated: channelId => plannerOutdated(config.harness, channelId),
 	offered: channelId => plannerOffered(config.harness, channelId),
 	incoming: channelId =>
 		plannerOfferIncoming(
@@ -3826,6 +3828,7 @@ if (config.agent && config.harness === "remote") {
 	accountLists = lists;
 	connectedAi.onChanged(userId => {
 		accountsChangedAt.set(userId, Date.now());
+		keptModels.changed(userId);
 		lists.forget(userId);
 	});
 }

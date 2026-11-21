@@ -254,8 +254,12 @@ durable.
   before any session has one: it is handed in `ai-catalog`, again when it would change, held
   only while the link is attached to this process and ended with it, and catalog-only
   (`catalogOnly`): the proxy serves it each provider's model list and the model catalog and
-  refuses it anything else (`catalog-only`) before reading a credential. An end, a
-  replacement or a session's close is in force in the
+  refuses it anything else (`catalog-only`) before reading a credential. What the client
+  reports counts only for the accounts the catalog launch it listed through was prepared for
+  (`AgentLink.catalog`): from the moment the person's accounts change it is no longer what the
+  client offers, and only a report through a launch prepared since counts again, named in
+  `catalogLaunch` by a client offering `catalog-launches`, never one through an earlier launch.
+  An end, a replacement or a session's close is in force in the
   process the moment it is asked, before storage deletes the rows (`#ending`), an end
   storage refuses is retried, and the writer lease's holder ends launches nothing owns
   as it starts serving and with each sweep (`AiCredentials.retire`). A key refused as

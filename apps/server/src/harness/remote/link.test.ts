@@ -2982,6 +2982,8 @@ describe("Agent connection AI launches", () => {
 		// At once, before any new launch is handed: the old list is no longer what the client offers.
 		expect(link.catalog).toBeUndefined();
 		expect(link.catalogPending).toBe(true);
+		// It names its launches, so it lists them again through the new one: it is waited for.
+		expect(link.outdated).toBe(false);
 		expect(told).toEqual([OLD, undefined]);
 		// Its commands are the client's own, and stay.
 		expect(link.lastReport).toEqual(OLD);
@@ -3036,6 +3038,14 @@ describe("Agent connection AI launches", () => {
 		};
 		changed("U_member");
 		expect(link.catalog).toBeUndefined();
+		// It may never report again: Chopin says it needs an update, and nothing waits for it.
+		expect(link.outdated).toBe(true);
+		expect(link.catalogPending).toBe(true);
+		expect(await Promise.race([link.offered.then(() => true), Bun.sleep(50).then(() => false)]))
+			.toBe(true);
+		// A turn that ran without its models leaves them unknown, so the room is still told why.
+		link.settleWithoutCatalog();
+		expect(link.catalogPending).toBe(true);
 		await preparing.promise;
 		// Between the change and the launch for the new accounts, nothing counts.
 		raw.send({ type: "capabilities", catalog: OLD });
@@ -3046,6 +3056,8 @@ describe("Agent connection AI launches", () => {
 		raw.send({ type: "capabilities", catalog: NEW });
 		await until(() => link.catalog !== undefined, 1_000);
 		expect(link.catalog).toEqual(NEW);
+		expect(link.outdated).toBe(false);
+		expect(link.catalogPending).toBe(false);
 
 		// Naming a launch is the feature's alone.
 		raw.send({ type: "capabilities", catalog: NEW, catalogLaunch: "c-1" });

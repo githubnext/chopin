@@ -122,6 +122,7 @@ client must then use none of them.
 | `session-choice`           | With `capability-catalog`, the document's chosen `model` and `thinkingLevel` in [`start` and `fork`](#server-to-client), so a session the client makes opens on them          |
 | `ai-credentials`           | An [AI launch](#models-through-chopin) in `start` and `fork`, and an `ai` message whenever it changes: stand-ins for the person's own AI accounts, reached through Chopin     |
 | `ai-catalog`               | With `ai-credentials`, a [catalog launch](#listing-models-before-a-session) for the link, asked for with `ai-catalog`, that lists the account's models and runs none          |
+| `catalog-launches`         | With `ai-catalog`, each `ai-catalog`'s `catalogLaunch`, and a `capabilities` report naming the one it was [listed through](#when-the-persons-accounts-change)                 |
 
 ### Pings
 
@@ -426,7 +427,7 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 { "type": "start", "session": "", "mode": "planner", "model?": "", "thinkingLevel?": "", "ai?": {} }
 { "type": "fork", "session": "", "mode": "planner", "from": { "session": "", "turn?": "" }, "model?": "", "thinkingLevel?": "", "ai?": {} }
 { "type": "ai", "session": "", "ai": { "launch?": "", "expiresAt?": 0, "providers": [], "withheld": [] } }
-{ "type": "ai-catalog", "ai": { "launch?": "", "expiresAt?": 0, "providers": [], "withheld": [] } }
+{ "type": "ai-catalog", "ai": { "launch?": "", "expiresAt?": 0, "providers": [], "withheld": [] }, "catalogLaunch?": "" }
 { "type": "turn", "session": "", "turn": "", "prompt": "", "instructions?": "", "model?": "", "thinkingLevel?": "", "attachments?": [{ "id": "", "name": "", "kind": "image", "mediaType": "", "size": 0, "data": "" }], "message?": "", "retry?": true, "tools": [], "responseFormat?": {} }
 { "type": "abort", "session": "", "turn": "" }
 { "type": "steer", "request": "", "session": "", "turn": "", "prompt": "" }
@@ -548,7 +549,7 @@ how `invoke_planner` returns it. Once a client is attached, both arrive as
 { "type": "detach" }
 { "type": "resume", "sessions": [{ "session": "", "requests": [""] }] }
 { "type": "input-received", "request": "" }
-{ "type": "capabilities", "catalog": {} }
+{ "type": "capabilities", "catalog": {}, "catalogLaunch?": "" }
 { "type": "ai-catalog" }
 ```
 
@@ -649,7 +650,7 @@ level can therefore never be chosen, and a turn never carries one.
       "default?": { "id": "", "thinkingLevel?": "" }
     },
     "commands?": [{ "name": "", "description?": "", "kind": "" }]
-} }
+}, "catalogLaunch?": "" }
 ```
 
 - **When.** Send it right after `attached`, and after the `resume` of a resumable link, which stays
@@ -659,7 +660,9 @@ level can therefore never be chosen, and a turn never carries one.
   feature and does not report offers no choice, the same as a client from before the feature. Sending
   `capabilities` without having offered the feature is a `protocol` violation, and a catalog whose fields have the
   wrong type (listed below), a `malformed-message` one. The catalog is held with the link, not stored: after a
-  server restart a resumed client sends it again.
+  server restart a resumed client sends it again. A client that lists its models through
+  [catalog launches](#listing-models-before-a-session) reports them through one of the person's
+  accounts as they are now: see [When the person's accounts change](#when-the-persons-accounts-change).
 - **`models.available`** lists the models in the order to show them within a provider, as many as the
   frame holds (Atomic's own list runs past 1,700).
   `id` is the exact string the client wants back as a turn's `model`; Chopin never parses, bounds
@@ -875,7 +878,7 @@ from its launches would offer none in the document's composer until a turn has r
 
 ```text
 { "type": "ai-catalog" }
-{ "type": "ai-catalog", "ai": { "launch?": "", "expiresAt?": 0, "providers": [], "withheld": [] } }
+{ "type": "ai-catalog", "ai": { "launch?": "", "expiresAt?": 0, "providers": [], "withheld": [] }, "catalogLaunch?": "" }
 ```
 
 - They are a launch for the same account a session's would be, on the same machine and
@@ -899,6 +902,32 @@ from its launches would offer none in the document's composer until a turn has r
   link changes nothing. A Chopin that hands out no launches answers nothing. Like every launch,
   the client keeps the launch credential in its own process and adds it to each request in
   `x-chopin-launch`.
+
+#### When the person's accounts change
+
+What a client lists through a catalog launch is the models of the accounts that launch was
+prepared for. The moment the person connects, replaces or removes a provider (or a key is
+refused, or GitHub confirms their Copilot seat lost or back), what the client reported no longer
+counts as what it offers: the composer shows the models of the person's new accounts, as Chopin
+lists them itself, marked as from their accounts, and a pick waits for the client's report (as on
+attach) and is refused if none comes. Its commands stay. The report that counts again is one made
+through a catalog launch of the accounts as they are now:
+
+- With `catalog-launches` too, every `ai-catalog` carries `catalogLaunch`, an opaque id that is
+  no credential, new with each one, renewals and one with no providers included. Name in
+  `capabilities` the `catalogLaunch` whose grants its models were listed through, read with
+  them, never a list saved or read under another; on each new `catalogLaunch`, list the models
+  again through it and report them naming it, even when they are the same, since the client
+  can't tell a renewal from a change. A report counts only while the launch it names was handed
+  since the person's accounts last changed: one naming an earlier launch, one that arrives late
+  among them, and one naming none, the report sent on attach included, change nothing.
+  `catalogLaunch` without the feature is a `protocol` violation.
+- Without it, a report counts for the latest catalog launch handed when it arrives, never one
+  that arrives before the first is handed or between a change and the launch handed for it. A
+  report through the old launch that arrives after the new one was handed can't be told apart,
+  so such a client needs `catalog-launches` to switch accounts reliably: until it reports again,
+  the composer says _The machine needs an update to switch AI accounts._, a pick is refused in
+  those words, and nothing waits for it.
 
 ### Stream parts
 

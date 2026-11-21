@@ -1393,8 +1393,21 @@ export class AgentLink {
 	 * everything is still a report.
 	 */
 	get catalogPending(): boolean {
-		return this.catalog === undefined && !this.#ranWithoutCatalog
+		return this.catalog === undefined && (!this.#ranWithoutCatalog || this.outdated)
 			&& this.#options.features?.includes(AGENT_FEATURES.capabilityCatalog) === true;
+	}
+
+	/**
+	 * Whether the client can't be told to list the models of the person's AI accounts as they are
+	 * now: it lists them through the link's catalog launches without naming which
+	 * (`catalog-launches`), and what it last reported was of accounts the person has since changed,
+	 * with nothing since. A client that names its launches lists them again through the new one. What
+	 * it offers stays unknown until it reports, and is not waited for.
+	 */
+	get outdated(): boolean {
+		return this.#catalog !== undefined && this.#catalogAccounts !== this.#accounts
+			&& this.#listsThroughLaunches
+			&& !this.#options.features?.includes(AGENT_FEATURES.catalogLaunches);
 	}
 
 	/**
@@ -1750,7 +1763,9 @@ export class AgentLink {
 		held.current = false;
 		held.launches.clear();
 		this.#ranWithoutCatalog = false;
-		if (!pending && this.catalogPending && this.#state === "attached") {
+		// A client that lists through launches without naming them may never report again: nothing
+		// waits for it.
+		if (!pending && this.catalogPending && this.#state === "attached" && !this.outdated) {
 			this.#offered = Promise.withResolvers<void>();
 		}
 		if (counted) this.#options.catalogChanged?.();

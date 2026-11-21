@@ -126,3 +126,20 @@ test("gives a person a kept list only if it was reported since their AI accounts
 	);
 	expect(await keptList(storage, channelId, userId, 2_500)).toBeUndefined();
 });
+
+test("saves the same list again once the person's AI accounts changed, as of the accounts they have now", async () => {
+	let { storage, userId, channelId, puts, models } = await kept();
+	await models.remember(channelId, { userId, catalog: LARGE });
+	models.changed("someone-else");
+	await models.remember(channelId, { userId, catalog: LARGE });
+	expect(puts).toHaveLength(1);
+	models.changed(userId);
+	await models.remember(channelId, { userId, catalog: LARGE });
+	expect(puts).toHaveLength(2);
+	expect((await storage.plannerCatalogs.get(channelId, userId))?.reportedAt).toEqual(
+		new Date(2_000),
+	);
+	// Then once a change, as before.
+	await models.remember(channelId, { userId, catalog: LARGE });
+	expect(puts).toHaveLength(2);
+});
