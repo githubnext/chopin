@@ -957,7 +957,7 @@ test("only a connector whose agents run in microVMs connects, and one that can't
 	}
 });
 
-test("a machine may forget the Planner disk of a document archived or gone, and keeps every other", async () => {
+test("a machine may forget the Planner disk of a document archived, gone or reset since, and keeps every other", async () => {
 	let { alice, storage, document, documentId, request, pair } = await setup();
 	let paired = await pair(alice.cookie);
 	let archived = await document();
@@ -969,11 +969,24 @@ test("a machine may forget the Planner disk of a document archived or gone, and 
 	let gone = crypto.randomUUID();
 	let kept = (documents: unknown, token = paired.machineToken) =>
 		request("/api/connector/planner/kept", { documents }, undefined, token, CURRENT);
-	let answer = await kept([documentId, archived, gone, "octo-org_score_plan", archived]);
+	let disks = (...ids: string[]) => ids.map(id => ({ id }));
+	let answer = await kept(disks(documentId, archived, gone, "octo-org_score_plan", archived));
 	expect(answer.status).toBe(200);
-	expect(await answer.json()).toEqual({ forget: [archived, gone] });
-	expect((await kept([documentId], "chopin_m_nobody")).status).toBe(401);
+	expect(await answer.json()).toEqual({ forget: [archived, gone], reset: [] });
+	// A writer resets its Planner: a disk made before, after no reset or an earlier one, goes.
+	let reset = await document();
+	await storage.channels.markPlannerReset(reset, new Date("2026-01-01T00:00:00.000Z"));
+	let first = new Date("2026-01-01T00:00:00.000Z").getTime();
+	expect(await (await kept([{ id: reset }, { id: documentId }])).json())
+		.toEqual({ forget: [], reset: [reset] });
+	expect(await (await kept([{ id: reset, reset: first }])).json())
+		.toEqual({ forget: [], reset: [] });
+	await storage.channels.markPlannerReset(reset, new Date("2026-01-02T00:00:00.000Z"));
+	expect(await (await kept([{ id: reset, reset: first }])).json())
+		.toEqual({ forget: [], reset: [reset] });
+	expect((await kept(disks(documentId), "chopin_m_nobody")).status).toBe(401);
 	expect((await kept("all")).status).toBe(409);
+	expect((await kept([documentId])).status).toBe(409);
 });
 
 test("an owner renames a paired machine, which chopin status then reads", async () => {

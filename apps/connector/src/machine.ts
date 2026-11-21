@@ -415,6 +415,10 @@ export async function plannerCredential(
 		// Its sessions run on people's AI accounts in Chopin: the backend gets nothing of the owner's
 		// agent setup. A Chopin from before says nothing, and the backend starts as before.
 		...(value.ai === "chopin" ? { ai: true as const } : {}),
+		// When a writer last reset the Planner: a disk made before then goes.
+		...(Number.isSafeInteger(value.reset) && (value.reset as number) >= 0
+			? { reset: value.reset as number }
+			: {}),
 	};
 }
 
@@ -716,19 +720,20 @@ export async function reportCapability(
 }
 
 /**
- * Which of `documents`, whose Planners' disks this machine keeps, Chopin says it may forget: each
- * archived or gone. Anything else it answers keeps them all.
+ * Which of `documents`, whose Planners' disks this machine keeps, each with the reset its disk was
+ * made after, Chopin says it may forget: `forget`, each archived or gone, and `reset`, each whose
+ * Planner a writer reset since. Anything else it answers keeps them all.
  */
 export async function forgettablePlanners(
 	url: string,
 	token: string,
-	documents: string[],
+	documents: Array<{ id: string; reset?: number }>,
 	signal?: AbortSignal,
-): Promise<string[]> {
+): Promise<{ forget: string[]; reset: string[] }> {
 	let answer = await post(url + "/api/connector/planner/kept", { documents }, token, signal);
-	return Array.isArray(answer.forget)
-		? answer.forget.filter((item): item is string => typeof item === "string")
-		: [];
+	let names = (value: unknown) =>
+		Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+	return { forget: names(answer.forget), reset: names(answer.reset) };
 }
 
 /** Ends a run's AI launch with its own credential, so its stand-ins stop working at once. */

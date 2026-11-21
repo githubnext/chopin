@@ -221,6 +221,21 @@ export function plannerServer(folder: string) {
 	return `${folder}.server`;
 }
 
+/**
+ * When a writer last reset the document's Planner in Chopin before its disk was made,
+ * `<folder>.reset`, in ms as Chopin said; none where it never was. A disk from before a later reset
+ * goes (see `sweepPlannerDisks` and `forgetResetDisk`).
+ */
+export function plannerReset(folder: string) {
+	return `${folder}.reset`;
+}
+
+/** The reset a Planner's disk in `folder` was made after, if any. */
+export async function readPlannerReset(folder: string): Promise<number | undefined> {
+	let text = (await readFile(plannerReset(folder), "utf8").catch(() => "")).trim();
+	return /^\d{1,16}$/.test(text) ? Number(text) : undefined;
+}
+
 /** When a process started: `id` differs for each process that held a pid, `at` is in ms. */
 export type ProcessStart = { id: string; at: number };
 
@@ -902,9 +917,14 @@ export async function pruneRuns(
  * commits are its owner's to keep or remove.
  */
 export async function plannerDisks(directory: string, options: { spares?: boolean } = {}) {
-	let found: Array<
-		{ path: string; repository: string; document: string; server?: string; earlier?: true }
-	> = [];
+	let found: Array<{
+		path: string;
+		repository: string;
+		document: string;
+		server?: string;
+		reset?: number;
+		earlier?: true;
+	}> = [];
 	let entries = async (path: string) =>
 		(await readdir(path, { withFileTypes: true }).catch(() => []))
 			.sort((a, b) => a.name.localeCompare(b.name));
@@ -927,11 +947,13 @@ export async function plannerDisks(directory: string, options: { spares?: boolea
 				let server = disk
 					? (await readFile(plannerServer(join(parent, slot)), "utf8").catch(() => "")).trim()
 					: "";
+				let reset = disk ? await readPlannerReset(join(parent, slot)) : undefined;
 				found.push({
 					path: join(parent, entry.name),
 					repository: `${owner}/${name}`,
 					document,
 					...server ? { server } : {},
+					...reset === undefined ? {} : { reset },
 					...disk ? {} : { earlier: true as const },
 				});
 			}

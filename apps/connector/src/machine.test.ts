@@ -12,6 +12,7 @@ import { updateConfig } from "./config";
 import {
 	classifyConnectorError,
 	connectorMessage,
+	forgettablePlanners,
 	machineAiLaunch,
 	machineFile,
 	machineGitHubToken,
@@ -894,6 +895,29 @@ test("a connector starts its spare Planners on Chopin's AI accounts only where C
 	}
 	// One that can't be asked is taken not to: each Planner credential says so again.
 	expect(await plannerAiManaged("http://127.0.0.1:1")).toBe(false);
+});
+
+test("a Planner's credential and Chopin's word on kept disks say which documents' Planners a writer reset", async () => {
+	let sent: unknown[] = [];
+	let server = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		async fetch(request) {
+			sent.push(await request.json());
+			return new URL(request.url).pathname === "/api/connector/planner"
+				? Response.json({ token: "chopin_p_x", expiresAt: 1, reset: 2_000 })
+				: Response.json({ forget: ["gone", 7], reset: ["reset"] });
+		},
+	});
+	cleanup.push(() => server.stop(true));
+	let url = `http://127.0.0.1:${server.port}`;
+	expect((await plannerCredential(url, MACHINE_TOKEN, "document")).reset).toBe(2_000);
+	let disks = [{ id: "gone" }, { id: "reset", reset: 1_000 }];
+	expect(await forgettablePlanners(url, MACHINE_TOKEN, disks)).toEqual({
+		forget: ["gone"],
+		reset: ["reset"],
+	});
+	expect(sent).toEqual([{ document: "document" }, { documents: disks }]);
 });
 
 test("while its agents run in microVMs here, every request for a credential or work says so", async () => {

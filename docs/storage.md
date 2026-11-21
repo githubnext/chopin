@@ -170,6 +170,12 @@ began in, checked under a shared lock on the document's row, which archiving
 locks for update; so a launch prepared before an archive keeps nothing after it,
 whether or not the document was restored.
 
+`channels.planner_reset_at` is when a repository writer last reset the document's
+Planner (migration 052), written before the reset ends the Planner's link; each reset
+is later than the one before. A paired machine's Planner credential names it, and the
+machine removes its Planner's disk made before it (see
+[NVX microVMs](nvx-sandbox.md)).
+
 Display titles may repeat. Slug values remain unique per repository, with one
 canonical slug per channel. Authored title changes commit the document state,
 display title and slug in the same fenced collaboration transaction.

@@ -42,7 +42,7 @@ import { gitSync, repositoryAt } from "./git-host";
 import { unhide } from "./windows-host";
 import { guestRepositoryPath } from "./nvx";
 import { type PlannerSpares, type Spare, SPARE_PROTOCOL } from "./planner-spare";
-import { holdDisk } from "./planner-disks";
+import { forgetResetDisk, holdDisk, stampPlannerReset } from "./planner-disks";
 import { managedEnvironment, privateAgentState } from "./ai-agent";
 import { type AgentStore, forgetAgentStore, keepSessionsIn } from "./machine-store";
 
@@ -382,6 +382,10 @@ async function servePlanner(options: {
 		let reportedAs = credential.document ?? options.id ?? document;
 		let id = credential.document ?? options.id ?? document;
 		let worktree = await plannerSlot(options.directory, repository, id);
+		// A writer reset this Planner in Chopin since its disk was made: it starts afresh here too.
+		await forgetResetDisk(worktree, credential.reset, { document, repository, output }).catch(
+			() => {},
+		);
 		let launched = Date.now();
 		let tokens: PlannerTokenFile | undefined;
 		let mcp: McpTokenFile | undefined;
@@ -475,7 +479,7 @@ async function servePlanner(options: {
 			// waits for the token, which fetching it takes.
 			let resolved = options.checkouts.resolve(repository, () => asked).then(value => value.root);
 			let prepared = resolved.then(
-				() => prepareDisk(options, document, worktree),
+				() => prepareDisk(options, document, worktree, credential.reset),
 				() => {},
 			);
 			let files = credentialFiles(options, document, tokenDirectory, credential);
@@ -693,6 +697,7 @@ async function onSpare(
 	}
 	let { tokens, mcp } = made;
 	await assignSlot(options.directory, repository, options.id, spare.slot);
+	await stampPlannerReset(spare.slot, credential.reset).catch(() => {});
 	let launched = Date.now();
 	let healthy = started();
 	let values = Object.values(options.env ?? {});
@@ -838,10 +843,13 @@ async function prepareDisk(
 	options: { output: Output; sandbox: Sandbox; url: string },
 	document: string,
 	folder: string,
+	reset: number | undefined,
 ) {
 	let disk = plannerDisk(folder);
-	// Which server's document it is, so only that server's word removes it (see `sweepPlannerDisks`).
+	// Which server's document it is, so only that server's word removes it (see `sweepPlannerDisks`),
+	// and the reset of its Planner it is from after.
 	await writeFile(plannerServer(folder), `${options.url}\n`, { mode: 0o600 }).catch(() => {});
+	await stampPlannerReset(folder, reset).catch(() => {});
 	await options.sandbox.makeDisk?.(disk).then(() => utimes(disk, new Date(), new Date())).catch(
 		error =>
 			options.output.say(

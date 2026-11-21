@@ -796,6 +796,8 @@ export function registerChannelRoutes(
 				repo.id !== channel.repositoryId
 				|| (!repo.permissions.push && !repo.permissions.admin)
 			) return json({ error: "repository write access is required" }, 403);
+			// Kept first, so a machine whose Planner of it starts again starts afresh (its disk goes).
+			await auth.storage.channels.markPlannerReset(channel.id, auth.clock());
 			let stored = await auth.storage.collaboration.load(channel.id, auth.clock());
 			let owner = stored?.agent;
 			if (owner?.ownerSessionId) {

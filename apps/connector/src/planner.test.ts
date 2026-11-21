@@ -1,6 +1,6 @@
 import { afterAll, expect, mock, test } from "bun:test";
 import { HOST_SANDBOX, hostSandbox } from "./testing/host-sandbox";
-import { mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { answerTokens, BOT, STARTER } from "./testing/github-grant";
@@ -519,6 +519,62 @@ test.skipIf(process.platform === "win32")(
 			let [launched] = await entries(log);
 			expect(launched.worktree).toBe(join(sandbox.work, "score"));
 			expect(await readFile(join(sandbox.work, "score", "sample.txt"), "utf8")).toBe("sample");
+		} finally {
+			abort.abort();
+			await serving;
+			await chopin.stop(true);
+		}
+	},
+	30_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"a Planner a writer reset in Chopin since its disk was made starts on a new disk, which records that reset",
+	async () => {
+		let state = await mkdtemp(join(scratch, "reset-state-"));
+		let folder = join(state, "planners", "octo-org", "score");
+		await mkdir(join(folder, "D_1.agent"), { recursive: true });
+		await writeFile(join(folder, "D_1.disk"), "made before the reset");
+		await writeFile(join(folder, "D_1.agent", "session.json"), "{}");
+		await writeFile(join(folder, "D_1.reset"), "1000\n");
+		let chopin = Bun.serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: async request =>
+				await answerTokens(request) ?? Response.json({
+					token: `chopin_p_${"P".repeat(43)}`,
+					expiresAt: Date.now() + 15 * 60_000,
+					document: { id: "D_1", repository: "octo-org/score", url: "http://x" },
+					reset: 2000,
+				}),
+		});
+		let root = await checkout();
+		let script = join(state, "backend.ts");
+		let log = join(state, "launches.jsonl");
+		await writeFile(script, STAYING_BACKEND);
+		let abort = new AbortController();
+		let said = "";
+		let quiet = { write: () => true };
+		let serving = servePlanners({
+			url: `http://127.0.0.1:${chopin.port}`,
+			machine: MACHINE,
+			documents: ["D_1"],
+			command: [process.execPath, script, log],
+			checkouts: checkouts({ directory: state, registered: { "octo-org/score": root } }),
+			directory: state,
+			output: createOutput({ write: (text: string) => (said += text, true) }, quiet, {}),
+			signal: abort.signal,
+			sandbox: hostSandbox(),
+		});
+		try {
+			await until(async () => (await entries(log)).length >= 1, 20_000);
+			expect(await readFile(join(folder, "D_1.disk"), "utf8")).toBe("");
+			expect(existsSync(join(folder, "D_1.agent", "session.json"))).toBe(false);
+			expect((await readFile(join(folder, "D_1.reset"), "utf8")).trim()).toBe("2000");
+			expect(said).toContain(
+				"Removed the disk of D_1's Planner (octo-org/score): its Planner was "
+					+ "reset in Chopin. Any commits on it that were never pushed went with it.",
+			);
 		} finally {
 			abort.abort();
 			await serving;

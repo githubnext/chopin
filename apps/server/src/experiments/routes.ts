@@ -1792,6 +1792,7 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		await auth.machines.seen(machine);
 		let url = new URL(await documentUrl(channel, auth.storage.channels), auth.config.origin).href;
 		let issued = await planners.issue(machine, channel.id);
+		let reset = await auth.storage.channels.plannerReset(channel.id);
 		// Each launch of a backend asks for one, from every release. One asked while nothing attached
 		// is a launch Chopin can count whatever the connector can say of it; one asked while the
 		// Planner is attached is a running backend's renewal, which is not.
@@ -1805,7 +1806,8 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		}
 		// The repository says which of the machine's checkouts the Planner runs in. `ai` says its
 		// sessions run on people's AI accounts in Chopin, handed over the agent connection: the
-		// connector starts its backend with nothing of the owner's agent setup.
+		// connector starts its backend with nothing of the owner's agent setup. `reset` is when a
+		// writer last reset the Planner: a disk made before it goes, so the Planner starts afresh.
 		return json({
 			...issued,
 			document: {
@@ -1814,26 +1816,40 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 				repository: `${channel.repositoryOwner}/${channel.repositoryName}`,
 			},
 			...(options.ai?.() ? { ai: "chopin" } : {}),
+			...(reset ? { reset: reset.getTime() } : {}),
 		});
 	});
 	/**
-	 * Which of the documents a machine keeps Planner disks for it may forget: each archived, or gone.
-	 * A document id is random, so it says nothing of a document the machine never ran.
+	 * Which of the documents a machine keeps Planner disks for it may forget: each archived, or gone
+	 * (`forget`), and each whose Planner a writer reset since its disk was made, after the reset it
+	 * names or none (`reset`). A document id is random, so it says nothing of a document the machine
+	 * never ran.
 	 */
 	route("POST", "/api/connector/planner/kept", async request => {
 		compatible(request, auth.config.origin, options.connectorVersion);
 		await machineRefusal(() => auth.machines.authenticate(bearer(request)));
 		let { documents } = z.object({
-			documents: z.array(z.string().min(1).max(256)).max(500),
+			documents: z.array(
+				z.object({
+					id: z.string().min(1).max(256),
+					reset: z.number().int().nonnegative().optional(),
+				}).strict(),
+			).max(500),
 		}).strict().parse(await body(request));
-		let forget: string[] = [];
-		for (let id of new Set(documents)) {
+		let forget = new Set<string>();
+		let reset = new Set<string>();
+		for (let disk of documents) {
 			// A name that is no document id is the machine's own, which it keeps.
-			if (!isChannelId(id)) continue;
-			let channel = await auth.storage.channels.get(id);
-			if (!channel || channel.archivedAt) forget.push(id);
+			if (!isChannelId(disk.id) || forget.has(disk.id)) continue;
+			let channel = await auth.storage.channels.get(disk.id);
+			if (!channel || channel.archivedAt) {
+				forget.add(disk.id);
+				continue;
+			}
+			let at = await auth.storage.channels.plannerReset(disk.id);
+			if (at && at.getTime() !== disk.reset) reset.add(disk.id);
 		}
-		return json({ forget });
+		return json({ forget: [...forget], reset: [...reset] });
 	});
 	/**
 	 * A machine's connector says why its Planner backend for a document keeps exiting before it

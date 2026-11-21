@@ -1543,8 +1543,10 @@ there; `git -C "$CHOPIN_WORKTREE" checkout -b <branch>` starts a branch.
 microVM read-only, uncommitted files included, and nothing writes it. A backend reads
 it, and does its work and its edits in `CHOPIN_WORKTREE`, from where its changes reach
 the person as commits and a pushed branch. The disk goes when Chopin says its document
-is archived or gone, when no Planner has run on it for 30 days, or when the machine is
-unpaired or revoked; commits never pushed go with it.
+is archived or gone, when a writer resets the document's Planner in Chopin (the
+credential's `reset` names when; a disk from before goes before the next launch), when
+no Planner has run on it for 30 days, or when the machine is unpaired or revoked;
+commits never pushed go with it.
 
 The connector renews the Planner credential in `CHOPIN_PLANNER_TOKEN_FILE` 5 minutes
 before it expires, for as long as the backend runs and Chopin still lets the machine run

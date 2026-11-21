@@ -1100,6 +1100,30 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
+		it("keeps when a document's Planner was last reset, each reset after the one before", async () => {
+			let storage = await opened(factory);
+			try {
+				let { channelId } = await userAndChannel(storage);
+				expect(await storage.channels.plannerReset(channelId)).toBeUndefined();
+				let now = new Date("2026-01-03T03:04:05.000Z");
+				await storage.channels.markPlannerReset(channelId, now);
+				expect(await storage.channels.plannerReset(channelId)).toEqual(now);
+				// Another in the same moment, or with a clock behind, still reads as a new reset.
+				await storage.channels.markPlannerReset(channelId, new Date("2026-01-02T00:00:00.000Z"));
+				expect(await storage.channels.plannerReset(channelId))
+					.toEqual(new Date("2026-01-03T03:04:05.001Z"));
+				await storage.channels.markPlannerReset(channelId, new Date("2026-01-04T00:00:00.000Z"));
+				expect(await storage.channels.plannerReset(channelId))
+					.toEqual(new Date("2026-01-04T00:00:00.000Z"));
+				await expect(
+					storage.channels.markPlannerReset("01ARZ3NDEKTSV4RRFFQ69G5FAV", now),
+				).rejects.toMatchObject({ failure: "missing" });
+				expect(await storage.channels.plannerReset("01ARZ3NDEKTSV4RRFFQ69G5FAV")).toBeUndefined();
+			} finally {
+				await storage.close();
+			}
+		});
+
 		it("keeps a document's Full width with the document, readable column by default", async () => {
 			let storage = await opened(factory);
 			try {

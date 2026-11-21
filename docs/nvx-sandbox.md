@@ -263,15 +263,18 @@ inside the guest, or reads nothing of it:
   agents' state:
   - when Chopin says its document is archived or gone (`POST
     /api/connector/planner/kept`, asked as the connector connects and every hour);
-  - when no Planner has run on it for 30 days;
+  - when a writer reset the document's Planner in Chopin after the disk was made.
+    Chopin keeps when it was last reset (`channels.planner_reset_at`, migration 052)
+    and names it with each Planner credential; the connector keeps the reset each disk
+    was made after (`<slot>.reset`). A disk from before goes as its Planner next
+    starts, or at the next `planner/kept` sweep, which names each disk's reset;
   - when the machine is unpaired, or Chopin revokes it, once its launches have
     stopped.
 
   It never removes a disk a running microVM has: each launch's record names its disk,
-  and the sweep checks the records again just before it removes one. A Planner reset in
-  Chopin doesn't remove the disk: the next Planner finds its clone as it was left.
+  and the sweep checks the records again just before it removes one.
 - **Unpushed commits** on a disk are the Planner's state. They go with the disk, and
-  the connector says so when it removes one ("Commits on it that were never pushed
+  the connector says so when it removes one ("Any commits on it that were never pushed
   went with it").
 
 ## Shares

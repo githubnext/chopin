@@ -418,7 +418,9 @@ durable.
   command the connector runs on the host (fetching into a checkout, a spare's `rev-parse HEAD`)
   still goes through `apps/connector/src/git-host.ts`. A Planner's disk goes when Chopin, the server
   its document is on (`<slot>.server`), says it is archived or gone (`/api/connector/planner/kept`,
-  asked as the connector connects and hourly), after 30 days unused, or when the machine is
+  asked as the connector connects and hourly), when a writer reset its Planner after the disk was
+  made (`channels.planner_reset_at`, named with each Planner credential and compared with
+  `<slot>.reset`), after 30 days unused, or when the machine is
   unpaired or revoked, never while a launch holds it (`<disk>.held`); commits never pushed go with
   it. Nothing a guest left in a folder it writes is followed by the host: no link is written or
   read through (`realDirectory`, `writeOwn`). A
