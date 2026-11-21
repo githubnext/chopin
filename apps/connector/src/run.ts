@@ -80,7 +80,7 @@ type Options = {
 	 * with neither is refused, as one Chopin gave no token is.
 	 */
 	github?: (request: GitHubGrantRequest & { folder: string }) => Promise<GitHubToken>;
-	/** Where the agent starts: the machine's process sandbox, else plainly. */
+	/** Where the agent starts: a microVM of its own. */
 	sandbox: Sandbox;
 	agentStore?: AgentStore;
 	/** How long a build's or rebuild's agent may work, for tests; `BUILD_LIMIT_MS` by default. */

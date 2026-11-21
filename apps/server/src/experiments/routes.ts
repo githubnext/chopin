@@ -1810,11 +1810,6 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		});
 	});
 	/**
-	 * A machine's connector says why its Planner backend for a document keeps exiting before it
-	 * attaches, or, without `failure`, that it no longer does. Only a Planner Chopin asked the
-	 * machine to run counts, since what is said here is shown to the document's people.
-	 */
-	/**
 	 * Which of the documents a machine keeps Planner disks for it may forget: each archived, or gone.
 	 * A document id is random, so it says nothing of a document the machine never ran.
 	 */
@@ -1833,6 +1828,11 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		}
 		return json({ forget });
 	});
+	/**
+	 * A machine's connector says why its Planner backend for a document keeps exiting before it
+	 * attaches, or, without `failure`, that it no longer does. Only a Planner Chopin asked the
+	 * machine to run counts, since what is said here is shown to the document's people.
+	 */
 	route("POST", "/api/connector/planner/failure", async request => {
 		let planners = options.planners;
 		if (!planners || !auth.machines.durable) fail("not-found");

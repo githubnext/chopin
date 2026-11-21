@@ -497,6 +497,14 @@ supplied image without also replacing its health check and container routing.
 Machines page, before the built-in agents. Only signed-in people see them.
 Chopin refuses to start when the value is malformed.
 
+What a setup installs on the machine doesn't reach its agent: `chopin` runs every
+agent and Planner command in a microVM of its own, from an image it builds. So a
+setup command that runs `chopin connect -- <agent>`, or `--planner-command`, for an
+agent that isn't one of the built-in ones needs `--install '<the command that
+installs it>'` (and `--planner-install`) as well, or `chopin` refuses it before it
+pairs. The Machines page shows what the machine needs (KVM or the Windows
+Hypervisor Platform, on x86_64) above a setup's own steps.
+
 ```json
 [
 	{
@@ -841,26 +849,32 @@ Remove `PREVIOUS_ORIGINS` once machines have reconnected and you stop serving
 the old name. Never list an origin you no longer control: its pages would pass
 Chopin's Origin checks.
 
-### Machines and the connector sandbox
+### Machines and their microVMs
 
-`chopin connect` runs agents and Planner commands in the operating system's
-process sandbox where the machine has one (see
-[Sandbox](chopin-cli.md#sandbox)). Nothing to configure here: the server only
-keeps what each connector says about its own sandbox, in three additive request
-headers (`chopin-connector-sandbox`, `-reason` and `-fix`), and the Machines page
-shows it as **Sandboxed** or **Not sandboxed**, with the reason and the one fix
-for a machine that has none. An older connector sends none, and an older server
-ignores them.
+Every agent and Planner command a machine runs is in an NVX microVM of its own
+(see [Sandbox](chopin-cli.md#sandbox) and [Agents in NVX microVMs](nvx-sandbox.md)).
+What this means for an operator:
 
-The sandbox lets agents reach your instance's origin, GitHub, the model
-providers and the npm, PyPI and crates registries, and nothing else. A
-self-hosted deployment whose agents also need an internal registry, a Git mirror
-or another model endpoint adds each host on the machine, with
-`chopin connect --sandbox-host <host>`, and runs `chopin service install` again
-for a service. An instance behind another origin needs nothing: the connector
-allows the origin it connected to. `--require-sandbox` refuses runs on a machine
-with no sandbox, which an operator may want to ask of the people who share
-machines.
+- **Machines need hardware virtualization.** Linux on x86_64 with KVM (or MSHV),
+  or Windows on x86_64 with the Windows Hypervisor Platform. A Mac or an Arm
+  machine can't be one of your machines.
+- **Older connectors are refused once you deploy.** Chopin takes a connection
+  only from connector protocol 8, which runs agents in microVMs, and tells an older
+  `chopin` to update (`connector-update-required`); people run `chopin update`.
+  The Machines page says so for a machine that tried, and why a machine that can't
+  run microVMs can't, with the fix, while it is away. Migration 051 adds where that
+  is kept (`machines.vm_problem`).
+- **A machine's first connect downloads NVX** from
+  [github.com/microsoft/nvx](https://github.com/microsoft/nvx/releases) (about 275 MB
+  on Linux, 150 MB on Windows, checked against the SHA-256 `chopin` pins), and the
+  agent's npm packages and Node.js, to build its image.
+
+Agents reach only your instance's origin, GitHub, the model providers and the
+package registries, through a proxy on the machine. A deployment whose agents
+also need an internal registry, a Git mirror or another model endpoint adds each
+host on the machine, with `chopin connect --sandbox-host <host>`, and runs
+`chopin service install` again for a service. An instance behind another origin
+needs nothing: the connector allows the origin it connected to.
 
 ### Agent sessions database for machines
 

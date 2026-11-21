@@ -1,4 +1,5 @@
-import { readFile, rm, stat, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { link, readFile, rm, stat, writeFile } from "node:fs/promises";
 import type { Output } from "./output";
 import { agentFolder, plannerDisks, plannerServer, tokenFolder } from "./workspace";
 
@@ -34,11 +35,17 @@ function alive(pid: number) {
  */
 async function lock(path: string): Promise<boolean> {
 	for (;;) {
+		// Made whole beside it, then linked into place, which fails where it is there: no other
+		// process ever reads a lock half written.
+		let temporary = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+		await writeFile(temporary, String(process.pid), { mode: 0o600 });
 		try {
-			await writeFile(path, String(process.pid), { flag: "wx", mode: 0o600 });
+			await link(temporary, path);
 			return true;
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+		} finally {
+			await rm(temporary, { force: true });
 		}
 		let owner = Number((await readFile(path, "utf8").catch(() => "")).trim());
 		if (owner > 0 && owner !== process.pid && alive(owner)) return false;

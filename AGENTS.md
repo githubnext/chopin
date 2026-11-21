@@ -413,10 +413,14 @@ durable.
   into its own file system before the agent starts (`PREPARE`), a run with `git clone --shared` into
   memory at the run's commit and branch, a Planner with `--reference --dissociate` onto a sparse
   32 GiB disk of its own (`<slot>.disk`) that lasts between its starts. The host never runs git in a
-  tree an agent wrote, and a run leaves no worktree; what an agent keeps, it pushes. A Planner's
-  disk goes when Chopin says its document is archived or gone (`/api/connector/planner/kept`, asked
-  as the connector connects and hourly), after 30 days unused, or when the machine is unpaired or
-  revoked, never while a launch's record names it as running; commits never pushed go with it. A
+  tree an agent wrote, and a run leaves no worktree; what an agent keeps, it pushes. Every git
+  command the connector runs on the host (fetching into a checkout, a spare's `rev-parse HEAD`)
+  still goes through `apps/connector/src/git-host.ts`. A Planner's disk goes when Chopin, the server
+  its document is on (`<slot>.server`), says it is archived or gone (`/api/connector/planner/kept`,
+  asked as the connector connects and hourly), after 30 days unused, or when the machine is
+  unpaired or revoked, never while a launch holds it (`<disk>.held`); commits never pushed go with
+  it. Nothing a guest left in a folder it writes is followed by the host: no link is written or
+  read through (`realDirectory`, `writeOwn`). A
   guest's only way out is the connector's allow-list proxy through NVX's proxy-only network
   (`--network-egress=deny --host-loopback=deny --network-proxy`), its environment is the launch's,
   in a `0600` file and never on a command line, and it holds only its own launch's credentials:

@@ -92,7 +92,7 @@ export type StatusReport = {
 		spares?: Array<Omit<SpareState, "since"> & { since: string }>;
 	}>;
 	service: ServiceStatus | { state: "unknown"; detail: string };
-	/** Whether agents run in the system's process sandbox, and if not, why and the one fix. */
+	/** Whether agents run in NVX microVMs here, and if not, why and the one fix. */
 	sandbox?: SandboxReport;
 	log: string;
 	baseDir: string;

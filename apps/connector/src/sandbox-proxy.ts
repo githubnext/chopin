@@ -4,7 +4,7 @@ import { matchingEntries, ownerEntry } from "./sandbox-policy";
 
 /** The proxy a sandbox's only way out goes through. */
 export type Proxy = {
-	/** The loopback URL MXC points the sandbox at. */
+	/** The proxy's loopback URL on the host, which a microVM reaches at its gateway. */
 	url: string;
 	port: number;
 	close(): Promise<void>;

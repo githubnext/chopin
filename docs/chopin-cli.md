@@ -38,15 +38,16 @@ Either way you copy one command and run it in a terminal on that machine, in
 any folder. The installer installs `chopin`, then runs `chopin connect` itself. If the install
 fails, it stops with its own message and runs nothing.
 
-The agent must be installed and signed in first. The page shows its install
-command under **Show install command**, and [Coding agents](#coding-agents)
-lists them all. Your server may list its own
+The machine needs Linux or Windows on x86_64 with hardware virtualization: the
+agent isn't installed or signed in on it, because `chopin` runs it in a microVM of
+its own and installs it there (see [Coding agents](#coding-agents) and
+[Sandbox](#sandbox)). A Mac or an Arm machine can install `chopin`, but can't run
+Chopin's work. Your server may list its own
 [setup agents](self-hosting.md#setup-agents) first, each with its own steps.
 
 ### Local
 
-Pick the system and your coding agent. On Linux or macOS the command looks like
-this:
+Pick the system and your coding agent. On Linux the command looks like this:
 
 ```sh
 curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | \
@@ -108,7 +109,11 @@ even under `nohup` or `setsid`. Use the service there.
 
 ## Install
 
-On Linux or macOS (x64 or arm64):
+`chopin` installs on Linux, macOS and Windows, x64 or arm64, but only a Linux or
+Windows machine on x86_64 with hardware virtualization runs Chopin's work (see
+[Sandbox](#sandbox)).
+
+On Linux or macOS:
 
 ```sh
 curl -fsSL https://github.com/githubnext/chopin/releases/latest/download/install.sh | sh
@@ -975,7 +980,8 @@ token Chopin issued for that one repository (see
 group: `sudo usermod -aG kvm $USER`, then log out and in again. A systemd user service
 gets the new group only once `user@$(id -u).service` restarts or the machine reboots.
 On a cloud VM choose a size with nested virtualization. Nothing else needs
-installing: NVX, Node.js and git come with `chopin`'s download and image.
+installing: `chopin` downloads the NVX release it pins from NVX's own GitHub
+release as it first connects, and builds the agent's image with Node.js and git.
 
 **Windows** on x86_64, with the Windows Hypervisor Platform turned on
 (`Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform`, then
@@ -1006,8 +1012,14 @@ says so when it would pair or connect.
   ACP `initialize`, so a service is not installed, nor a pairing key spent, on an agent
   that can't start; `--skip-check` leaves them out. The check that tells Chopin the
   agent's name when a connection opens runs the same way.
-- **`connector.js`**, the downloaded script, runs agents in microVMs too, building the
-  bridge its guests run from its own source.
+- **`connector.js`**, the downloaded script, runs agents in microVMs too, and carries
+  the bridge its guests run, as the binary does.
+- **What a microVM reads of yours** is what it is shared: a Planner's checkout whole, and
+  the git directory a run clones from, its `config` included. A token kept in a remote
+  URL there, or a credential store file inside `.git`, is readable to the agent; keep
+  credentials out of the repository's own files.
+- **A `--sandbox-write` folder** is written by agents as your user, setuid and setgid bits
+  included, so don't name one other users of the machine can reach.
 
 ## Which GitHub account pushes
 
