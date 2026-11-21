@@ -34,7 +34,7 @@ import {
 	turnModel,
 	turnReadsImages,
 } from "./chat/model-choice";
-import { lastModels } from "./chat/last-models";
+import { keptList, lastModels } from "./chat/last-models";
 import type { ModelChoiceDeps } from "./chat/model-choice";
 import * as Threads from "./chat/threads";
 import {
@@ -300,6 +300,11 @@ let modelCatalogs = modelCatalog();
  * remote Planner has yet to say what it offers.
  */
 let accountLists: AccountModels | undefined;
+/**
+ * When each person's AI accounts last changed in this process: a list a Planner reported for them
+ * before then was listed through accounts they may no longer have, so it is not their last list.
+ */
+let accountsChangedAt = new Map<string, number>();
 /** Whether AI launches nothing owns are ended with each sweep: once holds and runs are back. */
 let aiRetiring = false;
 let aiUsage: AiUsage | undefined;
@@ -1319,11 +1324,11 @@ const modelChoices: ModelChoiceDeps = {
 	fellBack: channelId => {
 		if (plannerRanWithoutOffer(config.harness, channelId)) announceModel(channelId);
 	},
-	// The document's own list for the account, else the account's last on any document.
+	// The document's own list for the account, else the account's last on any document, of the
+	// accounts they have now.
 	lastKnown: async (channelId, userId) =>
 		config.agent && config.harness === "remote"
-			? await storage.plannerCatalogs.get(channelId, userId)
-				?? await storage.plannerCatalogs.latest(userId)
+			? keptList(storage, channelId, userId, accountsChangedAt.get(userId))
 			: undefined,
 	accounts: async userId => accountLists?.read(userId, ACCOUNT_LIST_WAIT_MS),
 	storage,
@@ -3819,7 +3824,10 @@ if (config.agent && config.harness === "remote") {
 		changed: announceModels,
 	});
 	accountLists = lists;
-	connectedAi.onChanged(userId => lists.forget(userId));
+	connectedAi.onChanged(userId => {
+		accountsChangedAt.set(userId, Date.now());
+		lists.forget(userId);
+	});
 }
 plannerAi = {
 	launch: ({ sessionId, ...input }) =>

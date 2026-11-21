@@ -133,7 +133,10 @@ export type LinkOptions = {
 	revalidateEveryMs?: number;
 	/** The features `attached` names; absent when the client asked for none. */
 	features?: string[];
-	/** The client reported what it offers, which may be nothing now; read it from `catalog`. */
+	/**
+	 * The client reported what it offers, which may be nothing now, or what it reported stopped
+	 * counting because the person's AI accounts changed; read it from `catalog`.
+	 */
 	catalogChanged?(): void;
 	/** Launches the sessions' AI, once the client offered `ai-credentials`. */
 	ai?: LinkAi;
@@ -1115,7 +1118,16 @@ export class AgentLink {
 	#resumed = false;
 	/** Whether the server or the client chose to end this link, rather than the network failing. */
 	#planned = false;
+	/** What the client last reported that counted (see `#counts`), for `#catalogAccounts`. */
 	#catalog: CapabilityCatalog | undefined;
+	/**
+	 * The person's AI accounts as this link knows them, counted up each time they change while its
+	 * catalog launch watches them, and the count `#catalog` was reported under: a report counts only
+	 * for the accounts it was made for, so one made before they changed is no longer what the client
+	 * offers.
+	 */
+	#accounts = 0;
+	#catalogAccounts = 0;
 	/** Whether a turn has run without the catalog this client offered, so it is not waited for. */
 	#ranWithoutCatalog = false;
 	/** Settles once nothing is pending: the client reported, a turn ran without it, or the link ended. */
@@ -1132,6 +1144,12 @@ export class AgentLink {
 			renewal?: ReturnType<typeof setTimeout>;
 			unwatch: () => void;
 			work: Promise<void>;
+			/** Whether a catalog launch has been handed to the client yet. */
+			handed: boolean;
+			/** Whether the latest one handed was prepared for the person's accounts as they are now. */
+			current: boolean;
+			/** The `catalogLaunch` of each one handed for the person's accounts as they are now. */
+			launches: Set<string>;
 		}
 		| undefined;
 
@@ -1347,10 +1365,19 @@ export class AgentLink {
 	}
 
 	/**
-	 * What the client last reported with `capabilities`; absent until it does, and for a link whose
-	 * client offered no `capability-catalog`.
+	 * What the client last reported with `capabilities` for the person's AI accounts as they are
+	 * now; absent until it does, while a report made before they last changed is all there is, and
+	 * for a link whose client offered no `capability-catalog`.
 	 */
 	get catalog(): CapabilityCatalog | undefined {
+		return this.#catalogAccounts === this.#accounts ? this.#catalog : undefined;
+	}
+
+	/**
+	 * What the client last reported that counted, whether or not it still counts for the person's
+	 * accounts: its commands are the client's own, not the accounts', so they outlast a change.
+	 */
+	get lastReport(): CapabilityCatalog | undefined {
 		return this.#catalog;
 	}
 
@@ -1366,7 +1393,7 @@ export class AgentLink {
 	 * everything is still a report.
 	 */
 	get catalogPending(): boolean {
-		return this.#catalog === undefined && !this.#ranWithoutCatalog
+		return this.catalog === undefined && !this.#ranWithoutCatalog
 			&& this.#options.features?.includes(AGENT_FEATURES.capabilityCatalog) === true;
 	}
 
@@ -1698,8 +1725,58 @@ export class AgentLink {
 	#askCatalog(): void {
 		let ai = this.#port.ai;
 		if (!ai?.catalog || this.#catalogAi || this.#state !== "attached") return;
-		this.#catalogAi = { unwatch: ai.watch(() => this.#renewCatalog()), work: Promise.resolve() };
+		this.#catalogAi = {
+			unwatch: ai.watch(() => this.#accountsChanged()),
+			work: Promise.resolve(),
+			handed: false,
+			current: false,
+			launches: new Set(),
+		};
 		this.#renewCatalog();
+	}
+
+	/**
+	 * The person's AI accounts changed: what the client reported was listed through a catalog
+	 * launch of the accounts they had, so it no longer counts (`catalog`), and what it offers is
+	 * waited for again, until it reports through a launch of the accounts they have now, which is
+	 * prepared at once. Whoever shows the catalog is told.
+	 */
+	#accountsChanged(): void {
+		let held = this.#catalogAi;
+		if (!held) return;
+		let pending = this.catalogPending;
+		let counted = this.catalog !== undefined;
+		this.#accounts++;
+		held.current = false;
+		held.launches.clear();
+		this.#ranWithoutCatalog = false;
+		if (!pending && this.catalogPending && this.#state === "attached") {
+			this.#offered = Promise.withResolvers<void>();
+		}
+		if (counted) this.#options.catalogChanged?.();
+		this.#renewCatalog();
+	}
+
+	/** Whether the client lists its models through the catalog launches this link hands it. */
+	get #listsThroughLaunches(): boolean {
+		return this.#port.ai?.catalog !== undefined
+			&& this.#options.features?.includes(AGENT_FEATURES.aiCatalog) === true;
+	}
+
+	/**
+	 * Whether a report counts for the person's AI accounts as they are now. From a client that lists
+	 * its models through the link's catalog launches, only one made through a launch handed for them:
+	 * one naming such a launch, where it names them (`catalog-launches`), and otherwise one that
+	 * arrives while the latest launch handed is for them, never one before any was handed, which can
+	 * only be a list it kept from accounts nobody can name. From any other client, every report.
+	 */
+	#counts(catalogLaunch: string | undefined): boolean {
+		if (!this.#listsThroughLaunches) return true;
+		let held = this.#catalogAi;
+		if (this.#options.features?.includes(AGENT_FEATURES.catalogLaunches)) {
+			return catalogLaunch !== undefined && held?.launches.has(catalogLaunch) === true;
+		}
+		return held?.handed === true && held.current;
 	}
 
 	/**
@@ -1714,6 +1791,8 @@ export class AgentLink {
 		let catalog = ai.catalog.bind(ai);
 		held.work = held.work.then(async () => {
 			if (this.#catalogAi !== held || this.#state !== "attached") return;
+			// The accounts it is prepared for: a change while it is prepared makes another.
+			let accounts = this.#accounts;
 			let launched: { launchId?: string; grants: AiGrants };
 			try {
 				launched = await catalog(this.#channelId!, this.#id);
@@ -1735,13 +1814,26 @@ export class AgentLink {
 			}
 			// Held before it is sent, so the client's first request finds its owner live.
 			if (launched.launchId) ai.held?.(launched.launchId, true);
-			if (!this.#send({ type: "ai-catalog", ai: launched.grants })) {
+			let catalogLaunch = this.#options.features?.includes(AGENT_FEATURES.catalogLaunches)
+				? crypto.randomUUID()
+				: undefined;
+			if (
+				!this.#send({
+					type: "ai-catalog",
+					ai: launched.grants,
+					...(catalogLaunch ? { catalogLaunch } : {}),
+				})
+			) {
 				if (launched.launchId) {
 					ai.held?.(launched.launchId, false);
 					ai.end(launched.launchId);
 				}
 				return;
 			}
+			// A report counts for these accounts only through a launch prepared for them.
+			held.handed = true;
+			held.current = accounts === this.#accounts;
+			if (catalogLaunch && held.current) held.launches.add(catalogLaunch);
 			let previous = held.launchId;
 			held.launchId = launched.launchId;
 			if (previous && previous !== launched.launchId) {
@@ -1959,6 +2051,15 @@ export class AgentLink {
 				if (!this.#options.features?.includes(AGENT_FEATURES.capabilityCatalog)) {
 					return this.#violate("protocol", "capabilities needs the capability-catalog feature.");
 				}
+				if (
+					message.catalogLaunch !== undefined
+					&& !this.#options.features.includes(AGENT_FEATURES.catalogLaunches)
+				) {
+					return this.#violate("protocol", "catalogLaunch needs the catalog-launches feature.");
+				}
+				// A report of other accounts than the person's now, or one that names no launch from a
+				// client that names them, is not what the client offers them: it changes nothing.
+				if (!this.#counts(message.catalogLaunch)) return;
 				// What nobody can ask for (a model with no id, an empty level) is left out here, once,
 				// so every reader of the catalog sees only what can be chosen; the rest and the link stay.
 				let { catalog, skipped } = usableCatalog(message.catalog);
@@ -1969,6 +2070,7 @@ export class AgentLink {
 					);
 				}
 				this.#catalog = catalog;
+				this.#catalogAccounts = this.#accounts;
 				this.#offered.resolve();
 				this.#options.catalogChanged?.();
 				return;

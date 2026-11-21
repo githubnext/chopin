@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { userAndChannel } from "../storage/contract-support";
 import { MemoryStorage } from "../storage/memory/adapter";
-import { lastModels } from "./last-models";
+import { keptList, lastModels } from "./last-models";
 
 import type { CapabilityCatalog } from "@chopin/agent-link";
 import type { Lease, PlannerCatalog } from "../storage/model";
@@ -103,4 +103,26 @@ test("a save storage refuses is said and tried again with the next report", asyn
 	expect((await storage.plannerCatalogs.get(channelId, userId))?.catalog.models[0]?.id).toBe(
 		"acme/large",
 	);
+});
+
+test("gives a person a kept list only if it was reported since their AI accounts last changed, the document's own first", async () => {
+	let { storage, userId, channelId, models } = await kept();
+	let other = await storage.channels.create({
+		id: crypto.randomUUID(),
+		repositoryId: "R_other",
+		repositoryOwner: "octo-org",
+		repositoryName: "other",
+		title: "Another document",
+		createdBy: userId,
+		now: new Date(),
+	});
+	// Reported at 1 s on this document, and at 2 s on another.
+	await models.remember(channelId, { userId, catalog: LARGE });
+	await models.remember(other.id, { userId, catalog: SMALL });
+	expect((await keptList(storage, channelId, userId))?.catalog.models[0]?.id).toBe("acme/large");
+	// Their accounts changed at 1.5 s: this document's list is of the accounts they had.
+	expect((await keptList(storage, channelId, userId, 1_500))?.catalog.models[0]?.id).toBe(
+		"acme/small",
+	);
+	expect(await keptList(storage, channelId, userId, 2_500)).toBeUndefined();
 });

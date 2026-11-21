@@ -7,10 +7,27 @@
 import { remoteCatalog } from "../harness/catalog";
 
 import type { CapabilityCatalog } from "@chopin/agent-link";
-import type { Lease } from "../storage/model";
+import type { Lease, PlannerCatalog } from "../storage/model";
 import type { StorageAdapter } from "../storage/port";
 
 export type ReportedCatalog = { userId: string; catalog: CapabilityCatalog | undefined };
+
+/**
+ * The list last reported for `userId` on the document, else their latest on any document, of the
+ * accounts they have now: one reported before their AI accounts last changed (`changedAt`,
+ * milliseconds since the epoch) was listed through accounts they may no longer have, and is none.
+ */
+export async function keptList(
+	storage: Pick<StorageAdapter, "plannerCatalogs">,
+	channelId: string,
+	userId: string,
+	changedAt = -Infinity,
+): Promise<PlannerCatalog | undefined> {
+	let current = (kept: PlannerCatalog | undefined) =>
+		kept && kept.reportedAt.getTime() >= changedAt ? kept : undefined;
+	return current(await storage.plannerCatalogs.get(channelId, userId))
+		?? current(await storage.plannerCatalogs.latest(userId));
+}
 
 /**
  * Saves what a document's Planner reported for the account it attached for, under the writer lease,

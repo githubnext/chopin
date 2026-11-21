@@ -168,7 +168,7 @@ export async function plannerCommands(
 	channelId: string,
 	repository: { owner: string; name: string },
 ): Promise<Wire.CommandOption[] | undefined> {
-	if (harness === "remote") return remoteCommands(attachedLink(channelId)?.catalog);
+	if (harness === "remote") return remoteCommands(attachedLink(channelId)?.lastReport);
 	let atomic = selected as { commands?: (cwd: string) => Promise<Wire.CommandOption[]> };
 	if (harness !== "atomic" || !atomic?.commands) return undefined;
 	let { cwd } = await plannerWorkspace(channelId, repository);
