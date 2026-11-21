@@ -42,12 +42,15 @@ import { gitSync, repositoryAt } from "./git-host";
 import { unhide } from "./windows-host";
 import { guestRepositoryPath } from "./nvx";
 import { type PlannerSpares, type Spare, SPARE_PROTOCOL } from "./planner-spare";
+import type { LaunchGate } from "./launch-gate";
 import { forgetResetDisk, holdDisk, stampPlannerReset } from "./planner-disks";
 import { managedEnvironment, privateAgentState } from "./ai-agent";
 import { type AgentStore, forgetAgentStore, keepSessionsIn } from "./machine-store";
 
 /** How long a stopped Planner backend has to exit before it is killed. */
 const STOP_GRACE_MS = 5000;
+/** The longest a launch holds its gate slot without hearing its workload start. */
+const BOOT_SLOT_MS = 60_000;
 
 /**
  * Split a `--planner-command` line into its words as a POSIX shell would, without expanding
@@ -122,6 +125,8 @@ export async function servePlanners(options: {
 	agentStore?: AgentStore;
 	/** The machine's spare Planners, which a new document's Planner starts on. */
 	spares?: PlannerSpares;
+	/** How many Planner microVMs boot at once; a cold launch waits for a slot (see `launchGate`). */
+	gate?: LaunchGate;
 }) {
 	await Promise.all(options.documents.map(document => servePlanner({ ...options, document })));
 }
@@ -159,6 +164,7 @@ export function dispatchedPlanners(options: {
 	sandbox: Sandbox;
 	agentStore?: AgentStore;
 	spares?: PlannerSpares;
+	gate?: LaunchGate;
 }) {
 	type Backend = {
 		url: string;
@@ -306,6 +312,7 @@ async function servePlanner(options: {
 	sandbox: Sandbox;
 	agentStore?: AgentStore;
 	spares?: PlannerSpares;
+	gate?: LaunchGate;
 	/**
 	 * For a dispatched Planner: once the backend exits by itself, whether Chopin still asks for it,
 	 * so it starts again. Without it, a backend that exits is always started again.
@@ -338,6 +345,9 @@ async function servePlanner(options: {
 		});
 	};
 	for (let attempt = 0; !signal.aborted;) {
+		// From now until it boots, or takes a spare, no spare boots beside it (see
+		// `LaunchGate.coming`), so a burst's documents never share the machine with its refill.
+		let coming = options.gate?.coming();
 		let document = current();
 		let started = Date.now();
 		let credential;
@@ -351,6 +361,7 @@ async function servePlanner(options: {
 				signal,
 			);
 		} catch (error) {
+			coming?.();
 			if (signal.aborted) return;
 			if (!transient(classifyConnectorError(error))) {
 				let reason = redacted(
@@ -401,6 +412,8 @@ async function servePlanner(options: {
 			: undefined;
 		let handled = false;
 		if (spare) {
+			// It needs no boot of its own.
+			coming?.();
 			let ran = await onSpare(
 				{ ...options, document, id, repository, credential },
 				spare,
@@ -443,8 +456,18 @@ async function servePlanner(options: {
 					),
 				);
 				launched = Date.now();
+				// It boots cold after all.
+				coming = options.gate?.coming();
 			}
 		}
+		// A cold launch boots a microVM once its GitHub token and checkout are there: it waits for a
+		// slot of the machine's launch gate, documents in the order they asked, and gives it back once
+		// its workload starts or the launch ends. No slot is held while Chopin or GitHub is waited on.
+		let slot: (() => void) | undefined;
+		let booted = () => {
+			slot?.();
+			coming?.();
+		};
 		// Its tokens are kept in a folder of their own, which is all of them a sandbox is shown.
 		let tokenDirectory = tokenFolder(worktree);
 		if (!handled) await mkdir(tokenDirectory, { recursive: true, mode: 0o700 }).catch(() => {});
@@ -463,6 +486,8 @@ async function servePlanner(options: {
 			});
 		}
 		if (!handled) {
+			// When Chopin was asked: its token says the machine could push there then, not later.
+			let tokenAsked = Date.now();
 			let asked = githubToken({
 				url: options.url,
 				machine: options.machine,
@@ -480,8 +505,17 @@ async function servePlanner(options: {
 			// Chopin credentials from, and its own worktree of a checkout the person registered. A clone
 			// waits for the token, which fetching it takes.
 			let resolved = options.checkouts.resolve(repository, () => asked).then(value => value.root);
+			// Making its disk takes a microVM too, as short as it is: a slot of its own, meanwhile.
 			let prepared = resolved.then(
-				() => prepareDisk(options, document, worktree, credential.reset),
+				async () => {
+					let making = await options.gate?.acquire("document", signal).catch(() => undefined);
+					if (options.gate && !making) return;
+					try {
+						await prepareDisk(options, document, worktree, credential.reset);
+					} finally {
+						making?.();
+					}
+				},
 				() => {},
 			);
 			let files = credentialFiles(options, document, tokenDirectory, credential);
@@ -500,6 +534,7 @@ async function servePlanner(options: {
 				github = await asked;
 			} catch (error) {
 				await abandon();
+				booted();
 				if (signal.aborted) return;
 				if (error instanceof GitHubRefused) {
 					options.spares?.refused(repository);
@@ -527,10 +562,23 @@ async function servePlanner(options: {
 				})
 				: undefined;
 			if (github && !checkout) await abandon();
+			if (checkout && options.gate) {
+				// Its disk first, which gives its own slot back: a launch never holds one slot while it
+				// waits for another.
+				await prepared;
+				slot = await options.gate.acquire("document", signal).catch(() => undefined);
+				if (!slot) {
+					// Stopped while it waited: nothing started.
+					await abandon();
+					await github?.stop();
+					booted();
+					return;
+				}
+			}
 			if (checkout) {
 				output.say(`› Planner for ${document} started.`);
 				// Its repository, cloned or registered, keeps a spare for the next new document.
-				options.spares?.served(repository);
+				options.spares?.served(repository, tokenAsked);
 				let healthy = setTimeout(() => {
 					void options.failures?.started(document);
 					// Once it stays up, what was told to Chopin about its failing is no longer true.
@@ -550,6 +598,7 @@ async function servePlanner(options: {
 						cwd: checkout,
 						signal: AbortSignal.any([signal, lapsed]),
 						managed: credential.ai === true,
+						booted,
 					},
 					credential.token,
 					worktree,
@@ -569,6 +618,7 @@ async function servePlanner(options: {
 			}
 		}
 		let { how, stderr, reason } = outcome!;
+		booted();
 		await releaseDisk?.();
 		await github?.stop();
 		if (signal.aborted) return;
@@ -994,6 +1044,8 @@ async function launch(
 		agentStore?: AgentStore;
 		output?: Output;
 		managed?: boolean;
+		/** Hears once that its workload started in its microVM, or never will (see `LaunchGate`). */
+		booted?: () => void;
 	},
 	token: string,
 	worktree: string,
@@ -1040,8 +1092,17 @@ async function launch(
 			),
 		});
 	} catch (error) {
+		options.booted?.();
 		return { how: error instanceof Error ? error.message : String(error) };
 	}
+	// Its slot goes back once its workload starts, or after BOOT_SLOT_MS if that is never heard.
+	let booted = () => {
+		clearTimeout(late);
+		options.booted?.();
+	};
+	let late = setTimeout(booted, BOOT_SLOT_MS);
+	late.unref?.();
+	child.once("workload", booted);
 	// Read as each line is passed on, so a GitHub token renewed meanwhile is masked too.
 	let secrets = () => [
 		token,
@@ -1073,6 +1134,7 @@ async function launch(
 		if (options.signal.aborted) stop();
 	});
 	let how = await Promise.race([exited, stopped]);
+	booted();
 	options.signal.removeEventListener("abort", stop);
 	// A backend that exited by itself may leave children in its process group; they go too. On
 	// Windows its process id may already belong to another process, so nothing more is stopped.

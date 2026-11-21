@@ -30,6 +30,7 @@ import { createOutput } from "./output";
 import { permissionMemory } from "./permission";
 import { commandWords, dispatchedPlanners, servePlanners } from "./planner";
 import { plannerSpares } from "./planner-spare";
+import { launchGate } from "./launch-gate";
 import { PLANNER_DISK_SWEEP_MS, sweepPlannerDisks } from "./planner-disks";
 import { delay } from "./reconnect";
 import { runWork } from "./run";
@@ -769,6 +770,9 @@ export async function connect(args: string[], injected: Injected = {}) {
 			// Planner starts at once; it holds no credential until it is handed one, and none is kept
 			// for a repository Chopin says the machine can't push to.
 			let sparing = AbortSignal.any([abort.signal, planners.signal]);
+			// How many Planner microVMs boot at once: new documents' in the order they asked, then
+			// spares'.
+			let gate = launchGate();
 			let spares = plannerCommand.length
 				? plannerSpares({
 					url,
@@ -778,6 +782,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 					output,
 					signal: sparing,
 					check: repository => machineGitHubCheck(url, machine, repository, sparing),
+					gate,
 					env,
 					sandbox,
 					...(agentStore ? { agentStore } : {}),
@@ -801,6 +806,7 @@ export async function connect(args: string[], injected: Injected = {}) {
 				sandbox,
 				...(agentStore ? { agentStore } : {}),
 				...(spares ? { spares } : {}),
+				gate,
 			};
 			let planning = servePlanners(backends);
 			// The Planners Chopin asks for, of documents this machine's owner chose it for.

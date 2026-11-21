@@ -556,6 +556,12 @@ later.
   while it waits, `chopin` asks Chopin whether it would give this machine a token for
   the repository. Once it wouldn't, or refuses one of the repository's Planners its
   GitHub token, the spare stops and its disk goes.
+- **Many at once.** When new documents of a repository come faster than its spare is
+  replaced, as when a Planner makes several in one turn, the repository keeps up to 4
+  spares, within the same memory bound, until none has come for 2 minutes. Documents
+  that find no spare start cold side by side, half the machine's processors' worth at
+  a time (2 at least, 8 at most), in the order they were asked for, ahead of any new
+  spare.
 - **Nothing of a document until it gets one.** A spare starts with your checkout,
   read-only, and nothing else of the document's: no credential, an empty token folder
   and a disk of its own. It gets the document's credentials when it is handed the

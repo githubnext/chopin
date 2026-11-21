@@ -14,7 +14,14 @@ import type { Launch, Sandbox, Spawned } from "../sandbox";
  * Its bridge is the guest's, run by Bun from source, and its programs are found on the connector's
  * PATH where a launch's environment names none, as its image's are in a guest.
  */
-export function hostSandbox(overrides: Partial<Sandbox> = {}): Sandbox {
+export function hostSandbox(
+	overrides: Partial<Sandbox> = {},
+	/**
+	 * A guest that takes `bootMs` to boot before its program starts, as a microVM does; `heard` hears
+	 * each launch begin to boot and finish.
+	 */
+	stand: { bootMs?: number; heard?: (event: "boot" | "booted", launch: Launch) => void } = {},
+): Sandbox {
 	let work = overrides.work ?? mkdtempSync(join(tmpdir(), "chopin-work-"));
 	mkdirSync(work, { recursive: true });
 	return {
@@ -28,13 +35,43 @@ export function hostSandbox(overrides: Partial<Sandbox> = {}): Sandbox {
 			let repository = launch.repository;
 			// The image has the agent on its PATH; here the host's has it.
 			launch = { ...launch, env: { PATH: process.env.PATH, ...launch.env } };
+			// Its workload starts as its process does, or once its stand-in boot is over.
+			let bootMs = stand.bootMs ?? 0;
+			let asked = launch;
+			stand.heard?.("boot", asked);
+			if (bootMs) {
+				launch = {
+					...launch,
+					command: [
+						"/bin/sh",
+						"-c",
+						`sleep ${bootMs / 1000}; exec "$@"`,
+						"boot",
+						...launch.command,
+					],
+				};
+			}
+			let booted = (child: Spawned) => {
+				let done = false;
+				let finish = () => {
+					if (done) return;
+					done = true;
+					stand.heard?.("booted", asked);
+					child.emit("workload");
+				};
+				child.once("spawn", () => setTimeout(finish, bootMs));
+				child.once("exit", finish);
+				return child;
+			};
 			if (!repository) {
-				return spawn(launch.command[0]!, launch.command.slice(1), {
-					cwd: launch.cwd,
-					env: launch.env,
-					stdio: [launch.stdin, "pipe", "pipe"],
-					detached: process.platform !== "win32",
-				}) as Spawned;
+				return booted(
+					spawn(launch.command[0]!, launch.command.slice(1), {
+						cwd: launch.cwd,
+						env: launch.env,
+						stdio: [launch.stdin, "pipe", "pipe"],
+						detached: process.platform !== "win32",
+					}) as Spawned,
+				);
 			}
 			// A guest without a disk starts with nothing: a run's repository is cloned afresh.
 			if (!launch.disk && repository.path.startsWith(`${work}/`)) {
@@ -43,7 +80,7 @@ export function hostSandbox(overrides: Partial<Sandbox> = {}): Sandbox {
 			// Guests that share the stand-in's `/work` clone one at a time, as each guest has its own.
 			let serialized = 'flock "$CHOPIN_STAND_IN_LOCK" /bin/sh -c "$CHOPIN_STAND_IN_PREPARE" '
 				+ 'prepare true && exec /bin/sh -c "$CHOPIN_STAND_IN_PREPARE" chopin-launch "$@"';
-			return spawn("/bin/sh", ["-c", serialized, "chopin-launch", ...launch.command], {
+			return booted(spawn("/bin/sh", ["-c", serialized, "chopin-launch", ...launch.command], {
 				cwd: work,
 				env: {
 					...launch.env,
@@ -58,7 +95,7 @@ export function hostSandbox(overrides: Partial<Sandbox> = {}): Sandbox {
 				},
 				stdio: [launch.stdin, "pipe", "pipe"],
 				detached: process.platform !== "win32",
-			}) as Spawned;
+			}) as Spawned);
 		},
 		makeDisk: async path => {
 			await Bun.write(path, "");

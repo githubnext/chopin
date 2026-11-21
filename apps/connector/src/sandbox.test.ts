@@ -619,6 +619,43 @@ describe.skipIf(process.platform === "win32")("a burst of launches whose image i
 		30_000,
 	);
 
+	test(
+		"a spare's boot waits on the one build with the documents' launches, never builds again, and each says its workload started",
+		async () => {
+			let images = heldBuilder();
+			let { vm, sandbox, launch } = await machineWith(images.builder);
+			try {
+				let folder = join(vm.base, "spare");
+				mkdirSync(folder);
+				// A spare is a launch like any other: the same image, its stdin kept for its hand-over.
+				let spare = sandbox.spawn({
+					command: ["my-planner"],
+					cwd: folder,
+					env: { CHOPIN_PLANNER_SPARE: "1" },
+					stdin: "pipe",
+				});
+				let launches = [spare, launch(), launch(), launch()];
+				let workloads = launches.map(child =>
+					new Promise<boolean>(resolve => child.once("workload", () => resolve(true)))
+				);
+				let ends = Promise.all(launches.map(ended));
+				spare.stdin?.end();
+				await Bun.sleep(200);
+				expect(images.builds()).toBe(2);
+				expect(vm.calls).toHaveLength(0);
+				images.release();
+				// Each hears its workload start, as the launch gate does to give its slot back.
+				expect(await Promise.all(workloads)).toEqual([true, true, true, true]);
+				await ends;
+				expect(images.builds()).toBe(2);
+				expect(vm.starts()).toBe(4);
+			} finally {
+				await sandbox.close();
+			}
+		},
+		30_000,
+	);
+
 	test("a launch stopped while it waits for the image starts nothing", async () => {
 		let images = heldBuilder();
 		let { vm, sandbox, launch } = await machineWith(images.builder);

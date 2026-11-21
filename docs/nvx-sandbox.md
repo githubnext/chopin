@@ -252,7 +252,10 @@ image is gone since it was made, removed by hand say, waits for it to be made ag
 Planners of the documents one turn creates, all wait on that one build and then
 start in what it made; a build that fails ends every one of them with its words, and
 the next launch asks for a build again. A launch stopped while it waits starts
-nothing, and its stdin waits with it for the workload.
+nothing, and its stdin waits with it for the workload. A spare Planner's boot is such a
+launch: it waits on the same one build and never makes another, and, as every launch
+that waited, says its workload started once its microVM has booted, when it gives its
+slot of the launch gate back (see [Bursts of new documents](#bursts-of-new-documents)).
 
 An image is built in a microVM too, so an install script runs no closer to the host
 than the agent will. The host downloads Node and the packages and checks their
@@ -493,7 +496,39 @@ A new document (one with no disk on the machine yet) is handed its repository's
 ready spare, and its replacement starts 5 seconds later, in a slot of its own. A
 spare is never handed a second document: once handed, its process is the
 document's Planner and its slot the document's for good, and the pool keeps nothing
-of it. A document that has run here before starts on its own disk, cold, because its
+of it. Many documents asking at once never share one: the first takes it out of the
+pool before anything else runs, and the others start cold.
+
+### Bursts of new documents
+
+People open several documents at once, and a Planner's `create_document` makes up to
+10 in one turn, all in one repository, all wanting a Planner at once:
+
+- **A burst refills more than one spare.** A new document that finds no spare ready
+  within 10 seconds of another of its repository's asking starts a burst
+  (`BURST_MS`). Until none has asked for 2 minutes (`QUIET_MS`), the repository
+  keeps up to 4 spares, within the same memory bound, every repository's first
+  spare before any's second, and their replacements start at once rather than 5
+  seconds later. Once it is quiet, it goes back to one and lets the others go.
+- **Cold starts run side by side, up to a cap.** A launch gate (`launch-gate.ts`)
+  lets half the machine's processors' worth of Planner microVMs boot at once, 2 at
+  least and 8 at most. A cold launch takes a slot only once its GitHub token and its
+  checkout are there and its disk is made (the disk's own microVM takes a slot while
+  it is made), and gives it back once its guest has booted and starts the backend
+  (`workload` on the launch). So no slot is held while Chopin or GitHub is waited on.
+  A launch that finds every slot held waits, never refused: documents in the order
+  they asked, ahead of any spare. A spare also waits while any document's launch is on
+  its way, from the moment the connector asks Chopin for its credential until it boots
+  or takes a spare, so a burst's cold starts never share the machine with its refill.
+  A spare that is already booting keeps its slot, so a burst can wait up to one
+  spare's boot. A slot that frees goes on at once.
+- **One fetch for the burst.** The cold launches of a cloned repository fetch it
+  before they start. Work that arrives while it is fetched takes that fetch, each with
+  its own GitHub token, rather than fetching it again in turn.
+
+Measured on KVM with a gate of 3, five new documents of one repository at once: one
+attached on the spare in 79 ms, three cold ones in 2.8–2.9 s side by side, and the
+fifth in 4.7 s, once a slot freed (`nvx-vm.test.ts`). A document that has run here before starts on its own disk, cold, because its
 state is on that disk and a microVM's disk is fixed when it boots.
 
 There is no spare for a repository the machine has not served yet. A spare is bound to
@@ -613,7 +648,9 @@ concurrent 1 GiB VMs ran on an 8-vCPU, 32 GiB Windows host, and 80 on the Linux 
 machine. The connector runs one job at a time as before, plus the Planners it is
 asked for and its spares (see
 [Which repositories keep a spare](#which-repositories-keep-a-spare)): at most 4, and no
-more than take a tenth of the host's memory.
+more than take a tenth of the host's memory. At most half its processors' worth of Planner
+microVMs (2 to 8) boot at once; the rest wait their turn (see
+[Bursts of new documents](#bursts-of-new-documents)).
 
 ## What goes away
 
@@ -733,6 +770,7 @@ and the user can use `/dev/kvm`, and skip elsewhere, CI included.
 | Egress exact                   | A guest's only network endpoint is the connector's proxy, and the proxy allows only its list.                                                                                                              | `nvx.test.ts` (proxy-only flags; a launch's own proxy settings dropped); `nvx-vm.test.ts` (no direct connection, no DNS, only allowed hosts through the proxy); `sandbox-proxy.test.ts`                                                                                                                                                                                                                          |
 | No real credential in a guest  | No guest gets the machine token, an AI provider key, the relay's launch credential, the owner's GitHub login or agent logins, or the connector's environment.                                              | `nvx.test.ts` (the environment is the launch's, in a file, never on a command line); `nvx-vm.test.ts` (no secret on any host command line); `launch-handoff.test.ts` (an agent holds only stand-ins)                                                                                                                                                                                                             |
 | Warm spares                    | A spare is kept only for a repository Chopin says the machine can push to, within the cap and memory bound; it holds nothing of a document before its hand-over and is never handed a second one.          | `planner-spare.test.ts` (a clone a Planner ran in keeps a spare, across restarts; refused, none starts and a kept one goes; the cap, memory and most recent first; never handed twice; a disk here starts cold); `nvx-vm.test.ts` (a clone's spare boots with an empty token folder and attaches a new document sooner than a cold start)                                                                        |
+| Bursts                         | Many new documents at once each get one Planner and no spare twice; at most the cap of microVMs boot at once, none waits while a slot is free, documents in order and ahead of spares.                     | `launch-gate.test.ts`; `planner-spare.test.ts` (2, 5 and 10 documents at once, three repositories at once, a burst's refill, no slot held while a clone is fetched); `checkouts.test.ts` (one fetch for a burst); `nvx-vm.test.ts` (five documents at once)                                                                                                                                                      |
 | Snapshot clean                 | No snapshot holds anything of a launch.                                                                                                                                                                    | Holds trivially: this release takes no snapshots                                                                                                                                                                                                                                                                                                                                                                 |
 | Teardown                       | A launch that ended, was revoked or unpaired has no microVM left, and nothing of `nvx`'s in the temporary directory.                                                                                       | `nvx-vm.test.ts` (ending a launch ends OpenVMM, its record and `nvx`'s folder; a server the agent left running ends with it); `sandbox.test.ts` (a launch ended by force leaves no folder; a dead connector's records take theirs; the sweep keeps a live launch's, its own base dir's or another's, and removes a stale one); `sandbox.ts` `endOrphans`, `sweepRunFolders`                                      |
 | One start                      | An agent sees one start of its workload: a microVM is started again only after OpenVMM's io_uring failure, and only before its workload started, with nothing of its stdin given to the start that failed. | `sandbox.test.ts` (a fake `nvx` that fails once with that log line and then starts; no new start for another failure or once the workload started; three at most; a stop while waiting starts nothing); `nvx-vm.test.ts` (a start refused io_uring with strace starts again and its workload reads its input once)                                                                                               |

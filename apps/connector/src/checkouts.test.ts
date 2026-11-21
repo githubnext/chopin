@@ -199,9 +199,43 @@ test.skipIf(process.platform === "win32")(
 			join(base, "repos", "org", "other"),
 		]);
 		let commands = (await fixture.log()).map(line => line.split(" ")[0]);
-		// One clone of each repository; the second request for org/repo waited, then fetched.
+		// One clone of each repository; the second request for org/repo took the clone under way.
 		expect(commands.filter(command => command === "clone")).toHaveLength(2);
-		expect(commands.filter(command => command === "fetch")).toHaveLength(1);
+		expect(commands.filter(command => command === "fetch")).toHaveLength(0);
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"work that arrives at once for a repository cloned here fetches it once, each with its own token",
+	async () => {
+		await using fixture = await localGitHub();
+		let base = join(fixture.scratch, "base");
+		let machine = checkouts({ directory: base, registered: {} });
+		await machine.resolve("org/repo", async () => fixture.token);
+		let before = (await fixture.log()).length;
+		// Five new documents' Planners at once, each with a token of its own.
+		let tokens = await Promise.all([1, 2, 3, 4, 5].map(async index => {
+			let file = join(fixture.scratch, `token-${index}`);
+			await writeFile(file, `${TOKEN}\n`, { mode: 0o600 });
+			return { ...fixture.token, file };
+		}));
+		let resolved = await Promise.all(
+			tokens.map(token => machine.resolve("org/repo", async () => token)),
+		);
+		let reaching = async () =>
+			(await fixture.log()).slice(before).map(line => line.split(" ")[0]).filter(command =>
+				command === "fetch" || command === "clone"
+			);
+		expect(await reaching()).toEqual(["fetch"]);
+		expect(resolved.map(value => value.root)).toEqual(
+			tokens.map(() => join(base, "repos", "org", "repo")),
+		);
+		expect(resolved.map(value => value.env)).toEqual(
+			tokens.map(token => gitCredentials(token.file, "org/repo")),
+		);
+		// Work that arrives after it fetches again.
+		await machine.resolve("org/repo", async () => fixture.token);
+		expect(await reaching()).toEqual(["fetch", "fetch"]);
 	},
 );
 
