@@ -496,6 +496,11 @@ jobs:
           tar -xzf "$RUNNER_TEMP/nvx.tar.gz" -C "$RUNNER_TEMP/nvx"
           echo "CHOPIN_NVX_ROOT=$(echo "$RUNNER_TEMP"/nvx/*)" >> "$GITHUB_ENV"
 
+      # The tests make a microVM's start fail as OpenVMM's does under heavy load, by refusing it
+      # io_uring with strace.
+      - name: strace
+        run: command -v strace || (sudo apt-get update -q && sudo apt-get install -y -q strace)
+
       - name: Agents in microVMs
         run: bun test --timeout 600000 apps/connector/src/nvx-vm.test.ts
         env:

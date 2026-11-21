@@ -1,8 +1,17 @@
 import { execFile, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	realpathSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { stateDirectory } from "./workspace";
 
 /**
  * Every git command the connector runs itself, on the host and outside any sandbox, against a
@@ -111,7 +120,7 @@ export function repositoryAt(path: string): Repository | undefined {
 
 /** The settings of a person's own git configuration that the connector's commands are given. */
 type Person = {
-	/** A file in the connector's own temporary directory: what a fetch and a checkout need. */
+	/** A file in this process's own folder: what a fetch and a checkout need. */
 	file: string;
 };
 
@@ -149,17 +158,50 @@ function quote(text: string) {
 		.replaceAll("\t", "\\t");
 }
 
-let directory: string | undefined;
+let directories = new Set<string>();
 let people = new Map<string, Person>();
+let written = 0;
 
-/** The connector's own temporary directory, private to it, removed when it exits. */
+/** Where each `chopin` keeps its copies of the person's configuration, a folder per process. */
+function gitFolders(base: string) {
+	return join(base, "git");
+}
+
+/**
+ * This process's own folder for its copies of the person's configuration, in the state directory,
+ * private to it and removed as it exits. One a `chopin` ended by force left is removed by the next
+ * connector (see `sweepGitFolders`).
+ */
 function privateDirectory() {
-	if (!directory) {
-		let made = mkdtempSync(join(tmpdir(), "chopin-git-"));
-		directory = made;
+	let made = join(gitFolders(stateDirectory()), String(process.pid));
+	mkdirSync(made, { recursive: true, mode: 0o700 });
+	if (!directories.has(made)) {
+		directories.add(made);
 		process.once("exit", () => rmSync(made, { recursive: true, force: true }));
 	}
-	return directory;
+	return made;
+}
+
+/** Removes the folders of `chopin` processes that ended without removing their own. */
+export function sweepGitFolders(base: string) {
+	let names: string[];
+	try {
+		names = readdirSync(gitFolders(base));
+	} catch {
+		return;
+	}
+	for (let name of names) {
+		let pid = Number(name);
+		if (!/^\d+$/.test(name) || pid === process.pid) continue;
+		try {
+			process.kill(pid, 0);
+			continue;
+		} catch (error) {
+			// A process of another user's, which this one may not signal, is still running.
+			if ((error as NodeJS.ErrnoException).code === "EPERM") continue;
+		}
+		rmSync(join(gitFolders(base), name), { recursive: true, force: true });
+	}
 }
 
 function entriesOf(
@@ -197,13 +239,13 @@ function personConfig(env: NodeJS.ProcessEnv, repository?: Repository): Person {
 		repository?.gitDir,
 	].join("\0");
 	let known = people.get(key);
-	if (known) return known;
+	if (known && existsSync(known.file)) return known;
 	let reading: NodeJS.ProcessEnv = { ...env };
 	delete reading.GIT_CONFIG_NOSYSTEM;
 	if (repository) reading.GIT_DIR = repository.gitDir;
 	else delete reading.GIT_DIR;
 	let entries = [...entriesOf("--system", reading), ...entriesOf("--global", reading)];
-	let file = join(privateDirectory(), `gitconfig-${people.size}`);
+	let file = join(privateDirectory(), `gitconfig-${written++}`);
 	let kept: string[] = [];
 	for (let [name, value] of entries) {
 		let first = name.indexOf(".");

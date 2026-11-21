@@ -1,15 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { managedEnvironment } from "./ai-agent";
 import { githubPaths } from "./github-token";
 import {
 	type AgentImage,
 	guestPath,
+	LAUNCHER,
 	nvxArguments,
 	type NvxArtifacts,
 	nvxSupport,
 	OPEN_LAUNCHER,
 	PREPARE,
 	SandboxRefused,
+	STARTED_LINE,
 	type SupportHost,
 	type VmContext,
 	type VmLaunch,
@@ -344,9 +347,11 @@ describe("what a launch's microVM is given", () => {
 		let words = nvxArguments(spec, ARTIFACTS, "kvm", "/env.json");
 		expect(words).toContain(`--layer=distro,${IMAGE.layer.path},${IMAGE.layer.uuid}`);
 		expect(words).toContain("--workload-user=1000:1000");
-		expect(words.slice(words.indexOf("--entrypoint=/usr/bin/env"))).toEqual([
-			"--entrypoint=/usr/bin/env",
-			"--arg=--",
+		expect(words.slice(words.indexOf("--entrypoint=/bin/sh"))).toEqual([
+			"--entrypoint=/bin/sh",
+			"--arg=-c",
+			`--arg=${LAUNCHER}`,
+			"--arg=chopin-launch",
 			"--arg=copilot",
 			"--arg=--acp",
 			"--timeout=31536000",
@@ -376,6 +381,18 @@ describe("what a launch's microVM is given", () => {
 		expect(words.some(word => word.startsWith("--workload-user"))).toBe(false);
 		expect(words).toContain(`--arg=${OPEN_LAUNCHER}`);
 	});
+
+	test.skipIf(process.platform === "win32")(
+		"the guest says its workload starts before anything of the workload's own",
+		() => {
+			for (let launcher of [LAUNCHER, OPEN_LAUNCHER]) {
+				let { stdout } = spawnSync("/bin/sh", ["-c", launcher, "chopin-launch", "echo", "hi"], {
+					encoding: "utf8",
+				});
+				expect(stdout).toBe(`${STARTED_LINE}\nhi\n`);
+			}
+		},
+	);
 
 	test("git in the guest takes the shares, which the connector's user owns", () => {
 		let spec = vmSpec({

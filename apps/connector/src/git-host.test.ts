@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { execFile, spawnSync } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import {
 	chmodSync,
@@ -16,7 +16,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { gitAsync, gitSync, HOST_GIT_CONFIG, hostGitEnvironment, repositoryAt } from "./git-host";
+import {
+	gitAsync,
+	gitSync,
+	HOST_GIT_CONFIG,
+	hostGitEnvironment,
+	repositoryAt,
+	sweepGitFolders,
+} from "./git-host";
 
 let scratch = realpathSync(mkdtempSync(join(tmpdir(), "chopin-git-host-")));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -325,6 +332,37 @@ test("the connector's git reads of the person's own configuration only what a fe
 	expect(await ask("core.autocrlf")).toBe("true");
 	expect(await ask("url.https://mirror.example/.insteadof")).toBe("https://github.com/");
 	expect(await ask("http.proxy")).toBe("http://proxy.example:3128");
+});
+
+test("the copy of the person's configuration is in the state directory, in a folder of this process's that the next connector removes only once the process is gone", () => {
+	let base = join(scratch, "state");
+	let previous = process.env.CHOPIN_HOME;
+	process.env.CHOPIN_HOME = base;
+	try {
+		let env = person(
+			join(scratch, "state-person"),
+			"[http]\n\tproxy = http://proxy.example:3128\n",
+		);
+		let own = join(base, "git", String(process.pid));
+		expect(dirname(hostGitEnvironment(env).GIT_CONFIG_GLOBAL!)).toBe(own);
+		// A chopin ended by force left its folder; another still running keeps its own.
+		let gone = spawnSync("true");
+		let left = join(base, "git", String(gone.pid));
+		let running = spawn("sleep", ["60"], { stdio: "ignore" });
+		let kept = join(base, "git", String(running.pid));
+		try {
+			for (let folder of [left, kept]) mkdirSync(folder, { recursive: true });
+			sweepGitFolders(base);
+			expect(readdirSync(join(base, "git")).sort()).toEqual(
+				[String(process.pid), String(running.pid)].sort(),
+			);
+		} finally {
+			running.kill("SIGKILL");
+		}
+	} finally {
+		if (previous === undefined) delete process.env.CHOPIN_HOME;
+		else process.env.CHOPIN_HOME = previous;
+	}
 });
 
 test("a commondir made after the connector first saw the checkout sends its git nowhere: it reads the checkout's own configuration, runs no filter of the redirect's, and plain git, which follows the file, does", async () => {

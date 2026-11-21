@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
-import { basename, delimiter, dirname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { basename, delimiter, join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -360,7 +360,7 @@ test("connect --keep-runs saves how many finished runs to keep, and removes olde
 });
 
 test.skipIf(process.platform === "win32")(
-	"the start check that names the agent once connected runs in an empty folder of its own, never the home directory or a checkout",
+	"the start check that names the agent once connected runs in an empty folder in chopin's state directory, never the home directory, a checkout or the shared temporary directory",
 	async () => {
 		let record = join(scratch, "check-cwd");
 		await writeFile(
@@ -377,17 +377,14 @@ test.skipIf(process.platform === "win32")(
 				await Bun.sleep(50);
 			}
 			let [where = "", ...names] = (await readFile(record, "utf8")).trim().split("\n");
-			return { where, names };
+			return { where, names, directory: result.directory };
 		};
-		let alone = await asked(["--", "probe-cwd"]);
-		expect(alone.where).not.toBe(homedir());
-		expect(await realpath(dirname(alone.where))).toBe(await realpath(tmpdir()));
-		// Nothing in it to read, and it is gone with the connector.
-		expect(alone.names).toEqual([]);
-		await expect(stat(alone.where)).rejects.toThrow();
-		let registered = await asked([await checkout(), "--", "probe-cwd"]);
-		expect(await realpath(dirname(registered.where))).toBe(await realpath(tmpdir()));
-		expect(registered.names).toEqual([]);
+		for (let args of [["--", "probe-cwd"], [await checkout(), "--", "probe-cwd"]]) {
+			let { where, names, directory } = await asked(args);
+			expect(await realpath(where)).toBe(await realpath(join(directory, "nvx", "check")));
+			// Nothing in it to read.
+			expect(names).toEqual([]);
+		}
 	},
 );
 

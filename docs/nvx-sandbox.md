@@ -123,7 +123,7 @@ nvx sandbox run --hypervisor=<kvm|mshv|whp>
   --net=10.0.0.2/24 --network-profile=portable
   --network-egress=deny --host-loopback=deny --network-proxy=10.0.0.1:<proxy port>
   --environment-file=<0600 file> --cwd=<guest path>
-  --entrypoint=/usr/bin/env --arg=-- --arg=<word>...
+  --entrypoint=/bin/sh --arg=-c --arg=<launcher> --arg=chopin-launch --arg=<word>...
   --timeout=31536000 --exec-timeout-ms=0
 ```
 
@@ -132,8 +132,11 @@ ends the VM when the workload exits, and exits with its status. The environment
 goes in a file in the launch's own record folder (`<base>/nvx/launches/<id>/`,
 `0700`), never on a command line where another process could read it with `ps`, and
 the folder goes when the launch ends. `nvx` prints the OpenVMM command it starts as
-its first stdout line; the seam drops that line, because an agent's stdout is its
-protocol.
+its first stdout line, and the guest's launcher prints `>> chopin: the workload starts`
+before it runs the agent by the name its image has it under (`/usr/bin/env -- <word>...`);
+the seam drops both lines, because an agent's stdout is its protocol. The second is how
+the connector knows the workload has started (see
+[Starting a microVM again](#starting-a-microvm-again)).
 
 There is no other way to start an agent. `spawnIn(sandbox, launch)` calls
 `sandbox.spawn`. Tests of what the connector does around an agent use a stand-in
@@ -387,7 +390,8 @@ of a launch, and NVX reseeds each restore's entropy and machine ID.
 
 The connector owns each launch's `nvx` process. On Linux it runs in a process group
 of its own, OpenVMM in it, and the connector records its process, its own process
-and its disk in `<base>/nvx/launches/<id>/launch.json`. A launch ends when:
+and the folder `nvx` keeps for the run in `<base>/nvx/launches/<id>/launch.json`. A
+launch ends when:
 
 - its work ends (the agent exits, the run finishes or is stopped, its deadline
   passes);
@@ -404,6 +408,69 @@ kills those whose connector is gone and removes the records; a launch of a chopi
 still running beside it on the same state directory is left alone. Until then such
 a VM reaches nothing: its proxy and relay died with the connector, and its tokens
 expire.
+
+### What a launch leaves
+
+`nvx sandbox run` keeps a private folder of its own in the system's temporary
+directory (`nvx-sandbox-run-<id>`, in `$TMPDIR` or `%TEMP%`) with OpenVMM's log and
+report in it. It removes the folder when its workload ends by itself, but not when it
+is ended by force, as the connector ends a launch it stops (a cold Planner when you
+press Ctrl-C, for one); `nvx sandbox run` takes no other place for it
+(`--state-dir`), and a folder in the state directory would make OpenVMM's control socket
+path longer than Linux allows. So the connector reads the folder from the OpenVMM
+command line `nvx` prints (`--microvm-report <folder>/outcome.json`, `runFolderOf`),
+records it with the launch, and removes it when the launch ends, however it ends. The
+records of a connector that died take their folders with them when the next connector
+starts.
+
+As `chopin connect` starts, it also removes the folders in its temporary directory
+that no microVM uses (`sweepRunFolders`): those of a connector that died before it
+recorded them, or of an earlier `chopin`. It looks only at its user's folders, and
+keeps one a launch's record names, one younger than a minute (an `nvx` starting), and
+one a running process names, as OpenVMM's command line does for its whole run: a
+microVM of another chopin on another base dir, or of anything else of the person's
+that runs NVX. Where it can't read the processes (`/proc` on Linux, `Win32_Process`
+on Windows), it keeps them all.
+
+The connector's own files are in its state directory, not the shared temporary
+directory: the copy of the person's git configuration its git commands read
+(`<base>/git/<pid>/`, removed as that process exits, and by the next connector once
+the process is gone), and the empty folder the agent's start check runs in
+(`<base>/nvx/check`).
+
+## Starting a microVM again
+
+Under heavy host load OpenVMM sometimes fails to start a microVM: it can't set up
+io_uring for the guest's disk, and its log ends with `driver does not support
+io-uring` (3 of about 25 starts during one busy period on the test machine; refusing
+`io_uring_setup` with `strace` makes the same failure). `nvx` itself says only
+`vmm-failure status 1`.
+
+The connector starts such a launch's microVM again, up to three starts in all, half a
+second and then a second and a half after the start that failed (`startVm`). It does
+so only for that failure, read in OpenVMM's log, which it opens as soon as `nvx` names
+the folder (`nvx` removes it as a failed start ends), and only before the workload has
+started, so an agent never sees two starts:
+
+- the guest's launcher prints `>> chopin: the workload starts` on stdout before it runs
+  the agent, and until the connector reads that line nothing of the launch's stdin
+  reaches the guest and nothing `nvx` prints on stderr reaches the caller;
+- a start whose workload started is never tried again, whatever its log says;
+- a launch stopped meanwhile is not started again: on Linux the wait is in the new
+  start's own process group, which the caller's stop ends, and on Windows a stop goes
+  through the launch, which then starts nothing more.
+
+Each start has its own record and folder, and the caller sees one process: the last
+start's exit, and its process group as `pid`. A start that fails for good, for this
+reason after three tries or for any other at once, says why on stderr with the end of
+OpenVMM's log, its last fatal error with its causes:
+
+```text
+The microVM didn't start after 3 tries: fatal error: failed to launch vm worker / Caused by: / 0: failed to launch worker / … / 4: driver does not support io-uring (nvx: error[exited]: OpenVMM exited during startup: vmm-failure status 1)
+```
+
+That line is what a run's or Planner's failure shows. `chopin connect` says each new
+start in its output.
 
 ## Concurrency and resources
 
@@ -459,11 +526,14 @@ What differs on a Windows host:
   truncating it, and a guest formats it without discards, which NTFS doesn't take.
   Space a Planner frees inside its disk isn't given back to NTFS, so a disk only grows,
   to its 32 GiB at most, until it is removed.
-- **Leftovers.** `nvx sandbox run` keeps its own folder in the system's temporary
-  directory (`nvx-sandbox-run-*`, private), which a launch ended by force leaves behind,
-  on Linux too; sweeping it is still to do. A launch's environment file stays in its
-  `0700` record folder until the launch ends, or until the next connector starts after a
-  crash.
+- **Leftovers.** `nvx sandbox run` keeps its own folder in `%TEMP%`, which a launch
+  ended by force leaves, with only `openvmm.log` in it, as on Linux; the connector
+  removes it as the launch ends, trying again for a few seconds while OpenVMM still
+  holds the log, and the next `chopin connect` removes any left (see
+  [What a launch leaves](#what-a-launch-leaves)). OpenVMM's control channel is a named
+  pipe there, so the folder's command line names it only in `--microvm-report`. A
+  launch's environment file stays in its `0700` record folder until the launch ends, or
+  until the next connector starts after a crash.
 - **Ending.** Killing `nvx.exe` leaves `openvmm.exe` running, and so does an `nvx` that
   reaches its own `--timeout` while the guest is busy (`error[still-running]`); and a VM
   killed in the middle of heavy share I/O was seen to wedge, holding its memory until
@@ -519,17 +589,18 @@ These are what the change keeps, each with the tests that hold it. The real-VM t
 (`apps/connector/src/nvx-vm.test.ts`) run where `CHOPIN_NVX_ROOT` names an NVX package
 and the user can use `/dev/kvm`, and skip elsewhere, CI included.
 
-| Invariant                     | Statement                                                                                                                                                     | Tests                                                                                                                                                                                                                                              |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No host agent                 | No agent process (coding agent, Planner backend, agent check, image build) starts outside a microVM: the seam has no other way to start one.                  | `nvx.test.ts` (the command line is `nvx sandbox run` with the agent as its workload); `nvx-vm.test.ts` (a launch runs in its guest; ending it ends OpenVMM); every caller takes a `Sandbox`                                                        |
-| Shares exact                  | A microVM's shares are exactly its launch's allowed set, with their modes, and nothing else of the host; it writes nothing of the person's.                   | `nvx.test.ts` ("a run gets … and nothing else", "no share the guest writes is a path into the person's repository", "no share holds another"); `nvx-vm.test.ts` (a write into the person's `.git` fails with a read-only file system)              |
-| Alternates read-only          | A guest's clone reads the person's objects only through a read-only path, and a Planner's copies them.                                                        | `nvx.test.ts` (the clone and its source share); `run.test.ts` (a run's clone reads the checkout's objects and adds nothing to the person's repository); `planner.test.ts`; `nvx-vm.test.ts` (a Planner's clone has its own objects)                |
-| Egress exact                  | A guest's only network endpoint is the connector's proxy, and the proxy allows only its list.                                                                 | `nvx.test.ts` (proxy-only flags; a launch's own proxy settings dropped); `nvx-vm.test.ts` (no direct connection, no DNS, only allowed hosts through the proxy); `sandbox-proxy.test.ts`                                                            |
-| No real credential in a guest | No guest gets the machine token, an AI provider key, the relay's launch credential, the owner's GitHub login or agent logins, or the connector's environment. | `nvx.test.ts` (the environment is the launch's, in a file, never on a command line); `nvx-vm.test.ts` (no secret on any host command line); `launch-handoff.test.ts` (an agent holds only stand-ins)                                               |
-| Snapshot clean                | No snapshot holds anything of a launch.                                                                                                                       | Holds trivially: this release takes no snapshots                                                                                                                                                                                                   |
-| Teardown                      | A launch that ended, was revoked or unpaired has no microVM left.                                                                                             | `nvx-vm.test.ts` (ending a launch ends OpenVMM and its record; a server the agent left running ends with it); `sandbox.ts` `endOrphans`                                                                                                            |
-| Disk in use is kept           | A Planner's disk is never removed while a microVM runs on it; a removed disk takes its tokens and state with it.                                              | `planner-disks.test.ts`                                                                                                                                                                                                                            |
-| Refuse unsupported            | A machine that can't run NVX pairs, connects and starts nothing, says why, and Chopin keeps what it said.                                                     | `nvx.test.ts` (which machines can run it); `main.test.ts`, `messages.test.ts` (refused before pairing, nothing sent); `routes.test.ts` (older connectors told to update, `microvm-required`, the capability kept and shown); `machine-contract.ts` |
+| Invariant                     | Statement                                                                                                                                                                                                  | Tests                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No host agent                 | No agent process (coding agent, Planner backend, agent check, image build) starts outside a microVM: the seam has no other way to start one.                                                               | `nvx.test.ts` (the command line is `nvx sandbox run` with the agent as its workload); `nvx-vm.test.ts` (a launch runs in its guest; ending it ends OpenVMM); every caller takes a `Sandbox`                                                                                                                                                                                 |
+| Shares exact                  | A microVM's shares are exactly its launch's allowed set, with their modes, and nothing else of the host; it writes nothing of the person's.                                                                | `nvx.test.ts` ("a run gets … and nothing else", "no share the guest writes is a path into the person's repository", "no share holds another"); `nvx-vm.test.ts` (a write into the person's `.git` fails with a read-only file system)                                                                                                                                       |
+| Alternates read-only          | A guest's clone reads the person's objects only through a read-only path, and a Planner's copies them.                                                                                                     | `nvx.test.ts` (the clone and its source share); `run.test.ts` (a run's clone reads the checkout's objects and adds nothing to the person's repository); `planner.test.ts`; `nvx-vm.test.ts` (a Planner's clone has its own objects)                                                                                                                                         |
+| Egress exact                  | A guest's only network endpoint is the connector's proxy, and the proxy allows only its list.                                                                                                              | `nvx.test.ts` (proxy-only flags; a launch's own proxy settings dropped); `nvx-vm.test.ts` (no direct connection, no DNS, only allowed hosts through the proxy); `sandbox-proxy.test.ts`                                                                                                                                                                                     |
+| No real credential in a guest | No guest gets the machine token, an AI provider key, the relay's launch credential, the owner's GitHub login or agent logins, or the connector's environment.                                              | `nvx.test.ts` (the environment is the launch's, in a file, never on a command line); `nvx-vm.test.ts` (no secret on any host command line); `launch-handoff.test.ts` (an agent holds only stand-ins)                                                                                                                                                                        |
+| Snapshot clean                | No snapshot holds anything of a launch.                                                                                                                                                                    | Holds trivially: this release takes no snapshots                                                                                                                                                                                                                                                                                                                            |
+| Teardown                      | A launch that ended, was revoked or unpaired has no microVM left, and nothing of `nvx`'s in the temporary directory.                                                                                       | `nvx-vm.test.ts` (ending a launch ends OpenVMM, its record and `nvx`'s folder; a server the agent left running ends with it); `sandbox.test.ts` (a launch ended by force leaves no folder; a dead connector's records take theirs; the sweep keeps a live launch's, its own base dir's or another's, and removes a stale one); `sandbox.ts` `endOrphans`, `sweepRunFolders` |
+| One start                     | An agent sees one start of its workload: a microVM is started again only after OpenVMM's io_uring failure, and only before its workload started, with nothing of its stdin given to the start that failed. | `sandbox.test.ts` (a fake `nvx` that fails once with that log line and then starts; no new start for another failure or once the workload started; three at most; a stop while waiting starts nothing); `nvx-vm.test.ts` (a start refused io_uring with strace starts again and its workload reads its input once)                                                          |
+| Disk in use is kept           | A Planner's disk is never removed while a microVM runs on it; a removed disk takes its tokens and state with it.                                                                                           | `planner-disks.test.ts`                                                                                                                                                                                                                                                                                                                                                     |
+| Refuse unsupported            | A machine that can't run NVX pairs, connects and starts nothing, says why, and Chopin keeps what it said.                                                                                                  | `nvx.test.ts` (which machines can run it); `main.test.ts`, `messages.test.ts` (refused before pairing, nothing sent); `routes.test.ts` (older connectors told to update, `microvm-required`, the capability kept and shown); `machine-contract.ts`                                                                                                                          |
 
 ## Measurements
 
@@ -547,5 +618,5 @@ host cache:
 
 One failure to know: OpenVMM sometimes failed to start a microVM under heavy host
 load with "driver does not support io-uring" in its log (3 of about 25 starts during
-one busy period, none in 80 since). The launch fails with that reason and the run or
-Planner can be started again; retrying such a start by itself is the next step.
+one busy period, none in 80 since). The connector starts such a microVM again (see
+[Starting a microVM again](#starting-a-microvm-again)).

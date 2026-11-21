@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import {
 	accessSync,
 	constants,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readdirSync,
@@ -20,7 +21,7 @@ import { builtInRecipe, INSTALL_FROM } from "./images";
 import { artifactsAt } from "./nvx";
 import { AgentStore } from "./machine-store";
 import { plannerEnvironment } from "./planner";
-import { createSandbox, type Launch, type Sandbox } from "./sandbox";
+import { createSandbox, type Launch, type Sandbox, startNvx, type StartOptions } from "./sandbox";
 
 /**
  * Real microVMs, on this machine's KVM: what a guest can reach, write and keep. They run where
@@ -50,12 +51,33 @@ if (!usable) {
 	console.warn("Skipping the microVM tests: set CHOPIN_NVX_ROOT and give this user /dev/kvm.");
 }
 
+// The microVMs' failures to start are made with strace, as OpenVMM's under heavy load: io_uring
+// can't be set up, and its disk can't be either.
+let strace = Bun.which("strace");
+if (usable && !strace && process.env.CHOPIN_NVX_REQUIRED) {
+	throw new Error("The microVM tests need strace to make a start fail.");
+}
+
 let scratch = mkdtempSync(join(tmpdir(), "chopin-nvx-vm-"));
 let base = process.env.CHOPIN_NVX_TEST_BASE ?? join(scratch, "state");
 let sandbox: Sandbox;
 let chopin: ReturnType<typeof Bun.serve>;
 let other: ReturnType<typeof Bun.serve>;
 let repository = join(scratch, "repo");
+/** How many of the next starts of a microVM fail as OpenVMM's did under heavy load. */
+let failing = 0;
+let retried: string[] = [];
+
+/** `nvx`, or `nvx` under strace with io_uring refused, as OpenVMM is refused it under heavy load. */
+function start(program: string, words: string[], launch: StartOptions) {
+	if (failing <= 0 || !strace) return startNvx(program, words, launch);
+	failing--;
+	return startNvx(
+		strace,
+		["-f", "-qq", "-o", "/dev/null", "-e", "inject=io_uring_setup:error=ENOMEM", program, ...words],
+		launch,
+	);
+}
 
 function git(cwd: string, ...args: string[]) {
 	let result = spawnSync("git", [
@@ -142,6 +164,8 @@ beforeAll(async () => {
 				},
 			],
 		]),
+		start,
+		retrying: detail => retried.push(detail),
 	});
 }, 600_000);
 
@@ -398,27 +422,101 @@ describe.skipIf(!usable)("an agent in its microVM", () => {
 		expect(readdirSync(join(base, "nvx", "launches"))).toEqual([]);
 	}, 120_000);
 
-	test("ending a launch ends its microVM, OpenVMM included", async () => {
-		let tokens = join(base, "runs", "vm-end.tokens");
-		mkdirSync(tokens, { recursive: true });
-		let child = sandbox.spawn({
-			command: ["bash", "-c", "echo up; sleep 600"],
-			cwd: tokens,
-			env: {},
-			stdin: "ignore",
-			own: [tokens],
-		});
-		await new Promise<void>(resolve => child.stdout.once("data", () => resolve()));
-		let group = child.pid!;
-		let members = () =>
-			spawnSync("ps", ["-o", "pid=", "-g", String(group)], { encoding: "utf8" }).stdout.trim();
-		expect(members()).not.toBe("");
-		let ended = Date.now();
-		process.kill(-group, "SIGKILL");
-		while (members() && Date.now() - ended < 5_000) await Bun.sleep(100);
-		expect(members()).toBe("");
-		expect(readdirSync(join(base, "nvx", "launches"))).toEqual([]);
-	}, 120_000);
+	test(
+		"ending a launch ends its microVM, OpenVMM included, and leaves nothing of nvx's",
+		async () => {
+			let tokens = join(base, "runs", "vm-end.tokens");
+			mkdirSync(tokens, { recursive: true });
+			let child = sandbox.spawn({
+				command: ["bash", "-c", "echo up; sleep 600"],
+				cwd: tokens,
+				env: {},
+				stdin: "ignore",
+				own: [tokens],
+			});
+			let closed = new Promise(resolve => child.once("close", resolve));
+			let up = await new Promise<string>(resolve =>
+				child.stdout.once("data", chunk => resolve(String(chunk)))
+			);
+			// The guest's first words are the workload's own: nothing of nvx's or of the launcher's.
+			expect(up).toBe("up\n");
+			let launches = join(base, "nvx", "launches");
+			let [name] = readdirSync(launches);
+			let { run } = JSON.parse(readFileSync(join(launches, name!, "launch.json"), "utf8"));
+			// nvx keeps a folder in the temporary directory, which it leaves when ended by force.
+			expect(readdirSync(run)).toContain("openvmm.log");
+			let group = child.pid!;
+			let members = () =>
+				spawnSync("ps", ["-o", "pid=", "-g", String(group)], { encoding: "utf8" }).stdout.trim();
+			expect(members()).not.toBe("");
+			let ended = Date.now();
+			process.kill(-group, "SIGKILL");
+			while (members() && Date.now() - ended < 5_000) await Bun.sleep(100);
+			expect(members()).toBe("");
+			await closed;
+			expect(existsSync(run)).toBe(false);
+			expect(readdirSync(launches)).toEqual([]);
+		},
+		120_000,
+	);
+
+	test.skipIf(!strace)(
+		"a microVM OpenVMM couldn't start for io_uring starts again, and its workload runs once",
+		async () => {
+			let tokens = join(base, "runs", "vm-again.tokens");
+			mkdirSync(tokens, { recursive: true });
+			let runs = join(base, "runs", "vm-again.agent");
+			retried = [];
+			failing = 1;
+			let child = sandbox.spawn({
+				command: ["bash", "-c", `echo ran >> ${runs}/runs; read line; echo "read $line"`],
+				cwd: runs,
+				env: {},
+				stdin: "pipe",
+				own: [tokens, runs],
+				agentHome: runs,
+			});
+			// Written before the microVM started: the workload that starts reads it, once.
+			child.stdin!.end("hello\n");
+			let out = "";
+			let err = "";
+			child.stdout.on("data", chunk => out += chunk);
+			child.stderr.on("data", chunk => err += chunk);
+			let code = await new Promise(resolve => child.once("close", resolve));
+			expect({ code, out, err }).toEqual({ code: 0, out: "read hello\n", err: "" });
+			expect(readFileSync(join(runs, "runs"), "utf8")).toBe("ran\n");
+			expect(retried).toEqual([
+				"A microVM didn't start (OpenVMM: driver does not support io-uring), so chopin starts it again (2 of 3).",
+			]);
+			expect(readdirSync(join(base, "nvx", "launches"))).toEqual([]);
+		},
+		120_000,
+	);
+
+	test.skipIf(!strace)(
+		"a microVM that never starts says why with the end of OpenVMM's log",
+		async () => {
+			let tokens = join(base, "runs", "vm-never.tokens");
+			mkdirSync(tokens, { recursive: true });
+			failing = 3;
+			let { code, out, err } = await run({
+				command: ["bash", "-c", "echo ran"],
+				cwd: tokens,
+				env: {},
+				stdin: "ignore",
+				own: [tokens],
+			});
+			expect({ code, out }).toEqual({ code: 1, out: "" });
+			expect(err).toStartWith(
+				"The microVM didn't start after 3 tries: fatal error: failed to launch vm worker / ",
+			);
+			expect(err).toContain(
+				"4: driver does not support io-uring (nvx: error[exited]: OpenVMM exited during startup: vmm-failure status 1)",
+			);
+			expect(failing).toBe(0);
+		},
+		120_000,
+	);
 
 	test("the guest's environment comes from its file and never a command line", async () => {
 		let tokens = join(base, "runs", "vm-env.tokens");

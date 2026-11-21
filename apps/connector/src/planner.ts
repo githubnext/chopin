@@ -1176,14 +1176,17 @@ export async function stopBackend(
 		return;
 	}
 	if (!pid || !signalGroup(pid, "SIGTERM")) return;
+	// A microVM whose start failed just as it was stopped may be starting again, in a process group
+	// of its own (see `startVm`), so the group is read each time.
+	let group = () => child.pid ?? pid;
 	let gone = async (ms: number) => {
 		for (let deadline = Date.now() + ms; Date.now() < deadline;) {
 			await new Promise(resolve => setTimeout(resolve, 50));
-			if (!signalGroup(pid, 0)) return true;
+			if (!signalGroup(group(), 0)) return true;
 		}
 		return false;
 	};
-	if (await gone(processes.graceMs) || !signalGroup(pid, "SIGKILL")) return;
+	if (await gone(processes.graceMs) || !signalGroup(group(), "SIGKILL")) return;
 	await gone(1000);
 }
 

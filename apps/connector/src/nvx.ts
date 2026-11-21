@@ -686,10 +686,23 @@ export const GUEST_NETWORK = "10.0.0.2/24";
 export const GATEWAY = "10.0.0.1";
 
 /**
+ * What a guest prints on its stdout as it starts its workload, before anything of the workload's
+ * own: the line that tells the connector the workload has started, which it takes out (see
+ * `startVm`).
+ */
+export const STARTED_LINE = ">> chopin: the workload starts";
+
+/**
+ * The guest's command around an image's workload: it says the workload starts, then runs it by the
+ * name the guest finds it by on its PATH.
+ */
+export const LAUNCHER = `echo '${STARTED_LINE}'; exec /usr/bin/env -- "$@"`;
+
+/**
  * The guest's command where it runs as the layer's `nobody` (an image's build), which owns nothing
  * shared: what it makes in a share is left writable to it.
  */
-export const OPEN_LAUNCHER = 'umask 000; exec "$@"';
+export const OPEN_LAUNCHER = `umask 000; echo '${STARTED_LINE}'; exec "$@"`;
 
 /**
  * The `nvx sandbox run` command line for `spec`: the Ubuntu layer under a RAM upper, the shares,
@@ -735,15 +748,11 @@ export function nvxArguments(
 		`--network-proxy=${GATEWAY}:${spec.proxyPort}`,
 		`--environment-file=${environmentFile}`,
 		`--cwd=${spec.cwd}`,
-		...spec.image
-			? [`--entrypoint=/usr/bin/env`, "--arg=--", ...spec.command.map(word => `--arg=${word}`)]
-			: [
-				"--entrypoint=/bin/sh",
-				"--arg=-c",
-				`--arg=${OPEN_LAUNCHER}`,
-				"--arg=chopin-launch",
-				...spec.command.map(word => `--arg=${word}`),
-			],
+		"--entrypoint=/bin/sh",
+		"--arg=-c",
+		`--arg=${spec.image ? LAUNCHER : OPEN_LAUNCHER}`,
+		"--arg=chopin-launch",
+		...spec.command.map(word => `--arg=${word}`),
 		// The workload's own deadline is the connector's (a run's limit, a Planner's life), not NVX's.
 		"--timeout=31536000",
 		"--exec-timeout-ms=0",
