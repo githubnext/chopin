@@ -75,29 +75,36 @@ describe("which machines can run NVX", () => {
 		});
 	});
 
-	test("a user who can't use /dev/kvm is told to join the kvm group", () => {
-		let support = nvxSupport(host({ devices: { "/dev/kvm": false } }));
-		expect(support).toMatchObject({
+	/** What an administrator can do instead, for either: grant the user /dev/kvm with a udev rule. */
+	const RULE = 'Or have an administrator add a udev rule, such as KERNEL=="kvm", GROUP="kvm", '
+		+ 'MODE="0660", RUN+="/usr/bin/setfacl -m u:<user>:rw /dev/kvm" (logind may drop that ACL)';
+
+	test("a user who can't use /dev/kvm is told to join the kvm group, or to have it granted", () => {
+		expect(nvxSupport(host({ devices: { "/dev/kvm": false } }))).toEqual({
 			supported: false,
-			reason: expect.stringContaining("/dev/kvm"),
+			reason: "Your user can't read and write /dev/kvm.",
+			fix: "sudo usermod -aG kvm $USER, then log out and back in (for the chopin service, restart "
+				+ `the machine). ${RULE}`,
 		});
-		expect(support.supported === false && support.fix).toContain("usermod -aG kvm");
 	});
 
-	test("a user who joined the kvm group after chopin's login began is told to log in again, or to restart the service's user manager", () => {
-		let support = nvxSupport({
+	test("a user who joined the kvm group after chopin's login began is told to log in again, or for the service to restart the machine", () => {
+		expect(nvxSupport({
 			...host({ devices: { "/dev/kvm": false } }),
 			joinedLater: path => path === "/dev/kvm",
-		});
-		expect(support).toEqual({
+		})).toEqual({
 			supported: false,
 			reason: "Your user is in the kvm group, but chopin runs in a login that began before you "
 				+ "joined it, so it can't read and write /dev/kvm yet.",
-			fix:
-				"log out and in again, then run chopin there (for the chopin service, whose systemd user "
-				+ "manager began before you joined, restart the machine or run: sudo systemctl restart "
-				+ "user@$(id -u))",
+			fix: `Log out and back in (for the chopin service, restart the machine). ${RULE}`,
 		});
+	});
+
+	test("no fix restarts the user's systemd manager, which would end every one of their sessions and services", () => {
+		for (let joinedLater of [() => false, () => true]) {
+			let support = nvxSupport({ ...host({ devices: { "/dev/kvm": false } }), joinedLater });
+			expect(support.supported === false && support.fix).not.toContain("systemctl");
+		}
 	});
 
 	test("a machine without virtualization, a Mac and an Arm machine have nothing to fix", () => {

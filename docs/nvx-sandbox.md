@@ -55,14 +55,17 @@ whose WHP is off fails its first microVM, which says so.
   This machine can't run Chopin's work: Chopin runs each agent in its own microVM,
   which needs Linux or Windows on x86_64 with hardware virtualization. Your user
   can't read and write /dev/kvm.
-  Fix: sudo usermod -aG kvm $USER, then log out and in again (for the chopin service,
-  restart the machine or run: sudo systemctl restart user@$(id -u))
+  Fix: sudo usermod -aG kvm $USER, then log out and back in (for the chopin service,
+  restart the machine). Or have an administrator add a udev rule, such as
+  KERNEL=="kvm", GROUP="kvm", MODE="0660", RUN+="/usr/bin/setfacl -m u:<user>:rw /dev/kvm"
+  (logind may drop that ACL)
   ```
 
   A user who is in the `kvm` group, though the login `chopin` runs in began before
   they joined it (for the service, its systemd user manager, which a logout leaves
-  running), is told so, and to log out and in again or restart `user@$(id -u)`
-  (`joinedLater` reads the group database with `id -G`). A Mac, an Arm machine or one
+  running), is told so, and to log out and back in, or for the service to restart the
+  machine (`joinedLater` reads the group database with `id -G`). No fix restarts
+  `user@$(id -u)`, which would end every session and service of the user's. A Mac, an Arm machine or one
   without virtualization is told there is nothing to fix there. `chopin status` shows
   the same words in its `Agents` row.
 - **A machine paired before this release** that can't run NVX tells Chopin once,

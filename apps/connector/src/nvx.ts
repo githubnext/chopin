@@ -125,9 +125,16 @@ export function nvxSupport(host: SupportHost): NvxSupport {
 export type HypervisorDevice = "/dev/kvm" | "/dev/mshv";
 
 /**
+ * What an administrator can do instead of a group for a user's /dev/kvm: grant it with a udev rule.
+ * Never `systemctl restart user@…`, which would end every session and service of the user's.
+ */
+const UDEV_RULE = 'Or have an administrator add a udev rule, such as KERNEL=="kvm", GROUP="kvm", '
+	+ 'MODE="0660", RUN+="/usr/bin/setfacl -m u:<user>:rw /dev/kvm" (logind may drop that ACL)';
+
+/**
  * Why a Linux user can't use the hypervisor's `device`, which is there, with the fix: join the kvm
  * group, or, for one who has since chopin's login began, start that login again (for the service,
- * its systemd user manager, which a logout leaves running).
+ * whose systemd user manager a logout leaves running, the machine), or have it granted.
  */
 export function deviceDenied(
 	device: HypervisorDevice,
@@ -145,17 +152,14 @@ export function deviceDenied(
 			supported: false,
 			reason: "Your user is in the kvm group, but chopin runs in a login that began before you "
 				+ "joined it, so it can't read and write /dev/kvm yet.",
-			fix:
-				"log out and in again, then run chopin there (for the chopin service, whose systemd user "
-				+ "manager began before you joined, restart the machine or run: sudo systemctl restart "
-				+ "user@$(id -u))",
+			fix: `Log out and back in (for the chopin service, restart the machine). ${UDEV_RULE}`,
 		};
 	}
 	return {
 		supported: false,
 		reason: "Your user can't read and write /dev/kvm.",
-		fix: "sudo usermod -aG kvm $USER, then log out and in again (for the chopin service, "
-			+ "restart the machine or run: sudo systemctl restart user@$(id -u))",
+		fix: "sudo usermod -aG kvm $USER, then log out and back in (for the chopin service, restart "
+			+ `the machine). ${UDEV_RULE}`,
 	};
 }
 
