@@ -277,6 +277,7 @@ export function ProjectSidebarProject(
 			)}
 			{(groups.length > 0 || presence.rows.length > 0) && (
 				<ul
+					aria-busy={documents.status === "loading" || undefined}
 					className="project-sidebar-documents"
 					onBlur={intent.onBlur}
 					onClick={intent.onClick}
@@ -345,9 +346,6 @@ export function ProjectSidebarProject(
 						);
 					})}
 				</ul>
-			)}
-			{documents.status === "loading" && groups.length > 0 && (
-				<p className="project-sidebar-status" data-loading="" role="status">Loading more…</p>
 			)}
 			{documents.status === "ready" && documents.nextCursor && (
 				<button
