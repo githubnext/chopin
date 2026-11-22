@@ -83,6 +83,12 @@
 	transform-origin: var(--motion-origin-x, right) top;
 }
 
+/* Found by its shadow by day; at night, where shadows hardly show, by a light hairline too. */
+:where(.machines-add-menu) {
+	outline: var(--edge-width) solid var(--color-raised-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
 .machines-add-icon {
 	margin-top: calc((var(--text-sm--line-height) * 1em - 18px) / 2);
 }
@@ -849,6 +855,12 @@
 	padding: var(--menu-padding);
 	box-shadow: var(--shadow-raised);
 	transform-origin: top right;
+}
+
+/* Found by its shadow by day; at night, where shadows hardly show, by a light hairline too. */
+:where(.machine-actions-menu) {
+	outline: var(--edge-width) solid var(--color-raised-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 }
 
 /* A copy item names its action, with the command it copies underneath. */

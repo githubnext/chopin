@@ -87,26 +87,6 @@
 		]
 	},
 	{
-		"file": "apps/web/src/navigation.css",
-		"reason": "Sidebar resize affordance uses neutral 20% black; its interaction geometry owns this existing local treatment.",
-		"cases": [
-			[
-				"color",
-				"background",
-				"rgb(0 0 0 / 20%)",
-				"CSS > .navigation-drawer-backdrop",
-				1
-			],
-			[
-				"color",
-				"background",
-				"rgb(0 0 0 / 20%)",
-				"CSS > .navigation-modal-backdrop",
-				1
-			]
-		]
-	},
-	{
 		"file": "apps/web/src/local-login.css",
 		"reason": "Sign-in pulse is a continuous 1.6s status signal with its established curve; not a surface transition role.",
 		"cases": [
