@@ -78,6 +78,8 @@
 	--color-page: oklch(1 0 0);
 	/* Menus, popovers and dialogs: the page in light; one lighter step at night, where depth is light. */
 	--color-raised: var(--color-page);
+	/* Chat's message toolbar, which stands on a shown row's shade: lighter than every shade. */
+	--color-toolbar: var(--color-page);
 	/* A raised surface that draws no hairline of its own by day is found by its shadow; at night by this. */
 	--color-raised-edge: transparent;
 	--color-ground: var(--color-gray-150);
@@ -625,6 +627,8 @@
 
 	--color-page: oklch(0.245 0.006 95); /* #21201d */
 	--color-raised: oklch(0.27 0.007 95); /* #272623 */
+	/* A shown row's shade is lighter than the ground at night, so the toolbar on it is lighter still. */
+	--color-toolbar: oklch(0.34 0.007 95); /* #393834 */
 	/*
 	 * A hover lightens whatever it lies on, the ground, the sheet or a menu, as in light it moves
 	 * each toward the page; one opaque step cannot be lighter than all three.

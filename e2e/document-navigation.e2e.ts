@@ -196,6 +196,9 @@ test("account menu closes on Escape and outside click, and returns focus", async
 	await expect(menu).toBeVisible();
 	await page.keyboard.press("ArrowDown");
 	await expect(menu.getByRole("menuitem", { name: "Keyboard shortcuts" })).toBeFocused();
+	// The Theme row is one stop, at its chosen segment (theme.e2e.ts walks it).
+	await page.keyboard.press("ArrowDown");
+	await expect(menu.getByRole("menuitemradio", { name: "System", exact: true })).toBeFocused();
 	await page.keyboard.press("ArrowDown");
 	await expect(menu.getByRole("menuitem", { name: "Sign out" })).toBeFocused();
 	await page.keyboard.press("Escape");
