@@ -59,6 +59,15 @@ export function faceCorner(size: number): keyof typeof FACE_RADIUS_CLASS {
 	return size <= 18 ? "small" : "regular";
 }
 
+/**
+ * A face's initial: the person's colour mixed into the primary ink, `share` percent of it. With the
+ * face's wash of the same colour behind it, 80 reads at 4.5:1 or more on the light page and 60 on
+ * the dark one, for every colour in `cursor.ts`.
+ */
+function mixInk(tone: string, share: number): string {
+	return `color-mix(in srgb, ${tone} ${share}%, var(--color-text-primary))`;
+}
+
 /** Keyed by handle so a reused mount never carries one person's load state to another. */
 export function Face({ decorative, handle, ring, size, textSize, titled }: FaceProps) {
 	return (
@@ -102,7 +111,8 @@ function Portrait(
 				width: size,
 				height: size,
 				background: `color-mix(in srgb, ${tone} 18%, var(--color-page))`,
-				color: `color-mix(in srgb, ${tone} 80%, var(--color-text-primary))`,
+				// Less of the person's colour at night, where the ink it is mixed into is light.
+				color: `light-dark(${mixInk(tone, 80)}, ${mixInk(tone, 60)})`,
 			}}
 			title={titled ? name : undefined}
 		>
