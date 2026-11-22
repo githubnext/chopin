@@ -78,6 +78,8 @@
 	--color-page: oklch(1 0 0);
 	/* Menus, popovers and dialogs: the page in light; one lighter step at night, where depth is light. */
 	--color-raised: var(--color-page);
+	/* A raised surface that draws no hairline of its own by day is found by its shadow; at night by this. */
+	--color-raised-edge: transparent;
 	--color-ground: var(--color-gray-150);
 	--color-hover: var(--color-gray-100);
 	--color-inset: var(--color-gray-100);
@@ -110,6 +112,8 @@
 	--color-glass: color-mix(in oklch, var(--color-page) 72%, transparent);
 	/* Dims the page beneath a phone sheet. Every sheet shares it, and one grabber. */
 	--color-scrim: oklch(var(--shadow-color) / 32%);
+	/* Dims the page beneath a dialog and the Projects drawer. */
+	--color-backdrop: rgb(0 0 0 / 20%);
 	--color-grabber: var(--color-gray-300);
 	/*
 	 * A resting thumb is solid, so it reads equally light on page, ground and menus.
@@ -631,6 +635,8 @@
 	--color-chat-row-hover: oklch(var(--ink-tint) / 4.5%);
 	--color-chat-row-selected: oklch(var(--ink-tint) / 7%);
 	--color-scrim: oklch(var(--shadow-color) / 55%);
+	--color-backdrop: oklch(var(--shadow-color) / 55%);
+	--color-raised-edge: var(--color-edge);
 	--color-scrollbar-thumb-static: oklch(var(--ink-tint) / 30%);
 	--color-scrollbar-thumb-hover: oklch(var(--ink-tint) / 48%);
 	--color-scrollbar-thumb-active: oklch(var(--ink-tint) / 58%);
