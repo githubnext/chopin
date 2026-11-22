@@ -267,8 +267,8 @@ export function plannerHoldContract(name: string, factory: StorageFactory) {
 				expect(await storage.plannerHolds.get(b)).toBeUndefined();
 				expect(await storage.plannerHolds.get(c)).toBeDefined();
 
-				await storage.channels.archive({ id: c, now: AT, lease: await testLease(storage) });
-				expect(await storage.channels.delete(c)).toBe(true);
+				expect(await storage.channels.delete({ id: c, lease: await testLease(storage) }))
+					.toHaveLength(1);
 				expect(await storage.plannerHolds.get(c)).toBeUndefined();
 				expect(await storage.plannerHolds.get(d)).toBeDefined();
 			} finally {

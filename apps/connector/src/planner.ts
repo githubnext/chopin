@@ -165,6 +165,12 @@ export function dispatchedPlanners(options: {
 	agentStore?: AgentStore;
 	spares?: PlannerSpares;
 	gate?: LaunchGate;
+	/**
+	 * A Planner Chopin stopped asking for has exited and let go of its disk: its document's id, so
+	 * the machine asks Chopin now (`planner/kept`) whether to forget that disk, as when its document
+	 * was deleted, rather than at the next hourly sweep.
+	 */
+	withdrawn?: (id: string) => void;
 }) {
 	type Backend = {
 		url: string;
@@ -183,6 +189,11 @@ export function dispatchedPlanners(options: {
 	let withdraw = (id: string, backend: Backend, reason?: string) => {
 		running.delete(id);
 		backend.stop.abort();
+		if (!backend.own) {
+			void backend.served.catch(() => {}).then(() => {
+				if (!options.signal.aborted) options.withdrawn?.(id);
+			});
+		}
 		if (!backend.own && !options.signal.aborted) {
 			options.output.say(
 				`Stopped the Planner for ${backend.url}: ${

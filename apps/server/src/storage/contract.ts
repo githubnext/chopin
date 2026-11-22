@@ -4,6 +4,7 @@ import { experimentContract } from "./experiment-contract";
 import { chatAttachmentContract } from "./chat-attachment-contract";
 import { imageContract } from "./image-contract";
 import { decisionAnswerContract } from "./decision-answer-contract";
+import { deletionContract } from "./deletion-contract";
 import { versionContract } from "./version-contract";
 import { machineContract } from "./machine-contract";
 import { plannerAttachmentContract } from "./planner-attachment-contract";
@@ -57,6 +58,7 @@ export function storageContract(name: string, factory: Factory): void {
 	imageContract(name, factory);
 	chatAttachmentContract(name, factory);
 	decisionAnswerContract(name, factory);
+	deletionContract(name, factory);
 	versionContract(name, factory);
 	machineContract(name, factory);
 	childChannelContract(name, factory);
@@ -518,13 +520,24 @@ export function storageContract(name: string, factory: Factory): void {
 					now: new Date("2026-01-04T03:04:05.000Z"),
 				})).rejects.toMatchObject({ failure: "conflict" });
 
+				// A child goes only with its parent, and deleting the parent takes it, archived or not.
+				let lease = await testLease(storage);
+				await expect(storage.channels.delete({ id: childId, lease }))
+					.rejects.toMatchObject({ failure: "conflict" });
+				expect(await storage.channels.get(childId)).toBeDefined();
 				await storage.channels.archive({
 					id: parentChannelId,
 					now: new Date("2026-01-05T03:04:05.000Z"),
-					lease: await testLease(storage),
+					lease,
 				});
-				await expect(storage.channels.delete(parentChannelId))
-					.rejects.toMatchObject({ failure: "conflict" });
+				let deleted = await storage.channels.delete({ id: parentChannelId, lease });
+				expect(deleted.map(item => item.id)).toEqual([parentChannelId, childId]);
+				expect(deleted[1]).toMatchObject({ parentChannelId, title: "Research report" });
+				expect(await storage.channels.get(parentChannelId)).toBeUndefined();
+				expect(await storage.channels.get(childId)).toBeUndefined();
+				expect(await storage.collaboration.load(childId, new Date())).toBeUndefined();
+				expect((await storage.channels.list(repositoryId, 20, undefined, undefined, true))
+					.channels.map(item => item.id)).not.toContain(childId);
 			} finally {
 				await storage.close();
 			}
@@ -837,7 +850,7 @@ export function storageContract(name: string, factory: Factory): void {
 			}
 		});
 
-		it("deletes only archived channels and permits clean identity reuse", async () => {
+		it("deletes a document whole, active or archived, and permits clean identity reuse", async () => {
 			let storage = await opened(factory);
 			try {
 				let { userId, sessionId, channelId, repositoryId, lease } = await userAndChannel(storage);
@@ -954,15 +967,19 @@ export function storageContract(name: string, factory: Factory): void {
 					title: "Launch plan",
 					now: new Date("2026-01-08T03:04:05.000Z"),
 				});
-				await expect(storage.channels.delete(channelId))
+				// A process that no longer holds the writer lease deletes nothing: all of it or none.
+				expect(await storage.leases.release(lease)).toBe(true);
+				await expect(storage.channels.delete({ id: channelId, lease }))
 					.rejects.toMatchObject({ failure: "conflict" });
-				await storage.channels.archive({
-					id: channelId,
-					now: new Date("2026-01-09T03:04:05.000Z"),
-					lease: await testLease(storage),
-				});
-				expect(await storage.channels.delete(channelId)).toBe(true);
-				expect(await storage.channels.delete(channelId)).toBe(false);
+				expect(await storage.channels.get(channelId)).toMatchObject({ id: channelId });
+				expect((await storage.collaboration.load(channelId, new Date()))?.snapshot)
+					.toBeDefined();
+				expect(await storage.research.get(channelId, workspaceInput.id)).toBeDefined();
+				lease = await testLease(storage);
+				// An active document is deleted as it is; a second delete finds nothing.
+				expect((await storage.channels.delete({ id: channelId, lease })).map(item => item.id))
+					.toEqual([channelId]);
+				expect(await storage.channels.delete({ id: channelId, lease })).toEqual([]);
 
 				expect(await storage.channels.get(channelId)).toBeUndefined();
 				expect(await storage.channels.resolve(repositoryId, "release-plan")).toBeUndefined();
@@ -1021,16 +1038,19 @@ export function storageContract(name: string, factory: Factory): void {
 
 				let recreatedWorkspace = await storage.research.create({
 					...workspaceInput,
+					lease,
 					now: new Date("2026-01-10T03:06:05.000Z"),
 				});
 				expect(recreatedWorkspace.repeated).toBe(false);
 				let recreatedConfirmation = await storage.research.confirm({
 					...confirmation,
+					lease,
 					now: new Date("2026-01-10T03:06:06.000Z"),
 				});
 				expect(recreatedConfirmation.repeated).toBe(false);
 				let recreatedJob = await storage.jobs.enqueue({
 					...jobInput,
+					lease,
 					availableAt: new Date("2026-01-10T03:06:07.000Z"),
 					now: new Date("2026-01-10T03:06:07.000Z"),
 				});
@@ -1050,6 +1070,7 @@ export function storageContract(name: string, factory: Factory): void {
 				expect(
 					(await storage.research.appendAgentMessage({
 						...agentMessage,
+						lease,
 						now: new Date("2026-01-10T03:06:09.000Z"),
 					})).repeated,
 				).toBe(false);

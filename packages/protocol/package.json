@@ -61,6 +61,10 @@
 			"types": "./document-url.ts",
 			"default": "./document-url.ts"
 		},
+		"./document-delete": {
+			"types": "./document-delete.ts",
+			"default": "./document-delete.ts"
+		},
 		"./github-reference": {
 			"types": "./github-reference.ts",
 			"default": "./github-reference.ts"

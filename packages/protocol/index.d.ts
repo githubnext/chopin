@@ -151,9 +151,14 @@ export declare namespace Session {
 		canManage: boolean;
 	};
 
-	/** The durable document was permanently deleted. This connection is terminal. */
+	/**
+	 * The durable document was permanently deleted, or its parent was. This connection is terminal.
+	 * `by` is the GitHub login of the person who deleted it, when the server knows; an older server
+	 * omits it.
+	 */
 	export type Deleted = KIND<"session:deleted"> & {
 		channelId: string;
+		by?: string;
 	};
 
 	/**

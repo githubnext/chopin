@@ -444,15 +444,20 @@ export function aiCredentialContract(name: string, factory: StorageFactory) {
 			}
 		});
 
-		test("goes with its document", async () => {
+		test("goes with its document, active as it is, and a launch prepared before writes none after", async () => {
 			let storage = await openedStorage(factory);
 			try {
 				let { channelId, placeholder, lease } = await launched(storage);
 				let stored = placeholder();
 				await storage.aiPlaceholders.put([stored]);
-				await storage.channels.archive({ id: channelId, now: AT, lease });
-				expect(await storage.channels.delete(channelId)).toBe(true);
+				let cutoffs = storage.aiPlaceholders.cutoffs();
+				expect(await storage.channels.delete({ id: channelId, lease })).toHaveLength(1);
+				// A cutoff, as an archive is: the credential proxy reads again around it.
+				expect(storage.aiPlaceholders.cutoffs()).toBeGreaterThan(cutoffs);
 				expect(await storage.aiPlaceholders.find(stored.digest, AT)).toBeUndefined();
+				let late = placeholder();
+				expect(await storage.aiPlaceholders.put([late]).catch(() => false)).toBe(false);
+				expect(await storage.aiPlaceholders.find(late.digest, AT)).toBeUndefined();
 			} finally {
 				await storage.close();
 			}

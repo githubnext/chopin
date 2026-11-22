@@ -18,6 +18,7 @@ import {
 
 import { ActionSheet } from "./action-sheet";
 import { unansweredDecisionsLabel } from "./decision-view-control";
+import { mayDeleteDocument } from "@chopin/protocol/document-delete";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { AiAccountsEntry } from "./ai-accounts/entry";
 import { MachinesEntry } from "./machines-entry";
@@ -169,6 +170,8 @@ export function DocumentsSheet(
 					{canManageProject(entry.project) && (
 						<DocumentActionsMenu
 							channel={channel}
+							deletable={!!entry.project.repository
+								&& mayDeleteDocument(channel, entry.project.repository.permissions, user.id)}
 							className="documents-sheet-more"
 							onAction={action => onDocumentAction(channel, action)}
 							trigger={<EllipsisIcon aria-hidden="true" size={18} />}

@@ -23,6 +23,7 @@ import type {
 	ChannelArchiveInput,
 	ChannelArchiveResult,
 	ChannelDecisionCount,
+	ChannelDelete,
 	ChannelPage,
 	ChannelRecord,
 	ChannelScanCursor,
@@ -315,7 +316,13 @@ export interface ChannelStore {
 	 */
 	archive(input: ChannelArchive): Promise<ChannelArchiveResult>;
 	restore(input: ChannelArchiveInput): Promise<ChannelArchiveResult>;
-	delete(id: string): Promise<boolean>;
+	/**
+	 * Deletes a top-level document, active or archived, with its children and every row tied to any
+	 * of them, in one transaction under `input.lease`: all of it or none. Answers what it deleted,
+	 * the document first, or nothing when it is already gone. A child is deleted only with its
+	 * parent, so deleting one directly is a conflict. Ends its launches' AI placeholders, a cutoff.
+	 */
+	delete(input: ChannelDelete): Promise<ChannelRecord[]>;
 	publishDescription(input: PublishChannelDescription): Promise<PublishChannelDescriptionResult>;
 	list(
 		repositoryId: string,

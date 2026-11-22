@@ -77,6 +77,13 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > TrashIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > DocumentIcon > <LineIcon>",
 				1
 			],
@@ -123,7 +130,7 @@
 				1
 			]
 		],
-		"sourceHash": "5aab9c842201b9451e4e1322d8ef16f5803e7b55310ab87eb46b9d42c375433a"
+		"sourceHash": "68f9d51ece5afd8399c2e1d76b21b8df84b481e1868c3dd1cfcc73d963725f6c"
 	},
 	{
 		"file": "packages/icons/src/line.tsx",

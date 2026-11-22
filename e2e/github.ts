@@ -60,6 +60,8 @@ function accessGate(handle: string): string {
 // octo-org/score: a reader may pull but not push, and an outsider cannot see it.
 const SCORE_READER = "score-reader-";
 const SCORE_OUTSIDER = "score-outsider-";
+// An administrator of octo-org/score, who may delete anyone's document in it.
+const SCORE_ADMIN = "score-admin-";
 // Someone who shares a machine in a test sees one repository, a private one of their own, so the
 // machine is listed to nobody else on the server: a shared machine serves every repository its
 // owner can push to, and a teammate sees it wherever they can push to one too.
@@ -374,6 +376,9 @@ let fake = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof f
 			if (handle.startsWith(SCORE_OUTSIDER) && repository.name === "score") return [];
 			if (handle.startsWith(SCORE_READER) && repository.name === "score") {
 				return [{ ...repository, permissions: { ...repository.permissions, push: false } }];
+			}
+			if (handle.startsWith(SCORE_ADMIN) && repository.name === "score") {
+				return [{ ...repository, permissions: { ...repository.permissions, admin: true } }];
 			}
 			return handle.startsWith("document-creator-") && CREATOR_WRITABLE.has(repository.name)
 				? [{ ...repository, permissions: { ...repository.permissions, push: true } }]

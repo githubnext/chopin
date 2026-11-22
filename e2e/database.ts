@@ -55,14 +55,17 @@ export async function createChannel(
 	port: number,
 	id: string,
 	repository = SCORE,
+	/** Who created it, the one who may delete it with a repository admin; `e2e` by default. */
+	creator = "e2e",
 ): Promise<void> {
 	await sql(port, async database => {
 		let now = new Date();
 		let slug = testChannelSlug(id);
+		let createdBy = `U_${creator}`;
 		await database.begin(async transaction => {
 			await transaction`
 				INSERT INTO users (id, login, avatar_url, created_at, updated_at)
-				VALUES ('U_e2e', 'e2e', '', ${now}, ${now})
+				VALUES (${createdBy}, ${creator}, '', ${now}, ${now})
 				ON CONFLICT (id) DO NOTHING
 			`;
 			await transaction`
@@ -72,7 +75,7 @@ export async function createChannel(
 				) VALUES (
 					${id}, ${repository.id}, ${repository.owner}, ${repository.name},
 					${`Test ${id.slice(0, 8)}`},
-					'U_e2e', 0, 1, ${now}, ${now}
+					${createdBy}, 0, 1, ${now}, ${now}
 				)
 			`;
 			await transaction`

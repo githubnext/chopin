@@ -41,6 +41,10 @@ export type HostedWorkspaceProps = {
 	repository: Api.Repository;
 	canEdit: boolean;
 	canManage: boolean;
+	/** Who created the document, which with the repository role says who may delete it. */
+	createdBy?: string;
+	/** Set for a child, which goes with its parent and is never deleted on its own. */
+	parentChannelId?: string;
 	archivedAt?: string;
 	/** Full width, the document's own layout setting. */
 	fullWidth?: boolean;

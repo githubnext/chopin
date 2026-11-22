@@ -4,8 +4,9 @@ import { documentMenuItems, documentMenuKeyAction } from "./document-actions-men
 
 describe("document actions menu", () => {
 	it("offers only lifecycle-valid actions", () => {
-		let summary = (channel: Parameters<typeof documentMenuItems>[0]) =>
-			documentMenuItems(channel).map(item => [item.action, item.label, !!item.destructive]);
+		let summary = (channel: Parameters<typeof documentMenuItems>[0], deletable = false) =>
+			documentMenuItems(channel, [], false, deletable)
+				.map(item => [item.action, item.label, !!item.destructive]);
 		expect(summary({})).toEqual([
 			["copy-link", "Copy link", false],
 			["rename", "Rename", false],
@@ -13,7 +14,22 @@ describe("document actions menu", () => {
 		]);
 		expect(summary({ archivedAt: "2026-08-23T00:00:00.000Z" })).toEqual([
 			["restore", "Restore", false],
-			["delete", "Delete permanently", true],
+		]);
+	});
+
+	it("offers Delete, in the destructive ink, directly under Archive to those who may delete", () => {
+		let summary = (channel: Parameters<typeof documentMenuItems>[0]) =>
+			documentMenuItems(channel, [], false, true)
+				.map(item => [item.action, item.label, !!item.destructive]);
+		expect(summary({})).toEqual([
+			["copy-link", "Copy link", false],
+			["rename", "Rename", false],
+			["archive", "Archive", false],
+			["delete", "Delete…", true],
+		]);
+		expect(summary({ archivedAt: "2026-08-23T00:00:00.000Z" })).toEqual([
+			["restore", "Restore", false],
+			["delete", "Delete…", true],
 		]);
 	});
 
@@ -32,7 +48,7 @@ describe("document actions menu", () => {
 			"archive",
 		]);
 		expect(actions({}, [])).toEqual(["copy-link", "rename", "archive"]);
-		expect(actions({ archivedAt: "2026-08-23T00:00:00.000Z" })).toEqual(["restore", "delete"]);
+		expect(actions({ archivedAt: "2026-08-23T00:00:00.000Z" })).toEqual(["restore"]);
 	});
 
 	it("maps standard menu navigation keys without consuming unrelated keys", () => {

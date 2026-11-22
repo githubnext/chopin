@@ -123,6 +123,7 @@ export {
 	MachineIcon,
 	SearchIcon,
 	ServerIcon,
+	TrashIcon,
 } from "./system";
 export { TextStyleIcon } from "./text-style";
 export {

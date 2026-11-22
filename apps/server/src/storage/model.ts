@@ -329,6 +329,15 @@ export type ChannelArchiveResult = {
 	changed: boolean;
 };
 
+/**
+ * A permanent deletion, active or archived, which ends the AI authority of the document's launches
+ * as an archive does, so it is written under `lease` too.
+ */
+export type ChannelDelete = {
+	id: string;
+	lease: Lease;
+};
+
 export type PublishChannelDescription = {
 	channelId: string;
 	description: string;

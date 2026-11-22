@@ -58,7 +58,8 @@ Every adapter must provide:
 - atomic first-Planner ownership with a generation token;
 - active-only channel lists and scans by default, with explicit archived
   inclusion and direct archived reads;
-- idempotent archive and restore transitions and archived-only atomic deletion;
+- idempotent archive and restore transitions, and atomic deletion of a top-level
+  document, active or archived, with its children, under the writer lease;
 - repository-scoped canonical and historical slug resolution without rebinding
   aliases;
 - expiring session rows with optional opaque encrypted credentials;
@@ -219,15 +220,32 @@ Workspace compatibility listing apply the same active-only default; the current
 browser does not use that listing as a product surface.
 
 Archive and restore lock and update the channel row and are no-ops when it is
-already in the requested state. Deletion also locks the row and refuses an
-active channel. A parent cannot be deleted while it still has a child, and a
-published child cannot be deleted while its research request or investigation
-record retains that link. Deleting an eligible archived channel is one transaction: foreign
-keys cascade every channel-owned sidecar, snapshot, journal, event, operation,
-Planner state, implementation state, slug, background job and artifact, and
-research staging record. A saved navigation reference is set to null.
+already in the requested state.
 
-Full deletion leaves no live tombstone. It removes historical aliases and the
+Deletion (`channels.delete`) is the permanent counterpart: archive is reversible
+and keeps every row, deletion keeps none. It takes the writer lease and checks it in
+its own transaction, as every write that ends AI authority does, and counts as an AI
+cutoff. It locks the document's row and then its children's, refuses a child (a
+child goes only with its parent), and deletes active and archived documents alike.
+Children reference their parent, and the research requests and investigations that
+published a child reference that child, with `ON DELETE RESTRICT`, so the
+transaction deletes in order: those requests and investigations (all the parent's
+own), then the children, then the document. Foreign keys cascade the rest of each:
+sidecar, snapshot, journal, event, operation, Planner state and holds, AI
+placeholders, machine choices and Planner credentials, model choices and lists,
+Chat threads and attachments, images, decision answers, history, MCP invocation
+records, implementation state, slugs, background jobs and artifacts, and research
+staging. A saved navigation reference is set to null. All of it goes, or none: a
+transaction that fails, such as one whose writer lease was lost, changes nothing. It
+answers the documents it deleted, the document first, and nothing for one already
+gone, so a repeat is harmless. A write that arrives after it, whatever store it is
+for, finds no channel row and is refused, so no row comes back; the memory adapter
+behaves the same, and the storage contract runs these rules against both
+(`deletion-contract.ts`).
+
+Full deletion leaves no live tombstone. The serving process remembers a deleted
+document in memory for ten minutes, only so a repeated delete is answered as the
+first was; nothing of it is stored. Deletion removes historical aliases and the
 MCP creation idempotency identity, so former slugs can be reused and the same
 MCP idempotency key can create a fresh document at its deterministic UUID. Reads
 and implementation lifecycle reports for the deleted document return

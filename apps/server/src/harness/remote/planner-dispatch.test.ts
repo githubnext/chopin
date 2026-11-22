@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { MICROVMS } from "../../testing/microvms";
+import { testLease } from "../../storage/contract-support";
 import { AGENT_VERSION, LINK_CLOSE } from "@chopin/agent-link";
 import {
 	CONNECTOR_PLANNER_COMMAND_HEADER,
@@ -862,6 +863,44 @@ describe("choosing a machine for a document", () => {
 		expect(await second.next("refused")).toMatchObject({ code: "access-revoked" });
 		expect(await desk.poll([channel.id])).toMatchObject({ kind: "planners", planners: [] });
 		expect(server.attachments.attached(channel.id)).toBe(false);
+	});
+
+	it("tells a machine running a deleted document's Planner who deleted it, and then to forget its disk", async () => {
+		let { machine, choose, channel, server, storage, runtime, send, url } = await dispatchServer();
+		let laptop = await machine("member", "U_member", "laptop");
+		await choose("member", laptop.id);
+		expect(await laptop.poll([])).toEqual({
+			kind: "planners",
+			planners: [{ id: channel.id, url }],
+		});
+		let link = await laptop.backend();
+		await link.next("attached");
+		let kept = async () =>
+			(await send("/api/connector/planner/kept", {
+				bearer: laptop.token,
+				headers: CONNECTOR,
+				body: { documents: [{ id: channel.id }] },
+			})).json();
+		expect(await kept()).toEqual({ forget: [], reset: [] });
+
+		// As main.ts deletes it: its Planner's link ends, every row goes, then machines hear.
+		await server.attachments.documentEnded(channel.id);
+		expect(await link.next("refused")).toMatchObject({ code: "document-archived" });
+		let deleted = await storage.channels.delete({
+			id: channel.id,
+			lease: await testLease(storage),
+		});
+		runtime.documentsDeleted(deleted, "ana");
+		expect(await laptop.poll([channel.id])).toEqual({
+			kind: "planners",
+			planners: [],
+			stopped: {
+				[channel.id]: "ana deleted this document, so laptop stopped running its Planner.",
+			},
+		});
+		// Once its Planner has exited, the connector asks, and is told its disk may go.
+		expect(await kept()).toEqual({ forget: [channel.id], reset: [] });
+		expect(await laptop.poll([])).toEqual({ waiting: true });
 	});
 
 	it("tells the machine a renamed document's current address, once", async () => {

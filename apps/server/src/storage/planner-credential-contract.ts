@@ -122,8 +122,9 @@ export function plannerCredentialContract(name: string, factory: StorageFactory)
 				let { channelId, credential } = await paired(storage);
 				let stored = credential(later(900));
 				await storage.plannerCredentials.put(stored);
-				await storage.channels.archive({ id: channelId, now: AT, lease: await testLease(storage) });
-				expect(await storage.channels.delete(channelId)).toBe(true);
+				let lease = await testLease(storage);
+				await storage.channels.archive({ id: channelId, now: AT, lease });
+				expect(await storage.channels.delete({ id: channelId, lease })).toHaveLength(1);
 				expect(await storage.plannerCredentials.find(stored.digest, AT)).toBeUndefined();
 			} finally {
 				await storage.close();

@@ -69,6 +69,8 @@ function workspaceProps(
 		archivedAt: channel.archivedAt,
 		canEdit: !channel.archivedAt && (detail.canEdit || detail.canManage),
 		canManage: detail.canManage,
+		createdBy: channel.createdBy,
+		...(channel.parentChannelId ? { parentChannelId: channel.parentChannelId } : {}),
 		description: channel.description,
 		descriptionRevision: channel.descriptionRevision,
 		...(channel.fullWidth ? { fullWidth: true } : {}),

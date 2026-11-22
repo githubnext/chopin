@@ -39,16 +39,19 @@ export function DialogsPlate() {
 						className="design-audit-dialog"
 						role="group"
 					>
-						<h4 id="audit-delete-title">Delete document permanently?</h4>
+						<h4 id="audit-delete-title">Delete document?</h4>
 						<p>
 							<strong>Design system audit</strong>{" "}
-							will be permanently deleted. This cannot be undone.
+							is deleted for everyone, with its Chat and threads, its Decisions and its history.
+							This cannot be undone.
 						</p>
-						<TerminalAlert>Could not delete the document.</TerminalAlert>
+						<TerminalAlert>
+							This document is being built. Stop the build, then delete the document.
+						</TerminalAlert>
 						<div className="design-audit-dialog-actions">
 							<button className="btn btn-md btn-secondary" type="button">Cancel</button>
 							<button className="btn btn-md btn-destructive" type="button">
-								Delete permanently
+								Delete document
 							</button>
 						</div>
 					</div>

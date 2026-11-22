@@ -121,8 +121,9 @@ export function imageContract(name: string, factory: StorageFactory) {
 				});
 				expect(await storage.images.channels(hash)).toEqual([channelId, other.id]);
 
-				await storage.channels.archive({ id: other.id, now, lease: await testLease(storage) });
-				expect(await storage.channels.delete(other.id)).toBe(true);
+				let lease = await testLease(storage);
+				await storage.channels.archive({ id: other.id, now, lease });
+				expect(await storage.channels.delete({ id: other.id, lease })).toHaveLength(1);
 				expect(await storage.images.channels(hash)).toEqual([channelId]);
 				expect(await storage.images.get(other.id, hash)).toBeUndefined();
 			} finally {

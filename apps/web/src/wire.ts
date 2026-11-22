@@ -87,7 +87,8 @@ export type WireOptions = WireTarget & {
 	 */
 	onOutage?: (outage: Outage | undefined) => void;
 	onAuthenticationRequired?: () => void;
-	onDeleted?: () => void;
+	/** The document was deleted; `by` is who deleted it, when the server said. */
+	onDeleted?: (by?: string) => void;
 };
 
 type Refusal = { reason: string; authentication: boolean };
@@ -474,11 +475,14 @@ export class Wire {
 				console.error(`[wire] ${frame.kind} listener failed:`, err);
 			}
 		}
-		if (frame.kind === "session:deleted") this.#deleted();
+		if (frame.kind === "session:deleted") {
+			let by = (frame as Partial<Session.Deleted>).by;
+			this.#deleted(typeof by === "string" ? by : undefined);
+		}
 		if (frame.kind === "session:restarting") this.#announced = true;
 	}
 
-	#deleted(): void {
+	#deleted(by?: string): void {
 		if (this.#disposed || this.#terminal) return;
 		this.#terminal = true;
 		this.#unlisten();
@@ -492,7 +496,7 @@ export class Wire {
 		this.#abandon("document deleted");
 		this.#set("deleted", "document deleted");
 		socket?.close();
-		this.#options.onDeleted?.();
+		this.#options.onDeleted?.(by);
 	}
 
 	/** Reject everything still waiting; a reply cannot survive its connection. */

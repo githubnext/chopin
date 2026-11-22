@@ -33,6 +33,7 @@ import type {
 	ChannelArchiveResult,
 	ChannelCursor,
 	ChannelDecisionCount,
+	ChannelDelete,
 	ChannelPage,
 	ChannelRecord,
 	ChannelScanCursor,
@@ -475,7 +476,7 @@ export class MemoryStorage implements StorageAdapter {
 			return this.#setChannelArchived(input, true);
 		},
 		restore: input => this.#setChannelArchived(input, false),
-		delete: id => this.#deleteChannel(id),
+		delete: input => this.#deleteChannel(input),
 		publishDescription: input => this.#publishChannelDescription(input),
 		list: (repositoryId, limit, after, query, includeArchived) =>
 			this.#listChannels(repositoryId, limit, after, query, includeArchived),
@@ -758,56 +759,61 @@ export class MemoryStorage implements StorageAdapter {
 		return { channel: channel(saved), changed: true };
 	}
 
-	async #deleteChannel(id: string): Promise<boolean> {
-		let found = this.#channels.get(id);
-		if (!found) return false;
-		if (!found.archivedAt) throw conflict(`channel ${id} must be archived before deletion`);
-		if ([...this.#channels.values()].some(channel => channel.parentChannelId === id)) {
-			throw conflict(`channel ${id} still has child channels`);
+	async #deleteChannel(input: ChannelDelete): Promise<ChannelRecord[]> {
+		this.#assertLease(input.lease);
+		let found = this.#channels.get(input.id);
+		if (!found) return [];
+		if (found.parentChannelId) {
+			throw conflict(`channel ${input.id} is a child, deleted only with its parent`);
 		}
-		if (this.#research.referencesChannel(id)) {
-			throw conflict(`channel ${id} is still published by a research workspace`);
-		}
-		if (this.experiments.referencesChannel(id)) {
-			throw conflict(`channel ${id} is still published by an investigation`);
-		}
-
-		this.#channels.delete(id);
-		this.#plannerResets.delete(id);
-		await this.#research.deleteChannel(id);
-		this.#jobs.deleteChannel(id);
-		this.#images.deleteChannel(id);
-		this.#chatAttachments.deleteChannel(id);
-		this.#decisionAnswers.deleteChannel(id);
-		this.#versions.deleteChannel(id);
-		this.#plannerHolds.deleteChannel(id);
-		this.#plannerModelChoices.deleteChannel(id);
-		this.#plannerCatalogs.deleteChannel(id);
-		this.#chatThreads.deleteChannel(id);
-		this.#plannerCredentials.deleteChannel(id);
-		this.#aiPlaceholders.deleteChannel(id);
-		this.#mcpInvocations.deleteChannel(id);
-		this.#archiveGenerations.delete(id);
-		this.#snapshots.delete(id);
-		this.#sequences.delete(id);
-		this.#updates.delete(id);
-		this.#events.delete(id);
-		this.#sidecars.delete(id);
-		this.#operations.delete(id);
-		this.#agents.delete(id);
-		let aliases = this.#channelSlugs.get(found.repositoryId);
-		if (aliases) {
-			for (let [slug, owner] of aliases) {
-				if (owner === id) aliases.delete(slug);
+		let children = [...this.#channels.values()]
+			.filter(item => item.parentChannelId === input.id)
+			.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+		let deleted = [found, ...children];
+		let ids = new Set(deleted.map(item => item.id));
+		// As one transaction: every row goes before anything is awaited.
+		this.experiments.deleteChannels(ids);
+		for (let item of deleted) {
+			let id = item.id;
+			this.#channels.delete(id);
+			this.#plannerResets.delete(id);
+			this.#jobs.deleteChannel(id);
+			this.#images.deleteChannel(id);
+			this.#chatAttachments.deleteChannel(id);
+			this.#decisionAnswers.deleteChannel(id);
+			this.#versions.deleteChannel(id);
+			this.#plannerHolds.deleteChannel(id);
+			this.#plannerModelChoices.deleteChannel(id);
+			this.#plannerCatalogs.deleteChannel(id);
+			this.#chatThreads.deleteChannel(id);
+			this.#plannerCredentials.deleteChannel(id);
+			this.#aiPlaceholders.deleteChannel(id);
+			this.#mcpInvocations.deleteChannel(id);
+			this.#machines.deleteChannel(id);
+			this.#archiveGenerations.delete(id);
+			this.#snapshots.delete(id);
+			this.#sequences.delete(id);
+			this.#updates.delete(id);
+			this.#events.delete(id);
+			this.#sidecars.delete(id);
+			this.#operations.delete(id);
+			this.#agents.delete(id);
+			let aliases = this.#channelSlugs.get(item.repositoryId);
+			if (aliases) {
+				for (let [slug, owner] of aliases) {
+					if (owner === id) aliases.delete(slug);
+				}
+				if (aliases.size === 0) this.#channelSlugs.delete(item.repositoryId);
 			}
-			if (aliases.size === 0) this.#channelSlugs.delete(found.repositoryId);
-		}
-		for (let [userId, saved] of this.#navigation) {
-			if (saved.lastDocumentId === id) {
-				this.#navigation.set(userId, { ...saved, lastDocumentId: undefined });
+			for (let [userId, saved] of this.#navigation) {
+				if (saved.lastDocumentId === id) {
+					this.#navigation.set(userId, { ...saved, lastDocumentId: undefined });
+				}
 			}
 		}
-		return true;
+		// Research staging is queued behind writes already under way, which find the document gone.
+		for (let item of deleted) await this.#research.deleteChannel(item.id);
+		return deleted.map(item => channel(item));
 	}
 
 	#publishChannelDescription(

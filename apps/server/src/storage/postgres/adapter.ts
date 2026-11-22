@@ -37,6 +37,7 @@ import type {
 	ChannelArchiveResult,
 	ChannelCursor,
 	ChannelDecisionCount,
+	ChannelDelete,
 	ChannelPage,
 	ChannelRecord,
 	ChannelScanCursor,
@@ -866,7 +867,7 @@ export class PostgresStorage implements StorageAdapter {
 		archive: input =>
 			this.#setChannelArchived(input, true, input.lease).finally(() => this.#aiCutoffs.cut()),
 		restore: input => this.#setChannelArchived(input, false),
-		delete: id => this.#deleteChannel(id),
+		delete: input => this.#deleteChannel(input).finally(() => this.#aiCutoffs.cut()),
 		publishDescription: input => this.#publishChannelDescription(input),
 		list: (repositoryId, limit, after, query, includeArchived) =>
 			this.#listChannels(repositoryId, limit, after, query, includeArchived),
@@ -1155,38 +1156,49 @@ export class PostgresStorage implements StorageAdapter {
 		);
 	}
 
-	#deleteChannel(id: string): Promise<boolean> {
-		return this.#run("delete archived channel", () =>
+	#deleteChannel(input: ChannelDelete): Promise<ChannelRecord[]> {
+		return this.#run("delete channel", () =>
 			this.#sql.begin(async transaction => {
-				let [current] = await transaction<{ archivedAt: Timestamp | null }[]>`
-					SELECT archived_at AS "archivedAt"
+				// Deleting ends AI authority, which only the writer lease's holder counts.
+				await this.#assertLease(transaction, input.lease);
+				let [current] = await transaction<ChannelRow[]>`
+					SELECT ${transaction.unsafe(CHANNEL_COLUMNS)}
 					FROM channels
-					WHERE id = ${id}
+					WHERE id = ${input.id}
 					FOR UPDATE
 				`;
-				if (!current) return false;
-				if (current.archivedAt === null) {
-					throw conflict(`channel ${id} must be archived before deletion`);
+				if (!current) return [];
+				let document = channel(current);
+				if (document.parentChannelId) {
+					throw conflict(`channel ${input.id} is a child, deleted only with its parent`);
 				}
-				let [child] = await transaction<{ id: string }[]>`
-					SELECT id FROM channels WHERE parent_channel_id = ${id} LIMIT 1
+				// A child can't be published under a parent locked here, so these are all of them.
+				let children = (await transaction<ChannelRow[]>`
+					SELECT ${transaction.unsafe(CHANNEL_COLUMNS)}
+					FROM channels
+					WHERE parent_channel_id = ${input.id}
+					ORDER BY created_at, id
+					FOR UPDATE
+				`).map(channel);
+				let ids = [document.id, ...children.map(child => child.id)];
+				// What links a child restricts its deletion: the research requests and investigations
+				// that published it, all the document's own, go first. The rest cascades.
+				await transaction`
+					DELETE FROM research_workspaces
+					WHERE channel_id = ANY(${ids}) OR published_channel_id = ANY(${ids})
 				`;
-				if (child) throw conflict(`channel ${id} still has child channels`);
-				let [publication] = await transaction<{ id: string }[]>`
-					SELECT id FROM research_workspaces WHERE published_channel_id = ${id} LIMIT 1
+				await transaction`
+					DELETE FROM experiments
+					WHERE channel_id = ANY(${ids}) OR child_channel_id = ANY(${ids})
 				`;
-				if (publication) {
-					throw conflict(`channel ${id} is still published by a research workspace`);
+				if (children.length) {
+					await transaction`DELETE FROM channels WHERE parent_channel_id = ${input.id}`;
 				}
-				let [investigation] = await transaction<{ id: string }[]>`
-					SELECT id FROM experiments WHERE child_channel_id = ${id} LIMIT 1
-				`;
-				if (investigation) throw conflict(`channel ${id} is still published by an investigation`);
 				let deleted = await transaction<{ id: string }[]>`
-					DELETE FROM channels WHERE id = ${id} RETURNING id
+					DELETE FROM channels WHERE id = ${input.id} RETURNING id
 				`;
 				if (deleted.length !== 1) throw corrupt("deleting a channel returned no record");
-				return true;
+				return [document, ...children];
 			}));
 	}
 

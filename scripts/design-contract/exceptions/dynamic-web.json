@@ -18,7 +18,7 @@
 				1
 			]
 		],
-		"sourceHash": "467fa6e55cbf1adc48fb7000c2faa94b04054bb2a2943750e8a8b0513ce1ccbe"
+		"sourceHash": "ddaba0d373ce9429e76b353b322aff4e662beb2b8565ae9c1031194fb8f68e3a"
 	},
 	{
 		"file": "apps/web/src/document-rename.tsx",
@@ -46,7 +46,7 @@
 				1
 			]
 		],
-		"sourceHash": "970d2ac30e93a0271db034bbc8903378d4f5bc538366c600bcd8ffe326e48b41"
+		"sourceHash": "00863626016fa2a2933d28de04ca76ac5641657f053c925818dee1d8746e7e07"
 	},
 	{
 		"file": "apps/web/src/account-menu.tsx",
@@ -102,7 +102,7 @@
 				1
 			]
 		],
-		"sourceHash": "f1286cf4e03a076a7378453eb71d5c504ce64147356bd5128141b69a2953bf4f"
+		"sourceHash": "5abb9463e07f2645ec6605588ba6181527aa293cb26cee787570656abc701c5c"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -116,7 +116,7 @@
 				1
 			]
 		],
-		"sourceHash": "f1286cf4e03a076a7378453eb71d5c504ce64147356bd5128141b69a2953bf4f"
+		"sourceHash": "5abb9463e07f2645ec6605588ba6181527aa293cb26cee787570656abc701c5c"
 	},
 	{
 		"file": "apps/web/src/document-actions-menu.tsx",
@@ -137,7 +137,7 @@
 				1
 			]
 		],
-		"sourceHash": "f1286cf4e03a076a7378453eb71d5c504ce64147356bd5128141b69a2953bf4f"
+		"sourceHash": "5abb9463e07f2645ec6605588ba6181527aa293cb26cee787570656abc701c5c"
 	},
 	{
 		"file": "apps/web/src/chat/actions/message-toolbar.tsx",
@@ -186,7 +186,7 @@
 				1
 			]
 		],
-		"sourceHash": "aa43e0be34867360cd9d4c5f921cc3d85d94b8bba2d8d0f106ba59c5d976e301"
+		"sourceHash": "0b66666ed1e1ffcfb905c3bf0859dbb41eb43561252596a4a2577019980f86b4"
 	},
 	{
 		"file": "apps/web/src/navigation-drawer.tsx",

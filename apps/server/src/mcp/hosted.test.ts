@@ -293,12 +293,7 @@ describe("the hosted MCP adapter", () => {
 			let snapshot = await load(channelId, now);
 			if (channelId === id && snapshot && !deleted) {
 				deleted = true;
-				await context.storage.channels.archive({
-					id,
-					now,
-					lease: await testLease(context.storage),
-				});
-				await context.storage.channels.delete(id);
+				await context.storage.channels.delete({ id, lease: await testLease(context.storage) });
 			}
 			return snapshot;
 		};

@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { answerTokens, BOT, STARTER } from "./testing/github-grant";
 import { githubRefusal } from "./github-token";
 import { existsSync } from "node:fs";
-import { machineFile } from "./machine";
+import { forgettablePlanners, machineFile } from "./machine";
 import { createOutput } from "./output";
 import {
 	commandWords,
@@ -17,7 +17,15 @@ import {
 } from "./planner";
 import type { ServiceHost } from "./service";
 import { collectStatus, formatStatus } from "./status";
-import { git, lockWorkspace, startFailures } from "./workspace";
+import {
+	git,
+	lockWorkspace,
+	plannerDisk,
+	plannerServer,
+	plannerSlot,
+	startFailures,
+} from "./workspace";
+import { sweepPlannerDisks } from "./planner-disks";
 import { checkouts } from "./checkouts";
 import { CONNECTOR_PROTOCOL } from "./version";
 
@@ -1797,6 +1805,100 @@ test.skipIf(process.platform === "win32")(
 		}
 	},
 	60_000,
+);
+
+test.skipIf(process.platform === "win32")(
+	"a Planner Chopin stopped because its document was deleted says who deleted it, and its disk goes once it has exited, never before",
+	async () => {
+		const DOCUMENT = "00000000-0000-4000-8000-0000000000d1";
+		let kept: string[][] = [];
+		let chopin = serve({
+			hostname: "127.0.0.1",
+			port: 0,
+			fetch: async request => {
+				let path = new URL(request.url).pathname;
+				if (path === "/api/connector/planner") {
+					return Response.json({
+						token: `chopin_p_${"P".repeat(43)}`,
+						expiresAt: Date.now() + 15 * 60_000,
+						document: { id: DOCUMENT, repository: "octo-org/score", url: "http://x/plan" },
+					});
+				}
+				// The document is gone: Chopin says to forget its disk.
+				if (path === "/api/connector/planner/kept") {
+					let { documents } = await request.json() as { documents: Array<{ id: string }> };
+					kept.push(documents.map(item => item.id));
+					return Response.json({ forget: documents.map(item => item.id), reset: [] });
+				}
+				return new Response(null, { status: 404 });
+			},
+		});
+		let url = `http://127.0.0.1:${chopin.port}`;
+		let directory = await mkdtemp(join(scratch, "deleted-"));
+		repository(directory);
+		let script = join(directory, "backend.ts");
+		let log = join(directory, "launches.jsonl");
+		await writeFile(script, STAYING_BACKEND);
+		let abort = new AbortController();
+		let said = "";
+		let sink = {
+			write: (text: string) => {
+				said += text;
+				return true;
+			},
+		};
+		let output = createOutput(sink, sink, {});
+		let sweeps: Array<Promise<string[]>> = [];
+		let sweep = () =>
+			sweepPlannerDisks({
+				directory,
+				server: url,
+				output,
+				ask: documents => forgettablePlanners(url, MACHINE, documents),
+			});
+		let planners = dispatchedPlanners({
+			sandbox: HOST_SANDBOX,
+			url,
+			machine: MACHINE,
+			documents: [],
+			command: [process.execPath, script, log],
+			checkouts: checkouts({ directory, registered: { "octo-org/score": directory } }),
+			directory,
+			output,
+			signal: abort.signal,
+			withdrawn: () => void sweeps.push(sweep()),
+		});
+		let slot = await plannerSlot(directory, "octo-org/score", DOCUMENT);
+		try {
+			planners.assign([{ id: DOCUMENT, url: "http://x/plan" }]);
+			await until(async () => (await entries(log)).some(entry => entry.pid), 10_000);
+			// The disk its microVM would run on, which its launch holds.
+			await writeFile(plannerDisk(slot), "");
+			await writeFile(plannerServer(slot), `${url}\n`);
+			expect(await sweep()).toEqual([]);
+			expect(existsSync(plannerDisk(slot))).toBe(true);
+
+			planners.assign([], {
+				[DOCUMENT]: "ana deleted this document, so Build box stopped running its Planner.",
+			});
+			expect(said).toContain(
+				"Stopped the Planner for http://x/plan: ana deleted this document, so Build box stopped "
+					+ "running its Planner.",
+			);
+			await until(async () => sweeps.length === 1, 10_000);
+			// Asked only once its backend had exited and let go of the disk.
+			expect((await entries(log)).some(entry => entry.stopped)).toBe(true);
+			expect(await sweeps[0]).toEqual([DOCUMENT]);
+			expect(existsSync(plannerDisk(slot))).toBe(false);
+			expect(kept.at(-1)).toEqual([DOCUMENT]);
+			expect(said).toContain("Chopin no longer has its document");
+		} finally {
+			abort.abort();
+			await planners.stop();
+			await chopin.stop(true);
+		}
+	},
+	40_000,
 );
 
 test.skipIf(process.platform === "win32")(

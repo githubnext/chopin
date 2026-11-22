@@ -225,8 +225,9 @@ export function chatThreadContract(name: string, factory: StorageFactory) {
 				expect(stale).toBeInstanceOf(StorageError);
 				expect((await storage.chatThreads.getThread(channelId, "root-1"))!.forkedAt).toBe(2);
 
-				await storage.channels.archive({ id: channelId, now: AT, lease: await testLease(storage) });
-				await storage.channels.delete(channelId);
+				let current = await testLease(storage);
+				await storage.channels.archive({ id: channelId, now: AT, lease: current });
+				await storage.channels.delete({ id: channelId, lease: current });
 				expect(await storage.chatThreads.getThread(channelId, "root-1")).toBeUndefined();
 				expect(await storage.chatThreads.listThreads(channelId)).toEqual([]);
 				expect(await storage.chatThreads.getSessionState(channelId)).toBeUndefined();

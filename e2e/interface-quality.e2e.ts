@@ -50,7 +50,8 @@ test("Projects explains its first lazy load and remains dismissible", async ({ j
 for (let width of [1280, 390]) {
 	test(`delete confirmation contains an unbroken title at ${width}px`, async ({ join, page, room }) => {
 		await page.setViewportSize({ width, height: 844 });
-		await join("ana");
+		// Only its creator, or a repository admin, may delete it.
+		await join("e2e");
 		let actions = page.getByRole("group", { name: /^Document: / }).getByRole("button", {
 			name: /^Actions for /,
 		});
@@ -69,10 +70,8 @@ for (let width of [1280, 390]) {
 			)
 		).toBeGreaterThanOrEqual(12);
 		await actions.click();
-		await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
-		await actions.click();
-		await page.getByRole("menuitem", { name: "Delete permanently", exact: true }).click();
-		let dialog = page.getByRole("dialog", { name: "Delete document permanently?" });
+		await page.getByRole("menuitem", { name: "Delete…", exact: true }).click();
+		let dialog = page.getByRole("dialog", { name: "Delete document?" });
 		let name = dialog.getByText(title, { exact: true });
 		await expect(name).toBeVisible();
 		await expect.poll(() =>
@@ -132,16 +131,14 @@ for (let width of [1280, 390]) {
 }
 
 test("destructive confirmation keeps AA contrast in every state", async ({ join, page }) => {
-	await join("ana");
+	await join("e2e");
 	let actions = page.getByRole("group", { name: /^Document: / }).getByRole("button", {
 		name: /^Actions for /,
 	});
 	await actions.click();
-	await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
-	await actions.click();
-	await page.getByRole("menuitem", { name: "Delete permanently", exact: true }).click();
-	let button = page.getByRole("dialog", { name: "Delete document permanently?" })
-		.getByRole("button", { name: "Delete permanently", exact: true });
+	await page.getByRole("menuitem", { name: "Delete…", exact: true }).click();
+	let button = page.getByRole("dialog", { name: "Delete document?" })
+		.getByRole("button", { name: "Delete document", exact: true });
 	await expect(button).toBeVisible();
 	// The destructive red meets AA under white text from rest, through focus, hover and press.
 	await expect(button).toHaveCSS("background-color", "oklch(0.588 0.17178 24.175)");
@@ -169,17 +166,15 @@ test("delete keeps keyboard focus inside the dialog while pending and after fail
 		await route.fulfill({ status: 503, json: { error: "Temporarily unavailable" } });
 	});
 	try {
-		await join("ana");
+		await join("e2e");
 		let actions = page.getByRole("group", { name: /^Document: / }).getByRole("button", {
 			name: /^Actions for /,
 		});
 		await actions.click();
-		await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
-		await actions.click();
-		await page.getByRole("menuitem", { name: "Delete permanently", exact: true }).click();
-		let dialog = page.getByRole("dialog", { name: "Delete document permanently?" });
-		await dialog.getByRole("button", { name: "Delete permanently", exact: true }).click();
-		await expect(dialog.getByRole("button", { name: "Deleting...", exact: true })).toBeDisabled();
+		await page.getByRole("menuitem", { name: "Delete…", exact: true }).click();
+		let dialog = page.getByRole("dialog", { name: "Delete document?" });
+		await dialog.getByRole("button", { name: "Delete document", exact: true }).click();
+		await expect(dialog.getByRole("button", { name: "Deleting…", exact: true })).toBeDisabled();
 		await expect.poll(() => dialog.evaluate(element => element.contains(document.activeElement)))
 			.toBe(true);
 		await page.keyboard.press("Tab");

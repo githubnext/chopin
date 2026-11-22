@@ -12,7 +12,14 @@ import {
 import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { Face } from "@chopin/editor/face";
-import { ArchiveIcon, ArrowUpIcon, CloseIcon, LinkIcon, PencilIcon } from "@chopin/icons";
+import {
+	ArchiveIcon,
+	ArrowUpIcon,
+	CloseIcon,
+	LinkIcon,
+	PencilIcon,
+	TrashIcon,
+} from "@chopin/icons";
 
 import { activeActorRoster, launchUrl } from "./demo-actor";
 import { motionContract } from "./motion-contract";
@@ -55,6 +62,8 @@ export function documentMenuItems(
 	channel: Pick<Api.Channel, "archivedAt">,
 	collaborators: readonly DemoActor[] = [],
 	decision = false,
+	/** The reader may delete it for good (see `mayDeleteDocument`): Delete comes last. */
+	deletable = false,
 ): DocumentMenuItem[] {
 	// A decision's page is its question: it is copied or discarded, never renamed or archived.
 	if (decision) {
@@ -73,16 +82,17 @@ export function documentMenuItems(
 		label: `Open as collaborator: ${actor.name}`,
 		icon: () => <Face decorative handle={actor.id} size={16} titled={false} />,
 	}));
+	let remove: DocumentMenuItem[] = deletable
+		? [{ action: "delete", label: "Delete…", destructive: true, icon: TrashIcon }]
+		: [];
 	return channel.archivedAt
-		? [
-			{ action: "restore", label: "Restore", icon: ArrowUpIcon },
-			{ action: "delete", label: "Delete permanently", destructive: true, icon: CloseIcon },
-		]
+		? [{ action: "restore", label: "Restore", icon: ArrowUpIcon }, ...remove]
 		: [
 			{ action: "copy-link", label: "Copy link", icon: LinkIcon },
 			{ action: "rename", label: "Rename", icon: PencilIcon },
 			...personas,
 			{ action: "archive", label: "Archive", icon: ArchiveIcon },
+			...remove,
 		];
 }
 
@@ -103,6 +113,7 @@ export function DocumentActionsMenu(
 		align = "end",
 		className = "",
 		decision = false,
+		deletable = false,
 		iconButton = false,
 		onAction,
 		openDocument = false,
@@ -114,6 +125,8 @@ export function DocumentActionsMenu(
 		className?: string;
 		/** The menu of a decision's page: Copy link and Discard decision only. */
 		decision?: boolean;
+		/** The reader may delete the document for good: Delete comes under Archive or Restore. */
+		deletable?: boolean;
 		iconButton?: boolean;
 		onAction: (action: DocumentAction) => void;
 		/** This menu is for the document open in this tab, so it can launch collaborator tabs. */
@@ -141,7 +154,12 @@ export function DocumentActionsMenu(
 	let [open, setOpen] = useNavigationMenu();
 	let [sheetOpen, setSheetOpen] = useNavigationMenu();
 	let [position, setPosition] = useState<CSSProperties>();
-	let items = documentMenuItems(channel, openDocument ? activeActorRoster() : [], decision);
+	let items = documentMenuItems(
+		channel,
+		openDocument ? activeActorRoster() : [],
+		decision,
+		deletable,
+	);
 	let select = (action: DocumentMenuItem["action"]) => {
 		if (action.startsWith("collaborator:")) {
 			window.open(
