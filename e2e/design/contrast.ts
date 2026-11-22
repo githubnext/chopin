@@ -538,6 +538,11 @@ function walk({ root, focus }: { root: string; focus: boolean }): Measured[] {
 		let owner: Element | null = element;
 		let colour: RGBA | null = null;
 		for (let depth = 0; owner && depth < 4; depth++, owner = parentOf(owner)) {
+			// A dialog's frame is the dialog's own edge, never the edge of a field inside it.
+			if (owner !== element && owner.matches('[role="dialog"]')) {
+				owner = null;
+				break;
+			}
 			colour = edge(owner) ?? edge(owner, "::before");
 			if (colour) break;
 			let fill = parse(getComputedStyle(owner).backgroundColor);
