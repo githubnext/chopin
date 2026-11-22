@@ -17,7 +17,10 @@ type Oklch = { l: number; c: number; h: number };
 const ROOT = join(import.meta.dir, "../../..");
 const SHARED_THEME = readFileSync(join(ROOT, "packages/visuals/theme.css"), "utf8");
 const WEB_THEME = readFileSync(join(import.meta.dir, "theme.css"), "utf8");
-const THEME = `${SHARED_THEME}\n${WEB_THEME}`;
+/* The light theme's values; the dark theme's (`packages/visuals/src/theme.test.ts`) follow them. */
+const THEME = `${
+	SHARED_THEME.slice(0, SHARED_THEME.indexOf('\n:root[data-theme="dark"] {'))
+}\n${WEB_THEME}`;
 const EDITOR_STYLES = readFileSync(join(ROOT, "packages/editor/src/styles.css"), "utf8");
 
 describe("theme ownership", () => {
@@ -279,6 +282,7 @@ describe("edges and depth", () => {
 			"--color-control-edge",
 			"--color-danger-edge",
 			"--color-edge",
+			"--color-tooltip-edge",
 		]);
 		expect(declared("--color-edge")).toBe("oklch(0 0 0 / 7%)");
 		expect(declared("--color-control-edge")).toBe("oklch(0 0 0 / 15%)");
