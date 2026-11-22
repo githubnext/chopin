@@ -355,8 +355,9 @@ export function chatAttachmentContract(name: string, factory: StorageFactory) {
 					ids: [goes.id],
 					entryId: id("message"),
 				});
-				await storage.channels.archive({ id: other.id, now: NOW, lease: await testLease(storage) });
-				expect(await storage.channels.delete(other.id)).toBe(true);
+				let lease = await testLease(storage);
+				await storage.channels.archive({ id: other.id, now: NOW, lease });
+				expect(await storage.channels.delete({ id: other.id, lease })).toHaveLength(1);
 				expect(await storage.chatAttachments.get(other.id, goes.id)).toBeUndefined();
 				expect(await storage.chatAttachments.get(channelId, stays.id)).toBeDefined();
 			} finally {

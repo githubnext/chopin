@@ -47,6 +47,8 @@ type PhoneHeaderDocument = {
 	planner?: PlannerStatus;
 	fix?: MachineFix;
 	canManage: boolean;
+	/** The reader may delete the document for good: its menu offers Delete. */
+	canDelete?: boolean;
 	/** The room is a decision's page: its menu is Copy link and Discard decision only. */
 	decision?: boolean;
 	/** Open comment threads in the document; the bar offers a list of them when there are any. */
@@ -130,6 +132,7 @@ export function PhoneHeader(
 export function PhoneHeaderContent(
 	{
 		archivedAt,
+		canDelete = false,
 		canManage,
 		comments = 0,
 		context,
@@ -265,6 +268,7 @@ export function PhoneHeaderContent(
 						openDocument
 						channel={{ archivedAt, title: label }}
 						decision={decision}
+						deletable={canDelete && !decision}
 						className="btn btn-icon btn-ghost"
 						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
 						trigger={<EllipsisIcon aria-hidden="true" size={18} />}

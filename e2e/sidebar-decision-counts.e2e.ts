@@ -752,19 +752,16 @@ test("a document row loaded after the first watch reconciles a decision answered
 	}
 });
 
-test("deleting an archived child updates the project total for a viewer in its parent", async ({ baseURL, browser, join, room }) => {
+test("deleting a parent with its archived child updates the project total for a viewer in it", async ({ baseURL, browser, join, room }) => {
 	let port = Number(new URL(baseURL!).port);
 	let parent = crypto.randomUUID();
 	let child = crypto.randomUUID();
-	await createChannel(port, parent, ARCHIVED_CHILD);
+	// Its creator deletes it, which takes the child: a child is never deleted on its own.
+	let creator = `document-creator-${crypto.randomUUID()}`;
+	await createChannel(port, parent, ARCHIVED_CHILD, creator);
 	await createChildChannel(port, parent, child, ARCHIVED_CHILD);
 	let parentPath = documentPath(ARCHIVED_CHILD, parent);
-	let editor = await openAs(
-		browser,
-		baseURL!,
-		`document-creator-${crypto.randomUUID()}`,
-		parentPath,
-	);
+	let editor = await openAs(browser, baseURL!, creator, parentPath);
 	try {
 		await editor.page.goto(`${parentPath}/children/${testChannelSlug(child)}`);
 		// The root stays mounted beneath the open child, so two editors are present.
@@ -795,10 +792,12 @@ test("deleting an archived child updates the project total for a viewer in its p
 		expect(await catalogueTotal(viewer, ARCHIVED_CHILD.name)).toBe(baseline);
 		await expect(disclosure(baseline)).toBeVisible();
 
-		let deleted = await editor.page.request.delete(`/api/channels/${child}`, { headers });
+		let alone = await editor.page.request.delete(`/api/channels/${child}`, { headers });
+		expect(alone.status()).toBe(409);
+		let deleted = await editor.page.request.delete(`/api/channels/${parent}`, { headers });
 		expect(deleted.status()).toBe(204);
-		await expect.poll(() => catalogueTotal(viewer, ARCHIVED_CHILD.name)).toBe(baseline - 2);
-		await expect(disclosure(baseline - 2)).toBeVisible();
+		await expect.poll(() => catalogueTotal(viewer, ARCHIVED_CHILD.name)).toBe(baseline - 4);
+		await expect(disclosure(baseline - 4)).toBeVisible();
 	} finally {
 		await editor.context.close();
 	}

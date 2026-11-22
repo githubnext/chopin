@@ -1056,7 +1056,8 @@ What this changes for you:
 - **Nothing an agent writes reaches your checkout or its git directory**, and `chopin`
   runs no git in a tree an agent wrote.
 - **A Planner's unpushed commits live on its disk.** The disk goes when Chopin says its
-  document is archived or gone (asked as `chopin connect` connects and every hour),
+  document is archived or gone (asked as `chopin connect` connects, every hour, and
+  once a Planner Chopin stopped asking for has exited, as when its document is deleted),
   when someone resets the document's Planner in Chopin (as it next starts here, or at
   the next hourly check), when no Planner has run on it for 30 days, or when this machine is unpaired or
   revoked, never while a microVM runs on it. Its unpushed commits go with it, and the

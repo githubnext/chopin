@@ -105,12 +105,9 @@ export function decisionAnswerContract(name: string, factory: StorageFactory) {
 					{ decisionId: "d1", generation: 3, savedAt: AT },
 				]);
 
-				await storage.channels.archive({
-					id: first.channelId,
-					now: AT,
-					lease: await testLease(storage),
-				});
-				expect(await storage.channels.delete(first.channelId)).toBe(true);
+				expect(
+					await storage.channels.delete({ id: first.channelId, lease: await testLease(storage) }),
+				).toHaveLength(1);
 				expect(await answers.pending(first.channelId)).toEqual([]);
 				expect(await answers.pending(second.channelId)).toHaveLength(1);
 

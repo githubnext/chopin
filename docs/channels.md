@@ -17,10 +17,12 @@ authorization then depends on the surface:
 | Local MCP                  | Caller-supplied GitHub bearer              | GitHub is queried directly; no App installation is required.                                                   |
 
 Pull access may list and open active or archived documents. Push or
-administration access may create, edit, rename, archive, restore, and delete
-documents, including MCP `update_document`, and mutate an implementation
-lifecycle. Deletion additionally
-requires the document to be archived. The same roles apply to research requests:
+administration access may create, edit, rename, archive, and restore documents,
+including MCP `update_document`, and mutate an implementation lifecycle. Only a
+repository admin, or the person who created the document while they can still
+write to the repository, may delete it (`mayDeleteDocument` in
+`packages/protocol/document-delete.ts`, checked by the server with the role
+GitHub gives at the request). The same roles apply to research requests:
 pull may read a referenced request, while push or administration may start,
 cancel, or retry one on an active document. The browser only offers the start
 action on a top-level document. The API may accept a request on a child, but
@@ -204,7 +206,7 @@ and UUID reads still resolve an archived document, including historical slug
 aliases.
 
 An archived browser session is read-only, including for a repository writer,
-but retains `canManage` for writers so they can restore or delete the document.
+but retains `canManage` for writers so they can restore it.
 Archival blocks metadata and document edits, chat, question and comment
 mutations, new Planner and research-request work, and
 `start_implementation`. An already active implementation may still accept
@@ -214,17 +216,54 @@ replay an interrupted turn.
 
 The browser management routes are `POST /api/channels/:channelId/archive`,
 `POST /api/channels/:channelId/restore`, and `DELETE /api/channels/:channelId`.
-They require push or administration access and an exact browser Origin. Delete
-returns a conflict unless the document is archived. Before deletion, the server
-suspends description scheduling, cancels and aborts the channel's background
-work, and closes the live plan. It then atomically deletes the channel and all
-dependent data, notifies connected clients with `session:deleted`, and closes
-them terminally. See [Storage](storage.md) for the deletion and backup boundary.
+They require an exact browser Origin. Archive and restore require push or
+administration access.
+
+### Deleting a document
+
+Archive is the reversible way to put a document away; deleting is for good. The
+document actions menu offers **Delete…** under Archive (and under Restore in the
+archived list) only to those who may delete it, and asks first in a dialog that
+names what goes with it. `DELETE /api/channels/:channelId` deletes an active or
+archived top-level document with its research children (a child is deleted only
+with its parent: deleting one directly is a conflict). The server rechecks the
+caller's role and creatorship, then (`apps/server/src/channels/deletion.ts`):
+
+1. Refuses with a conflict, before disturbing anything, while a build or an
+   implementation run a coding agent claimed holds the document. Deleting never
+   stops a run that may be pushing a branch or opening a pull request: the person
+   stops the build, then deletes, and the dialog says so.
+2. Marks the document and its children as being deleted, so nothing new starts on
+   them: sockets, Planner turns and tools, jobs and research are refused, and the
+   WebSocket upgrade answers 404.
+3. Stops everything working on them: editing in their rooms, the Planner session
+   and its AI launches, a remote Planner's link and hold, background jobs (the
+   work of research requests among them) and investigations or prototypes on
+   machines. It checks for a build once more.
+4. Deletes every row of the document and its children in one transaction under the
+   writer lease (see [Storage](storage.md#archival-and-deletion)).
+5. Only then tells anyone: each socket on the document or a child hears
+   `session:deleted` with `by`, the login of who deleted it, and closes with 4404;
+   every sidebar watching the repository hears `sidebar:catalogue` and a zero
+   `sidebar:decisions`; each machine running one's Planner is told who deleted it,
+   stops it, and once it has exited asks `planner/kept`, which says to forget its
+   disk. A browser on the document goes to its project's list with a notice saying
+   who deleted it; there is no Undo.
+
+A delete that fails, such as storage being unavailable, publishes nothing and
+serves the documents again; work it stopped stays stopped. A repeated or
+concurrent delete is answered as the first was: it waits behind the first and is
+answered 204, as is a repeat within ten minutes by someone allowed to delete it.
+A late write (a Planner tool, a queued job, a reconnecting client's buffered edit)
+finds the document gone and is refused, so nothing brings it back.
 
 MCP exposes `archive_document` and `restore_document`, and `list_documents`
 accepts `includeArchived`; direct MCP reads also remain available. These and
 other common MCP document summaries expose the optional description. MCP does
-not expose document deletion. See [Local agent MCP](local-agent-mcp.md).
+not expose document deletion: deleting is permanent and must be confirmed by a
+person who sees what goes, and an MCP caller is a coding agent acting with no such
+confirmation, including one acting on the very document a paired machine's launch
+token is limited to. See [Local agent MCP](local-agent-mcp.md).
 
 The reset endpoint releases Planner ownership and aborts its disposable runtime
 session. The current web application does not expose a control that calls it.

@@ -3,6 +3,7 @@ import chopinIcon from "./assets/figma/navigation/chopin.svg";
 import collapseIcon from "./assets/icons/panel-close.svg";
 import documentActionsIcon from "./assets/figma/navigation/document-actions.svg";
 import { unansweredDecisionsLabel, useDecisionAttention } from "./decision-view-control";
+import { mayDeleteDocument } from "@chopin/protocol/document-delete";
 import { DocumentActionsMenu } from "./document-actions-menu";
 import { addressOfHref, documentIntent, DWELL_MS } from "./document-intent";
 import { IconButton } from "./icon-button";
@@ -201,6 +202,7 @@ export function ProjectSidebarProject(
 		onLoadMore,
 		onToggle,
 		revealed,
+		userId,
 	}: {
 		archiveMode: boolean;
 		pendingCreations: ReadonlyMap<string, DocumentCreationPhase>;
@@ -214,6 +216,8 @@ export function ProjectSidebarProject(
 		onLoadMore: (entry: ProjectDocuments) => void;
 		onToggle: () => void;
 		revealed: boolean;
+		/** Who is reading, for who may delete a document. */
+		userId: string;
 	},
 ) {
 	let item = useRef<HTMLLIElement>(null);
@@ -325,6 +329,8 @@ export function ProjectSidebarProject(
 										<div className="project-sidebar-document-actions">
 											<DocumentActionsMenu
 												channel={channel}
+												deletable={!!project.repository
+													&& mayDeleteDocument(channel, project.repository.permissions, userId)}
 												iconButton
 												onAction={action => documentAction(channel, action)}
 												trigger={
@@ -712,6 +718,7 @@ export function ProjectSidebar(
 									onFocused={onFocusedProject ?? noop}
 									onLoadMore={onLoadMore}
 									revealed={revealedId === entry.project.repositoryId}
+									userId={user.id}
 									onToggle={() =>
 										setCollapsedProjectIds(current =>
 											toggleCollapsedProjectIds(current, entry.project.repositoryId)

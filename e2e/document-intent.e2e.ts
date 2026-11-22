@@ -306,7 +306,8 @@ test("a record read at rest is not used once the document has been deleted, howe
 	await listOnly(page, room, [target]);
 	let told = watchChanges(page);
 	let reads = watchReads(page);
-	await join("ana");
+	// Its creator, who may delete it.
+	await join("e2e");
 	let row = await restOn(page, target);
 
 	// Archiving it is the first change the page is told of, and deleting it the second.

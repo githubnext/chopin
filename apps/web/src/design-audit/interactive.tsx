@@ -71,6 +71,7 @@ export function InteractiveSpecimens() {
 								archivedAt: archived ? "2026-09-28T00:00:00.000Z" : undefined,
 							}}
 							className="btn btn-md btn-secondary"
+							deletable
 							onAction={action}
 							trigger="Document actions"
 						/>
@@ -128,11 +129,12 @@ export function InteractiveSpecimens() {
 				<NavigationDialog
 					motion={presence}
 					onDismiss={() => setDialog(undefined)}
-					title="Delete document permanently?"
+					title="Delete document?"
 				>
 					<p className="mt-2 text-sm text-text-secondary">
 						<strong className="font-semibold text-text-primary">{title}</strong>{" "}
-						will be permanently deleted. This cannot be undone.
+						is deleted for everyone, with its Chat and threads, its Decisions and its history. This
+						cannot be undone.
 					</p>
 					<div className="mt-4 flex justify-end gap-2">
 						<button
@@ -150,7 +152,7 @@ export function InteractiveSpecimens() {
 							}}
 							type="button"
 						>
-							Delete permanently
+							Delete document
 						</button>
 					</div>
 				</NavigationDialog>

@@ -212,9 +212,15 @@ export function researchPublicationContract(factory: StorageFactory): void {
 				now: new Date(input.now.getTime() + 3),
 				lease: await testLease(storage),
 			});
-			await expect(storage.channels.delete(childId))
+			await expect(storage.channels.delete({ id: childId, lease }))
 				.rejects.toMatchObject({ failure: "conflict" });
 			expect(await storage.channels.get(childId)).toBeDefined();
+			// Its parent takes it, with the request that published it.
+			expect((await storage.channels.delete({ id: channelId, lease })).map(item => item.id))
+				.toEqual([channelId, childId]);
+			expect(await storage.channels.get(childId)).toBeUndefined();
+			expect(await storage.collaboration.load(childId, input.now)).toBeUndefined();
+			expect(await storage.research.get(channelId, ready.workspaceId)).toBeUndefined();
 		} finally {
 			await storage.close();
 		}

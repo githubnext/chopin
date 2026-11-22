@@ -3489,6 +3489,28 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 			() => {},
 		);
 	}
+	/**
+	 * Documents were deleted for good: each machine running one's Planner stops it and is told who
+	 * deleted it, and once that Planner has exited its connector asks `planner/kept`, which says to
+	 * forget the document's disk.
+	 */
+	async function documentsDeleted(deleted: ChannelRecord[], login: string) {
+		for (let channel of deleted) {
+			inUse.delete(channel.id);
+			defaults.delete(channel.id);
+			for (let asked of retryAsked.values()) asked.delete(channel.id);
+			for (let [machineId, told] of dispatched) {
+				if (!told.has(channel.id)) continue;
+				await stopPlanners(
+					machineId,
+					label => `${login} deleted this document, so ${label} stopped running its Planner.`,
+					id => id !== channel.id,
+				);
+			}
+			forgetStartFailure(channel.id);
+			connections.wake(channel.repositoryId);
+		}
+	}
 	return {
 		service,
 		connections,
@@ -3505,6 +3527,10 @@ export function registerExperimentRoutes(router: Router, auth: HostedAuth, optio
 		plannerChanged,
 		plannerUsed,
 		plannerStarting,
+		documentsDeleted: (deleted: ChannelRecord[], login: string) =>
+			void documentsDeleted(deleted, login).catch(err =>
+				console.error("chopin: could not stop a deleted document's Planner on its machine -", err)
+			),
 		/** Whether this server runs Planners on people's machines: HARNESS=remote, machines' own GitHub. */
 		plannerMachines: !!options.planners && auth.machines.durable,
 		sourceFor,

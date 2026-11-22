@@ -281,12 +281,8 @@ if (url) {
 				lease: lease!,
 			});
 			await storage.navigation.setLastDocument(userId, channelId, new Date(now.getTime() + 7));
-			await storage.channels.archive({
-				id: channelId,
-				now: new Date(now.getTime() + 8),
-				lease: await testLease(storage),
-			});
-			expect(await storage.channels.delete(channelId)).toBe(true);
+			expect(await storage.channels.delete({ id: channelId, lease: await testLease(storage) }))
+				.toHaveLength(1);
 		} finally {
 			await storage.close();
 		}

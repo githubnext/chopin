@@ -225,7 +225,7 @@ export function mcpInvocationContract(name: string, factory: StorageFactory) {
 				await storage.mcpInvocations.claim(lease, kept);
 				await storage.channels.archive({ id: channelId, now: AT, lease });
 				expect(await storage.mcpInvocations.get(doomed)).toMatchObject({ invokedAt: INVOKED_AT });
-				expect(await storage.channels.delete(channelId)).toBe(true);
+				expect(await storage.channels.delete({ id: channelId, lease })).toHaveLength(1);
 				expect(await storage.mcpInvocations.get(doomed)).toBeUndefined();
 				expect(await storage.mcpInvocations.get(kept)).toEqual(kept);
 				expect((await refusal(storage.mcpInvocations.claim(lease, doomed))).failure)

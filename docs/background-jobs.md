@@ -682,8 +682,9 @@ the workflow needs and document its retention boundary.
 
 There is no current pruning policy for jobs, artifacts, or internal research
 staging while their parent document remains stored. Cancellation prevents child
-publication; it does not erase input or history. Full eligible document deletion
-is the exception and removes that channel-owned state.
+publication; it does not erase input or history. Deleting a document is the
+exception: it cancels the document's jobs first and removes that channel-owned
+state, its children's included.
 
 ## Browser and Planner integration
 

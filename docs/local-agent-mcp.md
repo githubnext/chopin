@@ -429,7 +429,8 @@ own upload of the image, so a card never shows an image from another document.
 `list_documents` excludes archived documents by default. Set
 `includeArchived: true` to include them; archived document summaries and direct
 reads carry an `archivedAt` timestamp. Archiving and restoring are idempotent.
-MCP does not expose document deletion.
+MCP does not expose document deletion: deleting is permanent, and only a person
+who sees what goes with a document confirms it, in the browser.
 
 ## Generated descriptions
 

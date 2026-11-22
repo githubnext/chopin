@@ -29,8 +29,13 @@ export class MemoryExperimentStore implements ExperimentStore {
 		let value = [...this.#records.values()].find(item => item.childId === childId);
 		return value && this.options.exists(value.documentId) ? structuredClone(value) : undefined;
 	}
-	referencesChannel(channelId: string): boolean {
-		return [...this.#records.values()].some(value => value.childId === channelId);
+	/** Investigations of these documents, or that published one of them, go with them. */
+	deleteChannels(ids: ReadonlySet<string>) {
+		for (let [id, value] of this.#records) {
+			if (ids.has(value.documentId) || value.childId && ids.has(value.childId)) {
+				this.#records.delete(id);
+			}
+		}
 	}
 	async active() {
 		return [...this.#records.values()].filter(value =>

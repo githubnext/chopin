@@ -747,10 +747,6 @@ export class MemoryResearchWorkspaceStore implements ResearchWorkspaceStore {
 			});
 		});
 
-	referencesChannel(channelId: string): boolean {
-		return [...this.#workspaces.values()].some(value => value.publishedChannelId === channelId);
-	}
-
 	readonly list = async (
 		channelId: string,
 		limit: number,

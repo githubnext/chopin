@@ -360,7 +360,8 @@ inside the guest, or reads nothing of it:
 - **Removal.** The connector removes a Planner's disk, with its token folder and its
   agents' state:
   - when Chopin says its document is archived or gone (`POST
-    /api/connector/planner/kept`, asked as the connector connects and every hour);
+    /api/connector/planner/kept`, asked as the connector connects, every hour, and
+    once a Planner Chopin stopped asking for has exited, as when its document is deleted);
   - when a writer reset the document's Planner in Chopin after the disk was made.
     Chopin keeps when it was last reset (`channels.planner_reset_at`, migration 052)
     and names it with each Planner credential; the connector keeps the reset each disk

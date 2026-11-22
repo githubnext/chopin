@@ -139,8 +139,13 @@ export class MemoryMachineStore implements MachineStore {
 		if (found.repositories.some(value => value.repositoryId === repository.repositoryId)) return;
 		found.repositories.push(structuredClone(repository));
 	}
+	/** A deleted document takes its choices with it, as the database's cascade does. */
+	deleteChannel(channelId: string) {
+		for (let [key, choice] of this.#choices) {
+			if (choice.channelId === channelId) this.#choices.delete(key);
+		}
+	}
 	async choices() {
-		// A deleted document takes its choices with it, as the database's cascade does.
 		return [...this.#choices.values()].filter(value => this.channelExists(value.channelId))
 			.map(value => ({ ...value }));
 	}

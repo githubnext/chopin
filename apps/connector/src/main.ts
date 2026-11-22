@@ -809,9 +809,19 @@ export async function connect(args: string[], injected: Injected = {}) {
 				gate,
 			};
 			let planning = servePlanners(backends);
+			// Planner disks of documents Chopin no longer has, or no Planner ran on for long, go when
+			// connected, every hour, and once a Planner Chopin stopped asking for has exited; never
+			// one a running microVM has.
+			let sweep = () =>
+				void sweepPlannerDisks({
+					directory,
+					server: url,
+					output,
+					ask: documents => forgettablePlanners(url, machine, documents, abort.signal),
+				}).catch(() => {});
 			// The Planners Chopin asks for, of documents this machine's owner chose it for.
 			let dispatched = plannerCommand.length
-				? dispatchedPlanners({ ...backends, chosen })
+				? dispatchedPlanners({ ...backends, chosen, withdrawn: sweep })
 				: undefined;
 			try {
 				await serveWork({
@@ -838,15 +848,6 @@ export async function connect(args: string[], injected: Injected = {}) {
 						if (!announced) {
 							output.connected(Object.keys(registered));
 							output.say(output.style.dim(sandboxLabel(report)));
-							// Planner disks of documents Chopin no longer has, or no Planner ran on for long,
-							// go now and every hour, never one a running microVM has.
-							let sweep = () =>
-								void sweepPlannerDisks({
-									directory,
-									server: url,
-									output,
-									ask: documents => forgettablePlanners(url, machine, documents, abort.signal),
-								}).catch(() => {});
 							sweep();
 							sweeping = setInterval(sweep, PLANNER_DISK_SWEEP_MS);
 							sweeping.unref();

@@ -13,6 +13,7 @@ import { createPortal, flushSync } from "react-dom";
 import { FollowLinkProvider } from "@chopin/editor/follow-link";
 import { ImagePlace } from "@chopin/editor/image-place";
 import { rememberAvatars } from "@chopin/editor/people";
+import { mayDeleteDocument } from "@chopin/protocol/document-delete";
 import { documentPath } from "@chopin/protocol/document-url";
 import {
 	ArchiveIcon,
@@ -254,6 +255,8 @@ export function RoomMembers(
 
 type TitleProps = {
 	archivedAt?: string;
+	/** The reader may delete the document for good: its menu offers Delete. */
+	canDelete?: boolean;
 	canManage: boolean;
 	editing?: TitleEdit;
 	label: string;
@@ -285,6 +288,7 @@ let renamedFromField = new Map<string, number>();
 export function DocumentTitle(
 	{
 		archivedAt,
+		canDelete = false,
 		canManage,
 		decision,
 		editing,
@@ -412,6 +416,7 @@ export function DocumentTitle(
 						channel={{ archivedAt, title: label }}
 						className="title-control-action"
 						decision={decision}
+						deletable={canDelete && !decision}
 						onAction={action => action === "rename" ? onEditingChange("rename") : onAction(action)}
 						settings={width && !decision && !archivedAt && (
 							<MenuSwitchItem checked={width.full} onChange={width.onChange}>
@@ -481,6 +486,7 @@ export function Header(
 		<header className="room-header relative flex shrink-0 flex-nowrap items-center px-2 py-2 sm:px-5 sm:py-0">
 			<DocumentTitle
 				archivedAt={props.archivedAt}
+				canDelete={props.canDelete}
 				canManage={props.canManage}
 				editing={props.editing}
 				icon
@@ -508,12 +514,14 @@ export function RoomWorkspace(
 		archivedAt,
 		canEdit = true,
 		canManage,
+		createdBy,
 		description,
 		descriptionRevision,
 		fullWidth,
 		handle,
 		label,
 		onMetadataChanged,
+		parentChannelId,
 		presentation,
 		repository,
 		room,
@@ -1308,9 +1316,9 @@ export function RoomWorkspace(
 			channelId: room,
 			onAuthenticationRequired: () => location.reload(),
 			onOutage: setOutage,
-			onDeleted: () => {
+			onDeleted: by => {
 				setDeleted(true);
-				onDocumentDeleted(room);
+				onDocumentDeleted(room, by);
 			},
 			onStatus: next => {
 				if (next === "connected") {
@@ -1895,8 +1903,13 @@ export function RoomWorkspace(
 	let machinePicker = status === "connected" || (!!wire?.restarting && treatAsConnected)
 		? machineSlot
 		: undefined;
+	// Who may delete it for good: its creator while they can write, or a repository admin. A child
+	// goes with its parent and has no Delete of its own.
+	let canDelete = effectiveCanManage && !!createdBy
+		&& mayDeleteDocument({ createdBy, parentChannelId }, repository.permissions, userId);
 	let titleProps: TitleProps = {
 		archivedAt: workspaceArchivedAt,
+		canDelete,
 		canManage: effectiveCanManage,
 		editing: titleEdit,
 		label: metadata.title,
@@ -2200,6 +2213,7 @@ export function RoomWorkspace(
 								>
 									<PhoneHeaderContent
 										archivedAt={workspaceArchivedAt}
+										canDelete={canDelete}
 										canManage={effectiveCanManage}
 										comments={openComments}
 										context={buildSlot}

@@ -309,14 +309,11 @@ test("announces the repository total after a document is permanently deleted", a
 		await eventually(() => plan.persistence.committedUnanswered === 2 || undefined);
 		await Service.drain(plan);
 		await Service.persist(plan);
-		let archived = await storage.channels.archive({
-			id: channel.id,
-			now,
-			lease: await testLease(storage),
-		});
+		let lease = await testLease(storage);
+		let archived = await storage.channels.archive({ id: channel.id, now, lease });
 		await Service.close(plan);
 		closed = true;
-		expect(await storage.channels.delete(channel.id)).toBe(true);
+		expect(await storage.channels.delete({ id: channel.id, lease })).toHaveLength(1);
 		await Service.announceDeletedUnanswered(server, storage, archived.channel);
 
 		let frames = published.filter(entry => entry.frame.kind === "sidebar:decisions");

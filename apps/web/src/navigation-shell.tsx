@@ -16,7 +16,7 @@ import {
 import type { Dispatch, SetStateAction } from "react";
 import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
-import { documentPath } from "@chopin/protocol/document-url";
+import { documentPath, documentsPath } from "@chopin/protocol/document-url";
 
 import * as Api from "./api";
 import { newestDocument, updateDocumentMetadata } from "./document-actions";
@@ -153,7 +153,8 @@ let NavigationDocument = createContext<{
 		update: DocumentMetadata,
 	) => void;
 	onDocumentAction: (documentId: string, action: DocumentAction) => void;
-	onDocumentDeleted: (documentId: string) => void;
+	/** A document was deleted, by `by` (a login) when known: it leaves the page and the sidebar. */
+	onDocumentDeleted: (documentId: string, by?: string) => void;
 	onDocumentLoaded: (channel: Api.Channel, routeKey: DocumentRouteIdentity) => Promise<void>;
 	onDocumentRouteSettled: (routeKey: DocumentRouteIdentity) => void;
 	onProjectReveal: (repositoryId: string) => void;
@@ -659,11 +660,27 @@ export function NavigationShell(
 		resolvedDocumentRef.current = next;
 		setResolvedDocument(next);
 	}, [clearLastDocument, upsertDocument]);
-	let documentDeleted = useCallback((documentId: string) => {
-		let channel = knownChannelsRef.current.get(documentId);
+	/** The document whose deletion was last told, once however many of its sockets hear it. */
+	let deletedNotice = useRef<string>(undefined);
+	let documentDeleted = useCallback((documentId: string, by?: string) => {
+		let known = knownChannelsRef.current;
+		let channel = known.get(documentId);
 		// Loaded on demand: forgetting a deleted document's recovery state is not first-paint work.
 		if (channel) {
 			void import("./channel-recovery").then(recovery => recovery.forgetChannel(user.id, channel));
+		}
+		// A child goes with its parent, and is told as its parent's deletion.
+		let root = channel?.parentChannelId ? known.get(channel.parentChannelId) ?? channel : channel;
+		if (root && deletedNotice.current !== root.id) {
+			deletedNotice.current = root.id;
+			showNotice({
+				message: by === user.login
+					? `Deleted ${root.title}`
+					: by
+					? `${by} deleted ${root.title}`
+					: `${root.title} was deleted`,
+				duration: 8000,
+			});
 		}
 		removeDocument(documentId);
 		clearLastDocument(documentId);
@@ -677,8 +694,14 @@ export function NavigationShell(
 				? undefined
 				: currentDialog
 		);
-		if (currentDocumentIdRef.current === documentId) navigate("/", { replace: true });
-	}, [clearLastDocument, navigate, removeDocument, user.id]);
+		// Whoever had it open goes to its project's list, which the sidebar shows.
+		if (currentDocumentIdRef.current === documentId) {
+			navigate(
+				channel ? documentsPath(channel.repositoryOwner, channel.repositoryName) : "/",
+				{ replace: true },
+			);
+		}
+	}, [clearLastDocument, navigate, removeDocument, user.id, user.login]);
 	let documentAction = useCallback((channel: Api.Channel, action: DocumentAction) => {
 		setDrawerOpen(false);
 		setAccountOpen(false);
@@ -1210,9 +1233,10 @@ export function NavigationShell(
 						<LazyDialogBoundary onFailure={() => setDialogLoadFailed(true)}>
 							<DeleteDocumentDialog
 								channel={presentedDialog.channel}
+								known={knownChannelsRef.current}
 								motion={dialogMotion}
 								onDeleted={() =>
-									documentDeleted(presentedDialog.channel.id)}
+									documentDeleted(presentedDialog.channel.id, user.login)}
 								onDismiss={dismissDialog}
 							/>
 						</LazyDialogBoundary>

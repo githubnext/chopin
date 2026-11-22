@@ -1,5 +1,6 @@
 import { displayTitle } from "@chopin/dialect";
 import * as Plan from "../plan/service";
+import { mayDeleteDocument } from "@chopin/protocol/document-delete";
 import { documentPath } from "@chopin/protocol/document-url";
 import { MAX_GITHUB_REFERENCES, parseGitHubReferenceKey } from "@chopin/protocol/github-reference";
 
@@ -13,6 +14,7 @@ import { documentSlug } from "./slug";
 import { normalizedTitle } from "./title";
 
 import type { HostedAuth } from "../auth/routes";
+import type { DeleteOutcome, Deleter } from "./deletion";
 import type { AuthenticatedSession } from "../auth/session";
 import type { GitHubReference, GitHubReferencesResponse } from "@chopin/protocol/github-reference";
 import type { Repository } from "../github/client";
@@ -261,7 +263,12 @@ export function registerChannelRoutes(
 		onAgentReset?: (channelId: string) => Promise<void>;
 		/** Archives a document, under the writer lease, as every write that ends AI authority is. */
 		onChannelArchived: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
-		onChannelDeleted?: (channelId: string) => Promise<boolean>;
+		/**
+		 * Deletes a document for good, with its children, for `by`, who may (see `mayDeleteDocument`).
+		 */
+		onChannelDeleted: (channelId: string, by: Deleter) => Promise<DeleteOutcome>;
+		/** A document this process deleted moments ago, so a repeated delete is answered alike. */
+		deletedChannel?: (channelId: string) => ChannelRecord | undefined;
 		onChannelRenamed?: (channel: ChannelRecord) => void;
 		/** A person created a document. */
 		onChannelCreated?: (channel: ChannelRecord) => void;
@@ -749,7 +756,8 @@ export function registerChannelRoutes(
 			if (!session) return json({ error: "authentication required" }, 401);
 			let id = params.channelId!;
 			if (!isChannelId(id)) return json({ error: "channel not found" }, 404);
-			let channel = await auth.storage.channels.get(id);
+			// One deleted moments ago is authorized as it was, so a repeat is answered alike.
+			let channel = await auth.storage.channels.get(id) ?? options.deletedChannel?.(id);
 			if (!channel) return json({ error: "channel not found" }, 404);
 			let repo = await authorizedRepository(
 				auth,
@@ -763,15 +771,26 @@ export function registerChannelRoutes(
 			if (!repo.permissions.push && !repo.permissions.admin) {
 				return json({ error: "repository write access is required" }, 403);
 			}
-			if (!channel.archivedAt) {
-				return json({ error: "document must be archived before deletion" }, 409);
+			if (channel.parentChannelId) {
+				return json({ error: "A research document is deleted with the document it's in." }, 409);
 			}
-			let deleted = options.onChannelDeleted
-				? await options.onChannelDeleted(id)
-				: await auth.storage.channels.delete(id);
-			return deleted
-				? new Response(null, { status: 204, headers: { "cache-control": "no-store" } })
-				: json({ error: "channel not found" }, 404);
+			if (!mayDeleteDocument(channel, repo.permissions, session.user.id)) {
+				return json({
+					error: "Only the person who created this document or a repository admin can delete it.",
+				}, 403);
+			}
+			let outcome = await options.onChannelDeleted(id, {
+				id: session.user.id,
+				login: session.user.login,
+			});
+			if (outcome.kind === "deleted") {
+				return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+			}
+			if (outcome.kind === "running") return json({ error: outcome.message }, 409);
+			if (outcome.kind === "child") {
+				return json({ error: "A research document is deleted with the document it's in." }, 409);
+			}
+			return json({ error: "channel not found" }, 404);
 		} catch (err) {
 			return failure(err, request, auth);
 		}

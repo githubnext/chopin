@@ -1510,12 +1510,10 @@ test("a deleted document cannot block implementation recovery sweeps", async () 
 	});
 	context.experiments.connections.revoke(connection.connection.id);
 	await Plan.close(context.plan);
-	await context.storage.channels.archive({
+	await context.storage.channels.delete({
 		id: context.plan.id,
-		now: context.now,
 		lease: await testLease(context.storage),
 	});
-	await context.storage.channels.delete(context.plan.id);
 	await expect(context.implementations.sweep()).resolves.toBeUndefined();
 	await expect(context.implementations.sweep()).resolves.toBeUndefined();
 });
@@ -1770,12 +1768,10 @@ test("a second document queues behind the first on one connection, which a finis
 		expect(queued.state).toBe("queued");
 		await Plan.close(third);
 		context.plans.delete(third.id);
-		await context.storage.channels.archive({
+		await context.storage.channels.delete({
 			id: third.id,
-			now: context.now,
 			lease: await testLease(context.storage),
 		});
-		await context.storage.channels.delete(third.id);
 		let snapshot = await context.call(context.path);
 		expect(snapshot.status).toBe(200);
 		expect((await snapshot.json()).localAgent).toBe(true);

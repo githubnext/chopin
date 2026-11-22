@@ -92,6 +92,7 @@ import { handleConversationCommand } from "./conversation-plan/commands";
 import { handleResearchCommand } from "./conversation-plan/research-commands";
 import { startAcceptedResearch } from "./conversation-plan/accepted-research";
 import { registerChannelRoutes } from "./channels/routes";
+import { DocumentDeletion } from "./channels/deletion";
 import { DocumentHistory } from "./channels/history";
 import * as Comments from "./comments/service";
 import { clientBuild, proxy, serve } from "./client";
@@ -219,6 +220,7 @@ import type { DocumentSummaryInput } from "./jobs/document-summary";
 import type { JobDefinition } from "./jobs/registry";
 import type { InvestigationPlacement } from "./plan/room";
 import type { ChannelRecord, Lease, PlannerLinkHold } from "./storage/model";
+import type { Deleter } from "./channels/deletion";
 import type {
 	AuthorizationResult,
 	SidebarSocket,
@@ -2158,9 +2160,9 @@ async function checkAccess(ws: Socket, forceGitHub: boolean): Promise<Authorizat
 		let request = new Request(hostedAuth.config.origin, { headers: { cookie: data.credential } });
 		let session = await hostedAuth.sessions.authenticate(request);
 		if (!session || session.user.id !== data.principalId) return "denied";
-		let channel = deletingChannels.has(data.room)
-			? undefined
-			: await storage.channels.get(data.room);
+		// Being deleted: the socket hears so once the delete commits, or is served again if it fails.
+		if (deletingChannels.has(data.room)) return "unavailable";
+		let channel = await storage.channels.get(data.room);
 		if (!channel || channel.repositoryId !== data.repositoryId) return "denied";
 		if (!forceGitHub && Date.now() - (data.accessCheckedAt ?? 0) < ACCESS_RECHECK_MS) {
 			applyChannelAccess(ws, channel, data.canManage);
@@ -2211,13 +2213,13 @@ function scheduleAuthorization(ws: Socket): void {
 }
 
 async function validateOpenedSocket(ws: Socket): Promise<void> {
-	let channel = deletingChannels.has(ws.data.room)
-		? undefined
-		: await storage.channels.get(ws.data.room);
-	if (
-		!channel || channel.repositoryId !== ws.data.repositoryId || deletingChannels.has(channel.id)
-	) {
-		tell(ws, { kind: "session:deleted", ts: 0, channelId: ws.data.room });
+	// One that joined as a delete began hears of it with the room, once it commits.
+	if (deletingChannels.has(ws.data.room)) return;
+	let channel = await storage.channels.get(ws.data.room);
+	if (deletingChannels.has(ws.data.room)) return;
+	if (!channel || channel.repositoryId !== ws.data.repositoryId) {
+		let by = documentDeletion.recent(ws.data.room)?.by.login;
+		tell(ws, { kind: "session:deleted", ts: 0, channelId: ws.data.room, ...(by ? { by } : {}) });
 		ws.close(4404, "document deleted");
 		return;
 	}
@@ -2904,46 +2906,88 @@ function restoreChannel(channelId: string, now: Date) {
 	return withDocumentTransition(channelId, () => restoreChannelLocked(channelId, now));
 }
 
-async function deleteChannelLocked(channelId: string): Promise<boolean> {
-	if (deletingChannels.has(channelId)) return false;
-	let channel = await storage.channels.get(channelId);
-	if (!channel) return false;
-	if (!channel.archivedAt) {
-		throw new StorageError("conflict", `channel ${channelId} must be archived before deletion`);
+/** Why a document can't be deleted while a build holds it; its card offers Stop. */
+const DELETE_WHILE_BUILDING =
+	"This document is being built. Stop the build, then delete the document.";
+
+/**
+ * A build or an implementation run claimed by a coding agent holds the document: deleting it is
+ * refused rather than the run stopped, since it may be pushing a branch or opening a pull request.
+ */
+async function buildingAny(ids: string[]): Promise<string | undefined> {
+	for (let id of ids) {
+		let active = Rooms.get(id)?.plan;
+		let state = active
+			? { claiming: active.claiming, execution: active.execution, builds: active.builds }
+			: (await storage.collaboration.load(id, new Date()))?.sidecar as
+				| { claiming?: boolean; execution?: unknown; builds?: Array<{ state: string }> }
+				| null
+				| undefined;
+		if (
+			state?.claiming || state?.execution
+			|| state?.builds?.some(build => ["queued", "starting", "running"].includes(build.state))
+		) return DELETE_WHILE_BUILDING;
 	}
-	deletingChannels.add(channelId);
+	return undefined;
+}
+
+/** The children of a document anything may work on: those listed, and those open in a room. */
+async function deletableChildren(document: ChannelRecord): Promise<string[]> {
+	let ids = new Set((await storage.channels.children(document.id, 100)).map(child => child.id));
+	for (let room of Rooms.all()) if (room.parentChannelId === document.id) ids.add(room.id);
+	return [...ids];
+}
+
+/**
+ * Everything working on a document being deleted stops, before the commit: editing in its room,
+ * its Planner with its AI launches and a remote Planner's hold, its jobs (research requests' work
+ * among them) and its investigations and prototypes on machines.
+ */
+async function stopForDeletion(channelId: string): Promise<void> {
 	let room = Rooms.get(channelId);
-	for (let ws of room?.members.values() ?? []) ws.data.canEdit = false;
-	try {
-		await summaryCoordinator?.suspend(channelId);
-		await jobRunner?.cancelChannel(channelId);
-		ownerBindings?.revokeChannel(channelId);
-		let deleted = await withDocumentLock(channelId, async () => {
-			let activeRoom = Rooms.get(channelId);
-			let active = activeRoom?.plan;
-			if (activeRoom) activeRoom.plan = undefined;
-			if (active) {
-				let stopped = conversationRuntime.stop(active);
-				await stopped;
-				await Service.close(active);
-			}
-			return storage.channels.delete(channelId);
-		});
-		if (!deleted) throw new StorageError("missing", `channel ${channelId} does not exist`);
-		for (let ws of room?.members.values() ?? []) {
-			tell(ws, { kind: "session:deleted", ts: 0, channelId });
-			ws.close(4404, "document deleted");
+	for (let ws of room?.members.values() ?? []) {
+		ws.data.canEdit = false;
+		room?.plan?.chat.typists?.retire(ws.data.client);
+	}
+	await summaryCoordinator?.suspend(channelId);
+	await jobRunner?.cancelChannel(channelId);
+	ownerBindings?.revokeChannel(channelId);
+	await withDocumentLock(channelId, async () => {
+		let activeRoom = Rooms.get(channelId);
+		let active = activeRoom?.plan;
+		if (activeRoom) activeRoom.plan = undefined;
+		if (active) {
+			let stopped = conversationRuntime.stop(active);
+			await Chat.resetAgent(
+				active.chat,
+				undefined,
+				undefined,
+				"Stopped because this document is being deleted.",
+			);
+			await stopped;
+			await conversationRuntime.interrupt(active);
+			// Edits already admitted are written, so a delete that fails loses none.
+			await Service.drain(active);
+			await Service.close(active);
 		}
-		if (room) Rooms.forget(room);
-		buildReadiness?.forget(channelId);
-		void Service.announceDeletedUnanswered(server, storage, channel);
-		announceCatalogue(channel);
-		summaryCoordinator?.resume(channelId);
-		return true;
-	} catch (err) {
-		deletingChannels.delete(channelId);
+	});
+	// A remote Planner's link and hold end, and with them its sessions' AI launches.
+	await plannerAttachments?.documentEnded(channelId);
+	for (let investigation of await experiments?.service.store.list(channelId) ?? []) {
+		if (!["queued", "running", "publishing"].includes(investigation.state)) continue;
+		await experiments?.service.stop(investigation.id, "cancelled", "Its document was deleted.")
+			.catch(err =>
+				console.error("chopin: could not stop a deleted document's investigation -", err)
+			);
+	}
+}
+
+/** A delete that did not commit: the documents are served again, as after a failed archive. */
+async function resumeAfterDeletion(ids: string[]): Promise<void> {
+	for (let channelId of ids) {
 		summaryCoordinator?.resume(channelId);
 		jobRunner?.unblockChannel(channelId);
+		let room = Rooms.get(channelId);
 		let channel: ChannelRecord | undefined;
 		try {
 			channel = await storage.channels.get(channelId);
@@ -2951,37 +2995,50 @@ async function deleteChannelLocked(channelId: string): Promise<boolean> {
 			for (let ws of room?.members.values() ?? []) {
 				ws.close(SERVICE_RESTART, "document state is temporarily unavailable");
 			}
-			throw err;
+			continue;
 		}
-		if (channel) {
-			let survivingRoom = Rooms.get(channelId);
-			if (survivingRoom?.members.size) {
-				try {
-					await plan(survivingRoom, server);
-				} catch {
-					for (let ws of survivingRoom.members.values()) {
-						ws.close(SERVICE_RESTART, "document reload required");
-					}
-				}
+		if (!channel) continue;
+		if (room?.members.size) {
+			try {
+				await plan(room, server);
+			} catch {
+				for (let ws of room.members.values()) ws.close(SERVICE_RESTART, "document reload required");
 			}
-			announceChannel(channel);
-		} else {
-			for (let ws of room?.members.values() ?? []) {
-				tell(ws, { kind: "session:deleted", ts: 0, channelId });
-				ws.close(4404, "document deleted");
-			}
-			if (room) Rooms.forget(room);
 		}
-		throw err;
-	} finally {
-		deletingChannels.delete(channelId);
-		jobRunner?.unblockChannel(channelId);
+		announceChannel(channel);
 	}
 }
 
-function deleteChannel(channelId: string): Promise<boolean> {
-	return withDocumentTransition(channelId, () => deleteChannelLocked(channelId));
+/** After the commit: every socket on the documents hears who deleted them, and every sidebar. */
+function announceDeleted(deleted: ChannelRecord[], by: Deleter): void {
+	for (let channel of deleted) {
+		let room = Rooms.get(channel.id);
+		for (let ws of room?.members.values() ?? []) {
+			tell(ws, { kind: "session:deleted", ts: 0, channelId: channel.id, by: by.login });
+			ws.close(4404, "document deleted");
+		}
+		if (room) Rooms.forget(room);
+		buildReadiness?.forget(channel.id);
+		summaryCoordinator?.resume(channel.id);
+		jobRunner?.unblockChannel(channel.id);
+		void Service.announceDeletedUnanswered(server, storage, channel);
+		announceCatalogue(channel);
+	}
+	experiments?.documentsDeleted(deleted, by.login);
 }
+
+let documentDeletion = new DocumentDeletion({
+	storage,
+	lease: heldLease,
+	deleting: deletingChannels,
+	transition: withDocumentTransition,
+	children: deletableChildren,
+	running: buildingAny,
+	stop: stopForDeletion,
+	resume: resumeAfterDeletion,
+	deleted: announceDeleted,
+	clock: () => hostedAuth.clock().getTime(),
+});
 
 async function announceJobsChanged(channelId: string): Promise<void> {
 	if (cutting) return;
@@ -3714,7 +3771,8 @@ if (config.liveSpikes) {
 registerChannelRoutes(router, hostedAuth, {
 	onAgentReset: channelOwnerReset,
 	onChannelArchived: archiveChannel,
-	onChannelDeleted: deleteChannel,
+	onChannelDeleted: (id, by) => documentDeletion.delete(id, by),
+	deletedChannel: id => documentDeletion.recent(id)?.channel,
 	onChannelCreated: documentCreated,
 	renameChannel: (id, title) =>
 		withImplementationPlan(

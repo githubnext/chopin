@@ -70,6 +70,7 @@ export function AuditSidebarProject(
 					onToggle={() => {}}
 					pendingCreations={new Map()}
 					revealed={false}
+					userId="MaggieAppleton"
 				/>
 			</ul>
 		</div>
