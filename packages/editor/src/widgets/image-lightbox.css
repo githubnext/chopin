@@ -2,19 +2,20 @@
  * The image viewer, laid out as Slack's: the whole window over a dimmed, heavily blurred copy of
  * the picture, who and where along the top with Close at its end, the picture in the middle with a
  * margin, rotate and zoom at the bottom start and Download alone at the bottom end. Its ground is
- * dark whatever the picture is, so its words and controls are the page's colour on it: the blur is
- * dimmed to at most the luminance where white text still reads at 7:1 over a white picture.
+ * dark whatever the picture is, and in either theme, so its words and controls are white on it:
+ * the blur is dimmed to at most the luminance where white text still reads at 7:1 over a white
+ * picture. The viewer's colours are the same by day and by night (`--color-viewer`).
  */
 
 .image-viewer {
-	--image-viewer-ink: var(--color-page);
-	--image-viewer-muted: var(--color-gray-300);
-	--image-viewer-control: color-mix(in oklch, var(--color-page) 12%, transparent);
-	--image-viewer-control-hover: color-mix(in oklch, var(--color-page) 22%, transparent);
+	--image-viewer-ink: var(--color-white);
+	--image-viewer-muted: var(--color-viewer-muted);
+	--image-viewer-control: color-mix(in oklch, var(--color-white) 12%, transparent);
+	--image-viewer-control-hover: color-mix(in oklch, var(--color-white) 22%, transparent);
 	/* Previous and Next can sit over the picture itself, so they carry a dark ground of their own. */
-	--image-viewer-step: color-mix(in oklch, var(--color-gray-900) 62%, transparent);
-	--image-viewer-step-hover: color-mix(in oklch, var(--color-gray-900) 78%, transparent);
-	--image-viewer-track: color-mix(in oklch, var(--color-page) 45%, transparent);
+	--image-viewer-step: color-mix(in oklch, var(--color-viewer) 62%, transparent);
+	--image-viewer-step-hover: color-mix(in oklch, var(--color-viewer) 78%, transparent);
+	--image-viewer-track: color-mix(in oklch, var(--color-white) 45%, transparent);
 	position: fixed;
 	inset: 0;
 	inline-size: 100%;
@@ -25,7 +26,7 @@
 	padding: 0;
 	overflow: hidden;
 	border: 0;
-	background: var(--color-gray-900);
+	background: var(--color-viewer);
 	color: var(--image-viewer-ink);
 	font-family: var(--font-sans);
 	overscroll-behavior: contain;
@@ -63,7 +64,7 @@
 	content: "";
 	position: absolute;
 	inset: 0;
-	background: color-mix(in oklch, var(--color-gray-900) 40%, transparent);
+	background: color-mix(in oklch, var(--color-viewer) 40%, transparent);
 }
 
 .image-viewer-header,
