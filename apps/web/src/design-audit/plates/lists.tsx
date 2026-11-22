@@ -27,7 +27,11 @@ export function ListsPlate() {
 			item="lists"
 			title="Lists"
 		>
-			<div className="navigation-modal-content navigation-palette">
+			<div
+				aria-label="Search documents"
+				className="navigation-modal-content navigation-palette"
+				role="dialog"
+			>
 				<DocumentSearchField input={input} onQuery={() => {}} query="Design" />
 				<DocumentSearchResults
 					input={input}
