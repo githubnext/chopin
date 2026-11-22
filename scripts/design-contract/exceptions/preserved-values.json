@@ -255,7 +255,7 @@
 	},
 	{
 		"file": "packages/editor/src/face.tsx",
-		"reason": "Participant identity color is derived from the account handle, not a semantic interface color; preserve collaborative presence distinction.",
+		"reason": "Participant identity color is derived from the account handle, not a semantic interface color; preserve collaborative presence distinction. The initial mixes less of it into the light ink at night (`mixInk`), for AA there.",
 		"cases": [
 			[
 				"color",
@@ -267,12 +267,12 @@
 			[
 				"color",
 				"color",
-				"`color-mix(in srgb, ${tone} 80%, var(--color-text-primary))`",
+				"`light-dark(${mixInk(tone, 80)}, ${mixInk(tone, 60)})`",
 				"style object > Portrait > <span>",
 				1
 			]
 		],
-		"sourceHash": "3522beb37db7dc36895276f664a9bb74410a5c0381b96bf0a375ef34011a049d"
+		"sourceHash": "87da38eb5ea71afef2b50f22aaa1817813ea17c485b08e3bfef0cb9ac9dc5aa4"
 	},
 	{
 		"file": "packages/editor/src/callout.css",
