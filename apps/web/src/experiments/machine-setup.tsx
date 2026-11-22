@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { safeLocalStorage } from "@chopin/editor/browser-storage";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { CheckIcon, ChevronIcon, CloseIcon, CloudIcon, CopyIcon, MachineIcon } from "@chopin/icons";
 import { UnfoldPanel, UnfoldToggle, useUnfold } from "@chopin/visuals/unfold";
@@ -189,9 +190,9 @@ function useSetupAgents() {
  */
 export function useAgent(kind: "server" | "computer") {
 	let setupAgents = useSetupAgents();
-	let [picked, setPicked] = useState(() => localStorage.getItem(AGENT_KEY));
+	let [picked, setPicked] = useState(() => safeLocalStorage.getItem(AGENT_KEY));
 	let choose = (id: string) => {
-		localStorage.setItem(AGENT_KEY, id);
+		safeLocalStorage.setItem(AGENT_KEY, id);
 		setPicked(id);
 	};
 	return {

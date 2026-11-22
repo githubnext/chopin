@@ -23,16 +23,21 @@ describe("the formatting toolbar's preference", () => {
 		expect(readFormatPreference("ana", held)).toBe(true);
 	});
 
-	test("is on, and not an error, where storage is refused", () => {
-		let refusing = {
-			getItem: () => {
-				throw new Error("blocked");
+	test("is on, and not an error, where the browser refuses storage, and holds for the page", () => {
+		let original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+		Object.defineProperty(globalThis, "localStorage", {
+			configurable: true,
+			get: () => {
+				throw new DOMException("Access is denied for this document.", "SecurityError");
 			},
-			setItem: () => {
-				throw new Error("blocked");
-			},
-		};
-		expect(readFormatPreference("ana", refusing)).toBe(true);
-		expect(() => keepFormatPreference("ana", false, refusing)).not.toThrow();
+		});
+		try {
+			expect(readFormatPreference("bo")).toBe(true);
+			expect(() => keepFormatPreference("bo", false)).not.toThrow();
+			expect(readFormatPreference("bo")).toBe(false);
+		} finally {
+			if (original) Object.defineProperty(globalThis, "localStorage", original);
+			else Reflect.deleteProperty(globalThis, "localStorage");
+		}
 	});
 });

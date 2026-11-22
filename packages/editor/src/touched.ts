@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
 
+import { safeSessionStorage } from "./browser-storage";
+
 import type { Question } from "@chopin/protocol";
 
 /**
@@ -51,7 +53,7 @@ export function stillMine(
 
 function load(): Map<string, Selections> {
 	try {
-		let stored = JSON.parse(sessionStorage.getItem(KEY) ?? "{}") as unknown;
+		let stored = JSON.parse(safeSessionStorage.getItem(KEY) ?? "{}") as unknown;
 		if (!stored || typeof stored !== "object" || Array.isArray(stored)) return new Map();
 		return new Map(
 			Object.entries(stored as Record<string, unknown>).flatMap(([card, value]) =>
@@ -74,11 +76,7 @@ function current(): Map<string, Selections> {
 }
 
 function publish() {
-	try {
-		sessionStorage.setItem(KEY, JSON.stringify(Object.fromEntries(current())));
-	} catch {
-		// Remembered for this page only.
-	}
+	safeSessionStorage.setItem(KEY, JSON.stringify(Object.fromEntries(current())));
 	for (let listener of listeners) listener();
 }
 

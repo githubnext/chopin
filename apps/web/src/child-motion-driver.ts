@@ -1,3 +1,5 @@
+import { safeLocalStorage } from "@chopin/editor/browser-storage";
+
 import {
 	CHILD_MOTION_STORAGE_KEY,
 	childMotionStyle,
@@ -13,13 +15,7 @@ import type { Box, ChildMotionStyle } from "./child-motion";
 let toggleEnabled = import.meta.env.DEV || import.meta.env.VITE_CHILD_MOTION_TOGGLE === "on";
 
 export function readChildMotionStyle() {
-	let stored: string | null = null;
-	try {
-		stored = localStorage.getItem(CHILD_MOTION_STORAGE_KEY);
-	} catch {
-		// Storage can be unavailable; Zoom is the default.
-	}
-	return childMotionStyle(toggleEnabled, stored);
+	return childMotionStyle(toggleEnabled, safeLocalStorage.getItem(CHILD_MOTION_STORAGE_KEY));
 }
 
 /** Resolves once every animation has finished or been cancelled, so a close never sticks. */

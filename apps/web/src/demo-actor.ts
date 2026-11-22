@@ -1,13 +1,14 @@
 /**
  * The demo collaborator this tab acts as, if any.
  *
- * The actor lives only in this tab's sessionStorage, so a second tab, a plain
+ * The actor lives only in this tab's session storage, so a second tab, a plain
  * document link, and the presenter's own tab never inherit it. A launch carries
  * a one-time, non-secret persona hint in the URL; it is consumed and removed
  * before any socket opens. The server still validates the claim against its
  * roster at every admission, so nothing here is authority.
  */
 
+import { safeSessionStorage } from "@chopin/editor/browser-storage";
 import { setFaceProfiles } from "@chopin/editor/people";
 
 import { showCollaboratorBadge } from "./collaborator-badge";
@@ -23,23 +24,6 @@ type Resolution = {
 	/** The query to put back in the address bar when a hint was present. */
 	strippedSearch?: string;
 };
-
-function remembered(storage: Pick<Storage, "getItem">): string | null {
-	try {
-		return storage.getItem(ACTOR_STORAGE_KEY);
-	} catch {
-		return null;
-	}
-}
-
-function write(storage: Pick<Storage, "setItem" | "removeItem">, id: string | undefined): void {
-	try {
-		if (id) storage.setItem(ACTOR_STORAGE_KEY, id);
-		else storage.removeItem(ACTOR_STORAGE_KEY);
-	} catch {
-		// Blocked storage: the persona lasts until this page reloads.
-	}
-}
 
 /**
  * Decide this tab's actor from a launch hint or the stored persona.
@@ -60,8 +44,11 @@ export function resolveActor(
 		let query = parameters.toString();
 		strippedSearch = query ? `?${query}` : "";
 	}
-	let actor = hinted ?? roster.find(candidate => candidate.id === remembered(storage));
-	write(storage, actor?.id);
+	let remembered = storage.getItem(ACTOR_STORAGE_KEY);
+	let actor = hinted ?? roster.find(candidate => candidate.id === remembered);
+	// Where the browser keeps no storage, the persona lasts until this page reloads.
+	if (actor) storage.setItem(ACTOR_STORAGE_KEY, actor.id);
+	else storage.removeItem(ACTOR_STORAGE_KEY);
 	return { actor, ...(strippedSearch === undefined ? {} : { strippedSearch }) };
 }
 
@@ -95,7 +82,7 @@ export function chatDraftKey(room: string, actorId: string | undefined): string 
 
 /** Adopt this tab's actor before any socket opens; the hint never reaches the router. */
 export function adoptActor(roster: readonly DemoActor[]): void {
-	let { actor, strippedSearch } = resolveActor(location.search, roster, sessionStorage);
+	let { actor, strippedSearch } = resolveActor(location.search, roster, safeSessionStorage);
 	setFaceProfiles(roster);
 	setActiveActor(actor);
 	setActorRoster(roster);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { safeLocalStorage } from "@chopin/editor/browser-storage";
 import { holdDragCursor } from "@chopin/editor/drag-cursor";
 
 import { holdPaneDrag } from "./pane-drag-skip";
@@ -301,13 +302,13 @@ export function usePaneWidth(
 		if (!active) return;
 		if (!loaded.current) {
 			loaded.current = true;
-			let restored = readPaneWidth(localStorage, storageKey, { initial, min, max });
+			let restored = readPaneWidth(safeLocalStorage, storageKey, { initial, min, max });
 			if (restored !== width) {
 				setWidth(restored);
 				return;
 			}
 		}
-		writePaneWidth(localStorage, storageKey, width);
+		writePaneWidth(safeLocalStorage, storageKey, width);
 	}, [active, initial, max, min, storageKey, width]);
 
 	let resize = useCallback(

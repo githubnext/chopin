@@ -2,6 +2,7 @@ import { hasPendingWork } from "@chopin/protocol/pending-work";
 import { entryOf } from "@chopin/protocol/restart";
 import { describe, expect, it } from "bun:test";
 
+import { safeSessionStorage } from "../../../packages/editor/src/browser-storage";
 import { ResearchDraftStore } from "../../../packages/editor/src/research-draft";
 import { isNewerBuild, recoverFromPreloadError, RELOAD_GAP_MS } from "./preload-recovery";
 
@@ -11,7 +12,7 @@ function page(
 	options: {
 		pending?: boolean | (() => boolean);
 		newer?: boolean;
-		storage?: "none" | "refusing";
+		storage?: Reloading["storage"];
 	} = {},
 ) {
 	let values = new Map<string, string>();
@@ -19,14 +20,11 @@ function page(
 	let clock = 1_000_000;
 	let state = { pending: options.pending ?? false, newer: options.newer ?? true };
 	let pending = () => typeof state.pending === "function" ? state.pending() : state.pending;
-	let storage: Reloading["storage"] = options.storage === "none" ? undefined : {
-		getItem: key => {
-			if (options.storage === "refusing") throw new Error("storage is blocked");
-			return values.get(key) ?? null;
-		},
+	let storage: Reloading["storage"] = options.storage ?? {
+		getItem: key => values.get(key) ?? null,
 		setItem: (key, value) => {
-			if (options.storage === "refusing") throw new Error("storage is blocked");
 			values.set(key, value);
+			return true;
 		},
 	};
 	let reloading: Reloading = {
@@ -115,10 +113,21 @@ describe("recoverFromPreloadError", () => {
 	});
 
 	it("makes no reload it could not remember, so that it cannot loop", async () => {
-		for (let storage of ["none", "refusing"] as const) {
-			let tab = page({ storage });
+		let original = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
+		Object.defineProperty(globalThis, "sessionStorage", {
+			configurable: true,
+			get: () => {
+				throw new DOMException("Access is denied for this document.", "SecurityError");
+			},
+		});
+		try {
+			let tab = page({ storage: safeSessionStorage });
+			expect(await tab.fail()).toBe(false);
 			expect(await tab.fail()).toBe(false);
 			expect(tab.reloads()).toBe(0);
+		} finally {
+			if (original) Object.defineProperty(globalThis, "sessionStorage", original);
+			else Reflect.deleteProperty(globalThis, "sessionStorage");
 		}
 	});
 });

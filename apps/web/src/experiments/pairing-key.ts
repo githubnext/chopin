@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { safeSessionStorage } from "@chopin/editor/browser-storage";
 import { experimentRequest } from "./api";
 
 /**
@@ -28,8 +29,8 @@ export type PairingKey =
 /** The choices a key was asked for just before the page went to GitHub, once. */
 function returning(): KeyChoices | undefined {
 	try {
-		let value = sessionStorage.getItem(RETURNING_KEY);
-		sessionStorage.removeItem(RETURNING_KEY);
+		let value = safeSessionStorage.getItem(RETURNING_KEY);
+		safeSessionStorage.removeItem(RETURNING_KEY);
 		if (value === null) return undefined;
 		let parsed = JSON.parse(value);
 		return { autoRun: parsed?.autoRun === true, shared: parsed?.shared === true };
@@ -69,11 +70,8 @@ export function usePairingKey() {
 			}
 			setKey({ state: "authorize", url: result.authorize, going: go });
 			if (!go) return;
-			try {
-				sessionStorage.setItem(RETURNING_KEY, JSON.stringify(choices));
-			} catch {
-				// Without storage the page asks for another press as it comes back.
-			}
+			// Without storage the page asks for another press as it comes back.
+			safeSessionStorage.setItem(RETURNING_KEY, JSON.stringify(choices));
 			location.assign(result.authorize);
 		} catch (error) {
 			if (id === attempt.current) {

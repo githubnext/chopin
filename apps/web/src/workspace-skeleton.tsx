@@ -6,21 +6,19 @@
  * `PhoneSkeleton`.
  */
 
+import { safeLocalStorage } from "@chopin/editor/browser-storage";
+
 import { PhoneSkeletonPage } from "./phone-skeleton";
 
 import type { CSSProperties } from "react";
 
 /** The root workspace's saved Chat choice and width, under the keys `workspace.tsx` writes. */
 function savedChat(): { closed: boolean; width?: string } {
-	try {
-		let width = Number(localStorage.getItem("chopin:pane:chat"));
-		return {
-			closed: localStorage.getItem("chopin:pane:chat:choice") === "false",
-			width: Number.isFinite(width) && width > 0 ? `${width}px` : undefined,
-		};
-	} catch {
-		return { closed: false };
-	}
+	let width = Number(safeLocalStorage.getItem("chopin:pane:chat"));
+	return {
+		closed: safeLocalStorage.getItem("chopin:pane:chat:choice") === "false",
+		width: Number.isFinite(width) && width > 0 ? `${width}px` : undefined,
+	};
 }
 
 export function WorkspaceSkeleton({ label }: { label: string }) {
