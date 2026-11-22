@@ -12,28 +12,34 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
+import { useTheme } from "../theme";
 import { Diagram, renderMermaid } from "./render-blocks";
 
 import type { RefObject } from "react";
+import type { Theme } from "../theme";
 
 type Drawn = { source: string; html: string } | { source: string; failed: true };
 
-/** Starts work once the element is within a screen of the viewport. */
-function useNear(element: RefObject<HTMLElement | null>): boolean {
-	let [near, setNear] = useState(false);
+/**
+ * Starts work once the element is within a screen of the viewport, and again after a change of
+ * `since` (the page's theme), so a card far from the reader is drawn again only as it nears.
+ */
+function useNear(element: RefObject<HTMLElement | null>, since: Theme): boolean {
+	let [nearSince, setNearSince] = useState<Theme>();
+	let near = nearSince === since;
 	useEffect(() => {
 		let target = element.current;
 		if (near || !target) return;
 		if (typeof IntersectionObserver === "undefined") {
-			setNear(true);
+			setNearSince(since);
 			return;
 		}
 		let observer = new IntersectionObserver(entries => {
-			if (entries.some(entry => entry.isIntersecting)) setNear(true);
+			if (entries.some(entry => entry.isIntersecting)) setNearSince(since);
 		}, { rootMargin: "100% 0px" });
 		observer.observe(target);
 		return () => observer.disconnect();
-	}, [element, near]);
+	}, [element, near, since]);
 	return near;
 }
 
@@ -41,7 +47,8 @@ export function CardDiagram({ source }: { source: string }) {
 	// Mermaid uses the key in element IDs and CSS selectors, so it keeps to letters and digits.
 	let key = `card-${useId().replace(/[^A-Za-z0-9]/g, "")}`;
 	let frame = useRef<HTMLDivElement>(null);
-	let near = useNear(frame);
+	let theme = useTheme();
+	let near = useNear(frame, theme);
 	let [drawn, setDrawn] = useState<Drawn>();
 	let [expanded, setExpanded] = useState(false);
 	let [overflows, setOverflows] = useState(false);
@@ -49,14 +56,14 @@ export function CardDiagram({ source }: { source: string }) {
 	useEffect(() => {
 		if (!near) return;
 		let cancelled = false;
-		renderMermaid(key, source).then(
+		renderMermaid(key, source, theme).then(
 			html => !cancelled && setDrawn({ source, html }),
 			() => !cancelled && setDrawn({ source, failed: true }),
 		);
 		return () => {
 			cancelled = true;
 		};
-	}, [key, near, source]);
+	}, [key, near, source, theme]);
 
 	let current = drawn?.source === source ? drawn : undefined;
 	let html = current && "html" in current ? current.html : undefined;

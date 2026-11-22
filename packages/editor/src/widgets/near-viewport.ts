@@ -96,15 +96,22 @@ export function useNearAtMount(ref: RefObject<HTMLElement | null>): boolean | un
 	return near;
 }
 
-/** True from the first time the block is near, for as long as the caller keeps asking. */
+/**
+ * True from the first time the block is near, for as long as the caller keeps asking. A change of
+ * `since` asks again: false until the block is next within a screen, which is at once for a block
+ * the reader is near, so a drawing made for an earlier `since` (the page's theme) is made again
+ * only as the reader reaches it.
+ */
 export function useNearViewport(
 	element: HTMLElement | null | undefined,
 	enabled: boolean,
+	since?: unknown,
 ): boolean {
-	let [near, setNear] = useState(false);
+	let [nearSince, setNearSince] = useState<{ since: unknown }>();
+	let near = nearSince !== undefined && Object.is(nearSince.since, since);
 	useEffect(() => {
 		if (near || !enabled || !element) return;
-		return watchNear(element, element.closest("[data-plan-scroll]"), () => setNear(true));
-	}, [near, enabled, element]);
+		return watchNear(element, element.closest("[data-plan-scroll]"), () => setNearSince({ since }));
+	}, [near, enabled, element, since]);
 	return near;
 }
