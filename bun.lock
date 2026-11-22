@@ -320,6 +320,7 @@
   },
   "patchedDependencies": {
     "mdast-util-to-markdown@2.1.2": "patches/mdast-util-to-markdown@2.1.2.patch",
+    "lib0@0.2.120": "patches/lib0@0.2.120.patch",
     "@mdxeditor/editor@4.1.0": "patches/@mdxeditor%2Feditor@4.1.0.patch",
   },
   "catalogs": {

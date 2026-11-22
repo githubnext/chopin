@@ -1,0 +1,25 @@
+diff --git a/environment.js b/environment.js
+index 5bec300dec24c83cc9319cc70c35a4e97667eb00..8bc2c2d1ad973fd55a519842466d3d5cd8db997d 100644
+--- a/environment.js
++++ b/environment.js
+@@ -92,10 +92,16 @@ export const getParam = (name, defaultVal) =>
+  * @return {string|null}
+  */
+ /* c8 ignore next 4 */
+-export const getVariable = (name) =>
+-  isNode
+-    ? conditions.undefinedToNull(process.env[name.toUpperCase().replaceAll('-', '_')])
+-    : conditions.undefinedToNull(storage.varStorage.getItem(name))
++export const getVariable = (name) => {
++  if (isNode) return conditions.undefinedToNull(process.env[name.toUpperCase().replaceAll('-', '_')])
++  // A browser whose storage refuses reads (a damaged profile) holds no configuration; reading it
++  // unguarded here, as this module loads, would stop every module that imports it.
++  try {
++    return conditions.undefinedToNull(storage.varStorage.getItem(name))
++  } catch (e) {
++    return null
++  }
++}
+ 
+ /**
+  * @param {string} name
