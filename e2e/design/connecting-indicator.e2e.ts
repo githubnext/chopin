@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { plate, test } from "./fixture";
+import { drawTheme, plate, test } from "./fixture";
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -117,10 +117,7 @@ test("the machine button's badge is a capsule as tall as the machine's dot, at i
 
 for (let mode of ["light", "dark"] as const) {
 	test(`the dots are Chopin's petrol on the surface's own colour, in ${mode}`, async ({ page }) => {
-		await page.evaluate(
-			dark => document.documentElement.classList.toggle("dark", dark),
-			mode === "dark",
-		);
+		await drawTheme(page, mode);
 		let brand = await resolve(page, "var(--color-brand)");
 		for (let [label, indicator] of indicators(page)) {
 			let fills = await indicator.locator(".connecting-dot").evaluateAll(circles =>

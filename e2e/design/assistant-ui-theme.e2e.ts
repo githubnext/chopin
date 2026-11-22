@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect } from "@playwright/test";
-import { plate, test } from "./fixture";
+import { drawTheme, plate, test } from "./fixture";
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -332,9 +332,7 @@ async function states(page: Page, measure: (state: string) => Promise<void>) {
 
 for (let mode of ["light", "dark"] as const) {
 	test(`every colour a copied element draws is a Chopin token, and its type is Chopin's, in ${mode}`, async ({ page }) => {
-		if (mode === "dark") {
-			await page.evaluate(() => document.documentElement.classList.add("dark"));
-		}
+		await drawTheme(page, mode);
 		let checked = 0;
 		await states(page, async state => {
 			let result = await drawn(page);
@@ -355,8 +353,7 @@ for (let mode of ["light", "dark"] as const) {
  * The theme comes from Chopin and the proportions from the message box (`assistant-ui-geometry` has
  * the proportions). Every colour the composer draws, light and dark, is a Chopin token or a mix of
  * them: its surface is the page, its edge Chopin's control edge, its toolbar the inset ground, its
- * send Chopin's primary, its font Chopin's. Chopin has no dark theme yet, so `.dark` reads the same
- * tokens and the two schemes draw the same colours.
+ * send Chopin's primary, its font Chopin's. At night the same roles read the dark theme's tokens.
  */
 
 /** What a colour expression computes to, by asking the browser, so a token is exact. */
@@ -382,10 +379,7 @@ async function paint(element: Locator, property: Property, pseudo?: "::before"):
 
 for (let name of ["light", "dark"] as const) {
 	test(`the message box draws only Chopin's colours in ${name}: page, edge, inset, ink and primary from its tokens`, async ({ page }) => {
-		await page.evaluate(
-			dark => document.documentElement.classList.toggle("dark", dark),
-			name === "dark",
-		);
+		await drawTheme(page, name);
 		let composer = plate(page, "chat").locator(".chat-composer").first();
 		await composer.scrollIntoViewIfNeeded();
 		let token = (value: string) => computed(page, `var(--color-${value})`);
@@ -457,10 +451,7 @@ for (let name of ["light", "dark"] as const) {
 
 for (let name of ["light", "dark"] as const) {
 	test(`the message toolbar and reaction pills take Slack's shapes in Chopin's colours, in ${name}`, async ({ page }) => {
-		await page.evaluate(
-			dark => document.documentElement.classList.toggle("dark", dark),
-			name === "dark",
-		);
+		await drawTheme(page, name);
 		let token = (value: string) => computed(page, `var(--color-${value})`);
 		let outline = (element: Locator) =>
 			element.evaluate(node => getComputedStyle(node).outlineColor);
