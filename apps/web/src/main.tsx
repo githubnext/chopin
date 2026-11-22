@@ -10,6 +10,7 @@ import { useFocusInput } from "./focus-input";
 import { useMotionInput } from "./motion-input";
 import { watchPreloadErrors } from "./preload-recovery";
 import { watchScrollbarStyle } from "./scrollbars";
+import { startTheme } from "./theme-choice";
 import { useVisualViewport } from "./viewport";
 
 import "@fontsource-variable/inter/opsz.css";
@@ -29,6 +30,7 @@ import "./favorite-star.css";
 
 let root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
+startTheme();
 watchScrollbarStyle();
 watchPreloadErrors();
 
