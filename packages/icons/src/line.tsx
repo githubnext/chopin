@@ -37,6 +37,45 @@ export function KeyboardIcon(props: IconProps) {
 	);
 }
 
+/** The theme: a circle, half of it filled. */
+export function ContrastIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<circle cx="9" cy="9" r="7.25" />
+			<path d="M9 1.75a7.25 7.25 0 0 1 0 14.5Z" fill="currentColor" stroke="none" />
+		</LineIcon>
+	);
+}
+
+/** The light theme: a sun, a ring with eight short rays. */
+export function SunIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<circle cx="9" cy="9" r="3.25" />
+			<path d="M9 1.75v1.5M9 14.75v1.5M1.75 9h1.5M14.75 9h1.5M3.873 3.873l1.061 1.061M13.066 13.066l1.061 1.061M3.873 14.127l1.061-1.061M13.066 4.934l1.061-1.061" />
+		</LineIcon>
+	);
+}
+
+/** The dark theme: a crescent moon. */
+export function MoonIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<path d="M14.88 11.21A6.25 6.25 0 0 1 6.79 3.12 6.25 6.25 0 1 0 14.88 11.21Z" />
+		</LineIcon>
+	);
+}
+
+/** The system's own setting: a display on its stand. */
+export function MonitorIcon(props: IconProps) {
+	return (
+		<LineIcon {...props}>
+			<rect x="1.75" y="2.75" width="14.5" height="9.5" rx="2" />
+			<path d="M9 12.25v3M6 15.25h6" />
+		</LineIcon>
+	);
+}
+
 export function MessageIcon(props: IconProps) {
 	return (
 		<LineIcon {...props}>

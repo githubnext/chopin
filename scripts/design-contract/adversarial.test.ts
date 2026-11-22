@@ -76,6 +76,26 @@ describe("adversarial contract coverage", () => {
 		}, root => expect(scan(root).findings).toHaveLength(5));
 	});
 
+	test("the dark theme's tokens own their literals in the theme, and nowhere else", () => {
+		let day =
+			"@theme static { --color-brand: oklch(.5 .1 210); --shadow-raised: 0 1px 2px black; }";
+		let night =
+			':root[data-theme="dark"] { --color-brand: oklch(.7 .1 210); --shadow-raised: 0 1px 2px red; }';
+		fixture(
+			{ "packages/visuals/theme.css": `${day} ${night}` },
+			root => expect(scan(root).findings).toEqual([]),
+		);
+		fixture(
+			{ "packages/visuals/theme.css": day, "apps/web/styles.css": night },
+			root => expect(scan(root).findings).toHaveLength(2),
+		);
+		// A component rule under the dark root is still a component rule.
+		fixture({
+			"packages/visuals/theme.css":
+				`@theme static { --color-brand: oklch(.5 .1 210); } :root[data-theme="dark"] .bypass { color: red; }`,
+		}, root => expect(scan(root).findings).toHaveLength(1));
+	});
+
 	test("dynamic exceptions do not cover unrelated identical expressions", () => {
 		let source =
 			"function A({color}) { return <i style={{color}} />; } function B({color}) { return <b style={{color}} />; }";

@@ -621,6 +621,11 @@
 
 	--color-page: oklch(0.245 0.006 95); /* #21201d */
 	--color-raised: oklch(0.27 0.007 95); /* #272623 */
+	/*
+	 * A hover lightens whatever it lies on, the ground, the sheet or a menu, as in light it moves
+	 * each toward the page; one opaque step cannot be lighter than all three.
+	 */
+	--color-hover: oklch(var(--ink-tint) / 5%);
 	--color-chat-body: oklch(0.875 0.02 136);
 	/* Light ink laid over the transcript: the same lighter step on the ground and the Chat pane. */
 	--color-chat-row-hover: oklch(var(--ink-tint) / 4.5%);

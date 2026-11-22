@@ -1,10 +1,26 @@
-import { KeyboardIcon, LockIcon, SignInIcon } from "@chopin/icons";
+import {
+	ContrastIcon,
+	KeyboardIcon,
+	LockIcon,
+	MonitorIcon,
+	MoonIcon,
+	SignInIcon,
+	SunIcon,
+} from "@chopin/icons";
 import { Face } from "@chopin/editor/face";
+import { useId, useSyncExternalStore } from "react";
 
 import { MenuItem, MenuSeparator } from "./menu-item";
+import {
+	chooseTheme,
+	currentThemeChoice,
+	subscribeThemeChoice,
+	THEME_CHOICES,
+} from "./theme-choice";
 
 import type * as Api from "./api";
-import type { Ref } from "react";
+import type { ThemeChoice } from "./theme-choice";
+import type { KeyboardEvent, Ref } from "react";
 
 export type AccountMenuState = {
 	className: string;
@@ -20,6 +36,70 @@ export function menuItemTarget(key: string, current: number, count: number): num
 	return (current + (key === "ArrowDown" ? 1 : -1) + count) % count;
 }
 
+const THEME_NAMES: Record<ThemeChoice, string> = { light: "Light", dark: "Dark", system: "System" };
+const THEME_GLYPHS = { light: SunIcon, dark: MoonIcon, system: MonitorIcon };
+
+/**
+ * The menu's stops, top to bottom: each item, and the theme row once, at its chosen segment. A
+ * segment that has the focus stands for its row.
+ */
+function menuStops(menu: HTMLElement, focused: Element | null) {
+	let stops = [...menu.querySelectorAll<HTMLElement>("[role=menuitem], [role=menuitemradio]")]
+		.filter(item =>
+			item.getAttribute("role") === "menuitem" || item.getAttribute("aria-checked") === "true"
+		);
+	let current = stops.findIndex(item =>
+		item === focused
+		|| (item.getAttribute("role") === "menuitemradio" && item.parentElement?.contains(focused))
+	);
+	return { stops, current };
+}
+
+/**
+ * Light, Dark and System, as one row of the menu. Arrow keys move along it without leaving the
+ * menu, and choosing keeps the menu open so the change is seen behind it.
+ */
+function ThemeRow() {
+	let label = useId();
+	let chosen = useSyncExternalStore(subscribeThemeChoice, currentThemeChoice, () => "system");
+	let onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+		if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+		event.preventDefault();
+		let segments = [
+			...event.currentTarget.querySelectorAll<HTMLElement>("[role=menuitemradio]"),
+		];
+		let at = segments.indexOf(document.activeElement as HTMLElement);
+		let step = event.key === "ArrowRight" ? 1 : -1;
+		segments[(at + step + segments.length) % segments.length]?.focus();
+	};
+	return (
+		<div aria-labelledby={label} className="account-theme" role="group">
+			<span className="account-theme-label" id={label}>
+				<ContrastIcon aria-hidden="true" size={16} />
+				Theme
+			</span>
+			<div className="account-theme-segments" onKeyDown={onKeyDown}>
+				{THEME_CHOICES.map(choice => {
+					let Glyph = THEME_GLYPHS[choice];
+					return (
+						<button
+							aria-checked={choice === chosen}
+							aria-label={THEME_NAMES[choice]}
+							className="account-theme-segment"
+							key={choice}
+							onClick={() => chooseTheme(choice)}
+							role="menuitemradio"
+							type="button"
+						>
+							<Glyph aria-hidden="true" size={14} />
+						</button>
+					);
+				})}
+			</div>
+		</div>
+	);
+}
+
 export function AccountMenu({ id, menu }: { id?: string; menu: AccountMenuState }) {
 	return (
 		<div
@@ -31,15 +111,8 @@ export function AccountMenu({ id, menu }: { id?: string; menu: AccountMenuState 
 				if (event.key === "Tab") return menu.onDismiss();
 				if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
 				event.preventDefault();
-				let items = [...event.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
-				items[
-					menuItemTarget(
-						event.key,
-						items.indexOf(document.activeElement as HTMLElement),
-						items.length,
-					)
-				]
-					?.focus();
+				let { current, stops } = menuStops(event.currentTarget, document.activeElement);
+				stops[menuItemTarget(event.key, current, stops.length)]?.focus();
 			}}
 			role="menu"
 		>
@@ -53,6 +126,7 @@ export function AccountMenu({ id, menu }: { id?: string; menu: AccountMenuState 
 			>
 				<KeyboardIcon aria-hidden="true" size={16} />Keyboard shortcuts
 			</MenuItem>
+			<ThemeRow />
 			<MenuSeparator />
 			<MenuItem density="compact" onClick={menu.onSignOut}>
 				<SignInIcon aria-hidden="true" className="-scale-x-100" size={16} />

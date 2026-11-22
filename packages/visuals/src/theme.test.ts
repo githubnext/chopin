@@ -2,7 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const THEME = readFileSync(join(import.meta.dir, "../theme.css"), "utf8");
+const SOURCE = readFileSync(join(import.meta.dir, "../theme.css"), "utf8");
+const NIGHT_START = SOURCE.indexOf('\n:root[data-theme="dark"] {');
+/** The light theme's values, and the dark theme's, which replace some of them at night. */
+const THEME = SOURCE.slice(0, NIGHT_START);
+const NIGHT = SOURCE.slice(NIGHT_START, SOURCE.indexOf("\n}", NIGHT_START));
 
 const SCALES = {
 	ruby: [
@@ -49,9 +53,16 @@ const SCALES = {
 	],
 } as const;
 
-function declared(name: string): string | undefined {
-	let found = new RegExp(`\\n\\s*${name}:\\s*([^;]+);`).exec(THEME);
+type Theme = "light" | "dark";
+
+function declaredIn(source: string, name: string): string | undefined {
+	let found = new RegExp(`\\n\\s*${name}:\\s*([^;]+);`).exec(source);
 	return found?.[1]?.trim().replace(/\s+/g, " ").replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
+}
+
+/** A token as the theme draws it: at night, the dark block's value where it has one. */
+function declared(name: string, theme: Theme = "light"): string | undefined {
+	return (theme === "dark" ? declaredIn(NIGHT, name) : undefined) ?? declaredIn(THEME, name);
 }
 
 function scale(name: keyof typeof SCALES): [number, string][] {
@@ -59,14 +70,14 @@ function scale(name: keyof typeof SCALES): [number, string][] {
 		.map(match => [Number(match[1]), match[2]!.trim()] as [number, string]);
 }
 
-function resolved(name: string): string | undefined {
-	let value = declared(name);
+function resolved(name: string, theme: Theme = "light"): string | undefined {
+	let value = declared(name, theme);
 	let alias = value ? /^var\((--[\w-]+)\)$/.exec(value) : undefined;
-	return alias ? resolved(alias[1]!) : value;
+	return alias ? resolved(alias[1]!, theme) : value;
 }
 
-function linearChannels(name: string): [number, number, number] {
-	let value = resolved(name) ?? "";
+function linearChannels(name: string, theme: Theme = "light"): [number, number, number] {
+	let value = resolved(name, theme) ?? "";
 	let oklch = /^oklch\(([\d.]+)\s+([\d.]+)\s+([\d.]+)\)$/.exec(value);
 	if (!oklch) return [Number.NaN, Number.NaN, Number.NaN];
 	let lightness = Number(oklch[1]);
@@ -84,9 +95,13 @@ function linearChannels(name: string): [number, number, number] {
 	];
 }
 
-function contrast(foreground: string, background: string): number {
+function contrast(foreground: string, background: string, theme: Theme = "light"): number {
 	let luminance = (name: string) => {
-		let [red, green, blue] = linearChannels(name);
+		let [red, green, blue] = linearChannels(name, theme).map(channel => Math.max(0, channel)) as [
+			number,
+			number,
+			number,
+		];
 		return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 	};
 	let light = Math.max(luminance(foreground), luminance(background));
@@ -172,5 +187,114 @@ describe("semantic colour foundations", () => {
 		expect(Object.fromEntries(Object.keys(expected).map(name => [name, declared(name)]))).toEqual(
 			expected,
 		);
+	});
+});
+
+describe("the dark theme", () => {
+	let surfaces = ["page", "ground", "inset", "raised"];
+
+	it("turns every raw step over: twelve per semantic scale and the thirteen grays", () => {
+		for (let name of ["ruby", "orange", "lime", "plum"]) {
+			let steps = [...NIGHT.matchAll(new RegExp(`\\n\\s*--color-${name}-(\\d+):`, "g"))];
+			expect([name, steps.map(match => Number(match[1]))]).toEqual([
+				name,
+				[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+			]);
+		}
+		let grays = [...NIGHT.matchAll(/\n\s*--color-gray-(\d+):/g)].map(match => match[1]);
+		let day = [...THEME.matchAll(/\n\s*--color-gray-(\d+):/g)].map(match => match[1]);
+		expect(grays).toEqual(day);
+	});
+
+	it("lifts depth with light: the ground darkest, then the inset, the page and raised surfaces", () => {
+		let order = ["ground", "inset", "page", "raised"].map(name =>
+			contrast(`--color-${name}`, "--color-ground", "dark")
+		);
+		expect(order).toEqual(order.toSorted((a, b) => a - b));
+		expect(new Set(order).size).toBe(4);
+		expect(declared("--color-raised")).toBe("var(--color-page)");
+	});
+
+	it("keeps every ink role at AA on every surface, in the order light has them", () => {
+		let inks = ["primary", "secondary", "tertiary", "quaternary"];
+		for (let surface of surfaces) {
+			for (let ink of inks) {
+				let ratio = contrast(`--color-text-${ink}`, `--color-${surface}`, "dark");
+				expect({ surface, ink, passes: ratio >= 4.5 }).toEqual({ surface, ink, passes: true });
+			}
+		}
+		for (let theme of ["light", "dark"] as const) {
+			let ratios = inks.map(ink => contrast(`--color-text-${ink}`, "--color-page", theme));
+			expect([theme, ratios]).toEqual([theme, ratios.toSorted((a, b) => b - a)]);
+		}
+		expect(contrast("--color-text-tertiary", "--color-selected", "dark")).toBeGreaterThanOrEqual(
+			4.5,
+		);
+	});
+
+	it("keeps petrol legible as text on every surface, with the page's colour legible on it", () => {
+		for (let role of ["brand", "brand-hover", "brand-active", "brand-ink"]) {
+			for (let surface of [...surfaces, "selected", "brand-wash"]) {
+				let ratio = contrast(`--color-${role}`, `--color-${surface}`, "dark");
+				expect({ role, surface, passes: ratio >= 4.5 }).toEqual({ role, surface, passes: true });
+			}
+			let on = contrast("--color-page", `--color-${role}`, "dark");
+			expect({ role, on: on >= 4.5 }).toEqual({ role, on: true });
+		}
+		// The focus ring is petrol in both themes, 3:1 or more on every ground.
+		for (let surface of surfaces) {
+			expect(contrast("--color-brand", `--color-${surface}`, "dark")).toBeGreaterThanOrEqual(3);
+		}
+	});
+
+	it("keeps the destructive fills legible under the page's colour, each state further from it", () => {
+		let states = ["destructive", "destructive-hover", "destructive-active"].map(role =>
+			contrast("--color-page", `--color-${role}`, "dark")
+		);
+		for (let ratio of states) expect(ratio).toBeGreaterThanOrEqual(4.5);
+		expect(states).toEqual(states.toSorted((a, b) => a - b));
+		for (let surface of surfaces) {
+			expect(contrast("--color-destructive-ink", `--color-${surface}`, "dark"))
+				.toBeGreaterThanOrEqual(4.5);
+		}
+	});
+
+	it("keeps every semantic quad's text at AA and its icon at 3:1 on its surface", () => {
+		for (let role of ["neutral", "success", "warning", "danger", "merged"]) {
+			let text = contrast(`--color-${role}-text`, `--color-${role}-surface`, "dark");
+			let icon = contrast(`--color-${role}-icon`, `--color-${role}-surface`, "dark");
+			expect({ role, text: text >= 4.5, icon: icon >= 3 }).toEqual({
+				role,
+				text: true,
+				icon: true,
+			});
+		}
+		for (let state of ["hover", "active"]) {
+			expect(contrast("--color-danger-text", `--color-danger-surface-${state}`, "dark"))
+				.toBeGreaterThanOrEqual(4.5);
+		}
+		for (let role of ["success", "warning"]) {
+			for (let surface of [...surfaces, `${role}-wash`]) {
+				let ratio = contrast(`--color-${role}-ink`, `--color-${surface}`, "dark");
+				expect({ role, surface, passes: ratio >= 4.5 }).toEqual({ role, surface, passes: true });
+			}
+		}
+	});
+
+	it("keeps the edges people find controls by at 3:1", () => {
+		// The hover is a light veil over its surface; the browser walk measures it where it lies.
+		for (let surface of [...surfaces, "selected"]) {
+			let boundary = contrast("--color-control-boundary", `--color-${surface}`, "dark");
+			expect({ surface, passes: boundary >= 3 }).toEqual({ surface, passes: true });
+		}
+		expect(contrast("--color-neutral-graphic", "--color-page", "dark")).toBeGreaterThanOrEqual(3);
+		expect(contrast("--color-tooltip-ink", "--color-tooltip", "dark")).toBeGreaterThanOrEqual(4.5);
+	});
+
+	it("keeps the image viewer the same dark in both themes", () => {
+		for (let token of ["--color-viewer", "--color-viewer-muted", "--color-white"]) {
+			expect([token, declaredIn(NIGHT, token)]).toEqual([token, undefined]);
+		}
+		expect(contrast("--color-viewer-muted", "--color-viewer")).toBeGreaterThanOrEqual(4.5);
 	});
 });
