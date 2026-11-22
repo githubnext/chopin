@@ -24,7 +24,7 @@ import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState } from
 import { codeWraps } from "@chopin/dialect";
 
 import { fileNameOf, repaired, titled } from "./code";
-import { accessibleTheme, CODE_THEME, CODE_THEME_BASE } from "./code-theme";
+import { accessibleTheme, CODE_THEMES } from "./code-theme";
 import { grammar, PLAIN } from "./code-tokens";
 
 import type { ErrorInfo, ReactNode } from "react";
@@ -61,13 +61,12 @@ function readOverflow(element: HTMLElement): Overflow {
 }
 
 /**
- * One theme, named once: pierre-light at AA (`code-theme.ts`).
- *
- * The page is light only — `theme.css` says so and carries no second palette —
- * so a `{ dark, light }` pair would load a second set of colours nothing can
- * ever ask for.
+ * Both palettes, pierre-light and pierre-dark at AA on Chopin's page (`code-theme.ts`). The
+ * renderer gives every token both colours and picks one with `light-dark()`, by the colour scheme
+ * its host inherits from the page (`styles.css`), so a change of theme recolours a drawn preview
+ * where it stands: nothing is highlighted or drawn again.
  */
-const THEME = CODE_THEME;
+const THEME = { light: CODE_THEMES.light.name, dark: CODE_THEMES.dark.name };
 
 /**
  * Keeps the first file's change counts clear of the block's own controls,
@@ -82,10 +81,12 @@ let loading: Promise<Renderer> | undefined;
 function load(): Promise<Renderer> {
 	loading ??= Promise.all([import("@pierre/diffs/react"), import("@pierre/diffs")]).then(
 		([react, diffs]) => {
-			diffs.registerCustomTheme(
-				CODE_THEME,
-				async () => accessibleTheme(await diffs.resolveTheme(CODE_THEME_BASE)),
-			);
+			for (let theme of Object.values(CODE_THEMES)) {
+				diffs.registerCustomTheme(
+					theme.name,
+					async () => accessibleTheme(await diffs.resolveTheme(theme.base), theme),
+				);
+			}
 			return {
 				File: react.File,
 				FileDiff: react.FileDiff,
@@ -218,7 +219,8 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 	let options = useMemo(
 		() => ({
 			theme: THEME,
-			themeType: "light" as const,
+			// The page's scheme, which the host inherits, never the system's.
+			themeType: "system" as const,
 			// A diff's fallback has no title in the block's own header.
 			disableFileHeader: kind !== "diff" || !titled(meta),
 			disableLineNumbers: true,
@@ -232,7 +234,7 @@ function View({ kind, source, language, meta }: CodeViewProps) {
 	let diffOptions = useMemo(
 		() => ({
 			theme: THEME,
-			themeType: "light" as const,
+			themeType: "system" as const,
 			// Three panes wide, so side by side would be two unreadable
 			// columns. The filename comes from the patch and is the whole
 			// point of rendering one, so its header stays.

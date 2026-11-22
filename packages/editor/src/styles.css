@@ -3720,9 +3720,12 @@
 }
 
 /* The renderer's shadow root owns syntax painting; this host supplies the
- * readable width that the surrounding widget scrolls when a line exceeds it. */
+ * readable width that the surrounding widget scrolls when a line exceeds it,
+ * and the page's colour scheme, which picks the palette (`code-view.tsx`):
+ * the renderer's own `light dark` would follow the system, not the page. */
 .plan-content .plan-code-view > diffs-container {
 	min-inline-size: max-content;
+	color-scheme: inherit;
 }
 
 /* Each file in a patch is its own box, and they stack. */
