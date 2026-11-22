@@ -282,6 +282,7 @@ describe("edges and depth", () => {
 			"--color-control-edge",
 			"--color-danger-edge",
 			"--color-edge",
+			"--color-raised-edge",
 			"--color-tooltip-edge",
 		]);
 		expect(declared("--color-edge")).toBe("oklch(0 0 0 / 7%)");

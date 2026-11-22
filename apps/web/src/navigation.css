@@ -926,7 +926,7 @@
 	position: absolute;
 	inset: 0;
 	width: 100%;
-	background: rgb(0 0 0 / 20%);
+	background: var(--color-backdrop);
 }
 
 .navigation-drawer > .navigation-focus-scope {
@@ -1087,7 +1087,7 @@
 	position: absolute;
 	inset: 0;
 	width: 100%;
-	background: rgb(0 0 0 / 20%);
+	background: var(--color-backdrop);
 }
 
 .navigation-modal > .navigation-focus-scope {
@@ -1106,6 +1106,12 @@
 	padding: 20px;
 	box-shadow: var(--shadow-overlay);
 	pointer-events: auto;
+}
+
+/* Found by its shadow by day; at night, where shadows hardly show, by a light hairline too. */
+:where(.navigation-modal-content) {
+	outline: var(--edge-width) solid var(--color-raised-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 }
 
 .navigation-palette-list.keyboard-shortcuts {
@@ -1380,6 +1386,12 @@
 	transform-origin: bottom left;
 }
 
+/* Found by its shadow by day; at night, where shadows hardly show, by a light hairline too. */
+:where(.navigation-account-menu) {
+	outline: var(--edge-width) solid var(--color-raised-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
 .app-menu-item {
 	--item-height: var(--menu-item-height-normal);
 	--item-padding-block: var(--menu-item-padding-block-normal);
@@ -1569,6 +1581,12 @@
 	box-shadow: var(--shadow-raised);
 }
 
+/* Found by its shadow by day; at night, where shadows hardly show, by a light hairline too. */
+:where(.document-actions-menu) {
+	outline: var(--edge-width) solid var(--color-raised-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
 .document-status-badge {
 	display: inline-flex;
 	min-width: 0;
@@ -1712,6 +1730,12 @@
 	background: var(--color-raised);
 	box-shadow: var(--shadow-raised);
 	white-space: nowrap;
+}
+
+/* Found by its shadow by day; at night, where shadows hardly show, by a light hairline too. */
+:where(.document-title-error) {
+	outline: var(--edge-width) solid var(--color-raised-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 }
 
 .document-project-prefix {

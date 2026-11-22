@@ -112,6 +112,12 @@
 	color: var(--color-text-primary);
 }
 
+/* Found by its shadow by day; at night, where shadows hardly show, by a light hairline too. */
+:where(.documents-sheet) {
+	outline: var(--edge-width) solid var(--color-raised-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
 /* A nested action sheet dims the documents beneath it, as its own backdrop would. */
 .documents-sheet::after {
 	pointer-events: none;
@@ -523,6 +529,12 @@
 	border-radius: var(--radius-sheet);
 	background: var(--color-raised);
 	box-shadow: var(--shadow-overlay);
+}
+
+/* Found by its shadow by day; at night, where shadows hardly show, by a light hairline too. */
+:where(.action-sheet-group) {
+	outline: var(--edge-width) solid var(--color-raised-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 }
 
 .action-sheet-group > * + * {

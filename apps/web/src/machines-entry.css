@@ -20,6 +20,12 @@
 		scale var(--duration-fast) var(--ease-out);
 }
 
+/* Found by its shadow by day; at night, where shadows hardly show, by a light hairline too. */
+:where(.machines-menu) {
+	outline: var(--edge-width) solid var(--color-raised-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
 .machines-menu:is([data-starting-style], [data-ending-style]) {
 	opacity: 0;
 	scale: 0.98;

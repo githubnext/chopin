@@ -291,6 +291,13 @@ describe("the dark theme", () => {
 		expect(contrast("--color-tooltip-ink", "--color-tooltip", "dark")).toBeGreaterThanOrEqual(4.5);
 	});
 
+	it("dims a dialog's page and edges a raised surface only at night, leaving the day as it was", () => {
+		expect(declared("--color-raised-edge")).toBe("transparent");
+		expect(declared("--color-raised-edge", "dark")).toBe("var(--color-edge)");
+		expect(declared("--color-backdrop")).toBe("rgb(0 0 0 / 20%)");
+		expect(declared("--color-backdrop", "dark")).toBe("oklch(var(--shadow-color) / 55%)");
+	});
+
 	it("keeps the image viewer the same dark in both themes", () => {
 		for (let token of ["--color-viewer", "--color-viewer-muted", "--color-white"]) {
 			expect([token, declaredIn(NIGHT, token)]).toEqual([token, undefined]);
