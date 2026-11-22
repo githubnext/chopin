@@ -2,7 +2,7 @@
  * A Chat row shown under the pointer, with its menu open, with its thread open or jumped to is a
  * shade people can see on the transcript, and everything drawn on it (the name, its tag, the time,
  * the words, links, code, mentions, reactions and the toolbar's icons) meets WCAG 2.2 AA against
- * what is actually behind it: 4.5:1 for text, 3:1 for icons.
+ * what is actually behind it: 4.5:1 for text, 3:1 for icons, in light and in dark.
  *
  * The shade is a row's `::before`, under the row's ancestors rather than among them, so the DOM walk
  * of `e2e/design/contrast.ts` never sees it. Here every backdrop is read from the rendered pixels
@@ -13,7 +13,7 @@ import { appendFileSync } from "node:fs";
 import { chatInput } from "./chat-input";
 import { expect, test } from "./room";
 
-import type { Locator, Page } from "@playwright/test";
+import type { BrowserContextOptions, Locator, Page } from "@playwright/test";
 
 type Pair = {
 	state: string;
@@ -27,8 +27,10 @@ type Pair = {
 
 /**
  * Slack's hovered row is `#f8f8f8` on its white pane, 1.06:1, darker than the pane. A row Chat shades
- * must be at least that far darker than the transcript it lies on, and a selected row (its thread
- * open) a further step. The toolbar's white box stands off the shade at least as far again.
+ * must be at least that far from the transcript it lies on, and a selected row (its thread open) a
+ * further step: darker by day, lighter at night, where a hover is a light veil (`--color-hover`), as
+ * Slack's dark theme lightens a hovered message. Either way the toolbar's box is lighter than the
+ * shade it stands on, by at least as far again.
  */
 const HOVER_STEP = 1.06;
 const SELECTED_STEP = 1.12;
@@ -66,6 +68,28 @@ function transcript() {
 			ts: 1_700_000_200,
 		},
 	];
+}
+
+/**
+ * Opens the room in `theme` the way a person keeps it: their choice in this browser's storage
+ * (`chopin:theme`), which `index.html` reads before anything is drawn.
+ */
+async function joinIn(
+	join: (handle: string, options?: BrowserContextOptions) => Promise<Page>,
+	baseURL: string,
+	theme: "light" | "dark",
+	options: BrowserContextOptions,
+): Promise<Page> {
+	let origin = new URL(baseURL).origin;
+	let page = await join("ana", {
+		...options,
+		storageState: {
+			cookies: [],
+			origins: [{ origin, localStorage: [{ name: "chopin:theme", value: theme }] }],
+		},
+	});
+	await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+	return page;
 }
 
 function chatOf(page: Page): Locator {
@@ -133,6 +157,14 @@ async function measure(page: Page, row: Locator, state: string, ground: string):
 			let [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
 			return Math.round(((x! + 0.05) / (y! + 0.05)) * 100) / 100;
 		};
+		// How far `a` steps from `b` in the direction `lift` (1 lighter, -1 darker): a step the wrong
+		// way is written under 1, so it never passes a threshold above 1.
+		let step = (a: RGBA, b: RGBA, lift: number) => {
+			let r = ratio(a, b);
+			return (luminance(a) - luminance(b)) * lift > 0 ? r : Math.round(100 / r) / 100;
+		};
+		// A shade darkens the transcript by day and lightens it at night.
+		let lift = document.documentElement.dataset.theme === "dark" ? 1 : -1;
 		let hex = (c: RGBA) =>
 			"#" + c.slice(0, 3).map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
 		let opacity = (node: Element) => {
@@ -155,14 +187,12 @@ async function measure(page: Page, row: Locator, state: string, ground: string):
 		let shadePoint = { x: scroller.left + 8, y: rect.top + 8 };
 		let shade = pixel(shadePoint.x, shadePoint.y);
 		let groundColour = parse(ground);
-		// A shade lighter than the transcript is a step the wrong way: its ratio is written under 1.
-		let step = ratio(shade, groundColour);
 		pairs.push({
 			part: "row shade on the transcript",
 			role: "shade",
 			fg: hex(shade),
 			bg: hex(groundColour),
-			ratio: luminance(shade) > luminance(groundColour) ? Math.round(100 / step) / 100 : step,
+			ratio: step(shade, groundColour, lift),
 			threshold: 0,
 		});
 
@@ -228,10 +258,11 @@ async function measure(page: Page, row: Locator, state: string, ground: string):
 		let toolbar = body.querySelector(".chat-message-toolbar");
 		if (toolbar && parseFloat(getComputedStyle(toolbar).opacity) > 0.99) {
 			let bar = toolbar.getBoundingClientRect();
-			// Its darkest pixel just inside its start edge, where the hairline is drawn.
-			let edge = [0, 1, 2].map(step => pixel(bar.left + step, bar.top + bar.height / 2))
-				.sort((a, b) => luminance(a) - luminance(b))[0]!;
 			let fill = mode(bar);
+			// The hairline is the pixel just inside its start edge that stands farthest from the fill:
+			// darker than the white box by day, lighter than the box at night.
+			let edge = [0, 1, 2].map(inset => pixel(bar.left + inset, bar.top + bar.height / 2))
+				.sort((a, b) => ratio(b, fill) - ratio(a, fill))[0]!;
 			pairs.push({
 				part: "toolbar edge on the shade",
 				role: "toolbar edge",
@@ -245,7 +276,8 @@ async function measure(page: Page, row: Locator, state: string, ground: string):
 				role: "toolbar",
 				fg: hex(fill),
 				bg: hex(shade),
-				ratio: ratio(fill, shade),
+				// Lighter than the shade in both themes.
+				ratio: step(fill, shade, 1),
 				threshold: toolbarStep,
 			});
 		}
@@ -285,120 +317,128 @@ function below(pairs: Pair[], step: number): string[] {
 		);
 }
 
-test("a shown Chat row is a shade people can see, and every text and icon on it meets AA", async ({ join, seed }) => {
-	await seed("# Rows\n", { transcript: transcript() });
-	let page = await join("ana", { reducedMotion: "reduce", viewport: { width: 1440, height: 900 } });
-	await page.evaluate(() => document.fonts.ready);
-	let first = message(page, "ben-1");
-	let second = message(page, "ben-2");
-	let agent = message(page, "agent-1");
-	await expect(message(page, "ana-1")).toBeVisible();
-	let failures: string[] = [];
+for (let theme of ["light", "dark"] as const) {
+	test(`a shown Chat row is a shade people can see, and every text and icon on it meets AA, in ${theme}`, async ({ baseURL, join, seed }) => {
+		await seed("# Rows\n", { transcript: transcript() });
+		let page = await joinIn(join, baseURL!, theme, {
+			reducedMotion: "reduce",
+			viewport: { width: 1440, height: 900 },
+		});
+		await page.evaluate(() => document.fonts.ready);
+		let first = message(page, "ben-1");
+		let second = message(page, "ben-2");
+		let agent = message(page, "agent-1");
+		await expect(message(page, "ana-1")).toBeVisible();
+		let failures: string[] = [];
 
-	// Hovered: a person's first message, with its name line, and the one after it, with its time in the gutter.
-	for (
-		let [row, state] of [[first, "hovered"], [second, "hovered, grouped"], [
-			agent,
-			"hovered, agent",
-		]] as const
-	) {
-		let ground = await groundAt(page, row);
-		await row.locator("[data-chat-message-text]").hover();
-		await expect(row.getByRole("toolbar")).toHaveCSS("opacity", "1");
-		failures.push(...below(await measure(page, row, state, ground), HOVER_STEP));
-	}
+		// Hovered: a person's first message, with its name line, and the one after it, with its time in the gutter.
+		for (
+			let [row, state] of [[first, "hovered"], [second, "hovered, grouped"], [
+				agent,
+				"hovered, agent",
+			]] as const
+		) {
+			let ground = await groundAt(page, row);
+			await row.locator("[data-chat-message-text]").hover();
+			await expect(row.getByRole("toolbar")).toHaveCSS("opacity", "1");
+			failures.push(...below(await measure(page, row, state, ground), HOVER_STEP));
+		}
 
-	// Its menu open, the pointer gone.
-	let ground = await groundAt(page, first);
-	await first.locator("[data-chat-message-text]").hover();
-	await first.getByRole("button", { name: "Message actions" }).click();
-	await expect(page.getByRole("menu")).toBeVisible();
-	await page.mouse.move(0, 0);
-	failures.push(...below(await measure(page, first, "menu open", ground), HOVER_STEP));
-	await page.keyboard.press("Escape");
-	await expect(page.getByRole("menu")).toHaveCount(0);
+		// Its menu open, the pointer gone.
+		let ground = await groundAt(page, first);
+		await first.locator("[data-chat-message-text]").hover();
+		await first.getByRole("button", { name: "Message actions" }).click();
+		await expect(page.getByRole("menu")).toBeVisible();
+		await page.mouse.move(0, 0);
+		failures.push(...below(await measure(page, first, "menu open", ground), HOVER_STEP));
+		await page.keyboard.press("Escape");
+		await expect(page.getByRole("menu")).toHaveCount(0);
 
-	// Jumped to: the transcript washes the row it scrolls to (held here at its full strength).
-	ground = await groundAt(page, second);
-	await second.evaluate(node => {
-		let tint = document.createElement("span");
-		tint.className = "chat-source-tint";
-		tint.style.animation = "none";
-		node.setAttribute("data-chat-source", "");
-		node.prepend(tint);
-	});
-	failures.push(...below(await measure(page, second, "jumped to", ground), HOVER_STEP));
-	await second.evaluate(node => node.querySelector(".chat-source-tint")!.remove());
+		// Jumped to: the transcript washes the row it scrolls to (held here at its full strength).
+		ground = await groundAt(page, second);
+		await second.evaluate(node => {
+			let tint = document.createElement("span");
+			tint.className = "chat-source-tint";
+			tint.style.animation = "none";
+			node.setAttribute("data-chat-source", "");
+			node.prepend(tint);
+		});
+		failures.push(...below(await measure(page, second, "jumped to", ground), HOVER_STEP));
+		await second.evaluate(node => node.querySelector(".chat-source-tint")!.remove());
 
-	// Its thread open: the root keeps the selected wash, resting and hovered, and the thread's rows.
-	ground = await groundAt(page, first);
-	await first.locator("[data-chat-message-text]").hover();
-	await first.getByRole("button", { name: "Reply in thread" }).click();
-	let panel = page.locator("[data-thread-panel]");
-	await expect(panel).toBeVisible();
-	await chatInput(panel).fill(
-		"Booked for three, with `drill.ts` and [notes](https://example.com).",
-	);
-	await panel.getByRole("button", { name: "Send message" }).click();
-	let reply = panel.locator(".chat-message-body", { hasText: "Booked for three" });
-	await expect(reply).toBeVisible();
-	await page.mouse.move(0, 0);
-	failures.push(...below(await measure(page, first, "thread open", ground), SELECTED_STEP));
-	await first.locator("[data-chat-message-text]").hover();
-	await expect(first.getByRole("toolbar")).toHaveCSS("opacity", "1");
-	failures.push(
-		...below(await measure(page, first, "thread open, hovered", ground), SELECTED_STEP),
-	);
-
-	let threadGround = await groundAt(page, reply);
-	await reply.locator("[data-chat-message-text]").hover();
-	await expect(reply.getByRole("toolbar")).toHaveCSS("opacity", "1");
-	failures.push(
-		...below(await measure(page, reply, "thread reply, hovered", threadGround), HOVER_STEP),
-	);
-	// The root at the head of its thread is drawn as Chat draws it, with its toolbar and reactions.
-	let threadRoot = panel.locator("[data-thread-root-message] [data-chat-message-id]");
-	await page.mouse.move(0, 0);
-	let rootGround = await groundAt(page, threadRoot);
-	await threadRoot.locator("[data-chat-message-text]").hover();
-	await expect(threadRoot.getByRole("toolbar")).toHaveCSS("opacity", "1");
-	failures.push(
-		...below(await measure(page, threadRoot, "thread root, hovered", rootGround), HOVER_STEP),
-	);
-
-	expect(failures).toEqual([]);
-});
-
-test("on a phone a row brought up by a long press is a shade people can see, and everything on it meets AA", async ({ join, seed }) => {
-	await seed("# Rows\n", { transcript: transcript() });
-	let page = await join("ana", {
-		hasTouch: true,
-		isMobile: true,
-		viewport: { width: 390, height: 844 },
-	});
-	await page.getByRole("navigation", { name: "Workspace view" })
-		.getByRole("button", { name: /^Chat/ }).click();
-	await expect.poll(async () => (await chatOf(page).boundingBox())?.x).toBe(0);
-	await page.evaluate(() => document.fonts.ready);
-	let failures: string[] = [];
-	for (let [id, state] of [["ben-1", "phone, held"], ["agent-1", "phone, held, agent"]] as const) {
-		let row = message(page, id);
-		await row.scrollIntoViewIfNeeded();
-		let ground = await groundAt(page, row);
-		let box = (await row.locator("[data-chat-message-text]").boundingBox())!;
-		let session = await page.context().newCDPSession(page);
-		let point = { x: box.x + 24, y: box.y + Math.min(8, box.height / 2) };
-		await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
-		await page.waitForTimeout(700);
-		await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-		await session.detach();
-		await expect(row.getByRole("toolbar")).toBeVisible();
-		await expect.poll(() => row.evaluate(node => getComputedStyle(node, "::before").opacity)).toBe(
-			"1",
+		// Its thread open: the root keeps the selected wash, resting and hovered, and the thread's rows.
+		ground = await groundAt(page, first);
+		await first.locator("[data-chat-message-text]").hover();
+		await first.getByRole("button", { name: "Reply in thread" }).click();
+		let panel = page.locator("[data-thread-panel]");
+		await expect(panel).toBeVisible();
+		await chatInput(panel).fill(
+			"Booked for three, with `drill.ts` and [notes](https://example.com).",
 		);
-		failures.push(...below(await measure(page, row, state, ground), HOVER_STEP));
-		await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-		await page.mouse.click(1, 1).catch(() => {});
-	}
-	expect(failures).toEqual([]);
-});
+		await panel.getByRole("button", { name: "Send message" }).click();
+		let reply = panel.locator(".chat-message-body", { hasText: "Booked for three" });
+		await expect(reply).toBeVisible();
+		await page.mouse.move(0, 0);
+		failures.push(...below(await measure(page, first, "thread open", ground), SELECTED_STEP));
+		await first.locator("[data-chat-message-text]").hover();
+		await expect(first.getByRole("toolbar")).toHaveCSS("opacity", "1");
+		failures.push(
+			...below(await measure(page, first, "thread open, hovered", ground), SELECTED_STEP),
+		);
+
+		let threadGround = await groundAt(page, reply);
+		await reply.locator("[data-chat-message-text]").hover();
+		await expect(reply.getByRole("toolbar")).toHaveCSS("opacity", "1");
+		failures.push(
+			...below(await measure(page, reply, "thread reply, hovered", threadGround), HOVER_STEP),
+		);
+		// The root at the head of its thread is drawn as Chat draws it, with its toolbar and reactions.
+		let threadRoot = panel.locator("[data-thread-root-message] [data-chat-message-id]");
+		await page.mouse.move(0, 0);
+		let rootGround = await groundAt(page, threadRoot);
+		await threadRoot.locator("[data-chat-message-text]").hover();
+		await expect(threadRoot.getByRole("toolbar")).toHaveCSS("opacity", "1");
+		failures.push(
+			...below(await measure(page, threadRoot, "thread root, hovered", rootGround), HOVER_STEP),
+		);
+
+		expect(failures).toEqual([]);
+	});
+
+	test(`on a phone a row brought up by a long press is a shade people can see, and everything on it meets AA, in ${theme}`, async ({ baseURL, join, seed }) => {
+		await seed("# Rows\n", { transcript: transcript() });
+		let page = await joinIn(join, baseURL!, theme, {
+			hasTouch: true,
+			isMobile: true,
+			viewport: { width: 390, height: 844 },
+		});
+		await page.getByRole("navigation", { name: "Workspace view" })
+			.getByRole("button", { name: /^Chat/ }).click();
+		await expect.poll(async () => (await chatOf(page).boundingBox())?.x).toBe(0);
+		await page.evaluate(() => document.fonts.ready);
+		let failures: string[] = [];
+		for (
+			let [id, state] of [["ben-1", "phone, held"], ["agent-1", "phone, held, agent"]] as const
+		) {
+			let row = message(page, id);
+			await row.scrollIntoViewIfNeeded();
+			let ground = await groundAt(page, row);
+			let box = (await row.locator("[data-chat-message-text]").boundingBox())!;
+			let session = await page.context().newCDPSession(page);
+			let point = { x: box.x + 24, y: box.y + Math.min(8, box.height / 2) };
+			await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+			await page.waitForTimeout(700);
+			await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+			await session.detach();
+			await expect(row.getByRole("toolbar")).toBeVisible();
+			await expect.poll(() => row.evaluate(node => getComputedStyle(node, "::before").opacity))
+				.toBe(
+					"1",
+				);
+			failures.push(...below(await measure(page, row, state, ground), HOVER_STEP));
+			await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+			await page.mouse.click(1, 1).catch(() => {});
+		}
+		expect(failures).toEqual([]);
+	});
+}
