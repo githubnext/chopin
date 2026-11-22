@@ -73,18 +73,20 @@
 }
 
 /*
- * One account: the mark, the name, then three fixed columns (its state, the action that state asks
- * for, its menu), so a row's controls never move with what its neighbours hold. The lines under
- * the name run the row's full width. The controls are centred on the name's line.
+ * One account, laid out as a table row: the mark, the text (the name, then its lines under it), and
+ * three fixed columns (its state, the action that state asks for, its menu), so a row's controls
+ * never move with what its neighbours hold and its words never run under them. The name's line is as
+ * tall as the controls, which are centred on it.
  */
 .ai-account {
 	--ai-account-line: calc(var(--text-sm--line-height) * 1em);
+	--ai-account-head: max(var(--ai-account-line), var(--icon-button-size));
 	display: grid;
 	grid-template-columns:
 		calc(var(--spacing) * 4.5) minmax(0, 1fr) 10rem 7rem
 		var(--icon-button-size);
 	align-items: start;
-	gap: calc(var(--spacing) * 0.5) calc(var(--spacing) * 3);
+	gap: calc(var(--spacing) * 0.5) calc(var(--spacing) * 4);
 	padding: calc(var(--spacing) * 4) calc(var(--spacing) * 5);
 	font-size: var(--text-sm);
 
@@ -97,7 +99,7 @@
 	grid-area: 1 / 1;
 	display: grid;
 	place-items: center;
-	height: var(--ai-account-line);
+	height: var(--ai-account-head);
 	color: var(--color-text-primary);
 }
 
@@ -108,6 +110,9 @@
 .ai-account-name {
 	grid-row: 1;
 	grid-column: 2;
+	display: flex;
+	min-height: var(--ai-account-head);
+	align-items: center;
 	margin: 0;
 	color: var(--color-text-primary);
 	font-size: var(--text-sm);
@@ -116,7 +121,7 @@
 
 .ai-account-line,
 .ai-account-problem {
-	grid-column: 2 / -1;
+	grid-column: 2;
 	margin: 0;
 	text-wrap: pretty;
 }
@@ -134,7 +139,7 @@
 .ai-account-menu-slot {
 	grid-row: 1;
 	display: flex;
-	height: var(--ai-account-line);
+	height: var(--ai-account-head);
 	align-items: center;
 }
 
@@ -197,13 +202,23 @@
 	min-height: 0;
 }
 
-/* On a phone the state moves under the name; the action and menu columns stay where they are. */
-@container ai-accounts-list (width < 32rem) {
+/*
+ * Where the text column would be too narrow beside the three (a phone, a narrow pane), the state
+ * moves under the name and the lines run under the controls' columns, which hold only the name's
+ * line; the action and menu columns stay where they are.
+ */
+@container ai-accounts-list (width < 38rem) {
 	.ai-account {
 		grid-template-columns:
 			calc(var(--spacing) * 4.5) minmax(0, 1fr) 7rem
 			var(--icon-button-size);
+		column-gap: calc(var(--spacing) * 3);
 		padding-inline: calc(var(--spacing) * 4);
+	}
+
+	.ai-account-line,
+	.ai-account-problem {
+		grid-column: 2 / -1;
 	}
 
 	.ai-account-status {
