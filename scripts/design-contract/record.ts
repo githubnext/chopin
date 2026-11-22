@@ -18,6 +18,8 @@ let colors: Record<string, string> = {
 	merged: "merged-icon",
 	"chat-divider": "chat-divider",
 };
+/** Each named colour's value at night, recorded beside it as `<name>-dark`. */
+let dark = Object.keys(colors).map(name => `${name}-dark`);
 let typography: Record<string, string> = {
 	"document-title": "2xl",
 	"section-heading": "xl",
@@ -120,16 +122,29 @@ export function designRecordProblems(
 				} else tokens.set(name, declaration.value);
 			});
 		});
-		let resolveCSS = (value: string, trail: string[] = []): string => {
-			return value.replace(/var\(\s*(--[\w-]+)\s*\)/g, (_, name: string) => {
-				if (trail.includes(name)) {
-					throw new Error(`theme: alias cycle ${[...trail, name].join(" → ")}`);
-				}
-				let token = tokens.get(name);
-				if (token === undefined) throw new Error(`theme: unknown token ${name}`);
-				return resolveCSS(token, [...trail, name]);
+		// The dark theme replaces some tokens; any it leaves alone keep their light value at night.
+		let night = new Map<string, string>();
+		postcss.parse(theme).walkRules(':root[data-theme="dark"]', rule => {
+			rule.walkDecls(declaration => {
+				if (declaration.prop.startsWith("--")) night.set(declaration.prop, declaration.value);
 			});
+		});
+		if (!night.size) throw new Error('theme: missing the dark theme, :root[data-theme="dark"]');
+		let resolveIn = (theme: "light" | "dark") => {
+			let resolve = (value: string, trail: string[] = []): string => {
+				return value.replace(/var\(\s*(--[\w-]+)\s*\)/g, (_, name: string) => {
+					if (trail.includes(name)) {
+						throw new Error(`theme: alias cycle ${[...trail, name].join(" → ")}`);
+					}
+					let token = (theme === "dark" ? night.get(name) : undefined) ?? tokens.get(name);
+					if (token === undefined) throw new Error(`theme: unknown token ${name}`);
+					return resolve(token, [...trail, name]);
+				});
+			};
+			return resolve;
 		};
+		let resolveCSS = resolveIn("light");
+		let resolveNight = resolveIn("dark");
 		let resolveRecord = (value: unknown, trail: string[] = []): string => {
 			let text = scalar(value, trail.at(-1) ?? "record");
 			return text.replace(/\{([\w.-]+)\}/g, (_, path: string) => {
@@ -142,9 +157,10 @@ export function designRecordProblems(
 				return resolveRecord(field, [...trail, path]);
 			});
 		};
-		let compare = (path: string, value: unknown, expected: string, font = false) => {
-			let actual = resolveCSS(resolveRecord(value));
-			let wanted = resolveCSS(expected);
+		let compare = (path: string, value: unknown, expected: string, font = false, dark = false) => {
+			let resolve = dark ? resolveNight : resolveCSS;
+			let actual = resolve(resolveRecord(value));
+			let wanted = resolve(expected);
 			// Quotes do not change the identity of these simple font family names.
 			if (font) {
 				actual = actual.replace(/["']/g, "");
@@ -169,15 +185,16 @@ export function designRecordProblems(
 			})
 		) {
 			let fields = object(record[group], `DESIGN.md.${group}`);
-			keys(fields, Object.keys(mapping), `DESIGN.md.${group}`);
+			let named = group === "colors" ? [...Object.keys(mapping), ...dark] : Object.keys(mapping);
+			keys(fields, named, `DESIGN.md.${group}`);
 			for (let [name, token] of Object.entries(mapping)) {
-				compare(
-					`DESIGN.md.${group}.${name}`,
-					fields[name],
-					name === "chat-divider"
-						? divider
-						: `var(--${group === "colors" ? "color" : "radius"}-${token})`,
-				);
+				let expected = name === "chat-divider"
+					? divider
+					: `var(--${group === "colors" ? "color" : "radius"}-${token})`;
+				compare(`DESIGN.md.${group}.${name}`, fields[name], expected);
+				if (group === "colors") {
+					compare(`DESIGN.md.${group}.${name}-dark`, fields[`${name}-dark`], expected, false, true);
+				}
 			}
 		}
 		let roles = object(record.typography, "DESIGN.md.typography");
@@ -222,14 +239,19 @@ export function designRecordProblems(
 			);
 		}
 		let colorMeta = object(extensions.colorMeta, "design.json.extensions.colorMeta");
-		keys(colorMeta, Object.keys(colors), "design.json.extensions.colorMeta");
+		keys(colorMeta, [...Object.keys(colors), ...dark], "design.json.extensions.colorMeta");
 		for (let [name, token] of Object.entries(colors)) {
-			let color = object(colorMeta[name], `design.json.extensions.colorMeta.${name}`);
-			compare(
-				`design.json.extensions.colorMeta.${name}.canonical`,
-				color.canonical,
-				name === "chat-divider" ? divider : `var(--color-${token})`,
-			);
+			for (let theme of ["light", "dark"] as const) {
+				let entry = theme === "dark" ? `${name}-dark` : name;
+				let color = object(colorMeta[entry], `design.json.extensions.colorMeta.${entry}`);
+				compare(
+					`design.json.extensions.colorMeta.${entry}.canonical`,
+					color.canonical,
+					name === "chat-divider" ? divider : `var(--color-${token})`,
+					false,
+					theme === "dark",
+				);
+			}
 		}
 		keys(
 			object(extensions.typographyMeta, "design.json.extensions.typographyMeta"),

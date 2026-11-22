@@ -105,7 +105,7 @@
 	flex-direction: column;
 	overflow: hidden;
 	border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
-	background: var(--color-page);
+	background: var(--color-raised);
 	box-shadow: var(--shadow-overlay);
 	font-size: var(--text-base);
 	line-height: var(--text-base--line-height);
@@ -521,7 +521,7 @@
 	);
 	overscroll-behavior: contain;
 	border-radius: var(--radius-sheet);
-	background: var(--color-page);
+	background: var(--color-raised);
 	box-shadow: var(--shadow-overlay);
 }
 
@@ -564,7 +564,7 @@
 
 .action-sheet-cancel {
 	border-radius: var(--radius-sheet);
-	background: var(--color-page);
+	background: var(--color-raised);
 	box-shadow: var(--shadow-overlay);
 	font-weight: var(--font-weight-semibold);
 }

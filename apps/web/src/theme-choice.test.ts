@@ -1,38 +1,144 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-	applyTheme,
-	keepThemeChoice,
-	readThemeChoice,
-	resolveTheme,
-	storedThemeChoice,
-	THEME_GROUND,
-	THEME_STORAGE_KEY,
-} from "./theme-choice";
+import { THEME_CHOICES } from "./theme-choice";
 
-import type { Theme } from "./theme-choice";
+import type { ThemeChoice } from "./theme-choice";
+
+type Theme = "light" | "dark";
 
 let html = await Bun.file(new URL("../index.html", import.meta.url)).text();
 let theme = await Bun.file(new URL("../../../packages/visuals/theme.css", import.meta.url)).text();
 
-function storage(held: Record<string, string> = {}) {
+const KEY = "chopin:theme";
+
+/** The script in `index.html` that owns the theme, as the browser runs it. */
+let source = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+	.map(match => match[1]!)
+	.find(script => script.includes(KEY));
+
+/** Each theme's ground (`--color-gray-150`), as the theme's own comment writes it. */
+function ground(css: string) {
+	return /--color-gray-150:[^;]*;\s*\/\* (#[0-9a-f]{6}) \*\//.exec(css)?.[1];
+}
+const GROUND: Record<Theme, string | undefined> = {
+	light: ground(theme),
+	dark: ground(theme.slice(theme.indexOf('\n:root[data-theme="dark"] {'))),
+};
+
+/**
+ * A page for the script: its root and metas, storage holding `stored` (or refusing), a system
+ * scheme the test can turn, the window's events and frames, all of them observable.
+ */
+function page(stored: string | null | "refused", systemDark: boolean) {
+	if (!source) throw new Error("index.html has no script that reads the theme");
+	let held: Record<string, string> = stored === null || stored === "refused"
+		? {}
+		: { [KEY]: stored };
+	let storage = {
+		getItem: (key: string) => {
+			if (stored === "refused") throw new Error("blocked");
+			return held[key] ?? null;
+		},
+		setItem: (key: string, value: string) => {
+			if (stored === "refused") throw new Error("blocked");
+			held[key] = value;
+		},
+	};
+	let classes = new Set<string>();
+	let root = {
+		dataset: {} as Record<string, string>,
+		classList: {
+			toggle(name: string, force?: boolean) {
+				if (force ?? !classes.has(name)) classes.add(name);
+				else classes.delete(name);
+				return classes.has(name);
+			},
+		},
+		style: { colorScheme: "" },
+	};
+	let metas: Record<string, { content: string }> = {
+		'meta[name="color-scheme"]': { content: "light" },
+		'meta[name="theme-color"]': { content: "#f4f4f1" },
+	};
+	let system = {
+		matches: systemDark,
+		listeners: [] as (() => void)[],
+		addEventListener(_: string, listener: () => void) {
+			this.listeners.push(listener);
+		},
+	};
+	let listeners: Record<string, ((event: { key?: string | null }) => void)[]> = {};
+	let heard: string[] = [];
+	let frames: (() => void)[] = [];
+	let window = {} as { chopinTheme?: (next?: ThemeChoice) => ThemeChoice };
+	new Function(
+		"window",
+		"document",
+		"localStorage",
+		"matchMedia",
+		"addEventListener",
+		"dispatchEvent",
+		"requestAnimationFrame",
+		"Event",
+		source,
+	)(
+		window,
+		{ documentElement: root, querySelector: (selector: string) => metas[selector] },
+		storage,
+		(query: string) => {
+			expect(query).toBe("(prefers-color-scheme: dark)");
+			return system;
+		},
+		(type: string, listener: (event: { key?: string | null }) => void) => {
+			(listeners[type] ??= []).push(listener);
+		},
+		(event: { type: string }) => heard.push(event.type),
+		(frame: () => void) => frames.push(frame),
+		class {
+			constructor(public type: string) {}
+		},
+	);
 	return {
-		getItem: (key: string) => held[key] ?? null,
-		setItem: (key: string, value: string) => void (held[key] = value),
+		window,
+		held,
+		heard,
+		drawn: () => ({
+			theme: root.dataset.theme,
+			dark: classes.has("dark"),
+			colorScheme: root.style.colorScheme,
+			scheme: metas['meta[name="color-scheme"]']!.content,
+			ground: metas['meta[name="theme-color"]']!.content,
+		}),
+		switching: () => "themeSwitching" in root.dataset,
+		/** Runs the frames asked for so far, and those they ask for, as the browser draws. */
+		frame() {
+			let now = frames.splice(0);
+			for (let run of now) run();
+		},
+		turnSystem(dark: boolean) {
+			system.matches = dark;
+			for (let listener of system.listeners) listener();
+		},
+		storageEvent(key: string | null) {
+			for (let listener of listeners.storage ?? []) listener({ key });
+		},
 	};
 }
 
-let refusing = {
-	getItem: (): string | null => {
-		throw new Error("blocked");
-	},
-	setItem: () => {
-		throw new Error("blocked");
-	},
-};
+function painted(theme: Theme) {
+	let drawn: { theme: string; dark: boolean; colorScheme: string; scheme: string; ground: string } =
+		{
+			theme,
+			dark: theme === "dark",
+			colorScheme: theme,
+			scheme: theme,
+			ground: String(GROUND[theme]),
+		};
+	return drawn;
+}
 
-/** What anything can find in storage: nothing, each choice, a value from elsewhere, a refusal. */
-let STORED: (string | null | "throws")[] = [
+/** Anything the storage can hold, or a refusal to read it. */
+const STORED = [
 	null,
 	"light",
 	"dark",
@@ -41,141 +147,102 @@ let STORED: (string | null | "throws")[] = [
 	"Dark",
 	"purple",
 	'{"theme":"dark"}',
-	"throws",
+	"refused",
 ];
 
-function fakePage() {
-	let classes = new Set<string>();
-	let metas = {
-		'meta[name="color-scheme"]': { content: "light" },
-		'meta[name="theme-color"]': { content: "#f4f4f1" },
-	};
-	let root = {
-		dataset: {} as Record<string, string>,
-		classList: {
-			toggle(name: string, force?: boolean) {
-				let on = force ?? !classes.has(name);
-				if (on) classes.add(name);
-				else classes.delete(name);
-				return on;
-			},
-		},
-		style: { colorScheme: "" },
-	};
-	return {
-		root,
-		classes,
-		metas,
-		document: {
-			documentElement: root,
-			querySelector: (selector: keyof typeof metas) => metas[selector],
-		},
-		drawn: () => ({
-			theme: root.dataset.theme,
-			dark: classes.has("dark"),
-			colorScheme: root.style.colorScheme,
-			scheme: metas['meta[name="color-scheme"]'].content,
-			ground: metas['meta[name="theme-color"]'].content,
-		}),
-	};
-}
-
-/** `index.html`'s first script that reads the theme, run as the browser runs it. */
-function prePaint(stored: string | null | "throws", systemDark: boolean) {
-	let source = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-		.map(match => match[1]!)
-		.find(script => script.includes(THEME_STORAGE_KEY));
-	if (!source) throw new Error("index.html has no script that reads the theme");
-	let page = fakePage();
-	let localStorage = stored === "throws" ? refusing : storage(
-		stored === null ? {} : { [THEME_STORAGE_KEY]: stored },
-	);
-	let matchMedia = (query: string) => ({
-		matches: query === "(prefers-color-scheme: dark)" && systemDark,
-	});
-	new Function("document", "localStorage", "matchMedia", source)(
-		page.document,
-		localStorage,
-		matchMedia,
-	);
-	return page.drawn();
-}
-
-function expected(theme: Theme) {
-	return {
-		theme,
-		dark: theme === "dark",
-		colorScheme: theme,
-		scheme: theme,
-		ground: THEME_GROUND[theme],
-	};
-}
-
-describe("a person's theme", () => {
-	test("is System for somebody who never chose, for anything unknown and where storage is refused", () => {
-		expect(readThemeChoice(storage())).toBe("system");
-		for (let raw of ["", "Dark", "purple", '{"theme":"dark"}']) {
-			expect(readThemeChoice(storage({ [THEME_STORAGE_KEY]: raw }))).toBe("system");
-		}
-		expect(readThemeChoice(refusing)).toBe("system");
-		expect(storedThemeChoice(undefined)).toBe("system");
-	});
-
-	test("is kept in this browser, and a refusal to keep it is not an error", () => {
-		let held = storage();
-		for (let choice of ["dark", "light", "system"] as const) {
-			keepThemeChoice(choice, held);
-			expect(readThemeChoice(held)).toBe(choice);
-		}
-		expect(() => keepThemeChoice("dark", refusing)).not.toThrow();
-	});
-
-	test("System follows the system's scheme; Light and Dark never do", () => {
-		for (let systemDark of [false, true]) {
-			expect(resolveTheme("system", systemDark)).toBe(systemDark ? "dark" : "light");
-			expect(resolveTheme("light", systemDark)).toBe("light");
-			expect(resolveTheme("dark", systemDark)).toBe("dark");
-		}
-	});
-
-	test("writes every mark of a theme together: data-theme, .dark, color-scheme and both metas", () => {
-		let page = fakePage();
-		let meta = {
-			scheme: page.metas['meta[name="color-scheme"]'],
-			ground: page.metas['meta[name="theme-color"]'],
-		};
-		applyTheme("dark", page.root, meta);
-		expect(page.drawn()).toEqual(expected("dark"));
-		applyTheme("light", page.root, meta);
-		expect(page.drawn()).toEqual(expected("light"));
-	});
-
-	test("index.html draws the first frame exactly as the app would, for every stored value and system scheme", () => {
+describe("a person's theme, as index.html draws it", () => {
+	test("the first frame is the stored choice, System for anything unknown, missing or unreadable", () => {
 		for (let stored of STORED) {
 			for (let systemDark of [false, true]) {
-				let choice = stored === "throws" ? readThemeChoice(refusing) : storedThemeChoice(stored);
-				expect([stored, systemDark, prePaint(stored, systemDark)]).toEqual([
-					stored,
-					systemDark,
-					expected(resolveTheme(choice, systemDark)),
-				]);
+				let choice: ThemeChoice = stored === "light" || stored === "dark" ? stored : "system";
+				let expected: Theme = choice === "system" ? (systemDark ? "dark" : "light") : choice;
+				let drawn = page(stored, systemDark);
+				expect([stored, systemDark, drawn.drawn(), drawn.window.chopinTheme!()])
+					.toEqual([stored, systemDark, painted(expected), choice]);
+				// The first frame is the theme, not a switch to it.
+				expect(drawn.switching()).toBe(false);
 			}
 		}
 	});
 
-	test("index.html reads the theme before the page's stylesheets and body", () => {
+	test("each choice is drawn at once, kept, and told to the app", () => {
+		let drawn = page(null, false);
+		for (let choice of ["dark", "light", "system", "dark"] as const) {
+			expect(drawn.window.chopinTheme!(choice)).toBe(choice);
+			expect(drawn.drawn()).toEqual(painted(choice === "dark" ? "dark" : "light"));
+			expect(drawn.held[KEY]).toBe(choice);
+		}
+		expect(drawn.heard).toEqual(["chopin-theme", "chopin-theme", "chopin-theme", "chopin-theme"]);
+		expect(THEME_CHOICES).toEqual(["light", "dark", "system"]);
+	});
+
+	test("where storage is refused, a choice still holds for the page", () => {
+		let drawn = page("refused", false);
+		expect(drawn.window.chopinTheme!("dark")).toBe("dark");
+		expect(drawn.window.chopinTheme!()).toBe("dark");
+		expect(drawn.drawn()).toEqual(painted("dark"));
+	});
+
+	test("System follows the system's scheme while the page is open; Light and Dark hold", () => {
+		let drawn = page(null, false);
+		drawn.turnSystem(true);
+		expect(drawn.drawn()).toEqual(painted("dark"));
+		drawn.turnSystem(false);
+		expect(drawn.drawn()).toEqual(painted("light"));
+		for (let choice of ["light", "dark"] as const) {
+			drawn.window.chopinTheme!(choice);
+			drawn.turnSystem(choice === "light");
+			expect(drawn.drawn()).toEqual(painted(choice));
+		}
+	});
+
+	test("another tab's choice is taken at once, and nothing else in storage is", () => {
+		let drawn = page(null, false);
+		drawn.held[KEY] = "dark";
+		drawn.storageEvent("chopin:pane:chat");
+		expect(drawn.drawn()).toEqual(painted("light"));
+		expect(drawn.heard).toEqual([]);
+		drawn.storageEvent(KEY);
+		expect(drawn.drawn()).toEqual(painted("dark"));
+		expect(drawn.window.chopinTheme!()).toBe("dark");
+		expect(drawn.heard).toEqual(["chopin-theme"]);
+		// Storage cleared in another tab: System again.
+		delete drawn.held[KEY];
+		drawn.storageEvent(null);
+		expect(drawn.window.chopinTheme!()).toBe("system");
+	});
+
+	test("a new theme holds transitions back for the one frame that draws it", () => {
+		let drawn = page(null, false);
+		drawn.window.chopinTheme!("dark");
+		expect(drawn.switching()).toBe(true);
+		drawn.frame();
+		expect(drawn.switching()).toBe(true);
+		drawn.frame();
+		expect(drawn.switching()).toBe(false);
+		// A second switch before the first is drawn keeps them held until the second is.
+		drawn.window.chopinTheme!("light");
+		drawn.frame();
+		drawn.window.chopinTheme!("dark");
+		drawn.frame();
+		expect(drawn.switching()).toBe(true);
+		drawn.frame();
+		expect(drawn.switching()).toBe(false);
+		// Choosing the theme already drawn changes nothing on the page.
+		drawn.window.chopinTheme!("system");
+		drawn.window.chopinTheme!("light");
+		drawn.frame();
+		drawn.frame();
+		drawn.window.chopinTheme!("system");
+		expect(drawn.switching()).toBe(false);
+	});
+
+	test("runs before the page's stylesheets, module and body, after the metas it sets", () => {
 		let script = html.search(/<script>[^<]*chopin:theme/);
 		expect(script).toBeGreaterThan(html.indexOf('<meta name="theme-color"'));
 		expect(script).toBeGreaterThan(html.indexOf('<meta name="color-scheme"'));
 		expect(script).toBeLessThan(html.indexOf("<body"));
 		expect(script).toBeLessThan(html.indexOf('<script type="module"'));
-	});
-
-	test("the browser's chrome takes each theme's ground", () => {
-		let night = theme.slice(theme.indexOf('\n:root[data-theme="dark"] {'));
-		let ground = (source: string) =>
-			/--color-gray-150:[^;]*;\s*\/\* (#[0-9a-f]{6}) \*\//.exec(source)?.[1];
-		expect(ground(theme)).toBe(THEME_GROUND.light);
-		expect(ground(night)).toBe(THEME_GROUND.dark);
+		expect(GROUND).toEqual({ light: "#f4f4f1", dark: "#181714" });
 	});
 });

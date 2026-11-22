@@ -11,7 +11,7 @@
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	border-radius: var(--radius-lg);
-	background: var(--color-page);
+	background: var(--color-raised);
 	padding: var(--menu-padding);
 	box-shadow: var(--shadow-raised);
 	transform-origin: var(--transform-origin, bottom left);

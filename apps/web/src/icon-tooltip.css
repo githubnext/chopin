@@ -3,11 +3,11 @@
 	z-index: 1000;
 	max-width: min(20rem, calc(100vw - 16px));
 	padding: var(--spacing) calc(var(--spacing) * 2);
-	border: 1px solid var(--color-gray-750);
+	border: 1px solid var(--color-tooltip-edge);
 	border-radius: var(--radius-md);
-	background: var(--color-gray-800);
+	background: var(--color-tooltip);
 	box-shadow: var(--shadow-overlay);
-	color: var(--color-white);
+	color: var(--color-tooltip-ink);
 	font-size: var(--text-xs);
 	font-weight: 500;
 	line-height: 1.35;

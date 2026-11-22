@@ -13,7 +13,7 @@
 .design-audit-dialog {
 	padding: 1rem;
 	border-radius: var(--radius-xl);
-	background: var(--color-page);
+	background: var(--color-raised);
 	box-shadow: var(--shadow-overlay);
 }
 
