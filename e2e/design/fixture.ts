@@ -63,6 +63,15 @@ export let test = base.extend<DesignOptions>({
 	},
 });
 
+/**
+ * Draws the page in a theme the way a person gets it with the default System choice: the system's
+ * scheme turns, and the page follows it while open (`index.html`).
+ */
+export async function drawTheme(page: Page, theme: "light" | "dark") {
+	await page.emulateMedia({ colorScheme: theme });
+	await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+}
+
 export function plate(page: Page, id: string) {
 	return page.locator(`[data-audit-item="${id}"]`);
 }

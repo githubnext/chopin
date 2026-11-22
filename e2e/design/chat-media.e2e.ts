@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { plate, test } from "./fixture";
+import { drawTheme, plate, test } from "./fixture";
 
 import type { Locator, Page } from "@playwright/test";
 
@@ -165,7 +165,7 @@ test("a staged image is a 64px square and a staged file a short card, each with 
 
 for (let mode of ["light", "dark"] as const) {
 	test(`every colour of Chat's media is one of Chopin's tokens, in ${mode}`, async ({ page }) => {
-		if (mode === "dark") await page.evaluate(() => document.documentElement.classList.add("dark"));
+		await drawTheme(page, mode);
 		let figure = media(page).locator('[data-chat-image="single"]').first();
 		await expect(figure).toHaveAttribute("data-load", "shown");
 		let frame = figure.locator(".chat-image-frame");
@@ -215,27 +215,27 @@ for (let mode of ["light", "dark"] as const) {
 			await token(page, "--color-inset", "background-color"),
 		]);
 
-		// The viewer is Slack's dark ground under the blurred picture, its words in the page's colour
-		// and its secondary line in the light grey that keeps AA over a white picture's blur.
+		// The viewer is Slack's dark ground under the blurred picture, the same in both themes, its
+		// words white and its secondary line the light grey that keeps AA over a white picture's blur.
 		await frame.click();
 		let viewer = page.locator("[data-image-viewer]");
 		await expect(viewer.locator(".image-viewer-name")).toBeVisible();
 		expect(await css(viewer, "background-color", "color")).toEqual([
-			await token(page, "--color-gray-900", "background-color"),
-			await token(page, "--color-page"),
+			await token(page, "--color-viewer", "background-color"),
+			await token(page, "--color-white"),
 		]);
 		expect(await css(viewer.locator(".image-viewer-name"), "color")).toEqual([
-			await token(page, "--color-page"),
+			await token(page, "--color-white"),
 		]);
 		expect(await css(viewer.locator(".image-viewer-detail"), "color")).toEqual([
-			await token(page, "--color-gray-300"),
+			await token(page, "--color-viewer-muted"),
 		]);
 		expect(
 			await css(
 				viewer.getByRole("button", { name: "Download image" }).locator("[data-nucleo-icon]"),
 				"color",
 			),
-		).toEqual([await token(page, "--color-page")]);
+		).toEqual([await token(page, "--color-white")]);
 		await page.keyboard.press("Escape");
 		await expect(viewer).toHaveCount(0);
 	});
