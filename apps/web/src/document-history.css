@@ -174,7 +174,7 @@
 	padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5);
 	border: var(--edge-width) solid var(--color-control-edge);
 	border-radius: var(--radius-lg);
-	background: var(--color-page);
+	background: var(--color-raised);
 	box-shadow: var(--shadow-raised);
 	color: var(--color-text-primary);
 	font-size: var(--text-xs);

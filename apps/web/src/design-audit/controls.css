@@ -80,7 +80,7 @@
 	width: min(100%, 18rem);
 	padding: 0.25rem;
 	border-radius: var(--radius-lg);
-	background: var(--color-page);
+	background: var(--color-raised);
 	box-shadow: var(--shadow-overlay);
 }
 

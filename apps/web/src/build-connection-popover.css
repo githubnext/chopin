@@ -9,7 +9,7 @@
 	padding: calc(var(--spacing) * 3);
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-lg);
-	background: var(--color-page);
+	background: var(--color-raised);
 	color: var(--color-text-secondary);
 	box-shadow: var(--shadow-overlay);
 	font-size: var(--text-sm);

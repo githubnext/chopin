@@ -60,6 +60,33 @@ describe("structured design record", () => {
 		).toBe(true);
 	});
 
+	test("each named colour's dark twin is checked against the dark theme", () => {
+		let wrong = "oklch(0.3 0.006 95)";
+		let result = check({
+			markdown: markdown.replace('page-dark: "oklch(0.245 0.006 95)"', `page-dark: "${wrong}"`),
+			json: editJSON(value => {
+				value.extensions.colorMeta["page-dark"].canonical = wrong;
+			}),
+		});
+		expect(result.some(value => value.startsWith("DESIGN.md.colors.page-dark:"))).toBe(true);
+		expect(
+			result.some(value =>
+				value.startsWith("design.json.extensions.colorMeta.page-dark.canonical:")
+			),
+		).toBe(true);
+		// A token the dark theme leaves alone is read at its light value; one it changes, at its own.
+		let moved = check({
+			theme: theme.replace(
+				"--color-brand: oklch(0.735 0.085 212);",
+				"--color-brand: oklch(0.7 0.1 212);",
+			),
+		});
+		expect(moved.some(value => value.startsWith("DESIGN.md.colors.petrol-dark:"))).toBe(true);
+		expect(moved.some(value => value.startsWith("DESIGN.md.colors.petrol:"))).toBe(false);
+		expect(check({ theme: theme.replace(':root[data-theme="dark"] {', ".unrelated {") }))
+			.toEqual(['theme: missing the dark theme, :root[data-theme="dark"]']);
+	});
+
 	test("the merged colour follows the merged icon role through the plum scale", () => {
 		let result = check({
 			theme: theme.replace(

@@ -314,6 +314,14 @@
 	block-size: calc(var(--spacing) * 3);
 }
 
+/* By day the icon role's grey reads on the ink circle; at night the ink is light, so it is the page's. */
+:root[data-theme="dark"]
+	.chat-composer
+	[data-slot="composer-attachment"]
+	button[aria-label^="Remove "] {
+	--color-icon: currentColor;
+}
+
 /* A file that cannot go keeps the card's layout, whatever it is, so its reason has room. */
 .chat-composer [data-slot="composer-attachment"][data-state="error"] {
 	padding-inline-end: calc(var(--spacing) * 8);
