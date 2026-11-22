@@ -597,13 +597,23 @@ test.skipIf(process.platform === "win32")(
 			await Bun.sleep(500);
 			expect(await it.events()).toEqual([]);
 
-			// D_1 starts cold; its repository is served from then on, and its spare follows.
+			// D_1 starts cold; its repository is served from then on, and its spare follows. Both are
+			// processes of their own, starting side by side, so either may be the first to say it started.
 			let first = it.serve(["D_1"], spares);
-			await until(() => it.state() === "ready", 20_000);
-			let started = (await it.events()).filter(entry => entry.event === "start");
-			expect(started.map(entry => entry.spare)).toEqual([false, true]);
+			let starts = async () => (await it.events()).filter(entry => entry.event === "start");
+			await until(
+				async () =>
+					it.state() === "ready"
+					&& (await starts()).some(entry => entry.env?.CHOPIN_DOCUMENT === "D_1"),
+				20_000,
+			);
+			let started = await starts();
+			let cold = started.filter(entry => !entry.spare);
+			let kept = started.filter(entry => entry.spare);
+			expect(cold.map(entry => entry.env.CHOPIN_DOCUMENT)).toEqual(["D_1"]);
+			expect(kept).toHaveLength(1);
 			// The spare holds nothing of D_1, or of any document: no credential, an empty token folder.
-			let spare = started[1]!;
+			let spare = kept[0]!;
 			expect(spare.env).toMatchObject({
 				CHOPIN_CHECKOUT: clone,
 				CHOPIN_DOCUMENT: null,
