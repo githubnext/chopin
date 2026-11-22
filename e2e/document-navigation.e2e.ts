@@ -612,10 +612,12 @@ test("a stale catalogue response cannot remove a newly created document", async 
 	let created = projects.locator('a[aria-current="page"]');
 	await expect(created).toBeVisible();
 	let createdTitle = (await created.textContent())!.trim();
-	await expect(projects.getByText("Loading more…", { exact: true })).toBeVisible();
+	// The catalogue read is held, so the list says it is busy, and says nothing on screen.
+	await expect(projects.locator('ul[aria-busy="true"]')).toHaveCount(1);
+	await expect(projects.getByText(/^Loading/)).toHaveCount(0);
 
 	release.resolve();
-	await expect(projects.getByText("Loading more…", { exact: true })).toHaveCount(0);
+	await expect(projects.locator('ul[aria-busy="true"]')).toHaveCount(0);
 	await expect(projects.getByRole("link", { name: createdTitle, exact: true }))
 		.toHaveAttribute("aria-current", "page");
 	await expect(projects.locator('a[aria-current="page"]')).toHaveCount(1);
@@ -670,7 +672,7 @@ test("document switches preserve navigation state and avoid catalogue reloads", 
 	await expect.poll(() => latestVisit()?.documentId).not.toBeUndefined();
 	let createdDocumentId = latestVisit()!.documentId!;
 	await announced;
-	await expect(projects.getByText("Loading more…", { exact: true })).toHaveCount(0);
+	await expect(projects.locator('ul[aria-busy="true"]')).toHaveCount(0);
 
 	let documentRoutePattern = "**/api/repositories/octo-org/score/documents/*";
 	let release = Promise.withResolvers<void>();
