@@ -255,6 +255,14 @@
 	outline-offset: calc(-1 * var(--edge-width));
 }
 
+/*
+ * At night the toolbar is lighter than every row shade, and a button's hover fill lighter again, so
+ * its glyphs take the next ink up (tertiary) to keep 3:1 there; by day they keep the icon role.
+ */
+:root[data-theme="dark"] .chat-message-toolbar {
+	--color-icon: var(--color-text-tertiary);
+}
+
 .chat-message-toolbar > button {
 	width: calc(var(--spacing) * 8);
 	height: calc(var(--spacing) * 8);
