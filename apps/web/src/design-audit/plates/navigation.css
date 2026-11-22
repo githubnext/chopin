@@ -22,3 +22,17 @@
 	display: grid;
 	gap: 0.5rem;
 }
+
+/* Lays the live documents sheet's search field on the sheet's own surface; it never styles the field. */
+.design-audit-sheet-search {
+	display: grid;
+	width: min(100%, 32rem);
+	gap: 0.5rem;
+	margin-block-start: 1rem;
+}
+
+.design-audit-sheet-surface {
+	display: flow-root;
+	border-radius: var(--radius-sheet);
+	background: var(--color-page);
+}

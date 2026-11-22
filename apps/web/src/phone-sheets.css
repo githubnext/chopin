@@ -259,7 +259,11 @@
 	background: var(--color-hover);
 }
 
-/* The field fills the row, so the shared focus ring outlines the whole search box. */
+/*
+ * The field fills the row, so the shared focus ring outlines the whole search box. It is Chopin's
+ * field (`field`: the page's fill inside the control boundary), found by its edge in both themes; an
+ * inset fill alone was 1.05:1 on the sheet. At 44px it keeps the large radius, as the larger buttons do.
+ */
 .documents-sheet-search {
 	position: relative;
 	display: block;
@@ -282,8 +286,6 @@
 	height: var(--control-target-coarse);
 	padding-inline: calc(var(--spacing) * 9) calc(var(--spacing) * 3);
 	border-radius: var(--radius-lg);
-	background: var(--color-inset);
-	color: var(--color-text-primary);
 	-webkit-appearance: none;
 	appearance: none;
 }

@@ -41,6 +41,27 @@ import type { DocumentCreationPhase } from "./use-document-creation";
 
 type Page = "documents" | "archived";
 
+/** The sheet's inline filter, a field people find by its edge. The design audit shows it in place. */
+export function DocumentsSheetSearch(
+	{ onQuery, query }: { onQuery: (query: string) => void; query: string },
+) {
+	return (
+		<label className="documents-sheet-search">
+			<SearchIcon aria-hidden="true" size={16} />
+			<span className="sr-only">Search documents</span>
+			<input
+				autoComplete="off"
+				className="field"
+				enterKeyHint="search"
+				onChange={event => onQuery(event.target.value)}
+				placeholder="Search documents"
+				type="search"
+				value={query}
+			/>
+		</label>
+	);
+}
+
 /**
  * Phones navigate documents from a bottom sheet rather than the desktop's left drawer: one
  * project at a time, filtered inline, with archived documents a page deeper inside the sheet.
@@ -345,18 +366,7 @@ export function DocumentsSheet(
 										</li>
 									</ul>
 								)}
-								<label className="documents-sheet-search">
-									<SearchIcon aria-hidden="true" size={16} />
-									<span className="sr-only">Search documents</span>
-									<input
-										autoComplete="off"
-										enterKeyHint="search"
-										onChange={event => setQuery(event.target.value)}
-										placeholder="Search documents"
-										type="search"
-										value={query}
-									/>
-								</label>
+								<DocumentsSheetSearch onQuery={setQuery} query={query} />
 								<div className="documents-sheet-scroll">
 									{recents.length > 0 && (
 										<section aria-label="Recent" className="documents-sheet-section" data-recent="">

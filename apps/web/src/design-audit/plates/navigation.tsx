@@ -1,7 +1,8 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 
 import { BuildGlyph } from "../../build-plan-button";
 import { BUILD_UNAVAILABLE } from "../../decision-view-control";
+import { DocumentsSheetSearch } from "../../documents-sheet";
 import { workspaceDestinations } from "../../workspace-model";
 import { WorkspaceViewNavigation } from "../../workspace-navigation";
 import { AuditPlate, StateLabel } from "../frame";
@@ -61,9 +62,10 @@ let COMPACT_SPECIMENS: { label: string; state: CompactState }[] = [
 
 export function NavigationPlate() {
 	let reason = useId();
+	let [query, setQuery] = useState("");
 	return (
 		<AuditPlate
-			description="The live sidebar Project with current, ancestor, unanswered, loading, and empty rows. Descriptions appear on hover or focus. Below, the compact workspace's view navigation."
+			description="The live sidebar Project with current, ancestor, unanswered, loading, and empty rows. Descriptions appear on hover or focus. Below, the compact workspace's view navigation and the phone documents sheet's search field."
 			item="navigation"
 			title="Navigation"
 		>
@@ -99,6 +101,12 @@ export function NavigationPlate() {
 						/>
 					</div>
 				))}
+			</div>
+			<div className="design-audit-sheet-search">
+				<StateLabel>Phone documents sheet, search</StateLabel>
+				<div className="design-audit-sheet-surface">
+					<DocumentsSheetSearch onQuery={setQuery} query={query} />
+				</div>
 			</div>
 		</AuditPlate>
 	);
