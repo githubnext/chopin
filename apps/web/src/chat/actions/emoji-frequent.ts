@@ -4,6 +4,8 @@
  * equals, and Slack's own first picks until they have reacted enough to fill it.
  */
 
+import { safeLocalStorage } from "@chopin/editor/browser-storage";
+
 export type Uses = Record<string, { count: number; last: number }>;
 
 /** Slack's defaults: thumbs up, check, eyes, raised hands, party, joy, folded hands, heart, fire. */
@@ -50,17 +52,9 @@ export function frequent(uses: Uses, limit = FREQUENT_SHOWN): string[] {
 
 type Store = Pick<Storage, "getItem" | "setItem">;
 
-function store(): Store | undefined {
+export function readUses(storage: Store = safeLocalStorage): Uses {
 	try {
-		return globalThis.localStorage;
-	} catch {
-		return undefined;
-	}
-}
-
-export function readUses(storage = store()): Uses {
-	try {
-		let value = JSON.parse(storage?.getItem(USES_KEY) ?? "{}") as unknown;
+		let value = JSON.parse(storage.getItem(USES_KEY) ?? "{}") as unknown;
 		if (!value || typeof value !== "object" || Array.isArray(value)) return {};
 		return Object.fromEntries(
 			Object.entries(value).filter(([, use]) =>
@@ -73,23 +67,19 @@ export function readUses(storage = store()): Uses {
 }
 
 /** Called for every reaction this person adds, from the picker, the toolbar or a pill. */
-export function noteEmojiUse(emoji: string, storage = store(), now = Date.now()): void {
-	try {
-		storage?.setItem(USES_KEY, JSON.stringify(recordUse(readUses(storage), emoji, now)));
-	} catch {
-		// A browser that keeps nothing still reacts; the row shows Slack's defaults.
-	}
+export function noteEmojiUse(
+	emoji: string,
+	storage: Store = safeLocalStorage,
+	now = Date.now(),
+): void {
+	storage.setItem(USES_KEY, JSON.stringify(recordUse(readUses(storage), emoji, now)));
 }
 
-export function readTone(storage = store()): number {
-	let tone = Number(storage?.getItem(TONE_KEY) ?? 0);
+export function readTone(storage: Store = safeLocalStorage): number {
+	let tone = Number(storage.getItem(TONE_KEY) ?? 0);
 	return Number.isInteger(tone) && tone >= 0 && tone <= 5 ? tone : 0;
 }
 
-export function writeTone(tone: number, storage = store()): void {
-	try {
-		storage?.setItem(TONE_KEY, String(tone));
-	} catch {
-		// Kept for this picker only.
-	}
+export function writeTone(tone: number, storage: Store = safeLocalStorage): void {
+	storage.setItem(TONE_KEY, String(tone));
 }

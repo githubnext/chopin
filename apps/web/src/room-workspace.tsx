@@ -10,6 +10,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { createPortal, flushSync } from "react-dom";
+import { safeLocalStorage } from "@chopin/editor/browser-storage";
 import { FollowLinkProvider } from "@chopin/editor/follow-link";
 import { ImagePlace } from "@chopin/editor/image-place";
 import { rememberAvatars } from "@chopin/editor/people";
@@ -140,7 +141,7 @@ import {
 } from "./document-history-panel";
 import { DocumentRename } from "./document-rename";
 import { LostEditsNotice, UNDO_REFUSALS, UndoRefusedNotice } from "./document-status-notices";
-import { browserStorage, rememberOpened } from "./documents-sheet-model";
+import { rememberOpened } from "./documents-sheet-model";
 import { PhoneHeader, PhoneHeaderContent } from "./phone-header";
 import { DocumentSkeleton } from "./phone-skeleton";
 import { useEditorFocus, useKeyboardOpen } from "./keyboard-open";
@@ -554,7 +555,7 @@ export function RoomWorkspace(
 	} = useNavigationDocument();
 	// Phones list a project's recently opened documents in the documents sheet.
 	useEffect(() => {
-		if (!archivedAt) rememberOpened(browserStorage(), userId, repository.id, room);
+		if (!archivedAt) rememberOpened(safeLocalStorage, userId, repository.id, room);
 	}, [archivedAt, repository.id, room, userId]);
 	let [status, setStatus] = useState<Status>("connecting");
 	let [outage, setOutage] = useState<Outage>();
@@ -769,7 +770,7 @@ export function RoomWorkspace(
 	let hasPlanProse = useHasPlanContent(questions);
 	let hasPlanContent = documentHasPlanningContent(hasPlanProse);
 	let [decisionView, setDecisionView] = useState<DecisionViewState>(() => {
-		let stored = localStorage.getItem("chopin:view:document");
+		let stored = safeLocalStorage.getItem("chopin:view:document");
 		return {
 			phase: "initial",
 			preferred: initialDocumentView(profile, stored),
@@ -1034,7 +1035,7 @@ export function RoomWorkspace(
 	let selectView = (next: DecisionView, revealFirst = true) => {
 		setDecisionView(state => selectDecisionView(state, next));
 		if (hasPlanContent && profile.persistView) {
-			localStorage.setItem("chopin:view:document", next);
+			safeLocalStorage.setItem("chopin:view:document", next);
 		}
 		if (next === "decisions" && revealFirst) {
 			let first = firstOpenDecision(entries, cardMetadata);

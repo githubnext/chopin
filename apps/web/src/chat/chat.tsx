@@ -31,6 +31,7 @@ import {
 	usePendingWork,
 	usePopoverDismissal,
 } from "@chopin/editor";
+import { safeSessionStorage } from "@chopin/editor/browser-storage";
 import { chatDraftKey } from "../demo-actor";
 import { WireLost, WireRefusal } from "../wire";
 import { noteEmojiUse } from "./actions/emoji-frequent";
@@ -268,28 +269,24 @@ function draftKey(room: string, handle: string): string {
 	return chatDraftKey(room, isDemoHandle(handle) ? handle : undefined);
 }
 
-/** Holds an unsent message across a reload of this tab; storage may refuse. */
+/** Holds an unsent message across a reload of this tab, or this page where storage is refused. */
 function keepDraft(room: string, handle: string, draft: ComposerDraft): void {
-	try {
-		if (!draft.text.trim()) return sessionStorage.removeItem(draftKey(room, handle));
-		sessionStorage.setItem(
-			draftKey(room, handle),
-			JSON.stringify({
-				text: draft.text,
-				references: draft.references,
-				submission: draft.submission,
-			}),
-		);
-	} catch {
-		// Private windows and blocked storage: the draft is lost as it was before.
-	}
+	if (!draft.text.trim()) return safeSessionStorage.removeItem(draftKey(room, handle));
+	safeSessionStorage.setItem(
+		draftKey(room, handle),
+		JSON.stringify({
+			text: draft.text,
+			references: draft.references,
+			submission: draft.submission,
+		}),
+	);
 }
 
 /** The message a reload interrupted; anything malformed starts empty. */
 function restoreDraft(room: string, handle: string): ComposerDraft {
 	let empty = { text: "", references: [] };
 	try {
-		let raw = sessionStorage.getItem(draftKey(room, handle));
+		let raw = safeSessionStorage.getItem(draftKey(room, handle));
 		if (!raw) return empty;
 		let saved = JSON.parse(raw) as Partial<ComposerDraft>;
 		if (typeof saved.text !== "string") return empty;

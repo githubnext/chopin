@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { safeSessionStorage } from "@chopin/editor/browser-storage";
 import { GitHubIcon, RestartIcon } from "@chopin/icons";
 import { InlineNotice } from "@chopin/visuals/inline-notice";
 import {
@@ -38,7 +39,7 @@ type Settings = {
 
 function storedSettings(): Settings {
 	try {
-		let value = JSON.parse(sessionStorage.getItem(SETTINGS_KEY) ?? "{}");
+		let value = JSON.parse(safeSessionStorage.getItem(SETTINGS_KEY) ?? "{}");
 		return value && typeof value === "object" ? value as Settings : {};
 	} catch {
 		return {};
@@ -210,15 +211,12 @@ export function AddServerPage() {
 	let [name, setName] = useState(saved.name ?? "");
 	let choices = { autoRun, shared };
 	let { key: pairing, generate, reset } = usePairingKey();
+	// Without storage the page starts from its defaults after GitHub.
 	useEffect(() => {
-		try {
-			sessionStorage.setItem(
-				SETTINGS_KEY,
-				JSON.stringify({ system, background, autoRun, shared, name }),
-			);
-		} catch {
-			// Without storage the page starts from its defaults after GitHub.
-		}
+		safeSessionStorage.setItem(
+			SETTINGS_KEY,
+			JSON.stringify({ system, background, autoRun, shared, name }),
+		);
 	}, [system, background, autoRun, shared, name]);
 	let shell = shellFor(system);
 	// A setup agent's own command decides how the machine connects, service included.

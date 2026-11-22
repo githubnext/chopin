@@ -24,10 +24,6 @@ export function actorResolutionNeeded(
 	rosterSize: number,
 	storage: Pick<Storage, "getItem">,
 ): boolean {
-	try {
-		return rosterSize > 0 || search.includes(PERSONA_HINT)
-			|| storage.getItem(ACTOR_STORAGE_KEY) !== null;
-	} catch {
-		return true;
-	}
+	return rosterSize > 0 || search.includes(PERSONA_HINT)
+		|| storage.getItem(ACTOR_STORAGE_KEY) !== null;
 }

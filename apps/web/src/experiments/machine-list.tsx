@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { safeSessionStorage } from "@chopin/editor/browser-storage";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { usePhoneWidth } from "@chopin/editor/pointer";
 import {
@@ -583,9 +584,9 @@ function MachineRows(
 	useLayoutEffect(() => {
 		if (restored.current || !list.length) return;
 		restored.current = true;
-		let top = Number(sessionStorage.getItem(SCROLL_KEY));
+		let top = Number(safeSessionStorage.getItem(SCROLL_KEY));
 		if (top > 0) page()?.scrollTo({ top });
-		sessionStorage.removeItem(SCROLL_KEY);
+		safeSessionStorage.removeItem(SCROLL_KEY);
 	}, [list.length]);
 	return (
 		<section aria-labelledby={headingId} className="machines-rows">
@@ -628,7 +629,7 @@ function MachineRows(
 									<button
 										className="machines-row"
 										onClick={() => {
-											sessionStorage.setItem(SCROLL_KEY, String(page()?.scrollTop ?? 0));
+											safeSessionStorage.setItem(SCROLL_KEY, String(page()?.scrollTop ?? 0));
 											goTo(`/machines?machine=${encodeURIComponent(machine.id)}`);
 										}}
 										type="button"

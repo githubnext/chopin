@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { safeSessionStorage } from "@chopin/editor/browser-storage";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { ArrowLeftIcon, CheckIcon, MachineIcon, RestartIcon } from "@chopin/icons";
 import { InlineNotice } from "@chopin/visuals/inline-notice";
@@ -187,7 +188,7 @@ function MachinePage({ id }: { id: string }) {
 				<button
 					className="machines-back"
 					onClick={() => {
-						if (sessionStorage.getItem("chopin:machines:scroll") !== null) history.back();
+						if (safeSessionStorage.getItem("chopin:machines:scroll") !== null) history.back();
 						else goTo("/machines");
 					}}
 					type="button"

@@ -1,6 +1,12 @@
+import { safeSessionStorage } from "@chopin/editor/browser-storage";
 import { documentPath } from "@chopin/protocol/document-url";
 
+import type { KeptStorage } from "@chopin/editor/browser-storage";
 import type * as Api from "./api";
+
+type RecoveryStorage =
+	& Pick<Storage, "getItem" | "setItem" | "removeItem">
+	& Pick<KeptStorage, "keys">;
 
 export type ChannelRecovery = {
 	channel: Pick<Api.Channel, "id" | "title"> & Partial<Pick<Api.Channel, "slug">>;
@@ -39,38 +45,32 @@ export function rememberChannel(
 	userId: string,
 	channel: Pick<Api.Channel, "id" | "title" | "slug">,
 	repository: ChannelRecovery["repository"],
-	storage: Storage = sessionStorage,
+	storage: RecoveryStorage = safeSessionStorage,
 ): void {
-	try {
-		storage.setItem(
-			`${KEY}${encodeURIComponent(userId)}:${channel.id}`,
-			JSON.stringify({ channel, repository }),
-		);
-		storage.setItem(
-			`${PATH_KEY}${encodeURIComponent(userId)}:${
-				documentPath(
-					repository.owner,
-					repository.name,
-					channel.slug,
-				)
-			}`,
-			JSON.stringify({ channel, repository }),
-		);
-	} catch {
-		// Recovery context must never prevent the navigation it is meant to help.
-	}
+	storage.setItem(
+		`${KEY}${encodeURIComponent(userId)}:${channel.id}`,
+		JSON.stringify({ channel, repository }),
+	);
+	storage.setItem(
+		`${PATH_KEY}${encodeURIComponent(userId)}:${
+			documentPath(
+				repository.owner,
+				repository.name,
+				channel.slug,
+			)
+		}`,
+		JSON.stringify({ channel, repository }),
+	);
 }
 
 export function forgetChannel(
 	userId: string,
 	channel: Pick<Api.Channel, "id" | "repositoryOwner" | "repositoryName" | "slug">,
-	storage: Storage = sessionStorage,
+	storage: RecoveryStorage = safeSessionStorage,
 ): void {
 	try {
 		let userPathPrefix = `${PATH_KEY}${encodeURIComponent(userId)}:`;
-		let keys = Array.from({ length: storage.length }, (_, index) => storage.key(index))
-			.filter((key): key is string => !!key);
-		for (let key of keys) {
+		for (let key of storage.keys()) {
 			if (key === `${KEY}${encodeURIComponent(userId)}:${channel.id}`) {
 				storage.removeItem(key);
 				continue;
@@ -89,7 +89,7 @@ export function readDocumentRecovery(
 	owner: string,
 	repository: string,
 	slug: string,
-	storage: Storage = sessionStorage,
+	storage: RecoveryStorage = safeSessionStorage,
 ): ChannelRecovery | undefined {
 	try {
 		let path = documentPath(owner, repository, slug);
@@ -115,7 +115,7 @@ export function readDocumentRecovery(
 export function readChannelRecovery(
 	userId: string,
 	id: string,
-	storage: Storage = sessionStorage,
+	storage: RecoveryStorage = safeSessionStorage,
 ): ChannelRecovery | undefined {
 	try {
 		let value: unknown = JSON.parse(

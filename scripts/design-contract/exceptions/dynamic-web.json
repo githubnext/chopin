@@ -186,7 +186,7 @@
 				1
 			]
 		],
-		"sourceHash": "0b66666ed1e1ffcfb905c3bf0859dbb41eb43561252596a4a2577019980f86b4"
+		"sourceHash": "3b1dc6a04de40290c2f638643814dd6c13b16cbecf263378522adca0c018b147"
 	},
 	{
 		"file": "apps/web/src/navigation-drawer.tsx",
@@ -235,7 +235,7 @@
 				1
 			]
 		],
-		"sourceHash": "8a16975e6d5525e89d41377d39b99729a56e2519a6b0ce6bab8f55777bc5a94f"
+		"sourceHash": "3705d1e0af7c7928400d0ecbc254d1e279a18b88b0ce6109623487eb8b3f3e92"
 	},
 	{
 		"file": "apps/web/src/navigation-dialog.tsx",
@@ -312,7 +312,7 @@
 				1
 			]
 		],
-		"sourceHash": "b8ebd4a01dd317d3609855e94cf9d72491e361e3d462e82fd9249d1f8259fa19"
+		"sourceHash": "e665bec8c761059e1e5a64c0d09c88f48a4b3624acfa6119f98d4c6f32bc683a"
 	},
 	{
 		"file": "apps/web/src/experiments/machines.tsx",

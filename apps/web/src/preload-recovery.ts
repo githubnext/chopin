@@ -9,8 +9,11 @@
  * reload of the same build would not cure.
  */
 
+import { safeSessionStorage } from "@chopin/editor/browser-storage";
 import { hasPendingWork } from "@chopin/protocol/pending-work";
 import { entryOf } from "@chopin/protocol/restart";
+
+import type { KeptStorage } from "@chopin/editor/browser-storage";
 
 const RELOADED_AT = "chopin:preload-reloaded-at";
 
@@ -31,8 +34,8 @@ export type Reloading = {
 	newer: () => Promise<boolean>;
 	reload: () => void;
 	now: () => number;
-	/** Remembers when the page last reloaded; without it no reload is made. */
-	storage: Pick<Storage, "getItem" | "setItem"> | undefined;
+	/** Remembers when the page last reloaded; a reload it can't keep across one is not made. */
+	storage: Pick<KeptStorage, "getItem" | "setItem">;
 };
 
 /**
@@ -44,29 +47,16 @@ export async function recoverFromPreloadError(reloading: Reloading): Promise<boo
 	if (reloading.pending() || !await reloading.newer()) return false;
 	// Work may have begun while the server was asked.
 	if (reloading.pending()) return false;
-	try {
-		let now = reloading.now();
-		if (
-			!reloading.storage || now - Number(reloading.storage.getItem(RELOADED_AT)) < RELOAD_GAP_MS
-		) {
-			return false;
-		}
-		reloading.storage.setItem(RELOADED_AT, String(now));
-	} catch {
-		return false;
-	}
+	let now = reloading.now();
+	if (now - Number(reloading.storage.getItem(RELOADED_AT)) < RELOAD_GAP_MS) return false;
+	// Storage the browser refuses can't remember the reload, which could then repeat for ever.
+	if (!reloading.storage.setItem(RELOADED_AT, String(now))) return false;
 	reloading.reload();
 	return true;
 }
 
 /** Listen for Vite's `vite:preloadError`, which it raises when a dynamic import fails to load. */
 export function watchPreloadErrors(): void {
-	let storage: Storage | undefined;
-	try {
-		storage = sessionStorage;
-	} catch {
-		// Storage the browser refuses: no reload can be remembered, so none is made.
-	}
 	let running = document.querySelector('script[type="module"][src]')?.getAttribute("src")
 		?? undefined;
 	addEventListener("vite:preloadError", () => {
@@ -78,7 +68,7 @@ export function watchPreloadErrors(): void {
 					.then(html => isNewerBuild(running, entryOf(html)), () => false),
 			reload: () => location.reload(),
 			now: Date.now,
-			storage,
+			storage: safeSessionStorage,
 		});
 	});
 }

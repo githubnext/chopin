@@ -1,3 +1,4 @@
+import { safeSessionStorage } from "@chopin/editor/browser-storage";
 import { rememberAvatars } from "@chopin/editor/people";
 import { lazy, Suspense, useEffect, useState } from "react";
 
@@ -41,7 +42,7 @@ export function App() {
 		let active = true;
 		let roster = session.user ? session.demo?.actors ?? [] : [];
 		(async () => {
-			if (actorResolutionNeeded(location.search, roster.length, sessionStorage)) {
+			if (actorResolutionNeeded(location.search, roster.length, safeSessionStorage)) {
 				(await import("./demo-actor")).adoptActor(roster);
 			}
 			if (!active) return;

@@ -14,6 +14,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import type { Dispatch, SetStateAction } from "react";
+import { safeLocalStorage } from "@chopin/editor/browser-storage";
 import { usePhone } from "@chopin/editor/pointer";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { documentPath, documentsPath } from "@chopin/protocol/document-url";
@@ -214,11 +215,13 @@ function useNavigationMode(): NavigationMode {
 
 function useSidebarWidth() {
 	let [width, setWidth] = useState(() => {
-		let stored = Number(localStorage.getItem(SIDEBAR_STORAGE_KEY));
+		let stored = Number(safeLocalStorage.getItem(SIDEBAR_STORAGE_KEY));
 		return Number.isFinite(stored) ? clamp(stored) : SIDEBAR_MIN;
 	});
 
-	useEffect(() => localStorage.setItem(SIDEBAR_STORAGE_KEY, String(width)), [width]);
+	useEffect(() => {
+		safeLocalStorage.setItem(SIDEBAR_STORAGE_KEY, String(width));
+	}, [width]);
 	return [
 		width,
 		(delta: number) => setWidth(current => clamp(current + delta)),
@@ -267,7 +270,7 @@ export function NavigationShell(
 	let resolvedDocumentRef = useRef(resolvedDocument);
 	resolvedDocumentRef.current = resolvedDocument;
 	let [collapsed, setCollapsed] = useState(() =>
-		localStorage.getItem(`${SIDEBAR_STORAGE_KEY}:collapsed`) === "true"
+		safeLocalStorage.getItem(`${SIDEBAR_STORAGE_KEY}:collapsed`) === "true"
 	);
 	let [drawerOpen, setDrawerOpen] = useState(false);
 	let drawerOpener = useRef<HTMLButtonElement>(null);
@@ -528,7 +531,7 @@ export function NavigationShell(
 	}, [refresh]);
 
 	useEffect(() => {
-		localStorage.setItem(`${SIDEBAR_STORAGE_KEY}:collapsed`, String(collapsed));
+		safeLocalStorage.setItem(`${SIDEBAR_STORAGE_KEY}:collapsed`, String(collapsed));
 	}, [collapsed]);
 
 	useEffect(() => {

@@ -38,27 +38,18 @@ export function filterDocumentGroups(groups: DocumentGroup[], query: string): Do
 
 const RECENT_LIMIT = 8;
 
-/** Storage access itself throws where site data is blocked. */
-export function browserStorage(): Storage | undefined {
-	try {
-		return localStorage;
-	} catch {
-		return undefined;
-	}
-}
-
 function recentKey(userId: string): string {
 	return `chopin:recent-documents:${userId}`;
 }
 
 /** Each project's documents this browser's user opened, newest first. */
 export function readRecentIds(
-	storage: Pick<Storage, "getItem"> | undefined,
+	storage: Pick<Storage, "getItem">,
 	userId: string,
 	repositoryId: string,
 ): string[] {
 	try {
-		let value: unknown = JSON.parse(storage?.getItem(recentKey(userId)) ?? "{}");
+		let value: unknown = JSON.parse(storage.getItem(recentKey(userId)) ?? "{}");
 		let ids = value && typeof value === "object"
 			? (value as Record<string, unknown>)[repositoryId]
 			: undefined;
@@ -69,18 +60,18 @@ export function readRecentIds(
 }
 
 export function rememberOpened(
-	storage: Pick<Storage, "getItem" | "setItem"> | undefined,
+	storage: Pick<Storage, "getItem" | "setItem">,
 	userId: string,
 	repositoryId: string,
 	documentId: string,
 ): void {
 	try {
-		let all: Record<string, unknown> = JSON.parse(storage?.getItem(recentKey(userId)) ?? "{}");
+		let all: Record<string, unknown> = JSON.parse(storage.getItem(recentKey(userId)) ?? "{}");
 		let ids = readRecentIds(storage, userId, repositoryId).filter(id => id !== documentId);
 		all[repositoryId] = [documentId, ...ids].slice(0, RECENT_LIMIT);
-		storage?.setItem(recentKey(userId), JSON.stringify(all));
+		storage.setItem(recentKey(userId), JSON.stringify(all));
 	} catch {
-		// Recents are a convenience; private modes and full storage simply go without.
+		// Recents are a convenience; a list that can't be read simply goes without.
 	}
 }
 

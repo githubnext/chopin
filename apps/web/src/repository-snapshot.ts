@@ -1,5 +1,7 @@
+import { safeSessionStorage } from "@chopin/editor/browser-storage";
+
 import * as Api from "./api";
-import { ACTIVE_USER_KEY, cacheKey, storage } from "./repository-cache";
+import { ACTIVE_USER_KEY, cacheKey } from "./repository-cache";
 
 export { clearRepositoryCache } from "./repository-cache";
 
@@ -125,14 +127,12 @@ function cachedPages<T extends { nextPage?: number }>(
 }
 
 export function readRepositoryCache(userId: string): RepositorySnapshot | undefined {
-	let store = storage();
-	if (!store) return undefined;
 	let key = cacheKey(userId);
 	try {
-		let active = store.getItem(ACTIVE_USER_KEY);
-		if (active && active !== userId) store.removeItem(cacheKey(active));
-		store.setItem(ACTIVE_USER_KEY, userId);
-		let serialized = store.getItem(key);
+		let active = safeSessionStorage.getItem(ACTIVE_USER_KEY);
+		if (active && active !== userId) safeSessionStorage.removeItem(cacheKey(active));
+		safeSessionStorage.setItem(ACTIVE_USER_KEY, userId);
+		let serialized = safeSessionStorage.getItem(key);
 		if (!serialized) return undefined;
 		let item = record(JSON.parse(serialized));
 		let installations = cachedPages(item?.installationPages, installationPage);
@@ -172,24 +172,14 @@ export function readRepositoryCache(userId: string): RepositorySnapshot | undefi
 		) throw new Error("invalid repository cache");
 		return snapshot;
 	} catch {
-		try {
-			store.removeItem(key);
-		} catch {
-			// Ignore storage failures and load from the network.
-		}
+		safeSessionStorage.removeItem(key);
 		return undefined;
 	}
 }
 
 export function writeRepositoryCache(snapshot: RepositorySnapshot): void {
-	let store = storage();
-	if (!store) return;
-	try {
-		store.setItem(ACTIVE_USER_KEY, snapshot.userId);
-		store.setItem(cacheKey(snapshot.userId), JSON.stringify(snapshot));
-	} catch {
-		// Quota or privacy restrictions should not break repository selection.
-	}
+	safeSessionStorage.setItem(ACTIVE_USER_KEY, snapshot.userId);
+	safeSessionStorage.setItem(cacheKey(snapshot.userId), JSON.stringify(snapshot));
 }
 
 export function repositoryCacheIsStale(snapshot: RepositorySnapshot, now = Date.now()): boolean {

@@ -8,6 +8,8 @@
  * refuses the message, and the message then says so on itself.
  */
 
+import { safeSessionStorage } from "@chopin/editor/browser-storage";
+
 import { sentenceCase } from "../sentence-case";
 
 import type { Chat, Session } from "@chopin/protocol";
@@ -227,33 +229,32 @@ function outboxKey(room: string, handle: string): string {
 	return `${KEY}:${room}:${handle}`;
 }
 
-/** Holds the outbox across a reload of this tab; storage may refuse. */
+/**
+ * Holds the outbox across a reload of this tab. Where the browser keeps no storage it holds for
+ * this page only and a reload loses it, as it loses a draft; nothing says so.
+ */
 export function keepOutbox(room: string, handle: string, outbox: readonly Outgoing[]): void {
-	try {
-		let pending = outbox.filter(item => !item.acknowledged && !item.failure);
-		if (pending.length === 0) return sessionStorage.removeItem(outboxKey(room, handle));
-		sessionStorage.setItem(
-			outboxKey(room, handle),
-			JSON.stringify(
-				pending.map(({ payload, handle, ts, attempted, attachments, draft }) => ({
-					payload,
-					handle,
-					ts,
-					...(attempted ? { attempted } : {}),
-					...(attachments?.length ? { attachments } : {}),
-					...(draft ? { draft } : {}),
-				})),
-			),
-		);
-	} catch {
-		// Private windows and blocked storage: the outbox is lost with the tab, as a draft would be.
-	}
+	let pending = outbox.filter(item => !item.acknowledged && !item.failure);
+	if (pending.length === 0) return safeSessionStorage.removeItem(outboxKey(room, handle));
+	safeSessionStorage.setItem(
+		outboxKey(room, handle),
+		JSON.stringify(
+			pending.map(({ payload, handle, ts, attempted, attachments, draft }) => ({
+				payload,
+				handle,
+				ts,
+				...(attempted ? { attempted } : {}),
+				...(attachments?.length ? { attachments } : {}),
+				...(draft ? { draft } : {}),
+			})),
+		),
+	);
 }
 
 /** The messages a reload interrupted; anything malformed is left out. */
 export function restoreOutbox(room: string, handle: string): readonly Outgoing[] {
 	try {
-		let saved: unknown = JSON.parse(sessionStorage.getItem(outboxKey(room, handle)) ?? "[]");
+		let saved: unknown = JSON.parse(safeSessionStorage.getItem(outboxKey(room, handle)) ?? "[]");
 		if (!Array.isArray(saved)) return [];
 		return saved.flatMap((item: Partial<Outgoing>) => {
 			let payload = item?.payload;

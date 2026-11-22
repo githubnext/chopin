@@ -13,6 +13,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { flushSync } from "react-dom";
+import { safeLocalStorage } from "@chopin/editor/browser-storage";
 import { ContentSwapLayer } from "@chopin/editor/content-swap";
 import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { ArrowLeftIcon, ChevronIcon, DocumentIcon, ExpandIcon, MessageIcon } from "@chopin/icons";
@@ -165,13 +166,13 @@ export function useWorkspaceState(
 		// A child opens with its parent's saved Chat preference but never saves its own.
 		() =>
 			initialWorkspaceState(
-				storedDesktopChat(localStorage.getItem(CHAT_CHOICE_STORAGE_KEY)),
+				storedDesktopChat(safeLocalStorage.getItem(CHAT_CHOICE_STORAGE_KEY)),
 			),
 	);
 
 	useEffect(() => {
 		if (!profile.persistChat || state.desktopChatOpen === undefined) return;
-		localStorage.setItem(
+		safeLocalStorage.setItem(
 			CHAT_CHOICE_STORAGE_KEY,
 			String(state.desktopChatOpen),
 		);
@@ -349,25 +350,17 @@ export function Workspace(
 	}, []);
 	let [preferredThread, setPreferredThreadState] = useState<number | undefined>(() => {
 		if (!profile.persistPaneSize) return undefined;
-		try {
-			let raw = localStorage.getItem(THREAD_PANE_STORAGE_KEY);
-			if (raw === null) return undefined;
-			let parsed = Number(raw);
-			return Number.isFinite(parsed) ? clampPane(parsed, THREAD_MIN, THREAD_MAX) : undefined;
-		} catch {
-			return undefined;
-		}
+		let raw = safeLocalStorage.getItem(THREAD_PANE_STORAGE_KEY);
+		if (raw === null) return undefined;
+		let parsed = Number(raw);
+		return Number.isFinite(parsed) ? clampPane(parsed, THREAD_MIN, THREAD_MAX) : undefined;
 	});
 	let commitPreferredThread = useCallback(
 		(width: number) => {
 			let clamped = clampPane(width, THREAD_MIN, THREAD_MAX);
 			flushSync(() => setPreferredThreadState(clamped));
 			if (profile.persistPaneSize) {
-				try {
-					localStorage.setItem(THREAD_PANE_STORAGE_KEY, String(clamped));
-				} catch {
-					// Storage disabled.
-				}
+				safeLocalStorage.setItem(THREAD_PANE_STORAGE_KEY, String(clamped));
 			}
 		},
 		[profile.persistPaneSize],

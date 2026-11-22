@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Drawer } from "@base-ui/react/drawer";
+import { safeLocalStorage } from "@chopin/editor/browser-storage";
 import { Face } from "@chopin/editor/face";
 import { focusIsFree } from "@chopin/editor/focus-return";
 import { childDocumentPath, documentPath } from "@chopin/protocol/document-url";
@@ -23,7 +24,6 @@ import { DocumentActionsMenu } from "./document-actions-menu";
 import { AiAccountsEntry } from "./ai-accounts/entry";
 import { MachinesEntry } from "./machines-entry";
 import {
-	browserStorage,
 	documentGroups,
 	filterDocumentGroups,
 	readRecentIds,
@@ -262,7 +262,7 @@ export function DocumentsSheet(
 
 	let recents = entry && open && page === "documents" && !query.trim()
 		? recentDocuments(
-			readRecentIds(browserStorage(), user.id, entry.project.repositoryId),
+			readRecentIds(safeLocalStorage, user.id, entry.project.repositoryId),
 			entry.documents.channels,
 			currentDocumentId,
 		)

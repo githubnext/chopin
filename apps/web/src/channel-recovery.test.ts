@@ -7,23 +7,15 @@ import {
 	rememberChannel,
 } from "./channel-recovery";
 
-class MemoryStorage implements Storage {
+class MemoryStorage {
 	readonly #values = new Map<string, string>();
-
-	get length(): number {
-		return this.#values.size;
-	}
-
-	clear(): void {
-		this.#values.clear();
-	}
 
 	getItem(key: string): string | null {
 		return this.#values.get(key) ?? null;
 	}
 
-	key(index: number): string | null {
-		return [...this.#values.keys()][index] ?? null;
+	keys(): string[] {
+		return [...this.#values.keys()];
 	}
 
 	removeItem(key: string): void {
