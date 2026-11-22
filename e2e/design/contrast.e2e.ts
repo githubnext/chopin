@@ -8,9 +8,9 @@ import type { Measured } from "./contrast";
  * Every text and every control people need to see on the audit plates meets WCAG 2.2 AA, in light
  * and in dark: 4.5:1 for text and placeholders, 3:1 for large text, icons in controls, field and
  * checkbox edges, status dots and focus rings, against the colour actually behind them. Disabled
- * controls are exempt, as WCAG exempts them; nothing else is (DESIGN.md's Contrast Rule). Chopin is
- * light only, so dark is the system's dark preference with the `.dark` class assistant-ui's copies
- * read: it must not lower a ratio either.
+ * controls are exempt, as WCAG exempts them; nothing else is (DESIGN.md's Contrast Rule). Dark is
+ * drawn the way a person gets it with the default System choice: the system turns dark while the
+ * page is open, and the page follows.
  */
 function failures(rows: Measured[]): string[] {
 	return rows
@@ -25,7 +25,8 @@ for (let mode of ["light", "dark"] as const) {
 		test.setTimeout(240_000);
 		if (mode === "dark") {
 			await page.emulateMedia({ colorScheme: "dark" });
-			await page.evaluate(() => document.documentElement.classList.add("dark"));
+			await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+			await expect(page.locator("html")).toHaveClass(/\bdark\b/);
 		}
 		// Code is coloured in place, and a diff's preview drawn, once the highlighter loads.
 		for (let id of ["code", "diff"]) await plate(page, id).scrollIntoViewIfNeeded();

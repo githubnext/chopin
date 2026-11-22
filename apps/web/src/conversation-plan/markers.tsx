@@ -242,7 +242,7 @@ export function MessageMarkers(
 			{visible && createPortal(
 				<div
 					aria-label={jobsOnly ? "Background jobs" : "Message analysis"}
-					className="motion-popover is-open fixed z-50 flex flex-col overflow-x-hidden overflow-y-auto rounded-lg bg-page p-3 text-sm text-text-secondary ring-hairline shadow-overlay"
+					className="motion-popover is-open fixed z-50 flex flex-col overflow-x-hidden overflow-y-auto rounded-lg bg-raised p-3 text-sm text-text-secondary ring-hairline shadow-overlay"
 					data-analysis-message={messageId}
 					data-analysis-popover
 					id={popoverId}

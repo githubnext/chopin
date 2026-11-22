@@ -7,24 +7,67 @@
 		<meta name="theme-color" content="#f4f4f1" />
 		<meta name="color-scheme" content="light" />
 		<!--
-			The person's theme (Light, Dark or System, in the account menu), before anything is drawn:
-			src/theme-choice.ts keeps it from here on, and its test holds this script to the same rules.
+			The person's theme (Light, Dark or System, chosen in the account menu and kept in this
+			browser), drawn before anything else is: System follows the system's scheme while the page
+			is open, another tab's choice is taken at once, and window.chopinTheme is the app's handle
+			on it (src/theme-choice.ts). src/theme-choice.test.ts runs this script.
 		-->
 		<script>
 		(function() {
-			var choice = null;
-			try {
-				choice = localStorage.getItem("chopin:theme");
-			} catch (error) {}
-			var dark = choice === "dark"
-				|| (choice !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
-			var theme = dark ? "dark" : "light";
+			var key = "chopin:theme";
 			var root = document.documentElement;
-			root.dataset.theme = theme;
-			root.classList.toggle("dark", dark);
-			root.style.colorScheme = theme;
-			document.querySelector('meta[name="color-scheme"]').content = theme;
-			document.querySelector('meta[name="theme-color"]').content = dark ? "#181714" : "#f4f4f1";
+			var system = matchMedia("(prefers-color-scheme: dark)");
+			var drawing = 0;
+			function stored() {
+				var value = null;
+				try {
+					value = localStorage.getItem(key);
+				} catch (error) {}
+				return value === "light" || value === "dark" ? value : "system";
+			}
+			var choice = stored();
+			function draw() {
+				var theme = choice === "system" ? (system.matches ? "dark" : "light") : choice;
+				if (root.dataset.theme === theme) return;
+				// A new theme recolours the page in one frame: no colour eases from the old one.
+				if (root.dataset.theme) {
+					var mine = ++drawing;
+					root.dataset.themeSwitching = "";
+					requestAnimationFrame(function() {
+						requestAnimationFrame(function() {
+							if (mine === drawing) delete root.dataset.themeSwitching;
+						});
+					});
+				}
+				root.dataset.theme = theme;
+				root.classList.toggle("dark", theme === "dark");
+				root.style.colorScheme = theme;
+				document.querySelector('meta[name="color-scheme"]').content = theme;
+				document.querySelector('meta[name="theme-color"]').content = theme === "dark"
+					? "#181714"
+					: "#f4f4f1";
+			}
+			function changed() {
+				draw();
+				dispatchEvent(new Event("chopin-theme"));
+			}
+			window.chopinTheme = function(next) {
+				if (next) {
+					choice = next;
+					try {
+						localStorage.setItem(key, next);
+					} catch (error) {}
+					changed();
+				}
+				return choice;
+			};
+			system.addEventListener("change", draw);
+			addEventListener("storage", function(event) {
+				if (event.key !== key && event.key !== null) return;
+				choice = stored();
+				changed();
+			});
+			draw();
 		})();
 		</script>
 		<meta name="mobile-web-app-capable" content="yes" />

@@ -124,6 +124,24 @@
 }
 
 /*
+ * A copied tooltip (`TooltipIconButton` on a Chat code block) draws itself in the inverted ink, which
+ * matches Chopin's dark tooltip in light; at night that inversion would be a white chip, so it takes
+ * Chopin's own tooltip colours there, as the shared tooltip does.
+ */
+.dark [data-slot="tooltip-content"] {
+	--color-foreground: var(--color-tooltip);
+	--color-background: var(--color-tooltip-ink);
+}
+
+/*
+ * The voice button, listening, is an ink circle (`inkButton`). By day the icon role's grey reads on
+ * that dark ink; at night the ink is light, so the square takes the button's own colour, the page's.
+ */
+.dark [data-slot="composer-voice-button"] > [data-nucleo-icon] {
+	color: currentColor;
+}
+
+/*
  * A copy's focus ring keeps its own width and is drawn in Chopin's focus colour at full strength.
  * The copies fade it (`ring-foreground/20`, `ring-foreground/30`, `ring-ring/50`) to 1.6:1, 2:1 and
  * 2.1:1 on the ground, under the 3:1 a focus indicator needs to be seen.

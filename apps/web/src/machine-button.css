@@ -95,7 +95,7 @@
 	max-height: min(28rem, calc(100dvh - var(--spacing) * 4));
 	overflow-y: auto;
 	border-radius: var(--radius-lg);
-	background: var(--color-page);
+	background: var(--color-raised);
 	padding: var(--menu-padding);
 	/* A popover's hairline edge, as the shared menu surface draws it, with the raised shadow. */
 	outline: var(--edge-width) solid var(--color-edge);
@@ -161,7 +161,7 @@
 	);
 	overscroll-behavior: contain;
 	border-radius: var(--radius-sheet);
-	background: var(--color-page);
+	background: var(--color-raised);
 	padding-block: var(--spacing);
 	box-shadow: var(--shadow-overlay);
 }

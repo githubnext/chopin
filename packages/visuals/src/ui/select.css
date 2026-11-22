@@ -68,7 +68,7 @@
 	padding: var(--spacing);
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-lg);
-	background: var(--color-page);
+	background: var(--color-raised);
 	box-shadow: var(--shadow-raised);
 	font: var(--text-sm) / var(--text-sm--line-height) var(--font-sans);
 	color: var(--color-text-primary);

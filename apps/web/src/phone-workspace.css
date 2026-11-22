@@ -723,7 +723,7 @@
 	max-width: 100%;
 	padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
 	border-radius: var(--radius-md);
-	background: var(--color-page);
+	background: var(--color-raised);
 	box-shadow: var(--shadow-overlay);
 	color: var(--color-text-primary);
 	font-size: var(--text-sm);

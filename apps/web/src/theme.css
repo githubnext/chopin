@@ -444,6 +444,18 @@
 		background-color: var(--color-gray-200);
 		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath fill='none' stroke='%23605e56' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m3 7 2.5 2.5L11 4'/%3E%3C/svg%3E");
 	}
+
+	/*
+	 * An image cannot read a token, so the dark theme's ticks are written out: on petrol, which is
+	 * light at night, the page's own dark (#21201d), as text on petrol is; disabled, its gray-600.
+	 */
+	:root[data-theme="dark"] &[type="checkbox"]:checked {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath fill='none' stroke='%2321201d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m3 7 2.5 2.5L11 4'/%3E%3C/svg%3E");
+	}
+
+	:root[data-theme="dark"] &[type="checkbox"]:disabled:checked {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath fill='none' stroke='%23adaba3' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m3 7 2.5 2.5L11 4'/%3E%3C/svg%3E");
+	}
 }
 
 /* Extra contrast is an opt-in accommodation for other control edges; fields and choices meet it. */
@@ -2020,7 +2032,7 @@ label.question-option:has(.question-input:not(:disabled)) {
 .question-option:has(.question-input:checked) .question-key > span,
 .question-option[data-selected] .question-key > span {
 	background: var(--color-brand);
-	color: var(--color-white);
+	color: var(--color-page);
 }
 
 /* With a description below, the tile sits 4px under the label's centre (optical). */
@@ -2162,7 +2174,7 @@ button.question-add:disabled {
 
 .question-add-confirm[data-ready] {
 	background: var(--color-brand);
-	color: var(--color-white);
+	color: var(--color-page);
 }
 
 .question-add-confirm[data-ready]:hover {

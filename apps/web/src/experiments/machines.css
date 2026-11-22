@@ -77,7 +77,7 @@
 	z-index: 60;
 	width: min(22rem, calc(100vw - var(--spacing) * 4));
 	border-radius: var(--radius-lg);
-	background: var(--color-page);
+	background: var(--color-raised);
 	padding: var(--menu-padding);
 	box-shadow: var(--shadow-raised);
 	transform-origin: var(--motion-origin-x, right) top;
@@ -845,7 +845,7 @@
 	z-index: 60;
 	min-width: 13rem;
 	border-radius: var(--radius-md);
-	background: var(--color-page);
+	background: var(--color-raised);
 	padding: var(--menu-padding);
 	box-shadow: var(--shadow-raised);
 	transform-origin: top right;

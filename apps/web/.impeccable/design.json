@@ -228,6 +228,231 @@
 					"rgb(0 0 0 / 5%)",
 					"rgb(0 0 0 / 2%)"
 				]
+			},
+			"petrol-dark": {
+				"role": "primary",
+				"displayName": "Petrol at night",
+				"canonical": "oklch(0.735 0.085 212)",
+				"tonalRamp": [
+					"oklch(0.15 0.085 212)",
+					"oklch(0.25 0.085 212)",
+					"oklch(0.35 0.085 212)",
+					"oklch(0.45 0.085 212)",
+					"oklch(0.55 0.085 212)",
+					"oklch(0.68 0.085 212)",
+					"oklch(0.82 0.085 212)",
+					"oklch(0.95 0.085 212)"
+				]
+			},
+			"petrol-hover-dark": {
+				"role": "primary",
+				"displayName": "Petrol hover at night",
+				"canonical": "oklch(0.79 0.075 212)",
+				"tonalRamp": [
+					"oklch(0.15 0.075 212)",
+					"oklch(0.25 0.075 212)",
+					"oklch(0.35 0.075 212)",
+					"oklch(0.45 0.075 212)",
+					"oklch(0.55 0.075 212)",
+					"oklch(0.68 0.075 212)",
+					"oklch(0.82 0.075 212)",
+					"oklch(0.95 0.075 212)"
+				]
+			},
+			"petrol-active-dark": {
+				"role": "primary",
+				"displayName": "Petrol active at night",
+				"canonical": "oklch(0.84 0.065 212)",
+				"tonalRamp": [
+					"oklch(0.15 0.065 212)",
+					"oklch(0.25 0.065 212)",
+					"oklch(0.35 0.065 212)",
+					"oklch(0.45 0.065 212)",
+					"oklch(0.55 0.065 212)",
+					"oklch(0.68 0.065 212)",
+					"oklch(0.82 0.065 212)",
+					"oklch(0.95 0.065 212)"
+				]
+			},
+			"page-dark": {
+				"role": "neutral",
+				"displayName": "Night page",
+				"canonical": "oklch(0.245 0.006 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.006 95)",
+					"oklch(0.25 0.006 95)",
+					"oklch(0.35 0.006 95)",
+					"oklch(0.45 0.006 95)",
+					"oklch(0.55 0.006 95)",
+					"oklch(0.68 0.006 95)",
+					"oklch(0.82 0.006 95)",
+					"oklch(0.95 0.006 95)"
+				]
+			},
+			"ground-dark": {
+				"role": "neutral",
+				"displayName": "Night ground",
+				"canonical": "oklch(0.205 0.006 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.006 95)",
+					"oklch(0.25 0.006 95)",
+					"oklch(0.35 0.006 95)",
+					"oklch(0.45 0.006 95)",
+					"oklch(0.55 0.006 95)",
+					"oklch(0.68 0.006 95)",
+					"oklch(0.82 0.006 95)",
+					"oklch(0.95 0.006 95)"
+				]
+			},
+			"inset-dark": {
+				"role": "neutral",
+				"displayName": "Night inset",
+				"canonical": "oklch(0.226 0.006 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.006 95)",
+					"oklch(0.25 0.006 95)",
+					"oklch(0.35 0.006 95)",
+					"oklch(0.45 0.006 95)",
+					"oklch(0.55 0.006 95)",
+					"oklch(0.68 0.006 95)",
+					"oklch(0.82 0.006 95)",
+					"oklch(0.95 0.006 95)"
+				]
+			},
+			"selected-dark": {
+				"role": "neutral",
+				"displayName": "Night selected",
+				"canonical": "oklch(0.305 0.007 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.007 95)",
+					"oklch(0.25 0.007 95)",
+					"oklch(0.35 0.007 95)",
+					"oklch(0.45 0.007 95)",
+					"oklch(0.55 0.007 95)",
+					"oklch(0.68 0.007 95)",
+					"oklch(0.82 0.007 95)",
+					"oklch(0.95 0.007 95)"
+				]
+			},
+			"ink-dark": {
+				"role": "neutral",
+				"displayName": "Ink at night",
+				"canonical": "oklch(0.945 0.005 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.005 95)",
+					"oklch(0.25 0.005 95)",
+					"oklch(0.35 0.005 95)",
+					"oklch(0.45 0.005 95)",
+					"oklch(0.55 0.005 95)",
+					"oklch(0.68 0.005 95)",
+					"oklch(0.82 0.005 95)",
+					"oklch(0.95 0.005 95)"
+				]
+			},
+			"secondary-ink-dark": {
+				"role": "neutral",
+				"displayName": "Secondary ink at night",
+				"canonical": "oklch(0.825 0.009 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.009 95)",
+					"oklch(0.25 0.009 95)",
+					"oklch(0.35 0.009 95)",
+					"oklch(0.45 0.009 95)",
+					"oklch(0.55 0.009 95)",
+					"oklch(0.68 0.009 95)",
+					"oklch(0.82 0.009 95)",
+					"oklch(0.95 0.009 95)"
+				]
+			},
+			"tertiary-ink-dark": {
+				"role": "neutral",
+				"displayName": "Tertiary ink at night",
+				"canonical": "oklch(0.74 0.011 95)",
+				"tonalRamp": [
+					"oklch(0.15 0.011 95)",
+					"oklch(0.25 0.011 95)",
+					"oklch(0.35 0.011 95)",
+					"oklch(0.45 0.011 95)",
+					"oklch(0.55 0.011 95)",
+					"oklch(0.68 0.011 95)",
+					"oklch(0.82 0.011 95)",
+					"oklch(0.95 0.011 95)"
+				]
+			},
+			"destructive-dark": {
+				"role": "semantic",
+				"displayName": "Destructive at night",
+				"canonical": "oklch(0.69 0.16 24)",
+				"tonalRamp": [
+					"oklch(0.15 0.16 24)",
+					"oklch(0.25 0.16 24)",
+					"oklch(0.35 0.16 24)",
+					"oklch(0.45 0.16 24)",
+					"oklch(0.55 0.16 24)",
+					"oklch(0.68 0.16 24)",
+					"oklch(0.82 0.16 24)",
+					"oklch(0.95 0.16 24)"
+				]
+			},
+			"success-dark": {
+				"role": "semantic",
+				"displayName": "Success at night",
+				"canonical": "oklch(0.73 0.13 145)",
+				"tonalRamp": [
+					"oklch(0.15 0.13 145)",
+					"oklch(0.25 0.13 145)",
+					"oklch(0.35 0.13 145)",
+					"oklch(0.45 0.13 145)",
+					"oklch(0.55 0.13 145)",
+					"oklch(0.68 0.13 145)",
+					"oklch(0.82 0.13 145)",
+					"oklch(0.95 0.13 145)"
+				]
+			},
+			"warning-dark": {
+				"role": "semantic",
+				"displayName": "Warning at night",
+				"canonical": "oklch(0.79 0.13 75)",
+				"tonalRamp": [
+					"oklch(0.15 0.13 75)",
+					"oklch(0.25 0.13 75)",
+					"oklch(0.35 0.13 75)",
+					"oklch(0.45 0.13 75)",
+					"oklch(0.55 0.13 75)",
+					"oklch(0.68 0.13 75)",
+					"oklch(0.82 0.13 75)",
+					"oklch(0.95 0.13 75)"
+				]
+			},
+			"merged-dark": {
+				"role": "semantic",
+				"displayName": "Merged at night",
+				"canonical": "oklch(0.8 0.1536 301)",
+				"tonalRamp": [
+					"oklch(0.15 0.1536 301)",
+					"oklch(0.25 0.1536 301)",
+					"oklch(0.35 0.1536 301)",
+					"oklch(0.45 0.1536 301)",
+					"oklch(0.55 0.1536 301)",
+					"oklch(0.68 0.1536 301)",
+					"oklch(0.82 0.1536 301)",
+					"oklch(0.95 0.1536 301)"
+				]
+			},
+			"chat-divider-dark": {
+				"role": "neutral",
+				"displayName": "Chat divider at night",
+				"canonical": "rgb(255 255 255 / 9%)",
+				"tonalRamp": [
+					"rgb(255 255 255 / 50%)",
+					"rgb(255 255 255 / 35%)",
+					"rgb(255 255 255 / 25%)",
+					"rgb(255 255 255 / 18%)",
+					"rgb(255 255 255 / 12%)",
+					"rgb(255 255 255 / 9%)",
+					"rgb(255 255 255 / 5%)",
+					"rgb(255 255 255 / 2%)"
+				]
 			}
 		},
 		"typographyMeta": {

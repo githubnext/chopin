@@ -8,7 +8,8 @@ expresses why it exists; matching a number is not enough to choose it.
 
 ## Change a value deliberately
 
-1. Look for a reusable role before adding a token. Runtime geometry, chart coordinates and authored content remain data.
+1. Look for a reusable role before adding a token. A colour token has a value in both themes: give
+   it a dark value in `:root[data-theme="dark"]` whenever its light one would not serve at night. Runtime geometry, chart coordinates and authored content remain data.
    Important visual dimensions, typography, colors and control spacing use shared tokens.
 2. Put a justified shared value in the theme. Preserve the fluid type scale,
    document title role, accepted 3px quote edge, and sidebar transform behaviour.
@@ -65,8 +66,10 @@ code and diff colours, the quaternary audit-page labels and the original destruc
 red) to AA; see the Contrast Rule in [DESIGN.md](../apps/web/DESIGN.md).
 
 Required CI holds it: `bun run design:behavior` runs `e2e/design/contrast.e2e.ts`, which
-walks every audit plate in both themes, composites each colour over what is really behind
-it and fails any pair below its threshold. Browser screenshot comparisons and the axe scans
+walks every audit plate in both themes (dark as the default System choice draws it when the
+system turns dark), composites each colour over what is really behind it and fails any pair
+below its threshold; `packages/visuals/src/theme.test.ts` holds the dark theme's role pairs to
+the same thresholds without a browser. Browser screenshot comparisons and the axe scans
 of `bun run design:browser` remain optional review tools; their scans now expect no
 contrast findings. See [rendered design checks](../e2e/design/README.md).
 
@@ -77,20 +80,22 @@ fluid typography, keyboard, focus, or layout enforcement.
 
 ## What the record check proves
 
-The check parses YAML, JSON, and CSS. The theme owns token values; explicit
+The check parses YAML, JSON, and CSS. The theme owns token values, the light theme's in
+`@theme static` and the dark theme's in `:root[data-theme="dark"]`, which replaces some of them
+(a `-dark` colour resolves through it first, then the light theme); explicit
 `var(--token)` references and documented `{colors.petrol}`-style aliases resolve
 before comparison. Missing or unknown mapped fields, duplicate named entries,
 unknown aliases, alias cycles, malformed sources, and genuine value conflicts
 fail the check. Tailwind namespace resets are applied in source order.
 
-| Record subset                                                    | Implementation owner                                                                                     |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Fifteen named colours, including sidecar `colorMeta.*.canonical` | Explicit semantic colour mapping in the theme; Chat divider uses `--color-divider`                       |
-| Five `rounded` entries                                           | `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl`, `--radius-full`                              |
-| Seven typography roles: size, complete font stack, line height   | `--text-*`, `--font-sans`, paired leading; document prose uses `--document-line-height`                  |
-| Eight spacing steps                                              | Multiples of `--spacing`                                                                                 |
-| Five sidecar shadow entries                                      | `--shadow-resting`, `--shadow-resting-strong`, `--shadow-raised`, `--shadow-overlay`, `--shadow-stacked` |
-| Seven sidecar motion entries                                     | Fast/base/linger duration, smooth-out/move curves, sidebar open/close duration                           |
+| Record subset                                                                            | Implementation owner                                                                                                    |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Fifteen named colours and their `-dark` twins, including sidecar `colorMeta.*.canonical` | Explicit semantic colour mapping in the theme; a twin reads the dark theme's value; Chat divider uses `--color-divider` |
+| Five `rounded` entries                                                                   | `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-xl`, `--radius-full`                                             |
+| Seven typography roles: size, complete font stack, line height                           | `--text-*`, `--font-sans`, paired leading; document prose uses `--document-line-height`                                 |
+| Eight spacing steps                                                                      | Multiples of `--spacing`                                                                                                |
+| Five sidecar shadow entries                                                              | `--shadow-resting`, `--shadow-resting-strong`, `--shadow-raised`, `--shadow-overlay`, `--shadow-stacked`                |
+| Seven sidecar motion entries                                                             | Fast/base/linger duration, smooth-out/move curves, sidebar open/close duration                                          |
 
 The checker also verifies two component bindings. The divider is the `border-color`
 in `.workspace-frame .workspace-chat-panel` in the
