@@ -40,7 +40,7 @@ export function Count(
 		? `h-5 min-w-5 rounded-sm bg-count-quiet px-1 text-text-tertiary ${
 			typography === "metadata" ? "text-2xs" : "text-xs"
 		}`
-		: `h-5 min-w-5 rounded-full bg-brand px-1.5 text-white ${
+		: `h-5 min-w-5 rounded-full bg-brand px-1.5 text-page ${
 			typography === "metadata" ? "text-2xs" : "text-sm"
 		}`;
 	return (

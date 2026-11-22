@@ -276,12 +276,12 @@
 	},
 	{
 		"file": "packages/editor/src/callout.css",
-		"reason": "Callout shadow combines a local inset highlight/semantic outline with depth; no equivalent elevation role preserves the appearance.",
+		"reason": "Callout shadow combines a local inset highlight (in the page's own colour, so it is white by day and goes into the page at night)/semantic outline with depth; no equivalent elevation role preserves the appearance.",
 		"cases": [
 			[
 				"shadow",
 				"box-shadow",
-				"inset 0 1px rgb(255 255 255 / 55%), var(--shadow-resting)",
+				"inset 0 1px color-mix(in oklch, var(--color-page) 55%, transparent),\n\t\tvar(--shadow-resting)",
 				"CSS > .plan-content [data-plan-type]",
 				1
 			],

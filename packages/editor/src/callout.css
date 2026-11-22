@@ -46,7 +46,10 @@
 	margin-block: 1rem;
 	border-radius: var(--radius-lg);
 	background: color-mix(in oklab, var(--callout-wash) 68%, var(--color-page));
-	box-shadow: inset 0 1px rgb(255 255 255 / 55%), var(--shadow-resting);
+	/* A lit top edge in the page's own colour: white by day, and gone into the page at night. */
+	box-shadow:
+		inset 0 1px color-mix(in oklch, var(--color-page) 55%, transparent),
+		var(--shadow-resting);
 	transition:
 		border-color var(--duration-fast) var(--ease-out),
 		background var(--duration-fast) var(--ease-out);
@@ -193,7 +196,7 @@
 	padding: 0.25rem;
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-lg);
-	background: var(--color-page);
+	background: var(--color-raised);
 	box-shadow: var(--shadow-overlay);
 	animation: plan-callout-menu-in var(--duration-fast) var(--ease-out);
 }

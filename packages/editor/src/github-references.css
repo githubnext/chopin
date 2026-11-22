@@ -202,7 +202,7 @@
 	max-width: calc(100vw - var(--spacing) * 4);
 	border: var(--edge-width) solid var(--color-edge);
 	border-radius: var(--radius-lg);
-	background: var(--color-page);
+	background: var(--color-raised);
 	box-shadow: var(--shadow-overlay);
 	color: var(--color-text-primary);
 	transform-origin: var(--transform-origin, top left);

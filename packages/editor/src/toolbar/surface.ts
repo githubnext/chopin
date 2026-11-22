@@ -33,7 +33,7 @@ export function listenToEditorGeometry(editor: LexicalEditor, listener: () => vo
 }
 
 /** The `/` menu's surface and row, for hosts that position a matching menu themselves. */
-export const MENU_SURFACE = "rounded-lg bg-page p-1 ring-hairline shadow-raised";
+export const MENU_SURFACE = "rounded-lg bg-raised p-1 ring-hairline shadow-raised";
 export const SHELL = `fixed z-50 ${MENU_SURFACE}`;
 export const ROW = "plan-menu-row flex h-8 w-full items-center rounded-sm px-2 text-left text-sm";
 export const ROW_ON = "bg-selected text-text-primary";

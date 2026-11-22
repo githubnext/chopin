@@ -401,7 +401,7 @@
 
 .crit-table tr[data-chosen] .question-key > span {
 	background: var(--color-brand);
-	color: var(--color-white);
+	color: var(--color-page);
 }
 
 .crit-table tr[data-chosen] .crit-glyph {
