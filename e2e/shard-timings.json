@@ -375,6 +375,10 @@
 		"ms": 42000,
 		"tests": 7
 	},
+	"storage-unavailable.e2e.ts": {
+		"ms": 7345,
+		"tests": 3
+	},
 	"syntax-contrast.e2e.ts": {
 		"ms": 5342,
 		"tests": 3
