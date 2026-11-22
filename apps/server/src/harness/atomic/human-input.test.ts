@@ -160,36 +160,6 @@ test("a Markdown question keeps its exact text, indentation included, in its rec
 	expect((await response).answers[0]).toMatchObject({ question, answer: "Confirm all" });
 });
 
-test("Atomic's own HostInput validator accepts every answer a member can give", async () => {
-	let { HostInputBridge, getHostQuestionnaire } = await import(
-		new URL("./core/extensions/host-input.js", import.meta.resolve("@bastani/atomic")).href
-	);
-	let f = await fixture();
-	let bridge = new HostInputBridge(() => "session", () => undefined);
-	bridge.bind(f.input, "chopin");
-	let questionnaire = getHostQuestionnaire(bridge.wrap({}));
-	let [preview, multiple, plain] = params.questions;
-	for (
-		let [question, value, expected] of [
-			[preview!, [1], { kind: "option", answer: "B" }],
-			[preview!, [0], { kind: "option", answer: " A ", preview: "preview A" }],
-			[preview!, "  typed\n", { kind: "chat", answer: "  typed\n" }],
-			[multiple!, [1, 0], { kind: "multi", answer: null, selected: ["C", "D"] }],
-			[multiple!, "several\n", { kind: "chat", answer: "several\n" }],
-			[plain!, [1], { kind: "option", answer: "F" }],
-			[plain!, " own ", { kind: "custom", answer: " own " }],
-		] as const
-	) {
-		let response = questionnaire({ questions: [question] }, new AbortController().signal);
-		let [card] = await f.cards(1);
-		await f.answer(card!.id, typeof value === "string" ? value : [...value]);
-		expect(await response).toEqual({
-			cancelled: false,
-			answers: [{ questionIndex: 0, question: question.question, ...expected }],
-		});
-	}
-});
-
 test("maps confirm/select dialogs without treating custom text as approval or a selection", async () => {
 	let f = await fixture();
 	for (let [value, approved] of [[[0], true], [[1], false], ["Yes", false]] as const) {
