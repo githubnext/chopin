@@ -154,7 +154,8 @@
 
 /*
  * The whole message as one row as wide as the pane and as tall as its pitch, square, as Slack
- * shades a hovered message: a darker step of whatever the transcript lies on, never a lighter one.
+ * shades a hovered message: one step from whatever the transcript lies on, darker by day and
+ * lighter at night (`e2e/chat-hover-contrast.e2e.ts` holds both).
  */
 .chat-message-body::before {
 	content: "";
