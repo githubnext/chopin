@@ -642,7 +642,7 @@
 	--color-brand: oklch(0.735 0.085 212); /* #64b8c8 */
 	--color-brand-hover: oklch(0.79 0.075 212);
 	--color-brand-active: oklch(0.84 0.065 212);
-	--color-brand-wash: oklch(0.33 0.04 212);
+	--color-brand-wash: oklch(0.3 0.03 212);
 	--color-brand-ink: oklch(0.8 0.075 212);
 
 	--color-success: oklch(0.73 0.13 145);

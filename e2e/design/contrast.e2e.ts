@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 import { contrastWalk } from "./contrast";
-import { plate, test } from "./fixture";
+import { drawTheme, plate, test } from "./fixture";
 
 import type { Measured } from "./contrast";
 
@@ -23,11 +23,7 @@ function failures(rows: Measured[]): string[] {
 for (let mode of ["light", "dark"] as const) {
 	test(`every text and control on the plates meets AA contrast, in ${mode}`, async ({ page }) => {
 		test.setTimeout(240_000);
-		if (mode === "dark") {
-			await page.emulateMedia({ colorScheme: "dark" });
-			await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-			await expect(page.locator("html")).toHaveClass(/\bdark\b/);
-		}
+		await drawTheme(page, mode);
 		// Code is coloured in place, and a diff's preview drawn, once the highlighter loads.
 		for (let id of ["code", "diff"]) await plate(page, id).scrollIntoViewIfNeeded();
 		await expect.poll(() =>
