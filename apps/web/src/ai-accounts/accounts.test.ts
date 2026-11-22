@@ -4,8 +4,6 @@ import { accountRows, withCheck, withCredential, withoutCredential } from "./acc
 
 import type { AiCredentialSummary } from "@chopin/protocol/ai-credentials";
 
-const NOW = Date.parse("2026-11-19T12:00:00.000Z");
-
 const SIGN_IN: AiCredentialSummary = {
 	provider: "github-copilot",
 	kind: "github-sign-in",
@@ -21,11 +19,11 @@ const OPENAI: AiCredentialSummary = {
 };
 
 function copilot(summary: AiCredentialSummary, checking = false) {
-	return accountRows([summary], NOW, checking).signIns[0]!;
+	return accountRows([summary], checking).signIns[0]!;
 }
 
 function key(summary?: AiCredentialSummary) {
-	return accountRows(summary ? [summary] : [], NOW).keys[0]!;
+	return accountRows(summary ? [summary] : []).keys[0]!;
 }
 
 describe("GitHub Copilot through the sign-in", () => {
@@ -94,9 +92,12 @@ describe("GitHub Copilot through a token", () => {
 		copilotAccess: "access",
 	};
 
-	test("shows the token's ending, its last use, and a way back to the sign-in", () => {
+	test("shows the token's ending and a way back to the sign-in", () => {
 		let row = copilot(token);
-		expect(row.lines).toEqual(["Token ending f00d", "Never used"]);
+		expect(row.lines).toEqual(["Token ending f00d"]);
+		expect(copilot({ ...token, lastUsedAt: "2026-11-19T11:58:00.000Z" }).lines).toEqual([
+			"Token ending f00d",
+		]);
 		expect(row.actions).toEqual(["replace", "use-sign-in"]);
 	});
 
@@ -152,6 +153,7 @@ describe("every state of the GitHub Copilot row", () => {
 				name: `${credential}, access ${copilotAccess}, ${checking ? "" : "not "}checking`,
 				signIn: credential === "sign-in",
 				saidNone: copilotAccess === "none",
+				usable: copilotAccess === "access" && (credential === "sign-in" || credential === "token"),
 				row: copilot({ ...base, copilotAccess }, checking),
 			}))
 		)
@@ -161,7 +163,7 @@ describe("every state of the GitHub Copilot row", () => {
 		expect(states).toHaveLength(32);
 	});
 
-	for (let { name, signIn, saidNone, row } of states) {
+	for (let { name, signIn, saidNone, usable, row } of states) {
 		test(name, () => {
 			if (signIn) {
 				expect(row.actions).toContain("use-token");
@@ -176,6 +178,7 @@ describe("every state of the GitHub Copilot row", () => {
 			let claimsNone = row.badge?.label === "No Copilot access" || row.getCopilot
 				|| row.lines.some(line => line.includes("subscription"));
 			if (claimsNone) expect(saidNone).toBe(true);
+			expect(row.badge?.label === "Connected").toBe(usable);
 		});
 	}
 });
@@ -189,22 +192,19 @@ describe("API keys", () => {
 			getCopilot: false,
 			actions: ["add-key"],
 		});
-		expect(accountRows([], NOW).keys.map(row => row.name)).toEqual(["OpenAI", "Anthropic"]);
+		expect(accountRows([]).keys.map(row => row.name)).toEqual(["OpenAI", "Anthropic"]);
 	});
 
-	test("a connected key shows its ending and last use, each on its own line", () => {
+	test("a connected key shows its ending, and nothing of when it was used", () => {
 		expect(key(OPENAI)).toEqual({
 			provider: "openai",
 			name: "OpenAI",
 			badge: { tone: "success", label: "Connected" },
-			lines: ["Key ending 7Qxa", "Last used 2m ago"],
+			lines: ["Key ending 7Qxa"],
 			getCopilot: false,
 			actions: ["replace", "remove"],
 		});
-		expect(key({ ...OPENAI, lastUsedAt: undefined }).lines).toEqual([
-			"Key ending 7Qxa",
-			"Never used",
-		]);
+		expect(key({ ...OPENAI, lastUsedAt: undefined }).lines).toEqual(["Key ending 7Qxa"]);
 	});
 
 	test("an unusable key says it needs reconnecting", () => {
@@ -261,7 +261,7 @@ test("a change replaces only its provider's summary", () => {
 
 describe("ChatGPT and Claude sign-ins", () => {
 	function signIns(credentials: AiCredentialSummary[] = []) {
-		let [, chatgpt, claude] = accountRows(credentials, NOW).signIns;
+		let [, chatgpt, claude] = accountRows(credentials).signIns;
 		return { chatgpt: chatgpt!, claude: claude! };
 	}
 
@@ -283,22 +283,23 @@ describe("ChatGPT and Claude sign-ins", () => {
 		});
 		expect(claude.name).toBe("Claude");
 		expect(claude.actions).toEqual(["sign-in"]);
-		expect(accountRows([], NOW).keys.map(row => row.provider)).toEqual(["openai", "anthropic"]);
+		expect(accountRows([]).keys.map(row => row.provider)).toEqual(["openai", "anthropic"]);
 	});
 
-	test("a connected sign-in says whose it is and when it was last used, and can be disconnected", () => {
+	test("a connected sign-in says whose it is, nothing of when it was used, and can be disconnected", () => {
 		expect(signIns([CHATGPT]).chatgpt).toEqual({
 			provider: "chatgpt",
 			name: "ChatGPT",
 			badge: { tone: "success", label: "Connected" },
-			lines: ["Your ChatGPT sign-in", "Last used 2m ago"],
+			lines: ["Your ChatGPT sign-in"],
 			getCopilot: false,
 			actions: ["disconnect"],
 		});
 	});
 
 	test("a sign-in its provider ended, or Chopin can't read, never reads as connected", () => {
-		let ended = signIns([{ ...CHATGPT, provider: "claude", rejectedAt: NOW_ISO }]).claude;
+		let rejectedAt = "2026-11-19T12:00:00.000Z";
+		let ended = signIns([{ ...CHATGPT, provider: "claude", rejectedAt }]).claude;
 		expect(ended.badge).toEqual({ tone: "warning", label: "Needs reconnecting" });
 		expect(ended.lines).toEqual(["Claude ended this sign-in. Sign in again to keep using it."]);
 		expect(ended.actions).toEqual(["sign-in", "disconnect"]);
@@ -319,5 +320,3 @@ describe("ChatGPT and Claude sign-ins", () => {
 		expect(row.actions).toEqual(["disconnect"]);
 	});
 });
-
-const NOW_ISO = new Date(NOW).toISOString();

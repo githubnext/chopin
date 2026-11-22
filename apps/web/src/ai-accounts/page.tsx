@@ -82,16 +82,15 @@ function focusLost() {
 }
 
 export function AiAccountsView(
-	{ checking, credentials, now, onAction, pending, problem }: {
+	{ checking, credentials, onAction, pending, problem }: {
 		checking: boolean;
 		credentials: readonly AiCredentialSummary[];
-		now: number;
 		onAction: (row: AccountRow, action: AccountAction) => void;
 		pending?: PendingAction;
 		problem?: RowProblem;
 	},
 ) {
-	let { keys, signIns } = accountRows(credentials, now, checking);
+	let { keys, signIns } = accountRows(credentials, checking);
 	let shared = { busy: pending, onAction, problem };
 	return (
 		<>
@@ -193,7 +192,6 @@ export default function AiAccountsPage() {
 						<AiAccountsView
 							checking={checking}
 							credentials={credentials}
-							now={Date.now()}
 							onAction={act}
 							pending={pending}
 							problem={rowProblem}
