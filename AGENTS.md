@@ -894,6 +894,14 @@ so merge ranges from all mounted editors before replacing a registry entry.
   scroll position. A Playwright trace snapshot reads every element and can take seconds
   on a page in that state, so the browser tests that drag long documents run with
   `trace: "off"`.
+- Reach `localStorage` and `sessionStorage` only through `@chopin/editor/browser-storage`
+  (`safeLocalStorage`, `safeSessionStorage`); `scripts/check-storage.ts` in `bun run ci`
+  refuses any other use but `index.html`'s guarded theme script. A browser that blocks site
+  data throws from the getter itself, a full store from a write and a damaged one from every
+  call, and one unguarded read kept the page from rendering. A write the browser refuses holds
+  for the page, and nothing tells the person. lib0, which Yjs loads, reads storage as it loads;
+  `patches/lib0@<version>.patch` guards that read, and the same check fails once lib0 moves
+  past the patched version, which Bun would otherwise drop without a word.
 - Native `<select>` option values must remain globally unique, including the
   empty sentinel.
 - Add both MDXEditor's selected-cell class and Lexical's selected-cell theme
