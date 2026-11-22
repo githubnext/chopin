@@ -7,14 +7,7 @@ import type { AccountRow } from "../../ai-accounts/accounts";
 
 import "../../ai-accounts/ai-accounts.css";
 
-const NOW = Date.parse("2026-11-19T12:00:00.000Z");
-
-const OPENAI: AiCredentialSummary = {
-	provider: "openai",
-	kind: "api-key",
-	suffix: "7Qxa",
-	lastUsedAt: "2026-11-19T11:58:00.000Z",
-};
+const OPENAI: AiCredentialSummary = { provider: "openai", kind: "api-key", suffix: "7Qxa" };
 
 function copilot(
 	copilotAccess: AiCredentialSummary["copilotAccess"],
@@ -23,16 +16,16 @@ function copilot(
 	let summary: AiCredentialSummary = token
 		? { provider: "github-copilot", kind: "api-key", suffix: "f00d", copilotAccess }
 		: { provider: "github-copilot", kind: "github-sign-in", copilotAccess };
-	return accountRows([summary], NOW, checking).signIns[0]!;
+	return accountRows([summary], checking).signIns[0]!;
 }
 
 function subscription(summary?: Partial<AiCredentialSummary>): AccountRow {
-	return accountRows(summary ? [{ provider: "claude", kind: "subscription", ...summary }] : [], NOW)
+	return accountRows(summary ? [{ provider: "claude", kind: "subscription", ...summary }] : [])
 		.signIns[2]!;
 }
 
 function key(summary?: AiCredentialSummary): AccountRow {
-	return accountRows(summary ? [summary] : [], NOW).keys[0]!;
+	return accountRows(summary ? [summary] : []).keys[0]!;
 }
 
 const SPECIMENS: { label: string; row: AccountRow; problem?: string }[] = [
@@ -46,7 +39,7 @@ const SPECIMENS: { label: string; row: AccountRow; problem?: string }[] = [
 		problem: "Couldn't reach Chopin. Check your connection, then try again.",
 	},
 	{ label: "Sign-in missing", row: subscription() },
-	{ label: "Sign-in connected", row: subscription({ lastUsedAt: "2026-11-19T11:58:00.000Z" }) },
+	{ label: "Sign-in connected", row: subscription({ updatedAt: "2026-11-18T09:00:00.000Z" }) },
 	{ label: "Sign-in unchecked", row: subscription({ unchecked: true }) },
 	{
 		label: "Sign-in ended by its provider",

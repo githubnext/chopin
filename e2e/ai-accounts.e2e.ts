@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 import { markAiKeyRejected, seedUnreadableAiKey } from "./database";
 import { authenticate } from "./room";
 
-import type { Page, Request } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 
 const REFUSED_KEY = "sk-e2e-refused-openai-0000";
 
@@ -33,6 +33,12 @@ function row(page: Page, name: string) {
 	return page.getByRole("main").getByRole("listitem").filter({
 		has: page.getByRole("heading", { name, exact: true }),
 	});
+}
+
+/** A connected account's row: Connected and its one line, never when it was last used. */
+async function expectConnected(account: Locator, line: string) {
+	await expect(account.getByText("Connected", { exact: true })).toBeVisible();
+	await expect(account.getByRole("paragraph")).toHaveText([line]);
 }
 
 async function open(page: Page, handle: string, baseURL: string) {
@@ -67,8 +73,7 @@ test("AI accounts sits in the sidebar directly under Machines and opens its page
 test("GitHub Copilot through a sign-in with a seat is connected, takes a token instead, and goes back to the sign-in", async ({ baseURL, page }) => {
 	await open(page, person(), baseURL!);
 	let copilot = row(page, "GitHub Copilot");
-	await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
-	await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
+	await expectConnected(copilot, "Your GitHub sign-in");
 	await expect(copilot.getByRole("button")).toHaveText(["Use a token instead"]);
 
 	await copilot.getByRole("button", { name: "Use a token instead" }).click();
@@ -81,9 +86,7 @@ test("GitHub Copilot through a sign-in with a seat is connected, takes a token i
 	await field.fill("github_pat_e2e_other_account_9a9a");
 	await dialog.getByRole("button", { name: "Use token" }).click();
 	await expect(dialog).toHaveCount(0);
-	await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
-	await expect(copilot.getByText("Token ending 9a9a", { exact: true })).toBeVisible();
-	await expect(copilot.getByText("Your GitHub sign-in")).toHaveCount(0);
+	await expectConnected(copilot, "Token ending 9a9a");
 	await expect(copilot.getByRole("button")).toHaveText(["Replace", "Use GitHub sign-in"]);
 	await expect(copilot.getByRole("button", { name: "Replace GitHub Copilot token" }))
 		.toBeFocused();
@@ -91,16 +94,14 @@ test("GitHub Copilot through a sign-in with a seat is connected, takes a token i
 	await page.reload();
 	await expect(copilot.getByText("Token ending 9a9a", { exact: true })).toBeVisible();
 	await copilot.getByRole("button", { name: "Use GitHub sign-in" }).click();
-	await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
-	await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
-	await expect(copilot.getByText("Token ending 9a9a")).toHaveCount(0);
+	await expectConnected(copilot, "Your GitHub sign-in");
 	await expect(copilot.getByRole("button", { name: "Use a token instead" })).toBeFocused();
 });
 
 test("a token GitHub refuses for Copilot is said under the field and leaves the sign-in in place", async ({ baseURL, page }) => {
 	await open(page, person(), baseURL!);
 	let copilot = row(page, "GitHub Copilot");
-	await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+	await expectConnected(copilot, "Your GitHub sign-in");
 	await copilot.getByRole("button", { name: "Use a token instead" }).click();
 	let dialog = page.getByRole("dialog", { name: "Use a GitHub token for Copilot" });
 	let field = dialog.getByLabel("GitHub token");
@@ -116,8 +117,7 @@ test("a token GitHub refuses for Copilot is said under the field and leaves the 
 
 	await dialog.getByRole("button", { name: "Cancel" }).click();
 	await expect(dialog).toHaveCount(0);
-	await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
-	await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
+	await expectConnected(copilot, "Your GitHub sign-in");
 	await page.reload();
 	await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
 	await expect(copilot.getByText("Token ending dead")).toHaveCount(0);
@@ -143,9 +143,7 @@ test("without a seat, Copilot says so, links to Copilot, and takes a token inste
 		await dialog.getByLabel("GitHub token").fill("ghp_e2e_seat_token_c0de");
 		await dialog.getByRole("button", { name: "Use token" }).click();
 		await expect(dialog).toHaveCount(0);
-		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
-		await expect(copilot.getByText("Token ending c0de", { exact: true })).toBeVisible();
-		await expect(copilot.getByText("Never used", { exact: true })).toBeVisible();
+		await expectConnected(copilot, "Token ending c0de");
 		await expect(copilot.getByRole("button", { name: "Replace GitHub Copilot token" }))
 			.toBeFocused();
 
@@ -164,8 +162,7 @@ test("a seat-holder whose sign-in GitHub won't exchange is connected through Cop
 	try {
 		await open(page, handle, baseURL!);
 		let copilot = row(page, "GitHub Copilot");
-		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
-		await expect(copilot.getByText("Your GitHub sign-in", { exact: true })).toBeVisible();
+		await expectConnected(copilot, "Your GitHub sign-in");
 		await expect(copilot).not.toContainText("subscription");
 		await expect(copilot.getByRole("button")).toHaveText(["Use a token instead"]);
 	} finally {
@@ -191,7 +188,7 @@ test("a check that couldn't finish never says there is no subscription, and is d
 
 		await copilotAccess(handle, "access");
 		await page.reload();
-		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+		await expectConnected(copilot, "Your GitHub sign-in");
 		await expect(copilot.getByRole("button")).toHaveText(["Use a token instead"]);
 	} finally {
 		await forgetCopilotAccess(handle);
@@ -227,9 +224,7 @@ test("a key is checked before it is saved, then replaced and removed", async ({ 
 	await expect(field).not.toHaveAttribute("aria-invalid", "true");
 	await dialog.getByRole("button", { name: "Add key" }).click();
 	await expect(dialog).toHaveCount(0);
-	await expect(openai.getByText("Connected", { exact: true })).toBeVisible();
-	await expect(openai.getByText("Key ending 7Qxa", { exact: true })).toBeVisible();
-	await expect(openai.getByText("Never used", { exact: true })).toBeVisible();
+	await expectConnected(openai, "Key ending 7Qxa");
 	await expect(openai.getByRole("button", { name: "Add key for OpenAI" })).toHaveCount(0);
 	await expect(openai.getByRole("button", { name: "Replace OpenAI key" })).toBeFocused();
 	await page.keyboard.press("Tab");
@@ -280,9 +275,7 @@ test("a key Chopin can no longer read says it needs reconnecting until it is rep
 	await dialog.getByLabel("API key").fill("sk-e2e-good-anthropic-beef");
 	await dialog.getByRole("button", { name: "Replace key" }).click();
 	await expect(dialog).toHaveCount(0);
-	await expect(anthropic.getByText("Connected", { exact: true })).toBeVisible();
-	await expect(anthropic.getByText("Needs reconnecting")).toHaveCount(0);
-	await expect(anthropic.getByText("Key ending beef", { exact: true })).toBeVisible();
+	await expectConnected(anthropic, "Key ending beef");
 });
 
 test("a key its provider refused says it needs reconnecting", async ({ baseURL, page }) => {
@@ -293,7 +286,7 @@ test("a key its provider refused says it needs reconnecting", async ({ baseURL, 
 	let dialog = page.getByRole("dialog", { name: "Add OpenAI key" });
 	await dialog.getByLabel("API key").fill("sk-e2e-good-openai-feed");
 	await dialog.getByRole("button", { name: "Add key" }).click();
-	await expect(openai.getByText("Connected", { exact: true })).toBeVisible();
+	await expectConnected(openai, "Key ending feed");
 
 	await markAiKeyRejected(Number(new URL(baseURL!).port), handle, "openai");
 	await page.reload();
@@ -340,7 +333,7 @@ test("opening the page checks Copilot once, and again each time it is opened in 
 		let answered = page.waitForResponse(response => isCheck(response.request()));
 		await entry.click();
 		expect((await answered).ok()).toBe(true);
-		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+		await expectConnected(copilot, "Your GitHub sign-in");
 		expect(checks).toBe(1);
 
 		await page.evaluate(() => Object.assign(window, { stillThisPage: true }));
@@ -349,7 +342,7 @@ test("opening the page checks Copilot once, and again each time it is opened in 
 		answered = page.waitForResponse(response => isCheck(response.request()));
 		await entry.click();
 		await (await answered).finished();
-		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+		await expectConnected(copilot, "Your GitHub sign-in");
 		expect(await page.evaluate(() => "stillThisPage" in window)).toBe(true);
 		expect(checks).toBe(2);
 	} finally {
@@ -368,7 +361,7 @@ test("a seat lost between two visits shows on the second, the earlier answer sta
 		let answered = page.waitForResponse(response => isCheck(response.request()));
 		await entry.click();
 		await (await answered).finished();
-		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+		await expectConnected(copilot, "Your GitHub sign-in");
 
 		await page.goBack();
 		await expect(page).toHaveURL(/\/machines$/);
@@ -376,7 +369,7 @@ test("a seat lost between two visits shows on the second, the earlier answer sta
 		let check = await holdCheck(page);
 		await entry.click();
 		await check.sent;
-		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+		await expectConnected(copilot, "Your GitHub sign-in");
 		await expect(copilot.getByText("Checking…")).toHaveCount(0);
 
 		check.release();
@@ -405,7 +398,7 @@ test("with no earlier answer, Copilot says it is checking until the check answer
 
 		await copilotAccess(handle, "access");
 		check.release();
-		await expect(copilot.getByText("Connected", { exact: true })).toBeVisible();
+		await expectConnected(copilot, "Your GitHub sign-in");
 		await expect(copilot.getByText("Checking…")).toHaveCount(0);
 	} finally {
 		await forgetCopilotAccess(handle);
@@ -457,9 +450,7 @@ test("Sign in with ChatGPT takes the address the browser ends on, then connects 
 	);
 	await dialog.getByRole("button", { name: "Connect" }).click();
 	await expect(dialog).toHaveCount(0);
-	await expect(chatgpt.getByText("Connected", { exact: true })).toBeVisible();
-	await expect(chatgpt.getByText("Your ChatGPT sign-in", { exact: true })).toBeVisible();
-	await expect(chatgpt.getByText("Never used", { exact: true })).toBeVisible();
+	await expectConnected(chatgpt, "Your ChatGPT sign-in");
 	await expect(chatgpt.getByRole("button", { name: "Disconnect ChatGPT" })).toBeFocused();
 	let listed = await page.evaluate(async () => await (await fetch("/api/ai/credentials")).text());
 	expect(listed).toContain('"chatgpt"');
@@ -506,8 +497,7 @@ test("Claude's sign-in takes the code Claude shows, and a refused code starts a 
 	await field.fill(`e2e-claude-code#${second.searchParams.get("state")}`);
 	await dialog.getByRole("button", { name: "Connect" }).click();
 	await expect(dialog).toHaveCount(0);
-	await expect(claude.getByText("Connected", { exact: true })).toBeVisible();
-	await expect(claude.getByText("Your Claude sign-in", { exact: true })).toBeVisible();
+	await expectConnected(claude, "Your Claude sign-in");
 	await expect(row(page, "Anthropic").getByRole("button", { name: "Add key for Anthropic" }))
 		.toBeVisible();
 });

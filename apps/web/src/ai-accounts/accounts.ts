@@ -1,5 +1,3 @@
-import { ago } from "../build-model";
-
 import type {
 	AiCredentialSummary,
 	AiProvider,
@@ -67,11 +65,6 @@ const NOT_CHECKED_SIGN_IN =
 const NOT_CHECKED_TOKEN =
 	"Chopin couldn't check this token for Copilot access. It checks again when you open this page.";
 
-function lastUse(summary: AiCredentialSummary, now: number): string {
-	let when = summary.lastUsedAt && ago(summary.lastUsedAt, now);
-	return when ? `Last used ${when}` : "Never used";
-}
-
 function whyReconnect(
 	summary: AiCredentialSummary,
 	provider: string,
@@ -92,11 +85,7 @@ function whyReconnect(
  * sign-in can always give way to a token, and a token can always be replaced or give way to the
  * sign-in.
  */
-function copilotRow(
-	summary: AiCredentialSummary | undefined,
-	now: number,
-	checking: boolean,
-): AccountRow {
+function copilotRow(summary: AiCredentialSummary | undefined, checking: boolean): AccountRow {
 	let name = PROVIDER_NAMES["github-copilot"];
 	let token = summary?.kind === "api-key";
 	let ending = summary?.kind === "api-key" && summary.suffix
@@ -121,12 +110,7 @@ function copilotRow(
 			provider: "github-copilot",
 			name,
 			badge: CONNECTED,
-			lines: token
-				? [...ending, lastUse(summary, now)]
-				: [
-					"Your GitHub sign-in",
-					...(summary.lastUsedAt ? [lastUse(summary, now)] : []),
-				],
+			lines: token ? ending : ["Your GitHub sign-in"],
 			getCopilot: false,
 			actions: switches,
 		};
@@ -166,7 +150,6 @@ function copilotRow(
 function signInRow(
 	provider: SubscriptionProvider,
 	summary: AiCredentialSummary | undefined,
-	now: number,
 ): AccountRow {
 	let name = PROVIDER_NAMES[provider];
 	if (!summary) {
@@ -207,17 +190,13 @@ function signInRow(
 		provider,
 		name,
 		badge: CONNECTED,
-		lines: [yours, lastUse(summary, now)],
+		lines: [yours],
 		getCopilot: false,
 		actions: ["disconnect"],
 	};
 }
 
-function keyRow(
-	provider: KeyProvider,
-	summary: AiCredentialSummary | undefined,
-	now: number,
-): AccountRow {
+function keyRow(provider: KeyProvider, summary: AiCredentialSummary | undefined): AccountRow {
 	let name = PROVIDER_NAMES[provider];
 	if (!summary) {
 		return {
@@ -244,7 +223,7 @@ function keyRow(
 		provider,
 		name,
 		badge: CONNECTED,
-		lines: [...ending, lastUse(summary, now)],
+		lines: ending,
 		getCopilot: false,
 		actions: ["replace", "remove"],
 	};
@@ -252,17 +231,16 @@ function keyRow(
 
 export function accountRows(
 	credentials: readonly AiCredentialSummary[],
-	now: number,
 	checking = false,
 ): { signIns: AccountRow[]; keys: AccountRow[] } {
 	let find = (provider: AiProvider) =>
 		credentials.find(credential => credential.provider === provider);
 	return {
 		signIns: [
-			copilotRow(find("github-copilot"), now, checking),
-			...SIGN_IN_PROVIDERS.map(provider => signInRow(provider, find(provider), now)),
+			copilotRow(find("github-copilot"), checking),
+			...SIGN_IN_PROVIDERS.map(provider => signInRow(provider, find(provider))),
 		],
-		keys: KEY_PROVIDERS.map(provider => keyRow(provider, find(provider), now)),
+		keys: KEY_PROVIDERS.map(provider => keyRow(provider, find(provider))),
 	};
 }
 

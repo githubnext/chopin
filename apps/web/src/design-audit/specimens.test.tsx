@@ -280,6 +280,7 @@ describe("design audit specimens", () => {
 		) {
 			expect(accounts).toContain(`>${label}</span>`);
 		}
+		expect(accounts).not.toMatch(/Last used|Never used/);
 		expect(accounts).toContain("Your GitHub account has no Copilot subscription.");
 		expect(accounts).toContain(
 			"Chopin couldn't check for Copilot access through your GitHub sign-in. It checks again when you open this page.",
