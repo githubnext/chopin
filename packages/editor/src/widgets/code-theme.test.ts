@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolveTheme } from "@pierre/diffs";
 
-import { accessibleTheme, CODE_THEMES, contrast, legible } from "./code-theme";
+import { accessibleTheme, changeGrounds, CODE_THEMES, contrast, legible } from "./code-theme";
 
 import type { CodeTheme } from "./code-theme";
 
@@ -52,33 +52,63 @@ describe("the code palettes", () => {
 		expect(legible("#ff678d", page)).toBe("#ff678d");
 	});
 
+	// The renderer's own tints, measured in Chromium: changed lines, and changed words over them.
+	it("knows every ground a patch's words are drawn on, as the renderer tints them", async () => {
+		let grounds = async (palette: CodeTheme) =>
+			changeGrounds(accessibleTheme(await resolveTheme(palette.base), palette).colors!, palette);
+		expect(await grounds(CODE_THEMES.light)).toEqual([
+			"#ffffff",
+			"#e5f1e9",
+			"#c2e1d2",
+			"#ffe8e5",
+			"#f9ccca",
+		]);
+		expect(await grounds(CODE_THEMES.dark)).toEqual([
+			"#21201d",
+			"#293d2f",
+			"#23583f",
+			"#4a2a24",
+			"#6f2c2a",
+		]);
+	});
+
 	for (let [mode, palette] of Object.entries(CODE_THEMES) as [string, CodeTheme][]) {
-		it(`puts every word and change mark of the ${mode} palette at AA on the ${mode} page`, async () => {
+		it(`puts every word of the ${mode} palette at AA on the ${mode} page and its changed lines`, async () => {
 			let base = await resolveTheme(palette.base);
 			let theme = accessibleTheme(base, palette);
 			expect(theme.name).toBe(palette.name);
 			expect(theme.bg).toBe(palette.background);
 			expect(theme.colors?.["editor.background"]).toBe(palette.background);
-			let drawn = foregrounds(theme);
+			let grounds = changeGrounds(theme.colors!, palette);
+			let least = (colour: string) => Math.min(...grounds.map(ground => contrast(colour, ground)));
+			let words = (from: typeof base) =>
+				[
+					from.fg,
+					...(from.settings ?? []).flatMap(rule => rule.settings?.foreground ?? []),
+				].filter(colour => HEX.test(colour));
+			let drawn = words(theme);
 			expect(drawn.length).toBeGreaterThan(100);
-			expect(drawn.filter(colour => contrast(colour, palette.background) < 4.5)).toEqual([]);
+			expect(drawn.filter(colour => least(colour) < 4.5)).toEqual([]);
+			// Change marks and the editor's own words are read on the page.
+			expect(
+				foregrounds(theme).slice(1).filter(colour =>
+					!drawn.includes(colour) && contrast(colour, palette.background) < 4.5
+				),
+			).toEqual([]);
 			// Only what fell short moved, and only in lightness, away from the page.
-			let before = foregrounds(base);
+			let before = words(base);
 			expect(drawn.length).toBe(before.length);
 			for (let [index, colour] of before.entries()) {
-				if (contrast(colour, palette.background) >= 4.5) expect(drawn[index]).toBe(colour);
+				if (least(colour) >= 4.5) expect(drawn[index]).toBe(colour);
 				else if (mode === "light") expect(lightness(drawn[index]!)).toBeLessThan(lightness(colour));
 				else expect(lightness(drawn[index]!)).toBeGreaterThan(lightness(colour));
 			}
 		});
 	}
 
-	it("keeps the light palette on white, as it was before there was a dark one", () => {
-		expect(CODE_THEMES.light).toEqual({
-			name: "chopin-light",
-			base: "pierre-light",
-			background: "#ffffff",
-		});
+	it("keeps the light palette on white", () => {
+		expect(CODE_THEMES.light.background).toBe("#ffffff");
+		expect(CODE_THEMES.light.base).toBe("pierre-light");
 	});
 
 	// The palettes are made at AA against these pages, so a page that changes makes them again.
