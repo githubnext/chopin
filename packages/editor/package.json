@@ -11,6 +11,10 @@
 			"types": "./src/index.ts",
 			"default": "./src/index.ts"
 		},
+		"./browser-storage": {
+			"types": "./src/browser-storage.ts",
+			"default": "./src/browser-storage.ts"
+		},
 		"./card-diagram": {
 			"types": "./src/widgets/card-diagram.tsx",
 			"default": "./src/widgets/card-diagram.tsx"
