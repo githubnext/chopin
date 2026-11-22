@@ -158,7 +158,7 @@ export const AUDIT_INVENTORY: readonly AuditGroup[] = [
 				id: "navigation",
 				label: "Navigation",
 				source: "apps/web/src/project-sidebar.tsx",
-				states: ["current", "ancestor", "unanswered", "loading", "empty"],
+				states: ["current", "ancestor", "unanswered", "loading", "empty", "sheet-search"],
 			},
 			{
 				id: "ai-accounts",
