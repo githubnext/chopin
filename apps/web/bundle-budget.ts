@@ -45,10 +45,10 @@ export type StylesheetBudget = { gzip: number; raw: number };
 // The sidebar's AI accounts entry, under Machines, with the page loaded lazily, measures 260,298 B raw
 // and 83,456 B gzip in the container build; allow about 400 B raw and 190 B gzip above that.
 // Reaching the browser's storage only through its one guard, so a browser that refuses storage
-// still renders the app, measures 260,731 B raw and 82,823 B gzip locally; allow about 400 B raw
-// above that.
+// still renders the app, measures 260,727 B raw and 83,654 B gzip in the container build (260,731 B
+// raw and 82,823 B gzip locally); allow about 400 B raw and 200 B gzip above that.
 export const INITIAL_JAVASCRIPT_BUDGET: JavaScriptBudget = {
-	gzip: 83_650,
+	gzip: 83_850,
 	raw: 261_130,
 };
 
