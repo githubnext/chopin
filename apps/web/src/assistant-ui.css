@@ -23,7 +23,10 @@
 @import "./components/geometry.css";
 @import "tw-shimmer";
 
-/* Chopin is light only (`color-scheme: light`), so `dark:` never follows the system. */
+/*
+ * `dark:` follows Chopin's theme, never the system's directly: `index.html` and `theme-choice.ts`
+ * put `.dark` on <html> while the dark theme is drawn, whether chosen or System's.
+ */
 @custom-variant dark (&:is(.dark *));
 
 /*
@@ -60,8 +63,11 @@
 	--color-input: var(--input);
 	--color-ring: var(--ring);
 	/* `destructive` is Chopin's own role already: `--color-destructive` is the red. */
-	/* The one raw palette colour the copies use (a dialog's scrim) is Chopin's ink. */
-	--color-black: var(--color-gray-900);
+	/*
+	 * The one raw palette colour the copies use (a dialog's scrim) is the near-black the image viewer
+	 * stands on, Chopin's ink in light and the same dark at night, so a scrim still dims.
+	 */
+	--color-black: var(--color-viewer);
 	/*
 	 * The raw palette the composer, surfaces, context breakdown, message actions, agent handoff and
 	 * subagent list name: accent blue (caret, recording dot, upload bar, a drop target's tint, live
@@ -89,7 +95,7 @@
 	--foreground: var(--color-text-primary);
 	--card: var(--color-page);
 	--card-foreground: var(--color-text-primary);
-	--popover: var(--color-page);
+	--popover: var(--color-raised);
 	--popover-foreground: var(--color-text-primary);
 	/* Petrol is the action colour here, where assistant-ui's default is ink. */
 	--primary: var(--color-brand);
@@ -108,41 +114,10 @@
 	--ring: var(--focus-ring-color);
 	/*
 	 * A copy's `dark:` words name the lighter steps a dark ground needs (a file's reason in
-	 * `red-400/80`, a full context window in `amber-400`); on this light ground they would fall to
-	 * 3.2:1 and 4.1:1, so they read the steps the light variants name. The same here as under
-	 * `.dark`, which reads this scope's tokens while Chopin has one theme.
-	 */
-	--color-red-400: var(--color-danger-text);
-	--color-amber-400: var(--color-warning-ink);
-}
-
-/*
- * Chopin has no dark theme, so `.dark` reads the same tokens and a `dark:` class changes nothing
- * but its alpha. When a dark theme exists its tokens go here, and nowhere else.
- */
-.dark {
-	--background: var(--color-page);
-	--foreground: var(--color-text-primary);
-	--card: var(--color-page);
-	--card-foreground: var(--color-text-primary);
-	--popover: var(--color-page);
-	--popover-foreground: var(--color-text-primary);
-	--primary: var(--color-brand);
-	--primary-foreground: var(--color-page);
-	--secondary: var(--color-hover);
-	--secondary-foreground: var(--color-text-primary);
-	--muted: var(--color-inset);
-	--muted-foreground: var(--color-text-tertiary);
-	--accent: var(--color-hover);
-	--accent-foreground: var(--color-text-primary);
-	--destructive: var(--color-destructive);
-	--border: var(--color-edge);
-	--input: var(--color-edge);
-	--ring: var(--focus-ring-color);
-	/*
-	 * A copy's `dark:` words name the lighter steps a dark ground needs (a file's reason in
-	 * `red-400/80`, a full context window in `amber-400`); on this light ground they would fall to
-	 * 3.2:1 and 4.1:1, so they read the steps the light variants name.
+	 * `red-400/80`, a full context window in `amber-400`); on the light ground they would fall to
+	 * 3.2:1 and 4.1:1, so they read Chopin's danger text and warning ink, which are already the
+	 * lighter steps when the dark theme is drawn. Every role here is a Chopin token, so `.dark` needs
+	 * no scope of its own: the tokens themselves change at night (`packages/visuals/theme.css`).
 	 */
 	--color-red-400: var(--color-danger-text);
 	--color-amber-400: var(--color-warning-ink);

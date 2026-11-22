@@ -1,4 +1,7 @@
-/* The complete light-only system. `static` keeps tokens read from plain CSS. */
+/*
+ * The complete system: the light theme's values here, the dark theme's in `:root[data-theme="dark"]`
+ * below. `static` keeps tokens read from plain CSS.
+ */
 @theme static {
 	--color-*: initial;
 	--color-transparent: transparent;
@@ -73,6 +76,8 @@
 
 	/* Surfaces: white is reserved for the document and things lifted above it. */
 	--color-page: oklch(1 0 0);
+	/* Menus, popovers and dialogs: the page in light; one lighter step at night, where depth is light. */
+	--color-raised: var(--color-page);
 	--color-ground: var(--color-gray-150);
 	--color-hover: var(--color-gray-100);
 	--color-inset: var(--color-gray-100);
@@ -114,6 +119,17 @@
 	--color-scrollbar-thumb-static: oklch(var(--shadow-color) / 28%);
 	--color-scrollbar-thumb-hover: oklch(var(--shadow-color) / 45%);
 	--color-scrollbar-thumb-active: oklch(var(--shadow-color) / 55%);
+	/* The shared tooltip and the comment toast: a dark chip in light, a lighter one at night. */
+	--color-tooltip: var(--color-gray-800);
+	--color-tooltip-edge: var(--color-gray-750);
+	--color-tooltip-hover: var(--color-gray-750);
+	--color-tooltip-ink: var(--color-white);
+	/*
+	 * The image viewer is dark in both themes, so its ground and muted words are fixed values, not
+	 * steps of the gray scale (which turns over at night); its words and controls are white.
+	 */
+	--color-viewer: oklch(0.15908 0.00637 95);
+	--color-viewer-muted: oklch(0.89108 0.00552 95);
 
 	/* Petrol is the only accent: action, focus, presence and links all agree. */
 	--color-brand: oklch(0.50006 0.08514 210.06); /* #06707e */
@@ -514,4 +530,147 @@
 	--font-weight-bold: 700;
 	--font-weight-document-heading: 400;
 	--font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root {
+	color-scheme: light;
+}
+
+/*
+ * The same world at night: the warm olive neutrals, the one petrol accent and the semantic quads,
+ * composed for a dark ground rather than inverted. `index.html` sets `data-theme` (and `.dark`, which
+ * assistant-ui's copies read) on <html> before the first paint from the person's choice in the
+ * account menu, and keeps it with the system's for System (`apps/web/src/theme-choice.ts`).
+ *
+ * Depth is light here: the ground is darkest, the document's sheet one step lighter, menus and
+ * popovers (`--color-raised`) a step lighter again, and shadows only a quiet cue beneath them. The
+ * gray scale turns over, each step keeping its job: 50–200 the surfaces and fills beside the page,
+ * 300–450 the grips, strokes and graphics, 500–900 the inks, so a component that names a step for its
+ * job (a disabled fill, a secondary hover, a diagram's stroke) needs nothing of its own at night. The
+ * semantic scales keep their roles step for step (3 a surface, 8 a graphic, 11 an icon, 12 text),
+ * each pair at least as far apart as in light. Petrol is lightened until it reads as text on every
+ * surface, so a filled control carries the page's own colour on it, as in light; so does the
+ * destructive red. Every text pair meets 4.5:1 and every control edge, icon and ring 3:1
+ * (`e2e/design/contrast.e2e.ts` walks every plate in both themes).
+ */
+:root[data-theme="dark"] {
+	color-scheme: dark;
+
+	--color-ruby-1: oklch(0.215 0.0139 354.66);
+	--color-ruby-2: oklch(0.26 0.0151 8.54);
+	--color-ruby-3: oklch(0.3 0.0612 7.18);
+	--color-ruby-4: oklch(0.335 0.0892 8.14);
+	--color-ruby-5: oklch(0.37 0.0997 7.27);
+	--color-ruby-6: oklch(0.415 0.1059 8);
+	--color-ruby-7: oklch(0.475 0.1158 7.15);
+	--color-ruby-8: oklch(0.565 0.13 6.5);
+	--color-ruby-9: oklch(0.665 0.1796 13.15);
+	--color-ruby-10: oklch(0.705 0.1803 13.52);
+	--color-ruby-11: oklch(0.8 0.1289 16.04);
+	--color-ruby-12: oklch(0.925 0.0528 10);
+	--color-orange-1: oklch(0.215 0.0114 48.72);
+	--color-orange-2: oklch(0.26 0.0185 73.68);
+	--color-orange-3: oklch(0.3 0.0447 79.11);
+	--color-orange-4: oklch(0.335 0.0713 74.37);
+	--color-orange-5: oklch(0.37 0.0833 71.31);
+	--color-orange-6: oklch(0.415 0.0867 66.02);
+	--color-orange-7: oklch(0.475 0.0945 59.96);
+	--color-orange-8: oklch(0.565 0.1156 54.68);
+	--color-orange-9: oklch(0.72 0.1533 45.02);
+	--color-orange-10: oklch(0.76 0.1659 43.46);
+	--color-orange-11: oklch(0.8 0.1434 42.74);
+	--color-orange-12: oklch(0.925 0.0524 40.83);
+	--color-lime-1: oklch(0.215 0.0141 121.56);
+	--color-lime-2: oklch(0.26 0.0205 119.57);
+	--color-lime-3: oklch(0.3 0.0349 118.62);
+	--color-lime-4: oklch(0.335 0.0475 120.2);
+	--color-lime-5: oklch(0.37 0.0575 122.06);
+	--color-lime-6: oklch(0.415 0.0675 123.29);
+	--color-lime-7: oklch(0.475 0.0794 125.43);
+	--color-lime-8: oklch(0.565 0.0945 128.23);
+	--color-lime-9: oklch(0.74 0.12 126.09);
+	--color-lime-10: oklch(0.78 0.132 126.75);
+	--color-lime-11: oklch(0.8 0.128 130.05);
+	--color-lime-12: oklch(0.925 0.0573 120.98);
+	--color-plum-1: oklch(0.215 0.0177 305);
+	--color-plum-2: oklch(0.26 0.0318 305);
+	--color-plum-3: oklch(0.3 0.0609 305);
+	--color-plum-4: oklch(0.335 0.0874 305);
+	--color-plum-5: oklch(0.37 0.0967 305);
+	--color-plum-6: oklch(0.415 0.0972 305);
+	--color-plum-7: oklch(0.475 0.1074 305);
+	--color-plum-8: oklch(0.565 0.1281 304);
+	--color-plum-9: oklch(0.66 0.1877 301);
+	--color-plum-10: oklch(0.7 0.1818 301);
+	--color-plum-11: oklch(0.8 0.1536 301);
+	--color-plum-12: oklch(0.925 0.055 301);
+
+	--color-gray-50: oklch(0.237 0.006 95); /* #1f1f1b */
+	--color-gray-100: oklch(0.226 0.006 95); /* #1d1c19 */
+	--color-gray-150: oklch(0.205 0.006 95); /* #181714 */
+	--color-gray-200: oklch(0.305 0.007 95); /* #302f2b */
+	--color-gray-300: oklch(0.355 0.008 95); /* #3d3c37 */
+	--color-gray-400: oklch(0.47 0.01 95); /* #5c5b55 */
+	--color-gray-450: oklch(0.545 0.011 95); /* #727069 */
+	--color-gray-500: oklch(0.66 0.012 95); /* #94928a */
+	--color-gray-600: oklch(0.74 0.011 95); /* #adaba3 */
+	--color-gray-700: oklch(0.825 0.009 95); /* #c7c6bf */
+	--color-gray-750: oklch(0.87 0.008 95); /* #d6d4ce */
+	--color-gray-800: oklch(0.905 0.007 95); /* #e1e0da */
+	--color-gray-900: oklch(0.945 0.005 95); /* #eeede9 */
+
+	--color-page: oklch(0.245 0.006 95); /* #21201d */
+	--color-raised: oklch(0.27 0.007 95); /* #272623 */
+	--color-chat-body: oklch(0.875 0.02 136);
+	/* Light ink laid over the transcript: the same lighter step on the ground and the Chat pane. */
+	--color-chat-row-hover: oklch(var(--ink-tint) / 4.5%);
+	--color-chat-row-selected: oklch(var(--ink-tint) / 7%);
+	--color-scrim: oklch(var(--shadow-color) / 55%);
+	--color-scrollbar-thumb-static: oklch(var(--ink-tint) / 30%);
+	--color-scrollbar-thumb-hover: oklch(var(--ink-tint) / 48%);
+	--color-scrollbar-thumb-active: oklch(var(--ink-tint) / 58%);
+	--color-tooltip: oklch(0.36 0.008 95); /* #3e3d38 */
+	--color-tooltip-edge: oklch(0.43 0.009 95);
+	--color-tooltip-hover: oklch(0.43 0.009 95);
+	--color-tooltip-ink: var(--color-gray-900);
+
+	--color-brand: oklch(0.735 0.085 212); /* #64b8c8 */
+	--color-brand-hover: oklch(0.79 0.075 212);
+	--color-brand-active: oklch(0.84 0.065 212);
+	--color-brand-wash: oklch(0.33 0.04 212);
+	--color-brand-ink: oklch(0.8 0.075 212);
+
+	--color-success: oklch(0.73 0.13 145);
+	--color-success-wash: oklch(0.31 0.045 145);
+	--color-success-ink: oklch(0.8 0.12 145);
+	--color-warning: oklch(0.79 0.13 75);
+	--color-warning-wash: oklch(0.31 0.045 75);
+	--color-warning-ink: oklch(0.84 0.11 75);
+	--color-destructive: oklch(0.69 0.16 24); /* #ee6d69 */
+	--color-destructive-hover: oklch(0.73 0.145 24);
+	--color-destructive-active: oklch(0.77 0.13 24);
+	--color-destructive-ink: oklch(0.78 0.13 22);
+
+	--color-edge: oklch(1 0 0 / 8%);
+	--color-button-outline-edge: oklch(1 0 0 / 13%);
+	--color-control-edge: oklch(1 0 0 / 16%);
+	--color-divider: rgb(255 255 255 / 9%);
+
+	/* The ink a lighter step is laid in, as `--shadow-color` is the darker one's. */
+	--ink-tint: 0.945 0.005 95;
+	--shadow-color: 0.1 0.004 95;
+	--shadow-resting: 0 1px 1px oklch(var(--shadow-color) / 18%);
+	--shadow-resting-strong:
+		0 1px 2px oklch(var(--shadow-color) / 24%),
+		0 2px 4px oklch(var(--shadow-color) / 12%);
+	--shadow-raised:
+		0 1px 2px oklch(var(--shadow-color) / 24%),
+		0 4px 8px oklch(var(--shadow-color) / 16%);
+	--shadow-overlay:
+		0 2px 4px oklch(var(--shadow-color) / 28%),
+		0 12px 24px oklch(var(--shadow-color) / 28%);
+	--shadow-stacked:
+		0 -1px 1px oklch(var(--shadow-color) / 20%),
+		0 -1px 4px -1px oklch(var(--shadow-color) / 24%),
+		var(--shadow-raised);
 }

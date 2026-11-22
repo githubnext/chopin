@@ -3,9 +3,30 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-		<!-- The light-only ground (--color-ground) that sits behind the top chrome. -->
+		<!-- The ground (--color-ground) behind the top chrome, and the scheme, set below for the theme. -->
 		<meta name="theme-color" content="#f4f4f1" />
 		<meta name="color-scheme" content="light" />
+		<!--
+			The person's theme (Light, Dark or System, in the account menu), before anything is drawn:
+			src/theme-choice.ts keeps it from here on, and its test holds this script to the same rules.
+		-->
+		<script>
+		(function() {
+			var choice = null;
+			try {
+				choice = localStorage.getItem("chopin:theme");
+			} catch (error) {}
+			var dark = choice === "dark"
+				|| (choice !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+			var theme = dark ? "dark" : "light";
+			var root = document.documentElement;
+			root.dataset.theme = theme;
+			root.classList.toggle("dark", dark);
+			root.style.colorScheme = theme;
+			document.querySelector('meta[name="color-scheme"]').content = theme;
+			document.querySelector('meta[name="theme-color"]').content = dark ? "#181714" : "#f4f4f1";
+		})();
+		</script>
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-title" content="Chopin" />
