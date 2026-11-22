@@ -76,8 +76,10 @@ import { registerPreviewSelection } from "./preview-selection";
 import { diffSourceLine, lastLineStart, offsetOfLine } from "./source-offset";
 import { hiddenSides, scrollEdges } from "./tab-edges";
 import { CodeIcon, WarningIcon, WrapIcon } from "@chopin/icons";
+import { useTheme } from "../theme";
 
 import type { ElementNode, LexicalCommand, LexicalEditor, LexicalNode } from "lexical";
+import type { Theme } from "../theme";
 import type { Wireframe as WireframeTree } from "@chopin/diagrams/wireframe";
 import type { Kind } from "./code";
 
@@ -240,12 +242,12 @@ async function renderMath(source: string, inline: boolean): Promise<string> {
 	});
 }
 
-export async function renderMermaid(key: string, source: string): Promise<string> {
+export async function renderMermaid(key: string, source: string, theme: Theme): Promise<string> {
 	let [mermaid, { mermaidConfig, refineDiagram }] = await Promise.all([
 		import("mermaid"),
 		import("./mermaid-theme"),
 	]);
-	mermaid.default.initialize(mermaidConfig());
+	mermaid.default.initialize(mermaidConfig(theme));
 	let { svg } = await mermaid.default.render(`ace-mermaid-${key}`, source);
 
 	/*
@@ -400,10 +402,17 @@ function Preview(
 
 	let drawn = block.kind === "math" || block.kind === "mermaid" || block.kind === "seecode"
 		|| block.kind === "wireframe";
-	// A Mermaid drawing is made once its block is within a screen of the reader, not when the document
-	// opens. Until then the block shows its source, as it does while a drawing is on its way.
+	/*
+	 * A Mermaid drawing is made once its block is within a screen of the reader, not when the document
+	 * opens. Until then the block shows its source, as it does while a drawing is on its way. It bakes
+	 * the page's theme in (`mermaid-theme.ts`), so a change of theme makes it again, as the reader
+	 * comes within a screen of it; until then it keeps the drawing it has, whose colours follow the
+	 * page wherever its stylesheet names the page's own.
+	 */
+	let page = useTheme();
+	let theme: Theme | undefined = block.kind === "mermaid" ? page : undefined;
 	let element = editor.getElementByKey(block.key);
-	let near = useNearViewport(element, block.kind === "mermaid");
+	let near = useNearViewport(element, block.kind === "mermaid", theme);
 
 	useEffect(() => {
 		// A block that stopped being a diagram must stop showing one. Its
@@ -467,7 +476,7 @@ function Preview(
 				}
 				let out = block.kind === "math"
 					? await renderMath(block.source, block.inline)
-					: await renderMermaid(block.key, block.source);
+					: await renderMermaid(block.key, block.source, theme ?? "light");
 				if (cancelled) return;
 				setHtml(out);
 				setError(undefined);
@@ -488,7 +497,7 @@ function Preview(
 			cancelled = true;
 			clearTimeout(timer);
 		};
-	}, [drawn, near, block.key, block.kind, block.inline, block.source]);
+	}, [drawn, near, theme, block.key, block.kind, block.inline, block.source]);
 
 	/*
 	 * Hiding is applied to the DOM, never to the document: the source is still
