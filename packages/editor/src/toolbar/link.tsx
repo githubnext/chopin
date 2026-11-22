@@ -66,7 +66,7 @@ export const OPEN_LINK_EDITOR_COMMAND: LexicalCommand<void> = createCommand("OPE
 
 const RULES = { protocols: LINK_PROTOCOLS, relative: true };
 
-const SURFACE = "fixed z-50 rounded-lg bg-page ring-hairline shadow-overlay";
+const SURFACE = "fixed z-50 rounded-lg bg-raised ring-hairline shadow-overlay";
 
 const GONE = "Someone else changed this text. Select it again to add the link.";
 
