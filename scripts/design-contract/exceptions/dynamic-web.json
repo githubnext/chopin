@@ -329,6 +329,20 @@
 		"sourceHash": "2fdfc9e79346e700d4465f129d7661e8802ec76a9edb7b350f1e2010dfb1e07c"
 	},
 	{
+		"file": "apps/web/src/ai-accounts/rows.tsx",
+		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
+		"cases": [
+			[
+				"dynamic",
+				"class",
+				"presence.className",
+				"class > AccountMenu > <div>",
+				1
+			]
+		],
+		"sourceHash": "1591c7def50520fd7c40a9f810a3da7f73f4af369d2bbe506c31c5c7fe8ac5ba"
+	},
+	{
 		"file": "apps/web/src/chat/composer.tsx",
 		"reason": "Motion/presence contract returns finite semantic state classes; imported function evaluation is outside this static scanner. Review the producer when changing this boundary.",
 		"cases": [

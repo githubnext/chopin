@@ -52,7 +52,10 @@ export type AccountRow = {
 	badge?: AccountBadge;
 	lines: string[];
 	getCopilot: boolean;
-	actions: AccountAction[];
+	/** What the row's state asks for, on the row itself: connecting, or connecting again. */
+	action?: AccountAction;
+	/** Everything else the row offers, in its menu. */
+	more: AccountAction[];
 };
 
 const CONNECTED: AccountBadge = { tone: "success", label: "Connected" };
@@ -101,7 +104,8 @@ function copilotRow(summary: AiCredentialSummary | undefined, checking: boolean)
 			badge: NEEDS_RECONNECTING,
 			lines: [...ending, reconnect],
 			getCopilot: false,
-			actions: ["replace", "use-sign-in"],
+			action: "replace",
+			more: ["use-sign-in"],
 		};
 	}
 	let switches: AccountAction[] = token ? ["replace", "use-sign-in"] : ["use-token"];
@@ -112,7 +116,7 @@ function copilotRow(summary: AiCredentialSummary | undefined, checking: boolean)
 			badge: CONNECTED,
 			lines: token ? ending : ["Your GitHub sign-in"],
 			getCopilot: false,
-			actions: switches,
+			more: switches,
 		};
 	}
 	if (summary?.copilotAccess === "none") {
@@ -124,7 +128,7 @@ function copilotRow(summary: AiCredentialSummary | undefined, checking: boolean)
 				? [...ending, "This token's GitHub account has no Copilot subscription."]
 				: ["Your GitHub account has no Copilot subscription."],
 			getCopilot: true,
-			actions: switches,
+			more: switches,
 		};
 	}
 	if (checking) {
@@ -134,7 +138,7 @@ function copilotRow(summary: AiCredentialSummary | undefined, checking: boolean)
 			badge: CHECKING,
 			lines: token ? ending : ["Your GitHub sign-in"],
 			getCopilot: false,
-			actions: switches,
+			more: switches,
 		};
 	}
 	return {
@@ -143,7 +147,7 @@ function copilotRow(summary: AiCredentialSummary | undefined, checking: boolean)
 		badge: NOT_CHECKED,
 		lines: token ? [...ending, NOT_CHECKED_TOKEN] : ["Your GitHub sign-in", NOT_CHECKED_SIGN_IN],
 		getCopilot: false,
-		actions: switches,
+		more: switches,
 	};
 }
 
@@ -158,7 +162,8 @@ function signInRow(
 			name,
 			lines: [SIGN_IN_MISSING[provider]],
 			getCopilot: false,
-			actions: ["sign-in"],
+			action: "sign-in",
+			more: [],
 		};
 	}
 	let yours = `Your ${name} sign-in`;
@@ -173,7 +178,8 @@ function signInRow(
 					: `${name} ended this sign-in. Sign in again to keep using it.`,
 			],
 			getCopilot: false,
-			actions: ["sign-in", "disconnect"],
+			action: "sign-in",
+			more: ["disconnect"],
 		};
 	}
 	if (summary.unchecked) {
@@ -183,7 +189,7 @@ function signInRow(
 			badge: NOT_CHECKED,
 			lines: [yours, "Chopin couldn't finish checking this sign-in."],
 			getCopilot: false,
-			actions: ["disconnect"],
+			more: ["disconnect"],
 		};
 	}
 	return {
@@ -192,7 +198,7 @@ function signInRow(
 		badge: CONNECTED,
 		lines: [yours],
 		getCopilot: false,
-		actions: ["disconnect"],
+		more: ["disconnect"],
 	};
 }
 
@@ -204,7 +210,8 @@ function keyRow(provider: KeyProvider, summary: AiCredentialSummary | undefined)
 			name,
 			lines: [MISSING_LINES[provider]],
 			getCopilot: false,
-			actions: ["add-key"],
+			action: "add-key",
+			more: [],
 		};
 	}
 	let ending = summary.suffix ? [`Key ending ${summary.suffix}`] : [];
@@ -216,7 +223,8 @@ function keyRow(provider: KeyProvider, summary: AiCredentialSummary | undefined)
 			badge: NEEDS_RECONNECTING,
 			lines: [...ending, reconnect],
 			getCopilot: false,
-			actions: ["replace", "remove"],
+			action: "replace",
+			more: ["remove"],
 		};
 	}
 	return {
@@ -225,7 +233,7 @@ function keyRow(provider: KeyProvider, summary: AiCredentialSummary | undefined)
 		badge: CONNECTED,
 		lines: ending,
 		getCopilot: false,
-		actions: ["replace", "remove"],
+		more: ["replace", "remove"],
 	};
 }
 
