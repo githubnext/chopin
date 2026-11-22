@@ -168,6 +168,34 @@
 				"dynamic",
 				"*",
 				"props",
+				"unresolved JSX props > ContrastIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > SunIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > MoonIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
+				"unresolved JSX props > MonitorIcon > <LineIcon>",
+				1
+			],
+			[
+				"dynamic",
+				"*",
+				"props",
 				"unresolved JSX props > MessageIcon > <LineIcon>",
 				1
 			],
@@ -522,7 +550,7 @@
 				1
 			]
 		],
-		"sourceHash": "7ede216ca263e151d26b03ceb7b9e50ee71b09003e6e39c58e68d3538b1b7ed4"
+		"sourceHash": "4ff0fe1fa555c2dcae64f5c6533600b993b2bac21a95279aef028a9d745ee5b0"
 	},
 	{
 		"file": "packages/icons/src/warning.tsx",

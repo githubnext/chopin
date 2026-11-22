@@ -87,6 +87,9 @@ export function inspect(file: string, extracted: Extraction, policy: TokenPolicy
 	return findings;
 }
 
+/** The dark theme's token definitions, which own their literals as `@theme`'s do. */
+const NIGHT = 'CSS > :root[data-theme="dark"]';
+
 export function scan(
 	root: string,
 	read = (path: string) => readFileSync(path, "utf8"),
@@ -132,7 +135,9 @@ export function scan(
 			if (!property.startsWith("--")) continue;
 			if (file === "packages/visuals/theme.css" && /^CSS > @theme(?: static)?$/.test(context)) {
 				canonical.set(property, value);
-			} else aliases.set(property, [...(aliases.get(property) ?? []), value]);
+			} else if (file !== "packages/visuals/theme.css" || context !== NIGHT) {
+				aliases.set(property, [...(aliases.get(property) ?? []), value]);
+			}
 		}
 	}
 	let utilities = new Set<string>();
@@ -145,8 +150,10 @@ export function scan(
 	let policy = { canonical, aliases, utilities, typographyProperties: foundation?.properties };
 	let findings = sources.flatMap(({ file, extracted }) => {
 		if (file !== "packages/visuals/theme.css") return inspect(file, extracted, policy);
-		// Only direct token definitions own literals; component rules in the theme still count.
+		// Only direct token definitions own literals, the light theme's and the dark theme's;
+		// component rules in the theme still count.
 		let declarations = extracted.declarations.filter(({ property, context }) => {
+			if (property.startsWith("--") && context === NIGHT) return false;
 			if (!property.startsWith("--") || !/^CSS > @theme(?: static)?$/.test(context)) return true;
 			return property.startsWith("--text-")
 				&& !/^--text-(\*|(?:2xs|xs|sm|base|lg|xl|2xl|document-control|build-blocker)(?:--line-height)?)$/

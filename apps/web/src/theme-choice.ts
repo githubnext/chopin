@@ -107,7 +107,7 @@ export function startTheme(): void {
 	if (typeof matchMedia === "function") {
 		matchMedia(SYSTEM_DARK).addEventListener("change", paint);
 	}
-	addEventListener("storage", event => {
+	window.addEventListener("storage", event => {
 		if (event.key !== THEME_STORAGE_KEY && event.key !== null) return;
 		choice = readThemeChoice();
 		paint();

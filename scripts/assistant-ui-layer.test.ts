@@ -237,17 +237,13 @@ describe("assistant-ui's colours", () => {
 	];
 	let tokens = new Set([...chopinOwn.keys(), "--focus-ring-color"]);
 
-	test("every role is mapped in light and dark", () => {
-		for (let scope of [":root", ".dark"]) {
-			let mapped = block(scope);
-			for (let role of ROLES) {
-				expect([scope, role, mapped.has(`--${role}`)]).toEqual([scope, role, true]);
-			}
-		}
+	test("every role is mapped", () => {
+		let mapped = block(":root");
+		for (let role of ROLES) expect([role, mapped.has(`--${role}`)]).toEqual([role, true]);
 	});
 
 	test("every role reads a colour token Chopin's theme defines, and nothing else", () => {
-		for (let scope of [":root", ".dark"]) {
+		for (let scope of [":root"]) {
 			for (let [name, value] of block(scope)) {
 				let token = /^var\((--[\w-]+)\)$/.exec(value)?.[1];
 				expect([scope, name, value, token !== undefined && tokens.has(token)]).toEqual([
@@ -272,8 +268,19 @@ describe("assistant-ui's colours", () => {
 		expect(mapped.get("--ring")).toBe("var(--focus-ring-color)");
 	});
 
-	test("the dark scope reads the same tokens while Chopin has no dark theme", () => {
-		expect(block(".dark")).toEqual(block(":root"));
+	test("the dark theme needs no scope of its own: the tokens the roles read change at night", () => {
+		expect(block(".dark").size).toBe(0);
+		let night = new Set<string>();
+		postcss.parse(read("packages/visuals/theme.css")).walkRules(
+			':root[data-theme="dark"]',
+			rule =>
+				rule.walkDecls(decl => {
+					night.add(decl.prop);
+				}),
+		);
+		for (let token of ["--color-page", "--color-raised", "--color-brand", "--color-edge"]) {
+			expect([token, night.has(token)]).toEqual([token, true]);
+		}
 	});
 
 	test("every raw palette colour a copy names is a Chopin role: accent blue is petrol, green and red are its own", () => {
