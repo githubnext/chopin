@@ -1666,6 +1666,12 @@
 		var(--sheet-ease);
 }
 
+/* Found by its shadow by day; at night, where shadows hardly show, by a light hairline too. */
+:where(.plan-comment-sheet-popup) {
+	outline: var(--edge-width) solid var(--color-raised-edge);
+	outline-offset: calc(-1 * var(--edge-width));
+}
+
 /* The finger owns the sheet while it drags; the spring takes over on release. */
 .plan-comment-sheet-popup[data-swiping] {
 	transition: none;
@@ -3543,6 +3549,12 @@
 	border-radius: var(--radius-lg);
 	background: var(--color-raised);
 	box-shadow: var(--shadow-overlay);
+}
+
+/* Found by its shadow by day; at night, where shadows hardly show, by a light hairline too. */
+:where(.plan-table-action-toolbar) {
+	outline: var(--edge-width) solid var(--color-raised-edge);
+	outline-offset: calc(-1 * var(--edge-width));
 }
 
 .plan-table-action-groups,
