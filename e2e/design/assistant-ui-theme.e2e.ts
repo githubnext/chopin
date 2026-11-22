@@ -456,11 +456,13 @@ for (let name of ["light", "dark"] as const) {
 		let outline = (element: Locator) =>
 			element.evaluate(node => getComputedStyle(node).outlineColor);
 
-		// Slack's actions group is white with a grey ring at 13%; here the page's surface and the
-		// button outline's edge (12%), so the box stands off a shown row's shade.
+		// Slack's actions group is white with a grey ring at 13%; here the toolbar's surface (the
+		// page's by day, a step lighter than every row shade at night) and the button outline's edge
+		// (12%), so the box stands off a shown row's shade.
 		let toolbar = plate(page, "assistant-ui").locator(".chat-message-toolbar");
 		await toolbar.scrollIntoViewIfNeeded();
-		expect(await paint(toolbar, "backgroundColor")).toBe(await token("page"));
+		expect(await paint(toolbar, "backgroundColor")).toBe(await token("toolbar"));
+		if (name === "light") expect(await token("toolbar")).toBe(await token("page"));
 		expect(await outline(toolbar)).toBe(await token("button-outline-edge"));
 		// Slack greys a button under the pointer; here Chopin's hover surface does.
 		let add = toolbar.getByRole("button", { name: "Add reaction" });

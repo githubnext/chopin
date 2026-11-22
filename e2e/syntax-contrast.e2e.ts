@@ -37,7 +37,8 @@ test("code is coloured in place and a diff keeps its drawn preview, each with di
 			"// new spacing",
 		);
 
-	let tokens = previews.locator("[data-line] span[style*='color']");
+	// Each token carries both palettes' colours and draws the one the page's scheme picks.
+	let tokens = previews.locator("[data-line] span[style*='--diffs-token-light']");
 	await expect.poll(() => tokens.count()).toBeGreaterThan(10);
 	let seen = new Set<string>();
 	for (let index = 0; index < await tokens.count(); index++) {
@@ -79,7 +80,7 @@ test("diff preview text remains selectable", async ({ join, seed }) => {
 	let page = await join("ana");
 	let previews = content(page).locator("[data-plan-preview] .plan-code-view");
 	await expect(previews).toHaveCount(1);
-	let token = previews.locator("[data-line] span[style*='color']").first();
+	let token = previews.locator("[data-line] span[style*='--diffs-token-light']").first();
 	await expect(token).toBeVisible();
 	let selected = await token.evaluate(node => {
 		let range = document.createRange();
