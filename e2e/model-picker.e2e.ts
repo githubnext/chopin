@@ -600,7 +600,8 @@ async function connectPreviewToken(page: Page) {
 	let copilot = accounts.getByRole("main").getByRole("listitem").filter({
 		has: accounts.getByRole("heading", { name: "GitHub Copilot", exact: true }),
 	});
-	await copilot.getByRole("button", { name: "Use a token instead" }).click();
+	await copilot.getByRole("button", { name: "More actions for GitHub Copilot" }).click();
+	await accounts.getByRole("menuitem", { name: "Use a token instead" }).click();
 	let dialog = accounts.getByRole("dialog", { name: "Use a GitHub token for Copilot" });
 	await dialog.getByLabel("GitHub token").fill("github_pat_e2e_preview_account_9b9b");
 	await dialog.getByRole("button", { name: "Use token" }).click();

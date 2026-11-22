@@ -72,11 +72,19 @@
 	container: ai-accounts-list / inline-size;
 }
 
+/*
+ * One account: the mark, the name, then three fixed columns (its state, the action that state asks
+ * for, its menu), so a row's controls never move with what its neighbours hold. The lines under
+ * the name run the row's full width. The controls are centred on the name's line.
+ */
 .ai-account {
+	--ai-account-line: calc(var(--text-sm--line-height) * 1em);
 	display: grid;
-	grid-template-columns: auto minmax(0, 1fr) auto;
+	grid-template-columns:
+		calc(var(--spacing) * 4.5) minmax(0, 1fr) 10rem 7rem
+		var(--icon-button-size);
 	align-items: start;
-	gap: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+	gap: calc(var(--spacing) * 0.5) calc(var(--spacing) * 3);
 	padding: calc(var(--spacing) * 4) calc(var(--spacing) * 5);
 	font-size: var(--text-sm);
 
@@ -86,62 +94,84 @@
 }
 
 .ai-account-mark {
+	grid-area: 1 / 1;
 	display: grid;
 	place-items: center;
-	height: calc(var(--text-sm--line-height) * 1em);
+	height: var(--ai-account-line);
 	color: var(--color-text-primary);
 }
 
 .ai-account-text {
-	display: flex;
-	min-width: 0;
-	flex-direction: column;
-	align-items: flex-start;
-	gap: calc(var(--spacing) * 0.5);
+	display: contents;
 }
 
 .ai-account-name {
+	grid-row: 1;
+	grid-column: 2;
 	margin: 0;
 	color: var(--color-text-primary);
 	font-size: var(--text-sm);
 	font-weight: 600;
 }
 
-.ai-account-line {
+.ai-account-line,
+.ai-account-problem {
+	grid-column: 2 / -1;
 	margin: 0;
-	color: var(--color-text-secondary);
 	text-wrap: pretty;
 }
 
-.ai-account-link {
-	color: var(--color-brand-ink);
-	text-decoration-line: underline;
-	text-decoration-color: color-mix(in oklch, var(--color-brand-ink) 35%, transparent);
-	text-underline-offset: 0.2em;
-
-	&:hover {
-		text-decoration-color: currentColor;
-	}
+.ai-account-line {
+	color: var(--color-text-secondary);
 }
 
 .ai-account-problem {
 	color: var(--color-destructive-ink);
-	text-wrap: pretty;
 }
 
-.ai-account-end {
+.ai-account-status,
+.ai-account-action,
+.ai-account-menu-slot {
+	grid-row: 1;
 	display: flex;
-	flex-wrap: wrap;
+	height: var(--ai-account-line);
 	align-items: center;
-	justify-content: flex-end;
-	gap: calc(var(--spacing) * 3);
 }
 
-.ai-account-actions {
-	display: flex;
-	flex-wrap: wrap;
+.ai-account-status {
+	grid-column: -4 / -3;
+}
+
+.ai-account-unconnected {
+	padding-inline-start: calc(var(--spacing) * 1.5);
+	color: var(--color-text-tertiary);
+	font-size: var(--text-xs);
+}
+
+.ai-account-action {
+	grid-column: -3 / -2;
 	justify-content: flex-end;
-	gap: calc(var(--spacing) * 2);
+}
+
+/* The menu's glyph, not its button, meets the content edge; the button overhangs the padding. */
+.ai-account-menu-slot {
+	grid-column: -2 / -1;
+	justify-content: flex-end;
+	margin-inline-end: calc((var(--icon-button-size) - var(--icon-size-default)) / -2);
+}
+
+/* Placed below its button by measurement; see AccountMenu. */
+.ai-account-menu {
+	position: fixed;
+	z-index: 60;
+	display: flex;
+	min-width: 12rem;
+	flex-direction: column;
+	border-radius: var(--radius-md);
+	background: var(--color-page);
+	padding: var(--menu-padding);
+	box-shadow: var(--shadow-raised);
+	transform-origin: top right;
 }
 
 /* The Checking… badge turns its loader; reduced motion keeps it still, and its word says it. */
@@ -151,18 +181,35 @@
 	}
 }
 
+/*
+ * On touch the row's controls keep their size, as the touch-target rule asks, and answer a 44px
+ * press around them (the shared target of `btn-sm` and `btn-icon`), rather than growing to 44px as
+ * this page's other buttons do.
+ */
+:root[data-plan-coarse-pointer] .ai-accounts-list .ai-account .btn {
+	min-width: 0;
+	min-height: 0;
+}
+
+/* On a phone the state moves under the name; the action and menu columns stay where they are. */
 @container ai-accounts-list (width < 32rem) {
 	.ai-account {
-		grid-template-columns: auto minmax(0, 1fr);
+		grid-template-columns:
+			calc(var(--spacing) * 4.5) minmax(0, 1fr) 7rem
+			var(--icon-button-size);
+		padding-inline: calc(var(--spacing) * 4);
 	}
 
-	.ai-account-end {
-		grid-column: 2;
-		justify-content: flex-start;
+	.ai-account-status {
+		grid-row: 2;
+		grid-column: 2 / -1;
+		height: auto;
+		margin-block: var(--spacing) calc(var(--spacing) * 0.5);
 	}
 
-	.ai-account-actions {
-		justify-content: flex-start;
+	/* The row's own Sign in or Add key says it isn't connected. */
+	.ai-account-status:has(.ai-account-unconnected) {
+		display: none;
 	}
 }
 

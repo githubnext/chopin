@@ -286,9 +286,12 @@ describe("design audit specimens", () => {
 			"Chopin couldn't check for Copilot access through your GitHub sign-in. It checks again when you open this page.",
 		);
 		expect(accounts).not.toContain("Check again");
-		expect(accounts).toContain(">Get Copilot</a>");
+		expect(accounts).toContain(">Get Copilot<");
 		expect(accounts).toContain("Key ending 7Qxa");
-		expect(accounts).toContain('class="btn btn-md btn-primary"');
+		// The action a state asks for is on the row; everything else is in the row's menu.
+		expect(accounts).toContain('aria-label="Add key for OpenAI" class="btn btn-sm btn-outline"');
+		expect(accounts).toContain('aria-label="More actions for OpenAI"');
+		expect(accounts).toContain(">Not connected<");
 		expect(accounts).toContain('role="alert"');
 		expect(plate(markup, "lists")).toContain('class="document-status-badge">Archived<');
 		let empty = plate(markup, "empty");

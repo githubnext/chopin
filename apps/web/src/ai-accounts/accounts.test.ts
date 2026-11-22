@@ -34,7 +34,7 @@ describe("GitHub Copilot through the sign-in", () => {
 			badge: { tone: "success", label: "Connected" },
 			lines: ["Your GitHub sign-in"],
 			getCopilot: false,
-			actions: ["use-token"],
+			more: ["use-token"],
 		});
 	});
 
@@ -45,7 +45,7 @@ describe("GitHub Copilot through the sign-in", () => {
 			badge: { tone: "neutral", label: "No Copilot access" },
 			lines: ["Your GitHub account has no Copilot subscription."],
 			getCopilot: true,
-			actions: ["use-token"],
+			more: ["use-token"],
 		});
 	});
 
@@ -58,7 +58,8 @@ describe("GitHub Copilot through the sign-in", () => {
 				"Chopin couldn't check for Copilot access through your GitHub sign-in. It checks again when you open this page.",
 			]);
 			expect(row.getCopilot).toBe(false);
-			expect(row.actions).toEqual(["use-token"]);
+			expect(row.action).toBeUndefined();
+			expect(row.more).toEqual(["use-token"]);
 			expect(JSON.stringify(row)).not.toContain("subscription");
 		}
 	});
@@ -71,7 +72,7 @@ describe("GitHub Copilot through the sign-in", () => {
 				badge: { tone: "neutral", label: "Checking…" },
 				lines: ["Your GitHub sign-in"],
 				getCopilot: false,
-				actions: ["use-token"],
+				more: ["use-token"],
 			});
 		}
 	});
@@ -92,13 +93,14 @@ describe("GitHub Copilot through a token", () => {
 		copilotAccess: "access",
 	};
 
-	test("shows the token's ending and a way back to the sign-in", () => {
+	test("shows the token's ending, with replacing it and the way back to the sign-in in its menu", () => {
 		let row = copilot(token);
 		expect(row.lines).toEqual(["Token ending f00d"]);
 		expect(copilot({ ...token, lastUsedAt: "2026-11-19T11:58:00.000Z" }).lines).toEqual([
 			"Token ending f00d",
 		]);
-		expect(row.actions).toEqual(["replace", "use-sign-in"]);
+		expect(row.action).toBeUndefined();
+		expect(row.more).toEqual(["replace", "use-sign-in"]);
 	});
 
 	test("an unfinished check keeps the token's ending and its way back, and says so", () => {
@@ -108,23 +110,23 @@ describe("GitHub Copilot through a token", () => {
 			"Token ending f00d",
 			"Chopin couldn't check this token for Copilot access. It checks again when you open this page.",
 		]);
-		expect(row.actions).toEqual(["replace", "use-sign-in"]);
+		expect(row.more).toEqual(["replace", "use-sign-in"]);
 		expect(copilot({ ...token, copilotAccess: "unknown" }, true).lines).toEqual([
 			"Token ending f00d",
 		]);
 	});
 
 	test("without a seat it offers no check, only another token or the sign-in", () => {
-		expect(copilot({ ...token, copilotAccess: "none" }).actions).toEqual([
-			"replace",
-			"use-sign-in",
-		]);
+		let row = copilot({ ...token, copilotAccess: "none" });
+		expect(row.action).toBeUndefined();
+		expect(row.more).toEqual(["replace", "use-sign-in"]);
 	});
 
-	test("an unreadable token needs reconnecting", () => {
+	test("an unreadable token needs reconnecting, and asks to be replaced on the row", () => {
 		let row = copilot({ ...token, unusable: true });
 		expect(row.badge).toEqual({ tone: "warning", label: "Needs reconnecting" });
-		expect(row.actions).toEqual(["replace", "use-sign-in"]);
+		expect(row.action).toBe("replace");
+		expect(row.more).toEqual(["use-sign-in"]);
 	});
 });
 
@@ -165,16 +167,17 @@ describe("every state of the GitHub Copilot row", () => {
 
 	for (let { name, signIn, saidNone, usable, row } of states) {
 		test(name, () => {
+			let actions = [...(row.action ? [row.action] : []), ...row.more];
 			if (signIn) {
-				expect(row.actions).toContain("use-token");
+				expect(actions).toContain("use-token");
 			} else {
-				expect(row.actions).toContain("replace");
-				expect(row.actions).toContain("use-sign-in");
+				expect(actions).toContain("replace");
+				expect(actions).toContain("use-sign-in");
 			}
-			expect(row.actions.includes("use-token") && row.actions.includes("use-sign-in")).toBe(
-				false,
-			);
-			expect(row.actions.some(action => SWITCHES.has(action))).toBe(true);
+			expect(actions.includes("use-token") && actions.includes("use-sign-in")).toBe(false);
+			expect(actions.some(action => SWITCHES.has(action))).toBe(true);
+			// Only a token that needs reconnecting asks for an action on the row itself.
+			expect(row.action).toBe(row.badge?.label === "Needs reconnecting" ? "replace" : undefined);
 			let claimsNone = row.badge?.label === "No Copilot access" || row.getCopilot
 				|| row.lines.some(line => line.includes("subscription"));
 			if (claimsNone) expect(saidNone).toBe(true);
@@ -190,7 +193,8 @@ describe("API keys", () => {
 			name: "OpenAI",
 			lines: ["Use OpenAI models with your own key."],
 			getCopilot: false,
-			actions: ["add-key"],
+			action: "add-key",
+			more: [],
 		});
 		expect(accountRows([]).keys.map(row => row.name)).toEqual(["OpenAI", "Anthropic"]);
 	});
@@ -202,7 +206,7 @@ describe("API keys", () => {
 			badge: { tone: "success", label: "Connected" },
 			lines: ["Key ending 7Qxa"],
 			getCopilot: false,
-			actions: ["replace", "remove"],
+			more: ["replace", "remove"],
 		});
 		expect(key({ ...OPENAI, lastUsedAt: undefined }).lines).toEqual(["Key ending 7Qxa"]);
 	});
@@ -214,7 +218,8 @@ describe("API keys", () => {
 			"Key ending 7Qxa",
 			"Chopin can't read this key anymore. Replace it to keep using it.",
 		]);
-		expect(row.actions).toEqual(["replace", "remove"]);
+		expect(row.action).toBe("replace");
+		expect(row.more).toEqual(["remove"]);
 	});
 
 	test("a key its provider refused says it needs reconnecting, with the provider's name", () => {
@@ -224,7 +229,8 @@ describe("API keys", () => {
 			"Key ending 7Qxa",
 			"OpenAI no longer accepts this key. Replace it to keep using it.",
 		]);
-		expect(row.actions).toEqual(["replace", "remove"]);
+		expect(row.action).toBe("replace");
+		expect(row.more).toEqual(["remove"]);
 	});
 });
 
@@ -279,10 +285,12 @@ describe("ChatGPT and Claude sign-ins", () => {
 			name: "ChatGPT",
 			lines: ["Use OpenAI models with your ChatGPT plan."],
 			getCopilot: false,
-			actions: ["sign-in"],
+			action: "sign-in",
+			more: [],
 		});
 		expect(claude.name).toBe("Claude");
-		expect(claude.actions).toEqual(["sign-in"]);
+		expect(claude.action).toBe("sign-in");
+		expect(claude.more).toEqual([]);
 		expect(accountRows([]).keys.map(row => row.provider)).toEqual(["openai", "anthropic"]);
 	});
 
@@ -293,7 +301,7 @@ describe("ChatGPT and Claude sign-ins", () => {
 			badge: { tone: "success", label: "Connected" },
 			lines: ["Your ChatGPT sign-in"],
 			getCopilot: false,
-			actions: ["disconnect"],
+			more: ["disconnect"],
 		});
 	});
 
@@ -302,7 +310,8 @@ describe("ChatGPT and Claude sign-ins", () => {
 		let ended = signIns([{ ...CHATGPT, provider: "claude", rejectedAt }]).claude;
 		expect(ended.badge).toEqual({ tone: "warning", label: "Needs reconnecting" });
 		expect(ended.lines).toEqual(["Claude ended this sign-in. Sign in again to keep using it."]);
-		expect(ended.actions).toEqual(["sign-in", "disconnect"]);
+		expect(ended.action).toBe("sign-in");
+		expect(ended.more).toEqual(["disconnect"]);
 		let unreadable = signIns([{ ...CHATGPT, unusable: true }]).chatgpt;
 		expect(unreadable.badge?.label).toBe("Needs reconnecting");
 		expect(unreadable.lines).toEqual([
@@ -317,6 +326,7 @@ describe("ChatGPT and Claude sign-ins", () => {
 			"Your ChatGPT sign-in",
 			"Chopin couldn't finish checking this sign-in.",
 		]);
-		expect(row.actions).toEqual(["disconnect"]);
+		expect(row.action).toBeUndefined();
+		expect(row.more).toEqual(["disconnect"]);
 	});
 });

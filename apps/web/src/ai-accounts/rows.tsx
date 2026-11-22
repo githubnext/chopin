@@ -2,19 +2,28 @@ import {
 	AnthropicIcon,
 	CheckIcon,
 	CircleCloseIcon,
+	EllipsisIcon,
+	ExternalLinkIcon,
 	GitHubIcon,
 	InfoIcon,
 	LoaderIcon,
 	OpenAIIcon,
 	WarningIcon,
 } from "@chopin/icons";
+import { useTransitionPresence } from "@chopin/editor/transition-presence";
 import { Badge } from "@chopin/visuals";
-import { useId } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
+import { documentMenuKeyAction } from "../document-actions-menu";
+import { useMenuDismissal } from "../menu-dismissal";
+import { MenuItem } from "../menu-item";
+import { motionImmediately } from "../motion-input";
 import { TerminalAlert } from "../terminal-alert";
 import { GET_COPILOT_URL } from "./accounts";
 
 import type { AiProvider } from "@chopin/protocol/ai-credentials";
+import type { KeyboardEvent } from "react";
 import type { AccountAction, AccountBadge, AccountRow } from "./accounts";
 
 const PROVIDER_MARKS = {
@@ -43,6 +52,8 @@ const ACTION_LABELS: Record<AccountAction, string> = {
 	disconnect: "Disconnect",
 };
 
+const DESTRUCTIVE = new Set<AccountAction>(["remove", "disconnect"]);
+
 function actionLabel(row: AccountRow, action: AccountAction): string {
 	if (action === "sign-in" && row.badge?.label === "Needs reconnecting") return "Sign in again";
 	return ACTION_LABELS[action];
@@ -52,10 +63,7 @@ function actionName(row: AccountRow, action: AccountAction): string | undefined 
 	let secret = row.provider === "github-copilot" ? "token" : "key";
 	if (action === "add-key") return `Add key for ${row.name}`;
 	if (action === "sign-in") return `${actionLabel(row, action)} to ${row.name}`;
-	if (action === "disconnect") return `Disconnect ${row.name}`;
-	if (action === "replace" || action === "remove") {
-		return `${ACTION_LABELS[action]} ${row.name} ${secret}`;
-	}
+	if (action === "replace") return `Replace ${row.name} ${secret}`;
 	return undefined;
 }
 
@@ -63,6 +71,136 @@ export type PendingAction = { provider: AccountRow["provider"]; action: AccountA
 
 export type RowProblem = { provider: AccountRow["provider"]; message: string };
 
+/**
+ * A row's menu of what it offers besides the action its state asks for, in the Machines page's
+ * recipe: it sits on the page below its button, Up or Down on the button opens it, the arrows,
+ * Home and End move within it, and Escape closes it and returns to the button. A choice that opens
+ * a dialog first returns focus to the button, so the dialog gives it back there.
+ */
+function AccountMenu(
+	{ disabled, onAction, row }: {
+		disabled: boolean;
+		onAction: (row: AccountRow, action: AccountAction) => void;
+		row: AccountRow;
+	},
+) {
+	let id = useId();
+	let trigger = useRef<HTMLButtonElement>(null);
+	let menu = useRef<HTMLDivElement>(null);
+	let [open, setOpen] = useState(false);
+	let initialItem = useRef<"first" | "last">("first");
+	let presence = useTransitionPresence(open ? true : undefined, 150, motionImmediately());
+	let mounted = presence.phase !== "closed";
+	let name = `More actions for ${row.name}`;
+	let close = (restoreFocus: boolean) => {
+		setOpen(false);
+		if (restoreFocus) trigger.current?.focus();
+	};
+	let openAt = (item: "first" | "last") => {
+		initialItem.current = item;
+		setOpen(true);
+	};
+	useMenuDismissal(open, [trigger, menu], close);
+	useLayoutEffect(() => {
+		if (!mounted) return;
+		let place = () => {
+			let anchor = trigger.current?.getBoundingClientRect();
+			if (!anchor || !menu.current) return;
+			menu.current.style.top = `${anchor.bottom + 4}px`;
+			menu.current.style.right = `${document.documentElement.clientWidth - anchor.right}px`;
+		};
+		place();
+		window.addEventListener("resize", place);
+		document.addEventListener("scroll", place, true);
+		return () => {
+			window.removeEventListener("resize", place);
+			document.removeEventListener("scroll", place, true);
+		};
+	}, [mounted]);
+	useEffect(() => {
+		if (!open) return;
+		let items = menu.current?.querySelectorAll<HTMLElement>("[role=menuitem]");
+		items?.[initialItem.current === "last" ? items.length - 1 : 0]?.focus();
+	}, [open]);
+	let menuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+		if (event.key === "Tab") {
+			close(false);
+			return;
+		}
+		let action = documentMenuKeyAction(event.key);
+		if (!action) return;
+		event.preventDefault();
+		if (action === "close") {
+			close(true);
+			return;
+		}
+		let items = [...event.currentTarget.querySelectorAll<HTMLElement>("[role=menuitem]")];
+		let current = Math.max(0, items.indexOf(document.activeElement as HTMLElement));
+		let next = action === "first"
+			? 0
+			: action === "last"
+			? items.length - 1
+			: action === "next"
+			? (current + 1) % items.length
+			: (current - 1 + items.length) % items.length;
+		items[next]?.focus();
+	};
+	return (
+		<>
+			<button
+				aria-controls={open ? id : undefined}
+				aria-expanded={open}
+				aria-haspopup="menu"
+				aria-label={name}
+				className="btn btn-icon btn-ghost ai-account-more"
+				data-tooltip="More actions"
+				disabled={disabled}
+				onClick={() => open ? close(false) : openAt("first")}
+				onKeyDown={event => {
+					if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+					event.preventDefault();
+					openAt(event.key === "ArrowUp" ? "last" : "first");
+				}}
+				ref={trigger}
+				type="button"
+			>
+				<EllipsisIcon aria-hidden="true" />
+			</button>
+			{mounted && createPortal(
+				<div
+					aria-hidden={presence.phase === "closing" ? "true" : undefined}
+					aria-label={name}
+					className={`ai-account-menu motion-dropdown ${presence.className}`}
+					id={id}
+					inert={presence.phase === "closing"}
+					onKeyDown={menuKeyDown}
+					ref={menu}
+					role="menu"
+				>
+					{row.more.map(action => (
+						<MenuItem
+							key={action}
+							onClick={() => {
+								close(true);
+								onAction(row, action);
+							}}
+							tone={DESTRUCTIVE.has(action) ? "destructive" : "normal"}
+						>
+							{actionLabel(row, action)}
+						</MenuItem>
+					))}
+				</div>,
+				document.body,
+			)}
+		</>
+	);
+}
+
+/**
+ * One account: its mark, name and lines, then four fixed columns, so no row's controls move with
+ * what its neighbours hold: its state, the action that state asks for (or Get Copilot), and its
+ * menu, whose glyph ends on the card's content edge.
+ */
 export function AccountRowView(
 	{ busy, onAction, problem, row }: {
 		busy?: PendingAction;
@@ -80,16 +218,11 @@ export function AccountRowView(
 			<div className="ai-account-text">
 				<h3 className="ai-account-name">{row.name}</h3>
 				{row.lines.map(line => <p className="ai-account-line" key={line}>{line}</p>)}
-				{row.getCopilot && (
-					<a className="ai-account-link" href={GET_COPILOT_URL} rel="noreferrer" target="_blank">
-						Get Copilot
-					</a>
-				)}
 				{problem && <TerminalAlert className="ai-account-problem">{problem}</TerminalAlert>}
 			</div>
-			{(row.badge || row.actions.length > 0) && (
-				<div className="ai-account-end">
-					{row.badge && (
+			<div className="ai-account-status">
+				{row.badge
+					? (
 						<Badge
 							data-checking={row.badge.label === "Checking…" || undefined}
 							icon={BADGE_ICONS[row.badge.label]}
@@ -97,25 +230,36 @@ export function AccountRowView(
 							size="sm"
 							tone={row.badge.tone}
 						/>
-					)}
-					{row.actions.length > 0 && (
-						<div className="ai-account-actions">
-							{row.actions.map(action => (
-								<button
-									aria-label={actionName(row, action)}
-									className={`btn btn-md ${action === "add-key" ? "btn-primary" : "btn-secondary"}`}
-									disabled={!!busy}
-									key={action}
-									onClick={() => onAction(row, action)}
-									type="button"
-								>
-									{actionLabel(row, action)}
-								</button>
-							))}
-						</div>
-					)}
-				</div>
-			)}
+					)
+					: <span className="ai-account-unconnected">Not connected</span>}
+			</div>
+			<div className="ai-account-action">
+				{row.getCopilot && (
+					<a
+						className="btn btn-sm btn-outline"
+						href={GET_COPILOT_URL}
+						rel="noreferrer"
+						target="_blank"
+					>
+						Get Copilot
+						<ExternalLinkIcon aria-hidden="true" />
+					</a>
+				)}
+				{row.action && (
+					<button
+						aria-label={actionName(row, row.action)}
+						className="btn btn-sm btn-outline"
+						disabled={!!busy}
+						onClick={() => onAction(row, row.action!)}
+						type="button"
+					>
+						{actionLabel(row, row.action)}
+					</button>
+				)}
+			</div>
+			<div className="ai-account-menu-slot">
+				{row.more.length > 0 && <AccountMenu disabled={!!busy} onAction={onAction} row={row} />}
+			</div>
 		</li>
 	);
 }
