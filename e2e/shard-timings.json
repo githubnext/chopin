@@ -387,6 +387,14 @@
 		"ms": 33077,
 		"tests": 21
 	},
+	"theme-document.e2e.ts": {
+		"ms": 13295,
+		"tests": 4
+	},
+	"theme.e2e.ts": {
+		"ms": 12551,
+		"tests": 5
+	},
 	"toolbar.e2e.ts": {
 		"ms": 43143,
 		"tests": 22
