@@ -51,6 +51,16 @@ let freeText: Record<string, QuestionParams> = {
 			],
 		}],
 	},
+	custom: {
+		questions: [{
+			header: "Custom",
+			question: "Or free text?",
+			options: [
+				{ label: "Keep", description: "" },
+				{ label: "Drop", description: "" },
+			],
+		}],
+	},
 };
 /** A forked subagent receives its launcher's conversation, project context and skills. */
 let FORKED_LAUNCH = { agent: "worker", task: "Summarize the document.", context: "fork" };
@@ -553,15 +563,26 @@ test("without operator extension paths, Planner sessions have none of that packa
 	expect(plain.requests[0]!.system).not.toContain("OPERATOR-PACKAGE-SKILL-MARKER");
 });
 
-test("free-text Decisions answers to multi-select and preview questions reach the model", async () => {
+test("every answer a member can give in Decisions passes Atomic's own checks and reaches the model", async () => {
 	let room = await hostInputRoom();
 	try {
-		for (let prompt of ["multiple", "preview"]) {
+		for (
+			let [prompt, value, shown, hidden] of [
+				["preview", [1], ['"Columns"', "col | col"], "Rows"],
+				["preview", [0], ['"Rows"', "row\nrow"], "Columns"],
+				["preview", "  typed preview\n", ['"  typed preview\n"'], "Rows"],
+				["multiple", [1, 0], ['"Server, Web"'], undefined],
+				["multiple", "  typed multiple\n", ['"  typed multiple\n"'], "Server"],
+				["custom", [1], ['"Drop"'], "Keep"],
+				["custom", " own ", ['" own "'], "Keep"],
+			] as const
+		) {
 			let turn = run(true, prompt, { host: room.input });
 			let [card] = await room.cards(1);
-			await room.answer(card!.id, `  typed ${prompt}\n`);
+			await room.answer(card!.id, typeof value === "string" ? value : [...value]);
 			let output = (await turn).requests.at(-1)!.toolResults.join("\n");
-			expect(output).toContain(`  typed ${prompt}\n`);
+			for (let text of shown) expect(output).toContain(text);
+			if (hidden) expect(output).not.toContain(hidden);
 			expect(output).not.toContain("InvalidHostInput");
 		}
 	} finally {
