@@ -666,7 +666,7 @@ body {
  */
 .menu-surface {
 	border-radius: var(--radius-md);
-	background: var(--color-page);
+	background: var(--color-raised);
 	padding: var(--menu-padding);
 	outline: var(--edge-width) solid var(--color-edge);
 	outline-offset: calc(-1 * var(--edge-width));
@@ -718,6 +718,17 @@ body {
 	/* macOS subpixel smoothing thickens Inter past the weight asked for. */
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+}
+
+/*
+ * A new theme recolours the page at once (`theme-choice.ts` holds this for the frame that draws it):
+ * a transition on every coloured control would cross-fade the whole page.
+ */
+:root[data-theme-switching],
+:root[data-theme-switching] *,
+:root[data-theme-switching] *::before,
+:root[data-theme-switching] *::after {
+	transition: none !important;
 }
 
 /* One owner per edge: top chrome owns the top inset. */
@@ -2427,7 +2438,7 @@ textarea.question-written-field {
 
 /* The image viewer's controls sit on a dark ground, where petrol is under 3:1: theirs is white. */
 :is(.image-viewer-control, .image-viewer-slider) {
-	--focus-ring-color: var(--color-page);
+	--focus-ring-color: var(--color-white);
 }
 
 :where(a, button, input, select, summary, textarea, [role="button"], [tabindex]):is(:focus-visible, [data-force-state="focus"]) {
