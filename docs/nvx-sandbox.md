@@ -183,7 +183,7 @@ round trip, so loading Atomic's 34,000 files from a share took 36–46 seconds a
   archive path and SHA-256 (`guest-packages.ts`); the release's layer has no git;
 - the agent's install commands: the built-in agents' npm packages at the versions
   this release pins (`AGENT_PACKAGES`: `@github/copilot` 1.0.114, `@bastani/atomic`
-  0.10.5, `@bastani/atomic-acp` 0.0.18), or the commands the owner gives for another
+  0.10.6, `@bastani/atomic-acp` 0.0.18), or the commands the owner gives for another
   agent with `--install` and for a Planner command with `--planner-install`;
 - what is in the folder the owner names with `--install-from` for those commands, if
   any: each file's path in it, content and whether it is executable;
