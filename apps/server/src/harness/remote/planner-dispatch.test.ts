@@ -36,11 +36,7 @@ import {
 } from "./attachments";
 import { MachinePlanners } from "./machine-planners";
 import { createDocument } from "../../mcp/hosted";
-import {
-	createNewDocument,
-	MAX_DOCUMENTS_PER_TURN,
-	NewDocumentLimits,
-} from "../../agent/new-documents";
+import { createNewDocument } from "../../agent/new-documents";
 
 import type { RepositoryPage } from "../../github/client";
 import type { RemotePlanner } from "./registry";
@@ -3307,15 +3303,13 @@ describe("a burst of documents a Planner turn makes", () => {
 			modelChoice: async () => undefined,
 			invoke: async () => undefined,
 			appOrigin: "https://chopin.test",
-			limits: new NewDocumentLimits(() => Date.now()),
 		};
-		let turn = { created: 0 };
-		// The turn's fan-out: as many documents as one turn may make, all at once.
+		let burst = 12;
+		// The turn's fan-out: many documents all at once, with no per-turn cap.
 		let made = await Promise.all(
-			Array.from({ length: MAX_DOCUMENTS_PER_TURN }, (_, index) =>
+			Array.from({ length: burst }, (_, index) =>
 				createNewDocument(deps, {
 					sourceId: source.id,
-					turn,
 					creator: {
 						userId: "U_member",
 						handle: "member",
@@ -3341,7 +3335,7 @@ describe("a burst of documents a Planner turn makes", () => {
 			if (!result.ok) throw new Error(JSON.stringify(result));
 			return result.document.id;
 		});
-		expect(new Set(ids).size).toBe(MAX_DOCUMENTS_PER_TURN);
+		expect(new Set(ids).size).toBe(burst);
 		// Chopin asks the creator's machine for all of them in one answer.
 		let asked = await desk.poll([]);
 		expect(asked.kind).toBe("planners");

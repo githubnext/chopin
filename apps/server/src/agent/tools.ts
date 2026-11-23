@@ -347,7 +347,7 @@ export const documentTools = {
 			+ "large to review, unless the person asked for a single document. Give each a "
 			+ "complete first draft and brief; `instruction`, when given, starts its own Planner on "
 			+ "it as the person's message, so the documents run in parallel. Only a turn a person "
-			+ "asked for can create documents, at most 10 a turn. The result gives each document's "
+			+ "asked for can create documents. The result gives each document's "
 			+ "id and url; mention its link when you tell the person.",
 		inputSchema: jsonSchema(NEW_DOCUMENT_SCHEMA),
 		execute: (raw, { context: { room: context }, abortSignal }) =>

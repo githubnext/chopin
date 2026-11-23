@@ -502,8 +502,8 @@ pool before anything else runs, and the others start cold.
 
 ### Bursts of new documents
 
-People open several documents at once, and a Planner's `create_document` makes up to
-10 in one turn, all in one repository, all wanting a Planner at once:
+People open several documents at once, and a Planner's `create_document` can open
+many in one turn, all in one repository, all wanting a Planner at once:
 
 - **A burst refills more than one spare.** A new document that finds no spare ready
   within 10 seconds of another of its repository's asking starts a burst

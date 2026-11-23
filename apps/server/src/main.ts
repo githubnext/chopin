@@ -120,7 +120,7 @@ import { researchAnswerDefinition, researchEvidenceDefinition } from "./jobs/res
 import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
 import { invokeRouted, SystemTurns } from "./mcp/invoke";
-import { createNewDocument, NewDocumentLimits } from "./agent/new-documents";
+import { createNewDocument } from "./agent/new-documents";
 import type { NewDocumentDeps } from "./agent/new-documents";
 import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
@@ -328,8 +328,6 @@ let ownerBindings: ActiveOwnerBindings | undefined;
 let plannerAttachments: PlannerAttachments | undefined;
 /** Each document's recent automatic follow-ups through `invoke_planner`, for their hourly limit. */
 let systemTurns = new SystemTurns();
-/** How many documents each turn, and each person in an hour, had the Planner create. */
-let newDocumentLimits = new NewDocumentLimits();
 /** Browser sockets by login, so a login that ends closes them before another broadcast. */
 let sessionSockets = new SessionSockets(sessionId => hostedAuth.sessions.isLive(sessionId));
 const openSockets = new OpenSockets();
@@ -2747,7 +2745,6 @@ function plannerDocuments(): NewDocumentDeps {
 			);
 		},
 		appOrigin: hostedAuth.config.origin,
-		limits: newDocumentLimits,
 	};
 }
 

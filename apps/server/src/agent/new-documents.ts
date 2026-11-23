@@ -5,10 +5,9 @@
  * The person whose message drives the turn is the creator. Their own browser login is asked
  * again for write access to the repository, as `chat:send` is; the Planner's credential never
  * authorizes a new document by itself. A retried call with the same key returns the document the
- * first call made, from the base that call recorded and outside the limits, and creates and starts
- * nothing; it only posts the Chat line if the first call could not save it. A document is stored,
- * with the creating document's model choice, before its Chat line, the sidebar or its own Planner
- * hear of it.
+ * first call made, from the base that call recorded, and creates and starts nothing; it only posts
+ * the Chat line if the first call could not save it. A document is stored, with the creating
+ * document's model choice, before its Chat line, the sidebar or its own Planner hear of it.
  */
 import { deterministicChannelId } from "../channels/id";
 import { BRIEF, prepare } from "../mcp/create";
@@ -23,10 +22,7 @@ import type { Repository as GitHubRepository } from "../github/client";
 import type { ChannelRecord, CreateChannel } from "../storage/model";
 import type { Issue } from "@chopin/dialect";
 
-export const MAX_DOCUMENTS_PER_TURN = 10;
-export const MAX_DOCUMENTS_PER_HOUR = 30;
 export const MAX_INSTRUCTION_BYTES = 64 * 1_024;
-const HOUR_MS = 60 * 60_000;
 const KEY = /^[A-Za-z0-9_-]{8,64}$/;
 
 export type NewDocumentArguments = {
@@ -97,64 +93,9 @@ export function newDocumentArguments(raw: unknown): NewDocumentArguments {
 	};
 }
 
-/** The documents one turn has created; it lives exactly as long as the turn that holds it. */
-export type TurnDocuments = { created: number };
-
-/** One reservation against a turn's and a person's hourly document limits. */
-export type NewDocumentReservation = {
-	id: number;
-	turn: TurnDocuments;
-	userId: string;
-	at: number;
-};
-
-/** How many documents one turn, and one person in an hour, may create. */
-export class NewDocumentLimits {
-	#hours = new Map<string, NewDocumentReservation[]>();
-	#refunded = new WeakSet<NewDocumentReservation>();
-	#now: () => number;
-	#nextId = 1;
-
-	constructor(now: () => number = Date.now) {
-		this.#now = now;
-	}
-
-	/** Counts one for the turn and the person, or says which limit is spent. */
-	take(turn: TurnDocuments, userId: string): NewDocumentReservation | "turn" | "hour" {
-		let now = this.#now();
-		let recent = (this.#hours.get(userId) ?? []).filter(entry => now - entry.at < HOUR_MS);
-		this.#hours.set(userId, recent);
-		if (turn.created >= MAX_DOCUMENTS_PER_TURN) return "turn";
-		if (recent.length >= MAX_DOCUMENTS_PER_HOUR) return "hour";
-		let reservation: NewDocumentReservation = {
-			id: this.#nextId++,
-			turn,
-			userId,
-			at: now,
-		};
-		recent.push(reservation);
-		turn.created++;
-		return reservation;
-	}
-
-	/** Gives back the reservation a call took, for a call that created nothing. */
-	refund(reservation: NewDocumentReservation): void {
-		if (this.#refunded.has(reservation)) return;
-		this.#refunded.add(reservation);
-		reservation.turn.created = Math.max(0, reservation.turn.created - 1);
-		let recent = this.#hours.get(reservation.userId);
-		if (!recent) return;
-		let next = recent.filter(entry => entry.id !== reservation.id);
-		if (next.length === 0) this.#hours.delete(reservation.userId);
-		else this.#hours.set(reservation.userId, next);
-	}
-}
-
 export type NewDocumentRequest = {
 	/** The document whose turn asked. */
 	sourceId: string;
-	/** The asking turn's own count, held by that turn and gone with it. */
-	turn: TurnDocuments;
 	creator: { userId: string; handle: string; claimantSessionId?: string };
 	arguments: NewDocumentArguments;
 	/**
@@ -205,7 +146,6 @@ export type NewDocumentDeps = {
 	) => Promise<string | undefined>;
 	/** This deployment's origin, for the URL the model is given. */
 	appOrigin: string;
-	limits: NewDocumentLimits;
 };
 
 export type NewDocumentResult =
@@ -228,8 +168,6 @@ const REFUSALS: Record<string, string> = {
 		+ "was created.",
 	"document-unavailable": "This document is archived, deleted or closing, so it can't create "
 		+ "others.",
-	"turn-limit": `One turn may create at most ${MAX_DOCUMENTS_PER_TURN} documents.`,
-	"hour-limit": `A person's turns may create at most ${MAX_DOCUMENTS_PER_HOUR} documents an hour.`,
 	"idempotency-conflict": "Another document was already created with this idempotencyKey and "
 		+ "different content. Use a new key for a different document.",
 	"title-taken": "The repository already has a document with this title. Choose another title.",
@@ -258,7 +196,7 @@ export async function createNewDocument(
 	deps: NewDocumentDeps,
 	request: NewDocumentRequest,
 ): Promise<NewDocumentResult> {
-	let { creator, sourceId, turn } = request;
+	let { creator, sourceId } = request;
 	let args = request.arguments;
 	let source = await deps.channel(sourceId);
 	if (!source || source.archivedAt || deps.deleting(sourceId) || source.parentChannelId) {
@@ -298,34 +236,21 @@ export async function createNewDocument(
 		}]);
 	}
 	if ("issues" in prepared) return refused("invalid-document", prepared.issues);
-	let reservation: NewDocumentReservation | undefined;
-	if (!earlier) {
-		let taken = deps.limits.take(turn, creator.userId);
-		if (typeof taken === "string") return refused(`${taken}-limit`);
-		reservation = taken;
-	}
-	let outcome: CreatedDocument;
-	try {
-		outcome = await deps.create(
-			{
-				user: login.user,
-				repository,
-				stillWrites: async () => {
-					let current = await deps.login(creator.userId, creator.claimantSessionId);
-					return !!current
-						&& writes(await deps.repository(current, owner, name), source.repositoryId);
-				},
-				modelChoice: () => deps.modelChoice(sourceId, creator.userId),
-				...(request.signal ? { signal: request.signal } : {}),
+	let outcome = await deps.create(
+		{
+			user: login.user,
+			repository,
+			stillWrites: async () => {
+				let current = await deps.login(creator.userId, creator.claimantSessionId);
+				return !!current
+					&& writes(await deps.repository(current, owner, name), source.repositoryId);
 			},
-			prepared.input,
-			args.instruction !== undefined,
-		);
-	} catch (err) {
-		if (reservation) deps.limits.refund(reservation);
-		throw err;
-	}
-	if (reservation && outcome.kind !== "created") deps.limits.refund(reservation);
+			modelChoice: () => deps.modelChoice(sourceId, creator.userId),
+			...(request.signal ? { signal: request.signal } : {}),
+		},
+		prepared.input,
+		args.instruction !== undefined,
+	);
 	if (outcome.kind === "conflict") return refused("idempotency-conflict");
 	if (outcome.kind === "title-taken") return refused("title-taken");
 	if (outcome.kind === "forbidden") return refused("repository-forbidden");
