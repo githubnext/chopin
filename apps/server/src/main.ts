@@ -110,6 +110,7 @@ import { finishTurns } from "./handover/turns";
 import { Readiness, registerHealthRoutes } from "./http/health";
 import { registerMachinesPath } from "./http/machines-path";
 import { Router } from "./http/router";
+import { applyRequestTimeout, serverIdleTimeoutSeconds } from "./http/timeout";
 import { JobExecutionError, JobRegistry } from "./jobs/registry";
 import * as JobBrowser from "./jobs/browser";
 import { DocumentDescriptionProjector } from "./jobs/document-description";
@@ -2373,8 +2374,10 @@ function listen(): Server<SocketData> {
 	return Bun.serve<SocketData | SidebarSocketData | AgentSocketData>({
 		hostname: config.host,
 		port: config.port,
+		idleTimeout: serverIdleTimeoutSeconds(config.handover.holdMs),
 
 		fetch(req, self) {
+			applyRequestTimeout(req, self);
 			return requests.handle(req, abandoned => route(req, self, abandoned));
 		},
 
