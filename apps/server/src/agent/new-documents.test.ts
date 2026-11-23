@@ -3,25 +3,14 @@ import { describe, expect, test } from "bun:test";
 import { MemoryStorage } from "../storage/memory/adapter";
 import { createDocument } from "../mcp/hosted";
 import * as Plan from "../plan/service";
-import {
-	createNewDocument,
-	MAX_DOCUMENTS_PER_HOUR,
-	MAX_DOCUMENTS_PER_TURN,
-	newDocumentArguments,
-	NewDocumentLimits,
-} from "./new-documents";
+import { createNewDocument, newDocumentArguments } from "./new-documents";
 import { testLease } from "../storage/contract-support";
 
 import type { AuthenticatedSession } from "../auth/session";
 import type { Repository } from "../github/client";
 import type { PlannerInvocation } from "../mcp/hosted";
 import type { InvokePlannerError } from "../mcp";
-import type {
-	NewDocumentArguments,
-	NewDocumentDeps,
-	NewDocumentReservation,
-	TurnDocuments,
-} from "./new-documents";
+import type { NewDocumentArguments, NewDocumentDeps } from "./new-documents";
 import type { CreationOrigin } from "../mcp/create";
 
 const NOW = new Date("2026-11-16T12:00:00.000Z");
@@ -156,13 +145,10 @@ async function fixture(options: {
 		},
 		refusal: async code => code === "planner-not-attached" ? "No machine runs it." : undefined,
 		appOrigin: "https://chopin.test",
-		limits: new NewDocumentLimits(() => clock.now),
 	};
-	let turns = new Map<string, TurnDocuments>();
-	let request = (value: NewDocumentArguments = args(), turnId = "turn-1") =>
+	let request = (value: NewDocumentArguments = args()) =>
 		createNewDocument(deps, {
 			sourceId: source.id,
-			turn: turns.get(turnId) ?? turns.set(turnId, { created: 0 }).get(turnId)!,
 			creator: { userId: "U_mona", handle: "mona", claimantSessionId: "session-U_mona" },
 			arguments: value,
 			announce: async document => {
@@ -203,58 +189,6 @@ describe("create_document arguments", () => {
 		);
 		expect(() => newDocumentArguments(args({ instruction: " " }))).toThrow("instruction");
 		expect(() => newDocumentArguments(args({ document: "" }))).toThrow("document");
-	});
-});
-
-describe("new document limits", () => {
-	test("bound one turn and one person's hour, and give back refunds", () => {
-		let now = 0;
-		let limits = new NewDocumentLimits(() => now);
-		let turnA = { created: 0 };
-		let taken: NewDocumentReservation[] = [];
-		for (let index = 0; index < MAX_DOCUMENTS_PER_TURN; index++) {
-			let reservation = limits.take(turnA, "U_mona");
-			if (typeof reservation === "string") throw new Error(`unexpected ${reservation} limit`);
-			taken.push(reservation);
-		}
-		expect(limits.take(turnA, "U_mona")).toBe("turn");
-		limits.refund(taken[0]!);
-		expect(typeof limits.take(turnA, "U_mona")).toBe("object");
-		let turn = 0;
-		while (typeof limits.take({ created: 0 }, "U_mona") === "object" && ++turn < 100) {}
-		let next = { created: 0 };
-		expect(limits.take(next, "U_mona")).toBe("hour");
-		expect(typeof limits.take(next, "U_other")).toBe("object");
-		now += 60 * 60_000;
-		expect(typeof limits.take(next, "U_mona")).toBe("object");
-		expect(MAX_DOCUMENTS_PER_HOUR).toBeGreaterThan(MAX_DOCUMENTS_PER_TURN);
-	});
-
-	test("hold a turn's count for as long as the turn runs, however long that is", () => {
-		let now = 0;
-		let limits = new NewDocumentLimits(() => now);
-		let turn = { created: 0 };
-		for (let index = 0; index < MAX_DOCUMENTS_PER_TURN; index++) {
-			expect(typeof limits.take(turn, "U_mona")).toBe("object");
-		}
-		now += 3 * 60 * 60_000;
-		expect(limits.take(turn, "U_mona")).toBe("turn");
-		expect(typeof limits.take({ created: 0 }, "U_mona")).toBe("object");
-	});
-
-	test("refund removes only the failed reservation, not a newer one", () => {
-		let now = 0;
-		let limits = new NewDocumentLimits(() => now);
-		let first = limits.take({ created: 0 }, "U_mona");
-		if (typeof first === "string") throw new Error(`unexpected ${first} limit`);
-		now = 55 * 60_000;
-		expect(typeof limits.take({ created: 0 }, "U_mona")).toBe("object");
-		limits.refund(first);
-		now = 60 * 60_000 + 1_000;
-		for (let index = 1; index < MAX_DOCUMENTS_PER_HOUR; index++) {
-			expect(typeof limits.take({ created: 0 }, "U_mona")).toBe("object");
-		}
-		expect(limits.take({ created: 0 }, "U_mona")).toBe("hour");
 	});
 });
 
@@ -317,7 +251,7 @@ describe("createNewDocument", () => {
 	test("a retry with the same key creates and starts nothing again", async () => {
 		let context = await fixture();
 		let first = await context.request(args({ instruction: "Start." }));
-		let second = await context.request(args({ instruction: "Start." }), "turn-2");
+		let second = await context.request(args({ instruction: "Start." }));
 		if (!first.ok || !second.ok) throw new Error("expected both calls to succeed");
 		expect(second.document).toEqual(first.document);
 		expect(second.replayed).toBe(true);
@@ -334,99 +268,6 @@ describe("createNewDocument", () => {
 		if (!first.ok || !second.ok) throw new Error("expected both calls to succeed");
 		expect(second).toMatchObject({ replayed: true, document: first.document });
 		expect(context.created).toHaveLength(1);
-	});
-
-	test("a retry is answered with its document after the turn's limit is spent", async () => {
-		let context = await fixture();
-		let pieces = Array.from({ length: MAX_DOCUMENTS_PER_TURN }, (_, index) =>
-			args({
-				idempotencyKey: `piece-number-${index}`,
-				title: `Piece ${index}`,
-				document: `# Piece ${index}\n`,
-			}));
-		let first = await context.request(pieces[0]);
-		for (let piece of pieces.slice(1)) expect((await context.request(piece)).ok).toBe(true);
-		let retried = await context.request(pieces[0]);
-		if (!first.ok) throw new Error(first.message);
-		expect(retried).toMatchObject({ ok: true, replayed: true, document: first.document });
-		expect(context.created).toHaveLength(MAX_DOCUMENTS_PER_TURN);
-	});
-
-	test("a retry is answered with its document after the person's hour is spent", async () => {
-		let context = await fixture();
-		let first = await context.request(args(), "turn-0");
-		for (let index = 1; index < MAX_DOCUMENTS_PER_HOUR; index++) {
-			let result = await context.request(
-				args({
-					idempotencyKey: `piece-number-${index}`,
-					title: `Piece ${index}`,
-					document: `# Piece ${index}\n`,
-				}),
-				`turn-${index}`,
-			);
-			expect(result.ok).toBe(true);
-		}
-		let over = await context.request(
-			args({ idempotencyKey: "piece-number-over", title: "Over", document: "# Over\n" }),
-			"turn-over",
-		);
-		expect(over).toMatchObject({ ok: false, reason: "hour-limit" });
-		let retried = await context.request(args(), "turn-over");
-		if (!first.ok) throw new Error(first.message);
-		expect(retried).toMatchObject({ ok: true, replayed: true, document: first.document });
-	});
-
-	test("a failed request refunds its own hourly reservation, not a newer one", async () => {
-		let context = await fixture();
-		let create = context.deps.create;
-		let finishFirst!: () => void;
-		let firstWaiting = new Promise<void>(resolve => {
-			finishFirst = resolve;
-		});
-		let firstEntered!: () => void;
-		let entered = new Promise<void>(resolve => {
-			firstEntered = resolve;
-		});
-		let calls = 0;
-		context.deps.create = async (creator, input, instructed) => {
-			if (++calls === 1) {
-				firstEntered();
-				await firstWaiting;
-				return { kind: "unavailable" };
-			}
-			return create(creator, input, instructed);
-		};
-		let first = context.request(
-			args({ idempotencyKey: "piece-slow-fail", title: "Slow", document: "# Slow\n" }),
-			"turn-slow",
-		);
-		await entered;
-		context.clock.now += 55 * 60_000;
-		let second = await context.request(
-			args({ idempotencyKey: "piece-at-55m", title: "At 55m", document: "# At 55m\n" }),
-			"turn-55m",
-		);
-		expect(second.ok).toBe(true);
-		finishFirst();
-		expect(await first).toMatchObject({ ok: false, reason: "unavailable" });
-		context.clock.now = NOW.getTime() + 60 * 60_000 + 1_000;
-		for (let index = 1; index < MAX_DOCUMENTS_PER_HOUR; index++) {
-			let result = await context.request(
-				args({
-					idempotencyKey: `piece-after-hour-${index}`,
-					title: `After ${index}`,
-					document: `# After ${index}\n`,
-				}),
-				`turn-after-${index}`,
-			);
-			expect(result.ok).toBe(true);
-		}
-		let over = await context.request(
-			args({ idempotencyKey: "piece-number-over", title: "Over", document: "# Over\n" }),
-			"turn-over",
-		);
-		expect(over).toMatchObject({ ok: false, reason: "hour-limit" });
-		expect(context.created).toHaveLength(MAX_DOCUMENTS_PER_HOUR);
 	});
 
 	test("a Chat line that could not be saved is posted by the retry, once", async () => {
@@ -540,9 +381,10 @@ describe("createNewDocument", () => {
 		expect(context.created).toEqual([]);
 	});
 
-	test("one turn creates at most its limit", async () => {
+	test("one turn creates many documents without a per-turn or hourly cap", async () => {
 		let context = await fixture();
-		for (let index = 0; index < MAX_DOCUMENTS_PER_TURN; index++) {
+		let count = 35;
+		for (let index = 0; index < count; index++) {
 			let result = await context.request(args({
 				idempotencyKey: `piece-number-${index}`,
 				title: `Piece ${index}`,
@@ -550,13 +392,7 @@ describe("createNewDocument", () => {
 			}));
 			expect(result.ok).toBe(true);
 		}
-		let over = await context.request(args({
-			idempotencyKey: "piece-number-over",
-			title: "Piece over",
-			document: "# Piece over\n",
-		}));
-		expect(over).toMatchObject({ ok: false, reason: "turn-limit" });
-		expect(context.created).toHaveLength(MAX_DOCUMENTS_PER_TURN);
+		expect(context.created).toHaveLength(count);
 	});
 
 	test("says when the new document's Planner could not start", async () => {

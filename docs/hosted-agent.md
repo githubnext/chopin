@@ -1985,15 +1985,12 @@ holds its rules:
   writer lease (`CreateChannel.modelChoice`). A choice that can't be stored
   creates nothing, so a retry creates the document with it; a retry of a
   document already made never writes a choice, and so keeps any chosen since.
-- **Bounds.** At most 10 documents a turn and 30 an hour for one person, counted
-  in the process. A turn's count is kept with the turn itself (its active member
-  request) for as long as it runs, a turn waiting on a Decision included, and
-  goes with it. The idempotency key is scoped to the creating document, so a
+- **Idempotency.** There is no per-turn or hourly cap on how many documents a
+  turn can create. The idempotency key is scoped to the creating document, so a
   retried call returns the document the first made and creates and starts
   nothing again; the same key with a different draft is a conflict. A retry is
-  looked up in storage first: it is compared against the base the first call
-  recorded, so a default branch that moved since is no conflict, and it is
-  answered even after the limits are spent, since it counts toward neither.
+  looked up in storage first and compared against the base the first call
+  recorded, so a default branch that moved since is no conflict.
 - **Order.** The document is stored first. Then the sidebar hears of it through
   `/ws/sidebar`, the Chat or thread whose turn asked gets one system line naming
   it with a link (`Chat.Entry.document`), saved before it is shown, and, if an
