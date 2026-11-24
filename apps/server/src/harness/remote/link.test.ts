@@ -27,6 +27,7 @@ import { openWorkerSession } from "../../jobs/worker-session";
 import { createHumanInput } from "../atomic/human-input";
 import { openPlannerSession } from "../session";
 import { hostInputRoom, laterTimers } from "../../testing/decisions";
+import { REPLACED_LAUNCH_GRACE_MS } from "./link";
 import {
 	attach,
 	DENIED_TOKEN,
@@ -2693,14 +2694,42 @@ describe("Agent connection AI launches", () => {
 			session: start.session,
 			ai: { launch: "chopin_launch_2", providers: [{ placeholder: "chopin_ai_2" }] },
 		});
-		await until(() => ended.length === 1, 1_000);
-		expect(ended).toEqual(["launch-1"]);
+		// The launch it replaced stays live a while, for what the client sent on it before it read the new one.
+		await Bun.sleep(50);
+		expect(ended).toEqual([]);
 		await session.doDestroy();
 		await raw.next("destroy");
-		expect(ended).toEqual(["launch-1", "launch-2"]);
+		expect(ended).toEqual(["launch-2", "launch-1"]);
 		expect(listeners.size).toBe(0);
 		raw.send({ type: "detach" });
 		await raw.closed;
+	});
+
+	it("holds a launch a renewal replaced until its grace ends, then ends it", async () => {
+		let { raw, ended, changed } = await opened("ai-credentials");
+		let realTimeout = globalThis.setTimeout;
+		let graced: Array<{ ms: number; run: () => void }> = [];
+		globalThis.setTimeout = ((run: () => void, ms?: number) => {
+			if (ms === REPLACED_LAUNCH_GRACE_MS) {
+				graced.push({ ms, run });
+				return { unref() {} } as unknown as ReturnType<typeof setTimeout>;
+			}
+			return realTimeout(run, ms);
+		}) as typeof setTimeout;
+		try {
+			changed("U_member");
+			await raw.next("ai");
+			await until(() => graced.length === 1, 1_000);
+		} finally {
+			globalThis.setTimeout = realTimeout;
+		}
+		expect(ended).toEqual([]);
+		graced[0]!.run();
+		expect(ended).toEqual(["launch-1"]);
+		raw.send({ type: "detach" });
+		await raw.closed;
+		await until(() => ended.length === 2, 1_000);
+		expect(ended).toEqual(["launch-1", "launch-2"]);
 	});
 
 	it("ends a session's launch when its link closes for good", async () => {

@@ -44,6 +44,11 @@ import type { RemotePlanner } from "./registry";
 const OPERATION_TIMEOUT_MS = 10_000;
 /** How soon a renewal of a session's AI launch that failed is tried again. */
 const AI_RETRY_MS = 60_000;
+/**
+ * How long a session's launch stays live after a renewal replaced it: the client reads the new grants only once they
+ * arrive, so a request it sent on the old launch meanwhile, or is still streaming, is not refused as ended.
+ */
+export const REPLACED_LAUNCH_GRACE_MS = 2 * 60_000;
 const REVALIDATE_EVERY_MS = 5 * 60_000;
 const MAX_OPEN_INPUTS = 16;
 /** How many settled `input-request` ids a link remembers to refuse their reuse. */
@@ -421,6 +426,8 @@ class RemoteSession {
 	 * for it meanwhile is ended unsent, so the hold names the very launch its client holds.
 	 */
 	#aiFrozen = false;
+	/** Launches a renewal replaced, still held until their grace ends, with the timer that ends them. */
+	#replaced = new Map<string, ReturnType<typeof setTimeout>>();
 
 	constructor(id: string, planner: RemotePlanner, port: Port) {
 		this.id = id;
@@ -555,8 +562,8 @@ class RemoteSession {
 
 	#adopt(ai: LinkAi, launched: { launchId?: string; grants: AiGrants }): void {
 		let previous = this.#launchId;
+		if (previous && previous !== launched.launchId) this.#retireLater(ai, previous);
 		this.#holding(launched.launchId);
-		if (previous && previous !== launched.launchId) ai.end(previous);
 		this.#unwatch ??= ai.watch(() => this.renewAi());
 		let { expiresAt } = launched.grants;
 		if (expiresAt !== undefined) this.#renewAt(expiresAt - AI_RENEW_BEFORE_MS - Date.now());
@@ -569,7 +576,27 @@ class RemoteSession {
 		if (previous === launchId) return;
 		this.#launchId = launchId;
 		if (launchId) this.#port.aiHeld?.(launchId, true);
-		if (previous) this.#port.aiHeld?.(previous, false);
+		if (previous && !this.#replaced.has(previous)) this.#port.aiHeld?.(previous, false);
+	}
+
+	/**
+	 * Keeps a launch a renewal replaced held and live for `REPLACED_LAUNCH_GRACE_MS`, then ends it; the session's own end
+	 * ends it at once.
+	 */
+	#retireLater(ai: LinkAi, launchId: string): void {
+		if (this.#replaced.has(launchId)) return;
+		let timer = setTimeout(() => this.#retire(launchId, ai.end.bind(ai)), REPLACED_LAUNCH_GRACE_MS);
+		timer.unref?.();
+		this.#replaced.set(launchId, timer);
+	}
+
+	#retire(launchId: string, end: ((launchId: string) => void) | undefined): void {
+		let timer = this.#replaced.get(launchId);
+		if (timer === undefined) return;
+		clearTimeout(timer);
+		this.#replaced.delete(launchId);
+		this.#port.aiHeld?.(launchId, false);
+		end?.(launchId);
 	}
 
 	#renewAt(delay: number): void {
@@ -647,6 +674,7 @@ class RemoteSession {
 		let launchId = this.#launchId;
 		this.#holding(undefined);
 		if (launchId) this.#port.endAi?.(launchId);
+		for (let replaced of this.#replaced.keys()) this.#retire(replaced, this.#port.endAi);
 	}
 
 	/** The id of the session's AI launch, for a hold to keep across a restart. */
