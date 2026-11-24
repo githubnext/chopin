@@ -1199,6 +1199,139 @@ export function plannerGuest(
 	};
 }
 
+/** Reads the first non-empty line from `stream` (capped) until the stream closes. */
+function firstOutputLine(stream: NodeJS.ReadableStream, set: (line: string) => void) {
+	return new Promise<void>(resolve => {
+		let buffered = "";
+		stream.setEncoding("utf8");
+		stream.on("data", (chunk: string) => {
+			if (buffered.length > 8_192) return;
+			buffered += chunk;
+			let line = buffered.split(/\r?\n/).map(item => item.trim()).find(Boolean);
+			if (line) set(line.slice(0, 500));
+		});
+		stream.once("end", () => resolve());
+		stream.once("close", () => resolve());
+		stream.once("error", () => resolve());
+	});
+}
+
+/** How long a Planner command is given to clean up after a forgotten document. */
+export const FORGET_TIMEOUT_MS = 2 * 60_000;
+
+/**
+ * Runs the machine's Planner command once for a document Chopin no longer has, before its slot is
+ * removed, so the Planner can clean up what it kept for the document outside the disk (for example
+ * sessions in the machine's agent store). Gets `CHOPIN_FORGOTTEN_DOCUMENT`, `CHOPIN_URL`, the
+ * Planner's private agent state in `slot` with `agentStore` when present, and the machine's
+ * sandbox/microVM, with no Chopin credential, GitHub token, checkout or worktree. Bounded by
+ * `timeoutMs`; never throws, logging one dimmed line on failure.
+ */
+export async function forgetPlannerDocument(options: {
+	url: string;
+	document: string;
+	slot: string;
+	command: string[];
+	sandbox: Sandbox;
+	env?: Record<string, string>;
+	agentStore?: AgentStore;
+	output?: Output;
+	signal?: AbortSignal;
+	timeoutMs?: number;
+}): Promise<void> {
+	if (!options.command.length) return;
+	let secrets = [
+		...Object.values(options.env ?? {}),
+		...options.agentStore ? [options.agentStore.login.password] : [],
+	];
+	let fail = (detail: string) => {
+		let line = redacted(detail, secrets).replace(/\s+/g, " ").trim();
+		options.output?.say(
+			options.output.style.dim(
+				`… Couldn't let the Planner of ${options.document} clean up: ${line}`,
+			),
+		);
+	};
+	let home = agentFolder(options.slot);
+	let inherited = plannerEnvironment(
+		true,
+		options.slot,
+		options.env,
+		options.agentStore,
+		options.output,
+	);
+	let env: Record<string, string | undefined> = Object.fromEntries(
+		Object.entries(withoutSpare(inherited)).filter(([name]) =>
+			name === "CHOPIN_AI" || !name.toUpperCase().startsWith("CHOPIN_")
+		),
+	);
+	env.CHOPIN_URL = options.url;
+	env.CHOPIN_FORGOTTEN_DOCUMENT = options.document;
+	let child;
+	try {
+		child = spawnIn(options.sandbox, {
+			command: options.command,
+			cwd: home,
+			env,
+			stdin: "ignore",
+			own: [home],
+			agentHome: home,
+		});
+	} catch (error) {
+		fail(error instanceof Error ? error.message : String(error));
+		return;
+	}
+	let firstStderr: string | undefined;
+	let firstStdout: string | undefined;
+	let drained = Promise.all([
+		firstOutputLine(child.stderr, line => firstStderr ??= line),
+		firstOutputLine(child.stdout, line => firstStdout ??= line),
+	]);
+	let exited = new Promise<{ ok: boolean; how: string }>(resolve => {
+		child.once("error", error => resolve({ ok: false, how: error.message }));
+		child.once("exit", (code, signal) =>
+			resolve(
+				code === 0 && !signal
+					? { ok: true, how: "exit 0" }
+					: { ok: false, how: signal ? `signal ${signal}` : `exit ${code}` },
+			));
+	});
+	let timeoutMs = options.timeoutMs ?? FORGET_TIMEOUT_MS;
+	let timedOut = false;
+	let aborted = false;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	let stop!: () => void;
+	let onAbort = () => {
+		aborted = true;
+		stop();
+	};
+	let stopped = new Promise<undefined>(resolve => {
+		stop = () => resolve(undefined);
+		timer = setTimeout(() => {
+			timedOut = true;
+			stop();
+		}, timeoutMs);
+		timer.unref?.();
+		if (options.signal?.aborted) onAbort();
+		else options.signal?.addEventListener("abort", onAbort, { once: true });
+	});
+	let outcome = await Promise.race([exited, stopped]);
+	clearTimeout(timer);
+	options.signal?.removeEventListener("abort", onAbort);
+	if (outcome === undefined || process.platform !== "win32") await stopBackend(child);
+	outcome ??= await exited;
+	await Promise.race([drained, new Promise(resolve => setTimeout(resolve, 500))]);
+	if (outcome.ok && !timedOut && !aborted) return;
+	let detail = timedOut
+		? `timed out after ${Math.round(timeoutMs / 1_000)}s`
+		: aborted
+		? "stopped"
+		: firstStderr || firstStdout
+		? `${outcome.how}: ${firstStderr ?? firstStdout}`
+		: outcome.how;
+	fail(detail);
+}
+
 /** `env` without `CHOPIN_PLANNER_SPARE`: a cold launch is never offered spare mode. */
 function withoutSpare<T>(env: Record<string, T>): Record<string, T> {
 	let { CHOPIN_PLANNER_SPARE: _spare, ...rest } = env;

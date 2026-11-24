@@ -1579,6 +1579,27 @@ credential's `reset` names when; a disk from before goes before the next launch)
 no Planner has run on it for 30 days, or when the machine is unpaired or revoked;
 commits never pushed go with it.
 
+### Forgotten-document cleanup
+
+When the connector removes a Planner's disk because Chopin says its document is archived
+or gone (never for a Planner reset, 30-day age, or unpair/revocation) and
+`--planner-command` is configured, it runs that command once before removing the slot
+while holding the disk lock, so the Planner can clean up state it kept for the document
+outside the disk (for example sessions in the machine's agent store).
+
+- **Environment**: `CHOPIN_FORGOTTEN_DOCUMENT=<document id>`, `CHOPIN_URL`, `CHOPIN_AI=chopin`,
+  the slot's agent state directories (`ATOMIC_CODING_AGENT_DIR`, etc., with the machine's
+  agent store settings written there when present), and the connector's `--env` values.
+  No Chopin credential (`CHOPIN_PLANNER_TOKEN*`, `CHOPIN_MCP_TOKEN_FILE`), no GitHub
+  token (`CHOPIN_GITHUB_TOKEN*`, `GITHUB_TOKEN`, `GH_TOKEN`), no `CHOPIN_DOCUMENT`, no
+  checkout or worktree (`CHOPIN_CHECKOUT`, `CHOPIN_WORKTREE`), and no agent connection.
+- **Sandbox**: runs in the machine's microVM from the Planner's image with the slot's
+  agent folder mounted writable as its working directory and `HOME`, and no repository or
+  disk mounted.
+- **Bounds**: at most 2 minutes; a non-zero exit, error, or timeout logs one dimmed line
+  (`Couldn't let the Planner of <document id> clean up: …`) and never stops the disk's
+  removal. On exit 0, only the usual disk-removal line is logged.
+
 The connector renews the Planner credential in `CHOPIN_PLANNER_TOKEN_FILE` 5 minutes
 before it expires, for as long as the backend runs and Chopin still lets the machine run
 the document, and tries again if it cannot reach Chopin, keeping the file it has. It

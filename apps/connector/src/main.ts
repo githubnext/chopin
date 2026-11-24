@@ -28,7 +28,7 @@ import {
 } from "./machine";
 import { createOutput } from "./output";
 import { permissionMemory } from "./permission";
-import { commandWords, dispatchedPlanners, servePlanners } from "./planner";
+import { commandWords, dispatchedPlanners, forgetPlannerDocument, servePlanners } from "./planner";
 import { plannerSpares } from "./planner-spare";
 import { launchGate } from "./launch-gate";
 import { PLANNER_DISK_SWEEP_MS, sweepPlannerDisks } from "./planner-disks";
@@ -818,6 +818,22 @@ export async function connect(args: string[], injected: Injected = {}) {
 					server: url,
 					output,
 					ask: documents => forgettablePlanners(url, machine, documents, abort.signal),
+					...plannerCommand.length
+						? {
+							beforeForget: ({ document, slot }) =>
+								forgetPlannerDocument({
+									url,
+									document,
+									slot,
+									command: plannerCommand,
+									sandbox,
+									env,
+									...(agentStore ? { agentStore } : {}),
+									output,
+									signal: backends.signal,
+								}),
+						}
+						: {},
 				}).catch(() => {});
 			// The Planners Chopin asks for, of documents this machine's owner chose it for.
 			let dispatched = plannerCommand.length
