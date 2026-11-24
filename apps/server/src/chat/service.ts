@@ -75,7 +75,7 @@ import { broadcast, fail, PASSING, reply, tell } from "../wire";
 import { introduce } from "../people";
 import { MAX_MESSAGE_BYTES } from "./limits";
 import { actor, alone, contributed } from "./initiative";
-import { checkPlannerReply, PlannerReplyError, publishPlannerReplies } from "./reply-policy";
+import { checkPlannerReply, publishPlannerReplies } from "./reply-policy";
 import { withSessionContext } from "./session-context";
 import { TOOL_UNAVAILABLE, turnFailureOf } from "./turn-failure";
 import { retryTarget } from "./retry";
@@ -974,6 +974,8 @@ type Retained = {
 	release: () => Promise<void>;
 	/** Called when `binding` ends; a rebound session watches its new binding with it. */
 	ended: () => void;
+	/** The rebind under way from a binding that ended, which every caller of `rebindRetained` shares. */
+	rebinding?: { from: ActiveOwnerBinding; done: Promise<boolean> };
 };
 
 const RENEWED_CREDENTIAL = new Set(["credential-rotated", "credential-expired"]);
@@ -1011,6 +1013,20 @@ function ownerSignal(
 			ended.abort(previous.signal.reason);
 			return;
 		}
+		// A turn on the retained session follows the retained session's own rebind, so the session
+		// takes one binding, which the retained session releases with it.
+		let retained = context.chat.retained;
+		if (retained?.session === opened.session) {
+			let rebound = await rebindRetained(context, retained).catch(() => false);
+			if (released) return;
+			if (!rebound || context.chat.retained !== retained) {
+				ended.abort(previous.signal.reason);
+				return;
+			}
+			opened.binding = retained.binding;
+			watch(retained.binding);
+			return;
+		}
 		let binding = await context.activeOwner?.().catch(() => undefined);
 		if (released) {
 			binding?.release();
@@ -1045,8 +1061,19 @@ function ownerSignal(
  * work a disconnected Planner kept does not end with the old credential. False when the owner is
  * no longer the same, or the session cannot take a new binding.
  */
-async function rebindRetained(context: Room, retained: Retained): Promise<boolean> {
+function rebindRetained(context: Room, retained: Retained): Promise<boolean> {
 	let previous = retained.binding;
+	if (retained.rebinding?.from === previous) return retained.rebinding.done;
+	let done = rebindRetainedFrom(context, retained, previous);
+	retained.rebinding = { from: previous, done };
+	return done;
+}
+
+async function rebindRetainedFrom(
+	context: Room,
+	retained: Retained,
+	previous: ActiveOwnerBinding,
+): Promise<boolean> {
 	if (!retained.session.rebind || !credentialRenewed(previous)) return false;
 	let binding = await context.activeOwner?.();
 	if (!binding) return false;
@@ -1061,6 +1088,7 @@ async function rebindRetained(context: Room, retained: Retained): Promise<boolea
 	}
 	retained.session.rebind(binding);
 	retained.binding = binding;
+	previous.release();
 	binding.signal.addEventListener("abort", retained.ended, { once: true });
 	return true;
 }
@@ -2336,7 +2364,8 @@ function retain(
 ): boolean {
 	let { chat } = context;
 	if (chat.retained && chat.retained.session !== opened.session) return false;
-	if (opened.binding.signal.aborted) return false;
+	// A credential renewed as the turn closed is taken below, like one renewed later.
+	if (opened.binding.signal.aborted && !credentialRenewed(opened.binding)) return false;
 	// A question no member has answered is open work: its request ends with the session. So does
 	// an answer its client has not received.
 	if (!owesInput(opened.session)) return false;
@@ -2390,8 +2419,9 @@ function retain(
 			void retained.release();
 		};
 		retained.ended = ended;
-		opened.binding.signal.addEventListener("abort", ended, { once: true });
 		chat.retained = retained;
+		if (opened.binding.signal.aborted) ended();
+		else opened.binding.signal.addEventListener("abort", ended, { once: true });
 	}
 	return true;
 }
@@ -3049,7 +3079,6 @@ async function run(
 	// Where this turn's own messages begin, so its last word can be found again.
 	let firstEntry = chat.entries.length;
 	let failed = false;
-	let replyOnly = false;
 	// The turn a failure notice names, kept past `finally`, which clears the live fields.
 	let began: { request?: string; focus?: string } = {};
 	let skipped = false;
@@ -3297,8 +3326,6 @@ async function run(
 		if (!jobTurn?.preempted) console.error("[chat] turn failed:", err);
 		// A stop the room asked for is not a failure; an interruption is.
 		failed = !turnController.signal.aborted || !!chat.interruption;
-		// A reply the check refused answered no question.
-		replyOnly = err instanceof PlannerReplyError && !chat.interruption;
 		turnController.abort();
 		if (jobTurn) {
 			outcome = chat.closed
@@ -3353,12 +3380,9 @@ async function run(
 		chat.toolProgress = undefined;
 		let kept = false;
 		try {
-			// A turn the Planner's link dropped under fails, but its client may come back for the
-			// questions the session still holds.
-			if (
-				opened && !chat.closed && !isolated
-				&& (!failed || replyOnly || opened.session.suspended?.())
-			) kept = retain(context, opened);
+			// A turn that failed, or whose link dropped under it, still leaves its open questions to the
+			// session: a member can answer them, and the client may come back for them.
+			if (opened && !chat.closed && !isolated) kept = retain(context, opened);
 			if (!kept) {
 				if (!isolated && chat.retained?.session === opened?.session) await chat.retained?.release();
 				else await opened?.session.destroy();

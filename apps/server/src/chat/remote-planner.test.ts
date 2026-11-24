@@ -686,6 +686,40 @@ test("a question an attached Planner asks while its turn runs keeps the turn goi
 	expect(context.chat.entries.some(entry => entry.turnFailure !== undefined)).toBe(false);
 });
 
+test("a question an attached Planner asked stays open in Decisions when its turn fails, and its answer reaches the client", async () => {
+	let room = await remoteRoom();
+	let { context, server } = room;
+	let script = scriptedPlanner();
+	let client: Awaited<ReturnType<typeof connectAgent>> | undefined;
+	let answer = Promise.withResolvers<unknown>();
+	client = await connectAgent({
+		url: server.url,
+		token: MEMBER_TOKEN,
+		document: room.channel.id,
+		handlers: {
+			...script.handlers,
+			async turn(turn) {
+				void client!.ask(turn.message.session, {
+					method: "confirm",
+					title: "Ship?",
+					message: "Now.",
+				}).then(result => answer.resolve(result.value), answer.reject);
+				await until(() => [...context.plan.records.values()][0]?.status === "open");
+				throw new Error("The model failed.");
+			},
+		} as AgentHandlers,
+		resumable: true,
+	});
+	cleanups.push(() => client!.detach());
+	expect(await Chat.invoke(context, RIVAL, "Run the review")).toBeUndefined();
+	await until(() => !context.chat.busy);
+	let id = [...context.plan.records.keys()][0]!;
+	expect(context.plan.records.get(id)?.status).toBe("open");
+	expect(context.chat.retained).toBeDefined();
+	await answerChoice(context, id, 0);
+	expect(await answer.promise).toBe(true);
+});
+
 test("a dropped link's open question stays open and answerable for as long as its client is away, and Chat says nothing of the machine", async () => {
 	// Installed before anything is created, so every timer the server and Chat arm is on it.
 	let clock = laterTimers();
