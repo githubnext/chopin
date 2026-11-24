@@ -1,9 +1,15 @@
 import { afterAll, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { MACHINE_STORE_ADAPTER } from "@chopin/protocol/machine-store";
+import { AgentStore, storeAdapter } from "./machine-store";
+import { vmSpec } from "./nvx";
+import { forgetPlannerDocument } from "./planner";
 import { forgetResetDisk, holdDisk, stampPlannerReset, sweepPlannerDisks } from "./planner-disks";
+import type { Launch } from "./sandbox";
+import { hostSandbox } from "./testing/host-sandbox";
 
 let scratch = await mkdtemp(join(tmpdir(), "chopin-planner-disks-"));
 afterAll(() => rm(scratch, { recursive: true, force: true }));
@@ -214,4 +220,250 @@ test("a disk made before a writer last reset its Planner goes, at a sweep or bef
 	let fresh = await machine([D(4)]);
 	expect(await forgetResetDisk(fresh.slot(D(4)), undefined, item)).toBe(false);
 	expect(fresh.kept(D(4))).toEqual([true, true, true]);
+});
+
+const STORE_LOGIN = {
+	url:
+		"postgresql://m_0b5e6f0e7a7b4c1d9e1f2a3b4c5d6e7f@db.example.com:5432/m_0b5e6f0e7a7b4c1d9e1f2a3b4c5d6e7f?sslmode=verify-full",
+	password: "fake-store-password-0123456789",
+};
+
+async function fakeAgentStore(directory: string) {
+	let adapter = await storeAdapter(directory, async root => {
+		let dir = join(root, "node_modules", ...MACHINE_STORE_ADAPTER.split("/"));
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, "package.json"), JSON.stringify({ version: "0.10.8" }));
+	});
+	return new AgentStore(STORE_LOGIN, adapter);
+}
+
+test("beforeForget runs only for forgotten documents, never for reset, age, unpair or another server", async () => {
+	let it = await machine([D(1), D(2), D(3), D(4)], { [D(4)]: B });
+	let now = Date.now();
+	await utimes(`${it.slot(D(3))}.disk`, new Date(now - 31 * DAY), new Date(now - 31 * DAY));
+	let seen: string[] = [];
+	let removed = await sweepPlannerDisks({
+		directory: it.directory,
+		server: A,
+		now,
+		ask: async () => ({ forget: [D(1)], reset: [D(2)] }),
+		beforeForget: async ({ document, slot }) => {
+			// The sweep holds the disk lock and the slot's agent folder still exists.
+			expect(existsSync(`${slot}.disk.held`)).toBe(true);
+			expect(existsSync(`${slot}.agent`)).toBe(true);
+			seen.push(document);
+		},
+	});
+	expect(removed.sort()).toEqual([D(1), D(2), D(3)]);
+	expect(seen).toEqual([D(1)]);
+
+	// Unpair (`everything`) never runs beforeForget either.
+	let unpaired = await machine([D(5)]);
+	let unpairedSeen: string[] = [];
+	expect(
+		await sweepPlannerDisks({
+			directory: unpaired.directory,
+			server: A,
+			everything: "unpaired",
+			beforeForget: async ({ document }) => {
+				unpairedSeen.push(document);
+			},
+		}),
+	).toEqual([D(5)]);
+	expect(unpairedSeen).toEqual([]);
+});
+
+test("forgetPlannerDocument runs the Planner command with CHOPIN_FORGOTTEN_DOCUMENT and store state, no credentials, and valid microVM spec", async () => {
+	let it = await machine([D(1)]);
+	let store = await fakeAgentStore(it.directory);
+	let record = join(scratch, "forget-record.json");
+	let script = join(scratch, "forget-planner.mjs");
+	await writeFile(
+		script,
+		`import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+let atomic = process.env.ATOMIC_CODING_AGENT_DIR;
+let settings = atomic && existsSync(join(atomic, "settings.json"))
+	? JSON.parse(readFileSync(join(atomic, "settings.json"), "utf8"))
+	: null;
+writeFileSync(${JSON.stringify(record)}, JSON.stringify({
+	cwd: process.cwd(),
+	doc: process.env.CHOPIN_FORGOTTEN_DOCUMENT,
+	url: process.env.CHOPIN_URL,
+	ai: process.env.CHOPIN_AI,
+	atomic,
+	custom: process.env.CUSTOM_SETTING,
+	settingsUrl: settings?.storage?.options?.url ?? null,
+	passwordExists: !!(atomic && existsSync(join(atomic, "storage-password"))),
+	slotLocked: existsSync(${JSON.stringify(`${it.slot(D(1))}.disk.held`)}),
+	forbidden: Object.keys(process.env).filter(name =>
+		[
+			"CHOPIN_DOCUMENT",
+			"CHOPIN_PLANNER_TOKEN",
+			"CHOPIN_PLANNER_TOKEN_FILE",
+			"CHOPIN_MCP_TOKEN_FILE",
+			"CHOPIN_GITHUB_TOKEN",
+			"CHOPIN_GITHUB_TOKEN_FILE",
+			"CHOPIN_GITHUB_TOKEN_EXPIRES_AT",
+			"CHOPIN_CHECKOUT",
+			"CHOPIN_WORKTREE",
+			"CHOPIN_PLANNER_SPARE",
+			"GITHUB_TOKEN",
+			"GH_TOKEN",
+		].includes(name)
+	),
+}));
+`,
+	);
+	let launches: Launch[] = [];
+	let baseSandbox = hostSandbox();
+	let sandbox = {
+		...baseSandbox,
+		spawn(launch: Launch) {
+			launches.push(launch);
+			return baseSandbox.spawn(launch);
+		},
+	};
+	let lines: string[] = [];
+	let output = {
+		say: (...text: string[]) => lines.push(text.join(" ")),
+		style: { dim: (text: string) => text },
+	} as unknown as Parameters<typeof sweepPlannerDisks>[0]["output"];
+	let removed = await sweepPlannerDisks({
+		directory: it.directory,
+		server: A,
+		output,
+		ask: async () => ({ forget: [D(1)], reset: [] }),
+		beforeForget: ({ document, slot }) =>
+			forgetPlannerDocument({
+				url: A,
+				document,
+				slot,
+				command: [process.execPath, script],
+				sandbox,
+				env: {
+					CUSTOM_SETTING: "kept-value",
+					GITHUB_TOKEN: "ghp_should_not_pass",
+					CHOPIN_PLANNER_TOKEN: "chopin_p_should_not_pass",
+				},
+				agentStore: store,
+				output,
+			}),
+	});
+	expect(removed).toEqual([D(1)]);
+	expect(it.kept(D(1))).toEqual([false, false, false]);
+	expect(lines.some(line => line.includes("Couldn't let the Planner"))).toBe(false);
+	expect(lines.some(line => line.includes("Removed the disk"))).toBe(true);
+
+	let seen = JSON.parse(await readFile(record, "utf8"));
+	expect(seen.doc).toBe(D(1));
+	expect(seen.url).toBe(A);
+	expect(seen.ai).toBe("chopin");
+	expect(seen.cwd).toBe(`${it.slot(D(1))}.agent`);
+	expect(seen.atomic).toBe(join(`${it.slot(D(1))}.agent`, "atomic"));
+	expect(seen.custom).toBe("kept-value");
+	expect(seen.settingsUrl).toBe(STORE_LOGIN.url);
+	expect(seen.passwordExists).toBe(true);
+	expect(seen.slotLocked).toBe(true);
+	expect(seen.forbidden).toEqual([]);
+
+	// The same Launch compiles into a valid microVM spec with no repository, disk or checkout.
+	expect(launches).toHaveLength(1);
+	let spec = vmSpec(launches[0]!, {
+		base: it.directory,
+		platform: "linux",
+		proxyPort: 9000,
+		image: {
+			layer: { path: "/tmp/layer.erofs", uuid: "00000000-0000-4000-8000-000000000000" },
+			path: ["/opt/chopin/agent/bin"],
+			environment: {},
+			user: "1000:1000",
+		},
+	});
+	expect(spec.disk).toBeUndefined();
+	expect(spec.environment.CHOPIN_FORGOTTEN_DOCUMENT).toBe(D(1));
+	expect(spec.shares.some(share => share.host === `${it.slot(D(1))}.agent` && share.mode === "rw"))
+		.toBe(true);
+});
+
+test("a failing or timed-out cleanup logs one dimmed line, redacts secrets, and still removes the disk", async () => {
+	let it = await machine([D(1), D(2)]);
+	let store = await fakeAgentStore(it.directory);
+	let failScript = join(scratch, "forget-fail.mjs");
+	await writeFile(
+		failScript,
+		`console.error("store error with " + ${JSON.stringify(STORE_LOGIN.password)});
+process.exit(2);
+`,
+	);
+	let slowScript = join(scratch, "forget-slow.mjs");
+	await writeFile(slowScript, "setTimeout(() => {}, 60_000);\n");
+	let sandbox = hostSandbox();
+	let dimmed: string[] = [];
+	let lines: string[] = [];
+	let output = {
+		say: (...text: string[]) => lines.push(text.join(" ")),
+		style: {
+			dim: (text: string) => {
+				dimmed.push(text);
+				return text;
+			},
+		},
+	} as unknown as Parameters<typeof sweepPlannerDisks>[0]["output"];
+
+	let removed = await sweepPlannerDisks({
+		directory: it.directory,
+		server: A,
+		output,
+		ask: async () => ({ forget: [D(1), D(2)], reset: [] }),
+		beforeForget: ({ document, slot }) =>
+			forgetPlannerDocument({
+				url: A,
+				document,
+				slot,
+				command: [process.execPath, document === D(1) ? failScript : slowScript],
+				sandbox,
+				agentStore: store,
+				output,
+				timeoutMs: 250,
+			}),
+	});
+	expect(removed.sort()).toEqual([D(1), D(2)]);
+	expect(it.kept(D(1))).toEqual([false, false, false]);
+	expect(it.kept(D(2))).toEqual([false, false, false]);
+
+	let failLine = lines.find(line => line.includes(`Couldn't let the Planner of ${D(1)} clean up:`));
+	expect(failLine).toBeDefined();
+	expect(failLine).toContain("exit 2");
+	expect(failLine).not.toContain("\n");
+	expect(failLine).not.toContain(STORE_LOGIN.password);
+	expect(dimmed).toContain(failLine!);
+
+	let timeoutLine = lines.find(line =>
+		line.includes(`Couldn't let the Planner of ${D(2)} clean up:`)
+	);
+	expect(timeoutLine).toBeDefined();
+	expect(timeoutLine).toContain("timed out");
+	expect(timeoutLine).not.toContain("\n");
+	expect(dimmed).toContain(timeoutLine!);
+});
+
+test("forgetPlannerDocument skips when no Planner command is configured", async () => {
+	let it = await machine([D(1)]);
+	let spawned = false;
+	let sandbox = {
+		...hostSandbox(),
+		spawn() {
+			spawned = true;
+			throw new Error("should not spawn");
+		},
+	};
+	await forgetPlannerDocument({
+		url: A,
+		document: D(1),
+		slot: it.slot(D(1)),
+		command: [],
+		sandbox,
+	});
+	expect(spawned).toBe(false);
 });

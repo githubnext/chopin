@@ -128,6 +128,12 @@ export async function sweepPlannerDisks(options: {
 	server: string;
 	output?: Output;
 	ask?: ForgetAsk;
+	/**
+	 * Runs once before removing the slot of a document Chopin says is archived or gone (`forget`,
+	 * never `reset`, age or `everything`), while the sweep holds its disk lock and its agent folder
+	 * still exists. Errors never stop the disk's removal.
+	 */
+	beforeForget?: (item: { document: string; repository: string; slot: string }) => Promise<void>;
 	now?: number;
 	days?: number;
 	everything?: string;
@@ -173,7 +179,18 @@ export async function sweepPlannerDisks(options: {
 				let used = (await stat(item.path).catch(() => undefined))?.mtimeMs ?? now;
 				if (used >= oldest) continue;
 			}
-			await removePlannerSlot(item.path.slice(0, -".disk".length));
+			let slot = item.path.slice(0, -".disk".length);
+			if (
+				!options.everything && item.server === options.server && forget.has(item.document)
+				&& options.beforeForget
+			) {
+				await options.beforeForget({
+					document: item.document,
+					repository: item.repository,
+					slot,
+				}).catch(() => {});
+			}
+			await removePlannerSlot(slot);
 		} finally {
 			sweeping.delete(path);
 			await rm(path, { force: true });

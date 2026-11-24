@@ -1060,8 +1060,13 @@ What this changes for you:
   once a Planner Chopin stopped asking for has exited, as when its document is deleted),
   when someone resets the document's Planner in Chopin (as it next starts here, or at
   the next hourly check), when no Planner has run on it for 30 days, or when this machine is unpaired or
-  revoked, never while a microVM runs on it. Its unpushed commits go with it, and the
-  connector says so.
+  revoked, never while a microVM runs on it. When Chopin says the document is archived or
+  gone and `--planner-command` is set, the connector first runs that command once in a
+  microVM with `CHOPIN_FORGOTTEN_DOCUMENT=<document id>` (at most 2 minutes, with the
+  slot's agent folder and machine store login and no credentials or checkout) so the
+  Planner can clean up state it kept outside the disk; any failure is logged dimmed and
+  never stops the disk's removal. Its unpushed commits go with it, and the connector says
+  so.
 - **Your checkout over the share is slow to walk.** Reading a whole large checkout from
   a microVM is much slower than on your machine, so a Planner reads it for what is
   uncommitted and does its own work in its clone.
