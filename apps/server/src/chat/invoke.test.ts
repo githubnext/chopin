@@ -736,7 +736,7 @@ function plannerSession(open = 1) {
 	};
 }
 
-test("a failed foreground turn aborts late work and releases a Planner that waits on a question", async () => {
+test("a failed foreground turn aborts late work and keeps a Planner that waits on a question until it settles", async () => {
 	let { context, user } = await setup(configured(ATOMIC));
 	let planner = plannerSession();
 	let signal: AbortSignal | undefined;
@@ -748,10 +748,13 @@ test("a failed foreground turn aborts late work and releases a Planner that wait
 	await Chat.invoke(context, user, "Run the workflow");
 	await context.chat.running;
 	expect(signal?.aborted).toBe(true);
-	expect(planner.calls).toEqual(["destroy"]);
-	expect(context.chat.retained).toBeUndefined();
+	expect(planner.calls).toEqual([]);
+	expect(context.chat.retained?.session).toBe(planner.session as never);
 	expect(context.chat.busy).toBe(false);
 	expect(context.chat.entries.at(-1)?.text).toBe("The reply could not be verified.");
+	planner.settle();
+	await until(() => context.chat.retained === undefined);
+	expect(planner.calls).toEqual(["destroy"]);
 });
 
 test("a reply that cannot move its questions into decisions fails the turn but keeps the session and its open question past 30 minutes", async () => {
