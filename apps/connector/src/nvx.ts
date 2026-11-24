@@ -8,20 +8,20 @@ import { join, posix, win32 } from "node:path";
  * only, several a day, so the pin moves only with a `chopin` release that was tested on it.
  */
 export const NVX_RELEASE = {
-	version: "0.1.0-dev.c753e7b4c288",
-	tag: "v0.1.0-dev.c753e7b4c288",
+	version: "0.1.0-dev.30bf7f09e59a",
+	tag: "v0.1.0-dev.30bf7f09e59a",
 	packages: {
 		"linux-kvm": {
 			file: "nvx-0.1.0-linux-kvm.tar.gz",
-			sha256: "5f646bac060b2b6d7d447f9d8b274b0ce4e4c45c98bc4f81fa20759082192da9",
+			sha256: "64d7372790ee53cde628e7c6f76afba737b4cef7f7308582ae9864184afab145",
 		},
 		"linux-mshv": {
 			file: "nvx-0.1.0-linux-mshv.tar.gz",
-			sha256: "7ee04b2a4115ac6bc94be8ff263e4d7f8dea9845e2de124bc289e48376e1b8de",
+			sha256: "72d026350aedcc195e3a82ccaa7efeb822d335fd6a4a55df7ecf4fc98d8902ed",
 		},
 		"windows-whp": {
 			file: "nvx-0.1.0-windows-whp.zip",
-			sha256: "b2b185ddb2e00fb24810dbb8da5e0c36f36c1fc3d237cf0cec1b5a8724e4851f",
+			sha256: "45347c1c95256939c2ab798178fb9ac3628c9f5b976d65e646d8113c573f8e32",
 		},
 	},
 } as const;
