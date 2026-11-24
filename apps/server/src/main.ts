@@ -122,9 +122,9 @@ import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
 import { invokeRouted, SystemTurns } from "./mcp/invoke";
 import { createNewDocument } from "./agent/new-documents";
-import { buildState, fanOut } from "./agent/fan-out";
+import { buildState, orchestrate } from "./agent/orchestrate";
 import type { NewDocumentDeps } from "./agent/new-documents";
-import type { FanOutDeps } from "./agent/fan-out";
+import type { OrchestrateDeps } from "./agent/orchestrate";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
@@ -1113,8 +1113,8 @@ function conversation(
 		createDocument: config.agent
 			? request => createNewDocument(plannerDocuments(), { ...request, sourceId: room.id })
 			: undefined,
-		fanOut: config.agent
-			? request => fanOut(createdDocuments(), { ...request, sourceId: room.id })
+		orchestrate: config.agent
+			? request => orchestrate(createdDocuments(), { ...request, sourceId: room.id })
 			: undefined,
 		createResearch: config.agent
 			? async request => {
@@ -2757,8 +2757,8 @@ function plannerDocuments(): NewDocumentDeps {
 	};
 }
 
-/** The Planner's `fan_out`: `create_document`'s rules, and the state of what a document created. */
-function createdDocuments(): FanOutDeps {
+/** The Planner's `orchestrate`: `create_document`'s rules, and the state of what a document created. */
+function createdDocuments(): OrchestrateDeps {
 	return {
 		...plannerDocuments(),
 		createdFrom: (sourceId, limit) => storage.channels.createdFrom(sourceId, limit),

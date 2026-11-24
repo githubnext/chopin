@@ -39,7 +39,7 @@ import type { AiAccountRefusal } from "../ai/account-check";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
 import type { NewDocumentRequest, NewDocumentResult } from "../agent/new-documents";
-import type { FanOutRequest, FanOutResult } from "../agent/fan-out";
+import type { OrchestrateRequest, OrchestrateResult } from "../agent/orchestrate";
 import type { VisualAdmission } from "../agent/visual-admission";
 import type { ChildDocuments } from "./children";
 import type { TellChat } from "./thread-notes";
@@ -926,7 +926,7 @@ export type Room = {
 	/** Creates a top-level document for the person whose message drives the turn. */
 	createDocument?: (request: Omit<NewDocumentRequest, "sourceId">) => Promise<NewDocumentResult>;
 	/** Works with the documents this one created, for the person whose message drives the turn. */
-	fanOut?: (request: Omit<FanOutRequest, "sourceId">) => Promise<FanOutResult>;
+	orchestrate?: (request: Omit<OrchestrateRequest, "sourceId">) => Promise<OrchestrateResult>;
 	/** Keeps the room loaded while a retained Planner still waits on a question; returns the release. */
 	hold?: () => () => void;
 	/** The task draft the turn being started carries. */
@@ -2587,8 +2587,8 @@ export function documentRoom(context: Room): DocumentRoom {
 				return context.createDocument!({ ...request, arguments: args });
 			},
 		}),
-		...(!chat.job && context.fanOut && !context.rootChannelId && {
-			fanOut: async (args, index, signal) => {
+		...(!chat.job && context.orchestrate && !context.rootChannelId && {
+			orchestrate: async (args, index, signal) => {
 				let request = creatorRequest(context, signal);
 				if (!request) {
 					return {
@@ -2597,7 +2597,7 @@ export function documentRoom(context: Room): DocumentRoom {
 						message: "Only a turn a person asked for in Chat can work with created documents.",
 					};
 				}
-				return context.fanOut!({ ...request, arguments: args, index });
+				return context.orchestrate!({ ...request, arguments: args, index });
 			},
 		}),
 		createResearch: async _question => {

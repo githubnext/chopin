@@ -7,7 +7,7 @@ import * as edit from "../plan/edit";
 import { admitBlockEdit, applyBlockEdit } from "./document-ops";
 import { implementationActive } from "../plan/service";
 
-import type { CreatedDocumentState, IndexOutcome } from "./fan-out";
+import type { CreatedDocumentState, IndexOutcome } from "./orchestrate";
 import type { DocumentRoom } from "./tools";
 
 export const INDEX_HEADING = "Documents created from this one";

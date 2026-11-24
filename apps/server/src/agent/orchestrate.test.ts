@@ -4,8 +4,8 @@ import { MemoryStorage } from "../storage/memory/adapter";
 import { createDocument } from "../mcp/hosted";
 import { openPlan } from "../testing/plan";
 import * as edit from "../plan/edit";
-import { buildState, fanOut, fanOutArguments, MAX_OPEN } from "./fan-out";
-import { INDEX_HEADING, writeIndex } from "./fan-out-index";
+import { buildState, MAX_OPEN, orchestrate, orchestrateArguments } from "./orchestrate";
+import { INDEX_HEADING, writeIndex } from "./orchestrate-index";
 import { documentRoom } from "./heading-harness.test-fixtures";
 
 import type { AuthenticatedSession } from "../auth/session";
@@ -16,11 +16,11 @@ import type { NewDocumentArguments } from "./new-documents";
 import type {
 	BuildState,
 	CreatedDocumentState,
-	FanOutArguments,
-	FanOutDeps,
 	IndexWriter,
+	OrchestrateArguments,
+	OrchestrateDeps,
 	PlannerState,
-} from "./fan-out";
+} from "./orchestrate";
 import type { BuildRequest } from "@chopin/protocol/implementation";
 
 const NOW = new Date("2026-11-16T12:00:00.000Z");
@@ -85,7 +85,7 @@ async function fixture(
 	let planners = new Map<string, PlannerState>();
 	let builds = new Map<string, BuildState>();
 	let push = options.push ?? true;
-	let deps: FanOutDeps = {
+	let deps: OrchestrateDeps = {
 		channel: id => storage.channels.get(id),
 		deleting: () => false,
 		login: async () => login(),
@@ -110,8 +110,8 @@ async function fixture(
 		indexed.push({ documents, create });
 		return create ? { state: "written" } : { state: "absent" };
 	};
-	let call = (args: FanOutArguments) =>
-		fanOut(deps, {
+	let call = (args: OrchestrateArguments) =>
+		orchestrate(deps, {
 			sourceId: source.id,
 			creator: { userId: "U_mona", handle: "mona" },
 			arguments: args,
@@ -134,42 +134,44 @@ function byTitle<T extends { title: string }>(documents: T[]): T[] {
 	return documents.toSorted((left, right) => left.title.localeCompare(right.title));
 }
 
-describe("fan_out arguments", () => {
+describe("orchestrate arguments", () => {
 	test("take each operation's own fields only", () => {
-		expect(fanOutArguments({ operation: "list" })).toEqual({ operation: "list" });
-		expect(fanOutArguments({ operation: "instruct", instruction: "Resume." })).toEqual({
+		expect(orchestrateArguments({ operation: "list" })).toEqual({ operation: "list" });
+		expect(orchestrateArguments({ operation: "instruct", instruction: "Resume." })).toEqual({
 			operation: "instruct",
 			instruction: "Resume.",
 		});
-		expect(() => fanOutArguments({ operation: "list", instruction: "Resume." })).toThrow(
-			"fan_out list does not take `instruction`",
+		expect(() => orchestrateArguments({ operation: "list", instruction: "Resume." })).toThrow(
+			"orchestrate list does not take `instruction`",
 		);
-		expect(() => fanOutArguments({ operation: "close" })).toThrow("operation must be one of");
-		expect(() => fanOutArguments({ operation: "instruct" })).toThrow("instruction");
-		expect(() => fanOutArguments({ operation: "instruct", instruction: "Go.", targets: [] }))
+		expect(() => orchestrateArguments({ operation: "close" })).toThrow("operation must be one of");
+		expect(() => orchestrateArguments({ operation: "instruct" })).toThrow("instruction");
+		expect(() => orchestrateArguments({ operation: "instruct", instruction: "Go.", targets: [] }))
 			.toThrow("targets");
 	});
 
 	test("open checks every document as create_document does, and needs distinct keys", () => {
-		expect(() => fanOutArguments({ operation: "open", documents: [] })).toThrow("at least one");
+		expect(() => orchestrateArguments({ operation: "open", documents: [] })).toThrow(
+			"at least one",
+		);
 		expect(() =>
-			fanOutArguments({
+			orchestrateArguments({
 				operation: "open",
 				documents: [piece("login-page", "Login"), { title: "x" }],
 			})
 		).toThrow("documents[1]: idempotencyKey");
 		expect(() =>
-			fanOutArguments({
+			orchestrateArguments({
 				operation: "open",
 				documents: [piece("login-page", "Login"), piece("login-page", "Login again")],
 			})
 		).toThrow("its own idempotencyKey");
 		let many = Array.from({ length: MAX_OPEN + 1 }, (_, n) => piece(`document-${n}`, `D${n}`));
-		expect(() => fanOutArguments({ operation: "open", documents: many })).toThrow("at most");
+		expect(() => orchestrateArguments({ operation: "open", documents: many })).toThrow("at most");
 	});
 });
 
-describe("fanOut", () => {
+describe("orchestrate", () => {
 	test("open creates each document linked to this one, and a retry makes none twice", async () => {
 		let context = await fixture();
 		let opened = await context.open(

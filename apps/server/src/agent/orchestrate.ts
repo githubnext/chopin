@@ -1,5 +1,5 @@
 /**
- * The Planner's `fan_out`: one document's Planner working with the documents it created.
+ * The Planner's `orchestrate`: one document's Planner working with the documents it created.
  *
  * `open` creates several documents at once, each exactly as `create_document` would; `list` reads
  * each created document's state as Chopin holds it; `instruct` hands their Planners one instruction
@@ -35,20 +35,20 @@ export const MAX_CREATED = 200;
 /** How many documents are created, or Planners instructed, at once. */
 const CONCURRENCY = 4;
 
-export const FAN_OUT_OPERATIONS = ["open", "list", "instruct", "index"] as const;
+export const ORCHESTRATE_OPERATIONS = ["open", "list", "instruct", "index"] as const;
 
-export type FanOutArguments =
+export type OrchestrateArguments =
 	| { operation: "open"; documents: NewDocumentArguments[] }
 	| { operation: "list" }
 	| { operation: "instruct"; instruction: string; targets?: string[] }
 	| { operation: "index" };
 
-export const FAN_OUT_SCHEMA = {
+export const ORCHESTRATE_SCHEMA = {
 	type: "object",
 	properties: {
 		operation: {
 			type: "string",
-			enum: [...FAN_OUT_OPERATIONS],
+			enum: [...ORCHESTRATE_OPERATIONS],
 			description: "`open` creates documents from `documents`; `list` reports every document "
 				+ "this one created, with its Planner, open Decisions and build; `instruct` sends "
 				+ "`instruction` to their Planners; `index` writes or refreshes their table in this "
@@ -81,7 +81,7 @@ export const FAN_OUT_SCHEMA = {
 	additionalProperties: false,
 };
 
-const FIELDS: Record<FanOutArguments["operation"], string[]> = {
+const FIELDS: Record<OrchestrateArguments["operation"], string[]> = {
 	open: ["documents"],
 	list: [],
 	instruct: ["instruction", "targets"],
@@ -89,18 +89,18 @@ const FIELDS: Record<FanOutArguments["operation"], string[]> = {
 };
 
 /** The tool's arguments, checked; throws with a sentence the model can act on. */
-export function fanOutArguments(raw: unknown): FanOutArguments {
+export function orchestrateArguments(raw: unknown): OrchestrateArguments {
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-		throw new Error("fan_out arguments must be an object");
+		throw new Error("orchestrate arguments must be an object");
 	}
 	let args = raw as Record<string, unknown>;
 	let operation = args.operation;
-	if (!FAN_OUT_OPERATIONS.includes(operation as FanOutArguments["operation"])) {
-		throw new Error(`operation must be one of ${FAN_OUT_OPERATIONS.join(", ")}`);
+	if (!ORCHESTRATE_OPERATIONS.includes(operation as OrchestrateArguments["operation"])) {
+		throw new Error(`operation must be one of ${ORCHESTRATE_OPERATIONS.join(", ")}`);
 	}
-	let op = operation as FanOutArguments["operation"];
+	let op = operation as OrchestrateArguments["operation"];
 	let unknown = Object.keys(args).find(key => key !== "operation" && !FIELDS[op].includes(key));
-	if (unknown) throw new Error(`fan_out ${op} does not take \`${unknown}\``);
+	if (unknown) throw new Error(`orchestrate ${op} does not take \`${unknown}\``);
 	if (op === "open") {
 		if (!Array.isArray(args.documents) || args.documents.length === 0) {
 			throw new Error("open needs documents, at least one");
@@ -176,15 +176,15 @@ export type IndexWriter = (
 	create: boolean,
 ) => Promise<IndexOutcome>;
 
-export type FanOutDeps = NewDocumentDeps & {
+export type OrchestrateDeps = NewDocumentDeps & {
 	/** Unarchived documents created from a document, oldest first. */
 	createdFrom: (sourceId: string, limit: number) => Promise<ChannelRecord[]>;
 	planner: (channelId: string) => PlannerState;
 	build: (channelId: string) => Promise<BuildState>;
 };
 
-export type FanOutRequest = Omit<NewDocumentRequest, "arguments"> & {
-	arguments: FanOutArguments;
+export type OrchestrateRequest = Omit<NewDocumentRequest, "arguments"> & {
+	arguments: OrchestrateArguments;
 	index: IndexWriter;
 };
 
@@ -192,7 +192,7 @@ type Instructed =
 	& Pick<CreatedDocumentState, "id" | "title" | "url">
 	& ({ started: true } | { started: false; reason: string; message?: string });
 
-export type FanOutResult =
+export type OrchestrateResult =
 	| {
 		ok: true;
 		operation: "open";
@@ -220,7 +220,7 @@ const REFUSALS: Record<string, string> = {
 	"nothing-created": "No document was created from this one, so there is nothing to instruct.",
 };
 
-function refused(reason: string): FanOutResult {
+function refused(reason: string): OrchestrateResult {
 	return { ok: false, reason, message: REFUSALS[reason]! };
 }
 
@@ -238,7 +238,7 @@ async function bounded<T, R>(items: T[], work: (item: T) => Promise<R>): Promise
 	return results;
 }
 
-function url(deps: FanOutDeps, channel: ChannelRecord): string {
+function url(deps: OrchestrateDeps, channel: ChannelRecord): string {
 	return new URL(
 		documentPath(channel.repositoryOwner, channel.repositoryName, channel.slug),
 		deps.appOrigin,
@@ -246,14 +246,17 @@ function url(deps: FanOutDeps, channel: ChannelRecord): string {
 }
 
 /** The documents `source` created that are still its repository's, top-level and unarchived. */
-async function created(deps: FanOutDeps, source: ChannelRecord): Promise<ChannelRecord[]> {
+async function created(deps: OrchestrateDeps, source: ChannelRecord): Promise<ChannelRecord[]> {
 	return (await deps.createdFrom(source.id, MAX_CREATED)).filter(channel =>
 		channel.createdFrom === source.id && channel.repositoryId === source.repositoryId
 		&& !channel.parentChannelId && !channel.archivedAt && !deps.deleting(channel.id)
 	);
 }
 
-async function states(deps: FanOutDeps, source: ChannelRecord): Promise<CreatedDocumentState[]> {
+async function states(
+	deps: OrchestrateDeps,
+	source: ChannelRecord,
+): Promise<CreatedDocumentState[]> {
 	return Promise.all((await created(deps, source)).map(async channel => ({
 		id: channel.id,
 		title: channel.title,
@@ -265,18 +268,18 @@ async function states(deps: FanOutDeps, source: ChannelRecord): Promise<CreatedD
 }
 
 /** Whether `wanted`, an id or a url, names `channel`. */
-function names(deps: FanOutDeps, channel: ChannelRecord, wanted: string): boolean {
+function names(deps: OrchestrateDeps, channel: ChannelRecord, wanted: string): boolean {
 	let key = wanted.trim().replace(/\/+$/, "");
 	return key === channel.id || key === url(deps, channel)
 		|| key === documentPath(channel.repositoryOwner, channel.repositoryName, channel.slug);
 }
 
 async function instruct(
-	deps: FanOutDeps,
-	request: FanOutRequest,
+	deps: OrchestrateDeps,
+	request: OrchestrateRequest,
 	source: ChannelRecord,
-	args: Extract<FanOutArguments, { operation: "instruct" }>,
-): Promise<FanOutResult> {
+	args: Extract<OrchestrateArguments, { operation: "instruct" }>,
+): Promise<OrchestrateResult> {
 	let all = await created(deps, source);
 	if (all.length === 0) return refused("nothing-created");
 	let unknown = args.targets?.filter(wanted => !all.some(channel => names(deps, channel, wanted)));
@@ -327,7 +330,10 @@ async function instruct(
 	};
 }
 
-export async function fanOut(deps: FanOutDeps, request: FanOutRequest): Promise<FanOutResult> {
+export async function orchestrate(
+	deps: OrchestrateDeps,
+	request: OrchestrateRequest,
+): Promise<OrchestrateResult> {
 	let source = await deps.channel(request.sourceId);
 	if (!source || source.archivedAt || deps.deleting(source.id) || source.parentChannelId) {
 		return refused("document-unavailable");
