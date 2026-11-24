@@ -259,8 +259,11 @@ durable.
   (`AgentLink.catalog`): from the moment the person's accounts change it is no longer what the
   client offers, and only a report through a launch prepared since counts again, named in
   `catalogLaunch` by a client offering `catalog-launches`, never one through an earlier launch.
-  An end, a replacement or a session's close is in force in the
-  process the moment it is asked, before storage deletes the rows (`#ending`), an end
+  An end or a session's close is in force in the
+  process the moment it is asked, before storage deletes the rows (`#ending`), while a
+  session launch replaced by renewal stays live for a two-minute grace period
+  (`REPLACED_LAUNCH_GRACE_MS` in `apps/server/src/harness/remote/link.ts`) and ends at
+  once if the session does; an end
   storage refuses is retried, and the writer lease's holder ends launches nothing owns
   as it starts serving and with each sweep (`AiCredentials.retire`). A key refused as
   invalid, or a Copilot seat GitHub confirms lost or back, tells the person's lasting
@@ -326,7 +329,11 @@ durable.
   message, except one sent once the turn is being stopped or finishing, which starts
   its next turn. Chopin keeps no workflow runs of a client's and draws no run cards: a session
   outlives its turn only while it waits on a question it asked or on an answer its client has not
-  received. Signing out the owner's login, its expiry, or a Planner reset closes the link. A lost
+  received (whether the turn finished or failed, so a failing reply never withdraws open
+  Decisions). A routine renewal of the owner's GitHub credential rebinds a running or retained
+  remote session (`ownerSignal` and `rebindRetained` in `chat/service.ts`) without aborting the
+  turn or withdrawing its questions; only signing out, an unrenewable credential, or a Planner
+  reset closes the link. A lost
   connection never ends work by itself: a link that offered
   `resumable-sessions` and then dropped unexpectedly keeps its sessions that hold
   an open question or an answer its client has not acknowledged, however long it stays away.
@@ -654,26 +661,45 @@ means a former target can no longer be identified safely.
 
 ## Planner-created documents
 
-The Planner's `create_document` host tool (every harness) makes new top-level
-documents, one per piece of work that splits naturally, each with its own Chat,
-Decisions and Planner. Only a turn a person's message (in Chat or a thread)
-drives may call it: that person is the creator, and their own live browser login
-is rechecked for write access as for `chat:send`; a turn nobody typed and
-background jobs are refused. It reuses MCP `create_document`'s draft validation,
-visual assessment and creation (`createDocument` in `apps/server/src/mcp/hosted.ts`),
-keeps the creating document's repository and base branch, with an idempotency
-key scoped to the creating document and no per-turn or hourly cap. The creating
-document's model choice is stored in the transaction that creates the new one
-(`CreateChannel.modelChoice`), so a retry never overwrites a choice made since.
-A retry is found in storage, is compared against the base the first call
-recorded, and posts the linked line only if the first call could not save it.
-The document is stored before the sidebar, the asking Chat's
-one linked line (`Entry.document`) or its optional first instruction (posted as
-the creator's message, as `invoke_planner` does) hear of it. Each records the
-document it was created from (`ChannelRecord.createdFrom`), and the Planner's
-`orchestrate` tool opens several at once, lists their state, instructs their Planners
-and keeps a table of them in the creating document, reaching only documents whose
-`createdFrom` is its own. See
+The Planner's `create_document` host tool (every harness) opens one top-level
+document per piece of work, each with its own Chat, Decisions, and Planner.
+Only a turn driven by a person's message (in Chat or a thread) may call it:
+that person is the creator, and their live browser login is rechecked for write
+access as for `chat:send`. Turns nobody typed and background jobs are refused.
+
+`create_document` reuses MCP's draft validation, visual assessment, and
+creation transaction (`createDocument` in `apps/server/src/mcp/hosted.ts`),
+keeping the creating document's repository and base branch with a
+source-scoped idempotency key and no per-turn or hourly cap. The creating
+document's model choice is saved in the same transaction
+(`CreateChannel.modelChoice`), so retries never overwrite a choice made since.
+Retries compare against the recorded base and post the linked Chat line only if
+the first call could not save it. The document is stored before the sidebar,
+the asking Chat's linked line (`Entry.document`), or its optional first
+instruction (posted as the creator's message, as `invoke_planner` does) hear of
+it.
+
+Each created document records its parent in `ChannelRecord.createdFrom`
+(migration 054; cleared when the parent is deleted, keeping the child). The
+Planner's `orchestrate` host tool (`apps/server/src/agent/orchestrate.ts`,
+`orchestrate-index.ts`) is offered under the same permissions and reaches only
+unarchived top-level documents in the same repository whose `createdFrom` is
+this document:
+
+- `open`: creates up to 20 documents at once, each with `create_document`
+  semantics.
+- `list`: returns each created document's link, Planner state (`working`,
+  `idle`, `stopped`), open Decisions count, and build state.
+- `instruct`: posts one instruction as the person's message to all or named
+  (`targets`) created documents, starting stopped Planners.
+- `index`: writes or updates a table under `## Documents created from this one`
+  (`open` and `list` refresh an existing table; unchanged tables are not
+  rewritten).
+
+Limits: documents created before migration 054 have no `createdFrom` link and
+are invisible to `orchestrate`; the index refreshes only when `open`, `list`,
+or `index` runs; `list`, `instruct`, and `index` cover up to 200 created
+documents. See
 [Creating documents](docs/hosted-agent.md#creating-documents).
 
 ## Research requests and child documents
@@ -993,7 +1019,7 @@ run `bun run ci` and validate relative links with exact casing.
 When a disposable Planner session is created, diagnostics report available tool
 names and the external GitHub MCP contribution. Counts vary with SDK and remote
 MCP versions. A healthy boundary includes Chopin's document tools (currently
-plan-named), `create_document`, child document tools, repository tools, and allowed pull-request
+plan-named), `create_document`, `orchestrate`, child document tools, repository tools, and allowed pull-request
 tools, and excludes ambient capabilities such as `bash`, filesystem access, URL
 fetch, host Git, issues, and unrestricted search. The exception is an `atomic`
 Planner session, which deliberately adds Atomic's builtins and coding tools but

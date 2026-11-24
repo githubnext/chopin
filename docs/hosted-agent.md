@@ -610,20 +610,21 @@ remote client's workflow-stage input, become ordinary shared Decisions:
   cancellation by `@chopin`. Member cancellations retain any answers already
   given in that batch. Late submissions cannot approve withdrawn input.
 - A request has no time limit. It waits until members answer it or it is
-  withdrawn: the Planner stops, the document is archived
-  or deleted, or the asker's link closes for good, which includes its owner's
-  sign-in ending. A lost connection is never such an end. A link that dropped
-  unexpectedly and offered `resumable-sessions` keeps its open questions for its
-  account to [resume](agent-connection.md#resuming-after-a-dropped-link)
-  however long it stays away: no timer, including `PLANNER_ATTACH_GRACE_MS`, ends
-  them. While it is away Chat adds no line about the connection (the machine
-  button carries it); the Decisions stay open and answerable, their answers kept
-  for the client. Stop on
-  a Planner that only waits on a question withdraws it, and Chat says that. A
-  document on **Default machine**
-  keeps its Planner running while that Planner is replying or waits on a question,
-  a disconnected Planner's kept work included, so
-  nobody viewing the document does not withdraw it or cut its work short.
+  withdrawn: the Planner stops, the document is archived or deleted, or the
+  asker's link closes for good (such as the owner signing out or a credential
+  that cannot be renewed). A failed turn, a routine renewal of the owner's
+  GitHub credential, and a lost connection never withdraw open questions. A
+  link that dropped unexpectedly and offered `resumable-sessions` keeps its
+  open questions for its account to
+  [resume](agent-connection.md#resuming-after-a-dropped-link) however long it
+  stays away: no timer, including `PLANNER_ATTACH_GRACE_MS`, ends them. While
+  it is away, Chat adds no line about the connection (the machine button
+  carries it), and Decisions stay open and answerable with answers held for the
+  client. Stopping a Planner that only waits on a question withdraws it, and
+  Chat says so. A document on **Default machine** keeps its Planner running
+  while it is replying or waiting on a question (including a disconnected
+  Planner's kept work), so an idle document never withdraws questions or cuts
+  work short.
 - Cards an earlier Chopin closed unanswered after a fixed time stay in the
   document and in Decisions, among the resolved cards, marked
   `status="expired"`; each reads "Nobody answered this question, so the Planner
@@ -1386,17 +1387,20 @@ for (`owner`: `run:<id>`, `session:<id>` or `link:<id>`), which ends it (see bel
   An `ai` message hands the session a new launch when what a launch for the person may
   be given changes (they connect, replace or remove a provider, their provider refuses
   a key of theirs as invalid, or GitHub confirms their Copilot seat lost or regained),
-  half an hour before the deadline, and when a resumed session comes back; the earlier
-  launch ends once the new one is sent. A change while the session is starting reaches
-  it once the client acknowledges `start` or `fork`, prepared again from what the person
-  has then, once however often it changed. A renewal that finds nothing left to give
-  hands the session an empty `providers` and ends its launch. The session's end
-  (`destroy`, or its link closing for good) ends its launch. A session a restart's hold
-  keeps keeps its launch, named in the hold (`aiLaunchId`, an id and no credential):
-  from the moment the cut takes the hold no launch of its changes, and one a renewal
-  prepared meanwhile is ended unsent, so the hold names the launch its client holds. The
-  next process ends it when the session ends or the hold does, and replaces it when the
-  client resumes. A client that does not offer the feature is launched nothing. See
+  half an hour before the deadline, and when a resumed session comes back. The replaced
+  launch stays held and live for a two-minute grace period (`REPLACED_LAUNCH_GRACE_MS` in
+  `apps/server/src/harness/remote/link.ts`) before ending, so requests the client already
+  sent on it or is still streaming are not refused as ended. Ending the session ends both
+  the current launch and any replaced launch still in grace at once. A change while the
+  session is starting reaches it once the client acknowledges `start` or `fork`, prepared
+  again from what the person has then, once however often it changed. A renewal that finds
+  nothing left to give hands the session an empty `providers` and retires its launch. The
+  session's end (`destroy`, or its link closing for good) ends its launches at once. A
+  session a restart's hold keeps keeps its launch, named in the hold (`aiLaunchId`, an id
+  and no credential): from the moment the cut takes the hold no launch of its changes, and
+  one a renewal prepared meanwhile is ended unsent, so the hold names the launch its client
+  holds. The next process ends it when the session ends or the hold does, and replaces it
+  when the client resumes. A client that does not offer the feature is launched nothing. See
   [Models through Chopin](agent-connection.md#models-through-chopin).
 - **A link's catalog launch**, for a client that offers `ai-credentials` and `ai-catalog` and
   asks for it once attached, is launched for the same account its sessions are, for the
@@ -1918,31 +1922,43 @@ Chat is restored, so it shows no mark. See [Storage](storage.md#a-live-database-
 
 ## Session lifecycle
 
-A harness session is disposable. A process restart, credential rotation,
-logout, or ownership reset discards it. A later turn bootstraps from the
-bounded transcript and reads the current document.
+A harness session is disposable unless it holds an open question or an
+unacknowledged answer. Logout, an unrenewable credential, a process restart
+(without a remote Planner handover hold), or an ownership reset discards it; a
+later turn bootstraps from the bounded transcript and reads the current
+document.
 
-The one exception is a Planner session that waits on a question it asked, such as an
-`ask_user_question`, or on an answer its client has not received, when its turn ends. Chopin
-keeps the session and its owner binding, and keeps the document loaded, until a member answers
-the question or it is withdrawn, and the next turn reuses it. The session is let go once no
-question is open and every answer has reached its client, when its owner binding ends, or when
-the document closes. A turn whose Chat reply could not be verified, or moved into inline
-decisions, fails without letting go a session that waits on a question, so that failure
-withdraws no question. **Stop Planner** stops the running turn; with no turn running, it lets go
-a session that only waits on a question, which withdraws the question, and Chat says so. Chopin
-keeps no workflow runs and shows no run cards: a remote client's own work that outlives its turn
-is the client's to report in its replies. The Atomic adapter stops any turn Atomic starts on its
-own, such as for its lifecycle notices or, since Atomic 0.9.41, for a message queued while the
-session is idle, because Chopin would neither show nor record it. The Planner's next turn still
-starts normally. An Atomic Planner session keeps its history in
-memory, and Chopin saves its every entry with the document for forks and threads,
-so Atomic's shared top-level `storage` setting and its `ATOMIC_STORAGE` and
-`ATOMIC_SESSIONS_STORAGE` selections do not move it. Atomic still checks every set
-`ATOMIC_STORAGE` and `ATOMIC_SESSIONS_STORAGE` when it creates a session, so an
-invalid value fails every Atomic turn with a `StorageConfigError` naming the variable. A Build's tasks, their
-state and pull requests show under **Build**, whichever machine runs it. The
-Planner's instructions say so, so it does not point people to Chat for a Build.
+- **Credential renewal.** A routine renewal of the owner's GitHub credential
+  does not abort a running turn or discard a retained session on harnesses that
+  support rebinding (`remote`). The session takes the renewed credential and
+  keeps going, even if the renewal lands just as the turn closes. A turn
+  running on a retained session shares that session's rebind so the session
+  holds one binding at a time. Only signing out, a credential that cannot be
+  renewed, or a harness that cannot rebind ends the session.
+- **Kept sessions and failed turns.** When a turn finishes or fails while its
+  session still holds an open question (such as `ask_user_question`) or an
+  answer its client has not received, Chopin keeps the session, its owner
+  binding, and the loaded document. A failing reply never withdraws open
+  Decisions. The next turn reuses the session, and Chopin lets it go once no
+  question is open and every answer has reached its client, when its owner
+  binding ends for good, or when the document closes.
+- **Stop Planner.** Clicking **Stop Planner** stops a running turn. With no
+  turn running, it releases a kept session that only waits on a question,
+  withdrawing that question and posting a note in Chat.
+- **No workflow run cards.** Chopin keeps no workflow runs and shows no run
+  cards: a remote client's own work that outlives its turn is the client's to
+  report in its replies.
+- **Atomic sessions.** The Atomic adapter stops any turn Atomic starts on its
+  own (such as lifecycle notices or messages queued while idle) because Chopin
+  would neither show nor record it; the Planner's next turn still starts
+  normally. An Atomic Planner session keeps its history in memory and Chopin
+  saves every entry with the document for forks and threads, so Atomic's
+  top-level `storage` setting and `ATOMIC_STORAGE` / `ATOMIC_SESSIONS_STORAGE`
+  do not move it. Atomic still validates those variables on session creation,
+  so an invalid value fails every Atomic turn with `StorageConfigError`.
+- **Builds.** A Build's tasks, state, and pull requests appear under **Build**,
+  whichever machine runs it; the Planner's instructions tell it not to point
+  people to Chat for a Build.
 
 An interrupted turn is visible and is never replayed automatically because it
 may already have made durable document or question changes. `HarnessAgent.stream()`
@@ -2014,30 +2030,43 @@ kept, when the creating document is deleted.
 
 ### Working with created documents
 
-`orchestrate` (`apps/server/src/agent/orchestrate.ts`) is the Planner's tool for the
-documents its document created. It is offered with `create_document`, under the
-same rules: only a turn a person's message drives may call it, that person's live
-browser login is rechecked for write access, and it reaches only unarchived
-top-level documents of the same repository whose `createdFrom` is this document.
-It takes one `operation`:
+`orchestrate` (`apps/server/src/agent/orchestrate.ts`) lets a document's Planner
+open, inspect, instruct, and index the documents this document created. It is
+offered alongside `create_document` under the same rules: only a turn driven by
+a person's message may call it, that person's live browser login is rechecked
+for write access, and it is never offered to background jobs or child rooms. It
+reaches only unarchived top-level documents in the same repository whose stored
+`createdFrom` link (migration 054) points to this document.
 
-- `open` creates up to 20 documents at once from `documents`, each exactly as
-  `create_document` takes and creates it, with its own idempotency key. Results
-  come back in the order given.
-- `list` gives each created document's `id`, `title`, `url`, its Planner
-  (`working` while a turn runs, `idle` while a session or attached machine holds
-  it, otherwise `stopped`), its open Decisions, and its build (`building`,
-  `built`, `failed`, `stopped` or `not built`).
-- `instruct` posts one `instruction` in every created document's Chat, or only in
-  the `targets` named by id or url, as the person's message, exactly as
-  `invoke_planner` does, starting a Planner that isn't running. Each document's
-  outcome is reported; a busy Planner is refused and can be instructed again
-  later. A target that is not a document this one created is named in `unknown`.
-- `index` writes a table of the created documents under the heading "Documents
-  created from this one" in the creating document. The heading and the one block
-  after it are Chopin's; the rest of the document is left alone. `open` and
-  `list` refresh a table already there, and nothing is written when it would not
-  change.
+Each call takes one `operation`:
+
+- **`open`** creates up to 20 documents at once (`documents`), each with the
+  same schema, idempotency key, and creation rules as `create_document`.
+  Results come back in the order given.
+- **`list`** returns each created document's `id`, `title`, `url`, Planner
+  state (`working` while a turn runs, `idle` while a session or attached
+  machine holds it, otherwise `stopped`), open Decisions count, and build state
+  (`building`, `built`, `failed`, `stopped`, or `not built`).
+- **`instruct`** posts one `instruction` (up to 64 KiB) to every created
+  document's Chat—or only to `targets` matched by `id` or `url`—as the person's
+  message, exactly as `invoke_planner` does, starting stopped Planners. It
+  reports each document's outcome; a busy Planner returns `planner-busy` and
+  can be retried later. Any target not created from this document is returned
+  in `unknown`.
+- **`index`** writes or updates a table of the created documents under the
+  heading `## Documents created from this one` (`orchestrate-index.ts`). Chopin
+  owns only that heading and the one block after it; the rest of the document
+  is left alone. `open` and `list` refresh an existing table, and nothing is
+  written when the table would not change.
+
+**Limits:**
+
+- Documents created before `createdFrom` (migration 054) have no parent link,
+  so `orchestrate` cannot list, instruct, or index them.
+- The index table refreshes only when `open`, `list`, or `index` runs; Chopin
+  does not push status changes into the parent document automatically.
+- `open` accepts at most 20 documents per call; `list`, `instruct`, and `index`
+  cover up to 200 created documents.
 
 ## Background jobs
 

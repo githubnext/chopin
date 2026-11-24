@@ -850,10 +850,11 @@ session is one launch, prepared before its `start` or `fork` and carried in `ai`
   back), half an hour before the launch's deadline, and after a
   [resume](#resuming-after-a-dropped-link), because the launch a session held may have
   ended with its link or with the server's process. A change while the session starts
-  is sent once the client answers `started`, as the accounts are then. The earlier
-  launch ends once the new one is sent, so use the new grants from then on: a request
-  still waiting at Chopin on the earlier one is refused. An empty `providers` says the
-  session has no grant now.
+  is sent once the client answers `started`, as the accounts are then. Switch to the
+  new grants right away. The replaced launch stays live for a two-minute grace period
+  (`REPLACED_LAUNCH_GRACE_MS`) before ending, so requests the client already sent on
+  it or is still streaming are not refused as ended; if the session ends first, both
+  launches end at once. An empty `providers` says the session has no grant now.
 - A launch ends with its session (`destroy`, or a link that closes for good), and
   when its machine is revoked or its document archived; Chopin's proxy then answers
   `launch-ended`, or `unknown-placeholder` once its placeholders are gone (401, `{
@@ -1401,14 +1402,15 @@ not apply to it.
   first and handle `resumed`, then the redelivered `input-result`s; retry the same
   `resume` on a `refused` with `retry`, and treat any other `refused` or `error` as final.
 - **What still ends it for good.** Its own `detach`; any definitive `refused` (every
-  one without `retry`) or protocol error; the owner's sign-out or its expiry; a Planner reset; revoking or unpairing
-  the machine that attached it; the document's owner choosing another machine for it;
-  archiving or deleting the document; a Stop that withdraws its last question; and the
-  same account attaching with a client that does not resume, which includes a browser
-  sign-in attaching over a paired machine's parked work, since that client cannot
-  resume it. All of these withdraw the questions, and a later `resume` finds nothing. A
-  server restart does not end it: see below. A person
-  with write access can always end a disconnected Planner by resetting it.
+  one without `retry`) or protocol error; the owner's sign-out or a credential that
+  cannot be renewed (routine credential renewal does not end it); a Planner reset;
+  revoking or unpairing the machine that attached it; the document's owner choosing
+  another machine for it; archiving or deleting the document; a Stop that withdraws
+  its last question; and the same account attaching with a client that does not
+  resume, which includes a browser sign-in attaching over a paired machine's parked
+  work, since that client cannot resume it. All of these withdraw the questions, and
+  a later `resume` finds nothing. A server restart does not end it: see below. A
+  person with write access can always end a disconnected Planner by resetting it.
 
 #### When the server is restarting
 
