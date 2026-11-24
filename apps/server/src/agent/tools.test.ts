@@ -87,7 +87,7 @@ test("document tool names and schemas remain available to the Planner", async ()
 		"read_background_job",
 		"create_research_workspace",
 		"create_document",
-		"fan_out",
+		"orchestrate",
 		"upload_plan_image",
 		"assess_visual",
 		"edit_plan",
@@ -275,14 +275,14 @@ test("read_plan and edit_plan give a child document its nested canonical URL", a
 	expect(edited).toMatchObject({ ok: true, document: identity });
 });
 
-async function callFanOut(tools: ReturnType<typeof fixtureTools>, raw: unknown) {
-	let fanOut = tools.find(tool => tool.name === "fan_out");
-	if (!fanOut?.handler) throw new Error("fan_out is missing");
-	let text = String(await fanOut.handler(raw as never, { toolCallId: "call" }));
+async function callOrchestrate(tools: ReturnType<typeof fixtureTools>, raw: unknown) {
+	let orchestrate = tools.find(tool => tool.name === "orchestrate");
+	if (!orchestrate?.handler) throw new Error("orchestrate is missing");
+	let text = String(await orchestrate.handler(raw as never, { toolCallId: "call" }));
 	return text.startsWith("Error: ") ? text : JSON.parse(text);
 }
 
-test("fan_out hands checked arguments and this room's index to the member turn, and refuses without one", async () => {
+test("orchestrate hands checked arguments and this room's index to the member turn, and refuses without one", async () => {
 	let { plan, server } = await opened("# Whole app\n\nWhat the app does.\n");
 	let room = {
 		plan,
@@ -294,7 +294,7 @@ test("fan_out hands checked arguments and this room's index to the member turn, 
 		anchors() {},
 		changes() {},
 	};
-	expect(await callFanOut(fixtureTools(room), { operation: "list" })).toEqual({
+	expect(await callOrchestrate(fixtureTools(room), { operation: "list" })).toEqual({
 		ok: false,
 		reason: "member-request-required",
 		message: "Only a turn a person asked for in Chat can work with created documents.",
@@ -302,7 +302,7 @@ test("fan_out hands checked arguments and this room's index to the member turn, 
 	let received: unknown[] = [];
 	let tools = fixtureTools({
 		...room,
-		fanOut: async (args, index) => {
+		orchestrate: async (args, index) => {
 			received.push(args);
 			let written = await index([{
 				id: "doc",
@@ -315,7 +315,7 @@ test("fan_out hands checked arguments and this room's index to the member turn, 
 			return { ok: true, operation: "index", documents: [], index: written };
 		},
 	});
-	expect(await callFanOut(tools, { operation: "index" })).toMatchObject({
+	expect(await callOrchestrate(tools, { operation: "index" })).toMatchObject({
 		ok: true,
 		index: { state: "written" },
 	});

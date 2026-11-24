@@ -671,7 +671,7 @@ The document is stored before the sidebar, the asking Chat's
 one linked line (`Entry.document`) or its optional first instruction (posted as
 the creator's message, as `invoke_planner` does) hear of it. Each records the
 document it was created from (`ChannelRecord.createdFrom`), and the Planner's
-`fan_out` tool opens several at once, lists their state, instructs their Planners
+`orchestrate` tool opens several at once, lists their state, instructs their Planners
 and keeps a table of them in the creating document, reaching only documents whose
 `createdFrom` is its own. See
 [Creating documents](docs/hosted-agent.md#creating-documents).

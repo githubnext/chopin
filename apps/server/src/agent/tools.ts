@@ -35,9 +35,9 @@ import { experimentTools } from "./experiment-tools";
 import { planImage } from "./plan-images";
 import { NEW_DOCUMENT_SCHEMA, newDocumentArguments } from "./new-documents";
 import type { NewDocumentArguments, NewDocumentResult } from "./new-documents";
-import { FAN_OUT_SCHEMA, fanOutArguments } from "./fan-out";
-import { writeIndex } from "./fan-out-index";
-import type { FanOutArguments, FanOutResult, IndexWriter } from "./fan-out";
+import { ORCHESTRATE_SCHEMA, orchestrateArguments } from "./orchestrate";
+import { writeIndex } from "./orchestrate-index";
+import type { IndexWriter, OrchestrateArguments, OrchestrateResult } from "./orchestrate";
 import type { InvestigationTools } from "./experiment-tools";
 
 import type { ActiveOwnerBinding } from "./active-owner";
@@ -201,11 +201,11 @@ export type DocumentRoom = {
 	 * Works with the documents this one created, for the person whose message drives the current
 	 * turn; absent, or refusing, where `createDocument` is.
 	 */
-	fanOut?: (
-		args: FanOutArguments,
+	orchestrate?: (
+		args: OrchestrateArguments,
 		index: IndexWriter,
 		signal?: AbortSignal,
-	) => Promise<FanOutResult>;
+	) => Promise<OrchestrateResult>;
 	/** Starts the exact research request represented by the current member turn. */
 	createResearch?: (question: string) => Promise<ResearchWorkspaceRequest>;
 	/** Reads one reference retained by this room's active Planner session. */
@@ -376,7 +376,7 @@ export const documentTools = {
 			}),
 	}),
 
-	fan_out: tool({
+	orchestrate: tool({
 		contextSchema: roomContext,
 		description: "Work with the documents this document created, each with its own Chat, "
 			+ "Decisions and Planner. `open` creates several at once, each exactly as "
@@ -388,18 +388,18 @@ export const documentTools = {
 			+ "`index` writes a table of them, kept current by later calls, under its own heading in "
 			+ "this document. Only a turn a person asked for can use it, and it reaches only the "
 			+ "documents this one created.",
-		inputSchema: jsonSchema(FAN_OUT_SCHEMA),
+		inputSchema: jsonSchema(ORCHESTRATE_SCHEMA),
 		execute: (raw, { context: { room: context }, abortSignal }) =>
-			answer("fan_out", async () => {
-				let args = fanOutArguments(raw);
-				if (!context.fanOut) {
+			answer("orchestrate", async () => {
+				let args = orchestrateArguments(raw);
+				if (!context.orchestrate) {
 					return {
 						ok: false,
 						reason: "member-request-required",
 						message: "Only a turn a person asked for in Chat can work with created documents.",
 					};
 				}
-				return context.fanOut(
+				return context.orchestrate(
 					args,
 					(documents, create) => writeIndex(context, documents, create, abortSignal),
 					abortSignal,

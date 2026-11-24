@@ -371,7 +371,7 @@ Chopin's tools available to the Planner under every harness are:
   never offered to background jobs, and unexpected storage errors reach the
   model only as a generic message;
 - `create_document`, which makes new top-level documents for the person whose
-  message drives the turn, and `fan_out`, which opens, lists, instructs and
+  message drives the turn, and `orchestrate`, which opens, lists, instructs and
   indexes the documents this one created (see
   [Creating documents](#creating-documents)); neither is offered to background
   jobs;
@@ -2014,7 +2014,7 @@ kept, when the creating document is deleted.
 
 ### Working with created documents
 
-`fan_out` (`apps/server/src/agent/fan-out.ts`) is the Planner's tool for the
+`orchestrate` (`apps/server/src/agent/orchestrate.ts`) is the Planner's tool for the
 documents its document created. It is offered with `create_document`, under the
 same rules: only a turn a person's message drives may call it, that person's live
 browser login is rechecked for write access, and it reaches only unarchived
