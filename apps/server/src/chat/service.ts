@@ -986,6 +986,61 @@ function credentialRenewed(binding: ActiveOwnerBinding): boolean {
 }
 
 /**
+ * What a running turn stops on for its owner: the binding ending for any reason but its credential being renewed. A
+ * renewal (the owner's GitHub token expiring and being refreshed, every few hours) gives the session a binding to the
+ * renewed credential and the turn goes on; before, the turn was aborted, failing the reply and withdrawing every
+ * question it waited on. A session that can't take a new binding stops as before.
+ */
+function ownerSignal(
+	context: Room,
+	opened: { session: PlannerSession; binding: ActiveOwnerBinding },
+): { signal: AbortSignal; release: () => void } {
+	let ended = new AbortController();
+	let released = false;
+	let watched: ActiveOwnerBinding | undefined;
+	let onAbort = () => void follow();
+	let watch = (binding: ActiveOwnerBinding) => {
+		watched = binding;
+		if (binding.signal.aborted) void follow();
+		else binding.signal.addEventListener("abort", onAbort, { once: true });
+	};
+	let follow = async () => {
+		let previous = opened.binding;
+		if (released) return;
+		if (!opened.session.rebind || !credentialRenewed(previous)) {
+			ended.abort(previous.signal.reason);
+			return;
+		}
+		let binding = await context.activeOwner?.().catch(() => undefined);
+		if (released) {
+			binding?.release();
+			return;
+		}
+		if (
+			!binding || binding.ownerSessionId !== previous.ownerSessionId
+			|| binding.ownerGeneration !== previous.ownerGeneration
+			|| binding.repository.id !== previous.repository.id || binding.signal.aborted
+		) {
+			binding?.release();
+			ended.abort(previous.signal.reason);
+			return;
+		}
+		opened.session.rebind(binding);
+		opened.binding = binding;
+		previous.release();
+		watch(binding);
+	};
+	watch(opened.binding);
+	return {
+		signal: ended.signal,
+		release: () => {
+			released = true;
+			watched?.signal.removeEventListener("abort", onAbort);
+		},
+	};
+}
+
+/**
  * Gives a retained session whose owner's credential was renewed a binding to the renewed one, so
  * work a disconnected Planner kept does not end with the old credential. False when the owner is
  * no longer the same, or the session cannot take a new binding.
@@ -2324,6 +2379,14 @@ function retain(
 			// A Planner whose client is away keeps its work through a renewed credential, however
 			// long that is; its session takes the renewed one when it is next used.
 			if (opened.session.suspended?.() && credentialRenewed(retained.binding)) return;
+			// One whose client is here takes the renewed credential at once, so its open questions stay
+			// open; only an owner who left, or a credential that can't be renewed, ends them.
+			if (credentialRenewed(retained.binding)) {
+				void rebindRetained(context, retained).then(rebound => {
+					if (!rebound) void retained.release();
+				}, () => void retained.release());
+				return;
+			}
 			void retained.release();
 		};
 		retained.ended = ended;
@@ -3060,6 +3123,7 @@ async function run(
 	let releaseJobAbort: (() => void) | undefined;
 
 	let opened: { session: PlannerSession; binding: ActiveOwnerBinding } | undefined;
+	let ownerWatch: ReturnType<typeof ownerSignal> | undefined;
 	let turnController = new AbortController();
 	let retiring = chat.turn?.id;
 	turnController.signal.addEventListener("abort", () => {
@@ -3152,7 +3216,8 @@ async function run(
 			};
 			chat.toolProgress = (id, output) => progressed(context, id, output);
 		}
-		let signal = AbortSignal.any([opened.binding.signal, turnController.signal]);
+		ownerWatch = ownerSignal(context, opened);
+		let signal = AbortSignal.any([ownerWatch.signal, turnController.signal]);
 		if (jobTurn) releaseJobAbort = watchJobAbort(chat, jobTurn, signal);
 		if (jobTurn) {
 			let result = await opened.session.stream(prompt, signal, await turnChoice(context));
@@ -3274,6 +3339,7 @@ async function run(
 		}
 		chat.interruption = undefined;
 	} finally {
+		ownerWatch?.release();
 		steered?.end();
 		if (chat.steering === steered) chat.steering = undefined;
 		about?.signal?.removeEventListener("abort", invalidate);

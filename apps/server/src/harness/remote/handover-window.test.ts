@@ -939,7 +939,7 @@ describe("a remote Planner session's AI launch across a cut", () => {
 		return { ai, ended };
 	}
 
-	it("keeps the launch at the cut, and the client's return replaces it, ending the one it held", async () => {
+	it("keeps the launch at the cut, and the client's return replaces it, ending the one it held once the session ends", async () => {
 		let { ai, ended } = launches();
 		let d = await deploy(ASK_CONFIRM, 1, { ai, offer: AI_OFFER });
 		expect(d.start.ai).toMatchObject({ launch: "chopin_launch_1" });
@@ -958,8 +958,12 @@ describe("a remote Planner session's AI launch across a cut", () => {
 			session: d.sessionId,
 			ai: { launch: "chopin_launch_2" },
 		});
-		await until(() => ended.length === 1);
-		expect(ended).toEqual(["launch-1"]);
+		// The replaced launch stays live a while, for what the client sent on it before it read the new one.
+		await Bun.sleep(50);
+		expect(ended).toEqual([]);
+		client.send({ type: "detach" });
+		await until(() => ended.length === 2);
+		expect([...ended].sort()).toEqual(["launch-1", "launch-2"]);
 	});
 
 	it("ends the launch the cut kept when nothing takes the session back", async () => {
