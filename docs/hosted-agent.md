@@ -371,8 +371,10 @@ Chopin's tools available to the Planner under every harness are:
   never offered to background jobs, and unexpected storage errors reach the
   model only as a generic message;
 - `create_document`, which makes new top-level documents for the person whose
-  message drives the turn (see [Creating documents](#creating-documents)); it is
-  never offered to background jobs;
+  message drives the turn, and `fan_out`, which opens, lists, instructs and
+  indexes the documents this one created (see
+  [Creating documents](#creating-documents)); neither is offered to background
+  jobs;
 - bounded file and tree reads plus commit history using the session's default
   branch, or an explicitly supplied full commit ID when inspecting investigation evidence;
 - repository-scoped code search, post-filtered by repository node ID; and
@@ -2005,6 +2007,37 @@ holds its rules:
 
 The result gives each new document's `id` and absolute `url`, so the model, or a
 workflow it started, can follow up on it.
+
+Each document the Planner creates records the document it was created from
+(`ChannelRecord.createdFrom`, migration 054). It is cleared, and the document
+kept, when the creating document is deleted.
+
+### Working with created documents
+
+`fan_out` (`apps/server/src/agent/fan-out.ts`) is the Planner's tool for the
+documents its document created. It is offered with `create_document`, under the
+same rules: only a turn a person's message drives may call it, that person's live
+browser login is rechecked for write access, and it reaches only unarchived
+top-level documents of the same repository whose `createdFrom` is this document.
+It takes one `operation`:
+
+- `open` creates up to 20 documents at once from `documents`, each exactly as
+  `create_document` takes and creates it, with its own idempotency key. Results
+  come back in the order given.
+- `list` gives each created document's `id`, `title`, `url`, its Planner
+  (`working` while a turn runs, `idle` while a session or attached machine holds
+  it, otherwise `stopped`), its open Decisions, and its build (`building`,
+  `built`, `failed`, `stopped` or `not built`).
+- `instruct` posts one `instruction` in every created document's Chat, or only in
+  the `targets` named by id or url, as the person's message, exactly as
+  `invoke_planner` does, starting a Planner that isn't running. Each document's
+  outcome is reported; a busy Planner is refused and can be instructed again
+  later. A target that is not a document this one created is named in `unknown`.
+- `index` writes a table of the created documents under the heading "Documents
+  created from this one" in the creating document. The heading and the one block
+  after it are Chopin's; the rest of the document is left alone. `open` and
+  `list` refresh a table already there, and nothing is written when it would not
+  change.
 
 ## Background jobs
 

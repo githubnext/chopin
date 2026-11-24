@@ -296,6 +296,8 @@ export interface ChannelStore {
 	get(id: string): Promise<ChannelRecord | undefined>;
 	/** Unarchived direct children of one channel, oldest first, at most `limit`. */
 	children(parentId: string, limit: number): Promise<ChannelRecord[]>;
+	/** Unarchived documents created from `sourceId` (see `ChannelRecord.createdFrom`), oldest first. */
+	createdFrom(sourceId: string, limit: number): Promise<ChannelRecord[]>;
 	resolve(repositoryId: string, slug: string): Promise<ChannelRecord | undefined>;
 	/** Slugs a document had before a rename, which still resolve to it, newest first by first use. */
 	earlierSlugs(id: string): Promise<string[]>;

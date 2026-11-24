@@ -102,6 +102,7 @@ type ChannelRow = {
 	repositoryOwner: string;
 	repositoryName: string;
 	parentChannelId: string | null;
+	createdFrom: string | null;
 	title: string;
 	slug?: string;
 	createdBy: string;
@@ -253,6 +254,7 @@ function channel(row: ChannelRow): ChannelRecord {
 		archivedAt,
 		fullWidth,
 		parentChannelId,
+		createdFrom,
 		description,
 		descriptionRevision,
 		descriptionPlanRevision,
@@ -298,6 +300,7 @@ function channel(row: ChannelRow): ChannelRecord {
 	return {
 		...record,
 		...(parentChannelId === null ? {} : { parentChannelId }),
+		...(createdFrom === null ? {} : { createdFrom }),
 		slug: row.slug,
 		revision: integer(row.revision, "channel revision"),
 		createdAt: date(row.createdAt, "channel creation time"),
@@ -395,6 +398,7 @@ const CHANNEL_COLUMNS = `
 	channels.repository_owner AS "repositoryOwner",
 	channels.repository_name AS "repositoryName",
 	channels.parent_channel_id AS "parentChannelId",
+	channels.created_from AS "createdFrom",
 	channels.title,
 	(
 		SELECT channel_slugs.slug
@@ -427,6 +431,7 @@ const CHANNEL_RETURNING = `
 	repository_owner AS "repositoryOwner",
 	repository_name AS "repositoryName",
 	parent_channel_id AS "parentChannelId",
+	created_from AS "createdFrom",
 	title,
 	created_by AS "createdBy",
 	revision,
@@ -838,6 +843,17 @@ export class PostgresStorage implements StorageAdapter {
 				`;
 				return rows.map(channel);
 			}),
+		createdFrom: (sourceId, limit) =>
+			this.#run("list documents created from a document", async () => {
+				let rows = await this.#sql<ChannelRow[]>`
+					SELECT ${this.#sql.unsafe(CHANNEL_COLUMNS)}
+					FROM channels
+					WHERE created_from = ${sourceId} AND archived_at IS NULL
+					ORDER BY created_at, id
+					LIMIT ${limit}
+				`;
+				return rows.map(channel);
+			}),
 		resolve: (repositoryId, slug) =>
 			this.#run("resolve channel slug", async () => {
 				let [found] = await this.#sql<ChannelRow[]>`
@@ -967,13 +983,31 @@ export class PostgresStorage implements StorageAdapter {
 				throw conflict(`channel ${input.parentChannelId} cannot parent another child`);
 			}
 		}
+		if (input.createdFrom !== undefined) {
+			let [source] = await transaction<{
+				parentChannelId: string | null;
+				repositoryId: string;
+			}[]>`
+				SELECT
+					parent_channel_id AS "parentChannelId",
+					repository_id AS "repositoryId"
+				FROM channels
+				WHERE id = ${input.createdFrom}
+				FOR KEY SHARE
+			`;
+			if (!source) throw missing(`channel ${input.createdFrom} does not exist`);
+			if (source.repositoryId !== input.repositoryId || source.parentChannelId !== null) {
+				throw conflict(`channel ${input.id} must be created from a document of its repository`);
+			}
+		}
 		let [saved] = await transaction<ChannelRow[]>`
 			INSERT INTO channels (
-				id, repository_id, repository_owner, repository_name, parent_channel_id, title,
-				created_by, revision, next_sequence, created_at, updated_at
+				id, repository_id, repository_owner, repository_name, parent_channel_id, created_from,
+				title, created_by, revision, next_sequence, created_at, updated_at
 			) VALUES (
 				${input.id}, ${input.repositoryId}, ${input.repositoryOwner},
-				${input.repositoryName}, ${input.parentChannelId ?? null}, ${input.title},
+				${input.repositoryName}, ${input.parentChannelId ?? null}, ${input.createdFrom ?? null},
+				${input.title},
 				${input.createdBy}, 0, 1,
 				${input.now}, ${input.now}
 			)

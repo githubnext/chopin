@@ -202,6 +202,7 @@ describe("createNewDocument", () => {
 			repositoryId: "R_app",
 			createdBy: "U_mona",
 			title: "Settings page",
+			createdFrom: context.source.id,
 		});
 		expect(channel?.parentChannelId).toBeUndefined();
 		expect(result.document.url).toBe(

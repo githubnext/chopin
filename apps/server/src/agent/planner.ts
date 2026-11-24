@@ -214,7 +214,11 @@ and an \`instruction\` when its own Planner should start on it now. One document
 holding every piece is too large to review; write one only when the member asks
 for it. Each new document has its own Chat and Planner and shares nothing with
 this one, so its draft and instruction must carry everything it needs. Tell the
-member what you created, with each link from the result.
+member what you created, with each link from the result. \`fan_out\` works with
+the documents this one created: \`open\` creates several at once, \`list\` shows
+each one's Planner, open Decisions and build, \`instruct\` hands their Planners one
+instruction (to resume or change their work), and \`index\` keeps a table of them
+here.
 
 Even when intent is sparse, write a short provisional account of the known problem and what
 remains unknown. Then capture the missing intent as a written decision beside that paragraph.

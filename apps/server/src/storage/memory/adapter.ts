@@ -440,16 +440,9 @@ export class MemoryStorage implements StorageAdapter {
 		create: async input => this.#createChannel(input),
 		get: id => Promise.resolve(this.#channels.get(id)).then(value => value && channel(value)),
 		children: (parentId, limit) =>
-			Promise.resolve(
-				[...this.#channels.values()]
-					.filter(value => value.parentChannelId === parentId && !value.archivedAt)
-					.sort((left, right) =>
-						left.createdAt.getTime() - right.createdAt.getTime()
-						|| left.id.localeCompare(right.id)
-					)
-					.slice(0, limit)
-					.map(value => channel(value)),
-			),
+			this.#channelsWhere(value => value.parentChannelId === parentId, limit),
+		createdFrom: (sourceId, limit) =>
+			this.#channelsWhere(value => value.createdFrom === sourceId, limit),
 		resolve: (repositoryId, slug) => {
 			let id = this.#channelSlugs.get(repositoryId)?.get(slug);
 			let found = id ? this.#channels.get(id) : undefined;
@@ -645,6 +638,22 @@ export class MemoryStorage implements StorageAdapter {
 		return this.#setLastDocument(input.userId, input.documentId, input.now);
 	}
 
+	/** Unarchived channels that match, oldest first, at most `limit`. */
+	#channelsWhere(
+		matches: (value: ChannelRecord) => boolean,
+		limit: number,
+	): Promise<ChannelRecord[]> {
+		return Promise.resolve(
+			[...this.#channels.values()]
+				.filter(value => matches(value) && !value.archivedAt)
+				.sort((left, right) =>
+					left.createdAt.getTime() - right.createdAt.getTime() || left.id.localeCompare(right.id)
+				)
+				.slice(0, limit)
+				.map(value => channel(value)),
+		);
+	}
+
 	#createChannel(input: CreateChannel): ChannelRecord {
 		if (input.modelChoice) {
 			try {
@@ -668,6 +677,13 @@ export class MemoryStorage implements StorageAdapter {
 			}
 			if (parent.parentChannelId) {
 				throw conflict(`channel ${input.parentChannelId} cannot parent another child`);
+			}
+		}
+		if (input.createdFrom !== undefined) {
+			let source = this.#channels.get(input.createdFrom);
+			if (!source) throw missing(`channel ${input.createdFrom} does not exist`);
+			if (source.repositoryId !== input.repositoryId || source.parentChannelId) {
+				throw conflict(`channel ${input.id} must be created from a document of its repository`);
 			}
 		}
 		let { initial, now, modelChoice: _modelChoice, ...record } = input;
@@ -809,6 +825,11 @@ export class MemoryStorage implements StorageAdapter {
 				if (saved.lastDocumentId === id) {
 					this.#navigation.set(userId, { ...saved, lastDocumentId: undefined });
 				}
+			}
+			for (let created of this.#channels.values()) {
+				if (created.createdFrom !== id) continue;
+				let { createdFrom: _, ...unlinked } = created;
+				this.#channels.set(created.id, unlinked);
 			}
 		}
 		// Research staging is queued behind writes already under way, which find the document gone.
