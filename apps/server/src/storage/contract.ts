@@ -1,5 +1,6 @@
 import { researchWorkspace } from "./research-inline-contract-fixtures";
 import { childChannelContract } from "./child-channel-contract";
+import { createdFromContract } from "./created-from-contract";
 import { experimentContract } from "./experiment-contract";
 import { chatAttachmentContract } from "./chat-attachment-contract";
 import { imageContract } from "./image-contract";
@@ -62,6 +63,7 @@ export function storageContract(name: string, factory: Factory): void {
 	versionContract(name, factory);
 	machineContract(name, factory);
 	childChannelContract(name, factory);
+	createdFromContract(name, factory);
 	plannerAttachmentContract(name, factory);
 	plannerHoldContract(name, factory);
 	plannerModelChoiceContract(name, factory);

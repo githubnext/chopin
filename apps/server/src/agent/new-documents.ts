@@ -187,7 +187,8 @@ function refused(reason: string, issues?: Issue[]): NewDocumentResult {
 	};
 }
 
-function writes(repository: GitHubRepository | undefined, id: string): boolean {
+/** Whether `repository`, as a login reads it on GitHub, is the stored one and that login may push. */
+export function writes(repository: GitHubRepository | undefined, id: string): boolean {
 	return !!repository && repository.id === id
 		&& (repository.permissions.push || repository.permissions.admin);
 }
@@ -246,6 +247,7 @@ export async function createNewDocument(
 					&& writes(await deps.repository(current, owner, name), source.repositoryId);
 			},
 			modelChoice: () => deps.modelChoice(sourceId, creator.userId),
+			createdFrom: sourceId,
 			...(request.signal ? { signal: request.signal } : {}),
 		},
 		prepared.input,

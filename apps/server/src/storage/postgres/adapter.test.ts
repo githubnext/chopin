@@ -1115,6 +1115,7 @@ if (url) {
 				"051_machine_vm_problem",
 				"052_planner_reset",
 				"053_planner_catalogs_latest",
+				"054_documents_created_from",
 			]);
 			expect([
 				...await sql<{ table: string | null }[]>`SELECT to_regclass('channel_slugs') AS table`,

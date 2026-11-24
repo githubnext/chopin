@@ -253,6 +253,11 @@ export type ChannelRecord = {
 	repositoryOwner: string;
 	repositoryName: string;
 	parentChannelId?: string;
+	/**
+	 * The top-level document whose Planner created this one, in the same repository; absent for one
+	 * a person created, and once that document is deleted.
+	 */
+	createdFrom?: string;
 	title: string;
 	slug: string;
 	createdBy: string;

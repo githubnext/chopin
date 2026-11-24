@@ -295,6 +295,8 @@ export type DocumentCreator = {
 	stillWrites: () => Promise<boolean>;
 	/** The Planner model choice to store in the transaction that creates the document. */
 	modelChoice?: () => Promise<CreateChannel["modelChoice"]>;
+	/** The document whose Planner creates this one, stored as its `createdFrom`. */
+	createdFrom?: string;
 	signal?: AbortSignal;
 };
 
@@ -387,6 +389,7 @@ export async function createDocument(
 			now: auth.clock(),
 			initial,
 			...(modelChoice ? { modelChoice } : {}),
+			...(creator.createdFrom ? { createdFrom: creator.createdFrom } : {}),
 		});
 	} catch (err) {
 		if (!(err instanceof StorageError) || err.failure !== "conflict") throw err;

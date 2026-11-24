@@ -122,7 +122,10 @@ import { JobService } from "./jobs/service";
 import { DocumentSummaryCoordinator } from "./jobs/summary-coordinator";
 import { invokeRouted, SystemTurns } from "./mcp/invoke";
 import { createNewDocument } from "./agent/new-documents";
+import { buildState, fanOut } from "./agent/fan-out";
 import type { NewDocumentDeps } from "./agent/new-documents";
+import type { FanOutDeps } from "./agent/fan-out";
+import type { BuildRequest } from "@chopin/protocol/implementation";
 import { liveClassifier } from "./tasks/live-gate";
 import { LiveSyncCoordinator } from "./tasks/live-sync";
 import { heuristicJudge, jevJudge, SpikeScout } from "./experiments/spike-scout";
@@ -1109,6 +1112,9 @@ function conversation(
 		},
 		createDocument: config.agent
 			? request => createNewDocument(plannerDocuments(), { ...request, sourceId: room.id })
+			: undefined,
+		fanOut: config.agent
+			? request => fanOut(createdDocuments(), { ...request, sourceId: room.id })
 			: undefined,
 		createResearch: config.agent
 			? async request => {
@@ -2748,6 +2754,28 @@ function plannerDocuments(): NewDocumentDeps {
 			);
 		},
 		appOrigin: hostedAuth.config.origin,
+	};
+}
+
+/** The Planner's `fan_out`: `create_document`'s rules, and the state of what a document created. */
+function createdDocuments(): FanOutDeps {
+	return {
+		...plannerDocuments(),
+		createdFrom: (sourceId, limit) => storage.channels.createdFrom(sourceId, limit),
+		planner: channelId => {
+			let chat = Rooms.get(channelId)?.plan?.chat;
+			if (chat?.busy || chat?.starting) return "working";
+			if (chat?.agent || plannerAttachments?.holding(channelId)?.attached) return "idle";
+			return "stopped";
+		},
+		build: async channelId => {
+			let plan = Rooms.get(channelId)?.plan;
+			if (plan) return buildState(plan);
+			let stored = await storage.collaboration.load(channelId, hostedAuth.clock());
+			let sidecar = stored?.sidecar as { builds?: unknown; live?: unknown } | null | undefined;
+			let builds = Array.isArray(sidecar?.builds) ? sidecar.builds as BuildRequest[] : [];
+			return buildState({ builds, live: sidecar?.live });
+		},
 	};
 }
 

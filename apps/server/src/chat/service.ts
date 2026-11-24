@@ -39,6 +39,7 @@ import type { AiAccountRefusal } from "../ai/account-check";
 import type { ActiveOwnerBinding } from "../agent/active-owner";
 import type { DocumentRoom, ResearchWorkspaceRequest } from "../agent/tools";
 import type { NewDocumentRequest, NewDocumentResult } from "../agent/new-documents";
+import type { FanOutRequest, FanOutResult } from "../agent/fan-out";
 import type { VisualAdmission } from "../agent/visual-admission";
 import type { ChildDocuments } from "./children";
 import type { TellChat } from "./thread-notes";
@@ -924,6 +925,8 @@ export type Room = {
 	}) => Promise<ResearchWorkspaceRequest>;
 	/** Creates a top-level document for the person whose message drives the turn. */
 	createDocument?: (request: Omit<NewDocumentRequest, "sourceId">) => Promise<NewDocumentResult>;
+	/** Works with the documents this one created, for the person whose message drives the turn. */
+	fanOut?: (request: Omit<FanOutRequest, "sourceId">) => Promise<FanOutResult>;
 	/** Keeps the room loaded while a retained Planner still waits on a question; returns the release. */
 	hold?: () => () => void;
 	/** The task draft the turn being started carries. */
@@ -2573,27 +2576,28 @@ export function documentRoom(context: Room): DocumentRoom {
 		},
 		...(!chat.job && context.createDocument && !context.rootChannelId && {
 			createDocument: async (args, signal) => {
-				let active = currentMemberRequest(chat);
-				if (chat.job || !active) {
+				let request = creatorRequest(context, signal);
+				if (!request) {
 					return {
 						ok: false,
 						reason: "member-request-required",
 						message: "Only a turn a person asked for in Chat can create documents.",
 					};
 				}
-				let signals = [signal, chat.turnController?.signal].filter(
-					(value): value is AbortSignal => !!value,
-				);
-				return context.createDocument!({
-					creator: {
-						userId: active.userId,
-						handle: active.handle,
-						...(active.claimantSessionId ? { claimantSessionId: active.claimantSessionId } : {}),
-					},
-					arguments: args,
-					...(signals.length ? { signal: AbortSignal.any(signals) } : {}),
-					announce: document => createdNotice(context, active.handle, document),
-				});
+				return context.createDocument!({ ...request, arguments: args });
+			},
+		}),
+		...(!chat.job && context.fanOut && !context.rootChannelId && {
+			fanOut: async (args, index, signal) => {
+				let request = creatorRequest(context, signal);
+				if (!request) {
+					return {
+						ok: false,
+						reason: "member-request-required",
+						message: "Only a turn a person asked for in Chat can work with created documents.",
+					};
+				}
+				return context.fanOut!({ ...request, arguments: args, index });
 			},
 		}),
 		createResearch: async _question => {
@@ -2613,6 +2617,31 @@ export function documentRoom(context: Room): DocumentRoom {
 				question: active.text,
 			});
 		},
+	};
+}
+
+/**
+ * Who creates or instructs documents for the current turn: the person whose message drives it,
+ * with the turn's cancellation. Undefined in a turn nobody typed and in a background job.
+ */
+function creatorRequest(
+	context: Room,
+	signal: AbortSignal | undefined,
+): Omit<NewDocumentRequest, "sourceId" | "arguments"> | undefined {
+	let { chat } = context;
+	let active = currentMemberRequest(chat);
+	if (chat.job || !active) return undefined;
+	let signals = [signal, chat.turnController?.signal].filter(
+		(value): value is AbortSignal => !!value,
+	);
+	return {
+		creator: {
+			userId: active.userId,
+			handle: active.handle,
+			...(active.claimantSessionId ? { claimantSessionId: active.claimantSessionId } : {}),
+		},
+		...(signals.length ? { signal: AbortSignal.any(signals) } : {}),
+		announce: document => createdNotice(context, active.handle, document),
 	};
 }
 

@@ -666,6 +666,7 @@ function buildThreadRoom(
 		hold: topContext.hold,
 		children: topContext.children,
 		createDocument: topContext.createDocument,
+		fanOut: topContext.fanOut,
 		// A reaction saves the transcript it is about to make, before it changes the live one.
 		persist: async next => {
 			await saveThreadRecord(topContext, managed, override, next?.().entries);
