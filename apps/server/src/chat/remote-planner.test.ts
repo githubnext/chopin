@@ -615,7 +615,7 @@ async function resumablePlanner(
 	};
 }
 
-test("with its link connected, an attached Planner's open question stays open for hours, ending only with its owner's sign-in credential", async () => {
+test("with its link connected, an attached Planner's open question stays open for hours, through its owner's credential renewals, ending only when the owner signs out", async () => {
 	let clock = laterTimers();
 	cleanups.push(() => clock.restore());
 	let live = await resumablePlanner({ ask: true });
@@ -632,11 +632,58 @@ test("with its link connected, an attached Planner's open question stays open fo
 		});
 		expect(live.said().some(text => text.includes("was stopped"))).toBe(false);
 	}
-	// The one bound is authorization: the owner's GitHub credential, which the fixture's browser
-	// login issued for eight hours, is what the Planner acts under, and it cannot outlive it.
+	// The owner's GitHub credential, which the fixture's browser login issued for eight hours, is
+	// renewed as it expires: the session takes the renewed one and the question stays open.
 	await clock.pass(2 * HOUR);
+	await clock.pass(2 * HOUR);
+	expect(context.plan.records.get(id)?.status).toBe("open");
+	expect(context.chat.retained).toBeDefined();
+	// The one bound is the owner: signing out ends what the Planner acted for them on.
+	await live.signOut("member");
 	await until(() => context.plan.records.get(id)?.status === "cancelled");
 	await until(() => context.chat.retained === undefined);
+});
+
+test("a question an attached Planner asks while its turn runs keeps the turn going through its owner's credential renewals, and the reply finishes once it is answered", async () => {
+	let clock = laterTimers();
+	cleanups.push(() => clock.restore());
+	let room = await remoteRoom();
+	let { context, server } = room;
+	let script = scriptedPlanner();
+	let client: Awaited<ReturnType<typeof connectAgent>> | undefined;
+	let answered: unknown;
+	client = await connectAgent({
+		url: server.url,
+		token: MEMBER_TOKEN,
+		document: room.channel.id,
+		handlers: {
+			...script.handlers,
+			async turn(turn) {
+				let result = await client!.ask(turn.message.session, {
+					method: "confirm",
+					title: "Ship?",
+					message: "Now.",
+				});
+				answered = result.value;
+				finishTurn(turn);
+			},
+		} as AgentHandlers,
+		resumable: true,
+	});
+	cleanups.push(() => client!.detach());
+	expect(await Chat.invoke(context, RIVAL, "Run the review")).toBeUndefined();
+	await until(() => [...context.plan.records.values()][0]?.status === "open");
+	let id = [...context.plan.records.keys()][0]!;
+	// The fixture's browser login issued the owner's credential for eight hours; it is renewed twice.
+	for (let passed of [3 * HOUR, 3 * HOUR, 3 * HOUR]) {
+		await clock.pass(passed);
+		expect(context.plan.records.get(id)?.status).toBe("open");
+		expect(context.chat.busy).toBe(true);
+	}
+	await answerChoice(context, id, 0);
+	await context.chat.running;
+	expect(answered).toBe(true);
+	expect(context.chat.entries.some(entry => entry.turnFailure !== undefined)).toBe(false);
 });
 
 test("a dropped link's open question stays open and answerable for as long as its client is away, and Chat says nothing of the machine", async () => {
