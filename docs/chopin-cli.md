@@ -281,9 +281,9 @@ or disconnect it, it stops being your default.
 The Machines page offers these agents. **Connect with** is what follows
 `chopin connect`, and **Runs** is the command and variables it starts:
 
-| Agent                                                                                               | In its microVMs                                        | Connect with      | Runs                               | Tested with Chopin |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ----------------- | ---------------------------------- | ------------------ |
-| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `@github/copilot@1.0.114`                              | `--agent copilot` | `copilot --acp --allow-all`        | Yes                |
+| Agent                                                                                               | In its microVMs                                         | Connect with      | Runs                               | Tested with Chopin |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ----------------- | ---------------------------------- | ------------------ |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server) | `@github/copilot@1.0.114`                               | `--agent copilot` | `copilot --acp --allow-all`        | Yes                |
 | [Atomic](https://github.com/bastani-inc/atomic-acp)                                                 | `@bastani/atomic@0.10.10`, `@bastani/atomic-acp@0.0.18` | `--agent atomic`  | `ATOMIC_ACP_HEADLESS=1 atomic-acp` | Yes                |
 
 You don't install the agent on this machine, and it doesn't need Node.js:
