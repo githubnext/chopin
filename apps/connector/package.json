@@ -1,7 +1,7 @@
 {
 	"name": "@chopin/connector",
 	"private": true,
-	"version": "0.0.41",
+	"version": "0.0.42",
 	"type": "module",
 	"scripts": {
 		"build": "bun scripts/build-connector.ts",
