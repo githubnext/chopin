@@ -196,4 +196,84 @@ describe("hosted Copilot ownership", () => {
 		expect(chat.activeRequest).toBeUndefined();
 		expect(chat.referenceCache.size).toBe(0);
 	});
+
+	it("skips a rebindable session on credential rotation while resetting child chats, jobs, and full session revocations", async () => {
+		let chat = create();
+		let controller = chat.turnController = new AbortController();
+		chat.owner = { sessionId: "session", generation: 3, revision: 4 };
+		chat.busy = true;
+		chat.agent = {
+			activeTools: [],
+			rebind: () => {},
+			stream: (async () => ({ fullStream: (async function*() {})() })) as never,
+			destroy: async () => {},
+		};
+		chat.activeRequest = {
+			entryId: "entry",
+			userId: "U_ana",
+			handle: "ana",
+			text: "continue working",
+			claimantSessionId: "session",
+			turnId: "turn",
+			lifecycle: 0,
+		};
+		chat.referenceCache.set("reference", {} as never);
+
+		let child = create();
+		let childController = child.turnController = new AbortController();
+		child.owner = { sessionId: "session", generation: 3, revision: 4 };
+		child.busy = true;
+		child.agent = {
+			activeTools: [],
+			stream: (async () => ({ fullStream: (async function*() {})() })) as never,
+			destroy: async () => {},
+		};
+		chat.childChats = new Map([["thread-1", child]]);
+
+		// Credential rotation skips the rebindable root turn, but still resets its non-rebindable child chat.
+		await resetAgent(chat, "session", 4, "rotated");
+		expect(controller.signal.aborted).toBe(false);
+		expect(chat.interruption).toBeUndefined();
+		expect(chat.lifecycle).toBe(0);
+		expect(chat.activeRequest).toBeDefined();
+		expect(chat.referenceCache.size).toBe(1);
+		expect(childController.signal.aborted).toBe(true);
+		expect(child.interruption).toBe("rotated");
+		expect(child.lifecycle).toBe(1);
+
+		// Idle retained rebindable session is also skipped on credential rotation.
+		let retainedChat = create();
+		retainedChat.owner = { sessionId: "session", generation: 3, revision: 4 };
+		retainedChat.retained = {
+			session: {
+				activeTools: [],
+				rebind: () => {},
+				stream: (async () => ({ fullStream: (async function*() {})() })) as never,
+				destroy: async () => {},
+			},
+			binding: {} as never,
+			ended: () => {},
+			release: async () => {},
+		};
+		await resetAgent(retainedChat, "session", 4, "rotated");
+		expect(retainedChat.lifecycle).toBe(0);
+
+		// Background jobs never skip credential rotation.
+		let jobChat = create();
+		let jobController = jobChat.turnController = new AbortController();
+		jobChat.owner = { sessionId: "session", generation: 3, revision: 4 };
+		jobChat.busy = true;
+		jobChat.job = { kind: "heading", target: "heading" } as never;
+		jobChat.agent = chat.agent;
+		await resetAgent(jobChat, "session", 4, "rotated");
+		expect(jobController.signal.aborted).toBe(true);
+		expect(jobChat.lifecycle).toBe(1);
+
+		// Full session revocation (revision === undefined) still aborts a rebindable session.
+		await resetAgent(chat, "session", undefined, "signed out");
+		expect(controller.signal.aborted).toBe(true);
+		expect(chat.interruption).toBe("signed out");
+		expect(chat.lifecycle).toBe(1);
+		expect(chat.activeRequest).toBeUndefined();
+	});
 });

@@ -87,7 +87,10 @@ export function repositoryTools(options: Options = {}) {
 			name: z.string(),
 			defaultBranch: z.string(),
 		}),
-		owner: z.custom<{ currentToken: () => string | undefined }>(),
+		owner: z.custom<{
+			currentToken: () => string | undefined;
+			waitForRebind?: () => Promise<void>;
+		}>(),
 	});
 	let request = async (
 		context: z.infer<typeof repositoryContext>,
@@ -95,19 +98,33 @@ export function repositoryTools(options: Options = {}) {
 		search?: URLSearchParams,
 	): Promise<unknown> => {
 		let token = context.owner.currentToken();
+		if (!token && context.owner.waitForRebind) {
+			await context.owner.waitForRebind();
+			token = context.owner.currentToken();
+		}
 		if (!token) throw new Error("GitHub authorization expired");
 		let url = new URL(path, API);
 		if (search) url.search = search.toString();
-		let response = await (options.fetch ?? fetch)(url, {
-			headers: {
-				accept: "application/vnd.github+json",
-				authorization: `Bearer ${token}`,
-				"user-agent": "chopin",
-				"x-github-api-version": "2022-11-28",
-			},
-			redirect: "error",
-			signal: AbortSignal.timeout(TIMEOUT_MS),
-		});
+		let send = (bearer: string) =>
+			(options.fetch ?? fetch)(url, {
+				headers: {
+					accept: "application/vnd.github+json",
+					authorization: `Bearer ${bearer}`,
+					"user-agent": "chopin",
+					"x-github-api-version": "2022-11-28",
+				},
+				redirect: "error",
+				signal: AbortSignal.timeout(TIMEOUT_MS),
+			});
+		let response = await send(token);
+		if (response.status === 401 && context.owner.waitForRebind) {
+			await context.owner.waitForRebind();
+			let refreshed = context.owner.currentToken();
+			if (refreshed && refreshed !== token) {
+				token = refreshed;
+				response = await send(token);
+			}
+		}
 		if (!response.ok) throw new Error(`GitHub repository read failed (${response.status})`);
 		let source = await response.text();
 		if (Buffer.byteLength(source) > MAX_RESPONSE_BYTES) {

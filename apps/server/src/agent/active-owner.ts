@@ -30,6 +30,7 @@ export type ActiveOwnerBinding = {
 	expiresAt: Date;
 	signal: AbortSignal;
 	currentToken: () => string | undefined;
+	waitForRebind?: () => Promise<void>;
 	revalidate: () => Promise<boolean>;
 	release: () => void;
 };
@@ -135,6 +136,7 @@ export class ActiveOwnerBindings {
 			expiresAt: new Date(expiresAt),
 			signal: state.controller.signal,
 			currentToken: () => this.#currentToken(state),
+			waitForRebind: () => this.#auth.sessions.awaitRefresh?.(ownerSessionId) ?? Promise.resolve(),
 			revalidate: () => this.#revalidate(state),
 			release,
 		};

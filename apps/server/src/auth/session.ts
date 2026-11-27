@@ -504,6 +504,13 @@ export class Sessions {
 			: undefined;
 	}
 
+	/** Wait for any in-flight refresh on `id` to settle without starting one. */
+	async awaitRefresh(id: string): Promise<void> {
+		let active = this.#refreshes.get(id);
+		if (!active) return;
+		await active.then(() => {}, () => {});
+	}
+
 	/**
 	 * Never ask GitHub to refresh a login again. A refresh token is single-use, so a refresh begun
 	 * while a replacement process restores the same login could spend the token the replacement
@@ -591,6 +598,9 @@ export class Sessions {
 			await this.#revokeExact(current);
 			return undefined;
 		}
+		if (this.#refreshes.has(current.session.id)) {
+			return this.#rotate(current.session.id, undefined);
+		}
 		if (current.accessExpiresAt.getTime() > this.#clock().getTime() + REFRESH_EARLY_MS) {
 			return current;
 		}
@@ -612,11 +622,19 @@ export class Sessions {
 			if (this.#refreshes.get(id) === active) this.#refreshes.delete(id);
 			return this.#rotate(id, rejectedRevision);
 		}
-		let refresh = this.#rotateOnce(id, rejectedRevision);
+		let settled = Promise.withResolvers<MemorySession | undefined>();
+		let refresh = settled.promise;
 		this.#refreshes.set(id, refresh);
-		void refresh.finally(() => {
-			if (this.#refreshes.get(id) === refresh) this.#refreshes.delete(id);
-		}).catch(() => {});
+		this.#rotateOnce(id, rejectedRevision).then(
+			value => {
+				if (this.#refreshes.get(id) === refresh) this.#refreshes.delete(id);
+				settled.resolve(value);
+			},
+			err => {
+				if (this.#refreshes.get(id) === refresh) this.#refreshes.delete(id);
+				settled.reject(err);
+			},
+		);
 		return refresh;
 	}
 
