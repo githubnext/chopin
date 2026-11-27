@@ -72,62 +72,6 @@ async function rooted(options: { access?: () => Promise<boolean>; focus?: boolea
 	return { child, root, rootId, room, call, committedAtBroadcast };
 }
 
-test("edit_child assesses child source through the shared root admission before publishing", async () => {
-	let { call, child, root, room, committedAtBroadcast } = await rooted();
-	let before = child.plan.persistence.committedSource;
-	let rootBefore = root.plan.persistence.committedSource;
-	let sources: string[] = [];
-	room.visualAdmission = async input => {
-		expect(input.before).toBe(before);
-		sources = input.sources;
-		return [{ code: "E_VISUAL_REQUIRED", path: "sources[0]", message: "Add a sequence diagram." }];
-	};
-	let result = await call("edit_child", {
-		child: child.channel.id,
-		revision: child.plan.revision,
-		operations: [{ op: "insert_root", source: "The client sends a request to the server." }],
-	});
-	expect(result).toMatchObject({ ok: false, reason: "visuals-required", child: child.channel.id });
-	expect(sources).toHaveLength(1);
-	expect(sources[0]).toContain("Original finding.");
-	expect(sources[0]).toContain("The client sends a request to the server.");
-	expect(child.plan.persistence.committedSource).toBe(before);
-	expect(root.plan.persistence.committedSource).toBe(rootBefore);
-	expect(committedAtBroadcast).toHaveLength(0);
-});
-
-test("a child edit cancelled during visual admission leaves both documents and publication alone", async () => {
-	let { call, child, root, room, committedAtBroadcast } = await rooted();
-	let before = child.plan.persistence.committedSource;
-	let rootBefore = root.plan.persistence.committedSource;
-	let controller = new AbortController();
-	let entered = Promise.withResolvers<void>();
-	let finish = Promise.withResolvers<void>();
-	let seen: AbortSignal | undefined;
-	room.visualAdmission = async input => {
-		seen = input.signal;
-		entered.resolve();
-		await finish.promise;
-		return [];
-	};
-	let pending = call("edit_child", {
-		child: child.channel.id,
-		revision: child.plan.revision,
-		operations: [{ op: "insert_root", source: "This passage must not be published." }],
-	}, controller.signal);
-	await entered.promise;
-	controller.abort();
-	finish.resolve();
-	expect(await pending).toMatchObject({ ok: false, reason: "cancelled" });
-	expect(seen?.aborted).toBe(true);
-	expect(child.plan.persistence.committedSource).toBe(before);
-	expect((await call("read_child", { child: child.channel.id })).source).not.toContain(
-		"must not be published",
-	);
-	expect(root.plan.persistence.committedSource).toBe(rootBefore);
-	expect(committedAtBroadcast).toHaveLength(0);
-});
-
 test("root ask refuses child-focused choices before creating a decision", async () => {
 	let { call, root } = await rooted({ focus: true });
 	expect(await call("ask", {})).toMatchObject({ ok: false, reason: "child-decision-unavailable" });
@@ -265,20 +209,12 @@ test("anchor_child anchors through the child's own persistence and refuses a sta
 	expect(unknown).toMatchObject({ ok: false, reason: "invalid" });
 });
 
-test("child tools refuse the root, a foreign id, a malformed id, and visual routes", async () => {
-	let { call, rootId, child } = await rooted();
+test("child tools refuse the root, a foreign id, and a malformed id", async () => {
+	let { call, rootId } = await rooted();
 	for (let target of [rootId, crypto.randomUUID()]) {
 		expect(await call("read_child", { child: target })).toContain("no such child document");
 	}
 	expect(await call("read_child", { child: "../root" })).toContain("`child` must be");
-	expect(
-		await call("edit_child", {
-			child: child.channel.id,
-			revision: 0,
-			operations: [{ op: "insert_root", source: "x" }],
-			visual_route: "r",
-		}),
-	).toMatchObject({ ok: false, reason: "visual-routing-unavailable" });
 });
 
 test("every child tool refuses once the Planner owner loses repository access", async () => {

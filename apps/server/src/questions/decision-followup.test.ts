@@ -48,9 +48,6 @@ test("a source commit survives restart before job completion and replays without
 	let next = running(restored);
 	let revision = restored.plan.revision;
 	let room = scopeRoom(restored);
-	room.visualAdmission = async () => {
-		throw new Error("a receipt must not reassess");
-	};
 	expect(await writeScope(room, next, restored.plan.chat.turn, args)).toMatchObject({
 		output: { replayed: true },
 	});
@@ -77,36 +74,26 @@ test("a newer peer answer or an orphaned target refuses without changing prose",
 	expect(Room.project(context.plan.document)).toBe(before);
 });
 
-test("required visual refusal changes nothing and a native visual repair becomes part of the scope", async () => {
+test("a scoped write accepts and preserves tables and mermaid diagrams in the scope", async () => {
 	let context = await fixture();
 	let id = context.ids[0]!;
 	await context.save(id, "Compare the supported approaches.");
 	let snapshot = scopeSnapshot(context.plan, id);
 	let job = running(context);
 	let room = scopeRoom(context);
-	room.visualAdmission = async input =>
-		input.sources[0]!.includes("| Approach |") ? [] : [{
-			code: "E_VISUAL_REQUIRED",
-			path: "sources[0]",
-			message: "Add a comparison table.",
-		}];
 	let args = {
 		id,
 		revision: snapshot.revision,
 		answersHash: snapshot.answersHash,
-		source: "The alternatives have different constraints.",
+		source: "The alternatives have different constraints.\n\n"
+			+ "| Approach | Constraint |\n| --- | --- |\n| Existing | Offline |\n\n"
+			+ "```mermaid\nflowchart LR\n  A[Request] --> B[Store]\n```",
 	};
-	let before = Room.project(context.plan.document);
-	await expect(writeScope(room, job, context.plan.chat.turn, args)).rejects.toThrow(
-		"visuals-required",
-	);
-	expect(Room.project(context.plan.document)).toBe(before);
-	await writeScope(room, job, context.plan.chat.turn, {
-		...args,
-		source: `${args.source}\n\n| Approach | Constraint |\n| --- | --- |\n| Existing | Offline |`,
-	});
-	expect(context.plan.records.get(id)!.followUp!.target).toHaveLength(2);
-	expect(scopeSnapshot(context.plan, id).source).toContain("| Approach |");
+	await writeScope(room, job, context.plan.chat.turn, args);
+	expect(context.plan.records.get(id)!.followUp!.target).toHaveLength(3);
+	let updated = scopeSnapshot(context.plan, id);
+	expect(updated.source).toContain("| Approach |");
+	expect(updated.source).toContain("```mermaid");
 });
 
 test.each([0, 1])(
@@ -127,7 +114,6 @@ test.each([0, 1])(
 			exclusive: <T>(action: () => Promise<T>) => Service.exclusive(context.plan, action),
 			anchors() {},
 			changes() {},
-			visualAdmission: async () => [],
 		} as unknown as import("../agent/tools").DocumentRoom;
 		let job = {
 			id: "followup",

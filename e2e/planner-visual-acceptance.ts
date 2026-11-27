@@ -5,10 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { plannerInstructions } from "../apps/server/src/agent/planner";
-import {
-	PLANNER_TOOL_NAMES,
-	VISUAL_PLANNER_TOOL_NAMES,
-} from "../apps/server/src/harness/tool-names";
+import { PLANNER_TOOL_NAMES } from "../apps/server/src/harness/tool-names";
 import {
 	cases,
 	cohortSha256,
@@ -106,7 +103,7 @@ export function loadAcceptance() {
 		encoding: "utf8",
 	}).trim();
 	if (changes) throw new Error("Commit the acceptance checkout before a real Planner run");
-	let guidance = plannerInstructions("octo-org/score", undefined, undefined, visualRouting);
+	let guidance = plannerInstructions("octo-org/score");
 	let outputRoot = join(repository, "e2e/test-results/planner-visual-acceptance", runId);
 	let configuration = {
 		version: visualRouting ? 4 : 3,
@@ -119,7 +116,7 @@ export function loadAcceptance() {
 		model,
 		harness: "copilot-sdk",
 		harnessAuth: "direct",
-		toolNames: visualRouting ? VISUAL_PLANNER_TOOL_NAMES : PLANNER_TOOL_NAMES,
+		toolNames: PLANNER_TOOL_NAMES,
 		generationSettings: {
 			temperature: "SDK default; no override",
 			topP: "SDK default; no override",
@@ -137,10 +134,7 @@ export function loadAcceptance() {
 			jevDecisionThresholds: { possibility: 0.5, helpfulness: 0.5 },
 			jevRequestCap: { perCase: 3, total: 9 },
 			visualCodeSha256: Object.fromEntries([
-				"visual-routing.ts",
 				"visual-catalog.ts",
-				"visual-handoff.ts",
-				"visual-receipt.ts",
 				"visual-authoring.ts",
 				"planner.ts",
 			].map(name => [

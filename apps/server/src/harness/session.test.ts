@@ -11,7 +11,6 @@ import {
 	PLANNER_TOOL_NAMES,
 	REACTION_TOOL_NAMES,
 	THREAD_NOTE_TOOL_NAME,
-	VISUAL_PLANNER_TOOL_NAMES,
 } from "./tool-names";
 import { remotePlanner } from "./remote/registry";
 import { hostInputRoom, laterTimers } from "../testing/decisions";
@@ -93,34 +92,6 @@ describe("openPlannerSession", () => {
 		if (!job.ok) throw new Error("the job session did not open");
 		expect(job.value.steer).toBeUndefined();
 		await job.value.destroy();
-	});
-
-	it("uses the visual Planner profile only when the room has Jev routing", async () => {
-		let { owner, channel, deps } = fixture();
-		let visualOpened = false;
-		deps.agent = undefined;
-		channel.room = {
-			id: "channel",
-			plan: {},
-			server: {},
-			visual: {
-				ask: async () => {
-					throw new Error("unused");
-				},
-			},
-		} as never;
-		deps.visualAgent = {
-			createSession: async () => {
-				visualOpened = true;
-				return { destroy: async () => {} };
-			},
-		} as never;
-		let opened = await openPlannerSession(owner, channel, deps);
-		expect(opened.ok).toBe(true);
-		if (!opened.ok) return;
-		expect(visualOpened).toBe(true);
-		expect(opened.value.activeTools).toEqual(VISUAL_PLANNER_TOOL_NAMES);
-		await opened.value.destroy();
 	});
 
 	it("registers a remote Planner for its document, with Decisions on the client", async () => {
@@ -441,12 +412,11 @@ describe("Planner workspaces", () => {
 			let session = await openPlannerSession(owner, {
 				...channel,
 				...given,
-				room: { id: "channel", plan: {}, server: {}, visual: {} } as never,
+				room: { id: "channel", plan: {}, server: {} } as never,
 			}, {
 				...deps,
-				agent: undefined,
-				visualAgent: agent("planner"),
-				threadVisualAgent: agent("thread"),
+				agent: agent("planner"),
+				threadAgent: agent("thread"),
 			});
 			if (!session.ok) throw new Error("the Planner session did not open");
 			tools.push(session.value.activeTools);
@@ -454,10 +424,10 @@ describe("Planner workspaces", () => {
 		}
 		expect(opened).toEqual(["thread", "planner", "planner", "planner"]);
 		expect(tools).toEqual([
-			[...VISUAL_PLANNER_TOOL_NAMES, THREAD_NOTE_TOOL_NAME],
-			VISUAL_PLANNER_TOOL_NAMES,
-			VISUAL_PLANNER_TOOL_NAMES,
-			VISUAL_PLANNER_TOOL_NAMES,
+			[...PLANNER_TOOL_NAMES, THREAD_NOTE_TOOL_NAME],
+			PLANNER_TOOL_NAMES,
+			PLANNER_TOOL_NAMES,
+			PLANNER_TOOL_NAMES,
 		]);
 	});
 
@@ -578,7 +548,6 @@ describe("Planner workspaces", () => {
 it("member Planner sessions include the child tools and background jobs never do", () => {
 	for (let name of ["list_children", "read_child", "edit_child", "anchor_child"]) {
 		expect(PLANNER_TOOL_NAMES).toContain(name);
-		expect(VISUAL_PLANNER_TOOL_NAMES).toContain(name);
 		for (let names of Object.values(BACKGROUND_TOOL_NAMES)) expect(names).not.toContain(name);
 	}
 });

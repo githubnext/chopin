@@ -239,30 +239,6 @@ async function plan(context: ReturnType<typeof setup>) {
 }
 
 describe("the hosted MCP adapter", () => {
-	it("refuses an imported plan before creating its channel when selected visuals are missing", async () => {
-		let context = setup();
-		context.github.repositoryValue.permissions.push = true;
-		let lease = (await context.storage.leases.acquire("writer", "visual-create", 60_000))!;
-		let issue = {
-			code: "visual-required",
-			path: "sources[0]",
-			message: "Add an architecture diagram.",
-		};
-		let blocked = true;
-		let adapter = hosted(context.auth, { lease: () => lease }, {
-			visualAdmission: async () => blocked ? [issue] : [],
-		});
-		let caller = (await adapter.caller(request("Bearer allowed")))!;
-		expect(await adapter.create!.create(caller, creation))
-			.toEqual({ kind: "visuals-required", issues: [issue] });
-		let id = deterministicChannelId("R_score", creation.idempotencyKey);
-		expect(await context.storage.channels.get(id)).toBeUndefined();
-		blocked = false;
-		expect(await adapter.create!.create(caller, creation)).toMatchObject({ kind: "created" });
-		blocked = true;
-		expect(await adapter.create!.create(caller, creation)).toMatchObject({ kind: "replayed" });
-	});
-
 	it("tells sidebars about a document create_document made, once, not on a replay", async () => {
 		let context = setup();
 		context.github.repositoryValue.permissions.push = true;
@@ -297,16 +273,9 @@ describe("the hosted MCP adapter", () => {
 			}
 			return snapshot;
 		};
-		let checks = 0;
-		let api = hosted(context.auth, undefined, {
-			visualAdmission: async () => {
-				checks++;
-				return [{ code: "E_VISUAL_REQUIRED", path: "sources[0]", message: "Add a diagram." }];
-			},
-		});
+		let api = hosted(context.auth);
 		expect(await api.create!.create(caller, creation)).toMatchObject({ kind: "replayed" });
 		expect(await context.storage.channels.get(id)).toBeUndefined();
-		expect(checks).toBe(0);
 	});
 
 	it("offers invoke_planner in hosted and local configuration, passing the caller and any live login", async () => {

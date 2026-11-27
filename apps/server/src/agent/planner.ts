@@ -27,7 +27,7 @@ import type { PlannerWorkspace } from "../harness/atomic/workspace";
 import { READ_BYTES } from "../document-reading";
 import { COACHING } from "./coaching";
 import { NAMES_AS_WRITTEN } from "./identity";
-import { DIAGRAM_AUTHORING, ROUTED_DIAGRAM_AUTHORING } from "./visual-authoring";
+import { DIAGRAM_AUTHORING } from "./visual-authoring";
 
 export { DIAGRAM_AUTHORING };
 
@@ -75,15 +75,13 @@ function reference(): string {
 	}).filter(Boolean).join("\n");
 }
 
-const DIAGRAM_INTRO = `Charts, diagrams and formulas can clarify a plan. Use Chopin's native
-\`${SEECODE_LANGUAGE}\` charts and diagrams by default whenever a registered type
-can represent the required information. Author its JSON fence using the catalogue below.
-Use \`${MERMAID_LANGUAGE}\` only when no native type can provide the required
-representation or the user explicitly requests Mermaid. Mermaid supports diagrams
-and numerical charts, including \`pie\` and \`xychart-beta\` bar/line charts.
-Set a formula wherever the plan turns`;
-const ROUTED_DIAGRAM_INTRO = `A Jev-selected diagram uses a \`${SEECODE_LANGUAGE}\` fence.
-Do not substitute Mermaid for a Jev-selected diagram.
+const DIAGRAM_INTRO =
+	`Charts, diagrams, tables, wireframes, uploaded images, and formulas can clarify a plan.
+Supported diagram fences include \`${SEECODE_LANGUAGE}\` (structured JSON charts and diagrams
+documented in the catalogue below), \`${MERMAID_LANGUAGE}\` (diagrams and numerical charts,
+including \`pie\` and \`xychart-beta\` bar/line charts), and \`${WIREFRAME_LANGUAGE}\` (low-fidelity
+UI sketches). Choose whichever supported representation best fits the document's format
+and conventions.
 Set a formula wherever the plan turns`;
 
 /** One compact grammar summary and example; the parser owns the full rules. */
@@ -305,7 +303,12 @@ What is still unresolved, and what it blocks.
 \`\`\`
 
 Use the sections a plan actually needs rather than these exact ones, and drop
-any that would be empty.
+any that would be empty. These default sections and prose or diagram style
+suggestions apply only when nothing more specific is provided: if the Planner's
+session, repository instructions, or loaded skills define a specific document
+format, section template, or diagram convention, follow that format in full while
+using Chopin's document tools (\`read_plan\`, \`edit_plan\`, \`anchor_plan\`,
+\`open_decisions\`, and so on) and the MDX dialect rules below.
 
 Every question or request for human input uses \`open_decisions\` to create an anchored decision card.
 This includes open intent and clarification questions: use \`response: "text"\`, \`options: []\`
@@ -395,9 +398,6 @@ Questionnaires are created by \`open_decisions\` or blocking \`ask\`, never by h
 elsewhere — leave them alone when you rewrite around them. To take one out of
 the plan, use the \`detach_question\` operation rather than deleting the block.`;
 
-const ROUTED_PROMPT = PROMPT.replace(DIAGRAM_INTRO, ROUTED_DIAGRAM_INTRO)
-	.replace(DIAGRAM_AUTHORING, ROUTED_DIAGRAM_AUTHORING);
-
 /** Where a remote Planner's model and own tools run: the attached member's machine. */
 export type RemoteWorkspace = { remote: true };
 
@@ -405,26 +405,8 @@ export function plannerInstructions(
 	repository: string,
 	bootstrap?: string,
 	workspace?: PlannerWorkspace | RemoteWorkspace,
-	visualRouting = false,
 	thread = false,
 ): string {
-	let visual = visualRouting
-		? `Visual explanations are a normal part of this document. For each new explanatory
-paragraph, write the factual passage first, then call assess_visual with that one
-paragraph, its intended operation and the revision from read_plan. Jev separately
-decides whether it can be visualized, whether that would improve comprehension,
-and which supported type fits. Follow the returned route exactly; do not make
-those yes/no or type choices yourself. Keep the passage beside any selected
-visual. Use the returned example only as syntax; replace every label and value
-with supported facts. Pass visual_route to edit_plan for that same paragraph and
-placement. Write headings in separate edits. This bounded handoff does not yet
-support lists or nested MDX paragraphs; report that limit instead of bypassing
-the route. If the document changes, read it and assess again. If assessment is
-unavailable, do not write that explanatory passage; state the limitation. A valid
-earlier route still applies only to its original passage and placement. Do not
-add a table or diagram without its route.`
-		: undefined;
-	let prompt = visualRouting ? ROUTED_PROMPT : PROMPT;
 	let reading = `Read before you propose. The selected repository is ${repository}. Use
 \`read_repository_file\`, \`list_repository_tree\`, \`search_repository\` and
 \`repository_history\` for its code, and \`list_pull_requests\` and
@@ -432,7 +414,7 @@ add a table or diagram without its route.`
 	if (!workspace) {
 		let isolated = `You have no shell, checkout, host filesystem, skills or repository instructions,
 and cannot change GitHub. Ground the plan in what those reading tools return.`;
-		return [prompt, visual, reading, isolated, bootstrap].filter(Boolean).join("\n\n");
+		return [PROMPT, reading, isolated, bootstrap].filter(Boolean).join("\n\n");
 	}
 	let waits = `Each waits until a member answers it or it is withdrawn, however long that takes;
 a withdrawn question is not an answer or approval. Keep consequential choices open;
@@ -448,7 +430,7 @@ Decision. ${waits}`;
 Your own tools act on that machine and are not visible to the document's other members. The
 document changes only through this document's tools, and ${repository} is read through the
 repository tools, whatever that machine holds.`;
-		return [prompt, visual, reading, remote, questions, surface, bootstrap].filter(Boolean)
+		return [PROMPT, reading, remote, questions, surface, bootstrap].filter(Boolean)
 			.join("\n\n");
 	}
 	let questions = `\`ask_user_question\` questions appear to the document's members as Decisions.
@@ -467,8 +449,7 @@ asks to implement it now, say so plainly and offer to prepare its task graph ins
 	let threaded = `You answer in a thread of this document's Chat. Use \`tell_chat_planner\` as its
 description says, so the Chat's Planner learns what was decided here.`;
 	return [
-		prompt,
-		visual,
+		PROMPT,
 		reading,
 		place,
 		questions,

@@ -15,7 +15,6 @@ import {
 	PLANNER_TOOL_NAMES,
 	REACTION_TOOL_NAMES,
 	THREAD_NOTE_TOOL_NAME,
-	VISUAL_PLANNER_TOOL_NAMES,
 } from "./tool-names";
 import { harnessFor } from "./harnesses";
 import { carryingThinkingLevel } from "./turn-level";
@@ -105,7 +104,6 @@ function reporting(tools: ToolSet, room: DocumentRoom, toolSignal?: AbortSignal)
 export function createPlannerAgent(
 	harness: HarnessV1,
 	profile?: ConversationPlan.JobKind | "reaction",
-	visual = false,
 	thread = false,
 ) {
 	let reaction = profile === "reaction";
@@ -113,8 +111,6 @@ export function createPlannerAgent(
 		? REACTION_TOOL_NAMES
 		: profile
 		? BACKGROUND_TOOL_NAMES[profile]
-		: visual
-		? VISUAL_PLANNER_TOOL_NAMES
 		: PLANNER_TOOL_NAMES;
 	let noting = thread && !profile;
 	return new HarnessAgent({
@@ -146,17 +142,9 @@ export function createPlannerAgent(
 }
 
 export let plannerAgent = createPlannerAgent(harnessFor(harnessSelection()));
-export let visualPlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), undefined, true);
 export let threadPlannerAgent = createPlannerAgent(
 	harnessFor(harnessSelection()),
 	undefined,
-	false,
-	true,
-);
-export let threadVisualPlannerAgent = createPlannerAgent(
-	harnessFor(harnessSelection()),
-	undefined,
-	true,
 	true,
 );
 export let headingPlannerAgent = createPlannerAgent(harnessFor(harnessSelection()), "heading");

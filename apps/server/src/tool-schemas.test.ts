@@ -18,11 +18,7 @@ import {
 	researchReportSchema,
 } from "./harness/agents";
 import { GITHUB_TOOL_SCHEMAS } from "./harness/github-tools";
-import {
-	BACKGROUND_TOOL_NAMES,
-	PLANNER_TOOL_NAMES,
-	VISUAL_PLANNER_TOOL_NAMES,
-} from "./harness/tool-names";
+import { BACKGROUND_TOOL_NAMES, PLANNER_TOOL_NAMES } from "./harness/tool-names";
 import { webSearchTool } from "./harness/web-search";
 import { TOOLS } from "./mcp";
 import { implementationSchemas } from "./tasks/connector";
@@ -130,7 +126,6 @@ async function plannerSchemas() {
 	};
 	let offered = new Set([
 		...PLANNER_TOOL_NAMES,
-		...VISUAL_PLANNER_TOOL_NAMES,
 		...Object.values(BACKGROUND_TOOL_NAMES).flat(),
 	]);
 	expect([...offered].filter(name => !Object.hasOwn(tools, name))).toEqual([]);

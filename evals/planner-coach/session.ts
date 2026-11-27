@@ -22,7 +22,6 @@ export async function scenarioSession(
 		token: string;
 		instructions: string;
 		model: string;
-		visual: "off" | "fixture-prose";
 		limits: Limits;
 	},
 	dependencies: { openPlan?: typeof openPlan } = {},
@@ -57,20 +56,6 @@ export async function scenarioSession(
 			turnId: `turn-${guard.turn}`,
 			lifecycle: guard.turn,
 		}),
-		...(settings.visual === "fixture-prose"
-			? {
-				visual: {
-					ask: async request => ({
-						model: "fixture-prose-v1",
-						answers: Object.fromEntries(
-							Object.keys(request.questions).map(key => [key, { type: "noul" as const, noul: 0 }]),
-						),
-						usage: { input_tokens: 0, output_tokens: 0 },
-						latencyMs: 0,
-					}),
-				},
-			}
-			: {}),
 	};
 	let guard = new ToolGuard(room, settings.limits);
 	let owner: ActiveOwnerBinding = {
@@ -86,7 +71,7 @@ export async function scenarioSession(
 		revalidate: async () => !ownerController.signal.aborted,
 		release() {},
 	};
-	let realAgent = createPlannerAgent(settings.harness, undefined, !!room.visual);
+	let realAgent = createPlannerAgent(settings.harness);
 	let guarded = guard.wrap({
 		...documentTools,
 		...jobTools,

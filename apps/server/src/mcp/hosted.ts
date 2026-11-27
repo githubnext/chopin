@@ -61,7 +61,6 @@ import type {
 } from "../mcp";
 import type { CreateDocumentInput } from "./create";
 import type { UpdateClient, UpdateDocumentInput } from "./update";
-import type { Issue } from "@chopin/dialect";
 import type { LifecycleArguments } from "./lifecycle";
 import type {
 	ChannelArchiveResult,
@@ -72,7 +71,6 @@ import type {
 } from "../storage/model";
 import type { ClaimResult, Run } from "../tasks/graphs";
 import type { SocketData } from "../wire";
-import type { VisualAdmission } from "../agent/visual-admission";
 import type { PlanSource } from "../tasks/plan-source";
 
 export type HostedCaller = {
@@ -108,7 +106,6 @@ export type PlannerInvocation = {
 
 export type ImplementationPersistence = { lease(): Lease };
 export type HostedCallbacks = {
-	visualAdmission?: VisualAdmission;
 	archiveChannel?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
 	restoreChannel?: (channelId: string, now: Date) => Promise<ChannelArchiveResult>;
 	isChannelDeleting?: (channelId: string) => boolean;
@@ -325,8 +322,6 @@ async function locateAny(auth: LocatorAuth, caller: HostedCaller, locator: strin
 export type DocumentCreator = {
 	user: GitHubUser;
 	repository: GitHubRepository;
-	/** Asks again, after the visual assessment, whether the creator may still write the repository. */
-	stillWrites: () => Promise<boolean>;
 	/** The Planner model choice to store in the transaction that creates the document. */
 	modelChoice?: () => Promise<CreateChannel["modelChoice"]>;
 	/** The document whose Planner creates this one, stored as its `createdFrom`. */
@@ -343,8 +338,7 @@ export type CreatedDocument =
 	| { kind: "conflict" }
 	| { kind: "title-taken" }
 	| { kind: "forbidden" }
-	| { kind: "unavailable" }
-	| { kind: "visuals-required"; issues: Issue[] };
+	| { kind: "unavailable" };
 
 /**
  * Create a top-level document from a prepared draft, or return the one an earlier call with the
@@ -354,7 +348,7 @@ export async function createDocument(
 	auth: Pick<HostedAuth, "storage" | "clock">,
 	callbacks: Pick<
 		HostedCallbacks,
-		"visualAdmission" | "isChannelDeleting" | "onChannelCreated" | "onDocumentPersisted"
+		"isChannelDeleting" | "onChannelCreated" | "onDocumentPersisted"
 	>,
 	creator: DocumentCreator,
 	input: CreateDocumentInput,
@@ -391,15 +385,8 @@ export async function createDocument(
 			}),
 		};
 	};
-	// A durable replay must not rerun model judgments or reject a previously saved import.
 	let stored = await auth.storage.collaboration.load(id, auth.clock());
 	if (stored) return replay(stored);
-	if (callbacks.visualAdmission) {
-		let issues = await callbacks.visualAdmission({ sources: [input.plan], signal });
-		if (issues.length) return { kind: "visuals-required", issues };
-		if (!await creator.stillWrites()) return { kind: "forbidden" };
-		if (callbacks.isChannelDeleting?.(id)) return { kind: "unavailable" };
-	}
 	if (signal?.aborted) return { kind: "unavailable" };
 	await auth.storage.users.put({
 		id: user.id,
@@ -969,11 +956,6 @@ export function hosted(
 				let outcome = await createDocument(auth, callbacks, {
 					user: caller.user,
 					repository,
-					stillWrites: async () => {
-						let current = await directRepository(caller, parts[0]!, parts[1]!);
-						return !!current && current.id === repository.id
-							&& (current.permissions.push || current.permissions.admin);
-					},
 					...(caller.signal ? { signal: caller.signal } : {}),
 				}, input);
 				if (outcome.kind !== "created" && outcome.kind !== "replayed") return outcome;
@@ -984,37 +966,7 @@ export function hosted(
 			async update(caller, input: UpdateDocumentInput, client: UpdateClient) {
 				let access = await writableChannel(caller, input.id);
 				if (access.kind !== "allowed") return access;
-				let assessed = !callbacks.visualAdmission;
 				try {
-					if (callbacks.visualAdmission) {
-						let preflight = await serializeDocument(access.channel.id, async () => {
-							let channel = await auth.storage.channels.get(access.channel.id);
-							if (!channel || callbacks.isChannelDeleting?.(channel.id)) {
-								return { kind: "unavailable" as const };
-							}
-							return withPlan(channel.id, async plan => {
-								if (plan.mcpUpdates.some(entry => entry.idempotencyKey === input.idempotencyKey)) {
-									return { kind: "replay" as const };
-								}
-								if (channel.archivedAt) return { kind: "archived" as const };
-								if (Plan.implementationActive(plan)) return { kind: "locked" as const };
-								if (plan.revision !== input.revision) {
-									return { kind: "revision-conflict" as const, revision: plan.revision };
-								}
-								return { kind: "assess" as const, before: Plan.source(plan) };
-							});
-						});
-						if (preflight.kind === "assess") {
-							// Classifier I/O must not hold the room queue or block collaborators.
-							let issues = await callbacks.visualAdmission({
-								before: preflight.before,
-								sources: [input.plan],
-								signal: caller.signal,
-							});
-							if (issues.length) return { kind: "visuals-required" as const, issues };
-							assessed = true;
-						} else if (preflight.kind !== "replay") return preflight;
-					}
 					return await serializeDocument(access.channel.id, async () => {
 						let current = await writableChannel(caller, access.channel.id);
 						if (current.kind !== "allowed") return current;
@@ -1043,7 +995,7 @@ export function hosted(
 							}
 							if (channel.archivedAt) return { kind: "archived" as const };
 							if (Plan.implementationActive(plan)) return { kind: "locked" as const };
-							if (!assessed || caller.signal?.aborted) return { kind: "unavailable" as const };
+							if (caller.signal?.aborted) return { kind: "unavailable" as const };
 							// History credits the rewrite to this person, so they need a user row.
 							await auth.storage.users.put({
 								id: caller.user.id,
@@ -1278,7 +1230,6 @@ export function hosted(
 										anchors: () => Plan.anchors(plan, plan.server, source.id),
 										changes: found =>
 											Plan.changes(plan, plan.server, source.id, found, { cursor: false }),
-										visualAdmission: callbacks.visualAdmission,
 									};
 									return writeIndex(room, documents, create, caller.signal);
 								}));
@@ -1349,11 +1300,6 @@ export function hosted(
 							let created = await createDocument(auth, callbacks, {
 								user: caller.user,
 								repository,
-								stillWrites: async () => {
-									let current = await directRepository(caller, owner, name);
-									return !!current && current.id === source.repositoryId
-										&& (current.permissions.push || current.permissions.admin);
-								},
 								...(callbacks.modelChoice
 									? { modelChoice: () => callbacks.modelChoice!(source.id, caller.user.id) }
 									: {}),
@@ -1387,15 +1333,6 @@ export function hosted(
 									ok: false,
 									reason: "unavailable",
 									message: "The document could not be created now.",
-								};
-							}
-							if (created.kind === "visuals-required") {
-								return {
-									ok: false,
-									reason: "visuals-required",
-									message:
-										"Add the required diagrams or tables beside the named passages and retry.",
-									issues: created.issues,
 								};
 							}
 							let url = new URL(created.document.url, auth.config.origin).href;

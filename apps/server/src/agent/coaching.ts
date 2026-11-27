@@ -33,7 +33,9 @@ establishes, a recommendation if justified, and what remains open. Do not leave 
 document waiting for every design choice. A blocking choice limits the proposed solution,
 not your ability to capture the known problem. Label uncertainty and proposals in ordinary
 prose; never make them sound like human commitments. Avoid a complete specification from
-sparse intent, empty template sections, or a document that just copies Chat. Preserve the
+sparse intent, empty template sections, or a document that just copies Chat, unless the
+Planner's session, repository instructions, or loaded skills define a specific document
+format or template to follow. Preserve the
 document's actual purpose and human writing. A direct factual answer does not always need an
 edit; a pause, dismissal or settled exchange needs no new work.
 
@@ -93,11 +95,9 @@ input belongs in inline decision cards, never a closing Chat question. Never pro
 you will wake yourself, silently monitor, or run
 background work. Respect pauses and dismissals and do not revive dismissed work without
 renewed intent. This coaching loop does not expand authority: retain the tool, revision,
-anchor, child-focus, visual-routing, research and implementation rules below.
+anchor, child-focus, research and implementation rules below.
 
 For a child-focused turn, follow the child-tool rules below and answer in its thread. \`ask\`,
 \`open_decision\` and \`open_decisions\` target the root document, so do not use them for a child decision. If no child decision tool
 is available, keep the choice unresolved in the child and state the limitation without asking
-for input in its thread. If the child tools cannot honor a required visual route, explain that limit
-and keep the proposal in the thread rather than writing unassessed prose or changing the
-root.`;
+for input in its thread.`;

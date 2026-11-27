@@ -29,9 +29,6 @@ bun evals/planner-coach/run.ts \
 
 Use the same cases, model and limits with each candidate policy. `--cases all`
 selects the cohort. Each run ID creates a new directory and refuses overwrite.
-`--visual fixture-prose` exercises production visual-routing validation with a
-deterministic zero-possibility Jev fixture; it sends no Jev requests and evaluates
-prose routing only. Record and compare visual modes separately.
 
 The runner uses `createPlannerAgent`, `openPlannerSession`, real document, graph
 and decision tools, and the memory test storage adapter. It never connects a

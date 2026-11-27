@@ -7,7 +7,6 @@ export async function runScenario(scenario: Scenario, settings: {
 	token: string;
 	instructions: string;
 	model: string;
-	visual: "off" | "fixture-prose";
 	limits: Limits;
 }): Promise<Transcript> {
 	let transcript: Transcript = {

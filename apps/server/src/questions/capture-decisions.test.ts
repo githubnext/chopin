@@ -699,7 +699,6 @@ async function planned(context: Awaited<ReturnType<typeof setup>>, operations: E
 		exclusive: <T>(action: () => Promise<T>) => Plan.exclusive(context.plan, action),
 		anchors() {},
 		changes() {},
-		visualAdmission: async () => [],
 	} as unknown as DocumentRoom;
 	let outcome = await target.exclusive(() =>
 		applyBlockEdit(target, { revision: context.plan.revision, operations })

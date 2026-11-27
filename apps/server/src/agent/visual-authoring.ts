@@ -12,17 +12,10 @@ let aliases = Object.entries(DIAGRAM_ALIASES)
 /** Chopin-owned guidance loaded with the Planner on every supported harness. */
 export const DIAGRAM_AUTHORING = `Chopin visual authoring guide v1
 
-Add useful diagrams proactively while developing the document. The server checks
-every new passage with Jev before accepting an edit, including multi-paragraph
-batches, lists and nested MDX. A refused write returns \`visuals-required\` with the
-required type and authoring instructions. Repair the write by adding that visual
-beside the factual prose. Keep each assessed passage and its headings unchanged
-and add the exact returned type immediately after that
-passage. Rewriting, merging or splitting the prose triggers a new assessment and
-can select another type. Do not replace the required type with your own preference.
-Keep every claim grounded in the evidence. Submit the
-prose and its diagram together; no separate assessment call is needed. If the
-document changes during assessment, read it again and retry against its revision.
+Use diagrams, tables, wireframes, or uploaded images where they make the plan
+clearer than prose alone, following any document format or diagram convention
+supplied by the Planner's session, repository instructions, or loaded skills.
+Keep every claim grounded in the evidence.
 
 Start from the reader's question and the available evidence. Choose the smallest
 representation that answers it:
@@ -162,21 +155,3 @@ current revision. If the source cannot support a valid faithful diagram, write
 prose and explain the reason. In the final Chat reply, name the representation
 you saved or the reason you abstained. Claim a diagram was saved only after
 \`edit_plan\` succeeds.`;
-
-/** Used only by opted-in foreground Planner sessions. The tool supplies type-specific syntax. */
-export const ROUTED_DIAGRAM_AUTHORING = `Chopin Jev visual authoring guide
-
-Jev decides whether a passage can be visualized, whether that improves
-comprehension, and which supported type fits. Use the returned route as the
-authoring constraint. Keep the assessed passage as prose beside its visual.
-The returned example is syntax only; replace its labels and values with facts
-supported by the passage and repository evidence. Never infer a relation,
-order, branch, measurement, or comparison cell solely to complete a shape.
-
-For a selected diagram, write one valid seecode JSON fence after the passage.
-For a selected table, write one Markdown table after the passage. For a prose
-route, write only the passage. Keep caveats in the assessed prose. If the
-selected visual cannot be rendered faithfully, explain the blockage rather
-than claiming that it was saved. If edit_plan rejects a visual with problems,
-repair the named field using the same visual_route while the passage, revision,
-and placement are unchanged. Do not reassess merely to repair diagram syntax.`;

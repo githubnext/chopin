@@ -71,7 +71,6 @@ export function scopeRoom(context: Awaited<ReturnType<typeof fixture>>) {
 		exclusive: <T>(action: () => Promise<T>) => Service.exclusive(context.plan, action),
 		anchors() {},
 		changes() {},
-		visualAdmission: async () => [],
 	} as unknown as import("../agent/tools").DocumentRoom;
 }
 

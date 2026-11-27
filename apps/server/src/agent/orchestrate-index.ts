@@ -4,7 +4,7 @@
  * an ordinary validated, persisted-before-published edit, and not at all when nothing changed.
  */
 import * as edit from "../plan/edit";
-import { admitBlockEdit, applyBlockEdit } from "./document-ops";
+import { applyBlockEdit } from "./document-ops";
 import { implementationActive } from "../plan/service";
 
 import type { CreatedDocumentState, IndexOutcome } from "./orchestrate";
@@ -76,17 +76,6 @@ export async function writeIndex(
 		let located = await room.exclusive(async () => locate(room.plan, body, create));
 		if (located.state !== "edit") return located;
 		let args = { revision: located.revision, operations: located.operations };
-		let refusal = await admitBlockEdit(room, args, signal);
-		if (refusal) {
-			if (refusal.reason === "stale") continue;
-			return {
-				state: "refused",
-				reason: refusal.reason,
-				...("message" in refusal && typeof refusal.message === "string"
-					? { message: refusal.message }
-					: {}),
-			};
-		}
 		let result = await room.exclusive(() => applyBlockEdit(room, args, { signal }));
 		if (result.ok) return { state: "written" };
 		if (result.reason === "stale") continue;

@@ -1,5 +1,5 @@
 import { limits, parse, ulid } from "@chopin/dialect";
-import { SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
+import { MERMAID_LANGUAGE, SEECODE_LANGUAGE } from "@chopin/dialect/dialect";
 import * as Question from "@chopin/question";
 import * as Y from "yjs";
 
@@ -75,7 +75,9 @@ function captureScopes(
 			for (let next = at.index + 1; next < blocks.length; next++) {
 				let block = blocks[next]!;
 				if (
-					block.type !== "table" && !(block.type === "code" && block.lang === SEECODE_LANGUAGE)
+					block.type !== "table"
+					&& !(block.type === "code"
+						&& (block.lang === SEECODE_LANGUAGE || block.lang === MERMAID_LANGUAGE))
 				) break;
 				targets.push(room.anchorAt(plan.document, next, digests[next]!));
 			}
@@ -187,7 +189,8 @@ function blockBeforeCard(plan: Plan, record: Record): number | undefined {
 	if (widget === undefined) return undefined;
 	let blocks = parse(room.project(plan.document)).children;
 	let beside = (block: (typeof blocks)[number]) =>
-		block.type === "table" || block.type === "code" && block.lang === SEECODE_LANGUAGE
+		block.type === "table"
+		|| block.type === "code" && (block.lang === SEECODE_LANGUAGE || block.lang === MERMAID_LANGUAGE)
 		|| block.type === "mdxJsxFlowElement"
 			&& (block.name === "Questionnaire" || block.name === "Decision");
 	let index = widget - 1;

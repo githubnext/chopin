@@ -40,7 +40,6 @@ test("the Planner and decision features need a decisions model, and the error na
 		let [overrides, reason] of [
 			[{}, "AGENT is enabled"],
 			[{ AGENT: "off", CONVERSATION_PLAN: "on" }, "CONVERSATION_PLAN=on"],
-			[{ PLANNER_VISUALS: "on" }, "PLANNER_VISUALS=on"],
 		] as const
 	) {
 		expect(() => configured({ ...none, ...overrides })).toThrow(

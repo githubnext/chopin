@@ -139,7 +139,6 @@ test("an owner-availability callback wakes the saved answer after its foreground
 			source: "Offline operation is required.",
 		},
 	});
-	auth.context.visualAdmission = async () => [];
 	let errors: unknown[] = [];
 	let runtime = createConversationRuntime({
 		config: { agent: true, conversationPlan: false },

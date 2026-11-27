@@ -22,19 +22,17 @@ test("all Planner surfaces compose coaching once and preserve their question bou
 		{ remote: true },
 	];
 	for (let workspace of workspaces) {
-		for (let routed of [false, true]) {
-			let prompt = plannerInstructions("octo-org/score", "Earlier context.", workspace, routed);
-			expect(prompt.split(COACHING)).toHaveLength(2);
-			expect(prompt.endsWith("Earlier context.")).toBe(true);
-			if (workspace) {
-				expect(prompt).toContain("a withdrawn question is not an answer or approval");
-				expect(prompt).toContain(
-					"continue only independent work with explicitly provisional assumptions",
-				);
-				expect(prompt).not.toContain("proceed on your best judgement");
-			} else {
-				expect(prompt).toContain("You have no shell, checkout, host filesystem");
-			}
+		let prompt = plannerInstructions("octo-org/score", "Earlier context.", workspace);
+		expect(prompt.split(COACHING)).toHaveLength(2);
+		expect(prompt.endsWith("Earlier context.")).toBe(true);
+		if (workspace) {
+			expect(prompt).toContain("a withdrawn question is not an answer or approval");
+			expect(prompt).toContain(
+				"continue only independent work with explicitly provisional assumptions",
+			);
+			expect(prompt).not.toContain("proceed on your best judgement");
+		} else {
+			expect(prompt).toContain("You have no shell, checkout, host filesystem");
 		}
 	}
 });
@@ -64,16 +62,24 @@ test("ordinary and Atomic Planner instructions expose the registered visual inve
 	}
 });
 
-test("ordinary and Atomic guidance prefers native diagrams with a bounded Mermaid fallback", () => {
-	for (let workspace of [undefined, { cwd: "/tmp/chopin-test", checkout: false }]) {
+test("guidance documents supported diagram fences neutrally and defers to custom document formats", () => {
+	for (
+		let workspace of [undefined, { remote: true } as const, {
+			cwd: "/tmp/chopin-test",
+			checkout: false,
+		}]
+	) {
 		let prompt = plannerInstructions("octo-org/score", undefined, workspace).replace(/\s+/g, " ");
-		expect(prompt).toContain(
-			"Use Chopin's native `seecode` charts and diagrams by default whenever a registered type can represent the required information.",
-		);
-		expect(prompt).toContain(
-			"Use `mermaid` only when no native type can provide the required representation or the user explicitly requests Mermaid.",
-		);
+		expect(prompt).toContain("Supported diagram fences include `seecode`");
+		expect(prompt).toContain("`mermaid` (diagrams and numerical charts");
 		expect(prompt).toContain("including `pie` and `xychart-beta` bar/line charts");
+		expect(prompt).toContain("`wireframe`");
+		expect(prompt).toContain("follow that format in full while using Chopin's document tools");
+		expect(prompt).not.toContain("Use Chopin's native `seecode` charts and diagrams by default");
+		expect(prompt).not.toContain("Use `mermaid` only when");
+		expect(prompt).not.toContain("visuals-required");
+		expect(prompt).not.toContain("call assess_visual");
+		expect(prompt).not.toContain("checks every new passage with Jev");
 	}
 });
 
@@ -121,7 +127,7 @@ test("an Atomic Planner is told of no workflow, and that a Build's tasks show un
 test("an Atomic Planner is told of no Intercom, and only a thread's of tell_chat_planner", () => {
 	let workspace = { cwd: "/tmp/chopin-test", checkout: false };
 	let chat = plannerInstructions("octo-org/score", undefined, workspace).replace(/\s+/g, " ");
-	let thread = plannerInstructions("octo-org/score", undefined, workspace, false, true)
+	let thread = plannerInstructions("octo-org/score", undefined, workspace, true)
 		.replace(/\s+/g, " ");
 	for (let prompt of [chat, thread]) {
 		expect(prompt).not.toContain("intercom");
@@ -154,8 +160,6 @@ test.each(["marimekko", "dumbbell"])(
 
 test("teaches wireframe fences with a valid example and every kind", () => {
 	expect(PROMPT).toContain(WIREFRAME_AUTHORING);
-	expect(plannerInstructions("octo-org/score", undefined, undefined, true))
-		.toContain(WIREFRAME_AUTHORING);
 	expect(WIREFRAME_AUTHORING).toContain(
 		"Never draw one with box-drawing characters or ASCII art in a text fence.",
 	);
@@ -165,36 +169,6 @@ test("teaches wireframe fences with a valid example and every kind", () => {
 	expect(parsed.ok, JSON.stringify(parsed)).toBe(true);
 	for (let kind of Object.keys(WIREFRAME_KINDS)) {
 		expect(WIREFRAME_AUTHORING, kind).toMatch(new RegExp(`\\b${kind}\\b`));
-	}
-});
-
-test("makes Jev the only visual decision maker in routed Planner sessions", () => {
-	let routed = plannerInstructions("octo-org/score", undefined, undefined, true);
-	expect(routed).toContain("call assess_visual");
-	expect(routed).toContain("Jev separately");
-	expect(routed).toContain("do not make");
-	expect(routed).toContain("Pass visual_route to edit_plan");
-	expect(routed).toContain("Chopin Jev visual authoring guide");
-	expect(routed).toContain("Do not substitute Mermaid for a Jev-selected diagram.");
-	expect(routed).not.toContain("Use `mermaid` only when");
-	expect(routed).not.toContain("the user explicitly requests Mermaid");
-	expect(routed).toContain("repair the named field using the same visual_route");
-	expect(routed).toContain("unavailable, do not write that explanatory passage");
-	expect(routed).not.toContain("use the prose route and state the limitation");
-	expect(routed).not.toContain(DIAGRAM_AUTHORING);
-	expect(plannerInstructions("octo-org/score")).toContain(DIAGRAM_AUTHORING);
-	expect(plannerInstructions("octo-org/score")).not.toContain("call assess_visual");
-});
-
-test("every harness receives proactive visual guidance and shared admission repairs", () => {
-	for (let workspace of [undefined, { remote: true } as const, { cwd: "/tmp", checkout: false }]) {
-		let prompt = plannerInstructions("octo-org/score", undefined, workspace);
-		expect(prompt).toContain("Add useful diagrams proactively");
-		expect(prompt).toContain("every new passage");
-		expect(prompt).toContain("visuals-required");
-		expect(prompt).toContain("required type and authoring instructions");
-		expect(prompt).toContain("beside the factual prose");
-		expect(prompt).toContain(DIAGRAM_AUTHORING);
 	}
 });
 

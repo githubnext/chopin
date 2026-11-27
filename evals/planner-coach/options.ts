@@ -11,7 +11,6 @@ export type Options = Limits & {
 	out: string;
 	runId: string;
 	label: string;
-	visual: "off" | "fixture-prose";
 };
 
 export function options(args: string[]): Options {
@@ -23,7 +22,6 @@ export function options(args: string[]): Options {
 		out: resolve(tmpdir(), "chopin-planner-coach"),
 		runId: new Date().toISOString().replaceAll(":", "-"),
 		label: "unlabelled",
-		visual: "off",
 		maxTools: 16,
 		turnTimeoutMs: 120_000,
 		questionWaitMs: 2_000,
@@ -59,10 +57,6 @@ export function options(args: string[]): Options {
 				break;
 			case "--label":
 				result.label = value;
-				break;
-			case "--visual":
-				if (value !== "off" && value !== "fixture-prose") throw new Error("Invalid --visual");
-				result.visual = value;
 				break;
 			case "--max-tools":
 				result.maxTools = integer(value, 1, 50);

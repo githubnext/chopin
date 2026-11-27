@@ -408,7 +408,6 @@ the image.
 | `RESEARCH_EVIDENCE_TIMEOUT_MS`    | `600000`                | Deadline of one public-web research evidence attempt in milliseconds, an integer between 120000 and 1800000. Web search calls take up to about two minutes each; the attempt budgets at most four calls against what remains of this deadline. The job retries once after a failed attempt.                                                                                                                                                                                                                                                                                                                                                                       |
 | `COPILOT_CLI_PATH`                | automatic               | Advanced override for the Copilot CLI executable. Applies only to the `copilot-sdk` adapter.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `CONVERSATION_PLAN`               | off                     | Set exactly `on` to enable experimental conversation-derived cards. Interpretation runs independently of `AGENT`; Planner jobs still obey the agent and job settings.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `PLANNER_VISUALS`                 | off                     | Set exactly `on` to enable the bounded visual handoff for foreground Planner turns. Requires `AGENT=on` and a decisions model.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `DECISIONS_MODEL`                 | from the key present    | The classifier that answers every decision, as an exact Atomic `provider/id`. Unset, it is `typesafe/jev-latest` when `JEV_API_KEY` or `TYPESAFE_API_KEY` is set, otherwise `openai-decisions/gpt-6-luna` when `OPENAI_API_KEY` is set. See [Decisions](#decisions).                                                                                                                                                                                                                                                                                                                                                                                              |
 | `DECISIONS_TIMEOUT_MS`            | `30000`                 | Per-request decisions timeout in milliseconds, an integer between 100 and 60000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `OPENAI_API_KEY`                  | unset                   | OpenAI API key for `openai-decisions/gpt-6-luna`. Server-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -424,16 +423,9 @@ document. Group turn-taking asks the decisions model; solo replies bypass it.
 See [Background jobs and workers](background-jobs.md) for the combined
 `AGENT`, `BACKGROUND_JOBS`, and `WEB_RESEARCH` behavior and recovery model.
 
-Foreground Planner writes on every harness and MCP document imports share visual
-assessment before acceptance. The decisions model judges whether a faithful
-visual is possible and helpful, then selects its native type or a comparison
-table. The author must supply the selected visual beside its passage before the
-write succeeds. Lists and nested prose are included, and there is no diagram
-quota. Failed or uncertain assessments refuse the write. Prose imports require a
-decisions model even with `AGENT=off`.
-
-`PLANNER_VISUALS` controls only the legacy single-paragraph tool for sessions
-without the shared admission check; it does not disable the shared check.
+Document writes through the Planner and MCP are validated against the plan
+dialect (Markdown, supported components, and valid `seecode`/`wireframe` fences)
+without an additional server-side visual admission gate.
 
 Conversation-derived cards default to off. When enabled, interpretation sends
 current and recent Chat messages and selected decision context to the decisions
@@ -448,7 +440,7 @@ unavailable. Actual research starts only after a writer accepts the current shar
 brief and the execution capability is enabled. See
 [Research offers from Chat](conversation-research.md).
 
-The supplied Compose file forwards `CONVERSATION_PLAN`, `PLANNER_VISUALS`,
+The supplied Compose file forwards `CONVERSATION_PLAN`,
 `DECISIONS_MODEL`, `OPENAI_API_KEY` and `JEV_API_KEY` from the deployment
 environment. It uses the server's default 30-second decisions timeout. To
 override `DECISIONS_TIMEOUT_MS`, configure it explicitly in the service
@@ -457,7 +449,7 @@ empty value.
 
 ### Decisions
 
-Conversation cards, research offers, group turn-taking, visual routing, and the
+Conversation cards, research offers, group turn-taking, reply checks, and the
 living-build and prototype gates ask small typed questions: a yes-or-no
 probability, a choice from a fixed set, or a score on ordered levels. One
 classifier model answers all of them through Atomic's model registry. The
